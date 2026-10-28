@@ -1,38 +1,20 @@
 /*
- * Placeholder until Task 6 replaces this file.
- *
- * Contract with the router (src/app/router.tsx, lazy-loaded): the default export renders the item lists of five
- * routes. It gets the preset as a prop and reads the route's params itself:
+ * The item lists of five routes (contract with src/app/router.tsx, which lazy-loads this file): the default export
+ * gets the preset as a prop and reads the route's params itself:
  *   /my-items → "my", /created → "created", /subscribed → "subscribed",
  *   /views/:viewId → "view" (viewId), /projects/:identifier → "project" (identifier).
  * The router keys it by preset and param: every change of either (another list, view or project) mounts it anew, so
- * local state (selection, focus, scroll) starts fresh and never leaks from one list into the next. Changes of the
- * search (`?layout=board`, the view state in the URL) keep it mounted.
- * Task 6 renders `ItemsScreen({ preset, projectIdentifier, viewId })` here.
+ * local state (selection, cursor, scroll) starts fresh and never leaks from one list into the next. Changes of the
+ * search (`?layout=board`, the view state in the URL, see viewState.ts) keep it mounted.
  */
 
-import { ListTodo } from 'lucide-react';
 import { useParams } from 'react-router';
-import { ComingSoon } from '@/app/PageStates';
-import { useProjects } from '@/hooks/projects';
-import { useViews } from '@/hooks/views';
+import { ItemsScreen } from './ItemsScreen';
+import type { ItemsPreset } from './viewState';
 
-export type ItemsPreset = 'my' | 'created' | 'subscribed' | 'view' | 'project';
-
-const TITLES: Record<ItemsPreset, string> = { my: 'Meine Items', created: 'Von mir erstellt', subscribed: 'Beobachtet', view: 'View', project: 'Projekt' };
+export type { ItemsPreset } from './viewState';
 
 export default function ItemsRoute({ preset }: { preset: ItemsPreset }) {
   const { identifier, viewId } = useParams();
-  const view = useViews().data?.items.find((entry) => entry.id === viewId);
-  const project = useProjects().data?.items.find((entry) => entry.identifier === identifier);
-  const title = (preset === 'view' && view?.name) || (preset === 'project' && project?.name) || TITLES[preset];
-
-  return (
-    <ComingSoon
-      title={title}
-      task={6}
-      icon={ListTodo}
-      description="Hier entsteht die Item-Liste: Filter, Anzeige, Liste und Tabelle, Mehrfachauswahl und gespeicherte Views. Board und Timeline folgen mit Task 7."
-    />
-  );
+  return <ItemsScreen preset={preset} projectIdentifier={identifier} viewId={viewId} />;
 }
