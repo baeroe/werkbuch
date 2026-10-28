@@ -25,7 +25,7 @@ type StatePickerProps = PickerExtras & {
   onDone?: () => void;
 };
 
-export function StatePicker({ item, onDone, onOpenChange, ...extras }: StatePickerProps) {
+export function StatePicker({ item, onDone, onOpenChange, look = 'field', shortcut, ...extras }: StatePickerProps) {
   const { workflow, isLoading, error, retry, retrying } = useItemWorkflow(item);
   const reason = useEditReason(item);
   const transition = useTransitionWorkItem();
@@ -57,6 +57,8 @@ export function StatePicker({ item, onDone, onOpenChange, ...extras }: StatePick
     <>
       <Picker
         {...extras}
+        look={look}
+        shortcut={shortcut ?? (look === 'field' ? 's' : undefined)}
         triggerRef={trigger}
         label="Status"
         display={

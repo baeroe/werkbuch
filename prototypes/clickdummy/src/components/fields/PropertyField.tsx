@@ -5,8 +5,9 @@
  *   the field; Escape takes back what was typed.
  * Required: a required value cannot be emptied. An item without a value (the property became required later) stays
  * valid and shows a hint.
- * Rich text is a plain text area for now (paragraphs separated by a blank line, stored as Tiptap JSON); the editor
- * comes with Task 8.
+ * Rich text is a plain text area for now, and only for plain documents (paragraphs and line breaks): a blank line is a
+ * new paragraph, a single line break a `hardBreak`. A richer document (lists, marks, links, mentions) is shown read-only
+ * with "Im Editor bearbeiten", so the text area never flattens it; the editor comes with Task 8.
  */
 
 import { ExternalLink } from 'lucide-react';
@@ -20,7 +21,7 @@ import { fieldClass, fieldSize } from '@/components/ui/styles';
 import { Switch } from '@/components/ui/Switch';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { useUpdateWorkItem } from '@/hooks/workItems';
-import { docToText, isBlankDoc, textDoc } from '@/lib/richtext';
+import { docToText, isBlankDoc, isPlainDoc, plainDocText, textDoc } from '@/lib/richtext';
 import type { Property, PropertyValue, RichText, WorkItem } from '@/types';
 import { DatePopover, DayValue } from './DateField';
 import { botWord, formatDay, formatNumber, formatPropertyValue } from './format';
@@ -54,11 +55,22 @@ function parseTyped(property: Property, text: string): Parsed {
   switch (property.field_type) {
     case 'number': {
       const decimals = property.settings.decimals ?? 0;
-      if (/^-?\d+([.,]\d+)?$/.test(trimmed)) {
+      // German: the comma is the decimal sign; a point only groups thousands (1.500, 1.234,5)
+      const match = /^(-?)(\d{1,3}(?:\.\d{3})+|\d+)(?:,(\d+))?$/.exec(trimmed);
+      if (match) {
+        const [, sign, whole, fraction] = match;
         const factor = 10 ** decimals;
-        return { value: Math.round(Number(trimmed.replace(',', '.')) * factor) / factor };
+        return { value: Math.round(Number(`${sign}${whole.replaceAll('.', '')}.${fraction ?? '0'}`) * factor) / factor };
       }
-      return { error: `Nur eine Zahl eingeben, zum Beispiel ${decimals > 0 ? '3,5' : '4'}`, partial: /^-?\d*[.,]?\d*$/.test(trimmed) };
+      // digits, points and a comma may still become a number while one types ("1." on the way to "1.500")
+      const partial = /^-?[\d.]*,?\d*$/.test(trimmed);
+      if (partial && trimmed.includes('.')) {
+        return {
+          error: decimals > 0 ? 'Nachkommastellen nach einem Komma, zum Beispiel 3,5. Der Punkt trennt nur Tausender' : 'Der Punkt trennt nur Tausender, zum Beispiel 1.500',
+          partial,
+        };
+      }
+      return { error: `Nur eine Zahl eingeben, zum Beispiel ${decimals > 0 ? '3,5' : '4'}`, partial };
     }
     case 'url':
       try {
@@ -73,13 +85,17 @@ function parseTyped(property: Property, text: string): Parsed {
   }
 }
 
-/** The typed value as the field shows it: numbers with the property's decimals in German. */
+/** The value as the field shows it while it is edited: numbers in German without thousands points, plain rich text. */
 function shownText(property: Property, value: PropertyValue | undefined): string {
   if (value === undefined || value === null) return '';
-  if (property.field_type === 'number' && typeof value === 'number') return formatNumber(value, property.settings.decimals ?? 0);
-  if (property.field_type === 'rich_text') return docToText(value as RichText);
+  if (property.field_type === 'number' && typeof value === 'number') return formatNumber(value, property.settings.decimals ?? 0, { grouping: false });
+  if (property.field_type === 'rich_text') return plainDocText(value as RichText);
   return String(value);
 }
+
+/** A rich text the text area cannot hold without losing its form (see the top of this file). */
+const isLockedRichText = (property: Property, value: PropertyValue | undefined) =>
+  property.field_type === 'rich_text' && value !== undefined && value !== null && !isPlainDoc(value as RichText);
 
 /** What every editor gets: its control's id and description, the state of the field, and the ways to report. */
 interface EditorProps {
@@ -210,7 +226,7 @@ function BooleanEditor({ value, id, label, describedById, pending, onAccept }: E
 }
 
 /** A day from the calendar. */
-function DateEditor({ property, value, id, invalid, required, pending, onAccept }: EditorProps) {
+function DateEditor({ property, value, id, describedById, invalid, required, pending, onAccept }: EditorProps) {
   const { today } = useToday();
   const day = typeof value === 'string' ? value : null;
   return (
@@ -219,6 +235,7 @@ function DateEditor({ property, value, id, invalid, required, pending, onAccept 
       id={id}
       label={property.label}
       value={day}
+      describedBy={describedById}
       invalid={invalid}
       pending={pending}
       display={<DayValue value={day} today={today} overdue={false} empty="Datum wählen …" />}
@@ -233,7 +250,7 @@ function DateEditor({ property, value, id, invalid, required, pending, onAccept 
 }
 
 /** One or more options of a dropdown; archived options only while they are chosen. */
-function DropdownEditor({ property, value, id, invalid, required, pending, onAccept }: EditorProps) {
+function DropdownEditor({ property, value, id, describedById, invalid, required, pending, onAccept }: EditorProps) {
   const ids = idsOf(value);
   const multiple = property.settings.multiple === true;
   const options: PickerOption[] = property.options
@@ -265,6 +282,7 @@ function DropdownEditor({ property, value, id, invalid, required, pending, onAcc
     display,
     displayText: chosen.map((option) => option.label).join(', ') || 'keine Auswahl',
     placeholder: 'Option suchen …',
+    describedBy: describedById,
     invalid,
     pending,
   };
@@ -277,7 +295,7 @@ function DropdownEditor({ property, value, id, invalid, required, pending, onAcc
 }
 
 /** People and bots of the project, one or several. */
-function MemberEditor({ property, value, id, invalid, required, pending, projectId, onAccept }: EditorProps) {
+function MemberEditor({ property, value, id, describedById, invalid, required, pending, projectId, onAccept }: EditorProps) {
   const { people, isLoading, error, retry, retrying } = useProjectPeople(projectId);
   const users = useUserMap();
   const ids = idsOf(value);
@@ -313,6 +331,7 @@ function MemberEditor({ property, value, id, invalid, required, pending, project
     displayText: chosen.map((user) => user.name).join(', ') || 'niemand',
     placeholder: 'Person suchen …',
     load: { isLoading, error, retry, retrying },
+    describedBy: describedById,
     invalid,
     pending,
   };
@@ -322,6 +341,21 @@ function MemberEditor({ property, value, id, invalid, required, pending, project
   }
   const none: PickerOption[] = required ? [] : [{ value: '', label: 'Niemand', icon: <UnassignedAvatar /> }];
   return <Picker {...common} options={[...none, ...options]} value={ids[0] ?? ''} onValueChange={(next) => onAccept(next || null)} />;
+}
+
+/** A rich document the text area would flatten: shown read-only, to be edited in the editor (Task 8). */
+function LockedRichText({ value, id, label, describedById }: EditorProps) {
+  return (
+    <textarea
+      id={id}
+      readOnly
+      value={docToText(value as RichText)}
+      aria-label={label}
+      aria-describedby={describedById}
+      rows={3}
+      className="block max-h-80 min-h-24 w-full resize-none rounded-ctl border border-line bg-sunken px-3 py-2 text-input text-ink [field-sizing:content] md:text-md"
+    />
+  );
 }
 
 const EDITORS = {
@@ -376,7 +410,8 @@ export function PropertyValueInput({
   const users = useUserMap();
   const [ownError, setOwnError] = useState<string | null>(null);
   const error = outerError ?? ownError;
-  const hint = givenHint ?? (hideLabel ? null : property.help || null);
+  const locked = isLockedRichText(property, value);
+  const hint = locked ? 'Im Editor bearbeiten' : (givenHint ?? (hideLabel ? null : property.help || null));
   const label = (
     <>
       {property.label}
@@ -404,7 +439,7 @@ export function PropertyValueInput({
       </ReadOnlyTrigger>
     );
   } else {
-    const Editor = EDITORS[property.field_type];
+    const Editor = locked ? LockedRichText : EDITORS[property.field_type];
     control = (
       <Editor
         property={property}

@@ -15,7 +15,7 @@
 
 import { Combobox } from '@base-ui/react/combobox';
 import { Check, ChevronDown, LoaderCircle, RotateCw, Search } from 'lucide-react';
-import { useId, useRef, type ReactElement, type ReactNode, type Ref } from 'react';
+import { useId, useRef, useState, type ReactElement, type ReactNode, type Ref } from 'react';
 import { Button } from '@/components/ui/Button';
 import { cx } from '@/components/ui/cx';
 import { ariaKeyshortcuts } from '@/components/ui/Kbd';
@@ -161,6 +161,8 @@ export type PickerProps = Choice & {
   /** The shortcut that does the same (register notation), for the tooltip and aria-keyshortcuts. */
   shortcut?: string;
   id?: string;
+  /** Ids of the hint or error under the field (aria-describedby). */
+  describedBy?: string;
   /** Form look: the frame and writing line in the danger colour. */
   invalid?: boolean;
   /** Rows set -1: the row is the tab stop, the shortcuts change its fields. */
@@ -192,6 +194,7 @@ export function Picker(props: PickerProps) {
     pending = false,
     shortcut,
     id,
+    describedBy,
     invalid = false,
     tabIndex,
     open,
@@ -205,6 +208,8 @@ export function Picker(props: PickerProps) {
   const name = `${label}: ${displayText}`;
   // a list that starts open (the gallery's specimens) leaves the focus where it is that first time
   const startsOpen = useRef(Boolean(defaultOpen));
+  // what is typed in the search field, for the note under a long list
+  const [query, setQuery] = useState('');
   const content = (
     <>
       {display}
@@ -222,6 +227,8 @@ export function Picker(props: PickerProps) {
   }
 
   const chosen = props.multiple ? options.filter((option) => props.value.includes(option.value)) : options.filter((option) => option.value === props.value);
+  // the matches of what is typed: the list shows the first LIMIT of them
+  const found = query.trim() === '' ? options.length : options.filter((option) => matches(option, query)).length;
   const body = load?.isLoading ? (
     <SkeletonGroup label="Auswahl wird geladen …" className="flex flex-col gap-3.5 px-3 py-3">
       <Skeleton className="h-3.5 w-2/3" />
@@ -273,7 +280,11 @@ export function Picker(props: PickerProps) {
       limit={LIMIT}
       autoHighlight
       open={open}
-      onOpenChange={onOpenChange ? (next) => onOpenChange(next) : undefined}
+      onOpenChange={(next) => {
+        if (!next) setQuery('');
+        onOpenChange?.(next);
+      }}
+      onInputValueChange={(next) => setQuery(next)}
       defaultOpen={defaultOpen}
       modal={modal}
     >
@@ -282,6 +293,7 @@ export function Picker(props: PickerProps) {
           ref={triggerRef}
           id={id}
           aria-label={name}
+          aria-describedby={describedBy}
           aria-busy={pending || undefined}
           aria-invalid={invalid || undefined}
           aria-keyshortcuts={shortcut ? ariaKeyshortcuts(shortcut) : undefined}
@@ -319,8 +331,8 @@ export function Picker(props: PickerProps) {
               />
             </div>
             {body}
-            {options.length > LIMIT && !load?.isLoading && !load?.error && (
-              <p className="border-t border-edge px-3 py-2 text-sm text-pretty text-muted">Die ersten {LIMIT} von {options.length}. Tippen grenzt die Liste ein.</p>
+            {found > LIMIT && !load?.isLoading && !load?.error && (
+              <p className="border-t border-edge px-3 py-2 text-sm text-pretty text-muted">Die ersten {LIMIT} von {found}. Tippen grenzt die Liste ein.</p>
             )}
           </Combobox.Popup>
         </Combobox.Positioner>

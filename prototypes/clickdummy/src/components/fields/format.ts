@@ -37,14 +37,18 @@ export const relativeDay = (iso: string, today: string): string => RELATIVE.form
 /** A day `days` after `iso`. */
 export const addDays = (iso: string, days: number): string => new Date(utc(iso).getTime() + days * DAY_MS).toISOString().slice(0, 10);
 
-const numberFormats = new Map<number, Intl.NumberFormat>();
+const numberFormats = new Map<string, Intl.NumberFormat>();
 
-/** A number with at most the property's decimals: 3,5 or 4. */
-export function formatNumber(value: number, decimals = 0): string {
-  let format = numberFormats.get(decimals);
+/**
+ * A number with at most the property's decimals: 3,5 or 1.500 for reading; `grouping: false` gives 1500 for a field
+ * that is edited, where a point would be a thousands separator in the middle of the typing.
+ */
+export function formatNumber(value: number, decimals = 0, { grouping = true }: { grouping?: boolean } = {}): string {
+  const key = `${decimals}:${grouping}`;
+  let format = numberFormats.get(key);
   if (!format) {
-    format = new Intl.NumberFormat('de-DE', { maximumFractionDigits: decimals });
-    numberFormats.set(decimals, format);
+    format = new Intl.NumberFormat('de-DE', { maximumFractionDigits: decimals, useGrouping: grouping });
+    numberFormats.set(key, format);
   }
   return format.format(value);
 }

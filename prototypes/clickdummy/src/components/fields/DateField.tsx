@@ -12,6 +12,7 @@ import { ariaKeyshortcuts } from '@/components/ui/Kbd';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/Popover';
 import { isClosedCategory } from '@/domain/workflow';
 import { useUpdateWorkItem } from '@/hooks/workItems';
+import { useDialogScope } from '@/lib/shortcuts/useShortcut';
 import type { WorkItem } from '@/types';
 import { formatDay, formatShortDay, relativeDay } from './format';
 import { useEditReason, useItemWorkflow, useToday } from './itemData';
@@ -25,11 +26,22 @@ type DatePopoverProps = PickerExtras & {
   onChoose: (value: string | null) => string | null | void;
   display: ReactNode;
   displayText: string;
+  /** Ids of the hint or error under the field (aria-describedby). */
+  describedBy?: string;
   disabledReason?: string | null;
   pending?: boolean;
   invalid?: boolean;
   className?: string;
 };
+
+/**
+ * Mounted while the calendar is open: its days hold the focus like a dialog does, so the page's shortcuts (p, s,
+ * mod+backspace of the item) wait instead of acting on the item behind it.
+ */
+function PausePageShortcuts() {
+  useDialogScope();
+  return null;
+}
 
 /** A date trigger with its calendar; DateField and date properties use it. */
 export function DatePopover({
@@ -38,6 +50,7 @@ export function DatePopover({
   onChoose,
   display,
   displayText,
+  describedBy,
   look = 'field',
   shortcut,
   disabledReason,
@@ -90,6 +103,7 @@ export function DatePopover({
               type="button"
               id={id}
               aria-label={name}
+              aria-describedby={describedBy}
               aria-busy={pending || undefined}
               aria-invalid={invalid || undefined}
               aria-keyshortcuts={shortcut ? ariaKeyshortcuts(shortcut) : undefined}
@@ -115,6 +129,7 @@ export function DatePopover({
           return days.current?.querySelector<HTMLElement>('[data-day][tabindex="0"]') ?? true;
         }}
       >
+        <PausePageShortcuts />
         <div ref={days}>
           <Calendar
             value={value}
@@ -157,7 +172,8 @@ export function DayValue({ value, today, overdue, short = false, empty }: { valu
     <>
       <Icon className={cx('shrink-0', short ? 'size-3.5' : 'size-4', overdue ? 'text-danger' : 'text-muted')} aria-hidden="true" />
       <span className={cx('tabular-nums', overdue && 'font-medium text-danger')}>{short ? formatShortDay(value) : formatDay(value)}</span>
-      {!short && <span className={cx('truncate', overdue ? 'font-medium text-danger' : 'text-muted')}>{overdue ? 'überfällig' : relativeDay(value, today)}</span>}
+      {/* overdue is never colour alone: the word stands beside the day, in chips and cards too */}
+      {overdue ? <span className="truncate font-medium text-danger">überfällig</span> : !short && <span className="truncate text-muted">{relativeDay(value, today)}</span>}
     </>
   );
 }

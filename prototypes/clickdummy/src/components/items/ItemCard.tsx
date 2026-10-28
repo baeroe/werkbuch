@@ -106,7 +106,7 @@ export function ItemCard({ item, compact = false, onOpen, selected = false, lift
         )}
         {item.due_date && (
           <span className="inline-flex min-w-0 items-center gap-1">
-            <span className="sr-only">{overdue ? 'Überfällig seit' : 'Fällig am'}</span>
+            <span className="sr-only">Fällig am</span>
             <DayValue value={item.due_date} today={today} overdue={overdue} short empty="" />
           </span>
         )}

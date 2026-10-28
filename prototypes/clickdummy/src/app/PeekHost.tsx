@@ -10,6 +10,9 @@
  * - From md on the list beside the panel stays usable: the panel takes no focus when it opens. Below md it covers the
  *   page and is modal: <main> turns inert and the panel takes the focus.
  * - When it closes while the focus was inside (or lost), the focus goes back to where it came from.
+ * - The item commands (s, a, i, p, l, t, d, shift+d, shift+p, mod+backspace and the palette's "Aktionen für …") are
+ *   mounted here for the preview, in detail scope: with the focus inside the panel they act on the previewed item
+ *   (`PreviewItemCommands`, see the contract in components/fields/commands.ts). `ItemPeek` mounts nothing for them.
  */
 
 import { lazy, Suspense, useLayoutEffect, useRef, useSyncExternalStore, type RefObject } from 'react';
@@ -20,6 +23,8 @@ import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { useUiStore } from '@/store/ui';
 
 const ItemPeek = lazy(() => import('@/features/item-detail/ItemPeek').then((module) => ({ default: module.ItemPeek })));
+// loaded with the preview: the commands bring the field editors with them, which the shell's own bundle does not need
+const PreviewItemCommands = lazy(() => import('@/components/fields/commands').then((module) => ({ default: module.PreviewItemCommands })));
 
 /** From md on (Tailwind's md breakpoint). Without matchMedia (tests) the screen counts as wide. */
 const WIDE = '(min-width: 48rem)';
@@ -94,6 +99,9 @@ export function PeekHost() {
       className="tracing fixed inset-x-2 top-16 bottom-2 z-30 flex animate-peek-in flex-col rounded-card md:top-8 md:right-2 md:left-auto md:w-[var(--panel-w)]"
     >
       <CloseOnEscape panel={panel} />
+      <Suspense fallback={null}>
+        <PreviewItemCommands panel={panel} />
+      </Suspense>
       <Suspense
         fallback={
           <SkeletonGroup label="Vorschau wird geladen …" className="p-4">

@@ -3,25 +3,39 @@
  *   s Status, a Assignee, i Mir zuweisen, p Priorität, l Labels, t Typ, d Due-Date, shift+d Start-Date,
  *   shift+p Eltern-Item, mod+backspace Archivieren (closed items) bzw. Löschen, both with 5 s Rückgängig.
  * A shortcut of a command with a sub-list opens the palette right in it (`openPalette`); `i` and `mod+backspace` act at
- * once. Without the right a shortcut says why in a toast (as `c` does) and the palette leaves the command out.
+ * once. Without the right a shortcut says why in a toast (as `c` does) and the palette leaves the command out. While
+ * the catalogs a command needs still load, its shortcut says so instead of acting, and the palette leaves it out.
  *
- * A screen mounts them with `useItemCommands`:
- *   the item page   useItemCommands({ scope: 'detail', itemId })
- *   the preview     useItemCommands({ scope: 'detail' })
- *   a list, board   useItemCommands({ scope: 'list', current: () => cursorId })
- * Without `itemId` they act on the selection (`useUiStore.selection`) when there is one, else on the item under the
- * list's cursor (`current`), else on the previewed item (`peekItemId`).
+ * Mounting contract. A screen mounts the commands with `useItemCommands`; there are no global item shortcuts.
+ *   the preview      mounted by `PeekHost` (src/app): useItemCommands({ scope: 'detail', panel })
+ *   the item page    useItemCommands({ scope: 'detail', itemId: item.id })
+ *   a list or board  useItemCommands({ scope: 'list', current: () => cursorItemId })
+ * - `current` answers the id of the item under the screen's keyboard cursor, or null. It must read React state of that
+ *   screen (`const [cursor, setCursor] = useState(…)` and `current: () => cursor`), not a ref that changes without a
+ *   render: the hook calls it while rendering (the palette's heading) and again whenever a command runs.
+ * - A screen that fills `useUiStore.selection` empties it when it unmounts
+ *   (`useEffect(() => () => useUiStore.getState().setSelection([]), [])`), so no other screen acts on a selection that
+ *   is no longer on screen.
  *
- * Several screens may mount them at once (a list and the preview beside it). Only one of them registers: the innermost
- * scope (detail before list), within a scope the one mounted last, as the shortcut registry decides; when it unmounts
- * the next one takes over. So the palette lists the item commands once and the help shows each key once. The shortcuts
- * live only where the hook is mounted, never globally.
+ * The items the commands act on (the targets), decided when a shortcut is pressed or the palette opens; while the
+ * palette is open (it holds the focus) they stay as they were when it opened:
+ *   1. the focus is inside the preview panel: the previewed item (`peekItemId`)
+ *   2. an item page is mounted: its item
+ *   3. the selection (`useUiStore.selection`), when there is one
+ *   4. the item under a list's cursor (`current`)
+ *   5. the previewed item
+ * So the keys the preview's fields advertise change the item it shows, and a selection changes as a whole from the list.
+ *
+ * Several screens may mount the commands at once (a list and the preview beside it). Only one of them registers the
+ * palette commands and shortcuts: the innermost scope (detail before list), within a scope the one mounted last, as the
+ * shortcut registry decides; when it unmounts the next one takes over. The targets above take every mount into account.
+ * So the palette lists the item commands once and the help shows each key once.
  */
 
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
 import { Archive, CalendarArrowUp, CalendarClock, CircleDashed, CornerLeftUp, Shapes, Signal, Tag, Trash2, UserRoundCheck, UserRoundPlus } from 'lucide-react';
-import { createElement, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { createElement, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
 import { reasonText, type Page } from '@/api/client';
 import type { BulkPatch } from '@/api/workItems';
 import { UnassignedAvatar } from '@/components/ui/Avatar';
@@ -67,9 +81,11 @@ export type ItemCommandScope = 'list' | 'detail';
 export interface ItemCommandsOptions {
   /** The shortcut scope: `detail` (item page, preview) wins over `list`. */
   scope: ItemCommandScope;
-  /** The item page: the commands act on this item alone. */
+  /** The item page: its item (rule 2 at the top). */
   itemId?: string | null;
-  /** A list or board: the item under its keyboard cursor, used when nothing is selected. */
+  /** The preview: its panel; while the focus is inside, the commands act on the previewed item (rule 1). */
+  panel?: RefObject<HTMLElement | null>;
+  /** A list or board: the item under its keyboard cursor, from the screen's state (rule 4). */
   current?: () => string | null;
 }
 
@@ -81,6 +97,8 @@ const HELP_GROUP = 'Item';
 /** What the commands read and do when they run; the hook hands in the latest of it. */
 export interface ItemCommandContext {
   targets: WorkItem[];
+  /** The catalogs the commands read have loaded (projects, workflows, people, labels, types, properties, rights). */
+  ready: boolean;
   me: User | undefined;
   today: string;
   projects: Project[];
@@ -346,49 +364,94 @@ function parentOptions(ctx: ItemCommandContext): CommandOption[] {
 
 const isPage = (data: unknown): data is Page<WorkItem> => typeof data === 'object' && data !== null && Array.isArray((data as Page<WorkItem>).items);
 
-/** Takes the items out of every cached list at once, and out of the preview and the selection. */
-function hideAtOnce(ctx: ItemCommandContext, ids: string[]): void {
-  ctx.queryClient.setQueriesData({ queryKey: [...qk.workItems.all, 'list'] }, (data: unknown) =>
+/**
+ * Takes the items out of every cached list at once, and out of the preview and the selection. Answers `restore`, which
+ * puts the named items back where they were (undo, or a change that failed) and loads the lists again.
+ */
+function hideAtOnce(ctx: ItemCommandContext, ids: string[]): (back: string[]) => void {
+  const listKey = [...qk.workItems.all, 'list'];
+  const before = ctx.queryClient.getQueriesData<unknown>({ queryKey: listKey });
+  ctx.queryClient.setQueriesData({ queryKey: listKey }, (data: unknown) =>
     isPage(data) ? { ...data, items: data.items.filter((item) => !ids.includes(item.id)), total: Math.max(0, data.total - ids.length) } : data,
   );
   const ui = useUiStore.getState();
   if (ui.peekItemId && ids.includes(ui.peekItemId)) ui.openPeek(null);
   if (ui.selection.some((id) => ids.includes(id))) ui.setSelection(ui.selection.filter((id) => !ids.includes(id)));
-}
 
-/** Undo: the lists load again and show the items, which never left the server. */
-const showAgain = (ctx: ItemCommandContext) => () => void ctx.queryClient.invalidateQueries({ queryKey: qk.workItems.all });
+  return (back) => {
+    for (const [key, snapshot] of before) {
+      if (!isPage(snapshot)) continue;
+      ctx.queryClient.setQueryData(key, (current: unknown) => {
+        if (!isPage(current)) return current;
+        const now = new Map(current.items.map((item) => [item.id, item]));
+        const returning = snapshot.items.filter((item) => back.includes(item.id) && !now.has(item.id));
+        if (returning.length === 0) return current;
+        // the order of before, with today's version of every item that stayed, and new items at the end
+        const items = [
+          ...snapshot.items.flatMap((item) => (now.has(item.id) ? [now.get(item.id)!] : back.includes(item.id) ? [item] : [])),
+          ...current.items.filter((item) => !snapshot.items.some((old) => old.id === item.id)),
+        ];
+        return { ...current, items, total: current.total + returning.length };
+      });
+    }
+    // the server has the last word (a failed refetch keeps what is shown)
+    void ctx.queryClient.invalidateQueries({ queryKey: qk.workItems.all });
+  };
+}
 
 function archiveTargets(ctx: ItemCommandContext): void {
   const targets = ctx.targets;
   const ids = targets.map((item) => item.id);
-  hideAtOnce(ctx, ids);
-  runWithUndo({
-    label: `${subjectOf(targets)} archiviert`,
-    undo: showAgain(ctx),
-    // the item mutations roll back and toast a failure themselves (with "Erneut versuchen"): one toast is enough
-    run: () =>
-      (targets.length === 1
-        ? ctx.archive.mutateAsync(ids[0])
-        : ctx.bulk.mutateAsync({ ids, patch: { archived: true } }).then((result) => result.rejected.length > 0 && bulkToast(targets, result, 'archiviert'))
-      ).catch(() => undefined),
-  });
+  const restore = hideAtOnce(ctx, ids);
+  runWithUndo({ label: `${subjectOf(targets)} archiviert`, undo: () => restore(ids), run: () => archiveEach(ctx, targets, restore) });
+}
+
+/** Archives when the undo time is up. What fails or is refused comes back on screen. */
+async function archiveEach(ctx: ItemCommandContext, targets: WorkItem[], restore: (back: string[]) => void): Promise<void> {
+  const ids = targets.map((item) => item.id);
+  try {
+    if (targets.length === 1) {
+      await ctx.archive.mutateAsync(ids[0]);
+      return;
+    }
+    const result = await ctx.bulk.mutateAsync({ ids, patch: { archived: true } });
+    if (result.rejected.length > 0) {
+      restore(result.rejected.map((entry) => entry.id));
+      bulkToast(targets, result, 'archiviert');
+    }
+  } catch {
+    // the item mutations toast the failure themselves (with "Erneut versuchen"); the rows come back
+    restore(ids);
+  }
 }
 
 function deleteTargets(ctx: ItemCommandContext): void {
   const targets = ctx.targets;
   const ids = targets.map((item) => item.id);
-  hideAtOnce(ctx, ids);
-  runWithUndo({
-    label: `${subjectOf(targets)} gelöscht`,
-    undo: showAgain(ctx),
-    run: () => Promise.all(ids.map((id) => ctx.remove.mutateAsync(id))),
+  const restore = hideAtOnce(ctx, ids);
+  runWithUndo({ label: `${subjectOf(targets)} gelöscht`, undo: () => restore(ids), run: () => deleteEach(ctx, targets, restore) });
+}
+
+/**
+ * Deletes when the undo time is up, item by item. What fails comes back on screen, and "Erneut versuchen" tries only
+ * those again (the others are gone and would answer 404).
+ */
+async function deleteEach(ctx: ItemCommandContext, targets: WorkItem[], restore: (back: string[]) => void): Promise<void> {
+  const results = await Promise.allSettled(targets.map((item) => ctx.remove.mutateAsync(item.id)));
+  const failed = targets.filter((_, index) => results[index].status === 'rejected');
+  if (failed.length === 0) return;
+  restore(failed.map((item) => item.id));
+  const cause = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')?.reason;
+  notifyError(`${subjectOf(failed)} nicht gelöscht`, cause, () => {
+    const again = hideAtOnce(ctx, failed.map((item) => item.id));
+    void deleteEach(ctx, failed, again);
   });
 }
 
 /** What `mod+backspace` does now: archive closed items, delete others; or why it can do neither. */
 function removal(ctx: ItemCommandContext): { run: () => void } | { denied: string } {
   if (ctx.targets.length === 0) return { denied: 'Kein Item gewählt.' };
+  if (!ctx.ready) return { denied: LOADING };
   const archivable = ctx.targets.every((item) => item.archived_at === null && isClosed(ctx, item));
   if (archivable) {
     const denied = editReason(ctx);
@@ -406,6 +469,8 @@ interface ItemCommand {
   keys: string;
   icon: LucideIcon;
   keywords?: string[];
+  /** Whether what it reads has still to load; then it waits (its shortcut says so) instead of acting on gaps. */
+  loading?: (ctx: ItemCommandContext) => boolean;
   /** Why it is not possible for the current targets, or null. */
   denied: (ctx: ItemCommandContext) => string | null;
   /** Either a sub-list or an action. */
@@ -416,6 +481,11 @@ interface ItemCommand {
 }
 
 const SINGLE = (ctx: ItemCommandContext) => (ctx.targets.length > 1 ? ONE_ONLY : editReason(ctx));
+
+const LOADING = 'Die Daten dafür werden noch geladen. Versuch es gleich noch einmal.';
+
+/** Whether a command waits for data: the catalogs, and whatever the command reads besides. */
+const waiting = (command: ItemCommand, ctx: ItemCommandContext) => !ctx.ready || (command.loading?.(ctx) ?? false);
 
 const COMMANDS: ItemCommand[] = [
   {
@@ -470,6 +540,8 @@ const COMMANDS: ItemCommand[] = [
     keys: 'shift+p',
     icon: CornerLeftUp,
     keywords: ['epic', 'parent'],
+    // the candidates are the items of the project
+    loading: (ctx) => ctx.projectItems === undefined,
     denied: SINGLE,
     options: parentOptions,
     placeholder: 'Key oder Titel suchen …',
@@ -480,7 +552,8 @@ const COMMANDS: ItemCommand[] = [
 /** The palette commands and shortcuts of one source; answers the function that takes them out again. */
 export function registerItemCommands(source: ItemCommandSource): () => void {
   const ctx = () => source.context();
-  const deniedToast = (denied: string) => toast({ title: 'Nicht möglich', description: denied, tone: 'error' });
+  const deniedToast = (denied: string) =>
+    denied === LOADING ? toast({ title: 'Einen Moment', description: LOADING }) : toast({ title: 'Nicht möglich', description: denied, tone: 'error' });
   const offs: (() => void)[] = [];
 
   for (const command of COMMANDS) {
@@ -491,7 +564,10 @@ export function registerItemCommands(source: ItemCommandSource): () => void {
       keys: command.keys,
       icon: createElement(command.icon),
       keywords: command.keywords,
-      when: () => ctx().targets.length > 0 && command.denied(ctx()) === null,
+      when: () => {
+        const c = ctx();
+        return c.targets.length > 0 && !waiting(command, c) && command.denied(c) === null;
+      },
       run: () => (command.act ? command.act(ctx()) : undefined),
       subpage: command.options ? () => ({ placeholder: command.placeholder, emptyText: command.emptyText, options: command.options!(ctx()) }) : undefined,
     };
@@ -505,9 +581,10 @@ export function registerItemCommands(source: ItemCommandSource): () => void {
         group: HELP_GROUP,
         when: () => ctx().targets.length > 0,
         run: () => {
-          const denied = command.denied(ctx());
+          const c = ctx();
+          const denied = waiting(command, c) ? LOADING : command.denied(c);
           if (denied) deniedToast(denied);
-          else if (command.act) command.act(ctx());
+          else if (command.act) command.act(c);
           else useUiStore.getState().openPalette(command.id);
         },
       }),
@@ -524,7 +601,7 @@ export function registerItemCommands(source: ItemCommandSource): () => void {
       icon: createElement(Archive),
       when: () => {
         const c = ctx();
-        return c.targets.length > 0 && c.targets.every((item) => item.archived_at === null && isClosed(c, item)) && editReason(c) === null;
+        return c.ready && c.targets.length > 0 && c.targets.every((item) => item.archived_at === null && isClosed(c, item)) && editReason(c) === null;
       },
       run: () => archiveTargets(ctx()),
     }),
@@ -537,7 +614,7 @@ export function registerItemCommands(source: ItemCommandSource): () => void {
       keywords: ['entfernen'],
       when: () => {
         const c = ctx();
-        return c.targets.length > 0 && c.targets.every((item) => c.reason('item.delete', item.project_id) === null);
+        return c.ready && c.targets.length > 0 && c.targets.every((item) => c.reason('item.delete', item.project_id) === null);
       },
       run: () => deleteTargets(ctx()),
     }),
@@ -561,14 +638,21 @@ export function registerItemCommands(source: ItemCommandSource): () => void {
 
 /* --------------------------------------------------------------------------- the hook */
 
-/** The screens that mount the commands; the innermost scope, then the one mounted last, registers. */
-let mounts: { id: number; scope: ItemCommandScope }[] = [];
+/** A screen that mounts the commands, with the latest options it rendered. */
+interface Mount {
+  id: number;
+  scope: ItemCommandScope;
+  options: () => ItemCommandsOptions;
+}
+
+/** The mounted screens; the innermost scope, then the one mounted last, registers. */
+let mounts: Mount[] = [];
 let mountCounter = 0;
 const mountListeners = new Set<() => void>();
 const SCOPE_RANK: Record<ItemCommandScope, number> = { list: 1, detail: 2 };
 
 function activeMount(): number | null {
-  const best = mounts.reduce<(typeof mounts)[number] | null>((winner, mount) => {
+  const best = mounts.reduce<Mount | null>((winner, mount) => {
     if (!winner) return mount;
     const rank = SCOPE_RANK[mount.scope] - SCOPE_RANK[winner.scope];
     return rank > 0 || (rank === 0 && mount.id > winner.id) ? mount : winner;
@@ -582,6 +666,31 @@ function subscribeMounts(listener: () => void): () => void {
     mountListeners.delete(listener);
   };
 }
+
+/** The ids the commands act on right now, by the rules at the top of this file. */
+function currentTargetIds(): string[] {
+  const ui = useUiStore.getState();
+  const focus = typeof document === 'undefined' ? null : document.activeElement;
+  const newestFirst = [...mounts].reverse().map((mount) => mount.options());
+  if (ui.peekItemId && newestFirst.some((options) => options.panel?.current?.contains(focus) ?? false)) return [ui.peekItemId];
+  const page = newestFirst.find((options) => options.itemId)?.itemId;
+  if (page) return [page];
+  if (ui.selection.length > 0) return ui.selection;
+  for (const options of newestFirst) {
+    const cursor = options.current?.();
+    if (cursor) return [cursor];
+  }
+  return ui.peekItemId ? [ui.peekItemId] : [];
+}
+
+/** The targets of the moment the palette opened: it takes the focus, so asking again would lose the preview. */
+let paletteTargets: string[] | null = null;
+useUiStore.subscribe((state, previous) => {
+  if (state.paletteOpen && !previous.paletteOpen) paletteTargets = currentTargetIds();
+  else if (!state.paletteOpen) paletteTargets = null;
+});
+
+const targetIds = (): string[] => paletteTargets ?? currentTargetIds();
 
 const isDetail = (data: unknown): data is WorkItemDetail => typeof data === 'object' && data !== null && 'item' in data && 'workflow' in data;
 
@@ -598,12 +707,16 @@ function cachedItem(queryClient: QueryClient, ref: string): WorkItem | undefined
   return undefined;
 }
 
-/** Mounts the item commands and their shortcuts for a screen (see the top of this file). */
+/** Mounts the item commands and their shortcuts for a screen (see the mounting contract at the top of this file). */
 export function useItemCommands(options: ItemCommandsOptions): void {
   const [mountId] = useState(() => ++mountCounter);
-  const { scope, itemId } = options;
+  const latestOptions = useRef(options);
+  useLayoutEffect(() => {
+    latestOptions.current = options;
+  });
+  const { scope } = options;
   useEffect(() => {
-    mounts = [...mounts, { id: mountId, scope }];
+    mounts = [...mounts, { id: mountId, scope, options: () => latestOptions.current }];
     mountListeners.forEach((listener) => listener());
     return () => {
       mounts = mounts.filter((mount) => mount.id !== mountId);
@@ -613,9 +726,10 @@ export function useItemCommands(options: ItemCommandsOptions): void {
   const active = useSyncExternalStore(subscribeMounts, activeMount, activeMount) === mountId;
 
   const queryClient = useQueryClient();
-  // subscribed, so the heading follows the selection and the preview
+  // subscribed, so the palette's heading follows the selection, the preview and the targets of an opening palette
   useUiStore((state) => state.selection);
   useUiStore((state) => state.peekItemId);
+  useUiStore((state) => state.paletteOpen);
   const projects = useProjects({ include_archived: true }).data?.items;
   const workflows = useWorkflows().data?.items;
   const users = useUsers().data?.items;
@@ -636,39 +750,39 @@ export function useItemCommands(options: ItemCommandsOptions): void {
     archive: useArchiveWorkItem(),
     remove: useDeleteWorkItem(),
   };
+  // the rights come from the same people, projects and memberships
+  const ready = Boolean(projects && workflows && users && members && labels && types && properties && me);
 
-  // the ids the commands act on, read from the store at the moment they are asked (the selectors above re-render)
-  const targetIds = (): string[] => {
-    const ui = useUiStore.getState();
-    if (itemId) return [itemId];
-    if (ui.selection.length > 0) return ui.selection;
-    const cursor = options.current?.() ?? ui.peekItemId;
-    return cursor ? [cursor] : [];
-  };
   const ids = targetIds();
   // a single item is loaded here, so the commands know it even before its screen has
   const single = useWorkItem(ids.length === 1 ? ids[0] : null).data?.item;
   const targets = ids.flatMap((id) => (single && (single.id === id || single.key === id) ? [single] : (cachedItem(queryClient, id) ?? [])));
   const projectItems = useProjectItems(single?.project_id ?? '', single !== undefined).data?.items;
+  const projectItemsOf = projectItems ? single?.project_id : undefined;
 
-  const context = (): ItemCommandContext => ({
-    targets: targetIds().flatMap((id) => cachedItem(queryClient, id) ?? []),
-    me,
-    today,
-    projects: projects ?? [],
-    workflows: workflows ?? [],
-    peopleOf: (projectId) =>
-      (users ?? []).filter(
-        (user) => user.disabled_at === null && (members ?? []).some((member) => member.project_id === projectId && member.user_id === user.id),
-      ),
-    labels: labels ?? [],
-    types: types ?? [],
-    properties: properties ?? [],
-    projectItems,
-    reason: (permission, projectId) => reason(permission, projectId),
-    ...mutations,
-    queryClient,
-  });
+  const context = (): ItemCommandContext => {
+    const now = targetIds().flatMap((id) => cachedItem(queryClient, id) ?? []);
+    return {
+      targets: now,
+      ready,
+      me,
+      today,
+      projects: projects ?? [],
+      workflows: workflows ?? [],
+      peopleOf: (projectId) =>
+        (users ?? []).filter(
+          (user) => user.disabled_at === null && (members ?? []).some((member) => member.project_id === projectId && member.user_id === user.id),
+        ),
+      labels: labels ?? [],
+      types: types ?? [],
+      properties: properties ?? [],
+      // only the items of the target's own project (another target loads its project on the next render)
+      projectItems: now.length === 1 && now[0].project_id === projectItemsOf ? projectItems : undefined,
+      reason: (permission, projectId) => reason(permission, projectId),
+      ...mutations,
+      queryClient,
+    };
+  };
   const latest = useRef(context);
   useLayoutEffect(() => {
     latest.current = context;
@@ -681,8 +795,19 @@ export function useItemCommands(options: ItemCommandsOptions): void {
     return item.archived_at === null && state !== undefined && isClosedCategory(state.category);
   });
 
+  // registered anew when the data a command waits for arrive, so an open palette shows it then
+  const loaded = `${ready}:${projectItemsOf ?? ''}`;
   useEffect(() => {
     if (!active) return;
     return registerItemCommands({ scope, group, archives, context: () => latest.current() });
-  }, [active, scope, group, archives]);
+  }, [active, scope, group, archives, loaded]);
+}
+
+/**
+ * The item commands of the preview, as `PeekHost` mounts them (lazily, with the preview): detail scope, and the
+ * previewed item while the focus is inside `panel`.
+ */
+export function PreviewItemCommands({ panel }: { panel: RefObject<HTMLElement | null> }): null {
+  useItemCommands({ scope: 'detail', panel });
+  return null;
 }

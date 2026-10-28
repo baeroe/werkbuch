@@ -2,10 +2,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
+import type { Property, PropertyValue } from '@/types';
 import { MemoryRouter } from 'react-router';
+import { PeekHost } from '@/app/PeekHost';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { listProperties } from '@/api/properties';
 import { getWorkItem } from '@/api/workItems';
+import { useWorkItems } from '@/hooks/workItems';
 import { currentToasts, dismissToast } from '@/components/ui/toast';
 import { CommandPalette } from '@/features/palette/CommandPalette';
 import { listCommands } from '@/lib/commands';
@@ -14,7 +17,7 @@ import { useUiStore } from '@/store/ui';
 import { asUser, resetApi } from '@/test/api';
 import { useItemCommands, type ItemCommandScope } from './commands';
 import { ItemDialogsHost } from './ItemDialogs';
-import { PropertyField } from './PropertyField';
+import { PropertyField, PropertyValueInput } from './PropertyField';
 import { StatePicker } from './StatePicker';
 import { TypePicker } from './TypePicker';
 
@@ -108,15 +111,16 @@ describe('PropertyField', () => {
     expect((await stored('WEB-47')).values.effort).toBe(2.8);
   });
 
-  it('a rich text property is a plain text area: blocks become paragraphs and back', async () => {
+  it('a rich text with a list is shown read-only, to be edited in the editor', async () => {
     const user = userEvent.setup();
     const item = await stored('WEB-47');
     const steps = (await listProperties()).items.find((property) => property.key === 'steps')!;
     renderWithData(<PropertyField item={item} property={steps} required={false} />);
 
+    // the ordered list of the seed reads one line per step, and nothing can flatten it
     const area = await screen.findByRole<HTMLTextAreaElement>('textbox', { name: 'Schritte zum Nachstellen' });
-    await waitFor(() => expect(area.readOnly).toBe(false));
-    // the ordered list of the seed keeps one line per step
+    await waitFor(() => expect(screen.getByText('Im Editor bearbeiten')).toBeTruthy());
+    expect(area.readOnly).toBe(true);
     expect(area.value.split('\n')).toEqual([
       'So lässt sich der Fehler nachstellen:',
       '',
@@ -124,19 +128,85 @@ describe('PropertyField', () => {
       '2. Alle Felder ausfüllen und auf „Absenden“ tippen.',
       '3. Im Postfach des Teams liegen zwei identische Mails.',
     ]);
-
-    await user.clear(area);
-    await user.type(area, 'Erst das.{Enter}{Enter}Dann das.');
+    await user.type(area, 'mehr');
     await user.tab();
+    expect((await stored('WEB-47')).values.steps).toEqual(item.values.steps);
+  });
+
+  it('a plain rich text edits as paragraphs: a blank line starts one, a single line break stays a hard break', async () => {
+    const user = userEvent.setup();
+    const item = await stored('APP-10');
+    const steps = (await listProperties()).items.find((property) => property.key === 'steps')!;
+    renderWithData(<PropertyField item={item} property={steps} required={false} />);
+
+    const area = await screen.findByRole<HTMLTextAreaElement>('textbox', { name: 'Schritte zum Nachstellen' });
+    await waitFor(() => expect(area.readOnly || area.disabled).toBe(false));
+    await user.type(area, 'Erst das.{Enter}Und das.{Enter}{Enter}Dann das.');
+    await user.tab();
+
     await waitFor(async () =>
-      expect((await stored('WEB-47')).values.steps).toEqual({
+      expect((await stored('APP-10')).values.steps).toEqual({
         type: 'doc',
         content: [
-          { type: 'paragraph', content: [{ type: 'text', text: 'Erst das.' }] },
+          { type: 'paragraph', content: [{ type: 'text', text: 'Erst das.' }, { type: 'hardBreak' }, { type: 'text', text: 'Und das.' }] },
           { type: 'paragraph', content: [{ type: 'text', text: 'Dann das.' }] },
         ],
       }),
     );
+    // and it reads back as it was typed
+    expect(area.value).toBe('Erst das.\nUnd das.\n\nDann das.');
+  });
+});
+
+describe('PropertyValueInput numbers', () => {
+  const number = (decimals: number): Property => ({
+    id: `pr_test_${decimals}`,
+    key: `test_${decimals}`,
+    label: 'Anzahl',
+    field_type: 'number',
+    help: '',
+    default_value: null,
+    settings: { decimals },
+    options: [],
+  });
+
+  function renderNumber(decimals: number, value: number) {
+    const commits: PropertyValue[] = [];
+    renderWithData(<PropertyValueInput property={number(decimals)} value={value} onChange={() => undefined} onCommit={(next) => commits.push(next)} projectId="p_web" />);
+    return { commits, input: screen.getByRole<HTMLInputElement>('textbox', { name: 'Anzahl' }) };
+  }
+
+  it('edits 1500 without a thousands point and reads "1.500" as 1500, a point only as a thousands separator', async () => {
+    const user = userEvent.setup();
+    const { commits, input } = renderNumber(0, 1500);
+    expect(input.value).toBe('1500');
+
+    // a digit added to the shown value
+    await user.type(input, '0{Enter}');
+    expect(commits).toEqual([15000]);
+    expect(input.value).toBe('15000');
+
+    await user.clear(input);
+    await user.type(input, '1.500{Enter}');
+    expect(commits).toEqual([15000, 1500]);
+    expect(input.value).toBe('1500');
+
+    // "1.5" is no thousands group: refused with the fix, nothing saved
+    await user.clear(input);
+    await user.type(input, '1.5{Enter}');
+    expect(screen.getByText(/Der Punkt trennt nur Tausender/)).toBeTruthy();
+    expect(commits).toEqual([15000, 1500]);
+  });
+
+  it('reads "1.234,5" with one decimal as 1234,5 and edits it without the point', async () => {
+    const user = userEvent.setup();
+    const { commits, input } = renderNumber(1, 1234.5);
+    expect(input.value).toBe('1234,5');
+
+    await user.clear(input);
+    await user.type(input, '1.234,5{Enter}');
+    expect(commits).toEqual([1234.5]);
+    expect(input.value).toBe('1234,5');
   });
 });
 
@@ -228,6 +298,72 @@ describe('item commands', () => {
 
     act(() => dismissToast(undo!.id));
     await waitFor(async () => expect((await stored('WEB-40')).archived_at).not.toBeNull());
+  });
+
+  it('a delete that fails brings its row back and "Erneut versuchen" deletes it then', async () => {
+    function WebKeys() {
+      const items = useWorkItems({ filter: { version: 1, conditions: [{ field: 'project', op: 'is', value: 'p_web' }] } }).data?.items;
+      return <ul aria-label="WEB">{items?.map((item) => <li key={item.id}>{item.key}</li>)}</ul>;
+    }
+    renderWithData(
+      <>
+        <Screen scope="list" cursor="wi_web_50" />
+        <WebKeys />
+      </>,
+    );
+    const list = await screen.findByRole('list', { name: 'WEB' });
+    await waitFor(() => expect(within(list).getByText('WEB-50')).toBeTruthy());
+    await waitFor(() => expect(listCommands().find((command) => command.id === 'item.delete')?.when?.()).toBe(true));
+
+    // WEB-50 is open: mod+backspace deletes it, the row goes at once
+    localStorage.setItem('api:fail', '1');
+    act(() => {
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', ctrlKey: true, bubbles: true, cancelable: true }));
+    });
+    await waitFor(() => expect(within(list).queryByText('WEB-50')).toBeNull());
+
+    // the undo time is up, the server fails: the row is back, the toast offers to try again
+    act(() => dismissToast(currentToasts().find((entry) => entry.title === 'WEB-50 gelöscht')!.id));
+    expect(await within(list).findByText('WEB-50')).toBeTruthy();
+    const failed = await waitFor(() => {
+      const entry = currentToasts().find((toastEntry) => toastEntry.title === 'WEB-50 nicht gelöscht');
+      expect(entry?.action?.label).toBe('Erneut versuchen');
+      return entry!;
+    });
+
+    localStorage.removeItem('api:fail');
+    act(() => failed.action!.onClick());
+    await waitFor(() => expect(within(list).queryByText('WEB-50')).toBeNull());
+    await expect(getWorkItem('WEB-50')).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('in the preview the keys act on the item it shows, outside it on the selection', async () => {
+    renderWithData(
+      <MemoryRouter>
+        <Screen scope="list" cursor="wi_web_42" />
+        <PeekHost />
+      </MemoryRouter>,
+    );
+    act(() => useUiStore.setState({ selection: ['wi_web_50'], peekItemId: 'wi_web_47' }));
+    const panel = await screen.findByRole('complementary', { name: 'Vorschau' });
+    // the preview mounts the commands itself (detail scope)
+    await waitFor(() => expect(listShortcuts().find((shortcut) => shortcut.id === 'item.assign_me')?.scope).toBe('detail'));
+    await waitFor(() => expect(listCommands().find((command) => command.id === 'item.assign_me')?.when?.()).toBe(true));
+    const pressI = (target: Element) =>
+      act(() => {
+        target.dispatchEvent(new KeyboardEvent('keydown', { key: 'i', bubbles: true, cancelable: true }));
+      });
+
+    // focus inside the preview: WEB-47, which the preview shows, not the selected WEB-50
+    act(() => panel.focus());
+    pressI(panel);
+    await waitFor(async () => expect((await stored('WEB-47')).assignee_id).toBe('u_mara'));
+    expect((await stored('WEB-50')).assignee_id).toBeNull();
+
+    // focus outside: the selection
+    act(() => panel.blur());
+    pressI(document.body);
+    await waitFor(async () => expect((await stored('WEB-50')).assignee_id).toBe('u_mara'));
   });
 
   it('Done from the palette asks for the resolution, and Enter moves the item', async () => {
