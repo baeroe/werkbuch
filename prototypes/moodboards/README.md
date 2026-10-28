@@ -2,6 +2,8 @@
 
 Schritt 2 aus der Spec (`docs/superpowers/specs/2026-10-28-werkbuch-design.md`, Abschnitt 11). Drei Designrichtungen für werkbuch zum Vergleichen. Rafael wählt eine aus oder mischt. Die gewählte Richtung wird zur `DESIGN.md` des Klickdummys.
 
+**Entscheidung am 2026-10-28:** Rafael hat **Werkbuch („Arbeitsheft“)** gewählt, ohne Mischung. Die Gestaltungsgrundlage ist jetzt `prototypes/clickdummy/DESIGN.md`. Die anderen beiden Moodboards bleiben als Referenz liegen.
+
 Jede Richtung liegt in einem eigenen Ordner mit `index.html` (eine Datei, ohne Build) und `DESIGN.md` (Tokens, Typo, Motion, No-Gos).
 
 | Ordner | Richtung | Kurz |

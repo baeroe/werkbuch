@@ -14,7 +14,7 @@ Offenes, selbst gehostetes Projektmanagement-Tool: Projekte, Work Items mit eige
 
 Spec freigegeben am 2026-10-28. Es gibt noch keinen App-Code. Ablauf laut Spec, Abschnitt 11:
 
-1. Drei Moodboards in `prototypes/moodboards/`, daraus wird `DESIGN.md`.
+1. Drei Moodboards in `prototypes/moodboards/`. Erledigt: Am 2026-10-28 ist die Richtung **Werkbuch („Arbeitsheft“)** gewählt. Gestaltungsgrundlage ist `prototypes/clickdummy/DESIGN.md`; vor jeder UI-Arbeit lesen.
 2. Klickdummy in `prototypes/clickdummy/`.
 3. Umsetzung in Phasen, aber erst nach den Korrekturen am Klickdummy.
 4. Manuelle Tests.
