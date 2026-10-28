@@ -156,20 +156,22 @@ export function ViewsScreen() {
   const openCreate = () => setDialog({ open: true, view: null });
   useCommand({ id: 'views.create', label: 'Neue View', group: 'Views', icon: <Plus />, keywords: ['anlegen', 'erstellen', 'view'], run: openCreate, when: () => createReason === null });
 
-  /** "Als neue View speichern": every member may, of any view. The copy is theirs. */
-  function copy(view: View) {
+  /**
+   * "Als neue View speichern": every member may, of any view. The copy is theirs. Every copy ends itself
+   * (`mutateAsync`): with several copies on their way, the callbacks of `mutate` would only be called for the last one
+   * (one hook, one observer), and the row of an earlier copy would stay busy for good.
+   */
+  async function copy(view: View) {
     setCopying((state) => new Set(state).add(view.id));
-    saveView.mutate(
-      { name: `${view.name} (Kopie)`, icon: view.icon, filter: view.filter, display: view.display },
-      {
-        onSuccess: (saved) => {
-          useUiStore.getState().flash(saved.id);
-          toast({ title: `„${saved.name}“ angelegt`, tone: 'success', action: { label: 'Öffnen', onClick: () => void navigate(`/views/${saved.id}`) } });
-        },
-        onError: (error) => notifyError(`„${view.name}“ nicht dupliziert`, error, () => copy(view)),
-        onSettled: () => setCopying((state) => new Set([...state].filter((id) => id !== view.id))),
-      },
-    );
+    try {
+      const saved = await saveView.mutateAsync({ name: `${view.name} (Kopie)`, icon: view.icon, filter: view.filter, display: view.display });
+      useUiStore.getState().flash(saved.id);
+      toast({ title: `„${saved.name}“ angelegt`, tone: 'success', action: { label: 'Öffnen', onClick: () => void navigate(`/views/${saved.id}`) } });
+    } catch (error) {
+      notifyError(`„${view.name}“ nicht dupliziert`, error, () => void copy(view));
+    } finally {
+      setCopying((state) => new Set([...state].filter((id) => id !== view.id)));
+    }
   }
 
   /** The row goes at once, the call follows when the toast runs out; "Rückgängig" brings the row back. */

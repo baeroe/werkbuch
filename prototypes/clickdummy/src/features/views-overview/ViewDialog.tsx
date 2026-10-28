@@ -111,17 +111,27 @@ export function ViewDialog({ open, onOpenChange, view, onSaved }: ViewDialogProp
     if (open) setErrors({});
   }, [open]);
 
-  function submit(values: Values) {
+  // one send at a time: mod+enter again before the first is answered would make a second view, and the callbacks of
+  // `mutate` are only called for the last of several calls (the first one would never be heard)
+  const sending = useRef(false);
+
+  async function submit(values: Values) {
+    if (sending.current) return;
+    sending.current = true;
     setErrors({});
     const name = values.name.trim();
     const input: ViewInput = view ? { ...view, name, icon: values.icon, display: { ...view.display, layout: values.layout } } : newView(name, values.icon, values.layout);
-    save.mutate(input, {
-      onSuccess: (saved) => onSaved(saved, !editing),
-      onError: (error) => {
-        if (error instanceof ApiError && error.status === 422 && error.errors) setErrors(error.errors);
-        else notifyError(editing ? 'View nicht gespeichert' : 'View nicht angelegt', error, () => submit(values));
-      },
-    });
+    let saved: View;
+    try {
+      saved = await save.mutateAsync(input);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 422 && error.errors) setErrors(error.errors);
+      else notifyError(editing ? 'View nicht gespeichert' : 'View nicht angelegt', error, () => void submit(values));
+      return;
+    } finally {
+      sending.current = false;
+    }
+    onSaved(saved, !editing);
   }
 
   return (

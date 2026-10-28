@@ -64,11 +64,14 @@ function OpenItems({ projectId }: { projectId: string }) {
 function Membership({ project, role, loading }: { project: Project; role: ProjectRole | undefined; loading: boolean }) {
   const join = useJoinProject();
 
-  function enter() {
-    join.mutate(project.id, {
-      onSuccess: () => toast({ title: `Du bist ${project.name} beigetreten`, tone: 'success' }),
-      onError: (error) => notifyError(`Beitritt zu ${project.name} nicht möglich`, error, enter),
-    });
+  // `mutateAsync`: every call ends itself, also one sent again from the toast's retry while another is on its way
+  async function enter() {
+    try {
+      await join.mutateAsync(project.id);
+      toast({ title: `Du bist ${project.name} beigetreten`, tone: 'success' });
+    } catch (error) {
+      notifyError(`Beitritt zu ${project.name} nicht möglich`, error, () => void enter());
+    }
   }
 
   if (project.archived_at !== null) {

@@ -3,14 +3,17 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApiError } from '@/api/client';
 import * as viewsApi from '@/api/views';
 import { deleteView, listFavorites, listViews } from '@/api/views';
 import { currentToasts, dismissToast, runToastAction } from '@/components/ui/toast';
+import { useUiStore } from '@/store/ui';
 import { asUser, resetApi } from '@/test/api';
 import { ViewsScreen } from './ViewsScreen';
 
 beforeEach(() => {
   resetApi();
+  useUiStore.setState(useUiStore.getInitialState());
 });
 
 // the toast store is shared by all tests: close whatever a test left open
@@ -87,7 +90,7 @@ describe('favorites', () => {
     expect(within(rowOf('Für Kira')).getByRole('button', { name: '„Für Kira“ aus der Seitenleiste nehmen' })).toBeTruthy();
   });
 
-  it('puts a view in the sidebar and takes it out again, with a toast each time', async () => {
+  it('puts a view in the sidebar and takes it out again; the star shows it, no toast does', async () => {
     const user = userEvent.setup();
     renderViews();
     await loaded();
@@ -95,13 +98,14 @@ describe('favorites', () => {
     await user.click(within(rowOf('Roadmap')).getByRole('button', { name: '„Roadmap“ in die Seitenleiste legen' }));
 
     expect(await within(rowOf('Roadmap')).findByRole('button', { name: '„Roadmap“ aus der Seitenleiste nehmen' })).toBeTruthy();
-    expect(toastTitles()).toContain('„Roadmap“ steht jetzt in der Seitenleiste');
     expect((await listFavorites()).items.some((favorite) => favorite.id === 'v_roadmap')).toBe(true);
 
     await user.click(within(rowOf('Roadmap')).getByRole('button', { name: '„Roadmap“ aus der Seitenleiste nehmen' }));
 
     expect(await within(rowOf('Roadmap')).findByRole('button', { name: '„Roadmap“ in die Seitenleiste legen' })).toBeTruthy();
-    expect(toastTitles()).toContain('„Roadmap“ steht nicht mehr in der Seitenleiste');
+    expect((await listFavorites()).items.some((favorite) => favorite.id === 'v_roadmap')).toBe(false);
+    // a change that shows at once needs no toast (only a refusal does)
+    expect(toastTitles()).toEqual([]);
   });
 
   it('shows the new state of the star at once, with a spinner for the call that is on its way', async () => {
@@ -402,5 +406,128 @@ describe('the states', () => {
     localStorage.removeItem('api:fail');
     await user.click(within(alert).getByRole('button', { name: 'Erneut versuchen' }));
     await loaded();
+  });
+});
+
+/* ------------------------------------------------------------------------ fix round 1 */
+
+/** The server answers when the test says so. */
+function held() {
+  let answer!: () => void;
+  const gate = new Promise<void>((resolve) => (answer = resolve));
+  return { gate, answer };
+}
+
+const duplicateButton = (name: string) => within(rowOf(name)).getByRole('button', { name: `„${name}“ duplizieren` });
+
+describe('calls that overlap', () => {
+  it('settles two copies that are made one after the other, before the first is answered', async () => {
+    const user = userEvent.setup();
+    const { gate, answer } = held();
+    const original = viewsApi.saveView;
+    vi.spyOn(viewsApi, 'saveView').mockImplementation(async (input) => {
+      await gate;
+      return original(input);
+    });
+    renderViews();
+    await loaded();
+
+    await user.click(duplicateButton('Roadmap'));
+    await user.click(duplicateButton('Für Kira'));
+    expect(duplicateButton('Roadmap').getAttribute('aria-busy')).toBe('true');
+    expect(duplicateButton('Für Kira').getAttribute('aria-busy')).toBe('true');
+
+    answer();
+
+    // both copies are there, both rows are free again (and can be copied once more), both toasts came
+    await screen.findByRole('link', { name: 'Roadmap (Kopie)' });
+    await screen.findByRole('link', { name: 'Für Kira (Kopie)' });
+    await waitFor(() => {
+      expect(duplicateButton('Roadmap').getAttribute('aria-busy')).toBeNull();
+      expect(duplicateButton('Für Kira').getAttribute('aria-busy')).toBeNull();
+    });
+    expect(toastTitles()).toEqual(expect.arrayContaining(['„Roadmap (Kopie)“ angelegt', '„Für Kira (Kopie)“ angelegt']));
+    expect(useUiStore.getState().flashIds).toHaveLength(2);
+  });
+
+  it('says why the first copy failed although a second one was sent after it', async () => {
+    const user = userEvent.setup();
+    const { gate, answer } = held();
+    const original = viewsApi.saveView;
+    let calls = 0;
+    vi.spyOn(viewsApi, 'saveView').mockImplementation(async (input) => {
+      calls += 1;
+      const mine = calls;
+      await gate;
+      if (mine === 1) throw new ApiError({ status: 503, reason: 'simulated', detail: 'Simulierter Serverfehler.' });
+      return original(input);
+    });
+    renderViews();
+    await loaded();
+    await user.click(duplicateButton('Roadmap'));
+    await user.click(duplicateButton('Für Kira'));
+
+    answer();
+
+    await screen.findByRole('link', { name: 'Für Kira (Kopie)' });
+    await waitFor(() => expect(currentToasts().find((item) => item.tone === 'error')?.title).toBe('„Roadmap“ nicht dupliziert'));
+    expect(currentToasts().find((item) => item.tone === 'error')?.action?.label).toBe('Erneut versuchen');
+    await waitFor(() => expect(duplicateButton('Roadmap').getAttribute('aria-busy')).toBeNull());
+    expect(screen.queryByRole('link', { name: 'Roadmap (Kopie)' })).toBeNull();
+  });
+});
+
+describe('sending a form twice', () => {
+  it('makes one view when mod+enter is pressed twice before the server answers', async () => {
+    const user = userEvent.setup();
+    const { gate, answer } = held();
+    const original = viewsApi.saveView;
+    vi.spyOn(viewsApi, 'saveView').mockImplementation(async (input) => {
+      await gate;
+      return original(input);
+    });
+    const { router } = renderViews();
+    await loaded();
+    await user.click(screen.getByRole('button', { name: /Neue View/ }));
+    const dialog = await screen.findByRole('dialog', { name: 'Neue View' });
+    await user.type(within(dialog).getByRole('textbox', { name: 'Name' }), 'Kundenanfragen');
+
+    await user.keyboard('{Control>}{Enter}{/Control}');
+    await user.keyboard('{Control>}{Enter}{/Control}');
+    answer();
+
+    await waitFor(() => expect(router.state.location.pathname).toMatch(/^\/views\/v_/));
+    expect((await listViews()).items.filter((view) => view.name === 'Kundenanfragen')).toHaveLength(1);
+    expect(toastTitles().filter((title) => title === '„Kundenanfragen“ angelegt')).toHaveLength(1);
+  });
+});
+
+describe('toasts and the undo', () => {
+  it('keeps the 5 seconds of undo while stars are set and taken out', async () => {
+    const user = userEvent.setup();
+    renderViews();
+    await loaded();
+
+    await user.click(within(rowOf('Blockiert')).getByRole('button', { name: '„Blockiert“ löschen' }));
+    await waitFor(() => expect(screen.queryByRole('link', { name: 'Blockiert' })).toBeNull());
+    // four changes of the sidebar after the delete: a toast each would have pushed the undo out
+    for (const [name, now] of [
+      ['Roadmap', true],
+      ['Studio Nordlicht', true],
+      ['Bugs in Produktion', false],
+      ['Fällig diese Woche', false],
+    ] as const) {
+      const label = now ? `„${name}“ in die Seitenleiste legen` : `„${name}“ aus der Seitenleiste nehmen`;
+      await user.click(within(rowOf(name)).getByRole('button', { name: label }));
+      const next = now ? `„${name}“ aus der Seitenleiste nehmen` : `„${name}“ in die Seitenleiste legen`;
+      await within(rowOf(name)).findByRole('button', { name: next });
+    }
+
+    expect(toastTitles()).toEqual(['„Blockiert“ gelöscht']);
+    expect((await listViews()).items).toHaveLength(6);
+
+    act(() => runToastAction(currentToasts()[0].id));
+    expect(await screen.findByRole('link', { name: 'Blockiert' })).toBeTruthy();
+    expect((await listViews()).items).toHaveLength(6);
   });
 });

@@ -6,8 +6,8 @@
  * Keyboard (scope list; the help `?` lists them): j and k move the cursor and the focus with it, e marks the
  * notification under the cursor read, shift+e all of them, # deletes with 5 seconds of undo, Enter opens its item in
  * the preview. The preview is `useUiStore.openPeek`; opening it neither navigates nor marks anything read.
- * A notification marked read shows as read at once (and is unread again if the server refuses); a delete hides the row
- * at once and runs when the undo toast ends.
+ * A notification marked read shows as read at once, without a toast (and is unread again, with a toast, if the server
+ * refuses); a delete hides the row at once and runs when the undo toast ends.
  *
  * Live: `useLiveSync` (mounted in the shell) loads the list again on a live event, so a new notification appears and the
  * counters, here and in the sidebar, change. The profile menu's "Live-Ereignis simulieren" shows it.
@@ -27,7 +27,7 @@ import { ErrorState } from '@/components/ui/ErrorState';
 import { IndexCard } from '@/components/ui/IndexCard';
 import { ProjectBadge } from '@/components/ui/ProjectBadge';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
-import { toast } from '@/components/ui/toast';
+import { currentToasts, toast } from '@/components/ui/toast';
 import { useDeleteNotification, useMarkAllRead, useMarkRead, useNotifications } from '@/hooks/notifications';
 import { useOrganization } from '@/hooks/organization';
 import { useProjects } from '@/hooks/projects';
@@ -59,6 +59,15 @@ function useClock(): Date {
 }
 
 const without = (set: ReadonlySet<string>, ids: string[]): Set<string> => new Set([...set].filter((id) => !ids.includes(id)));
+
+/**
+ * A hint is not shown twice at once. The toasts are three at most and a fourth pushes out the oldest, which ends its
+ * time at once: a key pressed again and again must not cut the 5 seconds of an undo.
+ */
+function hint(title: string, description: string): void {
+  if (currentToasts().some((item) => item.title === title)) return;
+  toast({ title, description });
+}
 
 /* --------------------------------------------------------------------- the pieces */
 
@@ -233,7 +242,9 @@ export function InboxScreen() {
   const [cursorId, setCursorId] = useState<string | null>(null);
   const [hidden, setHidden] = useState<ReadonlySet<string>>(() => new Set());
   const [readNow, setReadNow] = useState<ReadonlySet<string>>(() => new Set());
-  const [allReadNow, setAllReadNow] = useState(false);
+  // calls of "all read" that are on their way (a count, so that one that ends does not end the mark of another)
+  const [allReadCalls, setAllReadCalls] = useState(0);
+  const allReadNow = allReadCalls > 0;
   const links = useRef(new Map<string, HTMLAnchorElement>());
 
   // what the server counts, less what is marked read and not yet confirmed
@@ -263,8 +274,16 @@ export function InboxScreen() {
     links.current.get(id)?.focus();
   }
 
-  /** The row that is left when `id` goes: the next one, else the one before. */
-  const neighbourOf = (id: string): string | null => order[order.indexOf(id) + 1] ?? order[order.indexOf(id) - 1] ?? null;
+  /**
+   * The row the cursor takes over when `id` leaves the list: the one that moves up into its place. The groups sort again
+   * without it (a group whose newest notification goes falls behind), so the row after it in today's order can be far
+   * away by then; the row at the same place in the new order is where the eye is.
+   */
+  function survivorOf(id: string): string | null {
+    const index = order.indexOf(id);
+    const left = groupNotifications(visible.filter((notification) => notification.id !== id)).flatMap((group) => group.notifications.map((notification) => notification.id));
+    return left[Math.min(index, left.length - 1)] ?? null;
+  }
 
   function move(step: 1 | -1) {
     if (order.length === 0) return;
@@ -277,7 +296,7 @@ export function InboxScreen() {
   }
 
   function noCursor() {
-    toast({ title: 'Keine Benachrichtigung ausgewählt', description: 'Wähle eine mit J und K, oder klicke sie an.' });
+    hint('Keine Benachrichtigung ausgewählt', 'Wähle eine mit J und K, oder klicke sie an.');
   }
 
   function setFilter(next: FilterValue[]) {
@@ -292,33 +311,43 @@ export function InboxScreen() {
 
   /* actions */
 
-  function markRead(ids: string[]) {
+  /**
+   * The notifications show as read at once; no toast for it, as a refusal alone is worth one (spec 5.1). Every call
+   * ends itself (`mutateAsync`): the callbacks of `mutate` only belong to the last of several calls on one hook, so the
+   * mark of an earlier call would stay on, and its refusal would go unsaid.
+   */
+  async function markRead(ids: string[]) {
     setReadNow((state) => new Set([...state, ...ids]));
-    markReadMutation.mutate(ids, {
-      onSuccess: () => toast({ title: ids.length === 1 ? 'Als gelesen markiert' : `${count.format(ids.length)} als gelesen markiert`, tone: 'success' }),
-      onError: (error) => notifyError('Nicht als gelesen markiert', error, () => markRead(ids)),
-      // success: the list has loaded again and says it; failure: the notification is unread as before
-      onSettled: () => setReadNow((state) => without(state, ids)),
-    });
+    try {
+      await markReadMutation.mutateAsync(ids);
+    } catch (error) {
+      // the notifications are unread as before (the mark goes in the `finally`)
+      notifyError('Nicht als gelesen markiert', error, () => void markRead(ids));
+    } finally {
+      // success: the lists have loaded again and say it
+      setReadNow((state) => without(state, ids));
+    }
   }
 
-  function markAll() {
+  async function markAll() {
     // only when the count is known to be zero: an unknown count (still loading, or failed) lets the call try
     if (unreadQuery.data && unreadCount === 0) {
-      toast({ title: 'Alles gelesen', description: 'Es gibt keine ungelesenen Benachrichtigungen.' });
+      hint('Alles gelesen', 'Es gibt keine ungelesenen Benachrichtigungen.');
       return;
     }
-    setAllReadNow(true);
-    markAllMutation.mutate(undefined, {
-      onSuccess: () => toast({ title: 'Alle Benachrichtigungen als gelesen markiert', tone: 'success' }),
-      onError: (error) => notifyError('Nicht als gelesen markiert', error, markAll),
-      onSettled: () => setAllReadNow(false),
-    });
+    setAllReadCalls((calls) => calls + 1);
+    try {
+      await markAllMutation.mutateAsync();
+    } catch (error) {
+      notifyError('Nicht als gelesen markiert', error, () => void markAll());
+    } finally {
+      setAllReadCalls((calls) => calls - 1);
+    }
   }
 
   /** The row goes at once, the call follows when the toast runs out; "Rückgängig" brings the row back. */
   function remove(id: string) {
-    const next = neighbourOf(id);
+    const next = survivorOf(id);
     if (current === id) {
       // the focus moves first, so removing the row does not drop it on the page
       if (next) focusRow(next);
@@ -349,11 +378,11 @@ export function InboxScreen() {
     if (!notification || notification.read_at !== null) return;
     // in the unread list the row is about to leave: the cursor goes on to the next one
     if (unreadOnly) {
-      const next = neighbourOf(current);
+      const next = survivorOf(current);
       if (next) focusRow(next);
       else setCursorId(null);
     }
-    markRead([current]);
+    void markRead([current]);
   }
 
   function deleteCurrent() {
@@ -499,7 +528,7 @@ export function InboxScreen() {
               timeZone={timeZone}
               onOpen={open}
               onCursor={setCursorId}
-              onMarkRead={(id) => markRead([id])}
+              onMarkRead={(id) => void markRead([id])}
               onDelete={remove}
               registerLink={registerLink}
             />

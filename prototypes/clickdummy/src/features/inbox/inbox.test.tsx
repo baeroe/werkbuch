@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApiError } from '@/api/client';
 import { getDb, saveDb } from '@/api/db';
 import { simulateRemoteChange } from '@/api/live';
 import * as notificationsApi from '@/api/notifications';
@@ -174,7 +175,8 @@ describe('the keys', () => {
 
     await waitFor(() => expect(screen.getByRole('status').textContent).toBe('2 ungelesen'));
     expect(rows()[0].getAttribute('aria-current')).toBe('true');
-    expect(toastTitles()).toContain('Als gelesen markiert');
+    // a change that shows at once needs no toast (only a refusal does)
+    expect(toastTitles()).toEqual([]);
     expect((await listNotifications({ unread_only: true })).items.map((entry) => entry.id)).not.toContain('n_01');
   });
 
@@ -295,7 +297,7 @@ describe('the keys', () => {
     await user.keyboard('{Shift>}e{/Shift}');
 
     await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Alles gelesen'));
-    expect(toastTitles()).toContain('Alle Benachrichtigungen als gelesen markiert');
+    expect(toastTitles()).toEqual([]);
     expect((await listNotifications({ unread_only: true })).total).toBe(0);
   });
 
@@ -525,5 +527,159 @@ describe('live', () => {
 
     await waitFor(() => expect(screen.getByRole('status').textContent).toBe('4 ungelesen'));
     expect(screen.getAllByRole('listitem').filter((row) => row.hasAttribute('data-unread'))).toHaveLength(4);
+  });
+});
+
+/* ------------------------------------------------------------------------ fix round 1 */
+
+/** The server answers when the test says so. */
+function held() {
+  let answer!: () => void;
+  const gate = new Promise<void>((resolve) => (answer = resolve));
+  return { gate, answer };
+}
+
+const focusedHref = () => (document.activeElement as HTMLAnchorElement).getAttribute('href');
+
+describe('calls that overlap', () => {
+  it('settles every e, also when a second one is sent before the first is answered', async () => {
+    const user = userEvent.setup();
+    const { gate, answer } = held();
+    const original = notificationsApi.markRead;
+    vi.spyOn(notificationsApi, 'markRead').mockImplementation(async (ids) => {
+      await gate;
+      return original(ids);
+    });
+    renderInbox('/inbox?unread=1');
+    await loaded();
+
+    // j e e: two of the three unread notifications are read, the server has answered neither
+    await user.keyboard('jee');
+    expect(screen.getByRole('status').textContent).toBe('1 ungelesen');
+
+    answer();
+    await waitFor(async () => expect((await listNotifications({ unread_only: true })).total).toBe(1));
+    // no mark is left pending: the header counts what the server counts, and the button is not off
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('1 ungelesen'));
+    expect(screen.getByRole('button', { name: /Alle als gelesen markieren/ }).getAttribute('aria-disabled')).toBeNull();
+    expect(rows()).toHaveLength(1);
+  });
+
+  it('puts a notification back when its call fails after a second one was sent', async () => {
+    const user = userEvent.setup();
+    const { gate, answer } = held();
+    const original = notificationsApi.markRead;
+    let calls = 0;
+    vi.spyOn(notificationsApi, 'markRead').mockImplementation(async (ids) => {
+      calls += 1;
+      const mine = calls;
+      await gate;
+      if (mine === 1) throw new ApiError({ status: 503, reason: 'simulated', detail: 'Simulierter Serverfehler.' });
+      return original(ids);
+    });
+    renderInbox('/inbox?unread=1');
+    await loaded();
+    await user.keyboard('jee');
+
+    answer();
+
+    // the first call failed: its toast comes, and its notification is unread again; the second one is read
+    await waitFor(() => expect(currentToasts().some((item) => item.title === 'Nicht als gelesen markiert')).toBe(true));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('2 ungelesen'));
+    expect(rows()).toHaveLength(2);
+    expect(rows()[0].textContent).toContain('Ida Brenner hat dich erwähnt');
+  });
+});
+
+describe('the cursor after a removal', () => {
+  it('goes to the row that moves up, also when the group of the deleted row sorts down', async () => {
+    const user = userEvent.setup();
+    renderInbox();
+    await loaded();
+
+    // "Heute fällig" is the newest notification of APP-18: without it that group falls behind all the others
+    await user.keyboard('jj#');
+
+    expect(focusedHref()).toBe('/items/APP-24');
+    await user.keyboard('j');
+    expect(focusedHref()).toBe('/items/APP-15');
+  });
+
+  it('goes to the row that moves up in the unread list as well', async () => {
+    // an older unread notification on WEB-42: once the newest is read, that group falls behind the others
+    const db = getDb();
+    db.notifications.push({ ...db.notifications.find((entry) => entry.id === 'n_01')!, id: 'n_old_web42', created_at: '2026-10-19T08:00:00.000Z' });
+    saveDb();
+    const user = userEvent.setup();
+    renderInbox('/inbox?unread=1');
+    await loaded();
+    expect(rows()).toHaveLength(4);
+
+    await user.keyboard('je');
+
+    expect(focusedHref()).toBe('/items/APP-24');
+    await user.keyboard('j');
+    expect(focusedHref()).toBe('/items/APP-15');
+  });
+
+  it('stays on the previous row when the last one goes', async () => {
+    const user = userEvent.setup();
+    renderInbox();
+    await loaded();
+
+    await user.keyboard('k#');
+
+    // the last row is the failed template run of the project OPS; the one before it is the webhook
+    expect(focusedHref()).toBe('/settings/webhooks');
+  });
+});
+
+describe('toasts and the undo', () => {
+  it('keeps the 5 seconds of undo while read marks follow', async () => {
+    const user = userEvent.setup();
+    renderInbox();
+    await loaded();
+
+    // delete "Heute fällig" (undo toast), then read the three unread notifications
+    await user.keyboard('jj#');
+    await user.keyboard('e');
+    await user.keyboard('je');
+    await user.keyboard('kkke');
+
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Alles gelesen'));
+    // reading shows no toast: nothing pushed the undo out, nothing was deleted
+    expect(toastTitles()).toEqual(['Benachrichtigung gelöscht']);
+    expect((await listNotifications()).total).toBe(14);
+
+    const undo = currentToasts().find((item) => item.title === 'Benachrichtigung gelöscht')!;
+    act(() => runToastAction(undo.id));
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(14));
+    expect((await listNotifications()).total).toBe(14);
+  });
+
+  it('shows no toast for shift+e either, which is shown at once as well', async () => {
+    const user = userEvent.setup();
+    renderInbox();
+    await loaded();
+
+    await user.keyboard('{Shift>}e{/Shift}');
+
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Alles gelesen'));
+    expect(toastTitles()).toEqual([]);
+  });
+
+  it('shows a hint once, however often the key is pressed', async () => {
+    const user = userEvent.setup();
+    renderInbox();
+    await loaded();
+
+    await user.keyboard('eeee');
+    expect(toastTitles()).toEqual(['Keine Benachrichtigung ausgewählt']);
+
+    await user.keyboard('{Shift>}e{/Shift}');
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Alles gelesen'));
+    act(() => currentToasts().forEach((item) => dismissToast(item.id)));
+    await user.keyboard('{Shift>}ee{/Shift}');
+    expect(toastTitles()).toEqual(['Alles gelesen']);
   });
 });

@@ -2,7 +2,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as projectsApi from '@/api/projects';
 import { archiveProject, deleteProject, getProject, listMembers, listProjects, removeMember, updateProject } from '@/api/projects';
 import { listFavorites } from '@/api/views';
 import { listWorkItems } from '@/api/workItems';
@@ -19,6 +20,7 @@ beforeEach(() => {
 // the toast store is shared by all tests: close whatever a test left open
 afterEach(() => {
   act(() => currentToasts().forEach((item) => dismissToast(item.id)));
+  vi.restoreAllMocks();
 });
 
 function renderProjects(path = '/projects') {
@@ -454,6 +456,72 @@ describe('the dialog "Neues Projekt"', () => {
     expect(currentToasts().find((item) => item.tone === 'error')?.title).toBe('Projekt nicht angelegt');
     expect(nameField(dialog).value).toBe('Zeiterfassung');
     expect(screen.getByRole('dialog', { name: 'Neues Projekt' })).toBeTruthy();
+  });
+
+  it('keeps the focus where the person types, also while two errors stand and one goes', async () => {
+    const user = userEvent.setup();
+    renderProjects();
+    await loaded();
+    const dialog = await open(user);
+
+    // an identifier of their own that is none, and no name: two errors at once
+    await user.click(identifierField(dialog));
+    await user.type(identifierField(dialog), 'a-b');
+    await user.click(within(dialog).getByRole('button', { name: 'Projekt anlegen' }));
+    await waitFor(() => expect(nameField(dialog).getAttribute('aria-invalid')).toBe('true'));
+    expect(identifierField(dialog).getAttribute('aria-invalid')).toBe('true');
+    // the first error takes the focus once, right after the send
+    expect(document.activeElement).toBe(nameField(dialog));
+
+    // typing changes the error state with the first letter, and must not move the focus (WCAG 3.2.2)
+    await user.type(nameField(dialog), 'Zeiterfassung');
+
+    expect(nameField(dialog).value).toBe('Zeiterfassung');
+    expect(identifierField(dialog).value).toBe('A-B');
+    expect(document.activeElement).toBe(nameField(dialog));
+  });
+
+  it('takes the focus to the first error after every send that fails, not only the first', async () => {
+    const user = userEvent.setup();
+    renderProjects();
+    await loaded();
+    const dialog = await open(user);
+
+    await user.click(within(dialog).getByRole('button', { name: 'Projekt anlegen' }));
+    await waitFor(() => expect(document.activeElement).toBe(nameField(dialog)));
+    // the name is made good, the identifier is not: the next send brings the focus to the identifier
+    await user.type(nameField(dialog), 'Zeiterfassung');
+    await user.clear(identifierField(dialog));
+    await user.type(identifierField(dialog), 'a-b');
+    await user.click(within(dialog).getByRole('button', { name: 'Projekt anlegen' }));
+
+    await waitFor(() => expect(identifierField(dialog).getAttribute('aria-invalid')).toBe('true'));
+    await waitFor(() => expect(document.activeElement).toBe(identifierField(dialog)));
+  });
+
+  it('makes one project when mod+enter is pressed twice before the server answers', async () => {
+    const user = userEvent.setup();
+    let answer!: () => void;
+    const gate = new Promise<void>((resolve) => (answer = resolve));
+    const original = projectsApi.createProject;
+    const create = vi.spyOn(projectsApi, 'createProject').mockImplementation(async (input) => {
+      await gate;
+      return original(input);
+    });
+    renderProjects();
+    await loaded();
+    const dialog = await open(user);
+    await user.type(nameField(dialog), 'Zeiterfassung');
+
+    await user.keyboard('{Control>}{Enter}{/Control}');
+    await user.keyboard('{Control>}{Enter}{/Control}');
+    answer();
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    // one call: a second would only be refused as taken, and show an error behind the closing dialog
+    expect(create).toHaveBeenCalledTimes(1);
+    expect((await listProjects()).items.filter((project) => project.identifier === 'ZEI')).toHaveLength(1);
+    expect(toastTitles().filter((title) => title === 'Projekt ZEI angelegt')).toHaveLength(1);
   });
 });
 
