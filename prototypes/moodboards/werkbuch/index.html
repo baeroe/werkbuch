@@ -1,0 +1,1438 @@
+<title>werkbuch Arbeitsheft</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+@import url("https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700..800&family=Figtree:wght@400;500;600&display=swap");
+/* Werkbuch (direction C): a workbook with dot-grid paper, index cards with type tabs, highlighter marks; glass = tracing paper. */
+:root {
+  /* core colours of both themes as constants (used by the token table) */
+  --day-bg: oklch(0.975 0.004 250);          --night-bg: oklch(0.235 0.02 258);
+  --day-surface: oklch(1 0 0);               --night-surface: oklch(0.275 0.022 258);
+  --day-glass: oklch(0.988 0.007 85 / 0.74); --night-glass: oklch(0.285 0.022 258 / 0.76);
+  --day-text: oklch(0.255 0.04 262);         --night-text: oklch(0.94 0.012 250);
+  --day-muted: oklch(0.5 0.03 260);          --night-muted: oklch(0.75 0.02 255);
+  --day-border: oklch(0.895 0.012 255);      --night-border: oklch(0.355 0.022 258);
+  --day-accent: oklch(0.47 0.165 266);       --night-accent: oklch(0.74 0.12 266);
+  --day-marker: oklch(0.93 0.175 104);       --night-marker: oklch(0.91 0.18 104);
+  /* paper, ink, lines */
+  --bg: var(--day-bg); --bg-sunken: oklch(0.955 0.006 250); --surface: var(--day-surface);
+  --text: var(--day-text); --muted: var(--day-muted); --faint: oklch(0.6 0.022 258);
+  --border: var(--day-border); --border-strong: oklch(0.8 0.016 255); --line-input: oklch(0.6 0.022 258);
+  --dot: oklch(0.255 0.04 262 / 0.16); --hover: oklch(0.255 0.04 262 / 0.05); --pressed: oklch(0.255 0.04 262 / 0.09);
+  /* accent: ink blue, the only one */
+  --accent: var(--day-accent); --accent-hover: oklch(0.42 0.16 266); --accent-text: var(--day-accent);
+  --accent-soft: oklch(0.945 0.025 266); --on-accent: oklch(1 0 0);
+  /* highlighter: selection, focus and marking only */
+  --marker: var(--day-marker); --on-marker: var(--day-text);
+  --mark-bg: var(--day-marker); --mark-fg: var(--day-text); --mark-glow: none;
+  --select-wash: oklch(0.93 0.175 104 / 0.5);
+  --focus-ring: var(--day-accent); --focus-halo: 0 0 0 6px oklch(0.93 0.175 104 / 0.85);
+  /* tracing paper (glass) */
+  --glass: var(--day-glass); --glass-strong: oklch(0.988 0.007 85 / 0.88); --raised: var(--day-surface);
+  --glass-edge: oklch(0.255 0.04 262 / 0.11); --glass-light: inset 0 1px 0 oklch(1 0 0 / 0.7);
+  --glass-blur: 8px;
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .1 0 0 0 0 .13 0 0 0 0 .2 0 0 0 .5 -.2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --scrim: oklch(0.975 0.004 250 / 0.22); --knock: var(--surface);
+  /* semantic */
+  --danger: oklch(0.53 0.19 25); --danger-hover: oklch(0.48 0.19 25);
+  --danger-soft: oklch(0.955 0.02 25); --on-danger: oklch(1 0 0);
+  /* type tabs: task sky, bug ochre, epic moss */
+  --sky: oklch(0.63 0.08 232);   --sky-tab: oklch(0.895 0.045 228); --sky-ink: oklch(0.4 0.07 236);
+  --ochre: oklch(0.65 0.115 76); --ochre-tab: oklch(0.875 0.07 80); --ochre-ink: oklch(0.42 0.075 70);
+  --moss: oklch(0.6 0.095 132);  --moss-tab: oklch(0.885 0.055 132); --moss-ink: oklch(0.39 0.07 132);
+  /* status categories: colour = category, shape = status */
+  --st-backlog: oklch(0.6 0.02 258); --st-unstarted: oklch(0.5 0.03 260); --st-started: var(--day-accent);
+  --st-completed: oklch(0.55 0.11 155); --st-canceled: oklch(0.56 0.04 20);
+  /* elevation */
+  --elev-1: 0 1px 0 oklch(0.255 0.04 262 / 0.04), 0 1px 3px oklch(0.255 0.04 262 / 0.08);
+  --elev-2: 0 1px 2px oklch(0.255 0.04 262 / 0.06), 0 12px 28px -8px oklch(0.255 0.04 262 / 0.2);
+  --elev-3: 0 2px 6px oklch(0.255 0.04 262 / 0.08), 0 28px 60px -16px oklch(0.255 0.04 262 / 0.34);
+  --elev-drag: 0 6px 12px oklch(0.255 0.04 262 / 0.1), 0 24px 40px -12px oklch(0.255 0.04 262 / 0.36);
+  color-scheme: light;
+  /* theme independent: shape, type, motion, sizes */
+  --r-chip: 6px; --r-ctl: 10px; --r-card: 14px;
+  --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI Variable Display", "Segoe UI", sans-serif;
+  --font-ui: Figtree, "Avenir Next", "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  --dur-fast: 120ms; --dur: 160ms; --dur-spring: 420ms;
+  --ease-out: cubic-bezier(0.25, 1, 0.5, 1); --ease-spring: cubic-bezier(0.34, 1.3, 0.64, 1);
+  --app-w: 1392px; --app-h: 960px; --side-w: 200px; --panel-w: 384px; --col-w: 180px; --palette-w: 540px;
+}
+@supports (transition-timing-function: linear(0, 1)) {
+  :root { --ease-spring: linear(0, 0.053 5%, 0.178 10%, 0.336 15%, 0.499 20%, 0.649 25%, 0.776 30%, 0.877 35%, 0.951 40%, 1.002 45%, 1.033 50%, 1.049 55%, 1.054 60%, 1.052 65%, 1.046 70%, 1.037 75%, 1.028 80%, 1.02 85%, 1.013 90%, 1.007 95%, 1); }
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: var(--night-bg); --bg-sunken: oklch(0.21 0.02 258); --surface: var(--night-surface);
+  --text: var(--night-text); --muted: var(--night-muted); --faint: oklch(0.62 0.02 255);
+  --border: var(--night-border); --border-strong: oklch(0.45 0.025 258); --line-input: oklch(0.62 0.02 255);
+  --dot: oklch(0.94 0.012 250 / 0.07); --hover: oklch(0.94 0.012 250 / 0.06); --pressed: oklch(0.94 0.012 250 / 0.1);
+  --accent: var(--night-accent); --accent-hover: oklch(0.8 0.1 266); --accent-text: oklch(0.78 0.11 266);
+  --accent-soft: oklch(0.335 0.06 266); --on-accent: oklch(0.2 0.035 266);
+  --marker: var(--night-marker); --on-marker: var(--night-bg);
+  --mark-bg: oklch(0.91 0.18 104 / 0.14); --mark-fg: oklch(0.93 0.17 104); --mark-glow: 0 0 12px oklch(0.91 0.18 104 / 0.5);
+  --select-wash: oklch(0.91 0.18 104 / 0.09);
+  --focus-ring: var(--night-marker); --focus-halo: 0 0 0 4px oklch(0.91 0.18 104 / 0.2), 0 0 20px 2px oklch(0.91 0.18 104 / 0.35);
+  --glass: var(--night-glass); --glass-strong: oklch(0.285 0.022 258 / 0.88); --raised: oklch(0.345 0.026 258);
+  --glass-edge: oklch(0.94 0.012 250 / 0.1); --glass-light: inset 0 1px 0 oklch(1 0 0 / 0.06);
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .95 0 0 0 0 .96 0 0 0 0 1 0 0 0 .26 -.11'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --scrim: oklch(0.17 0.02 258 / 0.32);
+  --danger: oklch(0.7 0.16 25); --danger-hover: oklch(0.76 0.14 25); --danger-soft: oklch(0.32 0.06 25); --on-danger: oklch(0.2 0.03 25);
+  --sky: oklch(0.7 0.08 232);   --sky-tab: oklch(0.41 0.05 234);  --sky-ink: oklch(0.92 0.04 228);
+  --ochre: oklch(0.74 0.11 78); --ochre-tab: oklch(0.42 0.065 76); --ochre-ink: oklch(0.93 0.055 82);
+  --moss: oklch(0.68 0.1 132);  --moss-tab: oklch(0.4 0.06 132);   --moss-ink: oklch(0.92 0.05 132);
+  --st-backlog: oklch(0.62 0.02 258); --st-unstarted: oklch(0.75 0.02 255); --st-started: var(--night-accent);
+  --st-completed: oklch(0.72 0.12 155); --st-canceled: oklch(0.66 0.04 20);
+  --elev-1: 0 1px 0 oklch(0.12 0.02 258 / 0.3), 0 1px 3px oklch(0.12 0.02 258 / 0.35);
+  --elev-2: 0 1px 2px oklch(0.12 0.02 258 / 0.35), 0 14px 32px -8px oklch(0.12 0.02 258 / 0.55);
+  --elev-3: 0 2px 6px oklch(0.12 0.02 258 / 0.4), 0 28px 64px -16px oklch(0.12 0.02 258 / 0.7);
+  --elev-drag: 0 6px 12px oklch(0.12 0.02 258 / 0.4), 0 24px 44px -12px oklch(0.12 0.02 258 / 0.7);
+  color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: var(--night-bg); --bg-sunken: oklch(0.21 0.02 258); --surface: var(--night-surface);
+  --text: var(--night-text); --muted: var(--night-muted); --faint: oklch(0.62 0.02 255);
+  --border: var(--night-border); --border-strong: oklch(0.45 0.025 258); --line-input: oklch(0.62 0.02 255);
+  --dot: oklch(0.94 0.012 250 / 0.07); --hover: oklch(0.94 0.012 250 / 0.06); --pressed: oklch(0.94 0.012 250 / 0.1);
+  --accent: var(--night-accent); --accent-hover: oklch(0.8 0.1 266); --accent-text: oklch(0.78 0.11 266);
+  --accent-soft: oklch(0.335 0.06 266); --on-accent: oklch(0.2 0.035 266);
+  --marker: var(--night-marker); --on-marker: var(--night-bg);
+  --mark-bg: oklch(0.91 0.18 104 / 0.14); --mark-fg: oklch(0.93 0.17 104); --mark-glow: 0 0 12px oklch(0.91 0.18 104 / 0.5);
+  --select-wash: oklch(0.91 0.18 104 / 0.09);
+  --focus-ring: var(--night-marker); --focus-halo: 0 0 0 4px oklch(0.91 0.18 104 / 0.2), 0 0 20px 2px oklch(0.91 0.18 104 / 0.35);
+  --glass: var(--night-glass); --glass-strong: oklch(0.285 0.022 258 / 0.88); --raised: oklch(0.345 0.026 258);
+  --glass-edge: oklch(0.94 0.012 250 / 0.1); --glass-light: inset 0 1px 0 oklch(1 0 0 / 0.06);
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .95 0 0 0 0 .96 0 0 0 0 1 0 0 0 .26 -.11'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --scrim: oklch(0.17 0.02 258 / 0.32);
+  --danger: oklch(0.7 0.16 25); --danger-hover: oklch(0.76 0.14 25); --danger-soft: oklch(0.32 0.06 25); --on-danger: oklch(0.2 0.03 25);
+  --sky: oklch(0.7 0.08 232);   --sky-tab: oklch(0.41 0.05 234);  --sky-ink: oklch(0.92 0.04 228);
+  --ochre: oklch(0.74 0.11 78); --ochre-tab: oklch(0.42 0.065 76); --ochre-ink: oklch(0.93 0.055 82);
+  --moss: oklch(0.68 0.1 132);  --moss-tab: oklch(0.4 0.06 132);   --moss-ink: oklch(0.92 0.05 132);
+  --st-backlog: oklch(0.62 0.02 258); --st-unstarted: oklch(0.75 0.02 255); --st-started: var(--night-accent);
+  --st-completed: oklch(0.72 0.12 155); --st-canceled: oklch(0.66 0.04 20);
+  --elev-1: 0 1px 0 oklch(0.12 0.02 258 / 0.3), 0 1px 3px oklch(0.12 0.02 258 / 0.35);
+  --elev-2: 0 1px 2px oklch(0.12 0.02 258 / 0.35), 0 14px 32px -8px oklch(0.12 0.02 258 / 0.55);
+  --elev-3: 0 2px 6px oklch(0.12 0.02 258 / 0.4), 0 28px 64px -16px oklch(0.12 0.02 258 / 0.7);
+  --elev-drag: 0 6px 12px oklch(0.12 0.02 258 / 0.4), 0 24px 44px -12px oklch(0.12 0.02 258 / 0.7);
+  color-scheme: dark;
+}
+
+/* ground: dot-grid paper; side gutter per the artifact contract */
+body {
+  margin: 0; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  background-color: var(--bg); color: var(--text); font: 400 15px/1.5 var(--font-ui);
+  background-image: radial-gradient(circle at 1px 1px, var(--dot) 1px, transparent 1.4px); background-size: 16px 16px;
+  -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: var(--select-wash);
+}
+.dots { background-image: radial-gradient(circle at 1px 1px, var(--dot) 1px, transparent 1.4px); background-size: 16px 16px; }
+.i { fill: none; stroke: currentColor; stroke-width: var(--icon-stroke, 2); stroke-linecap: round; stroke-linejoin: round; flex: none; }
+/* tracing paper: warm paper white, blur, grain, edge */
+.tracing, .tracing-strong {
+  background: var(--grain), var(--glass); border: 1px solid var(--glass-edge);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.08); backdrop-filter: blur(var(--glass-blur)) saturate(1.08);
+  box-shadow: var(--glass-light), var(--glass-shadow, var(--elev-2));
+}
+.tracing-strong { background: var(--grain), var(--glass-strong); --glass-shadow: var(--elev-3); }
+/* index card tab: a trapezoid flap, coloured by type */
+.tab-shape { isolation: isolate; }
+.tab-shape::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; background: var(--tab-bg);
+  border: 1px solid var(--tab-edge, transparent); border-bottom: 0; border-radius: var(--r-chip) var(--r-chip) 0 0;
+  transform: perspective(20px) rotateX(6deg); transform-origin: 50% 100%;
+}
+[data-type="task"] { --tab-bg: var(--sky-tab); --tab-ink: var(--sky-ink); }
+[data-type="bug"] { --tab-bg: var(--ochre-tab); --tab-ink: var(--ochre-ink); }
+[data-type="epic"] { --tab-bg: var(--moss-tab); --tab-ink: var(--moss-ink); }
+/* highlighter stroke with slanted ends */
+.hl {
+  color: var(--mark-fg); text-shadow: var(--mark-glow); padding: 0 0.3em; margin: 0 -0.3em; border-radius: 0.25em 0.15em;
+  background: linear-gradient(100deg, transparent 0.2em, var(--mark-bg) 0.32em calc(100% - 0.32em), transparent calc(100% - 0.2em)) 0 62% / 100% 80% no-repeat;
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
+}
+:root :focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 0; box-shadow: var(--focus-halo); }
+#palette-input:focus-visible { outline: none; box-shadow: none; } /* the palette itself shows focus (focus-within) */
+a, button, input, label, summary, [role="option"] { touch-action: manipulation; }
+::selection { background: var(--marker); color: var(--on-marker); }
+* { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+summary { list-style: none; }
+summary::-webkit-details-marker { display: none; }
+@keyframes rise { from { opacity: 0; transform: translate(-50%, -6px); } }
+@keyframes toast-in { from { opacity: 0; transform: translateY(16px) scale(0.97); } }
+@keyframes drain { to { transform: scaleX(0); } }
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; scroll-behavior: auto !important; }
+}
+</style>
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script>
+tailwind.config = {
+  theme: {
+    colors: {
+      transparent: 'transparent', current: 'currentColor',
+      paper: 'var(--bg)', sunken: 'var(--bg-sunken)', surface: 'var(--surface)',
+      ink: 'var(--text)', muted: 'var(--muted)', faint: 'var(--faint)',
+      line: 'var(--border)', 'line-strong': 'var(--border-strong)', 'line-input': 'var(--line-input)', edge: 'var(--glass-edge)',
+      hover: 'var(--hover)', pressed: 'var(--pressed)', scrim: 'var(--scrim)', wash: 'var(--select-wash)', raised: 'var(--raised)',
+      accent: { DEFAULT: 'var(--accent)', hover: 'var(--accent-hover)', text: 'var(--accent-text)', soft: 'var(--accent-soft)' },
+      'on-accent': 'var(--on-accent)',
+      marker: 'var(--marker)', 'on-marker': 'var(--on-marker)',
+      danger: { DEFAULT: 'var(--danger)', hover: 'var(--danger-hover)', soft: 'var(--danger-soft)' },
+      'on-danger': 'var(--on-danger)',
+      sky: { DEFAULT: 'var(--sky)', tab: 'var(--sky-tab)', ink: 'var(--sky-ink)' },
+      ochre: { DEFAULT: 'var(--ochre)', tab: 'var(--ochre-tab)', ink: 'var(--ochre-ink)' },
+      moss: { DEFAULT: 'var(--moss)', tab: 'var(--moss-tab)', ink: 'var(--moss-ink)' },
+      st: { backlog: 'var(--st-backlog)', unstarted: 'var(--st-unstarted)', started: 'var(--st-started)', completed: 'var(--st-completed)', canceled: 'var(--st-canceled)' },
+    },
+    // no monospace: kbd and code use the UI face with tabular figures
+    fontFamily: { display: ['var(--font-display)'], sans: ['var(--font-ui)'], mono: ['var(--font-ui)'] },
+    fontSize: {
+      '2xs': ['10px', '12px'], xs: ['11px', '14px'], sm: ['12px', '16px'], ui: ['13px', '18px'], md: ['14px', '20px'],
+      body: ['15px', '24px'], input: ['16px', '24px'], lg: ['18px', '24px'], xl: ['22px', '28px'], '2xl': ['28px', '32px'], '3xl': ['44px', '46px'],
+    },
+    borderRadius: { none: '0', chip: 'var(--r-chip)', ctl: 'var(--r-ctl)', card: 'var(--r-card)', full: '9999px' },
+    boxShadow: { none: 'none', e1: 'var(--elev-1)', e2: 'var(--elev-2)', e3: 'var(--elev-3)', drag: 'var(--elev-drag)' },
+    extend: {
+      borderColor: { DEFAULT: 'var(--border)' },
+      transitionTimingFunction: { out: 'var(--ease-out)', spring: 'var(--ease-spring)' },
+      transitionDuration: { 120: '120ms', 160: '160ms', 420: '420ms' },
+    },
+  },
+};
+</script>
+
+<!-- icon-sprite:start -->
+<svg class="absolute h-0 w-0 overflow-hidden" aria-hidden="true" focusable="false"><defs>
+<symbol id="i-archive" viewBox="0 0 24 24"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></symbol>
+<symbol id="i-arrow-big-up" viewBox="0 0 24 24"><path d="M9 19a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-6a1 1 0 0 1 1-1h3.293a.707.707 0 0 0 .5-1.207l-7.086-7.086a1 1 0 0 0-1.414 0l-7.086 7.086a.707.707 0 0 0 .5 1.207H8a1 1 0 0 1 1 1z"/></symbol>
+<symbol id="i-arrow-down" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></symbol>
+<symbol id="i-arrow-up" viewBox="0 0 24 24"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></symbol>
+<symbol id="i-ban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M4.929 4.929 19.07 19.071"/></symbol>
+<symbol id="i-book-open" viewBox="0 0 24 24"><path d="M12 5v16"/><path d="M20.001 19A2 2 0 0022 17V5a2 2 0 00-1.999-2L16 3.002A5 5 0 0012 5a5 5 0 00-4-2H4a2 2 0 00-2 2v12a2 2 0 001.999 2H8a5 5 0 014 2 5 5 0 014-2z"/></symbol>
+<symbol id="i-bot" viewBox="0 0 24 24"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></symbol>
+<symbol id="i-bug" viewBox="0 0 24 24"><path d="M12 20v-9"/><path d="M14 7a4 4 0 0 1 4 4v3a6 6 0 0 1-12 0v-3a4 4 0 0 1 4-4z"/><path d="M14.12 3.88 16 2"/><path d="M21 21a4 4 0 0 0-3.81-4"/><path d="M21 5a4 4 0 0 1-3.55 3.97"/><path d="M22 13h-4"/><path d="M3 21a4 4 0 0 1 3.81-4"/><path d="M3 5a4 4 0 0 0 3.55 3.97"/><path d="M6 13H2"/><path d="m8 2 1.88 1.88"/><path d="M9 7.13V6a3 3 0 1 1 6 0v1.13"/></symbol>
+<symbol id="i-building-2" viewBox="0 0 24 24"><path d="M10 12h4"/><path d="M10 8h4"/><path d="M14 21v-3a2 2 0 0 0-4 0v3"/><path d="M6 10H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-2"/><path d="M6 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16"/></symbol>
+<symbol id="i-calendar" viewBox="0 0 24 24"><path d="M8 2v3"/><path d="M16 2v3"/><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/></symbol>
+<symbol id="i-calendar-clock" viewBox="0 0 24 24"><path d="M16 14v2.2l1.6 1"/><path d="M16 2v3"/><path d="M21 7.338V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2h2.338"/><path d="M3 9h5.859"/><path d="M8 2v3"/><circle cx="16" cy="16" r="6"/></symbol>
+<symbol id="i-chart-gantt" viewBox="0 0 24 24"><path d="M10 6h8"/><path d="M12 16h6"/><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M8 11h7"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+<symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+<symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+<symbol id="i-circle-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></symbol>
+<symbol id="i-command" viewBox="0 0 24 24"><path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3"/></symbol>
+<symbol id="i-corner-down-left" viewBox="0 0 24 24"><path d="M20 4v7a4 4 0 0 1-4 4H4"/><path d="m9 10-5 5 5 5"/></symbol>
+<symbol id="i-delete" viewBox="0 0 24 24"><path d="M10 5a2 2 0 0 0-1.344.519l-6.328 5.74a1 1 0 0 0 0 1.481l6.328 5.741A2 2 0 0 0 10 19h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2z"/><path d="m12 9 6 6"/><path d="m18 9-6 6"/></symbol>
+<symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></symbol>
+<symbol id="i-file-text" viewBox="0 0 24 24"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+<symbol id="i-grip-vertical" viewBox="0 0 24 24"><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></symbol>
+<symbol id="i-inbox" viewBox="0 0 24 24"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></symbol>
+<symbol id="i-layers" viewBox="0 0 24 24"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/><path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"/><path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"/></symbol>
+<symbol id="i-layout-template" viewBox="0 0 24 24"><rect width="18" height="7" x="3" y="3" rx="1"/><rect width="9" height="7" x="3" y="14" rx="1"/><rect width="5" height="7" x="16" y="14" rx="1"/></symbol>
+<symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+<symbol id="i-list" viewBox="0 0 24 24"><path d="M3 5h.01"/><path d="M3 12h.01"/><path d="M3 19h.01"/><path d="M8 5h13"/><path d="M8 12h13"/><path d="M8 19h13"/></symbol>
+<symbol id="i-list-filter" viewBox="0 0 24 24"><path d="M2 5h20"/><path d="M6 12h12"/><path d="M9 19h6"/></symbol>
+<symbol id="i-maximize-2" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="m21 3-7 7"/><path d="m3 21 7-7"/><path d="M9 21H3v-6"/></symbol>
+<symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></symbol>
+<symbol id="i-panel-left" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></symbol>
+<symbol id="i-play" viewBox="0 0 24 24"><path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></symbol>
+<symbol id="i-settings" viewBox="0 0 24 24"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></symbol>
+<symbol id="i-sliders-horizontal" viewBox="0 0 24 24"><path d="M10 5H3"/><path d="M12 19H3"/><path d="M14 3v4"/><path d="M16 17v4"/><path d="M21 12h-9"/><path d="M21 19h-5"/><path d="M21 5h-7"/><path d="M8 10v4"/><path d="M8 12H3"/></symbol>
+<symbol id="i-smile-plus" viewBox="0 0 24 24"><path d="M13.267 2.08a10 10 0 108.653 8.653"/><path d="M15 10V9"/><path d="M16 5h6"/><path d="M16.472 15a6 6 0 01-8.943 0"/><path d="M19 2v6"/><path d="M9 10V9"/></symbol>
+<symbol id="i-square-check" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m16 9-5.5 5.5L8 12"/></symbol>
+<symbol id="i-square-kanban" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M8 7v7"/><path d="M12 7v4"/><path d="M16 7v9"/></symbol>
+<symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></symbol>
+<symbol id="i-table-2" viewBox="0 0 24 24"><path d="M3 9h18"/><path d="M9 3v18"/><rect x="3" y="3" width="18" height="18" rx="2"/></symbol>
+<symbol id="i-tag" viewBox="0 0 24 24"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/></symbol>
+<symbol id="i-trash-2" viewBox="0 0 24 24"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></symbol>
+<symbol id="i-undo-2" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></symbol>
+<symbol id="i-user-round-check" viewBox="0 0 24 24"><path d="M2 21a8 8 0 0 1 13.292-6"/><circle cx="10" cy="8" r="5"/><path d="m16 19 2 2 4-4"/></symbol>
+<symbol id="i-user-round-plus" viewBox="0 0 24 24"><path d="M2 21a8 8 0 0 1 13.292-6"/><circle cx="10" cy="8" r="5"/><path d="M19 16v6"/><path d="M22 19h-6"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+<symbol id="st-backlog" viewBox="0 0 24 24"><path d="M10.1 2.182a10 10 0 0 1 3.8 0"/><path d="M13.9 21.818a10 10 0 0 1-3.8 0"/><path d="M17.609 3.721a10 10 0 0 1 2.69 2.7"/><path d="M2.182 13.9a10 10 0 0 1 0-3.8"/><path d="M20.279 17.609a10 10 0 0 1-2.7 2.69"/><path d="M21.818 10.1a10 10 0 0 1 0 3.8"/><path d="M3.721 6.391a10 10 0 0 1 2.7-2.69"/><path d="M6.391 20.279a10 10 0 0 1-2.69-2.7"/></symbol>
+<symbol id="st-todo" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></symbol>
+<symbol id="st-progress" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 18a6 6 0 0 0 0-12v12z" fill="currentColor"/></symbol>
+<symbol id="st-pending" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="10" x2="10" y1="15" y2="9"/><line x1="14" x2="14" y1="15" y2="9"/></symbol>
+<symbol id="st-done" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="currentColor"/><path d="m16 9-5.5 5.5L8 12" style="stroke: var(--knock)"/></symbol>
+<symbol id="st-cancelled" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></symbol>
+</defs></svg>
+<!-- icon-sprite:end -->
+
+<a href="#key-screen" class="sr-only z-50 rounded-ctl bg-surface px-3 py-2 text-ui font-semibold text-ink shadow-e2 focus:not-sr-only focus:absolute focus:left-4 focus:top-4">Zum Schlüsselbildschirm springen</a>
+
+<!-- 1 header -->
+<header class="mx-auto max-w-[var(--app-w)] pb-8 pt-10 md:pt-14">
+  <div class="flex flex-wrap items-start justify-between gap-x-12 gap-y-6">
+    <div class="min-w-0 max-w-[64ch]">
+      <h1 class="font-display text-3xl font-extrabold tracking-[-0.02em] text-ink">Werkbuch</h1>
+      <p class="mt-4 text-body text-ink text-pretty">werkbuch als Arbeitsheft: Items liegen als Karteikarten auf Punktraster, der farbige Reiter zeigt den Typ. Was ausgewählt, gesucht oder im Fokus ist, bekommt einen Strich mit dem Textmarker. Seitenleiste, Panel und Befehlspalette sind Transparentpapier, durch das der Grund weich durchscheint.</p>
+      <ul class="mt-5 flex flex-wrap gap-2" aria-label="Stichworte">
+        <li class="inline-flex h-7 items-center gap-2 rounded-chip border border-line bg-surface px-2.5 text-sm font-medium text-ink"><span class="dots size-4 rounded-chip border border-line-strong bg-paper" aria-hidden="true"></span>Punktraster</li>
+        <li class="inline-flex h-7 items-center gap-2 rounded-chip border border-line bg-surface px-2.5 text-sm font-medium text-ink"><span class="tab-shape relative h-2.5 w-3.5" data-type="epic" aria-hidden="true"></span>Karteikarten mit Reiter</li>
+        <li class="inline-flex h-7 items-center gap-2 rounded-chip border border-line bg-surface px-2.5 text-sm font-medium text-ink"><span class="h-2.5 w-3.5 -skew-x-12 rounded-chip bg-marker" aria-hidden="true"></span>Textmarker für Auswahl und Fokus</li>
+        <li class="inline-flex h-7 items-center gap-2 rounded-chip border border-line bg-surface px-2.5 text-sm font-medium text-ink"><span class="tracing size-4 rounded-chip [--glass-shadow:none]" aria-hidden="true"></span>Transparentpapier</li>
+        <li class="inline-flex h-7 items-center gap-2 rounded-chip border border-line bg-surface px-2.5 text-sm font-medium text-ink"><span class="size-2.5 rounded-full bg-accent" aria-hidden="true"></span>Tintenblau</li>
+        <li class="inline-flex h-7 items-center gap-2 rounded-chip border border-line bg-surface px-2.5 text-sm font-medium text-ink"><svg class="i size-4 text-muted" aria-hidden="true"><use href="#i-moon"/></svg>Nachtheft</li>
+      </ul>
+    </div>
+    <div class="flex flex-col items-start gap-3 lg:items-end">
+      <div class="inline-flex rounded-ctl border border-line bg-sunken p-1" role="group" aria-label="Farbschema">
+        <button type="button" data-theme-option="light" aria-pressed="true" class="inline-flex h-11 items-center gap-1.5 rounded-chip px-3 text-ui font-medium text-muted transition-colors duration-120 ease-out hover:text-ink aria-pressed:bg-surface aria-pressed:text-ink aria-pressed:shadow-e1 md:h-8"><svg class="i size-4" aria-hidden="true"><use href="#i-sun"/></svg>Hell</button>
+        <button type="button" data-theme-option="dark" aria-pressed="false" class="inline-flex h-11 items-center gap-1.5 rounded-chip px-3 text-ui font-medium text-muted transition-colors duration-120 ease-out hover:text-ink aria-pressed:bg-surface aria-pressed:text-ink aria-pressed:shadow-e1 md:h-8"><svg class="i size-4" aria-hidden="true"><use href="#i-moon"/></svg>Dunkel</button>
+      </div>
+      <p class="text-sm text-muted lg:text-right">Richtung C von drei. Hell zuerst, Dunkel heißt Nachtheft.<br>Demo-Stand Mittwoch, 28.10.2026</p>
+    </div>
+  </div>
+</header>
+
+<main id="main" class="mx-auto max-w-[var(--app-w)] pb-24">
+
+  <!-- 2 key screen -->
+  <section id="key-screen" aria-labelledby="h-key" class="scroll-mt-6">
+    <h2 id="h-key" class="sr-only">Schlüsselbildschirm: Board des Projekts WEB mit Item-Panel und Befehlspalette</h2>
+    <div class="overflow-x-auto overscroll-x-contain rounded-card" tabindex="0" role="region" aria-label="Schlüsselbildschirm, seitlich scrollbar">
+      <div class="dots relative h-[var(--app-h)] w-[var(--app-w)] overflow-hidden rounded-card border border-line-strong bg-paper shadow-e2">
+
+        <!-- sidebar -->
+        <nav aria-label="Seitenleiste" class="tracing absolute bottom-2 left-2 top-2 z-10 flex w-[var(--side-w)] flex-col gap-4 rounded-card p-2 [--glass-shadow:var(--elev-1)]">
+          <div class="flex h-8 items-center justify-between pl-2">
+            <span class="font-display text-lg font-bold tracking-[-0.01em] text-ink" translate="no">werkbuch</span>
+            <button type="button" class="inline-flex size-7 items-center justify-center rounded-chip text-muted transition-colors duration-120 hover:bg-hover hover:text-ink" aria-label="Seitenleiste einklappen"><svg class="i size-4" aria-hidden="true"><use href="#i-panel-left"/></svg></button>
+          </div>
+          <button type="button" data-palette-open class="flex h-8 items-center gap-2 rounded-ctl border border-line bg-surface px-2 text-ui text-muted shadow-e1 transition-colors duration-120 hover:text-ink">
+            <svg class="i size-4" aria-hidden="true"><use href="#i-search"/></svg>Suchen …
+            <span class="ml-auto flex gap-0.5"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-chip border border-line bg-surface px-1 text-xs font-semibold text-muted"><svg class="i size-3" aria-hidden="true"><use href="#i-command"/></svg><span class="sr-only">Befehlstaste</span></kbd><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-chip border border-line bg-surface px-1 text-xs font-semibold text-muted">K</kbd></span>
+          </button>
+          <ul class="flex flex-col gap-0.5">
+            <li><a href="#empty-state" class="flex h-8 items-center gap-2 rounded-ctl px-2 text-ui font-medium text-ink transition-colors duration-120 hover:bg-hover"><svg class="i size-4 text-muted" aria-hidden="true"><use href="#i-inbox"/></svg>Inbox<span class="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-2xs font-semibold tabular-nums text-on-accent"><span class="sr-only">ungelesen: </span>3</span></a></li>
+            <li><a href="#list-view" class="flex h-8 items-center gap-2 rounded-ctl px-2 text-ui font-medium text-ink transition-colors duration-120 hover:bg-hover"><svg class="i size-4 text-muted" aria-hidden="true"><use href="#i-user-round-check"/></svg>Meine Items</a></li>
+          </ul>
+          <div>
+            <div class="flex h-6 items-center justify-between pl-2">
+              <h3 class="flex items-center gap-1.5 text-sm font-semibold text-muted">Views</h3>
+              <button type="button" class="inline-flex size-6 items-center justify-center rounded-chip text-muted transition-colors duration-120 hover:bg-hover hover:text-ink" aria-label="View anlegen"><svg class="i size-3.5" aria-hidden="true"><use href="#i-plus"/></svg></button>
+            </div>
+            <ul class="mt-0.5 flex flex-col gap-0.5">
+              <li><a href="#list-view" class="flex h-8 items-center gap-2 rounded-ctl px-2 text-ui text-ink transition-colors duration-120 hover:bg-hover"><svg class="i size-4 text-muted" aria-hidden="true"><use href="#i-calendar-clock"/></svg>Diese Woche fällig</a></li>
+              <li><a href="#list-view" class="flex h-8 items-center gap-2 rounded-ctl px-2 text-ui text-ink transition-colors duration-120 hover:bg-hover"><svg class="i size-4 text-muted" aria-hidden="true"><use href="#i-bug"/></svg>Offene Bugs</a></li>
+              <li><a href="#list-view" class="flex h-8 items-center gap-2 rounded-ctl px-2 text-ui text-ink transition-colors duration-120 hover:bg-hover"><svg class="i size-4 text-muted" aria-hidden="true"><use href="#i-building-2"/></svg>Studio Nordlicht</a></li>
+              <li><a href="#list-view" class="flex h-8 items-center gap-2 rounded-ctl px-2 pl-8 text-ui text-muted transition-colors duration-120 hover:bg-hover hover:text-ink">Alle Views</a></li>
+            </ul>
+          </div>
+          <div>
+            <div class="flex h-6 items-center justify-between pl-2">
+              <h3 class="text-sm font-semibold text-muted">Projekte</h3>
+              <button type="button" class="inline-flex size-6 items-center justify-center rounded-chip text-muted transition-colors duration-120 hover:bg-hover hover:text-ink" aria-label="Projekt anlegen"><svg class="i size-3.5" aria-hidden="true"><use href="#i-plus"/></svg></button>
+            </div>
+            <ul class="mt-0.5 flex flex-col gap-0.5">
+              <li>
+                <a href="#key-screen" class="flex h-8 items-center gap-2 rounded-ctl px-2 text-ui font-medium text-ink transition-colors duration-120 hover:bg-hover"><span class="inline-flex size-5 shrink-0 items-center justify-center rounded-chip bg-sky-tab text-2xs font-bold text-sky-ink" aria-hidden="true">W</span>Website-Relaunch<svg class="i ml-auto size-3.5 text-muted" aria-hidden="true"><use href="#i-chevron-down"/></svg></a>
+                <ul class="mt-0.5 flex flex-col gap-0.5">
+                  <li><a href="#key-screen" aria-current="page" class="flex h-8 items-center gap-2 rounded-ctl bg-raised px-2 pl-9 text-ui font-medium text-ink shadow-e1 ring-1 ring-inset ring-line-input"><svg class="i size-4 text-accent-text" aria-hidden="true"><use href="#i-square-kanban"/></svg>Items</a></li>
+                  <li><a href="#key-screen" class="flex h-8 items-center gap-2 rounded-ctl px-2 pl-9 text-ui text-ink transition-colors duration-120 hover:bg-hover"><svg class="i size-4 text-muted" aria-hidden="true"><use href="#i-book-open"/></svg>Wiki</a></li>
+                  <li><a href="#key-screen" class="flex h-8 items-center gap-2 rounded-ctl px-2 pl-9 text-ui text-ink transition-colors duration-120 hover:bg-hover"><svg class="i size-4 text-muted" aria-hidden="true"><use href="#i-layout-template"/></svg>Vorlagen</a></li>
+                  <li><a href="#key-screen" class="flex h-8 items-center gap-2 rounded-ctl px-2 pl-9 text-ui text-ink transition-colors duration-120 hover:bg-hover"><svg class="i size-4 text-muted" aria-hidden="true"><use href="#i-settings"/></svg>Einstellungen</a></li>
+                </ul>
+              </li>
+              <li><a href="#timeline" class="flex h-8 items-center gap-2 rounded-ctl px-2 text-ui font-medium text-ink transition-colors duration-120 hover:bg-hover"><span class="inline-flex size-5 shrink-0 items-center justify-center rounded-chip bg-moss-tab text-2xs font-bold text-moss-ink" aria-hidden="true">A</span>Kunden-App</a></li>
+              <li><a href="#timeline" class="flex h-8 items-center gap-2 rounded-ctl px-2 text-ui font-medium text-ink transition-colors duration-120 hover:bg-hover"><span class="inline-flex size-5 shrink-0 items-center justify-center rounded-chip bg-ochre-tab text-2xs font-bold text-ochre-ink" aria-hidden="true">O</span>Infrastruktur</a></li>
+              <li><a href="#timeline" class="flex h-8 items-center gap-2 rounded-ctl px-2 pl-9 text-ui text-muted transition-colors duration-120 hover:bg-hover hover:text-ink">Alle Projekte</a></li>
+            </ul>
+          </div>
+          <div class="mt-auto flex items-center gap-2 rounded-ctl px-2 py-1.5">
+            <span class="inline-flex size-6 items-center justify-center rounded-full bg-accent-soft text-2xs font-semibold text-accent-text" aria-hidden="true">TO</span>
+            <span class="min-w-0 flex-1 truncate text-ui font-medium text-ink">Theo Okafor</span>
+            <button type="button" class="inline-flex size-7 items-center justify-center rounded-chip text-muted transition-colors duration-120 hover:bg-hover hover:text-ink" aria-label="Einstellungen"><svg class="i size-4" aria-hidden="true"><use href="#i-settings"/></svg></button>
+          </div>
+        </nav>
+
+        <!-- board -->
+        <div class="absolute inset-y-0 left-[calc(var(--side-w)+16px)] right-0 pl-4 pt-3">
+          <div class="flex h-8 items-center gap-3 pr-[calc(var(--panel-w)+56px)]">
+            <div class="flex min-w-0 items-center gap-2">
+              <span class="inline-flex size-5 items-center justify-center rounded-chip bg-sky-tab text-2xs font-bold text-sky-ink" aria-hidden="true">W</span>
+              <h3 class="truncate font-display text-lg font-bold tracking-[-0.01em] text-ink">Website-Relaunch</h3>
+              <svg class="i size-3.5 text-faint" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+              <span class="text-ui font-medium text-muted">Items</span>
+            </div>
+            <div class="ml-auto inline-flex rounded-ctl border border-line bg-sunken p-1" role="group" aria-label="Layout" data-segmented>
+              <button type="button" aria-pressed="false" aria-keyshortcuts="1" title="Liste (1)" class="inline-flex h-6 items-center gap-1.5 rounded-chip px-2 text-sm font-medium text-muted transition-colors duration-120 hover:text-ink aria-pressed:bg-surface aria-pressed:text-ink aria-pressed:shadow-e1"><svg class="i size-3.5" aria-hidden="true"><use href="#i-list"/></svg>Liste</button>
+              <button type="button" aria-pressed="true" aria-keyshortcuts="2" title="Board (2)" class="inline-flex h-6 items-center gap-1.5 rounded-chip px-2 text-sm font-medium text-muted transition-colors duration-120 hover:text-ink aria-pressed:bg-surface aria-pressed:text-ink aria-pressed:shadow-e1"><svg class="i size-3.5" aria-hidden="true"><use href="#i-square-kanban"/></svg>Board</button>
+              <button type="button" aria-pressed="false" aria-keyshortcuts="3" title="Tabelle (3)" class="inline-flex h-6 items-center gap-1.5 rounded-chip px-2 text-sm font-medium text-muted transition-colors duration-120 hover:text-ink aria-pressed:bg-surface aria-pressed:text-ink aria-pressed:shadow-e1"><svg class="i size-3.5" aria-hidden="true"><use href="#i-table-2"/></svg>Tabelle</button>
+              <button type="button" aria-pressed="false" aria-keyshortcuts="4" title="Timeline (4)" class="inline-flex h-6 items-center gap-1.5 rounded-chip px-2 text-sm font-medium text-muted transition-colors duration-120 hover:text-ink aria-pressed:bg-surface aria-pressed:text-ink aria-pressed:shadow-e1"><svg class="i size-3.5" aria-hidden="true"><use href="#i-chart-gantt"/></svg>Timeline</button>
+            </div>
+          </div>
+          <div class="mt-2 flex h-8 items-center gap-2 pr-[calc(var(--panel-w)+56px)]">
+            <button type="button" aria-keyshortcuts="/" class="inline-flex h-7 items-center gap-1.5 rounded-ctl border border-line bg-surface px-2 text-sm font-medium text-ink shadow-e1 transition-colors duration-120 hover:bg-sunken"><svg class="i size-3.5 text-muted" aria-hidden="true"><use href="#i-list-filter"/></svg>Filter<kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-chip border border-line px-0.5 text-2xs font-semibold text-muted">/</kbd></button>
+            <span class="inline-flex h-7 items-center gap-1 rounded-ctl border border-line bg-surface pl-2 pr-1 text-sm text-ink shadow-e1">Status <span class="text-muted">ist nicht</span> <svg class="i size-3.5 text-st-canceled" aria-hidden="true"><use href="#st-cancelled"/></svg>Cancelled<button type="button" class="inline-flex size-6 items-center justify-center rounded-chip text-muted transition-colors duration-120 hover:bg-hover hover:text-ink" aria-label="Filter Status entfernen"><svg class="i size-3" aria-hidden="true"><use href="#i-x"/></svg></button></span>
+            <button type="button" class="ml-auto inline-flex h-7 items-center gap-1.5 rounded-ctl px-2 text-sm font-medium text-ink transition-colors duration-120 hover:bg-hover"><svg class="i size-3.5 text-muted" aria-hidden="true"><use href="#i-sliders-horizontal"/></svg>Anzeige</button>
+            <button type="button" aria-keyshortcuts="C" class="inline-flex h-7 items-center gap-1.5 rounded-ctl bg-accent pl-2 pr-1.5 text-sm font-semibold text-on-accent shadow-e1 transition-colors duration-120 hover:bg-accent-hover"><svg class="i size-3.5" aria-hidden="true"><use href="#i-plus"/></svg>Neues Item<kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-chip border border-current px-0.5 text-2xs font-semibold opacity-80">C</kbd></button>
+          </div>
+
+          <div class="mt-4 flex gap-3">
+            <!-- Backlog -->
+            <section aria-labelledby="col-backlog" class="flex w-[var(--col-w)] shrink-0 flex-col gap-2">
+              <div class="flex h-7 items-center gap-1.5 px-1">
+                <svg class="i size-3.5 text-st-backlog" aria-hidden="true"><use href="#st-backlog"/></svg>
+                <h4 id="col-backlog" class="text-ui font-semibold text-ink">Backlog</h4>
+                <span class="text-sm tabular-nums text-muted">2</span>
+                <button type="button" class="ml-auto inline-flex size-6 items-center justify-center rounded-chip text-muted transition-colors duration-120 hover:bg-hover hover:text-ink" aria-label="Item in Backlog anlegen"><svg class="i size-3.5" aria-hidden="true"><use href="#i-plus"/></svg></button>
+              </div>
+              <ul class="flex flex-col gap-2.5">
+                <li>
+                  <article data-type="task" aria-label="WEB-51, Task" class="relative mt-5 rounded-card border border-line bg-surface p-3 shadow-e1">
+                    <span class="tab-shape absolute bottom-full left-3 inline-flex h-5 items-center gap-1 px-2.5 text-xs font-semibold tabular-nums text-[var(--tab-ink)]"><svg class="i size-3" aria-hidden="true"><use href="#i-square-check"/></svg>WEB-51</span>
+                    <p class="text-ui font-medium text-ink text-pretty">Cookie-Banner auf Consent v2 umstellen</p>
+                    <div class="mt-3 flex items-center gap-2 text-sm text-muted">
+                      <span class="inline-flex h-3.5 items-end gap-0.5" role="img" aria-label="Priorität Low"><span class="h-1.5 w-1 -skew-x-12 rounded-full bg-muted"></span><span class="h-2.5 w-1 -skew-x-12 rounded-full bg-line-strong"></span><span class="h-3.5 w-1 -skew-x-12 rounded-full bg-line-strong"></span></span>
+                      <span class="ml-auto size-5 rounded-full border border-dashed border-faint" role="img" aria-label="Nicht zugewiesen"></span>
+                    </div>
+                  </article>
+                </li>
+                <li>
+                  <article data-type="task" aria-label="WEB-55, Task" class="relative mt-5 rounded-card border border-line bg-surface p-3 shadow-e1">
+                    <span class="tab-shape absolute bottom-full left-3 inline-flex h-5 items-center gap-1 px-2.5 text-xs font-semibold tabular-nums text-[var(--tab-ink)]"><svg class="i size-3" aria-hidden="true"><use href="#i-square-check"/></svg>WEB-55</span>
+                    <p class="text-ui font-medium text-ink text-pretty">Bildformate auf AVIF prüfen</p>
+                    <div class="mt-3 flex items-center gap-2 text-sm text-muted">
+                      <span class="inline-flex h-3.5 items-end gap-0.5" role="img" aria-label="Priorität None"><span class="h-1.5 w-1 -skew-x-12 rounded-full bg-line-strong"></span><span class="h-2.5 w-1 -skew-x-12 rounded-full bg-line-strong"></span><span class="h-3.5 w-1 -skew-x-12 rounded-full bg-line-strong"></span></span>
+                      <span class="ml-auto size-5 rounded-full border border-dashed border-faint" role="img" aria-label="Nicht zugewiesen"></span>
+                    </div>
+                  </article>
+                </li>
+              </ul>
+            </section>
+
+            <!-- Todo -->
+            <section aria-labelledby="col-todo" class="flex w-[var(--col-w)] shrink-0 flex-col gap-2">
+              <div class="flex h-7 items-center gap-1.5 px-1">
+                <svg class="i size-3.5 text-st-unstarted" aria-hidden="true"><use href="#st-todo"/></svg>
+                <h4 id="col-todo" class="text-ui font-semibold text-ink">Todo</h4>
+                <span class="text-sm tabular-nums text-muted">2</span>
+                <button type="button" class="ml-auto inline-flex size-6 items-center justify-center rounded-chip text-muted transition-colors duration-120 hover:bg-hover hover:text-ink" aria-label="Item in Todo anlegen"><svg class="i size-3.5" aria-hidden="true"><use href="#i-plus"/></svg></button>
+              </div>
+              <ul class="flex flex-col gap-2.5">
+                <li>
+                  <article data-type="task" aria-label="WEB-48, Task" class="relative mt-5 rounded-card border border-line bg-surface p-3 shadow-e1">
+                    <span class="tab-shape absolute bottom-full left-3 inline-flex h-5 items-center gap-1 px-2.5 text-xs font-semibold tabular-nums text-[var(--tab-ink)]"><svg class="i size-3" aria-hidden="true"><use href="#i-square-check"/></svg>WEB-48</span>
+                    <p class="text-ui font-medium text-ink text-pretty">Navigation für Mobilgeräte überarbeiten</p>
+                    <div class="mt-2 flex flex-wrap gap-1">
+                      <span class="inline-flex h-5 items-center gap-1 rounded-chip border border-line px-1.5 text-sm text-muted"><span class="size-1.5 rounded-full bg-sky" aria-hidden="true"></span>UX</span>
+                    </div>
+                    <div class="mt-2.5 flex items-center gap-2 text-sm text-muted">
+                      <span class="inline-flex h-3.5 items-end gap-0.5" role="img" aria-label="Priorität High"><span class="h-1.5 w-1 -skew-x-12 rounded-full bg-muted"></span><span class="h-2.5 w-1 -skew-x-12 rounded-full bg-muted"></span><span class="h-3.5 w-1 -skew-x-12 rounded-full bg-muted"></span></span>
+                      <span class="ml-auto inline-flex size-5 items-center justify-center rounded-full bg-sunken text-2xs font-semibold text-ink ring-1 ring-inset ring-line" role="img" aria-label="Lene Vogt" title="Lene Vogt">LV</span>
+                    </div>
+                  </article>
+                </li>
+                <li>
+                  <article data-type="task" aria-label="WEB-50, Task" class="relative mt-5 rounded-card border border-line bg-surface p-3 shadow-e1">
+                    <span class="tab-shape absolute bottom-full left-3 inline-flex h-5 items-center gap-1 px-2.5 text-xs font-semibold tabular-nums text-[var(--tab-ink)]"><svg class="i size-3" aria-hidden="true"><use href="#i-square-check"/></svg>WEB-50</span>
+                    <p class="text-ui font-medium text-ink text-pretty">Fehlerseite 404 gestalten</p>
+                    <div class="mt-3 flex items-center gap-2 text-sm text-muted">
+                      <span class="inline-flex h-3.5 items-end gap-0.5" role="img" aria-label="Priorität Medium"><span class="h-1.5 w-1 -skew-x-12 rounded-full bg-muted"></span><span class="h-2.5 w-1 -skew-x-12 rounded-full bg-muted"></span><span class="h-3.5 w-1 -skew-x-12 rounded-full bg-line-strong"></span></span>
+                      <span class="ml-auto size-5 rounded-full border border-dashed border-faint" role="img" aria-label="Nicht zugewiesen"></span>
+                    </div>
+                  </article>
+                </li>
+              </ul>
+            </section>
+
+            <!-- In Progress -->
+            <section aria-labelledby="col-progress" class="flex w-[var(--col-w)] shrink-0 flex-col gap-2">
+              <div class="flex h-7 items-center gap-1.5 px-1">
+                <svg class="i size-3.5 text-st-started" aria-hidden="true"><use href="#st-progress"/></svg>
+                <h4 id="col-progress" class="text-ui font-semibold text-ink">In Progress</h4>
+                <span class="text-sm tabular-nums text-muted">3</span>
+                <button type="button" class="ml-auto inline-flex size-6 items-center justify-center rounded-chip text-muted transition-colors duration-120 hover:bg-hover hover:text-ink" aria-label="Item in In Progress anlegen"><svg class="i size-3.5" aria-hidden="true"><use href="#i-plus"/></svg></button>
+              </div>
+              <ul class="flex flex-col gap-2.5">
+                <li>
+                  <article data-type="epic" aria-label="WEB-30, Epic" class="relative mt-5 rounded-card border border-line bg-surface p-3 shadow-e1">
+                    <span class="tab-shape absolute bottom-full left-3 inline-flex h-5 items-center gap-1 px-2.5 text-xs font-semibold tabular-nums text-[var(--tab-ink)]"><svg class="i size-3" aria-hidden="true"><use href="#i-layers"/></svg>WEB-30</span>
+                    <p class="text-ui font-medium text-ink text-pretty">Relaunch Phase 1</p>
+                    <div class="mt-2.5 flex items-center gap-2">
+                      <span class="grid flex-1 grid-cols-10 gap-0.5" role="img" aria-label="6 von 10 Kind-Items fertig">
+                        <span class="h-1.5 rounded-full bg-moss"></span><span class="h-1.5 rounded-full bg-moss"></span><span class="h-1.5 rounded-full bg-moss"></span><span class="h-1.5 rounded-full bg-moss"></span><span class="h-1.5 rounded-full bg-moss"></span><span class="h-1.5 rounded-full bg-moss"></span><span class="h-1.5 rounded-full bg-line"></span><span class="h-1.5 rounded-full bg-line"></span><span class="h-1.5 rounded-full bg-line"></span><span class="h-1.5 rounded-full bg-line"></span>
+                      </span>
+                      <span class="text-sm font-medium tabular-nums text-muted">6/10</span>
+                    </div>
+                    <div class="mt-2.5 flex items-center gap-2 text-sm text-muted">
+                      <span class="inline-flex items-center gap-1 tabular-nums"><svg class="i size-3.5" aria-hidden="true"><use href="#i-calendar"/></svg><span class="sr-only">fällig </span>15.11.</span>
+                      <span class="ml-auto inline-flex size-5 items-center justify-center rounded-full bg-sky-tab text-2xs font-semibold text-sky-ink" role="img" aria-label="Mara Lindqvist" title="Mara Lindqvist">ML</span>
+                    </div>
+                  </article>
+                </li>
+                <li>
+                  <article data-type="task" aria-label="WEB-42, Task" class="relative mt-5 rounded-card border border-line bg-surface p-3 shadow-e1">
+                    <span class="tab-shape absolute bottom-full left-3 inline-flex h-5 items-center gap-1 px-2.5 text-xs font-semibold tabular-nums text-[var(--tab-ink)]"><svg class="i size-3" aria-hidden="true"><use href="#i-square-check"/></svg>WEB-42</span>
+                    <p class="text-ui font-medium text-ink text-pretty">Startseite: Hero und Teaser bauen</p>
+                    <div class="mt-3 flex items-center gap-2 text-sm text-muted">
+                      <span class="inline-flex h-3.5 items-end gap-0.5" role="img" aria-label="Priorität High"><span class="h-1.5 w-1 -skew-x-12 rounded-full bg-muted"></span><span class="h-2.5 w-1 -skew-x-12 rounded-full bg-muted"></span><span class="h-3.5 w-1 -skew-x-12 rounded-full bg-muted"></span></span>
+                      <span class="inline-flex items-center gap-1 tabular-nums"><svg class="i size-3.5" aria-hidden="true"><use href="#i-calendar"/></svg><span class="sr-only">fällig </span>30.10.</span>
+                      <span class="ml-auto inline-flex size-5 items-center justify-center rounded-full bg-moss-tab text-2xs font-semibold text-moss-ink" role="img" aria-label="Ida Brenner" title="Ida Brenner">IB</span>
+                    </div>
+                  </article>
+                </li>
+                <li>
+                  <article data-type="bug" aria-label="WEB-47, Bug, ausgewählt" aria-current="true" class="relative mt-5 rounded-card border border-line-strong bg-surface p-3 shadow-e2">
+                    <span class="tab-shape absolute bottom-full left-3 inline-flex h-5 items-center gap-1 px-2.5 text-xs font-semibold tabular-nums text-[var(--tab-ink)]"><svg class="i size-3" aria-hidden="true"><use href="#i-bug"/></svg>WEB-47</span>
+                    <p class="text-ui font-medium text-ink"><span class="hl">Kontaktformular sendet doppelt</span></p>
+                    <p class="mt-2 inline-flex items-center gap-1 rounded-chip bg-danger-soft px-1.5 py-0.5 text-sm font-medium text-danger"><svg class="i size-3.5" aria-hidden="true"><use href="#i-ban"/></svg>Blockiert von OPS-12</p>
+                    <div class="mt-2 flex flex-wrap gap-1">
+                      <span class="inline-flex h-5 items-center gap-1 rounded-chip border border-line px-1.5 text-sm text-muted"><span class="size-1.5 rounded-full bg-moss" aria-hidden="true"></span>Formulare</span>
+                      <span class="inline-flex h-5 items-center gap-1 rounded-chip border border-line px-1.5 text-sm text-muted"><span class="size-1.5 rounded-full bg-danger" aria-hidden="true"></span>Produktion</span>
+                    </div>
+                    <div class="mt-2.5 flex items-center gap-2 text-sm text-muted">
+                      <span class="inline-flex size-3.5 items-center justify-center rounded-chip bg-danger text-2xs font-semibold leading-none text-on-danger" role="img" aria-label="Priorität Urgent">!</span>
+                      <span class="inline-flex items-center gap-1 tabular-nums"><svg class="i size-3.5" aria-hidden="true"><use href="#i-calendar"/></svg><span class="sr-only">fällig </span>31.10.</span>
+                      <span class="ml-auto inline-flex size-5 items-center justify-center rounded-full bg-ochre-tab text-2xs font-semibold text-ochre-ink" role="img" aria-label="Jonas Feld" title="Jonas Feld">JF</span>
+                    </div>
+                  </article>
+                </li>
+              </ul>
+            </section>
+
+            <!-- Pending -->
+            <section aria-labelledby="col-pending" class="flex w-[var(--col-w)] shrink-0 flex-col gap-2">
+              <div class="flex h-7 items-center gap-1.5 px-1">
+                <svg class="i size-3.5 text-st-started" aria-hidden="true"><use href="#st-pending"/></svg>
+                <h4 id="col-pending" class="text-ui font-semibold text-ink">Pending</h4>
+                <span class="text-sm tabular-nums text-muted">1</span>
+                <button type="button" class="ml-auto inline-flex size-6 items-center justify-center rounded-chip text-muted transition-colors duration-120 hover:bg-hover hover:text-ink" aria-label="Item in Pending anlegen"><svg class="i size-3.5" aria-hidden="true"><use href="#i-plus"/></svg></button>
+              </div>
+              <ul class="flex flex-col gap-2.5">
+                <li>
+                  <article data-type="task" aria-label="WEB-45, Task" class="relative mt-5 rounded-card border border-line bg-surface p-3 shadow-e1">
+                    <span class="tab-shape absolute bottom-full left-3 inline-flex h-5 items-center gap-1 px-2.5 text-xs font-semibold tabular-nums text-[var(--tab-ink)]"><svg class="i size-3" aria-hidden="true"><use href="#i-square-check"/></svg>WEB-45</span>
+                    <p class="text-ui font-medium text-ink text-pretty">Texte der Leistungsseiten</p>
+                    <p class="mt-1.5 flex items-center gap-1 text-sm text-muted"><svg class="i size-3.5 text-st-started" aria-hidden="true"><use href="#st-pending"/></svg>wartet auf Zulieferung</p>
+                    <div class="mt-2 flex flex-wrap gap-1">
+                      <span class="inline-flex h-5 items-center gap-1 rounded-chip bg-sunken px-1.5 text-sm text-muted"><svg class="i size-3" aria-hidden="true"><use href="#i-building-2"/></svg><span class="sr-only">Kunde: </span>Studio Nordlicht</span>
+                    </div>
+                    <div class="mt-2.5 flex items-center gap-2 text-sm text-muted">
+                      <span class="inline-flex h-3.5 items-end gap-0.5" role="img" aria-label="Priorität Medium"><span class="h-1.5 w-1 -skew-x-12 rounded-full bg-muted"></span><span class="h-2.5 w-1 -skew-x-12 rounded-full bg-muted"></span><span class="h-3.5 w-1 -skew-x-12 rounded-full bg-line-strong"></span></span>
+                      <span class="ml-auto inline-flex size-5 items-center justify-center rounded-full bg-sky-tab text-2xs font-semibold text-sky-ink" role="img" aria-label="Mara Lindqvist" title="Mara Lindqvist">ML</span>
+                    </div>
+                  </article>
+                </li>
+              </ul>
+            </section>
+
+            <!-- Done (lies under the panel) -->
+            <section aria-labelledby="col-done" class="flex w-[var(--col-w)] shrink-0 flex-col gap-2">
+              <div class="flex h-7 items-center gap-1.5 px-1">
+                <svg class="i size-3.5 text-st-completed [--knock:var(--bg)]" aria-hidden="true"><use href="#st-done"/></svg>
+                <h4 id="col-done" class="text-ui font-semibold text-ink">Done</h4>
+                <span class="text-sm tabular-nums text-muted">2</span>
+              </div>
+              <ul class="flex flex-col gap-2.5">
+                <li>
+                  <article data-type="task" aria-label="WEB-39, Task" class="relative mt-5 rounded-card border border-line bg-surface p-3 shadow-e1">
+                    <span class="tab-shape absolute bottom-full left-3 inline-flex h-5 items-center gap-1 px-2.5 text-xs font-semibold tabular-nums text-[var(--tab-ink)]"><svg class="i size-3" aria-hidden="true"><use href="#i-square-check"/></svg>WEB-39</span>
+                    <p class="text-ui font-medium text-muted text-pretty">Domain auf neuen Server umziehen</p>
+                    <div class="mt-3 flex items-center"><span class="ml-auto inline-flex size-5 items-center justify-center rounded-full bg-accent-soft text-2xs font-semibold text-accent-text" role="img" aria-label="Theo Okafor">TO</span></div>
+                  </article>
+                </li>
+                <li>
+                  <article data-type="bug" aria-label="WEB-40, Bug" class="relative mt-5 rounded-card border border-line bg-surface p-3 shadow-e1">
+                    <span class="tab-shape absolute bottom-full left-3 inline-flex h-5 items-center gap-1 px-2.5 text-xs font-semibold tabular-nums text-[var(--tab-ink)]"><svg class="i size-3" aria-hidden="true"><use href="#i-bug"/></svg>WEB-40</span>
+                    <p class="text-ui font-medium text-muted text-pretty">Favicon fehlt im Safari</p>
+                    <div class="mt-3 flex items-center"><span class="ml-auto inline-flex size-5 items-center justify-center rounded-full bg-ochre-tab text-2xs font-semibold text-ochre-ink" role="img" aria-label="Jonas Feld">JF</span></div>
+                  </article>
+                </li>
+              </ul>
+            </section>
+          </div>
+        </div>
+
+        <!-- item panel WEB-47 -->
+        <section id="panel-web-47" aria-labelledby="panel-title" data-type="bug" class="tracing absolute bottom-2 right-2 top-8 z-10 flex w-[var(--panel-w)] flex-col rounded-card">
+          <span class="tab-shape absolute bottom-full left-4 inline-flex h-6 items-center gap-1.5 px-3 text-xs font-semibold tabular-nums text-[var(--tab-ink)]"><svg class="i size-3.5" aria-hidden="true"><use href="#i-bug"/></svg>WEB-47</span>
+          <div class="flex h-11 shrink-0 items-center gap-1 border-b border-edge pl-4 pr-2">
+            <span class="flex min-w-0 items-center gap-1.5 text-sm text-muted"><span class="inline-flex size-5 shrink-0 items-center justify-center rounded-chip bg-sky-tab text-2xs font-bold text-sky-ink" aria-hidden="true">W</span>Website-Relaunch</span>
+            <div class="ml-auto flex items-center gap-0.5">
+              <button type="button" class="inline-flex size-7 items-center justify-center rounded-chip text-muted transition-colors duration-120 hover:bg-hover hover:text-ink aria-pressed:text-accent-text" aria-label="Beobachten" aria-pressed="true"><svg class="i size-4" aria-hidden="true"><use href="#i-eye"/></svg></button>
+              <button type="button" class="inline-flex size-7 items-center justify-center rounded-chip text-muted transition-colors duration-120 hover:bg-hover hover:text-ink" aria-label="Link kopieren"><svg class="i size-4" aria-hidden="true"><use href="#i-link"/></svg></button>
+              <button type="button" class="inline-flex size-7 items-center justify-center rounded-chip text-muted transition-colors duration-120 hover:bg-hover hover:text-ink" aria-label="Als Seite öffnen"><svg class="i size-4" aria-hidden="true"><use href="#i-maximize-2"/></svg></button>
+              <button type="button" class="inline-flex size-7 items-center justify-center rounded-chip text-muted transition-colors duration-120 hover:bg-hover hover:text-ink" aria-label="Panel schließen" aria-keyshortcuts="Escape"><svg class="i size-4" aria-hidden="true"><use href="#i-x"/></svg></button>
+            </div>
+          </div>
+          <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-5 pt-4">
+            <h3 id="panel-title" class="font-display text-xl font-bold tracking-[-0.01em] text-ink text-balance">Kontaktformular sendet doppelt</h3>
+            <button type="button" title="OPS-12 öffnen" class="mt-3 flex w-full items-start gap-2.5 rounded-ctl bg-danger-soft px-3 py-2 text-left transition-shadow duration-120 hover:ring-1 hover:ring-inset hover:ring-danger">
+              <svg class="i mt-0.5 size-4 shrink-0 text-danger" aria-hidden="true"><use href="#i-ban"/></svg>
+              <span class="min-w-0 flex-1">
+                <span class="block text-sm font-semibold text-danger">Blockiert, solange OPS-12 offen ist</span>
+                <span class="mt-0.5 flex items-center gap-1.5 text-ui text-ink"><svg class="i size-3.5 shrink-0 text-st-unstarted" role="img" aria-label="Status Todo"><use href="#st-todo"/></svg><span class="shrink-0 font-semibold tabular-nums">OPS-12</span><span class="min-w-0 truncate">Mail-Limits am Server erhöhen</span></span>
+              </span>
+            </button>
+
+            <dl class="mt-4 grid grid-cols-[88px_minmax(0,1fr)] items-center gap-x-2 text-ui">
+              <dt class="text-muted">Typ</dt>
+              <dd><button type="button" aria-keyshortcuts="T" class="-mx-2 inline-flex h-7 items-center gap-1.5 rounded-ctl px-2 text-ink transition-colors duration-120 hover:bg-hover"><svg class="i size-4 text-ochre-ink" aria-hidden="true"><use href="#i-bug"/></svg>Bug</button></dd>
+              <dt class="text-muted">Status</dt>
+              <dd><button type="button" aria-keyshortcuts="S" class="-mx-2 inline-flex h-7 items-center gap-1.5 rounded-ctl px-2 text-ink transition-colors duration-120 hover:bg-hover"><svg class="i size-4 text-st-started" aria-hidden="true"><use href="#st-progress"/></svg>In Progress</button></dd>
+              <dt class="text-muted">Assignee</dt>
+              <dd><button type="button" aria-keyshortcuts="A" class="-mx-2 inline-flex h-7 items-center gap-1.5 rounded-ctl px-2 text-ink transition-colors duration-120 hover:bg-hover"><span class="inline-flex size-5 items-center justify-center rounded-full bg-ochre-tab text-2xs font-semibold text-ochre-ink" aria-hidden="true">JF</span>Jonas Feld</button></dd>
+              <dt class="text-muted">Priorität</dt>
+              <dd><button type="button" aria-keyshortcuts="P" class="-mx-2 inline-flex h-7 items-center gap-1.5 rounded-ctl px-2 text-ink transition-colors duration-120 hover:bg-hover"><span class="inline-flex size-3.5 items-center justify-center rounded-chip bg-danger text-2xs font-semibold leading-none text-on-danger" aria-hidden="true">!</span>Urgent</button></dd>
+              <dt class="text-muted">Labels</dt>
+              <dd class="flex flex-wrap items-center gap-1 py-1">
+                <span class="inline-flex h-6 items-center gap-1 rounded-chip border border-line bg-surface px-1.5 text-sm text-ink"><span class="size-1.5 rounded-full bg-moss" aria-hidden="true"></span>Formulare</span>
+                <span class="inline-flex h-6 items-center gap-1 rounded-chip border border-line bg-surface px-1.5 text-sm text-ink"><span class="size-1.5 rounded-full bg-danger" aria-hidden="true"></span>Produktion</span>
+                <button type="button" aria-keyshortcuts="L" class="inline-flex size-6 items-center justify-center rounded-chip text-muted transition-colors duration-120 hover:bg-hover hover:text-ink" aria-label="Label hinzufügen"><svg class="i size-3.5" aria-hidden="true"><use href="#i-plus"/></svg></button>
+              </dd>
+              <dt class="text-muted">Start</dt>
+              <dd><button type="button" aria-keyshortcuts="Shift+D" class="-mx-2 inline-flex h-7 items-center gap-1.5 rounded-ctl px-2 tabular-nums text-ink transition-colors duration-120 hover:bg-hover"><svg class="i size-4 text-muted" aria-hidden="true"><use href="#i-calendar"/></svg>27.10.2026</button></dd>
+              <dt class="text-muted">Due</dt>
+              <dd><button type="button" aria-keyshortcuts="D" class="-mx-2 inline-flex h-7 items-center gap-1.5 rounded-ctl px-2 tabular-nums text-ink transition-colors duration-120 hover:bg-hover"><svg class="i size-4 text-muted" aria-hidden="true"><use href="#i-calendar"/></svg>31.10.2026<span class="text-muted">in 3&nbsp;Tagen</span></button></dd>
+            </dl>
+
+            <section aria-labelledby="h-props" class="mt-4 border-t border-edge pt-3">
+              <h4 id="h-props" class="text-sm font-semibold text-muted">Properties</h4>
+              <dl class="mt-2 grid grid-cols-[88px_minmax(0,1fr)] items-center gap-x-2 gap-y-1.5 text-ui">
+                <dt class="text-muted">Kunde</dt>
+                <dd><button type="button" aria-haspopup="listbox" class="inline-flex h-7 items-center gap-1.5 rounded-ctl border border-line bg-surface pl-2 pr-1.5 text-ink shadow-e1 transition-colors duration-120 hover:bg-sunken"><span class="size-2 rounded-full bg-sky" aria-hidden="true"></span>Studio Nordlicht<svg class="i size-3.5 text-muted" aria-hidden="true"><use href="#i-chevron-down"/></svg></button></dd>
+                <dt class="text-muted">Aufwand (h)</dt>
+                <dd><button type="button" class="inline-flex h-7 w-20 items-center justify-end rounded-ctl border border-line bg-surface px-2 tabular-nums text-ink shadow-e1 transition-colors duration-120 hover:bg-sunken" aria-label="Aufwand 3,5 Stunden ändern">3,5</button></dd>
+              </dl>
+            </section>
+
+            <section aria-labelledby="h-desc" class="mt-4 border-t border-edge pt-3">
+              <h4 id="h-desc" class="text-sm font-semibold text-muted">Beschreibung</h4>
+              <p class="mt-2 text-md text-ink">Beim Absenden über Safari kommen zwei Mails an. <a href="#avatars" class="rounded-chip bg-accent-soft px-1 font-medium text-accent-text">@mara</a> kannst du prüfen, ob das mit <a href="#key-screen" class="inline-flex items-baseline gap-1 rounded-chip bg-sunken px-1 font-medium tabular-nums text-accent-text underline decoration-line-strong underline-offset-2"><svg class="i size-3 self-center text-sky-ink" aria-hidden="true"><use href="#i-square-check"/></svg>WEB-42</a> zusammenhängt?</p>
+            </section>
+
+            <section aria-labelledby="h-activity" class="mt-4 border-t border-edge pt-3">
+              <div class="flex items-center justify-between gap-2">
+                <h4 id="h-activity" class="text-sm font-semibold text-muted">Aktivität</h4>
+                <div class="inline-flex rounded-ctl border border-line bg-sunken p-1" role="group" aria-label="Aktivität filtern" data-segmented>
+                  <button type="button" aria-pressed="true" class="h-6 rounded-chip px-2 text-sm font-medium text-muted transition-colors duration-120 hover:text-ink aria-pressed:bg-surface aria-pressed:text-ink aria-pressed:shadow-e1">Alles</button>
+                  <button type="button" aria-pressed="false" class="h-6 rounded-chip px-2 text-sm font-medium text-muted transition-colors duration-120 hover:text-ink aria-pressed:bg-surface aria-pressed:text-ink aria-pressed:shadow-e1">Kommentare</button>
+                  <button type="button" aria-pressed="false" class="h-6 rounded-chip px-2 text-sm font-medium text-muted transition-colors duration-120 hover:text-ink aria-pressed:bg-surface aria-pressed:text-ink aria-pressed:shadow-e1">Änderungen</button>
+                </div>
+              </div>
+              <ol class="relative mt-3 flex flex-col gap-3 before:absolute before:bottom-10 before:left-2.5 before:top-3 before:border-l before:border-dashed before:border-line-strong">
+                <li class="relative flex gap-2.5 text-ui">
+                  <span class="inline-flex size-5 shrink-0 items-center justify-center rounded-chip bg-ink text-paper" role="img" aria-label="Bot Automation"><svg class="i size-3.5" aria-hidden="true"><use href="#i-bot"/></svg></span>
+                  <p class="min-w-0 text-muted"><span class="font-semibold text-ink">Automation</span> hat <span class="font-medium text-ink">Jonas Feld</span> als Assignee gesetzt (Assignee beim Start). <time datetime="2026-10-27T09:40" class="whitespace-nowrap tabular-nums">gestern 09:40</time></p>
+                </li>
+                <li class="relative flex gap-2.5 text-ui">
+                  <span class="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-moss-tab text-2xs font-semibold text-moss-ink" role="img" aria-label="Ida Brenner">IB</span>
+                  <p class="min-w-0 text-muted"><span class="font-semibold text-ink">Ida Brenner</span> hat die Priorität von <span class="font-medium text-ink">High</span> auf <span class="font-medium text-ink">Urgent</span> geändert. <time datetime="2026-10-27T14:05" class="whitespace-nowrap tabular-nums">gestern 14:05</time></p>
+                </li>
+                <li class="relative flex gap-2.5">
+                  <span class="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-sky-tab text-2xs font-semibold text-sky-ink" role="img" aria-label="Mara Lindqvist">ML</span>
+                  <article aria-label="Kommentar von Mara Lindqvist" class="min-w-0 flex-1 rounded-ctl border border-line bg-surface p-3 shadow-e1">
+                    <p class="flex items-baseline gap-2 text-ui"><span class="font-semibold text-ink">Mara Lindqvist</span><time datetime="2026-10-28T09:12" class="text-sm tabular-nums text-muted">heute 09:12</time></p>
+                    <p class="mt-1 text-md text-ink">Kann ich reproduzieren, nur unter iOS&nbsp;18.</p>
+                    <div class="mt-2 flex items-center gap-1.5">
+                      <button type="button" aria-pressed="false" aria-label="Daumen hoch, 2 Reaktionen" class="inline-flex h-6 items-center gap-1 rounded-chip border border-line bg-sunken px-1.5 text-sm font-medium tabular-nums text-ink transition-colors duration-120 hover:border-line-strong"><span aria-hidden="true">👍</span>2</button>
+                      <button type="button" class="inline-flex size-6 items-center justify-center rounded-chip text-muted transition-colors duration-120 hover:bg-hover hover:text-ink" aria-label="Reaktion hinzufügen"><svg class="i size-3.5" aria-hidden="true"><use href="#i-smile-plus"/></svg></button>
+                    </div>
+                  </article>
+                </li>
+              </ol>
+              <button type="button" aria-keyshortcuts="M" class="mt-3 flex h-9 w-full items-center gap-2 rounded-ctl border border-line bg-surface px-3 text-ui text-muted shadow-[inset_0_-1.5px_0_var(--line-input)] transition-colors duration-120 hover:text-ink">Kommentar schreiben …<kbd class="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-chip border border-line bg-surface px-1 text-xs font-semibold text-muted">M</kbd></button>
+            </section>
+          </div>
+        </section>
+
+        <!-- command palette, open above everything -->
+        <div id="palette-layer" class="absolute inset-0 z-20">
+          <div class="absolute inset-0 bg-scrim" data-palette-close aria-hidden="true"></div>
+          <div id="palette" role="dialog" aria-modal="false" aria-labelledby="palette-label" class="tracing-strong absolute left-1/2 top-12 w-[var(--palette-w)] -translate-x-1/2 overflow-hidden rounded-card [animation:rise_160ms_var(--ease-out)] focus-within:outline focus-within:outline-2 focus-within:outline-[color:var(--focus-ring)]">
+            <h3 id="palette-label" class="sr-only">Befehlspalette</h3>
+            <div class="flex h-12 items-center gap-3 border-b border-edge px-4">
+              <svg class="i size-4 text-muted" aria-hidden="true"><use href="#i-search"/></svg>
+              <input id="palette-input" name="palette-query" type="text" value="kontakt" aria-label="Suchen oder Befehl eingeben" role="combobox" aria-expanded="true" aria-controls="palette-list" aria-activedescendant="pal-opt-1" aria-autocomplete="list" autocomplete="off" spellcheck="false" placeholder="Suchen oder Befehl …" class="min-w-0 flex-1 bg-transparent text-input text-ink placeholder:text-muted">
+              <kbd class="inline-flex h-5 items-center justify-center rounded-chip border border-line bg-surface px-1.5 text-xs font-semibold text-muted">Esc</kbd>
+            </div>
+            <div id="palette-list" role="listbox" aria-label="Treffer für kontakt" class="p-1.5">
+              <div role="group" aria-labelledby="pal-g-actions">
+                <div id="pal-g-actions" class="px-2.5 pb-1 pt-1.5 text-sm text-muted">Aktionen für WEB-47</div>
+                <div id="pal-opt-1" role="option" aria-selected="true" class="flex h-8 cursor-pointer items-center gap-2.5 rounded-ctl px-2.5 text-ui text-ink aria-selected:bg-raised aria-selected:shadow-e1 aria-selected:ring-1 aria-selected:ring-inset aria-selected:ring-line-input">
+                  <svg class="i size-4 text-muted" aria-hidden="true"><use href="#st-progress"/></svg>Status ändern …
+                  <kbd class="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-chip border border-line bg-surface px-1 text-xs font-semibold text-muted">S</kbd>
+                </div>
+                <div id="pal-opt-2" role="option" aria-selected="false" class="flex h-8 cursor-pointer items-center gap-2.5 rounded-ctl px-2.5 text-ui text-ink aria-selected:bg-raised aria-selected:shadow-e1 aria-selected:ring-1 aria-selected:ring-inset aria-selected:ring-line-input">
+                  <svg class="i size-4 text-muted" aria-hidden="true"><use href="#i-user-round-check"/></svg>Mir zuweisen
+                  <kbd class="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-chip border border-line bg-surface px-1 text-xs font-semibold text-muted">I</kbd>
+                </div>
+              </div>
+              <div role="group" aria-labelledby="pal-g-items">
+                <div id="pal-g-items" class="px-2.5 pb-1 pt-2 text-sm text-muted">Items</div>
+                <div id="pal-opt-3" role="option" aria-selected="false" class="flex h-8 cursor-pointer items-center gap-2.5 rounded-ctl px-2.5 text-ui text-ink aria-selected:bg-raised aria-selected:shadow-e1 aria-selected:ring-1 aria-selected:ring-inset aria-selected:ring-line-input">
+                  <svg class="i size-4 text-ochre-ink" aria-hidden="true"><use href="#i-bug"/></svg><span class="w-12 shrink-0 text-sm font-semibold tabular-nums text-muted">WEB-47</span><span class="min-w-0 truncate"><mark class="hl">Kontakt</mark>formular sendet doppelt</span>
+                  <span class="ml-auto inline-flex shrink-0 items-center gap-1 text-sm text-muted"><svg class="i size-3.5 text-st-started" aria-hidden="true"><use href="#st-progress"/></svg>In Progress</span>
+                </div>
+                <div id="pal-opt-4" role="option" aria-selected="false" class="flex h-8 cursor-pointer items-center gap-2.5 rounded-ctl px-2.5 text-ui text-ink aria-selected:bg-raised aria-selected:shadow-e1 aria-selected:ring-1 aria-selected:ring-inset aria-selected:ring-line-input">
+                  <svg class="i size-4 text-sky-ink" aria-hidden="true"><use href="#i-square-check"/></svg><span class="w-12 shrink-0 text-sm font-semibold tabular-nums text-muted">APP-12</span><span class="min-w-0 truncate"><mark class="hl">Kontakt</mark>daten im Profil bearbeiten</span>
+                  <span class="ml-auto inline-flex shrink-0 items-center gap-1 text-sm text-muted"><svg class="i size-3.5 text-st-unstarted" aria-hidden="true"><use href="#st-todo"/></svg>Todo</span>
+                </div>
+              </div>
+              <div role="group" aria-labelledby="pal-g-pages">
+                <div id="pal-g-pages" class="px-2.5 pb-1 pt-2 text-sm text-muted">Seiten</div>
+                <div id="pal-opt-5" role="option" aria-selected="false" class="flex h-8 cursor-pointer items-center gap-2.5 rounded-ctl px-2.5 text-ui text-ink aria-selected:bg-raised aria-selected:shadow-e1 aria-selected:ring-1 aria-selected:ring-inset aria-selected:ring-line-input">
+                  <svg class="i size-4 text-muted" aria-hidden="true"><use href="#i-file-text"/></svg><span class="min-w-0 truncate"><mark class="hl">Kontakt</mark>formular – Technik</span>
+                  <span class="ml-auto shrink-0 text-sm text-muted">Wiki WEB</span>
+                </div>
+              </div>
+            </div>
+            <div class="flex h-9 items-center gap-4 border-t border-edge px-4 text-sm text-muted">
+              <span class="inline-flex items-center gap-1.5"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-chip border border-line bg-surface px-1 text-xs font-semibold"><svg class="i size-3" aria-hidden="true"><use href="#i-arrow-up"/></svg><span class="sr-only">Pfeil hoch</span></kbd><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-chip border border-line bg-surface px-1 text-xs font-semibold"><svg class="i size-3" aria-hidden="true"><use href="#i-arrow-down"/></svg><span class="sr-only">Pfeil runter</span></kbd>auswählen</span>
+              <span class="inline-flex items-center gap-1.5"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-chip border border-line bg-surface px-1 text-xs font-semibold"><svg class="i size-3" aria-hidden="true"><use href="#i-corner-down-left"/></svg><span class="sr-only">Eingabe</span></kbd>ausführen</span>
+              <span class="ml-auto inline-flex items-center gap-1.5"><kbd class="inline-flex h-5 items-center justify-center rounded-chip border border-line bg-surface px-1.5 text-xs font-semibold">Esc</kbd>schließen</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="mt-3 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 text-sm text-muted">
+      <p>Board des Projekts WEB, Item WEB-47 im Panel, darüber die Befehlspalette mit der Suche „kontakt“. <span class="lg:hidden">Der Ausschnitt ist so breit wie die App; seitlich wischen.</span></p>
+      <button type="button" id="palette-toggle" aria-expanded="true" aria-controls="palette-layer" class="inline-flex h-11 items-center gap-2 rounded-ctl border border-line bg-surface px-3 text-ui font-medium text-ink shadow-e1 transition-colors duration-120 hover:bg-sunken md:h-8"><span data-label>Palette schließen</span><span class="inline-flex gap-0.5"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-chip border border-line bg-surface px-1 text-xs font-semibold text-muted">Esc</kbd></span></button>
+    </div>
+  </section>
+
+  <!-- 3 second excerpt: list and timeline -->
+  <section aria-labelledby="h-excerpt" class="mt-20">
+    <div class="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-line-strong pb-3">
+      <h2 id="h-excerpt" class="font-display text-2xl font-bold tracking-[-0.01em] text-ink">Liste und Timeline</h2>
+      <p class="text-ui text-muted">Dieselben Items als Liste und die Epics auf der Zeitachse.</p>
+    </div>
+
+    <div id="list-view" class="dots mt-6 scroll-mt-6 overflow-hidden rounded-card border border-line-strong bg-paper shadow-e1">
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line px-4 py-2.5">
+        <h3 class="font-display text-lg font-bold tracking-[-0.01em] text-ink">Website-Relaunch</h3>
+        <span class="text-ui text-muted">gruppiert nach Status, Kind-Items eingerückt</span>
+        <div class="ml-auto inline-flex rounded-ctl border border-line bg-sunken p-1" role="group" aria-label="Layout" data-segmented>
+          <button type="button" aria-pressed="true" aria-keyshortcuts="1" class="inline-flex h-11 items-center gap-1.5 rounded-chip px-2 text-sm font-medium text-muted transition-colors duration-120 hover:text-ink aria-pressed:bg-surface aria-pressed:text-ink aria-pressed:shadow-e1 md:h-6"><svg class="i size-3.5" aria-hidden="true"><use href="#i-list"/></svg>Liste</button>
+          <button type="button" aria-pressed="false" aria-keyshortcuts="2" class="inline-flex h-11 items-center gap-1.5 rounded-chip px-2 text-sm font-medium text-muted transition-colors duration-120 hover:text-ink aria-pressed:bg-surface aria-pressed:text-ink aria-pressed:shadow-e1 md:h-6"><svg class="i size-3.5" aria-hidden="true"><use href="#i-square-kanban"/></svg>Board</button>
+        </div>
+      </div>
+      <div class="p-2">
+        <details class="group">
+          <summary class="flex h-11 cursor-pointer sm:h-9 items-center gap-2 rounded-ctl px-2 text-ui transition-colors duration-120 hover:bg-hover">
+            <svg class="i size-3.5 -rotate-90 text-muted transition-transform duration-160 ease-out group-open:rotate-0" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+            <svg class="i size-3.5 text-st-backlog" aria-hidden="true"><use href="#st-backlog"/></svg><span class="font-semibold text-ink">Backlog</span><span class="tabular-nums text-muted">2</span>
+          </summary>
+          <p class="px-9 pb-2 text-sm text-muted">WEB-51 und WEB-55, eingeklappt.</p>
+        </details>
+        <details class="group" open>
+          <summary class="flex h-11 cursor-pointer sm:h-9 items-center gap-2 rounded-ctl px-2 text-ui transition-colors duration-120 hover:bg-hover">
+            <svg class="i size-3.5 -rotate-90 text-muted transition-transform duration-160 ease-out group-open:rotate-0" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+            <svg class="i size-3.5 text-st-unstarted" aria-hidden="true"><use href="#st-todo"/></svg><span class="font-semibold text-ink">Todo</span><span class="tabular-nums text-muted">1</span>
+          </summary>
+          <ul class="flex flex-col gap-0.5 pb-2">
+            <li class="flex min-h-9 flex-wrap items-center gap-x-2 gap-y-1 rounded-ctl px-2 py-1 transition-colors duration-120 hover:bg-hover">
+              <label class="relative inline-flex size-6 cursor-pointer items-center justify-center after:absolute after:-inset-2.5 sm:after:inset-0"><input type="checkbox" id="row-web50" class="peer sr-only"><span class="inline-flex size-4 items-center justify-center rounded-chip border border-line-input bg-surface text-on-accent peer-checked:border-accent peer-checked:bg-accent peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-[color:var(--focus-ring)] peer-focus-visible:[box-shadow:var(--focus-halo)] [&>svg]:opacity-0 peer-checked:[&>svg]:opacity-100"><svg class="i size-3" aria-hidden="true"><use href="#i-check"/></svg></span><span class="sr-only">WEB-50 auswählen</span></label>
+              <svg class="i size-4 text-sky-ink" aria-hidden="true"><use href="#i-square-check"/></svg>
+              <span class="w-14 text-sm font-semibold tabular-nums text-muted">WEB-50</span>
+              <span class="min-w-0 flex-1 truncate text-ui text-ink">Fehlerseite 404 gestalten</span>
+              <span class="flex basis-full flex-wrap items-center gap-1.5 pl-8 sm:basis-auto sm:pl-0">
+                <span class="inline-flex h-6 items-center gap-1.5 rounded-chip border border-line bg-surface px-1.5 text-sm text-ink"><span class="inline-flex h-3.5 items-end gap-0.5" aria-hidden="true"><span class="h-1.5 w-1 -skew-x-12 rounded-full bg-muted"></span><span class="h-2.5 w-1 -skew-x-12 rounded-full bg-muted"></span><span class="h-3.5 w-1 -skew-x-12 rounded-full bg-line-strong"></span></span>Medium</span>
+                <span class="size-5 rounded-full border border-dashed border-faint" role="img" aria-label="Nicht zugewiesen"></span>
+              </span>
+            </li>
+          </ul>
+        </details>
+        <details class="group" open>
+          <summary class="flex h-11 cursor-pointer sm:h-9 items-center gap-2 rounded-ctl px-2 text-ui transition-colors duration-120 hover:bg-hover">
+            <svg class="i size-3.5 -rotate-90 text-muted transition-transform duration-160 ease-out group-open:rotate-0" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+            <svg class="i size-3.5 text-st-started" aria-hidden="true"><use href="#st-progress"/></svg><span class="font-semibold text-ink">In Progress</span><span class="tabular-nums text-muted">4</span>
+          </summary>
+          <ul class="flex flex-col gap-0.5 pb-2">
+            <li class="flex min-h-9 flex-wrap items-center gap-x-2 gap-y-1 rounded-ctl px-2 py-1 transition-colors duration-120 hover:bg-hover">
+              <label class="relative inline-flex size-6 cursor-pointer items-center justify-center after:absolute after:-inset-2.5 sm:after:inset-0"><input type="checkbox" id="row-web30" class="peer sr-only"><span class="inline-flex size-4 items-center justify-center rounded-chip border border-line-input bg-surface text-on-accent peer-checked:border-accent peer-checked:bg-accent peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-[color:var(--focus-ring)] peer-focus-visible:[box-shadow:var(--focus-halo)] [&>svg]:opacity-0 peer-checked:[&>svg]:opacity-100"><svg class="i size-3" aria-hidden="true"><use href="#i-check"/></svg></span><span class="sr-only">WEB-30 auswählen</span></label>
+              <svg class="i size-4 text-moss-ink" aria-hidden="true"><use href="#i-layers"/></svg>
+              <span class="w-14 text-sm font-semibold tabular-nums text-muted">WEB-30</span>
+              <span class="min-w-0 flex-1 truncate text-ui font-medium text-ink">Relaunch Phase 1</span>
+              <span class="flex basis-full flex-wrap items-center gap-1.5 pl-8 sm:basis-auto sm:pl-0">
+                <span class="inline-flex h-6 items-center gap-1.5 rounded-chip border border-line bg-surface px-1.5 text-sm tabular-nums text-ink" role="img" aria-label="6 von 10 Kind-Items fertig"><span class="relative h-1.5 w-12 overflow-hidden rounded-full bg-line" aria-hidden="true"><span class="absolute inset-y-0 left-0 w-[60%] rounded-full bg-moss"></span></span>6/10</span>
+                <span class="inline-flex h-6 items-center gap-1 rounded-chip border border-line bg-surface px-1.5 text-sm tabular-nums text-ink"><svg class="i size-3.5 text-muted" aria-hidden="true"><use href="#i-calendar"/></svg><span class="sr-only">fällig </span>15.11.</span>
+                <span class="inline-flex size-5 items-center justify-center rounded-full bg-sky-tab text-2xs font-semibold text-sky-ink" role="img" aria-label="Mara Lindqvist">ML</span>
+              </span>
+            </li>
+            <li data-focus class="relative ml-7 flex min-h-9 flex-wrap items-center gap-x-2 gap-y-1 rounded-ctl px-2 py-1 outline outline-2 outline-[color:var(--focus-ring)] [box-shadow:var(--focus-halo)] before:absolute before:-left-3.5 before:top-0 before:h-1/2 before:w-3 before:rounded-bl-chip before:border-b before:border-l before:border-line-strong">
+              <label class="relative inline-flex size-6 cursor-pointer items-center justify-center after:absolute after:-inset-2.5 sm:after:inset-0"><input type="checkbox" id="row-web42" class="peer sr-only"><span class="inline-flex size-4 items-center justify-center rounded-chip border border-line-input bg-surface text-on-accent peer-checked:border-accent peer-checked:bg-accent peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-[color:var(--focus-ring)] peer-focus-visible:[box-shadow:var(--focus-halo)] [&>svg]:opacity-0 peer-checked:[&>svg]:opacity-100"><svg class="i size-3" aria-hidden="true"><use href="#i-check"/></svg></span><span class="sr-only">WEB-42 auswählen</span></label>
+              <svg class="i size-4 text-sky-ink" aria-hidden="true"><use href="#i-square-check"/></svg>
+              <span class="w-14 text-sm font-semibold tabular-nums text-muted">WEB-42</span>
+              <span class="min-w-0 flex-1 truncate text-ui text-ink">Startseite: Hero und Teaser bauen <span class="sr-only">(Tastaturfokus)</span></span>
+              <span class="flex basis-full flex-wrap items-center gap-1.5 pl-8 sm:basis-auto sm:pl-0">
+                <span class="inline-flex h-6 items-center gap-1 rounded-chip border border-line bg-surface px-1.5 text-sm text-ink"><svg class="i size-3.5 text-st-started" aria-hidden="true"><use href="#st-progress"/></svg>In Progress</span>
+                <span class="inline-flex h-6 items-center gap-1.5 rounded-chip border border-line bg-surface px-1.5 text-sm text-ink"><span class="inline-flex h-3.5 items-end gap-0.5" aria-hidden="true"><span class="h-1.5 w-1 -skew-x-12 rounded-full bg-muted"></span><span class="h-2.5 w-1 -skew-x-12 rounded-full bg-muted"></span><span class="h-3.5 w-1 -skew-x-12 rounded-full bg-muted"></span></span>High</span>
+                <span class="inline-flex h-6 items-center gap-1 rounded-chip border border-line bg-surface px-1.5 text-sm tabular-nums text-ink"><svg class="i size-3.5 text-muted" aria-hidden="true"><use href="#i-calendar"/></svg><span class="sr-only">fällig </span>30.10.</span>
+                <span class="inline-flex size-5 items-center justify-center rounded-full bg-moss-tab text-2xs font-semibold text-moss-ink" role="img" aria-label="Ida Brenner">IB</span>
+              </span>
+            </li>
+            <li class="relative ml-7 flex min-h-9 flex-wrap items-center gap-x-2 gap-y-1 rounded-ctl px-2 py-1 transition-colors duration-120 hover:bg-hover before:absolute before:-left-3.5 before:-top-1 before:h-[calc(50%+4px)] before:w-3 before:rounded-bl-chip before:border-b before:border-l before:border-line-strong">
+              <label class="relative inline-flex size-6 cursor-pointer items-center justify-center after:absolute after:-inset-2.5 sm:after:inset-0"><input type="checkbox" id="row-web48" class="peer sr-only"><span class="inline-flex size-4 items-center justify-center rounded-chip border border-line-input bg-surface text-on-accent peer-checked:border-accent peer-checked:bg-accent peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-[color:var(--focus-ring)] peer-focus-visible:[box-shadow:var(--focus-halo)] [&>svg]:opacity-0 peer-checked:[&>svg]:opacity-100"><svg class="i size-3" aria-hidden="true"><use href="#i-check"/></svg></span><span class="sr-only">WEB-48 auswählen</span></label>
+              <svg class="i size-4 text-sky-ink" aria-hidden="true"><use href="#i-square-check"/></svg>
+              <span class="w-14 text-sm font-semibold tabular-nums text-muted">WEB-48</span>
+              <span class="min-w-0 flex-1 truncate text-ui text-ink">Navigation für Mobilgeräte überarbeiten</span>
+              <span class="flex basis-full flex-wrap items-center gap-1.5 pl-8 sm:basis-auto sm:pl-0">
+                <span class="inline-flex h-6 items-center gap-1 rounded-chip border border-line bg-surface px-1.5 text-sm text-ink"><svg class="i size-3.5 text-st-unstarted" aria-hidden="true"><use href="#st-todo"/></svg>Todo</span>
+                <span class="inline-flex h-6 items-center gap-1.5 rounded-chip border border-line bg-surface px-1.5 text-sm text-ink"><span class="inline-flex h-3.5 items-end gap-0.5" aria-hidden="true"><span class="h-1.5 w-1 -skew-x-12 rounded-full bg-muted"></span><span class="h-2.5 w-1 -skew-x-12 rounded-full bg-muted"></span><span class="h-3.5 w-1 -skew-x-12 rounded-full bg-muted"></span></span>High</span>
+                <span class="inline-flex h-6 items-center gap-1 rounded-chip border border-line bg-surface px-1.5 text-sm text-ink"><span class="size-1.5 rounded-full bg-sky" aria-hidden="true"></span>UX</span>
+                <span class="inline-flex size-5 items-center justify-center rounded-full bg-sunken text-2xs font-semibold text-ink ring-1 ring-inset ring-line" role="img" aria-label="Lene Vogt">LV</span>
+              </span>
+            </li>
+            <li class="flex min-h-9 flex-wrap items-center gap-x-2 gap-y-1 rounded-ctl bg-wash px-2 py-1">
+              <label class="relative inline-flex size-6 cursor-pointer items-center justify-center after:absolute after:-inset-2.5 sm:after:inset-0"><input type="checkbox" id="row-web47" class="peer sr-only" checked><span class="inline-flex size-4 items-center justify-center rounded-chip border border-line-input bg-surface text-on-accent peer-checked:border-accent peer-checked:bg-accent peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-[color:var(--focus-ring)] peer-focus-visible:[box-shadow:var(--focus-halo)] [&>svg]:opacity-0 peer-checked:[&>svg]:opacity-100"><svg class="i size-3" aria-hidden="true"><use href="#i-check"/></svg></span><span class="sr-only">WEB-47 auswählen</span></label>
+              <svg class="i size-4 text-ochre-ink" aria-hidden="true"><use href="#i-bug"/></svg>
+              <span class="w-14 text-sm font-semibold tabular-nums text-muted">WEB-47</span>
+              <span class="min-w-0 flex-1 truncate text-ui text-ink">Kontaktformular sendet doppelt</span>
+              <span class="flex basis-full flex-wrap items-center gap-1.5 pl-8 sm:basis-auto sm:pl-0">
+                <span class="inline-flex h-6 items-center gap-1 rounded-chip bg-danger-soft px-1.5 text-sm font-medium text-danger"><svg class="i size-3.5" aria-hidden="true"><use href="#i-ban"/></svg>Blockiert</span>
+                <span class="inline-flex h-6 items-center gap-1.5 rounded-chip border border-line bg-surface px-1.5 text-sm text-ink"><span class="inline-flex size-3.5 items-center justify-center rounded-chip bg-danger text-2xs font-semibold leading-none text-on-danger" aria-hidden="true">!</span>Urgent</span>
+                <span class="inline-flex h-6 items-center gap-1 rounded-chip border border-line bg-surface px-1.5 text-sm text-ink"><span class="size-1.5 rounded-full bg-moss" aria-hidden="true"></span>Formulare</span>
+                <span class="inline-flex h-6 items-center gap-1 rounded-chip border border-line bg-surface px-1.5 text-sm text-ink"><span class="size-1.5 rounded-full bg-danger" aria-hidden="true"></span>Produktion</span>
+                <span class="inline-flex h-6 items-center gap-1 rounded-chip border border-line bg-surface px-1.5 text-sm tabular-nums text-ink"><svg class="i size-3.5 text-muted" aria-hidden="true"><use href="#i-calendar"/></svg><span class="sr-only">fällig </span>31.10.</span>
+                <span class="inline-flex size-5 items-center justify-center rounded-full bg-ochre-tab text-2xs font-semibold text-ochre-ink" role="img" aria-label="Jonas Feld">JF</span>
+              </span>
+            </li>
+          </ul>
+        </details>
+        <details class="group">
+          <summary class="flex h-11 cursor-pointer sm:h-9 items-center gap-2 rounded-ctl px-2 text-ui transition-colors duration-120 hover:bg-hover">
+            <svg class="i size-3.5 -rotate-90 text-muted transition-transform duration-160 ease-out group-open:rotate-0" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+            <svg class="i size-3.5 text-st-started" aria-hidden="true"><use href="#st-pending"/></svg><span class="font-semibold text-ink">Pending</span><span class="tabular-nums text-muted">1</span>
+          </summary>
+          <p class="px-9 pb-2 text-sm text-muted">WEB-45, eingeklappt.</p>
+        </details>
+        <details class="group">
+          <summary class="flex h-11 cursor-pointer sm:h-9 items-center gap-2 rounded-ctl px-2 text-ui transition-colors duration-120 hover:bg-hover">
+            <svg class="i size-3.5 -rotate-90 text-muted transition-transform duration-160 ease-out group-open:rotate-0" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+            <svg class="i size-3.5 text-st-completed [--knock:var(--bg)]" aria-hidden="true"><use href="#st-done"/></svg><span class="font-semibold text-ink">Done</span><span class="tabular-nums text-muted">2</span>
+          </summary>
+          <p class="px-9 pb-2 text-sm text-muted">WEB-39 und WEB-40, eingeklappt.</p>
+        </details>
+      </div>
+    </div>
+
+    <!-- timeline strip -->
+    <div id="timeline" class="dots mt-6 scroll-mt-6 overflow-hidden rounded-card border border-line-strong bg-paper shadow-e1">
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line px-4 py-2.5">
+        <h3 class="font-display text-lg font-bold tracking-[-0.01em] text-ink">Timeline</h3>
+        <span class="text-ui text-muted">Epics aller Projekte, September bis Dezember 2026</span>
+        <div class="ml-auto inline-flex rounded-ctl border border-line bg-sunken p-1" role="group" aria-label="Zoom" data-segmented>
+          <button type="button" aria-pressed="false" class="h-11 rounded-chip px-2 text-sm font-medium text-muted transition-colors duration-120 hover:text-ink aria-pressed:bg-surface aria-pressed:text-ink aria-pressed:shadow-e1 md:h-6">Woche</button>
+          <button type="button" aria-pressed="true" class="h-11 rounded-chip px-2 text-sm font-medium text-muted transition-colors duration-120 hover:text-ink aria-pressed:bg-surface aria-pressed:text-ink aria-pressed:shadow-e1 md:h-6">Monat</button>
+          <button type="button" aria-pressed="false" class="h-11 rounded-chip px-2 text-sm font-medium text-muted transition-colors duration-120 hover:text-ink aria-pressed:bg-surface aria-pressed:text-ink aria-pressed:shadow-e1 md:h-6">Quartal</button>
+        </div>
+      </div>
+      <div class="overflow-x-auto" tabindex="0" role="region" aria-label="Timeline, seitlich scrollbar">
+        <div class="grid min-w-[620px] grid-cols-[176px_minmax(0,1fr)] pr-6 sm:grid-cols-[232px_minmax(0,1fr)]">
+          <!-- month grid and today line behind all rows -->
+          <div class="pointer-events-none relative col-start-2 [grid-row:1/8] grid grid-cols-[30fr_31fr_30fr_31fr]" aria-hidden="true">
+            <span class="border-l border-line-strong"></span><span class="border-l border-line-strong"></span><span class="border-l border-line-strong"></span><span class="border-x border-line-strong"></span>
+            <span class="absolute inset-y-0 left-[47.13%] w-2 -translate-x-1/2 bg-wash"></span>
+            <span class="absolute inset-y-0 left-[47.13%] w-0.5 -translate-x-1/2 bg-accent"></span>
+          </div>
+          <!-- axis -->
+          <div class="col-start-1 row-start-1 flex h-9 items-center px-4 text-sm text-muted">Epic</div>
+          <div class="relative col-start-2 row-start-1 grid h-9 grid-cols-[30fr_31fr_30fr_31fr] items-center text-sm font-medium text-muted">
+            <span class="text-center">Sep.</span><span class="text-center">Okt.</span><span class="text-center">Nov.</span><span class="text-center">Dez.</span>
+            <span class="absolute left-[47.13%] top-1.5 inline-flex h-6 -translate-x-1/2 items-center rounded-chip bg-marker px-1.5 text-sm font-semibold tabular-nums text-on-marker [box-shadow:var(--mark-glow)]">Heute 28.10.</span>
+          </div>
+          <!-- WEB -->
+          <div class="col-span-2 col-start-1 row-start-2 flex h-8 items-center gap-2 border-t border-line px-4 text-sm font-semibold text-muted"><span class="inline-flex size-5 shrink-0 items-center justify-center rounded-chip bg-sky-tab text-2xs font-bold text-sky-ink" aria-hidden="true">W</span>Website-Relaunch</div>
+          <div class="col-start-1 row-start-3 flex h-11 min-w-0 items-center gap-2 px-4">
+            <svg class="i size-4 text-moss-ink" aria-hidden="true"><use href="#i-layers"/></svg>
+            <span class="shrink-0 whitespace-nowrap text-sm font-semibold tabular-nums text-muted">WEB-30</span><span class="truncate text-ui text-ink">Relaunch Phase 1</span>
+          </div>
+          <div class="relative col-start-2 row-start-3 h-11">
+            <div class="absolute left-[24.59%] top-1/2 h-5 w-[37.7%] -translate-y-1/2 overflow-hidden rounded-chip bg-moss-tab ring-1 ring-inset ring-[var(--moss)]" role="img" aria-label="WEB-30 Relaunch Phase 1, 01.10. bis 15.11.2026, 60 % fertig"><span class="block h-full w-[60%] bg-moss"></span></div>
+            <span class="absolute left-[calc(62.29%+8px)] top-1/2 -translate-y-1/2 text-sm font-semibold tabular-nums text-muted">60&nbsp;%</span>
+          </div>
+          <!-- APP -->
+          <div class="col-span-2 col-start-1 row-start-4 flex h-8 items-center gap-2 border-t border-line px-4 text-sm font-semibold text-muted"><span class="inline-flex size-5 shrink-0 items-center justify-center rounded-chip bg-moss-tab text-2xs font-bold text-moss-ink" aria-hidden="true">A</span>Kunden-App</div>
+          <div class="col-start-1 row-start-5 flex h-11 min-w-0 items-center gap-2 px-4">
+            <svg class="i size-4 text-moss-ink" aria-hidden="true"><use href="#i-layers"/></svg>
+            <span class="shrink-0 whitespace-nowrap text-sm font-semibold tabular-nums text-muted">APP-5</span><span class="truncate text-ui text-ink">Kunden-App 2.0 Beta</span>
+          </div>
+          <div class="relative col-start-2 row-start-5 h-11">
+            <div class="absolute left-[40.16%] top-1/2 h-5 w-[50.82%] -translate-y-1/2 overflow-hidden rounded-chip bg-moss-tab ring-1 ring-inset ring-[var(--moss)]" role="img" aria-label="APP-5 Kunden-App 2.0 Beta, 20.10. bis 20.12.2026, 25 % fertig"><span class="block h-full w-[25%] bg-moss"></span></div>
+            <span class="absolute left-[calc(90.98%+8px)] top-1/2 -translate-y-1/2 text-sm font-semibold tabular-nums text-muted">25&nbsp;%</span>
+          </div>
+          <!-- OPS -->
+          <div class="col-span-2 col-start-1 row-start-6 flex h-8 items-center gap-2 border-t border-line px-4 text-sm font-semibold text-muted"><span class="inline-flex size-5 shrink-0 items-center justify-center rounded-chip bg-ochre-tab text-2xs font-bold text-ochre-ink" aria-hidden="true">O</span>Infrastruktur</div>
+          <div class="col-start-1 row-start-7 flex h-11 min-w-0 items-center gap-2 px-4">
+            <svg class="i size-4 text-moss-ink" aria-hidden="true"><use href="#i-layers"/></svg>
+            <span class="shrink-0 whitespace-nowrap text-sm font-semibold tabular-nums text-muted">OPS-3</span><span class="truncate text-ui text-ink">Server-Migration</span>
+          </div>
+          <div class="relative col-start-2 row-start-7 h-11">
+            <div class="absolute left-0 top-1/2 h-5 w-[50%] -translate-y-1/2 overflow-hidden rounded-chip bg-moss-tab ring-1 ring-inset ring-[var(--moss)]" role="img" aria-label="OPS-3 Server-Migration, 01.09. bis 31.10.2026, 90 % fertig"><span class="block h-full w-[90%] bg-moss"></span></div>
+            <span class="absolute left-[calc(50%+8px)] top-1/2 -translate-y-1/2 text-sm font-semibold tabular-nums text-muted">90&nbsp;%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 tokens -->
+  <section aria-labelledby="h-tokens" class="mt-20">
+    <div class="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-line-strong pb-3">
+      <h2 id="h-tokens" class="font-display text-2xl font-bold tracking-[-0.01em] text-ink">Tokens</h2>
+      <p class="text-ui text-muted">Alle Farben sind Variablen; hell und dunkel teilen dieselben Namen.</p>
+    </div>
+
+    <div class="mt-8 grid gap-x-12 gap-y-14 lg:grid-cols-12">
+      <!-- colours -->
+      <div class="min-w-0 lg:col-span-7">
+        <h3 class="font-display text-lg font-bold text-ink">Farben</h3>
+        <div class="mt-4 overflow-x-auto">
+          <table class="w-full min-w-[480px] text-left text-ui">
+            <thead>
+              <tr class="border-b border-line-strong text-sm text-muted">
+                <th scope="col" class="py-2 pr-3 font-medium">Token</th>
+                <th scope="col" class="py-2 pr-3 font-medium">Arbeitsheft (hell)</th>
+                <th scope="col" class="py-2 font-medium">Nachtheft (dunkel)</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-line">
+              <tr><th scope="row" class="py-2.5 pr-3 font-normal"><code class="font-semibold text-ink">bg</code> <span class="text-muted">Papier</span></th>
+                <td class="py-2.5 pr-3"><span class="flex items-center gap-2.5"><span class="dots size-7 shrink-0 rounded-chip border border-line bg-[var(--day-bg)]"></span><span class="tabular-nums text-muted">#F5F7F9</span></span></td>
+                <td class="py-2.5"><span class="flex items-center gap-2.5"><span class="size-7 shrink-0 rounded-chip border border-line bg-[var(--night-bg)]"></span><span class="tabular-nums text-muted">#181E28</span></span></td></tr>
+              <tr><th scope="row" class="py-2.5 pr-3 font-normal"><code class="font-semibold text-ink">surface</code> <span class="text-muted">Karte</span></th>
+                <td class="py-2.5 pr-3"><span class="flex items-center gap-2.5"><span class="size-7 shrink-0 rounded-chip border border-line bg-[var(--day-surface)]"></span><span class="tabular-nums text-muted">#FFFFFF</span></span></td>
+                <td class="py-2.5"><span class="flex items-center gap-2.5"><span class="size-7 shrink-0 rounded-chip border border-line bg-[var(--night-surface)]"></span><span class="tabular-nums text-muted">#212833</span></span></td></tr>
+              <tr><th scope="row" class="py-2.5 pr-3 font-normal"><code class="font-semibold text-ink">glass</code> <span class="text-muted">Transparentpapier</span></th>
+                <td class="py-2.5 pr-3"><span class="flex items-center gap-2.5"><span class="relative size-7 shrink-0 overflow-hidden rounded-chip border border-line bg-[var(--day-bg)]"><span class="absolute left-1 top-1 size-3 rounded-full bg-accent"></span><span class="absolute inset-0 bg-[var(--day-glass)] backdrop-blur-[2px]"></span></span><span class="tabular-nums text-muted">#FDFBF6 bei 74&nbsp;%</span></span></td>
+                <td class="py-2.5"><span class="flex items-center gap-2.5"><span class="relative size-7 shrink-0 overflow-hidden rounded-chip border border-line bg-[var(--night-bg)]"><span class="absolute left-1 top-1 size-3 rounded-full bg-[var(--night-accent)]"></span><span class="absolute inset-0 bg-[var(--night-glass)] backdrop-blur-[2px]"></span></span><span class="tabular-nums text-muted">#232B35 bei 76&nbsp;%</span></span></td></tr>
+              <tr><th scope="row" class="py-2.5 pr-3 font-normal"><code class="font-semibold text-ink">text</code> <span class="text-muted">Tinte</span></th>
+                <td class="py-2.5 pr-3"><span class="flex items-center gap-2.5"><span class="size-7 shrink-0 rounded-chip border border-line bg-[var(--day-text)]"></span><span class="tabular-nums text-muted">#182336</span></span></td>
+                <td class="py-2.5"><span class="flex items-center gap-2.5"><span class="size-7 shrink-0 rounded-chip border border-line bg-[var(--night-text)]"></span><span class="tabular-nums text-muted">#E5ECF3</span></span></td></tr>
+              <tr><th scope="row" class="py-2.5 pr-3 font-normal"><code class="font-semibold text-ink">muted</code> <span class="text-muted">Bleistift</span></th>
+                <td class="py-2.5 pr-3"><span class="flex items-center gap-2.5"><span class="size-7 shrink-0 rounded-chip border border-line bg-[var(--day-muted)]"></span><span class="tabular-nums text-muted">#596475</span></span></td>
+                <td class="py-2.5"><span class="flex items-center gap-2.5"><span class="size-7 shrink-0 rounded-chip border border-line bg-[var(--night-muted)]"></span><span class="tabular-nums text-muted">#A6AFBB</span></span></td></tr>
+              <tr><th scope="row" class="py-2.5 pr-3 font-normal"><code class="font-semibold text-ink">border</code> <span class="text-muted">Linie</span></th>
+                <td class="py-2.5 pr-3"><span class="flex items-center gap-2.5"><span class="size-7 shrink-0 rounded-chip border border-line bg-[var(--day-border)]"></span><span class="tabular-nums text-muted">#D7DDE4</span></span></td>
+                <td class="py-2.5"><span class="flex items-center gap-2.5"><span class="size-7 shrink-0 rounded-chip border border-line bg-[var(--night-border)]"></span><span class="tabular-nums text-muted">#353C48</span></span></td></tr>
+              <tr><th scope="row" class="py-2.5 pr-3 font-normal"><code class="font-semibold text-ink">accent</code> <span class="text-muted">Tintenblau</span></th>
+                <td class="py-2.5 pr-3"><span class="flex items-center gap-2.5"><span class="size-7 shrink-0 rounded-chip border border-line bg-[var(--day-accent)]"></span><span class="tabular-nums text-muted">#2F51B6</span></span></td>
+                <td class="py-2.5"><span class="flex items-center gap-2.5"><span class="size-7 shrink-0 rounded-chip border border-line bg-[var(--night-accent)]"></span><span class="tabular-nums text-muted">#87A8F7</span></span></td></tr>
+              <tr><th scope="row" class="py-2.5 pr-3 font-normal"><code class="font-semibold text-ink">marker</code> <span class="text-muted">Textmarker</span></th>
+                <td class="py-2.5 pr-3"><span class="flex items-center gap-2.5"><span class="size-7 shrink-0 rounded-chip border border-line bg-[var(--day-marker)]"></span><span class="tabular-nums text-muted">#FCED48, nur Auswahl und Fokus</span></span></td>
+                <td class="py-2.5"><span class="flex items-center gap-2.5"><span class="size-7 shrink-0 rounded-chip border border-line bg-[var(--night-marker)] shadow-[0_0_10px_var(--night-marker)]"></span><span class="tabular-nums text-muted">#F6E634, leuchtet</span></span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- status, priority, type -->
+      <div class="flex min-w-0 flex-col gap-8 lg:col-span-5">
+        <div>
+          <h3 class="font-display text-lg font-bold text-ink">Status-Kategorien</h3>
+          <p class="mt-1 text-sm text-muted">Farbe zeigt die Kategorie, die Form den Status.</p>
+          <ul class="mt-3 grid gap-2 text-ui">
+            <li class="flex items-center gap-2.5"><svg class="i size-4 text-st-backlog" aria-hidden="true"><use href="#st-backlog"/></svg><span class="w-24 font-medium text-ink">Backlog</span><span class="text-muted">Backlog</span></li>
+            <li class="flex items-center gap-2.5"><svg class="i size-4 text-st-unstarted" aria-hidden="true"><use href="#st-todo"/></svg><span class="w-24 font-medium text-ink">Unstarted</span><span class="text-muted">Todo</span></li>
+            <li class="flex items-center gap-2.5"><span class="flex w-4 flex-col items-center gap-0.5"><svg class="i size-4 text-st-started" aria-hidden="true"><use href="#st-progress"/></svg></span><span class="w-24 font-medium text-ink">Started</span><span class="inline-flex items-center gap-1.5 text-muted">In Progress,<svg class="i size-4 text-st-started" aria-hidden="true"><use href="#st-pending"/></svg>Pending</span></li>
+            <li class="flex items-center gap-2.5"><svg class="i size-4 text-st-completed [--knock:var(--bg)]" aria-hidden="true"><use href="#st-done"/></svg><span class="w-24 font-medium text-ink">Completed</span><span class="text-muted">Done</span></li>
+            <li class="flex items-center gap-2.5"><svg class="i size-4 text-st-canceled" aria-hidden="true"><use href="#st-cancelled"/></svg><span class="w-24 font-medium text-ink">Canceled</span><span class="text-muted">Cancelled</span></li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="font-display text-lg font-bold text-ink">Prioritäten</h3>
+          <ul class="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-ui text-ink">
+            <li class="inline-flex items-center gap-2"><span class="inline-flex size-3.5 items-center justify-center rounded-chip bg-danger text-2xs font-semibold leading-none text-on-danger" aria-hidden="true">!</span>Urgent</li>
+            <li class="inline-flex items-center gap-2"><span class="inline-flex h-3.5 items-end gap-0.5" aria-hidden="true"><span class="h-1.5 w-1 -skew-x-12 rounded-full bg-muted"></span><span class="h-2.5 w-1 -skew-x-12 rounded-full bg-muted"></span><span class="h-3.5 w-1 -skew-x-12 rounded-full bg-muted"></span></span>High</li>
+            <li class="inline-flex items-center gap-2"><span class="inline-flex h-3.5 items-end gap-0.5" aria-hidden="true"><span class="h-1.5 w-1 -skew-x-12 rounded-full bg-muted"></span><span class="h-2.5 w-1 -skew-x-12 rounded-full bg-muted"></span><span class="h-3.5 w-1 -skew-x-12 rounded-full bg-line-strong"></span></span>Medium</li>
+            <li class="inline-flex items-center gap-2"><span class="inline-flex h-3.5 items-end gap-0.5" aria-hidden="true"><span class="h-1.5 w-1 -skew-x-12 rounded-full bg-muted"></span><span class="h-2.5 w-1 -skew-x-12 rounded-full bg-line-strong"></span><span class="h-3.5 w-1 -skew-x-12 rounded-full bg-line-strong"></span></span>Low</li>
+            <li class="inline-flex items-center gap-2"><span class="inline-flex h-3.5 items-end gap-0.5" aria-hidden="true"><span class="h-1.5 w-1 -skew-x-12 rounded-full bg-line-strong"></span><span class="h-2.5 w-1 -skew-x-12 rounded-full bg-line-strong"></span><span class="h-3.5 w-1 -skew-x-12 rounded-full bg-line-strong"></span></span>None</li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="font-display text-lg font-bold text-ink">Typen</h3>
+          <p class="mt-1 text-sm text-muted">Reiter in gedeckten Tönen, das Icon trägt den Typ mit.</p>
+          <ul class="mt-2 flex flex-wrap gap-4">
+            <li class="w-28">
+              <div data-type="task" class="relative mt-5 h-10 rounded-card border border-line bg-surface shadow-e1"><span class="tab-shape absolute bottom-full left-3 inline-flex h-5 items-center gap-1 px-2.5 text-xs font-semibold text-[var(--tab-ink)]"><svg class="i size-3" aria-hidden="true"><use href="#i-square-check"/></svg>Task</span></div>
+              <p class="mt-2 text-sm text-muted">Himmel</p>
+            </li>
+            <li class="w-28">
+              <div data-type="bug" class="relative mt-5 h-10 rounded-card border border-line bg-surface shadow-e1"><span class="tab-shape absolute bottom-full left-3 inline-flex h-5 items-center gap-1 px-2.5 text-xs font-semibold text-[var(--tab-ink)]"><svg class="i size-3" aria-hidden="true"><use href="#i-bug"/></svg>Bug</span></div>
+              <p class="mt-2 text-sm text-muted">Ocker</p>
+            </li>
+            <li class="w-28">
+              <div data-type="epic" class="relative mt-5 h-10 rounded-card border border-line bg-surface shadow-e1"><span class="tab-shape absolute bottom-full left-3 inline-flex h-5 items-center gap-1 px-2.5 text-xs font-semibold text-[var(--tab-ink)]"><svg class="i size-3" aria-hidden="true"><use href="#i-layers"/></svg>Epic</span></div>
+              <p class="mt-2 text-sm text-muted">Moos</p>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- type scale -->
+      <div class="min-w-0 lg:col-span-7">
+        <h3 class="font-display text-lg font-bold text-ink">Typo-Skala</h3>
+        <p class="mt-1 text-sm text-muted">Bricolage Grotesque für Titel, Figtree für alles andere. Kürzel und Keys in Tabellenziffern.</p>
+        <dl class="mt-4 divide-y divide-line">
+          <div class="grid grid-cols-[136px_minmax(0,1fr)] items-baseline gap-4 py-3"><dt class="text-sm tabular-nums text-muted">44/46 Display 800</dt><dd class="truncate font-display text-3xl font-extrabold tracking-[-0.02em] text-ink">Website-Relaunch</dd></div>
+          <div class="grid grid-cols-[136px_minmax(0,1fr)] items-baseline gap-4 py-3"><dt class="text-sm tabular-nums text-muted">28/32 Abschnitt 700</dt><dd class="font-display text-2xl font-bold tracking-[-0.01em] text-ink">Liste und Timeline</dd></div>
+          <div class="grid grid-cols-[136px_minmax(0,1fr)] items-baseline gap-4 py-3"><dt class="text-sm tabular-nums text-muted">22/28 Item-Titel 700</dt><dd class="font-display text-xl font-bold tracking-[-0.01em] text-ink">Kontaktformular sendet doppelt</dd></div>
+          <div class="grid grid-cols-[136px_minmax(0,1fr)] items-baseline gap-4 py-3"><dt class="text-sm tabular-nums text-muted">18/24 Board 700</dt><dd class="font-display text-lg font-bold text-ink">Website-Relaunch</dd></div>
+          <div class="grid grid-cols-[136px_minmax(0,1fr)] items-baseline gap-4 py-3"><dt class="text-sm tabular-nums text-muted">15/24 Text 400</dt><dd class="max-w-[60ch] text-body text-ink">Beim Absenden über Safari kommen zwei Mails an. Kannst du prüfen, ob das mit der Startseite zusammenhängt?</dd></div>
+          <div class="grid grid-cols-[136px_minmax(0,1fr)] items-baseline gap-4 py-3"><dt class="text-sm tabular-nums text-muted">13/18 UI 500</dt><dd class="text-ui font-medium text-ink">Meine Items, Diese Woche fällig, Studio Nordlicht</dd></div>
+          <div class="grid grid-cols-[136px_minmax(0,1fr)] items-baseline gap-4 py-3"><dt class="text-sm tabular-nums text-muted">12/16 Meta 500</dt><dd class="text-sm font-medium text-muted">gestern 14:05, fällig 31.10., 6 von 10 fertig</dd></div>
+          <div class="grid grid-cols-[136px_minmax(0,1fr)] items-baseline gap-4 py-3"><dt class="text-sm tabular-nums text-muted">11/14 Kürzel 600</dt><dd class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-semibold tabular-nums text-ink"><span>WEB-47</span><span>OPS-12</span><span>APP-5</span><span>31.10.</span><span>6/10</span></dd></div>
+        </dl>
+      </div>
+
+      <!-- radii and elevation -->
+      <div class="flex min-w-0 flex-col gap-8 lg:col-span-5">
+        <div>
+          <h3 class="font-display text-lg font-bold text-ink">Radien</h3>
+          <ul class="mt-4 grid grid-cols-2 gap-4 text-sm text-muted sm:grid-cols-4">
+            <li class="flex flex-col gap-2"><span class="h-12 rounded-chip border-2 border-line-strong bg-surface" aria-hidden="true"></span><span><span class="font-semibold tabular-nums text-ink">6</span> Chips, kbd, Reiter</span></li>
+            <li class="flex flex-col gap-2"><span class="h-12 rounded-ctl border-2 border-line-strong bg-surface" aria-hidden="true"></span><span><span class="font-semibold tabular-nums text-ink">10</span> Buttons, Eingaben</span></li>
+            <li class="flex flex-col gap-2"><span class="h-12 rounded-card border-2 border-line-strong bg-surface" aria-hidden="true"></span><span><span class="font-semibold tabular-nums text-ink">14</span> Karten, Panel, Palette</span></li>
+            <li class="flex flex-col gap-2"><span class="size-12 rounded-full border-2 border-line-strong bg-surface" aria-hidden="true"></span><span><span class="font-semibold text-ink">rund</span> Avatare, Switch</span></li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="font-display text-lg font-bold text-ink">Elevation</h3>
+          <ul class="mt-4 grid grid-cols-2 gap-4 text-sm text-muted">
+            <li class="flex flex-col gap-2"><span class="h-14 rounded-card border border-line bg-surface shadow-e1" aria-hidden="true"></span><span><span class="font-semibold text-ink">1</span> Karte liegt auf</span></li>
+            <li class="flex flex-col gap-2"><span class="h-14 rounded-card border border-line bg-surface shadow-e2" aria-hidden="true"></span><span><span class="font-semibold text-ink">2</span> Bogen schwebt: Panel, Menü</span></li>
+            <li class="flex flex-col gap-2"><span class="h-14 rounded-card border border-line bg-surface shadow-e3" aria-hidden="true"></span><span><span class="font-semibold text-ink">3</span> Palette</span></li>
+            <li class="flex flex-col gap-2"><span class="h-14 -rotate-2 rounded-card border border-line bg-surface shadow-drag" aria-hidden="true"></span><span><span class="font-semibold text-ink">Ziehen</span> plus −2° Neigung</span></li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- glass recipe -->
+      <div class="min-w-0 lg:col-span-6">
+        <h3 class="font-display text-lg font-bold text-ink">Glas als Transparentpapier</h3>
+        <div class="dots relative mt-4 h-52 overflow-hidden rounded-card border border-line bg-paper" aria-hidden="true">
+          <div data-type="task" class="absolute left-5 top-9 w-40 rounded-card border border-line bg-surface p-3 shadow-e1"><span class="tab-shape absolute bottom-full left-3 inline-flex h-5 items-center px-2.5 text-xs font-semibold tabular-nums text-[var(--tab-ink)]">WEB-48</span><span class="block h-2 w-28 rounded-full bg-line-strong"></span><span class="mt-2 block h-2 w-20 rounded-full bg-line"></span><span class="mt-3 flex justify-end"><span class="size-5 rounded-full bg-sky-tab"></span></span></div>
+          <div data-type="bug" class="absolute left-[34%] top-28 w-44 rounded-card border border-line bg-surface p-3 shadow-e1"><span class="tab-shape absolute bottom-full left-3 inline-flex h-5 items-center px-2.5 text-xs font-semibold tabular-nums text-[var(--tab-ink)]">WEB-47</span><span class="block h-2 w-32 rounded-full bg-line-strong"></span><span class="mt-3 flex items-center justify-between"><span class="h-4 w-20 rounded-chip bg-danger"></span><span class="size-6 rounded-full bg-ochre"></span></span></div>
+          <div data-type="epic" class="absolute right-8 top-10 w-40 rounded-card border border-line bg-surface p-3 shadow-e1"><span class="tab-shape absolute bottom-full left-3 inline-flex h-5 items-center px-2.5 text-xs font-semibold tabular-nums text-[var(--tab-ink)]">WEB-30</span><span class="block h-2 w-24 rounded-full bg-line-strong"></span><span class="mt-3 grid grid-cols-5 gap-1"><span class="h-2.5 rounded-full bg-moss"></span><span class="h-2.5 rounded-full bg-moss"></span><span class="h-2.5 rounded-full bg-moss"></span><span class="h-2.5 rounded-full bg-line-strong"></span><span class="h-2.5 rounded-full bg-line-strong"></span></span></div>
+          <div class="tracing absolute inset-y-4 right-4 w-1/2 rounded-card p-4">
+            <p class="font-display text-lg font-bold text-ink">Panel</p>
+            <p class="mt-1 text-ui text-ink">Darunter liegen Karten: Sie scheinen weich durch, der Text bleibt bei vollem Kontrast.</p>
+          </div>
+        </div>
+        <dl class="mt-4 grid grid-cols-[96px_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-ui">
+          <dt class="text-muted">Tönung</dt><dd class="text-ink">Papierweiß, leicht warm; im Nachtheft dunkles Blaugrau</dd>
+          <dt class="text-muted">Deckkraft</dt><dd class="tabular-nums text-ink">74&nbsp;% für Seitenleiste und Panel (Nachtheft 76&nbsp;%), 88&nbsp;% für Palette, Menüs, Toasts</dd>
+          <dt class="text-muted">Blur</dt><dd class="tabular-nums text-ink">8&nbsp;px, Sättigung 108&nbsp;%</dd>
+          <dt class="text-muted">Körnung</dt><dd class="tabular-nums text-ink">SVG-Rauschen, etwa 5&nbsp;%</dd>
+          <dt class="text-muted">Kante</dt><dd class="tabular-nums text-ink">1&nbsp;px Tinte 11&nbsp;%, Lichtkante innen oben</dd>
+        </dl>
+      </div>
+
+      <!-- Motion -->
+      <div class="min-w-0 lg:col-span-6">
+        <h3 class="font-display text-lg font-bold text-ink">Bewegung</h3>
+        <div class="mt-4 flex flex-wrap items-start gap-6">
+          <figure class="w-56 shrink-0">
+            <svg viewBox="0 0 224 144" class="w-full overflow-visible" role="img" aria-label="Verlauf über die Zeit: ease-out ist nach 160 ms am Ziel, die Feder nach 420 ms und schwingt dabei etwa 5 % über">
+              <line x1="16" y1="24" x2="216" y2="24" stroke="var(--border-strong)" stroke-dasharray="2 3"/>
+              <line x1="16" y1="116" x2="216" y2="116" stroke="var(--border-strong)"/>
+              <line x1="92.2" y1="116" x2="92.2" y2="120" stroke="var(--border-strong)"/>
+              <line x1="216" y1="116" x2="216" y2="120" stroke="var(--border-strong)"/>
+              <text x="10" y="28" text-anchor="end" font-size="10" fill="var(--muted)">1</text>
+              <text x="10" y="120" text-anchor="end" font-size="10" fill="var(--muted)">0</text>
+              <text x="16" y="134" text-anchor="middle" font-size="10" fill="var(--muted)">0</text>
+              <text x="92.2" y="134" text-anchor="middle" font-size="10" fill="var(--muted)">160</text>
+              <text x="216" y="134" text-anchor="end" font-size="10" fill="var(--muted)">420 ms</text>
+              <path d="M16 116 C35.05 24 54.1 24 92.2 24 L216 24" fill="none" stroke="var(--muted)" stroke-width="2"/>
+              <polyline fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" points="16,116 26,111.1 36,99.6 46,85.1 56,70.1 66,56.3 76,44.6 86,35.3 96,28.5 106,23.8 116,21 126,19.5 136,19 146,19.2 156,19.8 166,20.6 176,21.4 186,22.2 196,22.8 206,23.4 216,24"/>
+              <text x="136" y="12" text-anchor="middle" font-size="10" fill="var(--accent-text)">Feder</text>
+              <text x="40" y="16" text-anchor="middle" font-size="10" fill="var(--muted)">ease-out</text>
+            </svg>
+          </figure>
+          <ul class="flex min-w-0 flex-1 basis-56 flex-col gap-2.5 text-ui">
+            <li><span class="font-semibold text-ink">160&nbsp;ms ease-out</span><span class="block text-muted">Hover, Fokus, Auf- und Zuklappen, Palette, Menüs</span></li>
+            <li><span class="font-semibold text-ink">Feder, 420&nbsp;ms, 5&nbsp;% Überschwinger</span><span class="block text-muted">Ziehen und Ablegen, Toasts</span></li>
+            <li><span class="font-semibold text-ink">Ziehen</span><span class="block text-muted">−6&nbsp;px, 102&nbsp;%, −2° Neigung, Elevation Ziehen</span></li>
+            <li><span class="font-semibold text-ink">Nicht animiert</span><span class="block text-muted">Layout, Text, Filtern und Sortieren, Theme-Wechsel. Reduzierte Bewegung schaltet alles auf 1&nbsp;ms.</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5 components -->
+  <section aria-labelledby="h-components" class="mt-20">
+    <div class="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-line-strong pb-3">
+      <h2 id="h-components" class="font-display text-2xl font-bold tracking-[-0.01em] text-ink">Komponenten</h2>
+      <p class="text-ui text-muted">Kürzel stehen direkt an der Aktion.</p>
+    </div>
+
+    <!-- index cards -->
+    <div class="mt-8">
+      <h3 class="font-display text-lg font-bold text-ink">Karteikarte</h3>
+      <p class="mt-1 text-sm text-muted">Ruhe, Auswahl, Tastaturfokus, Ziehen.</p>
+      <ul class="mt-2 grid gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-4">
+        <li class="flex flex-col">
+          <article data-type="task" aria-label="WEB-50, Task, Ruhe" class="relative mt-6 rounded-card border border-line bg-surface p-3 shadow-e1">
+            <span class="tab-shape absolute bottom-full left-3 inline-flex h-5 items-center gap-1 px-2.5 text-xs font-semibold tabular-nums text-[var(--tab-ink)]"><svg class="i size-3" aria-hidden="true"><use href="#i-square-check"/></svg>WEB-50</span>
+            <p class="text-ui font-medium text-ink">Fehlerseite 404 gestalten</p>
+            <div class="mt-3 flex items-center gap-2 text-sm text-muted"><span class="inline-flex h-3.5 items-end gap-0.5" role="img" aria-label="Priorität Medium"><span class="h-1.5 w-1 -skew-x-12 rounded-full bg-muted"></span><span class="h-2.5 w-1 -skew-x-12 rounded-full bg-muted"></span><span class="h-3.5 w-1 -skew-x-12 rounded-full bg-line-strong"></span></span><span class="ml-auto size-5 rounded-full border border-dashed border-faint" role="img" aria-label="Nicht zugewiesen"></span></div>
+          </article>
+          <span class="mt-2 text-sm text-muted">Ruhe</span>
+        </li>
+        <li class="flex flex-col">
+          <article data-type="bug" aria-label="WEB-47, Bug, ausgewählt" class="relative mt-6 rounded-card border border-line-strong bg-surface p-3 shadow-e2">
+            <span class="tab-shape absolute bottom-full left-3 inline-flex h-5 items-center gap-1 px-2.5 text-xs font-semibold tabular-nums text-[var(--tab-ink)]"><svg class="i size-3" aria-hidden="true"><use href="#i-bug"/></svg>WEB-47</span>
+            <p class="text-ui font-medium text-ink"><span class="hl">Kontaktformular sendet doppelt</span></p>
+            <div class="mt-3 flex items-center gap-2 text-sm text-muted"><span class="inline-flex size-3.5 items-center justify-center rounded-chip bg-danger text-2xs font-semibold leading-none text-on-danger" role="img" aria-label="Priorität Urgent">!</span><span class="inline-flex items-center gap-1 tabular-nums"><svg class="i size-3.5" aria-hidden="true"><use href="#i-calendar"/></svg>31.10.</span><span class="ml-auto inline-flex size-5 items-center justify-center rounded-full bg-ochre-tab text-2xs font-semibold text-ochre-ink" role="img" aria-label="Jonas Feld">JF</span></div>
+          </article>
+          <span class="mt-2 text-sm text-muted">Ausgewählt: Textmarker auf dem Titel</span>
+        </li>
+        <li class="flex flex-col">
+          <article data-type="task" aria-label="WEB-42, Task, Tastaturfokus" class="relative mt-6 rounded-card border border-line bg-surface p-3 [box-shadow:var(--focus-halo)] outline outline-2 outline-[color:var(--focus-ring)]">
+            <span class="tab-shape absolute bottom-full left-3 inline-flex h-5 items-center gap-1 px-2.5 text-xs font-semibold tabular-nums text-[var(--tab-ink)]"><svg class="i size-3" aria-hidden="true"><use href="#i-square-check"/></svg>WEB-42</span>
+            <p class="text-ui font-medium text-ink">Startseite: Hero und Teaser bauen</p>
+            <div class="mt-3 flex items-center gap-2 text-sm text-muted"><span class="inline-flex h-3.5 items-end gap-0.5" role="img" aria-label="Priorität High"><span class="h-1.5 w-1 -skew-x-12 rounded-full bg-muted"></span><span class="h-2.5 w-1 -skew-x-12 rounded-full bg-muted"></span><span class="h-3.5 w-1 -skew-x-12 rounded-full bg-muted"></span></span><span class="inline-flex items-center gap-1 tabular-nums"><svg class="i size-3.5" aria-hidden="true"><use href="#i-calendar"/></svg>30.10.</span><span class="ml-auto inline-flex size-5 items-center justify-center rounded-full bg-moss-tab text-2xs font-semibold text-moss-ink" role="img" aria-label="Ida Brenner">IB</span></div>
+          </article>
+          <span class="mt-2 text-sm text-muted">Fokus: Tinten-Ring mit Marker-Halo</span>
+        </li>
+        <li class="flex flex-col">
+          <div class="relative mt-6">
+            <div class="absolute inset-0 rounded-card border-2 border-dashed border-line-strong" aria-hidden="true"></div>
+            <article id="drag-card" data-type="epic" data-lifted="true" aria-label="WEB-30, Epic, wird gezogen" class="relative rounded-card border border-line bg-surface p-3 shadow-e1 transition-transform duration-420 ease-spring after:pointer-events-none after:absolute after:-inset-px after:rounded-card after:opacity-0 after:shadow-drag after:transition-opacity after:duration-160 after:ease-out data-[lifted=true]:-translate-y-1.5 data-[lifted=true]:-rotate-2 data-[lifted=true]:scale-[1.02] data-[lifted=true]:after:opacity-100">
+              <span class="tab-shape absolute bottom-full left-3 inline-flex h-5 items-center gap-1 px-2.5 text-xs font-semibold tabular-nums text-[var(--tab-ink)]"><svg class="i size-3" aria-hidden="true"><use href="#i-layers"/></svg>WEB-30</span>
+              <p class="text-ui font-medium text-ink">Relaunch Phase 1</p>
+              <div class="mt-3 flex items-center gap-2"><span class="grid flex-1 grid-cols-10 gap-0.5" role="img" aria-label="6 von 10 Kind-Items fertig"><span class="h-1.5 rounded-full bg-moss"></span><span class="h-1.5 rounded-full bg-moss"></span><span class="h-1.5 rounded-full bg-moss"></span><span class="h-1.5 rounded-full bg-moss"></span><span class="h-1.5 rounded-full bg-moss"></span><span class="h-1.5 rounded-full bg-moss"></span><span class="h-1.5 rounded-full bg-line"></span><span class="h-1.5 rounded-full bg-line"></span><span class="h-1.5 rounded-full bg-line"></span><span class="h-1.5 rounded-full bg-line"></span></span><span class="text-sm font-medium tabular-nums text-muted">6/10</span></div>
+            </article>
+          </div>
+          <span class="mt-2 flex items-center justify-between gap-2 text-sm text-muted">Ziehen: angehoben und geneigt
+            <button type="button" id="drag-toggle" aria-pressed="true" class="inline-flex h-11 items-center gap-1.5 rounded-ctl border border-line bg-surface px-2.5 text-sm font-medium text-ink shadow-e1 transition-colors duration-120 hover:bg-sunken md:h-7"><svg class="i size-3.5 text-muted" aria-hidden="true"><use href="#i-grip-vertical"/></svg><span data-label>Ablegen</span></button>
+          </span>
+        </li>
+      </ul>
+    </div>
+
+    <div class="mt-14 grid gap-x-12 gap-y-14 md:grid-cols-2 xl:grid-cols-3">
+      <!-- Buttons -->
+      <div class="min-w-0">
+        <h3 class="font-display text-lg font-bold text-ink">Buttons</h3>
+        <div class="mt-4 flex flex-wrap items-center gap-2.5">
+          <button type="button" aria-keyshortcuts="C" class="inline-flex h-11 items-center gap-2 rounded-ctl bg-accent pl-3 pr-2 text-ui font-semibold text-on-accent shadow-e1 transition-colors duration-120 hover:bg-accent-hover md:h-8"><svg class="i size-4" aria-hidden="true"><use href="#i-plus"/></svg>Item anlegen<kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-chip border border-current px-1 text-xs font-semibold opacity-80">C</kbd></button>
+          <button type="button" aria-keyshortcuts="A" class="inline-flex h-11 items-center gap-2 rounded-ctl border border-line-strong bg-surface pl-3 pr-2 text-ui font-semibold text-ink shadow-e1 transition-colors duration-120 hover:bg-sunken md:h-8"><svg class="i size-4 text-muted" aria-hidden="true"><use href="#i-user-round-plus"/></svg>Zuweisen<kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-chip border border-line bg-surface px-1 text-xs font-semibold text-muted">A</kbd></button>
+          <button type="button" aria-keyshortcuts="Escape" class="inline-flex h-11 items-center gap-2 rounded-ctl pl-3 pr-2 text-ui font-semibold text-ink transition-colors duration-120 hover:bg-hover md:h-8">Abbrechen<kbd class="inline-flex h-5 items-center justify-center rounded-chip border border-line bg-surface px-1.5 text-xs font-semibold text-muted">Esc</kbd></button>
+          <button type="button" aria-keyshortcuts="Meta+Backspace" class="inline-flex h-11 items-center gap-2 rounded-ctl bg-danger pl-3 pr-2 text-ui font-semibold text-on-danger shadow-e1 transition-colors duration-120 hover:bg-danger-hover md:h-8"><svg class="i size-4" aria-hidden="true"><use href="#i-trash-2"/></svg>Löschen<span class="inline-flex gap-0.5"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-chip border border-current px-1 opacity-80"><svg class="i size-3" aria-hidden="true"><use href="#i-command"/></svg><span class="sr-only">Befehlstaste</span></kbd><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-chip border border-current px-1 opacity-80"><svg class="i size-3" aria-hidden="true"><use href="#i-delete"/></svg><span class="sr-only">Rückschritt</span></kbd></span></button>
+        </div>
+        <p class="mt-3 text-sm text-muted">Primär, sekundär, ghost, gefährlich. Löschen fragt nicht nach, es gibt 5&nbsp;Sekunden Rückgängig.</p>
+      </div>
+
+      <!-- input and select -->
+      <div class="min-w-0">
+        <h3 class="font-display text-lg font-bold text-ink">Eingabe und Auswahl</h3>
+        <div class="mt-4 flex flex-col gap-1.5">
+          <label for="demo-title" class="text-sm font-medium text-ink">Titel</label>
+          <input id="demo-title" name="title" type="text" autocomplete="off" placeholder="z. B. Kontaktformular testen …" class="h-11 w-full rounded-ctl border border-line bg-surface px-3 text-input text-ink shadow-[inset_0_-1.5px_0_var(--line-input)] placeholder:text-muted md:h-9 md:text-md">
+          <p class="text-sm text-muted">Pflicht, bis 255&nbsp;Zeichen.</p>
+        </div>
+        <div class="mt-4 flex flex-col gap-1.5">
+          <label for="demo-effort" class="text-sm font-medium text-ink">Aufwand (h)</label>
+          <input id="demo-effort" name="effort" type="text" inputmode="decimal" autocomplete="off" value="3,5 h" aria-invalid="true" aria-describedby="demo-effort-error" class="h-11 w-full rounded-ctl border border-danger bg-surface px-3 text-input tabular-nums text-ink shadow-[inset_0_-1.5px_0_var(--danger)] md:h-9 md:text-md">
+          <p id="demo-effort-error" class="flex items-center gap-1.5 text-sm font-medium text-danger"><svg class="i size-3.5 shrink-0" aria-hidden="true"><use href="#i-circle-alert"/></svg>Nur eine Zahl eingeben, zum Beispiel 3,5</p>
+        </div>
+        <div class="mt-4">
+          <span id="demo-select-label" class="text-sm font-medium text-ink">Kunde</span>
+          <button type="button" id="demo-select" aria-haspopup="listbox" aria-expanded="true" aria-controls="demo-listbox" aria-labelledby="demo-select-label demo-select-value" class="mt-1.5 flex h-11 w-full items-center gap-2 rounded-ctl border border-line bg-surface px-3 text-md text-ink shadow-[inset_0_-1.5px_0_var(--line-input)] md:h-9"><span id="demo-select-dot" class="size-2 rounded-full bg-sky" aria-hidden="true"></span><span id="demo-select-value">Studio Nordlicht</span><svg class="i ml-auto size-4 text-muted transition-transform duration-160 ease-out [[aria-expanded=true]>&]:rotate-180" aria-hidden="true"><use href="#i-chevron-down"/></svg></button>
+          <ul id="demo-listbox" role="listbox" tabindex="0" aria-labelledby="demo-select-label" aria-activedescendant="demo-opt-1" class="tracing-strong mt-1.5 rounded-card p-1 text-ui [--glass-shadow:var(--elev-2)]">
+            <li id="demo-opt-1" role="option" aria-selected="true" data-tone="sky" data-active="true" class="group flex h-8 cursor-pointer items-center gap-2 rounded-ctl px-2.5 text-ink data-[active=true]:bg-raised data-[active=true]:shadow-e1 data-[active=true]:ring-1 data-[active=true]:ring-inset data-[active=true]:ring-line-input"><span class="size-2 rounded-full bg-sky" aria-hidden="true"></span><span data-label>Studio Nordlicht</span><svg class="i ml-auto size-4 text-accent-text opacity-0 group-aria-selected:opacity-100" aria-hidden="true"><use href="#i-check"/></svg></li>
+            <li id="demo-opt-2" role="option" aria-selected="false" data-tone="ochre" data-active="false" class="group flex h-8 cursor-pointer items-center gap-2 rounded-ctl px-2.5 text-ink data-[active=true]:bg-raised data-[active=true]:shadow-e1 data-[active=true]:ring-1 data-[active=true]:ring-inset data-[active=true]:ring-line-input"><span class="size-2 rounded-full bg-ochre" aria-hidden="true"></span><span data-label>Hafenkontor</span><svg class="i ml-auto size-4 text-accent-text opacity-0 group-aria-selected:opacity-100" aria-hidden="true"><use href="#i-check"/></svg></li>
+            <li id="demo-opt-3" role="option" aria-selected="false" data-tone="moss" data-active="false" class="group flex h-8 cursor-pointer items-center gap-2 rounded-ctl px-2.5 text-ink data-[active=true]:bg-raised data-[active=true]:shadow-e1 data-[active=true]:ring-1 data-[active=true]:ring-inset data-[active=true]:ring-line-input"><span class="size-2 rounded-full bg-moss" aria-hidden="true"></span><span data-label>Gärtnerei Moos</span><svg class="i ml-auto size-4 text-accent-text opacity-0 group-aria-selected:opacity-100" aria-hidden="true"><use href="#i-check"/></svg></li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Chips -->
+      <div class="min-w-0">
+        <h3 class="font-display text-lg font-bold text-ink">Chips</h3>
+        <dl class="mt-4 flex flex-col gap-3">
+          <div><dt class="text-sm text-muted">Status</dt><dd class="mt-1.5 flex flex-wrap gap-1.5">
+            <span class="inline-flex h-6 items-center gap-1 rounded-chip border border-line bg-surface px-1.5 text-sm text-ink"><svg class="i size-3.5 text-st-backlog" aria-hidden="true"><use href="#st-backlog"/></svg>Backlog</span>
+            <span class="inline-flex h-6 items-center gap-1 rounded-chip border border-line bg-surface px-1.5 text-sm text-ink"><svg class="i size-3.5 text-st-unstarted" aria-hidden="true"><use href="#st-todo"/></svg>Todo</span>
+            <span class="inline-flex h-6 items-center gap-1 rounded-chip border border-line bg-surface px-1.5 text-sm text-ink"><svg class="i size-3.5 text-st-started" aria-hidden="true"><use href="#st-progress"/></svg>In Progress</span>
+            <span class="inline-flex h-6 items-center gap-1 rounded-chip border border-line bg-surface px-1.5 text-sm text-ink"><svg class="i size-3.5 text-st-started" aria-hidden="true"><use href="#st-pending"/></svg>Pending</span>
+            <span class="inline-flex h-6 items-center gap-1 rounded-chip border border-line bg-surface px-1.5 text-sm text-ink"><svg class="i size-3.5 text-st-completed" aria-hidden="true"><use href="#st-done"/></svg>Done</span>
+            <span class="inline-flex h-6 items-center gap-1 rounded-chip border border-line bg-surface px-1.5 text-sm text-ink"><svg class="i size-3.5 text-st-canceled" aria-hidden="true"><use href="#st-cancelled"/></svg>Cancelled</span>
+          </dd></div>
+          <div><dt class="text-sm text-muted">Priorität</dt><dd class="mt-1.5 flex flex-wrap gap-1.5">
+            <span class="inline-flex h-6 items-center gap-1.5 rounded-chip border border-line bg-surface px-1.5 text-sm text-ink"><span class="inline-flex size-3.5 items-center justify-center rounded-chip bg-danger text-2xs font-semibold leading-none text-on-danger" aria-hidden="true">!</span>Urgent</span>
+            <span class="inline-flex h-6 items-center gap-1.5 rounded-chip border border-line bg-surface px-1.5 text-sm text-ink"><span class="inline-flex h-3.5 items-end gap-0.5" aria-hidden="true"><span class="h-1.5 w-1 -skew-x-12 rounded-full bg-muted"></span><span class="h-2.5 w-1 -skew-x-12 rounded-full bg-muted"></span><span class="h-3.5 w-1 -skew-x-12 rounded-full bg-muted"></span></span>High</span>
+            <span class="inline-flex h-6 items-center gap-1.5 rounded-chip border border-line bg-surface px-1.5 text-sm text-ink"><span class="inline-flex h-3.5 items-end gap-0.5" aria-hidden="true"><span class="h-1.5 w-1 -skew-x-12 rounded-full bg-muted"></span><span class="h-2.5 w-1 -skew-x-12 rounded-full bg-muted"></span><span class="h-3.5 w-1 -skew-x-12 rounded-full bg-line-strong"></span></span>Medium</span>
+            <span class="inline-flex h-6 items-center gap-1.5 rounded-chip border border-line bg-surface px-1.5 text-sm text-ink"><span class="inline-flex h-3.5 items-end gap-0.5" aria-hidden="true"><span class="h-1.5 w-1 -skew-x-12 rounded-full bg-muted"></span><span class="h-2.5 w-1 -skew-x-12 rounded-full bg-line-strong"></span><span class="h-3.5 w-1 -skew-x-12 rounded-full bg-line-strong"></span></span>Low</span>
+            <span class="inline-flex h-6 items-center gap-1.5 rounded-chip border border-line bg-surface px-1.5 text-sm text-ink"><span class="inline-flex h-3.5 items-end gap-0.5" aria-hidden="true"><span class="h-1.5 w-1 -skew-x-12 rounded-full bg-line-strong"></span><span class="h-2.5 w-1 -skew-x-12 rounded-full bg-line-strong"></span><span class="h-3.5 w-1 -skew-x-12 rounded-full bg-line-strong"></span></span>None</span>
+          </dd></div>
+          <div><dt class="text-sm text-muted">Label</dt><dd class="mt-1.5 flex flex-wrap gap-1.5">
+            <span class="inline-flex h-6 items-center gap-1 rounded-chip border border-line bg-surface px-1.5 text-sm text-ink"><span class="size-1.5 rounded-full bg-sky" aria-hidden="true"></span>UX</span>
+            <span class="inline-flex h-6 items-center gap-1 rounded-chip border border-line bg-surface px-1.5 text-sm text-ink"><span class="size-1.5 rounded-full bg-moss" aria-hidden="true"></span>Formulare</span>
+            <span class="inline-flex h-6 items-center gap-1 rounded-chip border border-line bg-surface px-1.5 text-sm text-ink"><span class="size-1.5 rounded-full bg-danger" aria-hidden="true"></span>Produktion</span>
+          </dd></div>
+          <div><dt class="text-sm text-muted">Typ</dt><dd class="mt-2.5 flex flex-wrap gap-2">
+            <span data-type="task" class="tab-shape relative inline-flex h-6 items-center gap-1 px-2.5 text-xs font-semibold text-[var(--tab-ink)]"><svg class="i size-3" aria-hidden="true"><use href="#i-square-check"/></svg>Task</span>
+            <span data-type="bug" class="tab-shape relative inline-flex h-6 items-center gap-1 px-2.5 text-xs font-semibold text-[var(--tab-ink)]"><svg class="i size-3" aria-hidden="true"><use href="#i-bug"/></svg>Bug</span>
+            <span data-type="epic" class="tab-shape relative inline-flex h-6 items-center gap-1 px-2.5 text-xs font-semibold text-[var(--tab-ink)]"><svg class="i size-3" aria-hidden="true"><use href="#i-layers"/></svg>Epic</span>
+          </dd></div>
+        </dl>
+      </div>
+
+      <!-- avatars -->
+      <div id="avatars" class="min-w-0 scroll-mt-6">
+        <h3 class="font-display text-lg font-bold text-ink">Avatare</h3>
+        <ul class="mt-4 grid grid-cols-2 gap-x-4 gap-y-2.5 text-ui text-ink">
+          <li class="flex items-center gap-2"><span class="inline-flex size-7 items-center justify-center rounded-full bg-sky-tab text-sm font-semibold text-sky-ink" aria-hidden="true">ML</span>Mara Lindqvist</li>
+          <li class="flex items-center gap-2"><span class="inline-flex size-7 items-center justify-center rounded-full bg-ochre-tab text-sm font-semibold text-ochre-ink" aria-hidden="true">JF</span>Jonas Feld</li>
+          <li class="flex items-center gap-2"><span class="inline-flex size-7 items-center justify-center rounded-full bg-moss-tab text-sm font-semibold text-moss-ink" aria-hidden="true">IB</span>Ida Brenner</li>
+          <li class="flex items-center gap-2"><span class="inline-flex size-7 items-center justify-center rounded-full bg-accent-soft text-sm font-semibold text-accent-text" aria-hidden="true">TO</span>Theo Okafor</li>
+          <li class="flex items-center gap-2"><span class="inline-flex size-7 items-center justify-center rounded-full bg-sunken text-sm font-semibold text-ink ring-1 ring-inset ring-line" aria-hidden="true">LV</span>Lene Vogt</li>
+        </ul>
+        <ul class="mt-4 flex flex-col gap-2.5 border-t border-line pt-4 text-ui text-ink">
+          <li class="flex items-center gap-2"><span class="inline-flex size-7 items-center justify-center rounded-chip bg-ink text-paper" aria-hidden="true"><svg class="i size-4" aria-hidden="true"><use href="#i-bot"/></svg></span>Automation<span class="inline-flex h-5 items-center rounded-chip border border-line bg-surface px-1.5 text-xs font-semibold text-muted">Bot</span><span class="text-sm text-muted">Standard-Bot</span></li>
+          <li class="flex items-center gap-2"><span class="relative inline-flex size-7 items-center justify-center rounded-chip bg-ink font-display text-md font-bold text-paper" aria-hidden="true">K<span class="absolute -bottom-1 -right-1 inline-flex size-3.5 items-center justify-center rounded-full bg-surface text-ink ring-1 ring-line"><svg class="i size-2.5" aria-hidden="true"><use href="#i-bot"/></svg></span></span>Kira<span class="inline-flex h-5 items-center rounded-chip border border-line bg-surface px-1.5 text-xs font-semibold text-muted">Agent</span></li>
+        </ul>
+        <p class="mt-3 text-sm text-muted">Menschen rund, Bots eckig in Tinte und mit Zusatz.</p>
+      </div>
+
+      <!-- keyboard and tooltip -->
+      <div class="min-w-0">
+        <h3 class="font-display text-lg font-bold text-ink">Tastatur und Tooltip</h3>
+        <ul class="mt-4 grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-2.5 text-ui text-ink">
+          <li class="contents"><span class="flex gap-0.5"><kbd class="inline-flex h-6 min-w-6 items-center justify-center rounded-chip border border-line bg-surface px-1 text-xs font-semibold text-muted shadow-[inset_0_-1px_0_var(--border)]"><svg class="i size-3" aria-hidden="true"><use href="#i-command"/></svg><span class="sr-only">Befehlstaste</span></kbd><kbd class="inline-flex h-6 min-w-6 items-center justify-center rounded-chip border border-line bg-surface px-1 text-xs font-semibold text-muted shadow-[inset_0_-1px_0_var(--border)]">K</kbd></span><span>Befehlspalette und Suche</span></li>
+          <li class="contents"><span class="flex items-center gap-1"><kbd class="inline-flex h-6 min-w-6 items-center justify-center rounded-chip border border-line bg-surface px-1 text-xs font-semibold text-muted shadow-[inset_0_-1px_0_var(--border)]">G</kbd><span class="text-sm text-muted">dann</span><kbd class="inline-flex h-6 min-w-6 items-center justify-center rounded-chip border border-line bg-surface px-1 text-xs font-semibold text-muted shadow-[inset_0_-1px_0_var(--border)]">I</kbd></span><span>Inbox</span></li>
+          <li class="contents"><span class="flex gap-0.5"><kbd class="inline-flex h-6 min-w-6 items-center justify-center rounded-chip border border-line bg-surface px-1 text-xs font-semibold text-muted shadow-[inset_0_-1px_0_var(--border)]"><svg class="i size-3" aria-hidden="true"><use href="#i-arrow-big-up"/></svg><span class="sr-only">Umschalt</span></kbd><kbd class="inline-flex h-6 min-w-6 items-center justify-center rounded-chip border border-line bg-surface px-1 text-xs font-semibold text-muted shadow-[inset_0_-1px_0_var(--border)]">D</kbd></span><span>Start-Date</span></li>
+          <li class="contents"><span class="flex gap-0.5"><kbd class="inline-flex h-6 min-w-6 items-center justify-center rounded-chip border border-line bg-surface px-1 text-xs font-semibold text-muted shadow-[inset_0_-1px_0_var(--border)]"><svg class="i size-3" aria-hidden="true"><use href="#i-command"/></svg><span class="sr-only">Befehlstaste</span></kbd><kbd class="inline-flex h-6 min-w-6 items-center justify-center rounded-chip border border-line bg-surface px-1 text-xs font-semibold text-muted shadow-[inset_0_-1px_0_var(--border)]"><svg class="i size-3" aria-hidden="true"><use href="#i-corner-down-left"/></svg><span class="sr-only">Eingabe</span></kbd></span><span>Speichern bzw. absenden</span></li>
+          <li class="contents"><span class="flex items-center gap-1"><kbd class="inline-flex h-6 min-w-6 items-center justify-center rounded-chip border border-line bg-surface px-1 text-xs font-semibold tabular-nums text-muted shadow-[inset_0_-1px_0_var(--border)]">1</kbd><span class="text-sm text-muted">bis</span><kbd class="inline-flex h-6 min-w-6 items-center justify-center rounded-chip border border-line bg-surface px-1 text-xs font-semibold tabular-nums text-muted shadow-[inset_0_-1px_0_var(--border)]">4</kbd></span><span>Liste, Board, Tabelle, Timeline</span></li>
+        </ul>
+        <div class="relative mt-8 flex justify-center pt-10">
+          <div role="tooltip" id="demo-tooltip" class="absolute top-0 inline-flex items-center gap-2 whitespace-nowrap rounded-chip bg-ink px-2 py-1 text-sm font-medium text-paper shadow-e2">Priorität ändern<kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-chip border border-current px-0.5 text-2xs font-semibold opacity-80">P</kbd><span class="absolute -bottom-1 left-1/2 size-2 -translate-x-1/2 rotate-45 bg-ink" aria-hidden="true"></span></div>
+          <button type="button" aria-describedby="demo-tooltip" aria-keyshortcuts="P" class="inline-flex h-11 items-center gap-1.5 rounded-ctl border border-line bg-surface px-2.5 text-ui text-ink shadow-e1 transition-colors duration-120 hover:bg-sunken md:h-8"><span class="inline-flex size-3.5 items-center justify-center rounded-chip bg-danger text-2xs font-semibold leading-none text-on-danger" aria-hidden="true">!</span>Urgent</button>
+        </div>
+        <p class="mt-3 text-center text-sm text-muted">Tooltips erst nach kurzer Pause, danach sofort.</p>
+      </div>
+
+      <!-- menu -->
+      <div class="min-w-0">
+        <h3 class="font-display text-lg font-bold text-ink">Menü</h3>
+        <ul role="menu" aria-label="Aktionen für WEB-47" data-menu class="tracing-strong mt-4 w-full max-w-72 rounded-card p-1 text-ui [--glass-shadow:var(--elev-2)]">
+          <li role="menuitem" tabindex="0" data-active="true" class="flex h-8 cursor-pointer items-center gap-2.5 rounded-ctl px-2.5 text-ink data-[active=true]:bg-raised data-[active=true]:shadow-e1 data-[active=true]:ring-1 data-[active=true]:ring-inset data-[active=true]:ring-line-input"><svg class="i size-4 text-muted" aria-hidden="true"><use href="#st-progress"/></svg>Status ändern …<kbd class="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-chip border border-line bg-surface px-1 text-xs font-semibold text-muted">S</kbd></li>
+          <li role="menuitem" tabindex="-1" data-active="false" class="flex h-8 cursor-pointer items-center gap-2.5 rounded-ctl px-2.5 text-ink data-[active=true]:bg-raised data-[active=true]:shadow-e1 data-[active=true]:ring-1 data-[active=true]:ring-inset data-[active=true]:ring-line-input"><svg class="i size-4 text-muted" aria-hidden="true"><use href="#i-user-round-plus"/></svg>Zuweisen …<kbd class="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-chip border border-line bg-surface px-1 text-xs font-semibold text-muted">A</kbd></li>
+          <li role="menuitem" tabindex="-1" data-active="false" class="flex h-8 cursor-pointer items-center gap-2.5 rounded-ctl px-2.5 text-ink data-[active=true]:bg-raised data-[active=true]:shadow-e1 data-[active=true]:ring-1 data-[active=true]:ring-inset data-[active=true]:ring-line-input"><svg class="i size-4 text-muted" aria-hidden="true"><use href="#i-user-round-check"/></svg>Mir zuweisen<kbd class="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-chip border border-line bg-surface px-1 text-xs font-semibold text-muted">I</kbd></li>
+          <li role="menuitem" tabindex="-1" data-active="false" class="flex h-8 cursor-pointer items-center gap-2.5 rounded-ctl px-2.5 text-ink data-[active=true]:bg-raised data-[active=true]:shadow-e1 data-[active=true]:ring-1 data-[active=true]:ring-inset data-[active=true]:ring-line-input"><svg class="i size-4 text-muted" aria-hidden="true"><use href="#i-tag"/></svg>Labels …<kbd class="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-chip border border-line bg-surface px-1 text-xs font-semibold text-muted">L</kbd></li>
+          <li role="separator" class="mx-2 my-1 border-t border-edge"></li>
+          <li role="menuitem" tabindex="-1" data-active="false" class="flex h-8 cursor-pointer items-center gap-2.5 rounded-ctl px-2.5 text-ink data-[active=true]:bg-raised data-[active=true]:shadow-e1 data-[active=true]:ring-1 data-[active=true]:ring-inset data-[active=true]:ring-line-input"><svg class="i size-4 text-muted" aria-hidden="true"><use href="#i-link"/></svg>Link kopieren</li>
+          <li role="menuitem" tabindex="-1" data-active="false" class="flex h-8 cursor-pointer items-center gap-2.5 rounded-ctl px-2.5 text-ink data-[active=true]:bg-raised data-[active=true]:shadow-e1 data-[active=true]:ring-1 data-[active=true]:ring-inset data-[active=true]:ring-line-input"><svg class="i size-4 text-muted" aria-hidden="true"><use href="#i-archive"/></svg>Archivieren<span class="ml-auto flex gap-0.5"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-chip border border-line bg-surface px-1 text-xs font-semibold text-muted"><svg class="i size-3" aria-hidden="true"><use href="#i-command"/></svg><span class="sr-only">Befehlstaste</span></kbd><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-chip border border-line bg-surface px-1 text-xs font-semibold text-muted"><svg class="i size-3" aria-hidden="true"><use href="#i-delete"/></svg><span class="sr-only">Rückschritt</span></kbd></span></li>
+          <li role="menuitem" tabindex="-1" data-active="false" class="flex h-8 cursor-pointer items-center gap-2.5 rounded-ctl px-2.5 text-danger data-[active=true]:bg-raised data-[active=true]:shadow-e1 data-[active=true]:ring-1 data-[active=true]:ring-inset data-[active=true]:ring-line-input"><svg class="i size-4" aria-hidden="true"><use href="#i-trash-2"/></svg>Löschen …</li>
+        </ul>
+      </div>
+
+      <!-- Toast -->
+      <div class="min-w-0">
+        <h3 class="font-display text-lg font-bold text-ink">Toast</h3>
+        <div class="tracing-strong relative mt-4 flex max-w-sm items-center gap-2.5 overflow-hidden rounded-card py-2 pl-3 pr-2 text-ui [--glass-shadow:var(--elev-2)]">
+          <svg class="i size-4 text-st-completed" aria-hidden="true"><use href="#i-archive"/></svg>
+          <span class="min-w-0 flex-1 text-ink"><span class="font-semibold tabular-nums">WEB-51</span> archiviert</span>
+          <button type="button" aria-keyshortcuts="Meta+Z" class="inline-flex h-7 items-center gap-1.5 rounded-ctl px-2 text-ui font-semibold text-accent-text transition-colors duration-120 hover:bg-hover"><svg class="i size-4" aria-hidden="true"><use href="#i-undo-2"/></svg>Rückgängig</button>
+          <button type="button" class="inline-flex size-7 items-center justify-center rounded-chip text-muted transition-colors duration-120 hover:bg-hover hover:text-ink" aria-label="Hinweis schließen"><svg class="i size-4" aria-hidden="true"><use href="#i-x"/></svg></button>
+          <span class="absolute inset-x-0 bottom-0 h-0.5 origin-left scale-x-[0.6] bg-line-strong" aria-hidden="true"></span>
+        </div>
+        <p class="mt-3 text-sm text-muted">Bleibt 5&nbsp;Sekunden, der Strich zeigt die Zeit. Kommt mit Feder.</p>
+        <button type="button" id="toast-demo" class="mt-3 inline-flex h-11 items-center gap-2 rounded-ctl border border-line-strong bg-surface px-3 text-ui font-semibold text-ink shadow-e1 transition-colors duration-120 hover:bg-sunken md:h-8"><svg class="i size-4 text-muted" aria-hidden="true"><use href="#i-play"/></svg>Toast zeigen</button>
+      </div>
+
+      <!-- toggles -->
+      <div class="min-w-0">
+        <h3 class="font-display text-lg font-bold text-ink">Umschalter</h3>
+        <div class="mt-4 inline-flex max-w-full flex-wrap rounded-ctl border border-line bg-sunken p-1" role="group" aria-label="Layout" data-segmented>
+          <button type="button" aria-pressed="false" aria-keyshortcuts="1" class="inline-flex h-11 items-center gap-1.5 rounded-chip px-2.5 text-ui font-medium text-muted transition-colors duration-120 hover:text-ink aria-pressed:bg-surface aria-pressed:text-ink aria-pressed:shadow-e1 md:h-8">Liste<kbd class="text-2xs font-semibold tabular-nums text-muted">1</kbd></button>
+          <button type="button" aria-pressed="true" aria-keyshortcuts="2" class="inline-flex h-11 items-center gap-1.5 rounded-chip px-2.5 text-ui font-medium text-muted transition-colors duration-120 hover:text-ink aria-pressed:bg-surface aria-pressed:text-ink aria-pressed:shadow-e1 md:h-8">Board<kbd class="text-2xs font-semibold tabular-nums text-muted">2</kbd></button>
+          <button type="button" aria-pressed="false" aria-keyshortcuts="3" class="inline-flex h-11 items-center gap-1.5 rounded-chip px-2.5 text-ui font-medium text-muted transition-colors duration-120 hover:text-ink aria-pressed:bg-surface aria-pressed:text-ink aria-pressed:shadow-e1 md:h-8">Tabelle<kbd class="text-2xs font-semibold tabular-nums text-muted">3</kbd></button>
+          <button type="button" aria-pressed="false" aria-keyshortcuts="4" class="inline-flex h-11 items-center gap-1.5 rounded-chip px-2.5 text-ui font-medium text-muted transition-colors duration-120 hover:text-ink aria-pressed:bg-surface aria-pressed:text-ink aria-pressed:shadow-e1 md:h-8">Timeline<kbd class="text-2xs font-semibold tabular-nums text-muted">4</kbd></button>
+        </div>
+        <div class="mt-5 flex flex-col gap-1">
+          <label for="opt-children" class="flex min-h-11 cursor-pointer items-center gap-3 text-ui text-ink md:min-h-8">
+            <input type="checkbox" id="opt-children" class="peer sr-only" checked>
+            <span class="inline-flex size-4 shrink-0 items-center justify-center rounded-chip border border-line-input bg-surface text-on-accent transition-colors duration-120 peer-checked:border-accent peer-checked:bg-accent peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-[color:var(--focus-ring)] peer-focus-visible:[box-shadow:var(--focus-halo)] [&>svg]:opacity-0 peer-checked:[&>svg]:opacity-100" aria-hidden="true"><svg class="i size-3"><use href="#i-check"/></svg></span>
+            Kind-Items zeigen
+          </label>
+          <label for="opt-archived" class="flex min-h-11 cursor-pointer items-center gap-3 text-ui text-ink md:min-h-8">
+            <input type="checkbox" id="opt-archived" class="peer sr-only">
+            <span class="inline-flex size-4 shrink-0 items-center justify-center rounded-chip border border-line-input bg-surface text-on-accent transition-colors duration-120 peer-checked:border-accent peer-checked:bg-accent peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-[color:var(--focus-ring)] peer-focus-visible:[box-shadow:var(--focus-halo)] [&>svg]:opacity-0 peer-checked:[&>svg]:opacity-100" aria-hidden="true"><svg class="i size-3"><use href="#i-check"/></svg></span>
+            Archivierte zeigen
+          </label>
+          <label for="opt-mail" class="flex min-h-11 cursor-pointer items-center gap-3 text-ui text-ink md:min-h-8">
+            <input type="checkbox" role="switch" id="opt-mail" class="peer sr-only" checked>
+            <span class="relative h-5 w-9 shrink-0 rounded-full bg-line-input transition-colors duration-160 ease-out after:absolute after:left-0.5 after:top-0.5 after:size-4 after:rounded-full after:bg-surface after:shadow-e1 after:transition-transform after:duration-160 after:ease-out peer-checked:bg-accent peer-checked:after:translate-x-4 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-[color:var(--focus-ring)] peer-focus-visible:[box-shadow:var(--focus-halo)]" aria-hidden="true"></span>
+            Mail bei Erwähnung
+          </label>
+          <label for="opt-digest" class="flex min-h-11 cursor-pointer items-center gap-3 text-ui text-ink md:min-h-8">
+            <input type="checkbox" role="switch" id="opt-digest" class="peer sr-only">
+            <span class="relative h-5 w-9 shrink-0 rounded-full bg-line-input transition-colors duration-160 ease-out after:absolute after:left-0.5 after:top-0.5 after:size-4 after:rounded-full after:bg-surface after:shadow-e1 after:transition-transform after:duration-160 after:ease-out peer-checked:bg-accent peer-checked:after:translate-x-4 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-[color:var(--focus-ring)] peer-focus-visible:[box-shadow:var(--focus-halo)]" aria-hidden="true"></span>
+            Sammelmail um 8&nbsp;Uhr
+          </label>
+        </div>
+      </div>
+
+      <!-- empty state -->
+      <div id="empty-state" class="min-w-0 scroll-mt-6">
+        <h3 class="font-display text-lg font-bold text-ink">Leerer Zustand</h3>
+        <div class="dots mt-4 flex flex-col items-center rounded-card border border-dashed border-line-strong bg-paper px-6 py-10 text-center">
+          <span class="relative inline-flex size-14 items-center justify-center rounded-card border border-line bg-surface shadow-e1" aria-hidden="true"><svg class="i size-6 text-muted"><use href="#i-inbox"/></svg><span class="absolute -right-1.5 -top-1.5 inline-flex size-5 items-center justify-center rounded-full bg-surface text-st-completed ring-1 ring-line"><svg class="i size-3.5 [--icon-stroke:2.5]"><use href="#i-check"/></svg></span></span>
+          <p class="mt-4 font-display text-lg font-bold text-ink">Inbox ist leer</p>
+          <p class="mt-1 max-w-[46ch] text-ui text-muted text-pretty">Erwähnungen, Zuweisungen und Änderungen an Items, die du beobachtest, landen hier.</p>
+          <div class="mt-5 flex flex-wrap justify-center gap-2.5">
+            <button type="button" class="inline-flex h-11 items-center gap-2 rounded-ctl border border-line-strong bg-surface px-3 text-ui font-semibold text-ink shadow-e1 transition-colors duration-120 hover:bg-sunken md:h-8"><svg class="i size-4 text-muted" aria-hidden="true"><use href="#i-settings"/></svg>Benachrichtigungen einstellen</button>
+            <a href="#list-view" class="inline-flex h-11 items-center gap-2 rounded-ctl px-3 text-ui font-semibold text-accent-text transition-colors duration-120 hover:bg-hover md:h-8">Meine Items öffnen</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="mx-auto max-w-[var(--app-w)] border-t border-line pb-10 pt-5 text-sm text-muted">
+  <p>werkbuch, Moodboard C „Werkbuch“. Alle Personen, Projekte und Kunden sind ausgedacht. Icons: Lucide.</p>
+</footer>
+
+<div id="toast-region" aria-live="polite" class="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex justify-center px-4 pb-[calc(16px+env(safe-area-inset-bottom,0px))]"></div>
+<template id="toast-template">
+  <div class="tracing-strong pointer-events-auto relative flex w-full max-w-sm items-center gap-2.5 overflow-hidden rounded-card py-2 pl-3 pr-2 text-ui [animation:toast-in_var(--dur-spring)_var(--ease-spring)]">
+    <svg class="i size-4 text-st-completed" aria-hidden="true"><use href="#i-archive"/></svg>
+    <span class="min-w-0 flex-1 text-ink"><span class="font-semibold tabular-nums">WEB-51</span> archiviert</span>
+    <button type="button" data-undo class="inline-flex h-7 items-center gap-1.5 rounded-ctl px-2 text-ui font-semibold text-accent-text transition-colors duration-120 hover:bg-hover"><svg class="i size-4" aria-hidden="true"><use href="#i-undo-2"/></svg>Rückgängig</button>
+    <button type="button" data-dismiss class="inline-flex size-7 items-center justify-center rounded-chip text-muted transition-colors duration-120 hover:bg-hover hover:text-ink" aria-label="Hinweis schließen"><svg class="i size-4" aria-hidden="true"><use href="#i-x"/></svg></button>
+    <span class="absolute inset-x-0 bottom-0 h-0.5 origin-left bg-line-strong [animation:drain_5s_linear_forwards]" aria-hidden="true"></span>
+  </div>
+</template>
+
+<script>
+(() => {
+  document.documentElement.lang = 'de';
+  const root = document.documentElement;
+
+  // Theme: explicit choice sets data-theme; without it the system setting decides.
+  const darkQuery = matchMedia('(prefers-color-scheme: dark)');
+  const effectiveTheme = () => root.dataset.theme || (darkQuery.matches ? 'dark' : 'light');
+  const themeButtons = document.querySelectorAll('[data-theme-option]');
+  const syncTheme = () => themeButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.themeOption === effectiveTheme())));
+  themeButtons.forEach((b) => b.addEventListener('click', () => { root.dataset.theme = b.dataset.themeOption; syncTheme(); }));
+  darkQuery.addEventListener('change', syncTheme);
+  new MutationObserver(syncTheme).observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+  syncTheme();
+
+  // Segmented controls: one pressed button per group.
+  document.querySelectorAll('[data-segmented]').forEach((group) => {
+    group.addEventListener('click', (event) => {
+      const button = event.target.closest('button');
+      if (!button) return;
+      group.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b === button)));
+    });
+  });
+
+  // Command palette: open over everything; Esc closes, Cmd/Ctrl+K toggles, arrows move the active option.
+  const layer = document.getElementById('palette-layer');
+  const input = document.getElementById('palette-input');
+  const toggle = document.getElementById('palette-toggle');
+  const options = [...layer.querySelectorAll('[role="option"]')];
+  let active = 0;
+  const setActive = (index) => {
+    active = (index + options.length) % options.length;
+    options.forEach((o, i) => o.setAttribute('aria-selected', String(i === active)));
+    input.setAttribute('aria-activedescendant', options[active].id);
+  };
+  const setOpen = (open, focusInput) => {
+    layer.hidden = !open;
+    toggle.setAttribute('aria-expanded', String(open));
+    toggle.querySelector('[data-label]').textContent = open ? 'Palette schließen' : 'Palette öffnen';
+    toggle.querySelector('kbd').textContent = open ? 'Esc' : '⌘K';
+    if (open && focusInput) input.focus();
+  };
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'ArrowDown') { event.preventDefault(); setActive(active + 1); }
+    if (event.key === 'ArrowUp') { event.preventDefault(); setActive(active - 1); }
+    if (event.key === 'Enter') { event.preventDefault(); setOpen(false); toggle.focus(); }
+  });
+  options.forEach((option, i) => {
+    option.addEventListener('pointermove', () => setActive(i));
+    option.addEventListener('click', () => { setOpen(false); toggle.focus(); });
+  });
+  layer.querySelector('[data-palette-close]').addEventListener('click', () => setOpen(false));
+  document.querySelectorAll('[data-palette-open]').forEach((b) => b.addEventListener('click', () => setOpen(true, true)));
+  toggle.addEventListener('click', () => setOpen(layer.hidden, true));
+  document.addEventListener('keydown', (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); setOpen(layer.hidden, true); }
+    else if (event.key === 'Escape' && !layer.hidden) {
+      const hadFocus = layer.contains(document.activeElement);
+      setOpen(false);
+      if (hadFocus) toggle.focus();
+    }
+  });
+
+  // Drag demo: lift and tilt with the spring, drop back.
+  const dragCard = document.getElementById('drag-card');
+  const dragToggle = document.getElementById('drag-toggle');
+  dragToggle.addEventListener('click', () => {
+    const lifted = dragCard.dataset.lifted !== 'true';
+    dragCard.dataset.lifted = String(lifted);
+    dragToggle.setAttribute('aria-pressed', String(lifted));
+    dragToggle.querySelector('[data-label]').textContent = lifted ? 'Ablegen' : 'Anheben';
+  });
+
+  // Menu specimen: roving focus per the APG menu pattern (arrows, Home, End).
+  document.querySelectorAll('[data-menu]').forEach((menu) => {
+    const items = [...menu.querySelectorAll('[role="menuitem"]')];
+    const activate = (index, focus) => {
+      items.forEach((item, i) => { item.tabIndex = i === index ? 0 : -1; item.dataset.active = String(i === index); });
+      if (focus) items[index].focus();
+    };
+    items.forEach((item, i) => item.addEventListener('pointerenter', () => activate(i, false)));
+    menu.addEventListener('keydown', (event) => {
+      const current = items.indexOf(document.activeElement);
+      const target = { ArrowDown: current + 1, ArrowUp: current - 1, Home: 0, End: items.length - 1 }[event.key];
+      if (current < 0 || target === undefined) return;
+      event.preventDefault();
+      activate((target + items.length) % items.length, true);
+    });
+  });
+
+  // Listbox specimen: arrows move the cursor, Enter, Space or a click picks the option and updates the trigger.
+  const select = document.getElementById('demo-select');
+  const listbox = document.getElementById('demo-listbox');
+  const choices = [...listbox.querySelectorAll('[role="option"]')];
+  let cursor = choices.findIndex((o) => o.getAttribute('aria-selected') === 'true');
+  const moveCursor = (index) => {
+    cursor = (index + choices.length) % choices.length;
+    choices.forEach((o, i) => { o.dataset.active = String(i === cursor); });
+    listbox.setAttribute('aria-activedescendant', choices[cursor].id);
+  };
+  const pick = (index) => {
+    moveCursor(index);
+    choices.forEach((o, i) => o.setAttribute('aria-selected', String(i === index)));
+    document.getElementById('demo-select-value').textContent = choices[index].querySelector('[data-label]').textContent;
+    document.getElementById('demo-select-dot').className = `size-2 rounded-full bg-${choices[index].dataset.tone}`;
+  };
+  listbox.addEventListener('keydown', (event) => {
+    const target = { ArrowDown: cursor + 1, ArrowUp: cursor - 1, Home: 0, End: choices.length - 1 }[event.key];
+    if (target !== undefined) { event.preventDefault(); moveCursor(target); }
+    if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); pick(cursor); }
+  });
+  choices.forEach((o, i) => {
+    o.addEventListener('pointerenter', () => moveCursor(i));
+    o.addEventListener('click', () => pick(i));
+  });
+  select.addEventListener('click', () => {
+    const open = select.getAttribute('aria-expanded') !== 'true';
+    select.setAttribute('aria-expanded', String(open));
+    listbox.hidden = !open;
+    if (open) listbox.focus();
+  });
+
+  // Toast demo: 5 seconds with undo, announced politely.
+  const region = document.getElementById('toast-region');
+  const template = document.getElementById('toast-template');
+  let toastTimer;
+  const clearToast = () => { clearTimeout(toastTimer); region.replaceChildren(); };
+  document.getElementById('toast-demo').addEventListener('click', () => {
+    clearToast();
+    region.append(template.content.cloneNode(true));
+    region.querySelector('[data-undo]').addEventListener('click', clearToast);
+    region.querySelector('[data-dismiss]').addEventListener('click', clearToast);
+    toastTimer = setTimeout(clearToast, 5000);
+  });
+})();
+</script>

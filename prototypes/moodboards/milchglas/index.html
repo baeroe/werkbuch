@@ -1,0 +1,1462 @@
+<title>werkbuch Milchglas</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+:root, [data-theme="light"] { /* tokens:light */
+  color-scheme: light;
+  --bg: oklch(0.972 0.006 245); --surface: oklch(0.993 0.003 245); --surface-2: oklch(0.955 0.008 245);
+  --sheet: oklch(0.99 0.004 245 / 0.78); --card: oklch(0.998 0.002 245);
+  --glass: oklch(0.99 0.004 245 / 0.64); --glass-strong: oklch(0.99 0.004 245 / 0.7);
+  --glass-line: oklch(0.42 0.03 250 / 0.14); --glass-edge: oklch(1 0 0 / 0.9); --glass-inner: oklch(1 0 0 / 0.4);
+  --scrim: oklch(0.3 0.03 250 / 0.14); --hover: oklch(0.42 0.03 250 / 0.07);
+  --text: oklch(0.25 0.025 255); --text-muted: oklch(0.48 0.022 255);
+  --border: oklch(0.9 0.008 250); --border-strong: oklch(0.8 0.012 250);
+  --accent: oklch(0.5 0.085 220); --accent-hover: oklch(0.45 0.085 220); --accent-fg: oklch(0.99 0.004 220);
+  --accent-soft: oklch(0.5 0.085 220 / 0.11); --accent-text: oklch(0.45 0.08 220); --accent-veil: oklch(0.2 0.05 230 / 0.22);
+  --focus: oklch(0.52 0.1 220);
+  --danger: oklch(0.54 0.17 25); --danger-hover: oklch(0.49 0.17 25); --danger-fg: oklch(0.99 0.004 25);
+  --danger-soft: oklch(0.6 0.17 25 / 0.1); --danger-text: oklch(0.48 0.16 25);
+  --aurora-mint: oklch(0.9 0.055 170); --aurora-sky: oklch(0.88 0.055 230); --aurora-peach: oklch(0.91 0.055 55);
+  --st-backlog: oklch(0.6 0.012 250); --st-unstarted: oklch(0.5 0.02 250); --st-started: oklch(0.62 0.13 72);
+  --st-completed: oklch(0.57 0.12 152); --st-canceled: oklch(0.58 0.05 20);
+  --pr-urgent: oklch(0.56 0.18 27); --pr-high: oklch(0.62 0.14 48); --pr-medium: oklch(0.5 0.03 250);
+  --pr-low: oklch(0.6 0.02 250); --pr-none: oklch(0.62 0.01 250);
+  --ty-task: oklch(0.55 0.07 245); --ty-bug: oklch(0.57 0.16 25); --ty-epic: oklch(0.62 0.12 80);
+  --label-sky: oklch(0.6 0.1 235); --label-peach: oklch(0.63 0.12 52); --label-rose: oklch(0.6 0.14 10); --label-mint: oklch(0.6 0.1 170);
+  --tint-sky: oklch(0.92 0.04 235); --tint-mint: oklch(0.92 0.045 170); --tint-peach: oklch(0.93 0.045 60);
+  --tint-rose: oklch(0.92 0.04 10); --tint-sand: oklch(0.93 0.04 85); --tint-ink: oklch(0.3 0.03 250);
+  --elev-1: 0 1px 2px oklch(0.35 0.04 250 / 0.07), 0 1px 1px oklch(0.35 0.04 250 / 0.04);
+  --elev-2: 0 2px 6px oklch(0.35 0.04 250 / 0.06), 0 12px 32px -8px oklch(0.35 0.05 250 / 0.18);
+  --elev-3: 0 6px 16px oklch(0.3 0.05 250 / 0.08), 0 32px 80px -16px oklch(0.3 0.06 250 / 0.32);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { /* tokens:dark */
+    color-scheme: dark;
+  --bg: oklch(0.19 0.018 252); --surface: oklch(0.225 0.018 252); --surface-2: oklch(0.27 0.018 252);
+  --sheet: oklch(0.21 0.018 252 / 0.74); --card: oklch(0.255 0.018 252);
+  --glass: oklch(0.22 0.02 252 / 0.6); --glass-strong: oklch(0.22 0.02 252 / 0.66);
+  --glass-line: oklch(0.05 0.02 250 / 0.55); --glass-edge: oklch(1 0 0 / 0.12); --glass-inner: oklch(1 0 0 / 0.04);
+  --scrim: oklch(0.08 0.02 250 / 0.45); --hover: oklch(0.95 0.01 250 / 0.07);
+  --text: oklch(0.94 0.008 250); --text-muted: oklch(0.74 0.015 250);
+  --border: oklch(0.95 0.01 250 / 0.1); --border-strong: oklch(0.95 0.01 250 / 0.2);
+  --accent: oklch(0.72 0.09 210); --accent-hover: oklch(0.78 0.085 210); --accent-fg: oklch(0.2 0.03 230);
+  --accent-soft: oklch(0.72 0.09 210 / 0.16); --accent-text: oklch(0.8 0.08 210); --accent-veil: oklch(0.2 0.05 230 / 0.12);
+  --focus: oklch(0.76 0.09 210);
+  --danger: oklch(0.68 0.16 25); --danger-hover: oklch(0.74 0.15 25); --danger-fg: oklch(0.18 0.03 25);
+  --danger-soft: oklch(0.68 0.16 25 / 0.14); --danger-text: oklch(0.8 0.11 25);
+  --aurora-mint: oklch(0.34 0.05 175); --aurora-sky: oklch(0.33 0.06 235); --aurora-peach: oklch(0.35 0.045 50);
+  --st-backlog: oklch(0.6 0.012 250); --st-unstarted: oklch(0.74 0.02 250); --st-started: oklch(0.78 0.13 75);
+  --st-completed: oklch(0.72 0.13 152); --st-canceled: oklch(0.68 0.05 20);
+  --pr-urgent: oklch(0.68 0.17 27); --pr-high: oklch(0.74 0.13 52); --pr-medium: oklch(0.78 0.02 250);
+  --pr-low: oklch(0.66 0.02 250); --pr-none: oklch(0.56 0.01 250);
+  --ty-task: oklch(0.72 0.07 245); --ty-bug: oklch(0.7 0.15 25); --ty-epic: oklch(0.8 0.12 85);
+  --label-sky: oklch(0.72 0.1 235); --label-peach: oklch(0.76 0.11 55); --label-rose: oklch(0.72 0.13 10); --label-mint: oklch(0.74 0.1 170);
+  --tint-sky: oklch(0.42 0.05 235); --tint-mint: oklch(0.42 0.05 170); --tint-peach: oklch(0.44 0.05 55);
+  --tint-rose: oklch(0.42 0.05 10); --tint-sand: oklch(0.44 0.045 85); --tint-ink: oklch(0.95 0.01 250);
+  --elev-1: 0 1px 2px oklch(0.05 0.02 250 / 0.5), 0 1px 1px oklch(0.05 0.02 250 / 0.3);
+  --elev-2: 0 2px 6px oklch(0.05 0.02 250 / 0.35), 0 12px 32px -8px oklch(0.05 0.02 250 / 0.55);
+  --elev-3: 0 6px 16px oklch(0.05 0.02 250 / 0.4), 0 32px 80px -16px oklch(0.02 0.02 250 / 0.7);
+  }
+}
+:root[data-theme="dark"], [data-theme="dark"] {
+  color-scheme: dark;
+  --bg: oklch(0.19 0.018 252); --surface: oklch(0.225 0.018 252); --surface-2: oklch(0.27 0.018 252);
+  --sheet: oklch(0.21 0.018 252 / 0.74); --card: oklch(0.255 0.018 252);
+  --glass: oklch(0.22 0.02 252 / 0.6); --glass-strong: oklch(0.22 0.02 252 / 0.66);
+  --glass-line: oklch(0.05 0.02 250 / 0.55); --glass-edge: oklch(1 0 0 / 0.12); --glass-inner: oklch(1 0 0 / 0.04);
+  --scrim: oklch(0.08 0.02 250 / 0.45); --hover: oklch(0.95 0.01 250 / 0.07);
+  --text: oklch(0.94 0.008 250); --text-muted: oklch(0.74 0.015 250);
+  --border: oklch(0.95 0.01 250 / 0.1); --border-strong: oklch(0.95 0.01 250 / 0.2);
+  --accent: oklch(0.72 0.09 210); --accent-hover: oklch(0.78 0.085 210); --accent-fg: oklch(0.2 0.03 230);
+  --accent-soft: oklch(0.72 0.09 210 / 0.16); --accent-text: oklch(0.8 0.08 210); --accent-veil: oklch(0.2 0.05 230 / 0.12);
+  --focus: oklch(0.76 0.09 210);
+  --danger: oklch(0.68 0.16 25); --danger-hover: oklch(0.74 0.15 25); --danger-fg: oklch(0.18 0.03 25);
+  --danger-soft: oklch(0.68 0.16 25 / 0.14); --danger-text: oklch(0.8 0.11 25);
+  --aurora-mint: oklch(0.34 0.05 175); --aurora-sky: oklch(0.33 0.06 235); --aurora-peach: oklch(0.35 0.045 50);
+  --st-backlog: oklch(0.6 0.012 250); --st-unstarted: oklch(0.74 0.02 250); --st-started: oklch(0.78 0.13 75);
+  --st-completed: oklch(0.72 0.13 152); --st-canceled: oklch(0.68 0.05 20);
+  --pr-urgent: oklch(0.68 0.17 27); --pr-high: oklch(0.74 0.13 52); --pr-medium: oklch(0.78 0.02 250);
+  --pr-low: oklch(0.66 0.02 250); --pr-none: oklch(0.56 0.01 250);
+  --ty-task: oklch(0.72 0.07 245); --ty-bug: oklch(0.7 0.15 25); --ty-epic: oklch(0.8 0.12 85);
+  --label-sky: oklch(0.72 0.1 235); --label-peach: oklch(0.76 0.11 55); --label-rose: oklch(0.72 0.13 10); --label-mint: oklch(0.74 0.1 170);
+  --tint-sky: oklch(0.42 0.05 235); --tint-mint: oklch(0.42 0.05 170); --tint-peach: oklch(0.44 0.05 55);
+  --tint-rose: oklch(0.42 0.05 10); --tint-sand: oklch(0.44 0.045 85); --tint-ink: oklch(0.95 0.01 250);
+  --elev-1: 0 1px 2px oklch(0.05 0.02 250 / 0.5), 0 1px 1px oklch(0.05 0.02 250 / 0.3);
+  --elev-2: 0 2px 6px oklch(0.05 0.02 250 / 0.35), 0 12px 32px -8px oklch(0.05 0.02 250 / 0.55);
+  --elev-3: 0 6px 16px oklch(0.05 0.02 250 / 0.4), 0 32px 80px -16px oklch(0.02 0.02 250 / 0.7);
+}
+:root, [data-theme] {
+  --aurora: radial-gradient(60% 70% at 0% 0%, var(--aurora-mint), transparent 72%),
+    radial-gradient(55% 65% at 100% 8%, var(--aurora-sky), transparent 72%),
+    radial-gradient(60% 60% at 55% 105%, var(--aurora-peach), transparent 70%);
+  --glass-shadow-1: inset 0 1px 0 var(--glass-edge), inset 0 0 0 1px var(--glass-inner), var(--elev-1);
+  --glass-shadow-2: inset 0 1px 0 var(--glass-edge), inset 0 0 0 1px var(--glass-inner), var(--elev-2);
+  --glass-shadow-3: inset 0 1px 0 var(--glass-edge), inset 0 0 0 1px var(--glass-inner), var(--elev-3);
+}
+:root {
+  --font-ui: "Geist", ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --r-xs: 6px; --r-control: 8px; --r-card: 12px; --r-panel: 16px;
+  --glass-blur: 20px;
+  --dur: 150ms; --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1); --slide: 8px;
+  --dur-spring: 480ms; --drop: 24px;
+  --ease-spring: linear(0, 0.052, 0.176, 0.335, 0.502, 0.657, 0.79, 0.896, 0.974, 1.027, 1.058, 1.073,
+    1.075, 1.07, 1.059, 1.047, 1.034, 1.023, 1.014, 1.006, 1.001, 0.997, 0.995, 0.994, 1);
+  --w-sidebar: 232px; --w-panel: 420px; --w-palette: 560px;
+}
+html { touch-action: manipulation; -webkit-tap-highlight-color: var(--accent-soft); }
+html, body { background: var(--bg); color: var(--text); }
+body { font-family: var(--font-ui); -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; }
+[hidden] { display: none !important; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+::selection { background: var(--accent); color: var(--accent-fg); }
+svg { stroke-width: 1.75; }
+* { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+@keyframes panel-in { from { opacity: 0; transform: translateX(var(--slide)); } }
+@keyframes palette-in { from { opacity: 0; transform: translateY(calc(var(--slide) * -1)); } }
+@keyframes drop { from { transform: translateY(calc(var(--drop) * -1)); } }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+@media (prefers-reduced-motion: reduce) { :root { --slide: 0px; --drop: 0px; } }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script>
+tailwind.config = {
+  theme: {
+    colors: {
+      transparent: 'transparent', current: 'currentColor',
+      bg: 'var(--bg)', surface: 'var(--surface)', 'surface-2': 'var(--surface-2)', sheet: 'var(--sheet)', card: 'var(--card)',
+      glass: 'var(--glass)', 'glass-strong': 'var(--glass-strong)', 'glass-line': 'var(--glass-line)',
+      scrim: 'var(--scrim)', hover: 'var(--hover)', focus: 'var(--focus)',
+      fg: 'var(--text)', muted: 'var(--text-muted)', line: 'var(--border)', 'line-strong': 'var(--border-strong)',
+      accent: { DEFAULT: 'var(--accent)', hover: 'var(--accent-hover)', fg: 'var(--accent-fg)', soft: 'var(--accent-soft)', text: 'var(--accent-text)', veil: 'var(--accent-veil)' },
+      danger: { DEFAULT: 'var(--danger)', hover: 'var(--danger-hover)', fg: 'var(--danger-fg)', soft: 'var(--danger-soft)', text: 'var(--danger-text)' },
+      st: { backlog: 'var(--st-backlog)', unstarted: 'var(--st-unstarted)', started: 'var(--st-started)', completed: 'var(--st-completed)', canceled: 'var(--st-canceled)' },
+      pr: { urgent: 'var(--pr-urgent)', high: 'var(--pr-high)', medium: 'var(--pr-medium)', low: 'var(--pr-low)', none: 'var(--pr-none)' },
+      ty: { task: 'var(--ty-task)', bug: 'var(--ty-bug)', epic: 'var(--ty-epic)' },
+      label: { sky: 'var(--label-sky)', peach: 'var(--label-peach)', rose: 'var(--label-rose)', mint: 'var(--label-mint)' },
+      tint: { sky: 'var(--tint-sky)', mint: 'var(--tint-mint)', peach: 'var(--tint-peach)', rose: 'var(--tint-rose)', sand: 'var(--tint-sand)', ink: 'var(--tint-ink)' },
+    },
+    fontSize: {
+      '2xs': ['11px', { lineHeight: '16px' }],
+      xs: ['12px', { lineHeight: '16px' }],
+      sm: ['13px', { lineHeight: '20px' }],
+      base: ['14px', { lineHeight: '22px' }],
+      md: ['16px', { lineHeight: '24px' }],
+      lg: ['20px', { lineHeight: '28px', letterSpacing: '-0.01em' }],
+      xl: ['28px', { lineHeight: '34px', letterSpacing: '-0.02em' }],
+      '2xl': ['44px', { lineHeight: '48px', letterSpacing: '-0.03em' }],
+    },
+    borderRadius: { none: '0', xs: 'var(--r-xs)', control: 'var(--r-control)', card: 'var(--r-card)', panel: 'var(--r-panel)', full: '9999px' },
+    boxShadow: {
+      none: 'none', 'elev-1': 'var(--elev-1)', 'elev-2': 'var(--elev-2)', 'elev-3': 'var(--elev-3)',
+      'glass-1': 'var(--glass-shadow-1)', 'glass-2': 'var(--glass-shadow-2)', 'glass-3': 'var(--glass-shadow-3)',
+    },
+    extend: {
+      fontFamily: { sans: ['var(--font-ui)'], mono: ['var(--font-mono)'] },
+      borderColor: { DEFAULT: 'var(--border)' },
+      backdropBlur: { glass: 'var(--glass-blur)' },
+      backgroundImage: { aurora: 'var(--aurora)' },
+      width: { sidebar: 'var(--w-sidebar)', panel: 'var(--w-panel)', palette: 'var(--w-palette)' },
+      transitionTimingFunction: { out: 'var(--ease-out)' },
+      animation: {
+        'panel-in': 'panel-in var(--dur) var(--ease-out) both',
+        'palette-in': 'palette-in var(--dur) var(--ease-out) both',
+        drop: 'drop var(--dur-spring) var(--ease-spring) both',
+      },
+    },
+  },
+  safelist: ['animate-panel-in', 'animate-palette-in', 'animate-drop'],
+};
+</script>
+
+<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" class="absolute" aria-hidden="true" focusable="false">
+<!-- Lucide icons (lucide-static 1.63.0, ISC license) -->
+<symbol id="i-archive" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1" /><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" /><path d="M10 12h4" /></symbol>
+<symbol id="i-ban" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="M4.929 4.929 19.07 19.071" /></symbol>
+<symbol id="i-book-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v16" /><path d="M20.001 19A2 2 0 0022 17V5a2 2 0 00-1.999-2L16 3.002A5 5 0 0012 5a5 5 0 00-4-2H4a2 2 0 00-2 2v12a2 2 0 001.999 2H8a5 5 0 014 2 5 5 0 014-2z" /></symbol>
+<symbol id="i-bot" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8" /><rect width="16" height="12" x="4" y="8" rx="2" /><path d="M2 14h2" /><path d="M20 14h2" /><path d="M15 13v2" /><path d="M9 13v2" /></symbol>
+<symbol id="i-bug" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20v-9" /><path d="M14 7a4 4 0 0 1 4 4v3a6 6 0 0 1-12 0v-3a4 4 0 0 1 4-4z" /><path d="M14.12 3.88 16 2" /><path d="M21 21a4 4 0 0 0-3.81-4" /><path d="M21 5a4 4 0 0 1-3.55 3.97" /><path d="M22 13h-4" /><path d="M3 21a4 4 0 0 1 3.81-4" /><path d="M3 5a4 4 0 0 0 3.55 3.97" /><path d="M6 13H2" /><path d="m8 2 1.88 1.88" /><path d="M9 7.13V6a3 3 0 1 1 6 0v1.13" /></symbol>
+<symbol id="i-building-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M10 12h4" /><path d="M10 8h4" /><path d="M14 21v-3a2 2 0 0 0-4 0v3" /><path d="M6 10H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-2" /><path d="M6 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16" /></symbol>
+<symbol id="i-calendar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v3" /><path d="M16 2v3" /><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18" /></symbol>
+<symbol id="i-calendar-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M16 14v2.2l1.6 1" /><path d="M16 2v3" /><path d="M21 7.338V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2h2.338" /><path d="M3 9h5.859" /><path d="M8 2v3" /><circle cx="16" cy="16" r="6" /></symbol>
+<symbol id="i-chart-gantt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M10 6h8" /><path d="M12 16h6" /><path d="M3 3v16a2 2 0 0 0 2 2h16" /><path d="M8 11h7" /></symbol>
+<symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5" /></symbol>
+<symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6" /></symbol>
+<symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6" /></symbol>
+<symbol id="i-chevrons-up-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m7 15 5 5 5-5" /><path d="m7 9 5-5 5 5" /></symbol>
+<symbol id="i-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /></symbol>
+<symbol id="i-circle-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" x2="12" y1="8" y2="12" /><line x1="12" x2="12.01" y1="16" y2="16" /></symbol>
+<symbol id="i-circle-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="m16 9-5.5 5.5L8 12" /></symbol>
+<symbol id="i-circle-dashed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M10.1 2.182a10 10 0 0 1 3.8 0" /><path d="M13.9 21.818a10 10 0 0 1-3.8 0" /><path d="M17.609 3.721a10 10 0 0 1 2.69 2.7" /><path d="M2.182 13.9a10 10 0 0 1 0-3.8" /><path d="M20.279 17.609a10 10 0 0 1-2.7 2.69" /><path d="M21.818 10.1a10 10 0 0 1 0 3.8" /><path d="M3.721 6.391a10 10 0 0 1 2.7-2.69" /><path d="M6.391 20.279a10 10 0 0 1-2.69-2.7" /></symbol>
+<symbol id="i-circle-dot-dashed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M10.1 2.18a9.93 9.93 0 0 1 3.8 0" /><path d="M17.6 3.71a9.95 9.95 0 0 1 2.69 2.7" /><path d="M21.82 10.1a9.93 9.93 0 0 1 0 3.8" /><path d="M20.29 17.6a9.95 9.95 0 0 1-2.7 2.69" /><path d="M13.9 21.82a9.94 9.94 0 0 1-3.8 0" /><path d="M6.4 20.29a9.95 9.95 0 0 1-2.69-2.7" /><path d="M2.18 13.9a9.93 9.93 0 0 1 0-3.8" /><path d="M3.71 6.4a9.95 9.95 0 0 1 2.7-2.69" /><circle cx="12" cy="12" r="1" /></symbol>
+<symbol id="i-circle-pause" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><line x1="10" x2="10" y1="15" y2="9" /><line x1="14" x2="14" y1="15" y2="9" /></symbol>
+<symbol id="i-circle-user-round" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M17.925 20.056a6 6 0 0 0-11.851.001" /><circle cx="12" cy="11" r="4" /><circle cx="12" cy="12" r="10" /></symbol>
+<symbol id="i-circle-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="m15 9-6 6" /><path d="m9 9 6 6" /></symbol>
+<symbol id="i-contrast--fill2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path fill="currentColor" d="M12 18a6 6 0 0 0 0-12v12z" /></symbol>
+<symbol id="i-ellipsis" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /><circle cx="5" cy="12" r="1" /></symbol>
+<symbol id="i-file-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" /><path d="M14 2v5a1 1 0 0 0 1 1h5" /><path d="M10 9H8" /><path d="M16 13H8" /><path d="M16 17H8" /></symbol>
+<symbol id="i-funnel-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12.531 3H3a1 1 0 0 0-.742 1.67l7.225 7.989A2 2 0 0 1 10 14v6a1 1 0 0 0 .553.895l2 1A1 1 0 0 0 14 21v-7a2 2 0 0 1 .517-1.341l.427-.473" /><path d="m16.5 3.5 5 5" /><path d="m21.5 3.5-5 5" /></symbol>
+<symbol id="i-hourglass" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M5 22h14" /><path d="M5 2h14" /><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22" /><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2" /></symbol>
+<symbol id="i-inbox" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12" /><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /></symbol>
+<symbol id="i-keyboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M10 8h.01" /><path d="M12 12h.01" /><path d="M14 8h.01" /><path d="M16 12h.01" /><path d="M18 8h.01" /><path d="M6 8h.01" /><path d="M7 16h10" /><path d="M8 12h.01" /><rect width="20" height="16" x="2" y="4" rx="2" /></symbol>
+<symbol id="i-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z" /><path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12" /><path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17" /></symbol>
+<symbol id="i-layout-template" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="7" x="3" y="3" rx="1" /><rect width="9" height="7" x="3" y="14" rx="1" /><rect width="5" height="7" x="16" y="14" rx="1" /></symbol>
+<symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></symbol>
+<symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h.01" /><path d="M3 12h.01" /><path d="M3 19h.01" /><path d="M8 5h13" /><path d="M8 12h13" /><path d="M8 19h13" /></symbol>
+<symbol id="i-list-filter" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h20" /><path d="M6 12h12" /><path d="M9 19h6" /></symbol>
+<symbol id="i-maximize-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6" /><path d="m21 3-7 7" /><path d="m3 21 7-7" /><path d="M9 21H3v-6" /></symbol>
+<symbol id="i-message-square" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z" /></symbol>
+<symbol id="i-minus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14" /></symbol>
+<symbol id="i-monitor" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2" /><line x1="8" x2="16" y1="21" y2="21" /><line x1="12" x2="12" y1="17" y2="21" /></symbol>
+<symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401" /></symbol>
+<symbol id="i-move-horizontal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m18 8 4 4-4 4" /><path d="M2 12h20" /><path d="m6 8-4 4 4 4" /></symbol>
+<symbol id="i-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z" /></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14" /><path d="M12 5v14" /></symbol>
+<symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></symbol>
+<symbol id="i-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" /><circle cx="12" cy="12" r="3" /></symbol>
+<symbol id="i-settings-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M14 17H5" /><path d="M19 7h-9" /><circle cx="17" cy="17" r="3" /><circle cx="7" cy="7" r="3" /></symbol>
+<symbol id="i-signal-high" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20h.01" /><path d="M7 20v-4" /><path d="M12 20v-8" /><path d="M17 20V8" /></symbol>
+<symbol id="i-signal-low" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20h.01" /><path d="M7 20v-4" /></symbol>
+<symbol id="i-signal-medium" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20h.01" /><path d="M7 20v-4" /><path d="M12 20v-8" /></symbol>
+<symbol id="i-sliders-horizontal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M10 5H3" /><path d="M12 19H3" /><path d="M14 3v4" /><path d="M16 17v4" /><path d="M21 12h-9" /><path d="M21 19h-5" /><path d="M21 5h-7" /><path d="M8 10v4" /><path d="M8 12H3" /></symbol>
+<symbol id="i-smile-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M13.267 2.08a10 10 0 108.653 8.653" /><path d="M15 10V9" /><path d="M16 5h6" /><path d="M16.472 15a6 6 0 01-8.943 0" /><path d="M19 2v6" /><path d="M9 10V9" /></symbol>
+<symbol id="i-square-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /><path d="m16 9-5.5 5.5L8 12" /></symbol>
+<symbol id="i-square-kanban" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M8 7v7" /><path d="M12 7v4" /><path d="M16 7v9" /></symbol>
+<symbol id="i-square-pen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z" /></symbol>
+<symbol id="i-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></symbol>
+<symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4" /><path d="M12 2v2" /><path d="M12 20v2" /><path d="m4.93 4.93 1.41 1.41" /><path d="m17.66 17.66 1.41 1.41" /><path d="M2 12h2" /><path d="M20 12h2" /><path d="m6.34 17.66-1.41 1.41" /><path d="m19.07 4.93-1.41 1.41" /></symbol>
+<symbol id="i-table-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9h18" /><path d="M9 3v18" /><rect x="3" y="3" width="18" height="18" rx="2" /></symbol>
+<symbol id="i-tag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z" /><circle cx="7.5" cy="7.5" r=".5" fill="currentColor" /></symbol>
+<symbol id="i-trash-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6" /><path d="M14 11v6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M3 6h18" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></symbol>
+<symbol id="i-undo-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11" /></symbol>
+<symbol id="i-user-round" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5" /><path d="M20 21a8 8 0 0 0-16 0" /></symbol>
+<symbol id="i-user-round-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M2 21a8 8 0 0 1 13.292-6" /><circle cx="10" cy="8" r="5" /><path d="m16 19 2 2 4-4" /></symbol>
+<symbol id="i-workflow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="8" x="3" y="3" rx="2" /><path d="M7 11v4a2 2 0 0 0 2 2h4" /><rect width="8" height="8" x="13" y="13" rx="2" /></symbol>
+<symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></symbol>
+<symbol id="i-zap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z" /></symbol>
+</svg>
+
+<a href="#screen" class="sr-only z-50 rounded-control bg-card px-4 py-3 text-sm font-medium text-fg shadow-elev-2 focus:not-sr-only focus:fixed focus:left-4 focus:top-4">Zum Inhalt springen</a>
+
+<div class="relative isolate min-h-screen bg-bg font-sans text-fg">
+  <div aria-hidden="true" class="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[560px] bg-aurora opacity-70 [mask-image:linear-gradient(to_bottom,black,transparent)]"></div>
+  <div class="mx-auto w-full max-w-[1440px] pl-[max(16px,env(safe-area-inset-left,0px))] pr-[max(16px,env(safe-area-inset-right,0px))] md:pl-[max(32px,env(safe-area-inset-left,0px))] md:pr-[max(32px,env(safe-area-inset-right,0px))]">
+    <header class="pt-4 md:pt-6">
+      <div class="flex items-center justify-between gap-4">
+        <p class="flex min-w-0 items-baseline gap-2 whitespace-nowrap text-sm"><span class="font-semibold tracking-[-0.01em]" translate="no">werkbuch</span><span class="text-muted">Moodboard A</span></p>
+        <nav aria-label="Abschnitte" class="hidden items-center gap-1 lg:flex">
+          <a href="#screen" class="rounded-control px-3 py-1.5 text-sm text-muted transition-colors duration-150 ease-out hover:bg-hover hover:text-fg">Schlüsselbildschirm</a>
+          <a href="#views" class="rounded-control px-3 py-1.5 text-sm text-muted transition-colors duration-150 ease-out hover:bg-hover hover:text-fg">Liste und Timeline</a>
+          <a href="#tokens" class="rounded-control px-3 py-1.5 text-sm text-muted transition-colors duration-150 ease-out hover:bg-hover hover:text-fg">Tokens</a>
+          <a href="#components" class="rounded-control px-3 py-1.5 text-sm text-muted transition-colors duration-150 ease-out hover:bg-hover hover:text-fg">Komponenten</a>
+        </nav>
+        
+<div role="group" aria-label="Farbschema" class="inline-flex shrink-0 items-center gap-0.5 rounded-full p-1 border border-glass-line bg-glass shadow-glass-1 backdrop-blur-glass backdrop-saturate-150">
+  <button type="button" data-theme-choice="auto" aria-pressed="true" class="relative inline-flex h-8 items-center gap-1.5 rounded-full px-2 text-xs font-medium text-muted transition-colors duration-150 ease-out after:absolute after:inset-x-0 after:-inset-y-1.5 hover:text-fg aria-pressed:bg-card aria-pressed:text-fg aria-pressed:shadow-elev-1 sm:px-3"><svg class="size-3.5 shrink-0" aria-hidden="true"><use href="#i-monitor"/></svg><span class="sr-only sm:not-sr-only">Auto</span></button>
+  <button type="button" data-theme-choice="light" aria-pressed="false" class="relative inline-flex h-8 items-center gap-1.5 rounded-full px-2 text-xs font-medium text-muted transition-colors duration-150 ease-out after:absolute after:inset-x-0 after:-inset-y-1.5 hover:text-fg aria-pressed:bg-card aria-pressed:text-fg aria-pressed:shadow-elev-1 sm:px-3"><svg class="size-3.5 shrink-0" aria-hidden="true"><use href="#i-sun"/></svg><span class="sr-only sm:not-sr-only">Hell</span></button>
+  <button type="button" data-theme-choice="dark" aria-pressed="false" class="relative inline-flex h-8 items-center gap-1.5 rounded-full px-2 text-xs font-medium text-muted transition-colors duration-150 ease-out after:absolute after:inset-x-0 after:-inset-y-1.5 hover:text-fg aria-pressed:bg-card aria-pressed:text-fg aria-pressed:shadow-elev-1 sm:px-3"><svg class="size-3.5 shrink-0" aria-hidden="true"><use href="#i-moon"/></svg><span class="sr-only sm:not-sr-only">Dunkel</span></button>
+</div>
+      </div>
+      <div class="mt-6 grid grid-cols-1 gap-x-12 gap-y-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:items-end">
+        <h1 class="text-balance text-2xl font-semibold text-fg">Milchglas</h1>
+        <div>
+          <p class="max-w-[65ch] text-pretty text-base text-muted">Hell, luftig und freundlich. Seitenleiste, Panel, Befehlspalette, Menüs und Toasts schweben als Milchglas über einem ruhigen, zart getönten Hintergrund. Gelesen wird auf klaren Flächen mit vollem Kontrast.</p>
+          <ul aria-label="Stichworte" class="mt-4 flex flex-wrap gap-1.5">
+            <li class="inline-flex h-6 items-center rounded-full border border-glass-line bg-glass px-3 text-xs font-medium text-fg backdrop-blur-glass">Hell zuerst</li>
+            <li class="inline-flex h-6 items-center rounded-full border border-glass-line bg-glass px-3 text-xs font-medium text-fg backdrop-blur-glass">Schwebendes Milchglas</li>
+            <li class="inline-flex h-6 items-center rounded-full border border-glass-line bg-glass px-3 text-xs font-medium text-fg backdrop-blur-glass">Zarte Aurora</li>
+            <li class="inline-flex h-6 items-center rounded-full border border-glass-line bg-glass px-3 text-xs font-medium text-fg backdrop-blur-glass">Petrol als einziger Akzent</li>
+            <li class="inline-flex h-6 items-center rounded-full border border-glass-line bg-glass px-3 text-xs font-medium text-fg backdrop-blur-glass">Geist und Geist Mono</li>
+            <li class="inline-flex h-6 items-center rounded-full border border-glass-line bg-glass px-3 text-xs font-medium text-fg backdrop-blur-glass">150&nbsp;ms Ease-out</li>
+          </ul>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      
+<section id="screen" aria-labelledby="screen-title" class="mt-8 scroll-mt-6">
+  <div class="mb-3 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+    <h2 id="screen-title" class="text-sm font-semibold text-fg">Schlüsselbildschirm <span class="font-normal text-muted">Board WEB mit Item im Panel und offener Befehlspalette</span></h2>
+    <p class="flex flex-wrap items-center gap-1.5 text-xs text-muted"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted">Esc</kbd> schließt die Palette, <span class="inline-flex items-center gap-0.5"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted"><span aria-hidden="true" class="font-sans text-xs">⌘</span><span class="sr-only">Cmd</span></kbd><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted">K</kbd></span> öffnet sie wieder</p>
+  </div>
+  <p class="mb-3 flex items-center gap-2 text-xs text-muted lg:hidden"><svg class="size-4 shrink-0" aria-hidden="true"><use href="#i-move-horizontal"/></svg>Der Bildschirm ist breiter als dein Gerät. Seitlich wischen.</p>
+  <div class="overflow-x-auto overscroll-x-contain rounded-panel">
+    <div id="app" class="relative isolate h-[920px] min-w-[1280px] overflow-hidden rounded-panel border border-glass-line bg-bg bg-aurora shadow-elev-2">
+      
+<nav data-app-content aria-label="App-Navigation (Demo)" class="absolute bottom-2 left-2 top-2 flex w-sidebar flex-col rounded-panel p-2 border border-glass-line bg-glass shadow-glass-1 backdrop-blur-glass backdrop-saturate-150">
+  <div class="flex items-center gap-1">
+    <button type="button" aria-label="Feldwerk, Organisation wechseln" class="flex min-w-0 flex-1 items-center gap-2 rounded-control px-1.5 py-1 transition-colors duration-150 ease-out hover:bg-hover">
+      <span class="inline-grid size-6 shrink-0 place-items-center rounded-xs bg-fg text-2xs font-semibold text-bg" aria-hidden="true">F</span>
+      <span class="truncate text-sm font-semibold">Feldwerk</span>
+      <svg class="size-3.5 text-muted shrink-0" aria-hidden="true"><use href="#i-chevrons-up-down"/></svg>
+    </button>
+    <button type="button" class="inline-grid size-7 shrink-0 place-items-center rounded-control text-muted transition-colors duration-150 ease-out hover:bg-hover hover:text-fg" aria-label="Neues Item anlegen (C)"><svg class="size-4 shrink-0" aria-hidden="true"><use href="#i-square-pen"/></svg></button>
+  </div>
+  <button type="button" id="palette-trigger" class="mt-2 flex h-8 items-center gap-2 rounded-control border border-glass-line bg-card px-2 text-sm text-muted shadow-elev-1 transition-colors duration-150 ease-out hover:text-fg">
+    <svg class="size-4 shrink-0" aria-hidden="true"><use href="#i-search"/></svg><span>Suchen …</span><span class="ml-auto"><span class="inline-flex items-center gap-0.5"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted"><span aria-hidden="true" class="font-sans text-xs">⌘</span><span class="sr-only">Cmd</span></kbd><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted">K</kbd></span></span>
+  </button>
+  <ul class="mt-3 flex flex-col gap-0.5">
+    <li><a href="#" class="flex h-8 min-w-0 items-center gap-2 rounded-control px-2 text-sm text-fg transition-colors duration-150 ease-out hover:bg-hover"><svg class="size-4 text-muted shrink-0" aria-hidden="true"><use href="#i-inbox"/></svg><span class="min-w-0 truncate">Inbox</span><span class="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1.5 font-mono text-2xs font-medium text-accent-fg"><span class="sr-only">ungelesen: </span>3</span></a></li>
+    <li><a href="#" class="flex h-8 min-w-0 items-center gap-2 rounded-control px-2 text-sm text-fg transition-colors duration-150 ease-out hover:bg-hover"><svg class="size-4 text-muted shrink-0" aria-hidden="true"><use href="#i-circle-user-round"/></svg><span class="min-w-0 truncate">Meine Items</span></a></li>
+  </ul>
+  <p class="mt-5 px-2 text-xs font-medium text-muted">Views</p>
+  <ul class="mt-1 flex flex-col gap-0.5">
+    <li><a href="#" class="flex h-8 min-w-0 items-center gap-2 rounded-control px-2 text-sm text-fg transition-colors duration-150 ease-out hover:bg-hover"><svg class="size-4 text-muted shrink-0" aria-hidden="true"><use href="#i-calendar-clock"/></svg><span class="min-w-0 truncate">Diese Woche fällig</span></a></li>
+    <li><a href="#" class="flex h-8 min-w-0 items-center gap-2 rounded-control px-2 text-sm text-fg transition-colors duration-150 ease-out hover:bg-hover"><svg class="size-4 text-muted shrink-0" aria-hidden="true"><use href="#i-ban"/></svg><span class="min-w-0 truncate">Blockiert</span><span class="ml-auto font-mono text-xs text-muted">1</span></a></li>
+    <li><a href="#" class="flex h-8 min-w-0 items-center gap-2 rounded-control px-2 text-sm text-fg transition-colors duration-150 ease-out hover:bg-hover"><svg class="size-4 text-muted shrink-0" aria-hidden="true"><use href="#i-building-2"/></svg><span class="min-w-0 truncate">Studio Nordlicht</span></a></li>
+    <li><a href="#" class="flex h-8 min-w-0 items-center gap-2 rounded-control px-2 text-sm text-fg transition-colors duration-150 ease-out hover:bg-hover text-muted"><svg class="size-4 shrink-0" aria-hidden="true"><use href="#i-layers"/></svg><span class="min-w-0 truncate">Alle Views</span></a></li>
+  </ul>
+  <p class="mt-5 px-2 text-xs font-medium text-muted">Projekte</p>
+  <ul class="mt-1 flex flex-col gap-0.5">
+    <li>
+      <a href="#" class="flex h-8 min-w-0 items-center gap-2 rounded-control px-2 text-sm text-fg transition-colors duration-150 ease-out hover:bg-hover"><span class="inline-grid size-5 shrink-0 place-items-center rounded-xs bg-tint-sky text-2xs font-semibold text-tint-ink" aria-hidden="true">W</span><span class="min-w-0 truncate">Website-Relaunch</span><svg class="ml-auto size-3.5 text-muted shrink-0" aria-hidden="true"><use href="#i-chevron-down"/></svg></a>
+      <ul class="ml-4 mt-0.5 flex flex-col gap-0.5 border-l border-glass-line pl-2">
+        <li><a href="#" aria-current="page" class="flex h-8 min-w-0 items-center gap-2 rounded-control px-2 text-sm text-fg transition-colors duration-150 ease-out hover:bg-hover bg-card font-medium shadow-elev-1 hover:bg-card"><svg class="size-4 text-accent-text shrink-0" aria-hidden="true"><use href="#i-square-kanban"/></svg><span class="min-w-0 truncate">Items</span></a></li>
+        <li><a href="#" class="flex h-8 min-w-0 items-center gap-2 rounded-control px-2 text-sm text-fg transition-colors duration-150 ease-out hover:bg-hover"><svg class="size-4 text-muted shrink-0" aria-hidden="true"><use href="#i-book-open"/></svg><span class="min-w-0 truncate">Wiki</span></a></li>
+        <li><a href="#" class="flex h-8 min-w-0 items-center gap-2 rounded-control px-2 text-sm text-fg transition-colors duration-150 ease-out hover:bg-hover"><svg class="size-4 text-muted shrink-0" aria-hidden="true"><use href="#i-layout-template"/></svg><span class="min-w-0 truncate">Vorlagen</span></a></li>
+        <li><a href="#" class="flex h-8 min-w-0 items-center gap-2 rounded-control px-2 text-sm text-fg transition-colors duration-150 ease-out hover:bg-hover"><svg class="size-4 text-muted shrink-0" aria-hidden="true"><use href="#i-settings-2"/></svg><span class="min-w-0 truncate">Einstellungen</span></a></li>
+      </ul>
+    </li>
+    <li><a href="#" class="flex h-8 min-w-0 items-center gap-2 rounded-control px-2 text-sm text-fg transition-colors duration-150 ease-out hover:bg-hover"><span class="inline-grid size-5 shrink-0 place-items-center rounded-xs bg-tint-mint text-2xs font-semibold text-tint-ink" aria-hidden="true">K</span><span class="min-w-0 truncate">Kunden-App</span></a></li>
+    <li><a href="#" class="flex h-8 min-w-0 items-center gap-2 rounded-control px-2 text-sm text-fg transition-colors duration-150 ease-out hover:bg-hover"><span class="inline-grid size-5 shrink-0 place-items-center rounded-xs bg-tint-peach text-2xs font-semibold text-tint-ink" aria-hidden="true">I</span><span class="min-w-0 truncate">Infrastruktur</span></a></li>
+    <li><a href="#" class="flex h-8 min-w-0 items-center gap-2 rounded-control px-2 text-sm text-fg transition-colors duration-150 ease-out hover:bg-hover text-muted"><svg class="size-4 shrink-0" aria-hidden="true"><use href="#i-layers"/></svg><span class="min-w-0 truncate">Alle Projekte</span></a></li>
+  </ul>
+  <div class="mt-auto flex items-center gap-2 border-t border-glass-line px-1 pt-2">
+    <span class="inline-grid size-6 text-2xs shrink-0 place-items-center rounded-full bg-tint-rose font-semibold tracking-[-0.02em] text-tint-ink " role="img" aria-label="Mara Lindqvist">ML</span>
+    <span class="min-w-0 flex-1 truncate text-sm">Mara Lindqvist</span>
+    <button type="button" class="inline-grid size-7 shrink-0 place-items-center rounded-control text-muted transition-colors duration-150 ease-out hover:bg-hover hover:text-fg" aria-label="Alle Kürzel (?)"><svg class="size-4 shrink-0" aria-hidden="true"><use href="#i-keyboard"/></svg></button>
+    <button type="button" class="inline-grid size-7 shrink-0 place-items-center rounded-control text-muted transition-colors duration-150 ease-out hover:bg-hover hover:text-fg" aria-label="Einstellungen"><svg class="size-4 shrink-0" aria-hidden="true"><use href="#i-settings"/></svg></button>
+  </div>
+</nav>
+      <div data-app-content class="absolute bottom-2 left-[calc(var(--w-sidebar)+16px)] right-2 top-2 flex flex-col overflow-hidden rounded-panel border border-line bg-sheet shadow-elev-1">
+        
+<header class="flex h-12 shrink-0 items-center gap-3 border-b border-line pl-4 pr-3">
+  <nav aria-label="Pfad" class="flex min-w-0 items-center gap-2 text-sm">
+    <span class="inline-grid size-5 shrink-0 place-items-center rounded-xs bg-tint-sky text-2xs font-semibold text-tint-ink" aria-hidden="true">W</span>
+    <a href="#" class="font-medium text-fg hover:underline">Website-Relaunch</a>
+    <svg class="size-3.5 text-muted shrink-0" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+    <span class="text-muted">Items</span>
+  </nav>
+  <button type="button" class="inline-grid size-7 shrink-0 place-items-center rounded-control text-muted transition-colors duration-150 ease-out hover:bg-hover hover:text-fg" aria-pressed="true" aria-label="Favorit"><svg class="size-4 text-accent-text shrink-0" aria-hidden="true"><use href="#i-star"/></svg></button>
+  <div class="ml-auto flex items-center gap-2">
+    
+<div role="group" aria-label="Layout" data-toggle-group class="inline-flex h-8 shrink-0 items-center gap-0.5 rounded-control border border-line bg-surface-2 p-0.5 ">
+  <button type="button" aria-pressed="false" class="relative after:absolute after:inset-x-0 after:-inset-y-2 md:after:content-none inline-flex h-full items-center gap-1.5 rounded-xs px-2 text-xs font-medium text-muted transition-colors duration-150 ease-out hover:text-fg aria-pressed:bg-card aria-pressed:text-fg aria-pressed:shadow-elev-1"><svg class="size-3.5 shrink-0" aria-hidden="true"><use href="#i-list"/></svg>Liste</button>
+  <button type="button" aria-pressed="true" class="relative after:absolute after:inset-x-0 after:-inset-y-2 md:after:content-none inline-flex h-full items-center gap-1.5 rounded-xs px-2 text-xs font-medium text-muted transition-colors duration-150 ease-out hover:text-fg aria-pressed:bg-card aria-pressed:text-fg aria-pressed:shadow-elev-1"><svg class="size-3.5 shrink-0" aria-hidden="true"><use href="#i-square-kanban"/></svg>Board</button>
+  <button type="button" aria-pressed="false" class="relative after:absolute after:inset-x-0 after:-inset-y-2 md:after:content-none inline-flex h-full items-center gap-1.5 rounded-xs px-2 text-xs font-medium text-muted transition-colors duration-150 ease-out hover:text-fg aria-pressed:bg-card aria-pressed:text-fg aria-pressed:shadow-elev-1"><svg class="size-3.5 shrink-0" aria-hidden="true"><use href="#i-table-2"/></svg>Tabelle</button>
+  <button type="button" aria-pressed="false" class="relative after:absolute after:inset-x-0 after:-inset-y-2 md:after:content-none inline-flex h-full items-center gap-1.5 rounded-xs px-2 text-xs font-medium text-muted transition-colors duration-150 ease-out hover:text-fg aria-pressed:bg-card aria-pressed:text-fg aria-pressed:shadow-elev-1"><svg class="size-3.5 shrink-0" aria-hidden="true"><use href="#i-chart-gantt"/></svg>Timeline</button>
+</div>
+    <button type="button" class="inline-flex h-8 shrink-0 items-center gap-2 rounded-control px-3 text-sm font-medium transition-colors duration-150 ease-out relative after:absolute after:inset-x-0 after:-inset-y-1.5 md:after:content-none border border-line-strong bg-card text-fg shadow-elev-1 hover:border-muted" ><svg class="size-4 shrink-0" aria-hidden="true"><use href="#i-list-filter"/></svg>Filter<span class="inline-flex items-center gap-0.5"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted">/</kbd></span></button>
+    <button type="button" class="inline-flex h-8 shrink-0 items-center gap-2 rounded-control px-3 text-sm font-medium transition-colors duration-150 ease-out relative after:absolute after:inset-x-0 after:-inset-y-1.5 md:after:content-none border border-line-strong bg-card text-fg shadow-elev-1 hover:border-muted" ><svg class="size-4 shrink-0" aria-hidden="true"><use href="#i-sliders-horizontal"/></svg>Anzeige</button>
+    <button type="button" class="inline-flex h-8 shrink-0 items-center gap-2 rounded-control px-3 text-sm font-medium transition-colors duration-150 ease-out relative after:absolute after:inset-x-0 after:-inset-y-1.5 md:after:content-none bg-accent text-accent-fg shadow-elev-1 hover:bg-accent-hover" ><svg class="size-4 shrink-0" aria-hidden="true"><use href="#i-plus"/></svg>Neues Item<span class="inline-flex items-center gap-0.5"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs bg-accent-veil px-1 font-mono text-2xs font-medium text-accent-fg">C</kbd></span></button>
+  </div>
+</header>
+        <div class="grid min-h-0 flex-1 grid-cols-5 gap-3 p-4">
+<section aria-labelledby="col-backlog" class="flex min-w-0 flex-col">
+  <header class="flex h-8 items-center gap-2 pl-1">
+    <svg class="size-4 text-st-backlog shrink-0" aria-hidden="true"><use href="#i-circle-dashed"/></svg>
+    <h3 id="col-backlog" class="text-sm font-medium text-fg">Backlog</h3>
+    <span class="font-mono text-xs text-muted">2</span>
+    <button type="button" class="inline-grid size-7 shrink-0 place-items-center rounded-control text-muted transition-colors duration-150 ease-out hover:bg-hover hover:text-fg ml-auto" aria-label="Item in Backlog anlegen"><svg class="size-4 shrink-0" aria-hidden="true"><use href="#i-plus"/></svg></button>
+  </header>
+  <ol class="mt-2 flex flex-col gap-2">
+<li>
+  <a href="#" data-card="WEB-51" data-selected="false" class="block rounded-card border border-line bg-card p-3 shadow-elev-1 transition-[border-color,box-shadow] duration-150 ease-out hover:border-line-strong hover:shadow-elev-2 data-[selected=true]:border-accent data-[selected=true]:ring-1 data-[selected=true]:ring-accent">
+    <span class="flex items-center gap-1.5">
+      <svg class="size-3.5 text-ty-task shrink-0" aria-hidden="true"><use href="#i-square-check"/></svg><span class="sr-only">Task</span>
+      <span class="font-mono text-xs text-muted" translate="no">WEB-51</span>
+      <span class="ml-auto"><span class="inline-grid size-5 shrink-0 place-items-center rounded-full border border-dashed border-line-strong text-muted" role="img" aria-label="Kein Assignee"><svg class="size-3 shrink-0" aria-hidden="true"><use href="#i-user-round"/></svg></span></span>
+    </span>
+    <span class="mt-2 line-clamp-3 text-sm font-medium text-fg">Cookie-Banner auf Consent v2 umstellen</span>
+    
+    <span class="mt-3 flex flex-wrap items-center gap-1">
+      <span class="inline-grid size-5 shrink-0 place-items-center rounded-xs border border-line" title="Priorität Low"><svg class="size-3.5 text-pr-low shrink-0" aria-hidden="true"><use href="#i-signal-low"/></svg><span class="sr-only">Priorität Low</span></span>
+    </span>
+    
+    
+  </a>
+</li>
+<li>
+  <a href="#" data-card="WEB-55" data-selected="false" class="block rounded-card border border-line bg-card p-3 shadow-elev-1 transition-[border-color,box-shadow] duration-150 ease-out hover:border-line-strong hover:shadow-elev-2 data-[selected=true]:border-accent data-[selected=true]:ring-1 data-[selected=true]:ring-accent">
+    <span class="flex items-center gap-1.5">
+      <svg class="size-3.5 text-ty-task shrink-0" aria-hidden="true"><use href="#i-square-check"/></svg><span class="sr-only">Task</span>
+      <span class="font-mono text-xs text-muted" translate="no">WEB-55</span>
+      <span class="ml-auto"><span class="inline-grid size-5 shrink-0 place-items-center rounded-full border border-dashed border-line-strong text-muted" role="img" aria-label="Kein Assignee"><svg class="size-3 shrink-0" aria-hidden="true"><use href="#i-user-round"/></svg></span></span>
+    </span>
+    <span class="mt-2 line-clamp-3 text-sm font-medium text-fg">Bildformate auf AVIF prüfen</span>
+    
+    <span class="mt-3 flex flex-wrap items-center gap-1">
+      <span class="inline-grid size-5 shrink-0 place-items-center rounded-xs border border-line" title="Priorität None"><svg class="size-3.5 text-pr-none shrink-0" aria-hidden="true"><use href="#i-minus"/></svg><span class="sr-only">Priorität None</span></span>
+    </span>
+    
+    
+  </a>
+</li>
+  </ol>
+</section>
+<section aria-labelledby="col-todo" class="flex min-w-0 flex-col">
+  <header class="flex h-8 items-center gap-2 pl-1">
+    <svg class="size-4 text-st-unstarted shrink-0" aria-hidden="true"><use href="#i-circle"/></svg>
+    <h3 id="col-todo" class="text-sm font-medium text-fg">Todo</h3>
+    <span class="font-mono text-xs text-muted">2</span>
+    <button type="button" class="inline-grid size-7 shrink-0 place-items-center rounded-control text-muted transition-colors duration-150 ease-out hover:bg-hover hover:text-fg ml-auto" aria-label="Item in Todo anlegen"><svg class="size-4 shrink-0" aria-hidden="true"><use href="#i-plus"/></svg></button>
+  </header>
+  <ol class="mt-2 flex flex-col gap-2">
+<li>
+  <a href="#" data-card="WEB-48" data-selected="false" class="block rounded-card border border-line bg-card p-3 shadow-elev-1 transition-[border-color,box-shadow] duration-150 ease-out hover:border-line-strong hover:shadow-elev-2 data-[selected=true]:border-accent data-[selected=true]:ring-1 data-[selected=true]:ring-accent">
+    <span class="flex items-center gap-1.5">
+      <svg class="size-3.5 text-ty-task shrink-0" aria-hidden="true"><use href="#i-square-check"/></svg><span class="sr-only">Task</span>
+      <span class="font-mono text-xs text-muted" translate="no">WEB-48</span>
+      <span class="ml-auto"><span class="inline-grid size-5 text-2xs shrink-0 place-items-center rounded-full bg-tint-peach font-semibold tracking-[-0.02em] text-tint-ink " role="img" aria-label="Lene Vogt">LV</span></span>
+    </span>
+    <span class="mt-2 line-clamp-3 text-sm font-medium text-fg">Navigation für Mobilgeräte überarbeiten</span>
+    
+    <span class="mt-3 flex flex-wrap items-center gap-1">
+      <span class="inline-grid size-5 shrink-0 place-items-center rounded-xs border border-line" title="Priorität High"><svg class="size-3.5 text-pr-high shrink-0" aria-hidden="true"><use href="#i-signal-high"/></svg><span class="sr-only">Priorität High</span></span><span class="inline-flex h-5 shrink-0 items-center gap-1 rounded-full border border-line bg-card px-1.5 text-xs text-fg"><span class="size-1.5 shrink-0 rounded-full bg-label-sky" aria-hidden="true"></span>UX</span>
+    </span>
+    
+    
+  </a>
+</li>
+<li>
+  <a href="#" data-card="WEB-50" data-selected="false" class="block rounded-card border border-line bg-card p-3 shadow-elev-1 transition-[border-color,box-shadow] duration-150 ease-out hover:border-line-strong hover:shadow-elev-2 data-[selected=true]:border-accent data-[selected=true]:ring-1 data-[selected=true]:ring-accent">
+    <span class="flex items-center gap-1.5">
+      <svg class="size-3.5 text-ty-task shrink-0" aria-hidden="true"><use href="#i-square-check"/></svg><span class="sr-only">Task</span>
+      <span class="font-mono text-xs text-muted" translate="no">WEB-50</span>
+      <span class="ml-auto"><span class="inline-grid size-5 shrink-0 place-items-center rounded-full border border-dashed border-line-strong text-muted" role="img" aria-label="Kein Assignee"><svg class="size-3 shrink-0" aria-hidden="true"><use href="#i-user-round"/></svg></span></span>
+    </span>
+    <span class="mt-2 line-clamp-3 text-sm font-medium text-fg">Fehlerseite 404 gestalten</span>
+    
+    <span class="mt-3 flex flex-wrap items-center gap-1">
+      <span class="inline-grid size-5 shrink-0 place-items-center rounded-xs border border-line" title="Priorität Medium"><svg class="size-3.5 text-pr-medium shrink-0" aria-hidden="true"><use href="#i-signal-medium"/></svg><span class="sr-only">Priorität Medium</span></span>
+    </span>
+    
+    
+  </a>
+</li>
+  </ol>
+</section>
+<section aria-labelledby="col-progress" class="flex min-w-0 flex-col">
+  <header class="flex h-8 items-center gap-2 pl-1">
+    <svg class="size-4 text-st-started shrink-0" aria-hidden="true"><use href="#i-contrast--fill2"/></svg>
+    <h3 id="col-progress" class="text-sm font-medium text-fg">In Progress</h3>
+    <span class="font-mono text-xs text-muted">3</span>
+    <button type="button" class="inline-grid size-7 shrink-0 place-items-center rounded-control text-muted transition-colors duration-150 ease-out hover:bg-hover hover:text-fg ml-auto" aria-label="Item in In Progress anlegen"><svg class="size-4 shrink-0" aria-hidden="true"><use href="#i-plus"/></svg></button>
+  </header>
+  <ol class="mt-2 flex flex-col gap-2">
+<li>
+  <a href="#" data-card="WEB-30" data-selected="false" class="block rounded-card border border-line bg-card p-3 shadow-elev-1 transition-[border-color,box-shadow] duration-150 ease-out hover:border-line-strong hover:shadow-elev-2 data-[selected=true]:border-accent data-[selected=true]:ring-1 data-[selected=true]:ring-accent">
+    <span class="flex items-center gap-1.5">
+      <svg class="size-3.5 text-ty-epic shrink-0" aria-hidden="true"><use href="#i-zap"/></svg><span class="sr-only">Epic</span>
+      <span class="font-mono text-xs text-muted" translate="no">WEB-30</span>
+      <span class="ml-auto"><span class="inline-grid size-5 shrink-0 place-items-center rounded-full border border-dashed border-line-strong text-muted" role="img" aria-label="Kein Assignee"><svg class="size-3 shrink-0" aria-hidden="true"><use href="#i-user-round"/></svg></span></span>
+    </span>
+    <span class="mt-2 line-clamp-3 text-sm font-medium text-fg">Relaunch Phase 1</span>
+    <span class="mt-3 flex items-center gap-2">
+      <span class="h-1 flex-1 overflow-hidden rounded-full bg-surface-2" role="progressbar" aria-label="Kind-Items fertig" aria-valuemin="0" aria-valuemax="10" aria-valuenow="6"><span class="block h-full w-3/5 rounded-full bg-accent"></span></span>
+      <span class="font-mono text-xs text-muted">6/10</span>
+    </span>
+    <span class="mt-3 flex flex-wrap items-center gap-1">
+      <span class="inline-grid size-5 shrink-0 place-items-center rounded-xs border border-line" title="Priorität None"><svg class="size-3.5 text-pr-none shrink-0" aria-hidden="true"><use href="#i-minus"/></svg><span class="sr-only">Priorität None</span></span><span class="inline-flex h-5 shrink-0 items-center gap-1 rounded-full border border-line bg-card px-1.5 text-xs text-fg text-muted"><svg class="size-3 shrink-0" aria-hidden="true"><use href="#i-calendar"/></svg><span class="font-mono"><span class="sr-only">Fällig </span>15.11.</span></span>
+    </span>
+    
+    
+  </a>
+</li>
+<li>
+  <a href="#" data-card="WEB-42" data-selected="false" class="block rounded-card border border-line bg-card p-3 shadow-elev-1 transition-[border-color,box-shadow] duration-150 ease-out hover:border-line-strong hover:shadow-elev-2 data-[selected=true]:border-accent data-[selected=true]:ring-1 data-[selected=true]:ring-accent">
+    <span class="flex items-center gap-1.5">
+      <svg class="size-3.5 text-ty-task shrink-0" aria-hidden="true"><use href="#i-square-check"/></svg><span class="sr-only">Task</span>
+      <span class="font-mono text-xs text-muted" translate="no">WEB-42</span>
+      <span class="ml-auto"><span class="inline-grid size-5 text-2xs shrink-0 place-items-center rounded-full bg-tint-mint font-semibold tracking-[-0.02em] text-tint-ink " role="img" aria-label="Ida Brenner">IB</span></span>
+    </span>
+    <span class="mt-2 line-clamp-3 text-sm font-medium text-fg">Startseite: Hero und Teaser bauen</span>
+    
+    <span class="mt-3 flex flex-wrap items-center gap-1">
+      <span class="inline-grid size-5 shrink-0 place-items-center rounded-xs border border-line" title="Priorität High"><svg class="size-3.5 text-pr-high shrink-0" aria-hidden="true"><use href="#i-signal-high"/></svg><span class="sr-only">Priorität High</span></span><span class="inline-flex h-5 shrink-0 items-center gap-1 rounded-full border border-line bg-card px-1.5 text-xs text-fg text-muted"><svg class="size-3 shrink-0" aria-hidden="true"><use href="#i-calendar"/></svg><span class="font-mono"><span class="sr-only">Fällig </span>30.10.</span></span>
+    </span>
+    
+    
+  </a>
+</li>
+<li>
+  <a href="#" data-card="WEB-47" data-selected="true" class="block rounded-card border border-line bg-card p-3 shadow-elev-1 transition-[border-color,box-shadow] duration-150 ease-out hover:border-line-strong hover:shadow-elev-2 data-[selected=true]:border-accent data-[selected=true]:ring-1 data-[selected=true]:ring-accent">
+    <span class="flex items-center gap-1.5">
+      <svg class="size-3.5 text-ty-bug shrink-0" aria-hidden="true"><use href="#i-bug"/></svg><span class="sr-only">Bug</span>
+      <span class="font-mono text-xs text-muted" translate="no">WEB-47</span>
+      <span class="ml-auto"><span class="inline-grid size-5 text-2xs shrink-0 place-items-center rounded-full bg-tint-sky font-semibold tracking-[-0.02em] text-tint-ink " role="img" aria-label="Jonas Feld">JF</span></span>
+    </span>
+    <span class="mt-2 line-clamp-3 text-sm font-medium text-fg">Kontaktformular sendet doppelt</span>
+    
+    <span class="mt-3 flex flex-wrap items-center gap-1">
+      <span class="inline-grid size-5 shrink-0 place-items-center rounded-xs border border-line" title="Priorität Urgent"><svg class="size-3.5 text-pr-urgent shrink-0" aria-hidden="true"><use href="#i-circle-alert"/></svg><span class="sr-only">Priorität Urgent</span></span><span class="inline-flex h-5 shrink-0 items-center gap-1 rounded-full border border-line bg-card px-1.5 text-xs text-fg"><span class="size-1.5 shrink-0 rounded-full bg-label-peach" aria-hidden="true"></span>Formulare</span><span class="inline-flex h-5 shrink-0 items-center gap-1 rounded-full border border-line bg-card px-1.5 text-xs text-fg"><span class="size-1.5 shrink-0 rounded-full bg-label-rose" aria-hidden="true"></span>Produktion</span><span class="inline-flex h-5 shrink-0 items-center gap-1 rounded-full border border-line bg-card px-1.5 text-xs text-fg text-muted"><svg class="size-3 shrink-0" aria-hidden="true"><use href="#i-calendar"/></svg><span class="font-mono"><span class="sr-only">Fällig </span>31.10.</span></span>
+    </span>
+    
+    <span class="mt-3 flex items-center gap-1.5 rounded-control bg-danger-soft px-2 py-1 text-xs font-medium text-danger-text"><svg class="size-3.5 shrink-0" aria-hidden="true"><use href="#i-ban"/></svg>Blockiert von <span class="font-mono" translate="no">OPS-12</span></span>
+  </a>
+</li>
+  </ol>
+</section>
+<section aria-labelledby="col-pending" data-under-panel class="flex min-w-0 flex-col">
+  <header class="flex h-8 items-center gap-2 pl-1">
+    <svg class="size-4 text-st-started shrink-0" aria-hidden="true"><use href="#i-circle-pause"/></svg>
+    <h3 id="col-pending" class="text-sm font-medium text-fg">Pending</h3>
+    <span class="font-mono text-xs text-muted">1</span>
+    <button type="button" class="inline-grid size-7 shrink-0 place-items-center rounded-control text-muted transition-colors duration-150 ease-out hover:bg-hover hover:text-fg ml-auto" aria-label="Item in Pending anlegen"><svg class="size-4 shrink-0" aria-hidden="true"><use href="#i-plus"/></svg></button>
+  </header>
+  <ol class="mt-2 flex flex-col gap-2">
+<li>
+  <a href="#" data-card="WEB-45" data-selected="false" class="block rounded-card border border-line bg-card p-3 shadow-elev-1 transition-[border-color,box-shadow] duration-150 ease-out hover:border-line-strong hover:shadow-elev-2 data-[selected=true]:border-accent data-[selected=true]:ring-1 data-[selected=true]:ring-accent">
+    <span class="flex items-center gap-1.5">
+      <svg class="size-3.5 text-ty-task shrink-0" aria-hidden="true"><use href="#i-square-check"/></svg><span class="sr-only">Task</span>
+      <span class="font-mono text-xs text-muted" translate="no">WEB-45</span>
+      <span class="ml-auto"><span class="inline-grid size-5 shrink-0 place-items-center rounded-full border border-dashed border-line-strong text-muted" role="img" aria-label="Kein Assignee"><svg class="size-3 shrink-0" aria-hidden="true"><use href="#i-user-round"/></svg></span></span>
+    </span>
+    <span class="mt-2 line-clamp-3 text-sm font-medium text-fg">Texte der Leistungsseiten</span>
+    
+    <span class="mt-3 flex flex-wrap items-center gap-1">
+      <span class="inline-grid size-5 shrink-0 place-items-center rounded-xs border border-line" title="Priorität Medium"><svg class="size-3.5 text-pr-medium shrink-0" aria-hidden="true"><use href="#i-signal-medium"/></svg><span class="sr-only">Priorität Medium</span></span><span class="inline-flex h-5 shrink-0 items-center gap-1 rounded-full border border-line bg-card px-1.5 text-xs text-fg"><svg class="size-3 text-muted shrink-0" aria-hidden="true"><use href="#i-building-2"/></svg>Studio Nordlicht</span>
+    </span>
+    <span class="mt-2 flex items-center gap-1.5 text-xs text-muted"><svg class="size-3.5 shrink-0" aria-hidden="true"><use href="#i-hourglass"/></svg>Wartet auf Zulieferung</span>
+    
+  </a>
+</li>
+  </ol>
+</section>
+<section aria-labelledby="col-done" data-under-panel class="flex min-w-0 flex-col">
+  <header class="flex h-8 items-center gap-2 pl-1">
+    <svg class="size-4 text-st-completed shrink-0" aria-hidden="true"><use href="#i-circle-check"/></svg>
+    <h3 id="col-done" class="text-sm font-medium text-fg">Done</h3>
+    <span class="font-mono text-xs text-muted">2</span>
+    <button type="button" class="inline-grid size-7 shrink-0 place-items-center rounded-control text-muted transition-colors duration-150 ease-out hover:bg-hover hover:text-fg ml-auto" aria-label="Item in Done anlegen"><svg class="size-4 shrink-0" aria-hidden="true"><use href="#i-plus"/></svg></button>
+  </header>
+  <ol class="mt-2 flex flex-col gap-2">
+<li>
+  <a href="#" data-card="WEB-39" data-selected="false" class="block rounded-card border border-line bg-card p-3 shadow-elev-1 transition-[border-color,box-shadow] duration-150 ease-out hover:border-line-strong hover:shadow-elev-2 data-[selected=true]:border-accent data-[selected=true]:ring-1 data-[selected=true]:ring-accent">
+    <span class="flex items-center gap-1.5">
+      <svg class="size-3.5 text-ty-task shrink-0" aria-hidden="true"><use href="#i-square-check"/></svg><span class="sr-only">Task</span>
+      <span class="font-mono text-xs text-muted" translate="no">WEB-39</span>
+      <span class="ml-auto"><span class="inline-grid size-5 shrink-0 place-items-center rounded-full border border-dashed border-line-strong text-muted" role="img" aria-label="Kein Assignee"><svg class="size-3 shrink-0" aria-hidden="true"><use href="#i-user-round"/></svg></span></span>
+    </span>
+    <span class="mt-2 line-clamp-3 text-sm font-medium text-fg">Domain auf neuen Server umziehen</span>
+    
+    <span class="mt-3 flex flex-wrap items-center gap-1">
+      <span class="inline-grid size-5 shrink-0 place-items-center rounded-xs border border-line" title="Priorität None"><svg class="size-3.5 text-pr-none shrink-0" aria-hidden="true"><use href="#i-minus"/></svg><span class="sr-only">Priorität None</span></span>
+    </span>
+    
+    
+  </a>
+</li>
+<li>
+  <a href="#" data-card="WEB-40" data-selected="false" class="block rounded-card border border-line bg-card p-3 shadow-elev-1 transition-[border-color,box-shadow] duration-150 ease-out hover:border-line-strong hover:shadow-elev-2 data-[selected=true]:border-accent data-[selected=true]:ring-1 data-[selected=true]:ring-accent">
+    <span class="flex items-center gap-1.5">
+      <svg class="size-3.5 text-ty-bug shrink-0" aria-hidden="true"><use href="#i-bug"/></svg><span class="sr-only">Bug</span>
+      <span class="font-mono text-xs text-muted" translate="no">WEB-40</span>
+      <span class="ml-auto"><span class="inline-grid size-5 shrink-0 place-items-center rounded-full border border-dashed border-line-strong text-muted" role="img" aria-label="Kein Assignee"><svg class="size-3 shrink-0" aria-hidden="true"><use href="#i-user-round"/></svg></span></span>
+    </span>
+    <span class="mt-2 line-clamp-3 text-sm font-medium text-fg">Favicon fehlt im Safari</span>
+    
+    <span class="mt-3 flex flex-wrap items-center gap-1">
+      <span class="inline-grid size-5 shrink-0 place-items-center rounded-xs border border-line" title="Priorität None"><svg class="size-3.5 text-pr-none shrink-0" aria-hidden="true"><use href="#i-minus"/></svg><span class="sr-only">Priorität None</span></span>
+    </span>
+    
+    
+  </a>
+</li>
+  </ol>
+</section>
+        </div>
+        
+<aside id="item-panel" aria-labelledby="panel-title" class="absolute bottom-2 right-2 top-14 z-10 flex w-panel flex-col overflow-hidden rounded-panel border border-glass-line bg-glass shadow-glass-2 backdrop-blur-glass backdrop-saturate-150">
+  <div class="flex h-12 shrink-0 items-center gap-2 border-b border-glass-line pl-4 pr-2">
+    <nav aria-label="Item-Pfad" class="flex min-w-0 items-center gap-1.5 text-xs text-muted">
+      <span class="inline-grid size-4 shrink-0 place-items-center rounded-xs bg-tint-sky text-2xs font-semibold text-tint-ink" aria-hidden="true">W</span><span>WEB</span><svg class="size-3 shrink-0" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+      <svg class="size-3.5 text-ty-bug shrink-0" aria-hidden="true"><use href="#i-bug"/></svg><span class="font-mono font-medium text-fg" translate="no">WEB-47</span>
+    </nav>
+    <div class="ml-auto flex items-center">
+      <button type="button" class="inline-grid size-7 shrink-0 place-items-center rounded-control text-muted transition-colors duration-150 ease-out hover:bg-hover hover:text-fg" aria-label="Link kopieren"><svg class="size-4 shrink-0" aria-hidden="true"><use href="#i-link"/></svg></button>
+      <button type="button" class="inline-grid size-7 shrink-0 place-items-center rounded-control text-muted transition-colors duration-150 ease-out hover:bg-hover hover:text-fg" aria-label="Als Seite öffnen"><svg class="size-4 shrink-0" aria-hidden="true"><use href="#i-maximize-2"/></svg></button>
+      <button type="button" class="inline-grid size-7 shrink-0 place-items-center rounded-control text-muted transition-colors duration-150 ease-out hover:bg-hover hover:text-fg" aria-label="Weitere Aktionen"><svg class="size-4 shrink-0" aria-hidden="true"><use href="#i-ellipsis"/></svg></button>
+      <button type="button" class="inline-grid size-7 shrink-0 place-items-center rounded-control text-muted transition-colors duration-150 ease-out hover:bg-hover hover:text-fg" data-panel-close aria-label="Panel schließen"><svg class="size-4 shrink-0" aria-hidden="true"><use href="#i-x"/></svg></button>
+    </div>
+  </div>
+  <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-4 pt-3">
+    <h3 id="panel-title" class="text-lg font-semibold text-fg">Kontaktformular sendet doppelt</h3>
+    <a href="#" class="mt-3 flex min-w-0 items-center gap-2 rounded-control bg-danger-soft px-3 py-1.5 text-xs">
+      <svg class="size-3.5 text-danger-text shrink-0" aria-hidden="true"><use href="#i-ban"/></svg><span class="shrink-0 font-medium text-danger-text">Blockiert von</span>
+      <span class="shrink-0 font-mono font-medium text-fg" translate="no">OPS-12</span><span class="truncate text-muted">Mail-Limits am Server erhöhen</span>
+    </a>
+    <dl class="mt-3 grid grid-cols-[96px_minmax(0,1fr)] items-center gap-x-2">
+      
+      <dt class="flex h-7 items-center text-sm text-muted">Typ</dt>
+      <dd class="min-w-0"><button type="button" class="group flex h-7 w-full min-w-0 items-center gap-2 rounded-control px-2 text-left text-sm text-fg transition-colors duration-150 ease-out hover:bg-hover"><svg class="size-4 text-ty-bug shrink-0" aria-hidden="true"><use href="#i-bug"/></svg>Bug<span class="ml-auto opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-visible:opacity-100"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted">T</kbd></span></button></dd>
+      
+      <dt class="flex h-7 items-center text-sm text-muted">Status</dt>
+      <dd class="min-w-0"><button type="button" class="group flex h-7 w-full min-w-0 items-center gap-2 rounded-control px-2 text-left text-sm text-fg transition-colors duration-150 ease-out hover:bg-hover"><svg class="size-4 text-st-started shrink-0" aria-hidden="true"><use href="#i-contrast--fill2"/></svg>In Progress<span class="ml-auto opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-visible:opacity-100"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted">S</kbd></span></button></dd>
+      
+      <dt class="flex h-7 items-center text-sm text-muted">Assignee</dt>
+      <dd class="min-w-0"><button type="button" class="group flex h-7 w-full min-w-0 items-center gap-2 rounded-control px-2 text-left text-sm text-fg transition-colors duration-150 ease-out hover:bg-hover"><span class="inline-grid size-5 text-2xs shrink-0 place-items-center rounded-full bg-tint-sky font-semibold tracking-[-0.02em] text-tint-ink " role="img" aria-label="Jonas Feld">JF</span>Jonas Feld<span class="ml-auto opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-visible:opacity-100"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted">A</kbd></span></button></dd>
+      
+      <dt class="flex h-7 items-center text-sm text-muted">Priorität</dt>
+      <dd class="min-w-0"><button type="button" class="group flex h-7 w-full min-w-0 items-center gap-2 rounded-control px-2 text-left text-sm text-fg transition-colors duration-150 ease-out hover:bg-hover"><svg class="size-4 text-pr-urgent shrink-0" aria-hidden="true"><use href="#i-circle-alert"/></svg>Urgent<span class="ml-auto opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-visible:opacity-100"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted">P</kbd></span></button></dd>
+      
+      <dt class="flex h-7 items-center text-sm text-muted">Labels</dt>
+      <dd class="min-w-0"><button type="button" class="group flex h-7 w-full min-w-0 items-center gap-2 rounded-control px-2 text-left text-sm text-fg transition-colors duration-150 ease-out hover:bg-hover"><span class="inline-flex h-5 shrink-0 items-center gap-1 rounded-full border border-line bg-card px-1.5 text-xs text-fg"><span class="size-1.5 shrink-0 rounded-full bg-label-peach" aria-hidden="true"></span>Formulare</span><span class="inline-flex h-5 shrink-0 items-center gap-1 rounded-full border border-line bg-card px-1.5 text-xs text-fg"><span class="size-1.5 shrink-0 rounded-full bg-label-rose" aria-hidden="true"></span>Produktion</span><span class="ml-auto opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-visible:opacity-100"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted">L</kbd></span></button></dd>
+      
+      <dt class="flex h-7 items-center text-sm text-muted">Start</dt>
+      <dd class="min-w-0"><button type="button" class="group flex h-7 w-full min-w-0 items-center gap-2 rounded-control px-2 text-left text-sm text-fg transition-colors duration-150 ease-out hover:bg-hover"><svg class="size-4 text-muted shrink-0" aria-hidden="true"><use href="#i-calendar"/></svg><span class="font-mono">27.10.</span><span class="ml-auto opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-visible:opacity-100"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted">⇧D</kbd></span></button></dd>
+      
+      <dt class="flex h-7 items-center text-sm text-muted">Fällig</dt>
+      <dd class="min-w-0"><button type="button" class="group flex h-7 w-full min-w-0 items-center gap-2 rounded-control px-2 text-left text-sm text-fg transition-colors duration-150 ease-out hover:bg-hover"><svg class="size-4 text-muted shrink-0" aria-hidden="true"><use href="#i-calendar-clock"/></svg><span class="font-mono">31.10.</span><span class="text-muted">in 3 Tagen</span><span class="ml-auto opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-visible:opacity-100"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted">D</kbd></span></button></dd>
+    </dl>
+    <dl class="mt-2 grid grid-cols-[96px_minmax(0,1fr)] items-center gap-x-2 border-t border-glass-line pt-2">
+      
+      <dt class="flex h-7 items-center text-sm text-muted">Kunde</dt>
+      <dd class="min-w-0"><button type="button" class="group flex h-7 w-full min-w-0 items-center gap-2 rounded-control px-2 text-left text-sm text-fg transition-colors duration-150 ease-out hover:bg-hover"><span class="size-1.5 shrink-0 rounded-full bg-label-sky" aria-hidden="true"></span>Studio Nordlicht<svg class="ml-auto size-3.5 text-muted shrink-0" aria-hidden="true"><use href="#i-chevron-down"/></svg></button></dd>
+      
+      <dt class="flex h-7 items-center text-sm text-muted">Aufwand (h)</dt>
+      <dd class="min-w-0"><button type="button" class="group flex h-7 w-full min-w-0 items-center gap-2 rounded-control px-2 text-left text-sm text-fg transition-colors duration-150 ease-out hover:bg-hover"><span class="font-mono tabular-nums">3,5</span></button></dd>
+    </dl>
+    <div class="mt-3 border-t border-glass-line pt-3">
+      <h4 class="sr-only">Beschreibung</h4>
+      <p class="max-w-[65ch] text-base text-fg">Beim Absenden über Safari kommen zwei Mails an. <a href="#" class="rounded-xs bg-accent-soft px-1 font-medium text-accent-text hover:underline">@mara</a> kannst du prüfen, ob das mit <a href="#" class="inline-flex items-center gap-1 rounded-xs border border-line bg-card px-1 align-[-3px] font-mono text-sm text-fg hover:border-line-strong" translate="no"><svg class="size-3.5 text-ty-task shrink-0" aria-hidden="true"><use href="#i-square-check"/></svg>WEB-42</a> zusammenhängt?</p>
+    </div>
+    <div class="mt-4">
+      <div class="flex items-center justify-between gap-2">
+        <h4 class="text-sm font-semibold text-fg">Aktivität</h4>
+        
+<div role="group" aria-label="Aktivität filtern" data-toggle-group class="inline-flex h-8 shrink-0 items-center gap-0.5 rounded-control border border-line bg-surface-2 p-0.5 h-7">
+  <button type="button" aria-pressed="true" class="relative after:absolute after:inset-x-0 after:-inset-y-2 md:after:content-none inline-flex h-full items-center gap-1.5 rounded-xs px-2 text-xs font-medium text-muted transition-colors duration-150 ease-out hover:text-fg aria-pressed:bg-card aria-pressed:text-fg aria-pressed:shadow-elev-1">Alles</button>
+  <button type="button" aria-pressed="false" class="relative after:absolute after:inset-x-0 after:-inset-y-2 md:after:content-none inline-flex h-full items-center gap-1.5 rounded-xs px-2 text-xs font-medium text-muted transition-colors duration-150 ease-out hover:text-fg aria-pressed:bg-card aria-pressed:text-fg aria-pressed:shadow-elev-1">Kommentare</button>
+  <button type="button" aria-pressed="false" class="relative after:absolute after:inset-x-0 after:-inset-y-2 md:after:content-none inline-flex h-full items-center gap-1.5 rounded-xs px-2 text-xs font-medium text-muted transition-colors duration-150 ease-out hover:text-fg aria-pressed:bg-card aria-pressed:text-fg aria-pressed:shadow-elev-1">Änderungen</button>
+</div>
+      </div>
+      <ol class="mt-2 flex flex-col gap-3">
+        <li class="flex gap-2">
+          <span class="inline-grid size-5 shrink-0 place-items-center rounded-xs border border-line bg-accent-soft text-accent-text" role="img" aria-label="Automation, Bot"><svg class="size-3.5 shrink-0" aria-hidden="true"><use href="#i-workflow"/></svg></span>
+          <div class="min-w-0 text-xs text-muted">
+            <p><span class="font-medium text-fg">Automation</span> <span class="inline-flex h-4 items-center rounded-xs border border-line px-1 text-2xs font-medium text-muted">Bot</span> hat <span class="text-fg">Jonas Feld</span> als Assignee gesetzt</p>
+            <p>Regel „Assignee beim Start“, <time datetime="2026-10-27T09:12">27.10., 09:12</time></p>
+          </div>
+        </li>
+        <li class="flex gap-2">
+          <span class="inline-grid size-5 text-2xs shrink-0 place-items-center rounded-full bg-tint-mint font-semibold tracking-[-0.02em] text-tint-ink " role="img" aria-label="Ida Brenner">IB</span>
+          <div class="min-w-0 text-xs text-muted">
+            <p><span class="font-medium text-fg">Ida Brenner</span> hat die Priorität von <span class="inline-flex items-center gap-1 align-[-2px] text-fg"><svg class="size-3.5 text-pr-high shrink-0" aria-hidden="true"><use href="#i-signal-high"/></svg>High</span> auf <span class="inline-flex items-center gap-1 align-[-2px] text-fg"><svg class="size-3.5 text-pr-urgent shrink-0" aria-hidden="true"><use href="#i-circle-alert"/></svg>Urgent</span> geändert <time class="whitespace-nowrap" datetime="2026-10-27T16:40">27.10., 16:40</time></p>
+          </div>
+        </li>
+        <li>
+          <article aria-label="Kommentar von Mara Lindqvist" class="rounded-card border border-line bg-card p-3 shadow-elev-1">
+            <header class="flex items-center gap-2 text-xs">
+              <span class="inline-grid size-5 text-2xs shrink-0 place-items-center rounded-full bg-tint-rose font-semibold tracking-[-0.02em] text-tint-ink " role="img" aria-label="Mara Lindqvist">ML</span><span class="font-medium text-fg">Mara Lindqvist</span><time class="text-muted" datetime="2026-10-28T09:41">heute, 09:41</time>
+              <button type="button" class="inline-grid size-7 shrink-0 place-items-center rounded-control text-muted transition-colors duration-150 ease-out hover:bg-hover hover:text-fg ml-auto size-6" aria-label="Kommentar-Aktionen"><svg class="size-4 shrink-0" aria-hidden="true"><use href="#i-ellipsis"/></svg></button>
+            </header>
+            <p class="mt-1.5 text-base text-fg">Kann ich reproduzieren, nur unter iOS&nbsp;18.</p>
+            <div class="mt-2 flex items-center gap-1">
+              <button type="button" data-reaction aria-pressed="false" class="inline-flex h-6 items-center gap-1.5 rounded-full border border-line bg-surface px-2 text-xs transition-colors duration-150 ease-out hover:border-line-strong aria-pressed:border-accent aria-pressed:bg-accent-soft"><span aria-hidden="true">👍</span><span class="sr-only">Daumen hoch,</span><span class="font-mono text-fg" data-count>2</span></button>
+              <button type="button" class="inline-grid size-7 shrink-0 place-items-center rounded-control text-muted transition-colors duration-150 ease-out hover:bg-hover hover:text-fg size-6" aria-label="Reaktion hinzufügen"><svg class="size-4 shrink-0" aria-hidden="true"><use href="#i-smile-plus"/></svg></button>
+            </div>
+          </article>
+        </li>
+      </ol>
+    </div>
+  </div>
+  <div class="shrink-0 border-t border-glass-line px-3 py-2">
+    <button type="button" class="flex h-9 w-full items-center gap-2 rounded-card border border-line bg-card px-3 text-left text-sm text-muted shadow-elev-1 transition-colors duration-150 ease-out hover:border-line-strong">
+      <svg class="size-4 shrink-0" aria-hidden="true"><use href="#i-message-square"/></svg>Kommentar schreiben …<span class="ml-auto"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted">M</kbd></span>
+    </button>
+  </div>
+</aside>
+      </div>
+      
+<div id="palette-scrim" class="absolute inset-0 z-20 bg-scrim"></div>
+<div class="pointer-events-none absolute inset-y-0 left-[calc(var(--w-sidebar)+16px)] right-[calc(var(--w-panel)+16px)] z-30 flex justify-center">
+  <div id="palette" role="dialog" aria-label="Befehlspalette" data-mark-class="bg-transparent font-semibold text-accent-text" class="pointer-events-auto mt-64 h-fit w-palette overflow-hidden rounded-panel border border-glass-line bg-glass-strong shadow-glass-3 backdrop-blur-glass backdrop-saturate-150">
+    <div class="flex h-14 items-center gap-3 border-b border-glass-line px-4 focus-within:shadow-[inset_0_-2px_0_var(--focus)]">
+      <svg class="size-5 text-muted shrink-0" aria-hidden="true"><use href="#i-search"/></svg>
+      <span class="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-line bg-card px-2 text-xs font-medium text-fg shrink-0"><svg class="size-3.5 text-ty-bug shrink-0" aria-hidden="true"><use href="#i-bug"/></svg><span class="font-mono" translate="no">WEB-47</span></span>
+      <label for="palette-input" class="sr-only">Suchen oder Befehl eingeben</label>
+      <input id="palette-input" name="q" type="text" role="combobox" aria-expanded="true" aria-controls="palette-list" aria-autocomplete="list" aria-activedescendant="pal-status" value="kontakt" autocomplete="off" spellcheck="false" placeholder="Suchen oder Befehl eingeben …" class="h-full min-w-0 flex-1 bg-transparent text-md text-fg outline-none placeholder:text-muted">
+      <kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted">Esc</kbd>
+    </div>
+    <div id="palette-list" role="listbox" aria-label="Treffer" class="max-h-80 overflow-y-auto overscroll-contain p-2">
+      <div role="group" aria-labelledby="pal-g-actions" data-group>
+        <div id="pal-g-actions" class="px-2 pb-1 pt-1 text-xs font-medium text-muted">Aktionen für WEB-47</div>
+        <div role="option" id="pal-status" aria-selected="true" class="flex h-9 cursor-pointer items-center gap-3 rounded-control px-2 text-sm text-fg aria-selected:bg-accent-soft"><svg class="size-4 text-muted shrink-0" aria-hidden="true"><use href="#i-circle-dot-dashed"/></svg><span>Status ändern …</span><span class="ml-auto"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted">S</kbd></span></div>
+        <div role="option" id="pal-assign" aria-selected="false" class="flex h-9 cursor-pointer items-center gap-3 rounded-control px-2 text-sm text-fg aria-selected:bg-accent-soft"><svg class="size-4 text-muted shrink-0" aria-hidden="true"><use href="#i-user-round-check"/></svg><span>Mir zuweisen</span><span class="ml-auto"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted">I</kbd></span></div>
+      </div>
+      <div role="group" aria-labelledby="pal-g-items" data-group class="mt-1">
+        <div id="pal-g-items" class="px-2 pb-1 pt-2 text-xs font-medium text-muted">Items</div>
+        <div role="option" id="pal-web47" aria-selected="false" data-filterable data-search="WEB-47 Kontaktformular sendet doppelt" data-open="WEB-47" class="flex h-9 cursor-pointer items-center gap-3 rounded-control px-2 text-sm text-fg aria-selected:bg-accent-soft"><svg class="size-4 text-ty-bug shrink-0" aria-hidden="true"><use href="#i-bug"/></svg><span class="w-14 shrink-0 font-mono text-xs text-muted" translate="no">WEB-47</span><span class="min-w-0 truncate" data-text="Kontaktformular sendet doppelt"><mark class="bg-transparent font-semibold text-accent-text">Kontakt</mark>formular sendet doppelt</span><span class="ml-auto flex shrink-0 items-center gap-1.5 text-xs text-muted"><svg class="size-3.5 text-st-started shrink-0" aria-hidden="true"><use href="#i-contrast--fill2"/></svg>In Progress</span></div>
+        <div role="option" id="pal-app12" aria-selected="false" data-filterable data-search="APP-12 Kontaktdaten im Profil bearbeiten" class="flex h-9 cursor-pointer items-center gap-3 rounded-control px-2 text-sm text-fg aria-selected:bg-accent-soft"><svg class="size-4 text-ty-task shrink-0" aria-hidden="true"><use href="#i-square-check"/></svg><span class="w-14 shrink-0 font-mono text-xs text-muted" translate="no">APP-12</span><span class="min-w-0 truncate" data-text="Kontaktdaten im Profil bearbeiten"><mark class="bg-transparent font-semibold text-accent-text">Kontakt</mark>daten im Profil bearbeiten</span><span class="ml-auto flex shrink-0 items-center gap-1.5 text-xs text-muted"><svg class="size-3.5 text-st-unstarted shrink-0" aria-hidden="true"><use href="#i-circle"/></svg>Todo</span></div>
+      </div>
+      <div role="group" aria-labelledby="pal-g-pages" data-group class="mt-1">
+        <div id="pal-g-pages" class="px-2 pb-1 pt-2 text-xs font-medium text-muted">Seiten</div>
+        <div role="option" id="pal-wiki" aria-selected="false" data-filterable data-search="Kontaktformular – Technik Wiki WEB" class="flex h-9 cursor-pointer items-center gap-3 rounded-control px-2 text-sm text-fg aria-selected:bg-accent-soft"><svg class="size-4 text-muted shrink-0" aria-hidden="true"><use href="#i-file-text"/></svg><span class="min-w-0 truncate" data-text="Kontaktformular – Technik"><mark class="bg-transparent font-semibold text-accent-text">Kontakt</mark>formular – Technik</span><span class="ml-auto flex shrink-0 items-center gap-1.5 text-xs text-muted"><svg class="size-3.5 shrink-0" aria-hidden="true"><use href="#i-book-open"/></svg>Wiki WEB</span></div>
+      </div>
+      <p id="palette-empty" hidden class="px-2 py-6 text-center text-sm text-muted">Keine Items oder Seiten zu „<span data-query></span>“.</p>
+    </div>
+    <div class="flex h-10 items-center gap-4 border-t border-glass-line px-4 text-xs text-muted">
+      <span class="flex items-center gap-1.5"><span class="inline-flex items-center gap-0.5"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted"><span aria-hidden="true" class="font-sans text-xs">↑</span><span class="sr-only">Pfeil hoch</span></kbd><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted"><span aria-hidden="true" class="font-sans text-xs">↓</span><span class="sr-only">Pfeil runter</span></kbd></span>Auswählen</span>
+      <span class="flex items-center gap-1.5"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted"><span aria-hidden="true" class="font-sans text-xs">↵</span><span class="sr-only">Enter</span></kbd>Ausführen</span>
+      <span class="ml-auto truncate"><span class="font-mono" translate="no">WEB-123</span> springt direkt zum Item</span>
+    </div>
+  </div>
+</div>
+    </div>
+  </div>
+</section>
+
+      <section id="views" aria-labelledby="views-title" class="mt-24 scroll-mt-6">
+        <h2 id="views-title" class="text-balance text-xl font-semibold">Liste und Timeline</h2>
+        <p class="mt-2 max-w-[65ch] text-pretty text-base text-muted">Dieselben Items als Liste, gruppiert nach Status. Kind-Items stehen eingerückt unter ihrem Epic, Felder erscheinen als Chips. Darunter die Timeline mit drei Epics und einer Linie für heute.</p>
+        <div class="mt-8 flex flex-col gap-4">
+          
+<div class="overflow-hidden rounded-panel border border-line bg-surface shadow-elev-1">
+  <div class="flex h-12 items-center gap-3 border-b border-line px-4">
+    <span class="inline-grid size-5 shrink-0 place-items-center rounded-xs bg-tint-sky text-2xs font-semibold text-tint-ink" aria-hidden="true">W</span><h3 class="text-sm font-semibold text-fg">Website-Relaunch</h3><span class="hidden text-sm text-muted sm:inline">Items, gruppiert nach Status</span>
+    <div class="ml-auto">
+<div role="group" aria-label="Layout" data-toggle-group class="inline-flex h-8 shrink-0 items-center gap-0.5 rounded-control border border-line bg-surface-2 p-0.5 ">
+  <button type="button" aria-pressed="true" class="relative after:absolute after:inset-x-0 after:-inset-y-2 md:after:content-none inline-flex h-full items-center gap-1.5 rounded-xs px-2 text-xs font-medium text-muted transition-colors duration-150 ease-out hover:text-fg aria-pressed:bg-card aria-pressed:text-fg aria-pressed:shadow-elev-1" aria-label="Liste"><svg class="size-3.5 shrink-0" aria-hidden="true"><use href="#i-list"/></svg></button>
+  <button type="button" aria-pressed="false" class="relative after:absolute after:inset-x-0 after:-inset-y-2 md:after:content-none inline-flex h-full items-center gap-1.5 rounded-xs px-2 text-xs font-medium text-muted transition-colors duration-150 ease-out hover:text-fg aria-pressed:bg-card aria-pressed:text-fg aria-pressed:shadow-elev-1" aria-label="Board"><svg class="size-3.5 shrink-0" aria-hidden="true"><use href="#i-square-kanban"/></svg></button>
+  <button type="button" aria-pressed="false" class="relative after:absolute after:inset-x-0 after:-inset-y-2 md:after:content-none inline-flex h-full items-center gap-1.5 rounded-xs px-2 text-xs font-medium text-muted transition-colors duration-150 ease-out hover:text-fg aria-pressed:bg-card aria-pressed:text-fg aria-pressed:shadow-elev-1" aria-label="Tabelle"><svg class="size-3.5 shrink-0" aria-hidden="true"><use href="#i-table-2"/></svg></button>
+  <button type="button" aria-pressed="false" class="relative after:absolute after:inset-x-0 after:-inset-y-2 md:after:content-none inline-flex h-full items-center gap-1.5 rounded-xs px-2 text-xs font-medium text-muted transition-colors duration-150 ease-out hover:text-fg aria-pressed:bg-card aria-pressed:text-fg aria-pressed:shadow-elev-1" aria-label="Timeline"><svg class="size-3.5 shrink-0" aria-hidden="true"><use href="#i-chart-gantt"/></svg></button>
+</div></div>
+  </div>
+  
+<div>
+  <div class="flex h-10 items-center gap-2 border-b border-line bg-surface-2 pl-2 pr-3">
+    <button type="button" data-collapse aria-expanded="true" aria-controls="list-todo" class="relative after:absolute after:inset-x-0 after:-inset-y-1.5 md:after:content-none group flex h-8 items-center gap-2 rounded-control px-2 text-sm font-medium text-fg transition-colors duration-150 ease-out hover:bg-hover">
+      <svg class="size-3.5 text-muted transition-transform duration-150 ease-out group-aria-[expanded=false]:-rotate-90 motion-reduce:transition-none shrink-0" aria-hidden="true"><use href="#i-chevron-down"/></svg><svg class="size-4 text-st-unstarted shrink-0" aria-hidden="true"><use href="#i-circle"/></svg>Todo<span class="font-mono text-xs font-normal text-muted">1</span>
+    </button>
+    <button type="button" class="inline-grid size-7 shrink-0 place-items-center rounded-control text-muted transition-colors duration-150 ease-out hover:bg-hover hover:text-fg relative after:absolute after:-inset-2 md:after:content-none ml-auto" aria-label="Item in Todo anlegen"><svg class="size-4 shrink-0" aria-hidden="true"><use href="#i-plus"/></svg></button>
+  </div>
+  <ul id="list-todo">
+<li class="relative">
+  
+  <a href="#" class="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b border-line py-2 pr-4 transition-colors duration-150 ease-out hover:bg-hover focus-visible:-outline-offset-2 md:flex md:h-11 md:py-0 pl-4">
+    <span class="flex items-center gap-2">
+      <svg class="size-4 text-pr-medium shrink-0" aria-hidden="true"><use href="#i-signal-medium"/></svg><span class="sr-only">Priorität Medium</span>
+      <span class="w-14 font-mono text-xs text-muted" translate="no">WEB-50</span>
+      <svg class="size-4 text-st-unstarted shrink-0" aria-hidden="true"><use href="#i-circle"/></svg><span class="sr-only">Todo</span>
+    </span>
+    <span class="flex min-w-0 items-center gap-2 md:flex-1"><svg class="size-3.5 text-ty-task shrink-0" aria-hidden="true"><use href="#i-square-check"/></svg><span class="sr-only">Task</span><span class="text-sm font-medium text-fg md:truncate">Fehlerseite 404 gestalten</span></span>
+    <span class="col-span-3 row-start-2 flex flex-wrap items-center gap-1.5 md:ml-auto md:flex-nowrap">
+      
+      
+      
+      
+    </span>
+    <span class="col-start-3 row-start-1 md:order-last"><span class="inline-grid size-5 shrink-0 place-items-center rounded-full border border-dashed border-line-strong text-muted" role="img" aria-label="Kein Assignee"><svg class="size-3 shrink-0" aria-hidden="true"><use href="#i-user-round"/></svg></span></span>
+  </a>
+</li>
+  </ul>
+</div>
+  
+<div>
+  <div class="flex h-10 items-center gap-2 border-b border-line bg-surface-2 pl-2 pr-3">
+    <button type="button" data-collapse aria-expanded="true" aria-controls="list-progress" class="relative after:absolute after:inset-x-0 after:-inset-y-1.5 md:after:content-none group flex h-8 items-center gap-2 rounded-control px-2 text-sm font-medium text-fg transition-colors duration-150 ease-out hover:bg-hover">
+      <svg class="size-3.5 text-muted transition-transform duration-150 ease-out group-aria-[expanded=false]:-rotate-90 motion-reduce:transition-none shrink-0" aria-hidden="true"><use href="#i-chevron-down"/></svg><svg class="size-4 text-st-started shrink-0" aria-hidden="true"><use href="#i-contrast--fill2"/></svg>In Progress<span class="font-mono text-xs font-normal text-muted">3</span>
+    </button>
+    <button type="button" class="inline-grid size-7 shrink-0 place-items-center rounded-control text-muted transition-colors duration-150 ease-out hover:bg-hover hover:text-fg relative after:absolute after:-inset-2 md:after:content-none ml-auto" aria-label="Item in In Progress anlegen"><svg class="size-4 shrink-0" aria-hidden="true"><use href="#i-plus"/></svg></button>
+  </div>
+  <ul id="list-progress">
+<li class="relative">
+  
+  <a href="#" class="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b border-line py-2 pr-4 transition-colors duration-150 ease-out hover:bg-hover focus-visible:-outline-offset-2 md:flex md:h-11 md:py-0 pl-4">
+    <span class="flex items-center gap-2">
+      <svg class="size-4 text-pr-none shrink-0" aria-hidden="true"><use href="#i-minus"/></svg><span class="sr-only">Priorität None</span>
+      <span class="w-14 font-mono text-xs text-muted" translate="no">WEB-30</span>
+      <svg class="size-4 text-st-started shrink-0" aria-hidden="true"><use href="#i-contrast--fill2"/></svg><span class="sr-only">In Progress</span>
+    </span>
+    <span class="flex min-w-0 items-center gap-2 md:flex-1"><svg class="size-3.5 text-ty-epic shrink-0" aria-hidden="true"><use href="#i-zap"/></svg><span class="sr-only">Epic</span><span class="text-sm font-semibold text-fg md:truncate">Relaunch Phase 1</span></span>
+    <span class="col-span-3 row-start-2 flex flex-wrap items-center gap-1.5 md:ml-auto md:flex-nowrap">
+      <span class="inline-flex h-5 shrink-0 items-center gap-1 rounded-full border border-line bg-card px-1.5 text-xs text-fg"><span class="relative size-3 rounded-full bg-[conic-gradient(var(--accent)_60%,var(--surface-2)_0)]" aria-hidden="true"></span><span class="font-mono">6/10</span><span class="sr-only">Kind-Items fertig</span></span>
+      
+      
+      <span class="inline-flex h-5 shrink-0 items-center gap-1 rounded-full border border-line bg-card px-1.5 text-xs text-fg text-muted"><svg class="size-3 shrink-0" aria-hidden="true"><use href="#i-calendar"/></svg><span class="font-mono"><span class="sr-only">Fällig </span>15.11.</span></span>
+    </span>
+    <span class="col-start-3 row-start-1 md:order-last"><span class="inline-grid size-5 shrink-0 place-items-center rounded-full border border-dashed border-line-strong text-muted" role="img" aria-label="Kein Assignee"><svg class="size-3 shrink-0" aria-hidden="true"><use href="#i-user-round"/></svg></span></span>
+  </a>
+</li>
+<li class="relative">
+  <span aria-hidden="true" class="absolute bottom-0 left-7 top-0 border-l border-line"></span><span aria-hidden="true" class="absolute left-7 top-1/2 w-3 border-t border-line"></span>
+  <a href="#" class="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b border-line py-2 pr-4 transition-colors duration-150 ease-out hover:bg-hover focus-visible:-outline-offset-2 md:flex md:h-11 md:py-0 pl-12">
+    <span class="flex items-center gap-2">
+      <svg class="size-4 text-pr-high shrink-0" aria-hidden="true"><use href="#i-signal-high"/></svg><span class="sr-only">Priorität High</span>
+      <span class="w-14 font-mono text-xs text-muted" translate="no">WEB-42</span>
+      <svg class="size-4 text-st-started shrink-0" aria-hidden="true"><use href="#i-contrast--fill2"/></svg><span class="sr-only">In Progress</span>
+    </span>
+    <span class="flex min-w-0 items-center gap-2 md:flex-1"><svg class="size-3.5 text-ty-task shrink-0" aria-hidden="true"><use href="#i-square-check"/></svg><span class="sr-only">Task</span><span class="text-sm font-medium text-fg md:truncate">Startseite: Hero und Teaser bauen</span></span>
+    <span class="col-span-3 row-start-2 flex flex-wrap items-center gap-1.5 md:ml-auto md:flex-nowrap">
+      
+      
+      
+      <span class="inline-flex h-5 shrink-0 items-center gap-1 rounded-full border border-line bg-card px-1.5 text-xs text-fg text-muted"><svg class="size-3 shrink-0" aria-hidden="true"><use href="#i-calendar"/></svg><span class="font-mono"><span class="sr-only">Fällig </span>30.10.</span></span>
+    </span>
+    <span class="col-start-3 row-start-1 md:order-last"><span class="inline-grid size-5 text-2xs shrink-0 place-items-center rounded-full bg-tint-mint font-semibold tracking-[-0.02em] text-tint-ink " role="img" aria-label="Ida Brenner">IB</span></span>
+  </a>
+</li>
+<li class="relative">
+  <span aria-hidden="true" class="absolute bottom-0 left-7 top-0 border-l border-line h-1/2"></span><span aria-hidden="true" class="absolute left-7 top-1/2 w-3 border-t border-line"></span>
+  <a href="#" class="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b border-line py-2 pr-4 transition-colors duration-150 ease-out hover:bg-hover focus-visible:-outline-offset-2 md:flex md:h-11 md:py-0 pl-12">
+    <span class="flex items-center gap-2">
+      <svg class="size-4 text-pr-high shrink-0" aria-hidden="true"><use href="#i-signal-high"/></svg><span class="sr-only">Priorität High</span>
+      <span class="w-14 font-mono text-xs text-muted" translate="no">WEB-48</span>
+      <svg class="size-4 text-st-unstarted shrink-0" aria-hidden="true"><use href="#i-circle"/></svg><span class="sr-only">Todo</span>
+    </span>
+    <span class="flex min-w-0 items-center gap-2 md:flex-1"><svg class="size-3.5 text-ty-task shrink-0" aria-hidden="true"><use href="#i-square-check"/></svg><span class="sr-only">Task</span><span class="text-sm font-medium text-fg md:truncate">Navigation für Mobilgeräte überarbeiten</span></span>
+    <span class="col-span-3 row-start-2 flex flex-wrap items-center gap-1.5 md:ml-auto md:flex-nowrap">
+      
+      <span class="inline-flex h-5 shrink-0 items-center gap-1 rounded-full border border-line bg-card px-1.5 text-xs text-fg"><span class="size-1.5 shrink-0 rounded-full bg-label-sky" aria-hidden="true"></span>UX</span>
+      
+      
+    </span>
+    <span class="col-start-3 row-start-1 md:order-last"><span class="inline-grid size-5 text-2xs shrink-0 place-items-center rounded-full bg-tint-peach font-semibold tracking-[-0.02em] text-tint-ink " role="img" aria-label="Lene Vogt">LV</span></span>
+  </a>
+</li>
+<li class="relative">
+  
+  <a href="#" class="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b border-line py-2 pr-4 transition-colors duration-150 ease-out hover:bg-hover focus-visible:-outline-offset-2 md:flex md:h-11 md:py-0 pl-4">
+    <span class="flex items-center gap-2">
+      <svg class="size-4 text-pr-urgent shrink-0" aria-hidden="true"><use href="#i-circle-alert"/></svg><span class="sr-only">Priorität Urgent</span>
+      <span class="w-14 font-mono text-xs text-muted" translate="no">WEB-47</span>
+      <svg class="size-4 text-st-started shrink-0" aria-hidden="true"><use href="#i-contrast--fill2"/></svg><span class="sr-only">In Progress</span>
+    </span>
+    <span class="flex min-w-0 items-center gap-2 md:flex-1"><svg class="size-3.5 text-ty-bug shrink-0" aria-hidden="true"><use href="#i-bug"/></svg><span class="sr-only">Bug</span><span class="text-sm font-medium text-fg md:truncate">Kontaktformular sendet doppelt</span></span>
+    <span class="col-span-3 row-start-2 flex flex-wrap items-center gap-1.5 md:ml-auto md:flex-nowrap">
+      
+      <span class="inline-flex h-5 shrink-0 items-center gap-1 rounded-full border border-line bg-card px-1.5 text-xs text-fg"><span class="size-1.5 shrink-0 rounded-full bg-label-peach" aria-hidden="true"></span>Formulare</span><span class="inline-flex h-5 shrink-0 items-center gap-1 rounded-full border border-line bg-card px-1.5 text-xs text-fg"><span class="size-1.5 shrink-0 rounded-full bg-label-rose" aria-hidden="true"></span>Produktion</span>
+      <span class="inline-flex h-5 items-center gap-1 rounded-full bg-danger-soft px-1.5 text-xs font-medium text-danger-text"><svg class="size-3 shrink-0" aria-hidden="true"><use href="#i-ban"/></svg>blockiert</span>
+      <span class="inline-flex h-5 shrink-0 items-center gap-1 rounded-full border border-line bg-card px-1.5 text-xs text-fg text-muted"><svg class="size-3 shrink-0" aria-hidden="true"><use href="#i-calendar"/></svg><span class="font-mono"><span class="sr-only">Fällig </span>31.10.</span></span>
+    </span>
+    <span class="col-start-3 row-start-1 md:order-last"><span class="inline-grid size-5 text-2xs shrink-0 place-items-center rounded-full bg-tint-sky font-semibold tracking-[-0.02em] text-tint-ink " role="img" aria-label="Jonas Feld">JF</span></span>
+  </a>
+</li>
+  </ul>
+</div>
+</div>
+          
+<div class="overflow-hidden rounded-panel border border-line bg-surface shadow-elev-1">
+  <div class="flex h-12 items-center gap-3 border-b border-line px-4">
+    <svg class="size-4 text-muted shrink-0" aria-hidden="true"><use href="#i-chart-gantt"/></svg><h3 class="text-sm font-semibold text-fg">Timeline</h3><span class="hidden text-sm text-muted sm:inline">Epics, gruppiert nach Projekt</span>
+    <div class="ml-auto flex items-center gap-2">
+      <button type="button" class="inline-flex h-8 shrink-0 items-center gap-2 rounded-control px-3 text-sm font-medium transition-colors duration-150 ease-out relative after:absolute after:inset-x-0 after:-inset-y-1.5 md:after:content-none border border-line-strong bg-card text-fg shadow-elev-1 hover:border-muted hidden sm:inline-flex" >Heute</button>
+      
+<div role="group" aria-label="Zoom" data-toggle-group class="inline-flex h-8 shrink-0 items-center gap-0.5 rounded-control border border-line bg-surface-2 p-0.5 ">
+  <button type="button" aria-pressed="false" class="relative after:absolute after:inset-x-0 after:-inset-y-2 md:after:content-none inline-flex h-full items-center gap-1.5 rounded-xs px-2 text-xs font-medium text-muted transition-colors duration-150 ease-out hover:text-fg aria-pressed:bg-card aria-pressed:text-fg aria-pressed:shadow-elev-1">Woche</button>
+  <button type="button" aria-pressed="true" class="relative after:absolute after:inset-x-0 after:-inset-y-2 md:after:content-none inline-flex h-full items-center gap-1.5 rounded-xs px-2 text-xs font-medium text-muted transition-colors duration-150 ease-out hover:text-fg aria-pressed:bg-card aria-pressed:text-fg aria-pressed:shadow-elev-1">Monat</button>
+  <button type="button" aria-pressed="false" class="relative after:absolute after:inset-x-0 after:-inset-y-2 md:after:content-none inline-flex h-full items-center gap-1.5 rounded-xs px-2 text-xs font-medium text-muted transition-colors duration-150 ease-out hover:text-fg aria-pressed:bg-card aria-pressed:text-fg aria-pressed:shadow-elev-1">Quartal</button>
+</div>
+    </div>
+  </div>
+  <div class="overflow-x-auto">
+    <div class="relative min-w-[880px]">
+      <div class="grid grid-cols-[240px_minmax(0,1fr)] border-b border-line">
+        <div class="flex h-10 items-center px-4 text-xs font-medium text-muted">Epic</div>
+        <div class="relative h-10">
+          <span class="absolute top-0 flex h-full items-center border-l border-line pl-2 text-xs text-muted" style="left:0.00%">September</span>
+          <span class="absolute top-0 flex h-full items-center border-l border-line pl-2 text-xs text-muted" style="left:24.59%">Oktober</span>
+          <span class="absolute top-0 flex h-full items-center border-l border-line pl-2 text-xs text-muted" style="left:50.00%">November</span>
+          <span class="absolute top-0 flex h-full items-center border-l border-line pl-2 text-xs text-muted" style="left:74.59%">Dezember</span>
+        </div>
+      </div>
+      <div aria-hidden="true" class="pointer-events-none absolute inset-y-0 left-[240px] right-0">
+        <span class="absolute inset-y-0 w-0.5 -translate-x-1/2 bg-accent" style="left:47.13%"></span>
+      </div>
+      
+      <div class="grid grid-cols-[240px_minmax(0,1fr)] border-b border-line last:border-b-0">
+        <div class="flex min-w-0 flex-col justify-center gap-0.5 px-4 py-3">
+          <span class="flex items-center gap-1.5 text-xs text-muted"><span class="inline-grid size-4 shrink-0 place-items-center rounded-xs bg-tint-sky text-2xs font-semibold text-tint-ink" aria-hidden="true">W</span>Website-Relaunch</span>
+          <span class="flex min-w-0 items-center gap-1.5 text-sm"><svg class="size-3.5 text-ty-epic shrink-0" aria-hidden="true"><use href="#i-zap"/></svg><span class="font-mono text-xs text-muted" translate="no">WEB-30</span><span class="truncate font-medium text-fg">Relaunch Phase 1</span></span>
+        </div>
+        <div class="relative h-16">
+          <span aria-hidden="true" class="absolute inset-y-0 border-l border-line" style="left:24.59%"></span><span aria-hidden="true" class="absolute inset-y-0 border-l border-line" style="left:50.00%"></span><span aria-hidden="true" class="absolute inset-y-0 border-l border-line" style="left:74.59%"></span>
+          <a href="#" class="absolute top-4 flex h-8 items-center rounded-control border border-line bg-card shadow-elev-1 transition-shadow duration-150 ease-out after:absolute after:inset-x-0 after:-inset-y-1.5 hover:shadow-elev-2 md:after:content-none" style="left:24.59%;width:37.70%" aria-label="WEB-30 Relaunch Phase 1, 01.10.–15.11., 60 Prozent fertig">
+            <span aria-hidden="true" class="absolute inset-0 overflow-hidden rounded-control"><span class="absolute inset-y-0 left-0 bg-tint-sky" style="width:60%"></span><span class="absolute bottom-0 left-0 h-0.5 bg-label-sky" style="width:60%"></span></span>
+            <span class="relative flex w-full items-center gap-2 px-3 text-xs"><span class="font-mono text-muted">01.10.–15.11.</span><span class="ml-auto font-mono font-medium text-fg">60&nbsp;%</span></span>
+          </a>
+        </div>
+      </div>
+      <div class="grid grid-cols-[240px_minmax(0,1fr)] border-b border-line last:border-b-0">
+        <div class="flex min-w-0 flex-col justify-center gap-0.5 px-4 py-3">
+          <span class="flex items-center gap-1.5 text-xs text-muted"><span class="inline-grid size-4 shrink-0 place-items-center rounded-xs bg-tint-mint text-2xs font-semibold text-tint-ink" aria-hidden="true">K</span>Kunden-App</span>
+          <span class="flex min-w-0 items-center gap-1.5 text-sm"><svg class="size-3.5 text-ty-epic shrink-0" aria-hidden="true"><use href="#i-zap"/></svg><span class="font-mono text-xs text-muted" translate="no">APP-5</span><span class="truncate font-medium text-fg">Kunden-App 2.0 Beta</span></span>
+        </div>
+        <div class="relative h-16">
+          <span aria-hidden="true" class="absolute inset-y-0 border-l border-line" style="left:24.59%"></span><span aria-hidden="true" class="absolute inset-y-0 border-l border-line" style="left:50.00%"></span><span aria-hidden="true" class="absolute inset-y-0 border-l border-line" style="left:74.59%"></span>
+          <a href="#" class="absolute top-4 flex h-8 items-center rounded-control border border-line bg-card shadow-elev-1 transition-shadow duration-150 ease-out after:absolute after:inset-x-0 after:-inset-y-1.5 hover:shadow-elev-2 md:after:content-none" style="left:40.16%;width:50.82%" aria-label="APP-5 Kunden-App 2.0 Beta, 20.10.–20.12., 25 Prozent fertig">
+            <span aria-hidden="true" class="absolute inset-0 overflow-hidden rounded-control"><span class="absolute inset-y-0 left-0 bg-tint-mint" style="width:25%"></span><span class="absolute bottom-0 left-0 h-0.5 bg-label-mint" style="width:25%"></span></span>
+            <span class="relative flex w-full items-center gap-2 px-3 text-xs"><span class="font-mono text-muted">20.10.–20.12.</span><span class="ml-auto font-mono font-medium text-fg">25&nbsp;%</span></span>
+          </a>
+        </div>
+      </div>
+      <div class="grid grid-cols-[240px_minmax(0,1fr)] border-b border-line last:border-b-0">
+        <div class="flex min-w-0 flex-col justify-center gap-0.5 px-4 py-3">
+          <span class="flex items-center gap-1.5 text-xs text-muted"><span class="inline-grid size-4 shrink-0 place-items-center rounded-xs bg-tint-peach text-2xs font-semibold text-tint-ink" aria-hidden="true">I</span>Infrastruktur</span>
+          <span class="flex min-w-0 items-center gap-1.5 text-sm"><svg class="size-3.5 text-ty-epic shrink-0" aria-hidden="true"><use href="#i-zap"/></svg><span class="font-mono text-xs text-muted" translate="no">OPS-3</span><span class="truncate font-medium text-fg">Server-Migration</span></span>
+        </div>
+        <div class="relative h-16">
+          <span aria-hidden="true" class="absolute inset-y-0 border-l border-line" style="left:24.59%"></span><span aria-hidden="true" class="absolute inset-y-0 border-l border-line" style="left:50.00%"></span><span aria-hidden="true" class="absolute inset-y-0 border-l border-line" style="left:74.59%"></span>
+          <a href="#" class="absolute top-4 flex h-8 items-center rounded-control border border-line bg-card shadow-elev-1 transition-shadow duration-150 ease-out after:absolute after:inset-x-0 after:-inset-y-1.5 hover:shadow-elev-2 md:after:content-none" style="left:0.00%;width:50.00%" aria-label="OPS-3 Server-Migration, 01.09.–31.10., 90 Prozent fertig">
+            <span aria-hidden="true" class="absolute inset-0 overflow-hidden rounded-control"><span class="absolute inset-y-0 left-0 bg-tint-peach" style="width:90%"></span><span class="absolute bottom-0 left-0 h-0.5 bg-label-peach" style="width:90%"></span></span>
+            <span class="relative flex w-full items-center gap-2 px-3 text-xs"><span class="font-mono text-muted">01.09.–31.10.</span><span class="ml-auto font-mono font-medium text-fg">90&nbsp;%</span></span>
+          </a>
+        </div>
+      </div>
+      <div class="pointer-events-none absolute inset-y-0 left-[240px] right-0">
+        <span class="absolute top-7 -translate-x-1/2 whitespace-nowrap rounded-full bg-accent px-2 py-0.5 font-mono text-2xs font-medium text-accent-fg shadow-elev-1" style="left:47.13%">Heute 28.10.</span>
+      </div>
+    </div>
+  </div>
+</div>
+        </div>
+      </section>
+
+      
+<section id="tokens" aria-labelledby="tokens-title" class="mt-24 scroll-mt-6">
+  <h2 id="tokens-title" class="text-balance text-xl font-semibold">Tokens</h2>
+  <p class="mt-2 max-w-[65ch] text-pretty text-base text-muted">Alle Farben sind CSS-Variablen in OKLCH, mit denselben Namen in Hell und Dunkel. Glas gibt es nur für schwebende Flächen. Kontraste sind nach WCAG AA geprüft, auch für Text auf Glas über jedem Aurora-Ton.</p>
+  <div class="mt-8 grid grid-cols-1 gap-4 lg:grid-cols-2">
+    
+<div data-theme="light" class="overflow-hidden rounded-panel border border-line bg-bg text-fg shadow-elev-1">
+  <div class="relative h-36 overflow-hidden border-b border-line bg-aurora p-4">
+    <div aria-hidden="true" class="absolute bottom-4 left-4 w-56 rounded-card border border-line bg-card p-3 shadow-elev-1">
+      <span class="flex items-center gap-1.5"><svg class="size-3.5 text-ty-bug shrink-0" aria-hidden="true"><use href="#i-bug"/></svg><span class="font-mono text-xs text-muted">WEB-47</span></span>
+      <span class="mt-1 block text-sm font-medium">Kontaktformular sendet doppelt</span>
+    </div>
+    <div class="absolute right-4 top-4 w-60 rounded-card p-3 border border-glass-line bg-glass shadow-glass-2 backdrop-blur-glass backdrop-saturate-150">
+      <p class="text-sm font-semibold">Hell</p>
+      <p class="mt-1 text-xs text-muted">Milchglas: Weiß 64&nbsp;%, Blur 20&nbsp;px</p>
+    </div>
+  </div>
+  <ul class="grid grid-cols-1 gap-x-6 gap-y-3 p-4 sm:grid-cols-2"><li class="flex min-w-0 items-center gap-3"><span class="size-10 shrink-0 rounded-control border border-line bg-[var(--bg)]"></span><span class="min-w-0"><span class="block text-sm font-medium text-fg">Seite</span><span class="block truncate font-mono text-2xs text-muted" translate="no">--bg: oklch(0.972 0.006 245)</span></span></li><li class="flex min-w-0 items-center gap-3"><span class="size-10 shrink-0 rounded-control border border-line bg-[var(--surface)]"></span><span class="min-w-0"><span class="block text-sm font-medium text-fg">Ruhige Fläche</span><span class="block truncate font-mono text-2xs text-muted" translate="no">--surface: oklch(0.993 0.003 245)</span></span></li><li class="flex min-w-0 items-center gap-3"><span class="relative size-10 shrink-0 overflow-hidden rounded-control border border-line bg-bg bg-aurora"><span class="absolute inset-1.5 rounded-xs border border-glass-line bg-glass shadow-glass-1 backdrop-blur-glass"></span></span><span class="min-w-0"><span class="block text-sm font-medium text-fg">Milchglas</span><span class="block truncate font-mono text-2xs text-muted" translate="no">--glass: oklch(0.99 0.004 245 / 0.64)</span></span></li><li class="flex min-w-0 items-center gap-3"><span class="size-10 shrink-0 rounded-control border border-line bg-[var(--text)]"></span><span class="min-w-0"><span class="block text-sm font-medium text-fg">Text</span><span class="block truncate font-mono text-2xs text-muted" translate="no">--text: oklch(0.25 0.025 255)</span></span></li><li class="flex min-w-0 items-center gap-3"><span class="size-10 shrink-0 rounded-control border border-line bg-[var(--text-muted)]"></span><span class="min-w-0"><span class="block text-sm font-medium text-fg">Text gedämpft</span><span class="block truncate font-mono text-2xs text-muted" translate="no">--text-muted: oklch(0.48 0.022 255)</span></span></li><li class="flex min-w-0 items-center gap-3"><span class="size-10 shrink-0 rounded-control border border-line bg-[var(--border)]"></span><span class="min-w-0"><span class="block text-sm font-medium text-fg">Linien</span><span class="block truncate font-mono text-2xs text-muted" translate="no">--border: oklch(0.9 0.008 250)</span></span></li><li class="flex min-w-0 items-center gap-3"><span class="size-10 shrink-0 rounded-control border border-line bg-[var(--accent)]"></span><span class="min-w-0"><span class="block text-sm font-medium text-fg">Akzent Petrol</span><span class="block truncate font-mono text-2xs text-muted" translate="no">--accent: oklch(0.5 0.085 220)</span></span></li></ul>
+</div>
+    
+<div data-theme="dark" class="overflow-hidden rounded-panel border border-line bg-bg text-fg shadow-elev-1">
+  <div class="relative h-36 overflow-hidden border-b border-line bg-aurora p-4">
+    <div aria-hidden="true" class="absolute bottom-4 left-4 w-56 rounded-card border border-line bg-card p-3 shadow-elev-1">
+      <span class="flex items-center gap-1.5"><svg class="size-3.5 text-ty-bug shrink-0" aria-hidden="true"><use href="#i-bug"/></svg><span class="font-mono text-xs text-muted">WEB-47</span></span>
+      <span class="mt-1 block text-sm font-medium">Kontaktformular sendet doppelt</span>
+    </div>
+    <div class="absolute right-4 top-4 w-60 rounded-card p-3 border border-glass-line bg-glass shadow-glass-2 backdrop-blur-glass backdrop-saturate-150">
+      <p class="text-sm font-semibold">Dunkel</p>
+      <p class="mt-1 text-xs text-muted">Rauchglas: Tinte 60&nbsp;%, Blur 20&nbsp;px</p>
+    </div>
+  </div>
+  <ul class="grid grid-cols-1 gap-x-6 gap-y-3 p-4 sm:grid-cols-2"><li class="flex min-w-0 items-center gap-3"><span class="size-10 shrink-0 rounded-control border border-line bg-[var(--bg)]"></span><span class="min-w-0"><span class="block text-sm font-medium text-fg">Seite</span><span class="block truncate font-mono text-2xs text-muted" translate="no">--bg: oklch(0.19 0.018 252)</span></span></li><li class="flex min-w-0 items-center gap-3"><span class="size-10 shrink-0 rounded-control border border-line bg-[var(--surface)]"></span><span class="min-w-0"><span class="block text-sm font-medium text-fg">Ruhige Fläche</span><span class="block truncate font-mono text-2xs text-muted" translate="no">--surface: oklch(0.225 0.018 252)</span></span></li><li class="flex min-w-0 items-center gap-3"><span class="relative size-10 shrink-0 overflow-hidden rounded-control border border-line bg-bg bg-aurora"><span class="absolute inset-1.5 rounded-xs border border-glass-line bg-glass shadow-glass-1 backdrop-blur-glass"></span></span><span class="min-w-0"><span class="block text-sm font-medium text-fg">Milchglas</span><span class="block truncate font-mono text-2xs text-muted" translate="no">--glass: oklch(0.22 0.02 252 / 0.6)</span></span></li><li class="flex min-w-0 items-center gap-3"><span class="size-10 shrink-0 rounded-control border border-line bg-[var(--text)]"></span><span class="min-w-0"><span class="block text-sm font-medium text-fg">Text</span><span class="block truncate font-mono text-2xs text-muted" translate="no">--text: oklch(0.94 0.008 250)</span></span></li><li class="flex min-w-0 items-center gap-3"><span class="size-10 shrink-0 rounded-control border border-line bg-[var(--text-muted)]"></span><span class="min-w-0"><span class="block text-sm font-medium text-fg">Text gedämpft</span><span class="block truncate font-mono text-2xs text-muted" translate="no">--text-muted: oklch(0.74 0.015 250)</span></span></li><li class="flex min-w-0 items-center gap-3"><span class="size-10 shrink-0 rounded-control border border-line bg-[var(--border)]"></span><span class="min-w-0"><span class="block text-sm font-medium text-fg">Linien</span><span class="block truncate font-mono text-2xs text-muted" translate="no">--border: oklch(0.95 0.01 250 / 0.1)</span></span></li><li class="flex min-w-0 items-center gap-3"><span class="size-10 shrink-0 rounded-control border border-line bg-[var(--accent)]"></span><span class="min-w-0"><span class="block text-sm font-medium text-fg">Akzent Petrol</span><span class="block truncate font-mono text-2xs text-muted" translate="no">--accent: oklch(0.72 0.09 210)</span></span></li></ul>
+</div>
+  </div>
+  <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+    
+<div class="flex flex-col gap-4 rounded-card border border-line bg-surface p-5 shadow-elev-1">
+  <h3 class="text-sm font-semibold text-fg">Status-Kategorien</h3>
+  <ul class="flex flex-col gap-2"><li class="flex min-w-0 items-center gap-3"><span class="inline-grid size-7 shrink-0 place-items-center rounded-control border border-line bg-card"><svg class="size-4 text-st-backlog shrink-0" aria-hidden="true"><use href="#i-circle-dashed"/></svg></span><span class="min-w-0 flex-1"><span class="block text-sm font-medium text-fg">Backlog</span><span class="block truncate text-xs text-muted">Status Backlog</span></span><span class="hidden shrink-0 font-mono text-2xs text-muted sm:block" translate="no">--st-backlog</span></li><li class="flex min-w-0 items-center gap-3"><span class="inline-grid size-7 shrink-0 place-items-center rounded-control border border-line bg-card"><svg class="size-4 text-st-unstarted shrink-0" aria-hidden="true"><use href="#i-circle"/></svg></span><span class="min-w-0 flex-1"><span class="block text-sm font-medium text-fg">Unstarted</span><span class="block truncate text-xs text-muted">Status Todo</span></span><span class="hidden shrink-0 font-mono text-2xs text-muted sm:block" translate="no">--st-unstarted</span></li><li class="flex min-w-0 items-center gap-3"><span class="inline-grid size-7 shrink-0 place-items-center rounded-control border border-line bg-card"><svg class="size-4 text-st-started shrink-0" aria-hidden="true"><use href="#i-contrast--fill2"/></svg></span><span class="min-w-0 flex-1"><span class="block text-sm font-medium text-fg">Started</span><span class="block truncate text-xs text-muted">In Progress und Pending (Pause)</span></span><span class="hidden shrink-0 font-mono text-2xs text-muted sm:block" translate="no">--st-started</span></li><li class="flex min-w-0 items-center gap-3"><span class="inline-grid size-7 shrink-0 place-items-center rounded-control border border-line bg-card"><svg class="size-4 text-st-completed shrink-0" aria-hidden="true"><use href="#i-circle-check"/></svg></span><span class="min-w-0 flex-1"><span class="block text-sm font-medium text-fg">Completed</span><span class="block truncate text-xs text-muted">Status Done</span></span><span class="hidden shrink-0 font-mono text-2xs text-muted sm:block" translate="no">--st-completed</span></li><li class="flex min-w-0 items-center gap-3"><span class="inline-grid size-7 shrink-0 place-items-center rounded-control border border-line bg-card"><svg class="size-4 text-st-canceled shrink-0" aria-hidden="true"><use href="#i-circle-x"/></svg></span><span class="min-w-0 flex-1"><span class="block text-sm font-medium text-fg">Canceled</span><span class="block truncate text-xs text-muted">Status Cancelled</span></span><span class="hidden shrink-0 font-mono text-2xs text-muted sm:block" translate="no">--st-canceled</span></li></ul>
+</div>
+    
+<div class="flex flex-col gap-4 rounded-card border border-line bg-surface p-5 shadow-elev-1">
+  <h3 class="text-sm font-semibold text-fg">Prioritäten</h3>
+  <ul class="flex flex-col gap-2"><li class="flex min-w-0 items-center gap-3"><span class="inline-grid size-7 shrink-0 place-items-center rounded-control border border-line bg-card"><svg class="size-4 text-pr-urgent shrink-0" aria-hidden="true"><use href="#i-circle-alert"/></svg></span><span class="min-w-0 flex-1"><span class="block text-sm font-medium text-fg">Urgent</span><span class="block truncate text-xs text-muted">Rot, sofort sichtbar</span></span><span class="hidden shrink-0 font-mono text-2xs text-muted sm:block" translate="no">--pr-urgent</span></li><li class="flex min-w-0 items-center gap-3"><span class="inline-grid size-7 shrink-0 place-items-center rounded-control border border-line bg-card"><svg class="size-4 text-pr-high shrink-0" aria-hidden="true"><use href="#i-signal-high"/></svg></span><span class="min-w-0 flex-1"><span class="block text-sm font-medium text-fg">High</span><span class="block truncate text-xs text-muted">Orange</span></span><span class="hidden shrink-0 font-mono text-2xs text-muted sm:block" translate="no">--pr-high</span></li><li class="flex min-w-0 items-center gap-3"><span class="inline-grid size-7 shrink-0 place-items-center rounded-control border border-line bg-card"><svg class="size-4 text-pr-medium shrink-0" aria-hidden="true"><use href="#i-signal-medium"/></svg></span><span class="min-w-0 flex-1"><span class="block text-sm font-medium text-fg">Medium</span><span class="block truncate text-xs text-muted">Tinte, zwei Balken</span></span><span class="hidden shrink-0 font-mono text-2xs text-muted sm:block" translate="no">--pr-medium</span></li><li class="flex min-w-0 items-center gap-3"><span class="inline-grid size-7 shrink-0 place-items-center rounded-control border border-line bg-card"><svg class="size-4 text-pr-low shrink-0" aria-hidden="true"><use href="#i-signal-low"/></svg></span><span class="min-w-0 flex-1"><span class="block text-sm font-medium text-fg">Low</span><span class="block truncate text-xs text-muted">Grau, ein Balken</span></span><span class="hidden shrink-0 font-mono text-2xs text-muted sm:block" translate="no">--pr-low</span></li><li class="flex min-w-0 items-center gap-3"><span class="inline-grid size-7 shrink-0 place-items-center rounded-control border border-line bg-card"><svg class="size-4 text-pr-none shrink-0" aria-hidden="true"><use href="#i-minus"/></svg></span><span class="min-w-0 flex-1"><span class="block text-sm font-medium text-fg">None</span><span class="block truncate text-xs text-muted">Standard, nur ein Strich</span></span><span class="hidden shrink-0 font-mono text-2xs text-muted sm:block" translate="no">--pr-none</span></li></ul>
+</div>
+    
+<div class="flex flex-col gap-4 rounded-card border border-line bg-surface p-5 shadow-elev-1">
+  <h3 class="text-sm font-semibold text-fg">Typen und Labels</h3>
+  <ul class="flex flex-col gap-2"><li class="flex min-w-0 items-center gap-3"><span class="inline-grid size-7 shrink-0 place-items-center rounded-control border border-line bg-card"><svg class="size-4 text-ty-task shrink-0" aria-hidden="true"><use href="#i-square-check"/></svg></span><span class="min-w-0 flex-1"><span class="block text-sm font-medium text-fg">Task</span><span class="block truncate text-xs text-muted">Lucide square-check</span></span><span class="hidden shrink-0 font-mono text-2xs text-muted sm:block" translate="no">--ty-task</span></li><li class="flex min-w-0 items-center gap-3"><span class="inline-grid size-7 shrink-0 place-items-center rounded-control border border-line bg-card"><svg class="size-4 text-ty-bug shrink-0" aria-hidden="true"><use href="#i-bug"/></svg></span><span class="min-w-0 flex-1"><span class="block text-sm font-medium text-fg">Bug</span><span class="block truncate text-xs text-muted">Lucide bug</span></span><span class="hidden shrink-0 font-mono text-2xs text-muted sm:block" translate="no">--ty-bug</span></li><li class="flex min-w-0 items-center gap-3"><span class="inline-grid size-7 shrink-0 place-items-center rounded-control border border-line bg-card"><svg class="size-4 text-ty-epic shrink-0" aria-hidden="true"><use href="#i-zap"/></svg></span><span class="min-w-0 flex-1"><span class="block text-sm font-medium text-fg">Epic</span><span class="block truncate text-xs text-muted">Lucide zap, erscheint in der Timeline</span></span><span class="hidden shrink-0 font-mono text-2xs text-muted sm:block" translate="no">--ty-epic</span></li><li class="flex min-w-0 items-center gap-3"><span class="inline-grid size-7 shrink-0 place-items-center rounded-control border border-line bg-card"><span class="flex gap-0.5"><span class="size-1.5 shrink-0 rounded-full bg-label-sky" aria-hidden="true"></span><span class="size-1.5 shrink-0 rounded-full bg-label-peach" aria-hidden="true"></span><span class="size-1.5 shrink-0 rounded-full bg-label-rose" aria-hidden="true"></span><span class="size-1.5 shrink-0 rounded-full bg-label-mint" aria-hidden="true"></span></span></span><span class="min-w-0 flex-1"><span class="block text-sm font-medium text-fg">Labels</span><span class="block truncate text-xs text-muted">Himmel, Pfirsich, Rose, Mint</span></span><span class="hidden shrink-0 font-mono text-2xs text-muted sm:block" translate="no">--label-*</span></li><li class="flex min-w-0 items-center gap-3"><span class="inline-grid size-7 shrink-0 place-items-center rounded-control border border-line bg-card"><span class="flex -space-x-1"><span class="inline-grid size-5 text-2xs shrink-0 place-items-center rounded-full bg-tint-sky font-semibold tracking-[-0.02em] text-tint-ink ring-2 ring-card" role="img" aria-label="Jonas Feld">JF</span><span class="inline-grid size-5 text-2xs shrink-0 place-items-center rounded-full bg-tint-mint font-semibold tracking-[-0.02em] text-tint-ink ring-2 ring-card" role="img" aria-label="Ida Brenner">IB</span></span></span><span class="min-w-0 flex-1"><span class="block text-sm font-medium text-fg">Tönungen</span><span class="block truncate text-xs text-muted">Avatare, Projekte, Timeline</span></span><span class="hidden shrink-0 font-mono text-2xs text-muted sm:block" translate="no">--tint-*</span></li></ul>
+</div>
+  </div>
+  <div class="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+    <div class="flex flex-col gap-4 rounded-card border border-line bg-surface p-5 shadow-elev-1 lg:col-span-2">
+      <h3 class="text-sm font-semibold text-fg">Typo-Skala <span class="font-normal text-muted">Geist und Geist Mono</span></h3>
+      <ul class="flex flex-col">
+        <li class="flex min-w-0 flex-col gap-1 border-t border-line py-3 first:border-t-0 first:pt-0 sm:flex-row sm:items-baseline sm:gap-6"><span class="w-40 shrink-0 font-mono text-2xs text-muted" translate="no">text-2xl 44/48 600</span><span class="min-w-0 truncate text-2xl font-semibold text-fg">Milchglas</span></li>
+        <li class="flex min-w-0 flex-col gap-1 border-t border-line py-3 first:border-t-0 first:pt-0 sm:flex-row sm:items-baseline sm:gap-6"><span class="w-40 shrink-0 font-mono text-2xs text-muted" translate="no">text-xl 28/34 600</span><span class="min-w-0 truncate text-xl font-semibold text-fg">Liste und Timeline</span></li>
+        <li class="flex min-w-0 flex-col gap-1 border-t border-line py-3 first:border-t-0 first:pt-0 sm:flex-row sm:items-baseline sm:gap-6"><span class="w-40 shrink-0 font-mono text-2xs text-muted" translate="no">text-lg 20/28 600</span><span class="min-w-0 truncate text-lg font-semibold text-fg">Kontaktformular sendet doppelt</span></li>
+        <li class="flex min-w-0 flex-col gap-1 border-t border-line py-3 first:border-t-0 first:pt-0 sm:flex-row sm:items-baseline sm:gap-6"><span class="w-40 shrink-0 font-mono text-2xs text-muted" translate="no">text-md 16/24 400</span><span class="min-w-0 truncate text-md text-fg">Kommentar schreiben …</span></li>
+        <li class="flex min-w-0 flex-col gap-1 border-t border-line py-3 first:border-t-0 first:pt-0 sm:flex-row sm:items-baseline sm:gap-6"><span class="w-40 shrink-0 font-mono text-2xs text-muted" translate="no">text-base 14/22 400</span><span class="min-w-0 truncate text-base text-fg">Kann ich reproduzieren, nur unter iOS 18.</span></li>
+        <li class="flex min-w-0 flex-col gap-1 border-t border-line py-3 first:border-t-0 first:pt-0 sm:flex-row sm:items-baseline sm:gap-6"><span class="w-40 shrink-0 font-mono text-2xs text-muted" translate="no">text-sm 13/20 500</span><span class="min-w-0 truncate text-sm font-medium text-fg">Navigation für Mobilgeräte überarbeiten</span></li>
+        <li class="flex min-w-0 flex-col gap-1 border-t border-line py-3 first:border-t-0 first:pt-0 sm:flex-row sm:items-baseline sm:gap-6"><span class="w-40 shrink-0 font-mono text-2xs text-muted" translate="no">text-xs 12/16 500</span><span class="min-w-0 truncate text-xs font-medium text-fg">Aktionen, Items, Seiten</span></li>
+        <li class="flex min-w-0 flex-col gap-1 border-t border-line py-3 first:border-t-0 first:pt-0 sm:flex-row sm:items-baseline sm:gap-6"><span class="w-40 shrink-0 font-mono text-2xs text-muted" translate="no">text-2xs 11/16 Mono 500</span><span class="min-w-0 truncate font-mono text-2xs font-medium text-fg"><span class="inline-flex gap-4"><span>WEB-47</span><span>⌘K</span><span>3,5</span></span></span></li>
+      </ul>
+    </div>
+    <div class="flex flex-col gap-4 rounded-card border border-line bg-surface p-5 shadow-elev-1">
+      <h3 class="text-sm font-semibold text-fg">Radien</h3>
+      <ul class="flex flex-col gap-3">
+        <li class="flex items-center gap-3"><span class="size-10 shrink-0 rounded-xs border border-line-strong bg-card shadow-elev-1"></span><span class="min-w-0"><span class="block font-mono text-xs text-fg">6&nbsp;px</span><span class="block text-xs text-muted">Inline: kbd, Checkbox, Segment, Bot</span></span></li>
+        <li class="flex items-center gap-3"><span class="size-10 shrink-0 rounded-control border border-line-strong bg-card shadow-elev-1"></span><span class="min-w-0"><span class="block font-mono text-xs text-fg">8&nbsp;px</span><span class="block text-xs text-muted">Controls: Buttons, Eingaben, Menüeinträge</span></span></li>
+        <li class="flex items-center gap-3"><span class="size-10 shrink-0 rounded-card border border-line-strong bg-card shadow-elev-1"></span><span class="min-w-0"><span class="block font-mono text-xs text-fg">12&nbsp;px</span><span class="block text-xs text-muted">Karten, Menüs, Toasts</span></span></li>
+        <li class="flex items-center gap-3"><span class="size-10 shrink-0 rounded-panel border border-line-strong bg-card shadow-elev-1"></span><span class="min-w-0"><span class="block font-mono text-xs text-fg">16&nbsp;px</span><span class="block text-xs text-muted">Panels: Seitenleiste, Panel, Palette</span></span></li>
+        <li class="flex items-center gap-3"><span class="size-10 shrink-0 rounded-full border border-line-strong bg-card shadow-elev-1"></span><span class="min-w-0"><span class="block font-mono text-xs text-fg">rund</span><span class="block text-xs text-muted">Avatare, Chips, Badges, Switch</span></span></li>
+      </ul>
+    </div>
+  </div>
+  <div class="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+    <div class="flex flex-col gap-4 rounded-card border border-line bg-surface p-5 shadow-elev-1 lg:col-span-2">
+      <h3 class="text-sm font-semibold text-fg">Elevation und Glas</h3>
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div class="flex flex-col gap-3 rounded-control bg-surface-2 p-4">
+          <div class="flex items-center gap-3 rounded-card bg-card p-3 shadow-elev-1"><span class="font-mono text-xs font-medium text-fg">Stufe 1</span><span class="text-xs text-muted">Karten, Arbeitsfläche, Buttons</span></div>
+          <div class="flex items-center gap-3 rounded-card bg-card p-3 shadow-elev-2"><span class="font-mono text-xs font-medium text-fg">Stufe 2</span><span class="text-xs text-muted">Panel, Menüs, Toasts, Fenster</span></div>
+          <div class="flex items-center gap-3 rounded-card bg-card p-3 shadow-elev-3"><span class="font-mono text-xs font-medium text-fg">Stufe 3</span><span class="text-xs text-muted">Befehlspalette, Dialoge</span></div>
+        </div>
+        <div class="relative overflow-hidden rounded-control border border-line bg-bg bg-aurora min-h-56 p-4">
+          <div aria-hidden="true" class="absolute left-4 top-4 flex flex-col gap-1.5">
+            <span class="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-line bg-card px-2 text-xs font-medium text-fg"><span class="size-1.5 shrink-0 rounded-full bg-label-peach" aria-hidden="true"></span>Formulare</span><span class="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-line bg-card px-2 text-xs font-medium text-fg"><span class="size-1.5 shrink-0 rounded-full bg-label-rose" aria-hidden="true"></span>Produktion</span><span class="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-line bg-card px-2 text-xs font-medium text-fg"><span class="size-1.5 shrink-0 rounded-full bg-label-sky" aria-hidden="true"></span>UX</span>
+          </div>
+          <div class="absolute bottom-4 right-4 w-[min(100%-32px,240px)] rounded-card p-4 border border-glass-line bg-glass shadow-glass-2 backdrop-blur-glass backdrop-saturate-150">
+            <p class="text-sm font-semibold text-fg">Glas-Rezept</p>
+            <ul class="mt-2 flex flex-col gap-1 text-xs text-muted">
+              <li>Blur 20&nbsp;px, Sättigung 150&nbsp;%</li>
+              <li>Hell Weiß 64&nbsp;%, Palette 70&nbsp;%</li>
+              <li>Dunkel Tinte 60&nbsp;%, Palette 66&nbsp;%</li>
+              <li>1&nbsp;px Licht oben innen, Haarlinie außen</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <p class="text-xs text-muted">Glas nur für Seitenleiste, Seitenpanel, Befehlspalette, Menüs und Toasts. Schatten sind blaugrau getönt, nie Schwarz.</p>
+    </div>
+    <div class="flex flex-col gap-4 rounded-card border border-line bg-surface p-5 shadow-elev-1">
+      <h3 class="text-sm font-semibold text-fg">Motion</h3>
+      <dl class="grid grid-cols-[88px_minmax(0,1fr)] gap-x-3 gap-y-2 text-xs">
+        <dt class="font-mono text-fg">150&nbsp;ms</dt><dd class="text-muted">Ease-out für Hover, Fokus, Farben, Schatten</dd>
+        <dt class="font-mono text-fg">8&nbsp;px</dt><dd class="text-muted">Panels gleiten mit Fade herein, Palette von oben</dd>
+        <dt class="font-mono text-fg">Feder</dt><dd class="text-muted">nur beim Ziehen, 480&nbsp;ms, 7,6&nbsp;% Überschwingen</dd>
+        <dt class="font-mono text-fg">Reduziert</dt><dd class="text-muted">ohne Wege, nur Opazität</dd>
+      </dl>
+      <div class="relative overflow-hidden rounded-control border border-line bg-bg bg-aurora h-28">
+        <div id="motion-panel" class="absolute inset-y-3 right-3 w-36 rounded-card p-3 border border-glass-line bg-glass shadow-glass-2 backdrop-blur-glass backdrop-saturate-150"><p class="text-xs font-medium text-fg">Seitenpanel</p><p class="mt-1 font-mono text-2xs text-muted">--dur --ease-out</p></div>
+        <div id="motion-card" class="absolute bottom-3 left-3 w-32 rounded-card border border-line bg-card p-3 shadow-elev-2"><p class="text-xs font-medium text-fg">Karte</p><p class="mt-1 font-mono text-2xs text-muted">--ease-spring</p></div>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <button type="button" class="inline-flex h-8 shrink-0 items-center gap-2 rounded-control px-3 text-sm font-medium transition-colors duration-150 ease-out relative after:absolute after:inset-x-0 after:-inset-y-1.5 md:after:content-none border border-line-strong bg-card text-fg shadow-elev-1 hover:border-muted h-11 md:h-8" data-replay="motion-panel" data-animation="animate-panel-in"><svg class="size-4 shrink-0" aria-hidden="true"><use href="#i-play"/></svg>Panel öffnen</button>
+        <button type="button" class="inline-flex h-8 shrink-0 items-center gap-2 rounded-control px-3 text-sm font-medium transition-colors duration-150 ease-out relative after:absolute after:inset-x-0 after:-inset-y-1.5 md:after:content-none border border-line-strong bg-card text-fg shadow-elev-1 hover:border-muted h-11 md:h-8" data-replay="motion-card" data-animation="animate-drop"><svg class="size-4 shrink-0" aria-hidden="true"><use href="#i-play"/></svg>Karte ablegen</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+      
+<section id="components" aria-labelledby="components-title" class="mt-24 scroll-mt-6">
+  <h2 id="components-title" class="text-balance text-xl font-semibold">Komponenten</h2>
+  <p class="mt-2 max-w-[65ch] text-pretty text-base text-muted">Jede Aktion hat ein Kürzel, Rückgängig ersetzt die Rückfrage, und Glas gibt es nur dort, wo etwas schwebt.</p>
+  <div class="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+    
+<div class="flex flex-col gap-4 rounded-card border border-line bg-surface p-5 shadow-elev-1 ">
+  <h3 class="text-sm font-semibold text-fg">Buttons</h3>
+  <div class="flex flex-wrap items-center gap-2">
+        <button type="button" class="inline-flex h-8 shrink-0 items-center gap-2 rounded-control px-3 text-sm font-medium transition-colors duration-150 ease-out relative after:absolute after:inset-x-0 after:-inset-y-1.5 md:after:content-none bg-accent text-accent-fg shadow-elev-1 hover:bg-accent-hover" >Item anlegen<span class="inline-flex items-center gap-0.5"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs bg-accent-veil px-1 font-mono text-2xs font-medium text-accent-fg">C</kbd></span></button>
+        <button type="button" class="inline-flex h-8 shrink-0 items-center gap-2 rounded-control px-3 text-sm font-medium transition-colors duration-150 ease-out relative after:absolute after:inset-x-0 after:-inset-y-1.5 md:after:content-none border border-line-strong bg-card text-fg shadow-elev-1 hover:border-muted" ><svg class="size-4 shrink-0" aria-hidden="true"><use href="#i-list-filter"/></svg>Filter<span class="inline-flex items-center gap-0.5"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted">/</kbd></span></button>
+        <button type="button" class="inline-flex h-8 shrink-0 items-center gap-2 rounded-control px-3 text-sm font-medium transition-colors duration-150 ease-out relative after:absolute after:inset-x-0 after:-inset-y-1.5 md:after:content-none text-fg hover:bg-hover" >Abbrechen<span class="inline-flex items-center gap-0.5"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted">Esc</kbd></span></button>
+        <button type="button" class="inline-flex h-8 shrink-0 items-center gap-2 rounded-control px-3 text-sm font-medium transition-colors duration-150 ease-out relative after:absolute after:inset-x-0 after:-inset-y-1.5 md:after:content-none bg-danger text-danger-fg shadow-elev-1 hover:bg-danger-hover" ><svg class="size-4 shrink-0" aria-hidden="true"><use href="#i-trash-2"/></svg>Löschen<span class="inline-flex items-center gap-0.5"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs bg-accent-veil px-1 font-mono text-2xs font-medium text-accent-fg"><span aria-hidden="true" class="font-sans text-xs">⌘</span><span class="sr-only">Cmd</span></kbd><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs bg-accent-veil px-1 font-mono text-2xs font-medium text-accent-fg"><span aria-hidden="true" class="font-sans text-xs">⌫</span><span class="sr-only">Backspace</span></kbd></span></button>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <button type="button" class="inline-grid size-7 shrink-0 place-items-center rounded-control text-muted transition-colors duration-150 ease-out hover:bg-hover hover:text-fg relative size-8 border border-line-strong bg-card shadow-elev-1 after:absolute after:-inset-1.5 md:after:content-none" aria-label="Link kopieren"><svg class="size-4 shrink-0" aria-hidden="true"><use href="#i-link"/></svg></button>
+        <button type="button" class="inline-grid size-7 shrink-0 place-items-center rounded-control text-muted transition-colors duration-150 ease-out hover:bg-hover hover:text-fg relative size-8 after:absolute after:-inset-1.5 md:after:content-none" aria-label="Weitere Aktionen"><svg class="size-4 shrink-0" aria-hidden="true"><use href="#i-ellipsis"/></svg></button>
+        <span class="text-xs text-muted">Icon-Buttons mit Namen für Screenreader</span>
+      </div>
+</div>
+    
+<div class="flex flex-col gap-4 rounded-card border border-line bg-surface p-5 shadow-elev-1 ">
+  <h3 class="text-sm font-semibold text-fg">Eingabe</h3>
+  <div class="flex flex-col gap-1.5">
+        <label for="demo-title" class="text-xs font-medium text-fg">Titel</label>
+        <input id="demo-title" name="title" type="text" autocomplete="off" placeholder="z. B. Kontaktformular prüfen …" class="h-11 w-full rounded-control border border-line-strong bg-card px-3 text-md text-fg shadow-elev-1 transition-colors duration-150 ease-out placeholder:text-muted hover:border-muted focus-visible:border-accent md:h-10">
+        <p class="text-xs text-muted">Pflichtfeld, bis 255 Zeichen.</p>
+      </div>
+      <div class="flex flex-col gap-1.5">
+        <label for="demo-effort" class="text-xs font-medium text-fg">Aufwand (h)</label>
+        <input id="demo-effort" name="effort" type="text" inputmode="decimal" autocomplete="off" value="drei" aria-invalid="true" aria-describedby="demo-effort-error" class="h-11 w-full rounded-control border border-danger bg-card px-3 font-mono text-md text-fg shadow-elev-1 transition-colors duration-150 ease-out focus-visible:border-danger md:h-10">
+        <p id="demo-effort-error" class="flex items-center gap-1.5 text-xs font-medium text-danger-text"><svg class="size-3.5 shrink-0" aria-hidden="true"><use href="#i-circle-alert"/></svg>Bitte eine Zahl eingeben, zum Beispiel 3,5.</p>
+      </div>
+      <div class="relative">
+        <label for="demo-search" class="sr-only">In diesem Projekt suchen</label>
+        <svg class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted shrink-0" aria-hidden="true"><use href="#i-search"/></svg>
+        <input id="demo-search" name="q" type="search" autocomplete="off" placeholder="In diesem Projekt suchen …" class="h-11 w-full rounded-control border border-line-strong bg-card pl-10 pr-10 text-md text-fg shadow-elev-1 transition-colors duration-150 ease-out placeholder:text-muted hover:border-muted focus-visible:border-accent md:h-10">
+        <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted">/</kbd></span>
+      </div>
+</div>
+    
+<div class="flex flex-col gap-4 rounded-card border border-line bg-surface p-5 shadow-elev-1 ">
+  <h3 class="text-sm font-semibold text-fg">Offene Auswahl</h3>
+  <div class="relative overflow-hidden rounded-control border border-line bg-bg bg-aurora p-4">
+        <p id="demo-customer-label" class="text-xs font-medium text-fg">Kunde</p>
+        <button type="button" data-disclosure aria-expanded="true" aria-controls="demo-customer" aria-labelledby="demo-customer-label demo-customer-value" class="relative after:absolute after:inset-x-0 after:-inset-y-1.5 md:after:content-none group mt-1.5 flex h-8 w-full items-center gap-2 rounded-control border border-accent bg-card px-3 text-sm text-fg shadow-elev-1 aria-expanded:shadow-[0_0_0_3px_var(--accent-soft)]"><span data-dot class="size-1.5 shrink-0 rounded-full bg-label-sky" aria-hidden="true"></span><span id="demo-customer-value" data-value>Studio Nordlicht</span><svg class="ml-auto size-4 text-muted transition-transform duration-150 ease-out group-aria-expanded:rotate-180 motion-reduce:transition-none shrink-0" aria-hidden="true"><use href="#i-chevron-down"/></svg></button>
+        <ul id="demo-customer" aria-labelledby="demo-customer-label" class="mt-1.5 flex flex-col gap-0.5 rounded-card p-1 border border-glass-line bg-glass shadow-glass-2 backdrop-blur-glass backdrop-saturate-150">
+          <li><button type="button" aria-pressed="true" data-value="Studio Nordlicht" data-color="sky" class="group flex h-11 w-full items-center gap-2 rounded-control px-2 text-left text-sm text-fg transition-colors duration-150 ease-out hover:bg-hover aria-pressed:bg-hover md:h-8"><span class="size-1.5 shrink-0 rounded-full bg-label-sky" aria-hidden="true"></span>Studio Nordlicht<svg class="ml-auto size-4 text-accent-text opacity-0 group-aria-pressed:opacity-100 shrink-0" aria-hidden="true"><use href="#i-check"/></svg></button></li>
+          <li><button type="button" aria-pressed="false" data-value="Hafenkontor" data-color="mint" class="group flex h-11 w-full items-center gap-2 rounded-control px-2 text-left text-sm text-fg transition-colors duration-150 ease-out hover:bg-hover aria-pressed:bg-hover md:h-8"><span class="size-1.5 shrink-0 rounded-full bg-label-mint" aria-hidden="true"></span>Hafenkontor<svg class="ml-auto size-4 text-accent-text opacity-0 group-aria-pressed:opacity-100 shrink-0" aria-hidden="true"><use href="#i-check"/></svg></button></li>
+          <li><button type="button" aria-pressed="false" data-value="Gärtnerei Moos" data-color="peach" class="group flex h-11 w-full items-center gap-2 rounded-control px-2 text-left text-sm text-fg transition-colors duration-150 ease-out hover:bg-hover aria-pressed:bg-hover md:h-8"><span class="size-1.5 shrink-0 rounded-full bg-label-peach" aria-hidden="true"></span>Gärtnerei Moos<svg class="ml-auto size-4 text-accent-text opacity-0 group-aria-pressed:opacity-100 shrink-0" aria-hidden="true"><use href="#i-check"/></svg></button></li>
+        </ul>
+      </div>
+</div>
+    
+<div class="flex flex-col gap-4 rounded-card border border-line bg-surface p-5 shadow-elev-1 ">
+  <h3 class="text-sm font-semibold text-fg">Chips</h3>
+  <div class="flex flex-col gap-3">
+        <div class="flex flex-wrap gap-1.5"><span class="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-line bg-card px-2 text-xs font-medium text-fg"><svg class="size-3.5 text-st-backlog shrink-0" aria-hidden="true"><use href="#i-circle-dashed"/></svg>Backlog</span><span class="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-line bg-card px-2 text-xs font-medium text-fg"><svg class="size-3.5 text-st-unstarted shrink-0" aria-hidden="true"><use href="#i-circle"/></svg>Todo</span><span class="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-line bg-card px-2 text-xs font-medium text-fg"><svg class="size-3.5 text-st-started shrink-0" aria-hidden="true"><use href="#i-contrast--fill2"/></svg>In Progress</span><span class="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-line bg-card px-2 text-xs font-medium text-fg"><svg class="size-3.5 text-st-started shrink-0" aria-hidden="true"><use href="#i-circle-pause"/></svg>Pending</span><span class="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-line bg-card px-2 text-xs font-medium text-fg"><svg class="size-3.5 text-st-completed shrink-0" aria-hidden="true"><use href="#i-circle-check"/></svg>Done</span><span class="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-line bg-card px-2 text-xs font-medium text-fg"><svg class="size-3.5 text-st-canceled shrink-0" aria-hidden="true"><use href="#i-circle-x"/></svg>Cancelled</span></div>
+        <div class="flex flex-wrap gap-1.5"><span class="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-line bg-card px-2 text-xs font-medium text-fg"><svg class="size-3.5 text-pr-urgent shrink-0" aria-hidden="true"><use href="#i-circle-alert"/></svg>Urgent</span><span class="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-line bg-card px-2 text-xs font-medium text-fg"><svg class="size-3.5 text-pr-high shrink-0" aria-hidden="true"><use href="#i-signal-high"/></svg>High</span><span class="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-line bg-card px-2 text-xs font-medium text-fg"><svg class="size-3.5 text-pr-medium shrink-0" aria-hidden="true"><use href="#i-signal-medium"/></svg>Medium</span><span class="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-line bg-card px-2 text-xs font-medium text-fg"><svg class="size-3.5 text-pr-low shrink-0" aria-hidden="true"><use href="#i-signal-low"/></svg>Low</span><span class="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-line bg-card px-2 text-xs font-medium text-fg"><svg class="size-3.5 text-pr-none shrink-0" aria-hidden="true"><use href="#i-minus"/></svg>None</span></div>
+        <div class="flex flex-wrap gap-1.5"><span class="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-line bg-card px-2 text-xs font-medium text-fg"><span class="size-1.5 shrink-0 rounded-full bg-label-sky" aria-hidden="true"></span>UX</span><span class="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-line bg-card px-2 text-xs font-medium text-fg"><span class="size-1.5 shrink-0 rounded-full bg-label-peach" aria-hidden="true"></span>Formulare</span><span class="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-line bg-card px-2 text-xs font-medium text-fg"><span class="size-1.5 shrink-0 rounded-full bg-label-rose" aria-hidden="true"></span>Produktion</span><span class="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-line bg-card px-2 text-xs font-medium text-fg"><svg class="size-3.5 text-ty-task shrink-0" aria-hidden="true"><use href="#i-square-check"/></svg>Task</span><span class="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-line bg-card px-2 text-xs font-medium text-fg"><svg class="size-3.5 text-ty-bug shrink-0" aria-hidden="true"><use href="#i-bug"/></svg>Bug</span><span class="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-line bg-card px-2 text-xs font-medium text-fg"><svg class="size-3.5 text-ty-epic shrink-0" aria-hidden="true"><use href="#i-zap"/></svg>Epic</span></div>
+      </div>
+</div>
+    
+<div class="flex flex-col gap-4 rounded-card border border-line bg-surface p-5 shadow-elev-1 ">
+  <h3 class="text-sm font-semibold text-fg">Avatare</h3>
+  <ul class="flex flex-col gap-2">
+        <li class="flex items-center gap-2 text-sm"><span class="inline-grid size-6 text-2xs shrink-0 place-items-center rounded-full bg-tint-rose font-semibold tracking-[-0.02em] text-tint-ink " role="img" aria-label="Mara Lindqvist">ML</span>Mara Lindqvist</li><li class="flex items-center gap-2 text-sm"><span class="inline-grid size-6 text-2xs shrink-0 place-items-center rounded-full bg-tint-sky font-semibold tracking-[-0.02em] text-tint-ink " role="img" aria-label="Jonas Feld">JF</span>Jonas Feld</li><li class="flex items-center gap-2 text-sm"><span class="inline-grid size-6 text-2xs shrink-0 place-items-center rounded-full bg-tint-mint font-semibold tracking-[-0.02em] text-tint-ink " role="img" aria-label="Ida Brenner">IB</span>Ida Brenner</li>
+        <li class="flex items-center gap-2 text-sm"><span class="inline-grid size-6 shrink-0 place-items-center rounded-xs border border-line bg-accent-soft text-accent-text" role="img" aria-label="Automation, Bot"><svg class="size-3.5 shrink-0" aria-hidden="true"><use href="#i-workflow"/></svg></span>Automation <span class="inline-flex h-4 items-center rounded-xs border border-line px-1 text-2xs font-medium text-muted">Bot</span><span class="text-xs text-muted">Standard-Bot</span></li>
+        <li class="flex items-center gap-2 text-sm"><span class="inline-grid size-6 shrink-0 place-items-center rounded-xs border border-line bg-accent-soft text-accent-text" role="img" aria-label="Kira, Bot"><svg class="size-3.5 shrink-0" aria-hidden="true"><use href="#i-bot"/></svg></span>Kira <span class="inline-flex h-4 items-center rounded-xs border border-line px-1 text-2xs font-medium text-muted">Bot</span><span class="text-xs text-muted">Agent</span></li>
+      </ul>
+      <div class="flex items-center gap-3">
+        <span class="flex -space-x-1.5"><span class="inline-grid size-7 text-2xs shrink-0 place-items-center rounded-full bg-tint-rose font-semibold tracking-[-0.02em] text-tint-ink ring-2 ring-surface" role="img" aria-label="Mara Lindqvist">ML</span><span class="inline-grid size-7 text-2xs shrink-0 place-items-center rounded-full bg-tint-sky font-semibold tracking-[-0.02em] text-tint-ink ring-2 ring-surface" role="img" aria-label="Jonas Feld">JF</span><span class="inline-grid size-7 text-2xs shrink-0 place-items-center rounded-full bg-tint-mint font-semibold tracking-[-0.02em] text-tint-ink ring-2 ring-surface" role="img" aria-label="Ida Brenner">IB</span><span class="inline-grid size-7 text-2xs shrink-0 place-items-center rounded-full bg-tint-sand font-semibold tracking-[-0.02em] text-tint-ink ring-2 ring-surface" role="img" aria-label="Theo Okafor">TO</span><span class="inline-grid size-7 text-2xs shrink-0 place-items-center rounded-full bg-tint-peach font-semibold tracking-[-0.02em] text-tint-ink ring-2 ring-surface" role="img" aria-label="Lene Vogt">LV</span></span>
+        <span class="text-xs text-muted">Personen rund, Bots eckig mit Glyphe</span>
+      </div>
+</div>
+    
+<div class="flex flex-col gap-4 rounded-card border border-line bg-surface p-5 shadow-elev-1 ">
+  <h3 class="text-sm font-semibold text-fg">kbd und Tooltip</h3>
+  <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted">
+        <span class="flex items-center gap-1.5"><span class="inline-flex items-center gap-0.5"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted"><span aria-hidden="true" class="font-sans text-xs">⌘</span><span class="sr-only">Cmd</span></kbd><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted">K</kbd></span>Palette</span>
+        <span class="flex items-center gap-1.5"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted">G</kbd>dann<kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted">I</kbd>Inbox</span>
+        <span class="flex items-center gap-1.5"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted">?</kbd>alle Kürzel</span>
+        <span class="flex items-center gap-1.5"><span class="inline-flex items-center gap-0.5"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted"><span aria-hidden="true" class="font-sans text-xs">⇧</span><span class="sr-only">Shift</span></kbd><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted">D</kbd></span>Start-Date</span>
+        <span class="flex items-center gap-1.5"><span class="inline-flex items-center gap-0.5"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted"><span aria-hidden="true" class="font-sans text-xs">⌘</span><span class="sr-only">Cmd</span></kbd><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted"><span aria-hidden="true" class="font-sans text-xs">⏎</span><span class="sr-only">Enter</span></kbd></span>Senden</span>
+      </div>
+      <div class="flex items-start gap-3 pt-1">
+        <button type="button" class="inline-grid size-7 shrink-0 place-items-center rounded-control text-muted transition-colors duration-150 ease-out hover:bg-hover hover:text-fg relative size-8 border border-line-strong bg-card shadow-elev-1 after:absolute after:-inset-1.5 md:after:content-none" aria-label="Filter" aria-describedby="demo-tooltip"><svg class="size-4 shrink-0" aria-hidden="true"><use href="#i-list-filter"/></svg></button>
+        <div id="demo-tooltip" role="tooltip" class="relative mt-0.5 inline-flex items-center gap-2 rounded-control bg-fg py-1 pl-2 pr-1 text-xs font-medium text-bg shadow-elev-2">Filter<kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-muted px-1 font-mono text-2xs font-medium text-bg">/</kbd></div>
+      </div>
+      <p class="text-xs text-muted">Tooltips erscheinen nach 500&nbsp;ms, Nachbarn danach sofort.</p>
+</div>
+    
+<div class="flex flex-col gap-4 rounded-card border border-line bg-surface p-5 shadow-elev-1 ">
+  <h3 class="text-sm font-semibold text-fg">Menü</h3>
+  <div class="relative overflow-hidden rounded-control border border-line bg-bg bg-aurora p-4">
+        <ul aria-label="Aktionen für WEB-47" class="w-full max-w-64 rounded-card p-1 border border-glass-line bg-glass shadow-glass-2 backdrop-blur-glass backdrop-saturate-150">
+          <li><button type="button" class="flex h-11 w-full items-center gap-2 rounded-control px-2 text-left text-sm transition-colors duration-150 ease-out hover:bg-hover md:h-8 bg-hover text-fg"><svg class="size-4 text-muted shrink-0" aria-hidden="true"><use href="#i-circle-dot-dashed"/></svg>Status ändern …<span class="ml-auto inline-flex gap-0.5"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted">S</kbd></span></button></li>
+          <li><button type="button" class="flex h-11 w-full items-center gap-2 rounded-control px-2 text-left text-sm transition-colors duration-150 ease-out hover:bg-hover md:h-8  text-fg"><svg class="size-4 text-muted shrink-0" aria-hidden="true"><use href="#i-circle-user-round"/></svg>Assignee …<span class="ml-auto inline-flex gap-0.5"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted">A</kbd></span></button></li>
+          <li><button type="button" class="flex h-11 w-full items-center gap-2 rounded-control px-2 text-left text-sm transition-colors duration-150 ease-out hover:bg-hover md:h-8  text-fg"><svg class="size-4 text-muted shrink-0" aria-hidden="true"><use href="#i-user-round-check"/></svg>Mir zuweisen<span class="ml-auto inline-flex gap-0.5"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted">I</kbd></span></button></li>
+          <li><button type="button" class="flex h-11 w-full items-center gap-2 rounded-control px-2 text-left text-sm transition-colors duration-150 ease-out hover:bg-hover md:h-8  text-fg"><svg class="size-4 text-muted shrink-0" aria-hidden="true"><use href="#i-signal-high"/></svg>Priorität …<span class="ml-auto inline-flex gap-0.5"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted">P</kbd></span></button></li>
+          <li><button type="button" class="flex h-11 w-full items-center gap-2 rounded-control px-2 text-left text-sm transition-colors duration-150 ease-out hover:bg-hover md:h-8  text-fg"><svg class="size-4 text-muted shrink-0" aria-hidden="true"><use href="#i-tag"/></svg>Labels …<span class="ml-auto inline-flex gap-0.5"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted">L</kbd></span></button></li>
+          <li aria-hidden="true" class="mx-2 my-1 border-t border-glass-line"></li>
+          <li><button type="button" class="flex h-11 w-full items-center gap-2 rounded-control px-2 text-left text-sm transition-colors duration-150 ease-out hover:bg-hover md:h-8  text-fg"><svg class="size-4 text-muted shrink-0" aria-hidden="true"><use href="#i-archive"/></svg>Archivieren<span class="ml-auto inline-flex gap-0.5"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted"><span aria-hidden="true" class="font-sans text-xs">⌘</span><span class="sr-only">Cmd</span></kbd><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted"><span aria-hidden="true" class="font-sans text-xs">⌫</span><span class="sr-only">Backspace</span></kbd></span></button></li>
+          <li><button type="button" class="flex h-11 w-full items-center gap-2 rounded-control px-2 text-left text-sm transition-colors duration-150 ease-out hover:bg-hover md:h-8  text-danger-text"><svg class="size-4  shrink-0" aria-hidden="true"><use href="#i-trash-2"/></svg>Löschen …</button></li>
+        </ul>
+      </div>
+</div>
+    
+<div class="flex flex-col gap-4 rounded-card border border-line bg-surface p-5 shadow-elev-1 ">
+  <h3 class="text-sm font-semibold text-fg">Toast</h3>
+  <div class="relative overflow-hidden rounded-control border border-line bg-bg bg-aurora flex min-h-40 items-end p-4">
+        <div role="status" aria-live="polite" class="w-full">
+          <div data-toast class="relative flex w-full items-center gap-3 overflow-hidden rounded-card py-2 pl-3 pr-2 border border-glass-line bg-glass shadow-glass-2 backdrop-blur-glass backdrop-saturate-150">
+            <svg class="size-4 text-muted shrink-0" aria-hidden="true"><use href="#i-archive"/></svg>
+            <p class="min-w-0 flex-1 truncate text-sm text-fg"><span class="font-mono" translate="no">WEB-50</span> archiviert</p>
+            <button type="button" data-undo class="inline-flex h-8 shrink-0 items-center gap-2 rounded-control px-3 text-sm font-medium transition-colors duration-150 ease-out relative after:absolute after:inset-x-0 after:-inset-y-2 md:after:content-none h-7 px-2 text-accent-text hover:bg-accent-soft">Rückgängig<span class="hidden sm:inline-flex"><span class="inline-flex items-center gap-0.5"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted"><span aria-hidden="true" class="font-sans text-xs">⌘</span><span class="sr-only">Cmd</span></kbd><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted">Z</kbd></span></span></button>
+            <span aria-hidden="true" class="absolute bottom-0 left-0 h-0.5 w-3/5 bg-accent"></span>
+          </div>
+          <p data-undone hidden class="flex items-center gap-2 rounded-card px-3 py-2 text-sm text-fg border border-glass-line bg-glass shadow-glass-2 backdrop-blur-glass backdrop-saturate-150"><svg class="size-4 text-muted shrink-0" aria-hidden="true"><use href="#i-undo-2"/></svg><span class="font-mono" translate="no">WEB-50</span> ist wieder da.</p>
+        </div>
+      </div>
+      <p class="text-xs text-muted">Löschen und Archivieren zeigen 5&nbsp;Sekunden lang Rückgängig.</p>
+</div>
+    
+<div class="flex flex-col gap-4 rounded-card border border-line bg-surface p-5 shadow-elev-1 ">
+  <h3 class="text-sm font-semibold text-fg">Umschalter</h3>
+  
+<div role="group" aria-label="Layout" data-toggle-group class="inline-flex h-8 shrink-0 items-center gap-0.5 rounded-control border border-line bg-surface-2 p-0.5 max-w-full self-start overflow-x-auto">
+  <button type="button" aria-pressed="false" class="relative after:absolute after:inset-x-0 after:-inset-y-2 md:after:content-none inline-flex h-full items-center gap-1.5 rounded-xs px-2 text-xs font-medium text-muted transition-colors duration-150 ease-out hover:text-fg aria-pressed:bg-card aria-pressed:text-fg aria-pressed:shadow-elev-1"><svg class="size-3.5 shrink-0" aria-hidden="true"><use href="#i-list"/></svg>Liste<span class="hidden sm:inline-flex"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted">1</kbd></span></button>
+  <button type="button" aria-pressed="true" class="relative after:absolute after:inset-x-0 after:-inset-y-2 md:after:content-none inline-flex h-full items-center gap-1.5 rounded-xs px-2 text-xs font-medium text-muted transition-colors duration-150 ease-out hover:text-fg aria-pressed:bg-card aria-pressed:text-fg aria-pressed:shadow-elev-1"><svg class="size-3.5 shrink-0" aria-hidden="true"><use href="#i-square-kanban"/></svg>Board<span class="hidden sm:inline-flex"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted">2</kbd></span></button>
+  <button type="button" aria-pressed="false" class="relative after:absolute after:inset-x-0 after:-inset-y-2 md:after:content-none inline-flex h-full items-center gap-1.5 rounded-xs px-2 text-xs font-medium text-muted transition-colors duration-150 ease-out hover:text-fg aria-pressed:bg-card aria-pressed:text-fg aria-pressed:shadow-elev-1"><svg class="size-3.5 shrink-0" aria-hidden="true"><use href="#i-table-2"/></svg>Tabelle<span class="hidden sm:inline-flex"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted">3</kbd></span></button>
+  <button type="button" aria-pressed="false" class="relative after:absolute after:inset-x-0 after:-inset-y-2 md:after:content-none inline-flex h-full items-center gap-1.5 rounded-xs px-2 text-xs font-medium text-muted transition-colors duration-150 ease-out hover:text-fg aria-pressed:bg-card aria-pressed:text-fg aria-pressed:shadow-elev-1"><svg class="size-3.5 shrink-0" aria-hidden="true"><use href="#i-chart-gantt"/></svg>Timeline<span class="hidden sm:inline-flex"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs border border-line bg-surface px-1 font-mono text-2xs font-medium text-muted">4</kbd></span></button>
+</div>
+      <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
+        <label class="flex min-h-11 cursor-pointer items-center gap-2 text-sm text-fg md:min-h-0">
+          <span class="relative inline-grid size-4 place-items-center">
+            <input type="checkbox" checked class="peer size-4 cursor-pointer appearance-none rounded-xs border border-line-strong bg-card transition-colors duration-150 ease-out checked:border-accent checked:bg-accent">
+            <svg class="pointer-events-none absolute size-3 text-accent-fg opacity-0 peer-checked:opacity-100 shrink-0" aria-hidden="true"><use href="#i-check"/></svg>
+          </span>
+          Kind-Items zeigen
+        </label>
+        <label class="flex min-h-11 cursor-pointer items-center gap-2 text-sm text-fg md:min-h-0">
+          <span class="relative inline-grid size-4 place-items-center">
+            <input type="checkbox" class="peer size-4 cursor-pointer appearance-none rounded-xs border border-line-strong bg-card transition-colors duration-150 ease-out checked:border-accent checked:bg-accent">
+            <svg class="pointer-events-none absolute size-3 text-accent-fg opacity-0 peer-checked:opacity-100 shrink-0" aria-hidden="true"><use href="#i-check"/></svg>
+          </span>
+          Archivierte zeigen
+        </label>
+      </div>
+      <div class="flex items-center gap-3">
+        <button type="button" role="switch" id="demo-switch" aria-checked="true" class="group relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-line-strong bg-surface-2 transition-colors duration-150 ease-out after:absolute after:-inset-3 aria-checked:border-accent aria-checked:bg-accent">
+          <span class="ml-0.5 size-3.5 rounded-full bg-card shadow-elev-1 transition-transform duration-150 ease-out group-aria-checked:translate-x-4 motion-reduce:transition-none"></span>
+        </button>
+        <label for="demo-switch" class="cursor-pointer text-sm text-fg">Benachrichtigungen per Mail</label>
+      </div>
+</div>
+    
+<div class="flex flex-col gap-4 rounded-card border border-line bg-surface p-5 shadow-elev-1 xl:col-span-3">
+  <h3 class="text-sm font-semibold text-fg">Leerer Zustand</h3>
+  <div class="flex flex-col items-center rounded-card border border-dashed border-line-strong px-6 py-8 text-center">
+        <span class="relative overflow-hidden rounded-control border border-line bg-bg bg-aurora grid size-12 place-items-center rounded-card"><svg class="relative size-5 text-muted shrink-0" aria-hidden="true"><use href="#i-funnel-x"/></svg></span>
+        <h4 class="mt-4 text-base font-semibold text-fg">Keine Items für diesen Filter</h4>
+        <p class="mt-1 max-w-[40ch] text-sm text-muted">„Kunde ist Hafenkontor“ passt auf kein offenes Item. Setz den Filter zurück oder leg ein Item an.</p>
+        <div class="mt-4 flex flex-wrap justify-center gap-2">
+          <button type="button" class="inline-flex h-8 shrink-0 items-center gap-2 rounded-control px-3 text-sm font-medium transition-colors duration-150 ease-out relative after:absolute after:inset-x-0 after:-inset-y-1.5 md:after:content-none border border-line-strong bg-card text-fg shadow-elev-1 hover:border-muted" >Filter zurücksetzen</button>
+          <button type="button" class="inline-flex h-8 shrink-0 items-center gap-2 rounded-control px-3 text-sm font-medium transition-colors duration-150 ease-out relative after:absolute after:inset-x-0 after:-inset-y-1.5 md:after:content-none bg-accent text-accent-fg shadow-elev-1 hover:bg-accent-hover" >Item anlegen<span class="inline-flex items-center gap-0.5"><kbd class="inline-flex h-5 min-w-5 items-center justify-center rounded-xs bg-accent-veil px-1 font-mono text-2xs font-medium text-accent-fg">C</kbd></span></button>
+        </div>
+      </div>
+</div>
+  </div>
+</section>
+    </main>
+
+    <footer class="mt-24 flex flex-wrap items-center justify-between gap-2 border-t border-line py-8 text-xs text-muted">
+      <p><span translate="no">werkbuch</span> Moodboard A: Milchglas. Alle Personen, Firmen und Daten sind ausgedacht.</p>
+      <p>Stand <time datetime="2026-10-28">28.10.2026</time></p>
+    </footer>
+  </div>
+</div>
+
+<script>
+(() => {
+  const root = document.documentElement;
+  const $ = (sel, el = document) => el.querySelector(sel);
+  const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
+
+  // Demo links stay on this page.
+  document.addEventListener('click', (event) => {
+    if (event.target.closest('a[href="#"]')) event.preventDefault();
+  });
+
+  // Theme: auto follows the system, light and dark set data-theme on <html>.
+  const themeKey = 'werkbuch-milchglas-theme';
+  const themeButtons = $$('[data-theme-choice]');
+  const applyTheme = (choice) => {
+    if (choice === 'light' || choice === 'dark') root.setAttribute('data-theme', choice);
+    else root.removeAttribute('data-theme');
+  };
+  const syncTheme = () => {
+    const current = root.getAttribute('data-theme') || 'auto';
+    themeButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.themeChoice === current)));
+  };
+  try {
+    applyTheme(localStorage.getItem(themeKey));
+  } catch {}
+  themeButtons.forEach((b) =>
+    b.addEventListener('click', () => {
+      applyTheme(b.dataset.themeChoice);
+      try {
+        localStorage.setItem(themeKey, b.dataset.themeChoice);
+      } catch {}
+    }),
+  );
+  new MutationObserver(syncTheme).observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+  syncTheme();
+
+  // Toggle groups: exactly one pressed button per group.
+  $$('[data-toggle-group]').forEach((group) =>
+    group.addEventListener('click', (event) => {
+      const pressed = event.target.closest('button[aria-pressed]');
+      if (!pressed || !group.contains(pressed)) return;
+      $$('button[aria-pressed]', group).forEach((b) => b.setAttribute('aria-pressed', String(b === pressed)));
+    }),
+  );
+
+  $$('[role="switch"]').forEach((sw) =>
+    sw.addEventListener('click', () => sw.setAttribute('aria-checked', String(sw.getAttribute('aria-checked') !== 'true'))),
+  );
+
+  $$('[data-collapse]').forEach((btn) =>
+    btn.addEventListener('click', () => {
+      const open = btn.getAttribute('aria-expanded') !== 'true';
+      btn.setAttribute('aria-expanded', String(open));
+      document.getElementById(btn.getAttribute('aria-controls')).hidden = !open;
+    }),
+  );
+
+  $$('[data-reaction]').forEach((btn) =>
+    btn.addEventListener('click', () => {
+      const on = btn.getAttribute('aria-pressed') !== 'true';
+      const count = $('[data-count]', btn);
+      btn.setAttribute('aria-pressed', String(on));
+      count.textContent = String(Number(count.textContent) + (on ? 1 : -1));
+    }),
+  );
+
+  // Replays an entrance animation on demand (never on load).
+  const replay = (el, cls) => {
+    el.classList.remove(cls);
+    void el.offsetWidth;
+    el.classList.add(cls);
+  };
+  $$('[data-replay]').forEach((btn) =>
+    btn.addEventListener('click', () => replay(document.getElementById(btn.dataset.replay), btn.dataset.animation)),
+  );
+
+  const toast = $('[data-toast]');
+  const undone = $('[data-undone]');
+  $('[data-undo]')?.addEventListener('click', () => {
+    toast.hidden = true;
+    undone.hidden = false;
+  });
+
+  // Disclosure select (component specimen): the trigger shows the picked option.
+  $$('[data-disclosure]').forEach((trigger) => {
+    const list = document.getElementById(trigger.getAttribute('aria-controls'));
+    const setOpen = (open) => {
+      trigger.setAttribute('aria-expanded', String(open));
+      list.hidden = !open;
+    };
+    trigger.addEventListener('click', () => setOpen(trigger.getAttribute('aria-expanded') !== 'true'));
+    list.addEventListener('click', (event) => {
+      const option = event.target.closest('button[data-value]');
+      if (!option) return;
+      $$('button[data-value]', list).forEach((b) => b.setAttribute('aria-pressed', String(b === option)));
+      $('[data-value]', trigger).textContent = option.dataset.value;
+      $('[data-dot]', trigger).className = `size-1.5 shrink-0 rounded-full bg-label-${option.dataset.color}`;
+      setOpen(false);
+      trigger.focus();
+    });
+  });
+
+  // Key screen: board selection, item panel and command palette.
+  const app = $('#app');
+  if (!app) return;
+  const panel = $('#item-panel');
+  const palette = $('#palette');
+  const scrim = $('#palette-scrim');
+  const input = $('#palette-input');
+  const trigger = $('#palette-trigger');
+  const appContent = $$('[data-app-content]');
+  const cards = $$('[data-card]');
+  const panelCard = $('[data-card="WEB-47"]');
+
+  // Columns that sit fully behind the open panel leave the tab order, so focus is never hidden.
+  const underPanel = $$('[data-under-panel]');
+  const syncUnderPanel = () => underPanel.forEach((el) => (el.inert = !panel.hidden));
+  const selectCard = (key) => cards.forEach((c) => c.setAttribute('data-selected', String(c.dataset.card === key)));
+  const openPanel = () => {
+    panel.hidden = false;
+    syncUnderPanel();
+    replay(panel, 'animate-panel-in');
+  };
+  const closePanel = () => {
+    panel.hidden = true;
+    syncUnderPanel();
+    selectCard(null);
+    panelCard.focus();
+  };
+  syncUnderPanel();
+  cards.forEach((c) =>
+    c.addEventListener('click', () => {
+      selectCard(c.dataset.card);
+      if (c.dataset.card === 'WEB-47') openPanel();
+      else {
+        panel.hidden = true;
+        syncUnderPanel();
+      }
+    }),
+  );
+  $('[data-panel-close]').addEventListener('click', closePanel);
+
+  // Palette: the app behind it is inert while it is open.
+  appContent.forEach((el) => (el.inert = true));
+  const isOpen = () => !palette.hidden;
+  const options = () => $$('[role="option"]', palette).filter((o) => !o.hidden);
+  let active = 0;
+  const setActive = (index) => {
+    const list = options();
+    if (!list.length) return input.removeAttribute('aria-activedescendant');
+    active = (index + list.length) % list.length;
+    list.forEach((o, i) => o.setAttribute('aria-selected', String(i === active)));
+    input.setAttribute('aria-activedescendant', list[active].id);
+    list[active].scrollIntoView({ block: 'nearest' });
+  };
+  const openPalette = () => {
+    palette.hidden = false;
+    scrim.hidden = false;
+    appContent.forEach((el) => (el.inert = true));
+    replay(palette, 'animate-palette-in');
+    input.focus();
+    input.select();
+  };
+  const closePalette = () => {
+    palette.hidden = true;
+    scrim.hidden = true;
+    appContent.forEach((el) => (el.inert = false));
+    trigger.focus({ preventScroll: true });
+  };
+  const runOption = (option) => {
+    closePalette();
+    if (option.dataset.open === 'WEB-47') {
+      selectCard('WEB-47');
+      openPanel();
+    }
+  };
+
+  // Highlights the query inside an option label without touching innerHTML.
+  const markClass = palette.dataset.markClass;
+  const highlight = (el, query) => {
+    const text = el.dataset.text;
+    const at = query ? text.toLowerCase().indexOf(query) : -1;
+    el.textContent = '';
+    if (at < 0) return el.append(text);
+    const mark = document.createElement('mark');
+    mark.className = markClass;
+    mark.textContent = text.slice(at, at + query.length);
+    el.append(text.slice(0, at), mark, text.slice(at + query.length));
+  };
+  const filter = () => {
+    const query = input.value.trim().toLowerCase();
+    $$('[data-filterable]', palette).forEach((option) => {
+      option.hidden = Boolean(query) && !option.dataset.search.toLowerCase().includes(query);
+      $$('[data-text]', option).forEach((el) => highlight(el, query));
+    });
+    $$('[data-group]', palette).forEach((group) => {
+      group.hidden = !$$('[role="option"]', group).some((o) => !o.hidden);
+    });
+    const empty = $('#palette-empty');
+    empty.hidden = $$('[data-filterable]', palette).some((o) => !o.hidden);
+    $('[data-query]', empty).textContent = input.value.trim();
+    setActive(0);
+  };
+
+  input.addEventListener('input', filter);
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      setActive(active + (event.key === 'ArrowDown' ? 1 : -1));
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      const option = options()[active];
+      if (option) runOption(option);
+    }
+  });
+  palette.addEventListener('mousemove', (event) => {
+    const option = event.target.closest('[role="option"]');
+    if (option && option.getAttribute('aria-selected') !== 'true') setActive(options().indexOf(option));
+  });
+  palette.addEventListener('click', (event) => {
+    const option = event.target.closest('[role="option"]');
+    if (option) runOption(option);
+  });
+  scrim.addEventListener('click', closePalette);
+  trigger.addEventListener('click', openPalette);
+
+  document.addEventListener('keydown', (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+      event.preventDefault();
+      if (isOpen()) input.focus();
+      else openPalette();
+    } else if (event.key === 'Escape') {
+      if (isOpen()) {
+        event.preventDefault();
+        closePalette();
+      } else if (!panel.hidden && app.contains(document.activeElement)) {
+        closePanel();
+      }
+    }
+  });
+})();
+</script>

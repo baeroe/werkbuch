@@ -2,6 +2,8 @@
 
 Stand: 2026-10-28 · Status: freigegeben
 
+> **Änderungen vom 2026-10-28 (Moodboards):** Rafael hat die Designrichtung **Werkbuch („Arbeitsheft“)** gewählt: Punktraster-Papier, Karteikarten mit Typ-Reitern, Textmarker für Auswahl und Fokus, Glas als Transparentpapier, Schriften Bricolage Grotesque und Figtree, Tintenblau als einziger Akzent. Gestaltungsgrundlage ist jetzt `prototypes/clickdummy/DESIGN.md` (5.4).
+
 **Herkunft der Entscheidungen:** Jede Entscheidung trägt eine Herkunft. **Vorgabe** heißt, Rafael hat es von sich aus verlangt. **Abgestimmt** heißt, es wurde im Gespräch vorgeschlagen und bestätigt. **Spec** heißt, die Entscheidung fiel beim Ausformulieren und muss noch geprüft werden. Alle Spec-Entscheidungen stehen gesammelt in Abschnitt 12.
 
 ## 1. Ziel und Kontext
@@ -603,7 +605,7 @@ Gemeinsam haben alle Stufen: `/`-Menü, Markdown-Kürzel beim Tippen, Code-Blöc
 
 ### 5.4 Gestaltung
 
-- **Richtung:** sympathisch, schnell, modern, gern glassy (Vorgabe). Entschieden wird über drei Moodboards (Abschnitt 11) und festgehalten in `prototypes/clickdummy/DESIGN.md`.
+- **Richtung:** sympathisch, schnell, modern, gern glassy (Vorgabe). Aus drei Moodboards (Abschnitt 11) hat Rafael am 2026-10-28 **Werkbuch („Arbeitsheft“)** gewählt. Festgehalten ist sie in `prototypes/clickdummy/DESIGN.md`.
 - **Glas sparsam** (Spec): für schwebende Flächen wie Befehlspalette, Menüs, Seitenpanel und Toasts. Lesetext steht auf ruhigen Flächen mit vollem Kontrast.
 - **Tokens wie in openbill:** CSS-Variablen für hell und dunkel, `@theme inline`, die Farbpalette von Tailwind ist entfernt.
 - **Schriften** liegen lokal (fontsource); zur Laufzeit werden keine externen Fonts geladen.
