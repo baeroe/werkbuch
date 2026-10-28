@@ -66,7 +66,8 @@ export function ItemPage() {
       />
     );
   }
-  if (detail.isError) {
+  // only when nothing is loaded yet: a reload that fails keeps the item on screen, with what its editors hold
+  if (detail.isError && !detail.data) {
     return <ErrorState description={detail.error.message} onRetry={() => void detail.refetch()} retrying={detail.isFetching} />;
   }
   if (!detail.data) {

@@ -38,7 +38,8 @@ export function ItemPeek({ itemId }: { itemId: string }) {
   const close = () => useUiStore.getState().openPeek(null);
   const missing = detail.error instanceof ApiError && detail.error.status === 404;
 
-  if (data && !detail.isError) {
+  // a reload that fails (the server is down) keeps the item on screen: its editors hold what is not saved yet
+  if (data && !missing) {
     return (
       // a new detail for each item: drafts and edits never carry over to the next one
       <ItemDetailProvider key={data.item.id} detail={data} surface="peek">

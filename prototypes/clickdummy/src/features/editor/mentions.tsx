@@ -7,7 +7,8 @@
  *
  * The list is the combobox pattern on the editor: the focus stays in the text, the editor names the list
  * (`aria-controls`) and its active entry (`aria-activedescendant`); the arrows move, Enter or Tab take an entry, Escape
- * closes the list without closing anything else (the suggestion plugin uses up the key).
+ * closes the list without closing anything else: the suggestion plugin uses up the key, and the editor stops it there,
+ * so no dialog, popup or preview around the editor sees it (RichTextEditor, handleDOMEvents).
  */
 
 import Mention from '@tiptap/extension-mention';

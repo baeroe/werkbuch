@@ -439,27 +439,36 @@ function Reactions({ comment, users, canReact }: { comment: Comment; users: Map<
 function CommentEditor({ comment, projectId, onDone }: { comment: Comment; projectId: string; onDone: () => void }) {
   const edit = useEditComment();
   const [draft, setDraft] = useState<RichText | null>(comment.body);
+  /** The text as it is now. Refs, because the retry of an error toast runs the `save` of an older render. */
+  const latest = useRef<RichText | null>(comment.body);
+  const saving = useRef(false);
   const [problem, setProblem] = useState<string | null>(null);
   const box = useRef<HTMLDivElement>(null);
   const problemId = useId();
   const save = () => {
-    if (edit.isPending) return;
-    if (!draft || isEmptyDoc(draft)) {
+    if (saving.current) return;
+    // "Erneut versuchen" saves what was written since the failed attempt, too
+    const body = latest.current;
+    if (!body || isEmptyDoc(body)) {
       // the button stays usable; an empty text says so at the editor
       setProblem('Der Kommentar ist leer. Schreib etwas oder lösch den Kommentar.');
       box.current?.querySelector<HTMLElement>('[contenteditable="true"]')?.focus();
       return;
     }
-    edit.mutate(
-      { id: comment.id, body: draft },
-      {
-        onSuccess: () => {
-          onDone();
+    saving.current = true;
+    edit
+      .mutateAsync({ id: comment.id, body })
+      .then(
+        () => {
           toast({ title: 'Kommentar geändert', tone: 'success' });
+          // written on while it was on its way: the editor stays open with the newer text
+          if (latest.current === body) onDone();
         },
-        onError: (error) => notifyError('Kommentar nicht geändert', error, save),
-      },
-    );
+        (error: unknown) => notifyError('Kommentar nicht geändert', error, save),
+      )
+      .finally(() => {
+        saving.current = false;
+      });
   };
   // Escape takes the edit back (and is used up there, so a preview stays open); an open @ list closes first
   const onKeyDown = (event: KeyboardEvent) => {
@@ -472,6 +481,7 @@ function CommentEditor({ comment, projectId, onDone }: { comment: Comment; proje
       <RichTextEditor
         value={draft}
         onChange={(doc) => {
+          latest.current = doc;
           setDraft(doc);
           setProblem(null);
         }}

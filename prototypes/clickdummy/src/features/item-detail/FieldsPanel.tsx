@@ -59,12 +59,15 @@ function RichTextProperty({ item, property, required }: { item: WorkItem; proper
   const [draft, setDraft] = useState<RichText | null>(stored);
   const [error, setError] = useState<string | null>(null);
   const latest = useRef(draft);
+  /** Typed text the server does not have yet. Cleared only by a save that went through. */
   const dirty = useRef(false);
+  const inFlight = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const labelId = useId();
   const hintId = useId();
 
-  // a value from outside (another window, a live event) shows while nothing is typed
+  // a value from outside (another window, a live event) shows while nothing is typed; a failed save rolls the item
+  // back and fetches it again, and the text stays all the same
   useEffect(() => {
     if (dirty.current) return;
     latest.current = stored;
@@ -74,19 +77,29 @@ function RichTextProperty({ item, property, required }: { item: WorkItem; proper
   const save = useRef(() => {});
   save.current = () => {
     clearTimeout(timer.current);
-    if (!dirty.current) return;
-    dirty.current = false;
-    const next = isEmptyDoc(latest.current) ? null : latest.current;
+    if (!dirty.current || inFlight.current) return;
+    const sent = latest.current;
+    const next = isEmptyDoc(sent) ? null : sent;
     if (next === null && required && !isEmptyValue(stored)) {
       setError(`„${property.label}“ ist ein Pflichtfeld und lässt sich nicht leeren.`);
       return;
     }
+    inFlight.current = true;
     update.mutate(
       { id: item.id, patch: { values: { [property.key]: next } } },
       {
+        onSuccess: () => {
+          // typed on while it saved: that is still to save
+          if (latest.current === sent) dirty.current = false;
+          else timer.current = setTimeout(() => save.current(), SAVE_PAUSE_MS);
+        },
+        // the text stays unsaved; the item mutation's toast names the cause
         onError: (failure) => {
           const message = failure instanceof ApiError ? failure.errors?.[`values.${property.key}`]?.[0] : undefined;
           if (message) setError(message);
+        },
+        onSettled: () => {
+          inFlight.current = false;
         },
       },
     );

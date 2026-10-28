@@ -6,11 +6,15 @@
  *   <RichTextEditor value={doc} onChange={setDoc} preset="comment" projectId={item.project_id} onSubmit={send} />
  *
  * - `value` is controlled: a document that differs from what the editor shows replaces it (a reload, a reset after
- *   sending); the editor's own output coming back changes nothing, so the cursor stays where it is.
+ *   sending: pass a new document, or null). A document the editor reported itself changes nothing, also an older one
+ *   (with fast typing the parent may render one the editor has moved past), so the cursor and every key stay.
  * - `onChange` gets the Tiptap JSON after every change; `isEmptyDoc` tells an emptied editor from one with content.
+ *   Keep the document as it comes, also an "empty" one (a list without text yet), and turn it into null only when
+ *   sending: null coming back as `value` resets the editor to an empty paragraph.
  * - `mod+enter` calls `onSubmit` and never adds a line break; without `onSubmit` the key goes on to the page (a dialog's
  *   own mod+enter). In the editor only mod+k, escape and mod+enter reach the page's shortcuts (the registry's rule).
- * - Escape in an open `@`, `#` or `/` list closes the list and is used up there.
+ * - Escape in an open `@`, `#` or `/` list closes the list and is used up there: nothing around the editor sees it (a
+ *   dialog or preview stays open). Without an open list it goes on to the page.
  * - Uploads belong to `UploadOwnerContext` (pasteImages.ts); the editor stores the attachment's id only.
  * - The editor's accessible name is its level's ("Kommentar", "Beschreibung", "Inhalt der Seite") unless
  *   `aria-label` or `aria-labelledby` says otherwise.
@@ -233,8 +237,11 @@ function EditorBody({
   const framed = preset !== 'page';
   const tableExtension = useTables();
   const extensions = useMemo(() => buildExtensions(preset, env, placeholder ?? PRESET_PLACEHOLDER[preset], tableExtension), [preset, placeholder, tableExtension]);
-  /** The last document the editor reported: coming back as `value`, it changes nothing. */
-  const emitted = useRef<RichText | null>(null);
+  /**
+   * The documents the editor reported. One of them coming back as `value` changes nothing, also an older one: with
+   * fast typing the parent may render a document the editor has already moved past, and taking it would drop keys.
+   */
+  const emitted = useRef(new WeakSet<RichText>());
 
   const editor = useEditor(
     {
@@ -257,10 +264,15 @@ function EditorBody({
         },
         handleDOMEvents: {
           keydown: (view, event) => {
-            // ProseMirror would use up every Escape (preventDefault). An open @, # or / list takes it and closes;
-            // otherwise it goes on to the page: a preview first moves the focus out of the field, a field around
-            // the editor may cancel its edit.
-            if (event.key === 'Escape') return view.dom.querySelector('.suggestion') === null;
+            // ProseMirror would use up every Escape (preventDefault). Without an open list it goes on to the page:
+            // a preview first moves the focus out of the field, a field around the editor may cancel its edit.
+            if (event.key === 'Escape') {
+              if (view.dom.querySelector('.suggestion') === null) return true;
+              // An open @, # or / list takes it and closes (ProseMirror's own handler, below). Nothing behind the
+              // editor may see it: Base UI dialogs and popups close on any Escape, preventDefault or not.
+              event.stopPropagation();
+              return false;
+            }
             if (!isModEnter(event)) return false;
             const submit = latest.current.onSubmit;
             if (submit) {
@@ -274,7 +286,7 @@ function EditorBody({
       },
       onUpdate: ({ editor: current }) => {
         const doc = current.getJSON();
-        emitted.current = doc;
+        emitted.current.add(doc);
         latest.current.onChange(doc);
       },
     },
@@ -289,7 +301,7 @@ function EditorBody({
   // a document from outside (reload, reset) replaces what the editor shows; its own output changes nothing
   useEffect(() => {
     if (!editor || editor.isDestroyed) return;
-    if (value !== null && value === emitted.current) return;
+    if (value !== null && emitted.current.has(value)) return;
     const doc = value ?? EMPTY_DOC;
     if (!showsDoc(editor, doc)) editor.commands.setContent(doc, { emitUpdate: false });
   }, [editor, value]);

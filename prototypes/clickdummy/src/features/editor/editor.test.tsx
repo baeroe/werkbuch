@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '@/api/db';
+import { Dialog } from '@/components/ui/Dialog';
 import { currentToasts, dismissToast } from '@/components/ui/toast';
 import { textDoc } from '@/lib/richtext';
 import { asUser, resetApi } from '@/test/api';
@@ -155,11 +156,51 @@ describe('Escape in the editor', () => {
       await user.type(editor, ' @ma');
       await screen.findByRole('listbox', { name: 'Personen und Bots' });
       act(() => void escape());
-      expect(seen).toEqual([false, true]);
+      // used up: nothing behind the editor sees it (Base UI dialogs ignore preventDefault)
+      expect(seen).toEqual([false]);
       await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
     } finally {
       window.removeEventListener('keydown', record);
     }
+  });
+
+  it('closes only the open list inside a dialog; the next Escape closes the dialog', async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    renderWithData(
+      <Dialog open onOpenChange={onOpenChange} title="Item anlegen">
+        <RichTextEditor value={null} onChange={vi.fn()} preset="description" projectId="p_web" />
+      </Dialog>,
+    );
+    const editor = await screen.findByRole('textbox', { name: 'Beschreibung' });
+    await user.click(editor);
+    await user.type(editor, '@ma');
+    await screen.findByRole('listbox', { name: 'Personen und Bots' });
+    const escape = () => fireEvent.keyDown(editor, { key: 'Escape', code: 'Escape', keyCode: 27 });
+
+    act(() => void escape());
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog', { name: 'Item anlegen' })).toBeTruthy();
+
+    act(() => void escape());
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+});
+
+describe('RichTextEditor with a parent that holds the document', () => {
+  it('keeps every key of fast typing, also when the parent renders a document the editor has moved past', async () => {
+    const user = userEvent.setup();
+    function Controlled() {
+      const [doc, setDoc] = useState<RichText | null>(null);
+      return <RichTextEditor value={doc} onChange={setDoc} preset="comment" projectId="p_web" autoFocus />;
+    }
+    renderWithData(<Controlled />);
+    const editor = await screen.findByRole('textbox', { name: 'Kommentar' });
+    await waitFor(() => expect(document.activeElement).toBe(editor));
+
+    await user.keyboard('Tritt auch in Safari auf');
+    expect(editor.textContent).toBe('Tritt auch in Safari auf');
   });
 });
 

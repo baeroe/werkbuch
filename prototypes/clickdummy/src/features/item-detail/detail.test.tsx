@@ -1,15 +1,17 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { FAIL_KEY } from '@/api/client';
+import { getDb } from '@/api/db';
 import { getWorkItem } from '@/api/workItems';
-import { currentToasts, dismissToast } from '@/components/ui/toast';
+import { currentToasts, dismissToast, runToastAction } from '@/components/ui/toast';
 import { plainText } from '@/lib/richtext';
 import { useUiStore } from '@/store/ui';
 import { asUser, resetApi } from '@/test/api';
-import type { ActivityEntry, Comment, ItemEvent } from '@/types';
+import type { ActivityEntry, Comment, ItemEvent, RichText } from '@/types';
 import { preloadEditor } from '@/features/editor/RichTextEditor';
 import { buildTimeline } from './Activity';
 import { ItemPeek } from './ItemPeek';
@@ -20,6 +22,7 @@ beforeAll(async () => {
   Range.prototype.getBoundingClientRect = empty;
   Range.prototype.getClientRects = () => ({ length: 0, item: () => null, [Symbol.iterator]: [][Symbol.iterator] }) as unknown as DOMRectList;
   document.elementFromPoint = () => null;
+  Element.prototype.scrollIntoView = () => {};
   await preloadEditor();
 });
 
@@ -34,11 +37,34 @@ afterEach(() => {
 
 function renderWithData(node: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  return render(
+  const view = render(
     <QueryClientProvider client={client}>
       <MemoryRouter>{node}</MemoryRouter>
     </QueryClientProvider>,
   );
+  return { ...view, client };
+}
+
+/** jsdom is no Mac: mod is the Control key. */
+const modEnter = '{Control>}{Enter}{/Control}';
+
+/** Adds text where the editor's caret is. Typed keys would do the same, but jsdom mixes them up behind existing text. */
+const paste = (editor: HTMLElement, text: string) =>
+  fireEvent.paste(editor, { clipboardData: { files: [], types: ['text/plain'], getData: (type: string) => (type === 'text/plain' ? text : '') } });
+
+/** Runs `send` while the fake API is down (503), and answers the error toast it leaves. */
+async function failing(send: () => Promise<void>, title: string) {
+  localStorage.setItem(FAIL_KEY, '1');
+  try {
+    await send();
+    return await waitFor(() => {
+      const failed = currentToasts().find((item) => item.title === title);
+      expect(failed?.action?.label).toBe('Erneut versuchen');
+      return failed!;
+    });
+  } finally {
+    localStorage.removeItem(FAIL_KEY);
+  }
 }
 
 /* ----------------------------------------------------------------------------- timeline */
@@ -135,5 +161,110 @@ describe('ItemPeek', () => {
     expect(screen.queryByRole('alert')).toBeNull();
     const editor = screen.getByRole('textbox', { name: 'Beschreibung' });
     await waitFor(() => expect(editor.textContent).toContain('Nachtrag aus einem zweiten Fenster'));
+  });
+
+  it('keeps the own version of an open conflict when the item closes: reopened, the banner offers it again', async () => {
+    const user = userEvent.setup();
+    const first = renderWithData(<ItemPeek itemId="WEB-47" />);
+    await user.click(await screen.findByRole('button', { name: 'Weitere Aktionen' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Beschreibungskonflikt simulieren' }));
+    await screen.findByRole('alert', {}, { timeout: 3000 });
+    // written on below the banner, then the preview closes
+    paste(screen.getByRole('textbox', { name: 'Beschreibung' }), 'Meine Ergänzung. ');
+    first.unmount();
+
+    renderWithData(<ItemPeek itemId="WEB-47" />);
+    const editor = await screen.findByRole('textbox', { name: 'Beschreibung' });
+    const banner = screen.getByRole('alert');
+    expect(banner.textContent).toContain('hat die Beschreibung inzwischen geändert');
+    expect(editor.textContent).toContain('Meine Ergänzung.');
+    expect(editor.textContent).not.toContain('Nachtrag aus einem zweiten Fenster');
+
+    await user.click(within(banner).getByRole('button', { name: 'Meine Fassung übernehmen' }));
+    await waitFor(async () => expect(plainText((await getWorkItem('WEB-47')).item.description)).toContain('Meine Ergänzung.'));
+    expect(plainText((await getWorkItem('WEB-47')).item.description)).not.toContain('Nachtrag aus einem zweiten Fenster');
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('announces the save state of the description in a status region that is there before the first save', async () => {
+    const user = userEvent.setup();
+    renderWithData(<ItemPeek itemId="WEB-47" />);
+    const section = await screen.findByRole('region', { name: 'Beschreibung' });
+    const editor = await within(section).findByRole('textbox', { name: 'Beschreibung' });
+    // a live region speaks only about changes it was there for
+    const status = within(section).getByRole('status');
+    expect(status.textContent).toBe('');
+
+    await user.click(editor);
+    paste(editor, 'Kurz vor dem Release geprüft. ');
+    await user.keyboard(modEnter);
+    await waitFor(() => expect(status.textContent).toBe('Gespeichert'));
+    expect(within(section).getByRole('status')).toBe(status);
+  });
+});
+
+/* ------------------------------------------------------------------------------ retries */
+
+describe('a rich text property that failed to save', () => {
+  it('keeps its text, also when the item is fetched again, and the next save sends it', async () => {
+    const user = userEvent.setup();
+    const { client } = renderWithData(<ItemPeek itemId="WEB-47" />);
+    const steps = await screen.findByRole('textbox', { name: 'Schritte zum Nachstellen' });
+    await user.click(steps);
+    paste(steps, 'Vorher den Cache leeren. ');
+
+    // the save fails, and so does the reload after it: the item stays on screen with the text in its editor
+    await failing(() => user.keyboard(modEnter), 'Änderung nicht gespeichert');
+    expect(steps.isConnected).toBe(true);
+    expect(steps.textContent).toContain('Vorher den Cache leeren.');
+    // the server answers again, with the old steps
+    await act(() => client.invalidateQueries());
+    expect(screen.getByRole('textbox', { name: 'Schritte zum Nachstellen' })).toBe(steps);
+    expect(steps.textContent).toContain('Vorher den Cache leeren.');
+
+    await user.keyboard(modEnter);
+    await waitFor(async () => expect(plainText((await getWorkItem('WEB-47')).item.values.steps as RichText)).toContain('Vorher den Cache leeren.'));
+  });
+});
+
+describe('"Erneut versuchen" on a comment that failed', () => {
+  it('sends the comment as it reads now, also what was written after the failure', async () => {
+    const user = userEvent.setup();
+    renderWithData(<ItemPeek itemId="WEB-47" />);
+    const { item } = await getWorkItem('WEB-47');
+    await user.click(await screen.findByRole('button', { name: /Kommentar schreiben/ }));
+    const editor = await screen.findByRole('textbox', { name: 'Kommentar' });
+    // the editor takes the focus once it is there; keys before that would be the detail's shortcuts
+    await waitFor(() => expect(document.activeElement).toBe(editor));
+    await user.keyboard('Tritt auch in Safari auf');
+
+    const failed = await failing(() => user.keyboard(modEnter), 'Kommentar nicht gesendet');
+    paste(editor, ' und in Firefox');
+    act(() => runToastAction(failed.id));
+
+    await waitFor(() => expect(currentToasts().some((entry) => entry.title === 'Kommentar gesendet')).toBe(true));
+    const sent = getDb().comments.filter((entry) => entry.work_item_id === item.id);
+    expect(plainText(sent.at(-1)!.body)).toBe('Tritt auch in Safari auf und in Firefox');
+    // all of it went out: the composer starts empty again
+    expect(await screen.findByRole('button', { name: /Kommentar schreiben/ })).toBeTruthy();
+  });
+
+  it('saves an edited comment as it reads now, also what was written after the failure', async () => {
+    const user = userEvent.setup();
+    renderWithData(<ItemPeek itemId="WEB-47" />);
+    await user.click(await screen.findByRole('button', { name: 'Aktionen für den Kommentar von Mara Lindqvist' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Bearbeiten' }));
+    const editor = await screen.findByRole('textbox', { name: 'Kommentar bearbeiten' });
+    await waitFor(() => expect(document.activeElement).toBe(editor));
+    paste(editor, ' Auch unter iOS 17.');
+
+    const failed = await failing(() => user.keyboard(modEnter), 'Kommentar nicht geändert');
+    paste(editor, ' Und auf dem iPad.');
+    act(() => runToastAction(failed.id));
+
+    await waitFor(() => expect(currentToasts().some((entry) => entry.title === 'Kommentar geändert')).toBe(true));
+    const stored = getDb().comments.find((entry) => entry.id === 'c_web47_1')!;
+    expect(plainText(stored.body)).toBe('Kann ich reproduzieren, nur unter iOS 18. Auch unter iOS 17. Und auf dem iPad.');
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Kommentar bearbeiten' })).toBeNull());
   });
 });

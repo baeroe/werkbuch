@@ -7,6 +7,9 @@
  * The demo plays such a conflict ("Beschreibungskonflikt simulieren" in the item's menu): a first save comes from
  * "another window", then this window saves with the version it started from, a second save with a stale
  * `base_description_version`.
+ *
+ * An open conflict outlives the item's view, like an unsent comment: closing the preview (or opening another item)
+ * keeps this window's version, and the banner offers it again when the item comes back.
  */
 
 import { RotateCw } from 'lucide-react';
@@ -45,17 +48,29 @@ function conflictOf(error: unknown): Conflict | null {
   return { message: error.message, current: error.current as WorkItem };
 }
 
+/**
+ * Open conflicts by item id, for this visit (nothing is stored): this window's version as it reads now, and what the
+ * server said. Set when a save meets a conflict, also one that ran as the view closed; gone once it is resolved.
+ */
+const openConflicts = new Map<string, { mine: RichText | null; message: string }>();
+
 export function Description({ detail }: { detail: WorkItemDetail }) {
   const { item } = detail;
   const { actions } = useDetail();
   const reason = useEditReason(item);
   const update = useUpdateWorkItem();
 
-  const [draft, setDraft] = useState<RichText | null>(item.description);
-  const [conflict, setConflict] = useState<Conflict | null>(null);
+  // a conflict left open comes back with this window's version, unless the server holds that text by now
+  const [reopened] = useState(() => {
+    const open = openConflicts.get(item.id);
+    return open && !same(open.mine, item.description) ? open : null;
+  });
+  const [draft, setDraft] = useState<RichText | null>(reopened ? reopened.mine : item.description);
+  // against the stored item as it is now: "Neu laden" takes it, "Meine Fassung übernehmen" saves over its version
+  const [conflict, setConflict] = useState<Conflict | null>(reopened && { message: reopened.message, current: item });
   const [state, setState] = useState<SaveState>('idle');
   /** Typed text the server does not have yet: leaving or reloading the page asks first. */
-  const [unsaved, setUnsaved] = useState(false);
+  const [unsaved, setUnsaved] = useState(reopened !== null);
   useUnsavedGuard(unsaved || conflict !== null);
   /** The draft as typed, for saves that run outside a render. */
   const latest = useRef(draft);
@@ -63,12 +78,17 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
   const base = useRef(item.description_version);
   /** What the server holds of this window's text (or what was taken over from it). */
   const stored = useRef<RichText | null>(item.description);
-  const dirty = useRef(false);
+  const dirty = useRef(reopened !== null);
   const inFlight = useRef(false);
-  const inConflict = useRef(false);
+  const inConflict = useRef(reopened !== null);
   /** The demo: while "the other window" saves, this one keeps its version. */
   const hold = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // a conflict left open whose text the server took in the meantime: nothing left to offer
+  useEffect(() => {
+    if (!reopened) openConflicts.delete(item.id);
+  }, [reopened, item.id]);
 
   // a newer description from outside shows while nothing is typed here
   useEffect(() => {
@@ -103,6 +123,7 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
       });
       base.current = saved.description_version;
       stored.current = doc;
+      openConflicts.delete(item.id);
       setState('saved');
       if (!dirty.current) setUnsaved(false);
     } catch (error) {
@@ -116,6 +137,8 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
     }
     if (conflicted) {
       inConflict.current = true;
+      // kept beyond this view: the save may have run as it closed, or it closes before the conflict is resolved
+      openConflicts.set(item.id, { mine: latest.current, message: conflicted.message });
       setConflict(conflicted);
     } else if (dirty.current && !same(latest.current, doc)) {
       // typed on while it saved
@@ -123,7 +146,8 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
     }
   };
 
-  // what is typed is saved when the description goes away (the preview closes, another item opens)
+  // what is typed is saved when the description goes away (the preview closes, another item opens); an open conflict
+  // is kept in `openConflicts` instead
   useEffect(() => () => void save.current(), []);
 
   useEffect(() => {
@@ -152,6 +176,7 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
   function reload() {
     if (!conflict) return;
     const { current } = conflict;
+    openConflicts.delete(item.id);
     inConflict.current = false;
     dirty.current = false;
     base.current = current.description_version;
@@ -172,11 +197,13 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
     void save.current({ force: true });
   }
 
-  const aside = state === 'saving' ? 'Speichert …' : state === 'saved' ? 'Gespeichert' : state === 'failed' ? <span className="text-danger">Nicht gespeichert</span> : null;
+  const status = state === 'saving' ? 'Speichert …' : state === 'saved' ? 'Gespeichert' : state === 'failed' ? <span className="text-danger">Nicht gespeichert</span> : null;
 
   return (
-    <Section title="Beschreibung" aside={reason ? null : aside}>
-      {conflict && (
+    // the save state is a status region that is always there: screen readers announce changes only of regions they know
+    <Section title="Beschreibung" aside={reason ? null : <span role="status">{status}</span>}>
+      {/* with the editor only: while the rights load (or are gone), neither button could do anything */}
+      {conflict && !reason && (
         <Banner tone="danger" role="alert" title={conflict.message} className="mt-2">
           <p>Deine Fassung steht noch im Editor. Lade die neue Fassung oder übernimm deine; die andere bleibt in der History.</p>
           <div className="mt-2 flex flex-wrap gap-2">
@@ -201,6 +228,9 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
             value={draft}
             onChange={(doc) => {
               latest.current = doc;
+              // below the banner: what is kept for the conflict is the text as it reads now
+              const open = inConflict.current ? openConflicts.get(item.id) : undefined;
+              if (open) open.mine = doc;
               dirty.current = true;
               setUnsaved(true);
               setDraft(doc);

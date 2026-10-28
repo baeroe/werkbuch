@@ -102,6 +102,15 @@ function attachmentIds(doc: RichText | null): string[] {
   return ids;
 }
 
+/**
+ * The values as the request sends them: rich text without content is null. The form keeps the document until then,
+ * so an empty list or heading stays in the editor while it is written.
+ */
+function withoutEmptyDocs(values: Record<string, PropertyValue>, properties: readonly Property[] | undefined): Record<string, PropertyValue> {
+  const rich = new Set(properties?.filter((property) => property.field_type === 'rich_text').map((property) => property.key));
+  return Object.fromEntries(Object.entries(values).map(([key, value]) => [key, rich.has(key) && isEmptyDoc(value as RichText | null) ? null : value]));
+}
+
 const isModEnter = (event: KeyboardEvent) => event.key === 'Enter' && (isMac() ? event.metaKey : event.ctrlKey);
 
 /** Whether the form holds something typed that closing it would throw away. */
@@ -130,13 +139,20 @@ function park(draft: Draft): void {
   });
 }
 
-/** The parked draft, once, when its toast reopened the dialog and its project is still there. */
-function takeParked(projects: readonly Project[]): Draft | null {
-  if (!restoring || !parked) return null;
-  const draft = parked;
+/**
+ * The parked draft when its toast reopened the dialog and its project is still there. Only reads: rendering may run
+ * twice (StrictMode) or be thrown away; the form that shows it lets go of it with `parkedTaken`.
+ */
+function parkedToRestore(projects: readonly Project[]): Draft | null {
+  const draft = restoring ? parked : null;
+  return draft && projects.some((project) => project.id === draft.projectId) ? draft : null;
+}
+
+/** A form appeared after "Rückgängig": the parked draft is its own now (or its project is gone), nothing to restore. */
+function parkedTaken(): void {
+  if (!restoring) return;
   parked = null;
   restoring = false;
-  return projects.some((project) => project.id === draft.projectId) ? draft : null;
 }
 
 /* ------------------------------------------------------------------------------ dialog */
@@ -146,6 +162,20 @@ export function CreateItemDialog({ open, defaults, onOpenChange }: CreateItemDia
   const [another, setAnother] = useState(false);
   const [pending, setPending] = useState(false);
   const title = useRef<HTMLInputElement>(null);
+  /** What the form holds while it is shown and its item not yet created. */
+  const unsaved = useRef<Draft | null>(null);
+  const wasOpen = useRef(open);
+
+  // Closing with typed text parks it. On the close itself, not when the form unmounts: StrictMode unmounts and mounts
+  // every new form once more, which would park (and toast) a draft that "Rückgängig" just brought back.
+  useEffect(() => {
+    const closed = wasOpen.current && !open;
+    wasOpen.current = open;
+    if (!closed) return;
+    const draft = unsaved.current;
+    unsaved.current = null;
+    if (draft && hasContent(draft)) park(draft);
+  }, [open]);
 
   return (
     <Dialog
@@ -164,7 +194,7 @@ export function CreateItemDialog({ open, defaults, onOpenChange }: CreateItemDia
         </>
       }
     >
-      <CreateForm formId={formId} defaults={defaults} another={another} titleRef={title} onPending={setPending} onClose={() => onOpenChange(false)} />
+      <CreateForm formId={formId} defaults={defaults} another={another} titleRef={title} unsaved={unsaved} onPending={setPending} onClose={() => onOpenChange(false)} />
     </Dialog>
   );
 }
@@ -174,6 +204,8 @@ type CreateFormProps = {
   defaults: CreateDefaults | null;
   another: boolean;
   titleRef: RefObject<HTMLInputElement | null>;
+  /** The form keeps its draft here while it is mounted, and null once the item is created: the dialog parks it on close. */
+  unsaved: RefObject<Draft | null>;
   onPending: (pending: boolean) => void;
   onClose: () => void;
 };
@@ -251,7 +283,7 @@ type FormBodyProps = CreateFormProps & {
   organization: Organization;
 };
 
-function FormBody({ formId, defaults, another, titleRef, onPending, onClose, projects, initialProjectId, types, workflows, organization }: FormBodyProps) {
+function FormBody({ formId, defaults, another, titleRef, unsaved, onPending, onClose, projects, initialProjectId, types, workflows, organization }: FormBodyProps) {
   const properties = useProperties().data?.items;
   const labels = useLabels().data?.items;
   const { today } = useToday();
@@ -270,8 +302,8 @@ function FormBody({ formId, defaults, another, titleRef, onPending, onClose, pro
   };
 
   const [draft, setDraft] = useState<Draft>(() => {
-    // "Wiederherstellen" on the toast of a closed dialog brings its draft back
-    const restored = takeParked(projects);
+    // "Rückgängig" on the toast of a closed dialog brings its draft back
+    const restored = parkedToRestore(projects);
     if (restored) return restored;
     const projectId = initialProjectId;
     const typeId = defaults?.type_id && typesOf(projectId).some((type) => type.id === defaults.type_id) ? defaults.type_id : defaultType(projectId);
@@ -296,21 +328,23 @@ function FormBody({ formId, defaults, another, titleRef, onPending, onClose, pro
   const [focusError, setFocusError] = useState(0);
   /** The draft as it is now, for a submit that runs once pending field changes have landed. */
   const latest = useRef(draft);
-  useLayoutEffect(() => {
-    latest.current = draft;
-  });
-  const scheduled = useRef(false);
   /** The last item was created and the dialog closes: nothing to keep. */
   const done = useRef(false);
-
-  // typed text is not lost: reloading asks first, closing parks it with "Wiederherstellen" (undo, not a question)
-  useUnsavedGuard(hasContent(draft));
-  useEffect(
+  useLayoutEffect(() => {
+    latest.current = draft;
+    unsaved.current = done.current ? null : draft;
+  });
+  useLayoutEffect(
     () => () => {
-      if (!done.current && hasContent(latest.current)) park(latest.current);
+      unsaved.current = null;
     },
-    [],
+    [unsaved],
   );
+  useEffect(parkedTaken, []);
+  const scheduled = useRef(false);
+
+  // typed text is not lost: reloading asks first, closing parks it with "Rückgängig" (undo, not a question)
+  useUnsavedGuard(hasContent(draft));
 
   const project = projects.find((entry) => entry.id === draft.projectId)!;
   const workflow = workflows.find((entry) => entry.id === project.workflow_id);
@@ -442,7 +476,7 @@ function FormBody({ formId, defaults, another, titleRef, onPending, onClose, pro
         start_date: current.startDate,
         due_date: current.dueDate,
         parent_id: current.parentId,
-        values: current.values,
+        values: withoutEmptyDocs(current.values, properties),
         template_id: current.templateId,
         attachment_ids: attachmentIds(current.description),
       },
@@ -457,6 +491,7 @@ function FormBody({ formId, defaults, another, titleRef, onPending, onClose, pro
           });
           if (!another) {
             done.current = true;
+            unsaved.current = null;
             onClose();
             return;
           }
@@ -833,7 +868,8 @@ function PropertyInput({ property, required, value, projectId, error, onChange, 
         </p>
         <RichTextEditor
           value={(value ?? null) as RichText | null}
-          onChange={(doc) => onChange(isEmptyDoc(doc) ? null : doc)}
+          // the document as it is, also while it has no text yet (an empty list): null only goes out on create
+          onChange={onChange}
           preset="description"
           projectId={projectId}
           placeholder={property.help || `${property.label} …`}

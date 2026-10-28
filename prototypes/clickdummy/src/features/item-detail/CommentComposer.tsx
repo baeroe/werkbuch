@@ -19,7 +19,10 @@ import type { RichText, WorkItem } from '@/types';
 import { isEmptyDoc, RichTextEditor } from '@/features/editor/RichTextEditor';
 import { useDetail, useUnsavedGuard } from './shared';
 
-/** Unsent comments by item id, for this visit (a per-viewer convenience; nothing is stored). */
+/**
+ * Unsent comments by item id, for this visit (a per-viewer convenience; nothing is stored). Always the text as it is
+ * now, so sending reads it from here.
+ */
 const drafts = new Map<string, RichText>();
 
 export function CommentComposer({ item }: { item: WorkItem }) {
@@ -36,6 +39,8 @@ export function CommentComposer({ item }: { item: WorkItem }) {
   const box = useRef<HTMLDivElement>(null);
   const opener = useRef<HTMLButtonElement>(null);
   const refocus = useRef(false);
+  /** A send is on its way (a ref: the retry of an error toast runs an older render's `send`). */
+  const sending = useRef(false);
   const [problem, setProblem] = useState<string | null>(null);
   const problemId = useId();
   const denied = item.archived_at !== null ? archivedReason(item.key) : reason('item.comment', item.project_id);
@@ -67,27 +72,34 @@ export function CommentComposer({ item }: { item: WorkItem }) {
   }, [open]);
 
   function send() {
-    if (add.isPending) return;
-    if (!draft || empty) {
+    if (sending.current) return;
+    // the text as it is now: "Erneut versuchen" on the toast of an earlier attempt sends what was written since, too
+    const body = drafts.get(item.id);
+    if (!body) {
       // "Senden" stays usable; an empty comment says so at the editor
       setProblem('Der Kommentar ist noch leer. Schreib zuerst etwas.');
       box.current?.querySelector<HTMLElement>('[contenteditable="true"]')?.focus();
       return;
     }
-    const body = draft;
-    add.mutate(
-      { work_item_id: item.id, body },
-      {
-        onSuccess: () => {
+    sending.current = true;
+    // a promise, not callbacks of mutate: they are skipped once the preview has closed, and the draft would stay
+    add
+      .mutateAsync({ work_item_id: item.id, body })
+      .then(
+        () => {
+          toast({ title: 'Kommentar gesendet', tone: 'success' });
+          // written on while it was on its way: the newer text stays in the editor
+          if (drafts.get(item.id) !== body) return;
           setDraft(null);
           refocus.current = true;
           setOpen(false);
-          toast({ title: 'Kommentar gesendet', tone: 'success' });
         },
         // the draft stays in the editor
-        onError: (error) => notifyError('Kommentar nicht gesendet', error, send),
-      },
-    );
+        (error: unknown) => notifyError('Kommentar nicht gesendet', error, send),
+      )
+      .finally(() => {
+        sending.current = false;
+      });
   }
 
   if (denied && !open) {
