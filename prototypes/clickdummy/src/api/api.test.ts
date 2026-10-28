@@ -8,6 +8,7 @@ import { DB_KEY, getDb, loadDb, migrateDb } from './db';
 import { listNotifications, markAllRead, markRead } from './notifications';
 import { getPage, listPageVersions, listPages, savePage } from './pages';
 import { getProject, listProjects, updateProject } from './projects';
+import { addRelation, removeRelation } from './relations';
 import { search } from './search';
 import { listTemplates } from './templates';
 import { deactivateUser } from './users';
@@ -251,6 +252,63 @@ describe('visibility', () => {
     const asIda = await getWorkItem('WEB-47');
     const blocker = asIda.relations.find((entry) => entry.relation.id === asMara.relations.find((r) => r.other?.key === 'OPS-12')?.relation.id);
     expect(blocker).toMatchObject({ hidden: true, other: null, direction: 'inward' });
+  });
+
+  it('does not give away the key or the id of a hidden item in the detail of an item', async () => {
+    expect(JSON.stringify(await getWorkItem('WEB-47'))).toContain('wi_ops_12'); // Mara sees it
+    await addRelation('wi_web_50', 'rt_blocks', 'wi_ops_14'); // WEB-50 blocks an item of OPS
+
+    asUser('u_ida');
+    for (const key of ['WEB-47', 'WEB-50']) {
+      const detail = await getWorkItem(key);
+      // item ids spell the key (`wi_ops_12`), so the id is as telling as the key
+      expect(JSON.stringify(detail), key).not.toMatch(/wi_ops_|OPS-/i);
+      const hidden = detail.relations.filter((entry) => entry.hidden);
+      expect(hidden, key).toHaveLength(1);
+      expect(hidden[0]).toMatchObject({ other: null, hidden: true });
+    }
+
+    // what Ida may see of the relation stays: its id and type and her own item; the other end is blanked
+    const blockedBy = (await getWorkItem('WEB-47')).relations.find((entry) => entry.hidden)!;
+    expect(blockedBy).toMatchObject({ direction: 'inward', relation: { type_id: 'rt_blocks', source_id: '', target_id: 'wi_web_47' } });
+    expect(blockedBy.relation.id).toBeTruthy();
+    const blocks = (await getWorkItem('WEB-50')).relations.find((entry) => entry.hidden)!;
+    expect(blocks).toMatchObject({ direction: 'outward', relation: { type_id: 'rt_blocks', source_id: 'wi_web_50', target_id: '' } });
+  });
+
+  it('does not give away the key or the id of a hidden item in the history either', async () => {
+    // Mara links WEB-50 to OPS-14 and takes the link away again
+    const relation = await addRelation('wi_web_50', 'rt_relates', 'wi_ops_14');
+    await removeRelation(relation.id);
+    const relationEvents = async () =>
+      (await listActivity('WEB-50')).items.flatMap((entry) => (entry.kind === 'event' && entry.event.type.startsWith('work_item.relation_') ? [entry.event] : []));
+
+    // Mara sees the other item by its current key
+    const seen = await relationEvents();
+    expect(seen.map((event) => [event.type, event.changes.relation])).toEqual([
+      ['work_item.relation_added', { old: null, new: { label: 'verwandt mit', item_id: 'wi_ops_14', key: 'OPS-14' } }],
+      ['work_item.relation_removed', { old: { label: 'verwandt mit', item_id: 'wi_ops_14', key: 'OPS-14' }, new: null }],
+    ]);
+
+    asUser('u_ida');
+    expect(JSON.stringify(await listActivity('WEB-50'))).not.toMatch(/wi_ops_|OPS-/i);
+    const hidden = await relationEvents();
+    expect(hidden.map((event) => event.changes.relation)).toEqual([
+      { old: null, new: { label: 'verwandt mit', hidden: true } },
+      { old: { label: 'verwandt mit', hidden: true }, new: null },
+    ]);
+  });
+
+  it('names a related item in the history by its current key, also after its project got a new identifier', async () => {
+    await addRelation('wi_web_50', 'rt_relates', 'wi_web_51');
+    await updateProject('p_web', { identifier: 'SITE' });
+
+    const event = (await listActivity('SITE-50')).items.flatMap((entry) => (entry.kind === 'event' ? [entry.event] : [])).find((e) => e.type === 'work_item.relation_added');
+
+    expect(event?.changes.relation).toEqual({ old: null, new: { label: 'verwandt mit', item_id: 'wi_web_51', key: 'SITE-51' } });
+    // the event itself keeps the id of the other item and no key
+    const stored = getDb().events.find((entry) => entry.type === 'work_item.relation_added' && entry.subject.id === 'wi_web_50');
+    expect(stored?.changes.relation).toEqual({ old: null, new: { label: 'verwandt mit', item_id: 'wi_web_51' } });
   });
 });
 

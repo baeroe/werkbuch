@@ -13,4 +13,5 @@ Thumbs.db
 /prototypes/clickdummy/dist-review/
 /prototypes/clickdummy/.shots/
 /prototypes/clickdummy/test-results/
+/prototypes/clickdummy/.vitest/
 /prototypes/clickdummy/playwright-report/

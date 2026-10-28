@@ -11,6 +11,7 @@ import type {
   Filter,
   Project,
   PropertyValue,
+  RelationChange,
   RelationEntry,
   SortSpec,
   User,
@@ -95,8 +96,10 @@ export function getWorkItem(keyOrId: string): Promise<WorkItemDetail> {
       .map((relation) => {
         const outward = relation.source_id === item.id;
         const other = db.items.find((entry) => entry.id === (outward ? relation.target_id : relation.source_id));
-        const visible = other !== undefined && canSeeProject(db, me, projectOf(db, other));
-        return { relation, other: visible ? other : null, direction: outward ? 'outward' : 'inward', hidden: !visible };
+        const direction = outward ? 'outward' : 'inward';
+        if (other !== undefined && canSeeProject(db, me, projectOf(db, other))) return { relation, other, direction, hidden: false };
+        // a hidden end stays hidden: neither the item nor its id (which spells its key) leaves the server
+        return { relation: outward ? { ...relation, target_id: '' } : { ...relation, source_id: '' }, other: null, direction, hidden: true };
       });
 
     return {
@@ -140,7 +143,19 @@ export function getWorkItemMeta(): Promise<WorkItemMeta> {
   });
 }
 
-/** Comments and history of an item, oldest first. */
+/**
+ * What an event about a relation tells this reader about the other item: its current key when they may see it, only
+ * "hidden" otherwise (also when the item is gone). Events store the id; nothing but this answer leaves the server.
+ */
+function relationChange(db: Db, me: User, stored: unknown): RelationChange | null {
+  if (typeof stored !== 'object' || stored === null) return null;
+  const { label, item_id } = stored as { label?: string; item_id?: string };
+  const other = db.items.find((entry) => entry.id === item_id);
+  const text = typeof label === 'string' ? label : '';
+  return other && canSeeProject(db, me, projectOf(db, other)) ? { label: text, item_id: other.id, key: other.key } : { label: text, hidden: true };
+}
+
+/** Comments and history of an item, oldest first. Relation events name the other item only if the reader may see it. */
 export function listActivity(itemRef: string, args: PageArgs = {}): Promise<Page<ActivityEntry>> {
   return read(({ db, me }) => {
     const { item } = requireItem(db, me, itemRef);
@@ -151,7 +166,13 @@ export function listActivity(itemRef: string, args: PageArgs = {}): Promise<Page
       // the comment itself shows in the list, so its `comment.created` event does not
       ...db.events
         .filter((event) => event.subject.type === 'work_item' && event.subject.id === item.id && event.type !== 'comment.created')
-        .map((event): ActivityEntry => ({ kind: 'event', id: event.id, at: event.occurred_at, event })),
+        .map((event): ActivityEntry => {
+          const relation = event.changes.relation;
+          const shown = relation
+            ? { ...event, changes: { ...event.changes, relation: { old: relationChange(db, me, relation.old), new: relationChange(db, me, relation.new) } } }
+            : event;
+          return { kind: 'event', id: event.id, at: event.occurred_at, event: shown };
+        }),
     ];
     const ordered = entries
       .map((entry, index) => ({ entry, index }))

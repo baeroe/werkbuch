@@ -14,6 +14,7 @@
 import { useMutation, useQueryClient, type QueryClient, type QueryKey, type UseMutationResult } from '@tanstack/react-query';
 import { ApiError } from '@/api/client';
 import { toast } from '@/components/ui/toast';
+import { parseKey } from '@/domain/keys';
 import { useSession } from '@/store/session';
 import type { WorkItem, WorkItemDetail } from '@/types';
 import type { Page } from '@/api/client';
@@ -49,12 +50,27 @@ interface Snapshot {
 const isPage = (data: unknown): data is Page<WorkItem> => typeof data === 'object' && data !== null && Array.isArray((data as Page<WorkItem>).items);
 const isDetail = (data: unknown): data is WorkItemDetail => typeof data === 'object' && data !== null && 'item' in data && 'workflow' in data;
 
+/**
+ * Which items a list of references names. The API takes an id or a key (`WEB-47`), and a mutation hook is called with
+ * what the caller has, so both must find the item in the cache; a key matches in any case, as it does on the server.
+ */
+function referencing(refs: readonly string[]): (item: WorkItem) => boolean {
+  const ids = new Set(refs);
+  const keys = new Set(
+    refs.flatMap((ref) => {
+      const key = parseKey(ref);
+      return key ? [`${key.identifier}-${key.number}`] : [];
+    }),
+  );
+  return (item) => ids.has(item.id) || keys.has(item.key);
+}
+
 /** Lists and details in the cache with the changed items replaced; anything else stays as it is. */
-function patchCached(data: unknown, ids: ReadonlySet<string>, change: (item: WorkItem) => WorkItem): unknown {
+function patchCached(data: unknown, named: (item: WorkItem) => boolean, change: (item: WorkItem) => WorkItem): unknown {
   if (isPage(data)) {
-    return { ...data, items: data.items.map((item) => (ids.has(item.id) ? change(item) : item)) };
+    return { ...data, items: data.items.map((item) => (named(item) ? change(item) : item)) };
   }
-  if (isDetail(data) && ids.has(data.item.id)) {
+  if (isDetail(data) && named(data.item)) {
     const item = change(data.item);
     return {
       ...data,
@@ -71,7 +87,7 @@ const isTransient = (error: unknown) => !(error instanceof ApiError) || error.st
 
 interface ItemMutation<TVars, TData> {
   mutationFn: (vars: TVars) => Promise<TData>;
-  /** The ids of the items the change is about. */
+  /** The items the change is about, by id or key (what the API function takes). */
   ids: (vars: TVars) => string[];
   /** The item as the change leaves it. */
   apply: (item: WorkItem, vars: TVars) => WorkItem;
@@ -88,8 +104,8 @@ export function useItemMutation<TVars, TData>(config: ItemMutation<TVars, TData>
       // a running reload must not overwrite the change with the old state
       await queryClient.cancelQueries({ queryKey: qk.workItems.all });
       const snapshot = queryClient.getQueriesData<unknown>({ queryKey: qk.workItems.all });
-      const ids = new Set(config.ids(vars));
-      for (const [key, data] of snapshot) queryClient.setQueryData(key, patchCached(data, ids, (item) => config.apply(item, vars)));
+      const named = referencing(config.ids(vars));
+      for (const [key, data] of snapshot) queryClient.setQueryData(key, patchCached(data, named, (item) => config.apply(item, vars)));
       return { snapshot };
     },
     onError: (error, vars, context) => {

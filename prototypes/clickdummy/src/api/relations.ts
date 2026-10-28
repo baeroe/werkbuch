@@ -1,11 +1,13 @@
 /*
  * Relations between work items (spec 4.9). They may cross projects; a person who may not see one end sees it as a
- * "verborgenes Item". Only "blockiert" does something (the blocked item shows a hint); the other types are labels.
+ * "verborgenes Item", also in the history. Only "blockiert" does something (the blocked item shows a hint); the other
+ * types are labels. The events of a relation hold the id of the other item, not its key: what a reader gets to see of
+ * it is decided when they read (`listActivity`), and a renamed project does not leave old keys in the history.
  */
 
 import type { Relation } from '@/types';
 import { canSeeProject, requireWritable } from './access';
-import { clone, FieldErrors, newId, notFound, write } from './client';
+import { FieldErrors, newId, notFound, write } from './client';
 import { recordEvent } from './events';
 import { projectOf } from './lookup';
 import { requireItem } from './workItems';
@@ -44,7 +46,7 @@ export function addRelation(source_id: string, type_id: string, target_id: strin
         actor_id: me.id,
         subject: { type: 'work_item', id: item.id },
         project_id: item.project_id,
-        changes: { relation: { old: null, new: { label, item: other.key } } },
+        changes: { relation: { old: null, new: { label, item_id: other.id } } },
       });
     }
     return relation;
@@ -73,7 +75,7 @@ export function removeRelation(id: string): Promise<void> {
         actor_id: me.id,
         subject: { type: 'work_item', id: item.id },
         project_id: item.project_id,
-        changes: { relation: { old: clone({ label, item: other.key }), new: null } },
+        changes: { relation: { old: { label, item_id: other.id }, new: null } },
       });
     }
   });

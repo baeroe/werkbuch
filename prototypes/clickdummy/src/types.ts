@@ -580,6 +580,10 @@ export interface SystemStatus {
 
 /** One end of a relation, seen from a work item. */
 export interface RelationEntry {
+  /**
+   * The relation. When the reader may not see the other end, that end's id is blanked (`''`): item ids spell the key
+   * (`wi_ops_12`), so neither may leave the server. The relation's own `id` and `type_id` stay.
+   */
   relation: Relation;
   /** The item at the other end; null when the reader may not see it (shown as "verborgenes Item", without title). */
   other: WorkItem | null;
@@ -616,6 +620,20 @@ export interface WorkItemMeta {
 export type ActivityEntry =
   | { kind: 'comment'; id: string; at: string; comment: Comment }
   | { kind: 'event'; id: string; at: string; event: ItemEvent };
+
+/**
+ * What `changes.relation` of a `work_item.relation_added` / `work_item.relation_removed` event holds (`old` or `new`,
+ * the other one is null) when `listActivity` returns it. The event stores the id of the other item; the reader gets
+ * its current key if they may see it, and otherwise only `hidden`: the UI shows "verborgenes Item", without key or id.
+ */
+export interface RelationChange {
+  /** The relation as seen from this item, e.g. "wird blockiert von". */
+  label: string;
+  item_id?: string;
+  /** The current key of the other item. */
+  key?: string;
+  hidden?: true;
+}
 
 /** The result of a bulk edit: what changed, and what an item's own rules refused (e.g. `transition_not_allowed`). */
 export interface BulkResult {

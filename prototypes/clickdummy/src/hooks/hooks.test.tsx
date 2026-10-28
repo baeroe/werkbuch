@@ -5,9 +5,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { updateWorkItem } from '@/api/workItems';
 import { toast } from '@/components/ui/toast';
 import { resetApi } from '@/test/api';
-import type { WorkItemDetail } from '@/types';
+import type { Page } from '@/api/client';
+import type { WorkItemDetail, WorkItem } from '@/types';
 import { qk } from './keys';
-import { useTransitionWorkItem, useUpdateWorkItem, useWorkItem, useWorkItems } from './workItems';
+import { useArchiveWorkItem, useBulkUpdateWorkItems, useTransitionWorkItem, useUpdateWorkItem, useWorkItem, useWorkItems } from './workItems';
 
 vi.mock('@/components/ui/toast', () => ({ toast: vi.fn() }));
 
@@ -25,15 +26,18 @@ beforeEach(() => {
 
 const detailTitle = () => queryClient.getQueryData<WorkItemDetail>(qk.workItems.detail('WEB-47'))?.item.title;
 
-/** Every title the cached detail of WEB-47 has had, in order (cache events fire synchronously). */
-function recordTitles(): string[] {
-  const seen: string[] = [];
+/** What `read` answers now and then every time it changes while the cache changes (cache events fire synchronously). */
+function watch<T>(read: () => T): T[] {
+  const seen: T[] = [read()];
   queryClient.getQueryCache().subscribe(() => {
-    const title = detailTitle();
-    if (title !== undefined && seen.at(-1) !== title) seen.push(title);
+    const value = read();
+    if (value !== undefined && JSON.stringify(seen.at(-1)) !== JSON.stringify(value)) seen.push(value);
   });
   return seen;
 }
+
+/** Every title the cached detail of WEB-47 has had, in order. */
+const recordTitles = () => watch(detailTitle);
 
 describe('item mutations', () => {
   it('useUpdateWorkItem shows the change immediately and rolls back on failure', async () => {
@@ -48,7 +52,7 @@ describe('item mutations', () => {
 
     await waitFor(() => expect(result.current.update.isError).toBe(true));
     // first the new title, then the old one again
-    expect(titles).toEqual(['Neuer Titel', oldTitle]);
+    expect(titles).toEqual([oldTitle, 'Neuer Titel', oldTitle]);
     expect(detailTitle()).toBe(oldTitle);
     expect(result.current.update.isPending).toBe(false);
     expect(toast).toHaveBeenCalledWith(
@@ -109,6 +113,48 @@ describe('item mutations', () => {
     expect(toast).not.toHaveBeenCalled();
     // after the reload the detail shows what the other person wrote
     await waitFor(() => expect(JSON.stringify(result.current.detail.data?.item.description)).toContain('Von jemand anderem'));
+  });
+
+  it('called with a key (as the API takes it) the item mutations change detail and list at once and roll back on failure', async () => {
+    const args = { filter: { version: 1 as const, conditions: [{ field: 'project', op: 'is' as const, value: 'p_web' }] } };
+    const listItem = (key: string) => queryClient.getQueryData<Page<WorkItem>>(qk.workItems.list(args))?.items.find((entry) => entry.key === key);
+    const { result } = renderHook(() => ({ list: useWorkItems(args), detail: useWorkItem('WEB-47'), update: useUpdateWorkItem() }), { wrapper });
+    await waitFor(() => expect(result.current.list.data && result.current.detail.data).toBeTruthy());
+    const before = result.current.detail.data!.item.priority;
+    expect(before).toBe('urgent');
+    const inDetail = watch(() => queryClient.getQueryData<WorkItemDetail>(qk.workItems.detail('WEB-47'))?.item.priority);
+    const inList = watch(() => listItem('WEB-47')?.priority);
+
+    localStorage.setItem('api:fail', '1');
+    act(() => result.current.update.mutate({ id: 'WEB-47', patch: { priority: 'low' } })); // the key, not the id
+
+    await waitFor(() => expect(result.current.update.isError).toBe(true));
+    expect(inDetail).toEqual([before, 'low', before]);
+    expect(inList).toEqual([before, 'low', before]);
+    expect(result.current.update.isPending).toBe(false);
+    expect(toast).toHaveBeenCalledWith(expect.objectContaining({ action: expect.objectContaining({ label: 'Erneut versuchen' }) }));
+  });
+
+  it('a bulk edit and an archive with keys (also in lower case) show at once and roll back', async () => {
+    const args = { filter: { version: 1 as const, conditions: [{ field: 'project', op: 'is' as const, value: 'p_web' }] } };
+    const listItem = (key: string) => queryClient.getQueryData<Page<WorkItem>>(qk.workItems.list(args))?.items.find((entry) => entry.key === key);
+    const { result } = renderHook(
+      () => ({ list: useWorkItems(args), detail: useWorkItem('WEB-39'), bulk: useBulkUpdateWorkItems(), archive: useArchiveWorkItem() }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.list.data && result.current.detail.data).toBeTruthy());
+    const priorities = watch(() => ['WEB-50', 'WEB-51', 'WEB-55'].map((key) => listItem(key)?.priority));
+    const archived = watch(() => queryClient.getQueryData<WorkItemDetail>(qk.workItems.detail('WEB-39'))?.item.archived_at !== null);
+
+    localStorage.setItem('api:fail', '1');
+    act(() => result.current.bulk.mutate({ ids: ['web-50', 'WEB-51', 'wi_web_55'], patch: { priority: 'urgent' } }));
+    await waitFor(() => expect(result.current.bulk.isError).toBe(true));
+    const original = ['medium', 'low', 'none'];
+    expect(priorities).toEqual([original, ['urgent', 'urgent', 'urgent'], original]);
+
+    act(() => result.current.archive.mutate('WEB-39'));
+    await waitFor(() => expect(result.current.archive.isError).toBe(true));
+    expect(archived).toEqual([false, true, false]);
   });
 
   it('a transition the workflow does not allow rolls back and names the reason without a retry action', async () => {
