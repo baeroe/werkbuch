@@ -57,6 +57,8 @@ export interface User {
   is_default_bot: boolean;
   /** Bots: the responsible person. */
   owner_id: string | null;
+  /** Bots: what the bot is for (spec 4.2). */
+  description?: string;
   disabled_at: string | null;
   avatar_url: string | null;
   locale: Locale;
@@ -572,4 +574,89 @@ export interface SystemStatus {
   /** Meilisearch. */
   search: 'ok' | 'down';
   mail_configured: boolean;
+}
+
+/* --------------------------------------------------------------- API shapes (fake API) */
+
+/** One end of a relation, seen from a work item. */
+export interface RelationEntry {
+  relation: Relation;
+  /** The item at the other end; null when the reader may not see it (shown as "verborgenes Item", without title). */
+  other: WorkItem | null;
+  /** `outward`: this item is the source ("blockiert"); `inward`: it is the target ("wird blockiert von"). */
+  direction: 'outward' | 'inward';
+  hidden: boolean;
+}
+
+/** What `getWorkItem` returns: the item with everything the detail view shows besides the activity. */
+export interface WorkItemDetail {
+  item: WorkItem;
+  type: WorkItemType;
+  state: State;
+  workflow: Workflow;
+  children: WorkItem[];
+  relations: RelationEntry[];
+  attachments: Attachment[];
+  /** Whether the signed-in account watches the item. */
+  subscribed: boolean;
+}
+
+/**
+ * Facts about all items the signed-in account may see, for cards and rows: the progress of items with children, and
+ * the items that are blocked or block others (a blocker counts while it is open).
+ */
+export interface WorkItemMeta {
+  /** Item id → closed and all children, for items that have children. */
+  progress: Record<string, { done: number; total: number }>;
+  blocked: string[];
+  blocking: string[];
+}
+
+/** One line of an item's activity: a comment or an event of the history, in chronological order. */
+export type ActivityEntry =
+  | { kind: 'comment'; id: string; at: string; comment: Comment }
+  | { kind: 'event'; id: string; at: string; event: ItemEvent };
+
+/** The result of a bulk edit: what changed, and what an item's own rules refused (e.g. `transition_not_allowed`). */
+export interface BulkResult {
+  updated: string[];
+  rejected: { id: string; reason: string }[];
+}
+
+/** A view or project in the sidebar of one person. */
+export interface Favorite {
+  user_id: string;
+  kind: 'view' | 'project';
+  id: string;
+  position: number;
+}
+
+export interface Invitation {
+  id: string;
+  email: string;
+  org_role: OrgRole;
+  /** Projects to join on acceptance. */
+  projects: { project_id: string; role: ProjectRole }[];
+  link: string;
+  created_by: string;
+  created_at: string;
+  /** Seven days after creation; a new invitation replaces the old one. */
+  expires_at: string;
+}
+
+export interface SearchResults {
+  items: WorkItem[];
+  pages: Page[];
+  projects: Project[];
+  people: User[];
+  views: View[];
+}
+
+/** A wiki page in the tree of a project: no content, but its children. */
+export type PageNode = Omit<Page, 'content' | 'simulate_conflict_once'> & { children: PageNode[] };
+
+/** What saving a webhook returns: the secret in plain text only on creating and on renewing it. */
+export interface WebhookSaved {
+  webhook: Webhook;
+  secret: string | null;
 }

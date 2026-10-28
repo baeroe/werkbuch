@@ -1,0 +1,25 @@
+/*
+ * The three files attached to items of the demo, as data URLs (the prototype keeps attachments inside the stored
+ * document). Made up: a wireframe for the hero, a one-page outline and a few lines of a mail server configuration.
+ */
+
+export const HERO_PNG = {
+  filename: 'hero-entwurf.png',
+  mime: 'image/png',
+  size: 454,
+  url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAAB4CAIAAAArJ2pIAAABjUlEQVR42u3dsY2DQBRFUTpyLZTlhhxTAxGhJRICEgLLIoMKCIYB8WeOdJ0/7T/B4rW8TT98peSa/fVqP1JCAAkgAaQCAf3+a8b8rAECSAAJIPklWgBJAAkgAaTogPI+cKmeABJAAkgACSAJIAGkIgC9u1EZO7hBiAACCCCAAAIIIAEEEEAAAQQQQDUBiv7pJ4AAAggggAACCCCAAAIIII/xHuMBEkAAAQQQQAABBJAAAggggAACCCCABJAAAggggAACCCCABBBAAAEEEEAAASSAAAIIIIAAAgggAQQQQAABBBBAAAkgAQQQQAABFBGQ5L/1CCABJIAkgASQABJAEkC6FlC4d9YNvuFvFwAZDBBAALkHQO4BEEAGA2QwQAAB5B4AuYfBABkMEEAAuQdA7mHwOUDTvDw5g+8fDJDBAAEEkHsA5B4AAWQwQAYDBBBA7gGQexgMkMEAAQSQewDkHgYDZDBAAAHkHgC5h8EAGQwQQAC5B0DuAZAv2ZRvaRVAAkgAASSABJDCApKS2wBGzZB58v9gBAAAAABJRU5ErkJggg==',
+} as const;
+
+export const OUTLINE_PDF = {
+  filename: 'leistungsseiten-gliederung.pdf',
+  mime: 'application/pdf',
+  size: 756,
+  url: 'data:application/pdf;base64,JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA0MjAgMzAwXSAvQ29udGVudHMgNCAwIFIgL1Jlc291cmNlcyA8PCAvRm9udCA8PCAvRjEgNSAwIFIgPj4gPj4gPj4KZW5kb2JqCjQgMCBvYmoKPDwgL0xlbmd0aCAyMTEgPj4Kc3RyZWFtCkJUIC9GMSAxNCBUZiAzMCAyNTAgVGQgMTggVEwKKExlaXN0dW5nc3NlaXRlbiAtIEdsaWVkZXJ1bmcgKEVudHd1cmYpKSBUaiBUKgooKSBUaiBUKgooMS4gQmVyYXR1bmcpIFRqIFQqCigyLiBVbXNldHp1bmcpIFRqIFQqCigzLiBCZXRyaWViIHVuZCBXYXJ0dW5nKSBUaiBUKgooKSBUaiBUKgooVGV4dGUgZm9sZ2VuIHZvbiBTdHVkaW8gTm9yZGxpY2h0LikgVGogVCoKRVQKZW5kc3RyZWFtCmVuZG9iago1IDAgb2JqCjw8IC9UeXBlIC9Gb250IC9TdWJ0eXBlIC9UeXBlMSAvQmFzZUZvbnQgL0hlbHZldGljYSA+PgplbmRvYmoKeHJlZgowIDYKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDA5IDAwMDAwIG4gCjAwMDAwMDAwNTggMDAwMDAgbiAKMDAwMDAwMDExNSAwMDAwMCBuIAowMDAwMDAwMjQxIDAwMDAwIG4gCjAwMDAwMDA1MDMgMDAwMDAgbiAKdHJhaWxlcgo8PCAvU2l6ZSA2IC9Sb290IDEgMCBSID4+CnN0YXJ0eHJlZgo1NzMKJSVFT0YK',
+} as const;
+
+export const POSTFIX_TXT = {
+  filename: 'postfix-main.cf.txt',
+  mime: 'text/plain',
+  size: 135,
+  url: 'data:text/plain;charset=utf-8,%23%20/etc/postfix/main.cf%20%28Auszug%29%0Asmtpd_client_message_rate_limit%20%3D%20100%0Aanvil_rate_time_unit%20%3D%203600s%0Adefault_destination_rate_delay%20%3D%201s%0A',
+} as const;

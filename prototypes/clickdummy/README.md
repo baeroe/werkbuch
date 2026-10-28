@@ -50,12 +50,12 @@ src/
   styles/            tokens.css (alle Tokens aus DESIGN.md), app.css (Tailwind 4, @theme inline, Grundstile)
   components/ui/     eigenes Komponentenset auf Base UI, dazu ui.test.tsx
   routes/            components-gallery.tsx (/_components)
-  lib/               kleine Helfer (theme.ts, platform.ts); später Kürzel-Register, Uhr und Rechte
+  lib/               kleine Helfer (theme.ts, platform.ts, clock.ts, richtext.ts); später Kürzel-Register und Rechte
   types.ts           gemeinsame Typen
   domain/            Fachlogik als reine Funktionen; wird später nach PHP portiert
-  api/               Fake-API
-  hooks/             TanStack-Query-Hooks
-  store/             Zustand-Stores
+  api/               Fake-API: client.ts (Fehler, Latenz, Sitzung), db.ts (localStorage), eine Datei je Ressource, seed/ (Demo-Daten)
+  hooks/             TanStack-Query-Hooks, einer je API-Funktion; keys.ts hat alle Query-Keys
+  store/             Zustand: session.ts (wer angemeldet ist), ui.ts (Theme, Seitenleiste, Palette, Vorschau, Auswahl)
   app/               Shell und Router
   features/<name>/   die Bildschirme
 scripts/shots.mjs    Screenshots mit Prüfung
@@ -75,6 +75,17 @@ localStorage.removeItem('api:fail') //   wieder normal
 ```
 
 So lassen sich Fehlerzustände, „Erneut versuchen“ und das Zurückrollen optimistischer Änderungen ansehen.
+
+## Daten und Uhr
+
+Die Demo-Daten liegen in `src/api/seed/` (alles ausgedacht: Feldwerk, sechs Personen, zwei Bots, drei Projekte) und werden beim ersten Start nach `localStorage['werkbuch:db']` geschrieben. Dort stehen auch die Änderungen. Ein alter Stand (`schema_version`) oder kaputtes JSON wird nicht migriert, sondern durch die Demo-Daten ersetzt.
+
+```js
+localStorage.removeItem('werkbuch:db') // Demo-Daten neu laden (nach dem Neuladen der Seite)
+localStorage.getItem('werkbuch:session') // wer angemeldet ist; Standard ist Mara Lindqvist (u_mara)
+```
+
+„Heute“ ist Mittwoch, der 28.10.2026. Die Uhr (`src/lib/clock.ts`) startet beim Laden der Seite um 10:00 Europe/Berlin und läuft in Echtzeit weiter. Ändert sich die Seed-Form, hebt man `SCHEMA_VERSION` in `src/api/db.ts` an.
 
 ## Wo die echte API andockt
 
