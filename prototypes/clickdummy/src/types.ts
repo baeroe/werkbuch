@@ -320,11 +320,20 @@ export interface FilterContext {
   me: string;
   /** Today in the organisation's time zone, 'YYYY-MM-DD'. */
   today: string;
+  /**
+   * IANA name of the organisation's time zone, e.g. 'Europe/Berlin'. It belongs together with `today`: the days of
+   * the timestamps `created_at`, `updated_at` and `closed_at` are read in this zone. Without it they count by their
+   * UTC day.
+   */
+  time_zone?: string;
   week_start: 0 | 1;
   stateCategory(stateId: string): StateCategory;
   typeHasProperty(typeId: string, key: string): boolean;
   hasChildren(itemId: string): boolean;
+  /** Another item that is still open blocks this one (spec 4.9). */
   isBlocked(itemId: string): boolean;
+  /** This item is still open and blocks at least one other item (spec 4.9). */
+  isBlocking(itemId: string): boolean;
 }
 
 /** One bucket of a grouped item list: a board column or a list section. */

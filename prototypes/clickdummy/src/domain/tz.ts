@@ -203,3 +203,20 @@ export function createZone(timeZone: string): Zone {
     toUtc,
   };
 }
+
+/** The zones `cachedZone` has handed out, by name. */
+const zones = new Map<string, Zone>();
+
+/**
+ * `createZone`, remembered per time zone name. For code that needs a zone for every item of a long list (the filter
+ * engine reads the day of three timestamps per item): the formatter is built once, not once per item. A zone holds no
+ * state apart from its formatter, so sharing it is safe. An unknown name throws every time and is not remembered.
+ */
+export function cachedZone(timeZone: string): Zone {
+  let zone = zones.get(timeZone);
+  if (zone === undefined) {
+    zone = createZone(timeZone);
+    zones.set(timeZone, zone);
+  }
+  return zone;
+}

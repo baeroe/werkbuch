@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   addDays,
+  cachedZone,
   createZone,
   daysInMonth,
   diffDays,
@@ -87,6 +88,23 @@ describe('createZone', () => {
 
   it('rejects a time zone that does not exist', () => {
     expect(() => createZone('Mars/Phobos')).toThrow(RangeError);
+  });
+});
+
+describe('cachedZone', () => {
+  it('gives the same zone for the same name and a different one for another name', () => {
+    expect(cachedZone('Europe/Berlin')).toBe(cachedZone('Europe/Berlin'));
+    expect(cachedZone('Europe/Berlin')).not.toBe(cachedZone('UTC'));
+  });
+
+  it('works like createZone', () => {
+    expect(cachedZone('Europe/Berlin').date(new Date('2026-10-31T23:30:00Z'))).toBe('2026-11-01');
+    expect(cachedZone('Europe/Berlin').toUtc('2026-10-25', '09:00').toISOString()).toBe('2026-10-25T08:00:00.000Z');
+  });
+
+  it('keeps throwing for a time zone that does not exist', () => {
+    expect(() => cachedZone('Mars/Phobos')).toThrow(RangeError);
+    expect(() => cachedZone('Mars/Phobos')).toThrow(RangeError);
   });
 });
 

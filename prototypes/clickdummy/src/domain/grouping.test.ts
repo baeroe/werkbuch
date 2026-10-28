@@ -63,6 +63,7 @@ describe('groupItems', () => {
     typeHasProperty: () => false,
     hasChildren: () => false,
     isBlocked: () => false,
+    isBlocking: () => false,
     labelFor: (_groupBy, key) => labels[key] ?? key,
     orderFor: (groupBy) => orders[groupBy] ?? [],
   };

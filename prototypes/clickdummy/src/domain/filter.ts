@@ -7,8 +7,11 @@
  * - ids and enums: project, type, state, state_category, assignee, created_by, priority, parent
  * - label: the item's labels, so the operators work on a list (`in` means "has one of")
  * - dates: start_date, due_date
- * - timestamps: created_at, updated_at, closed_at; compared by their day (the date part of the ISO string)
- * - flags: has_children, blocked, archived; use `{ op: 'is', value: true }` or `false`
+ * - timestamps: created_at, updated_at, closed_at; compared by their calendar day in the organisation's time zone
+ *   (`ctx.time_zone`; the UTC day when the context has none), so that "created today" agrees with `ctx.today`.
+ *   A timestamp that cannot be read counts as missing.
+ * - flags: has_children, blocked (another open item blocks it), blocking (it blocks another item), archived;
+ *   use `{ op: 'is', value: true }` or `false`
  * - title: text
  * - `property:<key>`: the value of a property, keyed like `WorkItem.values`. Items whose type does not have the
  *   property never match, whatever the operator (`is_empty` and `is_not` included).
@@ -34,7 +37,7 @@
  */
 
 import type { Condition, Filter, FilterContext, Priority, RichText, SortSpec, WorkItem } from '@/types';
-import { addDays, endOfMonth, startOfMonth, startOfWeek } from './tz';
+import { addDays, cachedZone, endOfMonth, startOfMonth, startOfWeek } from './tz';
 import { CATEGORY_ORDER, isClosedCategory } from './workflow';
 
 export type { FilterContext } from '@/types';
@@ -42,8 +45,16 @@ export type { FilterContext } from '@/types';
 /** The order of the priorities, most urgent first. */
 export const PRIORITY_ORDER: readonly Priority[] = ['urgent', 'high', 'medium', 'low', 'none'];
 
-/** The day of an ISO timestamp, 'YYYY-MM-DD'. */
-const dayPart = (timestamp: string | null) => (timestamp === null ? null : timestamp.slice(0, 10));
+/**
+ * The calendar day of an ISO timestamp in the time zone of the context (UTC without one), 'YYYY-MM-DD'. Null when
+ * there is no timestamp or it cannot be read. Throws `RangeError` for a time zone name Intl does not know.
+ */
+function dayOf(timestamp: string | null, ctx: FilterContext): string | null {
+  if (timestamp === null) return null;
+  const at = new Date(timestamp);
+  if (Number.isNaN(at.getTime())) return null;
+  return cachedZone(ctx.time_zone || 'UTC').date(at);
+}
 
 const CORE_FIELDS = {
   project: (item) => item.project_id,
@@ -57,11 +68,12 @@ const CORE_FIELDS = {
   parent: (item) => item.parent_id,
   start_date: (item) => item.start_date,
   due_date: (item) => item.due_date,
-  created_at: (item) => dayPart(item.created_at),
-  updated_at: (item) => dayPart(item.updated_at),
-  closed_at: (item) => dayPart(item.closed_at),
+  created_at: (item, ctx) => dayOf(item.created_at, ctx),
+  updated_at: (item, ctx) => dayOf(item.updated_at, ctx),
+  closed_at: (item, ctx) => dayOf(item.closed_at, ctx),
   has_children: (item, ctx) => ctx.hasChildren(item.id),
   blocked: (item, ctx) => ctx.isBlocked(item.id),
+  blocking: (item, ctx) => ctx.isBlocking(item.id),
   archived: (item) => item.archived_at !== null,
   title: (item) => item.title,
 } satisfies Record<string, (item: WorkItem, ctx: FilterContext) => unknown>;

@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Condition, Filter, FilterContext, StateCategory, WorkItem } from '@/types';
 import { CORE_FILTER_FIELDS, matchesFilter, sortItems } from './filter';
-import { agency, epicWithoutCustomer, makeWorkItem, overdueDone, overdueStarted, standard, web47 } from './fixtures';
+import { agency, epicWithoutCustomer, makeWorkItem, ops12, overdueDone, overdueStarted, standard, web47 } from './fixtures';
 
 const categoryOf = new Map<string, StateCategory>([...standard.states, ...agency.states].map((s) => [s.id, s.category]));
 
@@ -25,6 +25,7 @@ const ctx: FilterContext = {
   typeHasProperty: (typeId, key) => typeProperties[typeId]?.includes(key) ?? false,
   hasChildren: (itemId) => itemId === epicWithoutCustomer.id,
   isBlocked: (itemId) => itemId === web47.id,
+  isBlocking: (itemId) => itemId === ops12.id,
 };
 
 const f = (condition: Condition): Filter => ({ version: 1, conditions: [condition] });
@@ -233,6 +234,84 @@ describe('matchesFilter', () => {
     });
   });
 
+  describe('timestamps and the time zone', () => {
+    // today is 2026-10-28, and Berlin has been on winter time (UTC+1) since 2026-10-25
+    const berlin: FilterContext = { ...ctx, time_zone: 'Europe/Berlin' };
+    const createdToday = f({ field: 'created_at', op: 'is', value: 'today' });
+    const justAfterMidnight = makeWorkItem({ created_at: '2026-10-27T23:30:00.000Z' }); // 00:30 on the 28th in Berlin
+    const justAfterNextMidnight = makeWorkItem({ created_at: '2026-10-28T23:30:00.000Z' }); // 00:30 on the 29th in Berlin
+
+    it('reads the day in the time zone of the context: 00:30 local on the 28th is today', () => {
+      expect(matchesFilter(justAfterMidnight, createdToday, berlin)).toBe(true);
+    });
+
+    it('reads the day in the time zone of the context: 00:30 local on the 29th is not today', () => {
+      expect(matchesFilter(justAfterNextMidnight, createdToday, berlin)).toBe(false);
+    });
+
+    it('counts by the UTC day when the context has no time zone, as before', () => {
+      expect(matchesFilter(justAfterMidnight, createdToday, ctx)).toBe(false);
+      expect(matchesFilter(justAfterNextMidnight, createdToday, ctx)).toBe(true);
+      // an empty name is no name
+      expect(matchesFilter(justAfterMidnight, createdToday, { ...ctx, time_zone: '' })).toBe(false);
+    });
+
+    it('applies to updated_at and closed_at as well', () => {
+      const updated = makeWorkItem({ updated_at: '2026-10-27T23:30:00.000Z' });
+      const closed = makeWorkItem({ closed_at: '2026-10-27T23:30:00.000Z' });
+
+      expect(matchesFilter(updated, f({ field: 'updated_at', op: 'is', value: 'today' }), berlin)).toBe(true);
+      expect(matchesFilter(closed, f({ field: 'closed_at', op: 'is', value: 'today' }), berlin)).toBe(true);
+      expect(matchesFilter(updated, f({ field: 'updated_at', op: 'is', value: 'today' }), ctx)).toBe(false);
+      expect(matchesFilter(closed, f({ field: 'closed_at', op: 'is', value: 'today' }), ctx)).toBe(false);
+    });
+
+    it('turns the day at the right hour in winter time and in summer time', () => {
+      const created = (timestamp: string) => makeWorkItem({ created_at: timestamp });
+      const winter: FilterContext = { ...berlin, today: '2026-10-28' }; // UTC+1: the day runs from 23:00 to 23:00 UTC
+      const summer: FilterContext = { ...berlin, today: '2026-07-15' }; // UTC+2: the day runs from 22:00 to 22:00 UTC
+
+      expect(matchesFilter(created('2026-10-27T22:59:59.999Z'), createdToday, winter)).toBe(false);
+      expect(matchesFilter(created('2026-10-27T23:00:00.000Z'), createdToday, winter)).toBe(true);
+      expect(matchesFilter(created('2026-10-28T22:59:59.999Z'), createdToday, winter)).toBe(true);
+      expect(matchesFilter(created('2026-10-28T23:00:00.000Z'), createdToday, winter)).toBe(false);
+
+      expect(matchesFilter(created('2026-07-14T21:59:59.999Z'), createdToday, summer)).toBe(false);
+      expect(matchesFilter(created('2026-07-14T22:00:00.000Z'), createdToday, summer)).toBe(true);
+      expect(matchesFilter(created('2026-07-15T21:59:59.999Z'), createdToday, summer)).toBe(true);
+      expect(matchesFilter(created('2026-07-15T22:00:00.000Z'), createdToday, summer)).toBe(false);
+    });
+
+    it('uses the day in the time zone for before, after and between as well', () => {
+      expect(matchesFilter(justAfterMidnight, f({ field: 'created_at', op: 'before', value: '2026-10-28' }), berlin)).toBe(false);
+      expect(matchesFilter(justAfterMidnight, f({ field: 'created_at', op: 'after', value: '2026-10-27' }), berlin)).toBe(true);
+      expect(matchesFilter(justAfterNextMidnight, f({ field: 'created_at', op: 'between', value: ['2026-10-28', '2026-10-28'] }), berlin)).toBe(false);
+      expect(matchesFilter(justAfterNextMidnight, f({ field: 'created_at', op: 'between', value: ['2026-10-28', '2026-10-28'] }), ctx)).toBe(true);
+    });
+
+    it('treats a timestamp it cannot read as missing', () => {
+      const broken = makeWorkItem({ created_at: 'not a time' });
+
+      expect(matchesFilter(broken, f({ field: 'created_at', op: 'is_empty' }), berlin)).toBe(true);
+      expect(matchesFilter(broken, createdToday, berlin)).toBe(false);
+    });
+
+    it('builds the formatter of the time zone once, not for every item', () => {
+      const spy = vi.spyOn(Intl, 'DateTimeFormat');
+      try {
+        // a zone no other test uses, so the first item has to build it
+        const auckland: FilterContext = { ...ctx, time_zone: 'Pacific/Auckland' };
+        for (let i = 0; i < 50; i++) {
+          matchesFilter(makeWorkItem({ id: `wi_${i}`, created_at: '2026-10-27T10:00:00.000Z' }), createdToday, auckland);
+        }
+
+        expect(spy).toHaveBeenCalledTimes(1);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+  });
+
   describe('flags', () => {
     it('has_children asks the context', () => {
       expect(matchesFilter(epicWithoutCustomer, f({ field: 'has_children', op: 'is', value: true }), ctx)).toBe(true);
@@ -243,6 +322,32 @@ describe('matchesFilter', () => {
     it('blocked asks the context', () => {
       expect(matchesFilter(web47, f({ field: 'blocked', op: 'is', value: true }), ctx)).toBe(true);
       expect(matchesFilter(overdueDone, f({ field: 'blocked', op: 'is', value: true }), ctx)).toBe(false);
+    });
+
+    it('blocking asks the context', () => {
+      // OPS-12 holds up WEB-47
+      expect(matchesFilter(ops12, f({ field: 'blocking', op: 'is', value: true }), ctx)).toBe(true);
+      expect(matchesFilter(web47, f({ field: 'blocking', op: 'is', value: true }), ctx)).toBe(false);
+      expect(matchesFilter(web47, f({ field: 'blocking', op: 'is', value: false }), ctx)).toBe(true);
+      expect(matchesFilter(ops12, f({ field: 'blocking', op: 'is', value: false }), ctx)).toBe(false);
+    });
+
+    it('blocked and blocking do not depend on each other', () => {
+      const blockedAndBlocking: Filter = {
+        version: 1,
+        conditions: [
+          { field: 'blocked', op: 'is', value: true },
+          { field: 'blocking', op: 'is', value: true },
+        ],
+      };
+      // the middle link of a chain (A blocks B blocks C) is both, the last one only blocked
+      const middle: FilterContext = { ...ctx, isBlocked: () => true, isBlocking: () => true };
+      const last: FilterContext = { ...ctx, isBlocked: () => true, isBlocking: () => false };
+
+      expect(matchesFilter(ops12, blockedAndBlocking, middle)).toBe(true);
+      expect(matchesFilter(ops12, blockedAndBlocking, last)).toBe(false);
+      expect(matchesFilter(web47, f({ field: 'blocked', op: 'is', value: true }), ctx)).toBe(true);
+      expect(matchesFilter(ops12, f({ field: 'blocked', op: 'is', value: true }), ctx)).toBe(false);
     });
 
     it('archived looks at archived_at', () => {
@@ -351,6 +456,7 @@ describe('CORE_FILTER_FIELDS', () => {
       'closed_at',
       'has_children',
       'blocked',
+      'blocking',
       'archived',
       'title',
     ]);

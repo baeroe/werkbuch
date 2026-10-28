@@ -183,6 +183,21 @@ export const web47: WorkItem = makeWorkItem({
   started_at: '2026-10-27T08:15:00.000Z',
 });
 
+/** OPS-12 holds up WEB-47 (relation "blocks" in the demo); open itself. */
+export const ops12: WorkItem = makeWorkItem({
+  id: 'wi_ops_12',
+  project_id: 'p_ops',
+  number: 12,
+  key: 'OPS-12',
+  title: 'Mail-Limits am Server erhöhen',
+  state_id: 'std_progress',
+  assignee_id: 'u_jonas',
+  priority: 'high',
+  due_date: '2026-10-30',
+  rank: 'a5',
+  started_at: '2026-10-26T09:00:00.000Z',
+});
+
 /** Started and one day past its due date. */
 export const overdueStarted: WorkItem = makeWorkItem({
   id: 'wi_web_41',
