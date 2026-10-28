@@ -15,3 +15,4 @@ Thumbs.db
 /prototypes/clickdummy/test-results/
 /prototypes/clickdummy/.vitest/
 /prototypes/clickdummy/playwright-report/
+/.claude/worktrees/
