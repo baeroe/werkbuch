@@ -12,9 +12,8 @@
  */
 
 import { useMutation, useQueryClient, type QueryClient, type QueryKey, type UseMutationResult } from '@tanstack/react-query';
-import { ApiError } from '@/api/client';
-import { toast } from '@/components/ui/toast';
 import { parseKey } from '@/domain/keys';
+import { notifyError } from '@/lib/errors';
 import { useSession } from '@/store/session';
 import type { WorkItem, WorkItemDetail } from '@/types';
 import type { Page } from '@/api/client';
@@ -82,9 +81,6 @@ function patchCached(data: unknown, named: (item: WorkItem) => boolean, change: 
   return data;
 }
 
-/** A failed call is worth repeating when the server could not answer; a refusal (4xx) would only be refused again. */
-const isTransient = (error: unknown) => !(error instanceof ApiError) || error.status >= 500;
-
 interface ItemMutation<TVars, TData> {
   mutationFn: (vars: TVars) => Promise<TData>;
   /** The items the change is about, by id or key (what the API function takes). */
@@ -110,14 +106,8 @@ export function useItemMutation<TVars, TData>(config: ItemMutation<TVars, TData>
     },
     onError: (error, vars, context) => {
       context?.snapshot.forEach(([key, data]) => queryClient.setQueryData(key, data));
-      // a conflict carries the stored state (`error.current`): the caller shows it, e.g. as the conflict banner
-      if (error instanceof ApiError && error.current !== undefined) return;
-      toast({
-        title: config.failureTitle,
-        description: error.message,
-        tone: 'error',
-        action: isTransient(error) ? { label: 'Erneut versuchen', onClick: () => mutation.mutate(vars) } : undefined,
-      });
+      // a conflict that carries the stored state (`error.current`) gets no toast: the caller shows its conflict banner
+      notifyError(config.failureTitle, error, () => mutation.mutate(vars));
     },
     onSettled: () =>
       Promise.all([qk.workItems.all, qk.activity.all, qk.notifications.all].map((queryKey) => queryClient.invalidateQueries({ queryKey }))),

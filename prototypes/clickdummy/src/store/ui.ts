@@ -1,6 +1,6 @@
 /*
- * Local UI state: theme, sidebar, command palette, the item preview, the create dialog, the selection of a list and
- * the ids that are highlighted for a moment. Server data lives in the query cache, never here.
+ * Local UI state: theme, sidebar, command palette, the shortcut help, the item preview, the create dialog, the
+ * selection of a list and the ids that are highlighted for a moment. Server data lives in the query cache, never here.
  *
  * The theme is not persisted by this store: `applyTheme` writes the plain string `werkbuch:theme` that `index.html`
  * reads before the first paint, and `readTheme` reads it back.
@@ -29,6 +29,9 @@ interface UiState {
   toggleSidebar: () => void;
   paletteOpen: boolean;
   setPaletteOpen: (open: boolean) => void;
+  /** The overlay with all shortcuts (`?`). */
+  helpOpen: boolean;
+  setHelpOpen: (open: boolean) => void;
   /** The item shown in the side panel; null: closed. */
   peekItemId: string | null;
   openPeek: (id: string | null) => void;
@@ -57,6 +60,8 @@ export const useUiStore = create<UiState>()((set) => ({
   toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
   paletteOpen: false,
   setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
+  helpOpen: false,
+  setHelpOpen: (helpOpen) => set({ helpOpen }),
   peekItemId: null,
   openPeek: (peekItemId) => set({ peekItemId }),
   createOpen: false,

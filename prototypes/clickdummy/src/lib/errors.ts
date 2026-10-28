@@ -1,0 +1,27 @@
+/*
+ * The error toast of a failed change, one policy for the whole app (Ruling R12):
+ * - a conflict that carries the stored state (409 with `current`) shows nothing: the caller shows its conflict banner
+ * - any other refusal shows its cause, without a retry, which would only be refused again
+ * - only errors worth repeating (the server failed with 5xx, or did not answer at all) offer "Erneut versuchen"
+ *
+ * The optimistic item mutations use it, and so does `runWithUndo`. Screens call it in the `onError` of their own
+ * mutations: `onError: (error, vars) => notifyError('Label nicht gespeichert', error, () => mutation.mutate(vars))`.
+ */
+
+import { ApiError } from '@/api/client';
+import { toast } from '@/components/ui/toast';
+
+/** Whether repeating can help: the server failed (5xx) or did not answer. A refusal (4xx) would be refused again. */
+export function isTransient(error: unknown): boolean {
+  return !(error instanceof ApiError) || error.status >= 500;
+}
+
+export function notifyError(title: string, error: unknown, retry?: () => void): void {
+  if (error instanceof ApiError && error.status === 409 && error.current !== undefined) return;
+  toast({
+    title,
+    description: error instanceof Error ? error.message : String(error),
+    tone: 'error',
+    action: retry && isTransient(error) ? { label: 'Erneut versuchen', onClick: retry } : undefined,
+  });
+}

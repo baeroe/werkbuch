@@ -1,6 +1,8 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { registerShortcut } from '@/lib/shortcuts/registry';
 import { Button } from './Button';
+import { Dialog } from './Dialog';
 import { Input } from './Input';
 import { Kbd } from './Kbd';
 import { currentToasts, dismissToast, toast } from './toast';
@@ -172,4 +174,23 @@ it('Field keeps a polite live region for errors, so an error that appears is ann
   // the same region, rendered before the error, now carries the message
   expect(region?.textContent).toContain('Nur eine Zahl eingeben, zum Beispiel 3,5');
   expect(screen.getByRole('textbox', { name: 'Aufwand (h)' }).getAttribute('aria-invalid')).toBe('true');
+});
+
+it('an open Dialog pauses the list shortcuts of the page behind it', async () => {
+  const next = vi.fn();
+  const off = registerShortcut({ id: 'test.list.next', keys: 'j', scope: 'list', label: 'Nächstes Item', group: 'Liste', run: next });
+  const press = () => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'j', bubbles: true, cancelable: true }));
+  try {
+    const { rerender } = render(<Dialog open title="Neues Item" />);
+    expect(await screen.findByRole('dialog', { name: 'Neues Item' })).toBeTruthy();
+    press();
+    expect(next).not.toHaveBeenCalled();
+
+    rerender(<Dialog open={false} title="Neues Item" />);
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    press();
+    expect(next).toHaveBeenCalledTimes(1);
+  } finally {
+    off();
+  }
 });

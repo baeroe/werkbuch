@@ -69,6 +69,22 @@ export function MenuItem({ icon, shortcut, danger = false, className, children, 
   );
 }
 
+type MenuLinkItemProps = Omit<ComponentProps<typeof BaseMenu.LinkItem>, 'className' | 'children'> & ItemLook;
+
+/**
+ * An entry that navigates: a real link, so Cmd/Ctrl- and middle-click work. Pass the router's link as `render`:
+ * <MenuLinkItem icon={UserRound} render={<Link to="/me" />}>Persönliche Einstellungen</MenuLinkItem>
+ */
+export function MenuLinkItem({ icon, shortcut, className, children, ...rest }: MenuLinkItemProps) {
+  return (
+    <BaseMenu.LinkItem closeOnClick aria-keyshortcuts={shortcut ? ariaKeyshortcuts(shortcut) : undefined} className={cx(optionClass, className)} {...rest}>
+      <ItemBody icon={icon} shortcut={shortcut} iconClass="text-muted">
+        {children}
+      </ItemBody>
+    </BaseMenu.LinkItem>
+  );
+}
+
 /** Space for the tick, so checkable items line up with items that have an icon. */
 function Tick({ indicator }: { indicator: ReactNode }) {
   return <span className="inline-flex size-4 shrink-0 items-center justify-center text-accent-text">{indicator}</span>;

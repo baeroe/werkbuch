@@ -11,11 +11,13 @@ type EmptyStateProps = {
   description?: ReactNode;
   /** The next action(s). */
   actions?: ReactNode;
+  /** The title's element: a heading where the empty state is the whole page (the 404 page). */
+  titleAs?: 'p' | 'h1' | 'h2';
   className?: string;
 };
 
 /** Empty view on dot-grid paper with a dashed edge: says what is missing and offers the next step. */
-export function EmptyState({ icon: Icon, badge: Badge, title, description, actions, className }: EmptyStateProps) {
+export function EmptyState({ icon: Icon, badge: Badge, title, description, actions, titleAs: Title = 'p', className }: EmptyStateProps) {
   return (
     <div className={cx('dots flex flex-col items-center rounded-card border border-dashed border-line-strong bg-paper px-6 py-10 text-center', className)}>
       <span className="relative inline-flex size-14 items-center justify-center rounded-card border border-line bg-surface shadow-elev-1" aria-hidden="true">
@@ -26,7 +28,7 @@ export function EmptyState({ icon: Icon, badge: Badge, title, description, actio
           </span>
         )}
       </span>
-      <p className="mt-4 max-w-full font-display text-lg font-bold tracking-title break-words text-balance text-ink">{title}</p>
+      <Title className="mt-4 max-w-full font-display text-lg font-bold tracking-title break-words text-balance text-ink">{title}</Title>
       {description && <p className="mt-1 max-w-[46ch] text-ui break-words text-pretty text-muted">{description}</p>}
       {actions && <div className="mt-5 flex flex-wrap justify-center gap-2.5">{actions}</div>}
     </div>

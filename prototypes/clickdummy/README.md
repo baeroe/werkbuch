@@ -46,18 +46,19 @@ Danach steht `FINDINGS`: Fehler und Warnungen in der Konsole, fehlgeschlagene Re
 
 ```text
 src/
-  main.tsx           Einstieg: Schriften, Styles, Router
+  main.tsx           Einstieg: Schriften, Styles, App
   styles/            tokens.css (alle Tokens aus DESIGN.md), app.css (Tailwind 4, @theme inline, Grundstile)
   components/ui/     eigenes Komponentenset auf Base UI, dazu ui.test.tsx
   routes/            components-gallery.tsx (/_components)
-  lib/               kleine Helfer (theme.ts, platform.ts, clock.ts, richtext.ts); später Kürzel-Register und Rechte
+  lib/               Helfer (theme, platform, clock, richtext), Kürzel-Register und Hilfe (shortcuts/), Palette-Befehle
+                     (commands.ts), Rechte (permissions.ts), Rückgängig (undo.ts), Fehler-Toast (errors.ts)
   types.ts           gemeinsame Typen
   domain/            Fachlogik als reine Funktionen; wird später nach PHP portiert
   api/               Fake-API: client.ts (Fehler, Latenz, Sitzung), db.ts (localStorage), eine Datei je Ressource, seed/ (Demo-Daten)
   hooks/             TanStack-Query-Hooks, einer je API-Funktion; keys.ts hat alle Query-Keys
-  store/             Zustand: session.ts (wer angemeldet ist), ui.ts (Theme, Seitenleiste, Palette, Vorschau, Auswahl)
-  app/               Shell und Router
-  features/<name>/   die Bildschirme
+  store/             Zustand: session.ts (wer angemeldet ist), ui.ts (Theme, Seitenleiste, Palette, Kürzel-Hilfe, Vorschau, Auswahl)
+  app/               Router, Shell mit Seitenleiste und Profilmenü, Live-Banner, Hosts für Vorschau und Anlegen-Dialog
+  features/<name>/   die Bildschirme; bis ihre Task sie baut, steht dort ein Platzhalter „Kommt in Task N“
 scripts/shots.mjs    Screenshots mit Prüfung
 ```
 
@@ -84,6 +85,8 @@ Die Demo-Daten liegen in `src/api/seed/` (alles ausgedacht: Feldwerk, sechs Pers
 localStorage.removeItem('werkbuch:db') // Demo-Daten neu laden (nach dem Neuladen der Seite)
 localStorage.getItem('werkbuch:session') // wer angemeldet ist; Standard ist Mara Lindqvist (u_mara)
 ```
+
+Das Profilmenü unten in der Seitenleiste hat die Werkzeuge der Demo: „Als … ansehen“ (eine andere Person), „Live-Ereignis simulieren“, „Live-Verbindung trennen“ und „Demo zurücksetzen“.
 
 „Heute“ ist Mittwoch, der 28.10.2026. Die Uhr (`src/lib/clock.ts`) startet beim Laden der Seite um 10:00 Europe/Berlin und läuft in Echtzeit weiter. Ändert sich die Seed-Form, hebt man `SCHEMA_VERSION` in `src/api/db.ts` an.
 
