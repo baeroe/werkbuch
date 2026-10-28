@@ -5,7 +5,7 @@
  */
 
 import { UserMinus, UserPlus, Users } from 'lucide-react';
-import { useMemo, useState, type FormEvent } from 'react';
+import { useId, useMemo, useState, type FormEvent } from 'react';
 import { AlertDialog } from '@/components/ui/AlertDialog';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
@@ -49,6 +49,7 @@ export function Members({ project, canManage }: SectionProps) {
   const [demotion, setDemotion] = useState<{ user: User; role: ProjectRole } | null>(null);
   const [candidate, setCandidate] = useState<string | null>(null);
   const [newRole, setNewRole] = useState<ProjectRole>('member');
+  const personFieldId = useId();
 
   const rows = useMemo(() => {
     const byId = new Map((users.data?.items ?? []).map((user) => [user.id, user]));
@@ -122,6 +123,9 @@ export function Members({ project, canManage }: SectionProps) {
     if (!user) return;
     try {
       await add.mutateAsync({ project_id: project.id, user_id: user.id, role: newRole });
+      // With nobody chosen the button is blocked again, and a blocked button is drawn anew inside its tooltip: the focus
+      // would go with the old one and fall to the page. It moves to the field first, which is ready for the next person.
+      document.getElementById(personFieldId)?.focus();
       setCandidate(null);
       toast({ title: `${user.name} ist jetzt ${ROLE_LABEL[newRole]} in ${project.identifier}`, tone: 'success' });
     } catch (error) {
@@ -135,6 +139,7 @@ export function Members({ project, canManage }: SectionProps) {
         {canManage && (
           <form aria-label="Mitglied hinzufügen" noValidate onSubmit={(event) => void addMember(event)} className="grid items-end gap-3 md:grid-cols-[minmax(0,1fr)_9rem_auto]">
             <Combobox
+              id={personFieldId}
               label="Person oder Bot"
               placeholder="Name suchen …"
               emptyText="Niemand mehr zum Hinzufügen"

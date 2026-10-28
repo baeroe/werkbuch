@@ -5,7 +5,7 @@
  */
 
 import { Lock } from 'lucide-react';
-import { useEffect, useId, type ReactNode } from 'react';
+import { useEffect, useId, type ReactNode, type RefObject } from 'react';
 import { Link, useBlocker, useNavigate } from 'react-router';
 import { AlertDialog } from '@/components/ui/AlertDialog';
 import { Banner } from '@/components/ui/Banner';
@@ -181,9 +181,14 @@ export function FormActions({ dirty, pending, quiet = false, onReset, saveLabel 
 /**
  * Asks before a person leaves the page with changes that are not saved: for a click inside the app, and for closing or
  * reloading the tab. `saving` lets the form's own save pass, which may move the address (a new identifier).
+ *
+ * `bypass` lets a departure pass that the person has confirmed in another way already (deleting the project, which
+ * leaves its settings for the list): the one who leaves sets it just before the navigation. It is a flag in a ref and
+ * not a prop, because the guard is asked in the same breath as the navigation starts, before a state change would have
+ * reached it.
  */
-export function UnsavedGuard({ dirty, saving = false }: { dirty: boolean; saving?: boolean }) {
-  const blocker = useBlocker(({ currentLocation, nextLocation }) => dirty && !saving && currentLocation.pathname !== nextLocation.pathname);
+export function UnsavedGuard({ dirty, saving = false, bypass }: { dirty: boolean; saving?: boolean; bypass?: RefObject<boolean> }) {
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => dirty && !saving && !bypass?.current && currentLocation.pathname !== nextLocation.pathname);
 
   useEffect(() => {
     if (!dirty) return;

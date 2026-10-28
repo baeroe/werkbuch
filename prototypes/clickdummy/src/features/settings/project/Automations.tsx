@@ -5,7 +5,7 @@
  * workflow; without one its switch stays off and says why.
  */
 
-import { useId, useState, type KeyboardEvent } from 'react';
+import { useId, useRef, useState, type KeyboardEvent } from 'react';
 import { Banner } from '@/components/ui/Banner';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
@@ -125,6 +125,9 @@ function AutomationRow({ definition, workflow, canManage, automation }: RowProps
 
   const [typedDays, setTypedDays] = useState<string | null>(null);
   const [problems, setProblems] = useState<{ days?: string; state?: string }>({});
+  // The days on their way to the server. Enter commits, and the blur that follows it (Tab, a click away) commits the same
+  // text again while the first save has not come back: that second one is the same commit, not a second save and toast.
+  const committing = useRef<number | null>(null);
   const savedDays = settings.days ?? DEFAULT_DAYS[key];
   const shownDays = typedDays ?? String(savedDays ?? '');
 
@@ -164,7 +167,15 @@ function AutomationRow({ definition, workflow, canManage, automation }: RowProps
       setProblems({});
       return;
     }
-    if (await persist({ days }, `${title} gespeichert`)) setTypedDays(null);
+    if (committing.current === days) return;
+    committing.current = days;
+    try {
+      // what was typed meanwhile stays: only the text that was just saved gives way to the saved value
+      if (await persist({ days }, `${title} gespeichert`)) setTypedDays((current) => (current !== null && parseDays(current) === days ? null : current));
+    } finally {
+      // not when other days were committed meanwhile: that one is still on its way
+      if (committing.current === days) committing.current = null;
+    }
   }
 
   function onDaysKeyDown(event: KeyboardEvent<HTMLInputElement>) {

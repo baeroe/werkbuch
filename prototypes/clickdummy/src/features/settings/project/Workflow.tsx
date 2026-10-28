@@ -5,7 +5,7 @@
  */
 
 import { ArrowRightLeft } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState, type RefObject } from 'react';
 import { Link } from 'react-router';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
@@ -31,12 +31,17 @@ function transitionText(workflow: WorkflowRecord): string {
   return start ? `${how} Neue Items starten in „${start}“.` : how;
 }
 
-/** Name, description, the states in their order and the rule for moving between them. */
-function WorkflowSummary({ workflow }: { workflow: WorkflowRecord }) {
+/**
+ * Name, description, the states in their order and the rule for moving between them. With `headingRef` the name can
+ * take the focus (programmatically, not by Tab): after a switch it is the one place on the screen that is still there.
+ */
+function WorkflowSummary({ workflow, headingRef }: { workflow: WorkflowRecord; headingRef?: RefObject<HTMLHeadingElement | null> }) {
   return (
     <div className="flex min-w-0 flex-col gap-3">
       <div>
-        <h3 className="font-display text-md font-bold tracking-title text-ink">{workflow.name}</h3>
+        <h3 ref={headingRef} tabIndex={headingRef ? -1 : undefined} data-focus-ring={headingRef ? 'none' : undefined} className="font-display text-md font-bold tracking-title text-ink outline-none">
+          {workflow.name}
+        </h3>
         {workflow.description && <p className="mt-0.5 max-w-[65ch] text-ui text-pretty text-muted">{workflow.description}</p>}
       </div>
       <ul role="list" aria-label="Status des Workflows" className="flex flex-wrap gap-1.5">
@@ -60,6 +65,12 @@ export function Workflow({ project, canManage }: SectionProps) {
   // the question as it was when it opened; `asking` shows or hides it
   const [plan, setPlan] = useState<MappingPlan | null>(null);
   const [asking, setAsking] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  // where the focus goes when the question closes: back to the button that asked, and after a switch to the name of the
+  // workflow the project has now. The button is blocked then (the workflow that was chosen is the current one) and drawn
+  // anew inside its tooltip, so the one that had the focus is gone.
+  const returnTo = useRef<HTMLElement | null>(null);
 
   const current = workflows.data?.items.find((workflow) => workflow.id === project.workflow_id);
   const others = useMemo(() => (workflows.data?.items ?? []).filter((workflow) => workflow.id !== project.workflow_id), [workflows.data, project.workflow_id]);
@@ -84,7 +95,12 @@ export function Workflow({ project, canManage }: SectionProps) {
       counts: countByState(items.data.items),
       autoClose: automations.data?.items.find((entry) => entry.key === 'auto_close' && entry.enabled),
     });
+    returnTo.current = trigger.current;
     setAsking(true);
+  }
+
+  function switched() {
+    returnTo.current = heading.current;
   }
 
   return (
@@ -93,7 +109,7 @@ export function Workflow({ project, canManage }: SectionProps) {
         title="Aktueller Workflow"
         description="Der Workflow legt fest, welche Status ein Item durchläuft und welche Übergänge erlaubt sind."
       >
-        <WorkflowSummary workflow={current} />
+        <WorkflowSummary workflow={current} headingRef={heading} />
         {can('org.manage_catalog') && (
           <p className="text-ui text-muted">
             Die Status und Übergänge ändern Org-Admins unter{' '}
@@ -108,7 +124,7 @@ export function Workflow({ project, canManage }: SectionProps) {
         title="Workflow wechseln"
         description="Alle Items des Projekts bekommen einen Status des neuen Workflows. Dafür ordnest du im nächsten Schritt jedem Status mit Items einen neuen zu."
         footer={
-          <Button variant="primary" icon={ArrowRightLeft} disabledReason={blocked} onClick={ask}>
+          <Button ref={trigger} variant="primary" icon={ArrowRightLeft} disabledReason={blocked} onClick={ask}>
             Workflow wechseln …
           </Button>
         }
@@ -133,7 +149,7 @@ export function Workflow({ project, canManage }: SectionProps) {
           </>
         )}
       </SettingsCard>
-      {plan && <StateMappingDialog open={asking} onOpenChange={setAsking} project={project} plan={plan} />}
+      {plan && <StateMappingDialog open={asking} onOpenChange={setAsking} project={project} plan={plan} finalFocus={returnTo} onSwitched={switched} />}
     </>
   );
 }

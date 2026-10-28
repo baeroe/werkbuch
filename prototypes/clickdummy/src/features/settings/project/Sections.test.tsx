@@ -1,10 +1,10 @@
-import { act, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { listAutomations } from '@/api/automations';
 import { createProject, getProject } from '@/api/projects';
 import { assignWorkflow, saveWorkflow } from '@/api/workflows';
-import { dismissToast, runToastAction } from '@/components/ui/toast';
+import { currentToasts, dismissToast, runToastAction } from '@/components/ui/toast';
 import { itemsOf, renderSettings, roleOf, textbox, toastTitled, useSettingsTestSetup } from './testing';
 
 useSettingsTestSetup();
@@ -112,6 +112,22 @@ describe('Members', () => {
     expect(await screen.findByText('@automation')).toBeTruthy();
   });
 
+  it('puts the focus back on the person field after a member was added with the keyboard', async () => {
+    const user = userEvent.setup();
+    renderSettings('/projects/WEB/settings/members');
+    const form = await screen.findByRole('form', { name: 'Mitglied hinzufügen' });
+    const search = within(form).getByRole('combobox', { name: 'Person oder Bot' });
+    await user.click(search);
+    await user.click(await screen.findByRole('option', { name: 'Automation' }));
+
+    // the button that is pressed is drawn anew when the form is empty again (it gets its tooltip): the focus must not go with it
+    within(form).getByRole('button', { name: 'Hinzufügen' }).focus();
+    await user.keyboard('{Enter}');
+
+    await waitFor(async () => expect(await roleOf('WEB', 'u_automation')).toBe('member'));
+    await waitFor(() => expect(document.activeElement).toBe(search));
+  });
+
   it('shows the members to Theo in WEB without the controls to change them', async () => {
     renderSettings('/projects/WEB/settings/members', 'u_theo');
     const list = await screen.findByRole('list', { name: 'Mitglieder von WEB' });
@@ -177,6 +193,61 @@ describe('Workflow', () => {
     await waitFor(async () => expect((await getProject('WEB')).workflow_id).toBe('wf_agency'));
     const after = await itemsOf('p_web');
     for (const item of done) expect(after.find((entry) => entry.id === item.id)).toMatchObject({ state_id: 'app_todo', resolution_id: null });
+  });
+
+  it('puts the focus on the name of the new workflow after the switch, not on a button that is gone', async () => {
+    const user = userEvent.setup();
+    renderSettings('/projects/WEB/settings/workflow');
+    await user.click(await screen.findByRole('combobox', { name: /^Neuer Workflow/ }));
+    await user.click(await screen.findByRole('option', { name: /Agentur-Freigabe/ }));
+    // with the keyboard: the button that opens the question
+    screen.getByRole('button', { name: 'Workflow wechseln …' }).focus();
+    await user.keyboard('{Enter}');
+    const dialog = await screen.findByRole('dialog', { name: /Agentur-Freigabe/ });
+    await user.click(within(dialog).getByRole('button', { name: 'Workflow wechseln' }));
+
+    await waitFor(async () => expect((await getProject('WEB')).workflow_id).toBe('wf_agency'));
+    const heading = await screen.findByRole('heading', { name: 'Agentur-Freigabe' });
+    await waitFor(() => expect(document.activeElement).toBe(heading));
+  });
+
+  it('puts the focus back on the button that opened the question when the person cancels', async () => {
+    const user = userEvent.setup();
+    renderSettings('/projects/WEB/settings/workflow');
+    await user.click(await screen.findByRole('combobox', { name: /^Neuer Workflow/ }));
+    await user.click(await screen.findByRole('option', { name: /Agentur-Freigabe/ }));
+    const trigger = screen.getByRole('button', { name: 'Workflow wechseln …' });
+    trigger.focus();
+    await user.keyboard('{Enter}');
+    const dialog = await screen.findByRole('dialog', { name: /Agentur-Freigabe/ });
+
+    await user.click(within(dialog).getByRole('button', { name: 'Abbrechen' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+    expect((await getProject('WEB')).workflow_id).toBe('wf_standard');
+  });
+
+  it('puts the focus on the button again when a question after a switch is cancelled, not on the name of the workflow', async () => {
+    const user = userEvent.setup();
+    renderSettings('/projects/WEB/settings/workflow');
+    await user.click(await screen.findByRole('combobox', { name: /^Neuer Workflow/ }));
+    await user.click(await screen.findByRole('option', { name: /Agentur-Freigabe/ }));
+    await user.click(screen.getByRole('button', { name: 'Workflow wechseln …' }));
+    await user.click(within(await screen.findByRole('dialog', { name: /Agentur-Freigabe/ })).getByRole('button', { name: 'Workflow wechseln' }));
+    await waitFor(async () => expect((await getProject('WEB')).workflow_id).toBe('wf_agency'));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    // and back: the second question is cancelled
+    await user.click(screen.getByRole('combobox', { name: /^Neuer Workflow/ }));
+    await user.click(await screen.findByRole('option', { name: /Standard/ }));
+    const trigger = screen.getByRole('button', { name: 'Workflow wechseln …' });
+    trigger.focus();
+    await user.keyboard('{Enter}');
+    await user.click(within(await screen.findByRole('dialog', { name: /Standard/ })).getByRole('button', { name: 'Abbrechen' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
   });
 
   it('has nothing to map for a project without items', async () => {
@@ -302,6 +373,45 @@ describe('Automations', () => {
     await waitFor(async () =>
       expect((await listAutomations('p_web')).items.find((entry) => entry.key === 'auto_close')).toMatchObject({ enabled: true, settings: { days: 90, state_id: 'std_cancelled' } }),
     );
+  });
+
+  it('saves the days once when the blur follows Enter before the first save has come back', async () => {
+    const user = userEvent.setup();
+    renderSettings('/projects/WEB/settings/automations');
+    const days = await textbox('Tage nach dem Schließen');
+    await user.clear(days);
+    await user.type(days, '45');
+
+    // Enter, and Tab or a click away in the same breath: the first save is still on its way
+    fireEvent.keyDown(days, { key: 'Enter' });
+    fireEvent.blur(days);
+
+    await waitFor(async () => expect((await listAutomations('p_web')).items.find((entry) => entry.key === 'auto_archive')?.settings.days).toBe(45));
+    await waitFor(() => expect(days.getAttribute('aria-invalid')).toBeNull());
+    // let a second save, if there were one, come through
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(currentToasts().filter((item) => item.title === 'Auto-Archiv gespeichert')).toHaveLength(1);
+  });
+
+  it('keeps what is typed while the first save is on its way, and saves it when the field is left', async () => {
+    const user = userEvent.setup();
+    renderSettings('/projects/WEB/settings/automations');
+    const days = await textbox('Tage nach dem Schließen');
+    await user.clear(days);
+    await user.type(days, '45');
+
+    fireEvent.keyDown(days, { key: 'Enter' });
+    // the person goes on typing; the answer to the first save must not wipe that
+    fireEvent.change(days, { target: { value: '450' } });
+
+    await waitFor(async () => expect((await listAutomations('p_web')).items.find((entry) => entry.key === 'auto_archive')?.settings.days).toBe(45));
+    await waitFor(() => expect(toastTitled('Auto-Archiv gespeichert')).toBeTruthy());
+    expect(days.value).toBe('450');
+
+    fireEvent.blur(days);
+    await waitFor(async () => expect((await listAutomations('p_web')).items.find((entry) => entry.key === 'auto_archive')?.settings.days).toBe(450));
+    await waitFor(() => expect(days.value).toBe('450'));
+    expect(days.getAttribute('aria-invalid')).toBeNull();
   });
 
   it('saves the days with Enter, and shows a wrong number at the field', async () => {

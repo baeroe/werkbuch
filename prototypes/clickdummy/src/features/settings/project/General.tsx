@@ -56,6 +56,8 @@ const READ_ONLY_LOOK = 'bg-sunken! shadow-none!';
 
 export function General({ project, canManage }: SectionProps) {
   const form = useRef<HTMLFormElement>(null);
+  // the danger zone sets it when the deletion sends the person to the list: the guard below lets that departure pass
+  const leaving = useRef(false);
   const members = useMembers(project.id);
   const users = useUsers();
   const update = useUpdateProject();
@@ -116,7 +118,7 @@ export function General({ project, canManage }: SectionProps) {
   return (
     <>
       <form ref={form} noValidate onSubmit={(event) => void save(event)}>
-        {canManage && <UnsavedGuard dirty={draft.dirty} saving={update.isPending} />}
+        {canManage && <UnsavedGuard dirty={draft.dirty} saving={update.isPending} bypass={leaving} />}
         <SettingsCard
           title="Projekt"
           description="So erscheint das Projekt in der Seitenleiste, in Views und in den Keys seiner Items."
@@ -211,7 +213,7 @@ export function General({ project, canManage }: SectionProps) {
           </div>
         </SettingsCard>
       </form>
-      {canManage && <DangerZone project={project} canManage={canManage} />}
+      {canManage && <DangerZone project={project} canManage={canManage} leaving={leaving} />}
     </>
   );
 }

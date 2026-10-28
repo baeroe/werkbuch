@@ -5,7 +5,7 @@
  */
 
 import { Archive, ArchiveRestore, Trash2 } from 'lucide-react';
-import { useEffect, useId, useState, type FormEvent } from 'react';
+import { useEffect, useId, useState, type FormEvent, type RefObject } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { Button } from '@/components/ui/Button';
 import { Dialog, DialogClose } from '@/components/ui/Dialog';
@@ -21,7 +21,16 @@ import { useProjectItems } from './useProjectItems';
 
 const itemsText = new Intl.NumberFormat('de');
 
-export function DangerZone({ project }: SectionProps) {
+type DangerZoneProps = SectionProps & {
+  /**
+   * Set to `true` just before the zone sends the person away from the settings (deleting the project). The unsaved-changes
+   * guard of the form above lets that one departure pass: the deletion was confirmed by typing the identifier, and the
+   * form is gone with the project.
+   */
+  leaving?: RefObject<boolean>;
+};
+
+export function DangerZone({ project, leaving }: DangerZoneProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const archive = useArchiveProject();
@@ -59,7 +68,10 @@ export function DangerZone({ project }: SectionProps) {
   function deleteWithUndo() {
     const here = location.pathname;
     setConfirming(false);
-    // the project is on its way out: leave its settings now, and come back when the deletion is taken back
+    // the project is on its way out: leave its settings now, and come back when the deletion is taken back. The guard of
+    // the form would ask about unsaved edits of a project that is going, and its question would stand in the way while
+    // the five seconds of undo run: the deletion is confirmed already, so the guard lets this departure pass.
+    if (leaving) leaving.current = true;
     navigate('/projects');
     runWithUndo({
       label: `Projekt ${project.identifier} gelöscht`,

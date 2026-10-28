@@ -7,7 +7,7 @@
  */
 
 import { ArrowRight } from 'lucide-react';
-import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type RefObject } from 'react';
 import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
 import { Dialog, DialogClose } from '@/components/ui/Dialog';
@@ -38,6 +38,10 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   project: Project;
   plan: MappingPlan;
+  /** Where the focus goes when the dialog closes; by default back to what had it before. Read when the dialog closes. */
+  finalFocus?: RefObject<HTMLElement | null>;
+  /** The workflow is switched, called just before the dialog closes: the caller can still point `finalFocus` somewhere else. */
+  onSwitched?: () => void;
 };
 
 const number = new Intl.NumberFormat('de');
@@ -53,7 +57,7 @@ function StateLabel({ state }: { state: State }) {
   );
 }
 
-export function StateMappingDialog({ open, onOpenChange, project, plan }: Props) {
+export function StateMappingDialog({ open, onOpenChange, project, plan, finalFocus, onSwitched }: Props) {
   const { from, to, counts, autoClose } = plan;
   const formId = useId();
   const form = useRef<HTMLFormElement>(null);
@@ -82,6 +86,7 @@ export function StateMappingDialog({ open, onOpenChange, project, plan }: Props)
     if (assign.isPending) return;
     try {
       await assign.mutateAsync({ project_id: project.id, workflow_id: to.id, mapping });
+      onSwitched?.();
       onOpenChange(false);
       toast({
         title: 'Workflow gewechselt',
@@ -108,6 +113,7 @@ export function StateMappingDialog({ open, onOpenChange, project, plan }: Props)
       open={open}
       onOpenChange={onOpenChange}
       size="lg"
+      finalFocus={finalFocus}
       title={`Zu „${to.name}“ wechseln`}
       description={`${project.identifier} nutzt bisher „${from.name}“. Ordne jedem Status mit Items einen Status des neuen Workflows zu. Die Items werden ohne Übergangsregeln umgeschrieben, die History nennt dich als Auslöser.`}
       footer={

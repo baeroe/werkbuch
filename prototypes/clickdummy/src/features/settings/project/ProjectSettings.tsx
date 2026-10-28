@@ -8,7 +8,7 @@
  */
 
 import { Archive } from 'lucide-react';
-import { useCallback } from 'react';
+import { Fragment, useCallback } from 'react';
 import { Navigate, useParams } from 'react-router';
 import { ApiError } from '@/api/client';
 import { NotFound } from '@/app/PageStates';
@@ -132,11 +132,16 @@ export default function ProjectSettings() {
         </Banner>
       )}
       {!canManage && denied && <ReadOnlyBanner reason={denied} />}
-      {current === 'general' && <General {...props} />}
-      {current === 'members' && <Members {...props} />}
-      {current === 'workflow' && <Workflow {...props} />}
-      {current === 'types' && <Types {...props} />}
-      {current === 'automations' && <Automations {...props} />}
+      {/* The sections keep their drafts, choices and dialogs in state, and a project that has been open before is in the
+          cache, so nothing remounts by itself on the way to the next one: each project gets sections of its own, or an
+          unsaved edit of one would turn up in the other. */}
+      <Fragment key={known.id}>
+        {current === 'general' && <General {...props} />}
+        {current === 'members' && <Members {...props} />}
+        {current === 'workflow' && <Workflow {...props} />}
+        {current === 'types' && <Types {...props} />}
+        {current === 'automations' && <Automations {...props} />}
+      </Fragment>
     </SettingsFrame>
   );
 }

@@ -64,6 +64,51 @@ describe('the frame', () => {
   });
 });
 
+describe('from one project to the next', () => {
+  // The projects are in the cache after their first visit, so the screen does not wait for them and nothing remounts by itself.
+
+  it('shows the other project its own data, not the unsaved name of the first', async () => {
+    const user = userEvent.setup();
+    const router = renderSettings('/projects/APP/settings');
+    expect((await textbox('Name')).value).toBe('Kunden-App');
+
+    await act(() => router.navigate('/projects/WEB/settings'));
+    const name = await textbox('Name');
+    await waitFor(() => expect(name.value).toBe('Website-Relaunch'));
+    await user.type(name, ' X');
+
+    await act(() => router.navigate('/projects/APP/settings'));
+    await user.click(within(await screen.findByRole('alertdialog', { name: 'Änderungen verwerfen?' })).getByRole('button', { name: 'Verwerfen' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/projects/APP/settings'));
+    await waitFor(async () => expect((await textbox('Name')).value).toBe('Kunden-App'));
+    expect(screen.queryByText('Nicht gespeicherte Änderungen')).toBeNull();
+    // Save has nothing of the other project to send
+    await user.click(screen.getByRole('button', { name: 'Speichern' }));
+    expect(await screen.findByText('Keine Änderungen zu speichern.')).toBeTruthy();
+    expect((await getProject('APP')).name).toBe('Kunden-App');
+  });
+
+  it('shows the other project its own types, not the unsaved choice of the first', async () => {
+    const user = userEvent.setup();
+    const router = renderSettings('/projects/APP/settings/types');
+    const box = (name: string) => screen.findByRole('checkbox', { name: `${name} verwenden` });
+    expect((await box('Kundenwunsch')).getAttribute('aria-checked')).toBe('true');
+
+    await act(() => router.navigate('/projects/WEB/settings/types'));
+    // WEB uses Task, Bug and Epic; APP also Kundenwunsch
+    await waitFor(async () => expect((await box('Kundenwunsch')).getAttribute('aria-checked')).toBe('false'));
+    await user.click(await box('Epic'));
+
+    await act(() => router.navigate('/projects/APP/settings/types'));
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Verwerfen' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/projects/APP/settings/types'));
+    await waitFor(async () => expect((await box('Kundenwunsch')).getAttribute('aria-checked')).toBe('true'));
+    expect((await box('Epic')).getAttribute('aria-checked')).toBe('true');
+  });
+});
+
 describe('rights', () => {
   it('lets Theo read the settings of WEB, where he is a viewer, and says why he cannot change them', async () => {
     renderSettings('/projects/WEB/settings', 'u_theo');
@@ -257,6 +302,43 @@ describe('DangerZone', () => {
 
     act(() => dismissToast(toast!.id));
     await waitFor(async () => expect((await failure(getProject('APP'))).status).toBe(404));
+  });
+
+  it('leaves for the list of projects without asking about unsaved changes: the deletion is confirmed, and its undo time runs', async () => {
+    const user = userEvent.setup();
+    const router = renderSettings('/projects/APP/settings');
+    await user.type(await textbox('Name'), ' neu');
+
+    await user.click(screen.getByRole('button', { name: 'Projekt löschen …' }));
+    const dialog = await screen.findByRole('dialog', { name: 'APP löschen?' });
+    await user.type(within(dialog).getByRole('textbox', { name: /Kennung/ }), 'APP');
+    await user.click(within(dialog).getByRole('button', { name: 'Projekt löschen' }));
+
+    expect(await screen.findByText('Alle Projekte')).toBeTruthy();
+    expect(router.state.location.pathname).toBe('/projects');
+    expect(screen.queryByRole('alertdialog', { name: 'Änderungen verwerfen?' })).toBeNull();
+    expect(toastTitled('Projekt APP gelöscht')).toBeTruthy();
+  });
+
+  it('asks about unsaved changes again once the deletion is undone', async () => {
+    const user = userEvent.setup();
+    const router = renderSettings('/projects/APP/settings');
+    await user.type(await textbox('Name'), ' neu');
+    await user.click(screen.getByRole('button', { name: 'Projekt löschen …' }));
+    const dialog = await screen.findByRole('dialog', { name: 'APP löschen?' });
+    await user.type(within(dialog).getByRole('textbox', { name: /Kennung/ }), 'APP');
+    await user.click(within(dialog).getByRole('button', { name: 'Projekt löschen' }));
+    await screen.findByText('Alle Projekte');
+
+    act(() => runToastAction(toastTitled('Projekt APP gelöscht')!.id));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/projects/APP/settings'));
+
+    // a form of its own: no edit of the one that was left, and the guard is back
+    const name = await textbox('Name');
+    expect(name.value).toBe('Kunden-App');
+    await user.type(name, ' x');
+    await user.click(screen.getByRole('link', { name: 'Mitglieder' }));
+    expect(await screen.findByRole('alertdialog', { name: 'Änderungen verwerfen?' })).toBeTruthy();
   });
 
   it('keeps the project when the deletion is undone', async () => {
