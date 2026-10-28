@@ -3,14 +3,13 @@
  * the same body as the preview (`ItemBody`), and the item commands for this item (s, a, i, p …).
  *
  * Contract with the router (lazy-loaded): the named export `ItemPage` is the screen of /items/:key and reads the key
- * itself. A key that is no key, an unknown key or one the person may not see shows the 404 page (`NotFound` from
- * src/app/PageStates); a former key (after a project was renamed) opens the item, and the address changes to the
- * current key.
+ * itself. A key that is no key, an unknown key or one the person may not see (404, or 403 once access is lost) shows
+ * the 404 page (`NotFound` from src/app/PageStates); a former key (after a project was renamed) opens the item, and
+ * the address changes to the current key.
  */
 
 import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { ApiError } from '@/api/client';
 import { NotFound } from '@/app/PageStates';
 import { useItemCommands } from '@/components/fields/commands';
 import { ErrorState } from '@/components/ui/ErrorState';
@@ -22,6 +21,7 @@ import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import type { WorkItemDetail } from '@/types';
 import { ItemBody, ItemDetailProvider } from './ItemBody';
 import { ItemHeader } from './ItemHeader';
+import { isGone } from './shared';
 
 function ItemPageContent({ detail }: { detail: WorkItemDetail }) {
   const { item, type } = detail;
@@ -58,7 +58,8 @@ export function ItemPage() {
     if (item && item.key !== key) navigate(`/items/${item.key}`, { replace: true });
   }, [item, key, navigate]);
 
-  if (!valid || (detail.error instanceof ApiError && detail.error.status === 404)) {
+  // gone (deleted, or access lost) shows the 404 page, also when the item was loaded before
+  if (!valid || isGone(detail.error)) {
     return (
       <NotFound
         title={`${key.toUpperCase()} gibt es nicht`}

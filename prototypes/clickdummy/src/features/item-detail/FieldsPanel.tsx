@@ -51,6 +51,9 @@ function PropertyLabel({ property, required }: { property: Property; required: b
   );
 }
 
+/** A rich text value as a save sends it (without content: null), for comparing. */
+const asSent = (doc: RichText | null) => JSON.stringify(isEmptyDoc(doc) ? null : doc);
+
 /** A rich text property in the editor: saved after a pause in typing and when the focus leaves it. */
 function RichTextProperty({ item, property, required }: { item: WorkItem; property: Property; required: boolean }) {
   const reason = useEditReason(item);
@@ -62,14 +65,25 @@ function RichTextProperty({ item, property, required }: { item: WorkItem; proper
   /** Typed text the server does not have yet. Cleared only by a save that went through. */
   const dirty = useRef(false);
   const inFlight = useRef(false);
+  /**
+   * What failed saves sent. "Erneut versuchen" on their toast sends it once more, possibly after a newer save went
+   * through: that older text coming back is not taken, the newer one is saved again.
+   */
+  const failedSends = useRef(new Set<string>());
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const labelId = useId();
   const hintId = useId();
 
   // a value from outside (another window, a live event) shows while nothing is typed; a failed save rolls the item
-  // back and fetches it again, and the text stays all the same
+  // back and fetches it again, and the text stays all the same. The text of a failed save is no value from outside:
+  // back on the server (its retry landed after a newer save), the newer text is saved again.
   useEffect(() => {
     if (dirty.current) return;
+    if (failedSends.current.has(asSent(stored)) && asSent(stored) !== asSent(latest.current)) {
+      dirty.current = true;
+      save.current();
+      return;
+    }
     latest.current = stored;
     setDraft(stored);
   }, [stored]);
@@ -85,24 +99,26 @@ function RichTextProperty({ item, property, required }: { item: WorkItem; proper
       return;
     }
     inFlight.current = true;
-    update.mutate(
-      { id: item.id, patch: { values: { [property.key]: next } } },
-      {
-        onSuccess: () => {
+    // the promise of this very call, not callbacks of mutate: those follow the newest call of the mutation, and
+    // "Erneut versuchen" on the error toast makes one while this save is still out (inFlight would stay set for good)
+    update
+      .mutateAsync({ id: item.id, patch: { values: { [property.key]: next } } })
+      .then(
+        () => {
           // typed on while it saved: that is still to save
           if (latest.current === sent) dirty.current = false;
           else timer.current = setTimeout(() => save.current(), SAVE_PAUSE_MS);
         },
         // the text stays unsaved; the item mutation's toast names the cause
-        onError: (failure) => {
+        (failure: unknown) => {
+          failedSends.current.add(asSent(next));
           const message = failure instanceof ApiError ? failure.errors?.[`values.${property.key}`]?.[0] : undefined;
           if (message) setError(message);
         },
-        onSettled: () => {
-          inFlight.current = false;
-        },
-      },
-    );
+      )
+      .finally(() => {
+        inFlight.current = false;
+      });
   };
   // what is typed is saved when the editor goes away
   useEffect(() => () => save.current(), []);

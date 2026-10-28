@@ -5,9 +5,11 @@
  *   comment composer and the relation dialog register them).
  * - `Section`: a titled part of the detail with actions on the right.
  * - `LinkedItem`: another item in one line (status, key, title), a link that opens it.
+ * - `isGone`: whether a failed read means the item is gone for the reader.
  */
 
 import { createContext, useContext, useEffect, useId, type MouseEvent, type ReactNode, type RefObject } from 'react';
+import { ApiError } from '@/api/client';
 import { useItemWorkflow } from '@/components/fields/itemData';
 import { ItemKey } from '@/components/items/ItemKey';
 import { cx } from '@/components/ui/cx';
@@ -37,6 +39,14 @@ export function useDetail(): DetailContextValue {
   const value = useContext(DetailContext);
   if (!value) throw new Error('useDetail needs an item detail around it');
   return value;
+}
+
+/**
+ * The item is gone for this reader: deleted, or in a project they no longer see (404, or 403 for lost access). The
+ * detail then says so instead of keeping what it loaded before; any other failed reload keeps the item on screen.
+ */
+export function isGone(error: unknown): boolean {
+  return error instanceof ApiError && (error.status === 404 || error.status === 403);
 }
 
 /** Section headings sit one level below the item's title: h3 in the preview (h2 title), h2 on the page (h1). */

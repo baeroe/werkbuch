@@ -21,7 +21,6 @@
  */
 
 import { FileQuestionMark } from 'lucide-react';
-import { ApiError } from '@/api/client';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
@@ -31,14 +30,16 @@ import { useWorkItem } from '@/hooks/workItems';
 import { useUiStore } from '@/store/ui';
 import { ItemBody, ItemDetailProvider } from './ItemBody';
 import { ItemHeader } from './ItemHeader';
+import { isGone } from './shared';
 
 export function ItemPeek({ itemId }: { itemId: string }) {
   const detail = useWorkItem(itemId);
   const data = detail.data;
   const close = () => useUiStore.getState().openPeek(null);
-  const missing = detail.error instanceof ApiError && detail.error.status === 404;
+  const missing = isGone(detail.error);
 
-  // a reload that fails (the server is down) keeps the item on screen: its editors hold what is not saved yet
+  // a reload that fails (the server is down) keeps the item on screen: its editors hold what is not saved yet. Gone
+  // (deleted, or access lost) it is not shown any more, not even as loaded before.
   if (data && !missing) {
     return (
       // a new detail for each item: drafts and edits never carry over to the next one

@@ -2,11 +2,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
-import { MemoryRouter } from 'react-router';
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { FAIL_KEY } from '@/api/client';
+import { MemoryRouter, Route, Routes } from 'react-router';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApiError, FAIL_KEY } from '@/api/client';
 import { getDb } from '@/api/db';
-import { getWorkItem } from '@/api/workItems';
+import { getWorkItem, updateWorkItem } from '@/api/workItems';
 import { currentToasts, dismissToast, runToastAction } from '@/components/ui/toast';
 import { plainText } from '@/lib/richtext';
 import { useUiStore } from '@/store/ui';
@@ -14,7 +14,32 @@ import { asUser, resetApi } from '@/test/api';
 import type { ActivityEntry, Comment, ItemEvent, RichText } from '@/types';
 import { preloadEditor } from '@/features/editor/RichTextEditor';
 import { buildTimeline } from './Activity';
+import { ItemPage } from './ItemPage';
 import { ItemPeek } from './ItemPeek';
+
+/** Switches of the item API for single tests; off, every call goes to the fake API as it is. */
+const api = vi.hoisted(() => ({
+  /** Saves wait in `held` until released: a save stays on its way while something else happens. */
+  holding: false,
+  held: [] as Array<() => void>,
+  /** Every item read fails with this. */
+  readError: null as Error | null,
+}));
+
+vi.mock('@/api/workItems', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/workItems')>();
+  return {
+    ...actual,
+    updateWorkItem: vi.fn(async (...args: Parameters<typeof actual.updateWorkItem>) => {
+      if (api.holding) await new Promise<void>((resolve) => api.held.push(resolve));
+      return actual.updateWorkItem(...args);
+    }),
+    getWorkItem: vi.fn(async (...args: Parameters<typeof actual.getWorkItem>) => {
+      if (api.readError) throw api.readError;
+      return actual.getWorkItem(...args);
+    }),
+  };
+});
 
 beforeAll(async () => {
   // jsdom has no layout; the editor measures the selection
@@ -29,21 +54,25 @@ beforeAll(async () => {
 beforeEach(() => {
   resetApi();
   useUiStore.setState(useUiStore.getInitialState());
+  Object.assign(api, { holding: false, held: [], readError: null });
 });
 
 afterEach(() => {
   act(() => currentToasts().forEach((item) => dismissToast(item.id)));
 });
 
-function renderWithData(node: ReactNode) {
+function renderWithData(node: ReactNode, path = '/') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const view = render(
     <QueryClientProvider client={client}>
-      <MemoryRouter>{node}</MemoryRouter>
+      <MemoryRouter initialEntries={[path]}>{node}</MemoryRouter>
     </QueryClientProvider>,
   );
   return { ...view, client };
 }
+
+/** The steps of WEB-47 as the server holds them. */
+const storedSteps = () => plainText(getDb().items.find((entry) => entry.key === 'WEB-47')!.values.steps as RichText);
 
 /** jsdom is no Mac: mod is the Control key. */
 const modEnter = '{Control>}{Enter}{/Control}';
@@ -224,6 +253,89 @@ describe('a rich text property that failed to save', () => {
 
     await user.keyboard(modEnter);
     await waitFor(async () => expect(plainText((await getWorkItem('WEB-47')).item.values.steps as RichText)).toContain('Vorher den Cache leeren.'));
+  });
+
+  it('keeps saving when "Erneut versuchen" runs while a save is on its way: what is written later reaches the server', async () => {
+    const user = userEvent.setup();
+    renderWithData(<ItemPeek itemId="WEB-47" />);
+    const steps = await screen.findByRole('textbox', { name: 'Schritte zum Nachstellen' });
+    await user.click(steps);
+    paste(steps, 'Vorher den Cache leeren. ');
+    const failed = await failing(() => user.keyboard(modEnter), 'Änderung nicht gespeichert');
+
+    // the click on the toast takes the focus from the editor, whose blur saves; the retry comes while that save is out
+    api.holding = true;
+    act(() => steps.blur());
+    await waitFor(() => expect(api.held).toHaveLength(1));
+    act(() => runToastAction(failed.id));
+    await waitFor(() => expect(api.held).toHaveLength(2));
+    api.holding = false;
+    await act(async () => api.held.splice(0).forEach((release) => release()));
+    await waitFor(() => expect(storedSteps()).toContain('Vorher den Cache leeren.'));
+
+    await user.click(steps);
+    paste(steps, 'Danach noch ergänzt. ');
+    await user.keyboard(modEnter);
+    await waitFor(() => expect(storedSteps()).toContain('Danach noch ergänzt.'));
+  });
+
+  it('does not take back an older text when the retry of a failed save lands after a newer save', async () => {
+    const user = userEvent.setup();
+    renderWithData(<ItemPeek itemId="WEB-47" />);
+    const steps = await screen.findByRole('textbox', { name: 'Schritte zum Nachstellen' });
+    await user.click(steps);
+    paste(steps, 'Vorher den Cache leeren. ');
+    const failed = await failing(() => user.keyboard(modEnter), 'Änderung nicht gespeichert');
+    // written on after the failure, then "Erneut versuchen": the blur saves the newer text, the retry sends the older one
+    paste(steps, 'Danach noch ergänzt. ');
+    api.holding = true;
+    act(() => steps.blur());
+    await waitFor(() => expect(api.held).toHaveLength(1));
+    act(() => runToastAction(failed.id));
+    await waitFor(() => expect(api.held).toHaveLength(2));
+    const retry = vi.mocked(updateWorkItem).mock.results.at(-1)!;
+    api.holding = false;
+
+    // the newer save lands first, the retry with the older text after it
+    await act(async () => api.held[0]());
+    await waitFor(() => expect(storedSteps()).toContain('Danach noch ergänzt.'));
+    await act(async () => {
+      api.held[1]();
+      await retry.value;
+    });
+    await waitFor(() => expect(storedSteps()).toContain('Danach noch ergänzt.'));
+    expect(steps.textContent).toContain('Danach noch ergänzt.');
+  });
+});
+
+/* --------------------------------------------------------------------------- access lost */
+
+describe('an item the reader can no longer see (403)', () => {
+  const forbidden = () => new ApiError({ status: 403, reason: 'forbidden', detail: 'Dieses Projekt siehst du nicht.' });
+
+  it('the preview shows it as gone instead of what it had loaded', async () => {
+    const { client } = renderWithData(<ItemPeek itemId="WEB-47" />);
+    await screen.findByRole('textbox', { name: 'Beschreibung' });
+
+    api.readError = forbidden();
+    await act(() => client.invalidateQueries());
+    expect(await screen.findByText('Dieses Item gibt es nicht mehr')).toBeTruthy();
+    expect(screen.queryByRole('textbox', { name: 'Beschreibung' })).toBeNull();
+  });
+
+  it('the page shows its 404 page instead of what it had loaded', async () => {
+    const { client } = renderWithData(
+      <Routes>
+        <Route path="/items/:key" element={<ItemPage />} />
+      </Routes>,
+      '/items/WEB-47',
+    );
+    await screen.findByRole('textbox', { name: 'Beschreibung' });
+
+    api.readError = forbidden();
+    await act(() => client.invalidateQueries());
+    expect(await screen.findByRole('heading', { level: 1, name: 'WEB-47 gibt es nicht' })).toBeTruthy();
+    expect(screen.queryByRole('textbox', { name: 'Beschreibung' })).toBeNull();
   });
 });
 
