@@ -172,8 +172,6 @@ export type PickerProps = Choice & {
   modal?: boolean;
   /** Keep the list below the trigger even without room. */
   keepSide?: boolean;
-  /** Extra content under the list, e.g. a link to the settings. */
-  footer?: ReactNode;
   /** The trigger, e.g. to give it the focus back after a follow-up dialog. */
   triggerRef?: Ref<HTMLButtonElement>;
   /** Extra classes of the trigger. */
@@ -201,7 +199,6 @@ export function Picker(props: PickerProps) {
     defaultOpen,
     modal,
     keepSide,
-    footer,
     triggerRef,
     className,
   } = props;
@@ -325,7 +322,6 @@ export function Picker(props: PickerProps) {
             {options.length > LIMIT && !load?.isLoading && !load?.error && (
               <p className="border-t border-edge px-3 py-2 text-sm text-pretty text-muted">Die ersten {LIMIT} von {options.length}. Tippen grenzt die Liste ein.</p>
             )}
-            {footer}
           </Combobox.Popup>
         </Combobox.Positioner>
       </Combobox.Portal>
