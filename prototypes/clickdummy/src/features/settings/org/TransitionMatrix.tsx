@@ -4,10 +4,18 @@
  * one tab stop, the arrows move between the cells (Home and End along a row, with Ctrl to the corners), Space and
  * Enter toggle the cell under the focus. A status never leads to itself, so the diagonal is there to walk over but
  * cannot be changed. Every cell is a checkbox named "Von <Status> nach <Status>".
+ *
+ * Three rules for people who cannot rely on a mouse or on good eyes:
+ * - Ctrl is the "mod" key off a Mac, so Ctrl+Enter is the page's save and must pass; Ctrl+Space and Ctrl+arrows belong
+ *   to the system. Only Ctrl+Home and Ctrl+End use Ctrl, as the grid pattern says.
+ * - An empty cell is drawn with the line of the input fields: 3:1 against its ground (WCAG 1.4.11).
+ * - The row headers stay at the left edge while the cells scroll under them. The scroll container keeps room for them,
+ *   so a cell that takes the focus stops beside the header and not behind it (WCAG 2.4.11). The arrow keys scroll the
+ *   cell they move to fully into that room: a browser leaves a cell where it is as long as a sliver of it shows.
  */
 
 import { ArrowDown, ArrowRight, Check, CircleAlert, Minus } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { cx } from '@/components/ui/cx';
 import { StatusIcon } from '@/components/ui/StatusIcon';
 import type { State, Transition } from '@/types';
@@ -49,6 +57,7 @@ export function TransitionMatrix({ states, transitions, onChange, initialStateId
   const [hover, setHover] = useState<Position | null>(null);
   const [inside, setInside] = useState(false);
   const cells = useRef(new Map<string, HTMLDivElement>());
+  const scroller = useRef<HTMLDivElement>(null);
   const allowed = useMemo(() => new Set(transitions.map(([from, to]) => pairKey(from, to))), [transitions]);
 
   // states come and go while the matrix stays; the tab stop has to stay inside the grid
@@ -57,11 +66,30 @@ export function TransitionMatrix({ states, transitions, onChange, initialStateId
     if (stop.row !== focus.row || stop.col !== focus.col) setFocus(stop);
   }, [stop.row, stop.col, focus.row, focus.col]);
 
+  // the row headers are as wide as their longest name; the scroll container keeps that much room (and a little more
+  // for the focus ring) on its left, so scrolling a cell into view does not leave it under a header
+  useLayoutEffect(() => {
+    const element = scroller.current;
+    const header = element?.querySelector<HTMLElement>('tbody th[scope="row"]');
+    if (!element || !header) return;
+    const keepRoom = () => element.style.setProperty('--matrix-head', `${header.offsetWidth + 8}px`);
+    keepRoom();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(keepRoom);
+    observer.observe(header);
+    return () => observer.disconnect();
+  }, [states]);
+
   if (size === 0) return null;
 
   function moveTo(next: Position) {
     setFocus(next);
-    cells.current.get(cellKey(next))?.focus();
+    const cell = cells.current.get(cellKey(next));
+    if (!cell) return;
+    // focus() alone leaves a cell half under a header or half past the edge where it is (Chromium did with 18 of its 44 px
+    // showing), and it knows nothing of the headers. scrollIntoView honours the scroll padding and margin.
+    cell.focus({ preventScroll: true });
+    cell.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
   }
 
   function toggle(row: number, col: number) {
@@ -72,8 +100,9 @@ export function TransitionMatrix({ states, transitions, onChange, initialStateId
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>, row: number, col: number) {
-    // browser and system shortcuts keep their keys
+    // browser and system shortcuts keep their keys; so does Ctrl (the page's save is Ctrl+Enter), except for the corners
     if (event.altKey || event.metaKey) return;
+    if (event.ctrlKey && event.key !== 'Home' && event.key !== 'End') return;
     const last = size - 1;
     switch (event.key) {
       case 'ArrowRight':
@@ -109,7 +138,7 @@ export function TransitionMatrix({ states, transitions, onChange, initialStateId
   const mark = hover ?? (inside ? stop : null);
 
   return (
-    <div className="overflow-x-auto overscroll-x-contain">
+    <div ref={scroller} className="overflow-x-auto overscroll-x-contain scroll-pl-[var(--matrix-head)]">
       <table
         role="grid"
         aria-label="Erlaubte Übergänge"
@@ -192,12 +221,13 @@ export function TransitionMatrix({ states, transitions, onChange, initialStateId
                         toggle(row, col);
                       }}
                       className={cx(
-                        'mx-auto flex size-11 items-center justify-center rounded-ctl border transition-colors duration-120 select-none md:size-8',
+                        // scroll-mt: a cell focused on a phone must not end up under the sticky top bar
+                        'mx-auto flex size-11 scroll-mt-20 items-center justify-center rounded-ctl border transition-colors duration-120 select-none md:size-8',
                         diagonal
                           ? 'cursor-not-allowed border-transparent bg-sunken text-faint'
                           : on
                             ? cx('border-accent bg-accent text-on-accent', !readOnly && 'cursor-pointer hover:bg-accent-hover')
-                            : cx('border-line bg-surface', !readOnly && 'cursor-pointer hover:border-line-input hover:bg-hover'),
+                            : cx('border-line-input bg-surface', !readOnly && 'cursor-pointer hover:border-ink hover:bg-hover'),
                         readOnly && !diagonal && 'cursor-default',
                       )}
                     >

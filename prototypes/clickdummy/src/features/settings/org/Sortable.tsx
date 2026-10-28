@@ -66,12 +66,18 @@ type RowProps<T extends { id: string }> = Pick<SortableListProps<T>, 'nameOf' | 
 
 function SortableRow<T extends { id: string }>({ item, index, nameOf, renderItem, disabled, rowClassName }: RowProps<T>) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: item.id, disabled });
+  // Only the bare Space and Enter lift a row. dnd-kit would lift on Ctrl+Enter (Windows, Linux) and Cmd+Enter (Mac) as
+  // well and swallow the page's save shortcut; Alt belongs to the system.
+  const { onKeyDown: lift, ...pointer } = listeners ?? ({} as NonNullable<typeof listeners>);
   const handle = (
     <button
       type="button"
       ref={setActivatorNodeRef}
       {...attributes}
-      {...listeners}
+      {...pointer}
+      onKeyDown={(event) => {
+        if (!event.ctrlKey && !event.metaKey && !event.altKey) lift?.(event);
+      }}
       aria-roledescription="sortierbar"
       aria-label={`${nameOf(item) || 'Eintrag'} verschieben`}
       className={cx(HANDLE_LOOK, 'touch-none transition-colors duration-120', disabled ? 'cursor-not-allowed opacity-50' : 'cursor-grab hover:bg-hover hover:text-ink active:cursor-grabbing')}

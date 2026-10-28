@@ -156,7 +156,8 @@ function GeneralForm({ organization, readOnly }: { organization: Organization; r
             onChange={(event) => setName(event.target.value)}
             className={cx('max-w-md', readOnly && readOnlyField)}
           />
-          <FieldGroup legend="Logo" hint="Ein Bild bis 256\u00a0KB, am besten quadratisch." error={logoError}>
+          {/* a JS expression, because an attribute string would print the escape as it stands */}
+          <FieldGroup legend="Logo" hint={'Ein Bild bis 256\u00a0KB, am besten quadratisch.'} error={logoError}>
             <div className="flex flex-wrap items-center gap-3">
               <OrgMark name={name} url={logo} />
               {!readOnly && (
