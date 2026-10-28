@@ -43,8 +43,8 @@ import {
   type UniqueIdentifier,
 } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
-import { Ban } from 'lucide-react';
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
+import { ArrowDown, ArrowUp, Ban } from 'lucide-react';
+import { createElement, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import type { WorkItemPatch } from '@/api/workItems';
 import { archivedReason } from '@/components/fields/itemData';
@@ -59,6 +59,7 @@ import { useMembers, useProjects } from '@/hooks/projects';
 import { useUsers } from '@/hooks/users';
 import { useWorkflows } from '@/hooks/workflows';
 import { useTransitionWorkItem, useUpdateWorkItem } from '@/hooks/workItems';
+import { useCommand } from '@/lib/commands';
 import { usePermissions } from '@/lib/permissions';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { useUiStore } from '@/store/ui';
@@ -299,9 +300,10 @@ export function BoardLayout({ items, groups, display, ctx, selection, onSelect, 
    * A card the keyboard or the pointer moved keeps the focus while it changes its place: moving to another column
    * mounts it anew, and the old element takes the focus with it.
    */
-  const following = useRef<{ id: string; column: string | null; pointer: boolean } | null>(null);
-  const follow = useCallback((id: string, column: string | null, pointer = false) => {
-    const target = { id, column, pointer };
+  const following = useRef<{ id: string; column: string; pointer: boolean; index?: number } | null>(null);
+  /** The card `id` is moving to `column` (at `index`, when the move chooses the place); `pointer`: a drag moved it. */
+  const follow = useCallback((id: string, column: string, { pointer = false, index }: { pointer?: boolean; index?: number } = {}) => {
+    const target = { id, column, pointer, index };
     following.current = target;
     // long enough for the optimistic change (or its rollback) to land
     setTimeout(() => {
@@ -310,13 +312,21 @@ export function BoardLayout({ items, groups, display, ctx, selection, onSelect, 
   }, []);
   useLayoutEffect(() => {
     const target = following.current;
-    if (!target || !focusIsNeutral()) return;
-    const element = findCard(target.id, target.column);
-    if (element) {
+    if (!target) return;
+    // only the card in its new place counts: until the move has landed the old element still holds the focus (a new
+    // place in the same column too: the new order moves the element and may take the focus with it)
+    const element = findCard(target.id, target.column, true);
+    const place = columns.find((column) => column.key === target.column)?.ids.indexOf(target.id);
+    if (!element || (target.index !== undefined && place !== target.index)) return;
+    if (element !== document.activeElement) {
+      // a focus elsewhere (a click on the paper, a field) wins over the follow
+      if (!focusIsNeutral()) return;
       // after a drag the card is focused as the pointer left it: without the keyboard ring
       element.focus({ preventScroll: true, focusVisible: !target.pointer });
       reveal(element);
     }
+    // done: later renders leave the focus where the person puts it
+    following.current = null;
   });
 
   const { clickSelect } = useSelection({ order, all, cursorId, onCursor, selection, onSelect, onOpen, onPeek, focus: (id) => focusCard(id), container: board });
@@ -443,12 +453,8 @@ export function BoardLayout({ items, groups, display, ctx, selection, onSelect, 
     const movable = checkMove(item, columns[at.column].key, columns[at.column].key, rules);
     if (!movable.ok) return refuse(item, movable.reason);
     const result = nearestAllowed(item, columns.map((column) => column.key), at.column, step, rules);
-    if (!result.ok) {
-      const edge = at.column + step < 0 || at.column + step >= columns.length;
-      if (edge) setAnnouncement(result.reason);
-      else refuse(item, result.reason);
-      return;
-    }
+    // no allowed column, or the edge of the board: the toast says which (an identical one replaces itself)
+    if (!result.ok) return refuse(item, result.reason);
     const target = columns[result.index];
     const message = said(item, result.check, target);
     if (result.check.closing) {
@@ -477,9 +483,42 @@ export function BoardLayout({ items, groups, display, ctx, selection, onSelect, 
       return;
     }
     const ids = arrayMove(column.ids, at.index, index);
-    follow(item.id, column.key);
+    follow(item.id, column.key, { index });
     void commit(item, { rank: rankAt(ids, index) }, `${item.key} steht jetzt an Stelle ${index + 1} von ${ids.length} in ${column.label}.`, column.key);
   }
+
+  /** Whether the cursor card can move one place up or down in its column (a column sorted by rank). */
+  function canReorder(step: 1 | -1): boolean {
+    const item = cursorId ? itemById.get(cursorId) : undefined;
+    const at = locate(cursorId);
+    if (!item || !at || !manual) return false;
+    const column = columns[at.column];
+    const index = at.index + step;
+    return index >= 0 && index < column.ids.length && checkMove(item, column.key, column.key, rules).ok;
+  }
+
+  // the place in a column without dragging (WCAG 2.5.7): ⌥↑/⌥↓, and the same in the palette, which a pointer reaches
+  // through the search field of the sidebar; listed while the cursor card can move that way
+  useCommand({
+    id: 'board.card_up',
+    label: 'Karte in der Spalte nach oben',
+    group: 'Board',
+    keys: 'alt+arrowup',
+    icon: createElement(ArrowUp),
+    keywords: ['Reihenfolge', 'verschieben', 'Platz'],
+    when: () => canReorder(-1),
+    run: () => reorderByKey(-1),
+  });
+  useCommand({
+    id: 'board.card_down',
+    label: 'Karte in der Spalte nach unten',
+    group: 'Board',
+    keys: 'alt+arrowdown',
+    icon: createElement(ArrowDown),
+    keywords: ['Reihenfolge', 'verschieben', 'Platz'],
+    when: () => canReorder(1),
+    run: () => reorderByKey(1),
+  });
 
   const sortedHint = () =>
     `Die Spalten sind nach ${SORT_NAMES[display.sort.field] ?? 'einem Feld'} sortiert. Eine eigene Reihenfolge geht mit der Sortierung „Manuell“ unter „Anzeige“.`;
@@ -498,8 +537,19 @@ export function BoardLayout({ items, groups, display, ctx, selection, onSelect, 
   useShortcut({ id: 'board.move_right', keys: 'shift+arrowright', scope: 'list', label: 'Karte in die nächste erlaubte Spalte rechts', group: GROUP, when: inBoard, run: () => moveByKey(1) });
   useShortcut({ id: 'board.move_up', keys: 'alt+arrowup', scope: 'list', label: 'Karte in der Spalte nach oben', group: GROUP, when: inBoard, run: () => reorderByKey(-1) });
   useShortcut({ id: 'board.move_down', keys: 'alt+arrowdown', scope: 'list', label: 'Karte in der Spalte nach unten', group: GROUP, when: inBoard, run: () => reorderByKey(1) });
-  // Escape during a drag cancels the drag (dnd-kit) and nothing else: the selection stays
-  useShortcut({ id: 'board.cancel_drag', keys: 'escape', scope: 'list', label: 'Ziehen abbrechen', group: GROUP, when: () => dragRef.current !== null, run: () => {} });
+  // Escape during a drag cancels the drag and nothing else: the selection stays. dnd-kit's pointer sensors cancel on
+  // the document's keydown and end the drag at once (onDragCancel), before this listener on the window asks: the drag
+  // that just ended counts too (`justDropped`, cleared after the event). An open preview still closes with the same
+  // key, through PeekHost's Escape in the detail scope, which outranks the list's.
+  useShortcut({
+    id: 'board.cancel_drag',
+    keys: 'escape',
+    scope: 'list',
+    label: 'Ziehen abbrechen',
+    group: GROUP,
+    when: () => dragRef.current !== null || justDropped.current,
+    run: () => {},
+  });
 
   /* -------------------------------------------------------------------- drag and drop */
 
@@ -605,7 +655,7 @@ export function BoardLayout({ items, groups, display, ctx, selection, onSelect, 
     const state = endDrag();
     const item = state ? itemById.get(state.id) : undefined;
     if (!state || !item) return;
-    follow(item.id, state.origin.column, true);
+    follow(item.id, state.origin.column, { pointer: true });
     const overKey = over ? columnKeyOf(state.columns, String(over.id)) : null;
     if (!overKey) {
       setAnnouncement(`${item.key} liegt wieder in ${columnLabel(state.origin.column)}.`);
@@ -630,7 +680,7 @@ export function BoardLayout({ items, groups, display, ctx, selection, onSelect, 
       return;
     }
     const patch: WorkItemPatch = manual ? { ...check.patch, rank: rankAt(ids, index) } : { ...check.patch };
-    follow(item.id, overKey, true);
+    follow(item.id, overKey, { pointer: true, index });
     setPlacements((current) => new Map(current).set(item.id, { column: overKey, index }));
     setCursorColumn(overKey);
     const message = said(item, check, target);
@@ -643,7 +693,7 @@ export function BoardLayout({ items, groups, display, ctx, selection, onSelect, 
 
   function onDragCancel() {
     const state = endDrag();
-    if (state) follow(state.id, state.origin.column, true);
+    if (state) follow(state.id, state.origin.column, { pointer: true });
   }
 
   const keyOf = (id: UniqueIdentifier) => itemById.get(String(id))?.key ?? 'Die Karte';
@@ -828,10 +878,7 @@ export function BoardLayout({ items, groups, display, ctx, selection, onSelect, 
             collisionDetection={collision}
             measuring={MEASURING}
             autoScroll={AUTO_SCROLL}
-            accessibility={{
-              announcements,
-              screenReaderInstructions: { draggable: 'Mit der Maus oder lange gedrückt ziehen. Per Tastatur schiebt Umschalt mit Pfeil links oder rechts die Karte.' },
-            }}
+            accessibility={{ announcements }}
             onDragStart={onDragStart}
             onDragOver={onDragOver}
             onDragEnd={onDragEnd}

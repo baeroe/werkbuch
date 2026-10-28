@@ -7,14 +7,23 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getWorkItem, listWorkItems } from '@/api/workItems';
 import { currentToasts, dismissToast } from '@/components/ui/toast';
 import { TooltipProvider } from '@/components/ui/Tooltip';
+import { CommandPalette } from '@/features/palette/CommandPalette';
 import { useUiStore } from '@/store/ui';
 import { asUser, resetApi } from '@/test/api';
 import ItemsRoute from '../routes';
 
-function renderAt(path: string) {
+function renderAt(path: string, { palette = false } = {}) {
   const router = createMemoryRouter(
     [
-      { path: '/projects/:identifier', element: <ItemsRoute preset="project" /> },
+      {
+        path: '/projects/:identifier',
+        element: (
+          <>
+            <ItemsRoute preset="project" />
+            {palette && <CommandPalette />}
+          </>
+        ),
+      },
       { path: '/views/:viewId', element: <ItemsRoute preset="view" /> },
     ],
     { initialEntries: [path] },
@@ -91,7 +100,7 @@ describe('the board', () => {
     router.dispose();
   });
 
-  it('moves the cursor down a column with ↓ and into the next column with →', async () => {
+  it('moves the cursor down a column with ↓, stops at its end, and goes into the next column with →', async () => {
     const router = renderAt('/projects/APP?layout=board');
     await screen.findByRole('region', { name: 'Todo' });
     const todo = within(column('Todo')).getAllByRole('article');
@@ -100,10 +109,68 @@ describe('the board', () => {
 
     press('ArrowDown');
     expect(document.activeElement).toBe(todo[1]);
+    // at the end of a column ↓ and j stay there; in the order of the whole list they would go on to the next column
+    act(() => todo.at(-1)!.focus());
+    press('ArrowDown');
+    expect(document.activeElement).toBe(todo.at(-1));
+    press('j');
+    expect(document.activeElement).toBe(todo.at(-1));
     press('ArrowRight');
     expect(column('In Progress').contains(document.activeElement)).toBe(true);
     // one card is the tab stop
     expect(document.querySelectorAll('[data-nav-target][tabindex="0"]')).toHaveLength(1);
+    router.dispose();
+  });
+
+  it('says why at the edge of the board when ⇧← finds no column', async () => {
+    const router = renderAt('/projects/APP?layout=board');
+    await screen.findByRole('region', { name: 'Backlog' });
+    act(() => cardIn('Backlog', 'APP-13').focus());
+
+    press('ArrowLeft', { shiftKey: true });
+    expect(lastToast()).toMatchObject({ tone: 'error', description: '„Backlog“ ist die erste Spalte.' });
+    router.dispose();
+  });
+
+  it('moves the cursor card down its column from the palette, a way without dragging (WCAG 2.5.7)', async () => {
+    const router = renderAt('/projects/WEB?layout=board', { palette: true });
+    await screen.findByRole('region', { name: 'Todo' });
+    const todoOrder = async () =>
+      (
+        await listWorkItems({
+          filter: { version: 1, conditions: [{ field: 'project', op: 'is', value: 'p_web' }, { field: 'state', op: 'is', value: 'std_todo' }] },
+          sort: { field: 'rank', direction: 'asc' },
+        })
+      ).items.map((item) => item.key);
+    expect((await todoOrder()).slice(0, 3)).toEqual(['WEB-43', 'WEB-44', 'WEB-48']);
+    act(() => cardIn('Todo', 'WEB-43').focus());
+
+    act(() => useUiStore.getState().setPaletteOpen(true));
+    const input = await screen.findByRole('combobox', { name: 'Suchen oder Befehl eingeben' });
+    fireEvent.change(input, { target: { value: 'Spalte nach unten' } });
+    const command = await screen.findByRole('option', { name: /Karte in der Spalte nach unten/ });
+    // the palette shows the shortcut beside the command
+    expect(within(command).getByRole('img', { name: /Pfeil runter/ })).toBeTruthy();
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(async () => expect((await todoOrder()).slice(0, 3)).toEqual(['WEB-44', 'WEB-43', 'WEB-48']));
+    router.dispose();
+  });
+
+  it('cancels a pointer drag with Escape and keeps the selection', async () => {
+    const router = renderAt('/projects/WEB?layout=board');
+    await screen.findByRole('region', { name: 'Todo' });
+    act(() => useUiStore.getState().setSelection(['wi_web_44']));
+
+    // the card's frame (li) holds the drag listeners: press, then move past the 5 px of the mouse sensor
+    const frame = cardIn('Todo', 'WEB-48').parentElement!;
+    act(() => void fireEvent.mouseDown(frame, { button: 0, clientX: 10, clientY: 10 }));
+    act(() => void fireEvent.mouseMove(document, { clientX: 40, clientY: 40 }));
+    expect(await screen.findByText('WEB-48 aufgenommen.')).toBeTruthy();
+
+    act(() => void fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' }));
+    expect(await screen.findByText('Abgebrochen. WEB-48 liegt wieder an seinem Platz.')).toBeTruthy();
+    expect(useUiStore.getState().selection).toEqual(['wi_web_44']);
     router.dispose();
   });
 
