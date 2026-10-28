@@ -65,7 +65,7 @@ export function Combobox({
           <BaseCombobox.Input
             id={inputId}
             placeholder={placeholder}
-            aria-label={rest['aria-label']}
+            {...rest}
             aria-invalid={error ? true : undefined}
             aria-describedby={describedBy(inputId, { hint, error })}
             className={cx(fieldClass(Boolean(error)), fieldSize, selected && !disabled ? 'pr-24 md:pr-16' : 'pr-12 md:pr-9')}

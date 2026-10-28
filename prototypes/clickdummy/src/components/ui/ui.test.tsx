@@ -1,9 +1,15 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Button } from './Button';
+import { Input } from './Input';
 import { Kbd } from './Kbd';
-import { toast } from './toast';
+import { currentToasts, dismissToast, toast } from './toast';
 import { Toaster } from './Toaster';
+
+// The toast store is shared by all tests: close whatever a test left open.
+afterEach(() => {
+  act(() => currentToasts().forEach((item) => dismissToast(item.id)));
+});
 
 describe('Kbd on a Mac', () => {
   beforeEach(() => {
@@ -68,4 +74,102 @@ it('toast with action calls onExpire after the duration unless the action ran', 
   } finally {
     vi.useRealTimers();
   }
+});
+
+it('toast still expires after the focused toast was closed by hand', () => {
+  vi.useFakeTimers();
+  try {
+    render(<Toaster />);
+    act(() => {
+      toast({ title: 'WEB-51 archiviert' });
+    });
+    const close = screen.getByRole('button', { name: 'Hinweis schließen' });
+    // the focus sits on the close button when it is pressed; the removed button sends no blur
+    fireEvent.focus(close);
+    fireEvent.click(close);
+
+    const expire = vi.fn();
+    act(() => {
+      toast({ title: 'WEB-52 archiviert', onExpire: expire });
+    });
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(expire).toHaveBeenCalledTimes(1);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it('toast still expires after a hovered toast was closed while the pointer stayed', () => {
+  vi.useFakeTimers();
+  try {
+    render(<Toaster />);
+    let first = 0;
+    act(() => {
+      first = toast({ title: 'WEB-51 archiviert' });
+    });
+    // a mouse hover sends pointer and mouse events
+    const title = screen.getByText('WEB-51 archiviert');
+    fireEvent.pointerEnter(title);
+    fireEvent.mouseEnter(title);
+    // closed from elsewhere (e.g. mod+z): the pointer never leaves the removed toast
+    act(() => dismissToast(first));
+
+    const expire = vi.fn();
+    act(() => {
+      toast({ title: 'WEB-52 archiviert', onExpire: expire });
+    });
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(expire).toHaveBeenCalledTimes(1);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it('toast waits while the pointer is on it and runs out the rest of its time after the pointer left', () => {
+  vi.useFakeTimers();
+  try {
+    render(<Toaster />);
+    const expire = vi.fn();
+    act(() => {
+      toast({ title: 'WEB-51 archiviert', onExpire: expire });
+    });
+    act(() => {
+      vi.advanceTimersByTime(2000);
+    });
+    const title = screen.getByText('WEB-51 archiviert');
+    fireEvent.pointerEnter(title);
+    fireEvent.mouseEnter(title);
+    act(() => {
+      vi.advanceTimersByTime(10_000);
+    });
+    expect(expire).not.toHaveBeenCalled();
+
+    fireEvent.pointerLeave(title);
+    fireEvent.mouseLeave(title);
+    act(() => {
+      vi.advanceTimersByTime(2999);
+    });
+    expect(expire).not.toHaveBeenCalled();
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(expire).toHaveBeenCalledTimes(1);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it('Field keeps a polite live region for errors, so an error that appears is announced', () => {
+  const { container, rerender } = render(<Input label="Aufwand (h)" name="effort" />);
+  const region = container.querySelector('[aria-live="polite"]');
+  expect(region).not.toBeNull();
+
+  rerender(<Input label="Aufwand (h)" name="effort" error="Nur eine Zahl eingeben, zum Beispiel 3,5" />);
+  // the same region, rendered before the error, now carries the message
+  expect(region?.textContent).toContain('Nur eine Zahl eingeben, zum Beispiel 3,5');
+  expect(screen.getByRole('textbox', { name: 'Aufwand (h)' }).getAttribute('aria-invalid')).toBe('true');
 });

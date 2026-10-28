@@ -116,16 +116,18 @@ export function MenuGroupLabel({ children }: { children: ReactNode }) {
   return <BaseMenu.GroupLabel className="px-2.5 pt-1.5 pb-1 text-sm text-muted">{children}</BaseMenu.GroupLabel>;
 }
 
+type MenuSubmenuProps = { label: ReactNode; icon?: LucideIcon; children: ReactNode; defaultOpen?: boolean; keepSide?: boolean };
+
 /** An item that opens a nested menu to the side. */
-export function MenuSubmenu({ label, icon: Icon, children }: { label: ReactNode; icon?: LucideIcon; children: ReactNode }) {
+export function MenuSubmenu({ label, icon: Icon, children, defaultOpen, keepSide }: MenuSubmenuProps) {
   return (
-    <BaseMenu.SubmenuRoot>
+    <BaseMenu.SubmenuRoot defaultOpen={defaultOpen}>
       <BaseMenu.SubmenuTrigger className={cx(optionClass, 'data-popup-open:bg-hover')}>
         {Icon && <Icon className="size-4 shrink-0 text-muted" aria-hidden="true" />}
         <span className="min-w-0 flex-1 truncate">{label}</span>
         <ChevronRight className="size-4 shrink-0 text-muted" aria-hidden="true" />
       </BaseMenu.SubmenuTrigger>
-      <MenuContent side="inline-end" sideOffset={-2}>
+      <MenuContent side="inline-end" sideOffset={-2} keepSide={keepSide}>
         {children}
       </MenuContent>
     </BaseMenu.SubmenuRoot>

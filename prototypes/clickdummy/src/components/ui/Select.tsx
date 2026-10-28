@@ -43,7 +43,7 @@ export function Select({ label, hint, error, options, value, onValueChange, plac
       <Field id={triggerId} label={label} hint={hint} error={error} className={className}>
         <BaseSelect.Trigger
           id={triggerId}
-          aria-label={rest['aria-label']}
+          {...rest}
           aria-labelledby={label ? `${fieldIds(triggerId).label} ${valueId}` : undefined}
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy(triggerId, { hint, error })}

@@ -34,9 +34,16 @@ function rowsOf(groups: EmojiGroup[], columns: number): number[][] {
   return rows;
 }
 
+type EmojiPickerProps = {
+  onPick: (emoji: string) => void;
+  /** Text already in the search (the gallery shows a search without matches). */
+  defaultQuery?: string;
+  className?: string;
+};
+
 /** Emoji for reactions and page titles: search by German name, arrow keys move, Enter picks. */
-export function EmojiPicker({ onPick, className }: { onPick: (emoji: string) => void; className?: string }) {
-  const [query, setQuery] = useState('');
+export function EmojiPicker({ onPick, defaultQuery = '', className }: EmojiPickerProps) {
+  const [query, setQuery] = useState(defaultQuery);
   const [active, setActive] = useState(0);
   const [shown, setShown] = useState<Emoji | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);

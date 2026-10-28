@@ -253,6 +253,7 @@ function ControlsSection() {
       <MenuSpecimen />
       <TooltipSpecimen />
       <PopoverSpecimen />
+      <EmojiSearchSpecimen />
       <DialogSpecimen />
       <TogglesSpecimen />
       <SegmentedSpecimen />
@@ -395,6 +396,9 @@ function InputsSpecimen() {
         />
         <Input label="Kennung" defaultValue="WEB" disabled hint="Lässt sich nach dem Anlegen nur in den Einstellungen ändern." name="identifier" />
         <Textarea label="Kommentar" placeholder="Kommentar schreiben …" hint="Mit @ erwähnst du jemanden." name="comment" />
+        <Textarea label="Kommentar (Hover)" defaultValue="Kann ich reproduzieren, nur unter iOS&nbsp;18." data-demo="hover" name="comment-hover" />
+        <Textarea label="Kommentar (Fokus)" defaultValue="Kann ich reproduzieren, nur unter iOS&nbsp;18." data-demo="focus" name="comment-focus" />
+        <Textarea label="Kommentar (deaktiviert)" defaultValue="Viewer lesen mit, kommentieren aber nicht." disabled hint="Nur Mitglieder dürfen kommentieren." name="comment-disabled" />
         <Textarea label="Schritte zum Nachstellen" defaultValue={'1. Formular ausfüllen\n2. Absenden'} error="Bitte beschreibe auch, was du erwartet hast." name="steps" />
       </div>
     </Specimen>
@@ -409,6 +413,8 @@ function SelectSpecimen() {
     <Specimen title="Auswahl" note="Für kurze Listen. Der aktive Eintrag liegt als Karte auf dem Transparentpapier.">
       <div className="flex flex-col gap-4">
         <Select label="Kunde" options={CUSTOMERS} value={customer} onValueChange={setCustomer} />
+        <Select label="Kunde (Hover)" options={CUSTOMERS} value={customer} onValueChange={setCustomer} data-demo="hover" />
+        <Select label="Kunde (Fokus)" options={CUSTOMERS} value={customer} onValueChange={setCustomer} data-demo="focus" />
         <Select label="Kunde (leer)" options={CUSTOMERS} value={empty} onValueChange={setEmpty} placeholder="Kunde wählen …" hint="Optional." />
         <Select label="Umgebung" options={CUSTOMERS} value={null} onValueChange={() => undefined} placeholder="Umgebung wählen …" error="Pflichtfeld für Bugs: Wo tritt der Fehler auf?" />
         <Select label="Kunde (deaktiviert)" options={CUSTOMERS} value="opt_moos" onValueChange={() => undefined} disabled />
@@ -427,6 +433,16 @@ function ComboboxSpecimen() {
     <Specimen title="Suche mit Auswahl" note="Für lange Listen: tippen filtert, Pfeile wählen, Enter übernimmt.">
       <div className="flex flex-col gap-4">
         <Combobox label="Assignee" options={ASSIGNEES} value={assignee} onValueChange={setAssignee} placeholder="Person suchen …" />
+        <Combobox label="Assignee (Hover)" options={ASSIGNEES} value={assignee} onValueChange={setAssignee} data-demo="hover" />
+        <Combobox label="Assignee (Fokus)" options={ASSIGNEES} value={assignee} onValueChange={setAssignee} data-demo="focus" />
+        <Combobox
+          label="Reviewer"
+          options={ASSIGNEES}
+          value={null}
+          onValueChange={() => undefined}
+          placeholder="Person suchen …"
+          error="Pflichtfeld bei Kundenwünschen: Wer nimmt vor der Freigabe ab?"
+        />
         <Combobox label="Reviewer (deaktiviert)" options={ASSIGNEES} value="Ida Brenner" onValueChange={() => undefined} disabled />
         <div className="pb-16">
           <Combobox label="Assignee (keine Treffer)" options={ASSIGNEES} value={null} onValueChange={() => undefined} defaultOpen keepSide defaultInputValue="Xaver" emptyText="Niemand heißt so. Prüfe die Schreibweise." />
@@ -441,61 +457,71 @@ function ComboboxSpecimen() {
 
 function MenuSpecimen() {
   const [theme, setTheme] = useState('system');
-  const [showArchived, setShowArchived] = useState(false);
+  const [showArchived, setShowArchived] = useState(true);
+  // the submenu opens to the side; on phones there is no room for it next to the menu
+  const [wide] = useState(() => window.matchMedia('(min-width: 48rem)').matches);
   return (
-    <Specimen title="Menü" note="Aktionen mit Kürzeln. Der hervorgehobene Eintrag zeigt den aktiven Streifen.">
-      <div className="pb-96 md:pb-80">
-        <Menu defaultOpen modal={false}>
-          <MenuTrigger render={<Button variant="secondary">Aktionen für WEB-47</Button>} />
-          <MenuContent keepSide>
-            <MenuItem icon={Check} shortcut="s" data-demo="hover">
-              Status ändern …
-            </MenuItem>
-            <MenuItem icon={UserRoundPlus} shortcut="a">
-              Zuweisen …
-            </MenuItem>
-            <MenuItem icon={UserRoundCheck} shortcut="i">
-              Mir zuweisen
-            </MenuItem>
-            <MenuItem icon={Tag} shortcut="l">
-              Labels …
-            </MenuItem>
-            <MenuSeparator />
-            <MenuItem icon={LinkIcon}>Link kopieren</MenuItem>
-            <MenuItem icon={Archive} shortcut="mod+backspace">
-              Archivieren
-            </MenuItem>
-            <MenuItem icon={Trash2} disabled>
-              Löschen (nur Admins)
-            </MenuItem>
-            <MenuItem icon={Trash2} danger>
-              Löschen …
-            </MenuItem>
-          </MenuContent>
-        </Menu>
+    <Specimen
+      title="Menü"
+      note="Aktionen mit Kürzeln; der hervorgehobene Eintrag zeigt den aktiven Streifen. Daneben Auswahl, Häkchen und ein Untermenü."
+      wide
+    >
+      <div className="flex flex-wrap items-start gap-x-10 gap-y-4">
+        <div className="w-full pb-96 sm:w-64 md:pb-80">
+          <Menu defaultOpen modal={false}>
+            <MenuTrigger render={<Button variant="secondary">Aktionen für WEB-47</Button>} />
+            <MenuContent keepSide>
+              <MenuItem icon={Check} shortcut="s" data-demo="hover">
+                Status ändern …
+              </MenuItem>
+              <MenuItem icon={UserRoundPlus} shortcut="a">
+                Zuweisen …
+              </MenuItem>
+              <MenuItem icon={UserRoundCheck} shortcut="i">
+                Mir zuweisen
+              </MenuItem>
+              <MenuItem icon={Tag} shortcut="l">
+                Labels …
+              </MenuItem>
+              <MenuSeparator />
+              <MenuItem icon={LinkIcon}>Link kopieren</MenuItem>
+              <MenuItem icon={Archive} shortcut="mod+backspace">
+                Archivieren
+              </MenuItem>
+              <MenuItem icon={Trash2} disabled>
+                Löschen (nur Admins)
+              </MenuItem>
+              <MenuItem icon={Trash2} danger>
+                Löschen …
+              </MenuItem>
+            </MenuContent>
+          </Menu>
+        </div>
+        <div className="w-full pb-80 md:w-[30rem] md:pb-96">
+          <Menu defaultOpen modal={false}>
+            <MenuTrigger render={<Button variant="ghost" icon={Palette}>Profilmenü</Button>} />
+            <MenuContent keepSide>
+              <MenuGroup>
+                <MenuGroupLabel>Farbschema</MenuGroupLabel>
+                <MenuRadioGroup value={theme} onValueChange={(value) => setTheme(String(value))}>
+                  <MenuRadioItem value="system">System</MenuRadioItem>
+                  <MenuRadioItem value="light">Hell</MenuRadioItem>
+                  <MenuRadioItem value="dark">Nachtheft</MenuRadioItem>
+                </MenuRadioGroup>
+              </MenuGroup>
+              <MenuSeparator />
+              <MenuCheckboxItem checked={showArchived} onCheckedChange={setShowArchived}>
+                Archivierte zeigen
+              </MenuCheckboxItem>
+              <MenuSubmenu label="Als … ansehen" icon={Users} defaultOpen={wide} keepSide>
+                {PEOPLE.map((person) => (
+                  <MenuItem key={person.name}>{person.name}</MenuItem>
+                ))}
+              </MenuSubmenu>
+            </MenuContent>
+          </Menu>
+        </div>
       </div>
-      <Menu>
-        <MenuTrigger render={<Button variant="ghost" icon={Palette}>Profilmenü (zu)</Button>} />
-        <MenuContent>
-          <MenuGroup>
-            <MenuGroupLabel>Farbschema</MenuGroupLabel>
-            <MenuRadioGroup value={theme} onValueChange={(value) => setTheme(String(value))}>
-              <MenuRadioItem value="system">System</MenuRadioItem>
-              <MenuRadioItem value="light">Hell</MenuRadioItem>
-              <MenuRadioItem value="dark">Nachtheft</MenuRadioItem>
-            </MenuRadioGroup>
-          </MenuGroup>
-          <MenuSeparator />
-          <MenuCheckboxItem checked={showArchived} onCheckedChange={setShowArchived}>
-            Archivierte zeigen
-          </MenuCheckboxItem>
-          <MenuSubmenu label="Als … ansehen" icon={Users}>
-            {PEOPLE.map((person) => (
-              <MenuItem key={person.name}>{person.name}</MenuItem>
-            ))}
-          </MenuSubmenu>
-        </MenuContent>
-      </Menu>
     </Specimen>
   );
 }
@@ -534,6 +560,16 @@ function PopoverSpecimen() {
             <Calendar value={due} onChange={setDue} today={TODAY} label="Due-Date" />
           </PopoverContent>
         </Popover>
+      </div>
+    </Specimen>
+  );
+}
+
+function EmojiSearchSpecimen() {
+  return (
+    <Specimen title="Emoji-Suche ohne Treffer" note="Kein Name passt. Ein eingetipptes Emoji lässt sich trotzdem übernehmen.">
+      <div className="inline-block max-w-full rounded-card border border-line bg-surface p-3 shadow-elev-1">
+        <EmojiPicker defaultQuery="Einhorn 🦄" onPick={(emoji) => toast({ title: `Reaktion ${emoji} hinzugefügt`, tone: 'success' })} />
       </div>
     </Specimen>
   );

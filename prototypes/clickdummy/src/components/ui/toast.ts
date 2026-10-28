@@ -18,37 +18,62 @@ export type Toast = Omit<ToastOptions, 'duration' | 'tone'> & { id: number; dura
 const DEFAULT_DURATION = 5000;
 const MAX_VISIBLE = 3;
 
-/** Who holds the toasts open: the pointer over them or the keyboard focus in them (WCAG 2.2.1). */
-export type ToastHold = 'pointer' | 'focus';
-
 let toasts: readonly Toast[] = [];
 let sequence = 0;
-const holds = new Set<ToastHold>();
 const listeners = new Set<() => void>();
-/** Remaining time per toast; a timer only runs while nothing holds the toasts. */
+/** Remaining time per toast; a timer only runs while no toast is held. */
 const timers = new Map<number, { remaining: number; started: number; handle: ReturnType<typeof setTimeout> | null }>();
+/**
+ * Toasts under the pointer and toasts holding the keyboard focus pause all timers (WCAG 2.2.1). The holds are
+ * kept per toast, so closing a toast releases its hold: browsers send no leave or blur for removed elements.
+ */
+const hovered = new Set<number>();
+const focused = new Set<number>();
+let paused = false;
 
 const emit = () => listeners.forEach((listener) => listener());
-
-function stopTimer(id: number) {
-  const timer = timers.get(id);
-  if (timer?.handle) clearTimeout(timer.handle);
-  timers.delete(id);
-}
 
 function startTimer(id: number) {
   const timer = timers.get(id);
   if (!timer) return;
+  if (timer.handle) clearTimeout(timer.handle);
   timer.started = Date.now();
   timer.handle = setTimeout(() => dismissToast(id), timer.remaining);
+}
+
+/** Pauses every timer while a toast is held and resumes them once none is. */
+function syncPause() {
+  const held = hovered.size > 0 || focused.size > 0;
+  if (held === paused) return;
+  paused = held;
+  for (const [id, timer] of timers) {
+    if (!paused) {
+      startTimer(id);
+    } else if (timer.handle) {
+      clearTimeout(timer.handle);
+      timer.handle = null;
+      timer.remaining = Math.max(0, timer.remaining - (Date.now() - timer.started));
+    }
+  }
+  emit();
+}
+
+/** Drops a toast's timer and its holds. */
+function forget(id: number) {
+  const timer = timers.get(id);
+  if (timer?.handle) clearTimeout(timer.handle);
+  timers.delete(id);
+  hovered.delete(id);
+  focused.delete(id);
 }
 
 function remove(id: number): Toast | undefined {
   const item = toasts.find((entry) => entry.id === id);
   if (!item) return undefined;
-  stopTimer(id);
+  forget(id);
   toasts = toasts.filter((entry) => entry.id !== id);
   emit();
+  syncPause();
   return item;
 }
 
@@ -56,10 +81,11 @@ function remove(id: number): Toast | undefined {
 export function toast({ duration = DEFAULT_DURATION, tone = 'neutral', ...options }: ToastOptions): number {
   const id = ++sequence;
   const pushedOut = toasts.slice(0, Math.max(0, toasts.length - (MAX_VISIBLE - 1)));
-  pushedOut.forEach((item) => stopTimer(item.id));
+  pushedOut.forEach((item) => forget(item.id));
   toasts = [...toasts.slice(pushedOut.length), { ...options, id, duration, tone }];
+  syncPause();
   timers.set(id, { remaining: duration, started: 0, handle: null });
-  if (holds.size === 0) startTimer(id);
+  if (!paused) startTimer(id);
   emit();
   pushedOut.forEach((item) => item.onExpire?.());
   return id;
@@ -72,29 +98,23 @@ export function dismissToast(id: number): void {
 
 /** Runs the toast's action (e.g. undo) and closes it; onExpire does not run. */
 export function runToastAction(id: number): void {
-  const item = remove(id);
-  item?.action?.onClick();
-  // the action's button had the focus and is gone now; browsers send no blur for removed elements
-  if (item) resumeToasts('focus');
+  remove(id)?.action?.onClick();
 }
 
-export function pauseToasts(hold: ToastHold): void {
-  const wasRunning = holds.size === 0;
-  holds.add(hold);
-  if (!wasRunning) return;
-  for (const timer of timers.values()) {
-    if (!timer.handle) continue;
-    clearTimeout(timer.handle);
-    timer.handle = null;
-    timer.remaining = Math.max(0, timer.remaining - (Date.now() - timer.started));
-  }
-  emit();
+/** The pointer entered or left a toast. Ids that are not shown (the gallery's specimens) are ignored. */
+export function setToastHovered(id: number, over: boolean): void {
+  if (!toasts.some((entry) => entry.id === id)) return;
+  if (over) hovered.add(id);
+  else hovered.delete(id);
+  syncPause();
 }
 
-export function resumeToasts(hold: ToastHold): void {
-  if (!holds.delete(hold) || holds.size > 0) return;
-  for (const id of timers.keys()) startTimer(id);
-  emit();
+/** The keyboard focus moved into or out of a toast. */
+export function setToastFocused(id: number, within: boolean): void {
+  if (!toasts.some((entry) => entry.id === id)) return;
+  if (within) focused.add(id);
+  else focused.delete(id);
+  syncPause();
 }
 
 export function currentToasts(): readonly Toast[] {
@@ -110,11 +130,11 @@ export function useToasts(): readonly Toast[] {
   return useSyncExternalStore(subscribe, currentToasts, currentToasts);
 }
 
-/** Whether something holds the toasts open, so the Toaster can pause the time line. */
+/** Whether a toast is held, so the Toaster can pause the time line. */
 export function useToastsPaused(): boolean {
   return useSyncExternalStore(subscribe, toastsPaused, toastsPaused);
 }
 
 function toastsPaused(): boolean {
-  return holds.size > 0;
+  return paused;
 }
