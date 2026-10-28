@@ -1,0 +1,355 @@
+/*
+ * Rich text, as the editor writes it and the viewer reads it (DESIGN.md): ink on calm paper, mentions and references as
+ * ink-blue chips, code in the UI face, the highlighter only for a selection. Panel text is 14/20, pages 15/24; while
+ * editing on a phone the text is 16 px, so iOS does not zoom.
+ */
+
+.rt {
+  color: var(--text);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  overflow-wrap: anywhere;
+}
+.rt[data-preset='page'] {
+  font-size: 0.9375rem;
+  line-height: 1.5rem;
+}
+
+/* the field look of the comment and description editors: a white field with the writing line */
+.rt-frame {
+  border: 1px solid var(--border);
+  border-radius: var(--r-ctl);
+  background: var(--surface);
+  box-shadow: inset 0 -1.5px 0 var(--line-input);
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+@media (hover: hover) {
+  .rt-frame:hover {
+    border-color: var(--border-strong);
+  }
+}
+.rt-frame:has(.ProseMirror:focus-visible) {
+  outline: 2px solid var(--focus-ring);
+  box-shadow: var(--focus-halo);
+}
+/* the frame shows the focus of a framed editor; a page editor keeps the app's own focus ring */
+.rt-frame .ProseMirror {
+  padding: 0.5rem 0.75rem;
+  outline: none;
+}
+.rt-editor .ProseMirror {
+  min-height: 5rem;
+  touch-action: manipulation;
+}
+.rt-editor[data-preset='description'] .ProseMirror {
+  min-height: 6rem;
+}
+.rt-editor[data-preset='page'] .ProseMirror {
+  min-height: 16rem;
+}
+@media (max-width: 47.99rem) {
+  .rt-editor .ProseMirror {
+    font-size: 1rem;
+    line-height: 1.5rem;
+  }
+}
+
+/* blocks: text stays within a readable measure, code, tables and images may use the width */
+.rt .ProseMirror > * + * {
+  margin-top: 0.5rem;
+}
+.rt :is(p, h1, h2, h3, ul, ol, blockquote) {
+  max-width: 65ch;
+}
+.rt :is(h1, h2, h3) {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+  margin-top: 1rem;
+}
+.rt h1 {
+  font-size: 1.375rem;
+  line-height: 1.75rem;
+}
+.rt h2 {
+  font-size: 1.125rem;
+  line-height: 1.5rem;
+}
+.rt h3 {
+  font-size: 0.9375rem;
+  line-height: 1.375rem;
+}
+.rt .ProseMirror > :first-child {
+  margin-top: 0;
+}
+.rt :is(ul, ol) {
+  padding-left: 1.25rem;
+}
+.rt ul {
+  list-style: disc;
+}
+.rt ol {
+  list-style: decimal;
+}
+.rt li + li {
+  margin-top: 0.125rem;
+}
+.rt li > :is(ul, ol) {
+  margin-top: 0.125rem;
+}
+.rt li::marker {
+  color: var(--muted);
+}
+.rt blockquote {
+  border-left: 2px solid var(--border-strong);
+  padding-left: 0.75rem;
+  color: var(--muted);
+}
+.rt hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 1rem 0;
+}
+.rt :is(strong, b) {
+  font-weight: 600;
+}
+.rt a:not(.rt-ref) {
+  color: var(--accent-text);
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 2px;
+}
+.rt code {
+  border-radius: var(--r-chip);
+  background: var(--bg-sunken);
+  padding: 0.0625rem 0.25rem;
+  font-family: var(--font-ui);
+  font-size: 0.9em;
+  font-variant-numeric: tabular-nums;
+}
+.rt pre {
+  border: 1px solid var(--border);
+  border-radius: var(--r-ctl);
+  background: var(--bg-sunken);
+  padding: 0.625rem 0.75rem;
+  overflow-x: auto;
+  white-space: pre;
+  font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+.rt pre code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+}
+
+/* checklists */
+.rt ul[data-type='taskList'] {
+  list-style: none;
+  padding-left: 0;
+}
+.rt ul[data-type='taskList'] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+.rt ul[data-type='taskList'] li > label {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  padding-top: 0.125rem;
+  user-select: none;
+}
+/* the box is 16 px; its label reaches 24 px around it, 44 px on phones */
+.rt ul[data-type='taskList'] li > label::after {
+  content: '';
+  position: absolute;
+  inset: -0.25rem;
+}
+@media (max-width: 47.99rem) {
+  .rt ul[data-type='taskList'] li > label::after {
+    inset: -0.875rem;
+  }
+}
+.rt ul[data-type='taskList'] li > div {
+  min-width: 0;
+  flex: 1;
+}
+.rt ul[data-type='taskList'] input[type='checkbox'] {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.rt ul[data-type='taskList'] li[data-checked='true'] > div {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+/* tables */
+.rt .tableWrapper {
+  overflow-x: auto;
+}
+.rt table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 100%;
+  margin: 0;
+}
+.rt :is(td, th) {
+  position: relative;
+  border: 1px solid var(--border);
+  padding: 0.375rem 0.5rem;
+  vertical-align: top;
+  min-width: 4rem;
+}
+.rt th {
+  background: var(--bg-sunken);
+  font-weight: 600;
+  text-align: left;
+}
+.rt .selectedCell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--select-wash);
+  pointer-events: none;
+}
+
+/* mentions, references, files */
+.rt .rt-mention {
+  border-radius: var(--r-chip);
+  background: var(--accent-soft);
+  padding: 0 0.25rem;
+  font-weight: 500;
+  color: var(--accent-text);
+  white-space: nowrap;
+}
+.rt .rt-ref {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  border-radius: var(--r-chip);
+  background: var(--bg-sunken);
+  padding: 0 0.25rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-text);
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 2px;
+  white-space: nowrap;
+}
+.rt .rt-ref svg {
+  width: 0.75rem;
+  height: 0.75rem;
+  align-self: center;
+}
+.rt .rt-ref-hidden {
+  color: var(--muted);
+  text-decoration: none;
+}
+.rt .rt-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r-chip);
+  background: var(--surface);
+  padding: 0 0.375rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.rt .rt-file a {
+  color: var(--accent-text);
+  text-decoration: none;
+}
+.rt .rt-file svg {
+  width: 0.875rem;
+  height: 0.875rem;
+  color: var(--muted);
+}
+
+/* images: only from attachments; a missing one keeps its place and says so */
+.rt .rt-image {
+  display: block;
+  max-width: 100%;
+}
+.rt .rt-image img {
+  display: block;
+  max-width: 100%;
+  max-height: 28rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r-ctl);
+}
+.rt .rt-image-missing {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-ctl);
+  background: var(--bg-sunken);
+  padding: 0.5rem 0.75rem;
+  color: var(--muted);
+}
+.rt .ProseMirror-selectednode:is(.rt-image, .rt-ref-wrap, .rt-file),
+.rt .rt-image.ProseMirror-selectednode img {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+/* the typed query of a menu (@, #, /) */
+.rt .suggestion {
+  color: var(--accent-text);
+}
+
+/* an empty editor shows its placeholder */
+.rt .is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+/* an upload on its way: what is uploaded and a bar that fills while it waits */
+.rt .rt-upload {
+  display: inline-flex;
+  min-width: 12rem;
+  max-width: 100%;
+  flex-direction: column;
+  gap: 0.375rem;
+  vertical-align: middle;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-ctl);
+  background: var(--bg-sunken);
+  padding: 0.5rem 0.625rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: var(--muted);
+  user-select: none;
+}
+.rt-upload-bar {
+  display: block;
+  height: 0.25rem;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: var(--border);
+}
+.rt-upload-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transform-origin: left center;
+  animation: rt-upload 1.6s var(--ease-out) forwards;
+}
+@keyframes rt-upload {
+  from {
+    transform: scaleX(0.04);
+  }
+  to {
+    transform: scaleX(0.9);
+  }
+}
