@@ -165,6 +165,9 @@ export function ListLayout({ items, groups, display, selection, onSelect, onOpen
               tabIndex={row.key === stopKey ? 0 : -1}
               data-row-id={item.id}
               data-nav-target=""
+              // the focused row names itself and its state (x, ⇧X, ⌘A change it; the screen announces the change too)
+              role="group"
+              aria-label={`${item.key} ${item.title}${selected ? ', ausgewählt' : ''}`}
               lead={
                 <Checkbox
                   aria-label={`${item.key} auswählen`}
@@ -196,7 +199,8 @@ export function ListLayout({ items, groups, display, selection, onSelect, onOpen
                 event.stopPropagation();
                 clickSelect(item.id, true);
               }}
-              className={cx(peekItemId === item.id && !selected && 'bg-pressed', flashIds.includes(item.id) && 'bg-wash')}
+              // a live change gets its own short ink-blue tint (the highlighter is for selection, focus and hits only)
+              className={cx(!selected && (flashIds.includes(item.id) ? 'bg-accent-soft' : peekItemId === item.id && 'bg-pressed'))}
             />
           </li>
         );

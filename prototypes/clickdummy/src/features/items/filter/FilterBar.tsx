@@ -214,8 +214,7 @@ export function FilterBar({ filter, onChange, project, actions }: FilterBarProps
   const coreFields = CORE_FIELD_DEFS.filter((def) => def.field !== 'title' && !(project && def.field === 'project'));
 
   return (
-    // as tall as the bulk bar that takes its place, so the list does not jump when a selection starts
-    <div className="flex min-h-[2.375rem] flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <Menu open={adding} onOpenChange={setAdding}>
         <MenuTrigger
           render={

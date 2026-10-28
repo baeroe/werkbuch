@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import { nextInOrder, rangeBetween, selectRange, toggleId } from './useSelection';
+import { renderHook } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { nextInOrder, rangeBetween, selectRange, toggleId, useSelection, type SelectionOptions } from './useSelection';
 
 const order = ['a', 'b', 'c', 'd', 'e'];
 
@@ -28,5 +29,38 @@ describe('selection', () => {
     expect(nextInOrder(order, 'e', 1)).toBe('e');
     expect(nextInOrder(order, 'a', -1)).toBe('a');
     expect(nextInOrder([], null, 1)).toBeNull();
+  });
+});
+
+describe('a layout that mounts', () => {
+  const options = (focus: (id: string) => void): SelectionOptions => ({
+    order,
+    cursorId: 'c',
+    onCursor: vi.fn(),
+    selection: [],
+    onSelect: vi.fn(),
+    onOpen: vi.fn(),
+    onPeek: vi.fn(),
+    focus,
+    container: { current: null },
+  });
+
+  afterEach(() => {
+    document.body.replaceChildren();
+  });
+
+  it('takes the focus for the cursor when it is on nothing, as after 1–4 switched the layout', () => {
+    const focus = vi.fn();
+    renderHook(() => useSelection(options(focus)));
+    expect(focus).toHaveBeenCalledWith('c');
+  });
+
+  it('leaves the focus where it is when it is somewhere, e.g. on the layout switcher', () => {
+    const button = document.createElement('button');
+    document.body.append(button);
+    button.focus();
+    const focus = vi.fn();
+    renderHook(() => useSelection(options(focus)));
+    expect(focus).not.toHaveBeenCalled();
   });
 });

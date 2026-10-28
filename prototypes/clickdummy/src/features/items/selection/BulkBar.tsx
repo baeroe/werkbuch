@@ -5,8 +5,8 @@
  * Every item follows its own rules on the server: what they refuse (a transition its workflow forbids, an open item to
  * archive, a project the person may only read) stays as it was, the rest changes, and the toast names each refused
  * item with the reason. A move to Completed or Canceled asks for the resolution first, as everywhere.
- * It stands in the screen's sticky toolbar in place of the filter bar while something is selected (the toasts at the
- * bottom would cover a bar down there right when they report on it).
+ * It stands in the screen's sticky toolbar below the filter bar while something is selected (the toasts at the bottom
+ * would cover a bar down there right when they report on it).
  */
 
 import { Archive, CircleDashed, LoaderCircle, Signal, Tag, UserRound, UserRoundCheck, X } from 'lucide-react';
@@ -121,7 +121,6 @@ export function BulkBar({ items, total, onSelectAll, onClear, onArchive }: BulkB
   const me = useCurrentUser();
   const { reason } = usePermissions();
 
-  const ids = items.map((item) => item.id);
   const subject = subjectOf(items);
   const workflowOf = (item: WorkItem) => workflows.find((workflow) => workflow.id === projects.find((project) => project.id === item.project_id)?.workflow_id);
   const stateOf = (item: WorkItem) => workflowOf(item)?.states.find((state) => state.id === item.state_id);
@@ -135,13 +134,23 @@ export function BulkBar({ items, total, onSelectAll, onClear, onArchive }: BulkB
   });
   const archiveDenied = editDenied ?? (closed.length === 0 ? 'Nur geschlossene Items lassen sich archivieren. Setze sie zuerst auf einen Status wie Done.' : null);
 
-  function change(what: string, patch: BulkPatch) {
-    bulk.mutate({ ids, patch }, { onSuccess: (result) => bulkToast(items, result, what) });
+  /**
+   * Waits for the answer outside the life of this bar: Esc during the request clears the selection and takes the bar
+   * away, and the refused items must still be named.
+   */
+  async function change(what: string, patch: BulkPatch) {
+    const targets = items;
+    try {
+      const result = await bulk.mutateAsync({ ids: targets.map((item) => item.id), patch });
+      bulkToast(targets, result, what);
+    } catch {
+      // the mutation says what failed itself, with "Erneut versuchen"
+    }
   }
 
   function moveTo(state: State) {
     if (!isClosedCategory(state.category)) {
-      change(`Status ${state.name}`, { state_id: state.id });
+      void change(`Status ${state.name}`, { state_id: state.id });
       return;
     }
     const [first] = items;
@@ -150,7 +159,7 @@ export function BulkBar({ items, total, onSelectAll, onClear, onArchive }: BulkB
       subject,
       target: state,
       from: from ? { category: from.category, resolutionId: first.resolution_id } : undefined,
-      onConfirm: (resolutionId) => change(`Status ${state.name}`, { state_id: state.id, resolution_id: resolutionId }),
+      onConfirm: (resolutionId) => void change(`Status ${state.name}`, { state_id: state.id, resolution_id: resolutionId }),
     });
   }
 
@@ -162,7 +171,7 @@ export function BulkBar({ items, total, onSelectAll, onClear, onArchive }: BulkB
   const common = users
     .filter((user) => user.disabled_at === null && projectIds.every((projectId) => members.some((member) => member.project_id === projectId && member.user_id === user.id)))
     .sort((a, b) => (a.type === b.type ? COLLATOR.compare(a.name, b.name) : a.type === 'person' ? -1 : 1));
-  const assign = (user: User | null) => change(user ? `zugewiesen an ${user.name}` : 'nicht mehr zugewiesen', { assignee_id: user?.id ?? null });
+  const assign = (user: User | null) => void change(user ? `zugewiesen an ${user.name}` : 'nicht mehr zugewiesen', { assignee_id: user?.id ?? null });
 
   const all = items.length === total;
 
@@ -212,7 +221,7 @@ export function BulkBar({ items, total, onSelectAll, onClear, onArchive }: BulkB
       </ActionMenu>
       <ActionMenu label="Priorität" icon={Signal} disabledReason={editDenied}>
         {PRIORITY_OPTIONS.map((option) => (
-          <MenuItem key={option.value} onClick={() => change(`Priorität ${option.label}`, { priority: option.value as Priority })}>
+          <MenuItem key={option.value} onClick={() => void change(`Priorität ${option.label}`, { priority: option.value as Priority })}>
             <Choice option={option} />
           </MenuItem>
         ))}
@@ -227,7 +236,7 @@ export function BulkBar({ items, total, onSelectAll, onClear, onArchive }: BulkB
               <MenuItem
                 key={label.id}
                 onClick={() =>
-                  change(`Label ${label.name} ${everywhere ? 'entfernt' : 'gesetzt'}`, everywhere ? { remove_label_ids: [label.id] } : { add_label_ids: [label.id] })
+                  void change(`Label ${label.name} ${everywhere ? 'entfernt' : 'gesetzt'}`, everywhere ? { remove_label_ids: [label.id] } : { add_label_ids: [label.id] })
                 }
               >
                 <Choice option={{ ...labelOption(label), hint: everywhere ? 'bei allen, entfernen' : undefined }} />

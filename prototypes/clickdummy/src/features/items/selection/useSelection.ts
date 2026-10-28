@@ -238,6 +238,13 @@ export function useSelection(options: SelectionOptions): { clickSelect: (id: str
     if (next && (document.activeElement === null || document.activeElement === document.body)) latest.current.focus(next);
   }, [order, cursorId]);
 
+  // a layout that mounts while the focus is on nothing (1–4 switched the layout, and the old one took the focused row
+  // with it) gives the cursor its focus, so it stays visible; a focus elsewhere (the layout switcher) stays where it is
+  useEffect(() => {
+    const { cursorId: current, order: ids } = latest.current;
+    if (current !== null && ids.includes(current) && focusIsNeutral()) latest.current.focus(current);
+  }, []);
+
   // a selection that was cleared elsewhere (Esc, a bulk change) starts the next range anew
   useEffect(() => {
     if (selection.length === 0) anchor.current = null;

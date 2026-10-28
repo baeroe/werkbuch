@@ -2,9 +2,14 @@
  * The item lists (spec 4.11, 5.2): the items of a project, "Meine Items" (zugewiesen, erstellt, beobachtet) and the
  * team's views. One screen for all of them:
  * - The header names the list (with the star of a project or view) and switches the layout (1–4).
- * - The toolbar sticks to the top: the filter bar, or the bulk bar while items are selected.
+ * - The toolbar sticks to the top: the filter bar, and below it the bulk bar while items are selected (so `/`, `f`,
+ *   "Anzeige" and "Neues Item" stay within reach during a selection).
  * - Below it: "Ungespeicherte Änderungen" when the list differs from its base, a hint when the status grouping fell
  *   back to the categories, then the layout (display/layouts.ts) or the empty, loading or error state.
+ *
+ * One polite status region ("Mitteilungen der Liste") announces what changes without the focus moving: the selection
+ * ("WEB-47 ausgewählt, 3 von 21", "Auswahl aufgehoben") and the results of a new filter ("2 Items", "Kein Item passt
+ * zum Filter"). Spec 5.1, WCAG 4.1.3.
  *
  * The state (filter and display) is in the URL (viewState.ts), so links share it and Back restores it. The router
  * mounts the screen anew for every list (routes.tsx), so cursor and selection never leak into the next one.
@@ -86,6 +91,25 @@ const MY_TABS: { preset: ItemsPreset; to: string; label: string; title: string }
 ];
 
 const count = new Intl.NumberFormat('de-DE');
+
+/** What a change of the selection says: "WEB-47 ausgewählt, 3 von 21", "Auswahl aufgehoben"; null for no change. */
+export function selectionMessage(before: readonly string[], after: readonly string[], items: readonly WorkItem[]): string | null {
+  const keyOf = (id: string) => items.find((item) => item.id === id)?.key ?? 'Ein Item';
+  const added = after.filter((id) => !before.includes(id));
+  const removed = before.filter((id) => !after.includes(id));
+  const of = `${count.format(after.length)} von ${count.format(items.length)}`;
+  if (added.length === 0 && removed.length === 0) return null;
+  if (after.length === 0) return 'Auswahl aufgehoben';
+  if (added.length === 1 && removed.length === 0) return `${keyOf(added[0])} ausgewählt, ${of}`;
+  if (removed.length === 1 && added.length === 0) return `${keyOf(removed[0])} abgewählt, ${of}`;
+  if (after.length === items.length && added.length > 0) return `Alle ${count.format(items.length)} Items ausgewählt`;
+  if (added.length > 0) return `${count.format(added.length)} Items ausgewählt, ${of}`;
+  return `${count.format(removed.length)} Items abgewählt, ${of}`;
+}
+
+/** What a new result says: "2 Items", "Ein Item", "Kein Item passt zum Filter". */
+const resultMessage = (shown: number, filtered: boolean) =>
+  shown === 0 ? (filtered ? 'Kein Item passt zum Filter' : 'Keine Items') : shown === 1 ? 'Ein Item' : `${count.format(shown)} Items`;
 
 /* ------------------------------------------------------------------------ the parts */
 
@@ -333,6 +357,26 @@ function ItemsList({ preset, project, view }: ItemsListProps) {
     if (selection.some((id) => !shown.has(id))) setSelection(selection.filter((id) => shown.has(id)));
   }, [page, items, selection, setSelection]);
 
+  /** The last thing the status region said. */
+  const [announcement, setAnnouncement] = useState('');
+  const previousSelection = useRef(selection);
+  useEffect(() => {
+    const before = previousSelection.current;
+    previousSelection.current = selection;
+    const message = before === selection ? null : selectionMessage(before, selection, items);
+    if (message) setAnnouncement(message);
+  }, [selection, items]);
+  // a new filter (or sub-items shown or not): the number of results, once its answer is there; not on the first load
+  const resultKey = JSON.stringify([state.filter.conditions.filter(isComplete), state.display.show_sub_items]);
+  const announcedResult = useRef<string | null>(null);
+  useEffect(() => {
+    if (!query.data || !ctx) return;
+    if (announcedResult.current === null) announcedResult.current = resultKey;
+    if (announcedResult.current === resultKey) return;
+    announcedResult.current = resultKey;
+    setAnnouncement(resultMessage(items.length, state.filter.conditions.length > 0));
+  }, [query.data, ctx, resultKey, items.length, state.filter.conditions.length]);
+
   const onCursor = useCallback((id: string | null) => {
     setCursorId(id);
     // an open preview follows the cursor
@@ -388,7 +432,9 @@ function ItemsList({ preset, project, view }: ItemsListProps) {
       run: async () => {
         try {
           const result = await bulk.mutateAsync({ ids: targets.map((item) => item.id), patch: { archived: true } });
-          without(result.rejected.map((entry) => entry.id));
+          // the list has loaded again by now (without the archived ones): nothing needs hiding any more, so a filter
+          // "Archiviert: ja" or a restore elsewhere shows them again
+          without(goingIds);
           if (result.rejected.length > 0) bulkToast(targets, result, 'archiviert', 'archiviert');
         } catch {
           // the mutation says what failed (with "Erneut versuchen"); the rows come back
@@ -533,6 +579,9 @@ function ItemsList({ preset, project, view }: ItemsListProps) {
   return (
     <div ref={screen} className={cx('min-w-0', peekOpen && 'lg:pr-[calc(var(--panel-w)+0.5rem)]')}>
       {project && <ProjectCreateKey project={project} onCreate={create} />}
+      <div role="status" aria-label="Mitteilungen der Liste" className="sr-only">
+        {announcement}
+      </div>
       <header className="flex min-h-8 flex-wrap items-center gap-x-3 gap-y-2">
         <div className="flex min-w-0 items-center gap-2">
           {project && (
@@ -597,27 +646,28 @@ function ItemsList({ preset, project, view }: ItemsListProps) {
       )}
 
       <StickyToolbar>
-        {selected.length > 0 ? (
-          <BulkBar items={selected} total={items.length} onSelectAll={() => setSelection(items.map((item) => item.id))} onClear={() => setSelection([])} onArchive={archive} />
-        ) : (
-          <FilterBar
-            filter={state.filter}
-            onChange={setFilter}
-            project={project}
-            actions={
-              <>
-                <DisplayMenu display={state.display} onChange={setDisplay} fellBack={fellBack} />
-                <Button variant="primary" size="sm" icon={Plus} shortcut="c" disabledReason={createReason} onClick={create} className="max-sm:[&_kbd]:hidden">
-                  <span className="max-sm:sr-only">Neues Item</span>
-                </Button>
-              </>
-            }
-          />
+        <FilterBar
+          filter={state.filter}
+          onChange={setFilter}
+          project={project}
+          actions={
+            <>
+              <DisplayMenu display={state.display} onChange={setDisplay} fellBack={fellBack} />
+              <Button variant="primary" size="sm" icon={Plus} shortcut="c" disabledReason={createReason} onClick={create} className="max-sm:[&_kbd]:hidden">
+                <span className="max-sm:sr-only">Neues Item</span>
+              </Button>
+            </>
+          }
+        />
+        {selected.length > 0 && (
+          <div className="mt-2">
+            <BulkBar items={selected} total={items.length} onSelectAll={() => setSelection(items.map((item) => item.id))} onClear={() => setSelection([])} onArchive={archive} />
+          </div>
         )}
       </StickyToolbar>
 
-      {/* polite: a change of filter or display announces that the list now differs from what is saved */}
-      <div aria-live="polite" className="empty:hidden">
+      {/* polite and always there: a change of filter or display announces that the list now differs from what is saved */}
+      <div aria-live="polite">
         {dirty && (
           <UnsavedBar
             view={view}

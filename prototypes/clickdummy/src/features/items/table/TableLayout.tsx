@@ -47,8 +47,14 @@ function tableRows(groups: readonly Group[], grouped: boolean, collapsed: Readon
     });
 }
 
-/** A cell that has the cursor shows the highlighter's wash above the paper of the sticky column. */
+/**
+ * Backgrounds of a row's cells, laid over the paper the sticky column needs: a selected row has the highlighter's wash,
+ * a live change a short ink-blue tint (the highlighter is for selection, focus and hits only), the previewed row the
+ * pressed tone, others the hover tone.
+ */
 const wash = '[background-image:linear-gradient(var(--select-wash),var(--select-wash))]';
+const tint = '[background-image:linear-gradient(var(--accent-soft),var(--accent-soft))]';
+const pressed = '[background-image:linear-gradient(var(--pressed),var(--pressed))]';
 const hoverWash = 'group-hover:[background-image:linear-gradient(var(--hover),var(--hover))]';
 
 export function TableLayout({ items, groups, display, selection, onSelect, onOpen, onPeek, cursorId, onCursor }: LayoutProps) {
@@ -299,7 +305,7 @@ export function TableLayout({ items, groups, display, selection, onSelect, onOpe
             const { item } = row;
             const selected = selection.includes(item.id);
             const type = types?.find((entry) => entry.id === item.type_id);
-            const marked = selected || flashIds.includes(item.id);
+            const look = selected ? wash : flashIds.includes(item.id) ? tint : peekItemId === item.id ? pressed : hoverWash;
             const cellFocus = (col: number) => ({
               'data-cell': `${item.id}:${col}`,
               'data-nav-target': '',
@@ -338,7 +344,7 @@ export function TableLayout({ items, groups, display, selection, onSelect, onOpe
                   }}
                   className={cx(
                     'sticky left-0 z-10 h-10 border-r border-b border-line bg-surface px-2 [--focus-offset:-2px]',
-                    marked ? wash : peekItemId === item.id ? '[background-image:linear-gradient(var(--pressed),var(--pressed))]' : hoverWash,
+                    look,
                   )}
                 >
                   <div className="flex min-w-0 items-center gap-2" style={{ paddingLeft: row.depth > 0 ? `${row.depth * 1.25}rem` : undefined }}>
@@ -371,7 +377,7 @@ export function TableLayout({ items, groups, display, selection, onSelect, onOpe
                       key={entry.field}
                       role="gridcell"
                       {...cellFocus(col)}
-                      className={cx('h-10 border-b border-line px-2 [--focus-offset:-2px]', entry.numeric && 'text-right', marked ? wash : hoverWash)}
+                      className={cx('h-10 border-b border-line px-2 [--focus-offset:-2px]', entry.numeric && 'text-right', look === pressed ? hoverWash : look)}
                     >
                       <div className={cx('flex min-w-0 items-center', entry.numeric && 'justify-end')}>
                         <Cell

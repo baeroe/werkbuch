@@ -33,8 +33,12 @@
  *   To open a command's list from code: `useUiStore.getState().openPalette('item.state')`.
  * - Shows the selection with the highlighter (`selected` of ItemRowBase / ItemCard) and keeps chips and pickers out of
  *   the tab order (`tabIndex={-1}`); the shortcuts change fields.
- * - When a bar of the screen disappears under the focus (bulk bar, unsaved bar) or the layout changes, the screen hands
- *   the focus to the layout's tab stop (`[data-nav-target][tabindex="0"]`); keep exactly one such element rendered.
+ * - When a bar of the screen disappears under the focus (bulk bar, unsaved bar), the screen hands the focus to the
+ *   layout's tab stop (`[data-nav-target][tabindex="0"]`); keep exactly one such element rendered. When the layout
+ *   mounts with the focus on nothing (1–4 took the focused row with the old layout), `useSelection` focuses the cursor.
+ * - Exposes the selected state on the element that has the focus (a row's `aria-selected` in a grid, or the name of
+ *   the row's group: "WEB-47 … , ausgewählt"). The screen announces selection and result changes itself.
+ * - A live change (`useUiStore.flashIds`) gets an ink-blue tint (`--accent-soft`), never the highlighter.
  */
 
 import { lazy, type ComponentType } from 'react';
