@@ -1,0 +1,19 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # required check: the name must stay `tests`
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # placeholder until the foundation phase adds the real checks
+      - name: Design phase
+        run: echo "No application code yet."

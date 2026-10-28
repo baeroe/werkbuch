@@ -1,0 +1,10 @@
+*.log
+.DS_Store
+.env
+node_modules/
+/.pnpm-store/
+/.playwright-mcp
+/.superpowers/
+/.idea
+/.vscode
+Thumbs.db
