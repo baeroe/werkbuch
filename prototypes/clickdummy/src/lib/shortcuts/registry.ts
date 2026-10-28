@@ -8,15 +8,16 @@
  * "?" or "/" match whatever modifiers the keyboard layout needs to produce them.
  *
  * Which shortcut runs:
- * - While focus is in an input, a textarea, a select or a contenteditable editor, only `mod+k`, `escape` and
- *   `mod+enter` run; everything else is typing.
+ * - While focus is in an input, a textarea, a select or a contenteditable editor (`isTyping`), only `mod+k`, `escape`
+ *   and `mod+enter` run; everything else is typing.
  * - A key that a component has already handled (`preventDefault`, e.g. Base UI's typeahead in an open menu, or the
- *   Escape that closes a popup) is left alone.
+ *   Escape that closes a popup) is left alone, and so is a key an input method is composing (also Safari's 229).
+ * - A held key (auto-repeat) runs only shortcuts that ask for it (`repeat: true`, e.g. j/k through a list).
  * - A sequence waits up to 1000 ms for its next step.
  * - Of the shortcuts that match, the innermost scope wins: dialog over detail over list over global; within a scope
  *   the one registered last. A shortcut whose `when()` answers false does not take part, so an outer one runs.
- * - While a modal dialog is open (`enterDialogScope`, which `Dialog` does on its own), the shortcuts of the page
- *   behind it (scopes list and detail) pause; global and dialog shortcuts keep working.
+ * - While a modal dialog is open (`enterDialogScope`, which `Dialog` does on its own), only the dialog's own
+ *   shortcuts and the global `mod+k`, `escape` and `mod+enter` run; the page behind it waits.
  */
 
 import { isMac } from '@/lib/platform';
@@ -36,6 +37,8 @@ export interface ShortcutDef {
   run: (event: KeyboardEvent) => void;
   /** Takes part only while this answers true. */
   when?: () => boolean;
+  /** Runs again while the key is held (auto-repeat), e.g. j/k through a list. Off by default. */
+  repeat?: boolean;
 }
 
 /** Pressed together: one step of a shortcut. */
@@ -58,8 +61,6 @@ interface Entry {
 }
 
 const SCOPE_RANK: Record<ShortcutScope, number> = { global: 0, list: 1, detail: 2, dialog: 3 };
-/** The scopes of the page behind a modal dialog. */
-const PAGE_SCOPES = new Set<ShortcutScope>(['list', 'detail']);
 const SEQUENCE_MS = 1000;
 /** What still runs while typing, in canonical spelling. */
 const WHILE_TYPING = new Set(['mod+k', 'escape', 'mod+enter']);
@@ -118,7 +119,8 @@ function matches(chord: Chord, event: KeyboardEvent): boolean {
   return isLetter(chord.key) && !isLetter(key) && event.code === `Key${chord.key.toUpperCase()}`;
 }
 
-function isTyping(target: EventTarget | null): boolean {
+/** Whether keys pressed on this target are typing: a text field, a text area, a select or a contenteditable editor. */
+export function isTyping(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false;
   if (target.closest('[contenteditable]:not([contenteditable="false"])')) return true;
   if (target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) return true;
@@ -126,8 +128,13 @@ function isTyping(target: EventTarget | null): boolean {
   return false;
 }
 
-function takesPart(entry: Entry): boolean {
-  if (dialogLayers > 0 && PAGE_SCOPES.has(entry.def.scope)) return false;
+/** Global shortcuts that also work over a modal dialog: the same three that work while typing. */
+const passesDialog = (entry: Entry) => entry.def.scope === 'global' && entry.steps.length === 1 && WHILE_TYPING.has(entry.spelled[0]);
+
+function takesPart(entry: Entry, event: KeyboardEvent): boolean {
+  // over a modal dialog the page waits: a second "c" would reset the create dialog, "g i" would leave the page
+  if (dialogLayers > 0 && entry.def.scope !== 'dialog' && !passesDialog(entry)) return false;
+  if (event.repeat && entry.def.repeat !== true) return false;
   return entry.def.when?.() ?? true;
 }
 
@@ -150,9 +157,11 @@ function runEntry(entry: Entry, event: KeyboardEvent): void {
 }
 
 function onKeyDown(event: KeyboardEvent): void {
-  if (event.defaultPrevented || event.isComposing || MODIFIER_KEYS.has(event.key)) return;
+  // Chrome sends keydowns without a key on autofill; 229 is a key an input method composes (Safari ends with it)
+  if (typeof event.key !== 'string' || event.isComposing || event.keyCode === 229) return;
+  if (event.defaultPrevented || MODIFIER_KEYS.has(event.key)) return;
   const typing = isTyping(event.target);
-  const active = [...entries.values()].filter(takesPart);
+  const active = [...entries.values()].filter((entry) => takesPart(entry, event));
   // a sequence started on the page does not go on in a field
   if (typing) clearPending();
 
@@ -210,6 +219,11 @@ function changed(): void {
     listening = false;
     clearPending();
   }
+}
+
+/** The keys in one spelling, e.g. "Esc" and "escape" or "shift+mod+k" and "mod+shift+k" become the same. */
+export function canonicalKeys(keys: string): string {
+  return keys.trim().split(/\s+/).filter(Boolean).map((step) => spell(parseChord(step))).join(' ');
 }
 
 /** Registers a shortcut; the returned function takes it out again (it does nothing once the id was replaced). */

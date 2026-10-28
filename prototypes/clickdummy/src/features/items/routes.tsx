@@ -5,6 +5,9 @@
  * routes. It gets the preset as a prop and reads the route's params itself:
  *   /my-items → "my", /created → "created", /subscribed → "subscribed",
  *   /views/:viewId → "view" (viewId), /projects/:identifier → "project" (identifier).
+ * The router keys it by preset and param: every change of either (another list, view or project) mounts it anew, so
+ * local state (selection, focus, scroll) starts fresh and never leaks from one list into the next. Changes of the
+ * search (`?layout=board`, the view state in the URL) keep it mounted.
  * Task 6 renders `ItemsScreen({ preset, projectIdentifier, viewId })` here.
  */
 

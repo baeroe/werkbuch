@@ -43,10 +43,12 @@ const isWide = () => typeof window.matchMedia === 'function' && window.matchMedi
 
 export function useShellBindings(): void {
   const navigate = useNavigate();
-  const { reason } = usePermissions();
+  const { can, reason } = usePermissions();
   const collapsed = useUiStore((state) => state.sidebarCollapsed);
 
   function createItem() {
+    // already open: a second "c" must not reset what is being typed
+    if (ui().createOpen) return;
     const denied = reason('item.create');
     if (denied) toast({ title: 'Kein neues Item möglich', description: denied, tone: 'error' });
     else ui().openCreate();
@@ -65,7 +67,8 @@ export function useShellBindings(): void {
     return () => offs.forEach((off) => off());
   }, [navigate]);
 
-  useCommand({ id: 'shell.create', label: 'Neues Item', group: ACTIONS, keys: 'c', icon: <SquarePen />, keywords: ['anlegen', 'erstellen'], run: createItem });
+  // hidden without the right; the shortcut "c" says why instead (toast)
+  useCommand({ id: 'shell.create', label: 'Neues Item', group: ACTIONS, keys: 'c', icon: <SquarePen />, keywords: ['anlegen', 'erstellen'], run: createItem, when: () => can('item.create') });
   useCommand({
     id: 'shell.theme',
     label: 'Theme wechseln …',

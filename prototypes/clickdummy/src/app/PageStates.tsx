@@ -45,11 +45,23 @@ export function NotFound({
   );
 }
 
+/** The messages of Chrome, Safari and Firefox when the code of a lazy screen could not be fetched. */
+const CHUNK_FAILED = /dynamically imported module|importing a module script failed/i;
+
+/** What went wrong, in German: the browser's own messages are English and say little to people. */
+export function routeErrorText(error: unknown): string {
+  if (isRouteErrorResponse(error)) return `Die Seite antwortet mit Fehler ${error.status}.`;
+  if (error instanceof Error && CHUNK_FAILED.test(error.message)) {
+    return 'Der Programmcode dieser Ansicht ließ sich nicht laden, etwa nach einem Update oder ohne Verbindung.';
+  }
+  return 'In dieser Ansicht ist ein unerwarteter Fehler aufgetreten.';
+}
+
 /** A screen threw while rendering, or its code could not be loaded. */
 export function RouteError() {
   const error = useRouteError();
   useDocumentTitle('Fehler');
-  const cause = isRouteErrorResponse(error) ? `${error.status} ${error.statusText}` : error instanceof Error ? error.message : 'Unbekannter Fehler.';
+  const cause = routeErrorText(error);
   return (
     <ErrorState
       title="Diese Ansicht konnte nicht angezeigt werden"

@@ -168,13 +168,15 @@ function PaletteBody() {
   }, [activeDomId, activeRowId]);
 
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    // the arrows and the Enter of an input method that composes belong to it (Safari ends with keyCode 229)
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return;
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       if (rows.length === 0) return;
       const index = active ? rows.indexOf(active) : -1;
       const next = (index + (event.key === 'ArrowDown' ? 1 : -1) + rows.length) % rows.length;
       setActiveId(rows[next].id);
-    } else if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+    } else if (event.key === 'Enter') {
       event.preventDefault();
       active?.run();
     } else if (event.key === 'Backspace' && query === '' && subpage) {

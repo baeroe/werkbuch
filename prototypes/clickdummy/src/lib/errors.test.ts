@@ -25,8 +25,9 @@ describe('notifyError', () => {
     runToastAction(newest()!.id);
     expect(retry).toHaveBeenCalledTimes(1);
 
+    // no answer at all: the browser's English message is no text for people
     notifyError('Löschen fehlgeschlagen', new TypeError('Failed to fetch'), retry);
-    expect(newest()).toMatchObject({ description: 'Failed to fetch', action: { label: 'Erneut versuchen' } });
+    expect(newest()).toMatchObject({ description: 'Der Server hat nicht geantwortet.', action: { label: 'Erneut versuchen' } });
   });
 
   it('stays silent on a conflict that carries the stored state: the caller shows its conflict banner', () => {

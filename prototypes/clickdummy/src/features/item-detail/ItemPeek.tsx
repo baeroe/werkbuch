@@ -3,8 +3,16 @@
  *
  * Contract with `PeekHost` (src/app/PeekHost.tsx): the named export `ItemPeek({ itemId })` fills the preview panel
  * while `useUiStore.peekItemId` is set. The host draws the panel (tracing paper, `--panel-w`, room above for the
- * item's tab) and closes it with Escape (scope detail) or on a new route; this component draws everything inside,
- * its own close button (`openPeek(null)`) included.
+ * item's tab, focusable itself); this component draws everything inside, its own close button (`openPeek(null)`)
+ * included. What the host already does, so this component need not:
+ * - Escape (scope detail): in a field (title, description, comment, any `isTyping` target) the first Escape only moves
+ *   the focus to the panel, so the draft stays; the next Escape closes the preview. A field that wants Escape for
+ *   itself (e.g. to cancel an edit) calls `event.preventDefault()` in its own onKeyDown: the shortcut registry leaves a
+ *   handled key alone, so the preview stays open.
+ * - A new route closes the preview at the moment of the navigation. To show an item on another screen, call
+ *   `navigate(to)` and then `openPeek(id)`, or open it while the new screen mounts; both keep it open.
+ * - Below md the panel covers the page and is modal (<main> inert, the panel takes the focus); from md on the list
+ *   beside it stays usable and keeps the focus. Closing gives the focus back to where it was.
  */
 
 import { Maximize2, PanelRight, X } from 'lucide-react';

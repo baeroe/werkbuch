@@ -7,16 +7,19 @@ import { Fragment, useId, useRef } from 'react';
 import { Dialog } from '@/components/ui/Dialog';
 import { Kbd } from '@/components/ui/Kbd';
 import { useUiStore } from '@/store/ui';
-import type { ShortcutDef } from './registry';
+import { canonicalKeys, type ShortcutDef } from './registry';
 import { useShortcutList } from './useShortcut';
 
 /** The groups that work everywhere come first, the screen's groups follow in the order they were registered. */
 const FIRST_GROUPS = ['Allgemein', 'Navigation'];
 
-function groupsOf(shortcuts: ShortcutDef[]): { group: string; entries: ShortcutDef[] }[] {
+/** The lines of the help, grouped. A global shortcut the page binds again (e.g. `/` as the list's filter) is left out. */
+export function helpGroups(shortcuts: ShortcutDef[]): { group: string; entries: ShortcutDef[] }[] {
   const groups = new Map<string, ShortcutDef[]>(FIRST_GROUPS.map((group) => [group, []]));
+  const pageKeys = new Set(shortcuts.filter((shortcut) => shortcut.scope === 'list' || shortcut.scope === 'detail').map((shortcut) => canonicalKeys(shortcut.keys)));
   const seen = new Set<string>();
   for (const shortcut of shortcuts) {
+    if (shortcut.scope === 'global' && pageKeys.has(canonicalKeys(shortcut.keys))) continue;
     // the same keys for the same thing in two scopes is one line
     const line = `${shortcut.keys}|${shortcut.label}`;
     if (seen.has(line)) continue;
@@ -68,7 +71,7 @@ export function HelpOverlay() {
       }
     >
       <div ref={start} tabIndex={-1} data-focus-ring="none" className="grid gap-x-10 gap-y-6 outline-none sm:grid-cols-2">
-        {groupsOf(shortcuts).map(({ group, entries }) => (
+        {helpGroups(shortcuts).map(({ group, entries }) => (
           <Group key={group} group={group} entries={entries} />
         ))}
       </div>

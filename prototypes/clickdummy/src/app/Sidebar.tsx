@@ -136,17 +136,20 @@ function SectionLoading({ label }: { label: string }) {
 }
 
 function SectionError({ what, onRetry }: { what: string; onRetry: () => void }) {
+  // the alert sits inside the list item, so the list keeps its structure
   return (
-    <li role="alert" className="flex flex-wrap items-center gap-x-2 gap-y-1 px-2 py-1 text-sm text-danger">
-      <CircleAlert className="size-3.5 shrink-0" aria-hidden="true" />
-      {what} nicht geladen.
-      <button
-        type="button"
-        onClick={onRetry}
-        className="inline-flex h-11 cursor-pointer items-center rounded-chip font-semibold text-accent-text underline-offset-2 hover:underline md:h-6"
-      >
-        Erneut versuchen
-      </button>
+    <li>
+      <div role="alert" className="flex flex-wrap items-center gap-x-2 gap-y-1 px-2 py-1 text-sm text-danger">
+        <CircleAlert className="size-3.5 shrink-0" aria-hidden="true" />
+        {what} nicht geladen.
+        <button
+          type="button"
+          onClick={onRetry}
+          className="inline-flex h-11 cursor-pointer items-center rounded-chip font-semibold text-accent-text underline-offset-2 hover:underline md:h-6"
+        >
+          Erneut versuchen
+        </button>
+      </div>
     </li>
   );
 }

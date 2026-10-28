@@ -16,11 +16,16 @@ export function isTransient(error: unknown): boolean {
   return !(error instanceof ApiError) || error.status >= 500;
 }
 
+/** The cause in German: the API's own sentence, or what not getting an answer means (the browser's text is English). */
+function causeOf(error: unknown): string {
+  return error instanceof ApiError ? error.message : 'Der Server hat nicht geantwortet.';
+}
+
 export function notifyError(title: string, error: unknown, retry?: () => void): void {
   if (error instanceof ApiError && error.status === 409 && error.current !== undefined) return;
   toast({
     title,
-    description: error instanceof Error ? error.message : String(error),
+    description: causeOf(error),
     tone: 'error',
     action: retry && isTransient(error) ? { label: 'Erneut versuchen', onClick: retry } : undefined,
   });

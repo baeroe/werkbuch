@@ -5,8 +5,10 @@
  */
 
 import { lazy, Suspense } from 'react';
-import { createBrowserRouter, Navigate, Outlet, ScrollRestoration } from 'react-router';
+import { createBrowserRouter, Navigate, Outlet, ScrollRestoration, useParams, type RouteObject } from 'react-router';
+import type { ItemsPreset } from '@/features/items/routes';
 import { NotFound, RouteError } from './PageStates';
+import { closePeekOnNavigation } from './PeekHost';
 import { Shell } from './Shell';
 
 const Gallery = lazy(() => import('@/routes/components-gallery').then((module) => ({ default: module.ComponentsGallery })));
@@ -39,6 +41,15 @@ function Root() {
   );
 }
 
+/**
+ * The item lists of five routes share one component (Task 6). The key makes every preset, view and project a list of
+ * its own: changing either mounts it anew, so no state of one list leaks into the next.
+ */
+function ItemsFor({ preset }: { preset: ItemsPreset }) {
+  const { viewId, identifier } = useParams();
+  return <Items key={`${preset}:${viewId ?? identifier ?? ''}`} preset={preset} />;
+}
+
 function StandaloneError() {
   return (
     <main className="mx-auto max-w-xl px-4 py-16">
@@ -47,7 +58,7 @@ function StandaloneError() {
   );
 }
 
-export const router = createBrowserRouter([
+export const routes: RouteObject[] = [
   {
     element: <Root />,
     errorElement: <StandaloneError />,
@@ -64,14 +75,14 @@ export const router = createBrowserRouter([
             errorElement: <RouteError />,
             children: [
               { index: true, element: <Navigate to="/my-items" replace /> },
-              { path: 'my-items', element: <Items preset="my" /> },
-              { path: 'created', element: <Items preset="created" /> },
-              { path: 'subscribed', element: <Items preset="subscribed" /> },
+              { path: 'my-items', element: <ItemsFor preset="my" /> },
+              { path: 'created', element: <ItemsFor preset="created" /> },
+              { path: 'subscribed', element: <ItemsFor preset="subscribed" /> },
               { path: 'inbox', element: <Inbox /> },
               { path: 'views', element: <ViewsOverview /> },
-              { path: 'views/:viewId', element: <Items preset="view" /> },
+              { path: 'views/:viewId', element: <ItemsFor preset="view" /> },
               { path: 'projects', element: <Projects /> },
-              { path: 'projects/:identifier', element: <Items preset="project" /> },
+              { path: 'projects/:identifier', element: <ItemsFor preset="project" /> },
               { path: 'projects/:identifier/wiki/:pageId?', element: <Wiki /> },
               { path: 'projects/:identifier/templates/:templateId?', element: <Templates /> },
               { path: 'projects/:identifier/settings/:section?', element: <ProjectSettings /> },
@@ -85,4 +96,9 @@ export const router = createBrowserRouter([
       },
     ],
   },
-]);
+];
+
+export const router = createBrowserRouter(routes);
+
+// a new screen closes the preview, decided at the moment of navigation (see PeekHost)
+closePeekOnNavigation(router);

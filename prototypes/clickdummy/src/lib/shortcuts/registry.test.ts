@@ -1,15 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { isMac } from '@/lib/platform';
-import { enterDialogScope, listShortcuts, registerShortcut, type ShortcutScope } from './registry';
+import { enterDialogScope, isTyping, listShortcuts, registerShortcut, type ShortcutScope } from './registry';
 
 const cleanups: (() => void)[] = [];
 let sequence = 0;
 
 /** Registers a shortcut for the running test; `run` is the spy behind it, `off` takes it out again. */
-function shortcut(keys: string, { scope = 'global', when }: { scope?: ShortcutScope; when?: () => boolean } = {}) {
+function shortcut(keys: string, { scope = 'global', when, repeat }: { scope?: ShortcutScope; when?: () => boolean; repeat?: boolean } = {}) {
   const run = vi.fn();
   sequence += 1;
-  const off = registerShortcut({ id: `test-${sequence}`, keys, scope, label: `${keys} (${scope})`, group: 'Test', run, when });
+  const off = registerShortcut({ id: `test-${sequence}`, keys, scope, label: `${keys} (${scope})`, group: 'Test', run, when, repeat });
   cleanups.push(off);
   return { run, off };
 }
@@ -153,24 +153,89 @@ describe('shortcut registry', () => {
     expect(fallback.run).toHaveBeenCalledTimes(1);
   });
 
-  it('pauses list and detail shortcuts while a dialog is open, global ones keep working', () => {
+  it('lets only the dialog’s own shortcuts and mod+k, escape, mod+enter through while a dialog is open', () => {
     const next = shortcut('j', { scope: 'list' });
     const editTitle = shortcut('e', { scope: 'detail' });
     const create = shortcut('c');
+    const help = shortcut('?');
+    const inbox = shortcut('g i');
+    const palette = shortcut('mod+k');
+    const close = shortcut('escape');
+    const submit = shortcut('mod+enter');
+    const confirm = shortcut('y', { scope: 'dialog' });
 
     const leave = enterDialogScope();
     press('j');
     press('e');
     press('c');
-    expect(next.run).not.toHaveBeenCalled();
-    expect(editTitle.run).not.toHaveBeenCalled();
-    expect(create.run).toHaveBeenCalledTimes(1);
+    press('?', { shiftKey: true });
+    press('g');
+    press('i');
+    press('k', mod());
+    press('Escape');
+    press('Enter', mod());
+    press('y');
+    // a second "c" would reset the create dialog, "g i" would leave the page, "?" would stack a dialog
+    for (const paused of [next, editTitle, create, help, inbox]) expect(paused.run).not.toHaveBeenCalled();
+    for (const passed of [palette, close, submit, confirm]) expect(passed.run).toHaveBeenCalledTimes(1);
 
     leave();
     press('j');
     press('e');
-    expect(next.run).toHaveBeenCalledTimes(1);
-    expect(editTitle.run).toHaveBeenCalledTimes(1);
+    press('c');
+    expect([next, editTitle, create].map((entry) => entry.run.mock.calls.length)).toEqual([1, 1, 1]);
+  });
+
+  it('ignores a held key, unless the shortcut asks for repeats', () => {
+    const palette = shortcut('mod+k');
+    const nextItem = shortcut('j', { scope: 'list', repeat: true });
+
+    press('k', { ...mod(), repeat: true });
+    press('j', { repeat: true });
+    press('j', { repeat: true });
+
+    expect(palette.run).not.toHaveBeenCalled();
+    expect(nextItem.run).toHaveBeenCalledTimes(2);
+  });
+
+  it('leaves the keys of an input method that is composing alone (Safari sends keyCode 229)', () => {
+    const create = shortcut('c');
+    const submit = shortcut('mod+enter');
+
+    press('c', { keyCode: 229 });
+    press('Enter', { ...mod(), keyCode: 229 });
+    expect(create.run).not.toHaveBeenCalled();
+    expect(submit.run).not.toHaveBeenCalled();
+
+    press('c');
+    expect(create.run).toHaveBeenCalledTimes(1);
+  });
+
+  it('survives a keydown without a key, as Chrome sends on autofill', () => {
+    const create = shortcut('c');
+    const uncaught = vi.fn((event: ErrorEvent) => event.preventDefault());
+    window.addEventListener('error', uncaught);
+    try {
+      // a real KeyboardEvent, modifiers all false, but no key at all
+      const autofill = new KeyboardEvent('keydown', { bubbles: true, cancelable: true });
+      Object.defineProperty(autofill, 'key', { value: undefined });
+      document.body.dispatchEvent(autofill);
+      expect(uncaught).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener('error', uncaught);
+    }
+
+    press('c');
+    expect(create.run).toHaveBeenCalledTimes(1);
+  });
+
+  it('isTyping knows fields, text areas and editors, but not buttons and checkboxes', () => {
+    const checkbox = Object.assign(document.createElement('input'), { type: 'checkbox' });
+    const button = document.createElement('button');
+    document.body.append(checkbox, button);
+
+    expect([field('input'), field('textarea'), field('editor')].map(isTyping)).toEqual([true, true, true]);
+    expect([checkbox, button, document.body].map(isTyping)).toEqual([false, false, false]);
   });
 
   it('leaves a key alone that a component has already handled', () => {

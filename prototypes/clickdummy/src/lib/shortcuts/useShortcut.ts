@@ -4,7 +4,7 @@
  *   useShortcut({ id: 'list.next', keys: 'j', scope: 'list', label: 'Nächstes Item', group: 'Liste', run: next }, []);
  *
  * `run` and `when` always see the latest render, so they need no dependencies; the shortcut is registered again when
- * its id, keys, scope, label or group change, or one of `deps`.
+ * its id, keys, scope, label, group or `repeat` change, or one of `deps`.
  */
 
 import { useEffect, useLayoutEffect, useRef, useSyncExternalStore, type DependencyList } from 'react';
@@ -16,7 +16,7 @@ export function useShortcut(def: ShortcutDef, deps: DependencyList = []): void {
   useLayoutEffect(() => {
     latest.current = def;
   });
-  const { id, keys, scope, label, group } = def;
+  const { id, keys, scope, label, group, repeat } = def;
   const conditional = def.when !== undefined;
   useEffect(
     () =>
@@ -26,11 +26,12 @@ export function useShortcut(def: ShortcutDef, deps: DependencyList = []): void {
         scope,
         label,
         group,
+        repeat,
         run: (event) => latest.current.run(event),
         when: conditional ? () => latest.current.when?.() ?? true : undefined,
       }),
     // the latest callbacks come through the ref, so they need not be dependencies
-    [id, keys, scope, label, group, conditional, ...deps],
+    [id, keys, scope, label, group, repeat, conditional, ...deps],
   );
 }
 
