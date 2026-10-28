@@ -1,14 +1,15 @@
 /*
  * The frame every screen lives in (spec 5.2): the sidebar from md on, below it a top bar whose menu opens the same
  * content as a drawer; the live banner above the screen; and the floating layers over everything: preview panel,
- * create dialog, command palette and the shortcut help. The shell's shortcuts and commands are registered here,
- * and live events reach the screens through `useLiveSync`.
+ * create dialog, command palette, the follow-up questions of the item commands and the shortcut help. The shell's
+ * shortcuts and commands are registered here, and live events reach the screens through `useLiveSync`.
  */
 
 import { Dialog as BaseDialog } from '@base-ui/react/dialog';
 import { Inbox, Menu, Search, X } from 'lucide-react';
 import { Suspense, useEffect, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router';
+import { ItemDialogsHost } from '@/components/fields/ItemDialogs';
 import { cx } from '@/components/ui/cx';
 import { IconButton } from '@/components/ui/IconButton';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
@@ -118,6 +119,7 @@ export function Shell() {
       <PeekHost />
       <CreateHost />
       <CommandPalette />
+      <ItemDialogsHost />
       <HelpOverlay />
     </>
   );

@@ -50,6 +50,26 @@ export function mentionedIds(doc: RichText | null | undefined): string[] {
   return [...found];
 }
 
+/** One top-level block as plain text: list items on lines of their own, numbered or with a dash. */
+function blockText(node: RichText): string {
+  const items: RichText[] = node.content ?? [];
+  if (node.type === 'orderedList') return items.map((item, index) => `${index + 1}. ${plainText(item)}`).join('\n');
+  if (node.type === 'bulletList' || node.type === 'taskList') return items.map((item) => `- ${plainText(item)}`).join('\n');
+  return plainText(node);
+}
+
+/**
+ * The text of a document for a plain text field: blocks separated by a blank line (as `textDoc` reads them back),
+ * list items on lines of their own. Empty for null.
+ */
+export function docToText(doc: RichText | null | undefined): string {
+  if (!doc) return '';
+  return (doc.content ?? [])
+    .map(blockText)
+    .filter((block) => block !== '')
+    .join('\n\n');
+}
+
 /** A document with one paragraph per blank-line-separated block of the text. */
 export function textDoc(text: string): RichText {
   const blocks = text.split(/\n{2,}/).filter((block) => block.trim() !== '');

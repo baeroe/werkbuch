@@ -117,7 +117,8 @@ export function Calendar({ value, onChange, today = deviceToday(), weekStartsOn 
         <IconButton icon={ChevronLeft} label="Voriger Monat" tooltip={false} onClick={() => pageMonth(-1)} />
         <IconButton icon={ChevronRight} label="Nächster Monat" tooltip={false} onClick={() => pageMonth(1)} />
       </div>
-      <table ref={gridRef} role="grid" aria-label={`${label}, ${title}`} onKeyDown={onKeyDown} className="w-full table-fixed border-collapse">
+      {/* sized by its days, so it keeps its width inside a popup that fits its content */}
+      <table ref={gridRef} role="grid" aria-label={`${label}, ${title}`} onKeyDown={onKeyDown} className="border-collapse">
         <thead>
           <tr>
             {weeks[0].map((day) => (

@@ -29,6 +29,10 @@ interface UiState {
   toggleSidebar: () => void;
   paletteOpen: boolean;
   setPaletteOpen: (open: boolean) => void;
+  /** The command whose sub-list the palette opened with (`openPalette`), e.g. the status choice of `s`. */
+  paletteCommandId: string | null;
+  /** Opens the palette; with a command id it starts in that command's sub-list. */
+  openPalette: (commandId?: string | null) => void;
   /** The overlay with all shortcuts (`?`). */
   helpOpen: boolean;
   setHelpOpen: (open: boolean) => void;
@@ -59,7 +63,10 @@ export const useUiStore = create<UiState>()((set) => ({
   sidebarCollapsed: false,
   toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
   paletteOpen: false,
-  setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
+  // closing keeps the command, so the palette does not switch lists while it fades out
+  setPaletteOpen: (paletteOpen) => set(paletteOpen ? { paletteOpen, paletteCommandId: null } : { paletteOpen }),
+  paletteCommandId: null,
+  openPalette: (commandId = null) => set({ paletteOpen: true, paletteCommandId: commandId }),
   helpOpen: false,
   setHelpOpen: (helpOpen) => set({ helpOpen }),
   peekItemId: null,

@@ -49,7 +49,10 @@ src/
   main.tsx           Einstieg: Schriften, Styles, App
   styles/            tokens.css (alle Tokens aus DESIGN.md), app.css (Tailwind 4, @theme inline, Grundstile)
   components/ui/     eigenes Komponentenset auf Base UI, dazu ui.test.tsx
-  routes/            components-gallery.tsx (/_components)
+  components/fields/ Feld-Editoren (Status, Assignee, Priorität, Labels, Datum, Typ, Eltern, Properties) und die
+                     Item-Befehle mit ihren Kürzeln (commands.ts, useItemCommands)
+  components/items/  Item-Bausteine: Karteikarte (ItemCard), Listenzeile (ItemRowBase), Key, Blockiert-Hinweis
+  routes/            components-gallery.tsx (/_components), gallery/ (Rahmen und der Abschnitt „Felder“)
   lib/               Helfer (theme, platform, clock, richtext), Kürzel-Register und Hilfe (shortcuts/), Palette-Befehle
                      (commands.ts), Rechte (permissions.ts), Rückgängig (undo.ts), Fehler-Toast (errors.ts)
   types.ts           gemeinsame Typen

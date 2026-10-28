@@ -19,6 +19,8 @@ type FrameProps = {
   size?: keyof typeof WIDTHS;
   /** Element to focus on open; by default the first field or button. */
   initialFocus?: RefObject<HTMLElement | null>;
+  /** Element to focus on close; by default the one that had the focus before (gone after a closing menu). */
+  finalFocus?: RefObject<HTMLElement | null>;
   /** Close button at the top right (Dialog yes, AlertDialog no: it must be answered). */
   closable?: boolean;
 };
@@ -33,13 +35,14 @@ function PausePageShortcuts() {
  * Portal, scrim and popup on strong tracing paper. Shared by Dialog and AlertDialog: Base UI's alert dialog
  * re-exports these dialog parts.
  */
-export function DialogFrame({ title, description, children, footer, size = 'md', initialFocus, closable = true }: FrameProps) {
+export function DialogFrame({ title, description, children, footer, size = 'md', initialFocus, finalFocus, closable = true }: FrameProps) {
   return (
     <BaseDialog.Portal>
       <BaseDialog.Backdrop className="fixed inset-0 z-50 bg-scrim transition-opacity duration-160 data-ending-style:opacity-0 data-starting-style:opacity-0" />
       <BaseDialog.Viewport className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain pt-[max(1rem,10vh)] pr-[max(1rem,env(safe-area-inset-right))] pb-[max(1rem,env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))]">
         <BaseDialog.Popup
           initialFocus={initialFocus}
+          finalFocus={finalFocus}
           data-focus-ring="none"
           className={cx('tracing-strong popup-motion relative w-full rounded-card text-ui text-ink outline-none', WIDTHS[size])}
         >

@@ -26,7 +26,7 @@ import {
   WifiOff,
   ChartGantt,
 } from 'lucide-react';
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { AlertDialog } from '@/components/ui/AlertDialog';
 import { Avatar, UnassignedAvatar } from '@/components/ui/Avatar';
 import { Banner } from '@/components/ui/Banner';
@@ -61,6 +61,8 @@ import { Tooltip } from '@/components/ui/Tooltip';
 import { TypeTab } from '@/components/ui/TypeTab';
 import { applyTheme, readTheme, type ThemeChoice } from '@/lib/theme';
 import type { Priority, StateCategory, StateIcon, TypeTone } from '@/types';
+import { FieldsSection } from './gallery/FieldsSection';
+import { Section, Specimen, State, States } from './gallery/layout';
 
 /* Demo data: everything here is made up (see the moodboard README). */
 
@@ -126,49 +128,6 @@ const ASSIGNEES: ComboboxOption[] = [...PEOPLE, ...BOTS].map((user) => ({
 const dueDate = new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit', timeZone: 'UTC' });
 const formatDue = (iso: string) => dueDate.format(new Date(`${iso}T00:00:00Z`));
 
-/* Layout helpers */
-
-function Section({ id, title, intro, children }: { id: string; title: string; intro: string; children: ReactNode }) {
-  return (
-    <section aria-labelledby={id} className="mt-20">
-      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-line-strong pb-3">
-        <h2 id={id} className="scroll-mt-6 font-display text-2xl font-bold tracking-title text-ink">
-          {title}
-        </h2>
-        <p className="text-ui text-muted">{intro}</p>
-      </div>
-      <div className="mt-8 grid gap-x-12 gap-y-14 md:grid-cols-2 xl:grid-cols-3">{children}</div>
-    </section>
-  );
-}
-
-function Specimen({ title, note, wide = false, children }: { title: string; note?: ReactNode; wide?: boolean; children: ReactNode }) {
-  const id = useId();
-  return (
-    <section aria-labelledby={id} className={cx('min-w-0', wide && 'md:col-span-2 xl:col-span-3')}>
-      <h3 id={id} className="font-display text-lg font-bold tracking-title text-ink">
-        {title}
-      </h3>
-      {note && <p className="mt-1 max-w-[65ch] text-sm text-pretty text-muted">{note}</p>}
-      <div className="mt-4">{children}</div>
-    </section>
-  );
-}
-
-/** States side by side: the state in pencil on the left, the specimen on the right. */
-function States({ children }: { children: ReactNode }) {
-  return <dl className="grid grid-cols-1 gap-x-4 gap-y-1.5 sm:grid-cols-[7rem_minmax(0,1fr)] sm:items-center sm:gap-y-3">{children}</dl>;
-}
-
-function State({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <>
-      <dt className="mt-2 text-sm text-muted first:mt-0 sm:mt-0">{label}</dt>
-      <dd className="flex min-w-0 flex-wrap items-center gap-2.5">{children}</dd>
-    </>
-  );
-}
-
 /* Page */
 
 export function ComponentsGallery() {
@@ -200,6 +159,7 @@ export function ComponentsGallery() {
                 {[
                   ['#controls', 'Bedienung'],
                   ['#elements', 'Status und Elemente'],
+                  ['#fields', 'Felder'],
                   ['#feedback', 'Rückmeldung'],
                 ].map(([href, label]) => (
                   <li key={href}>
@@ -233,6 +193,7 @@ export function ComponentsGallery() {
       <main id="main" className="mx-auto max-w-7xl pb-24">
         <ControlsSection />
         <ElementsSection />
+        <FieldsSection />
         <FeedbackSection />
       </main>
     </div>

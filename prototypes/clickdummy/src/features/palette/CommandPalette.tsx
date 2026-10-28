@@ -3,8 +3,9 @@
  * light scrim. It is a modal dialog: the focus stays inside and returns where it came from when it closes.
  *
  * The input is a combobox: the arrows move the active row, Enter runs it, Escape closes. A command with a sub-list
- * (e.g. the status choice) shows that list in place; Backspace in the empty input goes back. The list itself comes
- * from `model.ts`; the search runs on the server (`useSearch`, a moment after the last key).
+ * (e.g. the status choice) shows that list in place; Backspace in the empty input goes back. `openPalette(id)` opens
+ * the palette right in a command's sub-list (the item shortcuts `s`, `a`, `p` … do that). The list itself comes from
+ * `model.ts`; the search runs on the server (`useSearch`, a moment after the last key).
  */
 
 import { Dialog as BaseDialog } from '@base-ui/react/dialog';
@@ -21,7 +22,7 @@ import { useProjects } from '@/hooks/projects';
 import { useSearch } from '@/hooks/search';
 import { useWorkflows } from '@/hooks/workflows';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
-import { useCommands, type CommandDef } from '@/lib/commands';
+import { listCommands, useCommands, type CommandDef } from '@/lib/commands';
 import { useDialogScope } from '@/lib/shortcuts/useShortcut';
 import { useUiStore } from '@/store/ui';
 import type { State } from '@/types';
@@ -64,7 +65,11 @@ function PaletteBody() {
   const navigate = useNavigate();
   const commands = useCommands();
   const [query, setQuery] = useState('');
-  const [subpage, setSubpage] = useState<CommandDef | null>(null);
+  // opened by a shortcut such as `s`: start in that command's sub-list
+  const [subpage, setSubpage] = useState<CommandDef | null>(() => {
+    const commandId = useUiStore.getState().paletteCommandId;
+    return listCommands().find((command) => command.id === commandId && command.subpage) ?? null;
+  });
   const [activeId, setActiveId] = useState<string | null>(null);
   const searchQuery = useDebounced(subpage ? '' : query.trim(), SEARCH_DELAY_MS);
   const search = useSearch(searchQuery);
@@ -317,6 +322,7 @@ function PaletteBody() {
 
 export function CommandPalette() {
   const open = useUiStore((state) => state.paletteOpen);
+  const commandId = useUiStore((state) => state.paletteCommandId);
   return (
     <BaseDialog.Root open={open} onOpenChange={(next) => useUiStore.getState().setPaletteOpen(next)}>
       <BaseDialog.Portal>
@@ -331,7 +337,8 @@ export function CommandPalette() {
           )}
         >
           <BaseDialog.Title className="sr-only">Befehlspalette</BaseDialog.Title>
-          <PaletteBody />
+          {/* a new start (another command's sub-list) starts afresh, also while the last one is still closing */}
+          <PaletteBody key={commandId ?? 'root'} />
         </BaseDialog.Popup>
       </BaseDialog.Portal>
     </BaseDialog.Root>
