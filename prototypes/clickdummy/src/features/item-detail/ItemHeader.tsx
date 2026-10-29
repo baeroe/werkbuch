@@ -369,7 +369,11 @@ function ItemMenu({ detail, project }: { detail: WorkItemDetail; project: Projec
 
 /* -------------------------------------------------------------------------------- path */
 
-/** The parents of an item on the path, the farthest first; at most three, the rest is "…". */
+/**
+ * The parents of an item on the path, the farthest first; at most three, the rest is "…". Below md only the key shows,
+ * and on a very narrow screen it gives way ("WEB-…") instead of running into the next crumb; from md on the title gives
+ * way first, as before.
+ */
 function ParentCrumbs({ id, depth }: { id: string; depth: number }) {
   const parent = useWorkItem(id).data?.item;
   if (!parent) return null;
@@ -384,7 +388,7 @@ function ParentCrumbs({ id, depth }: { id: string; depth: number }) {
       ) : null}
       <li className="flex min-w-0 items-center gap-1.5">
         <Link to={`/items/${parent.key}`} className="flex min-h-11 min-w-0 items-center gap-1.5 rounded-chip text-muted hover:text-ink md:min-h-6">
-          <ItemKey value={parent.key} />
+          <ItemKey value={parent.key} className="min-w-0 truncate md:shrink-0" />
           <span className="hidden min-w-0 truncate md:inline">{parent.title}</span>
         </Link>
         <ChevronRight className="size-3.5 shrink-0" aria-hidden="true" />
@@ -399,9 +403,13 @@ function Path({ item, project }: { item: WorkItem; project: Project | undefined 
       <ol className="flex min-w-0 items-center gap-1.5 text-sm text-muted">
         <li className="flex min-w-0 shrink-0 items-center gap-1.5">
           {project ? (
-            <Link to={`/projects/${project.identifier}`} className="flex min-h-11 items-center gap-1.5 rounded-chip hover:text-ink md:min-h-6">
+            // below md the badge stands for the project (its name stays for screen readers) and the target reaches 44 px
+            <Link
+              to={`/projects/${project.identifier}`}
+              className="relative flex min-h-11 items-center gap-1.5 rounded-chip hover:text-ink max-md:after:absolute max-md:after:inset-y-0 max-md:after:-inset-x-3 md:min-h-6"
+            >
               <ProjectBadge project={project} />
-              <span className="max-w-40 truncate">{project.name}</span>
+              <span className="max-w-40 truncate max-md:sr-only">{project.name}</span>
             </Link>
           ) : (
             <Skeleton className="h-4 w-28" />

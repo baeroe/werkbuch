@@ -1,8 +1,8 @@
 /*
  * The seven flows of the clickdummy (plan, Task 13, step 1; spec 1, success criteria 2–6). Every step runs on the
  * keyboard, only the board drag uses the mouse (dnd-kit listens to pointer events). A flow may start on a route
- * opened by its address; everything after that is typed. Beside them, one check measures the table's targets on a
- * phone.
+ * opened by its address; everything after that is typed. Beside them, two checks on a phone measure the table's
+ * targets and the path of a child item.
  *
  * Every test has a fresh browser context: empty localStorage, so the seed data, Mara Lindqvist signed in and the
  * demo clock at Wednesday, 2026-10-28, 10:00 Europe/Berlin. A console error or an uncaught exception fails the flow.
@@ -258,5 +258,20 @@ test.describe('on a phone (390 px), beside the flows', () => {
     const toggles = await table.locator('tbody tr[role="row"]:has(td[colspan]) button').evaluateAll((buttons) => buttons.map((button) => button.getBoundingClientRect().height));
     expect(toggles.length).toBeGreaterThan(0);
     expect(Math.min(...toggles)).toBeGreaterThanOrEqual(44);
+  });
+
+  test('the path of a child item keeps its crumbs apart, and the project keeps its name', async ({ page }) => {
+    // WEB-42 hangs under WEB-30
+    await page.goto('/items/WEB-42');
+    const path = page.getByRole('navigation', { name: 'Pfad' });
+    const current = path.locator('[aria-current="page"]');
+    await expect(current).toHaveText('WEB-42');
+    const parentKey = path.getByRole('link', { name: /WEB-30/ }).locator('[translate="no"]');
+    await expect(parentKey).toBeVisible();
+
+    const [parent, item] = await Promise.all([parentKey.boundingBox(), current.boundingBox()]);
+    expect(parent!.x + parent!.width, 'the key of the parent ends before the key of the item').toBeLessThanOrEqual(item!.x);
+    // only the badge shows on a phone; screen readers still hear the project
+    await expect(path.getByRole('link', { name: 'Website-Relaunch' })).toBeVisible();
   });
 });
