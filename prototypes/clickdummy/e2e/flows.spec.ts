@@ -1,29 +1,15 @@
 /*
  * The seven flows of the clickdummy (plan, Task 13, step 1; spec 1, success criteria 2–6). Every step runs on the
  * keyboard, only the board drag uses the mouse (dnd-kit listens to pointer events). A flow may start on a route
- * opened by its address; everything after that is typed.
+ * opened by its address; everything after that is typed. Beside them, one check measures the table's targets on a
+ * phone.
  *
  * Every test has a fresh browser context: empty localStorage, so the seed data, Mara Lindqvist signed in and the
  * demo clock at Wednesday, 2026-10-28, 10:00 Europe/Berlin. A console error or an uncaught exception fails the flow.
  */
 
-import { expect, test as base, type Locator, type Page } from '@playwright/test';
-
-/** Fails the test on errors the page reports: console errors and uncaught exceptions. */
-const test = base.extend<{ pageErrors: string[] }>({
-  pageErrors: [
-    async ({ page }, use) => {
-      const errors: string[] = [];
-      page.on('pageerror', (error) => errors.push(`page error: ${error.message}`));
-      page.on('console', (message) => {
-        if (message.type() === 'error') errors.push(`console error: ${message.text()}`);
-      });
-      await use(errors);
-      expect(errors, 'the page reported errors').toEqual([]);
-    },
-    { auto: true },
-  ],
-});
+import type { Locator, Page } from '@playwright/test';
+import { expect, openPalette, test } from './fixtures';
 
 /**
  * Presses Tab (or Shift+Tab) until the focus is on `target` or inside it: the keyboard way there, whatever lies in
@@ -33,14 +19,6 @@ async function tabTo(page: Page, target: Locator, key: 'Tab' | 'Shift+Tab' = 'Ta
   const reached = () => target.evaluate((element) => element === document.activeElement || element.contains(document.activeElement));
   for (let presses = 0; presses < limit && !(await reached()); presses += 1) await page.keyboard.press(key);
   expect(await reached(), `${key} reaches ${target}`).toBe(true);
-}
-
-/** The command palette: ⌘K on a Mac, Strg+K elsewhere. */
-async function openPalette(page: Page): Promise<Locator> {
-  await page.keyboard.press('ControlOrMeta+k');
-  const palette = page.getByRole('dialog', { name: 'Befehlspalette' });
-  await expect(palette.getByRole('combobox')).toBeFocused();
-  return palette;
 }
 
 /**

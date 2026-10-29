@@ -6,17 +6,20 @@
  * The app starts on its hash routes with the seed in memory; navigation, the palette and the theme work.
  */
 
-import { expect, test as base, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { expect, openPalette, test as app } from './fixtures';
 
-/** Fails the test on what the page reports (errors and warnings) and on any request that leaves the server or fails. */
-const test = base.extend<{ problems: string[] }>({
+/**
+ * Beyond the errors of every test (fixtures.ts): fails on console warnings and on any request that leaves the server
+ * or fails, and traps window.print.
+ */
+const test = app.extend<{ problems: string[] }>({
   problems: [
     async ({ page, baseURL }, use) => {
       const problems: string[] = [];
       const own = new URL(baseURL!).origin;
-      page.on('pageerror', (error) => problems.push(`page error: ${error.message}`));
       page.on('console', (message) => {
-        if (message.type() === 'error' || message.type() === 'warning') problems.push(`console ${message.type()}: ${message.text()}`);
+        if (message.type() === 'warning') problems.push(`console warning: ${message.text()}`);
       });
       page.on('response', (response) => {
         if (response.status() >= 400) problems.push(`HTTP ${response.status()}: ${response.url()}`);
@@ -51,10 +54,9 @@ async function expectOwnFonts(page: Page): Promise<void> {
   }
 }
 
-/** Opens the palette with mod+k, waits for its input and types the query. */
+/** Opens the palette and types the query. */
 async function palette(page: Page, query: string): Promise<void> {
-  await page.keyboard.press('ControlOrMeta+k');
-  await expect(page.getByRole('combobox', { name: 'Suchen oder Befehl eingeben' })).toBeFocused();
+  await openPalette(page);
   await page.keyboard.type(query);
 }
 
@@ -152,4 +154,25 @@ test('runs in a sandboxed frame without an origin of its own', async ({ page }) 
   await frame.getByRole('option', { name: 'Seitenstruktur Wiki WEB' }).click();
   await expect(frame.getByRole('article', { name: 'Seitenstruktur' })).toBeVisible();
   expect(app.url()).toMatch(/#\/projects\/WEB\/wiki\/pg_web_structure$/);
+  expect(await app.evaluate(() => {
+    try {
+      return localStorage.length;
+    } catch (error) {
+      return (error as Error).name;
+    }
+  })).toBe('SecurityError');
+
+  // a write lands in the data held in memory: a new comment shows on its item
+  await frame.getByRole('button', { name: 'Suchen …' }).click();
+  await expect(frame.getByRole('combobox', { name: 'Suchen oder Befehl eingeben' })).toBeFocused();
+  await page.keyboard.type('WEB-47');
+  await frame.getByRole('option', { name: /^WEB-47 / }).click();
+  await expect(frame.getByRole('heading', { level: 1, name: 'Kontaktformular sendet doppelt' })).toBeVisible();
+  await frame.getByRole('button', { name: /^Kommentar schreiben/ }).click();
+  await expect(frame.getByRole('textbox', { name: 'Kommentar' })).toBeFocused();
+  await page.keyboard.type('Im Frame ohne Speicher geschrieben');
+  await page.keyboard.press('ControlOrMeta+Enter');
+  await expect(frame.getByRole('status').filter({ hasText: 'Kommentar gesendet' })).toBeVisible();
+  const comment = frame.getByRole('region', { name: 'Aktivität' }).getByRole('article', { name: 'Kommentar von Mara Lindqvist' }).last();
+  await expect(comment).toContainText('Im Frame ohne Speicher geschrieben');
 });

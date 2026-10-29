@@ -1,14 +1,16 @@
 /*
- * Playwright, two projects:
- *   flows   the seven flows (e2e/flows.spec.ts) against a dev server of their own on port 5199, so a dev server on
- *           5173/5174 keeps running beside them
+ * Playwright, two projects, each with a server of its own:
+ *   flows   the seven flows and the phone check (e2e/flows.spec.ts) against a dev server on port 5199, so a dev
+ *           server on 5173/5174 keeps running beside them
  *   review  the review build (e2e/review.spec.ts): pnpm build:review, served statically on port 5198
  *           (scripts/serve.mjs) the way an artifact host serves it
+ * Only the servers of the projects that run start: `--project flows` neither builds nor serves the review build.
  * Every test starts in a fresh browser context: empty localStorage, so the seed data and Mara Lindqvist signed in.
  *
- *   pnpm e2e                      everything
- *   pnpm e2e --project flows      the flows only
- *   pnpm e2e -g "Flow 3"          one of them
+ *   pnpm e2e                              both projects (CI)
+ *   pnpm e2e:flows                        the flows (= pnpm e2e --project flows)
+ *   pnpm e2e:review                       the review build (= pnpm e2e --project review)
+ *   pnpm e2e:flows -g "Flow 3"            one flow
  *
  * Chromium comes from Playwright's own cache (`pnpm exec playwright install chromium` once).
  */
@@ -17,6 +19,23 @@ import { defineConfig } from '@playwright/test';
 
 const DEV_PORT = 5199;
 const REVIEW_PORT = 5198;
+
+/**
+ * The projects named on the command line: `--project flows`, `--project=review`, `--project flows review`. None named
+ * means all of them run. The runner reads this file with its own arguments; workers have none, but they start no
+ * servers either.
+ */
+function namedProjects(argv: readonly string[]): string[] {
+  const names: string[] = [];
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg.startsWith('--project=')) names.push(arg.slice('--project='.length));
+    else if (arg === '--project') for (let next = index + 1; next < argv.length && !argv[next].startsWith('-'); next += 1) names.push(argv[next]);
+  }
+  return names;
+}
+const named = namedProjects(process.argv);
+const runs = (project: string) => named.length === 0 || named.includes(project);
 
 // no device preset: its user agent names Windows, and the app would read mod as Strg while ControlOrMeta presses ⌘ on
 // a Mac. With the browser's own user agent, the app and Playwright agree on the platform.
@@ -41,17 +60,25 @@ export default defineConfig({
     { name: 'review', testMatch: 'review.spec.ts', use: { ...browser, baseURL: `http://localhost:${REVIEW_PORT}` } },
   ],
   webServer: [
-    {
-      command: `pnpm dev --port ${DEV_PORT} --strictPort`,
-      url: `http://localhost:${DEV_PORT}`,
-      reuseExistingServer: false,
-      timeout: 60_000,
-    },
-    {
-      command: `pnpm build:review && node scripts/serve.mjs dist-review ${REVIEW_PORT}`,
-      url: `http://localhost:${REVIEW_PORT}/sandbox.html`,
-      reuseExistingServer: false,
-      timeout: 180_000,
-    },
+    ...(runs('flows')
+      ? [
+          {
+            command: `pnpm dev --port ${DEV_PORT} --strictPort`,
+            url: `http://localhost:${DEV_PORT}`,
+            reuseExistingServer: false,
+            timeout: 60_000,
+          },
+        ]
+      : []),
+    ...(runs('review')
+      ? [
+          {
+            command: `pnpm build:review && node scripts/serve.mjs dist-review ${REVIEW_PORT}`,
+            url: `http://localhost:${REVIEW_PORT}/sandbox.html`,
+            reuseExistingServer: false,
+            timeout: 180_000,
+          },
+        ]
+      : []),
   ],
 });
