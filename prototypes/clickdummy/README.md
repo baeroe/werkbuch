@@ -119,11 +119,11 @@ Eine unbekannte Route zeigt „Diese Seite gibt es nicht“ in der Shell. Im Rev
 | `f` | Filterbedingung hinzufügen |
 | `1`–`4` | Liste, Board, Tabelle, Timeline |
 | ⌘⏎ | speichern bzw. absenden |
-| ⌘⌫ | archivieren bzw. löschen, mit Rückgängig |
+| ⌘⌫ | archivieren bzw. löschen, mit Rückgängig (eine Wiki-Seite erst nach Rückfrage) |
 | ⌘Z | letzte Aktion zurücknehmen, solange ihr Toast steht |
 | Board: ← →, ⇧← ⇧→, ⌥↑ ⌥↓ | Spalte wechseln, Karte in die nächste erlaubte Spalte, Karte in der Spalte verschieben |
 | Timeline: ⇧← ⇧→, ⌥← ⌥→ | Epic verschieben, Epic kürzer oder länger machen (je eine Einheit des Zooms: Tag, Woche oder Monat) |
-| Inbox: `e`, ⇧E, `#` | als gelesen markieren, alle als gelesen, löschen |
+| Inbox: `e`, `u`, ⇧E, `#` | als gelesen markieren, wieder als ungelesen markieren, alle als gelesen, löschen |
 
 ## Demo-Rollen („Als … ansehen“)
 
@@ -187,7 +187,7 @@ src/
                      Ausnahmen (storage.ts)
   types.ts           gemeinsame Typen
   domain/            Fachlogik als reine Funktionen; wird später nach PHP portiert. people.ts: wer Items übernehmen
-                     und erwähnt werden kann
+                     und erwähnt werden kann; hierarchy.ts: wer Kind-Items und wer ein Eltern-Item haben kann
   api/               Fake-API: client.ts (Fehler, Latenz, Sitzung), db.ts (localStorage), eine Datei je Ressource, seed/ (Demo-Daten)
   hooks/             TanStack-Query-Hooks, einer je API-Funktion; keys.ts hat alle Query-Keys
   store/             Zustand: session.ts (wer angemeldet ist), ui.ts (Theme, Seitenleiste, Palette, Kürzel-Hilfe, Vorschau, Auswahl)
@@ -226,16 +226,16 @@ Was der Klickdummy anders macht als die Spec (`docs/superpowers/specs/2026-10-28
 - Der Review-Build routet im Hash (`#/…`), weil er als eine statische Seite läuft.
 
 **Bedienung**
-- Tastatur, zusätzlich zu 5.3: `/` öffnet die Palette, in Listen filtert es nach Titel; `f` für eine Filterbedingung; Board mit ← →, ⇧← ⇧→ und ⌥↑ ⌥↓ (auch als Palette-Befehle, R30); Timeline mit ⇧← ⇧→ (verschieben) und ⌥← ⌥→ (kürzer, länger), wo 4.11 für das Verschieben die Pfeiltasten allein nennt; Inbox mit `e`, ⇧E und `#`.
+- Tastatur, zusätzlich zu 5.3: `/` öffnet die Palette, in Listen filtert es nach Titel; `f` für eine Filterbedingung; Board mit ← →, ⇧← ⇧→ und ⌥↑ ⌥↓ (auch als Palette-Befehle, R30); Timeline mit ⇧← ⇧→ (verschieben) und ⌥← ⌥→ (kürzer, länger), wo 4.11 für das Verschieben die Pfeiltasten allein nennt; Inbox mit `e`, `u`, ⇧E und `#`.
 - Esc in einem Feld der Vorschau verlässt erst das Feld, das zweite Esc schließt die Vorschau (R14).
-- Öffnen: Klick auf Zeile oder Karte zeigt die Vorschau, Enter öffnet die Seite, ⌘-Klick einen neuen Tab, ⇧-Klick wählt einen Bereich. In der Inbox öffnet Enter die Vorschau.
+- Öffnen: Klick auf Zeile oder Karte zeigt die Vorschau, Enter öffnet die Seite, ⌘-Klick einen neuen Tab, ⇧-Klick wählt einen Bereich. In der Inbox öffnet Enter die Vorschau, und jedes Öffnen markiert als gelesen: Enter, Klick, ⌘- oder Mittelklick (neuer Tab), die Seite einer Benachrichtigung ohne Item und der Titel einer Karte (dann alle ihre Benachrichtigungen). Im Filter „Ungelesen“ verlässt die geöffnete Zeile die Liste, Cursor und Fokus gehen weiter, die Vorschau bleibt offen. `u`, die Zeile und die Palette markieren wieder als ungelesen.
 - „Vorlage anwenden …“ in der Palette (4.12, 4.17) listet die Vorlagen aller Projekte, in denen du Items anlegen darfst, jeweils mit ihrem Projekt; die Wahl öffnet den Anlegen-Dialog mit Projekt und Vorlage. Ist keine anwendbar, sagt ein Toast, warum.
 - Die Leiste der Mehrfachbearbeitung ersetzt die Filterleiste oben, solange Items gewählt sind (unten würden die Toasts sie verdecken).
 - Ein Zug im Board bekommt keinen Erfolgs-Toast: Die Karte zeigt das Ergebnis, eine Statuszeile sagt es Screenreadern. Abgelehnte Züge melden sich per Toast.
 - Toasts: drei Plätze; Rückgängig-Toasts werden nie verdrängt, neue warten dann. Fehler stehen außerhalb der drei, werden wie alle Toasts höflich angesagt (`aria-live="polite"`), und derselbe Fehler noch einmal frischt den stehenden Toast auf (neueste Aktion, Zeit beginnt von vorn), statt sich zu stapeln; angesagt wird er dabei nicht noch einmal. Nur Fehler, bei denen Wiederholen hilft (5xx, keine Antwort), bieten „Erneut versuchen“; ein 409 mit Konfliktstand zeigt das Banner statt eines Toasts (R12).
 - Die Speichern-Knöpfe der Projekteinstellungen bleiben aktiv und antworten „Keine Änderungen zu speichern.“, statt grau zu sein (Guideline: Absenden bleibt aktiv). Verlässt man ein geändertes Einstellungsformular, fragt die App nach.
 - „Neu laden“ im Wiki-Konflikt lässt sich zurücknehmen; neue Seiten heißen „Neue Seite“ mit markiertem Titel.
-- Öffnen markiert eine Benachrichtigung nicht als gelesen (R20), und Kind-Items stehen nur in ihrer eigenen Gruppe (R21); beides steht unten als Frage.
+- Kind-Items stehen nur in ihrer eigenen Statusgruppe, so stimmen die Zähler (R21, in der Korrekturrunde bestätigt).
 
 **Fachliche Präzisierungen**
 - Wer Items übernehmen und erwähnt werden kann: Mitglieder des Projekts und Org-Admins (Personen), Bots nur als Mitglied, der Standard-Bot also nur, wenn er ausdrücklich Mitglied ist (R33, präzisiert 4.8 „Zugriff“).
@@ -246,19 +246,24 @@ Was der Klickdummy anders macht als die Spec (`docs/superpowers/specs/2026-10-28
 - Board nach Kategorie gruppiert: Ein Zug in die Spalte der eigenen Kategorie behält den Status, ein Zug in eine andere nimmt deren ersten erlaubten Status.
 - Zähler pro Gruppe zählen im Browser über alle geladenen Seiten (gruppierte Listen laden alle Seiten), nicht auf dem Server.
 - Die Relation heißt „wird blockiert von“ (4.9), nicht „blockiert von“ wie im Moodboard.
-- Ein Löschen im Wiki fragt nur nach, wenn Unterseiten mitgehen (siehe Fragen).
+- Ein Löschen im Wiki fragt immer nach (4.15 „mit Bestätigung“) und nennt mitgehende Unterseiten; nach dem Ja bleiben fünf Sekunden Rückgängig (5.1). Das Ziehen im Baum bleibt, wie es ist.
+- Nur Epics (Typen mit Häkchen „Epic“) können Kind-Items haben, und Epics haben selbst kein Eltern-Item: zwei Ebenen (Korrekturrunde 2026-10-29; Spec 4.8 sagte „beliebig tief“).
 - Ein neu angelegtes Projekt wird nicht automatisch Favorit; Maras Favoriten enthalten auch die drei Projekte (R13).
 - Das JSON-Snippet für MCP hat die Form `mcpServers.werkbuch` mit `type`, `url` und `headers.Authorization`.
 
+## Entschieden in der Korrekturrunde (2026-10-29)
+
+- Öffnen markiert als gelesen; neu `u` für ungelesen. „Alle als gelesen“ bleibt global.
+- Neue Kind-Items starten im Startstatus des Workflows (war schon so); Kinder stehen in ihrer eigenen Gruppe (R21 bleibt).
+- Löschen im Wiki fragt immer; das Ziehen im Baum bleibt.
+- Im Anlegen-Dialog zuerst der Titel (bleibt so).
+- Nur Epics (Typen mit Häkchen „Epic“) können Kind-Items haben, und Epics haben selbst kein Eltern-Item: zwei Ebenen (Korrekturrunde 2026-10-29; Spec 4.8 sagte „beliebig tief“).
+- Die Geschmacksfragen bleiben vorerst.
+
 ## Fragen für die Korrekturrunde
 
-- **Inbox:** Soll das Öffnen einer Benachrichtigung sie als gelesen markieren? Heute tut das nur `e` (R20). Und soll „Alle als gelesen markieren“ nur den aktuellen Filter treffen?
-- **Kind-Items über Statusgruppen:** Kinder stehen nur in ihrer eigenen Gruppe, so stimmen die Zähler. Im Moodboard hingen WEB-42 und WEB-48 unter WEB-30, auch über Statusgrenzen hinweg (R21).
 - **Heute-Chip im Nachtheft:** Er hat eine gelbe Fläche wie im Moodboard; DESIGN.md sagt für das Nachtheft „leuchtende Schrift statt gelber Fläche“.
-- **Wiki löschen:** Rückfrage nur, wenn Unterseiten mitgehen, sonst gleich Rückgängig (5.1 „Rückgängig statt Rückfrage“ gegen 4.15 „mit Bestätigung“).
-- **Wiki-Baum ziehen:** nur mit Maus oder Touch (ohne Maus über „Verschieben nach …“), und schon ein leichter Zug nach rechts verschachtelt die Seite. Strengere Schwelle?
-- **Anlegen-Dialog:** Der Fokus steht im Titel, Projekt, Typ und Vorlage stehen darüber. Passt die Reihenfolge der Schritte, oder erst Typ, dann Titel?
-- **Geschmack:**
+- **Geschmack:** Rafael lässt diese Punkte vorerst, wie sie sind (2026-10-29).
   - Enter öffnet in Listen die Seite, in der Inbox die Vorschau.
   - Kein Erfolgs-Toast nach einem Zug im Board.
   - Die Speichern-Knöpfe der Projekteinstellungen bleiben aktiv, auch ohne Änderung.
