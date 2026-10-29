@@ -126,7 +126,7 @@ describe('the item list screen', () => {
     router.dispose();
   });
 
-  it('with the preview open, e edits the title of the previewed item, from its row and from the title link in the row', async () => {
+  it('with the preview open, e edits the title of the previewed item: from its row, from inside the preview and from the row’s title link', async () => {
     const user = userEvent.setup();
     const router = renderAt('/projects/WEB', { preview: true });
     const row = await screen.findByRole('group', { name: /^WEB-47 / });
@@ -141,7 +141,14 @@ describe('the item list screen', () => {
     await user.keyboard('e');
     await waitFor(() => expect(document.activeElement).toBe(within(panel).getByRole('textbox', { name: 'Titel' })));
 
-    // Escape leaves the field; a click on the row's title focuses its link, and e edits from there as well
+    // Escape leaves the field for the title in the preview; with the focus inside the preview e edits as well
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(within(panel).queryByRole('textbox', { name: 'Titel' })).toBeNull());
+    expect(panel.contains(document.activeElement)).toBe(true);
+    await user.keyboard('e');
+    await waitFor(() => expect(document.activeElement).toBe(within(panel).getByRole('textbox', { name: 'Titel' })));
+
+    // a click on the row's title focuses its link; e edits from there too
     await user.keyboard('{Escape}');
     await waitFor(() => expect(within(panel).queryByRole('textbox', { name: 'Titel' })).toBeNull());
     act(() => row.querySelector<HTMLElement>('[data-item-link]')!.focus());
