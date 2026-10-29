@@ -7,7 +7,8 @@
  * the same two actions in a menu.
  *
  * A row with an unread notification has the ink-blue dot; the whole row is the link (a plain click opens the item in the
- * preview, a click with a modifier key opens its page), and the actions sit above it.
+ * preview, a click with ⌘/Ctrl or ⇧ and a middle click open its page in a new tab; either way the screen reads the
+ * notification), and the actions sit above it.
  */
 
 import { CalendarClock, CalendarSync, Check, Ellipsis, Trash2, Webhook, type LucideIcon } from 'lucide-react';
@@ -27,7 +28,7 @@ import { useWebhooks } from '@/hooks/webhooks';
 import { useWorkflows } from '@/hooks/workflows';
 import { hrefOf } from '@/lib/links';
 import type { Notification, WorkItem } from '@/types';
-import { changedFields, timeAgo } from './notifications';
+import { changedFields, opensElsewhere, timeAgo } from './notifications';
 
 /** How long a webhook may fail before the system switches it off (spec 4.14, 6.3): the reason in the row. */
 const WEBHOOK_REASON = 'Er war 24\u00a0Stunden lang nicht erreichbar.';
@@ -86,6 +87,8 @@ type NotificationRowProps = {
   timeZone: string;
   /** A plain click or Enter: the screen opens the item in the preview, or navigates. */
   onOpen: (notification: Notification, href: string) => void;
+  /** The browser opens the page in a new tab or window (⌘/Ctrl- or ⇧-click, middle click): the screen reads it. */
+  onOpenInTab: (notification: Notification) => void;
   /** The link got the focus: the cursor follows. */
   onCursor: (notificationId: string) => void;
   onMarkRead: (notificationId: string) => void;
@@ -93,7 +96,7 @@ type NotificationRowProps = {
   linkRef: Ref<HTMLAnchorElement>;
 };
 
-export function NotificationRow({ notification, item, current, tabStop, flashing, now, timeZone, onOpen, onCursor, onMarkRead, onDelete, linkRef }: NotificationRowProps) {
+export function NotificationRow({ notification, item, current, tabStop, flashing, now, timeZone, onOpen, onOpenInTab, onCursor, onMarkRead, onDelete, linkRef }: NotificationRowProps) {
   const users = useUserMap();
   const { today } = useToday();
   const properties = useProperties().data?.items;
@@ -201,10 +204,16 @@ export function NotificationRow({ notification, item, current, tabStop, flashing
           aria-current={current || undefined}
           onFocus={() => onCursor(notification.id)}
           onClick={(event) => {
-            // a click with a modifier key lets the browser open the page in a new tab
-            if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+            if (event.button !== 0) return;
+            // a click with a modifier key is the browser's: a new tab or window opens the notification as well
+            if (opensElsewhere(event)) onOpenInTab(notification);
+            if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
             event.preventDefault();
             onOpen(notification, href);
+          }}
+          onAuxClick={(event) => {
+            // the middle button opens the page in a new tab
+            if (event.button === 1) onOpenInTab(notification);
           }}
           className={cx('block text-ui text-pretty break-words no-underline outline-none after:absolute after:inset-0 after:rounded-ctl', unread ? 'text-ink' : 'text-muted')}
         >

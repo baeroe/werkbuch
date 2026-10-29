@@ -1,6 +1,6 @@
 /*
  * What the inbox works out from the notifications before it draws them: the groups (one per item), how long ago a
- * notification happened, and the names of the fields an `item_changed` notification lists.
+ * notification happened, the names of the fields an `item_changed` notification lists, and which clicks open a page.
  */
 
 import { formatShortDay } from '@/components/fields/format';
@@ -34,6 +34,16 @@ export function groupNotifications(list: Notification[]): NotificationGroup[] {
     groups.set(key, group);
   }
   return [...groups.values()];
+}
+
+/* ---------------------------------------------------------------------- clicks */
+
+/**
+ * Whether the browser turns a click on a link into a new tab or window (⌘ or Ctrl, ⇧), which opens the notification
+ * as well. Alt saves the link instead: nothing opens.
+ */
+export function opensElsewhere(event: { metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean }): boolean {
+  return (event.metaKey || event.ctrlKey || event.shiftKey) && !event.altKey;
 }
 
 /* ------------------------------------------------------------------------ time */

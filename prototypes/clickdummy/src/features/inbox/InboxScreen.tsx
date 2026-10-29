@@ -5,7 +5,12 @@
  *
  * Keyboard (scope list; the help `?` lists them): j and k move the cursor and the focus with it, e marks the
  * notification under the cursor read, shift+e all of them, # deletes with 5 seconds of undo, Enter opens its item in
- * the preview. The preview is `useUiStore.openPeek`; opening it neither navigates nor marks anything read.
+ * the preview (`useUiStore.openPeek`) without leaving the list.
+ *
+ * Opening reads (correction round 2026-10-29, in place of R20): Enter and a click (the preview), a click with ⌘/Ctrl
+ * or ⇧ and a middle click (the item's page in a new tab), the page of a notification without an item, and the title
+ * of a card (the item's page: all of the card's notifications). The cursor stays on the row; in the unread list the row
+ * leaves, the cursor and the focus move on as after a delete, and the preview stays open.
  * A notification marked read shows as read at once, without a toast (and is unread again, with a toast, if the server
  * refuses); a delete hides the row at once and runs when the undo toast ends.
  *
@@ -16,7 +21,7 @@
 import { Toggle } from '@base-ui/react/toggle';
 import { ToggleGroup } from '@base-ui/react/toggle-group';
 import { Building2, CheckCheck, Inbox, SlidersHorizontal } from 'lucide-react';
-import { useEffect, useId, useMemo, useReducer, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useReducer, useRef, useState, type MouseEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { ApiError } from '@/api/client';
 import { Banner } from '@/components/ui/Banner';
@@ -135,6 +140,9 @@ type GroupCardProps = {
   now: Date;
   timeZone: string;
   onOpen: (notification: Notification, href: string) => void;
+  onOpenInTab: (notification: Notification) => void;
+  /** The title of the card opened the item's page; `focused`: the title had the focus. */
+  onOpenItem: (group: NotificationGroup, focused: boolean) => void;
   onCursor: (notificationId: string) => void;
   onMarkRead: (notificationId: string) => void;
   onDelete: (notificationId: string) => void;
@@ -142,7 +150,7 @@ type GroupCardProps = {
 };
 
 /** The notifications of one item on its index card; what belongs to no item stands on a plain card of its project. */
-function GroupCard({ group, current, tabStop, previewed, flashing, now: at, timeZone, onOpen, onCursor, onMarkRead, onDelete, registerLink }: GroupCardProps) {
+function GroupCard({ group, current, tabStop, previewed, flashing, now: at, timeZone, onOpen, onOpenInTab, onOpenItem, onCursor, onMarkRead, onDelete, registerLink }: GroupCardProps) {
   const headingId = useId();
   const detail = useWorkItem(group.itemId);
   const projects = useProjects({ include_archived: true });
@@ -163,6 +171,7 @@ function GroupCard({ group, current, tabStop, previewed, flashing, now: at, time
           now={at}
           timeZone={timeZone}
           onOpen={onOpen}
+          onOpenInTab={onOpenInTab}
           onCursor={onCursor}
           onMarkRead={onMarkRead}
           onDelete={onDelete}
@@ -174,12 +183,23 @@ function GroupCard({ group, current, tabStop, previewed, flashing, now: at, time
 
   if (group.itemId !== null) {
     const type = detail.data?.type;
+    // the item's page, here or in a new tab, opens all of the card's notifications (Alt alone saves the link)
+    const openItem = (event: MouseEvent<HTMLAnchorElement>) => onOpenItem(group, document.activeElement === event.currentTarget);
     return (
       <IndexCard tone={type?.tone ?? 'slate'} icon={type?.icon ?? 'square-check'} tabLabel={item?.key ?? '…'} selected={previewed} aria-labelledby={headingId}>
         <h2 id={headingId} className="text-ui font-medium text-pretty break-words text-ink">
           {item ? (
             // the padding makes the target taller without moving anything: 24 px on desktop, 44 px on a phone
-            <Link to={`/items/${item.key}`} className="rounded-chip py-3.5 text-inherit no-underline hover:underline md:py-1">
+            <Link
+              to={`/items/${item.key}`}
+              onClick={(event) => {
+                if (event.button === 0 && !event.altKey) openItem(event);
+              }}
+              onAuxClick={(event) => {
+                if (event.button === 1) openItem(event);
+              }}
+              className="rounded-chip py-3.5 text-inherit no-underline hover:underline md:py-1"
+            >
               <span className="sr-only">{item.key}:</span> {item.title}
             </Link>
           ) : known === null ? (
@@ -278,14 +298,22 @@ export function InboxScreen() {
   }
 
   /**
-   * The row the cursor takes over when `id` leaves the list: the one that moves up into its place. The groups sort again
-   * without it (a group whose newest notification goes falls behind), so the row after it in today's order can be far
-   * away by then; the row at the same place in the new order is where the eye is.
+   * The row the cursor takes over when the rows `ids` leave the list: the one that moves up into the place of the first
+   * of them. The groups sort again without them (a group whose newest notification goes falls behind), so the row after
+   * it in today's order can be far away by then; the row at the same place in the new order is where the eye is.
    */
-  function survivorOf(id: string): string | null {
-    const index = order.indexOf(id);
-    const left = groupNotifications(visible.filter((notification) => notification.id !== id)).flatMap((group) => group.notifications.map((notification) => notification.id));
-    return left[Math.min(index, left.length - 1)] ?? null;
+  function survivorOf(ids: readonly string[]): string | null {
+    const places = ids.map((id) => order.indexOf(id)).filter((index) => index >= 0);
+    if (places.length === 0) return null;
+    const left = groupNotifications(visible.filter((notification) => !ids.includes(notification.id))).flatMap((group) => group.notifications.map((notification) => notification.id));
+    return left[Math.min(Math.min(...places), left.length - 1)] ?? null;
+  }
+
+  /** The rows `ids` leave the list: the cursor and the focus go on to the row that takes their place (or the one before at the end). */
+  function moveOn(ids: readonly string[]) {
+    const next = survivorOf(ids);
+    if (next) focusRow(next);
+    else setCursorId(null);
   }
 
   function move(step: 1 | -1) {
@@ -350,12 +378,8 @@ export function InboxScreen() {
 
   /** The row goes at once, the call follows when the toast runs out; "Rückgängig" brings the row back. */
   function remove(id: string) {
-    const next = survivorOf(id);
-    if (current === id) {
-      // the focus moves first, so removing the row does not drop it on the page
-      if (next) focusRow(next);
-      else setCursorId(null);
-    }
+    // the focus moves first, so removing the row does not drop it on the page
+    if (current === id) moveOn([id]);
     setHidden((state) => new Set(state).add(id));
     runWithUndo({
       label: 'Benachrichtigung gelöscht',
@@ -380,11 +404,7 @@ export function InboxScreen() {
     const notification = visible.find((entry) => entry.id === current);
     if (!notification || notification.read_at !== null) return;
     // in the unread list the row is about to leave: the cursor goes on to the next one
-    if (unreadOnly) {
-      const next = survivorOf(current);
-      if (next) focusRow(next);
-      else setCursorId(null);
-    }
+    if (unreadOnly) moveOn([current]);
     void markRead([current]);
   }
 
@@ -396,11 +416,31 @@ export function InboxScreen() {
     remove(current);
   }
 
+  /**
+   * Opening a notification reads it. The cursor stays on its row; in the unread list the row leaves, and the cursor and
+   * the focus go on to the row that takes its place.
+   */
+  function readOpened(notification: Notification) {
+    const unread = notification.read_at === null;
+    if (unread && unreadOnly) moveOn([notification.id]);
+    else setCursorId(notification.id);
+    if (unread) void markRead([notification.id]);
+  }
+
   function open(notification: Notification, href: string) {
-    setCursorId(notification.id);
+    readOpened(notification);
     // nothing navigates: the item opens beside the list; what belongs to no item leads to its page
     if (notification.work_item_id) useUiStore.getState().openPeek(notification.work_item_id);
     else void navigate(href);
+  }
+
+  /** The title of a card opened the item's page: every notification of the card is read. */
+  function readItem(group: NotificationGroup, focused: boolean) {
+    const ids = group.notifications.filter((notification) => notification.read_at === null).map((notification) => notification.id);
+    if (ids.length === 0) return;
+    // in the unread list the card leaves: a cursor or a focus inside it goes on
+    if (unreadOnly && (focused || (current !== null && ids.includes(current)))) moveOn(ids);
+    void markRead(ids);
   }
 
   /* shortcuts and palette */
@@ -538,6 +578,8 @@ export function InboxScreen() {
               now={at}
               timeZone={timeZone}
               onOpen={open}
+              onOpenInTab={readOpened}
+              onOpenItem={readItem}
               onCursor={setCursorId}
               onMarkRead={(id) => void markRead([id])}
               onDelete={remove}

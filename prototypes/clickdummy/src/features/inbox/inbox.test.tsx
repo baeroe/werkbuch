@@ -12,6 +12,7 @@ import { listNotifications } from '@/api/notifications';
 import { currentToasts, dismissToast, resetToasts, runToastAction } from '@/components/ui/toast';
 import { preloadEditor } from '@/features/editor/RichTextEditor';
 import { useLiveSync } from '@/hooks/live';
+import { useUnreadCount } from '@/hooks/notifications';
 import { listShortcuts } from '@/lib/shortcuts/registry';
 import { useUiStore } from '@/store/ui';
 import { asUser, resetApi } from '@/test/api';
@@ -34,12 +35,18 @@ function LiveSync() {
   return null;
 }
 
+/** The number on the sidebar's inbox entry, from the same hook the sidebar uses. */
+function SidebarBadge() {
+  return <span data-testid="sidebar-badge">{useUnreadCount()}</span>;
+}
+
 /** The inbox; with `preview` as in the shell: in the main area, with the preview panel beside it. */
 function renderInbox(path = '/inbox', { preview = false } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const screenElement = (
     <>
       <LiveSync />
+      <SidebarBadge />
       <InboxScreen />
     </>
   );
@@ -73,6 +80,34 @@ const loaded = () => screen.findByRole('heading', { level: 2, name: /WEB-42/ });
 
 const rows = () => screen.getAllByRole('link').filter((link) => link.hasAttribute('data-item-link'));
 const toastTitles = () => currentToasts().map((item) => item.title);
+const badge = () => screen.getByTestId('sidebar-badge').textContent;
+const unreadIds = async () => (await listNotifications({ unread_only: true })).items.map((entry) => entry.id);
+
+/** Marks seeded notifications unread, as if they had just come in. */
+function unread(...ids: string[]) {
+  const db = getDb();
+  for (const notification of db.notifications) if (ids.includes(notification.id)) notification.read_at = null;
+  saveDb();
+}
+
+/**
+ * A click the browser carries out itself (a new tab, a new window). jsdom cannot open a page: a listener on the
+ * document cancels the browser's part after noting whether the screen left it to the browser.
+ */
+function browserClick(element: Element, init: MouseEventInit, type: 'click' | 'auxclick' = 'click'): boolean {
+  let leftToBrowser = false;
+  const cancel = (event: Event) => {
+    leftToBrowser = !event.defaultPrevented;
+    event.preventDefault();
+  };
+  document.addEventListener(type, cancel);
+  try {
+    fireEvent(element, new MouseEvent(type, { bubbles: true, cancelable: true, ...init }));
+  } finally {
+    document.removeEventListener(type, cancel);
+  }
+  return leftToBrowser;
+}
 
 describe('the list', () => {
   it('stands in cards, one per item, with the notifications of the item inside', async () => {
@@ -369,47 +404,134 @@ describe('the keys', () => {
     const main = screen.getByRole('main');
     await waitFor(() => expect(within(main).getByRole('status').textContent).toBe('3 ungelesen'));
 
-    // j and Enter: the item of the first notification opens beside the list, the focus stays on the row
+    // j and Enter: the item of the first notification opens beside the list and the notification is read; the focus
+    // stays on the row
     await user.keyboard('j{Enter}');
     const panel = await screen.findByRole('complementary', { name: 'Vorschau' });
     await within(panel).findByRole('button', { name: 'Startseite: Hero und Teaser bauen' });
     // the preview's own e ("Titel bearbeiten") is registered by now
     await waitFor(() => expect(listShortcuts().some((shortcut) => shortcut.id === 'detail.title.peek')).toBe(true));
-    const row = within(main).getAllByRole('link').find((link) => link.hasAttribute('data-item-link'))!;
-    expect(document.activeElement).toBe(row);
+    await waitFor(() => expect(within(main).getByRole('status').textContent).toBe('2 ungelesen'));
+    // on to the next unread notification (APP-24), the preview stays with WEB-42
+    await user.keyboard('jjj');
+    const row = document.activeElement as HTMLAnchorElement;
+    expect(row.getAttribute('href')).toBe('/items/APP-24');
 
     await user.keyboard('e');
 
-    await waitFor(() => expect(within(main).getByRole('status').textContent).toBe('2 ungelesen'));
+    await waitFor(() => expect(within(main).getByRole('status').textContent).toBe('1 ungelesen'));
     expect(document.activeElement).toBe(row);
     expect(within(panel).queryByRole('textbox', { name: 'Titel' })).toBeNull();
   });
 
-  it('Enter opens the item in the preview, does not navigate, and does not mark anything read', async () => {
+  it('Enter opens the item in the preview and marks the notification read; the counters drop, the cursor stays', async () => {
     const user = userEvent.setup();
     const { router } = renderInbox();
     await loaded();
+    await waitFor(() => expect(badge()).toBe('3'));
 
     await user.keyboard('j{Enter}');
 
     expect(useUiStore.getState().peekItemId).toBe('wi_web_42');
     expect(router.state.location.pathname).toBe('/inbox');
-    expect((await listNotifications({ unread_only: true })).total).toBe(3);
+    const row = rows()[0];
+    // read at once, before the server has answered
+    expect(row.closest('li')!.hasAttribute('data-unread')).toBe(false);
+    expect(screen.getByRole('status').textContent).toBe('2 ungelesen');
+    expect(document.activeElement).toBe(row);
+    expect(row.getAttribute('aria-current')).toBe('true');
+    // the server agrees, and the sidebar counts it as well; reading needs no toast
+    await waitFor(() => expect(badge()).toBe('2'));
+    expect(await unreadIds()).not.toContain('n_01');
+    expect(toastTitles()).toEqual([]);
   });
 
-  it('a click does the same as Enter, and a click with a modifier key is left to the browser', async () => {
+  it('a click opens the item in the preview and marks the notification read', async () => {
     const user = userEvent.setup();
     renderInbox();
     await loaded();
-
-    const link = screen.getByRole('link', { name: /Theo Okafor hat kommentiert/ });
-    // jsdom cannot navigate: the browser's part of the click is cancelled by the test
-    link.addEventListener('click', (event) => event.preventDefault());
-    fireEvent.click(link, { ctrlKey: true });
-    expect(useUiStore.getState().peekItemId).toBeNull();
+    const link = screen.getByRole('link', { name: /^Ungelesen: Theo Okafor hat kommentiert/ });
 
     await user.click(link);
+
     expect(useUiStore.getState().peekItemId).toBe('wi_app_15');
+    expect(link.closest('li')!.hasAttribute('data-unread')).toBe(false);
+    expect(link.getAttribute('aria-current')).toBe('true');
+    await waitFor(async () => expect(await unreadIds()).toEqual(['n_01', 'n_04']));
+    await waitFor(() => expect(badge()).toBe('2'));
+  });
+
+  it('a ⌘-click opens the item’s page in a new tab and marks the notification read', async () => {
+    renderInbox();
+    await loaded();
+    const link = screen.getByRole('link', { name: /^Ungelesen: Theo Okafor hat kommentiert/ });
+
+    // Ctrl on Windows and Linux; jsdom is no Mac
+    const leftToBrowser = browserClick(link, { button: 0, ctrlKey: true });
+
+    expect(leftToBrowser).toBe(true);
+    expect(useUiStore.getState().peekItemId).toBeNull();
+    expect(link.closest('li')!.hasAttribute('data-unread')).toBe(false);
+    await waitFor(async () => expect(await unreadIds()).toEqual(['n_01', 'n_04']));
+    // the inbox stays, with the cursor on the row
+    expect(link.getAttribute('aria-current')).toBe('true');
+  });
+
+  it('a middle click opens the item’s page in a new tab and marks the notification read', async () => {
+    renderInbox();
+    await loaded();
+    const link = screen.getByRole('link', { name: /^Ungelesen: Theo Okafor hat dir das Item zugewiesen/ });
+
+    const leftToBrowser = browserClick(link, { button: 1 }, 'auxclick');
+
+    expect(leftToBrowser).toBe(true);
+    expect(useUiStore.getState().peekItemId).toBeNull();
+    await waitFor(async () => expect(await unreadIds()).toEqual(['n_01', 'n_03']));
+  });
+
+  it('an Alt-click is left to the browser and marks nothing read (it saves the link, it opens nothing)', async () => {
+    renderInbox();
+    await loaded();
+    const link = screen.getByRole('link', { name: /^Ungelesen: Theo Okafor hat kommentiert/ });
+
+    expect(browserClick(link, { button: 0, altKey: true })).toBe(true);
+
+    expect(link.closest('li')!.hasAttribute('data-unread')).toBe(true);
+    expect(await unreadIds()).toEqual(['n_01', 'n_04', 'n_03']);
+  });
+
+  it('the title of a card opens the item’s page and marks all of its notifications read', async () => {
+    // two of the three notifications of WEB-47 are unread
+    unread('n_06', 'n_07');
+    const user = userEvent.setup();
+    const { router } = renderInbox();
+    await loaded();
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('5 ungelesen'));
+
+    await user.click(screen.getByRole('link', { name: 'WEB-47: Kontaktformular sendet doppelt' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/items/WEB-47'));
+    await waitFor(async () => expect(await unreadIds()).toEqual(['n_01', 'n_04', 'n_03']));
+  });
+
+  it('in the unread list, opening moves the cursor and the focus on to the next row; the preview stays open', async () => {
+    const user = userEvent.setup();
+    renderInbox('/inbox?unread=1', { preview: true });
+    await loaded();
+    const [first, second] = rows();
+
+    await user.keyboard('j{Enter}');
+
+    // the opened row leaves the list; the focus is on the row that took its place
+    await waitFor(() => expect(rows()).toHaveLength(2));
+    expect(rows().includes(first)).toBe(false);
+    expect(document.activeElement).toBe(second);
+    expect(second.getAttribute('aria-current')).toBe('true');
+    // the preview still shows the opened item
+    expect(useUiStore.getState().peekItemId).toBe('wi_web_42');
+    const panel = await screen.findByRole('complementary', { name: 'Vorschau' });
+    expect(await within(panel).findByRole('button', { name: 'Startseite: Hero und Teaser bauen' })).toBeTruthy();
+    await waitFor(async () => expect(await unreadIds()).toEqual(['n_04', 'n_03']));
   });
 
   it('Enter on a button elsewhere stays that button’s Enter', async () => {
@@ -425,7 +547,8 @@ describe('the keys', () => {
     expect(screen.getByRole('button', { name: 'Ungelesen' }).getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('what belongs to no item leads to its page on Enter', async () => {
+  it('what belongs to no item leads to its page on Enter, and is read', async () => {
+    unread('n_10');
     const user = userEvent.setup();
     const { router } = renderInbox();
     await loaded();
@@ -435,6 +558,7 @@ describe('the keys', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/settings/webhooks'));
     expect(useUiStore.getState().peekItemId).toBeNull();
+    await waitFor(async () => expect(await unreadIds()).not.toContain('n_10'));
   });
 
   it('lists its keys in the help, in the group Inbox', async () => {
@@ -477,8 +601,9 @@ describe('the preview beside the inbox', () => {
 
     const editor = await within(panel).findByRole('textbox', { name: 'Kommentar' });
     await waitFor(() => expect(document.activeElement).toBe(editor));
-    // the notification is untouched: still unread
-    expect(within(main).getByRole('status').textContent).toBe('3 ungelesen');
+    // Enter read the notification; m did nothing in the list
+    expect(within(main).getByRole('status').textContent).toBe('2 ungelesen');
+    expect(within(main).getAllByRole('listitem')).toHaveLength(14);
   });
 });
 
