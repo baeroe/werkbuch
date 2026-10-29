@@ -698,11 +698,14 @@ function subscribeMounts(listener: () => void): () => void {
   };
 }
 
-/** The ids the commands act on right now, by the rules at the top of this file. */
-function currentTargetIds(): string[] {
+/**
+ * The ids the commands act on right now, by the rules at the top of this file. A mount that is rendering passes its
+ * options of this render as `own`: its ref takes them only after the render.
+ */
+function currentTargetIds(own?: { id: number; options: ItemCommandsOptions }): string[] {
   const ui = useUiStore.getState();
   const focus = typeof document === 'undefined' ? null : document.activeElement;
-  const newestFirst = [...mounts].reverse().map((mount) => mount.options());
+  const newestFirst = [...mounts].reverse().map((mount) => (mount.id === own?.id ? own.options : mount.options()));
   if (ui.peekItemId && newestFirst.some((options) => options.panel?.current?.contains(focus) ?? false)) return [ui.peekItemId];
   const page = newestFirst.find((options) => options.itemId)?.itemId;
   if (page) return [page];
@@ -813,7 +816,9 @@ export function useItemCommands(options: ItemCommandsOptions): void {
   // a catalog that failed stays failed until asked again: the shortcuts say so instead of "Einen Moment" for ever
   const failedCatalogs = Object.values(catalogs).filter((query) => query.isError && query.data === undefined);
 
-  const ids = targetIds();
+  // with the options of this render: a cursor that just moved would be one render late otherwise, and nothing renders
+  // again after it (⇧P on a card waited for the epics of no project)
+  const ids = paletteTargets ?? currentTargetIds({ id: mountId, options });
   // a single item is loaded here, so the commands know it even before its screen has
   const single = useWorkItem(ids.length === 1 ? ids[0] : null).data?.item;
   const targets = ids.flatMap((id) => (single && (single.id === id || single.key === id) ? [single] : (cachedItem(queryClient, id) ?? [])));

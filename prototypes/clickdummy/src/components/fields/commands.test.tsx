@@ -4,8 +4,8 @@
  */
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { useState, type ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PeekHost } from '@/app/PeekHost';
@@ -126,6 +126,27 @@ describe('item commands', () => {
     expect(options).toEqual(['Kein Eltern-Item', expect.stringContaining('APP-5')]);
     // „Kein Eltern-Item“ carries its icon, as in the parent field
     expect(within(list).getByRole('option', { name: /Kein Eltern-Item/ }).querySelector('svg.lucide-corner-left-up')).not.toBeNull();
+  });
+
+  it('a cursor that just moved is the target at once: shift+p offers the epics without waiting for another render', async () => {
+    // a list sets its cursor as state; nothing else renders after it (no focus moved, no preview follows)
+    function MovingCursor() {
+      const [cursor, setCursor] = useState<string | null>(null);
+      useItemCommands({ scope: 'list', current: () => cursor });
+      return (
+        <button type="button" onClick={() => setCursor('wi_web_42')}>
+          Cursor auf WEB-42
+        </button>
+      );
+    }
+    renderWithData(<MovingCursor />);
+    await waitFor(() => expect(command('item.parent')).toBeDefined());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cursor auf WEB-42' }));
+
+    await waitFor(() => expect(command('item.parent')?.group).toBe('Aktionen für WEB-42'));
+    // the epics of WEB have loaded for it: the command is there, not „Einen Moment“
+    await waitFor(() => expect(command('item.parent')?.when?.()).toBe(true));
   });
 
   it('shift+p on an epic says that epics have no parent, and the palette leaves the command out', async () => {
