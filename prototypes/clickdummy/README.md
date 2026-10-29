@@ -24,7 +24,9 @@ pnpm dev   # http://localhost:5173, die Komponenten-Galerie liegt unter /_compon
 | `pnpm typecheck` | TypeScript prüfen, auch `e2e/`, `vite.config.ts` und `playwright.config.ts` |
 | `pnpm test` | Unit-Tests (Vitest mit jsdom und Testing Library), dazu `scripts/*.test.mjs` |
 | `pnpm shots <route…>` | Screenshots mit Prüfung, siehe unten |
-| `pnpm e2e` | Playwright: die sieben Flows und der Review-Build, siehe unten |
+| `pnpm e2e` | Playwright, beide Projekte: die Flows (Dev-Server) und der Review-Build (baut ihn), siehe unten |
+| `pnpm e2e:flows` | nur die Flows und die Handy-Prüfung, mit eigenem Dev-Server; baut keinen Review-Build |
+| `pnpm e2e:review` | nur der Review-Build: baut `dist-review/` und prüft ihn statisch ausgeliefert |
 
 ### Screenshots
 
@@ -47,12 +49,13 @@ Danach steht `FINDINGS`: Fehler und Warnungen in der Konsole, fehlgeschlagene Re
 
 ```sh
 pnpm exec playwright install chromium   # einmal; Chromium kommt in den Cache von Playwright
-pnpm e2e                                # alles
-pnpm e2e --project flows                # nur die sieben Flows
-pnpm e2e -g "Flow 3"                    # einer davon
+pnpm e2e                                # beide Projekte, wie die CI
+pnpm e2e:flows                          # nur die Flows (= pnpm e2e --project flows)
+pnpm e2e:flows -g "Flow 3"              # ein Flow
+pnpm e2e:review                         # nur der Review-Build (= pnpm e2e --project review)
 ```
 
-Das Projekt `flows` (`e2e/flows.spec.ts`) startet einen eigenen Dev-Server auf Port 5199 (`strictPort`), ein laufender Dev-Server auf 5173/5174 bleibt also stehen. Jeder Test beginnt mit leerem `localStorage`, also mit den Demo-Daten und Mara Lindqvist. Alles läuft über die Tastatur, nur das Ziehen im Board mit der Maus. Ein Fehler in der Konsole lässt den Flow scheitern.
+Es starten nur die Server der Projekte, die laufen: Das Projekt `flows` (`e2e/flows.spec.ts`) startet einen eigenen Dev-Server auf Port 5199 (`strictPort`), ein laufender Dev-Server auf 5173/5174 bleibt also stehen; das Projekt `review` baut den Review-Build und liefert ihn auf Port 5198 aus. Ohne `--project` laufen beide, auch mit `-g`. Jeder Test beginnt mit leerem `localStorage`, also mit den Demo-Daten und Mara Lindqvist. Alles läuft über die Tastatur, nur das Ziehen im Board mit der Maus. Ein Fehler in der Konsole lässt einen Test scheitern; Helfer und diese Prüfung teilen sich beide Projekte (`e2e/fixtures.ts`).
 
 1. ⌘K, „kontakt“, Enter öffnet WEB-47; `s`, „done“, Enter: Die Resolution „Done“ ist vorbelegt, Enter setzt den Status.
 2. APP-11 im Board von Todo nach Done ziehen: Die Karte bleibt in Todo, ein Toast nennt den Grund („… nicht erlaubt“).
@@ -62,7 +65,7 @@ Das Projekt `flows` (`e2e/flows.spec.ts`) startet einen eigenen Dev-Server auf P
 6. Vorlage „Monatsbericht“: Die Vorschau zeigt 02.11.2026, 07.12.2026, 04.01.2027, 01.02.2027 und 01.03.2027.
 7. Workflow „Agentur-Freigabe“ ohne den letzten Übergang nach Review: „Review ist vom Startstatus aus nicht erreichbar“, Speichern wird abgelehnt.
 
-Das Projekt `review` (`e2e/review.spec.ts`) baut den Review-Build und prüft ihn statisch ausgeliefert (siehe unten). In der CI läuft beides im Job `clickdummy-e2e`; er ist kein Pflicht-Check.
+Neben den Flows prüft das Projekt `flows` am Handy (390 px), dass Zeilen, Gruppenzeilen und ihre Schalter in der Tabelle mindestens 44 px hoch sind. Das Projekt `review` (`e2e/review.spec.ts`) prüft den Review-Build (siehe unten). In der CI läuft `pnpm e2e`, also beides, im Job `clickdummy-e2e`; er ist kein Pflicht-Check.
 
 ## Review-Build
 
@@ -75,7 +78,7 @@ Der Build für Reviews läuft als claude.ai-Artifact, also als eine statische Se
 - `scripts/artifact.mjs` macht aus `dist-review/index.html` das Fragment, das ein Artifact erwartet: Es beginnt mit `<title>werkbuch Klickdummy</title>` und `<meta name="claude:viewport-fit-sides" content="cover">`, hat kein `<!doctype>`, `<html>`, `<head>` oder `<body>`, behält Modul-Script, Preloads und Stylesheet unter `assets/` und das Theme-Script inline (es setzt auch `lang="de"`).
 - Die App startet auch, wenn `localStorage` wirft: Die Demo-Daten leben dann im Speicher, bis die Seite neu lädt. Schriften kommen aus den gebündelten fontsource-Dateien, sonst lädt die Seite nichts von außen.
 
-`pnpm e2e --project review` liefert `dist-review/` mit `scripts/serve.mjs` aus wie ein Host (das Fragment in einem Seitengerüst, keine Rückfallseite für unbekannte Pfade) und prüft Hash-Routen, Palette, `g`-Folgen, Theme, „Zum Inhalt“, einen Deep-Link, ein werfendes `localStorage`, einen Frame mit `sandbox="allow-scripts"` ohne eigenen Ursprung, die Schriften und dass keine Anfrage die Seite verlässt.
+`pnpm e2e:review` baut den Review-Build, liefert `dist-review/` mit `scripts/serve.mjs` aus wie ein Host (das Fragment in einem Seitengerüst, keine Rückfallseite für unbekannte Pfade) und prüft Hash-Routen, Palette, `g`-Folgen, Theme, „Zum Inhalt“, einen Deep-Link, ein werfendes `localStorage`, einen Frame mit `sandbox="allow-scripts"` ohne eigenen Ursprung (dort auch einen neuen Kommentar, der nur im Speicher lebt), die Schriften und dass keine Anfrage die Seite verlässt.
 
 ## Routen
 
@@ -190,7 +193,8 @@ src/
   app/               Router (Browser- oder Hash-Router), Shell mit Seitenleiste und Profilmenü, Live-Banner, Hosts für
                      Vorschau und Anlegen-Dialog
   features/<name>/   die Bildschirme, je Bereich ein Ordner
-e2e/                 Playwright: flows.spec.ts (die sieben Flows), review.spec.ts (der Review-Build)
+e2e/                 Playwright: flows.spec.ts (die sieben Flows und die Handy-Prüfung), review.spec.ts (der
+                     Review-Build), fixtures.ts (Fehlerprüfung und Palette für beide)
 scripts/
   shots.mjs          Screenshots mit Prüfung
   artifact.mjs       macht aus dist-review/index.html das Fragment für ein Artifact (Test: artifact.test.mjs)
@@ -256,7 +260,7 @@ Was der Klickdummy anders macht als die Spec (`docs/superpowers/specs/2026-10-28
   - Derselbe Fehler-Toast ersetzt den alten; „Erneut versuchen“ wiederholt dann den neuesten Versuch.
   - Der Versionen-Dialog hat zwei „Schließen“ (Kreuz oben, Knopf unten).
   - Unterhalb von 1024 px zeigt die Wiki-Seite den Baum nicht daneben; zurück geht es über „Wiki“.
-  - Tabellen auf dem Handy: Die Tabelle scrollt seitlich, ihre Zellen sind klein. Reicht die Liste fürs Handy?
+  - Tabellen auf dem Handy: Die Tabelle scrollt seitlich, man sieht nur Item und Status. Reicht die Liste fürs Handy?
 
 ## Bekannte Punkte nach der Korrekturrunde
 
@@ -271,5 +275,5 @@ Kurzfassung der zurückgestellten Befunde (`task-13-deferred.md` im Plan-Ordner,
   - Einstellungen: Steuerelemente ohne Recht sind ausgegraut statt im Lese-Look; leere Zustände ohne nächsten Schritt (Mitglieder, Relationstypen); Bots und Personen laden ohne Skelett; ein 422 auf ein nicht gezeigtes Feld bleibt stumm; Automatisierungen können doppelt speichern.
   - Inbox, Views, Projekte: falscher Hinweistext bei gelesenen Einträgen; Zeilenaktionen nicht per Tab erreichbar; „Du liest nur mit.“ auch bei Org-Admins; in der Inbox heißt jeder Ladefehler eines Items „gibt es nicht mehr“.
   - Fake-API: der Lead bekommt beim Anlegen in einem späteren Status zwei Benachrichtigungen; Anhänge prüfen beim Verknüpfen die hochladende Person nicht (für den PHP-Port merken).
-- **Guidelines aus dem Durchgang:** Board, Tabelle und Timeline sind nicht virtualisiert (Regel ab 50 Items; die Liste ist es); die Tabelle hat auf dem Handy kleine Ziele; die Galerie lässt geöffnete Muster stehen, die den Rest für Screenreader verdecken; Skelette erscheinen sofort statt nach etwa 300 ms; Witwen in langen Seitentiteln („– Technik“ allein auf der Zeile).
+- **Guidelines aus dem Durchgang:** Board und Timeline sind nicht virtualisiert; die Regel gilt ab 50 Items, der Punkt bleibt nach R34 offen und kommt mit 13c (Liste und Tabelle sind virtualisiert). Die Galerie lässt geöffnete Muster stehen, die den Rest für Screenreader verdecken; Skelette erscheinen sofort statt nach etwa 300 ms; Witwen in langen Seitentiteln („– Technik“ allein auf der Zeile).
 - **Tests:** Zeigerziehen im Board, ⌥↑/⌥↓, Abbruch der Resolution-Abfrage, Fokus nach 1–4, Rechte-Gating der Board-Befehle, Kalender-Rechnen und -Tastatur, `Kbd`-Folgen, Bildansicht und Upload-Besitz im Wiki, Entwurf nach fehlgeschlagenem Speichern, Tippen während des Speicherns.
