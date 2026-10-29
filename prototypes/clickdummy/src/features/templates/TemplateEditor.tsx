@@ -12,14 +12,14 @@
  * - Viewers read: the fields are read-only, there is no saving and no running.
  */
 
-import { CornerLeftUp, Ellipsis, Play, Save, Trash2 } from 'lucide-react';
+import { Ellipsis, Play, Save, Trash2 } from 'lucide-react';
 import { useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Link, UNSAFE_DataRouterContext, useBlocker, useNavigate } from 'react-router';
 import { ApiError } from '@/api/client';
 import { personOption } from '@/components/fields/AssigneePicker';
 import { useProjectPeople, useUserMap } from '@/components/fields/itemData';
 import { labelOption } from '@/components/fields/LabelsPicker';
-import { useProjectItems } from '@/components/fields/ParentPicker';
+import { noParentText, NO_PARENT_OPTION, parentCandidates, parentOption, useProjectItems } from '@/components/fields/ParentPicker';
 import { Picker, type PickerOption } from '@/components/fields/Picker';
 import { PRIORITY_OPTIONS } from '@/components/fields/PriorityPicker';
 import { isEmptyValue, PropertyValueInput } from '@/components/fields/PropertyField';
@@ -34,6 +34,7 @@ import { Input } from '@/components/ui/Input';
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '@/components/ui/Menu';
 import { labelClass } from '@/components/ui/styles';
 import { toast } from '@/components/ui/toast';
+import { canHaveParent } from '@/domain/hierarchy';
 import { renderTitle } from '@/domain/placeholders';
 import { nextOccurrences } from '@/domain/recurrence';
 import { isEmptyDoc, RichTextEditor, RichTextView } from '@/features/editor/RichTextEditor';
@@ -333,7 +334,14 @@ export function TemplateEditor({ project, template, base, denied, onDelete }: Te
         id: template?.id,
         project_id: project.id,
         name: current.name.trim(),
-        payload: { ...current.payload, title: current.payload.title.trim(), description: isEmptyDoc(current.payload.description) ? null : current.payload.description, values },
+        payload: {
+          ...current.payload,
+          title: current.payload.title.trim(),
+          description: isEmptyDoc(current.payload.description) ? null : current.payload.description,
+          values,
+          // an epic stands at the top: the parent its hidden field held is not kept
+          parent_id: canHaveParent(types.find((entry) => entry.id === current.payload.type_id)) ? current.payload.parent_id : null,
+        },
         schedule: current.schedule,
       });
       setBaseline(snapshot(current));
@@ -399,15 +407,10 @@ export function TemplateEditor({ project, template, base, denied, onDelete }: Te
   const parentDetail = useWorkItem(payload.parent_id && !listedParent ? payload.parent_id : null);
   const parent = listedParent ?? parentDetail.data?.item;
   const priority = PRIORITY_OPTIONS.find((option) => option.value === payload.priority);
-  const parentOptions: PickerOption[] = [
-    { value: '', label: 'Kein Eltern-Item', icon: <CornerLeftUp className="size-4 text-muted" /> },
-    ...[...items]
-      .sort((a, b) => b.number - a.number)
-      .map((entry) => {
-        const itemType = types.find((candidate) => candidate.id === entry.type_id);
-        return { value: entry.id, label: entry.title, hint: entry.key, keywords: [entry.key], icon: itemType ? <TypeGlyph type={itemType} /> : undefined };
-      }),
-  ];
+  // two levels: the epics of the project are the parents, and an epic has none (the field hides)
+  const typeOf = (typeId: string) => types.find((entry) => entry.id === typeId);
+  const candidates = parentCandidates({ id: null, project_id: project.id }, items, typeOf);
+  const parentOptions: PickerOption[] = [...(payload.parent_id ? [NO_PARENT_OPTION] : []), ...candidates.map((candidate) => parentOption(candidate, typeOf(candidate.type_id)))];
   const owner = useMemo(() => (template ? { type: 'template' as const, id: template.id } : null), [template]);
 
   function insertPlaceholder(token: string) {
@@ -678,29 +681,32 @@ export function TemplateEditor({ project, template, base, denied, onDelete }: Te
                 disabledReason={denied}
               />
             </FormRow>
-            <FormRow label="Eltern-Item">
-              <Picker
-                look="form"
-                label="Eltern-Item"
-                display={
-                  parent ? (
-                    <span className="flex min-w-0 items-center gap-1.5">
-                      <span className="shrink-0 font-semibold text-muted tabular-nums">{parent.key}</span>
-                      <span className="truncate">{parent.title}</span>
-                    </span>
-                  ) : (
-                    <span className="truncate text-muted">Kein Eltern-Item</span>
-                  )
-                }
-                displayText={parent ? `${parent.key} ${parent.title}` : 'keins'}
-                options={parentOptions}
-                value={payload.parent_id ?? ''}
-                onValueChange={(next) => setPayload({ parent_id: next || null })}
-                placeholder="Key oder Titel suchen …"
-                load={{ isLoading: projectItems.isPending, error: projectItems.error, retry: () => void projectItems.refetch(), retrying: projectItems.isFetching }}
-                disabledReason={denied}
-              />
-            </FormRow>
+            {canHaveParent(type) && (
+              <FormRow label="Eltern-Item">
+                <Picker
+                  look="form"
+                  label="Eltern-Item"
+                  display={
+                    parent ? (
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <span className="shrink-0 font-semibold text-muted tabular-nums">{parent.key}</span>
+                        <span className="truncate">{parent.title}</span>
+                      </span>
+                    ) : (
+                      <span className="truncate text-muted">Kein Eltern-Item</span>
+                    )
+                  }
+                  displayText={parent ? `${parent.key} ${parent.title}` : 'keins'}
+                  options={parentOptions}
+                  value={payload.parent_id ?? ''}
+                  onValueChange={(next) => setPayload({ parent_id: next || null })}
+                  placeholder="Key oder Titel suchen …"
+                  emptyText={noParentText(candidates)}
+                  load={{ isLoading: projectItems.isPending, error: projectItems.error, retry: () => void projectItems.refetch(), retrying: projectItems.isFetching }}
+                  disabledReason={denied}
+                />
+              </FormRow>
+            )}
             <div data-typed="" className="contents">
               <OffsetField label="Start-Date" name="start_offset_days" value={payload.start_offset_days} readOnly={readOnly} onChange={(start_offset_days) => setPayload({ start_offset_days })} />
               <OffsetField label="Due-Date" name="due_offset_days" value={payload.due_offset_days} readOnly={readOnly} onChange={(due_offset_days) => setPayload({ due_offset_days })} />

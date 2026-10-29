@@ -41,6 +41,7 @@ import type { BulkPatch } from '@/api/workItems';
 import { UnassignedAvatar } from '@/components/ui/Avatar';
 import { PRIORITY_LABELS } from '@/components/ui/PriorityIcon';
 import { toast } from '@/components/ui/toast';
+import { canHaveParent } from '@/domain/hierarchy';
 import { allowedTargets, isClosedCategory, statesInOrder } from '@/domain/workflow';
 import { useLabels, useResolutions } from '@/hooks/catalog';
 import { qk } from '@/hooks/keys';
@@ -71,7 +72,7 @@ import { addDays, formatDay, formatWeekdayDay, weekdayOf } from './format';
 import { askResolution, askTypeChange } from './ItemDialogs';
 import { archivedReason, projectPeople, useToday } from './itemData';
 import { labelOption } from './LabelsPicker';
-import { parentCandidates, useProjectItems } from './ParentPicker';
+import { noParentText, parentCandidates, parentOption, useProjectItems } from './ParentPicker';
 import type { PickerOption } from './Picker';
 import { PRIORITY_OPTIONS } from './PriorityPicker';
 import { stateOption } from './StatePicker';
@@ -346,24 +347,23 @@ function dateOptions(ctx: ItemCommandContext, field: 'start_date' | 'due_date'):
   return [...presets, ...clear];
 }
 
+const typeIn = (ctx: ItemCommandContext) => (typeId: string) => ctx.types.find((type) => type.id === typeId);
+/** The epics the single target can hang under (`parentCandidates`). */
+const candidatesOf = (ctx: ItemCommandContext) => parentCandidates(ctx.targets[0], ctx.projectItems ?? [], typeIn(ctx));
+
+/** Why the single target takes no parent: an epic stands at the top (two levels, domain/hierarchy). */
+function parentReason(ctx: ItemCommandContext): string | null {
+  const [item] = ctx.targets;
+  return item && !canHaveParent(typeIn(ctx)(item.type_id)) ? reasonText('epic_has_no_parent') : null;
+}
+
 function parentOptions(ctx: ItemCommandContext): CommandOption[] {
   const [item] = ctx.targets;
-  const isEpic = (typeId: string) => ctx.types.find((type) => type.id === typeId)?.is_epic ?? false;
   const setParent = (parent: WorkItem | null) =>
     ctx.settle(ctx.update.mutateAsync({ id: item.id, patch: { parent_id: parent?.id ?? null } }), {
       onSuccess: () => done(parent ? `${item.key}: Eltern-Item ${parent.key}` : `${item.key}: kein Eltern-Item mehr`),
     });
-  const candidates = parentCandidates(item, ctx.projectItems ?? [], isEpic).map((candidate) => {
-    const type = ctx.types.find((entry) => entry.id === candidate.type_id);
-    return {
-      id: candidate.id,
-      label: candidate.title,
-      hint: candidate.key,
-      keywords: [candidate.key],
-      icon: type ? typeOption(type).icon : undefined,
-      run: () => setParent(candidate),
-    };
-  });
+  const candidates = candidatesOf(ctx).map((candidate) => option(parentOption(candidate, typeIn(ctx)(candidate.type_id)), () => setParent(candidate)));
   return [...(item.parent_id ? [{ id: 'none', label: 'Kein Eltern-Item', keywords: ['entfernen'], run: () => setParent(null) }] : []), ...candidates];
 }
 
@@ -483,7 +483,8 @@ interface ItemCommand {
   /** Either a sub-list or an action. */
   options?: (ctx: ItemCommandContext) => CommandOption[];
   placeholder?: string;
-  emptyText?: string;
+  /** What the sub-list says when nothing matches (or there is nothing to choose). */
+  emptyText?: string | ((ctx: ItemCommandContext) => string);
   act?: (ctx: ItemCommandContext) => void;
 }
 
@@ -558,12 +559,12 @@ const COMMANDS: ItemCommand[] = [
     keys: 'shift+p',
     icon: CornerLeftUp,
     keywords: ['epic', 'parent'],
-    // the candidates are the items of the project
+    // the candidates are the epics of the project
     loading: (ctx) => (ctx.projectItems !== undefined ? null : ctx.projectItemsFailed ? 'failed' : 'loading'),
-    denied: SINGLE,
+    denied: (ctx) => SINGLE(ctx) ?? parentReason(ctx),
     options: parentOptions,
     placeholder: 'Key oder Titel suchen …',
-    emptyText: 'Kein Item im Projekt passt.',
+    emptyText: (ctx) => noParentText(candidatesOf(ctx)),
   },
 ];
 
@@ -590,7 +591,13 @@ export function registerItemCommands(source: ItemCommandSource): () => void {
         return c.targets.length > 0 && blocker(command, c) === null;
       },
       run: () => (command.act ? command.act(ctx()) : undefined),
-      subpage: command.options ? () => ({ placeholder: command.placeholder, emptyText: command.emptyText, options: command.options!(ctx()) }) : undefined,
+      subpage: command.options
+        ? () => {
+            const c = ctx();
+            const emptyText = typeof command.emptyText === 'function' ? command.emptyText(c) : command.emptyText;
+            return { placeholder: command.placeholder, emptyText, options: command.options!(c) };
+          }
+        : undefined,
     };
     offs.push(registerCommand(def));
     offs.push(

@@ -13,7 +13,7 @@
  * refuses, the dialog does not create the item and puts the focus there.
  */
 
-import { CornerLeftUp, FileQuestionMark, RotateCw } from 'lucide-react';
+import { FileQuestionMark, RotateCw } from 'lucide-react';
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { useLocation } from 'react-router';
 import { ApiError } from '@/api/client';
@@ -21,7 +21,7 @@ import { personOption } from '@/components/fields/AssigneePicker';
 import { DatePopover, DayValue } from '@/components/fields/DateField';
 import { useProjectPeople, useToday } from '@/components/fields/itemData';
 import { labelOption } from '@/components/fields/LabelsPicker';
-import { useProjectItems } from '@/components/fields/ParentPicker';
+import { noParentText, NO_PARENT_OPTION, parentCandidates, parentOption, useProjectItems } from '@/components/fields/ParentPicker';
 import { Picker, type PickerOption } from '@/components/fields/Picker';
 import { PRIORITY_OPTIONS } from '@/components/fields/PriorityPicker';
 import { PropertyValueInput } from '@/components/fields/PropertyField';
@@ -40,6 +40,7 @@ import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
 import { labelClass } from '@/components/ui/styles';
 import { Switch } from '@/components/ui/Switch';
 import { toast } from '@/components/ui/toast';
+import { canHaveParent } from '@/domain/hierarchy';
 import { renderTitle } from '@/domain/placeholders';
 import { addDays as addDay } from '@/domain/tz';
 import { allowedTargets } from '@/domain/workflow';
@@ -478,7 +479,8 @@ function FormBody({ formId, defaults, another, titleRef, unsaved, onPending, onC
         label_ids: current.labelIds,
         start_date: current.startDate,
         due_date: current.dueDate,
-        parent_id: current.parentId,
+        // an epic stands at the top: the parent its field held while hidden does not count
+        parent_id: canHaveParent(types.find((type) => type.id === current.typeId)) ? current.parentId : null,
         values: withoutEmptyDocs(current.values, properties),
         template_id: current.templateId,
         attachment_ids: attachmentIds(current.description),
@@ -681,16 +683,11 @@ function ItemFields({ draft, update, errors, clearError, workflow, labels }: Ite
   const chosenLabels = sortedLabels.filter((label) => draft.labelIds.includes(label.id));
   const items = projectItems.data?.items ?? [];
   const parent = items.find((entry) => entry.id === draft.parentId);
-  const isEpic = (typeId: string) => types?.find((type) => type.id === typeId)?.is_epic ?? false;
-  const parentOptions: PickerOption[] = [
-    { value: '', label: 'Kein Eltern-Item', keywords: ['entfernen'], icon: <CornerLeftUp className="size-4 text-muted" /> },
-    ...[...items]
-      .sort((a, b) => Number(isEpic(b.type_id)) - Number(isEpic(a.type_id)) || b.number - a.number)
-      .map((entry) => {
-        const type = types?.find((candidate) => candidate.id === entry.type_id);
-        return { value: entry.id, label: entry.title, hint: entry.key, keywords: [entry.key], icon: type ? <TypeGlyph type={type} /> : undefined };
-      }),
-  ];
+  const typeOf = (typeId: string) => types?.find((type) => type.id === typeId);
+  // two levels: the epics of the project are the parents, and an epic has none (the field hides)
+  const takesParent = canHaveParent(typeOf(draft.typeId));
+  const candidates = parentCandidates({ id: null, project_id: draft.projectId }, items, typeOf);
+  const parentOptions: PickerOption[] = [...(draft.parentId ? [NO_PARENT_OPTION] : []), ...candidates.map((candidate) => parentOption(candidate, typeOf(candidate.type_id)))];
   const problems = fieldErrors(errors);
 
   const date = (field: 'startDate' | 'dueDate', path: 'start_date' | 'due_date', label: string) => {
@@ -812,31 +809,34 @@ function ItemFields({ draft, update, errors, clearError, workflow, labels }: Ite
         </FieldRow>
         <FieldRow label="Start">{date('startDate', 'start_date', 'Start-Date')}</FieldRow>
         <FieldRow label="Due">{date('dueDate', 'due_date', 'Due-Date')}</FieldRow>
-        <FieldRow label="Eltern">
-          <Picker
-            label="Eltern-Item"
-            display={
-              parent ? (
-                <span className="flex min-w-0 items-center gap-1.5">
-                  <span className="shrink-0 font-semibold text-muted tabular-nums">{parent.key}</span>
-                  <span className="truncate">{parent.title}</span>
-                </span>
-              ) : (
-                <span className="truncate text-muted">Kein Eltern-Item</span>
-              )
-            }
-            displayText={parent ? `${parent.key} ${parent.title}` : 'keins'}
-            options={parentOptions}
-            value={draft.parentId ?? ''}
-            onValueChange={(next) => {
-              update({ parentId: next || null });
-              clearError('parent_id');
-            }}
-            placeholder="Key oder Titel suchen …"
-            load={{ isLoading: projectItems.isPending, error: projectItems.error, retry: () => void projectItems.refetch(), retrying: projectItems.isFetching }}
-            invalid={Boolean(errors.parent_id)}
-          />
-        </FieldRow>
+        {takesParent && (
+          <FieldRow label="Eltern">
+            <Picker
+              label="Eltern-Item"
+              display={
+                parent ? (
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <span className="shrink-0 font-semibold text-muted tabular-nums">{parent.key}</span>
+                    <span className="truncate">{parent.title}</span>
+                  </span>
+                ) : (
+                  <span className="truncate text-muted">Kein Eltern-Item</span>
+                )
+              }
+              displayText={parent ? `${parent.key} ${parent.title}` : 'keins'}
+              options={parentOptions}
+              value={draft.parentId ?? ''}
+              onValueChange={(next) => {
+                update({ parentId: next || null });
+                clearError('parent_id');
+              }}
+              placeholder="Key oder Titel suchen …"
+              emptyText={noParentText(candidates)}
+              load={{ isLoading: projectItems.isPending, error: projectItems.error, retry: () => void projectItems.refetch(), retrying: projectItems.isFetching }}
+              invalid={Boolean(errors.parent_id)}
+            />
+          </FieldRow>
+        )}
       </dl>
       <div aria-live="polite">
         {problems.length > 0 && <p className="mt-2 text-sm font-medium text-pretty text-danger">{problems.join(' ')}</p>}

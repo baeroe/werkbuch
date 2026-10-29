@@ -7,8 +7,9 @@ import { MemoryRouter } from 'react-router';
 import { PeekHost } from '@/app/PeekHost';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { getDb, saveDb } from '@/api/db';
+import { createProject } from '@/api/projects';
 import { listProperties } from '@/api/properties';
-import { getWorkItem } from '@/api/workItems';
+import { createWorkItem, getWorkItem } from '@/api/workItems';
 import { useWorkItems } from '@/hooks/workItems';
 import { currentToasts, dismissToast, resetToasts } from '@/components/ui/toast';
 import { CommandPalette } from '@/features/palette/CommandPalette';
@@ -19,6 +20,7 @@ import { asUser, resetApi } from '@/test/api';
 import { AssigneePicker } from './AssigneePicker';
 import { useItemCommands, type ItemCommandScope } from './commands';
 import { ItemDialogsHost } from './ItemDialogs';
+import { ParentPicker } from './ParentPicker';
 import { PropertyField, PropertyValueInput } from './PropertyField';
 import { StatePicker } from './StatePicker';
 import { TypePicker } from './TypePicker';
@@ -242,6 +244,31 @@ describe('PropertyValueInput numbers', () => {
     await user.type(input, '1.234,5{Enter}');
     expect(commits).toEqual([1234.5]);
     expect(input.value).toBe('1234,5');
+  });
+});
+
+describe('ParentPicker', () => {
+  it('offers the epics of the project only, and "Kein Eltern-Item" once the item has a parent', async () => {
+    const user = userEvent.setup();
+    // WEB-48 is a task under WEB-30, the one epic of WEB
+    renderWithData(<ParentPicker item={await stored('WEB-48')} />);
+
+    await user.click(await picker(/^Eltern-Item/));
+
+    const options = await screen.findAllByRole('option');
+    expect(options.map((option) => option.textContent)).toEqual(['Kein Eltern-Item', 'Relaunch Phase 1WEB-30']);
+  });
+
+  it('says so when the project has no epic yet', async () => {
+    const user = userEvent.setup();
+    const project = await createProject({ name: 'Newsletter', identifier: 'news' });
+    const item = await createWorkItem({ project_id: project.id, type_id: 't_task', title: 'Erste Ausgabe planen' });
+    renderWithData(<ParentPicker item={item} />);
+
+    await user.click(await picker(/^Eltern-Item/));
+
+    expect(await screen.findByText('Im Projekt gibt es noch kein Epic.')).toBeTruthy();
+    expect(screen.queryAllByRole('option')).toHaveLength(0);
   });
 });
 

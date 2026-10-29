@@ -142,6 +142,25 @@ describe('the template editor', () => {
     await waitFor(() => expect(within(log).getAllByText(/Pflicht-Property Umgebung fehlt/)).toHaveLength(2));
   });
 
+  it('offers the epics of the project as the parent, and no parent for an epic', async () => {
+    const user = userEvent.setup();
+    renderTemplates('/projects/WEB/templates/tpl_web_maintenance');
+
+    await user.click(await screen.findByRole('combobox', { name: /^Eltern-Item/ }));
+    const options = await screen.findAllByRole('option');
+    expect(options.map((option) => option.textContent)).toEqual(['Relaunch Phase 1WEB-30']);
+    await user.click(options[0]);
+    expect(screen.getByRole('combobox', { name: /^Eltern-Item/ }).textContent).toContain('WEB-30');
+
+    // as an epic the template's item stands at the top: the field goes, and the parent is not saved
+    await user.click(screen.getByRole('combobox', { name: /^Typ/ }));
+    await user.click(await screen.findByRole('option', { name: 'Epic' }));
+    await waitFor(() => expect(screen.queryByRole('combobox', { name: /^Eltern-Item/ })).toBeNull());
+    await user.click(save());
+
+    await waitFor(() => expect(storedTemplate('tpl_web_maintenance')?.payload).toMatchObject({ type_id: 't_epic', parent_id: null }));
+  });
+
   it('saves the template', async () => {
     const user = userEvent.setup();
     renderTemplates('/projects/APP/templates/tpl_app_report');

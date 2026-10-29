@@ -122,9 +122,19 @@ describe('item commands', () => {
 
     const list = await screen.findByRole('listbox', { name: 'Eltern-Item setzen …' });
     const options = within(list).getAllByRole('option').map((option) => option.textContent ?? '');
-    const candidates = options.filter((text) => text !== 'Kein Eltern-Item');
-    expect(candidates.length).toBeGreaterThan(0);
-    expect(candidates.every((text) => /APP-\d+/.test(text) && !/WEB-/.test(text))).toBe(true);
+    // APP-11 hangs under APP-5, the one epic of APP: only epics are offered
+    expect(options).toEqual(['Kein Eltern-Item', expect.stringContaining('APP-5')]);
+  });
+
+  it('shift+p on an epic says that epics have no parent, and the palette leaves the command out', async () => {
+    renderWithData(<Screen scope="list" cursor="wi_web_30" />);
+    await waitFor(() => expect(command('item.state')?.group).toBe('Aktionen für WEB-30'));
+    await waitFor(() => expect(command('item.state')?.when?.()).toBe(true));
+
+    press('P', { shiftKey: true });
+
+    expect(lastToast()).toMatchObject({ title: 'Nicht möglich', description: 'Epics haben kein Eltern-Item.' });
+    expect(command('item.parent')?.when?.()).toBe(false);
   });
 
   it('a catalog that failed to load says so with "Erneut versuchen" instead of "Einen Moment" for ever', async () => {

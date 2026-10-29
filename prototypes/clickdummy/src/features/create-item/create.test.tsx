@@ -5,6 +5,7 @@ import { StrictMode, type ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '@/api/db';
+import { createProject } from '@/api/projects';
 import { createWorkItem } from '@/api/workItems';
 import { currentToasts, resetToasts } from '@/components/ui/toast';
 import { canUndo, undoLatest } from '@/lib/undo';
@@ -122,6 +123,40 @@ function Host() {
 }
 
 const parkedToasts = () => currentToasts().filter((item) => item.title === 'Entwurf verworfen');
+
+describe('the parent of a new item', () => {
+  it('offers the epics of the project only, and hides while the type is an epic without sending what it held', async () => {
+    const user = userEvent.setup();
+    // as "Sub-Item" on WEB-30 opens it
+    renderWithData(<CreateItemDialog open defaults={{ project_id: 'p_web', type_id: 't_task', parent_id: 'wi_web_30' }} onOpenChange={() => {}} />);
+    const dialog = await screen.findByRole('dialog', { name: 'Neues Item' });
+
+    await user.click(await within(dialog).findByRole('combobox', { name: /^Eltern-Item/ }));
+    const options = await screen.findAllByRole('option');
+    expect(options.map((option) => option.textContent)).toEqual(['Kein Eltern-Item', 'Relaunch Phase 1WEB-30']);
+    await user.click(options[1]);
+
+    // an epic stands at the top: no parent field, and the parent it held is not sent
+    await user.click(within(dialog).getByRole('combobox', { name: /^Typ/ }));
+    await user.click(await screen.findByRole('option', { name: 'Epic' }));
+    await waitFor(() => expect(within(dialog).queryByRole('combobox', { name: /^Eltern-Item/ })).toBeNull());
+    await user.type(within(dialog).getByRole('textbox', { name: /Titel/ }), 'Relaunch Phase 2');
+    await user.click(within(dialog).getByRole('button', { name: /Anlegen/ }));
+
+    await waitFor(() => expect(getDb().items.find((item) => item.title === 'Relaunch Phase 2')).toMatchObject({ type_id: 't_epic', parent_id: null }));
+  });
+
+  it('says so when the project has no epic yet', async () => {
+    const user = userEvent.setup();
+    const project = await createProject({ name: 'Newsletter', identifier: 'news' });
+    renderWithData(<CreateItemDialog open defaults={{ project_id: project.id, type_id: 't_task' }} onOpenChange={() => {}} />);
+    const dialog = await screen.findByRole('dialog', { name: 'Neues Item' });
+
+    await user.click(await within(dialog).findByRole('combobox', { name: /^Eltern-Item/ }));
+
+    expect(await screen.findByText('Im Projekt gibt es noch kein Epic.')).toBeTruthy();
+  });
+});
 
 describe('closing the dialog with content', () => {
   it('parks the draft once, also under StrictMode: taken back with mod+z, created, then nothing is left to bring back', async () => {

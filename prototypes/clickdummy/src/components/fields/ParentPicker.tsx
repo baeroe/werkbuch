@@ -1,13 +1,16 @@
 /*
- * The parent of an item (spec 4.8): another item of the same project, never the item itself or one of its children
- * and grandchildren (no cycles). Epics come first. Searching finds key and title. The change is optimistic.
+ * The parent of an item (spec 4.8): an epic of the same project (two levels, `domain/hierarchy`, correction round
+ * 2026-10-29), never the item itself or one of its children (no cycles). An epic has no parent: the item's fields show
+ * no picker for it, ⇧P says why. Searching finds key and title. The change is optimistic. The create dialog, the
+ * template editor and ⇧P build their lists with the helpers here.
  */
 
 import { CornerLeftUp } from 'lucide-react';
 import { useMemo } from 'react';
+import { canHaveChildren } from '@/domain/hierarchy';
 import { useUpdateWorkItem, useWorkItem, useWorkItems } from '@/hooks/workItems';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
-import type { WorkItem } from '@/types';
+import type { WorkItem, WorkItemType } from '@/types';
 import { useEditReason } from './itemData';
 import { Picker, type PickerExtras, type PickerOption } from './Picker';
 import { TypeGlyph } from './TypePicker';
@@ -29,12 +32,32 @@ export function descendantsOf(itemId: string, items: readonly WorkItem[]): Set<s
   return found;
 }
 
-/** The items of a project that can be the parent of `item`: epics first, then the newest. */
-export function parentCandidates(item: WorkItem, projectItems: readonly WorkItem[], isEpic: (typeId: string) => boolean): WorkItem[] {
-  const below = descendantsOf(item.id, projectItems);
+/**
+ * The items that can be the parent of `item` (a new item has no id yet): the epics of its project, never the item itself
+ * or one of its descendants, the newest first.
+ */
+export function parentCandidates(
+  item: { id: string | null; project_id: string },
+  projectItems: readonly WorkItem[],
+  typeOf: (typeId: string) => WorkItemType | undefined,
+): WorkItem[] {
+  const below = item.id ? descendantsOf(item.id, projectItems) : new Set<string>();
   return projectItems
-    .filter((entry) => entry.project_id === item.project_id && entry.id !== item.id && !below.has(entry.id))
-    .sort((a, b) => Number(isEpic(b.type_id)) - Number(isEpic(a.type_id)) || b.number - a.number);
+    .filter((entry) => entry.project_id === item.project_id && entry.id !== item.id && !below.has(entry.id) && canHaveChildren(typeOf(entry.type_id)))
+    .sort((a, b) => b.number - a.number);
+}
+
+/** "Kein Eltern-Item", offered once there is a parent to take away. */
+export const NO_PARENT_OPTION: PickerOption = { value: '', label: 'Kein Eltern-Item', keywords: ['entfernen'], icon: <CornerLeftUp className="size-4 text-muted" /> };
+
+/** A candidate in a parent list: its title, the key as hint and search word, the icon of its type. */
+export function parentOption(candidate: WorkItem, type: WorkItemType | undefined): PickerOption {
+  return { value: candidate.id, label: candidate.title, hint: candidate.key, keywords: [candidate.key], icon: type ? <TypeGlyph type={type} /> : undefined };
+}
+
+/** What a parent list says when it shows nothing: the project has no epic yet, or none matches the search. */
+export function noParentText(candidates: readonly WorkItem[]): string {
+  return candidates.length === 0 ? 'Im Projekt gibt es noch kein Epic.' : 'Kein Epic im Projekt passt.';
 }
 
 /** The items of one project (the parent picker and the command `shift+p` choose from them). */
@@ -53,17 +76,11 @@ export function ParentPicker({ item, look = 'field', shortcut, ...extras }: Pare
   const typeList = types.data?.items;
   const typeOf = (id: string) => typeList?.find((type) => type.id === id);
 
-  const options = useMemo<PickerOption[]>(() => {
-    const isEpic = (typeId: string) => typeList?.find((type) => type.id === typeId)?.is_epic ?? false;
-    const candidates = parentCandidates(item, items.data?.items ?? [], isEpic);
-    return [
-      { value: NONE, label: 'Kein Eltern-Item', keywords: ['entfernen'], icon: <CornerLeftUp className="size-4 text-muted" /> },
-      ...candidates.map((candidate) => {
-        const type = typeList?.find((entry) => entry.id === candidate.type_id);
-        return { value: candidate.id, label: candidate.title, hint: candidate.key, keywords: [candidate.key], icon: type ? <TypeGlyph type={type} /> : undefined };
-      }),
-    ];
-  }, [item, items.data, typeList]);
+  const candidates = useMemo(() => parentCandidates(item, items.data?.items ?? [], (id) => typeList?.find((type) => type.id === id)), [item, items.data, typeList]);
+  const options = useMemo<PickerOption[]>(
+    () => [...(item.parent_id ? [NO_PARENT_OPTION] : []), ...candidates.map((candidate) => parentOption(candidate, typeList?.find((type) => type.id === candidate.type_id)))],
+    [item.parent_id, candidates, typeList],
+  );
 
   const parentType = parent ? typeOf(parent.type_id) : undefined;
   const display =
@@ -94,7 +111,7 @@ export function ParentPicker({ item, look = 'field', shortcut, ...extras }: Pare
       value={item.parent_id ?? NONE}
       onValueChange={(value) => update.mutate({ id: item.id, patch: { parent_id: value || null } })}
       placeholder="Key oder Titel suchen …"
-      emptyText="Kein Item im Projekt passt. Kinder des Items können nicht seine Eltern sein."
+      emptyText={noParentText(candidates)}
       load={{ isLoading: items.isPending || types.isPending, error: items.error ?? types.error, retry: () => void items.refetch(), retrying: items.isFetching }}
       disabledReason={reason}
       pending={update.isPending}
