@@ -86,7 +86,7 @@ const takesPlace = (item: Toast) => item.tone !== 'error';
 /**
  * The same error again (same title and description, e.g. a refused key pressed again and again) takes the place of
  * the one on screen instead of stacking a second: the newest keeps its action and gets the whole time, and as a new
- * entry of the alert region it is announced again. Errors carry no deferred action, so the one that makes room loses
+ * entry of its live region it is announced again. Errors carry no deferred action, so the one that makes room loses
  * nothing; should one ever have an `onExpire`, it runs like that of a toast pushed out. Answers the replaced toasts.
  */
 function replaceSameError(item: Toast): Toast[] {
