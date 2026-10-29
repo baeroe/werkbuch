@@ -122,6 +122,7 @@ Eine unbekannte Route zeigt „Diese Seite gibt es nicht“ in der Shell. Im Rev
 | ⌘⌫ | archivieren bzw. löschen, mit Rückgängig |
 | ⌘Z | letzte Aktion zurücknehmen, solange ihr Toast steht |
 | Board: ← →, ⇧← ⇧→, ⌥↑ ⌥↓ | Spalte wechseln, Karte in die nächste erlaubte Spalte, Karte in der Spalte verschieben |
+| Timeline: ⇧← ⇧→, ⌥← ⌥→ | Epic verschieben, Epic kürzer oder länger machen (je eine Einheit des Zooms: Tag, Woche oder Monat) |
 | Inbox: `e`, ⇧E, `#` | als gelesen markieren, alle als gelesen, löschen |
 
 ## Demo-Rollen („Als … ansehen“)
@@ -205,6 +206,10 @@ scripts/
 
 Komponenten rufen `src/api/*` nie direkt auf, nur über die Hooks in `src/hooks/`. Die Funktionen in `src/api/` tragen die Namen und Felder der REST-API aus der Spec (Abschnitt 6.1, Felder in snake_case). In der App ersetzen Aufrufe der Laravel-API diese Funktionen; Hooks und Komponenten bleiben, wie sie sind.
 
+An zwei Stellen ist die Fake-API breiter als 6.1. Der Port übernimmt ihre Form nicht, sondern plant sie bewusst:
+- `getWorkItemMeta()` rechnet für alle sichtbaren Items auf einmal den Fortschritt der Kind-Items und „blockiert“ bzw. „blockiert andere“ aus; `useFilterContext` und die Listen hängen daran. Der Server liefert stattdessen `children_progress`, `blocked` und `blocking` am Item oder je Seite mit.
+- `listMembers()` ohne Projekt gibt die Mitgliedschaften aller sichtbaren Projekte zurück; daraus rechnen `usePermissions` und die Personenlisten der Felder. Eine Liste über alle Projekte hinweg sieht 6.1 nicht vor.
+
 ## Abweichungen von der Spec
 
 Was der Klickdummy anders macht als die Spec (`docs/superpowers/specs/2026-10-28-werkbuch-design.md`) oder genauer festlegt. Die Entscheidungen während der Umsetzung (R1, R2, …) stehen mit Grund in `docs/superpowers/plans/2026-10-28-werkbuch-clickdummy-rulings.md`.
@@ -221,7 +226,7 @@ Was der Klickdummy anders macht als die Spec (`docs/superpowers/specs/2026-10-28
 - Der Review-Build routet im Hash (`#/…`), weil er als eine statische Seite läuft.
 
 **Bedienung**
-- Tastatur, zusätzlich zu 5.3: `/` öffnet die Palette, in Listen filtert es nach Titel; `f` für eine Filterbedingung; Board mit ← →, ⇧← ⇧→ und ⌥↑ ⌥↓ (auch als Palette-Befehle, R30); Inbox mit `e`, ⇧E und `#`.
+- Tastatur, zusätzlich zu 5.3: `/` öffnet die Palette, in Listen filtert es nach Titel; `f` für eine Filterbedingung; Board mit ← →, ⇧← ⇧→ und ⌥↑ ⌥↓ (auch als Palette-Befehle, R30); Timeline mit ⇧← ⇧→ (verschieben) und ⌥← ⌥→ (kürzer, länger), wo 4.11 für das Verschieben die Pfeiltasten allein nennt; Inbox mit `e`, ⇧E und `#`.
 - Esc in einem Feld der Vorschau verlässt erst das Feld, das zweite Esc schließt die Vorschau (R14).
 - Öffnen: Klick auf Zeile oder Karte zeigt die Vorschau, Enter öffnet die Seite, ⌘-Klick einen neuen Tab, ⇧-Klick wählt einen Bereich. In der Inbox öffnet Enter die Vorschau.
 - „Vorlage anwenden …“ in der Palette (4.12, 4.17) listet die Vorlagen aller Projekte, in denen du Items anlegen darfst, jeweils mit ihrem Projekt; die Wahl öffnet den Anlegen-Dialog mit Projekt und Vorlage. Ist keine anwendbar, sagt ein Toast, warum.
@@ -262,6 +267,8 @@ Was der Klickdummy anders macht als die Spec (`docs/superpowers/specs/2026-10-28
   - Der Versionen-Dialog hat zwei „Schließen“ (Kreuz oben, Knopf unten).
   - Unterhalb von 1024 px zeigt die Wiki-Seite den Baum nicht daneben; zurück geht es über „Wiki“.
   - Tabellen auf dem Handy: Die Tabelle scrollt seitlich, man sieht nur Item und Status. Reicht die Liste fürs Handy?
+  - Die Vorschau in der Inbox folgt `j` und `k` nicht, anders als in den Listen. Soll sie?
+  - Die Prioritäten heißen wie in 4.8 Urgent, High, Medium, Low und None. So lassen oder auf Deutsch (Dringend, Hoch, Mittel, Niedrig, Keine)?
 
 ## Bekannte Punkte nach der Korrekturrunde
 
@@ -276,5 +283,5 @@ Kurzfassung der zurückgestellten Befunde (vollständige Liste: `docs/superpower
   - Einstellungen: Steuerelemente ohne Recht sind ausgegraut statt im Lese-Look; leere Zustände ohne nächsten Schritt (Mitglieder, Relationstypen); Bots und Personen laden ohne Skelett; ein 422 auf ein nicht gezeigtes Feld bleibt stumm; Automatisierungen können doppelt speichern.
   - Inbox, Views, Projekte: falscher Hinweistext bei gelesenen Einträgen; Zeilenaktionen nicht per Tab erreichbar; „Du liest nur mit.“ auch bei Org-Admins; in der Inbox heißt jeder Ladefehler eines Items „gibt es nicht mehr“.
   - Fake-API: der Lead bekommt beim Anlegen in einem späteren Status zwei Benachrichtigungen; Anhänge prüfen beim Verknüpfen die hochladende Person nicht (für den PHP-Port merken).
-- **Guidelines aus dem Durchgang:** Board und Timeline sind nicht virtualisiert; die Regel gilt ab 50 Items, der Punkt bleibt nach R34 offen und kommt mit 13c (Liste und Tabelle sind virtualisiert). Die Galerie lässt geöffnete Muster stehen, die den Rest für Screenreader verdecken; Skelette erscheinen sofort statt nach etwa 300 ms; Witwen in langen Seitentiteln („– Technik“ allein auf der Zeile).
+- **Guidelines aus dem Durchgang:** Board und Timeline sind nicht virtualisiert; die Regel gilt ab 50 Items, der Punkt bleibt nach R34 offen und kommt mit 13c (Liste und Tabelle sind virtualisiert). Die Auswahlfelder in den Zellen der Tabelle sind am Handy nur etwa 24 px hoch (Zeilen und Gruppenschalter haben 44 px); auch diese Regel (MUST) ist offen und kommt mit 13c, je nachdem, wie die Frage „Reicht die Liste fürs Handy?“ ausgeht. Die Galerie lässt geöffnete Muster stehen, die den Rest für Screenreader verdecken; Skelette erscheinen sofort statt nach etwa 300 ms; Witwen in langen Seitentiteln („– Technik“ allein auf der Zeile).
 - **Tests:** Zeigerziehen im Board, ⌥↑/⌥↓, Abbruch der Resolution-Abfrage, Fokus nach 1–4, Rechte-Gating der Board-Befehle, Kalender-Rechnen und -Tastatur, `Kbd`-Folgen, Bildansicht und Upload-Besitz im Wiki, Entwurf nach fehlgeschlagenem Speichern, Tippen während des Speicherns.
