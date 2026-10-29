@@ -31,6 +31,7 @@ import { currentToasts, toast } from '@/components/ui/toast';
 import { useDeleteNotification, useMarkAllRead, useMarkRead, useNotifications } from '@/hooks/notifications';
 import { useOrganization } from '@/hooks/organization';
 import { useProjects } from '@/hooks/projects';
+import { useRefetchFailed } from '@/hooks/retry';
 import { useWorkItem } from '@/hooks/workItems';
 import { now } from '@/lib/clock';
 import { useCommand } from '@/lib/commands';
@@ -226,6 +227,8 @@ export function InboxScreen() {
   const list = useNotifications({ per_page: PAGE_SIZE, ...(unreadOnly && { unread_only: true }), ...(mentionsOnly && { mentions_only: true }) });
   // the same query as the sidebar's badge, so both always agree
   const unreadQuery = useNotifications({ unread_only: true, per_page: 1 });
+  // the banner's retry, like an error state's, fetches every failed query again (the sidebar failed as well)
+  const refetchFailed = useRefetchFailed();
   const timeZone = useOrganization().data?.timezone ?? 'Europe/Berlin';
   const at = useClock();
   const previewId = useUiStore((state) => state.peekItemId);
@@ -507,7 +510,15 @@ export function InboxScreen() {
             className="mt-5"
             title="Die Inbox ist nicht auf dem neuesten Stand"
             action={
-              <Button variant="secondary" size="sm" pending={list.isFetching} onClick={() => void list.refetch()}>
+              <Button
+                variant="secondary"
+                size="sm"
+                pending={list.isFetching}
+                onClick={() => {
+                  void list.refetch();
+                  refetchFailed();
+                }}
+              >
                 Erneut versuchen
               </Button>
             }

@@ -18,6 +18,7 @@ import { Tooltip } from '@/components/ui/Tooltip';
 import { ViewIcon } from '@/components/ui/ViewIcon';
 import { useUnreadCount } from '@/hooks/notifications';
 import { useProjects } from '@/hooks/projects';
+import { useRefetchFailed } from '@/hooks/retry';
 import { useFavorites, useViews } from '@/hooks/views';
 import { usePermissions } from '@/lib/permissions';
 import { useUiStore } from '@/store/ui';
@@ -136,6 +137,8 @@ function SectionLoading({ label }: { label: string }) {
 }
 
 function SectionError({ what, onRetry }: { what: string; onRetry: () => void }) {
+  // after an outage the screen beside it failed as well: one retry fetches every failed query again
+  const refetchFailed = useRefetchFailed();
   // the alert sits inside the list item, so the list keeps its structure
   return (
     <li>
@@ -144,7 +147,10 @@ function SectionError({ what, onRetry }: { what: string; onRetry: () => void }) 
         {what} nicht geladen.
         <button
           type="button"
-          onClick={onRetry}
+          onClick={() => {
+            onRetry();
+            refetchFailed();
+          }}
           className="inline-flex h-11 cursor-pointer items-center rounded-chip font-semibold text-accent-text underline-offset-2 hover:underline md:h-6"
         >
           Erneut versuchen

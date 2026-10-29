@@ -1,5 +1,6 @@
 import { CircleAlert, RotateCw } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { useRefetchFailed } from '@/hooks/retry';
 import { Button } from './Button';
 import { cx } from './cx';
 
@@ -13,8 +14,16 @@ type ErrorStateProps = {
   className?: string;
 };
 
-/** A view that could not load: names the cause and offers "Erneut versuchen". */
+/**
+ * A view that could not load: names the cause and offers "Erneut versuchen". The retry runs `onRetry` and then fetches
+ * every other failed query as well (`useRefetchFailed`), so after an outage one click brings the whole screen back.
+ */
 export function ErrorState({ title = 'Konnte nicht geladen werden', description, onRetry, retrying = false, className }: ErrorStateProps) {
+  const refetchFailed = useRefetchFailed();
+  const retry = () => {
+    onRetry();
+    refetchFailed();
+  };
   return (
     <div role="alert" className={cx('flex flex-col items-center rounded-card border border-line bg-surface px-6 py-10 text-center shadow-elev-1', className)}>
       <span className="inline-flex size-14 items-center justify-center rounded-card bg-danger-soft" aria-hidden="true">
@@ -22,7 +31,7 @@ export function ErrorState({ title = 'Konnte nicht geladen werden', description,
       </span>
       <p className="mt-4 max-w-full font-display text-lg font-bold tracking-title break-words text-balance text-ink">{title}</p>
       <p className="mt-1 max-w-[46ch] text-ui break-words text-pretty text-muted">{description}</p>
-      <Button variant="secondary" icon={RotateCw} pending={retrying} onClick={onRetry} className="mt-5">
+      <Button variant="secondary" icon={RotateCw} pending={retrying} onClick={retry} className="mt-5">
         Erneut versuchen
       </Button>
     </div>
