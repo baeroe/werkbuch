@@ -73,6 +73,13 @@ Rohliste für 13b (Aufräumen) und 13c (Feinschliff) nach der Korrekturrunde, si
 - Final review: minor (deferred → 13c): search stale ≤10 s after comments, template runs, new projects, renamed views or people (invalidate qk.search there too); template-command and `c` refusal toasts for viewers without a next step; `pnpm shots --keys` can press keys before data has loaded (wait for content in scripts/shots.mjs)
 - Final review fix wave: minor (deferred → 13b): retry-all refetches inactive failed queries too (retry.ts:12, `type: 'active'` would do); previewKeysAct name plural after R40 and a fourth copy of the neutral-focus test (useSelection.ts:54, BoardLayout.tsx:162, TimelineLayout.tsx:100); ErrorState is the first data-layer import in components/ui; inline „Erneut versuchen“ in pickers/dialogs/panels retry only their own query; Sidebar SectionError refetches both queries of a section.
 
+## Aus Korrekturrunde 1 (2026-10-29)
+
+- Correction round 1: minor (deferred → 13c): the inbox header count can briefly show one too few after a read mark (`countUnread` mixes the unread-count query with the list's read state; store per mark whether the row was unread, drop the mark once the count query has reloaded)
+- Correction round 1: minor (deferred → 13b): move the inbox read marks (`Mark`, `countUnread`, `inTurn`, `setRead`) out of `InboxScreen.tsx` (711 lines) into a `useReadMarks` hook
+- Correction round 1: minor (deferred → 13c): „Kind-Item anlegen …“ in the item menu refuses with a toast because the menu has no disabled entry with a reason; `t` in a list before the project's items have loaded goes straight to the server, which refuses with a named toast
+- Correction round 1: question for Rafael: a board column for every epic, so an epic's first child can be quick-added there (needs `quickAddFor` to take the project from the epic, `BoardLayout.tsx:742`)
+
 ## Triage im Gesamt-Review (2026-10-29)
 
 Aus dem Bericht des Gesamt-Reviews. „MUST FIX NOW“ war keiner der Punkte; die zwei neuen wichtigen Befunde des Reviews (`e` in der Inbox, „Vorlage anwenden“) sind behoben.
