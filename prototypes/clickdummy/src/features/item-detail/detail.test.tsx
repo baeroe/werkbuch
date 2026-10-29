@@ -241,6 +241,32 @@ describe('ItemPeek', () => {
 
 /* ------------------------------------------------------------------------------ children */
 
+describe('two levels: children under epics only, no parent for an epic', () => {
+  it('a task shows no children section and no "Sub-Item anlegen …"; it has a parent field', async () => {
+    const user = userEvent.setup();
+    // WEB-42 is a task under WEB-30
+    renderWithData(<ItemPeek itemId="WEB-42" />);
+    expect(await screen.findByRole('combobox', { name: /^Eltern-Item: WEB-30/ })).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Kinder' })).toBeNull();
+
+    await user.click(await screen.findByRole('button', { name: 'Weitere Aktionen' }));
+    expect(await screen.findByRole('menuitem', { name: /Relation hinzufügen/ })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: /Sub-Item anlegen/ })).toBeNull();
+  });
+
+  it('an epic shows its children with "Sub-Item" and "Sub-Item anlegen …", and no parent field', async () => {
+    const user = userEvent.setup();
+    renderWithData(<ItemPeek itemId="WEB-30" />);
+    const children = await screen.findByRole('region', { name: 'Kinder' });
+    expect(await within(children).findByRole('button', { name: 'Sub-Item' })).toBeTruthy();
+    expect(screen.queryByText('Eltern')).toBeNull();
+    expect(screen.queryByRole('combobox', { name: /^Eltern-Item/ })).toBeNull();
+
+    await user.click(await screen.findByRole('button', { name: 'Weitere Aktionen' }));
+    expect(await screen.findByRole('menuitem', { name: /Sub-Item anlegen/ })).toBeTruthy();
+  });
+});
+
 describe('a new child item', () => {
   it('starts in the start status of the workflow, also when its parent is further along', async () => {
     const user = userEvent.setup();

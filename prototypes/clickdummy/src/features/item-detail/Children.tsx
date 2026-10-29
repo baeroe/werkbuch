@@ -1,7 +1,8 @@
 /*
  * The children of an item (spec 4.8): their progress (closed of all, the bar in the type's tone) and each child in a
- * line that opens it. "Sub-Item" opens the create dialog with this item as parent. Without children and without the
- * right to create one, the section is left out.
+ * line that opens it. "Sub-Item" opens the create dialog with this item as parent. Only epics have children (two
+ * levels, `domain/hierarchy`): other items have no section. Without children and without the right to create one, the
+ * section is left out as well.
  */
 
 import { Plus } from 'lucide-react';
@@ -9,6 +10,7 @@ import { Avatar, UnassignedAvatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { useUserMap } from '@/components/fields/itemData';
+import { canHaveChildren } from '@/domain/hierarchy';
 import { childProgress } from '@/domain/progress';
 import { usePermissions } from '@/lib/permissions';
 import { useUiStore } from '@/store/ui';
@@ -20,7 +22,7 @@ export function Children({ detail }: { detail: WorkItemDetail }) {
   const { reason } = usePermissions();
   const users = useUserMap();
   const createReason = item.archived_at ? 'Archivierte Items bekommen keine neuen Kinder.' : reason('item.create', item.project_id);
-  if (children.length === 0 && createReason) return null;
+  if (!canHaveChildren(type) || (children.length === 0 && createReason)) return null;
 
   const categoryOf = (stateId: string) => workflow.states.find((state) => state.id === stateId)?.category ?? 'backlog';
   const progress = childProgress(children, categoryOf);

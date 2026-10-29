@@ -20,6 +20,7 @@ import { TypePicker } from '@/components/fields/TypePicker';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
+import { canHaveParent } from '@/domain/hierarchy';
 import { isClosedCategory } from '@/domain/workflow';
 import { useResolutions } from '@/hooks/catalog';
 import { useProperties } from '@/hooks/properties';
@@ -276,9 +277,12 @@ export function FieldsPanel({ detail }: { detail: WorkItemDetail }) {
         <Row label="Due">
           <DateField item={item} field="due_date" />
         </Row>
-        <Row label="Eltern">
-          <ParentPicker item={item} />
-        </Row>
+        {/* an epic stands at the top: it has no parent */}
+        {canHaveParent(detail.type) && (
+          <Row label="Eltern">
+            <ParentPicker item={item} />
+          </Row>
+        )}
         <Stamps item={item} />
       </dl>
       <Properties detail={detail} />

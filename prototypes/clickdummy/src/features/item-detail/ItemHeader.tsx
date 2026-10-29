@@ -22,6 +22,7 @@ import { ProjectBadge } from '@/components/ui/ProjectBadge';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { toast } from '@/components/ui/toast';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { canHaveChildren } from '@/domain/hierarchy';
 import { isClosedCategory } from '@/domain/workflow';
 import { qk } from '@/hooks/keys';
 import { useProjects } from '@/hooks/projects';
@@ -299,7 +300,8 @@ function ItemMenu({ detail, project }: { detail: WorkItemDetail; project: Projec
   const archived = item.archived_at !== null;
   const closed = isClosedCategory(state.category);
   const canDelete = can('item.delete', item.project_id);
-  const canCreate = !archived && can('item.create', item.project_id);
+  // a child item only under an epic (two levels, domain/hierarchy)
+  const canCreate = !archived && canHaveChildren(detail.type) && can('item.create', item.project_id);
   const canRestore = archived && reason('item.edit', item.project_id) === null;
   const canArchive = !archived && closed && !editReason;
 
