@@ -77,7 +77,6 @@ function CodesGuard({ active }: { active: boolean }) {
   );
 }
 
-
 export function TwoFactorCard({ user }: { user: User }) {
   const record = useTwoFactorOf(user.id);
   const enable = useTwoFactor((state) => state.enable);

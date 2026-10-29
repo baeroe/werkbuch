@@ -83,6 +83,19 @@ function forget(id: number) {
  */
 const takesPlace = (item: Toast) => item.tone !== 'error';
 
+/**
+ * The same error again (same title and description, e.g. a refused key pressed again and again) takes the place of
+ * the one on screen instead of stacking a second: the newest keeps its action and gets the whole time, and as a new
+ * entry of the alert region it is announced again. Errors carry no deferred action, so the one that makes room loses
+ * nothing; should one ever have an `onExpire`, it runs like that of a toast pushed out. Answers the replaced toasts.
+ */
+function replaceSameError(item: Toast): Toast[] {
+  const same = toasts.filter((entry) => entry.tone === 'error' && entry.title === item.title && entry.description === item.description);
+  same.forEach((entry) => forget(entry.id));
+  if (same.length > 0) toasts = toasts.filter((entry) => !same.includes(entry));
+  return same;
+}
+
 /** Puts a toast on screen and starts its time (unless a held toast pauses all of them). */
 function show(item: Toast): void {
   toasts = [...toasts, item];
@@ -131,17 +144,22 @@ function remove(id: number): Toast | undefined {
 /**
  * Shows a toast and returns its id. Three show at most: a new one pushes out the oldest that is not kept (it expires).
  * When all three are kept (undo toasts), the new one waits for the first of them to close. An error toast shows at
- * once and takes no place.
+ * once and takes no place; the same error again replaces the one on screen.
  */
 export function toast({ duration = DEFAULT_DURATION, tone = 'neutral', keep = false, ...options }: ToastOptions): number {
   const id = ++sequence;
   const item: Toast = { ...options, id, duration, tone, keep };
-  if (takesPlace(item)) waiting = [...waiting, item];
-  else show(item);
+  let replaced: Toast[] = [];
+  if (takesPlace(item)) {
+    waiting = [...waiting, item];
+  } else {
+    replaced = replaceSameError(item);
+    show(item);
+  }
   const pushedOut = place();
   syncPause();
   emit();
-  pushedOut.forEach((item) => item.onExpire?.());
+  [...replaced, ...pushedOut].forEach((entry) => entry.onExpire?.());
   return id;
 }
 

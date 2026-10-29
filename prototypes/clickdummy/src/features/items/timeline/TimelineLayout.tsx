@@ -40,7 +40,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { ProjectBadge } from '@/components/ui/ProjectBadge';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
-import { currentToasts, dismissToast, toast } from '@/components/ui/toast';
+import { toast } from '@/components/ui/toast';
 import { addDays } from '@/domain/tz';
 import { useProjects } from '@/hooks/projects';
 import { useUpdateWorkItem, useWorkItemMeta } from '@/hooks/workItems';
@@ -342,14 +342,8 @@ export function TimelineLayout({ items, ctx, selection, onSelect, onSelectAll, o
   /* --------------------------------------------------------------------------- dates */
 
   const editReason = (item: WorkItem) => (item.archived_at !== null ? archivedReason(item.key) : reason('item.edit', item.project_id));
-  const refuse = (item: WorkItem, why: string) => {
-    // the same refusal again replaces its toast instead of stacking a second one (toasts are three at most)
-    const title = `${item.key} nicht geändert`;
-    currentToasts()
-      .filter((entry) => entry.title === title && entry.description === why)
-      .forEach((entry) => dismissToast(entry.id));
-    toast({ title, description: why, tone: 'error' });
-  };
+  // the same refusal again replaces its toast instead of stacking a second one: toast() does that for errors
+  const refuse = (item: WorkItem, why: string) => toast({ title: `${item.key} nicht geändert`, description: why, tone: 'error' });
   const rangeText = (dates: DateRange) => `${formatDay(dates.start)} bis ${formatDay(dates.due)}`;
 
   const setDraft = (id: string, dates: DateRange) => setDrafts((current) => new Map(current).set(id, dates));

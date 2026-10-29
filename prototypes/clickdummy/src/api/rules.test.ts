@@ -152,7 +152,7 @@ describe('who can be assigned: the rule of the pickers', () => {
 
   it('refuses a person who only sees a public project, a bot of another project and the default bot without membership', async () => {
     // Ida sees APP, which is public, but is no member of it
-    expect((await failure(assign('wi_app_16', 'u_ida'))).errors?.assignee_id).toBeTruthy();
+    expect((await failure(assign('wi_app_16', 'u_ida'))).errors?.assignee_id).toEqual(['Nur aktive Mitglieder des Projekts und Org-Admins können Items übernehmen.']);
     // Kira works in WEB and OPS, not in APP
     expect((await failure(assign('wi_app_16', 'u_kira'))).errors?.assignee_id).toBeTruthy();
     // Automation is an org admin, but counts only where it is a member

@@ -7,7 +7,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { ApiError, FAIL_KEY } from '@/api/client';
 import { getDb } from '@/api/db';
 import { getWorkItem, updateWorkItem } from '@/api/workItems';
-import { currentToasts, resetToasts, runToastAction } from '@/components/ui/toast';
+import { currentToasts, resetToasts, runToastAction, toast } from '@/components/ui/toast';
 import { plainText } from '@/lib/richtext';
 import { useUiStore } from '@/store/ui';
 import { asUser, resetApi } from '@/test/api';
@@ -39,6 +39,12 @@ vi.mock('@/api/workItems', async (importOriginal) => {
       return actual.getWorkItem(...args);
     }),
   };
+});
+
+// the toast store as it is; the spy counts the toasts asked for (the same error again replaces the one on screen)
+vi.mock('@/components/ui/toast', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/components/ui/toast')>();
+  return { ...actual, toast: vi.fn(actual.toast) };
 });
 
 beforeAll(async () => {
@@ -398,14 +404,17 @@ describe('calls that overlap keep their own answer', () => {
     expect(currentToasts().map((item) => item.title)).toEqual(expect.arrayContaining(['„skizze.png“ angehängt', '„notizen.txt“ angehängt']));
   });
 
-  it('keeps the error toast of each reaction that failed, also when the second was sent before the first was answered', async () => {
+  it('answers each reaction that failed, also when the second was sent before the first was answered; the same error stands once', async () => {
     renderWithData(<ItemPeek itemId="WEB-47" />);
     const thumbs = await screen.findByRole('button', { name: /^Daumen hoch, 2 Reaktionen/ });
+    const answers = () => vi.mocked(toast).mock.calls.filter(([options]) => options.title === 'Reaktion nicht gespeichert');
+    vi.mocked(toast).mockClear();
     localStorage.setItem(FAIL_KEY, '1');
     try {
       fireEvent.click(thumbs);
       fireEvent.click(thumbs);
-      await waitFor(() => expect(currentToasts().filter((item) => item.title === 'Reaktion nicht gespeichert')).toHaveLength(2));
+      await waitFor(() => expect(answers()).toHaveLength(2));
+      expect(currentToasts().filter((item) => item.title === 'Reaktion nicht gespeichert')).toHaveLength(1);
     } finally {
       localStorage.removeItem(FAIL_KEY);
     }

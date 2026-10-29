@@ -85,6 +85,21 @@ describe('item commands', () => {
     expect(lastToast()).toMatchObject({ title: 'Nicht möglich', description: 'Typ und Eltern-Item ändern sich nur für ein Item allein.' });
   });
 
+  it('a burst of refused shortcuts leaves one „Nicht möglich“ on screen, not one per press', async () => {
+    renderWithData(
+      <>
+        <Screen scope="list" cursor="wi_web_42" />
+        <WebList />
+      </>,
+    );
+    await within(await screen.findByRole('list', { name: 'WEB' })).findByText('WEB-50');
+    act(() => useUiStore.setState({ selection: ['wi_web_42', 'wi_web_50'] }));
+    await waitFor(() => expect(command('item.state')?.when?.()).toBe(true));
+
+    for (let pressed = 0; pressed < 6; pressed += 1) press('P', { shiftKey: true });
+    expect(currentToasts().filter((item) => item.title === 'Nicht möglich')).toHaveLength(1);
+  });
+
   it('shift+p in the preview of an item of another project offers the parents of that project', async () => {
     renderWithData(
       <>

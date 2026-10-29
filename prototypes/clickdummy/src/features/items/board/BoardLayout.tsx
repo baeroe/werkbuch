@@ -18,7 +18,7 @@
  * keyboard sensor is left out on purpose: it would take Enter (open) and the space bar (preview) from the cards.
  *
  * No success toast for a move: the card shows the result at once, and a polite status line says it for screen
- * readers (toasts are three at most, and more would push out the undo of an archive).
+ * readers (toasts take three places at most, and a toast per move would push out the others).
  */
 
 import {
@@ -135,7 +135,10 @@ function springEasing(): string {
   }
 }
 
-/** A toast that replaces one with the same text instead of stacking a second (toasts are three at most). */
+/**
+ * A toast that replaces one with the same text instead of stacking a second. `toast()` does that for errors itself;
+ * the sorting hint is neutral and would otherwise take one more of the three places with every drop.
+ */
 function toastOnce(options: ToastOptions): void {
   currentToasts()
     .filter((entry) => entry.title === options.title && entry.description === options.description)

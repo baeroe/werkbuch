@@ -170,6 +170,44 @@ describe('the queue behind three undo toasts', () => {
   });
 });
 
+describe('the same error again', () => {
+  const errors = () => currentToasts().filter((item) => item.tone === 'error');
+
+  it('replaces the error on screen instead of stacking a second one, with the newest action and its whole time', () => {
+    const first = vi.fn();
+    const newest = vi.fn();
+    toast({ title: 'Statuswechsel nicht gespeichert', description: 'Simulierter Serverfehler.', tone: 'error', action: { label: 'Erneut versuchen', onClick: first } });
+    for (let press = 0; press < 4; press += 1) toast({ title: 'Nicht möglich', description: 'Du liest in WEB nur mit.', tone: 'error' });
+    expect(errors().map((item) => item.title)).toEqual(['Statuswechsel nicht gespeichert', 'Nicht möglich']);
+
+    vi.advanceTimersByTime(4000);
+    toast({ title: 'Statuswechsel nicht gespeichert', description: 'Simulierter Serverfehler.', tone: 'error', action: { label: 'Erneut versuchen', onClick: newest } });
+    // the newest one takes the place of the old one, at the end
+    expect(errors().map((item) => item.title)).toEqual(['Nicht möglich', 'Statuswechsel nicht gespeichert']);
+
+    // its time starts anew: it outlasts the burst shown at the same moment as the first one
+    vi.advanceTimersByTime(1000);
+    expect(errors().map((item) => item.title)).toEqual(['Statuswechsel nicht gespeichert']);
+    vi.advanceTimersByTime(3999);
+    expect(errors()).toHaveLength(1);
+    runToastAction(errors()[0].id);
+    expect(newest).toHaveBeenCalledTimes(1);
+    expect(first).not.toHaveBeenCalled();
+    expect(errors()).toHaveLength(0);
+  });
+
+  it('keeps errors with another description side by side, beyond the three places', () => {
+    threeLinks();
+    toast({ title: 'Nicht möglich', description: 'Du liest in WEB nur mit.', tone: 'error' });
+    toast({ title: 'Nicht möglich', description: 'APP-21 ist archiviert.', tone: 'error' });
+
+    expect(errors().map((item) => item.description)).toEqual(['Du liest in WEB nur mit.', 'APP-21 ist archiviert.']);
+    expect(currentToasts()).toHaveLength(5);
+  });
+
+  const threeLinks = () => ['Eins', 'Zwei', 'Drei'].forEach((title) => toast({ title }));
+});
+
 describe('undoLatest (mod+z)', () => {
   it('takes back the newest action that can still be undone, as long as its toast stands', () => {
     const first = vi.fn();

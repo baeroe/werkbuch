@@ -59,6 +59,7 @@ import { toast } from '@/components/ui/toast';
 import { ToastCard } from '@/components/ui/Toaster';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { TypeTab } from '@/components/ui/TypeTab';
+import { isWide } from '@/lib/media';
 import { applyTheme, readTheme, type ThemeChoice } from '@/lib/theme';
 import type { Priority, StateCategory, StateIcon, TypeTone } from '@/types';
 import { FieldsSection } from './gallery/FieldsSection';
@@ -420,7 +421,7 @@ function MenuSpecimen() {
   const [theme, setTheme] = useState('system');
   const [showArchived, setShowArchived] = useState(true);
   // the submenu opens to the side; on phones there is no room for it next to the menu
-  const [wide] = useState(() => window.matchMedia('(min-width: 48rem)').matches);
+  const [wide] = useState(isWide);
   return (
     <Specimen
       title="Menü"

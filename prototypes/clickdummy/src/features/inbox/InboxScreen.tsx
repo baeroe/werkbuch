@@ -61,8 +61,8 @@ function useClock(): Date {
 const without = (set: ReadonlySet<string>, ids: string[]): Set<string> => new Set([...set].filter((id) => !ids.includes(id)));
 
 /**
- * A hint is not shown twice at once. The toasts are three at most and a fourth pushes out the oldest, which ends its
- * time at once: a key pressed again and again must not cut the 5 seconds of an undo.
+ * A hint is not shown twice at once. Toasts take three places at most: a key pressed again and again would fill them
+ * with the same text and push out the others, or, behind three undo toasts, queue copies that show long after.
  */
 function hint(title: string, description: string): void {
   if (currentToasts().some((item) => item.title === title)) return;

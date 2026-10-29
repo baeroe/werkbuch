@@ -2,8 +2,8 @@
  * The star that puts a view or a project into the sidebar of the signed-in person and takes it out again (spec 4.4,
  * 4.11). It shows the new state at once and keeps it while the call is on its way (a spinner takes the star's place);
  * when the call fails the star is as it was and a toast says why. A change that shows at once gets no toast of its own
- * (spec 5.1): the toasts are three at most, and one more would push out the undo of a delete. The views overview and
- * the projects overview share this star.
+ * (spec 5.1): it would take one of the three places of the toasts to say what the star already shows. The views
+ * overview and the projects overview share this star.
  */
 
 import { LoaderCircle, Star } from 'lucide-react';
