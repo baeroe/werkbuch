@@ -173,17 +173,18 @@ describe('the queue behind three undo toasts', () => {
 describe('the same error again', () => {
   const errors = () => currentToasts().filter((item) => item.tone === 'error');
 
-  it('replaces the error on screen instead of stacking a second one, with the newest action and its whole time', () => {
+  it('refreshes the error on screen instead of stacking a second one: same toast, the newest action, its whole time', () => {
     const first = vi.fn();
     const newest = vi.fn();
-    toast({ title: 'Statuswechsel nicht gespeichert', description: 'Simulierter Serverfehler.', tone: 'error', action: { label: 'Erneut versuchen', onClick: first } });
+    const shown = toast({ title: 'Statuswechsel nicht gespeichert', description: 'Simulierter Serverfehler.', tone: 'error', action: { label: 'Erneut versuchen', onClick: first } });
     for (let press = 0; press < 4; press += 1) toast({ title: 'Nicht möglich', description: 'Du liest in WEB nur mit.', tone: 'error' });
     expect(errors().map((item) => item.title)).toEqual(['Statuswechsel nicht gespeichert', 'Nicht möglich']);
 
     vi.advanceTimersByTime(4000);
-    toast({ title: 'Statuswechsel nicht gespeichert', description: 'Simulierter Serverfehler.', tone: 'error', action: { label: 'Erneut versuchen', onClick: newest } });
-    // the newest one takes the place of the old one, at the end
-    expect(errors().map((item) => item.title)).toEqual(['Nicht möglich', 'Statuswechsel nicht gespeichert']);
+    const again = toast({ title: 'Statuswechsel nicht gespeichert', description: 'Simulierter Serverfehler.', tone: 'error', action: { label: 'Erneut versuchen', onClick: newest } });
+    // the toast on screen stays where it is, as the same toast
+    expect(again).toBe(shown);
+    expect(errors().map((item) => item.title)).toEqual(['Statuswechsel nicht gespeichert', 'Nicht möglich']);
 
     // its time starts anew: it outlasts the burst shown at the same moment as the first one
     vi.advanceTimersByTime(1000);

@@ -45,7 +45,7 @@ export function Toaster() {
 }
 
 /** One toast; exported so the component gallery can show it in place. */
-export function ToastCard({ item, className, ...rest }: { item: Omit<Toast, 'keep'> } & Omit<ComponentProps<'div'>, 'children'>) {
+export function ToastCard({ item, className, ...rest }: { item: Omit<Toast, 'keep' | 'round'> & { round?: number } } & Omit<ComponentProps<'div'>, 'children'>) {
   return (
     <div
       className={cx(
@@ -70,7 +70,9 @@ export function ToastCard({ item, className, ...rest }: { item: Omit<Toast, 'kee
         </button>
       )}
       <IconButton icon={X} label="Hinweis schließen" tooltip={false} onClick={() => dismissToast(item.id)} />
+      {/* a new round (the same error again) draws the time line anew */}
       <span
+        key={item.round ?? 0}
         aria-hidden="true"
         style={{ '--toast-duration': `${item.duration}ms` } as CSSProperties}
         className="absolute inset-x-0 bottom-0 h-0.5 origin-left animate-drain bg-line-strong group-data-paused:[animation-play-state:paused]"

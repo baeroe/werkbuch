@@ -265,6 +265,43 @@ it('announces every toast politely, errors too (web guidelines: polite aria-live
   expect(screen.queryByRole('alert')).toBeNull();
 });
 
+it('the same error again refreshes its toast in place: the focus and the pause stay, the newest action counts', () => {
+  vi.useFakeTimers();
+  try {
+    const { container } = render(<Toaster />);
+    const first = vi.fn();
+    const newest = vi.fn();
+    const refusal = { title: 'Nicht möglich', description: 'Du liest in WEB nur mit.', tone: 'error' } as const;
+    act(() => {
+      toast({ ...refusal, action: { label: 'Erneut versuchen', onClick: first } });
+    });
+    // the person reached the toast with the keyboard: its close button has the focus and holds the time
+    const close = screen.getByRole('button', { name: 'Hinweis schließen' });
+    act(() => close.focus());
+    expect(container.querySelector('[data-paused]')).not.toBeNull();
+
+    act(() => {
+      toast({ ...refusal, action: { label: 'Erneut versuchen', onClick: newest } });
+    });
+    expect(screen.getAllByRole('button', { name: 'Hinweis schließen' })).toHaveLength(1);
+    expect(document.activeElement).toBe(close);
+    expect(container.querySelector('[data-paused]')).not.toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Erneut versuchen' }));
+    expect(newest).toHaveBeenCalledTimes(1);
+    expect(first).not.toHaveBeenCalled();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// type checks only, never run: an error toast carries no deferred action and is never kept
+export function errorToastsTakeNoDeferredAction() {
+  // @ts-expect-error errors carry no onExpire
+  toast({ title: 'Nicht möglich', tone: 'error', onExpire: () => {} });
+  // @ts-expect-error errors are never kept
+  toast({ title: 'Nicht möglich', tone: 'error', keep: true });
+}
+
 it('Combobox gives its search input the name it is given and no autofill', () => {
   render(<Combobox label="Zeitzone" name="timezone" options={[{ value: 'Europe/Berlin', label: 'Europe/Berlin' }]} value={null} onValueChange={() => {}} />);
   const input = screen.getByRole('combobox', { name: 'Zeitzone' });

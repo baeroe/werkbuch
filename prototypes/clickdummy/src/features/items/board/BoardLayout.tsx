@@ -136,8 +136,9 @@ function springEasing(): string {
 }
 
 /**
- * A toast that replaces one with the same text instead of stacking a second. `toast()` does that for errors itself;
- * the sorting hint is neutral and would otherwise take one more of the three places with every drop.
+ * The sorting hint once: a neutral toast with the same text replaces the one shown, so drop after drop does not take
+ * one more of the three places each time. Refusals are errors and go straight to `toast()`, which refreshes the same
+ * error itself.
  */
 function toastOnce(options: ToastOptions): void {
   currentToasts()
@@ -402,7 +403,7 @@ export function BoardLayout({ items, groups, display, ctx, selection, onSelect, 
       return next;
     });
 
-  const refuse = (item: WorkItem, why: string) => toastOnce({ title: `${item.key} nicht verschoben`, description: why, tone: 'error' });
+  const refuse = (item: WorkItem, why: string) => toast({ title: `${item.key} nicht verschoben`, description: why, tone: 'error' });
 
   const stateName = (item: WorkItem, stateId: string) => workflowOf(item)?.states.find((state) => state.id === stateId)?.name ?? columnLabel(stateId);
   /** What a move did, for the status line. */

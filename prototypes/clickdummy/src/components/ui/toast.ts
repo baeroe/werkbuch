@@ -2,23 +2,39 @@ import { useSyncExternalStore } from 'react';
 
 export type ToastTone = 'neutral' | 'success' | 'error';
 export type ToastAction = { label: string; onClick: () => void };
-export type ToastOptions = {
+type ToastBase = {
   title: string;
   description?: string;
   action?: ToastAction;
-  /** The toast closed without its action (time up, closed, pushed out): e.g. run the deferred delete now. */
-  onExpire?: () => void;
   /** Milliseconds until the toast closes on its own. */
   duration?: number;
-  /** error: marked with the danger colour, stands below the others and never waits for a place. */
-  tone?: ToastTone;
+};
+/** A confirmation or a hint: it takes one of the three places. */
+type NoticeOptions = ToastBase & {
+  tone?: 'neutral' | 'success';
+  /** The toast closed without its action (time up, closed, pushed out): e.g. run the deferred delete now. */
+  onExpire?: () => void;
   /**
    * Never pushed out by newer toasts: it stays for its whole time unless it is closed or its action runs. Undo toasts
    * (`runWithUndo`) set it, so a deferred delete never runs early and "Rückgängig" stays within reach.
    */
   keep?: boolean;
 };
-export type Toast = Omit<ToastOptions, 'duration' | 'tone' | 'keep'> & { id: number; duration: number; tone: ToastTone; keep: boolean };
+/**
+ * An error: marked with the danger colour, it stands below the others and never waits for a place. It carries no
+ * deferred action and is never kept, so the same error again can refresh the one on screen and nothing is lost.
+ */
+type ErrorOptions = ToastBase & { tone: 'error'; onExpire?: never; keep?: never };
+export type ToastOptions = NoticeOptions | ErrorOptions;
+export type Toast = ToastBase & {
+  id: number;
+  duration: number;
+  tone: ToastTone;
+  keep: boolean;
+  onExpire?: () => void;
+  /** Counts the refreshes of an error toast; its time line starts anew with each (see `refreshSameError`). */
+  round: number;
+};
 
 const DEFAULT_DURATION = 5000;
 const MAX_VISIBLE = 3;
@@ -84,16 +100,20 @@ function forget(id: number) {
 const takesPlace = (item: Toast) => item.tone !== 'error';
 
 /**
- * The same error again (same title and description, e.g. a refused key pressed again and again) takes the place of
- * the one on screen instead of stacking a second: the newest keeps its action and gets the whole time, and as a new
- * entry of its live region it is announced again. Errors carry no deferred action, so the one that makes room loses
- * nothing; should one ever have an `onExpire`, it runs like that of a toast pushed out. Answers the replaced toasts.
+ * The same error again (same title and description, e.g. a refused key pressed again and again) refreshes the one on
+ * screen instead of stacking a second: the toast keeps its id and its place, so its element, a focus inside it and the
+ * pause that focus holds all stay. It takes the newest action and starts its time anew. Errors carry no deferred
+ * action (see `ErrorOptions`), so nothing runs or gets lost. Answers the id of the refreshed toast, or null.
  */
-function replaceSameError(item: Toast): Toast[] {
-  const same = toasts.filter((entry) => entry.tone === 'error' && entry.title === item.title && entry.description === item.description);
-  same.forEach((entry) => forget(entry.id));
-  if (same.length > 0) toasts = toasts.filter((entry) => !same.includes(entry));
-  return same;
+function refreshSameError(item: Toast): number | null {
+  const same = toasts.find((entry) => entry.tone === 'error' && entry.title === item.title && entry.description === item.description);
+  if (!same) return null;
+  toasts = toasts.map((entry) => (entry === same ? { ...same, action: item.action, duration: item.duration, round: same.round + 1 } : entry));
+  const timer = timers.get(same.id);
+  if (timer?.handle) clearTimeout(timer.handle);
+  timers.set(same.id, { remaining: item.duration, started: 0, handle: null });
+  if (!paused) startTimer(same.id);
+  return same.id;
 }
 
 /** Puts a toast on screen and starts its time (unless a held toast pauses all of them). */
@@ -144,23 +164,25 @@ function remove(id: number): Toast | undefined {
 /**
  * Shows a toast and returns its id. Three show at most: a new one pushes out the oldest that is not kept (it expires).
  * When all three are kept (undo toasts), the new one waits for the first of them to close. An error toast shows at
- * once and takes no place; the same error again replaces the one on screen.
+ * once and takes no place; the same error again refreshes the one on screen and answers its id.
  */
 export function toast({ duration = DEFAULT_DURATION, tone = 'neutral', keep = false, ...options }: ToastOptions): number {
-  const id = ++sequence;
-  const item: Toast = { ...options, id, duration, tone, keep };
-  let replaced: Toast[] = [];
-  if (takesPlace(item)) {
-    waiting = [...waiting, item];
-  } else {
-    replaced = replaceSameError(item);
-    show(item);
+  const item: Toast = { ...options, id: sequence + 1, duration, tone, keep, round: 0 };
+  if (!takesPlace(item)) {
+    const refreshed = refreshSameError(item);
+    if (refreshed !== null) {
+      emit();
+      return refreshed;
+    }
   }
+  sequence = item.id;
+  if (takesPlace(item)) waiting = [...waiting, item];
+  else show(item);
   const pushedOut = place();
   syncPause();
   emit();
-  [...replaced, ...pushedOut].forEach((entry) => entry.onExpire?.());
-  return id;
+  pushedOut.forEach((entry) => entry.onExpire?.());
+  return item.id;
 }
 
 /** Closes a toast without its action, so onExpire runs. */
