@@ -6,7 +6,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, FAIL_KEY } from '@/api/client';
 import { CreateHost } from '@/app/CreateHost';
-import { getDb } from '@/api/db';
+import { getDb, saveDb } from '@/api/db';
 import { getWorkItem, updateWorkItem } from '@/api/workItems';
 import { currentToasts, resetToasts, runToastAction, toast } from '@/components/ui/toast';
 import { plainText } from '@/lib/richtext';
@@ -267,6 +267,84 @@ describe('two levels: children under epics only, no parent for an epic', () => {
   });
 });
 
+/** WEB as a project may be set up: its default type, and the types it enables. */
+function webTypes(change: { default_type_id?: string; enabled_type_ids?: string[] }) {
+  Object.assign(getDb().projects.find((project) => project.id === 'p_web')!, change);
+  saveDb();
+}
+
+/** The "Kind-Item" button of an epic's children section, once it acts (the rights and the types have loaded). */
+async function childButton() {
+  const button = await within(await screen.findByRole('region', { name: 'Kinder' })).findByRole('button', { name: 'Kind-Item' });
+  await waitFor(() => expect(button.getAttribute('aria-disabled')).toBeNull());
+  return button;
+}
+
+describe('a child item with Epic as the default type of the project', () => {
+  it('„Kind-Item“ on WEB-30 creates a Task under WEB-30', async () => {
+    webTypes({ default_type_id: 't_epic' });
+    const user = userEvent.setup();
+    renderWithData(
+      <>
+        <ItemPeek itemId="WEB-30" />
+        <CreateHost />
+      </>,
+    );
+
+    await user.click(await childButton());
+
+    const dialog = await screen.findByRole('dialog', { name: 'Neues Item' });
+    // the default type would be an epic, which takes no parent: the child is the project's first other type
+    expect((await within(dialog).findByRole('combobox', { name: /^Typ/ })).textContent).toContain('Task');
+    expect(await within(dialog).findByRole('combobox', { name: /^Eltern-Item: WEB-30/ })).toBeTruthy();
+    await user.type(await within(dialog).findByRole('textbox', { name: /Titel/ }), 'Referenzen: Fallstudien sammeln');
+    await user.keyboard(modEnter);
+
+    await waitFor(() =>
+      expect(getDb().items.find((entry) => entry.title === 'Referenzen: Fallstudien sammeln')).toMatchObject({ type_id: 't_task', parent_id: 'wi_web_30' }),
+    );
+  });
+
+  it('„Kind-Item anlegen …“ in the item menu opens the dialog with that type as well', async () => {
+    webTypes({ default_type_id: 't_epic' });
+    const user = userEvent.setup();
+    renderWithData(
+      <>
+        <ItemPeek itemId="WEB-30" />
+        <CreateHost />
+      </>,
+    );
+    await childButton();
+
+    await user.click(await screen.findByRole('button', { name: 'Weitere Aktionen' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Kind-Item anlegen …' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Neues Item' });
+    expect((await within(dialog).findByRole('combobox', { name: /^Typ/ })).textContent).toContain('Task');
+    expect(await within(dialog).findByRole('combobox', { name: /^Eltern-Item: WEB-30/ })).toBeTruthy();
+  });
+
+  it('without a type that may be a child, both ways say why and open nothing', async () => {
+    webTypes({ default_type_id: 't_epic', enabled_type_ids: ['t_epic'] });
+    const user = userEvent.setup();
+    renderWithData(
+      <>
+        <ItemPeek itemId="WEB-30" />
+        <CreateHost />
+      </>,
+    );
+    const button = await within(await screen.findByRole('region', { name: 'Kinder' })).findByRole('button', { name: 'Kind-Item' });
+    await waitFor(() => expect(document.getElementById(button.getAttribute('aria-describedby') ?? '')?.textContent).toBe('Im Projekt ist kein Typ aktiviert, der Kind-Item sein kann.'));
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+
+    await user.click(await screen.findByRole('button', { name: 'Weitere Aktionen' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Kind-Item anlegen …' }));
+
+    expect(currentToasts().at(-1)).toMatchObject({ title: 'Nicht möglich', description: 'Im Projekt ist kein Typ aktiviert, der Kind-Item sein kann.' });
+    expect(screen.queryByRole('dialog', { name: 'Neues Item' })).toBeNull();
+  });
+});
+
 describe('a new child item', () => {
   it('starts in the start status of the workflow, also when its parent is further along', async () => {
     const user = userEvent.setup();
@@ -277,11 +355,11 @@ describe('a new child item', () => {
       </>,
     );
     // WEB-30, an epic of WEB, is in progress
-    const children = await screen.findByRole('region', { name: 'Kinder' });
+    await screen.findByRole('region', { name: 'Kinder' });
     expect(getDb().items.find((entry) => entry.key === 'WEB-30')?.state_id).toBe('std_progress');
 
-    // the button comes with the rights
-    await user.click(await within(children).findByRole('button', { name: 'Kind-Item' }));
+    // the button comes with the rights and acts once the types have loaded
+    await user.click(await childButton());
     const dialog = await screen.findByRole('dialog', { name: 'Neues Item' });
     // the dialog offers the start status of the workflow, not the status of the parent
     expect(await within(dialog).findByRole('combobox', { name: 'Status: Backlog' })).toBeTruthy();

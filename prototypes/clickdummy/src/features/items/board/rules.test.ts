@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { types } from '@/api/seed/config';
 import { agency, makeWorkItem, standard } from '@/domain/fixtures';
 import type { GroupBy, Project, ProjectMember, StateCategory, User, WorkItem } from '@/types';
 import { CATEGORY_LABELS } from '../display/grouping';
@@ -150,8 +151,8 @@ describe('the rank of a card placed between two others', () => {
 });
 
 describe('quick add in a column', () => {
-  const app = { id: 'p_app', identifier: 'APP', enabled_type_ids: ['t_task', 't_bug', 't_epic'] } as Project;
-  const web = { id: 'p_web', identifier: 'WEB', enabled_type_ids: ['t_task', 't_bug', 't_epic'] } as Project;
+  const app = { id: 'p_app', identifier: 'APP', enabled_type_ids: ['t_task', 't_bug', 't_epic'], default_type_id: 't_task' } as Project;
+  const web = { id: 'p_web', identifier: 'WEB', enabled_type_ids: ['t_task', 't_bug', 't_epic'], default_type_id: 't_task' } as Project;
 
   it('creates in the column status when the workflow allows the move from the start status', () => {
     expect(quickAddFields('app_todo', { ...rules('state'), project: app, workflow: agency })).toEqual({ ok: true, fields: { project_id: 'p_app', state_id: 'app_todo' } });
@@ -182,7 +183,26 @@ describe('quick add in a column', () => {
     expect(quickAddFields('none', { ...rules('assignee'), project: web, workflow: standard })).toEqual({ ok: true, fields: { project_id: 'p_web' } });
     expect(quickAddFields('t_bug', { ...rules('type'), project: web, workflow: standard })).toEqual({ ok: true, fields: { project_id: 'p_web', type_id: 't_bug' } });
     expect(quickAddFields('lb_ux', { ...rules('label'), project: web, workflow: standard })).toEqual({ ok: true, fields: { project_id: 'p_web', label_ids: ['lb_ux'] } });
-    expect(quickAddFields('wi_web_30', { ...rules('parent'), project: web, workflow: standard })).toEqual({ ok: true, fields: { project_id: 'p_web', parent_id: 'wi_web_30' } });
+    expect(quickAddFields('wi_web_30', { ...rules('parent'), project: web, workflow: standard, types })).toEqual({
+      ok: true,
+      fields: { project_id: 'p_web', parent_id: 'wi_web_30', type_id: 't_task' },
+    });
+  });
+
+  it('gives a child in the column of its parent a type that may have a parent, also when the default type is an epic', () => {
+    const epicDefault = { ...web, default_type_id: 't_epic' } as Project;
+    expect(quickAddFields('wi_web_30', { ...rules('parent'), project: epicDefault, workflow: standard, types })).toEqual({
+      ok: true,
+      fields: { project_id: 'p_web', parent_id: 'wi_web_30', type_id: 't_task' },
+    });
+    // "Ohne Eltern-Item" makes no child: the default type stands, whatever it is
+    expect(quickAddFields('none', { ...rules('parent'), project: epicDefault, workflow: standard, types })).toEqual({ ok: true, fields: { project_id: 'p_web' } });
+
+    const onlyEpics = { ...web, enabled_type_ids: ['t_epic'], default_type_id: 't_epic' } as Project;
+    expect(quickAddFields('wi_web_30', { ...rules('parent'), project: onlyEpics, workflow: standard, types })).toEqual({
+      ok: false,
+      reason: 'Im Projekt ist kein Typ aktiviert, der Kind-Item sein kann.',
+    });
   });
 
   it('refuses a type the project has not switched on', () => {

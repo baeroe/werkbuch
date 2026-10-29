@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { createMemoryRouter } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { getDb, saveDb } from '@/api/db';
 import { getWorkItem, listWorkItems } from '@/api/workItems';
 import { currentToasts, resetToasts } from '@/components/ui/toast';
 import { TooltipProvider } from '@/components/ui/Tooltip';
@@ -186,6 +187,22 @@ describe('the board', () => {
       expect(page.items[0]).toMatchObject({ project_id: 'p_app', state_id: 'app_todo', type_id: 't_task' });
     });
     expect(await within(column('Todo')).findByRole('article', { name: /Testflug planen/ })).toBeTruthy();
+    router.dispose();
+  });
+
+  it('creates a child of the epic with the quick add of its column, also when the default type is an epic', async () => {
+    getDb().projects.find((project) => project.id === 'p_web')!.default_type_id = 't_epic';
+    saveDb();
+    const router = renderAt('/projects/WEB?layout=board&group=parent');
+    fireEvent.click(await screen.findByRole('button', { name: 'Item in WEB-30 Relaunch Phase 1 anlegen' }));
+    const input = screen.getByRole('textbox', { name: 'Neues Item in WEB-30 Relaunch Phase 1' });
+    fireEvent.change(input, { target: { value: 'Pressebereich anlegen' } });
+    fireEvent.submit(input.closest('form')!);
+
+    await waitFor(async () => {
+      const page = await listWorkItems({ filter: { version: 1, conditions: [{ field: 'title', op: 'contains', value: 'Pressebereich' }] } });
+      expect(page.items[0]).toMatchObject({ project_id: 'p_web', parent_id: 'wi_web_30', type_id: 't_task' });
+    });
     router.dispose();
   });
 

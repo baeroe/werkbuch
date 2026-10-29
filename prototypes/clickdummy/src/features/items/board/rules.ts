@@ -13,10 +13,11 @@
 import type { CreateWorkItemInput } from '@/api/workItems';
 import { dropTargetState } from '@/domain/board';
 import { NONE_KEY } from '@/domain/grouping';
+import { childTypeId, NO_CHILD_TYPE } from '@/domain/hierarchy';
 import { canTakeWork } from '@/domain/people';
 import { rankBetween } from '@/domain/rank';
 import { canTransition, isClosedCategory } from '@/domain/workflow';
-import type { GroupBy, Priority, Project, ProjectMember, State, StateCategory, User, Workflow, WorkItem } from '@/types';
+import type { GroupBy, Priority, Project, ProjectMember, State, StateCategory, User, Workflow, WorkItem, WorkItemType } from '@/types';
 
 /** What the rules need to know about the board besides the item. */
 export interface BoardRules {
@@ -148,7 +149,8 @@ export function rankForSlot(above: string | null, below: string | null, directio
 /** What a quick add in a column sets besides the title and the type. */
 export type QuickAddFields = Pick<CreateWorkItemInput, 'project_id'> & Partial<Pick<CreateWorkItemInput, 'state_id' | 'priority' | 'assignee_id' | 'type_id' | 'label_ids' | 'parent_id'>>;
 
-export type QuickAddContext = BoardRules & { project: Project; workflow: Workflow };
+/** `types`: the organisation's types; a child in a parent's column takes one that may have a parent (`childTypeId`). */
+export type QuickAddContext = BoardRules & { project: Project; workflow: Workflow; types?: readonly WorkItemType[] };
 
 /**
  * The fields of an item made in a column: its value of the grouped field. A status other than the start status is a
@@ -187,8 +189,12 @@ export function quickAddFields(columnKey: string, ctx: QuickAddContext): { ok: t
       return { ok: true, fields: { ...fields, type_id: columnKey } };
     case 'label':
       return { ok: true, fields: columnKey === NONE_KEY ? fields : { ...fields, label_ids: [columnKey] } };
-    case 'parent':
-      return { ok: true, fields: columnKey === NONE_KEY ? fields : { ...fields, parent_id: columnKey } };
+    case 'parent': {
+      if (columnKey === NONE_KEY) return { ok: true, fields };
+      // the default type may be an epic, which takes no parent (two levels)
+      const typeId = childTypeId(project, ctx.types ?? []);
+      return typeId ? { ok: true, fields: { ...fields, parent_id: columnKey, type_id: typeId } } : { ok: false, reason: NO_CHILD_TYPE };
+    }
     case 'project':
     case 'none':
       return { ok: true, fields };

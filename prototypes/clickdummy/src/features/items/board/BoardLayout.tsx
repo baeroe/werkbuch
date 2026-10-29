@@ -59,6 +59,7 @@ import { useMembers, useProjects } from '@/hooks/projects';
 import { useUsers } from '@/hooks/users';
 import { useWorkflows } from '@/hooks/workflows';
 import { useTransitionWorkItem, useUpdateWorkItem } from '@/hooks/workItems';
+import { useWorkItemTypes } from '@/hooks/workItemTypes';
 import { useCommand } from '@/lib/commands';
 import { usePermissions } from '@/lib/permissions';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
@@ -172,6 +173,8 @@ export function BoardLayout({ items, groups, display, ctx, selection, onSelect, 
   const { pathname } = useLocation();
   const workflows = useWorkflows().data?.items;
   const projects = useProjects({ include_archived: true }).data?.items;
+  // a quick add in a parent's column gives the child a type that may have a parent
+  const types = useWorkItemTypes().data?.items;
   const users = useUsers().data?.items;
   const members = useMembers().data?.items;
   const { reason } = usePermissions();
@@ -749,7 +752,7 @@ export function BoardLayout({ items, groups, display, ctx, selection, onSelect, 
         refusal ??= denied;
         continue;
       }
-      const result = quickAddFields(column.key, { ...rules, project, workflow });
+      const result = quickAddFields(column.key, { ...rules, project, workflow, types });
       if (result.ok) options.push({ project, fields: result.fields });
       else refusal ??= result.reason;
     }

@@ -1,6 +1,7 @@
 /*
  * The children of an item (spec 4.8): their progress (closed of all, the bar in the type's tone) and each child in a
- * line that opens it. "Kind-Item" opens the create dialog with this item as parent. Only epics have children (two
+ * line that opens it. "Kind-Item" opens the create dialog with this item as parent and a type that may have a parent
+ * (`useChildType`); without such a type the button says why. Only epics have children (two
  * levels, `domain/hierarchy`): other items have no section. Without children and without the right to create one, the
  * section is left out as well.
  */
@@ -15,12 +16,13 @@ import { childProgress } from '@/domain/progress';
 import { usePermissions } from '@/lib/permissions';
 import { useUiStore } from '@/store/ui';
 import type { WorkItemDetail } from '@/types';
-import { LinkedItem, Section } from './shared';
+import { LinkedItem, Section, useChildType } from './shared';
 
 export function Children({ detail }: { detail: WorkItemDetail }) {
   const { item, children, workflow, type } = detail;
   const { reason } = usePermissions();
   const users = useUserMap();
+  const child = useChildType(item.project_id);
   const createReason = item.archived_at ? 'Archivierte Items bekommen keine neuen Kinder.' : reason('item.create', item.project_id);
   if (!canHaveChildren(type) || (children.length === 0 && createReason)) return null;
 
@@ -33,7 +35,13 @@ export function Children({ detail }: { detail: WorkItemDetail }) {
       aside={children.length > 0 ? <span className="tabular-nums">{new Intl.NumberFormat('de-DE').format(children.length)}</span> : null}
       actions={
         !createReason && (
-          <Button variant="ghost" size="sm" icon={Plus} onClick={() => useUiStore.getState().openCreate({ project_id: item.project_id, parent_id: item.id })}>
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={Plus}
+            disabledReason={child.reason}
+            onClick={() => child.typeId && useUiStore.getState().openCreate({ project_id: item.project_id, parent_id: item.id, type_id: child.typeId })}
+          >
             Kind-Item
           </Button>
         )

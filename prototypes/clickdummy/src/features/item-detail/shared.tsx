@@ -6,6 +6,7 @@
  * - `Section`: a titled part of the detail with actions on the right.
  * - `LinkedItem`: another item in one line (status, key, title), a link that opens it.
  * - `isGone`: whether a failed read means the item is gone for the reader.
+ * - `useChildType`: the type a new child of the item takes ("Kind-Item", "Kind-Item anlegen …"), or why there is none.
  */
 
 import { createContext, useContext, useEffect, useId, type MouseEvent, type ReactNode, type RefObject } from 'react';
@@ -14,6 +15,9 @@ import { useItemWorkflow } from '@/components/fields/itemData';
 import { ItemKey } from '@/components/items/ItemKey';
 import { cx } from '@/components/ui/cx';
 import { StatusIcon } from '@/components/ui/StatusIcon';
+import { childTypeId, NO_CHILD_TYPE } from '@/domain/hierarchy';
+import { useProjects } from '@/hooks/projects';
+import { useWorkItemTypes } from '@/hooks/workItemTypes';
 import { hrefOf } from '@/lib/links';
 import type { WorkItem } from '@/types';
 
@@ -40,6 +44,18 @@ export function useDetail(): DetailContextValue {
   const value = useContext(DetailContext);
   if (!value) throw new Error('useDetail needs an item detail around it');
   return value;
+}
+
+/**
+ * The type a new child item of the project takes (`childTypeId`): the default type unless it is an epic. `reason` says
+ * why there is none yet: the catalogs still load, or no enabled type may have a parent (`NO_CHILD_TYPE`).
+ */
+export function useChildType(projectId: string): { typeId: string | null; reason: string | null } {
+  const project = useProjects({ include_archived: true }).data?.items.find((entry) => entry.id === projectId);
+  const types = useWorkItemTypes().data?.items;
+  if (!project || !types) return { typeId: null, reason: 'Die Typen werden noch geladen.' };
+  const typeId = childTypeId(project, types);
+  return { typeId, reason: typeId ? null : NO_CHILD_TYPE };
 }
 
 /**

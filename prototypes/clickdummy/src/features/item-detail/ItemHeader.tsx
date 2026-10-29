@@ -34,7 +34,7 @@ import { usePermissions } from '@/lib/permissions';
 import { runWithUndo } from '@/lib/undo';
 import { useUiStore } from '@/store/ui';
 import type { Project, WorkItem, WorkItemDetail } from '@/types';
-import { useDetail, type DetailSurface } from './shared';
+import { useChildType, useDetail, type DetailSurface } from './shared';
 
 const MAX_TITLE = 255;
 
@@ -301,8 +301,13 @@ function ItemMenu({ detail, project }: { detail: WorkItemDetail; project: Projec
   const archived = item.archived_at !== null;
   const closed = isClosedCategory(state.category);
   const canDelete = can('item.delete', item.project_id);
-  // a child item only under an epic (two levels, domain/hierarchy)
+  // a child item only under an epic (two levels, domain/hierarchy), with a type that may have a parent
   const canCreate = !archived && canHaveChildren(detail.type) && can('item.create', item.project_id);
+  const child = useChildType(item.project_id);
+  const createChild = () => {
+    if (child.typeId) useUiStore.getState().openCreate({ project_id: item.project_id, parent_id: item.id, type_id: child.typeId });
+    else toast({ title: 'Nicht möglich', description: child.reason ?? undefined, tone: 'error' });
+  };
   const canRestore = archived && reason('item.edit', item.project_id) === null;
   const canArchive = !archived && closed && !editReason;
 
@@ -311,7 +316,7 @@ function ItemMenu({ detail, project }: { detail: WorkItemDetail; project: Projec
     (canCreate || !editReason) && (
       <MenuGroup key="add">
         {canCreate && (
-          <MenuItem icon={CornerDownRight} onClick={() => useUiStore.getState().openCreate({ project_id: item.project_id, parent_id: item.id })}>
+          <MenuItem icon={CornerDownRight} onClick={createChild}>
             Kind-Item anlegen …
           </MenuItem>
         )}
