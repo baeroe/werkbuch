@@ -149,7 +149,10 @@ export function EntryRow({ entry, terms, lookups }: { entry: PaletteEntry; terms
   }
 }
 
-/** One option of a command's sub-list. */
+/**
+ * One option of a command's sub-list. Its hint can be a name people chose (a template's project, up to 120 characters):
+ * it takes at most a good third of the row and truncates, so the option's own label always stays readable.
+ */
 export function OptionRow({ option, terms }: { option: CommandOption; terms: string[] }) {
   return (
     <>
@@ -157,7 +160,7 @@ export function OptionRow({ option, terms }: { option: CommandOption; terms: str
       <Label>
         <Highlight text={option.label} terms={terms} />
       </Label>
-      {option.hint && <Meta>{option.hint}</Meta>}
+      {option.hint && <span className="ml-auto max-w-[40%] min-w-0 truncate pl-2 text-sm text-muted">{option.hint}</span>}
     </>
   );
 }

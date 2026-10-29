@@ -27,6 +27,7 @@ import { useNavigate } from 'react-router';
 import { ProjectBadge } from '@/components/ui/ProjectBadge';
 import { toast } from '@/components/ui/toast';
 import { useProjects } from '@/hooks/projects';
+import { useRefetchFailed } from '@/hooks/retry';
 import { useTemplates } from '@/hooks/templates';
 import { registerCommand, SHELL_COMMAND_GROUPS, useCommand } from '@/lib/commands';
 import { notifyError } from '@/lib/errors';
@@ -73,6 +74,7 @@ function useTemplateCommand(): void {
   const { can, reason, loading } = usePermissions();
   const projects = useProjects();
   const templates = useTemplates();
+  const refetchFailed = useRefetchFailed();
   const projectList = projects.data?.items;
   const failed = [templates, projects].find((query) => query.isError && query.data === undefined);
   const ready = !loading && (failed !== undefined || (templates.data !== undefined && projectList !== undefined));
@@ -87,7 +89,8 @@ function useTemplateCommand(): void {
   /** Why there is nothing to choose: the templates did not load, the person may create items nowhere, or no template. */
   function explain() {
     if (failed) {
-      notifyError('Vorlagen nicht geladen', failed.error, () => [templates, projects].forEach((query) => query.isError && void query.refetch()));
+      // the retry fetches whatever else failed with them as well, the rights included
+      notifyError('Vorlagen nicht geladen', failed.error, refetchFailed);
       return;
     }
     const description =

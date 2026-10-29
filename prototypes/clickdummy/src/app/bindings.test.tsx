@@ -3,8 +3,9 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { FAIL_KEY } from '@/api/client';
 import { getDb, saveDb } from '@/api/db';
-import { currentToasts, resetToasts } from '@/components/ui/toast';
+import { currentToasts, resetToasts, runToastAction } from '@/components/ui/toast';
 import { preloadEditor } from '@/features/editor/RichTextEditor';
 import { CommandPalette } from '@/features/palette/CommandPalette';
 import { listCommands } from '@/lib/commands';
@@ -169,6 +170,21 @@ describe('"Vorlage anwenden …" in the palette', () => {
     expect(screen.queryByRole('listbox', { name: 'Vorlage anwenden …' })).toBeNull();
     expect(useUiStore.getState().paletteOpen).toBe(false);
     expect(currentToasts().at(-1)).toMatchObject({ title: 'Keine Vorlage anwendbar', description: 'Items anlegen darfst du in keinem Projekt.' });
+  });
+
+  it('says that the templates did not load, and its "Erneut versuchen" brings the list', async () => {
+    localStorage.setItem(FAIL_KEY, '1');
+    const user = userEvent.setup();
+    renderShell();
+
+    await chooseCommand(user);
+
+    const failure = currentToasts().at(-1)!;
+    expect(failure).toMatchObject({ title: 'Vorlagen nicht geladen', tone: 'error', action: { label: 'Erneut versuchen' } });
+    localStorage.removeItem(FAIL_KEY);
+    act(() => runToastAction(failure.id));
+    // the retry fetched the templates, the projects and the rights again: now the command has its list
+    await waitFor(() => expect(command()?.subpage).toBeDefined());
   });
 
   it('says why as well when the projects where the person may create items have no template', async () => {
