@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createMemoryRouter } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { getDb, saveDb } from '@/api/db';
 import { getWorkItem } from '@/api/workItems';
 import { currentToasts, dismissToast } from '@/components/ui/toast';
 import { TooltipProvider } from '@/components/ui/Tooltip';
@@ -123,6 +124,50 @@ describe('the item list screen', () => {
 
     await act(() => router.navigate(`/projects/OPS?filter=${filterOf([{ field: 'archived', op: 'is', value: true }])}`));
     expect(await screen.findByText('Bestandsaufnahme der alten Server')).toBeTruthy();
+    router.dispose();
+  });
+});
+
+describe('a list of more than 100 items', () => {
+  /** WEB gets 180 more open items, in this test only; they sort after the seed's. */
+  function moreItems(count = 180) {
+    const db = getDb();
+    const model = db.items.find((item) => item.key === 'WEB-43')!;
+    for (let n = 0; n < count; n += 1) {
+      const number = 1000 + n;
+      db.items.push({
+        ...structuredClone(model),
+        id: `wi_web_${number}`,
+        number,
+        key: `WEB-${number}`,
+        title: `Zusatzaufgabe ${number}`,
+        parent_id: null,
+        rank: `z${String(n).padStart(4, '0')}`,
+        subscriber_ids: [],
+      });
+    }
+    saveDb();
+  }
+
+  it('counts every matching item, loads the next page with "Mehr laden" and selects all of them with mod+a', async () => {
+    moreItems();
+    const router = renderAt('/projects/WEB');
+    // the 34 top-level items of the seed and the 180 new ones; the first 100 load
+    expect(await screen.findByText('100 von 214 Items geladen')).toBeTruthy();
+
+    act(() => useUiStore.getState().setSelection(['wi_web_47']));
+    await waitFor(() => expect(announcer().textContent).toBe('WEB-47 ausgewählt, 1 von 214'));
+    expect(screen.getByText(/von 214 ausgewählt/)).toBeTruthy();
+    act(() => useUiStore.getState().setSelection([]));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mehr laden' }));
+    expect(await screen.findByText('200 von 214 Items geladen')).toBeTruthy();
+
+    // mod+a takes all of them, also the ones that were not loaded yet
+    act(() => void fireEvent.keyDown(document.body, { key: 'a', ctrlKey: true }));
+    await waitFor(() => expect(useUiStore.getState().selection).toHaveLength(214));
+    await waitFor(() => expect(announcer().textContent).toBe('Alle 214 Items ausgewählt'));
+    expect(screen.queryByRole('button', { name: 'Mehr laden' })).toBeNull();
     router.dispose();
   });
 });

@@ -41,7 +41,7 @@ import { useProperties } from '@/hooks/properties';
 import { useUsers } from '@/hooks/users';
 import { useFavorites, useSaveView, useToggleFavorite, useViews } from '@/hooks/views';
 import { useWorkflows } from '@/hooks/workflows';
-import { useBulkUpdateWorkItems, useFilterContext, useWorkItemMeta, useWorkItems } from '@/hooks/workItems';
+import { useBulkUpdateWorkItems, useFilterContext, useInfiniteWorkItems, useWorkItemMeta, useWorkItems } from '@/hooks/workItems';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
 import { useSettle } from '@/hooks/mutation';
 import { notifyError } from '@/lib/errors';
@@ -52,7 +52,7 @@ import { runWithUndo, UNDO_LABEL } from '@/lib/undo';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import { useSession } from '@/store/session';
 import { useUiStore, type CreateDefaults } from '@/store/ui';
-import type { Display, Filter, Project, View, WorkItem } from '@/types';
+import type { Condition, Display, Filter, Project, View, WorkItem } from '@/types';
 import { DisplayMenu } from './display/DisplayMenu';
 import { effectiveGrouping, groupContext } from './display/grouping';
 import { LAYOUT_OPTIONS, layouts, type LayoutProps } from './display/layouts';
@@ -93,17 +93,20 @@ const MY_TABS: { preset: ItemsPreset; to: string; label: string; title: string }
 
 const count = new Intl.NumberFormat('de-DE');
 
-/** What a change of the selection says: "WEB-47 ausgewählt, 3 von 21", "Auswahl aufgehoben"; null for no change. */
-export function selectionMessage(before: readonly string[], after: readonly string[], items: readonly WorkItem[]): string | null {
+/**
+ * What a change of the selection says: "WEB-47 ausgewählt, 3 von 21", "Auswahl aufgehoben"; null for no change.
+ * `total` counts every item of the list, also those of pages not loaded yet.
+ */
+export function selectionMessage(before: readonly string[], after: readonly string[], items: readonly WorkItem[], total = items.length): string | null {
   const keyOf = (id: string) => items.find((item) => item.id === id)?.key ?? 'Ein Item';
   const added = after.filter((id) => !before.includes(id));
   const removed = before.filter((id) => !after.includes(id));
-  const of = `${count.format(after.length)} von ${count.format(items.length)}`;
+  const of = `${count.format(after.length)} von ${count.format(total)}`;
   if (added.length === 0 && removed.length === 0) return null;
   if (after.length === 0) return 'Auswahl aufgehoben';
   if (added.length === 1 && removed.length === 0) return `${keyOf(added[0])} ausgewählt, ${of}`;
   if (removed.length === 1 && added.length === 0) return `${keyOf(removed[0])} abgewählt, ${of}`;
-  if (after.length === items.length && added.length > 0) return `Alle ${count.format(items.length)} Items ausgewählt`;
+  if (after.length === total && added.length > 0) return `Alle ${count.format(total)} Items ausgewählt`;
   if (added.length > 0) return `${count.format(added.length)} Items ausgewählt, ${of}`;
   return `${count.format(removed.length)} Items abgewählt, ${of}`;
 }
@@ -219,6 +222,42 @@ function FavoriteStar({ kind, id }: { kind: 'project' | 'view'; id: string }) {
   );
 }
 
+/**
+ * Below a list that has more pages: how many items are here of how many, and "Mehr laden". The next page also loads on
+ * its own when this comes into view (a while before the end of the rows); the button is the way for the keyboard.
+ */
+function MoreItems({ loaded, total, loading, error, onMore }: { loaded: number; total: number; loading: boolean; error: Error | null; onMore: () => void }) {
+  const footer = useRef<HTMLDivElement>(null);
+  const latest = useRef({ loading, error, onMore });
+  useLayoutEffect(() => {
+    latest.current = { loading, error, onMore };
+  });
+  // observed anew with every page, so a footer that is still in view asks for the next one
+  useEffect(() => {
+    const element = footer.current;
+    if (!element || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        const { loading: busy, error: failed, onMore: more } = latest.current;
+        if (entry.isIntersecting && !busy && !failed) more();
+      },
+      { rootMargin: '0px 0px 600px 0px' },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [loaded]);
+  return (
+    <div ref={footer} className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-line px-2 pt-3 text-sm text-muted">
+      <p className="tabular-nums" aria-live="polite">
+        {error ? 'Weitere Items ließen sich nicht laden.' : `${count.format(loaded)} von ${count.format(total)} Items geladen`}
+      </p>
+      <Button variant="secondary" size="sm" pending={loading} onClick={onMore}>
+        {error ? 'Erneut versuchen' : 'Mehr laden'}
+      </Button>
+    </div>
+  );
+}
+
 /** The toolbar sticks below the top edge; once it does, it gets the paper and a line, so the rows pass beneath. */
 function StickyToolbar({ children }: { children: ReactNode }) {
   const sentinel = useRef<HTMLDivElement>(null);
@@ -296,7 +335,13 @@ function ItemsList({ preset, project, view }: ItemsListProps) {
   /* --------------------------------------------------------------------------- data */
 
   const scope = useMemo(() => scopeConditions(preset, project?.id), [preset, project?.id]);
-  const query = useWorkItems({ filter: { version: 1, conditions: [...scope, ...state.filter.conditions.filter(isComplete)] }, sort: state.display.sort, per_page: 100 });
+  // sub-items left out on the server, so the count of the list is the count of what it shows
+  const topLevel: Condition[] = state.display.show_sub_items ? [] : [{ field: 'parent', op: 'is_empty' }];
+  // page by page (100 each); "Beobachtet" narrows on this side, so it loads all of them to know its count
+  const query = useInfiniteWorkItems(
+    { filter: { version: 1, conditions: [...scope, ...state.filter.conditions.filter(isComplete), ...topLevel] }, sort: state.display.sort },
+    { all: preset === 'subscribed' },
+  );
   // a new filter keeps the old rows until its answer is there (no flash of the loading state)
   const [lastPage, setLastPage] = useState(query.data);
   if (query.data && query.data !== lastPage) setLastPage(query.data);
@@ -317,13 +362,24 @@ function ItemsList({ preset, project, view }: ItemsListProps) {
 
   /** Items on their way to the archive: hidden while the undo toast runs. */
   const [hidden, setHidden] = useState<ReadonlySet<string>>(() => new Set());
-  const items = useMemo(() => {
-    let list = page?.items ?? [];
-    // "Beobachtet" has no filter field: the screen narrows it (a gap of the filter engine)
-    if (preset === 'subscribed') list = list.filter((item) => item.subscriber_ids.includes(me));
-    if (!state.display.show_sub_items) list = list.filter((item) => item.parent_id === null);
-    return list.filter((item) => !hidden.has(item.id));
-  }, [page, preset, me, state.display.show_sub_items, hidden]);
+  const narrow = useCallback(
+    (list: readonly WorkItem[]) =>
+      // "Beobachtet" has no filter field: the screen narrows it (a gap of the filter engine)
+      list.filter((item) => (preset !== 'subscribed' || item.subscriber_ids.includes(me)) && (state.display.show_sub_items || item.parent_id === null) && !hidden.has(item.id)),
+    [preset, me, state.display.show_sub_items, hidden],
+  );
+  const items = useMemo(() => narrow(page?.items ?? []), [narrow, page]);
+  /** Every item of the list, also those of pages not loaded yet: what counts, ⌘A and "x von N" refer to. */
+  const total = preset === 'subscribed' ? items.length : Math.max(items.length, (page?.total ?? 0) - hidden.size);
+  /** ⌘A and "Alle Items auswählen": every item of the list, the pages not loaded yet are loaded first. */
+  const selectAll = useCallback(async () => {
+    try {
+      const all = await query.loadAll();
+      useUiStore.getState().setSelection(narrow(all).map((item) => item.id));
+    } catch (error) {
+      notifyError('Nicht alle Items geladen', error, () => void selectAll());
+    }
+  }, [query, narrow]);
 
   const projectList = projects.data?.items;
   const groupBy = effectiveGrouping(state.display.group_by, items, projectList ?? []);
@@ -363,9 +419,9 @@ function ItemsList({ preset, project, view }: ItemsListProps) {
   useEffect(() => {
     const before = previousSelection.current;
     previousSelection.current = selection;
-    const message = before === selection ? null : selectionMessage(before, selection, items);
+    const message = before === selection ? null : selectionMessage(before, selection, items, total);
     if (message) setAnnouncement(message);
-  }, [selection, items]);
+  }, [selection, items, total]);
   // a new filter (or sub-items shown or not): the number of results, once its answer is there; not on the first load
   const resultKey = JSON.stringify([state.filter.conditions.filter(isComplete), state.display.show_sub_items]);
   const announcedResult = useRef<string | null>(null);
@@ -374,8 +430,8 @@ function ItemsList({ preset, project, view }: ItemsListProps) {
     if (announcedResult.current === null) announcedResult.current = resultKey;
     if (announcedResult.current === resultKey) return;
     announcedResult.current = resultKey;
-    setAnnouncement(resultMessage(items.length, state.filter.conditions.length > 0));
-  }, [query.data, ctx, resultKey, items.length, state.filter.conditions.length]);
+    setAnnouncement(resultMessage(total, state.filter.conditions.length > 0));
+  }, [query.data, ctx, resultKey, total, state.filter.conditions.length]);
 
   const onCursor = useCallback((id: string | null) => {
     setCursorId(id);
@@ -555,11 +611,16 @@ function ItemsList({ preset, project, view }: ItemsListProps) {
       content = <EmptyState icon={preset === 'project' ? SquareKanban : List} title={title} description={description} actions={actions} />;
     }
   } else {
-    const props: LayoutProps = { items, groups, display, ctx, selection, onSelect: setSelection, onOpen, onPeek, cursorId, onCursor };
+    const props: LayoutProps = { items, groups, display, ctx, selection, onSelect: setSelection, onSelectAll: () => void selectAll(), onOpen, onPeek, cursorId, onCursor };
     content = (
-      <Suspense fallback={<ListSkeleton />}>
-        <Layout {...props} />
-      </Suspense>
+      <>
+        <Suspense fallback={<ListSkeleton />}>
+          <Layout {...props} />
+        </Suspense>
+        {query.hasMore && (
+          <MoreItems loaded={items.length} total={total} loading={query.loadingMore} error={query.moreError} onMore={query.loadMore} />
+        )}
+      </>
     );
   }
 
@@ -658,7 +719,7 @@ function ItemsList({ preset, project, view }: ItemsListProps) {
         />
         {selected.length > 0 && (
           <div className="mt-2">
-            <BulkBar items={selected} total={items.length} onSelectAll={() => setSelection(items.map((item) => item.id))} onClear={() => setSelection([])} onArchive={archive} />
+            <BulkBar items={selected} total={total} onSelectAll={() => void selectAll()} onClear={() => setSelection([])} onArchive={archive} />
           </div>
         )}
       </StickyToolbar>
@@ -687,20 +748,12 @@ function ItemsList({ preset, project, view }: ItemsListProps) {
         defaultIcon={view?.icon ?? 'layers'}
       />
 
-      {(fellBack || (page && page.total > page.items.length)) && (
+      {fellBack && (
         <div className="mt-2 flex flex-col gap-1 px-2 text-sm text-pretty text-muted">
-          {fellBack && (
-            <p className="flex items-start gap-2">
-              <Info className="mt-px size-3.5 shrink-0" aria-hidden="true" />
-              Die Items haben verschiedene Workflows. Darum sind sie nach Kategorie gruppiert statt nach Status.
-            </p>
-          )}
-          {page && page.total > page.items.length && (
-            <p className="flex items-start gap-2">
-              <Info className="mt-px size-3.5 shrink-0" aria-hidden="true" />
-              Es stehen die ersten {count.format(page.items.length)} von {count.format(page.total)} Items hier. Ein engerer Filter zeigt die übrigen.
-            </p>
-          )}
+          <p className="flex items-start gap-2">
+            <Info className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+            Die Items haben verschiedene Workflows. Darum sind sie nach Kategorie gruppiert statt nach Status.
+          </p>
         </div>
       )}
 

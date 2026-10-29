@@ -130,7 +130,7 @@ interface PlanDrag {
   returning: boolean;
 }
 
-export function TimelineLayout({ items, ctx, selection, onSelect, onOpen, onPeek, cursorId, onCursor }: LayoutProps) {
+export function TimelineLayout({ items, ctx, selection, onSelect, onSelectAll, onOpen, onPeek, cursorId, onCursor }: LayoutProps) {
   const { identifier } = useParams();
   const types = useWorkItemTypes().data?.items;
   const projects = useProjects({ include_archived: true }).data?.items;
@@ -337,7 +337,7 @@ export function TimelineLayout({ items, ctx, selection, onSelect, onOpen, onPeek
     if (element?.isConnected) element.focus({ preventScroll: true });
   });
 
-  const { clickSelect } = useSelection({ order, all, cursorId, onCursor, selection, onSelect, onOpen, onPeek, focus: focusRow, container: root });
+  const { clickSelect } = useSelection({ order, all, onSelectAll, cursorId, onCursor, selection, onSelect, onOpen, onPeek, focus: focusRow, container: root });
 
   /* --------------------------------------------------------------------------- dates */
 

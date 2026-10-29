@@ -57,7 +57,7 @@ const tint = '[background-image:linear-gradient(var(--accent-soft),var(--accent-
 const pressed = '[background-image:linear-gradient(var(--pressed),var(--pressed))]';
 const hoverWash = 'group-hover:[background-image:linear-gradient(var(--hover),var(--hover))]';
 
-export function TableLayout({ items, groups, display, selection, onSelect, onOpen, onPeek, cursorId, onCursor }: LayoutProps) {
+export function TableLayout({ items, groups, display, selection, onSelect, onSelectAll, onOpen, onPeek, cursorId, onCursor }: LayoutProps) {
   const properties = useProperties().data?.items;
   const types = useWorkItemTypes().data?.items;
   const { reason } = usePermissions();
@@ -127,6 +127,7 @@ export function TableLayout({ items, groups, display, selection, onSelect, onOpe
   const { clickSelect } = useSelection({
     order,
     all,
+    onSelectAll,
     cursorId,
     onCursor: (id) => {
       setEditing(null);

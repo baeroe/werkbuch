@@ -162,7 +162,7 @@ function focusIsNeutral(): boolean {
 
 const cardKey = (column: string, id: string) => `${column}\n${id}`;
 
-export function BoardLayout({ items, groups, display, ctx, selection, onSelect, onOpen, onPeek, cursorId, onCursor }: LayoutProps) {
+export function BoardLayout({ items, groups, display, ctx, selection, onSelect, onSelectAll, onOpen, onPeek, cursorId, onCursor }: LayoutProps) {
   const navigate = useNavigate();
   const { identifier } = useParams();
   const { pathname } = useLocation();
@@ -329,7 +329,7 @@ export function BoardLayout({ items, groups, display, ctx, selection, onSelect, 
     following.current = null;
   });
 
-  const { clickSelect } = useSelection({ order, all, cursorId, onCursor, selection, onSelect, onOpen, onPeek, focus: (id) => focusCard(id), container: board });
+  const { clickSelect } = useSelection({ order, all, onSelectAll, cursorId, onCursor, selection, onSelect, onOpen, onPeek, focus: (id) => focusCard(id), container: board });
 
   /** Puts the cursor on a card and the focus with it. */
   function go(column: number, index: number) {

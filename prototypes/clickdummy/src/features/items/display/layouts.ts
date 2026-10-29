@@ -17,7 +17,8 @@
  *   the items span several workflows (spec 4.11). The screen says so in a hint above the layout; a layout need not.
  * - `ctx`: the filter context (who is signed in, today, categories of states, blocked items …).
  * - `selection` / `onSelect(ids)`: the selected ids (`useUiStore.selection`). The screen clears it when it unmounts
- *   and drops ids that leave the list; the bulk bar acts on it.
+ *   and drops ids that leave the list; the bulk bar acts on it. `onSelectAll()` (⌘A) selects every item of the list,
+ *   also those of pages the screen has not loaded yet; pass it on to `useSelection`.
  * - `cursorId` / `onCursor(id)`: the item under the keyboard cursor. It is the `current` of the list's item commands
  *   (`useItemCommands` in ItemsScreen), so s, a, i, p, l, t, d, ⇧D, ⇧P and ⌘⌫ act on it when nothing is selected.
  *   Report every change (keys, click, focus). While the preview is open it follows the cursor.
@@ -53,6 +54,8 @@ export interface LayoutProps {
   ctx: FilterContext;
   selection: string[];
   onSelect(ids: string[]): void;
+  /** ⌘A: every item of the list, also those not loaded yet (the screen loads them first). */
+  onSelectAll?(): void;
   onOpen(id: string): void;
   onPeek(id: string): void;
   cursorId: string | null;

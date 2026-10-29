@@ -79,6 +79,8 @@ export interface SelectionOptions {
   order: string[];
   /** All ids of the layout (⌘A), collapsed groups included; `order` when left out. */
   all?: string[];
+  /** ⌘A when the list has more than the layout shows (pages not loaded yet): the screen selects them all. */
+  onSelectAll?: () => void;
   cursorId: string | null;
   onCursor: (id: string | null) => void;
   selection: string[];
@@ -208,7 +210,11 @@ export function useSelection(options: SelectionOptions): { clickSelect: (id: str
     label: 'Alle auswählen',
     group: GROUP,
     when: () => (latest.current.all ?? latest.current.order).length > 0,
-    run: () => latest.current.onSelect([...(latest.current.all ?? latest.current.order)]),
+    run: () => {
+      const { onSelectAll, onSelect, all, order: ids } = latest.current;
+      if (onSelectAll) onSelectAll();
+      else onSelect([...(all ?? ids)]);
+    },
   });
   useShortcut({
     id: 'list.clear_selection',

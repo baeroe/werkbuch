@@ -38,7 +38,7 @@ function listRows(groups: readonly Group[], grouped: boolean, collapsed: Readonl
   });
 }
 
-export function ListLayout({ items, groups, display, selection, onSelect, onOpen, onPeek, cursorId, onCursor }: LayoutProps) {
+export function ListLayout({ items, groups, display, selection, onSelect, onSelectAll, onOpen, onPeek, cursorId, onCursor }: LayoutProps) {
   const container = useRef<HTMLUListElement>(null);
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
   const peekItemId = useUiStore((state) => state.peekItemId);
@@ -97,7 +97,7 @@ export function ListLayout({ items, groups, display, selection, onSelect, onOpen
     [rows, virtualizer],
   );
 
-  const { clickSelect } = useSelection({ order, all, cursorId, onCursor, selection, onSelect, onOpen, onPeek, focus: focusRow, container });
+  const { clickSelect } = useSelection({ order, all, onSelectAll, cursorId, onCursor, selection, onSelect, onOpen, onPeek, focus: focusRow, container });
 
   // the tab stop: the cursor row, else the first row; one that is rendered, so Tab always reaches the list
   const renderedItems = virtualRows.flatMap((virtual) => {

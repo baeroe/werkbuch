@@ -4,9 +4,9 @@
  * error brings the old state back and offers "Erneut versuchen".
  */
 
-import { useQuery } from '@tanstack/react-query';
-import { useMemo } from 'react';
-import type { PageArgs } from '@/api/client';
+import { useQueries, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { Page, PageArgs } from '@/api/client';
 import {
   archiveWorkItem,
   bulkUpdateWorkItems,
@@ -40,6 +40,111 @@ import { useWorkItemTypes } from './workItemTypes';
 /** Items the signed-in account sees, filtered and sorted on the server; `view_id` applies a saved view. */
 export function useWorkItems(args: ListWorkItemsArgs = {}, options: HookOptions = {}) {
   return useQuery({ queryKey: qk.workItems.list(args), queryFn: () => listWorkItems(args), enabled: options.enabled !== false });
+}
+
+/** The cache key of one page of a list: the first page is the one `useWorkItems(args)` reads. */
+const pageKey = (args: ListWorkItemsArgs, cursor: string | null) => qk.workItems.list(cursor === null ? args : { ...args, cursor });
+
+export interface InfiniteWorkItems {
+  /** One page of everything loaded so far: the items of all pages, `total` of all matches, the cursor of the next. */
+  data: Page<WorkItem> | undefined;
+  /** The first page failed (a later one that fails shows as `moreError`). */
+  isError: boolean;
+  error: Error | null;
+  isFetching: boolean;
+  refetch: () => Promise<unknown>;
+  /** More pages are there to load. */
+  hasMore: boolean;
+  /** A further page is on its way. */
+  loadingMore: boolean;
+  moreError: Error | null;
+  /** Loads the next page. */
+  loadMore: () => void;
+  /** Loads every page that is left and answers all items (⌘A selects them). */
+  loadAll: () => Promise<WorkItem[]>;
+}
+
+/** The items of the pages so far as one `Page`, and how the pages stand; a module function, so its result stays stable. */
+function combinePages(results: UseQueryResult<Page<WorkItem>>[]) {
+  const [first] = results;
+  const last = results.at(-1)!;
+  const seen = new Set<string>();
+  // a page that moved (an item went away meanwhile) may repeat an item of the page before
+  const items = results.flatMap((result) => result.data?.items ?? []).filter((item) => !seen.has(item.id) && seen.add(item.id));
+  return {
+    data: first.data ? { items, total: first.data.total, next_cursor: last.data?.next_cursor ?? null } : undefined,
+    isError: first.isError,
+    error: first.error,
+    refetch: first.refetch,
+    isFetching: results.some((result) => result.isFetching),
+    loadingMore: results.slice(1).some((result) => result.data === undefined && !result.isError),
+    moreError: results.slice(1).find((result) => result.isError)?.error ?? null,
+    nextCursor: last.data?.next_cursor ?? null,
+  };
+}
+
+/**
+ * Every matching item, one page of 100 at a time (the cursor of `listWorkItems`), for lists that may be longer. Each
+ * page is a list of its own in the cache, in the `Page` shape, so the optimistic item mutations (`patchCached`) and the
+ * item commands reach it like any other list; the first page is the one `useWorkItems(args)` reads. A new `args` starts
+ * at the first page again. With `all`, the pages load one after the other until none is left (a list that narrows on
+ * the client, so its count is only known in full).
+ */
+export function useInfiniteWorkItems(args: ListWorkItemsArgs = {}, options: HookOptions & { all?: boolean } = {}): InfiniteWorkItems {
+  const queryClient = useQueryClient();
+  const enabled = options.enabled !== false;
+  const argsKey = JSON.stringify(args);
+  // the cursors of the pages to show: the first page has none, each further one the cursor its predecessor answered
+  const [state, setState] = useState<{ argsKey: string; cursors: (string | null)[] }>({ argsKey, cursors: [null] });
+  const cursors = state.argsKey === argsKey ? state.cursors : [null];
+
+  const { data, isError, error, refetch, isFetching, loadingMore, moreError, nextCursor } = useQueries({
+    queries: cursors.map((cursor) => ({
+      queryKey: pageKey(args, cursor),
+      queryFn: () => listWorkItems(cursor === null ? args : { ...args, cursor }),
+      enabled,
+    })),
+    combine: combinePages,
+  });
+
+  const loadMore = useCallback(() => {
+    if (!nextCursor) return;
+    setState({ argsKey, cursors: [...cursors, nextCursor] });
+  }, [argsKey, cursors, nextCursor]);
+
+  const loadAll = useCallback(async (): Promise<WorkItem[]> => {
+    const all = [...cursors];
+    let page = await queryClient.fetchQuery({ queryKey: pageKey(args, all.at(-1)!), queryFn: () => listWorkItems(all.at(-1) === null ? args : { ...args, cursor: all.at(-1) }) });
+    while (page.next_cursor) {
+      const cursor = page.next_cursor;
+      all.push(cursor);
+      page = await queryClient.fetchQuery({ queryKey: pageKey(args, cursor), queryFn: () => listWorkItems({ ...args, cursor }) });
+    }
+    setState({ argsKey, cursors: all });
+    const seen = new Set<string>();
+    return all
+      .flatMap((cursor) => queryClient.getQueryData<Page<WorkItem>>(pageKey(args, cursor))?.items ?? [])
+      .filter((item) => !seen.has(item.id) && seen.add(item.id));
+    // `args` is what `argsKey` spells: a new object of the same args changes nothing
+  }, [argsKey, cursors, queryClient]);
+
+  // a list that narrows on the client loads on until it has everything
+  useEffect(() => {
+    if (options.all && nextCursor && !loadingMore && !moreError) loadMore();
+  }, [options.all, nextCursor, loadingMore, moreError, loadMore]);
+
+  return {
+    data,
+    isError,
+    error,
+    isFetching,
+    refetch,
+    hasMore: nextCursor !== null,
+    loadingMore,
+    moreError,
+    loadMore,
+    loadAll,
+  };
 }
 
 /** One item with type, state, workflow, children, relations and attachments; takes a key (also a former one) or an id. */
