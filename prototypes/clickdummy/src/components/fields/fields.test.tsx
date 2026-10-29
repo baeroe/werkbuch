@@ -5,11 +5,13 @@ import type { ReactNode } from 'react';
 import type { Property, PropertyValue } from '@/types';
 import { MemoryRouter } from 'react-router';
 import { PeekHost } from '@/app/PeekHost';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApiError } from '@/api/client';
 import { getDb, saveDb } from '@/api/db';
 import { createProject } from '@/api/projects';
 import { listProperties } from '@/api/properties';
 import { listWorkItemTypes } from '@/api/workItemTypes';
+import * as workItemsApi from '@/api/workItems';
 import { createWorkItem, getWorkItem } from '@/api/workItems';
 import { useWorkItems } from '@/hooks/workItems';
 import { currentToasts, dismissToast, resetToasts } from '@/components/ui/toast';
@@ -328,6 +330,20 @@ describe('TypePicker', () => {
     expect(screen.queryByRole('button', { name: /Zu Task wechseln/ })).toBeNull();
     expect(await screen.findByText('WEB-30 hat Kind-Items. Nur Epics können Kind-Items haben.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Zu Task wechseln/ })).toBeNull();
+  });
+
+  it('the dialog does not wait for an item that fails to load: it offers the change and leaves the decision to the server', async () => {
+    const item = await stored('WEB-30');
+    const task = (await listWorkItemTypes()).items.find((type) => type.id === 't_task')!;
+    vi.spyOn(workItemsApi, 'getWorkItem').mockRejectedValue(new ApiError({ status: 503, reason: 'simulated', detail: 'Simulierter Serverfehler.' }));
+    try {
+      renderWithData(<TypeChangeDialog item={item} target={task} open onOpenChange={() => {}} />);
+
+      expect(await screen.findByRole('button', { name: /Zu Task wechseln/ })).toBeTruthy();
+      expect(screen.queryByText('Item wird geladen …')).toBeNull();
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 
   it('makes no epic of an item with a parent: the dialog says why', async () => {

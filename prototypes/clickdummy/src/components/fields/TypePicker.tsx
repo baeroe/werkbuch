@@ -84,18 +84,21 @@ type TypeChangeDialogProps = {
 /**
  * The change dialog; the type picker and the command `t` open it when a change costs values or needs some, or when the
  * two levels refuse it: then it says why and offers only "Typ behalten". Until it knows whether the item has children
- * (the caller's `hasChildren`, then the loaded item), a type that takes none waits instead of offering the change.
+ * (the caller's `hasChildren`, then the loaded item), a type that takes none waits instead of offering the change; when
+ * the item fails to load it waits no longer and leaves the decision to the server.
  */
 export function TypeChangeDialog({ item, target, open, onOpenChange, finalFocus, hasChildren }: TypeChangeDialogProps) {
   const formId = useId();
   const change = useChangeWorkItemType();
   // the children and the parent as they are now; also while the dialog fades out, so a refusal does not turn into the
   // form for a moment
-  const detail = useWorkItem(item.id).data;
+  const detailQuery = useWorkItem(item.id);
+  const detail = detailQuery.data;
   if (!target) return null;
   const children = detail ? detail.children.length > 0 : hasChildren;
   const refusal = typeChangeRefusal(item.key, { hasChildren: children ?? false, hasParent: (detail?.item ?? item).parent_id !== null }, target);
-  const waiting = refusal === null && children === undefined && !canHaveChildren(target);
+  // an item that fails to load ends the wait: the form goes on, and a refusal of the server names its reason
+  const waiting = refusal === null && children === undefined && !canHaveChildren(target) && !detailQuery.isError;
   return (
     <Dialog
       open={open}
