@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/Input';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { toast } from '@/components/ui/toast';
 import { useDeleteLabel, useLabels, useSaveLabel } from '@/hooks/catalog';
+import { useSettle } from '@/hooks/mutation';
 import type { Label, TypeTone } from '@/types';
 import { ReadOnlyNotice } from './access';
 import { TONE_NAMES } from './catalog';
@@ -27,6 +28,7 @@ import { useItemCount } from './usage';
 import { useRemoval } from './useRemoval';
 
 function LabelDialog({ open, onOpenChange, label }: { open: boolean; onOpenChange: (open: boolean) => void; label: Label | null }) {
+  const settle = useSettle();
   const save = useSaveLabel();
   const [name, setName] = useState(label?.name ?? '');
   const [tone, setTone] = useState<TypeTone>(label?.color ?? 'sky');
@@ -39,15 +41,12 @@ function LabelDialog({ open, onOpenChange, label }: { open: boolean; onOpenChang
       document.getElementById('label-name')?.focus();
       return;
     }
-    save.mutate(
-      { id: label?.id, name, color: tone },
-      {
-        onSuccess: (saved) => {
-          onOpenChange(false);
-          toast({ title: label ? `Label „${saved.name}“ gespeichert` : `Label „${saved.name}“ ist angelegt`, tone: 'success' });
-        },
+    settle(save.mutateAsync({ id: label?.id, name, color: tone }), {
+      onSuccess: (saved) => {
+        onOpenChange(false);
+        toast({ title: label ? `Label „${saved.name}“ gespeichert` : `Label „${saved.name}“ ist angelegt`, tone: 'success' });
       },
-    );
+    });
   }
 
   return (

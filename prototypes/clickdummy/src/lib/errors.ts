@@ -4,8 +4,8 @@
  * - any other refusal shows its cause, without a retry, which would only be refused again
  * - only errors worth repeating (the server failed with 5xx, or did not answer at all) offer "Erneut versuchen"
  *
- * The optimistic item mutations use it, and so does `runWithUndo`. Screens call it in the `onError` of their own
- * mutations: `onError: (error, vars) => notifyError('Label nicht gespeichert', error, () => mutation.mutate(vars))`.
+ * The optimistic item mutations use it, and so does `runWithUndo`. Screens call it for their own calls, one answer per
+ * call: `settle(save.mutateAsync(vars), { onError: (error) => notifyError('Label nicht gespeichert', error, retry) })`.
  */
 
 import { ApiError } from '@/api/client';

@@ -44,6 +44,7 @@ import { toast } from '@/components/ui/toast';
 import { allowedTargets, isClosedCategory, statesInOrder } from '@/domain/workflow';
 import { useLabels, useResolutions } from '@/hooks/catalog';
 import { qk } from '@/hooks/keys';
+import { useSettle, type Settle } from '@/hooks/mutation';
 import { useMembers, useProjects } from '@/hooks/projects';
 import { useProperties } from '@/hooks/properties';
 import { useCurrentUser, useUsers } from '@/hooks/users';
@@ -117,6 +118,8 @@ export interface ItemCommandContext {
   changeType: ReturnType<typeof useChangeWorkItemType>;
   archive: ReturnType<typeof useArchiveWorkItem>;
   remove: ReturnType<typeof useDeleteWorkItem>;
+  /** The answer of one call (`mutateAsync`), also when several overlap (see `useSettle`). */
+  settle: Settle;
   queryClient: QueryClient;
 }
 
@@ -166,7 +169,7 @@ function apply(ctx: ItemCommandContext, what: string, single: (item: WorkItem, o
     single(targets[0], () => done(`${targets[0].key}: ${what}`));
     return;
   }
-  ctx.bulk.mutate({ ids: targets.map((item) => item.id), patch }, { onSuccess: (result) => bulkToast(targets, result, what) });
+  ctx.settle(ctx.bulk.mutateAsync({ ids: targets.map((item) => item.id), patch }), { onSuccess: (result) => bulkToast(targets, result, what) });
 }
 
 function bulkToast(targets: WorkItem[], result: BulkResult, what: string) {
@@ -202,14 +205,14 @@ function stateOptions(ctx: ItemCommandContext): CommandOption[] {
         target: state,
         from: from ? { category: from.category, resolutionId: targets[0].resolution_id } : undefined,
         onConfirm: (resolutionId) =>
-          apply(ctx, `Status ${state.name}`, (item, onSuccess) => ctx.transition.mutate({ id: item.id, to_state_id: state.id, resolution_id: resolutionId }, { onSuccess }), {
+          apply(ctx, `Status ${state.name}`, (item, onSuccess) => ctx.settle(ctx.transition.mutateAsync({ id: item.id, to_state_id: state.id, resolution_id: resolutionId }), { onSuccess }), {
             state_id: state.id,
             resolution_id: resolutionId,
           }),
       });
       return;
     }
-    apply(ctx, `Status ${state.name}`, (item, onSuccess) => ctx.transition.mutate({ id: item.id, to_state_id: state.id }, { onSuccess }), { state_id: state.id });
+    apply(ctx, `Status ${state.name}`, (item, onSuccess) => ctx.settle(ctx.transition.mutateAsync({ id: item.id, to_state_id: state.id }), { onSuccess }), { state_id: state.id });
   };
 
   if (targets.length === 1) {
@@ -230,7 +233,7 @@ function commonPeople(ctx: ItemCommandContext): User[] {
 }
 
 function assign(ctx: ItemCommandContext, user: User | null) {
-  apply(ctx, user ? `zugewiesen an ${user.name}` : 'nicht mehr zugewiesen', (item, onSuccess) => ctx.update.mutate({ id: item.id, patch: { assignee_id: user?.id ?? null } }, { onSuccess }), {
+  apply(ctx, user ? `zugewiesen an ${user.name}` : 'nicht mehr zugewiesen', (item, onSuccess) => ctx.settle(ctx.update.mutateAsync({ id: item.id, patch: { assignee_id: user?.id ?? null } }), { onSuccess }), {
     assignee_id: user?.id ?? null,
   });
 }
@@ -249,7 +252,7 @@ function priorityOptions(ctx: ItemCommandContext): CommandOption[] {
   return PRIORITY_OPTIONS.map((picker) => {
     const priority = picker.value as Priority;
     return option(picker, () =>
-      apply(ctx, `Priorität ${PRIORITY_LABELS[priority]}`, (item, onSuccess) => ctx.update.mutate({ id: item.id, patch: { priority } }, { onSuccess }), { priority }),
+      apply(ctx, `Priorität ${PRIORITY_LABELS[priority]}`, (item, onSuccess) => ctx.settle(ctx.update.mutateAsync({ id: item.id, patch: { priority } }), { onSuccess }), { priority }),
     );
   });
 }
@@ -266,7 +269,7 @@ function labelOptions(ctx: ItemCommandContext): CommandOption[] {
             ctx,
             `Label ${label.name} ${all ? 'entfernt' : 'gesetzt'}`,
             (item, onSuccess) =>
-              ctx.update.mutate({ id: item.id, patch: { label_ids: all ? item.label_ids.filter((id) => id !== label.id) : [...item.label_ids, label.id] } }, { onSuccess }),
+              ctx.settle(ctx.update.mutateAsync({ id: item.id, patch: { label_ids: all ? item.label_ids.filter((id) => id !== label.id) : [...item.label_ids, label.id] } }), { onSuccess }),
             all ? { remove_label_ids: [label.id] } : { add_label_ids: [label.id] },
           ),
         ),
@@ -287,10 +290,10 @@ function typeOptions(ctx: ItemCommandContext): CommandOption[] {
           askTypeChange(item, type);
           return;
         }
-        ctx.changeType.mutate(
-          { id: item.id, type_id: type.id },
-          { onSuccess: () => done(`${item.key} hat jetzt den Typ ${type.name}`), onError: (error) => notifyError('Typ nicht geändert', error) },
-        );
+        ctx.settle(ctx.changeType.mutateAsync({ id: item.id, type_id: type.id }), {
+          onSuccess: () => done(`${item.key} hat jetzt den Typ ${type.name}`),
+          onError: (error) => notifyError('Typ nicht geändert', error),
+        });
       }),
     );
 }
@@ -329,7 +332,7 @@ function dateOptions(ctx: ItemCommandContext, field: 'start_date' | 'due_date'):
       });
       return;
     }
-    apply(ctx, date ? `${name} ${formatDay(date)}` : `${name} entfernt`, (item, onSuccess) => ctx.update.mutate({ id: item.id, patch: { [field]: date } }, { onSuccess }), {
+    apply(ctx, date ? `${name} ${formatDay(date)}` : `${name} entfernt`, (item, onSuccess) => ctx.settle(ctx.update.mutateAsync({ id: item.id, patch: { [field]: date } }), { onSuccess }), {
       [field]: date,
     });
   };
@@ -342,10 +345,9 @@ function parentOptions(ctx: ItemCommandContext): CommandOption[] {
   const [item] = ctx.targets;
   const isEpic = (typeId: string) => ctx.types.find((type) => type.id === typeId)?.is_epic ?? false;
   const setParent = (parent: WorkItem | null) =>
-    ctx.update.mutate(
-      { id: item.id, patch: { parent_id: parent?.id ?? null } },
-      { onSuccess: () => done(parent ? `${item.key}: Eltern-Item ${parent.key}` : `${item.key}: kein Eltern-Item mehr`) },
-    );
+    ctx.settle(ctx.update.mutateAsync({ id: item.id, patch: { parent_id: parent?.id ?? null } }), {
+      onSuccess: () => done(parent ? `${item.key}: Eltern-Item ${parent.key}` : `${item.key}: kein Eltern-Item mehr`),
+    });
   const candidates = parentCandidates(item, ctx.projectItems ?? [], isEpic).map((candidate) => {
     const type = ctx.types.find((entry) => entry.id === candidate.type_id);
     return {
@@ -742,6 +744,7 @@ export function useItemCommands(options: ItemCommandsOptions): void {
   const me = useCurrentUser();
   const { reason } = usePermissions();
   const { today } = useToday();
+  const settle = useSettle();
   const mutations = {
     update: useUpdateWorkItem(),
     transition: useTransitionWorkItem(),
@@ -780,6 +783,7 @@ export function useItemCommands(options: ItemCommandsOptions): void {
       projectItems: now.length === 1 && now[0].project_id === projectItemsOf ? projectItems : undefined,
       reason: (permission, projectId) => reason(permission, projectId),
       ...mutations,
+      settle,
       queryClient,
     };
   };

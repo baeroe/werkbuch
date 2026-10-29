@@ -9,6 +9,7 @@ import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
 import { toast } from '@/components/ui/toast';
 import { useSaveWebhook } from '@/hooks/webhooks';
+import { useSettle } from '@/hooks/mutation';
 import { notifyError } from '@/lib/errors';
 import type { Webhook, WebhookDelivery } from '@/types';
 import { formatDateTime, useOrgZone } from './format';
@@ -35,14 +36,12 @@ export function StateBadge({ webhook }: { webhook: Webhook }) {
 /** Turns a webhook on again. A webhook the system shut down loses its mark when it is switched on. */
 export function useReenable(): { reenable: (webhook: Webhook) => void; pending: boolean } {
   const save = useSaveWebhook();
+  const settle = useSettle();
   function reenable(webhook: Webhook) {
-    save.mutate(
-      { webhook: { id: webhook.id, name: webhook.name, url: webhook.url, project_id: webhook.project_id, events: webhook.events, bot_id: webhook.bot_id, active: true } },
-      {
-        onSuccess: () => toast({ title: `Webhook „${webhook.name}“ ist wieder aktiv`, description: 'Die nächsten Ereignisse gehen wieder an den Empfänger.', tone: 'success' }),
-        onError: (error) => notifyError(`Webhook „${webhook.name}“ nicht aktiviert`, error, () => reenable(webhook)),
-      },
-    );
+    settle(save.mutateAsync({ webhook: { id: webhook.id, name: webhook.name, url: webhook.url, project_id: webhook.project_id, events: webhook.events, bot_id: webhook.bot_id, active: true } }), {
+      onSuccess: () => toast({ title: `Webhook „${webhook.name}“ ist wieder aktiv`, description: 'Die nächsten Ereignisse gehen wieder an den Empfänger.', tone: 'success' }),
+      onError: (error) => notifyError(`Webhook „${webhook.name}“ nicht aktiviert`, error, () => reenable(webhook)),
+    });
   }
   return { reenable, pending: save.isPending };
 }

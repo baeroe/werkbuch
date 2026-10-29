@@ -10,6 +10,7 @@ import { Link, type To } from 'react-router';
 import { Button, buttonClass } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useDeliveries, usePingWebhook, useRedeliver, useWebhooks } from '@/hooks/webhooks';
+import { useSettle } from '@/hooks/mutation';
 import { notifyError } from '@/lib/errors';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import type { WebhookDelivery } from '@/types';
@@ -42,6 +43,7 @@ function StatusBadge({ delivery }: { delivery: WebhookDelivery }) {
 }
 
 export function WebhookDeliveries({ webhookId, onClose, closeTo }: WebhookDeliveriesProps) {
+  const settle = useSettle();
   const webhooks = useWebhooks();
   const deliveries = useDeliveries(webhookId);
   const ping = usePingWebhook();
@@ -52,7 +54,7 @@ export function WebhookDeliveries({ webhookId, onClose, closeTo }: WebhookDelive
 
   function runPing() {
     if (!webhook) return;
-    ping.mutate(webhook.id, {
+    settle(ping.mutateAsync(webhook.id), {
       onSuccess: (delivery) => toastDelivery('Test-Ping', webhook, delivery),
       onError: (error) => notifyError('Test-Ping nicht gesendet', error, runPing),
     });
@@ -60,7 +62,7 @@ export function WebhookDeliveries({ webhookId, onClose, closeTo }: WebhookDelive
 
   function runRedeliver(delivery: WebhookDelivery) {
     if (!webhook) return;
-    redeliver.mutate(delivery.id, {
+    settle(redeliver.mutateAsync(delivery.id), {
       onSuccess: (sent) => toastDelivery('Zustellung', webhook, sent),
       onError: (error) => notifyError('Zustellung nicht gesendet', error, () => runRedeliver(delivery)),
     });

@@ -21,6 +21,7 @@ import { fieldClass, fieldSize } from '@/components/ui/styles';
 import { Switch } from '@/components/ui/Switch';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { useUpdateWorkItem } from '@/hooks/workItems';
+import { useSettle } from '@/hooks/mutation';
 import { docToText, isBlankDoc, isPlainDoc, plainDocText, textDoc } from '@/lib/richtext';
 import type { Property, PropertyValue, RichText, WorkItem } from '@/types';
 import { DatePopover, DayValue } from './DateField';
@@ -476,6 +477,7 @@ type PropertyFieldProps = {
 };
 
 export function PropertyField({ item, property, required, hideLabel }: PropertyFieldProps) {
+  const settle = useSettle();
   const reason = useEditReason(item);
   const update = useUpdateWorkItem();
   const [refusal, setRefusal] = useState<string | null>(null);
@@ -484,16 +486,13 @@ export function PropertyField({ item, property, required, hideLabel }: PropertyF
   function save(next: PropertyValue) {
     if (sameValue(next, value)) return;
     setRefusal(null);
-    update.mutate(
-      { id: item.id, patch: { values: { [property.key]: next } } },
-      {
-        // the toast names the cause too; the field shows the server's words where the change was made
-        onError: (failure) => {
-          const message = failure instanceof ApiError ? failure.errors?.[`values.${property.key}`]?.[0] : undefined;
-          if (message) setRefusal(message);
-        },
+    settle(update.mutateAsync({ id: item.id, patch: { values: { [property.key]: next } } }), {
+      // the toast names the cause too; the field shows the server's words where the change was made
+      onError: (failure) => {
+        const message = failure instanceof ApiError ? failure.errors?.[`values.${property.key}`]?.[0] : undefined;
+        if (message) setRefusal(message);
       },
-    );
+    });
   }
 
   return (

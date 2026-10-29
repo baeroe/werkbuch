@@ -43,6 +43,7 @@ import { useFavorites, useSaveView, useToggleFavorite, useViews } from '@/hooks/
 import { useWorkflows } from '@/hooks/workflows';
 import { useBulkUpdateWorkItems, useFilterContext, useWorkItemMeta, useWorkItems } from '@/hooks/workItems';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
+import { useSettle } from '@/hooks/mutation';
 import { notifyError } from '@/lib/errors';
 import { usePermissions } from '@/lib/permissions';
 import { registerShortcut } from '@/lib/shortcuts/registry';
@@ -195,6 +196,7 @@ function ScreenSkeleton() {
 
 /** The star of a project or view: puts it into the sidebar. */
 function FavoriteStar({ kind, id }: { kind: 'project' | 'view'; id: string }) {
+  const settle = useSettle();
   const favorites = useFavorites();
   const toggle = useToggleFavorite();
   const on = favorites.data?.items.some((favorite) => favorite.kind === kind && favorite.id === id) ?? false;
@@ -208,13 +210,10 @@ function FavoriteStar({ kind, id }: { kind: 'project' | 'view'; id: string }) {
       className={cx(on && '[&>svg]:fill-current')}
       onClick={() => {
         if (!favorites.data || toggle.isPending) return;
-        toggle.mutate(
-          { kind, id },
-          {
-            onSuccess: (result) => toast({ title: result.favorite ? 'Steht jetzt in der Seitenleiste' : 'Aus der Seitenleiste genommen', tone: 'success' }),
-            onError: (error) => notifyError('Favorit nicht geändert', error, () => toggle.mutate({ kind, id })),
-          },
-        );
+        settle(toggle.mutateAsync({ kind, id }), {
+          onSuccess: (result) => toast({ title: result.favorite ? 'Steht jetzt in der Seitenleiste' : 'Aus der Seitenleiste genommen', tone: 'success' }),
+          onError: (error) => notifyError('Favorit nicht geändert', error, () => toggle.mutate({ kind, id })),
+        });
       }}
     />
   );
@@ -263,6 +262,7 @@ type ItemsListProps = {
 };
 
 function ItemsList({ preset, project, view }: ItemsListProps) {
+  const settle = useSettle();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const me = useSession((state) => state.userId);
@@ -472,17 +472,14 @@ function ItemsList({ preset, project, view }: ItemsListProps) {
   }
   function save() {
     if (!view) return;
-    saveView.mutate(
-      { id: view.id, name: view.name, icon: view.icon, filter: state.filter, display: state.display },
-      {
-        onSuccess: () => {
-          // the view now holds what is shown (it has loaded again by now): the URL needs no changes any more
-          clearChanges();
-          toast({ title: `„${view.name}“ gespeichert`, tone: 'success' });
-        },
-        onError: (error) => notifyError('View nicht gespeichert', error, save),
+    settle(saveView.mutateAsync({ id: view.id, name: view.name, icon: view.icon, filter: state.filter, display: state.display }), {
+      onSuccess: () => {
+        // the view now holds what is shown (it has loaded again by now): the URL needs no changes any more
+        clearChanges();
+        toast({ title: `„${view.name}“ gespeichert`, tone: 'success' });
       },
-    );
+      onError: (error) => notifyError('View nicht gespeichert', error, save),
+    });
   }
   const scopeText = project ? `Projekt ist ${project.name}` : preset === 'my' ? 'Assignee ist ich' : preset === 'created' ? 'Ersteller ist ich' : null;
 

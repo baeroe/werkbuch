@@ -23,6 +23,7 @@ import { toast } from '@/components/ui/toast';
 import { TYPE_ICONS, TypeTab } from '@/components/ui/TypeTab';
 import { useProperties } from '@/hooks/properties';
 import { useDeleteWorkItemType, useSaveWorkItemType, useWorkItemTypes } from '@/hooks/workItemTypes';
+import { useSettle } from '@/hooks/mutation';
 import { notifyError } from '@/lib/errors';
 import type { Property, TypeTone, WorkItemType } from '@/types';
 import { ReadOnlyNotice } from './access';
@@ -76,6 +77,7 @@ type TypeDialogProps = {
 };
 
 function TypeDialog({ open, onOpenChange, type, properties }: TypeDialogProps) {
+  const settle = useSettle();
   const save = useSaveWorkItemType();
   const [name, setName] = useState(type?.name ?? '');
   const [icon, setIcon] = useState(type?.icon ?? 'square-check');
@@ -97,8 +99,8 @@ function TypeDialog({ open, onOpenChange, type, properties }: TypeDialogProps) {
       document.getElementById('type-name')?.focus();
       return;
     }
-    save.mutate(
-      {
+    settle(
+      save.mutateAsync({
         id: type?.id,
         name,
         icon,
@@ -106,7 +108,7 @@ function TypeDialog({ open, onOpenChange, type, properties }: TypeDialogProps) {
         description: description.trim(),
         is_epic: isEpic,
         properties: assigned.map((entry, position) => ({ property_id: entry.id, required: entry.required, position })),
-      },
+      }),
       {
         onSuccess: (saved) => {
           onOpenChange(false);
@@ -202,23 +204,21 @@ function TypeDialog({ open, onOpenChange, type, properties }: TypeDialogProps) {
 
 /** The buttons of a type: archive or delete, depending on whether items use it, and restore once it is archived. */
 function TypeActions({ type, canEdit, onEdit, onDelete }: { type: WorkItemType; canEdit: boolean; onEdit: () => void; onDelete: () => void }) {
+  const settle = useSettle();
   const items = useItemCount({ field: 'type', op: 'is', value: type.id });
   const archive = useDeleteWorkItemType();
   const save = useSaveWorkItemType();
   if (!canEdit) return null;
 
   function restore() {
-    save.mutate(
-      { id: type.id, name: type.name, icon: type.icon, tone: type.tone, description: type.description, is_epic: type.is_epic, properties: type.properties, archived_at: null },
-      {
-        onSuccess: () => toast({ title: `Typ „${type.name}“ ist wiederhergestellt`, description: 'Neue Items dieses Typs lassen sich wieder anlegen.', tone: 'success' }),
-        onError: (error) => notifyError(`Typ „${type.name}“ nicht wiederhergestellt`, error, restore),
-      },
-    );
+    settle(save.mutateAsync({ id: type.id, name: type.name, icon: type.icon, tone: type.tone, description: type.description, is_epic: type.is_epic, properties: type.properties, archived_at: null }), {
+      onSuccess: () => toast({ title: `Typ „${type.name}“ ist wiederhergestellt`, description: 'Neue Items dieses Typs lassen sich wieder anlegen.', tone: 'success' }),
+      onError: (error) => notifyError(`Typ „${type.name}“ nicht wiederhergestellt`, error, restore),
+    });
   }
 
   function runArchive() {
-    archive.mutate(type.id, {
+    settle(archive.mutateAsync(type.id), {
       onSuccess: () =>
         toast({
           title: `Typ „${type.name}“ ist archiviert`,

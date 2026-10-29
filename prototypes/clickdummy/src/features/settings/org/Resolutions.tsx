@@ -15,6 +15,7 @@ import { Select } from '@/components/ui/Select';
 import { Switch } from '@/components/ui/Switch';
 import { toast } from '@/components/ui/toast';
 import { useDeleteResolution, useResolutions, useSaveResolution } from '@/hooks/catalog';
+import { useSettle } from '@/hooks/mutation';
 import { now } from '@/lib/clock';
 import type { Resolution } from '@/types';
 import { ReadOnlyNotice } from './access';
@@ -37,6 +38,7 @@ const DEFAULT_OPTIONS: { value: string; label: string }[] = [
 const defaultText = (resolution: Resolution) => (resolution.default_for ? `Standard für ${CATEGORY_NAMES[resolution.default_for]}` : null);
 
 function ResolutionDialog({ open, onOpenChange, resolution }: { open: boolean; onOpenChange: (open: boolean) => void; resolution: Resolution | null }) {
+  const settle = useSettle();
   const save = useSaveResolution();
   const [label, setLabel] = useState(resolution?.label ?? '');
   const [standard, setStandard] = useState<Default>(resolution?.default_for ?? null);
@@ -50,15 +52,12 @@ function ResolutionDialog({ open, onOpenChange, resolution }: { open: boolean; o
       document.getElementById('resolution-label')?.focus();
       return;
     }
-    save.mutate(
-      { id: resolution?.id, label, default_for: standard, position: resolution?.position ?? 0, archived_at: archived ? (resolution?.archived_at ?? now().toISOString()) : null },
-      {
-        onSuccess: (saved) => {
-          onOpenChange(false);
-          toast({ title: resolution ? `Resolution „${saved.label}“ gespeichert` : `Resolution „${saved.label}“ ist angelegt`, tone: 'success' });
-        },
+    settle(save.mutateAsync({ id: resolution?.id, label, default_for: standard, position: resolution?.position ?? 0, archived_at: archived ? (resolution?.archived_at ?? now().toISOString()) : null }), {
+      onSuccess: (saved) => {
+        onOpenChange(false);
+        toast({ title: resolution ? `Resolution „${saved.label}“ gespeichert` : `Resolution „${saved.label}“ ist angelegt`, tone: 'success' });
       },
-    );
+    });
   }
 
   return (

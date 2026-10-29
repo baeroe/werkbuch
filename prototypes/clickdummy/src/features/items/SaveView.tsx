@@ -19,6 +19,7 @@ import { Select } from '@/components/ui/Select';
 import { toast } from '@/components/ui/toast';
 import { ViewIcon } from '@/components/ui/ViewIcon';
 import { useSaveView } from '@/hooks/views';
+import { useSettle } from '@/hooks/mutation';
 import { notifyError } from '@/lib/errors';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import type { Condition, View } from '@/types';
@@ -62,6 +63,7 @@ function SaveAsForm({
   formId,
   save,
 }: Omit<SaveAsDialogProps, 'open'> & { formId: string; save: ReturnType<typeof useSaveView> }) {
+  const settle = useSettle();
   const navigate = useNavigate();
   const [name, setName] = useState(defaultName);
   const [icon, setIcon] = useState(defaultIcon);
@@ -81,21 +83,18 @@ function SaveAsForm({
       refuse('Gib der View einen Namen, zum Beispiel „Offene Bugs“.');
       return;
     }
-    save.mutate(
-      { name: name.trim(), icon, filter: { version: 1, conditions: [...scope, ...state.filter.conditions] }, display: state.display },
-      {
-        onSuccess: (view: View) => {
-          onOpenChange(false);
-          toast({ title: `View „${view.name}“ angelegt`, tone: 'success' });
-          navigate(`/views/${view.id}`);
-        },
-        onError: (failure) => {
-          const field = failure instanceof ApiError ? failure.errors?.name?.[0] : undefined;
-          if (field) refuse(field);
-          else notifyError('View nicht angelegt', failure, () => submit());
-        },
+    settle(save.mutateAsync({ name: name.trim(), icon, filter: { version: 1, conditions: [...scope, ...state.filter.conditions] }, display: state.display }), {
+      onSuccess: (view: View) => {
+        onOpenChange(false);
+        toast({ title: `View „${view.name}“ angelegt`, tone: 'success' });
+        navigate(`/views/${view.id}`);
       },
-    );
+      onError: (failure) => {
+        const field = failure instanceof ApiError ? failure.errors?.name?.[0] : undefined;
+        if (field) refuse(field);
+        else notifyError('View nicht angelegt', failure, () => submit());
+      },
+    });
   }
 
   // ⌘↵ submits, as the button says

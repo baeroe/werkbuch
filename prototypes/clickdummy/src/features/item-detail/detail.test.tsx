@@ -380,3 +380,34 @@ describe('"Erneut versuchen" on a comment that failed', () => {
     await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Kommentar bearbeiten' })).toBeNull());
   });
 });
+
+describe('calls that overlap keep their own answer', () => {
+  it('uploads several files at once: each has its progress line until it is stored, and each gets its toast', async () => {
+    renderWithData(<ItemPeek itemId="WEB-47" />);
+    const section = await screen.findByRole('region', { name: 'Anhänge' });
+    const input = section.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const files = [new File(['skizze'], 'skizze.png', { type: 'image/png' }), new File(['notizen'], 'notizen.txt', { type: 'text/plain' })];
+
+    fireEvent.change(input, { target: { files } });
+    expect(within(section).getByRole('progressbar', { name: 'skizze.png wird hochgeladen' })).toBeTruthy();
+    expect(within(section).getByRole('progressbar', { name: 'notizen.txt wird hochgeladen' })).toBeTruthy();
+
+    await waitFor(() => expect(within(section).queryAllByRole('progressbar')).toHaveLength(0));
+    expect(await within(section).findByText('skizze.png')).toBeTruthy();
+    expect(within(section).getByText('notizen.txt')).toBeTruthy();
+    expect(currentToasts().map((item) => item.title)).toEqual(expect.arrayContaining(['„skizze.png“ angehängt', '„notizen.txt“ angehängt']));
+  });
+
+  it('keeps the error toast of each reaction that failed, also when the second was sent before the first was answered', async () => {
+    renderWithData(<ItemPeek itemId="WEB-47" />);
+    const thumbs = await screen.findByRole('button', { name: /^Daumen hoch, 2 Reaktionen/ });
+    localStorage.setItem(FAIL_KEY, '1');
+    try {
+      fireEvent.click(thumbs);
+      fireEvent.click(thumbs);
+      await waitFor(() => expect(currentToasts().filter((item) => item.title === 'Reaktion nicht gespeichert')).toHaveLength(2));
+    } finally {
+      localStorage.removeItem(FAIL_KEY);
+    }
+  });
+});

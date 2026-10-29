@@ -20,6 +20,7 @@ import { toast } from '@/components/ui/toast';
 import { useProjects } from '@/hooks/projects';
 import { useUsers } from '@/hooks/users';
 import { useDeleteWebhook, usePingWebhook, useSaveWebhook, useWebhooks } from '@/hooks/webhooks';
+import { useSettle } from '@/hooks/mutation';
 import { notifyError } from '@/lib/errors';
 import type { Project, User, Webhook } from '@/types';
 import { eventLabel } from './catalog';
@@ -51,6 +52,7 @@ type WebhookDialogProps = {
 };
 
 function WebhookDialog({ open, onOpenChange, webhook, projects, bots, onSecret }: WebhookDialogProps) {
+  const settle = useSettle();
   const save = useSaveWebhook();
   const [name, setName] = useState(webhook?.name ?? '');
   const [url, setUrl] = useState(webhook?.url ?? '');
@@ -84,30 +86,24 @@ function WebhookDialog({ open, onOpenChange, webhook, projects, bots, onSecret }
       document.getElementById(name.trim() === '' ? 'webhook-name' : 'webhook-url')?.focus();
       return;
     }
-    save.mutate(
-      { webhook: { id: webhook?.id, name, url, project_id: scope === ORG_SCOPE ? null : scope, events, bot_id: bot === ANY_BOT ? null : bot, active } },
-      {
-        onSuccess: ({ webhook: saved, secret }) => {
-          if (secret) reveal(saved, secret);
-          else {
-            onOpenChange(false);
-            toast({ title: `Webhook „${saved.name}“ gespeichert`, tone: 'success' });
-          }
-        },
+    settle(save.mutateAsync({ webhook: { id: webhook?.id, name, url, project_id: scope === ORG_SCOPE ? null : scope, events, bot_id: bot === ANY_BOT ? null : bot, active } }), {
+      onSuccess: ({ webhook: saved, secret }) => {
+        if (secret) reveal(saved, secret);
+        else {
+          onOpenChange(false);
+          toast({ title: `Webhook „${saved.name}“ gespeichert`, tone: 'success' });
+        }
       },
-    );
+    });
   }
 
   function renew() {
     if (!webhook) return;
     setRenewing(false);
-    save.mutate(
-      { webhook: { id: webhook.id, name: webhook.name, url: webhook.url, project_id: webhook.project_id, events: webhook.events, bot_id: webhook.bot_id, active: webhook.active }, options: { renew_secret: true } },
-      {
-        onSuccess: ({ webhook: saved, secret }) => secret && reveal(saved, secret),
-        onError: (error) => notifyError('Geheimnis nicht erneuert', error, renew),
-      },
-    );
+    settle(save.mutateAsync({ webhook: { id: webhook.id, name: webhook.name, url: webhook.url, project_id: webhook.project_id, events: webhook.events, bot_id: webhook.bot_id, active: webhook.active }, options: { renew_secret: true } }), {
+      onSuccess: ({ webhook: saved, secret }) => secret && reveal(saved, secret),
+      onError: (error) => notifyError('Geheimnis nicht erneuert', error, renew),
+    });
   }
 
   return (
@@ -192,6 +188,7 @@ function scopeOf(webhook: Webhook, projects: Project[]) {
 const SHOWN_EVENTS = 3;
 
 function WebhookCard({ webhook, projects, bots, onEdit, onDelete }: { webhook: Webhook; projects: Project[]; bots: User[]; onEdit: () => void; onDelete: () => void }) {
+  const settle = useSettle();
   const ping = usePingWebhook();
   const zone = useOrgZone();
   const bot = bots.find((entry) => entry.id === webhook.bot_id);
@@ -199,7 +196,7 @@ function WebhookCard({ webhook, projects, bots, onEdit, onDelete }: { webhook: W
   const titleId = `webhook-${webhook.id}`;
 
   function runPing() {
-    ping.mutate(webhook.id, {
+    settle(ping.mutateAsync(webhook.id), {
       onSuccess: (delivery) => toastDelivery('Test-Ping', webhook, delivery),
       onError: (error) => notifyError('Test-Ping nicht gesendet', error, runPing),
     });

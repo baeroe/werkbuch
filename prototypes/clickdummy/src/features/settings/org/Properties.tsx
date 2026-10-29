@@ -22,6 +22,7 @@ import { labelClass } from '@/components/ui/styles';
 import { toast } from '@/components/ui/toast';
 import { useDeleteProperty, useProperties, useSaveProperty } from '@/hooks/properties';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
+import { useSettle } from '@/hooks/mutation';
 import { now } from '@/lib/clock';
 import { notifyError } from '@/lib/errors';
 import type { FieldType, Property, PropertyValue, TypeTone, WorkItemType } from '@/types';
@@ -143,6 +144,7 @@ type PropertyDialogProps = {
 const DECIMALS = [0, 1, 2, 3, 4].map((count) => ({ value: String(count), label: count === 0 ? 'Keine (ganze Zahlen)' : count === 1 ? '1 Nachkommastelle' : `${count} Nachkommastellen` }));
 
 function PropertyDialog({ open, onOpenChange, property }: PropertyDialogProps) {
+  const settle = useSettle();
   const save = useSaveProperty();
   const [label, setLabel] = useState(property?.label ?? '');
   const [key, setKey] = useState(property?.key ?? '');
@@ -188,8 +190,8 @@ function PropertyDialog({ open, onOpenChange, property }: PropertyDialogProps) {
     // a default that points at an option which is no longer offered would be refused by every form
     const optionIds = new Set(options.filter((option) => option.archivedAt === null).map((option) => option.id));
     const stillOffered = fieldType !== 'dropdown' || defaultValue === null || [defaultValue].flat().every((value) => typeof value === 'string' && optionIds.has(value));
-    save.mutate(
-      {
+    settle(
+      save.mutateAsync({
         id: property?.id,
         key,
         label,
@@ -198,7 +200,7 @@ function PropertyDialog({ open, onOpenChange, property }: PropertyDialogProps) {
         default_value: canHaveDefault && stillOffered ? defaultValue : null,
         settings: fieldType === 'number' ? { decimals } : fieldType === 'dropdown' ? { multiple } : {},
         options: fieldType === 'dropdown' ? options.map((option, position) => ({ id: option.id, label: option.label, color: option.color, position, archived_at: option.archivedAt })) : [],
-      },
+      }),
       {
         onSuccess: (saved) => {
           onOpenChange(false);
@@ -328,6 +330,7 @@ function Usage({ property }: { property: Property }) {
 const typesWith = (property: Property, types: WorkItemType[]) => types.filter((type) => type.properties.some((entry) => entry.property_id === property.id));
 
 export default function Properties({ readOnlyReason }: SectionProps) {
+  const settle = useSettle();
   const properties = useProperties();
   const types = useWorkItemTypes();
   const remove = useDeleteProperty();
@@ -338,7 +341,7 @@ export default function Properties({ readOnlyReason }: SectionProps) {
   function confirmDelete() {
     const property = deleting;
     if (!property) return;
-    remove.mutate(property.id, {
+    settle(remove.mutateAsync(property.id), {
       onSuccess: ({ affected_items }) => {
         setDeleting(null);
         toast({

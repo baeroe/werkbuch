@@ -51,6 +51,7 @@ import { useTemplates } from '@/hooks/templates';
 import { useWorkflows } from '@/hooks/workflows';
 import { useCreateWorkItem } from '@/hooks/workItems';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
+import { useSettle } from '@/hooks/mutation';
 import { now } from '@/lib/clock';
 import { notifyError } from '@/lib/errors';
 import { isMac } from '@/lib/platform';
@@ -285,6 +286,7 @@ type FormBodyProps = CreateFormProps & {
 };
 
 function FormBody({ formId, defaults, another, titleRef, unsaved, onPending, onClose, projects, initialProjectId, types, workflows, organization }: FormBodyProps) {
+  const settle = useSettle();
   const properties = useProperties().data?.items;
   const labels = useLabels().data?.items;
   const { today } = useToday();
@@ -464,8 +466,8 @@ function FormBody({ formId, defaults, another, titleRef, unsaved, onPending, onC
     }
     setBlocked(null);
     setErrors({});
-    create.mutate(
-      {
+    settle(
+      create.mutateAsync({
         project_id: current.projectId,
         type_id: current.typeId,
         title,
@@ -480,7 +482,7 @@ function FormBody({ formId, defaults, another, titleRef, unsaved, onPending, onC
         values: withoutEmptyDocs(current.values, properties),
         template_id: current.templateId,
         attachment_ids: attachmentIds(current.description),
-      },
+      }),
       {
         onSuccess: (item) => {
           useUiStore.getState().flash(item.id);

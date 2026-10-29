@@ -14,6 +14,7 @@ import { toast } from '@/components/ui/toast';
 import { useLiveConnected, useSetLiveConnected, useSimulateRemoteChange } from '@/hooks/live';
 import { useResetDemo } from '@/hooks/system';
 import { useCurrentUser, useUsers } from '@/hooks/users';
+import { useSettle } from '@/hooks/mutation';
 import { notifyError } from '@/lib/errors';
 import type { ThemeChoice } from '@/lib/theme';
 import type { User } from '@/types';
@@ -43,6 +44,7 @@ function forgetScreenState() {
 }
 
 export function ProfileMenu({ compact = false }: { compact?: boolean }) {
+  const settle = useSettle();
   const me = useCurrentUser();
   const users = useUsers();
   const userId = useSession((state) => state.userId);
@@ -66,7 +68,7 @@ export function ProfileMenu({ compact = false }: { compact?: boolean }) {
   }
 
   function simulateEvent() {
-    simulate.mutate(undefined, {
+    settle(simulate.mutateAsync(undefined), {
       onSuccess: (event) => {
         if (!event) {
           toast({ title: 'Kein Live-Ereignis', description: 'In WEB ist gerade kein offenes Item, das sich ändern ließe.' });
@@ -85,7 +87,7 @@ export function ProfileMenu({ compact = false }: { compact?: boolean }) {
   }
 
   function resetDemo() {
-    reset.mutate(undefined, {
+    settle(reset.mutateAsync(undefined), {
       onSuccess: () => {
         forgetScreenState();
         setConfirmReset(false);

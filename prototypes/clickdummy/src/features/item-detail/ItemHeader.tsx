@@ -26,6 +26,7 @@ import { isClosedCategory } from '@/domain/workflow';
 import { qk } from '@/hooks/keys';
 import { useProjects } from '@/hooks/projects';
 import { useArchiveWorkItem, useDeleteWorkItem, useRestoreWorkItem, useSetSubscribed, useUpdateWorkItem, useWorkItem } from '@/hooks/workItems';
+import { useSettle } from '@/hooks/mutation';
 import { usePermissions } from '@/lib/permissions';
 import { runWithUndo } from '@/lib/undo';
 import { useUiStore } from '@/store/ui';
@@ -39,6 +40,7 @@ const denied = (reason: string) => toast({ title: 'Nicht möglich', description:
 /* ------------------------------------------------------------------------------- title */
 
 export function ItemTitle({ item }: { item: WorkItem }) {
+  const settle = useSettle();
   const { surface, actions } = useDetail();
   const reason = useEditReason(item);
   const update = useUpdateWorkItem();
@@ -90,19 +92,16 @@ export function ItemTitle({ item }: { item: WorkItem }) {
     setDraft(null);
     setError(null);
     if (!save || title === item.title) return;
-    update.mutate(
-      { id: item.id, patch: { title } },
-      {
-        // the hook rolls back and names the cause in a toast; a field error goes back into the field
-        onError: (failure) => {
-          const message = failure instanceof ApiError ? failure.errors?.title?.[0] : undefined;
-          if (!message) return;
-          editing.current = true;
-          setDraft(title);
-          setError(message);
-        },
+    settle(update.mutateAsync({ id: item.id, patch: { title } }), {
+      // the hook rolls back and names the cause in a toast; a field error goes back into the field
+      onError: (failure) => {
+        const message = failure instanceof ApiError ? failure.errors?.title?.[0] : undefined;
+        if (!message) return;
+        editing.current = true;
+        setDraft(title);
+        setError(message);
       },
-    );
+    });
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -184,20 +183,18 @@ export function ItemTitle({ item }: { item: WorkItem }) {
 /* ---------------------------------------------------------------------------- actions */
 
 function WatchButton({ detail }: { detail: WorkItemDetail }) {
+  const settle = useSettle();
   const watch = useSetSubscribed();
   const { item, subscribed } = detail;
   const toggle = () =>
-    watch.mutate(
-      { id: item.id, on: !subscribed },
-      {
-        onSuccess: () =>
-          toast(
-            subscribed
-              ? { title: `Du beobachtest ${item.key} nicht mehr`, description: 'Erst eine neue Erwähnung oder Zuweisung meldet dich wieder an.' }
-              : { title: `Du beobachtest ${item.key}`, description: 'Änderungen und Kommentare kommen in deine Inbox.', tone: 'success' },
-          ),
-      },
-    );
+    settle(watch.mutateAsync({ id: item.id, on: !subscribed }), {
+      onSuccess: () =>
+        toast(
+          subscribed
+            ? { title: `Du beobachtest ${item.key} nicht mehr`, description: 'Erst eine neue Erwähnung oder Zuweisung meldet dich wieder an.' }
+            : { title: `Du beobachtest ${item.key}`, description: 'Änderungen und Kommentare kommen in deine Inbox.', tone: 'success' },
+        ),
+    });
   return <IconButton icon={Eye} label="Beobachten" aria-pressed={subscribed} onClick={toggle} />;
 }
 
@@ -291,6 +288,7 @@ function useRemoval(item: WorkItem, project: Project | undefined, surface: Detai
 }
 
 function ItemMenu({ detail, project }: { detail: WorkItemDetail; project: Project | undefined }) {
+  const settle = useSettle();
   const { surface, actions } = useDetail();
   const { item, state } = detail;
   const { can, reason } = usePermissions();
@@ -323,7 +321,7 @@ function ItemMenu({ detail, project }: { detail: WorkItemDetail; project: Projec
     (canRestore || canArchive || canDelete) && (
       <MenuGroup key="remove">
         {canRestore && (
-          <MenuItem icon={ArchiveRestore} onClick={() => restore.mutate(item.id, { onSuccess: () => toast({ title: `${item.key} wiederhergestellt`, tone: 'success' }) })}>
+          <MenuItem icon={ArchiveRestore} onClick={() => settle(restore.mutateAsync(item.id), { onSuccess: () => toast({ title: `${item.key} wiederhergestellt`, tone: 'success' }) })}>
             Wiederherstellen
           </MenuItem>
         )}
@@ -495,6 +493,7 @@ const ARCHIVED_DAY = new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '
 
 /** Archived: read-only and out of the lists; who may change the item can bring it back. */
 export function ArchivedNote({ item }: { item: WorkItem }) {
+  const settle = useSettle();
   const { reason } = usePermissions();
   const restore = useRestoreWorkItem();
   if (item.archived_at === null) return null;
@@ -510,7 +509,7 @@ export function ArchivedNote({ item }: { item: WorkItem }) {
         <button
           type="button"
           // the item mutation names a failure itself
-          onClick={() => restore.mutate(item.id, { onSuccess: () => toast({ title: `${item.key} wiederhergestellt`, tone: 'success' }) })}
+          onClick={() => settle(restore.mutateAsync(item.id), { onSuccess: () => toast({ title: `${item.key} wiederhergestellt`, tone: 'success' }) })}
           disabled={restore.isPending}
           className="inline-flex h-11 shrink-0 cursor-pointer items-center gap-1.5 rounded-ctl border border-line-strong bg-surface px-2.5 text-sm font-semibold text-ink shadow-elev-1 transition-colors duration-120 hover:bg-sunken md:h-7"
         >

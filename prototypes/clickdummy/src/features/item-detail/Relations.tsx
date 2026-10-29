@@ -23,6 +23,7 @@ import { useRelationTypes } from '@/hooks/catalog';
 import { useAddRelation, useRemoveRelation } from '@/hooks/relations';
 import { useWorkItems } from '@/hooks/workItems';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
+import { useSettle } from '@/hooks/mutation';
 import { notifyError } from '@/lib/errors';
 import { usePermissions } from '@/lib/permissions';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
@@ -73,6 +74,7 @@ function RelationDialog({ item, open, onOpenChange }: RelationDialogProps) {
 }
 
 function RelationForm({ formId, item, onDone }: { formId: string; item: WorkItem; onDone: () => void }) {
+  const settle = useSettle();
   const relationTypes = useRelationTypes();
   const workItems = useWorkItems({ per_page: 100 });
   const types = useWorkItemTypes().data?.items;
@@ -118,21 +120,18 @@ function RelationForm({ formId, item, onDone }: { formId: string; item: WorkItem
     const [typeId, direction] = chosenKind.split(':');
     const [source, other] = direction === 'out' ? [item, target] : [target, item];
     setErrors({});
-    add.mutate(
-      { source_id: source.id, type_id: typeId, target_id: other.id },
-      {
-        onSuccess: () => {
-          toast({ title: 'Relation hinzugefügt', description: `${item.key} ${label} ${target.key}`, tone: 'success' });
-          onDone();
-        },
-        onError: (error) => {
-          const fields = error instanceof ApiError ? error.errors : undefined;
-          if (fields?.target_id || fields?.type_id) setErrors({ target: fields.target_id?.[0], kind: fields.type_id?.[0] });
-          else if (error instanceof ApiError && error.status < 500) setErrors({ form: error.message });
-          else notifyError('Relation nicht hinzugefügt', error, submit);
-        },
+    settle(add.mutateAsync({ source_id: source.id, type_id: typeId, target_id: other.id }), {
+      onSuccess: () => {
+        toast({ title: 'Relation hinzugefügt', description: `${item.key} ${label} ${target.key}`, tone: 'success' });
+        onDone();
       },
-    );
+      onError: (error) => {
+        const fields = error instanceof ApiError ? error.errors : undefined;
+        if (fields?.target_id || fields?.type_id) setErrors({ target: fields.target_id?.[0], kind: fields.type_id?.[0] });
+        else if (error instanceof ApiError && error.status < 500) setErrors({ form: error.message });
+        else notifyError('Relation nicht hinzugefügt', error, submit);
+      },
+    });
   }
 
   return (

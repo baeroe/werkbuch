@@ -29,6 +29,7 @@ import { Textarea } from '@/components/ui/Textarea';
 import { CATEGORY_ORDER, statesInOrder, validateWorkflow, type WorkflowIssue } from '@/domain/workflow';
 import { useProjects } from '@/hooks/projects';
 import { useSaveWorkflow, useWorkflows } from '@/hooks/workflows';
+import { useSettle } from '@/hooks/mutation';
 import { notifyError } from '@/lib/errors';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
@@ -281,6 +282,7 @@ interface MappingRequest {
 }
 
 function EditorForm({ initial, existing, projects, readOnlyReason, onClose, closeTo, onSaved }: EditorFormProps) {
+  const settle = useSettle();
   const readOnly = readOnlyReason !== null;
   const [draft, setDraft] = useState<Draft>(initial);
   const [attempted, setAttempted] = useState(false);
@@ -356,35 +358,32 @@ function EditorForm({ initial, existing, projects, readOnlyReason, onClose, clos
       return;
     }
 
-    save.mutate(
-      { workflow: toInput(draft, existing?.id), options },
-      {
-        onSuccess: (saved) => {
-          const moved = mapping?.affected.reduce((sum, entry) => sum + entry.items, 0) ?? 0;
-          setMapping(null);
-          toast({
-            title: `Workflow „${saved.name}“ gespeichert`,
-            description: moved > 0 ? `${counted(moved, 'Item hat', 'Items haben')} einen neuen Status.` : undefined,
-            tone: 'success',
-          });
-          leaving.current = true;
-          onSaved?.(saved.id);
-          setTimeout(() => {
-            leaving.current = false;
-          }, 0);
-        },
-        onError: (error) => {
-          if (hasReason(error, 'state_in_use')) {
-            const listed = (error.extensions.states as { state_id: string; name: string; items: number }[] | undefined) ?? [];
-            const affected = listed.map((entry) => ({ ...entry, category: existing?.states.find((state) => state.id === entry.state_id)?.category ?? 'backlog' }));
-            setMapping((current) => ({ round: (current?.round ?? 0) + 1, open: true, affected }));
-            return;
-          }
-          // field errors are shown where they belong; anything else is a toast
-          if (!(error instanceof ApiError && error.status === 422)) notifyError('Workflow nicht gespeichert', error, () => submit(options));
-        },
+    settle(save.mutateAsync({ workflow: toInput(draft, existing?.id), options }), {
+      onSuccess: (saved) => {
+        const moved = mapping?.affected.reduce((sum, entry) => sum + entry.items, 0) ?? 0;
+        setMapping(null);
+        toast({
+          title: `Workflow „${saved.name}“ gespeichert`,
+          description: moved > 0 ? `${counted(moved, 'Item hat', 'Items haben')} einen neuen Status.` : undefined,
+          tone: 'success',
+        });
+        leaving.current = true;
+        onSaved?.(saved.id);
+        setTimeout(() => {
+          leaving.current = false;
+        }, 0);
       },
-    );
+      onError: (error) => {
+        if (hasReason(error, 'state_in_use')) {
+          const listed = (error.extensions.states as { state_id: string; name: string; items: number }[] | undefined) ?? [];
+          const affected = listed.map((entry) => ({ ...entry, category: existing?.states.find((state) => state.id === entry.state_id)?.category ?? 'backlog' }));
+          setMapping((current) => ({ round: (current?.round ?? 0) + 1, open: true, affected }));
+          return;
+        }
+        // field errors are shown where they belong; anything else is a toast
+        if (!(error instanceof ApiError && error.status === 422)) notifyError('Workflow nicht gespeichert', error, () => submit(options));
+      },
+    });
   }
 
   useShortcut({ id: 'workflow.save', keys: 'mod+enter', scope: 'detail', label: 'Workflow speichern', group: 'Workflow', run: () => submit(), when: () => !readOnly && (dirty || existing === null) });

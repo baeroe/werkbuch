@@ -15,6 +15,7 @@ import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { Select } from '@/components/ui/Select';
 import { toast } from '@/components/ui/toast';
 import { useOrganization, useUpdateOrganization } from '@/hooks/organization';
+import { useSettle } from '@/hooks/mutation';
 import { now } from '@/lib/clock';
 import { notifyError } from '@/lib/errors';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
@@ -74,6 +75,7 @@ function OrgMark({ name, url }: { name: string; url: string | null }) {
 }
 
 function GeneralForm({ organization, readOnly }: { organization: Organization; readOnly: boolean }) {
+  const settle = useSettle();
   const [name, setName] = useState(organization.name);
   const [logo, setLogo] = useState(organization.logo_url);
   const [locale, setLocale] = useState<Locale>(organization.locale);
@@ -114,13 +116,10 @@ function GeneralForm({ organization, readOnly }: { organization: Organization; r
       toast({ title: 'Es gibt nichts zu speichern', description: 'Die Einstellungen sind so, wie sie gespeichert sind.' });
       return;
     }
-    update.mutate(
-      { name, logo_url: logo, locale, timezone, week_start: weekStart },
-      {
-        onSuccess: () => toast({ title: 'Einstellungen gespeichert', tone: 'success' }),
-        onError: (error) => notifyError('Einstellungen nicht gespeichert', error, submit),
-      },
-    );
+    settle(update.mutateAsync({ name, logo_url: logo, locale, timezone, week_start: weekStart }), {
+      onSuccess: () => toast({ title: 'Einstellungen gespeichert', tone: 'success' }),
+      onError: (error) => notifyError('Einstellungen nicht gespeichert', error, submit),
+    });
   }
 
   useShortcut({ id: 'org.general.save', keys: 'mod+enter', scope: 'detail', label: 'Einstellungen speichern', group: 'Einstellungen', run: submit, when: () => !readOnly && !update.isPending });

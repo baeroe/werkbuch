@@ -23,6 +23,7 @@ import { toast } from '@/components/ui/toast';
 import { useProjects } from '@/hooks/projects';
 import { useSession } from '@/store/session';
 import { useCurrentUser, useDeactivateUser, useInvitations, useInviteUser, useReactivateUser, useUpdateUserRole, useUsers } from '@/hooks/users';
+import { useSettle } from '@/hooks/mutation';
 import { notifyError } from '@/lib/errors';
 import type { Invitation, OrgRole, Project, ProjectRole, User } from '@/types';
 import { CopyField } from './CopyField';
@@ -53,6 +54,7 @@ const isActiveAdmin = (user: User) => user.type === 'person' && user.org_role ==
 /* ------------------------------------------------------------------------ invite */
 
 function InviteDialog({ open, onOpenChange, projects }: { open: boolean; onOpenChange: (open: boolean) => void; projects: Project[] }) {
+  const settle = useSettle();
   const invite = useInviteUser();
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<OrgRole>('member');
@@ -68,10 +70,10 @@ function InviteDialog({ open, onOpenChange, projects }: { open: boolean; onOpenC
       document.getElementById('invite-email')?.focus();
       return;
     }
-    invite.mutate(
-      { email, org_role: role, projects: Object.entries(joined).map(([project_id, projectRole]) => ({ project_id, role: projectRole })) },
-      { onSuccess: ({ link, invitation }) => setSent({ email: invitation.email, link }) },
-    );
+    const memberships = Object.entries(joined).map(([project_id, projectRole]) => ({ project_id, role: projectRole }));
+    settle(invite.mutateAsync({ email, org_role: role, projects: memberships }), {
+      onSuccess: ({ link, invitation }) => setSent({ email: invitation.email, link }),
+    });
   }
 
   if (sent) {
@@ -203,6 +205,7 @@ type Refusal = { name: string; what: 'deactivate' | 'demote' };
 type SelfAction = { what: 'deactivate' | 'demote'; user: User };
 
 export default function People(_props: SectionProps) {
+  const settle = useSettle();
   const users = useUsers();
   const invitations = useInvitations();
   const projects = useProjects();
@@ -225,18 +228,15 @@ export default function People(_props: SectionProps) {
 
   function changeRole(user: User, role: OrgRole) {
     setRefusal(null);
-    updateRole.mutate(
-      { user_id: user.id, org_role: role },
-      {
-        onSuccess: () => toast({ title: `${user.name} ist jetzt ${ROLE_NAME[role]}`, tone: 'success' }),
-        onError: (error) => refuse(error, user, 'demote'),
-      },
-    );
+    settle(updateRole.mutateAsync({ user_id: user.id, org_role: role }), {
+      onSuccess: () => toast({ title: `${user.name} ist jetzt ${ROLE_NAME[role]}`, tone: 'success' }),
+      onError: (error) => refuse(error, user, 'demote'),
+    });
   }
 
   function runDeactivate(user: User) {
     setRefusal(null);
-    deactivate.mutate(user.id, {
+    settle(deactivate.mutateAsync(user.id), {
       onSuccess: () => {
         if (user.id === me?.id) {
           // the account that deactivated itself has no session any more, and the fake API would refuse every call it
@@ -255,7 +255,7 @@ export default function People(_props: SectionProps) {
   }
 
   function runReactivate(user: User) {
-    reactivate.mutate(user.id, {
+    settle(reactivate.mutateAsync(user.id), {
       onSuccess: () => toast({ title: `${user.name} ist wieder aktiv`, tone: 'success' }),
       onError: (error) => notifyError(`${user.name} nicht reaktiviert`, error, () => runReactivate(user)),
     });

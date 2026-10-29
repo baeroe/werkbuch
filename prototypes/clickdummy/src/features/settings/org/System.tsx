@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/Button';
 import { toast } from '@/components/ui/toast';
 import { useRetryFailedJobs, useSendTestMail, useSystemStatus } from '@/hooks/system';
 import { useCurrentUser } from '@/hooks/users';
+import { useSettle } from '@/hooks/mutation';
 import { notifyError } from '@/lib/errors';
 import type { SystemStatus } from '@/types';
 import { causeOf, hasReason } from './errors';
@@ -64,11 +65,12 @@ function Instance({ status }: { status: SystemStatus }) {
 }
 
 function FailedJobs({ status }: { status: SystemStatus }) {
+  const settle = useSettle();
   const retry = useRetryFailedJobs();
   const zone = useOrgZone();
 
   function run() {
-    retry.mutate(undefined, {
+    settle(retry.mutateAsync(undefined), {
       onSuccess: ({ retried }) => toast({ title: `${counted(retried, 'Job', 'Jobs')} wieder eingereiht`, description: 'Sie laufen mit der nächsten Runde der Queue.', tone: 'success' }),
       onError: (error) => notifyError('Jobs nicht wieder eingereiht', error, run),
     });
@@ -116,13 +118,14 @@ function FailedJobs({ status }: { status: SystemStatus }) {
 }
 
 function TestMail({ status }: { status: SystemStatus }) {
+  const settle = useSettle();
   const me = useCurrentUser();
   const send = useSendTestMail();
   const [refusal, setRefusal] = useState<string | null>(null);
 
   function run() {
     setRefusal(null);
-    send.mutate(undefined, {
+    settle(send.mutateAsync(undefined), {
       onSuccess: ({ sent_to }) => toast({ title: `Testmail an ${sent_to} gesendet`, description: 'Sie sollte in wenigen Sekunden ankommen.', tone: 'success' }),
       onError: (error) => (hasReason(error, 'mail_not_configured') ? setRefusal(causeOf(error)) : notifyError('Testmail nicht gesendet', error, run)),
     });

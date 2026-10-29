@@ -33,6 +33,7 @@ import { useOrganization } from '@/hooks/organization';
 import { useProperties } from '@/hooks/properties';
 import { useActivity, useWorkItem } from '@/hooks/workItems';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
+import { useSettle } from '@/hooks/mutation';
 import { notifyError } from '@/lib/errors';
 import { usePermissions } from '@/lib/permissions';
 import { runWithUndo } from '@/lib/undo';
@@ -388,11 +389,12 @@ const EMOJI_NAMES: Record<string, string> = {
 };
 
 function Reactions({ comment, users, canReact }: { comment: Comment; users: Map<string, User>; canReact: boolean }) {
+  const settle = useSettle();
   const me = useSession((state) => state.userId);
   const toggle = useToggleReaction();
   const [picking, setPicking] = useState(false);
   const react = (emoji: string) =>
-    toggle.mutate({ comment_id: comment.id, emoji }, { onError: (error) => notifyError('Reaktion nicht gespeichert', error, () => react(emoji)) });
+    settle(toggle.mutateAsync({ comment_id: comment.id, emoji }), { onError: (error) => notifyError('Reaktion nicht gespeichert', error, () => react(emoji)) });
 
   if (comment.reactions.length === 0 && !canReact) return null;
   return (

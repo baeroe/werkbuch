@@ -24,6 +24,7 @@ import { botWord, formatDay } from '@/components/fields/format';
 import { useToday } from '@/components/fields/itemData';
 import { useCreateToken, useRevokeToken, useTokens } from '@/hooks/tokens';
 import { useCreateBot, useCurrentUser, useDeactivateUser, useReactivateUser, useUpdateUser, useUsers } from '@/hooks/users';
+import { useSettle } from '@/hooks/mutation';
 import { now } from '@/lib/clock';
 import { notifyError } from '@/lib/errors';
 import type { Token, TokenAbility, User } from '@/types';
@@ -69,6 +70,7 @@ type BotDialogProps = {
 };
 
 function BotDialog({ open, onOpenChange, bot, people, meId }: BotDialogProps) {
+  const settle = useSettle();
   const create = useCreateBot();
   const update = useUpdateUser();
   const mutation = bot ? update : create;
@@ -93,8 +95,8 @@ function BotDialog({ open, onOpenChange, bot, people, meId }: BotDialogProps) {
       toast({ title: bot ? `${name.trim()} gespeichert` : `Bot ${name.trim()} ist angelegt`, tone: 'success' });
       onOpenChange(false);
     };
-    if (bot) update.mutate({ user_id: bot.id, patch: { name, handle, description, owner_id: bot.is_default_bot ? null : owner } }, { onSuccess: done });
-    else create.mutate({ name, handle, description, owner_id: owner ?? undefined }, { onSuccess: done });
+    if (bot) settle(update.mutateAsync({ user_id: bot.id, patch: { name, handle, description, owner_id: bot.is_default_bot ? null : owner } }), { onSuccess: done });
+    else settle(create.mutateAsync({ name, handle, description, owner_id: owner ?? undefined }), { onSuccess: done });
   }
 
   return (
@@ -161,6 +163,7 @@ type TokenDialogProps = {
 };
 
 function TokenDialog({ open, onOpenChange, bot, onCreated }: TokenDialogProps) {
+  const settle = useSettle();
   const create = useCreateToken();
   const zone = useOrgZone();
   const { today } = useToday();
@@ -179,25 +182,23 @@ function TokenDialog({ open, onOpenChange, bot, onCreated }: TokenDialogProps) {
       return;
     }
     if (abilities.length === 0) return;
-    create.mutate(
-      // the token runs until the end of the chosen day in the organisation's time zone
-      { user_id: bot.id, name, abilities, expires_at: expiresOn ? createZone(zone).toUtc(expiresOn, '23:59').toISOString() : null },
-      {
-        onSuccess: ({ token, plain_text }) => {
-          onOpenChange(false);
-          onCreated({
-            title: 'Token ist angelegt',
-            description: `„${token.name}“ für ${bot.name}.`,
-            heading: 'Kopiere den Token jetzt',
-            once: 'Du siehst ihn nur dieses eine Mal. Später kannst du ihn nicht mehr abrufen, nur einen neuen anlegen.',
-            label: 'Token',
-            value: plain_text,
-            copyLabel: 'Token kopieren',
-            warning: bot.is_default_bot ? <AdminWarning title="Dieser Token hat Admin-Rechte" /> : undefined,
-          });
-        },
+    // the token runs until the end of the chosen day in the organisation's time zone
+    const expires_at = expiresOn ? createZone(zone).toUtc(expiresOn, '23:59').toISOString() : null;
+    settle(create.mutateAsync({ user_id: bot.id, name, abilities, expires_at }), {
+      onSuccess: ({ token, plain_text }) => {
+        onOpenChange(false);
+        onCreated({
+          title: 'Token ist angelegt',
+          description: `„${token.name}“ für ${bot.name}.`,
+          heading: 'Kopiere den Token jetzt',
+          once: 'Du siehst ihn nur dieses eine Mal. Später kannst du ihn nicht mehr abrufen, nur einen neuen anlegen.',
+          label: 'Token',
+          value: plain_text,
+          copyLabel: 'Token kopieren',
+          warning: bot.is_default_bot ? <AdminWarning title="Dieser Token hat Admin-Rechte" /> : undefined,
+        });
       },
-    );
+    });
   }
 
   function toggle(ability: TokenAbility, on: boolean) {
@@ -366,20 +367,21 @@ type BotCardProps = {
 };
 
 function BotCard({ bot, owner, onEdit }: BotCardProps) {
+  const settle = useSettle();
   const deactivate = useDeactivateUser();
   const reactivate = useReactivateUser();
   const disabled = bot.disabled_at !== null;
   const titleId = `bot-${bot.id}`;
 
   function runReactivate() {
-    reactivate.mutate(bot.id, {
+    settle(reactivate.mutateAsync(bot.id), {
       onSuccess: () => toast({ title: `${bot.name} ist wieder aktiv`, description: 'Seine Tokens sind widerrufen. Lege neue an.', tone: 'success' }),
       onError: (error) => notifyError(`${bot.name} nicht reaktiviert`, error, runReactivate),
     });
   }
 
   function runDeactivate() {
-    deactivate.mutate(bot.id, {
+    settle(deactivate.mutateAsync(bot.id), {
       onSuccess: () =>
         toast({ title: `${bot.name} ist deaktiviert`, description: 'Seine Tokens sind widerrufen. Verlauf und Zuweisungen bleiben.', tone: 'success', action: { label: 'Reaktivieren', onClick: runReactivate } }),
       onError: (error) => notifyError(`${bot.name} nicht deaktiviert`, error, runDeactivate),

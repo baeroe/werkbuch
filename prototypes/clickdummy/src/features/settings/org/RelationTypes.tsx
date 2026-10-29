@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/Input';
 import { Switch } from '@/components/ui/Switch';
 import { toast } from '@/components/ui/toast';
 import { useDeleteRelationType, useRelationTypes, useSaveRelationType } from '@/hooks/catalog';
+import { useSettle } from '@/hooks/mutation';
 import type { RelationType } from '@/types';
 import { ReadOnlyNotice } from './access';
 import { fieldMessage, noticeOf } from './errors';
@@ -25,6 +26,7 @@ import { useDialogRound } from './useDialogRound';
 import { useRemoval } from './useRemoval';
 
 function RelationTypeDialog({ open, onOpenChange, type }: { open: boolean; onOpenChange: (open: boolean) => void; type: RelationType | null }) {
+  const settle = useSettle();
   const save = useSaveRelationType();
   const [name, setName] = useState(type?.name ?? '');
   const [outward, setOutward] = useState(type?.outward_label ?? '');
@@ -42,15 +44,12 @@ function RelationTypeDialog({ open, onOpenChange, type }: { open: boolean; onOpe
       document.getElementById(name.trim() === '' ? 'relation-name' : outward.trim() === '' ? 'relation-outward' : 'relation-inward')?.focus();
       return;
     }
-    save.mutate(
-      { id: type?.id, name, outward_label: outward, inward_label: symmetric ? null : inward, built_in: type?.built_in ?? null },
-      {
-        onSuccess: (saved) => {
-          onOpenChange(false);
-          toast({ title: type ? `Relationstyp „${saved.name}“ gespeichert` : `Relationstyp „${saved.name}“ ist angelegt`, tone: 'success' });
-        },
+    settle(save.mutateAsync({ id: type?.id, name, outward_label: outward, inward_label: symmetric ? null : inward, built_in: type?.built_in ?? null }), {
+      onSuccess: (saved) => {
+        onOpenChange(false);
+        toast({ title: type ? `Relationstyp „${saved.name}“ gespeichert` : `Relationstyp „${saved.name}“ ist angelegt`, tone: 'success' });
       },
-    );
+    });
   }
 
   return (

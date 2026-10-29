@@ -16,6 +16,7 @@ import { typeIcon } from '@/components/ui/TypeTab';
 import { useProperties } from '@/hooks/properties';
 import { useChangeWorkItemType } from '@/hooks/workItems';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
+import { useSettle } from '@/hooks/mutation';
 import { notifyError } from '@/lib/errors';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import type { Property, PropertyValue, WorkItem, WorkItemType } from '@/types';
@@ -116,6 +117,7 @@ type TypeChangeFormProps = {
 
 /** The dialog's content; mounted while it is open, so every change starts empty. */
 function TypeChangeForm({ formId, item, target, change, onDone }: TypeChangeFormProps) {
+  const settle = useSettle();
   const properties = useProperties();
   const types = useWorkItemTypes();
   const users = useUserMap();
@@ -139,25 +141,22 @@ function TypeChangeForm({ formId, item, target, change, onDone }: TypeChangeForm
   const nameOf = (userId: string) => users.get(userId)?.name ?? 'Unbekannt';
 
   function submit() {
-    change.mutate(
-      { id: item.id, type_id: target.id, values },
-      {
-        onSuccess: () => {
-          onDone();
-          successToast(item, target);
-        },
-        // field errors (422) show at their field; anything else in a toast
-        onError: (error) => {
-          if (!(error instanceof ApiError && error.status === 422 && error.errors)) {
-            notifyError('Typ nicht geändert', error, submit);
-            return;
-          }
-          setErrors(error.errors);
-          // the focus goes to the first field the server refused, once it shows its error
-          requestAnimationFrame(() => form.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus());
-        },
+    settle(change.mutateAsync({ id: item.id, type_id: target.id, values }), {
+      onSuccess: () => {
+        onDone();
+        successToast(item, target);
       },
-    );
+      // field errors (422) show at their field; anything else in a toast
+      onError: (error) => {
+        if (!(error instanceof ApiError && error.status === 422 && error.errors)) {
+          notifyError('Typ nicht geändert', error, submit);
+          return;
+        }
+        setErrors(error.errors);
+        // the focus goes to the first field the server refused, once it shows its error
+        requestAnimationFrame(() => form.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus());
+      },
+    });
   }
 
   return (
@@ -209,6 +208,7 @@ function TypeChangeForm({ formId, item, target, change, onDone }: TypeChangeForm
 type TypePickerProps = PickerExtras & { item: WorkItem };
 
 export function TypePicker({ item, look = 'field', shortcut, ...extras }: TypePickerProps) {
+  const settle = useSettle();
   const types = useWorkItemTypes();
   const properties = useProperties();
   const { project, isLoading, error, retry, retrying } = useItemWorkflow(item);
@@ -233,10 +233,10 @@ export function TypePicker({ item, look = 'field', shortcut, ...extras }: TypePi
       setDialogOpen(true);
       return;
     }
-    change.mutate(
-      { id: item.id, type_id: next.id },
-      { onSuccess: () => successToast(item, next), onError: (failure) => notifyError('Typ nicht geändert', failure, () => choose(typeId)) },
-    );
+    settle(change.mutateAsync({ id: item.id, type_id: next.id }), {
+      onSuccess: () => successToast(item, next),
+      onError: (failure) => notifyError('Typ nicht geändert', failure, () => choose(typeId)),
+    });
   }
 
   return (

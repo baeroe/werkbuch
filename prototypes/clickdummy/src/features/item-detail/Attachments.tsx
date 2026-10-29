@@ -5,13 +5,14 @@
  */
 
 import { File, FileText, Paperclip, Upload, X } from 'lucide-react';
-import { useEffect, useId, useRef, useState, type DragEvent } from 'react';
+import { useId, useRef, useState, type DragEvent } from 'react';
 import { useEditReason } from '@/components/fields/itemData';
 import { Button } from '@/components/ui/Button';
 import { cx } from '@/components/ui/cx';
 import { IconButton } from '@/components/ui/IconButton';
 import { toast } from '@/components/ui/toast';
 import { useDeleteAttachment, useUploadAttachment } from '@/hooks/attachments';
+import { useSettle } from '@/hooks/mutation';
 import { notifyError } from '@/lib/errors';
 import { runWithUndo } from '@/lib/undo';
 import type { Attachment, WorkItemDetail } from '@/types';
@@ -50,6 +51,7 @@ interface Pending {
 let pendingCounter = 0;
 
 export function Attachments({ detail }: { detail: WorkItemDetail }) {
+  const settle = useSettle();
   const { item } = detail;
   const editReason = useEditReason(item);
   const upload = useUploadAttachment();
@@ -61,31 +63,20 @@ export function Attachments({ detail }: { detail: WorkItemDetail }) {
   /** Deleted, while their undo toast stands. */
   const [gone, setGone] = useState<string[]>([]);
   const [over, setOver] = useState(false);
-  const mounted = useRef(true);
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
 
   const files = detail.attachments.filter((attachment) => attachment.kind === 'file' && !gone.includes(attachment.id));
   if (files.length === 0 && pending.length === 0 && editReason) return null;
 
+  /** Every file is a call of its own, with its own line and toast (calls that overlap keep their own answer). */
   function send(list: readonly File[]) {
     for (const file of list) {
       const entry = { id: `pending-${(pendingCounter += 1)}`, name: file.name };
       setPending((current) => [...current, entry]);
-      upload.mutate(
-        { project_id: item.project_id, file, owner: { type: 'work_item', id: item.id }, kind: 'file' },
-        {
-          onSuccess: () => toast({ title: `„${file.name}“ angehängt`, tone: 'success' }),
-          onError: (error) => notifyError(`„${file.name}“ nicht hochgeladen`, error, () => send([file])),
-          onSettled: () => {
-            if (mounted.current) setPending((current) => current.filter((other) => other.id !== entry.id));
-          },
-        },
-      );
+      settle(upload.mutateAsync({ project_id: item.project_id, file, owner: { type: 'work_item', id: item.id }, kind: 'file' }), {
+        onSuccess: () => toast({ title: `„${file.name}“ angehängt`, tone: 'success' }),
+        onError: (error) => notifyError(`„${file.name}“ nicht hochgeladen`, error, () => send([file])),
+        onSettled: () => setPending((current) => current.filter((other) => other.id !== entry.id)),
+      });
     }
   }
 
