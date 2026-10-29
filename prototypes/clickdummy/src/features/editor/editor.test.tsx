@@ -9,7 +9,7 @@ import { currentToasts, dismissToast } from '@/components/ui/toast';
 import { textDoc } from '@/lib/richtext';
 import { asUser, resetApi } from '@/test/api';
 import type { RichText } from '@/types';
-import { preloadEditor, RichTextEditor } from './RichTextEditor';
+import { preloadEditor, RichTextEditor, RichTextView } from './RichTextEditor';
 
 // jsdom has no layout: ProseMirror measures the selection to scroll it into view, Floating UI the popup
 beforeAll(async () => {
@@ -237,5 +237,24 @@ describe('RichTextEditor as a viewer', () => {
     expect(getDb().attachments).toHaveLength(before);
     expect(nodesOf(lastDoc(onChange), 'image')).toHaveLength(0);
     expect(editor.querySelector('[data-upload]')).toBeNull();
+  });
+});
+
+describe('code blocks', () => {
+  const code = (text: string, language: string | null = null): RichText => ({ type: 'doc', content: [{ type: 'codeBlock', attrs: { language }, content: [{ type: 'text', text }] }] });
+
+  it.each(['comment', 'description', 'page'] as const)('highlights the tokens of a code block in the %s editor', async (preset) => {
+    renderWithData(<RichTextEditor value={code('const answer = 42; // stimmt', 'javascript')} onChange={vi.fn()} preset={preset} projectId="p_web" />);
+    const editor = await screen.findByRole('textbox');
+
+    await waitFor(() => expect(editor.querySelector('pre .hljs-keyword')?.textContent).toBe('const'));
+    expect(editor.querySelector('pre .hljs-number')?.textContent).toBe('42');
+    expect(editor.querySelector('pre .hljs-comment')?.textContent).toBe('// stimmt');
+  });
+
+  it('finds the language of a block that names none, also in the viewer', async () => {
+    renderWithData(<RichTextView value={code('SELECT id, title FROM work_items WHERE archived_at IS NULL;')} />);
+
+    await waitFor(() => expect([...document.querySelectorAll('pre .hljs-keyword')].map((node) => node.textContent)).toEqual(expect.arrayContaining(['SELECT', 'FROM', 'WHERE'])));
   });
 });

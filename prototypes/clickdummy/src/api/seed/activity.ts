@@ -7,7 +7,7 @@
 import { mentionedIds } from '@/lib/richtext';
 import type { Attachment, Comment, ItemEvent, WorkItem } from '@/types';
 import { HERO_PNG, OUTLINE_PDF, POSTFIX_TXT } from './files';
-import { at, rt, USER_IDS, type UserShort } from './helpers';
+import { at, code, doc, p, rt, USER_IDS, type UserShort } from './helpers';
 import { itemId } from './items';
 
 const PROJECT_OF: Record<string, string> = { WEB: 'p_web', APP: 'p_app', OPS: 'p_ops' };
@@ -44,7 +44,14 @@ const closing = (from: string, to: string): Changes => ({ ...state(from, to), re
 
 export const comments: Comment[] = [
   comment('c_web47_1', 'WEB-47', 'mara', '10-27 14:42', 'Kann ich reproduzieren, nur unter iOS 18.', [{ emoji: '👍', users: ['ida', 'jonas'] }]),
-  comment('c_web47_2', 'WEB-47', 'jonas', '10-28 08:50', 'Ich schaue mir den Submit-Handler an. Vermutlich feuert das Formular-Plugin zweimal.'),
+  {
+    // with a code block, so the item shows the highlighting of code (spec 4.16)
+    ...comment('c_web47_2', 'WEB-47', 'jonas', '10-28 08:50', ''),
+    body: doc(
+      p('Ich schaue mir den Submit-Handler an. Vermutlich feuert das Formular-Plugin zweimal:'),
+      code("form.addEventListener('submit', sendMail);\n// das Plugin hängt sich noch einmal an\nplugin.on('submit', (event) => sendMail(event, { retries: 2 }));"),
+    ),
+  },
   comment('c_web42_1', 'WEB-42', 'ida', '10-28 08:40', 'Hero-Entwurf ist drin, die Teaser kommen heute Nachmittag. @mara kannst du die Texte kurz gegenlesen?'),
   comment('c_web42_2', 'WEB-42', 'lene', '10-28 09:05', 'Die Bildzuschnitte für Mobil schicke ich dir bis mittags.', [{ emoji: '🙌', users: ['ida'] }]),
   comment('c_web30_1', 'WEB-30', 'mara', '10-05 11:10', 'Phase 1 endet am 15.11. Danach starten wir mit den Leistungsseiten und dem Journal.'),

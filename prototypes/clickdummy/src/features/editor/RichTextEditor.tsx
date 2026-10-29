@@ -1,7 +1,8 @@
 /*
  * The one rich text editor of werkbuch (spec 4.16), Tiptap 3 with our own surface. Its level (`preset`) decides what
- * it knows (presets.ts); all levels have the `/` menu, Markdown shortcuts while typing, `@` mentions, `#` references
- * and images or files by pasting and dropping, with a placeholder and progress until the upload is stored.
+ * it knows (presets.ts); all levels have the `/` menu, Markdown shortcuts while typing, `@` mentions, `#` references,
+ * code blocks with syntax highlighting (codeBlocks.ts) and images or files by pasting and dropping, with a placeholder
+ * and progress until the upload is stored.
  *
  *   <RichTextEditor value={doc} onChange={setDoc} preset="comment" projectId={item.project_id} onSubmit={send} />
  *
@@ -138,26 +139,34 @@ function FileView({ node }: ReactNodeViewProps) {
 
 /* ------------------------------------------------------------------------- extensions */
 
-let tables: AnyExtension | null = null;
-let loadingTables: Promise<AnyExtension> | null = null;
+/** What comes as a chunk of its own: tables and the highlighting of code (most texts have neither). */
+interface LateExtensions {
+  tables: AnyExtension;
+  code: AnyExtension;
+}
+
+let late: LateExtensions | null = null;
+let loadingLate: Promise<LateExtensions> | null = null;
 
 /**
- * Tables come as a chunk of their own (most texts have none). It is asked for as soon as the editor's code is there;
- * an editor that renders before it arrived waits (Suspense) once. Tests call this first, so no editor waits.
+ * Tables and code highlighting come as chunks of their own. They are asked for as soon as the editor's code is there;
+ * an editor that renders before they arrived waits (Suspense) once. Tests call this first, so no editor waits.
  */
-export function preloadEditor(): Promise<AnyExtension> {
-  loadingTables ??= import('@tiptap/extension-table').then(({ TableKit }) => (tables = TableKit.configure({ table: { resizable: false } })));
-  return loadingTables;
+export function preloadEditor(): Promise<LateExtensions> {
+  loadingLate ??= Promise.all([import('@tiptap/extension-table'), import('./codeBlocks')]).then(
+    ([{ TableKit }, { highlightedCodeBlock }]) => (late = { tables: TableKit.configure({ table: { resizable: false } }), code: highlightedCodeBlock }),
+  );
+  return loadingLate;
 }
 void preloadEditor();
 
-const useTables = (): AnyExtension => tables ?? use(preloadEditor());
+const useLateExtensions = (): LateExtensions => late ?? use(preloadEditor());
 
 /**
  * The extensions of a level. `placeholder: null` builds a viewer: the same nodes, without the menus, the upload path
  * and the placeholder.
  */
-function buildExtensions(preset: EditorPreset, env: RefObject<EditorEnv | null>, placeholder: string | null, tableKit: AnyExtension): AnyExtension[] {
+function buildExtensions(preset: EditorPreset, env: RefObject<EditorEnv | null>, placeholder: string | null, { tables: tableKit, code }: LateExtensions): AnyExtension[] {
   const features = PRESETS[preset];
   const editing: AnyExtension[] =
     placeholder === null
@@ -179,6 +188,8 @@ function buildExtensions(preset: EditorPreset, env: RefObject<EditorEnv | null>,
     StarterKit.configure({
       heading: features.headings ? { levels: [1, 2, 3] } : false,
       horizontalRule: features.horizontalRule ? {} : false,
+      // every level has code blocks, highlighted (below)
+      codeBlock: false,
       link: { openOnClick: false, autolink: true, linkOnPaste: true, defaultProtocol: 'https', HTMLAttributes: { rel: 'noopener noreferrer nofollow', target: '_blank' } },
       dropcursor: { color: 'var(--accent)', width: 2 },
     }),
@@ -186,6 +197,7 @@ function buildExtensions(preset: EditorPreset, env: RefObject<EditorEnv | null>,
       ? [TaskList, TaskItem.configure({ nested: true, a11y: { checkboxLabel: (node, checked) => `${node.textContent || 'Leerer Punkt'}: ${checked ? 'erledigt' : 'offen'}` } })]
       : []),
     ...(features.table ? [tableKit] : []),
+    code,
     AttachmentImage.extend({ addNodeView: () => ReactNodeViewRenderer(ImageView) }),
     AttachmentFile.extend({ addNodeView: () => ReactNodeViewRenderer(FileView, { as: 'span' }) }),
     mentionExtension(env),
@@ -244,8 +256,8 @@ function EditorBody({
   });
 
   const framed = preset !== 'page';
-  const tableExtension = useTables();
-  const extensions = useMemo(() => buildExtensions(preset, env, placeholder ?? PRESET_PLACEHOLDER[preset], tableExtension), [preset, placeholder, tableExtension]);
+  const lateExtensions = useLateExtensions();
+  const extensions = useMemo(() => buildExtensions(preset, env, placeholder ?? PRESET_PLACEHOLDER[preset], lateExtensions), [preset, placeholder, lateExtensions]);
   /**
    * The documents the editor reported. One of them coming back as `value` changes nothing, also an older one: with
    * fast typing the parent may render a document the editor has already moved past, and taking it would drop keys.
@@ -340,8 +352,8 @@ export function RichTextView(props: RichTextViewProps) {
 
 function Viewer({ value, className }: RichTextViewProps) {
   const env = useRef<EditorEnv | null>(null);
-  const tableExtension = useTables();
-  const extensions = useMemo(() => buildExtensions('page', env, null, tableExtension), [tableExtension]);
+  const lateExtensions = useLateExtensions();
+  const extensions = useMemo(() => buildExtensions('page', env, null, lateExtensions), [lateExtensions]);
   const editor = useEditor(
     {
       extensions,

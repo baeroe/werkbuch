@@ -144,6 +144,31 @@
   font-size: inherit;
 }
 
+/*
+ * Syntax highlighting (codeBlocks.ts, lowlight's `hljs-*` classes) with the tokens of DESIGN.md only: words of the
+ * language in ink blue and semibold, values (strings, numbers) in ink blue, names in ink and semibold, comments and
+ * punctuation in pencil. On --bg-sunken each of them holds at least 5 : 1 in both themes.
+ */
+.rt pre :is(.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-type, .hljs-name, .hljs-section, .hljs-doctag, .hljs-template-tag, .hljs-meta .hljs-keyword) {
+  color: var(--accent-text);
+  font-weight: 600;
+}
+.rt pre :is(.hljs-string, .hljs-regexp, .hljs-symbol, .hljs-number, .hljs-char, .hljs-link, .hljs-addition, .hljs-selector-attr, .hljs-selector-pseudo, .hljs-meta .hljs-string) {
+  color: var(--accent-text);
+}
+.rt pre :is(.hljs-title, .hljs-attr, .hljs-attribute, .hljs-property, .hljs-selector-id, .hljs-selector-class, .hljs-built_in, .hljs-strong) {
+  font-weight: 600;
+}
+.rt pre :is(.hljs-comment, .hljs-quote, .hljs-meta, .hljs-punctuation, .hljs-deletion) {
+  color: var(--muted);
+}
+.rt pre :is(.hljs-comment, .hljs-quote, .hljs-emphasis) {
+  font-style: italic;
+}
+.rt pre .hljs-deletion {
+  text-decoration: line-through;
+}
+
 /* checklists */
 .rt ul[data-type='taskList'] {
   list-style: none;
