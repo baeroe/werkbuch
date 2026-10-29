@@ -1,20 +1,7 @@
 /*
- * Placeholder until Task 10 replaces this file. Contract with the router (lazy-loaded): the default export is the
- * screen of /projects/:identifier/templates/:templateId? and reads both params itself.
+ * Contract with the router (lazy-loaded, from Task 4): the default export is the screen of
+ * /projects/:identifier/templates/:templateId? and reads both params itself. Without an id it lists the templates of
+ * the project; the id `new` opens the editor for a new template.
  */
 
-import { LayoutTemplate } from 'lucide-react';
-import { useParams } from 'react-router';
-import { ComingSoon } from '@/app/PageStates';
-
-export default function TemplatesRoute() {
-  const { identifier } = useParams();
-  return (
-    <ComingSoon
-      title={`Vorlagen ${identifier}`}
-      task={10}
-      icon={LayoutTemplate}
-      description="Hier entstehen die Vorlagen des Projekts mit Zeitplan, den nächsten Terminen und dem Protokoll der Läufe."
-    />
-  );
-}
+export { default } from './TemplatesScreen';
