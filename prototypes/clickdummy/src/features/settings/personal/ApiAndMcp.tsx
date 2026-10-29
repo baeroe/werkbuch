@@ -12,6 +12,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { IconButton } from '@/components/ui/IconButton';
 import { useRevokeToken, useTokens } from '@/hooks/tokens';
 import { now } from '@/lib/clock';
+import { instanceOrigin } from '@/lib/links';
 import { runWithUndo } from '@/lib/undo';
 import type { Token, TokenAbility } from '@/types';
 import { focusNeighbour } from '../project/form';
@@ -32,7 +33,7 @@ export function ApiAndMcp({ user }: SectionProps) {
   const [revoking, setRevoking] = useState<ReadonlySet<string>>(new Set());
 
   const day = (iso: string) => new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: user.timezone }).format(new Date(iso));
-  const origin = window.location.origin;
+  const origin = instanceOrigin();
 
   function revokeWithUndo(token: Token, row: Element | null) {
     focusNeighbour(row);

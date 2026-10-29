@@ -12,6 +12,7 @@ import { Link, Outlet, useLocation } from 'react-router';
 import { ItemDialogsHost } from '@/components/fields/ItemDialogs';
 import { cx } from '@/components/ui/cx';
 import { IconButton } from '@/components/ui/IconButton';
+import { InPageLink } from '@/components/ui/InPageLink';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
 import { CommandPalette } from '@/features/palette/CommandPalette';
 import { useLiveSync } from '@/hooks/live';
@@ -97,12 +98,12 @@ export function Shell() {
 
   return (
     <>
-      <a
-        href="#main"
+      <InPageLink
+        to="main"
         className="sr-only rounded-ctl bg-surface px-3 py-2 text-ui font-semibold text-ink shadow-elev-2 focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-60"
       >
         Zum Inhalt
-      </a>
+      </InPageLink>
       <MobileBar />
       <Sidebar />
       <main

@@ -6,6 +6,7 @@
 
 import type { ReactNode } from 'react';
 import { cx } from '@/components/ui/cx';
+import { hrefOf } from '@/lib/links';
 import type { WorkItem } from '@/types';
 
 /** The focus ring of the link, drawn around the card or row that holds it. */
@@ -25,7 +26,7 @@ type ItemLinkProps = {
 export function ItemLink({ item, onOpen, tabIndex, className, children }: ItemLinkProps) {
   return (
     <a
-      href={`/items/${item.key}`}
+      href={hrefOf(`/items/${item.key}`)}
       data-item-link=""
       data-focus-ring="none"
       tabIndex={tabIndex}

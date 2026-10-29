@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:review": "vite build --mode review --outDir dist-review",
+    "build:review": "vite build --mode review --outDir dist-review && node scripts/artifact.mjs",
     "preview": "vite preview",
     "typecheck": "tsc -b",
     "test": "vitest run",

@@ -3,6 +3,7 @@
  * among the people can neither be demoted nor deactivated; the default bot does not count and cannot be deactivated.
  */
 
+import { appUrl, DEMO_ORIGIN } from '@/lib/links';
 import type { Invitation, OrgRole, ProjectRole, User } from '@/types';
 import { isOrgAdmin, requireOrgAdmin } from './access';
 import { conflict, FieldErrors, forbidden, newId, notFound, paginate, read, write, type Page } from './client';
@@ -56,13 +57,13 @@ export function inviteUser(input: InviteUserInput): Promise<{ link: string; invi
     errors.throwIfAny();
 
     const token = Math.random().toString(36).slice(2, 12) + Math.random().toString(36).slice(2, 12);
-    const origin = typeof window === 'undefined' ? 'https://werkbuch.example.com' : window.location.origin;
+    const path = `/invitations/${token}`;
     const invitation: Invitation = {
       id: newId('inv'),
       email,
       org_role: input.org_role,
       projects: (input.projects ?? []).map((entry) => ({ ...entry })),
-      link: `${origin}/invitations/${token}`,
+      link: typeof window === 'undefined' ? `${DEMO_ORIGIN}${path}` : appUrl(path),
       created_by: me.id,
       created_at: stamp,
       expires_at: new Date(now.getTime() + INVITATION_DAYS * 86_400_000).toISOString(),

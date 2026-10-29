@@ -42,6 +42,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { IconButton } from '@/components/ui/IconButton';
 import { IndexCard } from '@/components/ui/IndexCard';
+import { InPageLink } from '@/components/ui/InPageLink';
 import { Input } from '@/components/ui/Input';
 import { Kbd } from '@/components/ui/Kbd';
 import { Menu, MenuCheckboxItem, MenuContent, MenuGroup, MenuGroupLabel, MenuItem, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuSubmenu, MenuTrigger } from '@/components/ui/Menu';
@@ -144,9 +145,9 @@ export function ComponentsGallery() {
 
   return (
     <div className="px-4 md:px-8">
-      <a href="#main" className="sr-only rounded-ctl bg-surface px-3 py-2 text-ui font-semibold text-ink shadow-elev-2 focus:not-sr-only focus:absolute focus:top-3 focus:left-3">
+      <InPageLink to="main" className="sr-only rounded-ctl bg-surface px-3 py-2 text-ui font-semibold text-ink shadow-elev-2 focus:not-sr-only focus:absolute focus:top-3 focus:left-3">
         Zum Inhalt
-      </a>
+      </InPageLink>
       <header className="mx-auto max-w-7xl pt-10 pb-4 md:pt-14">
         <div className="flex flex-wrap items-start justify-between gap-x-12 gap-y-6">
           <div className="min-w-0 max-w-[60ch]">
@@ -158,15 +159,15 @@ export function ComponentsGallery() {
             <nav aria-label="Abschnitte" className="mt-5">
               <ul className="flex flex-wrap gap-2">
                 {[
-                  ['#controls', 'Bedienung'],
-                  ['#elements', 'Status und Elemente'],
-                  ['#fields', 'Felder'],
-                  ['#feedback', 'Rückmeldung'],
-                ].map(([href, label]) => (
-                  <li key={href}>
-                    <a href={href} className={buttonClass({ variant: 'secondary', size: 'sm' })}>
+                  ['controls', 'Bedienung'],
+                  ['elements', 'Status und Elemente'],
+                  ['fields', 'Felder'],
+                  ['feedback', 'Rückmeldung'],
+                ].map(([id, label]) => (
+                  <li key={id}>
+                    <InPageLink to={id} className={buttonClass({ variant: 'secondary', size: 'sm' })}>
                       {label}
-                    </a>
+                    </InPageLink>
                   </li>
                 ))}
               </ul>
@@ -1073,9 +1074,9 @@ function EmptySpecimen() {
             <Button variant="secondary" icon={Bell}>
               Benachrichtigungen einstellen
             </Button>
-            <a href="#controls" className="inline-flex h-11 items-center rounded-ctl px-3 text-ui font-semibold text-accent-text transition-colors duration-120 hover:bg-hover md:h-8">
+            <InPageLink to="controls" className="inline-flex h-11 items-center rounded-ctl px-3 text-ui font-semibold text-accent-text transition-colors duration-120 hover:bg-hover md:h-8">
               Meine Items öffnen
-            </a>
+            </InPageLink>
           </>
         }
       />

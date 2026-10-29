@@ -1,11 +1,12 @@
 /*
  * The snippets that connect an agent to the MCP server, for Claude Code, Codex and JSON clients, with the address of
- * this instance (`window.location.origin`). Without a token they carry a placeholder; the dialog after "Neuer Token"
+ * this instance (`instanceOrigin()`). Without a token they carry a placeholder; the dialog after "Neuer Token"
  * fills in the real one, once.
  */
 
 import { useRef } from 'react';
 import { Tab, Tabs, TabsList, TabsPanel } from '@/components/ui/Tabs';
+import { instanceOrigin } from '@/lib/links';
 import { CopyButton } from './CopyButton';
 import { mcpSnippets, TOKEN_PLACEHOLDER, type McpSnippets } from './snippets';
 
@@ -31,7 +32,7 @@ function Snippet({ text, hint }: { text: string; hint: string }) {
 }
 
 export function SetupSnippets({ token }: { token?: string }) {
-  const snippets = mcpSnippets(window.location.origin, token ?? TOKEN_PLACEHOLDER);
+  const snippets = mcpSnippets(instanceOrigin(), token ?? TOKEN_PLACEHOLDER);
   return (
     <Tabs defaultValue="claude_code">
       <TabsList aria-label="Client">

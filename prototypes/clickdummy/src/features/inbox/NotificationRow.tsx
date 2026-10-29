@@ -25,6 +25,7 @@ import { useProperties } from '@/hooks/properties';
 import { useTemplates } from '@/hooks/templates';
 import { useWebhooks } from '@/hooks/webhooks';
 import { useWorkflows } from '@/hooks/workflows';
+import { hrefOf } from '@/lib/links';
 import type { Notification, WorkItem } from '@/types';
 import { changedFields, timeAgo } from './notifications';
 
@@ -193,7 +194,7 @@ export function NotificationRow({ notification, item, current, tabStop, flashing
       <div className="min-w-0 flex-1">
         <a
           ref={linkRef}
-          href={href}
+          href={hrefOf(href)}
           data-item-link=""
           data-focus-ring="none"
           tabIndex={tabStop ? 0 : -1}

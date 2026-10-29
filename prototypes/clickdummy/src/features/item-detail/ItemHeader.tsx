@@ -27,6 +27,7 @@ import { qk } from '@/hooks/keys';
 import { useProjects } from '@/hooks/projects';
 import { useArchiveWorkItem, useDeleteWorkItem, useRestoreWorkItem, useSetSubscribed, useUpdateWorkItem, useWorkItem } from '@/hooks/workItems';
 import { useSettle } from '@/hooks/mutation';
+import { appUrl } from '@/lib/links';
 import { usePermissions } from '@/lib/permissions';
 import { runWithUndo } from '@/lib/undo';
 import { useUiStore } from '@/store/ui';
@@ -200,7 +201,7 @@ function WatchButton({ detail }: { detail: WorkItemDetail }) {
 
 function CopyLinkButton({ item }: { item: WorkItem }) {
   const copy = async () => {
-    const url = `${window.location.origin}/items/${item.key}`;
+    const url = appUrl(`/items/${item.key}`);
     try {
       await navigator.clipboard.writeText(url);
       toast({ title: `Link zu ${item.key} kopiert`, tone: 'success' });

@@ -14,6 +14,7 @@ import { useItemWorkflow } from '@/components/fields/itemData';
 import { ItemKey } from '@/components/items/ItemKey';
 import { cx } from '@/components/ui/cx';
 import { StatusIcon } from '@/components/ui/StatusIcon';
+import { hrefOf } from '@/lib/links';
 import type { WorkItem } from '@/types';
 
 export type DetailSurface = 'peek' | 'page';
@@ -134,7 +135,7 @@ export function LinkedItem({ item, trailing, className }: LinkedItemProps) {
         <span className="size-3.5 shrink-0" aria-hidden="true" />
       )}
       <a
-        href={`/items/${item.key}`}
+        href={hrefOf(`/items/${item.key}`)}
         onClick={openHandler(() => open(item))}
         className="flex min-w-0 flex-1 items-center gap-2 rounded-chip text-ui text-ink no-underline after:absolute after:inset-0 after:rounded-ctl"
       >

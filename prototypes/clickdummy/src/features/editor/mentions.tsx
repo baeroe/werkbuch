@@ -29,6 +29,7 @@ import { useSearch } from '@/hooks/search';
 import { useUsers } from '@/hooks/users';
 import { useWorkItem } from '@/hooks/workItems';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
+import { hrefOf } from '@/lib/links';
 import type { User } from '@/types';
 import type { EditorEnv } from './pasteImages';
 
@@ -343,7 +344,7 @@ function AppLink({ to, className, children }: { to: string; className: string; c
       {children}
     </Link>
   ) : (
-    <a href={to} className={className}>
+    <a href={hrefOf(to)} className={className}>
       {children}
     </a>
   );

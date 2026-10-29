@@ -20,6 +20,23 @@ describe('useSession', () => {
     expect(JSON.parse(localStorage.getItem(SESSION_KEY) ?? '{}').state.userId).toBe('u_ida');
     useSession.getState().setUserId('u_mara');
   });
+
+  it('switches the person when the browser refuses storage (a sandboxed frame): the choice lasts until reload', () => {
+    const refuse = () => {
+      throw new DOMException('The operation is insecure.', 'SecurityError');
+    };
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(refuse);
+    const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(refuse);
+    try {
+      expect(() => useSession.getState().setUserId('u_ida')).not.toThrow();
+      expect(useSession.getState().userId).toBe('u_ida');
+      expect(() => useSession.persist.rehydrate()).not.toThrow();
+    } finally {
+      setItem.mockRestore();
+      getItem.mockRestore();
+      useSession.getState().setUserId('u_mara');
+    }
+  });
 });
 
 describe('useUiStore', () => {

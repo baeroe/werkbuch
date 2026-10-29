@@ -2,10 +2,13 @@
  * All routes (plan, Task 4). Every screen is loaded on demand (`React.lazy`), each from the one file its task owns:
  * a later task replaces the placeholder there and the route stays as it is. "/" leads to /my-items; an unknown route
  * shows the 404 page inside the shell. The screens before signing in and the component gallery stand without it.
+ *
+ * The review build (`pnpm build:review`, `VITE_ROUTER=hash`) is one static page: its routes live in the hash
+ * (`#/items/WEB-47`). Plain links into the app take their href from `hrefOf` (lib/links.ts) for that reason.
  */
 
 import { lazy, Suspense } from 'react';
-import { createBrowserRouter, Navigate, Outlet, ScrollRestoration, useParams, type RouteObject } from 'react-router';
+import { createBrowserRouter, createHashRouter, Navigate, Outlet, ScrollRestoration, useParams, type RouteObject } from 'react-router';
 import type { ItemsPreset } from '@/features/items/routes';
 import { NotFound, RouteError } from './PageStates';
 import { closePeekOnNavigation } from './PeekHost';
@@ -98,7 +101,7 @@ export const routes: RouteObject[] = [
   },
 ];
 
-export const router = createBrowserRouter(routes);
+export const router = import.meta.env.VITE_ROUTER === 'hash' ? createHashRouter(routes) : createBrowserRouter(routes);
 
 // a new screen closes the preview, decided at the moment of navigation (see PeekHost)
 closePeekOnNavigation(router);
