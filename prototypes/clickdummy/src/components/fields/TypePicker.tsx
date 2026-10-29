@@ -16,7 +16,7 @@ import { Dialog, DialogClose } from '@/components/ui/Dialog';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
 import { toast } from '@/components/ui/toast';
 import { typeIcon } from '@/components/ui/TypeTab';
-import { canHaveChildren, canHaveParent } from '@/domain/hierarchy';
+import { typeChangeRefusal } from '@/domain/hierarchy';
 import { useProperties } from '@/hooks/properties';
 import { useChangeWorkItemType, useWorkItem } from '@/hooks/workItems';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
@@ -67,13 +67,6 @@ export function typeChangeOf(item: WorkItem, target: WorkItemType, properties: P
   return { lost, missing };
 }
 
-/** Why the item cannot take the type, by the two levels of items; null when it can. */
-export function typeRefusal(item: WorkItem, target: WorkItemType, hasChildren: boolean): string | null {
-  if (hasChildren && !canHaveChildren(target)) return `${item.key} hat Kind-Items. Nur Epics können Kind-Items haben.`;
-  if (item.parent_id !== null && !canHaveParent(target)) return `${item.key} hat ein Eltern-Item. Epics haben kein Eltern-Item.`;
-  return null;
-}
-
 const successToast = (item: WorkItem, target: WorkItemType) => toast({ title: `${item.key} hat jetzt den Typ ${target.name}`, tone: 'success' });
 
 type TypeChangeDialogProps = {
@@ -97,7 +90,8 @@ export function TypeChangeDialog({ item, target, open, onOpenChange, finalFocus 
   // form for a moment
   const detail = useWorkItem(item.id).data;
   if (!target) return null;
-  const refusal = typeRefusal(detail?.item ?? item, target, (detail?.children.length ?? 0) > 0);
+  const known = detail?.item ?? item;
+  const refusal = typeChangeRefusal(item.key, { hasChildren: (detail?.children.length ?? 0) > 0, hasParent: known.parent_id !== null }, target);
   return (
     <Dialog
       open={open}
@@ -263,7 +257,7 @@ export function TypePicker({ item, look = 'field', shortcut, ...extras }: TypePi
     const next = offered.find((type) => type.id === typeId);
     if (!next || !properties.data) return;
     const { lost, missing } = typeChangeOf(item, next, properties.data.items, all);
-    if (lost.length > 0 || missing.length > 0 || typeRefusal(item, next, (children?.length ?? 0) > 0)) {
+    if (lost.length > 0 || missing.length > 0 || typeChangeRefusal(item.key, { hasChildren: (children?.length ?? 0) > 0, hasParent: item.parent_id !== null }, next)) {
       setTarget(next);
       setDialogOpen(true);
       return;

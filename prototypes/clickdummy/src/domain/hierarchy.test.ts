@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { types } from '@/api/seed/config';
 import type { WorkItemType } from '@/types';
-import { canHaveChildren, canHaveParent } from './hierarchy';
+import { canHaveChildren, canHaveParent, typeChangeRefusal } from './hierarchy';
 
 const typeNamed = (name: string) => types.find((type) => type.name === name)!;
 
@@ -19,6 +19,15 @@ describe('two levels: epics have children, everything else has a parent', () => 
     expect(canHaveParent(unmarked)).toBe(true);
     expect(canHaveChildren(initiative)).toBe(true);
     expect(canHaveParent(initiative)).toBe(false);
+  });
+
+  it('says why a type change would break the two levels, in the words the API and the screens share', () => {
+    expect(typeChangeRefusal('WEB-30', { hasChildren: true, hasParent: false }, typeNamed('Task'))).toBe('WEB-30 hat Kind-Items. Nur Epics können Kind-Items haben.');
+    expect(typeChangeRefusal('WEB-48', { hasChildren: false, hasParent: true }, typeNamed('Epic'))).toBe('WEB-48 hat ein Eltern-Item. Epics haben kein Eltern-Item.');
+    // what keeps the two levels
+    expect(typeChangeRefusal('WEB-30', { hasChildren: true, hasParent: false }, typeNamed('Epic'))).toBeNull();
+    expect(typeChangeRefusal('WEB-48', { hasChildren: false, hasParent: true }, typeNamed('Bug'))).toBeNull();
+    expect(typeChangeRefusal('WEB-50', { hasChildren: false, hasParent: false }, typeNamed('Epic'))).toBeNull();
   });
 
   it('an unknown type has no children, and nothing says it cannot have a parent', () => {

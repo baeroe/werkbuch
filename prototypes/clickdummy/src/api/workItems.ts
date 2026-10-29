@@ -3,7 +3,7 @@
  * `itemRules.ts`; reading goes through the filter engine and the scope of the projects a person sees.
  */
 
-import { canHaveChildren, canHaveParent } from '@/domain/hierarchy';
+import { typeChangeRefusal } from '@/domain/hierarchy';
 import { childProgress } from '@/domain/progress';
 import { matchesFilter, sortItems } from '@/domain/filter';
 import { isClosedCategory } from '@/domain/workflow';
@@ -22,7 +22,7 @@ import type {
   WorkItemMeta,
 } from '@/types';
 import { canSeeProject, requireRole, requireWritable, visibleProjectIds, visibleProjects } from './access';
-import { ApiError, conflict, FieldErrors, invalid, notFound, paginate, read, reasonText, write, type Page, type PageArgs } from './client';
+import { ApiError, conflict, FieldErrors, invalid, notFound, paginate, read, write, type Page, type PageArgs } from './client';
 import type { Db } from './db';
 import { addSubscriber, notifyPeople, recordEvent, removeSubscriber } from './events';
 import {
@@ -291,9 +291,8 @@ export function changeWorkItemType(id: string, type_id: string, values: Record<s
     else if (type.archived_at !== null) errors.add('type_id', 'Dieser Typ ist archiviert.');
     errors.throwIfAny();
     // the sentence is the cause as well, so a toast names it
-    const refuse = (message: string) => invalid({ type_id: [message] }, message);
-    if (!canHaveChildren(type) && db.items.some((entry) => entry.parent_id === item.id)) throw refuse(`${item.key} hat Kind-Items. ${reasonText('parent_not_epic')}`);
-    if (!canHaveParent(type) && item.parent_id !== null) throw refuse(`${item.key} hat ein Eltern-Item. ${reasonText('epic_has_no_parent')}`);
+    const refusal = typeChangeRefusal(item.key, { hasChildren: db.items.some((entry) => entry.parent_id === item.id), hasParent: item.parent_id !== null }, type);
+    if (refusal) throw invalid({ type_id: [refusal] }, refusal);
 
     const kept = new Set(propertiesOfType(db, type!).map(({ property }) => property.key));
     const keptValues = Object.fromEntries(Object.entries(item.values).filter(([key]) => kept.has(key)));

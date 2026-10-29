@@ -9,6 +9,7 @@
  * account, and `write` stores the result, or undoes everything when the body throws.
  */
 
+import { EPICS_HAVE_NO_PARENT, ONLY_EPICS_HAVE_CHILDREN } from '@/domain/hierarchy';
 import { now } from '@/lib/clock';
 import { DEFAULT_USER_ID, useSession } from '@/store/session';
 import type { User } from '@/types';
@@ -71,8 +72,8 @@ const REASON_TEXT: Record<string, string> = {
   validation_failed: 'Die Eingabe ist nicht gültig.',
   description_conflict: 'Die Beschreibung wurde inzwischen geändert.',
   page_conflict: 'Die Seite wurde inzwischen geändert.',
-  parent_not_epic: 'Nur Epics können Kind-Items haben.',
-  epic_has_no_parent: 'Epics haben kein Eltern-Item.',
+  parent_not_epic: ONLY_EPICS_HAVE_CHILDREN,
+  epic_has_no_parent: EPICS_HAVE_NO_PARENT,
   last_admin: 'Das ist der letzte aktive Admin.',
   in_use: 'Das wird noch benutzt.',
   simulated: 'Simulierter Serverfehler.',

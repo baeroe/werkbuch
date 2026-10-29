@@ -41,7 +41,7 @@ import type { BulkPatch } from '@/api/workItems';
 import { UnassignedAvatar } from '@/components/ui/Avatar';
 import { PRIORITY_LABELS } from '@/components/ui/PriorityIcon';
 import { toast } from '@/components/ui/toast';
-import { canHaveParent } from '@/domain/hierarchy';
+import { canHaveParent, typeChangeRefusal } from '@/domain/hierarchy';
 import { allowedTargets, isClosedCategory, statesInOrder } from '@/domain/workflow';
 import { useLabels, useResolutions } from '@/hooks/catalog';
 import { qk } from '@/hooks/keys';
@@ -72,11 +72,11 @@ import { addDays, formatDay, formatWeekdayDay, weekdayOf } from './format';
 import { askResolution, askTypeChange } from './ItemDialogs';
 import { archivedReason, projectPeople, useToday } from './itemData';
 import { labelOption } from './LabelsPicker';
-import { noParentText, parentCandidates, parentOption, useProjectItems } from './ParentPicker';
+import { noParentText, NO_PARENT_OPTION, parentCandidates, parentOption, useProjectItems } from './ParentPicker';
 import type { PickerOption } from './Picker';
 import { PRIORITY_OPTIONS } from './PriorityPicker';
 import { stateOption } from './StatePicker';
-import { typeChangeOf, typeOption, typeRefusal } from './TypePicker';
+import { typeChangeOf, typeOption } from './TypePicker';
 
 export type ItemCommandScope = 'list' | 'detail';
 
@@ -294,7 +294,7 @@ function typeOptions(ctx: ItemCommandContext): CommandOption[] {
         const { lost, missing } = typeChangeOf(item, type, ctx.properties, ctx.types);
         // the two levels: the dialog says why (unknown children leave it to the server, whose toast says it)
         const hasChildren = (ctx.projectItems ?? []).some((entry) => entry.parent_id === item.id);
-        if (lost.length > 0 || missing.length > 0 || typeRefusal(item, type, hasChildren)) {
+        if (lost.length > 0 || missing.length > 0 || typeChangeRefusal(item.key, { hasChildren, hasParent: item.parent_id !== null }, type)) {
           askTypeChange(item, type);
           return;
         }
@@ -366,7 +366,7 @@ function parentOptions(ctx: ItemCommandContext): CommandOption[] {
       onSuccess: () => done(parent ? `${item.key}: Eltern-Item ${parent.key}` : `${item.key}: kein Eltern-Item mehr`),
     });
   const candidates = candidatesOf(ctx).map((candidate) => option(parentOption(candidate, typeIn(ctx)(candidate.type_id)), () => setParent(candidate)));
-  return [...(item.parent_id ? [{ id: 'none', label: 'Kein Eltern-Item', keywords: ['entfernen'], run: () => setParent(null) }] : []), ...candidates];
+  return [...(item.parent_id ? [option(NO_PARENT_OPTION, () => setParent(null))] : []), ...candidates];
 }
 
 /* ----------------------------------------------------------------------- archive, delete */

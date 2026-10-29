@@ -20,6 +20,17 @@ export function canHaveParent(type: TypeMark): boolean {
   return !canHaveChildren(type);
 }
 
+/** The two halves of the rule as the API and the screens say them (the API's reasons `parent_not_epic`, `epic_has_no_parent`). */
+export const ONLY_EPICS_HAVE_CHILDREN = 'Nur Epics können Kind-Items haben.';
+export const EPICS_HAVE_NO_PARENT = 'Epics haben kein Eltern-Item.';
+
+/** Why an item (`key`) cannot take the type `target` without breaking the two levels; null when it can. */
+export function typeChangeRefusal(key: string, { hasChildren, hasParent }: { hasChildren: boolean; hasParent: boolean }, target: TypeMark): string | null {
+  if (hasChildren && !canHaveChildren(target)) return `${key} hat Kind-Items. ${ONLY_EPICS_HAVE_CHILDREN}`;
+  if (hasParent && !canHaveParent(target)) return `${key} hat ein Eltern-Item. ${EPICS_HAVE_NO_PARENT}`;
+  return null;
+}
+
 /** Why a project takes no child item: none of its types may have a parent. */
 export const NO_CHILD_TYPE = 'Im Projekt ist kein Typ aktiviert, der Kind-Item sein kann.';
 

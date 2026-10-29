@@ -124,6 +124,8 @@ describe('item commands', () => {
     const options = within(list).getAllByRole('option').map((option) => option.textContent ?? '');
     // APP-11 hangs under APP-5, the one epic of APP: only epics are offered
     expect(options).toEqual(['Kein Eltern-Item', expect.stringContaining('APP-5')]);
+    // „Kein Eltern-Item“ carries its icon, as in the parent field
+    expect(within(list).getByRole('option', { name: /Kein Eltern-Item/ }).querySelector('svg.lucide-corner-left-up')).not.toBeNull();
   });
 
   it('shift+p on an epic says that epics have no parent, and the palette leaves the command out', async () => {
