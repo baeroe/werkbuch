@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, FAIL_KEY } from '@/api/client';
+import { CreateHost } from '@/app/CreateHost';
 import { getDb } from '@/api/db';
 import { getWorkItem, updateWorkItem } from '@/api/workItems';
 import { currentToasts, resetToasts, runToastAction, toast } from '@/components/ui/toast';
@@ -235,6 +236,35 @@ describe('ItemPeek', () => {
     await user.keyboard(modEnter);
     await waitFor(() => expect(status.textContent).toBe('Gespeichert'));
     expect(within(section).getByRole('status')).toBe(status);
+  });
+});
+
+/* ------------------------------------------------------------------------------ children */
+
+describe('a new child item', () => {
+  it('starts in the start status of the workflow, also when its parent is further along', async () => {
+    const user = userEvent.setup();
+    renderWithData(
+      <>
+        <ItemPeek itemId="WEB-30" />
+        <CreateHost />
+      </>,
+    );
+    // WEB-30, an epic of WEB, is in progress
+    const children = await screen.findByRole('region', { name: 'Kinder' });
+    expect(getDb().items.find((entry) => entry.key === 'WEB-30')?.state_id).toBe('std_progress');
+
+    // the button comes with the rights
+    await user.click(await within(children).findByRole('button', { name: 'Sub-Item' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Neues Item' });
+    // the dialog offers the start status of the workflow, not the status of the parent
+    expect(await within(dialog).findByRole('combobox', { name: 'Status: Backlog' })).toBeTruthy();
+    await user.type(await within(dialog).findByRole('textbox', { name: /Titel/ }), 'Kontaktseite: Anfahrtskarte einbinden');
+    await user.keyboard(modEnter);
+
+    await waitFor(() =>
+      expect(getDb().items.find((entry) => entry.title === 'Kontaktseite: Anfahrtskarte einbinden')).toMatchObject({ parent_id: 'wi_web_30', state_id: 'std_backlog' }),
+    );
   });
 });
 
