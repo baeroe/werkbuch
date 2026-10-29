@@ -187,7 +187,8 @@ src/
                      Ausnahmen (storage.ts)
   types.ts           gemeinsame Typen
   domain/            Fachlogik als reine Funktionen; wird später nach PHP portiert. people.ts: wer Items übernehmen
-                     und erwähnt werden kann; hierarchy.ts: wer Kind-Items und wer ein Eltern-Item haben kann
+                     und erwähnt werden kann; hierarchy.ts: wer Kind-Items und wer ein Eltern-Item haben kann und
+                     welchen Typ ein neues Kind-Item bekommt
   api/               Fake-API: client.ts (Fehler, Latenz, Sitzung), db.ts (localStorage), eine Datei je Ressource, seed/ (Demo-Daten)
   hooks/             TanStack-Query-Hooks, einer je API-Funktion; keys.ts hat alle Query-Keys
   store/             Zustand: session.ts (wer angemeldet ist), ui.ts (Theme, Seitenleiste, Palette, Kürzel-Hilfe, Vorschau, Auswahl)
@@ -248,6 +249,7 @@ Was der Klickdummy anders macht als die Spec (`docs/superpowers/specs/2026-10-28
 - Die Relation heißt „wird blockiert von“ (4.9), nicht „blockiert von“ wie im Moodboard.
 - Ein Löschen im Wiki fragt immer nach (4.15 „mit Bestätigung“) und nennt mitgehende Unterseiten; nach dem Ja bleiben fünf Sekunden Rückgängig (5.1). Das Ziehen im Baum bleibt, wie es ist.
 - Nur Epics (Typen mit Häkchen „Epic“) können Kind-Items haben, und Epics haben selbst kein Eltern-Item: zwei Ebenen (Korrekturrunde 2026-10-29; Spec 4.8 sagte „beliebig tief“).
+- Ein neues Kind-Item bekommt den Standardtyp des Projekts, außer der ist ein Epic; dann den ersten aktivierten Typ, der ein Eltern-Item haben kann. Hat das Projekt keinen solchen Typ, sagen „Kind-Item“, das Item-Menü und die Spalte im Board, warum nicht.
 - Ein neu angelegtes Projekt wird nicht automatisch Favorit; Maras Favoriten enthalten auch die drei Projekte (R13).
 - Das JSON-Snippet für MCP hat die Form `mcpServers.werkbuch` mit `type`, `url` und `headers.Authorization`.
 
