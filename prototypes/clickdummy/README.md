@@ -65,7 +65,7 @@ Es starten nur die Server der Projekte, die laufen: Das Projekt `flows` (`e2e/fl
 6. Vorlage „Monatsbericht“: Die Vorschau zeigt 02.11.2026, 07.12.2026, 04.01.2027, 01.02.2027 und 01.03.2027.
 7. Workflow „Agentur-Freigabe“ ohne den letzten Übergang nach Review: „Review ist vom Startstatus aus nicht erreichbar“, Speichern wird abgelehnt.
 
-Neben den Flows prüft das Projekt `flows` am Handy (390 px), dass Zeilen, Gruppenzeilen und ihre Schalter in der Tabelle mindestens 44 px hoch sind und dass sich im Pfad eines Kind-Items (WEB-42 unter WEB-30) die Keys nicht überlappen. Das Projekt `review` (`e2e/review.spec.ts`) prüft den Review-Build (siehe unten). In der CI läuft `pnpm e2e`, also beides, im Job `clickdummy-e2e`; er ist kein Pflicht-Check.
+Neben den Flows prüft das Projekt `flows` am Handy (390 px), dass Zeilen, Gruppenzeilen und ihre Schalter in der Tabelle mindestens 44 px hoch sind, dass sich im Pfad eines Kind-Items (WEB-42 unter WEB-30) die Keys nicht überlappen und dass ein Item ohne Eltern-Item den Namen seines Projekts zeigt. Das Projekt `review` (`e2e/review.spec.ts`) prüft den Review-Build (siehe unten). In der CI läuft `pnpm e2e`, also beides, im Job `clickdummy-e2e`; er ist kein Pflicht-Check.
 
 ## Review-Build
 

@@ -403,18 +403,23 @@ function ParentCrumbs({ id, depth }: { id: string; depth: number }) {
 }
 
 function Path({ item, project }: { item: WorkItem; project: Project | undefined }) {
+  // with a parent crumb the path is long: below md the badge stands for the project (its name stays for screen readers)
+  // and the link keeps a 44 px target; without one the name fits beside the key
+  const compact = item.parent_id !== null;
   return (
     <nav aria-label="Pfad" className="min-w-0">
       <ol className="flex min-w-0 items-center gap-1.5 text-sm text-muted">
         <li className="flex min-w-0 shrink-0 items-center gap-1.5">
           {project ? (
-            // below md the badge stands for the project (its name stays for screen readers) and the target reaches 44 px
             <Link
               to={`/projects/${project.identifier}`}
-              className="relative flex min-h-11 items-center gap-1.5 rounded-chip hover:text-ink max-md:after:absolute max-md:after:inset-y-0 max-md:after:-inset-x-3 md:min-h-6"
+              className={cx(
+                'relative flex min-h-11 items-center gap-1.5 rounded-chip hover:text-ink md:min-h-6',
+                compact && 'max-md:after:absolute max-md:after:inset-y-0 max-md:after:-inset-x-3',
+              )}
             >
               <ProjectBadge project={project} />
-              <span className="max-w-40 truncate max-md:sr-only">{project.name}</span>
+              <span className={cx('max-w-40 truncate', compact && 'max-md:sr-only')}>{project.name}</span>
             </Link>
           ) : (
             <Skeleton className="h-4 w-28" />

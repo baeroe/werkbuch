@@ -1,8 +1,8 @@
 /*
  * The seven flows of the clickdummy (plan, Task 13, step 1; spec 1, success criteria 2–6). Every step runs on the
  * keyboard, only the board drag uses the mouse (dnd-kit listens to pointer events). A flow may start on a route
- * opened by its address; everything after that is typed. Beside them, two checks on a phone measure the table's
- * targets and the path of a child item.
+ * opened by its address; everything after that is typed. Beside them, checks on a phone measure the table's targets
+ * and the path of an item with and without a parent.
  *
  * Every test has a fresh browser context: empty localStorage, so the seed data, Mara Lindqvist signed in and the
  * demo clock at Wednesday, 2026-10-28, 10:00 Europe/Berlin. A console error or an uncaught exception fails the flow.
@@ -273,5 +273,15 @@ test.describe('on a phone (390 px), beside the flows', () => {
     expect(parent!.x + parent!.width, 'the key of the parent ends before the key of the item').toBeLessThanOrEqual(item!.x);
     // only the badge shows on a phone; screen readers still hear the project
     await expect(path.getByRole('link', { name: 'Website-Relaunch' })).toBeVisible();
+  });
+
+  test('an item without a parent keeps the name of its project in the path', async ({ page }) => {
+    // WEB-50 stands at the top
+    await page.goto('/items/WEB-50');
+    const path = page.getByRole('navigation', { name: 'Pfad' });
+    await expect(path.locator('[aria-current="page"]')).toHaveText('WEB-50');
+
+    const name = await path.getByRole('link', { name: 'Website-Relaunch' }).getByText('Website-Relaunch').boundingBox();
+    expect(name!.width, 'the name shows on screen, not only to screen readers').toBeGreaterThan(40);
   });
 });
