@@ -1,8 +1,16 @@
 # werkbuch: Fachkonzept und App-Design
 
-Stand: 2026-10-28 · Status: freigegeben
+Stand: 2026-10-29 · Status: freigegeben
 
 > **Änderungen vom 2026-10-28 (Moodboards):** Rafael hat die Designrichtung **Werkbuch („Arbeitsheft“)** gewählt: Punktraster-Papier, Karteikarten mit Typ-Reitern, Textmarker für Auswahl und Fokus, Glas als Transparentpapier, Schriften Bricolage Grotesque und Figtree, Tintenblau als einziger Akzent. Gestaltungsgrundlage ist jetzt `prototypes/clickdummy/DESIGN.md` (5.4).
+
+> **Änderungen vom 2026-10-29 (Korrekturrunde 1 am Klickdummy):** Rafael hat entschieden:
+> - **Eltern und Kinder (4.8):** zwei Ebenen. Nur Items eines Typs mit Häkchen „Epic“ haben Kind-Items, und Epics haben selbst kein Eltern-Item. Ein Typwechsel und das Häkchen „Epic“ in den Einstellungen werden abgelehnt, wenn bestehende Items die Regel sonst brechen würden. Neue Kind-Items starten im Startstatus des Workflows.
+> - **Inbox (4.14):** Öffnen markiert eine Benachrichtigung als gelesen; „Als ungelesen markieren“ führt zurück.
+> - **Wiki (4.15):** Löschen fragt immer nach, auch ohne Unterseiten, und bleibt danach 5 Sekunden rückgängig.
+> - **Anlegen-Dialog (5.1):** Der Fokus startet im Titel.
+>
+> Die übrigen Abweichungen des Klickdummys stehen in `prototypes/clickdummy/README.md` und kommen hierher, sobald Rafael sie bestätigt.
 
 **Herkunft der Entscheidungen:** Jede Entscheidung trägt eine Herkunft. **Vorgabe** heißt, Rafael hat es von sich aus verlangt. **Abgestimmt** heißt, es wurde im Gespräch vorgeschlagen und bestätigt. **Spec** heißt, die Entscheidung fiel beim Ausformulieren und muss noch geprüft werden. Alle Spec-Entscheidungen stehen gesammelt in Abschnitt 12.
 
@@ -294,7 +302,9 @@ Properties liegen zentral in der Organisation und werden Typen zugeordnet (abges
 - Rang für die manuelle Reihenfolge
 
 **Eltern und Kinder** (abgestimmt):
-- Ein Item kann ein Eltern-Item im selben Projekt haben, beliebig tief, ohne Zyklen (Spec: selbes Projekt).
+- Zwei Ebenen (Vorgabe, 2026-10-29): Nur Items eines Typs mit Häkchen „Epic“ haben Kind-Items, und Epics haben selbst kein Eltern-Item. Das Eltern-Item liegt im selben Projekt (Spec).
+- Ein Typwechsel und das Häkchen „Epic“ in den Einstellungen werden abgelehnt, wenn bestehende Items die Regel sonst brechen würden; die Meldung nennt den Grund.
+- Neue Kind-Items starten im Startstatus des Workflows; in gruppierten Listen stehen Kinder in ihrer eigenen Gruppe.
 - Items mit Kindern zeigen den Fortschritt der Kinder: geschlossene von allen.
 
 **Archivieren und Löschen** (abgestimmt):
@@ -463,6 +473,7 @@ Automatisierungen sind pro Projekt schaltbar, mit Parametern. Sie handeln als St
 
 **Inbox:**
 - gruppiert nach Item, gelesen/ungelesen, alle als gelesen markieren, löschen, Filter „ungelesen“ und „Erwähnungen“
+- Öffnen markiert als gelesen; „Als ungelesen markieren“ führt zurück (Vorgabe, 2026-10-29)
 - das Badge aktualisiert sich live
 - kein Snooze (Spec)
 
@@ -480,7 +491,7 @@ Jedes Projekt hat einen Seitenbaum (abgestimmt). Eine Seite hat Titel, Emoji, In
 
 **Baum:**
 - Seiten lassen sich per Drag & Drop umordnen; ohne Maus über den Dialog „Verschieben nach …“.
-- Löschen entfernt den ganzen Teilbaum, mit Bestätigung und Rückgängig (Spec).
+- Löschen fragt immer nach, mit und ohne Unterseiten, entfernt den ganzen Teilbaum und bleibt danach 5 Sekunden rückgängig (Vorgabe, 2026-10-29).
 
 **Gleichzeitiges Bearbeiten** (abgestimmt: keine Live-Kollaboration):
 - Die Seite speichert automatisch nach kurzer Pause und schickt dabei die Versionsnummer mit, auf der die Änderung beruht.
@@ -563,7 +574,7 @@ Gemeinsam haben alle Stufen: `/`-Menü, Markdown-Kürzel beim Tippen, Code-Blöc
   - Änderungen erscheinen sofort (optimistisch); Fehler werden mit Toast zurückgerollt.
   - Live-Updates statt Neuladen; lange Listen sind virtualisiert.
   - Zielwert (Spec): sichtbare Rückmeldung unter 100 ms; gecachte Seiten wechseln ohne Ladezustand.
-- **Rückgängig statt Rückfrage:** Löschen und Archivieren zeigen 5 Sekunden einen Toast mit Rückgängig. Bestätigungsdialoge gibt es nur bei großen Folgen, etwa Projekt löschen oder Workflow wechseln.
+- **Rückgängig statt Rückfrage:** Löschen und Archivieren zeigen 5 Sekunden einen Toast mit Rückgängig. Bestätigungsdialoge gibt es nur bei großen Folgen, etwa Projekt löschen, Workflow wechseln oder eine Wiki-Seite löschen.
 - **Hell und Dunkel** nach System, umschaltbar.
 - **Barrierefreiheit:** WCAG 2.2 AA mit Kontrasten, Fokusführung und Ansagen für Screenreader. Wie bei openbill geht Barrierefreiheit vor Gestaltung.
 - **Responsiv:** Am Desktop ist alles möglich. Am Handy (390 px) kann man lesen, kommentieren und Status oder Assignee ändern.
