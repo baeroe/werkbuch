@@ -19,7 +19,7 @@ type ResolutionRequest = {
   from?: { category: StateCategory; resolutionId: string | null };
   onConfirm: (resolutionId: string | null) => void;
 };
-type TypeRequest = { kind: 'type'; item: WorkItem; target: WorkItemType };
+type TypeRequest = { kind: 'type'; item: WorkItem; target: WorkItemType; hasChildren?: boolean };
 
 /** The question asked last, and whether it is shown (it stays while it fades out). */
 let state: { request: ResolutionRequest | TypeRequest | null; open: boolean } = { request: null, open: false };
@@ -34,8 +34,9 @@ export function askResolution(request: Omit<ResolutionRequest, 'kind'>): void {
   set({ request: { kind: 'resolution', ...request }, open: true });
 }
 
-export function askTypeChange(item: WorkItem, target: WorkItemType): void {
-  set({ request: { kind: 'type', item, target }, open: true });
+/** `hasChildren`: what the command knows about the item's children, so the dialog can refuse before the item loads. */
+export function askTypeChange(item: WorkItem, target: WorkItemType, hasChildren?: boolean): void {
+  set({ request: { kind: 'type', item, target, hasChildren }, open: true });
 }
 
 const subscribe = (listener: () => void) => {
@@ -57,7 +58,7 @@ export function ItemDialogsHost() {
       {request.kind === 'resolution' ? (
         <ResolutionPrompt open={open} onOpenChange={close} subject={request.subject} target={request.target} from={request.from} onConfirm={request.onConfirm} />
       ) : (
-        <TypeChangeDialog key={request.item.id} item={request.item} target={request.target} open={open} onOpenChange={close} />
+        <TypeChangeDialog key={request.item.id} item={request.item} target={request.target} open={open} onOpenChange={close} hasChildren={request.hasChildren} />
       )}
     </Suspense>
   );

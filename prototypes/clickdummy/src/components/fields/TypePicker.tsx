@@ -16,7 +16,7 @@ import { Dialog, DialogClose } from '@/components/ui/Dialog';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
 import { toast } from '@/components/ui/toast';
 import { typeIcon } from '@/components/ui/TypeTab';
-import { typeChangeRefusal } from '@/domain/hierarchy';
+import { canHaveChildren, typeChangeRefusal } from '@/domain/hierarchy';
 import { useProperties } from '@/hooks/properties';
 import { useChangeWorkItemType, useWorkItem } from '@/hooks/workItems';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
@@ -77,21 +77,25 @@ type TypeChangeDialogProps = {
   onOpenChange: (open: boolean) => void;
   /** Where the focus goes when the dialog closes (the picker's trigger). */
   finalFocus?: RefObject<HTMLElement | null>;
+  /** Whether the item has children, as far as the caller knows (`t` from a list); the item, once loaded, says it. */
+  hasChildren?: boolean;
 };
 
 /**
  * The change dialog; the type picker and the command `t` open it when a change costs values or needs some, or when the
- * two levels refuse it: then it says why and offers only "Typ behalten".
+ * two levels refuse it: then it says why and offers only "Typ behalten". Until it knows whether the item has children
+ * (the caller's `hasChildren`, then the loaded item), a type that takes none waits instead of offering the change.
  */
-export function TypeChangeDialog({ item, target, open, onOpenChange, finalFocus }: TypeChangeDialogProps) {
+export function TypeChangeDialog({ item, target, open, onOpenChange, finalFocus, hasChildren }: TypeChangeDialogProps) {
   const formId = useId();
   const change = useChangeWorkItemType();
   // the children and the parent as they are now; also while the dialog fades out, so a refusal does not turn into the
   // form for a moment
   const detail = useWorkItem(item.id).data;
   if (!target) return null;
-  const known = detail?.item ?? item;
-  const refusal = typeChangeRefusal(item.key, { hasChildren: (detail?.children.length ?? 0) > 0, hasParent: known.parent_id !== null }, target);
+  const children = detail ? detail.children.length > 0 : hasChildren;
+  const refusal = typeChangeRefusal(item.key, { hasChildren: children ?? false, hasParent: (detail?.item ?? item).parent_id !== null }, target);
+  const waiting = refusal === null && children === undefined && !canHaveChildren(target);
   return (
     <Dialog
       open={open}
@@ -117,14 +121,23 @@ export function TypeChangeDialog({ item, target, open, onOpenChange, finalFocus 
                 </Button>
               }
             />
-            <Button variant="primary" type="submit" form={formId} pending={change.isPending} shortcut="mod+enter">
-              Zu {target.name} wechseln
-            </Button>
+            {!waiting && (
+              <Button variant="primary" type="submit" form={formId} pending={change.isPending} shortcut="mod+enter">
+                Zu {target.name} wechseln
+              </Button>
+            )}
           </>
         )
       }
     >
-      {!refusal && <TypeChangeForm key={target.id} formId={formId} item={item} target={target} change={change} onDone={() => onOpenChange(false)} />}
+      {waiting ? (
+        <SkeletonGroup label="Item wird geladen …" className="flex flex-col gap-3">
+          <Skeleton className="h-4 w-2/3" />
+          <Skeleton className="h-9 w-full rounded-ctl" />
+        </SkeletonGroup>
+      ) : (
+        !refusal && <TypeChangeForm key={target.id} formId={formId} item={item} target={target} change={change} onDone={() => onOpenChange(false)} />
+      )}
     </Dialog>
   );
 }

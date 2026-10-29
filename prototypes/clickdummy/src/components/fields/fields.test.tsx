@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { getDb, saveDb } from '@/api/db';
 import { createProject } from '@/api/projects';
 import { listProperties } from '@/api/properties';
+import { listWorkItemTypes } from '@/api/workItemTypes';
 import { createWorkItem, getWorkItem } from '@/api/workItems';
 import { useWorkItems } from '@/hooks/workItems';
 import { currentToasts, dismissToast, resetToasts } from '@/components/ui/toast';
@@ -23,7 +24,7 @@ import { ItemDialogsHost } from './ItemDialogs';
 import { ParentPicker } from './ParentPicker';
 import { PropertyField, PropertyValueInput } from './PropertyField';
 import { StatePicker } from './StatePicker';
-import { TypePicker } from './TypePicker';
+import { TypeChangeDialog, TypePicker } from './TypePicker';
 
 beforeEach(() => {
   resetApi();
@@ -306,6 +307,27 @@ describe('TypePicker', () => {
     await user.click(within(dialog).getByRole('button', { name: /^Typ behalten/ }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect((await stored('WEB-30')).type_id).toBe('t_epic');
+  });
+
+  it('the dialog says why from what the caller knows, before the item has loaded, and never offers the change', async () => {
+    const item = await stored('WEB-30');
+    const task = (await listWorkItemTypes()).items.find((type) => type.id === 't_task')!;
+    // as t from a list opens it: the items of the project told the command that WEB-30 has children
+    renderWithData(<TypeChangeDialog item={item} target={task} open onOpenChange={() => {}} hasChildren />);
+
+    // the first draw already says no
+    expect(screen.getByText('WEB-30 hat Kind-Items. Nur Epics können Kind-Items haben.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Zu Task wechseln/ })).toBeNull();
+  });
+
+  it('the dialog waits for the item when nothing is known about its children, instead of offering the change', async () => {
+    const item = await stored('WEB-30');
+    const task = (await listWorkItemTypes()).items.find((type) => type.id === 't_task')!;
+    renderWithData(<TypeChangeDialog item={item} target={task} open onOpenChange={() => {}} />);
+
+    expect(screen.queryByRole('button', { name: /Zu Task wechseln/ })).toBeNull();
+    expect(await screen.findByText('WEB-30 hat Kind-Items. Nur Epics können Kind-Items haben.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Zu Task wechseln/ })).toBeNull();
   });
 
   it('makes no epic of an item with a parent: the dialog says why', async () => {

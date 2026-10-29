@@ -292,10 +292,11 @@ function typeOptions(ctx: ItemCommandContext): CommandOption[] {
     .map((type) =>
       option(typeOption(type), () => {
         const { lost, missing } = typeChangeOf(item, type, ctx.properties, ctx.types);
-        // the two levels: the dialog says why (unknown children leave it to the server, whose toast says it)
-        const hasChildren = (ctx.projectItems ?? []).some((entry) => entry.parent_id === item.id);
-        if (lost.length > 0 || missing.length > 0 || typeChangeRefusal(item.key, { hasChildren, hasParent: item.parent_id !== null }, type)) {
-          askTypeChange(item, type);
+        // the two levels: the dialog says why, at once with what the items of the project say (unknown children leave
+        // it to the server, whose toast says it)
+        const hasChildren = ctx.projectItems?.some((entry) => entry.parent_id === item.id);
+        if (lost.length > 0 || missing.length > 0 || typeChangeRefusal(item.key, { hasChildren: hasChildren ?? false, hasParent: item.parent_id !== null }, type)) {
+          askTypeChange(item, type, hasChildren);
           return;
         }
         ctx.settle(ctx.changeType.mutateAsync({ id: item.id, type_id: type.id }), {
