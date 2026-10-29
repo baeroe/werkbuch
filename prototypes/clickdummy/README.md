@@ -207,7 +207,7 @@ Komponenten rufen `src/api/*` nie direkt auf, nur über die Hooks in `src/hooks/
 
 ## Abweichungen von der Spec
 
-Was der Klickdummy anders macht als die Spec (`docs/superpowers/specs/2026-10-28-werkbuch-design.md`) oder genauer festlegt. Die Rulings (R…) stehen im Ledger des Plans.
+Was der Klickdummy anders macht als die Spec (`docs/superpowers/specs/2026-10-28-werkbuch-design.md`) oder genauer festlegt. Die Entscheidungen während der Umsetzung (R1, R2, …) stehen mit Grund in `docs/superpowers/plans/2026-10-28-werkbuch-clickdummy-rulings.md`.
 
 **Gestaltung und Sprache**
 - **Status-Icons statt freier Statusfarbe** (4.5): Jeder Status hat eine Form aus sieben (`dashed`, `circle`, `half`, `three-quarter`, `pause`, `check`, `cross`), die Farbe folgt der Kategorie. Der Spec-Nachtrag folgt nach den Korrekturrunden.
@@ -226,7 +226,7 @@ Was der Klickdummy anders macht als die Spec (`docs/superpowers/specs/2026-10-28
 - Öffnen: Klick auf Zeile oder Karte zeigt die Vorschau, Enter öffnet die Seite, ⌘-Klick einen neuen Tab, ⇧-Klick wählt einen Bereich. In der Inbox öffnet Enter die Vorschau.
 - Die Leiste der Mehrfachbearbeitung ersetzt die Filterleiste oben, solange Items gewählt sind (unten würden die Toasts sie verdecken).
 - Ein Zug im Board bekommt keinen Erfolgs-Toast: Die Karte zeigt das Ergebnis, eine Statuszeile sagt es Screenreadern. Abgelehnte Züge melden sich per Toast.
-- Toasts: drei Plätze; Rückgängig-Toasts werden nie verdrängt, neue warten dann. Fehler stehen außerhalb der drei, werden wie alle Toasts höflich angesagt (`aria-live="polite"`), und derselbe Fehler noch einmal ersetzt den alten, statt sich zu stapeln. Nur Fehler, bei denen Wiederholen hilft (5xx, keine Antwort), bieten „Erneut versuchen“; ein 409 mit Konfliktstand zeigt das Banner statt eines Toasts (R12).
+- Toasts: drei Plätze; Rückgängig-Toasts werden nie verdrängt, neue warten dann. Fehler stehen außerhalb der drei, werden wie alle Toasts höflich angesagt (`aria-live="polite"`), und derselbe Fehler noch einmal frischt den stehenden Toast auf (neueste Aktion, Zeit beginnt von vorn), statt sich zu stapeln; angesagt wird er dabei nicht noch einmal. Nur Fehler, bei denen Wiederholen hilft (5xx, keine Antwort), bieten „Erneut versuchen“; ein 409 mit Konfliktstand zeigt das Banner statt eines Toasts (R12).
 - Die Speichern-Knöpfe der Projekteinstellungen bleiben aktiv und antworten „Keine Änderungen zu speichern.“, statt grau zu sein (Guideline: Absenden bleibt aktiv). Verlässt man ein geändertes Einstellungsformular, fragt die App nach.
 - „Neu laden“ im Wiki-Konflikt lässt sich zurücknehmen; neue Seiten heißen „Neue Seite“ mit markiertem Titel.
 - Öffnen markiert eine Benachrichtigung nicht als gelesen (R20), und Kind-Items stehen nur in ihrer eigenen Gruppe (R21); beides steht unten als Frage.
@@ -257,14 +257,14 @@ Was der Klickdummy anders macht als die Spec (`docs/superpowers/specs/2026-10-28
   - Kein Erfolgs-Toast nach einem Zug im Board.
   - Die Speichern-Knöpfe der Projekteinstellungen bleiben aktiv, auch ohne Änderung.
   - Die Mehrfachbearbeitung ersetzt oben die Filterleiste.
-  - Derselbe Fehler-Toast ersetzt den alten; „Erneut versuchen“ wiederholt dann den neuesten Versuch.
+  - Derselbe Fehler noch einmal frischt den stehenden Toast auf und wird nicht erneut angesagt; „Erneut versuchen“ wiederholt dann den neuesten Versuch.
   - Der Versionen-Dialog hat zwei „Schließen“ (Kreuz oben, Knopf unten).
   - Unterhalb von 1024 px zeigt die Wiki-Seite den Baum nicht daneben; zurück geht es über „Wiki“.
   - Tabellen auf dem Handy: Die Tabelle scrollt seitlich, man sieht nur Item und Status. Reicht die Liste fürs Handy?
 
 ## Bekannte Punkte nach der Korrekturrunde
 
-Kurzfassung der zurückgestellten Befunde (`task-13-deferred.md` im Plan-Ordner, R32). Sie warten, weil die Korrekturen diese Bildschirme ohnehin ändern.
+Kurzfassung der zurückgestellten Befunde (vollständige Liste: `docs/superpowers/plans/2026-10-28-werkbuch-clickdummy-deferred.md`, R32). Sie warten, weil die Korrekturen diese Bildschirme ohnehin ändern.
 
 - **Aufräumen (13b):** große Dateien teilen (Items-Bildschirm, Board, Timeline, Anlegen-Dialog, Aktivität, Item-Kopf, Vorlagen-Editor, Wiki-Seite, Workflow-Editor, Item-Befehle, Seitenleiste, Galerie). Doppeltes zusammenführen: Einstellungsrahmen, Verlassen-Schutz, Status-Zuordnung, Zeitzonen und Entfernen-Helfer aus den Organisations- und Projekt-Einstellungen; Formatierer, Status-Icons, Hilfen der Listen und Tabellen. FavoriteStar, FormDialog, CopyField und Sortable in die gemeinsamen Komponenten; den lokalen Retry-Umweg der Felder durch einen Retry in der gemeinsamen Mutation ersetzen.
 - **Verhalten (13c):**
