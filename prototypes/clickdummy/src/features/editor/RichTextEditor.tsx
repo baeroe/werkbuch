@@ -145,22 +145,43 @@ interface LateExtensions {
   code: AnyExtension;
 }
 
-let late: LateExtensions | null = null;
-let loadingLate: Promise<LateExtensions> | null = null;
+/** A promise that carries its result once it has one, the way React's `use()` reads it without waiting again. */
+type Loading<T> = Promise<T> & { status?: 'pending' | 'fulfilled' | 'rejected'; value?: T; reason?: unknown };
+
+let loadingLate: Loading<LateExtensions> | null = null;
 
 /**
  * Tables and code highlighting come as chunks of their own. They are asked for as soon as the editor's code is there;
  * an editor that renders before they arrived waits (Suspense) once. Tests call this first, so no editor waits.
  */
 export function preloadEditor(): Promise<LateExtensions> {
-  loadingLate ??= Promise.all([import('@tiptap/extension-table'), import('./codeBlocks')]).then(
-    ([{ TableKit }, { highlightedCodeBlock }]) => (late = { tables: TableKit.configure({ table: { resizable: false } }), code: highlightedCodeBlock }),
-  );
+  if (!loadingLate) {
+    const loading: Loading<LateExtensions> = Promise.all([import('@tiptap/extension-table'), import('./codeBlocks')]).then(([{ TableKit }, { highlightedCodeBlock }]) => ({
+      tables: TableKit.configure({ table: { resizable: false } }),
+      code: highlightedCodeBlock,
+    }));
+    loading.status = 'pending';
+    loading.then(
+      (value) => {
+        loading.status = 'fulfilled';
+        loading.value = value;
+      },
+      (reason: unknown) => {
+        loading.status = 'rejected';
+        loading.reason = reason;
+      },
+    );
+    loadingLate = loading;
+  }
   return loadingLate;
 }
 void preloadEditor();
 
-const useLateExtensions = (): LateExtensions => late ?? use(preloadEditor());
+/**
+ * `use()` on every render, also once the chunks are there: React must see the same calls before and after the wait
+ * (rules of hooks). A loaded promise answers at once, because it carries its result (`status`, `value`).
+ */
+const useLateExtensions = (): LateExtensions => use(preloadEditor());
 
 /**
  * The extensions of a level. `placeholder: null` builds a viewer: the same nodes, without the menus, the upload path
