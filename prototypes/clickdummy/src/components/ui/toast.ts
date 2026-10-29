@@ -12,13 +12,23 @@ export type ToastOptions = {
   duration?: number;
   /** error: announced at once (role=alert) and marked with the danger colour. */
   tone?: ToastTone;
+  /**
+   * Never pushed out by newer toasts: it stays for its whole time unless it is closed or its action runs. Undo toasts
+   * (`runWithUndo`) set it, so a deferred delete never runs early and "Rückgängig" stays within reach.
+   */
+  keep?: boolean;
 };
-export type Toast = Omit<ToastOptions, 'duration' | 'tone'> & { id: number; duration: number; tone: ToastTone };
+export type Toast = Omit<ToastOptions, 'duration' | 'tone' | 'keep'> & { id: number; duration: number; tone: ToastTone; keep: boolean };
 
 const DEFAULT_DURATION = 5000;
 const MAX_VISIBLE = 3;
 
 let toasts: readonly Toast[] = [];
+/**
+ * Toasts that found no room: three were showing and none of them could be pushed out (all kept). They show, oldest
+ * first, as soon as a toast closes; their time starts then.
+ */
+let waiting: Toast[] = [];
 let sequence = 0;
 const listeners = new Set<() => void>();
 /** Remaining time per toast; a timer only runs while no toast is held. */
@@ -67,25 +77,58 @@ function forget(id: number) {
   focused.delete(id);
 }
 
+/** Puts a toast on screen and starts its time (unless a held toast pauses all of them). */
+function show(item: Toast): void {
+  toasts = [...toasts, item];
+  timers.set(item.id, { remaining: item.duration, started: 0, handle: null });
+  if (!paused) startTimer(item.id);
+}
+
+/**
+ * Gives the toasts that wait the room there is: a free place, or the place of the oldest toast that may be pushed out
+ * (that one expires). Answers the toasts it pushed out, whose `onExpire` the caller runs once the store is settled.
+ */
+function place(): Toast[] {
+  const pushedOut: Toast[] = [];
+  while (waiting.length > 0) {
+    if (toasts.length >= MAX_VISIBLE) {
+      const oldest = toasts.find((entry) => !entry.keep);
+      if (!oldest) break;
+      forget(oldest.id);
+      toasts = toasts.filter((entry) => entry.id !== oldest.id);
+      pushedOut.push(oldest);
+    }
+    show(waiting.shift()!);
+  }
+  return pushedOut;
+}
+
 function remove(id: number): Toast | undefined {
+  const waited = waiting.find((entry) => entry.id === id);
+  if (waited) {
+    waiting = waiting.filter((entry) => entry.id !== id);
+    return waited;
+  }
   const item = toasts.find((entry) => entry.id === id);
   if (!item) return undefined;
   forget(id);
   toasts = toasts.filter((entry) => entry.id !== id);
+  const pushedOut = place();
   emit();
   syncPause();
+  pushedOut.forEach((entry) => entry.onExpire?.());
   return item;
 }
 
-/** Shows a toast and returns its id. Only the newest three stay; older ones expire. */
-export function toast({ duration = DEFAULT_DURATION, tone = 'neutral', ...options }: ToastOptions): number {
+/**
+ * Shows a toast and returns its id. Three show at most: a new one pushes out the oldest that is not kept (it expires).
+ * When all three are kept (undo toasts), the new one waits for the first of them to close.
+ */
+export function toast({ duration = DEFAULT_DURATION, tone = 'neutral', keep = false, ...options }: ToastOptions): number {
   const id = ++sequence;
-  const pushedOut = toasts.slice(0, Math.max(0, toasts.length - (MAX_VISIBLE - 1)));
-  pushedOut.forEach((item) => forget(item.id));
-  toasts = [...toasts.slice(pushedOut.length), { ...options, id, duration, tone }];
+  waiting = [...waiting, { ...options, id, duration, tone, keep }];
+  const pushedOut = place();
   syncPause();
-  timers.set(id, { remaining: duration, started: 0, handle: null });
-  if (!paused) startTimer(id);
   emit();
   pushedOut.forEach((item) => item.onExpire?.());
   return id;

@@ -19,7 +19,7 @@ export const UNDO_LABEL = 'Rückgängig';
 export interface UndoOptions {
   /** What happened, as the toast says it: "WEB-51 gelöscht". */
   label: string;
-  /** Does it for real when the toast runs out (time up, closed, pushed out by newer toasts); may return a promise. */
+  /** Does it for real when the toast runs out (time up or closed; newer toasts never push it out); may return a promise. */
   run: () => unknown;
   /** Takes back what the screen already shows. */
   undo?: () => void;
@@ -29,7 +29,10 @@ export interface UndoOptions {
   failureTitle?: string;
 }
 
-/** Shows the toast and runs the action when it runs out. Answers the id of the toast. */
+/**
+ * Shows the toast and runs the action when it runs out. Answers the id of the toast. Newer toasts never push it out
+ * (`keep`): the action runs when its time is up or it is closed, never early.
+ */
 export function runWithUndo({ label, run, undo, delay = 5000, failureTitle }: UndoOptions): number {
   const fail = (error: unknown) => notifyError(failureTitle ?? `Nicht ausgeführt: ${label}`, error, execute);
   function execute() {
@@ -39,7 +42,7 @@ export function runWithUndo({ label, run, undo, delay = 5000, failureTitle }: Un
       fail(error);
     }
   }
-  return toast({ title: label, duration: delay, action: { label: UNDO_LABEL, onClick: () => undo?.() }, onExpire: execute });
+  return toast({ title: label, duration: delay, keep: true, action: { label: UNDO_LABEL, onClick: () => undo?.() }, onExpire: execute });
 }
 
 const undoable = () => currentToasts().filter((item) => item.action?.label === UNDO_LABEL);

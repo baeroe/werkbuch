@@ -468,7 +468,7 @@ function ItemsList({ preset, project, view }: ItemsListProps) {
     const before = state;
     if (view) clearChanges();
     else setFilter(base.filter);
-    toast({ title: 'Änderungen verworfen', action: { label: UNDO_LABEL, onClick: () => setState(before) } });
+    toast({ title: 'Änderungen verworfen', keep: true, action: { label: UNDO_LABEL, onClick: () => setState(before) } });
   }
   function save() {
     if (!view) return;

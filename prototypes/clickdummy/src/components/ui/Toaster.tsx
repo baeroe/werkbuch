@@ -44,7 +44,7 @@ export function Toaster() {
 }
 
 /** One toast; exported so the component gallery can show it in place. */
-export function ToastCard({ item, className, ...rest }: { item: Toast } & Omit<ComponentProps<'div'>, 'children'>) {
+export function ToastCard({ item, className, ...rest }: { item: Omit<Toast, 'keep'> } & Omit<ComponentProps<'div'>, 'children'>) {
   return (
     <div
       className={cx(

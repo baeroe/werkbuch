@@ -445,7 +445,7 @@ function PageSheet({ page, projectId, base, ancestors, rights, onMove, onDelete,
     setTitleError(null);
     focusText();
     // the own text left the editor: "Rückgängig" (or mod+z) brings it back, with the banner
-    toast({ title: 'Deine Fassung verworfen', description: 'Im Editor steht jetzt die neue Fassung.', action: { label: UNDO_LABEL, onClick: () => restoreMine(mine, before) } });
+    toast({ title: 'Deine Fassung verworfen', description: 'Im Editor steht jetzt die neue Fassung.', keep: true, action: { label: UNDO_LABEL, onClick: () => restoreMine(mine, before) } });
   }
 
   function restoreMine(mine: Draft, before: Conflict) {

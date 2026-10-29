@@ -129,6 +129,7 @@ function park(draft: Draft): void {
   toast({
     title: 'Entwurf verworfen',
     description: draft.title.trim() || 'Ein neues Item ohne Titel',
+    keep: true,
     action: {
       label: UNDO_LABEL,
       onClick: () => {
