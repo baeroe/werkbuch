@@ -13,6 +13,7 @@ import { currentToasts, dismissToast, resetToasts, runToastAction } from '@/comp
 import { preloadEditor } from '@/features/editor/RichTextEditor';
 import { useLiveSync } from '@/hooks/live';
 import { useUnreadCount } from '@/hooks/notifications';
+import { listCommands } from '@/lib/commands';
 import { listShortcuts } from '@/lib/shortcuts/registry';
 import { useUiStore } from '@/store/ui';
 import { asUser, resetApi } from '@/test/api';
@@ -568,7 +569,125 @@ describe('the keys', () => {
     const keys = listShortcuts()
       .filter((shortcut) => shortcut.group === 'Inbox')
       .map((shortcut) => `${shortcut.scope}:${shortcut.keys}`);
-    expect(keys).toEqual(expect.arrayContaining(['list:j', 'list:k', 'list:e', 'list:shift+e', 'list:#', 'list:enter']));
+    expect(keys).toEqual(expect.arrayContaining(['list:j', 'list:k', 'list:e', 'list:u', 'list:shift+e', 'list:#', 'list:enter']));
+  });
+});
+
+describe('marking unread again', () => {
+  it('u marks the notification under the cursor unread again; the counters follow and the cursor stays', async () => {
+    const user = userEvent.setup();
+    renderInbox();
+    await loaded();
+    await waitFor(() => expect(badge()).toBe('3'));
+
+    // the second row is "Heute fällig" (n_02), read
+    await user.keyboard('jj');
+    const row = rows()[1];
+    expect(row.closest('li')!.hasAttribute('data-unread')).toBe(false);
+    await user.keyboard('u');
+
+    // unread at once, before the server has answered
+    expect(row.closest('li')!.hasAttribute('data-unread')).toBe(true);
+    expect(screen.getByRole('status').textContent).toBe('4 ungelesen');
+    expect(document.activeElement).toBe(row);
+    expect(row.getAttribute('aria-current')).toBe('true');
+    await waitFor(() => expect(badge()).toBe('4'));
+    expect(await unreadIds()).toEqual(['n_01', 'n_02', 'n_04', 'n_03']);
+    expect(toastTitles()).toEqual([]);
+  });
+
+  it('u shows the notification as unread at once and takes it back when the server fails', async () => {
+    const user = userEvent.setup();
+    renderInbox();
+    await loaded();
+    await user.keyboard('jj');
+    const row = rows()[1].closest('li')!;
+    localStorage.setItem('api:fail', '1');
+
+    await user.keyboard('u');
+
+    await waitFor(() => expect(toastTitles()).toContain('Nicht als ungelesen markiert'));
+    expect(row.hasAttribute('data-unread')).toBe(false);
+    expect(screen.getByRole('status').textContent).toBe('3 ungelesen');
+    expect(currentToasts().find((item) => item.title === 'Nicht als ungelesen markiert')?.action?.label).toBe('Erneut versuchen');
+  });
+
+  it('u right after Enter leaves the notification unread, also when the server answers the read last', async () => {
+    const user = userEvent.setup();
+    const { gate, answer } = held();
+    const original = notificationsApi.markRead;
+    let readStored = false;
+    vi.spyOn(notificationsApi, 'markRead').mockImplementation(async (ids) => {
+      await gate;
+      await original(ids);
+      readStored = true;
+    });
+    renderInbox();
+    await loaded();
+
+    // Enter reads n_01 (its call waits), u takes it back at once
+    await user.keyboard('j{Enter}u');
+    expect(rows()[0].closest('li')!.hasAttribute('data-unread')).toBe(true);
+    expect(screen.getByRole('status').textContent).toBe('3 ungelesen');
+
+    answer();
+    await waitFor(() => expect(readStored).toBe(true));
+
+    // the unread call goes after the read call: the server ends where the last key left it
+    await waitFor(async () => expect(await unreadIds()).toContain('n_01'));
+    await waitFor(() => expect(badge()).toBe('3'));
+    expect(rows()[0].closest('li')!.hasAttribute('data-unread')).toBe(true);
+    expect(screen.getByRole('status').textContent).toBe('3 ungelesen');
+  });
+
+  it('u without a cursor says how to get one and changes nothing', async () => {
+    const user = userEvent.setup();
+    renderInbox();
+    await loaded();
+
+    await user.keyboard('u');
+
+    expect(toastTitles()).toEqual(['Keine Benachrichtigung ausgewählt']);
+    expect((await listNotifications({ unread_only: true })).total).toBe(3);
+  });
+
+  it('a read row has "Als ungelesen markieren" as its button and in its menu', async () => {
+    const user = userEvent.setup();
+    renderInbox();
+    await loaded();
+    const row = screen.getByRole('link', { name: /Heute fällig/ }).closest('li')!;
+    // an unread row offers the other way
+    const unreadRow = screen.getByRole('link', { name: /^Ungelesen: Ida Brenner hat dich erwähnt/ }).closest('li')!;
+    expect(within(unreadRow).queryByRole('button', { name: 'Als ungelesen markieren' })).toBeNull();
+
+    await user.click(within(row).getByRole('button', { name: 'Aktionen für diese Benachrichtigung' }));
+    expect(await screen.findByRole('menuitem', { name: 'Als ungelesen markieren' })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: 'Als gelesen markieren' })).toBeNull();
+    await user.keyboard('{Escape}');
+
+    await user.click(within(row).getByRole('button', { name: 'Als ungelesen markieren' }));
+
+    await waitFor(() => expect(row.hasAttribute('data-unread')).toBe(true));
+    await waitFor(async () => expect(await unreadIds()).toContain('n_02'));
+  });
+
+  it('the palette offers it for a read notification under the cursor, with the key u', async () => {
+    const user = userEvent.setup();
+    renderInbox();
+    await loaded();
+    const unreadCommand = () => listCommands().find((entry) => entry.id === 'inbox.unread');
+
+    // nothing under the cursor, then an unread one: nothing to offer
+    expect(unreadCommand()?.when?.()).toBe(false);
+    await user.keyboard('j');
+    expect(unreadCommand()?.when?.()).toBe(false);
+    await user.keyboard('j');
+    expect(unreadCommand()).toMatchObject({ label: 'Benachrichtigung als ungelesen markieren', group: 'Inbox', keys: 'u' });
+    expect(unreadCommand()?.when?.()).toBe(true);
+
+    act(() => unreadCommand()!.run());
+
+    await waitFor(async () => expect(await unreadIds()).toContain('n_02'));
   });
 });
 

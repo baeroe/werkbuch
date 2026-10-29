@@ -1,9 +1,9 @@
 /*
  * One notification of the inbox (spec 4.14): who did what, an excerpt for comments and mentions, how long ago, and
- * the two things you do with it, mark it read and delete it.
+ * the two things you do with it: mark it read (or unread again, once it is read) and delete it.
  *
  * Keyboard: the link over the row is the tab stop of the whole list (roving: `tabStop`), the screen moves the cursor
- * with j/k and acts with e and #. The buttons are no tab stops, like the chips of a list row; touch screens get
+ * with j/k and acts with e, u and #. The buttons are no tab stops, like the chips of a list row; touch screens get
  * the same two actions in a menu.
  *
  * A row with an unread notification has the ink-blue dot; the whole row is the link (a plain click opens the item in the
@@ -11,7 +11,7 @@
  * notification), and the actions sit above it.
  */
 
-import { CalendarClock, CalendarSync, Check, Ellipsis, Trash2, Webhook, type LucideIcon } from 'lucide-react';
+import { CalendarClock, CalendarSync, Check, CircleDot, Ellipsis, Trash2, Webhook, type LucideIcon } from 'lucide-react';
 import type { ReactNode, Ref } from 'react';
 import { formatShortDay } from '@/components/fields/format';
 import { useToday, useUserMap } from '@/components/fields/itemData';
@@ -92,11 +92,12 @@ type NotificationRowProps = {
   /** The link got the focus: the cursor follows. */
   onCursor: (notificationId: string) => void;
   onMarkRead: (notificationId: string) => void;
+  onMarkUnread: (notificationId: string) => void;
   onDelete: (notificationId: string) => void;
   linkRef: Ref<HTMLAnchorElement>;
 };
 
-export function NotificationRow({ notification, item, current, tabStop, flashing, now, timeZone, onOpen, onOpenInTab, onCursor, onMarkRead, onDelete, linkRef }: NotificationRowProps) {
+export function NotificationRow({ notification, item, current, tabStop, flashing, now, timeZone, onOpen, onOpenInTab, onCursor, onMarkRead, onMarkUnread, onDelete, linkRef }: NotificationRowProps) {
   const users = useUserMap();
   const { today } = useToday();
   const properties = useProperties().data?.items;
@@ -239,8 +240,10 @@ export function NotificationRow({ notification, item, current, tabStop, flashing
           {ago}
         </time>
         <div className={cx('relative z-10 col-start-1 row-start-1 hidden items-center gap-0.5 opacity-0 transition-opacity duration-120 md:[@media(hover:hover)]:flex', SHOW_ON_ROW)}>
-          {unread && (
+          {unread ? (
             <IconButton icon={Check} label="Als gelesen markieren" shortcut="e" tabIndex={-1} onClick={() => onMarkRead(notification.id)} />
+          ) : (
+            <IconButton icon={CircleDot} label="Als ungelesen markieren" shortcut="u" tabIndex={-1} onClick={() => onMarkUnread(notification.id)} />
           )}
           <IconButton icon={Trash2} label="Löschen" shortcut="#" tabIndex={-1} onClick={() => onDelete(notification.id)} />
         </div>
@@ -261,9 +264,13 @@ export function NotificationRow({ notification, item, current, tabStop, flashing
             }
           />
           <MenuContent align="end">
-            {unread && (
+            {unread ? (
               <MenuItem icon={Check} onClick={() => onMarkRead(notification.id)}>
                 Als gelesen markieren
+              </MenuItem>
+            ) : (
+              <MenuItem icon={CircleDot} onClick={() => onMarkUnread(notification.id)}>
+                Als ungelesen markieren
               </MenuItem>
             )}
             <MenuItem icon={Trash2} danger onClick={() => onDelete(notification.id)}>

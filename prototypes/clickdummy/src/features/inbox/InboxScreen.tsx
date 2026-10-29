@@ -4,15 +4,17 @@
  * "Ungelesen" and "Erwähnungen" live in the URL (`?unread=1&mentions=1`), so a link keeps them.
  *
  * Keyboard (scope list; the help `?` lists them): j and k move the cursor and the focus with it, e marks the
- * notification under the cursor read, shift+e all of them, # deletes with 5 seconds of undo, Enter opens its item in
- * the preview (`useUiStore.openPeek`) without leaving the list.
+ * notification under the cursor read and u unread again, shift+e marks all of them read, # deletes with 5 seconds of
+ * undo, Enter opens its item in the preview (`useUiStore.openPeek`) without leaving the list.
  *
  * Opening reads (correction round 2026-10-29, in place of R20): Enter and a click (the preview), a click with ⌘/Ctrl
  * or ⇧ and a middle click (the item's page in a new tab), the page of a notification without an item, and the title
  * of a card (the item's page: all of the card's notifications). The cursor stays on the row; in the unread list the row
- * leaves, the cursor and the focus move on as after a delete, and the preview stays open.
- * A notification marked read shows as read at once, without a toast (and is unread again, with a toast, if the server
- * refuses); a delete hides the row at once and runs when the undo toast ends.
+ * leaves, the cursor and the focus move on as after a delete, and the preview stays open. u, the row's button or menu
+ * and the palette take it back.
+ * A notification marked read or unread shows it at once, without a toast (and is as before, with a toast, if the server
+ * refuses); the calls go one after another, so the server ends where the last key left it. A delete hides the row at
+ * once and runs when the undo toast ends.
  *
  * Live: `useLiveSync` (mounted in the shell) loads the list again on a live event, so a new notification appears and the
  * counters, here and in the sidebar, change. The profile menu's "Live-Ereignis simulieren" shows it.
@@ -20,7 +22,7 @@
 
 import { Toggle } from '@base-ui/react/toggle';
 import { ToggleGroup } from '@base-ui/react/toggle-group';
-import { Building2, CheckCheck, Inbox, SlidersHorizontal } from 'lucide-react';
+import { Building2, CheckCheck, CircleDot, Inbox, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useId, useMemo, useReducer, useRef, useState, type MouseEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { ApiError } from '@/api/client';
@@ -33,7 +35,7 @@ import { IndexCard } from '@/components/ui/IndexCard';
 import { ProjectBadge } from '@/components/ui/ProjectBadge';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
 import { currentToasts, toast } from '@/components/ui/toast';
-import { useDeleteNotification, useMarkAllRead, useMarkRead, useNotifications } from '@/hooks/notifications';
+import { useDeleteNotification, useMarkAllRead, useMarkRead, useMarkUnread, useNotifications } from '@/hooks/notifications';
 import { useOrganization } from '@/hooks/organization';
 import { useProjects } from '@/hooks/projects';
 import { useRefetchFailed } from '@/hooks/retry';
@@ -65,6 +67,25 @@ function useClock(): Date {
 }
 
 const without = (set: ReadonlySet<string>, ids: string[]): Set<string> => new Set([...set].filter((id) => !ids.includes(id)));
+
+/** A read mark the server has not confirmed yet: what was chosen last for a notification (read or unread), and the call that sends it. */
+type Mark = { read: boolean; call: number };
+
+/**
+ * The unread count with the marks the server has not confirmed: the server's count, less what is marked read, plus
+ * what is marked unread. A mark counts only where it differs from what is stored (`storedUnread`; a notification the
+ * list does not hold is as the mark found it). While "all read" is on its way, only the unread marks made since count.
+ */
+function countUnread(total: number, marks: ReadonlyMap<string, Mark>, storedUnread: (id: string) => boolean | undefined, allRead: boolean): number {
+  if (allRead) return [...marks.values()].filter((mark) => !mark.read).length;
+  let unread = total;
+  for (const [id, mark] of marks) {
+    const stored = storedUnread(id) ?? mark.read;
+    if (mark.read && stored) unread -= 1;
+    else if (!mark.read && !stored) unread += 1;
+  }
+  return Math.max(0, unread);
+}
 
 /**
  * A hint is not shown twice at once. Toasts take three places at most: a key pressed again and again would fill them
@@ -145,12 +166,13 @@ type GroupCardProps = {
   onOpenItem: (group: NotificationGroup, focused: boolean) => void;
   onCursor: (notificationId: string) => void;
   onMarkRead: (notificationId: string) => void;
+  onMarkUnread: (notificationId: string) => void;
   onDelete: (notificationId: string) => void;
   registerLink: (notificationId: string, element: HTMLAnchorElement | null) => void;
 };
 
 /** The notifications of one item on its index card; what belongs to no item stands on a plain card of its project. */
-function GroupCard({ group, current, tabStop, previewed, flashing, now: at, timeZone, onOpen, onOpenInTab, onOpenItem, onCursor, onMarkRead, onDelete, registerLink }: GroupCardProps) {
+function GroupCard({ group, current, tabStop, previewed, flashing, now: at, timeZone, onOpen, onOpenInTab, onOpenItem, onCursor, onMarkRead, onMarkUnread, onDelete, registerLink }: GroupCardProps) {
   const headingId = useId();
   const detail = useWorkItem(group.itemId);
   const projects = useProjects({ include_archived: true });
@@ -174,6 +196,7 @@ function GroupCard({ group, current, tabStop, previewed, flashing, now: at, time
           onOpenInTab={onOpenInTab}
           onCursor={onCursor}
           onMarkRead={onMarkRead}
+          onMarkUnread={onMarkUnread}
           onDelete={onDelete}
           linkRef={(element) => registerLink(notification.id, element)}
         />
@@ -255,32 +278,45 @@ export function InboxScreen() {
   const flashIds = useUiStore((state) => state.flashIds);
 
   const markReadMutation = useMarkRead();
+  const markUnreadMutation = useMarkUnread();
   const markAllMutation = useMarkAllRead();
   const deleteMutation = useDeleteNotification();
 
   /**
-   * The cursor (the row the keys act on); rows waiting for their delete; what is marked read and not yet confirmed. A
-   * notification marked read shows as read at once and goes back to unread when the server refuses.
+   * The cursor (the row the keys act on); rows waiting for their delete; the read marks the server has not confirmed
+   * yet. A notification marked read or unread shows it at once and is as before when the server refuses.
    */
   const [cursorId, setCursorId] = useState<string | null>(null);
   const [hidden, setHidden] = useState<ReadonlySet<string>>(() => new Set());
-  const [readNow, setReadNow] = useState<ReadonlySet<string>>(() => new Set());
+  const [marks, setMarks] = useState<ReadonlyMap<string, Mark>>(() => new Map());
   // calls of "all read" that are on their way (a count, so that one that ends does not end the mark of another)
   const [allReadCalls, setAllReadCalls] = useState(0);
   const allReadNow = allReadCalls > 0;
   const links = useRef(new Map<string, HTMLAnchorElement>());
+  const calls = useRef(0);
+  /** The calls that change what is read, one after another (see `setRead`). */
+  const turn = useRef<Promise<unknown>>(Promise.resolve());
 
-  // what the server counts, less what is marked read and not yet confirmed
-  const unreadCount = allReadNow ? 0 : Math.max(0, (unreadQuery.data?.total ?? 0) - readNow.size);
+  const storedUnread = (id: string) => {
+    const stored = list.data?.items.find((notification) => notification.id === id);
+    return stored && stored.read_at === null;
+  };
+  const unreadCount = countUnread(unreadQuery.data?.total ?? 0, marks, storedUnread, allReadNow);
 
   const visible = useMemo(() => {
     const markedAt = now().toISOString();
     return (list.data?.items ?? [])
       .filter((notification) => !hidden.has(notification.id))
-      .map((notification) => (notification.read_at === null && (allReadNow || readNow.has(notification.id)) ? { ...notification, read_at: markedAt } : notification))
+      .map((notification) => {
+        // a mark made since "all read" was sent is newer than it
+        const mark = marks.get(notification.id);
+        const read = mark ? mark.read : allReadNow || notification.read_at !== null;
+        if (read === (notification.read_at !== null)) return notification;
+        return { ...notification, read_at: read ? markedAt : null };
+      })
       // in the unread list a notification that was just read leaves it
       .filter((notification) => !unreadOnly || notification.read_at === null);
-  }, [list.data, hidden, readNow, allReadNow, unreadOnly]);
+  }, [list.data, hidden, marks, allReadNow, unreadOnly]);
   const groups = useMemo(() => groupNotifications(visible), [visible]);
   const order = useMemo(() => groups.flatMap((group) => group.notifications.map((notification) => notification.id)), [groups]);
   const current = cursorId !== null && order.includes(cursorId) ? cursorId : null;
@@ -342,23 +378,36 @@ export function InboxScreen() {
 
   /* actions */
 
+  /** Runs `send` once the calls before it have ended, however they ended. */
+  function inTurn<T>(send: () => Promise<T>): Promise<T> {
+    const call = turn.current.then(send);
+    turn.current = call.catch(() => undefined);
+    return call;
+  }
+
   /**
-   * The notifications show as read at once; no toast for it, as a refusal alone is worth one (spec 5.1). Every call
-   * ends itself (`mutateAsync`): the callbacks of `mutate` only belong to the last of several calls on one hook, so the
-   * mark of an earlier call would stay on, and its refusal would go unsaid.
+   * Marks notifications read or unread. They show it at once; no toast for it, as a refusal alone is worth one (spec
+   * 5.1). The calls go one after another, so the server ends where the last key left it: Enter and then u at once leave
+   * the notification unread, whichever call the server would have answered first. Every call ends itself
+   * (`mutateAsync`): the callbacks of `mutate` only belong to the last of several calls on one hook, so the mark of an
+   * earlier call would stay on, and its refusal would go unsaid.
    */
-  async function markRead(ids: string[]) {
-    setReadNow((state) => new Set([...state, ...ids]));
+  async function setRead(ids: string[], read: boolean) {
+    calls.current += 1;
+    const call = calls.current;
+    setMarks((state) => new Map([...state, ...ids.map((id) => [id, { read, call }] as const)]));
     try {
-      await markReadMutation.mutateAsync(ids);
+      await inTurn(() => (read ? markReadMutation : markUnreadMutation).mutateAsync(ids));
     } catch (error) {
-      // the notifications are unread as before (the mark goes in the `finally`)
-      notifyError('Nicht als gelesen markiert', error, () => void markRead(ids));
+      // the notifications are as before (the mark goes in the `finally`)
+      notifyError(read ? 'Nicht als gelesen markiert' : 'Nicht als ungelesen markiert', error, () => void setRead(ids, read));
     } finally {
-      // success: the lists have loaded again and say it
-      setReadNow((state) => without(state, ids));
+      // success: the lists have loaded again and say it. A newer mark of the same notification stays.
+      setMarks((state) => new Map([...state].filter(([, mark]) => mark.call !== call)));
     }
   }
+
+  const markRead = (ids: string[]) => setRead(ids, true);
 
   async function markAll() {
     // only when the count is known to be zero: an unknown count (still loading, or failed) lets the call try
@@ -366,13 +415,15 @@ export function InboxScreen() {
       hint('Alles gelesen', 'Es gibt keine ungelesenen Benachrichtigungen.');
       return;
     }
-    setAllReadCalls((calls) => calls + 1);
+    // everything is read once this call is through; the marks before it are settled by it (their calls go first)
+    setMarks(new Map());
+    setAllReadCalls((count) => count + 1);
     try {
-      await markAllMutation.mutateAsync();
+      await inTurn(() => markAllMutation.mutateAsync());
     } catch (error) {
       notifyError('Nicht als gelesen markiert', error, () => void markAll());
     } finally {
-      setAllReadCalls((calls) => calls - 1);
+      setAllReadCalls((count) => count - 1);
     }
   }
 
@@ -406,6 +457,17 @@ export function InboxScreen() {
     // in the unread list the row is about to leave: the cursor goes on to the next one
     if (unreadOnly) moveOn([current]);
     void markRead([current]);
+  }
+
+  /** u: the notification under the cursor is unread again; the cursor stays on it. */
+  function unreadCurrent() {
+    if (current === null) {
+      if (order.length > 0) noCursor();
+      return;
+    }
+    const notification = visible.find((entry) => entry.id === current);
+    if (!notification || notification.read_at === null) return;
+    void setRead([current], false);
   }
 
   function deleteCurrent() {
@@ -459,6 +521,7 @@ export function InboxScreen() {
   useShortcut({ id: 'inbox.next.arrow', keys: 'arrowdown', scope: 'list', label: 'Nächste Benachrichtigung', group: SHORTCUT_GROUP, repeat: true, when: () => hasRows() && rowHasFocus(), run: () => move(1) });
   useShortcut({ id: 'inbox.prev.arrow', keys: 'arrowup', scope: 'list', label: 'Vorige Benachrichtigung', group: SHORTCUT_GROUP, repeat: true, when: () => hasRows() && rowHasFocus(), run: () => move(-1) });
   useShortcut({ id: 'inbox.read', keys: 'e', scope: 'list', label: 'Als gelesen markieren', group: SHORTCUT_GROUP, when: hasRows, run: readCurrent });
+  useShortcut({ id: 'inbox.unread', keys: 'u', scope: 'list', label: 'Als ungelesen markieren', group: SHORTCUT_GROUP, when: hasRows, run: unreadCurrent });
   useShortcut({ id: 'inbox.read_all', keys: 'shift+e', scope: 'list', label: 'Alle als gelesen markieren', group: SHORTCUT_GROUP, run: markAll });
   useShortcut({ id: 'inbox.delete', keys: '#', scope: 'list', label: 'Benachrichtigung löschen', group: SHORTCUT_GROUP, when: hasRows, run: deleteCurrent });
   useShortcut({
@@ -483,6 +546,18 @@ export function InboxScreen() {
     keywords: ['inbox', 'gelesen', 'erledigt'],
     run: markAll,
     when: () => unreadCount > 0,
+  });
+  const cursorNotification = current === null ? undefined : visible.find((entry) => entry.id === current);
+  useCommand({
+    id: 'inbox.unread',
+    label: 'Benachrichtigung als ungelesen markieren',
+    group: SHORTCUT_GROUP,
+    keys: 'u',
+    icon: <CircleDot />,
+    keywords: ['inbox', 'ungelesen'],
+    run: unreadCurrent,
+    // the read notification under the cursor
+    when: () => cursorNotification !== undefined && cursorNotification.read_at !== null,
   });
 
   /* the screen */
@@ -582,6 +657,7 @@ export function InboxScreen() {
               onOpenItem={readItem}
               onCursor={setCursorId}
               onMarkRead={(id) => void markRead([id])}
+              onMarkUnread={(id) => void setRead([id], false)}
               onDelete={remove}
               registerLink={registerLink}
             />
