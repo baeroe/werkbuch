@@ -5,6 +5,7 @@ import { registerShortcut } from '@/lib/shortcuts/registry';
 import { X } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { Button } from './Button';
+import { Combobox } from './Combobox';
 import { Dialog, DialogClose } from './Dialog';
 import { IconButton } from './IconButton';
 import { Input } from './Input';
@@ -247,6 +248,28 @@ it('toast waits while the pointer is on it and runs out the rest of its time aft
   } finally {
     vi.useRealTimers();
   }
+});
+
+it('announces every toast politely, errors too (web guidelines: polite aria-live for toasts)', () => {
+  render(<Toaster />);
+  act(() => {
+    toast({ title: 'Link kopiert' });
+    toast({ title: 'Nicht möglich', description: 'Du liest in WEB nur mit.', tone: 'error' });
+  });
+
+  for (const title of ['Link kopiert', 'Nicht möglich']) {
+    const region = screen.getByText(title).closest('[aria-live], [role="alert"], [role="status"]');
+    expect(region?.getAttribute('role')).toBe('status');
+    expect(region?.getAttribute('aria-live')).toBe('polite');
+  }
+  expect(screen.queryByRole('alert')).toBeNull();
+});
+
+it('Combobox gives its search input the name it is given and no autofill', () => {
+  render(<Combobox label="Zeitzone" name="timezone" options={[{ value: 'Europe/Berlin', label: 'Europe/Berlin' }]} value={null} onValueChange={() => {}} />);
+  const input = screen.getByRole('combobox', { name: 'Zeitzone' });
+  expect(input.getAttribute('name')).toBe('timezone');
+  expect(input.getAttribute('autocomplete')).toBe('off');
 });
 
 it('Field keeps a polite live region for errors, so an error that appears is announced', () => {

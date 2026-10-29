@@ -223,6 +223,8 @@ function StateRow({ state, index, handle, readOnly, keepReason, error, onChange,
       <ShapeMenu state={state} disabled={readOnly} onChange={(icon) => onChange({ icon })} />
       <input
         id={`state-name-${state.id}`}
+        name={`state_name_${index + 1}`}
+        autoComplete="off"
         value={state.name}
         readOnly={readOnly}
         placeholder="Name des Status …"
@@ -462,6 +464,7 @@ function EditorForm({ initial, existing, projects, readOnlyReason, onClose, clos
         <div className="grid gap-4 p-4 md:grid-cols-2">
           <Input
             id="workflow-name"
+            name="name"
             label="Name"
             value={draft.name}
             readOnly={readOnly}
@@ -486,6 +489,8 @@ function EditorForm({ initial, existing, projects, readOnlyReason, onClose, clos
           <div className="md:col-span-2">
             <Textarea
               label="Beschreibung"
+              name="description"
+              autoComplete="off"
               hint="Wofür dieser Workflow gedacht ist."
               rows={2}
               value={draft.description}

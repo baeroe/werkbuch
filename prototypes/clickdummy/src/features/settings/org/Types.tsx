@@ -147,7 +147,7 @@ function TypeDialog({ open, onOpenChange, type, properties }: TypeDialogProps) {
       <FieldGroup legend="Farbe" hint="Der Reiter trägt die Farbe, das Icon und der Name stehen immer dabei.">
         <TonePicker label="Farbe des Typs" value={tone} onChange={setTone} />
       </FieldGroup>
-      <Textarea label="Beschreibung" hint="Wofür der Typ da ist. Sie erscheint in der Auswahl." rows={2} value={description} onChange={(event) => setDescription(event.target.value)} />
+      <Textarea label="Beschreibung" name="description" autoComplete="off" hint="Wofür der Typ da ist. Sie erscheint in der Auswahl." rows={2} value={description} onChange={(event) => setDescription(event.target.value)} />
       <Checkbox label="Epic: Items dieses Typs erscheinen in der Timeline" checked={isEpic} onCheckedChange={setIsEpic} />
 
       <FieldGroup legend="Properties" hint="Sie erscheinen im Formular und am Item in dieser Reihenfolge. Eine Pflicht-Property braucht beim Anlegen einen Wert.">

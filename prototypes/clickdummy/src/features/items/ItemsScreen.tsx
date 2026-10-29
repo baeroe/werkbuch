@@ -654,7 +654,7 @@ function ItemsList({ preset, project, view }: ItemsListProps) {
           )}
           {view && (
             <>
-              <Link to="/views" className="shrink-0 text-ui font-medium text-muted underline-offset-2 hover:text-ink hover:underline">
+              <Link to="/views" className="inline-flex min-h-11 shrink-0 items-center text-ui font-medium text-muted underline-offset-2 hover:text-ink hover:underline md:min-h-6">
                 Views
               </Link>
               <ChevronRight className="size-3.5 shrink-0 text-faint" aria-hidden="true" />

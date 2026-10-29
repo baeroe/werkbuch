@@ -57,6 +57,21 @@ describe('the status of a workflow', () => {
     expect(currentToasts().some((item) => item.title === 'Workflow „Standard“ gespeichert' && /1 Item hat einen neuen Status/.test(plain(item.description)))).toBe(true);
   });
 
+  it('names its fields for the browser and keeps autofill out of them', async () => {
+    renderWithData(<WorkflowEditor workflowId="wf_agency" onClose={() => {}} />);
+
+    const fields = [
+      await screen.findByRole('textbox', { name: 'Name' }),
+      screen.getByRole('textbox', { name: 'Beschreibung' }),
+      ...screen.getAllByRole('textbox', { name: /^Name von Status/ }),
+    ];
+    expect(fields).toHaveLength(9);
+    for (const field of fields) {
+      expect(field.getAttribute('name')).toBeTruthy();
+      expect(field.getAttribute('autocomplete')).toBe('off');
+    }
+  });
+
   it('keeps the start status from being deleted and says what to do first', async () => {
     renderWithData(<WorkflowEditor workflowId="wf_standard" onClose={() => {}} />);
 

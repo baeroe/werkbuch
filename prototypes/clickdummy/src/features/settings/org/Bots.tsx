@@ -137,7 +137,7 @@ function BotDialog({ open, onOpenChange, bot, people, meId }: BotDialogProps) {
           setHandleTouched(true);
         }}
       />
-      <Textarea label="Beschreibung" hint="Wofür der Bot da ist, damit andere ihn einordnen können." rows={2} value={description} onChange={(event) => setDescription(event.target.value)} />
+      <Textarea label="Beschreibung" name="description" autoComplete="off" hint="Wofür der Bot da ist, damit andere ihn einordnen können." rows={2} value={description} onChange={(event) => setDescription(event.target.value)} />
       {!bot?.is_default_bot && (
         <Select
           label="Verantwortliche Person"

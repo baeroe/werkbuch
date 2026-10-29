@@ -5,8 +5,9 @@ import { IconButton } from './IconButton';
 import { dismissToast, runToastAction, setToastFocused, setToastHovered, useToasts, useToastsPaused, type Toast } from './toast';
 
 /**
- * Toasts on tracing paper at the bottom. Confirmations are announced politely, errors at once. Pointer or
- * keyboard focus on a toast pauses all of them (the line at the bottom drains with the time).
+ * Toasts on tracing paper at the bottom, errors below the others. Every toast is announced politely, errors too: they
+ * answer what the person just did, so they need not cut into what a screen reader is saying (web guidelines). Pointer
+ * or keyboard focus on a toast pauses all of them (the line at the bottom drains with the time).
  */
 export function Toaster() {
   const toasts = useToasts();
@@ -36,7 +37,7 @@ export function Toaster() {
       <div role="status" aria-live="polite" className="flex w-full flex-col items-center gap-2">
         {toasts.filter((item) => item.tone !== 'error').map(card)}
       </div>
-      <div role="alert" className="flex w-full flex-col items-center gap-2">
+      <div role="status" aria-live="polite" className="flex w-full flex-col items-center gap-2">
         {toasts.filter((item) => item.tone === 'error').map(card)}
       </div>
     </div>

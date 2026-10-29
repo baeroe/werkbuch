@@ -140,6 +140,7 @@ export function Members({ project, canManage }: SectionProps) {
             <Combobox
               id={personFieldId}
               label="Person oder Bot"
+              name="member"
               placeholder="Name suchen …"
               emptyText="Niemand mehr zum Hinzufügen"
               value={candidate}

@@ -28,6 +28,7 @@ import { FieldGroup, FormSkeleton, Loaded, Panel, readOnlyField, SectionHeader }
 import type { SectionProps } from './sections';
 
 const MAX_LOGO_BYTES = 256 * 1024;
+const KILOBYTES = new Intl.NumberFormat('de-DE');
 
 const LOCALES: { value: Locale; label: string }[] = [
   { value: 'de', label: 'Deutsch' },
@@ -99,7 +100,7 @@ function GeneralForm({ organization, readOnly }: { organization: Organization; r
       return;
     }
     if (file.size > MAX_LOGO_BYTES) {
-      setLogoError(`Das Bild ist ${Math.ceil(file.size / 1024)}\u00a0KB groß. Erlaubt sind höchstens 256\u00a0KB.`);
+      setLogoError(`Das Bild ist ${KILOBYTES.format(Math.ceil(file.size / 1024))}\u00a0KB groß. Erlaubt sind höchstens 256\u00a0KB.`);
       return;
     }
     setLogoError(null);
@@ -189,6 +190,7 @@ function GeneralForm({ organization, readOnly }: { organization: Organization; r
           />
           <Combobox
             label="Zeitzone"
+            name="timezone"
             hint="Gilt für Zeitpläne und für die täglichen Jobs."
             placeholder="Zeitzone suchen …"
             emptyText="Keine Zeitzone gefunden"

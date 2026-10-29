@@ -105,7 +105,7 @@ test.describe('on a wide screen, where every column of the board is in view', ()
     await page.mouse.move(to.x + to.width / 2, to.y + 160, { steps: 20 });
     await page.mouse.up();
 
-    const toast = page.getByRole('alert').filter({ hasText: 'APP-11 nicht verschoben' });
+    const toast = page.getByRole('status').filter({ hasText: 'APP-11 nicht verschoben' });
     await expect(toast).toContainText('Von „Todo“ nach „Done“ ist im Workflow „Agentur-Freigabe“ nicht erlaubt.');
     await expect(todo.getByRole('article', { name: /^APP-11 / })).toBeVisible();
     await expect(done.getByRole('article', { name: /^APP-11 / })).toHaveCount(0);

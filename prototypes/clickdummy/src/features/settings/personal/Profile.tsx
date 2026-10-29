@@ -134,6 +134,7 @@ export function Profile({ user }: SectionProps) {
           />
           <Combobox
             label="Zeitzone"
+            name="timezone"
             hint={`Fällige Items meldet werkbuch dir täglich um 08:00 in dieser Zeitzone.${organization ? ` Voreinstellung der Organisation: ${organization.timezone}.` : ''}`}
             placeholder="Zeitzone suchen …"
             emptyText="Keine Zeitzone gefunden"

@@ -170,6 +170,7 @@ export function General({ project, canManage }: SectionProps) {
           <Textarea
             label="Beschreibung"
             name="description"
+            autoComplete="off"
             value={value.description}
             readOnly={!canManage}
             className={canManage ? undefined : READ_ONLY_LOOK}

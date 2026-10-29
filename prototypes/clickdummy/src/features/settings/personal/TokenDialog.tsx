@@ -113,7 +113,7 @@ export function TokenDialog({ user, onClose }: Props) {
         <div className="flex min-w-0 flex-col gap-5">
           <div className="flex flex-wrap items-end gap-2">
             <div className="min-w-0 flex-1 basis-56">
-              <Input ref={secret} label="Token" value={created.plain_text} readOnly translate="no" onFocus={(event) => event.currentTarget.select()} />
+              <Input ref={secret} label="Token" name="token" autoComplete="off" value={created.plain_text} readOnly translate="no" onFocus={(event) => event.currentTarget.select()} />
             </div>
             <CopyButton text={created.plain_text} target={() => secret.current} label="Token kopieren" variant="primary" />
           </div>

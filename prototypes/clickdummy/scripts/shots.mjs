@@ -2,12 +2,13 @@
 // Needs a running dev server (pnpm dev).
 //
 //   pnpm shots [--base=http://localhost:5173] [--keys=<Playwright keys, comma separated>] [--click=<selector>]
-//              [--only=desktop,tablet,mobile] [--light|--dark] [--wait=<ms>] <route…>
+//              [--only=desktop,tablet,mobile] [--light|--dark] [--wait=<ms>] [--fail] <route…>
 //
 // Writes .shots/<route>/<viewport>-<theme>.png (full page). With --keys or --click the shot shows the viewport,
 // where overlays such as dialogs, the palette or toasts appear, and the file name gets a suffix naming the action
 // (desktop-light-keys-Meta+K.png), so the plain shot stays. The theme comes from
-// localStorage['werkbuch:theme'] before the page loads. Prints FINDINGS: console errors and warnings, page errors,
+// localStorage['werkbuch:theme'] before the page loads. --fail sets localStorage['api:fail'] as well: every call of the
+// fake API fails, the shots show the error states (file name suffix "-fail"). Prints FINDINGS: console errors and warnings, page errors,
 // failed requests, fonts with status "error" (not "unloaded": subsets nobody needs) and sideways page overflow.
 // Exits with 1 when there are findings.
 import { mkdirSync } from 'node:fs';
@@ -18,7 +19,7 @@ const args = process.argv.slice(2);
 const flag = (name) => args.find((arg) => arg.startsWith(`--${name}=`))?.slice(name.length + 3);
 const routes = args.filter((arg) => !arg.startsWith('--'));
 if (routes.length === 0) {
-  console.error('usage: pnpm shots [--base=http://localhost:5173] [--keys=Meta+K] [--click=<selector>] [--only=desktop,tablet,mobile] [--light|--dark] [--wait=700] <route…>');
+  console.error('usage: pnpm shots [--base=http://localhost:5173] [--keys=Meta+K] [--click=<selector>] [--only=desktop,tablet,mobile] [--light|--dark] [--wait=700] [--fail] <route…>');
   process.exit(2);
 }
 
@@ -33,6 +34,7 @@ const viewports = [
   { name: 'mobile', width: 390, height: 844 },
 ].filter((viewport) => !only || only.includes(viewport.name));
 const themes = args.includes('--light') ? ['light'] : args.includes('--dark') ? ['dark'] : ['light', 'dark'];
+const fail = args.includes('--fail');
 const action = [keys.length > 0 && `keys-${keys.join('_')}`, click && `click-${click}`].filter(Boolean).join('-').replace(/[^\w+?-]+/g, '_');
 const outRoot = path.resolve(import.meta.dirname, '..', '.shots');
 
@@ -53,13 +55,17 @@ try {
       for (const viewport of viewports) {
         const tag = `${route} ${viewport.name}-${theme}`;
         const context = await browser.newContext({ viewport: { width: viewport.width, height: viewport.height }, colorScheme: theme });
-        await context.addInitScript((choice) => {
-          try {
-            localStorage.setItem('werkbuch:theme', choice);
-          } catch {
-            // storage blocked: the page follows the colour scheme
-          }
-        }, theme);
+        await context.addInitScript(
+          ({ choice, failing }) => {
+            try {
+              localStorage.setItem('werkbuch:theme', choice);
+              if (failing) localStorage.setItem('api:fail', '1');
+            } catch {
+              // storage blocked: the page follows the colour scheme
+            }
+          },
+          { choice: theme, failing: fail },
+        );
         const page = await context.newPage();
         page.on('console', (message) => {
           if (message.type() === 'error' || message.type() === 'warning') findings.push(`[${tag}] console ${message.type()}: ${message.text()}`);
@@ -90,7 +96,7 @@ try {
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
         if (overflow > 0) findings.push(`[${tag}] horizontal page overflow: ${overflow}px`);
 
-        const file = path.join(dir, `${viewport.name}-${theme}${action ? `-${action}` : ''}.png`);
+        const file = path.join(dir, `${viewport.name}-${theme}${fail ? '-fail' : ''}${action ? `-${action}` : ''}.png`);
         await page.screenshot({ path: file, fullPage: !action });
         console.log(path.relative(process.cwd(), file));
         await context.close();

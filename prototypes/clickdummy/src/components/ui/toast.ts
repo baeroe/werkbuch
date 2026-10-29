@@ -10,7 +10,7 @@ export type ToastOptions = {
   onExpire?: () => void;
   /** Milliseconds until the toast closes on its own. */
   duration?: number;
-  /** error: announced at once (role=alert) and marked with the danger colour. */
+  /** error: marked with the danger colour, stands below the others and never waits for a place. */
   tone?: ToastTone;
   /**
    * Never pushed out by newer toasts: it stays for its whole time unless it is closed or its action runs. Undo toasts
@@ -78,8 +78,8 @@ function forget(id: number) {
 }
 
 /**
- * Whether a toast takes one of the three places. Errors do not: they have a region of their own (role=alert), show at
- * once, beyond the three, and are never pushed out, so no error goes unseen or unannounced.
+ * Whether a toast takes one of the three places. Errors do not: they have a region of their own below the others,
+ * show at once, beyond the three, and are never pushed out, so no error goes unseen or unannounced.
  */
 const takesPlace = (item: Toast) => item.tone !== 'error';
 

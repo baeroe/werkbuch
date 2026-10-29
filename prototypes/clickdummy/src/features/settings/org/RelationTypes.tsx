@@ -66,6 +66,7 @@ function RelationTypeDialog({ open, onOpenChange, type }: { open: boolean; onOpe
       <Input id="relation-name" name="name" label="Name" hint="So heißt der Typ in der Auswahl, etwa „blockiert“." autoComplete="off" value={name} error={nameError} onChange={(event) => setName(event.target.value)} />
       <Input
         id="relation-outward"
+        name="outward_label"
         label="Beschriftung"
         hint="So liest sich die Beziehung vom ersten Item aus: „WEB-1 blockiert WEB-2“."
         autoComplete="off"
@@ -77,6 +78,7 @@ function RelationTypeDialog({ open, onOpenChange, type }: { open: boolean; onOpe
       {!symmetric && (
         <Input
           id="relation-inward"
+          name="inward_label"
           label="Beschriftung der Gegenrichtung"
           hint="So liest sie sich vom zweiten Item aus: „WEB-2 wird blockiert von WEB-1“."
           autoComplete="off"

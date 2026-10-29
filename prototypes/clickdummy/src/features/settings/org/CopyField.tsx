@@ -65,6 +65,8 @@ export function CopyField({ label, value, hint, buttonLabel = 'Kopieren', classN
         <input
           ref={field}
           id={id}
+          name={id}
+          autoComplete="off"
           readOnly
           value={value}
           aria-describedby={`${id}-status`}

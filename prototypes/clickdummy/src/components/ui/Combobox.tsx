@@ -16,6 +16,8 @@ type ComboboxProps = FieldText & {
   emptyText?: string;
   disabled?: boolean;
   id?: string;
+  /** The name of the search input (it takes no autofill: autocomplete is off). */
+  name?: string;
   'aria-label'?: string;
   className?: string;
   defaultOpen?: boolean;
@@ -65,6 +67,7 @@ export function Combobox({
           <BaseCombobox.Input
             id={inputId}
             placeholder={placeholder}
+            autoComplete="off"
             {...rest}
             aria-invalid={error ? true : undefined}
             aria-describedby={describedBy(inputId, { hint, error })}

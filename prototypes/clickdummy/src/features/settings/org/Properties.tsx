@@ -87,6 +87,8 @@ function OptionRows({ options, onChange }: { options: DraftOption[]; onChange: (
                 {handle}
                 <ToneMenu label={`Farbe von ${name}`} value={option.color} onChange={(color) => patch(option.id, { color })} />
                 <input
+                  name={`option_label_${index + 1}`}
+                  autoComplete="off"
                   value={option.label}
                   aria-label={`Label von Option ${index + 1}`}
                   placeholder="Label der Option"
@@ -270,7 +272,7 @@ function PropertyDialog({ open, onOpenChange, property }: PropertyDialogProps) {
             options={FIELD_TYPES.map((type) => ({ value: type, label: FIELD_TYPE_NAMES[type] }))}
           />
         )}
-        <Input label="Hilfetext" hint="Steht unter dem Feld, etwa „Für wen das Item gemacht wird.“" autoComplete="off" value={help} onChange={(event) => setHelp(event.target.value)} />
+        <Input label="Hilfetext" name="help" hint="Steht unter dem Feld, etwa „Für wen das Item gemacht wird.“" autoComplete="off" value={help} onChange={(event) => setHelp(event.target.value)} />
       </div>
 
       {fieldType === 'number' && (
