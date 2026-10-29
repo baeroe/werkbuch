@@ -6,9 +6,11 @@
  * - The tree (PageTree) stands on the left from lg on. Below that, the overview shows the tree and a page shows alone;
  *   the path in the header leads back.
  * - Moving a page (dragging in the tree, or "Verschieben nach …") shows at once; a refusal of the server takes it back.
- * - Deleting takes the page with its whole subtree. A page with subpages first says how many go along. Then the pages
- *   leave the tree at once and are deleted when the undo toast runs out (5 s); "Rückgängig" brings them back, and the
- *   page that was open with them.
+ * - Deleting takes the page with its whole subtree and always asks first (spec 4.15 "mit Bestätigung", correction
+ *   round 2026-10-29), from every entry: the page's menu, the palette, mod+backspace on the page or on a row of the tree.
+ *   With subpages the question names them. After the yes the pages leave the tree at once and are deleted when the undo
+ *   toast runs out (5 s); "Rückgängig" brings them back, and the page that was open with them. "Abbrechen" gives the
+ *   focus back to where it was.
  * - Members and admins edit, viewers read (`wiki.edit`, spec 4.3).
  */
 
@@ -225,13 +227,11 @@ function Wiki({ project, pageId }: { project: Project; pageId: string | undefine
     }
   }
 
-  /** A page with subpages asks first and says how many go along; a single page goes at once, with undo. */
+  /** Every delete asks first, a page with subpages says how many go along; after the yes it goes with undo (`remove`). */
   function requestDelete(id: string) {
     const node = findPage(tree, id);
     if (!node) return;
-    const count = subtreeIds(tree, id).length;
-    if (count > 1) setAsking({ open: true, page: node, count });
-    else remove(node);
+    setAsking({ open: true, page: node, count: subtreeIds(tree, id).length });
   }
 
   function remove(node: PageNode) {
@@ -361,9 +361,9 @@ function Wiki({ project, pageId }: { project: Project; pageId: string | undefine
       <AlertDialog
         open={asking.open}
         onOpenChange={(open) => setAsking((state) => ({ ...state, open }))}
-        title={asking.page ? `„${asking.page.title}“ mit ${subpages(asking.count - 1)} löschen?` : ''}
+        title={asking.page ? deleteTitle(asking.page, asking.count) : ''}
         description={asking.page ? deleteText(asking.page, asking.count) : ''}
-        confirmLabel={`${asking.count} Seiten löschen`}
+        confirmLabel={asking.count > 1 ? `${asking.count} Seiten löschen` : 'Seite löschen'}
         onConfirm={() => {
           const node = asking.page;
           setAsking((state) => ({ ...state, open: false }));
@@ -376,10 +376,16 @@ function Wiki({ project, pageId }: { project: Project; pageId: string | undefine
 
 const LIST = new Intl.ListFormat('de-DE', { type: 'conjunction' });
 
-/** What goes along with a page, in words: its subpages by name, at most five. */
+/** The question: the page, and how many subpages go along. */
+function deleteTitle(page: PageNode, count: number): string {
+  return count > 1 ? `„${page.title}“ mit ${subpages(count - 1)} löschen?` : `„${page.title}“ löschen?`;
+}
+
+/** What goes along with a page, in words: its subpages by name, at most five; and how long it can be taken back. */
 function deleteText(page: PageNode, count: number): string {
   const below = flattenPages(page.children).map((row) => `„${row.node.title}“`);
   const later = 'Fünf Sekunden lang lässt sich das rückgängig machen.';
+  if (below.length === 0) return later;
   if (below.length === 1) return `Mit der Seite verschwindet auch ihre Unterseite ${below[0]}. ${later}`;
   const names = below.length > 5 ? `${below.slice(0, 5).join(', ')} und ${below.length - 5} weitere` : LIST.format(below);
   return `Mit der Seite verschwinden auch ihre ${subpages(count - 1)}: ${names}. ${later}`;

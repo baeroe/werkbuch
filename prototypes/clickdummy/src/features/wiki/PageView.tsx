@@ -487,13 +487,13 @@ function PageSheet({ page, projectId, base, ancestors, rights, onMove, onDelete,
   }
 
   useShortcut({ id: 'wiki.save', keys: 'mod+enter', scope: 'detail', label: 'Seite jetzt speichern', group: 'Wiki', run: () => void save.current(), when: () => canEdit });
-  useShortcut({ id: 'wiki.delete', keys: 'mod+backspace', scope: 'detail', label: 'Seite löschen (mit Rückgängig)', group: 'Wiki', run: onDelete, when: () => canEdit });
+  useShortcut({ id: 'wiki.delete', keys: 'mod+backspace', scope: 'detail', label: 'Seite löschen (mit Rückfrage)', group: 'Wiki', run: onDelete, when: () => canEdit });
 
   const group = `Seite „${page.title}“`;
   useCommand({ id: 'wiki.page.versions', label: 'Versionen ansehen', group, icon: <History />, keywords: ['historie', 'wiederherstellen', 'version'], run: () => setVersionsOpen(true) });
   useCommand({ id: 'wiki.page.move', label: 'Seite verschieben …', group, icon: <FolderInput />, keywords: ['verschieben', 'umhängen'], run: onMove, when: () => canEdit });
   useCommand({ id: 'wiki.page.child', label: 'Unterseite anlegen', group, icon: <FilePlus2 />, keywords: ['neue seite', 'anlegen'], run: onCreateChild, when: () => canEdit });
-  useCommand({ id: 'wiki.page.delete', label: 'Seite löschen', group, keys: 'mod+backspace', icon: <Trash2 />, keywords: ['entfernen'], run: onDelete, when: () => canEdit });
+  useCommand({ id: 'wiki.page.delete', label: 'Seite löschen …', group, keys: 'mod+backspace', icon: <Trash2 />, keywords: ['entfernen'], run: onDelete, when: () => canEdit });
 
   const editor = users.get(page.updated_by)?.name ?? 'Unbekannt';
 
@@ -534,7 +534,7 @@ function PageSheet({ page, projectId, base, ancestors, rights, onMove, onDelete,
                 </MenuItem>
                 <MenuSeparator />
                 <MenuItem icon={Trash2} danger shortcut="mod+backspace" onClick={onDelete}>
-                  Löschen
+                  Löschen …
                 </MenuItem>
               </MenuContent>
             </Menu>

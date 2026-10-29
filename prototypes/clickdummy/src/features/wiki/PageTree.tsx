@@ -2,7 +2,8 @@
  * The page tree of a wiki (spec 4.15; 5.2: "Baum links, Seite rechts"): an ARIA tree of links in one flat list.
  * - Keyboard: one tab stop (the open page). The arrows move, Right opens a page's subpages or steps into them, Left
  *   closes them or steps to the parent, Home and End jump; Enter opens the page (each row is a link); mod+backspace
- *   deletes the page of the row (with its subtree, as on the page). Other keys with Ctrl, Cmd or Alt are left to the app.
+ *   asks to delete the page of the row (with its subtree, as on the page). Other keys with Ctrl, Cmd or Alt are left to
+ *   the app.
  * - Pointer: the chevron opens and closes subpages; the handle on the left of a row drags the page (dnd-kit's sortable
  *   tree: up and down chooses the neighbours, sideways the depth). A line in ink blue shows where it lands, a lifted
  *   copy of the row floats along (DESIGN.md: drag), the subpages travel with it. The handle is no tab stop and hidden
@@ -54,7 +55,7 @@ type PageTreeProps = {
   /** Dragging is offered only to people who may edit the wiki. */
   canMove: boolean;
   onMove: (id: string, placement: Placement) => void;
-  /** mod+backspace on a row; only for people who may edit the wiki. */
+  /** mod+backspace on a row asks to delete its page; only for people who may edit the wiki. */
   onDelete?: (id: string) => void;
 };
 

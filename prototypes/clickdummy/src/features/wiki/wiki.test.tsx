@@ -5,6 +5,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { getDb } from '@/api/db';
 import { currentToasts, dismissToast, resetToasts, runToastAction } from '@/components/ui/toast';
+import { listCommands } from '@/lib/commands';
 import { plainText } from '@/lib/richtext';
 import { useUiStore } from '@/store/ui';
 import { asUser, resetApi } from '@/test/api';
@@ -311,21 +312,81 @@ describe('the wiki', () => {
     await waitFor(() => expect(webPages()).toHaveLength(7));
   });
 
-  it('deletes a page without subpages without asking, with undo', async () => {
+  it('asks before it deletes a page without subpages; "Seite löschen" deletes it with undo, which brings it back', async () => {
     const user = userEvent.setup();
-    renderWiki('/projects/WEB/wiki/pg_web_kickoff');
+    const { router } = renderWiki('/projects/WEB/wiki/pg_web_kickoff');
     await screen.findByRole('textbox', { name: 'Inhalt der Seite' });
+    const pages = await tree();
 
     await user.click(screen.getByRole('button', { name: 'Weitere Aktionen' }));
     await user.click(await screen.findByRole('menuitem', { name: /Löschen/ }));
 
-    await waitFor(() => expect(toastTitles()).toContain('„Kickoff-Notizen“ gelöscht'));
-    expect(screen.queryByRole('alertdialog')).toBeNull();
-    act(() => dismissToast(currentToasts().find((item) => item.title === '„Kickoff-Notizen“ gelöscht')!.id));
-    await waitFor(() => expect(stored('pg_web_kickoff')).toBeUndefined());
+    // nothing is gone yet: the question comes first (the modal hides the page behind it from screen readers)
+    const ask = await screen.findByRole('alertdialog', { name: '„Kickoff-Notizen“ löschen?' });
+    expect(within(ask).getByText('Fünf Sekunden lang lässt sich das rückgängig machen.')).toBeTruthy();
+    expect(toastTitles()).toEqual([]);
+    expect(within(pages).getByRole('treeitem', { name: 'Kickoff-Notizen', hidden: true })).toBeTruthy();
+
+    await user.click(within(ask).getByRole('button', { name: 'Seite löschen' }));
+
+    await waitFor(() => expect(within(pages).queryByRole('treeitem', { name: 'Kickoff-Notizen' })).toBeNull());
+    const undo = currentToasts().find((item) => item.title === '„Kickoff-Notizen“ gelöscht')!;
+    expect(undo.action?.label).toBe('Rückgängig');
+    expect(router.state.location.pathname).toBe('/projects/WEB/wiki/pg_web_meetings');
+
+    act(() => runToastAction(undo.id));
+
+    expect(await within(pages).findByRole('treeitem', { name: 'Kickoff-Notizen' })).toBeTruthy();
+    await waitFor(() => expect(router.state.location.pathname).toBe('/projects/WEB/wiki/pg_web_kickoff'));
+    expect(stored('pg_web_kickoff')).toBeDefined();
   });
 
-  it('deletes the page of the focused row with mod+backspace, not the open page', async () => {
+  it('"Abbrechen" keeps the page, and the focus goes back to where it was', async () => {
+    const user = userEvent.setup();
+    renderWiki('/projects/WEB/wiki/pg_web_structure');
+    const pages = await tree();
+    const kickoff = await within(pages).findByRole('treeitem', { name: 'Kickoff-Notizen' });
+
+    // from the tree: mod+backspace on the row
+    act(() => kickoff.focus());
+    await user.keyboard('{Control>}{Backspace}{/Control}');
+    const ask = await screen.findByRole('alertdialog', { name: '„Kickoff-Notizen“ löschen?' });
+    await user.click(within(ask).getByRole('button', { name: 'Abbrechen' }));
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(kickoff));
+    expect(within(pages).getByRole('treeitem', { name: 'Kickoff-Notizen' })).toBeTruthy();
+
+    // from the page's menu: back on its button
+    const more = screen.getByRole('button', { name: 'Weitere Aktionen' });
+    await user.click(more);
+    await user.click(await screen.findByRole('menuitem', { name: /Löschen/ }));
+    await user.click(within(await screen.findByRole('alertdialog', { name: '„Seitenstruktur“ löschen?' })).getByRole('button', { name: 'Abbrechen' }));
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(more));
+    expect(toastTitles()).toEqual([]);
+    expect(stored('pg_web_kickoff')).toBeDefined();
+    expect(stored('pg_web_structure')).toBeDefined();
+  });
+
+  it('asks on every way to delete: the page’s mod+backspace and the palette command', async () => {
+    const user = userEvent.setup();
+    renderWiki('/projects/WEB/wiki/pg_web_kickoff');
+    await screen.findByRole('textbox', { name: 'Inhalt der Seite' });
+
+    // the page's own shortcut, with the focus outside any field
+    act(() => screen.getByRole('button', { name: 'Weitere Aktionen' }).focus());
+    await user.keyboard('{Control>}{Backspace}{/Control}');
+    await user.click(within(await screen.findByRole('alertdialog', { name: '„Kickoff-Notizen“ löschen?' })).getByRole('button', { name: 'Abbrechen' }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+
+    act(() => listCommands().find((entry) => entry.id === 'wiki.page.delete')!.run());
+    expect(await screen.findByRole('alertdialog', { name: '„Kickoff-Notizen“ löschen?' })).toBeTruthy();
+    expect(toastTitles()).toEqual([]);
+  });
+
+  it('deletes the page of the focused row with mod+backspace, not the open page, once the question is answered', async () => {
     const user = userEvent.setup();
     const { router } = renderWiki('/projects/WEB/wiki/pg_web_structure');
     const pages = await tree();
@@ -333,6 +394,7 @@ describe('the wiki', () => {
 
     act(() => kickoff.focus());
     await user.keyboard('{Control>}{Backspace}{/Control}');
+    await user.click(within(await screen.findByRole('alertdialog', { name: '„Kickoff-Notizen“ löschen?' })).getByRole('button', { name: 'Seite löschen' }));
 
     await waitFor(() => expect(toastTitles()).toContain('„Kickoff-Notizen“ gelöscht'));
     expect(within(pages).queryByRole('treeitem', { name: 'Kickoff-Notizen' })).toBeNull();
