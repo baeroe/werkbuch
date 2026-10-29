@@ -79,6 +79,9 @@ Rohliste für 13b (Aufräumen) und 13c (Feinschliff) nach der Korrekturrunde, si
 - Correction round 1: minor (deferred → 13b): move the inbox read marks (`Mark`, `countUnread`, `inTurn`, `setRead`) out of `InboxScreen.tsx` (711 lines) into a `useReadMarks` hook
 - Correction round 1: minor (deferred → 13c): „Kind-Item anlegen …“ in the item menu refuses with a toast because the menu has no disabled entry with a reason; `t` in a list before the project's items have loaded goes straight to the server, which refuses with a named toast
 - Correction round 1: question for Rafael: a board column for every epic, so an epic's first child can be quick-added there (needs `quickAddFor` to take the project from the epic, `BoardLayout.tsx:742`)
+- Correction round 1 part 2: minor (deferred → 13c): ⇧P can still be one render behind while a preview is open on a cross-project board (moving the cursor from a WEB to an APP card keeps WEB's items loaded → „Einen Moment“); notify the `targetSnapshot` listeners after a mount updates `latestOptions`, or keep the list cursor in `useUiStore` (`components/fields/commands.ts:705-718`, `:821`; `ItemsScreen.tsx:437-441`)
+- Correction round 1 part 2: minor (deferred → 13b): the gallery hard-codes the bot word instead of `botWord` (`routes/components-gallery.tsx:112-113`); dead `?? 'Bot'` fallback at `Bots.tsx:404`; code comment at `Bots.tsx:2` still says "an agent"
+- Correction round 1 part 2: minor (deferred → 13c): `ItemCard` hides the epic crumb from assistive tech and relies on the caller to add „Teil von …“ to the card's name (the board does, the gallery specimen does not); let `ItemCard` add it itself when `showParent` is on
 
 ## Triage im Gesamt-Review (2026-10-29)
 
