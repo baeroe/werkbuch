@@ -40,6 +40,20 @@ describe('Types', () => {
     expect(within(await rowOf('Task')).queryByText('In der Timeline')).toBeNull();
   });
 
+  it('keeps the Epic mark while items of the type have children, and says so in the dialog', async () => {
+    const user = userEvent.setup();
+    renderWithData(<Types readOnlyReason={null} />);
+
+    await user.click(within(await rowOf('Epic')).getByRole('button', { name: 'Typ „Epic“ bearbeiten' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Typ „Epic“ bearbeiten' });
+    await user.click(within(dialog).getByRole('checkbox', { name: /^Epic/ }));
+    await user.click(within(dialog).getByRole('button', { name: /^Speichern/ }));
+
+    const alert = await within(dialog).findByRole('alert');
+    expect(alert.textContent).toContain('3 Items dieses Typs haben Kind-Items. Nur Epics können Kind-Items haben.');
+    expect((await listWorkItemTypes()).items.find((type) => type.id === 't_epic')?.is_epic).toBe(true);
+  });
+
   it('creates a type with an icon, a tone and a required property', async () => {
     const user = userEvent.setup();
     renderWithData(<Types readOnlyReason={null} />);

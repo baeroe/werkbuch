@@ -292,6 +292,35 @@ describe('TypePicker', () => {
     // nothing changes before the answer
     expect((await stored('WEB-47')).type_id).toBe('t_bug');
   });
+
+  it('keeps an epic with children an epic: the dialog says why and offers only "Typ behalten"', async () => {
+    const user = userEvent.setup();
+    renderWithData(<TypePicker item={await stored('WEB-30')} />);
+
+    await user.click(await picker(/^Typ/));
+    await user.click(await screen.findByRole('option', { name: 'Task' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Typ von WEB-30 auf Task ändern' });
+    expect(within(dialog).getByText('WEB-30 hat Kind-Items. Nur Epics können Kind-Items haben.')).toBeTruthy();
+    expect(within(dialog).queryByRole('button', { name: /Zu Task wechseln/ })).toBeNull();
+    await user.click(within(dialog).getByRole('button', { name: /^Typ behalten/ }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect((await stored('WEB-30')).type_id).toBe('t_epic');
+  });
+
+  it('makes no epic of an item with a parent: the dialog says why', async () => {
+    const user = userEvent.setup();
+    // WEB-48 hangs under WEB-30
+    renderWithData(<TypePicker item={await stored('WEB-48')} />);
+
+    await user.click(await picker(/^Typ/));
+    await user.click(await screen.findByRole('option', { name: 'Epic' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Typ von WEB-48 auf Epic ändern' });
+    expect(within(dialog).getByText('WEB-48 hat ein Eltern-Item. Epics haben kein Eltern-Item.')).toBeTruthy();
+    expect(within(dialog).queryByRole('button', { name: /Zu Epic wechseln/ })).toBeNull();
+    expect((await stored('WEB-48')).type_id).toBe('t_task');
+  });
 });
 
 describe('item commands', () => {
@@ -426,6 +455,33 @@ describe('item commands', () => {
     act(() => panel.blur());
     pressI(document.body);
     await waitFor(async () => expect((await stored('WEB-50')).assignee_id).toBe('u_mara'));
+  });
+
+  it('t on an epic with children opens the type dialog, which says why it stays an epic', async () => {
+    const user = userEvent.setup();
+    renderWithData(
+      <MemoryRouter>
+        <Screen scope="detail" cursor="wi_web_30" />
+        <CommandPalette />
+        <ItemDialogsHost />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(listCommands().find((command) => command.id === 'item.type')?.group).toBe('Aktionen für WEB-30'));
+    // the children are known once the items of the project have loaded
+    await waitFor(() => expect(listCommands().find((command) => command.id === 'item.parent')?.subpage).toBeDefined());
+    await ready();
+    act(() => {
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 't', bubbles: true, cancelable: true }));
+    });
+    const list = await screen.findByRole('listbox', { name: 'Typ ändern …' });
+    await user.click(within(list).getByRole('option', { name: 'Task' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Typ von WEB-30 auf Task ändern' });
+    expect(within(dialog).getByText('WEB-30 hat Kind-Items. Nur Epics können Kind-Items haben.')).toBeTruthy();
+    expect((await stored('WEB-30')).type_id).toBe('t_epic');
+    // the question host lives as long as the module: it is closed, so the next test starts without it
+    await user.click(within(dialog).getByRole('button', { name: /^Typ behalten/ }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
   it('Done from the palette asks for the resolution, and Enter moves the item', async () => {

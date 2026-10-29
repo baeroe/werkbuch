@@ -3,6 +3,9 @@
  * type need a value: the change dialog names the values that go (the history keeps them) and asks for the required
  * ones. A change without either happens at once. Not optimistic: only the server knows the values of the new type, so
  * the trigger shows the change on its way and a toast confirms it.
+ * The two levels of items hold (`domain/hierarchy`): an epic with children stays an epic, an item with a parent becomes
+ * none. Such a choice opens the dialog, which says why and offers only "Typ behalten"; a refusal of the server shows
+ * there too.
  */
 
 import { useId, useRef, useState, type RefObject } from 'react';
@@ -13,8 +16,9 @@ import { Dialog, DialogClose } from '@/components/ui/Dialog';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
 import { toast } from '@/components/ui/toast';
 import { typeIcon } from '@/components/ui/TypeTab';
+import { canHaveChildren, canHaveParent } from '@/domain/hierarchy';
 import { useProperties } from '@/hooks/properties';
-import { useChangeWorkItemType } from '@/hooks/workItems';
+import { useChangeWorkItemType, useWorkItem } from '@/hooks/workItems';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
 import { useSettle } from '@/hooks/mutation';
 import { notifyError } from '@/lib/errors';
@@ -63,6 +67,13 @@ export function typeChangeOf(item: WorkItem, target: WorkItemType, properties: P
   return { lost, missing };
 }
 
+/** Why the item cannot take the type, by the two levels of items; null when it can. */
+export function typeRefusal(item: WorkItem, target: WorkItemType, hasChildren: boolean): string | null {
+  if (hasChildren && !canHaveChildren(target)) return `${item.key} hat Kind-Items. Nur Epics können Kind-Items haben.`;
+  if (item.parent_id !== null && !canHaveParent(target)) return `${item.key} hat ein Eltern-Item. Epics haben kein Eltern-Item.`;
+  return null;
+}
+
 const successToast = (item: WorkItem, target: WorkItemType) => toast({ title: `${item.key} hat jetzt den Typ ${target.name}`, tone: 'success' });
 
 type TypeChangeDialogProps = {
@@ -75,34 +86,50 @@ type TypeChangeDialogProps = {
   finalFocus?: RefObject<HTMLElement | null>;
 };
 
-/** The change dialog; the type picker and the command `t` open it when a change costs values or needs some. */
+/**
+ * The change dialog; the type picker and the command `t` open it when a change costs values or needs some, or when the
+ * two levels refuse it: then it says why and offers only "Typ behalten".
+ */
 export function TypeChangeDialog({ item, target, open, onOpenChange, finalFocus }: TypeChangeDialogProps) {
   const formId = useId();
   const change = useChangeWorkItemType();
+  // the children and the parent as they are now
+  const detail = useWorkItem(open ? item.id : null).data;
   if (!target) return null;
+  const refusal = typeRefusal(detail?.item ?? item, target, (detail?.children.length ?? 0) > 0);
   return (
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
       finalFocus={finalFocus}
       title={`Typ von ${item.key} auf ${target.name} ändern`}
-      description={`Die Felder von ${item.key} richten sich danach nach ${target.name}.`}
+      description={refusal ?? `Die Felder von ${item.key} richten sich danach nach ${target.name}.`}
       footer={
-        <>
+        refusal ? (
           <DialogClose
             render={
-              <Button variant="ghost" shortcut="escape">
-                Abbrechen
+              <Button variant="secondary" shortcut="escape">
+                Typ behalten
               </Button>
             }
           />
-          <Button variant="primary" type="submit" form={formId} pending={change.isPending} shortcut="mod+enter">
-            Zu {target.name} wechseln
-          </Button>
-        </>
+        ) : (
+          <>
+            <DialogClose
+              render={
+                <Button variant="ghost" shortcut="escape">
+                  Abbrechen
+                </Button>
+              }
+            />
+            <Button variant="primary" type="submit" form={formId} pending={change.isPending} shortcut="mod+enter">
+              Zu {target.name} wechseln
+            </Button>
+          </>
+        )
       }
     >
-      <TypeChangeForm key={target.id} formId={formId} item={item} target={target} change={change} onDone={() => onOpenChange(false)} />
+      {!refusal && <TypeChangeForm key={target.id} formId={formId} item={item} target={target} change={change} onDone={() => onOpenChange(false)} />}
     </Dialog>
   );
 }
@@ -146,7 +173,7 @@ function TypeChangeForm({ formId, item, target, change, onDone }: TypeChangeForm
         onDone();
         successToast(item, target);
       },
-      // field errors (422) show at their field; anything else in a toast
+      // field errors (422) show at their field, a refusal of the type itself above them; anything else in a toast
       onError: (error) => {
         if (!(error instanceof ApiError && error.status === 422 && error.errors)) {
           notifyError('Typ nicht geändert', error, submit);
@@ -169,6 +196,11 @@ function TypeChangeForm({ formId, item, target, change, onDone }: TypeChangeForm
       }}
       className="flex flex-col gap-5"
     >
+      {errors.type_id && (
+        <Banner tone="danger" role="alert" title="Typ nicht geändert">
+          {errors.type_id[0]}
+        </Banner>
+      )}
       {lost.length > 0 && (
         <Banner tone="danger" title={<span id={lostId}>Diese Werte gehen verloren</span>}>
           <ul aria-labelledby={lostId} className="mt-1 flex flex-col gap-1">
@@ -214,6 +246,8 @@ export function TypePicker({ item, look = 'field', shortcut, ...extras }: TypePi
   const { project, isLoading, error, retry, retrying } = useItemWorkflow(item);
   const change = useChangeWorkItemType();
   const reason = useEditReason(item);
+  // whether the item has children: an epic with children keeps its type (the dialog says why)
+  const children = useWorkItem(item.id).data?.children;
   const trigger = useRef<HTMLButtonElement>(null);
   // the target stays while the dialog fades out
   const [target, setTarget] = useState<WorkItemType | null>(null);
@@ -228,7 +262,7 @@ export function TypePicker({ item, look = 'field', shortcut, ...extras }: TypePi
     const next = offered.find((type) => type.id === typeId);
     if (!next || !properties.data) return;
     const { lost, missing } = typeChangeOf(item, next, properties.data.items, all);
-    if (lost.length > 0 || missing.length > 0) {
+    if (lost.length > 0 || missing.length > 0 || typeRefusal(item, next, (children?.length ?? 0) > 0)) {
       setTarget(next);
       setDialogOpen(true);
       return;

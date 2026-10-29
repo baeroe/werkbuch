@@ -76,7 +76,7 @@ import { noParentText, parentCandidates, parentOption, useProjectItems } from '.
 import type { PickerOption } from './Picker';
 import { PRIORITY_OPTIONS } from './PriorityPicker';
 import { stateOption } from './StatePicker';
-import { typeChangeOf, typeOption } from './TypePicker';
+import { typeChangeOf, typeOption, typeRefusal } from './TypePicker';
 
 export type ItemCommandScope = 'list' | 'detail';
 
@@ -292,7 +292,9 @@ function typeOptions(ctx: ItemCommandContext): CommandOption[] {
     .map((type) =>
       option(typeOption(type), () => {
         const { lost, missing } = typeChangeOf(item, type, ctx.properties, ctx.types);
-        if (lost.length > 0 || missing.length > 0) {
+        // the two levels: the dialog says why (unknown children leave it to the server, whose toast says it)
+        const hasChildren = (ctx.projectItems ?? []).some((entry) => entry.parent_id === item.id);
+        if (lost.length > 0 || missing.length > 0 || typeRefusal(item, type, hasChildren)) {
           askTypeChange(item, type);
           return;
         }
