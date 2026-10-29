@@ -5,10 +5,11 @@ import { createMemoryRouter } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb, saveDb } from '@/api/db';
-import { getWorkItem, listWorkItems } from '@/api/workItems';
+import { createWorkItem, getWorkItem, listWorkItems } from '@/api/workItems';
 import { currentToasts, resetToasts } from '@/components/ui/toast';
 import { TooltipProvider } from '@/components/ui/Tooltip';
 import { CommandPalette } from '@/features/palette/CommandPalette';
+import { listCommands } from '@/lib/commands';
 import { useUiStore } from '@/store/ui';
 import { asUser, resetApi } from '@/test/api';
 import ItemsRoute from '../routes';
@@ -238,6 +239,74 @@ describe('the board', () => {
     press('ArrowRight', { shiftKey: true });
     expect(lastToast()).toMatchObject({ tone: 'error', description: 'Im Projekt WEB darfst du nur lesen. Items ändern dürfen Member und Admins.' });
     expect((await getWorkItem('WEB-48')).item.state_id).toBe('std_todo');
+    router.dispose();
+  });
+});
+
+describe('the epic on the cards of child items', () => {
+  /** What a card names before its key: its epic, in the row of its tab. */
+  const epicOf = (card: HTMLElement) => card.querySelector<HTMLElement>('[data-parent-crumb]');
+
+  it('a child card names its epic before its key, with key and title in its tooltip and in the name of the card', async () => {
+    const router = renderAt('/projects/WEB?layout=board');
+    await screen.findByRole('region', { name: 'In Progress' });
+    const card = cardIn('In Progress', 'WEB-42');
+    const epic = epicOf(card)!;
+    expect(epic.textContent).toBe('Relaunch Phase 1');
+    expect(epic.title).toBe('WEB-30 Relaunch Phase 1');
+    // the epic, a chevron, then the tab with the key: the way the path of the item page reads
+    expect(epic.querySelector('svg.lucide-chevron-right')).not.toBeNull();
+    expect(epic.nextElementSibling?.textContent).toBe('WEB-42');
+    expect(card.getAttribute('aria-label')).toBe('WEB-42 Startseite: Hero und Teaser bauen, Teil von WEB-30 Relaunch Phase 1');
+    // nothing of its own to click: the card opens the preview
+    expect(epic.querySelector('a, button')).toBeNull();
+    expect(epic.closest('a, button')).toBeNull();
+    router.dispose();
+  });
+
+  it('an epic and an item without a parent name none', async () => {
+    const router = renderAt('/projects/WEB?layout=board');
+    await screen.findByRole('region', { name: 'In Progress' });
+    for (const card of [cardIn('In Progress', 'WEB-30'), cardIn('Todo', 'WEB-44')]) {
+      expect(epicOf(card)).toBeNull();
+      expect(card.getAttribute('aria-label')).not.toContain('Teil von');
+    }
+    router.dispose();
+  });
+
+  it('a board grouped by parent names none: its columns are the epics', async () => {
+    const router = renderAt('/projects/WEB?layout=board&group=parent');
+    await screen.findByRole('region', { name: 'WEB-30 Relaunch Phase 1' });
+    const card = cardIn('WEB-30 Relaunch Phase 1', 'WEB-42');
+    expect(epicOf(card)).toBeNull();
+    expect(card.getAttribute('aria-label')).toBe('WEB-42 Startseite: Hero und Teaser bauen');
+    router.dispose();
+  });
+
+  it('names the right epic where the filter leaves the epic out (Typ = Task)', async () => {
+    const filter = encodeURIComponent(JSON.stringify([{ field: 'type', op: 'is', value: 't_task' }]));
+    const router = renderAt(`/projects/WEB?layout=board&filter=${filter}`);
+    await screen.findByRole('region', { name: 'In Progress' });
+    await waitFor(() => expect(within(column('In Progress')).queryByRole('article', { name: /^WEB-30 / })).toBeNull());
+    expect(epicOf(cardIn('In Progress', 'WEB-42'))?.textContent).toBe('Relaunch Phase 1');
+    expect(cardIn('In Progress', 'WEB-42').getAttribute('aria-label')).toContain('Teil von WEB-30 Relaunch Phase 1');
+    router.dispose();
+  });
+
+  it('⇧P gives a card another epic, and the card names the new one', async () => {
+    const phase2 = await createWorkItem({ project_id: 'p_web', type_id: 't_epic', title: 'Relaunch Phase 2' });
+    const router = renderAt('/projects/WEB?layout=board', { palette: true });
+    await screen.findByRole('region', { name: 'In Progress' });
+    act(() => cardIn('In Progress', 'WEB-42').focus());
+    await waitFor(() => expect(listCommands().find((entry) => entry.id === 'item.parent')?.when?.()).toBe(true));
+
+    press('P', { shiftKey: true });
+    const list = await screen.findByRole('listbox', { name: 'Eltern-Item setzen …' });
+    fireEvent.click(within(list).getByRole('option', { name: /Relaunch Phase 2/ }));
+
+    await waitFor(() => expect(epicOf(cardIn('In Progress', 'WEB-42'))?.textContent).toBe('Relaunch Phase 2'));
+    expect(cardIn('In Progress', 'WEB-42').getAttribute('aria-label')).toBe(`WEB-42 Startseite: Hero und Teaser bauen, Teil von ${phase2.key} Relaunch Phase 2`);
+    expect((await getWorkItem('WEB-42')).item.parent_id).toBe(phase2.id);
     router.dispose();
   });
 });

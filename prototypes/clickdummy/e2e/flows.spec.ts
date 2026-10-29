@@ -1,9 +1,9 @@
 /*
  * The seven flows of the clickdummy (plan, Task 13, step 1; spec 1, success criteria 2–6). Every step runs on the
  * keyboard, only the board drag uses the mouse (dnd-kit listens to pointer events). A flow may start on a route
- * opened by its address; everything after that is typed. Beside them, checks on a phone measure the table's targets
- * and the path of an item with and without a parent, and a check in both themes looks at how the highlighter marks
- * today.
+ * opened by its address; everything after that is typed. Beside them, checks on a phone measure the table's targets,
+ * the path of an item with and without a parent and the epic on a narrow board card, and a check in both themes looks
+ * at how the highlighter marks today.
  *
  * Every test has a fresh browser context: empty localStorage, so the seed data, Mara Lindqvist signed in and the
  * demo clock at Wednesday, 2026-10-28, 10:00 Europe/Berlin. A console error or an uncaught exception fails the flow.
@@ -353,6 +353,41 @@ test.describe('on a phone (390 px), beside the flows', () => {
     expect(parent!.x + parent!.width, 'the key of the parent ends before the key of the item').toBeLessThanOrEqual(item!.x);
     // only the badge shows on a phone; screen readers still hear the project
     await expect(path.getByRole('link', { name: 'Website-Relaunch' })).toBeVisible();
+  });
+
+  test('a card of a child item names its epic before its key, and on a narrow card the epic gives way first', async ({ page }) => {
+    await page.goto('/projects/WEB?layout=board');
+    await expect(page.getByRole('article', { name: /^WEB-49 / })).toBeVisible();
+    // an epic title longer than any card is wide
+    await page.evaluate(() => {
+      const db = JSON.parse(localStorage.getItem('werkbuch:db')!);
+      db.items.find((item: { key: string }) => item.key === 'WEB-30').title = 'Relaunch Phase 1: Struktur, Gestaltung, Startseite und Umzug';
+      localStorage.setItem('werkbuch:db', JSON.stringify(db));
+    });
+    await page.reload();
+
+    // WEB-49 hangs under WEB-30
+    const card = page.getByRole('article', { name: /^WEB-49 / });
+    await expect(card).toHaveAccessibleName('WEB-49 Leistungsseiten: Layout-Vorlage, Teil von WEB-30 Relaunch Phase 1: Struktur, Gestaltung, Startseite und Umzug');
+    const row = await card.evaluate((element) => {
+      const epic = element.querySelector<HTMLElement>('[data-parent-crumb]');
+      const title = epic?.firstElementChild as HTMLElement | undefined;
+      const tab = epic?.nextElementSibling as HTMLElement | undefined;
+      const key = tab?.lastElementChild as HTMLElement | undefined;
+      if (!epic || !title || !tab || !key) return null;
+      const box = element.getBoundingClientRect();
+      return {
+        epicCut: title.scrollWidth > title.clientWidth,
+        keyWhole: key.scrollWidth <= key.clientWidth,
+        epicLeft: epic.getBoundingClientRect().left - box.left,
+        tabRight: box.right - tab.getBoundingClientRect().right,
+      };
+    });
+    expect(row, 'the epic stands before the tab').not.toBeNull();
+    expect(row!.epicCut, 'the epic gives way').toBe(true);
+    expect(row!.keyWhole, 'the key stays whole').toBe(true);
+    expect(row!.epicLeft, 'the row starts where the tab does').toBeGreaterThan(0);
+    expect(row!.tabRight, 'the tab stays above the card').toBeGreaterThan(0);
   });
 
   test('an item without a parent keeps the name of its project in the path', async ({ page }) => {

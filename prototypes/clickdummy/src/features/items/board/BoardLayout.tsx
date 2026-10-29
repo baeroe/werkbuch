@@ -49,7 +49,7 @@ import { useLocation, useNavigate, useParams } from 'react-router';
 import type { WorkItemPatch } from '@/api/workItems';
 import { archivedReason } from '@/components/fields/itemData';
 import { ResolutionPrompt } from '@/components/fields/ResolutionPrompt';
-import { ItemCard } from '@/components/items/ItemCard';
+import { cardEpic, ItemCard, partOf } from '@/components/items/ItemCard';
 import { cx } from '@/components/ui/cx';
 import { PRIORITY_LABELS } from '@/components/ui/PriorityIcon';
 import { currentToasts, dismissToast, toast, type ToastOptions } from '@/components/ui/toast';
@@ -185,6 +185,8 @@ export function BoardLayout({ items, groups, display, ctx, selection, onSelect, 
   const hintId = useId();
 
   const groupBy = display.group_by;
+  // a child card names its epic before its key, except where the columns are the epics
+  const showParent = groupBy !== 'parent';
   const manual = display.sort.field === 'rank';
   const locked = boardLockReason(groupBy);
   const sortable = locked === null;
@@ -816,12 +818,14 @@ export function BoardLayout({ items, groups, display, ctx, selection, onSelect, 
   function cardFor(item: WorkItem, column: string) {
     const selected = selection.includes(item.id);
     const key = cardKey(column, item.id);
+    const epic = showParent ? cardEpic(item) : null;
     return {
       onOpen: onPeek,
       selected,
+      showParent,
       tabIndex: stop?.id === item.id && stop.column === column ? 0 : -1,
       'data-nav-target': '',
-      'aria-label': `${item.key} ${item.title}${selected ? ', ausgewählt' : ''}`,
+      'aria-label': `${item.key} ${item.title}${epic ? `, ${partOf(epic)}` : ''}${selected ? ', ausgewählt' : ''}`,
       ref: (element: HTMLElement | null) => {
         if (!element) return;
         cards.current.set(key, element);
@@ -939,7 +943,7 @@ export function BoardLayout({ items, groups, display, ctx, selection, onSelect, 
               {dragItem ? (
                 // flow-root keeps the card's margin (the room of its tab) inside, so the overlay measures like the card's place
                 <div className="relative flow-root">
-                  <ItemCard item={dragItem} onOpen={() => {}} lifted={lifted} selected={selection.includes(dragItem.id)} className={SETTLE} />
+                  <ItemCard item={dragItem} onOpen={() => {}} lifted={lifted} selected={selection.includes(dragItem.id)} showParent={showParent} className={SETTLE} />
                   {/* over a column it may not enter, the card says why; out of the layout, so the overlay keeps its size */}
                   {refusedHere && (
                     <p className="absolute inset-x-1 top-full mt-2.5 flex items-start gap-1.5 rounded-ctl bg-danger-soft px-2.5 py-2 text-sm font-medium text-pretty text-danger shadow-elev-2 in-[.board-dropping]:hidden">

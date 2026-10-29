@@ -1,4 +1,4 @@
-import type { ComponentProps } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import type { TypeTone } from '@/types';
 import { cx } from './cx';
 import { TypeTab } from './TypeTab';
@@ -9,6 +9,8 @@ type IndexCardProps = ComponentProps<'article'> & {
   icon: string;
   /** Text in the tab, usually the item key. */
   tabLabel: string;
+  /** What stands before the tab in its row, e.g. the epic of a child item: it gives way first, the tab never truncates. */
+  tabPrefix?: ReactNode;
   /** Stronger edge and elevation 2; the content marks the title with the highlighter (class "hl"). */
   selected?: boolean;
   /** Being dragged: lifted 6 px, 102 %, tilted −2° with the drag elevation; springs back when dropped. */
@@ -19,7 +21,7 @@ type IndexCardProps = ComponentProps<'article'> & {
  * Index card: white, 1 px line, elevation 1 and a real tab at the top left that covers the card's edge.
  * The space for the tab is part of the card (top margin).
  */
-export function IndexCard({ tone, icon, tabLabel, selected = false, lifted = false, className, children, ...rest }: IndexCardProps) {
+export function IndexCard({ tone, icon, tabLabel, tabPrefix, selected = false, lifted = false, className, children, ...rest }: IndexCardProps) {
   return (
     <article
       data-tone={tone}
@@ -37,8 +39,9 @@ export function IndexCard({ tone, icon, tabLabel, selected = false, lifted = fal
       )}
       {...rest}
     >
-      <span className="absolute bottom-full left-3 flex">
-        <TypeTab tone={tone} icon={icon} label={tabLabel} size="sm" />
+      <span className="absolute bottom-full left-3 flex max-w-[calc(100%-1.5rem)] items-center">
+        {tabPrefix}
+        <TypeTab tone={tone} icon={icon} label={tabLabel} size="sm" className="shrink-0" />
       </span>
       {children}
     </article>

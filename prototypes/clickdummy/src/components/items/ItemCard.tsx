@@ -1,11 +1,14 @@
 /*
  * An item as an index card (DESIGN.md, moodboard board): the tab in the type's tone with icon and key, the title, the
  * blocked hint, labels, the progress of an epic (or any item with children), then priority, due date and assignee.
+ * With `showParent` a child item names its epic before the tab, as the path of the item page does („Relaunch Phase 1 ›
+ * WEB-42“): muted, and it gives way first. Its full name is in the tooltip and belongs in the card's name (`partOf`);
+ * it is no link of its own.
  * The title is a link over the whole card. A board with its own keyboard cursor and drag and drop passes `tabIndex`
  * (and the drag listeners) to the card: then the card is the tab stop, Enter opens it, and the link leaves the tab order.
  */
 
-import { Archive, Ban } from 'lucide-react';
+import { Archive, Ban, ChevronRight } from 'lucide-react';
 import type { ComponentProps, KeyboardEvent } from 'react';
 import { DayValue, useOverdue } from '@/components/fields/DateField';
 import { useToday, useUserMap } from '@/components/fields/itemData';
@@ -18,7 +21,7 @@ import { ProgressBar } from '@/components/ui/ProgressBar';
 import { useLabels } from '@/hooks/catalog';
 import { useWorkItemMeta } from '@/hooks/workItems';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
-import type { WorkItem } from '@/types';
+import type { ItemRef, WorkItem } from '@/types';
 import { BlockedHint } from './BlockedHint';
 import { ItemLink, linkFocusRing } from './ItemLink';
 
@@ -31,9 +34,20 @@ type ItemCardProps = Omit<ComponentProps<'article'>, 'children'> & {
   selected?: boolean;
   /** Being dragged (see IndexCard). */
   lifted?: boolean;
+  /** Names the epic of a child item before the key (the board, unless its columns are the epics). */
+  showParent?: boolean;
 };
 
-export function ItemCard({ item, compact = false, onOpen, selected = false, lifted = false, className, onKeyDown, tabIndex, ...rest }: ItemCardProps) {
+/** The epic a card names before its key: the parent of a child item, as the item names it; null without one. */
+export function cardEpic(item: WorkItem): ItemRef | null {
+  const { parent, parent_id } = item;
+  return parent && parent.id === parent_id ? parent : null;
+}
+
+/** The epic in the words of a card's name: „Teil von WEB-30 Relaunch Phase 1“. */
+export const partOf = (epic: ItemRef): string => `Teil von ${epic.key} ${epic.title}`;
+
+export function ItemCard({ item, compact = false, onOpen, selected = false, lifted = false, showParent = false, className, onKeyDown, tabIndex, ...rest }: ItemCardProps) {
   const type = useWorkItemTypes().data?.items.find((entry) => entry.id === item.type_id);
   const labels = useLabels().data?.items;
   const users = useUserMap();
@@ -46,12 +60,21 @@ export function ItemCard({ item, compact = false, onOpen, selected = false, lift
   const itemLabels = item.label_ids.flatMap((id) => labels?.find((label) => label.id === id) ?? []);
   // the card is the tab stop itself: Enter opens it
   const cardFocus = tabIndex !== undefined;
+  const epic = showParent ? cardEpic(item) : null;
 
   return (
     <IndexCard
       tone={type?.tone ?? 'slate'}
       icon={type?.icon ?? 'square-check'}
       tabLabel={item.key}
+      tabPrefix={
+        epic && (
+          <span data-parent-crumb="" aria-hidden="true" title={`${epic.key} ${epic.title}`} className="flex min-w-0 items-center gap-0.5 pr-1 text-sm text-muted">
+            <span className="min-w-0 truncate">{epic.title}</span>
+            <ChevronRight className="size-3.5 shrink-0" />
+          </span>
+        )
+      }
       selected={selected}
       lifted={lifted}
       tabIndex={tabIndex}

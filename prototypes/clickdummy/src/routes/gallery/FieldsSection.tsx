@@ -475,10 +475,11 @@ function PropertiesSpecimen() {
 
 /* Cards and rows */
 
-const CARDS: { key: string; note: string; compact?: boolean; selected?: boolean }[] = [
+const CARDS: { key: string; note: string; compact?: boolean; selected?: boolean; showParent?: boolean }[] = [
   { key: 'WEB-50', note: 'Task' },
   { key: 'WEB-47', note: 'Bug, blockiert, ausgewählt', selected: true },
   { key: 'WEB-30', note: 'Epic mit Fortschritt' },
+  { key: 'WEB-43', note: 'Kind-Item, wie im Board: das Epic vor dem Key', showParent: true },
   { key: 'WEB-41', note: 'Überfällig' },
   { key: 'WEB-8', note: 'Archiviert' },
   { key: 'WEB-42', note: 'Kompakt', compact: true },
@@ -488,11 +489,17 @@ const CARDS: { key: string; note: string; compact?: boolean; selected?: boolean 
 
 function CardsSpecimen() {
   return (
-    <Specimen title="Items als Karteikarte" note="Reiter mit Typ und Key, Titel, Blockiert-Hinweis, Labels, Fortschritt bei Kindern, Priorität, Fälligkeit, Assignee. Der Titel öffnet das Item." wide>
+    <Specimen
+      title="Items als Karteikarte"
+      note="Reiter mit Typ und Key (im Board bei Kind-Items das Epic davor), Titel, Blockiert-Hinweis, Labels, Fortschritt bei Kindern, Priorität, Fälligkeit, Assignee. Der Titel öffnet das Item."
+      wide
+    >
       <ul className="grid gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
         {CARDS.map((card) => (
           <li key={card.key} className="flex min-w-0 flex-col">
-            <WithItem itemKey={card.key}>{(item) => <ItemCard item={item} compact={card.compact} selected={card.selected} onOpen={open(item.key)} />}</WithItem>
+            <WithItem itemKey={card.key}>
+              {(item) => <ItemCard item={item} compact={card.compact} selected={card.selected} showParent={card.showParent} onOpen={open(item.key)} />}
+            </WithItem>
             <span className="mt-2 text-sm text-muted">{card.note}</span>
           </li>
         ))}
