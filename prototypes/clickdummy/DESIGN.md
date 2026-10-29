@@ -128,7 +128,7 @@ color-scheme: dark;
 - **Aktive Streifen** (Treffer in der Palette, Menüeintrag, gewählte Option, aktuelle Seite): eine Lage Karte (`--raised`) mit Elevation 1 und 1 px Bleistiftkante (`--line-input`). Die Kante trägt den Zustand, weil Weiß auf Transparentpapier nur 1,04 : 1 hat.
 - **Elevation**: 1 = Karte liegt auf, 2 = Bogen schwebt (Panel, Menü), 3 = Palette, Ziehen = eigene Stufe plus Neigung.
 - **Eingaben** haben unten eine Schreiblinie in `--line-input` (≥ 3 : 1), damit das Feld als Feld erkennbar ist. Fehler: Rahmen und Schreiblinie in `--danger`, darunter die Meldung mit Icon und konkreter Abhilfe.
-- **Avatare**: Personen rund mit Initialen auf gedeckter Fläche; Bots eckig (Radius 6) in Tinte mit Lucide-`bot` bzw. Initiale und dem Zusatz „Bot“ oder „Agent“.
+- **Avatare**: Personen rund mit Initialen auf gedeckter Fläche; Bots eckig (Radius 6) in Tinte mit Lucide-`bot` bzw. Initiale und dem Zusatz „Bot“.
 
 ## Typo-Regeln
 

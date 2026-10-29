@@ -88,8 +88,8 @@ export const webhooks: StoredWebhook[] = [
   },
   {
     id: 'wh_kira',
-    name: 'Kira-Agent',
-    url: 'https://agent.feldwerk.example.com/werkbuch/webhook',
+    name: 'Kira',
+    url: 'https://kira.feldwerk.example.com/werkbuch/webhook',
     project_id: null,
     events: ['bot.*'],
     bot_id: USER_IDS.kira,

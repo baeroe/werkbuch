@@ -12,7 +12,7 @@
 import { Ellipsis, Pencil, RotateCw, SmilePlus, Trash2, Zap } from 'lucide-react';
 import { useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
-import { addDays, formatDay, formatPropertyValue } from '@/components/fields/format';
+import { addDays, botWord, formatDay, formatPropertyValue } from '@/components/fields/format';
 import { archivedReason, useToday, useUserMap } from '@/components/fields/itemData';
 import { ItemKey } from '@/components/items/ItemKey';
 import { Avatar } from '@/components/ui/Avatar';
@@ -318,13 +318,8 @@ function When({ iso }: { iso: string }) {
 
 /* ---------------------------------------------------------------------------- lines */
 
-function botWord(user: User | undefined): string | null {
-  if (user?.type !== 'bot') return null;
-  return user.owner_id ? 'Agent' : 'Bot';
-}
-
 function Actor({ user }: { user: User | undefined }) {
-  const word = botWord(user);
+  const word = user && botWord(user);
   return (
     <>
       <span className="font-semibold text-ink">{user?.name ?? 'Unbekannt'}</span>

@@ -138,7 +138,7 @@ Das Profilmenü unten in der Seitenleiste wechselt die angemeldete Person. Die W
 | Lene Vogt | Member | Member | Member | sieht es nicht |
 | Sven Albers | deaktiviert, nicht wählbar | | | |
 
-Bots: „Automation“ (Standard-Bot, Org-Admin; legt Items aus Vorlagen an) und „Kira“ (Agent, Member in WEB und OPS).
+Bots: „Automation“ (Standard-Bot, Org-Admin; legt Items aus Vorlagen an) und „Kira“ (Bot von Mara, Member in WEB und OPS).
 
 ## Theme
 
@@ -265,6 +265,7 @@ Was der Klickdummy anders macht als die Spec (`docs/superpowers/specs/2026-10-28
 - Nur Epics (Typen mit Häkchen „Epic“) können Kind-Items haben, und Epics haben selbst kein Eltern-Item: zwei Ebenen (Korrekturrunde 2026-10-29; Spec 4.8 sagte „beliebig tief“).
 - Die Heute-Markierung folgt im Nachtheft der Textmarker-Regel: gelbe Schrift mit Schein statt gelber Fläche.
 - Karten von Kind-Items zeigen auf dem Board ihr Epic vor dem Key, außer das Board ist nach Eltern-Item gruppiert.
+- Bots heißen in der Oberfläche durchgehend „Bot“, auch wenn sie einer Person gehören.
 - Die Geschmacksfragen bleiben vorerst.
 
 ## Fragen für die Korrekturrunde

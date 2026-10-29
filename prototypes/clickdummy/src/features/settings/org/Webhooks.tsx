@@ -287,7 +287,7 @@ function WebhookList() {
     <div className="flex flex-col gap-4">
       <SectionHeader
         title="Webhooks"
-        description={'Schicken Ereignisse aus werkbuch an andere Systeme, etwa an einen Agenten, der auf „Bot zugewiesen“ wartet. Jede Zustellung ist signiert und wird 30\u00a0Tage protokolliert.'}
+        description={'Schicken Ereignisse aus werkbuch an andere Systeme, etwa an ein Skript, das auf „Bot zugewiesen“ wartet. Jede Zustellung ist signiert und wird 30\u00a0Tage protokolliert.'}
         actions={
           <Button variant="primary" icon={Plus} onClick={() => dialog.show()}>
             Webhook anlegen

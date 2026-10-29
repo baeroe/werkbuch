@@ -110,7 +110,7 @@ const PEOPLE = [
 
 const BOTS = [
   { name: 'Automation', type: 'bot', badge: 'Bot', note: 'Standard-Bot' },
-  { name: 'Kira', type: 'bot', badge: 'Agent', note: 'gehört Mara Lindqvist' },
+  { name: 'Kira', type: 'bot', badge: 'Bot', note: 'gehört Mara Lindqvist' },
 ] as const;
 
 const dot = (tone: TypeTone) => <ToneDot tone={tone} className="size-2" />;

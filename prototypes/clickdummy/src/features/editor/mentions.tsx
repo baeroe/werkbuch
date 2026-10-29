@@ -19,6 +19,7 @@ import { EyeOff, FileText } from 'lucide-react';
 import { useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type ReactNode, type Ref, type RefObject } from 'react';
 import { Link, useInRouterContext } from 'react-router';
 import { ApiError } from '@/api/client';
+import { botWord } from '@/components/fields/format';
 import { projectPeople } from '@/components/fields/itemData';
 import { TypeGlyph } from '@/components/fields/TypePicker';
 import { Avatar } from '@/components/ui/Avatar';
@@ -238,7 +239,7 @@ function PeopleSuggestions({ suggestion, env, ref }: PopupProps) {
       <>
         <Avatar user={user} size="sm" decorative />
         <span className="min-w-0 flex-1 truncate">{user.name}</span>
-        <span className="shrink-0 text-sm text-muted">{user.type === 'bot' ? (user.owner_id ? 'Agent' : 'Bot') : `@${user.handle}`}</span>
+        <span className="shrink-0 text-sm text-muted">{botWord(user) ?? `@${user.handle}`}</span>
       </>
     ),
     pick: () => suggestion.command({ id: user.id, label: user.handle }),

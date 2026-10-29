@@ -80,5 +80,5 @@ export function formatPropertyValue(property: Property, value: PropertyValue | u
   }
 }
 
-/** Bots carry a word beside the name (DESIGN.md): "Agent" for a person's agent, "Bot" otherwise. */
-export const botWord = (user: Pick<User, 'type' | 'owner_id'>): string | undefined => (user.type !== 'bot' ? undefined : user.owner_id ? 'Agent' : 'Bot');
+/** Bots carry the word "Bot" beside the name (DESIGN.md), also a bot that belongs to a person. */
+export const botWord = (user: Pick<User, 'type'>): string | undefined => (user.type === 'bot' ? 'Bot' : undefined);

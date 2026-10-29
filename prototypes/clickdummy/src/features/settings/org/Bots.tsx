@@ -213,7 +213,7 @@ function TokenDialog({ open, onOpenChange, bot, onCreated }: TokenDialogProps) {
       open={open}
       onOpenChange={onOpenChange}
       title={`Token für ${bot.name} anlegen`}
-      description="Mit dem Token arbeitet ein Skript oder ein Agent im Namen des Bots, über REST und MCP."
+      description="Mit dem Token arbeitet der Bot über REST und MCP."
       submitLabel="Token anlegen"
       pending={create.isPending}
       notice={noticeOf(create.error, ['name', 'abilities', 'expires_at'])}
@@ -458,7 +458,7 @@ export default function Bots(_props: SectionProps) {
     <div className="flex flex-col gap-4">
       <SectionHeader
         title="Bots"
-        description="Konten ohne Login für Agenten und Skripte. Sie arbeiten über Tokens, können Projektmitglied sein, Items zugewiesen bekommen und erwähnt werden."
+        description="Konten ohne Login. Bots arbeiten über Tokens, können Projektmitglied sein, Items zugewiesen bekommen und erwähnt werden."
         actions={
           <Button variant="primary" icon={Plus} onClick={() => dialog.show()}>
             Bot anlegen
@@ -471,7 +471,7 @@ export default function Bots(_props: SectionProps) {
             <EmptyState
               icon={BotIcon}
               title="Noch kein Bot"
-              description="Ein Bot arbeitet für dich, etwa als Agent, der Items bekommt und sie per MCP bearbeitet."
+              description="Ein Bot arbeitet für dich: Er bekommt Items und bearbeitet sie per REST oder MCP."
               actions={
                 <Button variant="primary" icon={Plus} onClick={() => dialog.show()}>
                   Bot anlegen

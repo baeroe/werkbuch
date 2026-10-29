@@ -796,9 +796,10 @@ describe('seed: the moodboard demo content', () => {
     const webhooks = (await listWebhooks()).items;
     expect(webhooks.map((w) => [w.name, w.project_id, w.bot_id, w.events, w.active])).toEqual([
       ['Deploy-Bot', null, null, ['work_item.state_changed'], true],
-      ['Kira-Agent', null, 'u_kira', ['bot.*'], true],
+      ['Kira', null, 'u_kira', ['bot.*'], true],
       ['Altes CRM', 'p_app', null, expect.any(Array), false],
     ]);
+    expect(webhooks[1].url).toBe('https://kira.feldwerk.example.com/werkbuch/webhook');
     expect(webhooks[2].disabled_at).not.toBeNull();
     for (const webhook of webhooks) {
       expect(db.webhook_deliveries.some((delivery) => delivery.webhook_id === webhook.id), webhook.name).toBe(true);
@@ -807,9 +808,12 @@ describe('seed: the moodboard demo content', () => {
     expect(db.tokens.map((t) => [t.user_id, t.name, t.abilities])).toEqual([
       ['u_mara', 'Claude Code', ['read', 'write', 'mcp']],
       ['u_mara', 'CI-Skript', ['read']],
-      ['u_kira', 'Agent', ['read', 'write', 'mcp']],
+      ['u_kira', 'MCP', ['read', 'write', 'mcp']],
     ]);
     expect(new Date(db.tokens[1].expires_at ?? '9999').getTime()).toBeLessThan(Date.parse('2026-10-28T09:00:00Z'));
+    // Kira is Mara's bot: called a bot, and its token keeps its id
+    expect(db.tokens[2].id).toBe('tok_kira_agent');
+    expect(db.users.find((user) => user.id === 'u_kira')?.description).toBe('Bot von Mara. Bearbeitet per MCP die Items, die ihm zugewiesen sind.');
     expect(db.system).toMatchObject({ version: '0.1.0-dev', queued_jobs: 3, search: 'ok', mail_configured: true });
     expect(db.system.failed_jobs).toHaveLength(2);
   });

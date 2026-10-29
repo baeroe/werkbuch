@@ -479,6 +479,34 @@ describe('an item the reader can no longer see (403)', () => {
   });
 });
 
+describe('a bot that belongs to a person', () => {
+  it('Kira, the bot of Mara, is called „Bot“ in the activity, the people picker and the mention list, never „Agent“', async () => {
+    const user = userEvent.setup();
+    renderWithData(<ItemPeek itemId="OPS-12" />);
+
+    // the activity: Kira wrote a comment on OPS-12
+    const comment = await screen.findByRole('article', { name: 'Kommentar von Kira' });
+    expect(within(comment).getByText('Bot')).toBeTruthy();
+    expect(comment.textContent).not.toContain('Agent');
+
+    // the people picker of the assignee
+    await user.click((await screen.findAllByRole('combobox', { name: /^Assignee/ }))[0]);
+    const picked = await screen.findByRole('option', { name: /Kira/ });
+    expect(picked.textContent).toContain('Bot');
+    expect(picked.textContent).not.toContain('Agent');
+    await user.keyboard('{Escape}');
+
+    // the mention list of a comment
+    await user.click(await screen.findByRole('button', { name: /Kommentar schreiben/ }));
+    const editor = await screen.findByRole('textbox', { name: 'Kommentar' });
+    await waitFor(() => expect(document.activeElement).toBe(editor));
+    await user.keyboard('@ki');
+    const mentioned = await within(await screen.findByRole('listbox', { name: 'Personen und Bots' })).findByRole('option', { name: /Kira/ });
+    expect(mentioned.textContent).toContain('Bot');
+    expect(mentioned.textContent).not.toContain('Agent');
+  });
+});
+
 describe('"Erneut versuchen" on a comment that failed', () => {
   it('sends the comment as it reads now, also what was written after the failure', async () => {
     const user = userEvent.setup();

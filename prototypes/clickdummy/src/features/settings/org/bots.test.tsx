@@ -135,19 +135,19 @@ describe('Bots', () => {
     renderWithData(<Bots readOnlyReason={null} />);
 
     const kira = await cardOf('Kira');
-    const revoke = () => within(kira).queryByRole('button', { name: 'Token „Agent“ widerrufen' });
-    await user.click(await within(kira).findByRole('button', { name: 'Token „Agent“ widerrufen' }));
+    const revoke = () => within(kira).queryByRole('button', { name: 'Token „MCP“ widerrufen' });
+    await user.click(await within(kira).findByRole('button', { name: 'Token „MCP“ widerrufen' }));
     expect(revoke()).toBeNull();
     const toast = currentToasts().find((item) => item.action?.label === 'Rückgängig')!;
-    expect(toast.title).toBe('Token „Agent“ von Kira widerrufen');
+    expect(toast.title).toBe('Token „MCP“ von Kira widerrufen');
 
     // taken back: the token is there and was never touched
     act(() => runToastAction(toast.id));
-    expect(await within(kira).findByRole('button', { name: 'Token „Agent“ widerrufen' })).toBeTruthy();
+    expect(await within(kira).findByRole('button', { name: 'Token „MCP“ widerrufen' })).toBeTruthy();
     expect((await listTokens('u_kira')).items).toHaveLength(1);
 
     // left alone, the toast runs out and the token is revoked for real
-    await user.click(await within(kira).findByRole('button', { name: 'Token „Agent“ widerrufen' }));
+    await user.click(await within(kira).findByRole('button', { name: 'Token „MCP“ widerrufen' }));
     act(() => dismissToast(currentToasts().find((item) => item.action?.label === 'Rückgängig')!.id));
     await waitFor(async () => expect((await listTokens('u_kira')).items).toHaveLength(0));
   });

@@ -1,6 +1,6 @@
 /*
- * The assignee of an item (spec 4.8): one or nobody, from the members of the project. Bots carry their word ("Bot",
- * "Agent") and their square avatar; "Mir zuweisen" comes first. The change is optimistic.
+ * The assignee of an item (spec 4.8): one or nobody, from the members of the project. Bots carry the word "Bot" and
+ * their square avatar; "Mir zuweisen" comes first. The change is optimistic.
  */
 
 import { UserRoundCheck } from 'lucide-react';

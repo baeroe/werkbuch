@@ -63,7 +63,7 @@ export const users: User[] = [
     org_role: 'member',
     is_default_bot: false,
     owner_id: 'u_mara',
-    description: 'Agent von Mara. Arbeitet per MCP an Items, die ihr zugewiesen sind.',
+    description: 'Bot von Mara. Bearbeitet per MCP die Items, die ihm zugewiesen sind.',
     disabled_at: null,
     avatar_url: null,
     locale: 'de',
@@ -152,7 +152,7 @@ export const tokens: Token[] = [
   {
     id: 'tok_kira_agent',
     user_id: 'u_kira',
-    name: 'Agent',
+    name: 'MCP',
     abilities: ['read', 'write', 'mcp'],
     expires_at: null,
     last_used_at: at('10-27 09:41'),
