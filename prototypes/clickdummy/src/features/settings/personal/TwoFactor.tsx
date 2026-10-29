@@ -1,11 +1,14 @@
 /*
  * Two-factor authentication with an authenticator app and recovery codes (spec 4.2). Setting it up is a sequence of
  * two steps: scan the code (here a dummy), then type the first code the app shows (here any six digits are right). The
- * recovery codes appear once, right after, and can be copied. Switching it off, or issuing new recovery codes (the old
- * ones stop working), asks first. After each step the focus moves on to where the next one is.
+ * recovery codes appear once, right after, and can be copied; leaving the page before "Codes sind gesichert" asks
+ * first, and what a step showed once (the key, the codes) is let go of when the step is over. Switching it off, or
+ * issuing new recovery codes (the old ones stop working), asks first. After each step the focus moves on to where the
+ * next one is.
  */
 
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useBlocker } from 'react-router';
 import { AlertDialog } from '@/components/ui/AlertDialog';
 import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
@@ -43,6 +46,35 @@ function Step({ number, title, children }: { number: number; title: string; chil
 }
 
 const date = (iso: string, timeZone: string) => new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone }).format(new Date(iso));
+
+/**
+ * While the recovery codes show, leaving the page asks first: a link inside the app stops at the question, closing or
+ * reloading the tab gets the browser's own. The codes are shown only this once.
+ */
+function CodesGuard({ active }: { active: boolean }) {
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => active && currentLocation.pathname !== nextLocation.pathname);
+  useEffect(() => {
+    if (!active) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      // older browsers want the return value as well
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [active]);
+  return (
+    <AlertDialog
+      open={blocker.state === 'blocked'}
+      onOpenChange={(open) => !open && blocker.state === 'blocked' && blocker.reset()}
+      title="Recovery-Codes gesichert?"
+      description="werkbuch zeigt die Codes nur jetzt. Gehst du weiter, ohne sie gesichert zu haben, brauchst du später neue."
+      cancelLabel="Zurück zu den Codes"
+      confirmLabel="Weitergehen"
+      onConfirm={() => blocker.state === 'blocked' && blocker.proceed()}
+    />
+  );
+}
 
 /** From md on: a field may take the focus on its own. On a phone that would open the keyboard over the QR code. */
 const isWide = () => typeof window.matchMedia !== 'function' || window.matchMedia('(min-width: 48rem)').matches;
@@ -84,6 +116,9 @@ export function TwoFactorCard({ user }: { user: User }) {
 
   function go(next: Phase) {
     moved.current = true;
+    // what a step showed once goes with it: the key once the setup is over, the codes once they are saved
+    if (next !== 'setup') setSetupKey('');
+    if (next !== 'codes') setCodes([]);
     setPhase(next);
   }
 
@@ -133,6 +168,7 @@ export function TwoFactorCard({ user }: { user: User }) {
 
   return (
     <>
+      <CodesGuard active={phase === 'codes'} />
       <SettingsCard
         title="Zwei-Faktor-Authentifizierung"
         description="Schütze dein Konto zusätzlich mit einem Code aus einer Authenticator-App. Beim Anmelden gibst du dann Passwort und Code ein."

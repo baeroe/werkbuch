@@ -1,7 +1,7 @@
 /*
  * "Neuer Token" (spec 4.2): a name, the abilities, and optionally a day it expires. When it is made, the dialog shows
  * the plain text, which cannot be read again, together with the setup snippets that already carry it. Closing the
- * dialog drops the plain text: it is kept nowhere else.
+ * dialog drops the plain text: it is kept nowhere else (the call's answer leaves the mutation cache with the dialog).
  */
 
 import { CircleAlert, KeyRound } from 'lucide-react';
@@ -83,6 +83,10 @@ export function TokenDialog({ user, onClose }: Props) {
     <Dialog
       open
       onOpenChange={(open) => !open && onClose()}
+      // the plain text shows once: Escape asks first, a click outside does nothing (the form before it closes as usual)
+      confirmClose={
+        created ? { title: 'Ohne Kopie schließen?', description: 'Den Token zeigt werkbuch nur dieses eine Mal. Ohne Kopie legst du später einen neuen an.' } : undefined
+      }
       size={created ? 'lg' : 'md'}
       title={created ? 'Token angelegt' : 'Neuer Token'}
       description={

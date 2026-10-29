@@ -69,6 +69,8 @@ function WebhookDialog({ open, onOpenChange, webhook, projects, bots, onSecret }
 
   function reveal(created: Webhook, secret: string) {
     onOpenChange(false);
+    // the secret dialog has it now; the call's answer lets go of it (and leaves the cache, gcTime 0)
+    save.reset();
     onSecret({
       title: webhook ? 'Neues Geheimnis ist erzeugt' : 'Webhook ist angelegt',
       description: `„${created.name}“. Der Empfänger prüft damit die Signatur jeder Zustellung.`,

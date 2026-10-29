@@ -7,11 +7,15 @@ export function useWebhooks() {
   return useQuery({ queryKey: qk.webhooks.all, queryFn: listWebhooks });
 }
 
-/** Variables: `{ webhook, options?: { renew_secret } }`. Answers `{ webhook, secret }`; the secret only on create or renew. */
+/**
+ * Variables: `{ webhook, options?: { renew_secret } }`. Answers `{ webhook, secret }`; the secret only on create or
+ * renew, and the answer leaves the cache with its dialog.
+ */
 export function useSaveWebhook() {
   return useApiMutation(
     ({ webhook, options }: { webhook: WebhookInput; options?: { renew_secret?: boolean } }) => saveWebhook(webhook, options),
     [qk.webhooks.all],
+    { gcTime: 0 },
   );
 }
 

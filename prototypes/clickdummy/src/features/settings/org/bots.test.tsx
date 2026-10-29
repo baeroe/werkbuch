@@ -20,7 +20,7 @@ afterEach(() => {
 
 function renderWithData(node: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  return render(<QueryClientProvider client={client}>{node}</QueryClientProvider>);
+  return { ...render(<QueryClientProvider client={client}>{node}</QueryClientProvider>), client };
 }
 
 /** The card of a bot, by its name. */
@@ -55,6 +55,24 @@ describe('Bots', () => {
     expect(await within(kira).findByText('Deploy')).toBeTruthy();
     expect(document.body.innerHTML).not.toContain(plain);
     expect(JSON.stringify((await listTokens('u_kira')).items)).not.toContain(plain);
+  });
+
+  it('keeps the new token on a click outside and on Escape until asked, and holds it nowhere after', async () => {
+    const user = userEvent.setup();
+    const { client } = renderWithData(<Bots readOnlyReason={null} />);
+    const dialog = await createToken(user, 'Kira', 'Deploy-Skript');
+    const plain = within(dialog).getByRole<HTMLInputElement>('textbox', { name: 'Token' }).value;
+
+    await user.click(dialog.parentElement!);
+    expect(screen.getByRole('dialog', { name: 'Token ist angelegt' })).toBeTruthy();
+    await user.keyboard('{Escape}');
+    expect(await screen.findByRole('alertdialog', { name: 'Ohne Kopie schließen?' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Zurück' }));
+
+    await user.click(within(dialog).getByRole('button', { name: 'Fertig' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(document.body.innerHTML).not.toContain(plain);
+    await waitFor(() => expect(JSON.stringify(client.getMutationCache().getAll().map((mutation) => mutation.state.data))).not.toContain(plain));
   });
 
   it('warns that tokens of the default bot have admin rights, on the card, in the dialog and after creating one', async () => {

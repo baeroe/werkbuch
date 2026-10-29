@@ -25,7 +25,7 @@ export function usePersonalTestSetup(): void {
   });
 }
 
-export function renderPersonal(path = '/me', userId = 'u_mara') {
+function mount(path: string, userId: string) {
   asUser(userId);
   const router = createMemoryRouter([{ path: '/me/:section?', element: <PersonalSettings /> }], { initialEntries: [path] });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
@@ -36,7 +36,16 @@ export function renderPersonal(path = '/me', userId = 'u_mara') {
       </TooltipProvider>
     </QueryClientProvider>,
   );
-  return router;
+  return { router, client };
+}
+
+export function renderPersonal(path = '/me', userId = 'u_mara') {
+  return mount(path, userId).router;
+}
+
+/** `renderPersonal`, answering the query client, for a look into what the data layer still holds. */
+export function renderPersonalWithClient(path = '/me', userId = 'u_mara') {
+  return mount(path, userId).client;
 }
 
 export const textbox = (name: string) => screen.findByRole<HTMLInputElement>('textbox', { name });

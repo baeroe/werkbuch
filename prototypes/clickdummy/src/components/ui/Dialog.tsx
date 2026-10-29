@@ -1,7 +1,9 @@
+import { AlertDialog as BaseAlertDialog } from '@base-ui/react/alert-dialog';
 import { Dialog as BaseDialog } from '@base-ui/react/dialog';
 import { X } from 'lucide-react';
-import type { ReactElement, ReactNode, RefObject } from 'react';
+import { useRef, useState, type ReactElement, type ReactNode, type RefObject } from 'react';
 import { useDialogScope } from '@/lib/shortcuts/useShortcut';
+import { Button } from './Button';
 import { cx } from './cx';
 import { IconButton } from './IconButton';
 
@@ -23,6 +25,8 @@ type FrameProps = {
   finalFocus?: RefObject<HTMLElement | null>;
   /** Close button at the top right (Dialog yes, AlertDialog no: it must be answered). */
   closable?: boolean;
+  /** Rendered inside the popup after everything else, e.g. a question that belongs to this dialog. */
+  nested?: ReactNode;
 };
 
 /**
@@ -38,7 +42,7 @@ function PausePageShortcuts() {
  * Portal, scrim and popup on strong tracing paper. Shared by Dialog and AlertDialog: Base UI's alert dialog
  * re-exports these dialog parts.
  */
-export function DialogFrame({ title, description, children, footer, size = 'md', initialFocus, finalFocus, closable = true }: FrameProps) {
+export function DialogFrame({ title, description, children, footer, size = 'md', initialFocus, finalFocus, closable = true, nested }: FrameProps) {
   return (
     <BaseDialog.Portal>
       <BaseDialog.Backdrop className="fixed inset-0 z-50 bg-scrim transition-opacity duration-160 data-ending-style:opacity-0 data-starting-style:opacity-0" />
@@ -58,26 +62,92 @@ export function DialogFrame({ title, description, children, footer, size = 'md',
           {footer && <div className={cx('flex flex-wrap items-center justify-end gap-2 px-5 py-3', children ? 'border-t border-edge' : 'pt-4')}>{footer}</div>}
           {/* last in the DOM, so the initial focus lands on the content and not on the close button */}
           {closable && <BaseDialog.Close render={<IconButton icon={X} label="Schließen" tooltip={false} className="absolute top-3 right-3" />} />}
+          {nested}
         </BaseDialog.Popup>
       </BaseDialog.Viewport>
     </BaseDialog.Portal>
   );
 }
 
-type DialogProps = Omit<FrameProps, 'closable'> & {
+/** The question before a dialog with something shown once closes by Escape. */
+export interface ConfirmClose {
+  /** "Ohne Kopie schließen?" */
+  title: string;
+  /** What is lost: that it cannot be shown again. */
+  description: ReactNode;
+  confirmLabel?: string;
+  cancelLabel?: string;
+}
+
+type DialogProps = Omit<FrameProps, 'closable' | 'nested'> & {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** After the closing (or opening) animation, e.g. to let go of what the dialog showed. */
+  onOpenChangeComplete?: (open: boolean) => void;
   defaultOpen?: boolean;
   /** Element that opens the dialog (rendered as Dialog.Trigger). */
   trigger?: ReactElement;
+  /**
+   * For what is shown only once (a new token, a webhook secret, spec 4.2): a click outside does not close the dialog,
+   * and Escape asks this question first. Its own buttons (and the close button) close it as always.
+   */
+  confirmClose?: ConfirmClose;
 };
 
-/** Modal dialog above a light scrim; Escape, a click outside and the close button close it. */
-export function Dialog({ open, onOpenChange, defaultOpen, trigger, ...frame }: DialogProps) {
+/**
+ * Modal dialog above a light scrim; Escape, a click outside and the close button close it. With `confirmClose` only a
+ * button of its own does, or Escape once the person has said yes.
+ */
+export function Dialog({ open, onOpenChange, onOpenChangeComplete, defaultOpen, trigger, confirmClose, ...frame }: DialogProps) {
+  const [asking, setAsking] = useState(false);
+  const actions = useRef<BaseDialog.Root.Actions>(null);
   return (
-    <BaseDialog.Root open={open} onOpenChange={onOpenChange ? (next) => onOpenChange(next) : undefined} defaultOpen={defaultOpen}>
+    <BaseDialog.Root
+      open={open}
+      defaultOpen={defaultOpen}
+      actionsRef={actions}
+      disablePointerDismissal={confirmClose !== undefined}
+      onOpenChange={(next, details) => {
+        if (!next && confirmClose && details.reason === 'escape-key') {
+          // the dialog stays; the question decides
+          details.cancel();
+          setAsking(true);
+          return;
+        }
+        onOpenChange?.(next);
+      }}
+      onOpenChangeComplete={onOpenChangeComplete}
+    >
       {trigger && <BaseDialog.Trigger render={trigger} />}
-      <DialogFrame {...frame} />
+      <DialogFrame
+        {...frame}
+        nested={
+          confirmClose && (
+            <BaseAlertDialog.Root open={asking} onOpenChange={setAsking}>
+              <DialogFrame
+                title={confirmClose.title}
+                description={confirmClose.description}
+                size="sm"
+                closable={false}
+                footer={
+                  <>
+                    <BaseAlertDialog.Close render={<Button variant="secondary">{confirmClose.cancelLabel ?? 'Zurück'}</Button>} />
+                    <Button
+                      variant="danger"
+                      onClick={() => {
+                        setAsking(false);
+                        actions.current?.close();
+                      }}
+                    >
+                      {confirmClose.confirmLabel ?? 'Schließen'}
+                    </Button>
+                  </>
+                }
+              />
+            </BaseAlertDialog.Root>
+          )
+        }
+      />
     </BaseDialog.Root>
   );
 }

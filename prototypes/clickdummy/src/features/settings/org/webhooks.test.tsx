@@ -76,6 +76,24 @@ describe('Webhooks', () => {
     expect((await listWebhooks()).items.find((webhook) => webhook.name === 'Chat-Hinweise')?.events).toEqual(['comment.*']);
   });
 
+  it('asks before Escape closes the secret of a new webhook', async () => {
+    const user = userEvent.setup();
+    renderWithData(<Webhooks readOnlyReason={null} />);
+    await user.click(await screen.findByRole('button', { name: 'Webhook anlegen' }));
+    const form = await screen.findByRole('dialog', { name: 'Webhook anlegen' });
+    await user.type(within(form).getByRole('textbox', { name: 'Name' }), 'Chat-Hinweise');
+    await user.type(within(form).getByRole('textbox', { name: 'URL' }), 'https://chat.example.com/hooks/werkbuch');
+    await user.click(within(form).getByRole('checkbox', { name: /^Kommentare/ }));
+    await user.click(within(form).getByRole('button', { name: /^Anlegen/ }));
+    const result = await screen.findByRole('dialog', { name: 'Webhook ist angelegt' });
+
+    await user.keyboard('{Escape}');
+    const question = await screen.findByRole('alertdialog', { name: 'Ohne Kopie schließen?' });
+    await user.click(within(question).getByRole('button', { name: 'Schließen' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Webhook ist angelegt' })).toBeNull());
+    expect(result.isConnected).toBe(false);
+  });
+
   it('refuses a private address next to the URL field', async () => {
     const user = userEvent.setup();
     renderWithData(<Webhooks readOnlyReason={null} />);

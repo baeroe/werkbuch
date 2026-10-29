@@ -1,10 +1,11 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { registerShortcut } from '@/lib/shortcuts/registry';
 import { X } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { Button } from './Button';
-import { Dialog } from './Dialog';
+import { Dialog, DialogClose } from './Dialog';
 import { IconButton } from './IconButton';
 import { Input } from './Input';
 import { Kbd } from './Kbd';
@@ -303,5 +304,52 @@ describe('Avatar', () => {
     fireEvent.error(avatar.querySelector('img')!);
     expect(avatar.querySelector('img')).toBeNull();
     expect(avatar.textContent).toBe('ML');
+  });
+});
+
+describe('Dialog with something shown once', () => {
+  const ask = { title: 'Ohne Kopie schließen?', description: 'Den Token zeigt werkbuch nur dieses eine Mal.', confirmLabel: 'Schließen', cancelLabel: 'Zurück' };
+  const footer = (
+    <DialogClose
+      render={
+        <Button variant="primary" disabledReason={null}>
+          Fertig
+        </Button>
+      }
+    />
+  );
+
+  it('stays open on a click outside, and Escape asks first', async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    render(<Dialog open onOpenChange={onOpenChange} title="Token angelegt" confirmClose={ask} footer={footer} />);
+    const dialog = await screen.findByRole('dialog', { name: 'Token angelegt' });
+
+    // the area around the popup is outside
+    await user.click(dialog.parentElement!);
+    expect(onOpenChange).not.toHaveBeenCalled();
+
+    await user.keyboard('{Escape}');
+    const question = await screen.findByRole('alertdialog', { name: 'Ohne Kopie schließen?' });
+    expect(onOpenChange).not.toHaveBeenCalled();
+    await user.click(within(question).getByRole('button', { name: 'Zurück' }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog', { name: 'Token angelegt' })).toBeTruthy();
+
+    await user.keyboard('{Escape}');
+    await user.click(within(await screen.findByRole('alertdialog', { name: 'Ohne Kopie schließen?' })).getByRole('button', { name: 'Schließen' }));
+    expect(onOpenChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it('closes from its own buttons without asking', async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    render(<Dialog open onOpenChange={onOpenChange} title="Token angelegt" confirmClose={ask} footer={footer} />);
+    const dialog = await screen.findByRole('dialog', { name: 'Token angelegt' });
+
+    await user.click(within(dialog).getByRole('button', { name: 'Fertig' }));
+    expect(onOpenChange).toHaveBeenLastCalledWith(false);
+    expect(screen.queryByRole('alertdialog')).toBeNull();
   });
 });

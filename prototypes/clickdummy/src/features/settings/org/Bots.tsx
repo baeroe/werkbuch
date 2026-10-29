@@ -187,6 +187,8 @@ function TokenDialog({ open, onOpenChange, bot, onCreated }: TokenDialogProps) {
     settle(create.mutateAsync({ user_id: bot.id, name, abilities, expires_at }), {
       onSuccess: ({ token, plain_text }) => {
         onOpenChange(false);
+        // the secret dialog has it now; the call's answer lets go of it (and leaves the cache, gcTime 0)
+        create.reset();
         onCreated({
           title: 'Token ist angelegt',
           description: `„${token.name}“ für ${bot.name}.`,

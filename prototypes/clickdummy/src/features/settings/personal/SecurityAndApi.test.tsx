@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { listTokens } from '@/api/tokens';
 import { currentToasts, dismissToast, runToastAction } from '@/components/ui/toast';
 import { useSession } from '@/store/session';
-import { renderPersonal, toastTitled, usePersonalTestSetup } from './testing';
+import { renderPersonal, renderPersonalWithClient, toastTitled, usePersonalTestSetup } from './testing';
 
 usePersonalTestSetup();
 
@@ -105,6 +105,24 @@ describe('Security: two-factor', () => {
     await user.click(await screen.findByRole('link', { name: 'Sicherheit' }));
     expect(await screen.findByText('Aktiv seit 28.10.2026.')).toBeTruthy();
     expect(screen.queryByRole('list', { name: 'Recovery-Codes' })).toBeNull();
+  });
+
+  it('asks before the page is left while the recovery codes still show', async () => {
+    const user = userEvent.setup();
+    renderPersonal('/me/security');
+    const codes = await switchOnTwoFactor(user);
+    const first = within(codes).getAllByRole('listitem')[0].textContent!;
+
+    await user.click(screen.getByRole('link', { name: 'Profil' }));
+    const question = await screen.findByRole('alertdialog', { name: 'Recovery-Codes gesichert?' });
+    await user.click(within(question).getByRole('button', { name: 'Zurück zu den Codes' }));
+    expect(screen.getByRole('list', { name: 'Recovery-Codes' })).toBeTruthy();
+
+    // once they are saved, the way is free and the codes are gone
+    await user.click(screen.getByRole('button', { name: 'Codes sind gesichert' }));
+    await user.click(screen.getByRole('link', { name: 'Profil' }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(document.body.textContent).not.toContain(first);
   });
 
   it('copies all recovery codes at once', async () => {
@@ -258,6 +276,31 @@ describe('API & MCP: tokens', () => {
     // the plain text is gone from the page, and the list has the token without it
     expect(document.body.textContent).not.toContain(secret.value);
     expect(within(await screen.findByRole('list', { name: 'Tokens' })).getByText('Laptop')).toBeTruthy();
+  });
+
+  it('keeps the new token on Escape until the person says it may go, and keeps it nowhere after', async () => {
+    const user = userEvent.setup();
+    const client = renderPersonalWithClient('/me/api', 'u_theo');
+    await user.click(await screen.findByRole('button', { name: 'Neuer Token' }));
+    const form = await screen.findByRole('dialog', { name: 'Neuer Token' });
+    await user.type(within(form).getByRole('textbox', { name: 'Name' }), 'Laptop');
+    await user.click(within(form).getByRole('button', { name: 'Token anlegen' }));
+    const created = await screen.findByRole('dialog', { name: 'Token angelegt' });
+    const secret = within(created).getByRole<HTMLInputElement>('textbox', { name: 'Token' });
+    await waitFor(() => expect(document.activeElement).toBe(secret));
+    const plain = secret.value;
+
+    await user.keyboard('{Escape}');
+    const question = await screen.findByRole('alertdialog', { name: 'Ohne Kopie schließen?' });
+    await user.click(within(question).getByRole('button', { name: 'Zurück' }));
+    expect(screen.getByRole('dialog', { name: 'Token angelegt' })).toBeTruthy();
+
+    await user.keyboard('{Escape}');
+    await user.click(within(await screen.findByRole('alertdialog', { name: 'Ohne Kopie schließen?' })).getByRole('button', { name: 'Schließen' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(document.body.textContent).not.toContain(plain);
+    // nothing holds the answer of the call any more
+    await waitFor(() => expect(JSON.stringify(client.getMutationCache().getAll().map((mutation) => mutation.state.data))).not.toContain(plain));
   });
 
   it('gives a token the abilities that were ticked and an expiry date', async () => {
