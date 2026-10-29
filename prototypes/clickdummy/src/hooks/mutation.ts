@@ -199,8 +199,10 @@ export function useItemMutation<TVars, TData>(config: ItemMutation<TVars, TData>
           const next = config.apply(item, vars);
           return next.parent_id === item.parent_id ? next : { ...next, parent: parentOf(next.parent_id) };
         }
-        const parent = item.parent && changed.get(item.parent.id);
-        if (!parent || item.parent_id !== parent.id || sameRef(item.parent!, refOf(parent))) return item;
+        // a child of a changed item names it as its parent: with the title the change gives it
+        if (!item.parent) return item;
+        const parent = changed.get(item.parent.id);
+        if (!parent || item.parent_id !== parent.id || sameRef(item.parent, refOf(parent))) return item;
         return { ...item, parent: refOf(parent) };
       };
       for (const [key, data] of snapshot) queryClient.setQueryData(key, patchCached(data, change));
