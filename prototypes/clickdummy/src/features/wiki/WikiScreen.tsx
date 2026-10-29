@@ -36,8 +36,9 @@ import { notifyError } from '@/lib/errors';
 import { usePermissions } from '@/lib/permissions';
 import { runWithUndo } from '@/lib/undo';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
+import { useSession } from '@/store/session';
 import type { PageNode, Project } from '@/types';
-import { useLongDay } from './format';
+import { subpages, useLongDay } from './format';
 import { MovePageDialog, PageGlyph } from './MovePageDialog';
 import { PageTree } from './PageTree';
 import { PageView, SHEET } from './PageView';
@@ -156,6 +157,7 @@ export default WikiScreen;
 
 function Wiki({ project, pageId }: { project: Project; pageId: string | undefined }) {
   const navigate = useNavigate();
+  const userId = useSession((state) => state.userId);
   const queryClient = useQueryClient();
   const pages = usePages(project.id);
   const createPage = useCreatePage();
@@ -244,7 +246,7 @@ function Wiki({ project, pageId }: { project: Project; pageId: string | undefine
     focusWhenLost(parentId);
     const show = () => setHidden((state) => without(state, ids));
     runWithUndo({
-      label: ids.length > 1 ? `„${node.title}“ und ${ids.length - 1} Unterseiten gelöscht` : `„${node.title}“ gelöscht`,
+      label: ids.length > 1 ? `„${node.title}“ und ${subpages(ids.length - 1)} gelöscht` : `„${node.title}“ gelöscht`,
       failureTitle: `„${node.title}“ nicht gelöscht`,
       undo: () => {
         show();
@@ -332,7 +334,8 @@ function Wiki({ project, pageId }: { project: Project; pageId: string | undefine
         <div className={cx('min-w-0', !pageId && treeArea && 'max-lg:mt-6')}>
           {pageId ? (
             <PageView
-              key={pageId}
+              // a page of its own per person: "Als … ansehen" never carries a draft over to somebody else
+              key={`${userId} ${pageId}`}
               projectId={project.id}
               base={base}
               pageId={pageId}
@@ -358,7 +361,7 @@ function Wiki({ project, pageId }: { project: Project; pageId: string | undefine
       <AlertDialog
         open={asking.open}
         onOpenChange={(open) => setAsking((state) => ({ ...state, open }))}
-        title={asking.page ? `„${asking.page.title}“ mit ${asking.count - 1} Unterseiten löschen?` : ''}
+        title={asking.page ? `„${asking.page.title}“ mit ${subpages(asking.count - 1)} löschen?` : ''}
         description={asking.page ? deleteText(asking.page, asking.count) : ''}
         confirmLabel={`${asking.count} Seiten löschen`}
         onConfirm={() => {
@@ -376,8 +379,10 @@ const LIST = new Intl.ListFormat('de-DE', { type: 'conjunction' });
 /** What goes along with a page, in words: its subpages by name, at most five. */
 function deleteText(page: PageNode, count: number): string {
   const below = flattenPages(page.children).map((row) => `„${row.node.title}“`);
+  const later = 'Fünf Sekunden lang lässt sich das rückgängig machen.';
+  if (below.length === 1) return `Mit der Seite verschwindet auch ihre Unterseite ${below[0]}. ${later}`;
   const names = below.length > 5 ? `${below.slice(0, 5).join(', ')} und ${below.length - 5} weitere` : LIST.format(below);
-  return `Mit der Seite verschwinden auch ihre ${count - 1} Unterseiten: ${names}. Fünf Sekunden lang lässt sich das rückgängig machen.`;
+  return `Mit der Seite verschwinden auch ihre ${subpages(count - 1)}: ${names}. ${later}`;
 }
 
 type WikiHomeProps = {

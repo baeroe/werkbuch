@@ -166,6 +166,16 @@ describe('the template editor', () => {
     await waitFor(() => expect(storedTemplate('tpl_ops_certs')!.payload.values.environment).toBeTruthy());
   });
 
+  it('saves with mod+enter from a property field that takes Enter for itself', async () => {
+    const user = userEvent.setup();
+    renderTemplates('/projects/OPS/templates/tpl_ops_certs');
+    await user.type(await screen.findByRole('textbox', { name: 'Aufwand (h)' }), '3');
+    await user.keyboard('{Control>}{Enter}{/Control}');
+
+    await waitFor(() => expect(storedTemplate('tpl_ops_certs')!.payload.values.effort).toBe(3));
+    expect(toastTitles()).toContain('„Zertifikate prüfen“ gespeichert');
+  });
+
   it('does not save while a property field still shows a text it refuses', async () => {
     const user = userEvent.setup();
     renderTemplates('/projects/OPS/templates/tpl_ops_certs');

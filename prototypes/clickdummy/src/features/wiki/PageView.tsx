@@ -8,13 +8,17 @@
  * The save state stands in a status region that is always there: "Speichert …", "Gespeichert vor …" (moving on with
  * the time) or "Nicht gespeichert". Screen readers hear when the state changes, not every tick of the time.
  *
- * What the server does not have yet outlives the page's view for this visit (`pending`): a save that failed or met a
- * conflict, also one that ran as the page was left, comes back with its text and its banner when the page opens again.
- * A failed save keeps the text and offers "Erneut versuchen" in the toast; the retry sends the text as it reads then.
+ * What the server does not have yet outlives the page's view for this visit (`pending`, kept per person): a save that
+ * failed or met a conflict, also one that ran as the page was left, comes back with its text and its banner when the
+ * page opens again. A conflict keeps the page as the server sent it and writes it into the cache, so "Neu laden" and
+ * "Meine Fassung übernehmen" work on the latest version, also after reopening. A failed save keeps the text and offers
+ * "Erneut versuchen" in the toast; the retry sends the text as it reads then. A page left with an empty title is saved
+ * under the title it had, so nothing typed is lost.
  *
  * Viewers read: the title as heading, the text in the viewer, the versions without restoring.
  */
 
+import { useQueryClient } from '@tanstack/react-query';
 import { Ellipsis, Eye, FilePlus2, FileQuestionMark, FolderInput, History, SmilePlus, Trash2, X } from 'lucide-react';
 import { useEffect, useId, useMemo, useReducer, useRef, useState, type KeyboardEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router';
@@ -32,6 +36,7 @@ import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
 import { toast } from '@/components/ui/toast';
 import { isEmptyDoc, RichTextEditor, RichTextView } from '@/features/editor/RichTextEditor';
 import { UploadOwnerContext } from '@/features/editor/pasteImages';
+import { qk } from '@/hooks/keys';
 import { usePage, useSavePage } from '@/hooks/pages';
 import { useProjects } from '@/hooks/projects';
 import { now } from '@/lib/clock';
@@ -39,6 +44,7 @@ import { useCommand } from '@/lib/commands';
 import { notifyError } from '@/lib/errors';
 import { UNDO_LABEL } from '@/lib/undo';
 import { useDialogScope, useShortcut } from '@/lib/shortcuts/useShortcut';
+import { useSession } from '@/store/session';
 import type { Page as WikiPage, PageNode, RichText } from '@/types';
 import { ConflictBanner } from './ConflictBanner';
 import { useLongDay } from './format';
@@ -78,11 +84,35 @@ function conflictOf(error: unknown): Conflict | null {
 /** The read failed because the page is gone for the reader (deleted, or a project they no longer see). */
 const isGone = (error: unknown) => error instanceof ApiError && (error.status === 404 || error.status === 403);
 
+interface KeptDraft {
+  mine: Draft;
+  /** The version the draft is based on. */
+  base: number;
+  /** The conflict it met, with the page as the server had it then. */
+  conflict: Conflict | null;
+}
+
 /**
- * Typed text the server does not have yet, by page, for this visit (nothing is stored): this window's draft, the
- * version it is based on, and the conflict it met, if any. Gone once a save goes through or the text is reloaded.
+ * Typed text the server does not have yet, for this visit (nothing is stored): a save that failed or met a conflict,
+ * also one that ran as the page was left. Kept by person and page, so "Als … ansehen" neither shows nor saves somebody
+ * else's text. Gone once a save goes through or the text is reloaded.
  */
-const pending = new Map<string, { mine: Draft; base: number; conflict: string | null }>();
+const pending = new Map<string, KeptDraft>();
+const draftKey = (userId: string, pageId: string) => `${userId} ${pageId}`;
+
+/**
+ * The draft kept for this person and page, unless it is settled by now: the server holds that text, or the server's
+ * page is older than what the draft knew (the demo was reset), so the draft belongs to data that is gone.
+ */
+function keptDraft(key: string, page: WikiPage): KeptDraft | null {
+  const kept = pending.get(key);
+  if (!kept) return null;
+  if (sameDraft(kept.mine, draftOf(page)) || page.version < (kept.conflict?.current.version ?? kept.base)) {
+    pending.delete(key);
+    return null;
+  }
+  return kept;
+}
 
 /** While `active`, closing or reloading the tab asks first. */
 function useUnsavedGuard(active: boolean): void {
@@ -204,20 +234,22 @@ function PageSheet({ page, projectId, base, ancestors, rights, onMove, onDelete,
   const location = useLocation();
   const navigate = useNavigate();
   const savePage = useSavePage();
+  const queryClient = useQueryClient();
   const titleRef = useRef<HTMLTextAreaElement>(null);
   const titleErrorId = useId();
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
 
-  // text kept from earlier in this visit comes back, unless the server holds it by now
-  const [kept] = useState(() => {
-    const open = pending.get(page.id);
-    if (open && !sameDraft(open.mine, draftOf(page))) return open;
-    pending.delete(page.id);
-    return null;
-  });
+  /** The person who types here; another person gets a sheet of their own (WikiScreen keys it by person). */
+  const [writer] = useState(() => useSession.getState().userId);
+  const key = draftKey(writer, page.id);
+  // text kept from earlier in this visit comes back, unless it is settled by now
+  const [kept] = useState(() => keptDraft(key, page));
   const [draft, setDraft] = useState<Draft>(kept ? kept.mine : draftOf(page));
-  const [conflict, setConflict] = useState<Conflict | null>(kept?.conflict ? { message: kept.conflict, current: page } : null);
+  // a kept conflict meets the newer of the page as it met it and the page as the cache has it now
+  const [conflict, setConflict] = useState<Conflict | null>(() =>
+    kept?.conflict ? { message: kept.conflict.message, current: page.version >= kept.conflict.current.version ? page : kept.conflict.current } : null,
+  );
   const [state, setState] = useState<SaveState>(kept && !kept.conflict ? 'failed' : 'idle');
   const [spoken, setSpoken] = useState(kept && !kept.conflict ? 'Nicht gespeichert' : '');
   const [savedAt, setSavedAt] = useState<Date | null>(null);
@@ -228,8 +260,11 @@ function PageSheet({ page, projectId, base, ancestors, rights, onMove, onDelete,
 
   /** The draft as typed, for saves that run outside a render. */
   const latest = useRef(draft);
+  /** The page as the latest render had it, for an undo that runs later. */
+  const latestPage = useRef(page);
+  latestPage.current = page;
   /** The version the draft is based on. */
-  const base_ = useRef(kept && !kept.conflict ? kept.base : page.version);
+  const base_ = useRef(kept ? kept.base : page.version);
   /** What the server holds of this window's text. */
   const stored = useRef<Draft>(draftOf(page));
   const dirty = useRef(kept !== null);
@@ -264,10 +299,22 @@ function PageSheet({ page, projectId, base, ancestors, rights, onMove, onDelete,
       if (mounted.current) setUnsaved(false);
       return;
     }
-    const title = mine.title.trim();
-    if (title === '') {
-      setTitleError('Gib der Seite einen Titel. Ohne Titel wird nichts gespeichert.');
+    // another person took over this window ("Als … ansehen"): the text stays the writer's, for when they come back
+    if (useSession.getState().userId !== writer) {
+      pending.set(key, { mine, base: base_.current, conflict: null });
       return;
+    }
+    let title = mine.title.trim();
+    /** The page was left with an empty title: the text goes in under the title the page had. */
+    let keptTitle = false;
+    if (title === '') {
+      // while the page is open its field says what is missing, and the text waits in the editor
+      if (mounted.current) {
+        setTitleError('Gib der Seite einen Titel. Ohne Titel wird nichts gespeichert.');
+        return;
+      }
+      title = stored.current.title.trim() || page.title;
+      keptTitle = true;
     }
     dirty.current = false;
     inFlight.current = true;
@@ -281,13 +328,16 @@ function PageSheet({ page, projectId, base, ancestors, rights, onMove, onDelete,
       flight.current = request;
       const saved = await request;
       base_.current = saved.version;
-      stored.current = mine;
-      pending.delete(page.id);
+      stored.current = { ...mine, title };
+      pending.delete(key);
+      // the page as the server answered: a page opened again shows it at once, not the copy from before the save
+      queryClient.setQueryData(qk.pages.detail(page.id), saved);
       setState('saved');
       setSpoken('Gespeichert');
       setSavedAt(now());
       setTitleError(null);
       if (!dirty.current) setUnsaved(false);
+      if (keptTitle) toast({ title: `„${title}“ gespeichert`, description: 'Ohne Titel lässt sich eine Seite nicht speichern. Sie behält deshalb ihren bisherigen Titel.', tone: 'success' });
     } catch (error) {
       conflicted = conflictOf(error);
       if (conflicted) {
@@ -297,9 +347,9 @@ function PageSheet({ page, projectId, base, ancestors, rights, onMove, onDelete,
         setState('failed');
         setSpoken('Nicht gespeichert');
         const titleRefusal = error instanceof ApiError ? error.errors?.title?.[0] : undefined;
-        if (titleRefusal) setTitleError(titleRefusal);
+        if (titleRefusal && mounted.current) setTitleError(titleRefusal);
         else {
-          pending.set(page.id, { mine: latest.current, base: base_.current, conflict: null });
+          pending.set(key, { mine: latest.current, base: base_.current, conflict: null });
           notifyError(`„${title}“ nicht gespeichert`, error, () => void save.current());
         }
       }
@@ -309,7 +359,11 @@ function PageSheet({ page, projectId, base, ancestors, rights, onMove, onDelete,
     }
     if (conflicted) {
       inConflict.current = true;
-      pending.set(page.id, { mine: latest.current, base: base_.current, conflict: conflicted.message });
+      pending.set(key, { mine: latest.current, base: base_.current, conflict: conflicted });
+      // a refused save refreshes nothing (only a save that goes through does): the page as the conflict brought it goes
+      // into the cache, so the header, the versions and a reopened page know it
+      queryClient.setQueryData(qk.pages.detail(page.id), conflicted.current);
+      void queryClient.invalidateQueries({ queryKey: [...qk.pages.all, 'list'] });
       setConflict(conflicted);
       // the page was left while it saved: the text waits on the page, and the toast says where
       if (!mounted.current) {
@@ -347,7 +401,7 @@ function PageSheet({ page, projectId, base, ancestors, rights, onMove, onDelete,
   function change(patch: Partial<Draft>, { now: saveNow = false } = {}) {
     const next = { ...latest.current, ...patch };
     latest.current = next;
-    const open = pending.get(page.id);
+    const open = pending.get(key);
     if (open) open.mine = next;
     dirty.current = true;
     setUnsaved(true);
@@ -378,7 +432,7 @@ function PageSheet({ page, projectId, base, ancestors, rights, onMove, onDelete,
     const mine = latest.current;
     const before = conflict;
     const theirs = draftOf(conflict.current);
-    pending.delete(page.id);
+    pending.delete(key);
     inConflict.current = false;
     dirty.current = false;
     base_.current = conflict.current.version;
@@ -397,7 +451,10 @@ function PageSheet({ page, projectId, base, ancestors, rights, onMove, onDelete,
   function restoreMine(mine: Draft, before: Conflict) {
     // a copy: the editor ignores documents it reported itself (the value rule of RichTextEditor)
     const copy: Draft = { ...mine, content: mine.content ? structuredClone(mine.content) : null };
-    pending.set(page.id, { mine: copy, base: before.current.version, conflict: before.message });
+    // what this window saved after "Neu laden" is newer than the page the conflict met: "Neu laden" loads that one now
+    const fresh = latestPage.current.version > before.current.version ? latestPage.current : before.current;
+    const again: Conflict = { message: before.message, current: fresh };
+    pending.set(key, { mine: copy, base: Math.max(base_.current, fresh.version), conflict: again });
     // a page left meanwhile shows it again when it opens
     if (!mounted.current) return;
     clearTimeout(timer.current);
@@ -405,14 +462,15 @@ function PageSheet({ page, projectId, base, ancestors, rights, onMove, onDelete,
     dirty.current = true;
     latest.current = copy;
     setDraft(copy);
-    setConflict(before);
+    setConflict(again);
     setUnsaved(true);
   }
 
   function keepMine() {
     if (!conflict) return;
-    // save over the newer version: based on it now; the server keeps the other one as a version first
-    base_.current = conflict.current.version;
+    // save over the newer version: based on it now (or on what this window saved since, which is newer still); the
+    // server keeps a foreign version first
+    base_.current = Math.max(base_.current, conflict.current.version);
     inConflict.current = false;
     setConflict(null);
     focusText();

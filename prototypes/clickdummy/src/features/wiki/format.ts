@@ -29,3 +29,6 @@ export function useLongDay(): (iso: string) => string {
     return (iso: string) => format.format(new Date(iso));
   }, [zone]);
 }
+
+/** "1 Unterseite", "4 Unterseiten" */
+export const subpages = (count: number): string => `${count} ${count === 1 ? 'Unterseite' : 'Unterseiten'}`;

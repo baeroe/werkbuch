@@ -31,6 +31,7 @@ import { Link } from 'react-router';
 import { cx } from '@/components/ui/cx';
 import { isMac } from '@/lib/platform';
 import type { PageNode } from '@/types';
+import { subpages } from './format';
 import { PageGlyph } from './MovePageDialog';
 import { dropPlacement, findPage, flattenPages, projectDrop, subtreeIds, type PageRow, type Placement } from './tree';
 
@@ -283,7 +284,7 @@ export function PageTree({ nodes, hrefOf, currentId, collapsed, onToggle, canMov
                 <PageGlyph emoji={dragged.emoji} className="w-4 shrink-0 text-center text-sm" />
                 <span className="min-w-0 truncate">{dragged.title}</span>
                 {dragged.children.length > 0 && (
-                  <span className="shrink-0 text-sm font-normal text-muted tabular-nums">mit {subtreeIds(nodes, dragged.id).length - 1} Unterseiten</span>
+                  <span className="shrink-0 text-sm font-normal text-muted tabular-nums">mit {subpages(subtreeIds(nodes, dragged.id).length - 1)}</span>
                 )}
               </div>
             </div>

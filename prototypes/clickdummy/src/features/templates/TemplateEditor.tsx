@@ -46,6 +46,7 @@ import { useWorkItemTypes } from '@/hooks/workItemTypes';
 import { now } from '@/lib/clock';
 import { useCommand } from '@/lib/commands';
 import { notifyError } from '@/lib/errors';
+import { isMac } from '@/lib/platform';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { useUiStore } from '@/store/ui';
 import type { Label, Priority, Project, Property, PropertyValue, RichText, Schedule, Template, TemplatePayload, WorkItemType } from '@/types';
@@ -67,6 +68,10 @@ const PLACEHOLDERS: { token: string; meaning: string }[] = [
 ];
 
 const MAX_OFFSET = 365;
+
+/** mod held alone with Enter, as the shortcut registry reads it: ⌘ on a Mac, Strg elsewhere. */
+const isModEnter = (event: { key: string; metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean }) =>
+  event.key === 'Enter' && !event.shiftKey && !event.altKey && (isMac() ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey);
 
 /**
  * When the control that had the focus went away with its screen (a template made, deleted or brought back), the focus
@@ -476,6 +481,11 @@ export function TemplateEditor({ project, template, base, denied, onDelete }: Te
         onSubmit={(event) => {
           event.preventDefault();
           requestSave();
+        }}
+        // a field that takes mod+enter for itself (it commits its value on Enter, so the shortcut sees a handled key)
+        // still saves the template, as in the create dialog
+        onKeyDown={(event) => {
+          if (event.defaultPrevented && isModEnter(event)) requestSave();
         }}
         className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start xl:grid-cols-[minmax(0,1fr)_25rem]"
       >

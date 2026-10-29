@@ -30,8 +30,9 @@ afterEach(() => {
   act(() => currentToasts().forEach((item) => dismissToast(item.id)));
 });
 
+/** The screen in a router, with the query defaults of the app (hooks/queryClient.ts): cached data count as fresh for 10 s. */
 function renderWiki(path: string) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 10_000, refetchOnWindowFocus: false }, mutations: { retry: false } } });
   const router = createMemoryRouter([{ path: '/projects/:identifier/wiki/:pageId?', element: <WikiScreen /> }], { initialEntries: [path] });
   render(
     <QueryClientProvider client={client}>
@@ -164,6 +165,118 @@ describe('the wiki', () => {
     const banner = await screen.findByRole('alert');
     await user.click(within(banner).getByRole('button', { name: 'Meine Fassung übernehmen' }));
     await waitFor(() => expect(plainText(stored('pg_web_structure')!.content)).toContain('Meine Ergänzung.'));
+  });
+
+  it('a conflict met on leaving comes back with the page as the server has it: "Neu laden" shows the colleague’s text and name', async () => {
+    const user = userEvent.setup();
+    const { router } = renderWiki('/projects/WEB/wiki/pg_web_structure');
+    const editor = await screen.findByRole('textbox', { name: 'Inhalt der Seite' });
+    act(() => editor.focus());
+    paste(editor, 'Meine Ergänzung. ');
+    // left before the pause runs out: the save on leaving meets the conflict
+    await act(() => router.navigate('/projects/WEB/wiki/pg_web_kickoff'));
+    await waitFor(() => expect(toastTitles()).toContain('„Seitenstruktur“ nicht gespeichert'));
+
+    // opened again, as the toast's "Öffnen" does
+    await act(() => router.navigate('/projects/WEB/wiki/pg_web_structure'));
+    const banner = await screen.findByRole('alert');
+    expect(banner.textContent).toContain('Jonas Feld hat die Seite inzwischen geändert.');
+    await user.click(within(banner).getByRole('button', { name: 'Neu laden' }));
+
+    const again = screen.getByRole('textbox', { name: 'Inhalt der Seite' });
+    await waitFor(() => expect(again.textContent).toContain('Nachtrag: Die Referenzen kommen erst in Phase 2.'));
+    expect(again.textContent).not.toContain('Meine Ergänzung.');
+    expect(screen.getByText(/Zuletzt geändert von Jonas Feld/)).toBeTruthy();
+  });
+
+  it('a conflict met on leaving: "Meine Fassung übernehmen" saves on the first press after opening the page again', async () => {
+    const user = userEvent.setup();
+    const { router } = renderWiki('/projects/WEB/wiki/pg_web_structure');
+    const editor = await screen.findByRole('textbox', { name: 'Inhalt der Seite' });
+    act(() => editor.focus());
+    paste(editor, 'Meine Ergänzung. ');
+    await act(() => router.navigate('/projects/WEB/wiki/pg_web_kickoff'));
+    await waitFor(() => expect(toastTitles()).toContain('„Seitenstruktur“ nicht gespeichert'));
+    await act(() => router.navigate('/projects/WEB/wiki/pg_web_structure'));
+
+    await user.click(within(await screen.findByRole('alert')).getByRole('button', { name: 'Meine Fassung übernehmen' }));
+
+    await waitFor(() => expect(plainText(stored('pg_web_structure')!.content)).toContain('Meine Ergänzung.'));
+    expect(plainText(stored('pg_web_structure')!.content)).not.toContain('Nachtrag');
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('after taking back "Neu laden", a version saved meanwhile counts: "Meine Fassung übernehmen" saves at once', async () => {
+    const user = userEvent.setup();
+    renderWiki('/projects/WEB/wiki/pg_web_structure');
+    const editor = await screen.findByRole('textbox', { name: 'Inhalt der Seite' });
+    await user.click(editor);
+    paste(editor, 'Meine Ergänzung. ');
+    await user.keyboard(modEnter);
+    await user.click(within(await screen.findByRole('alert')).getByRole('button', { name: 'Neu laden' }));
+    // written on in the colleague's text and saved: version 5
+    paste(editor, 'Noch ein Satz. ');
+    await user.keyboard(modEnter);
+    await waitFor(() => expect(stored('pg_web_structure')!.version).toBe(5));
+
+    act(() => runToastAction(currentToasts().find((item) => item.title === 'Deine Fassung verworfen')!.id));
+    await user.click(within(await screen.findByRole('alert')).getByRole('button', { name: 'Meine Fassung übernehmen' }));
+
+    await waitFor(() => expect(plainText(stored('pg_web_structure')!.content)).toContain('Meine Ergänzung.'));
+    expect(stored('pg_web_structure')!.version).toBe(6);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('leaving a page with an empty title keeps the text: it is saved under the title the page had', async () => {
+    const { router } = renderWiki('/projects/WEB/wiki/pg_web_kickoff');
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Titel der Seite' }), { target: { value: '' } });
+    const editor = screen.getByRole('textbox', { name: 'Inhalt der Seite' });
+    act(() => editor.focus());
+    paste(editor, 'Wichtiger Absatz. ');
+
+    await act(() => router.navigate('/projects/WEB/wiki/pg_web_meetings'));
+
+    await waitFor(() => expect(plainText(stored('pg_web_kickoff')!.content)).toContain('Wichtiger Absatz.'));
+    expect(stored('pg_web_kickoff')!.title).toBe('Kickoff-Notizen');
+    expect(toastTitles()).toContain('„Kickoff-Notizen“ gespeichert');
+    // opened again: the cache holds the page as the save answered, so the text is there at once
+    await act(() => router.navigate('/projects/WEB/wiki/pg_web_kickoff'));
+    expect((await screen.findByRole('textbox', { name: 'Inhalt der Seite' })).textContent).toContain('Wichtiger Absatz.');
+  });
+
+  it('keeps drafts per person: somebody else sees the page as it is, the person gets the draft back', async () => {
+    const user = userEvent.setup();
+    renderWiki('/projects/WEB/wiki/pg_web_structure');
+    const editor = await screen.findByRole('textbox', { name: 'Inhalt der Seite' });
+    await user.click(editor);
+    paste(editor, 'Meine Ergänzung. ');
+    await user.keyboard(modEnter);
+    await screen.findByRole('alert');
+
+    // "Als Ida Brenner ansehen"
+    act(() => asUser('u_ida'));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+    expect(screen.getByRole('textbox', { name: 'Inhalt der Seite' }).textContent).not.toContain('Meine Ergänzung.');
+    expect(plainText(stored('pg_web_structure')!.content)).not.toContain('Meine Ergänzung.');
+
+    act(() => asUser('u_mara'));
+    const banner = await screen.findByRole('alert');
+    expect(screen.getByRole('textbox', { name: 'Inhalt der Seite' }).textContent).toContain('Meine Ergänzung.');
+    // resolved, so no draft is left for the next test
+    await user.click(within(banner).getByRole('button', { name: 'Neu laden' }));
+  });
+
+  it('names a single subpage in the singular', async () => {
+    const user = userEvent.setup();
+    renderWiki('/projects/WEB/wiki/pg_web_meetings');
+    await screen.findByRole('textbox', { name: 'Inhalt der Seite' });
+    await user.click(screen.getByRole('button', { name: 'Weitere Aktionen' }));
+    await user.click(await screen.findByRole('menuitem', { name: /Löschen/ }));
+
+    const ask = await screen.findByRole('alertdialog', { name: '„Meetings“ mit 1 Unterseite löschen?' });
+    expect(ask.textContent).toContain('Mit der Seite verschwindet auch ihre Unterseite „Kickoff-Notizen“.');
+    await user.click(within(ask).getByRole('button', { name: '2 Seiten löschen' }));
+    await waitFor(() => expect(toastTitles()).toContain('„Meetings“ und 1 Unterseite gelöscht'));
   });
 
   it('names how many subpages go along, hides them at once, and deletes only when the toast runs out', async () => {
