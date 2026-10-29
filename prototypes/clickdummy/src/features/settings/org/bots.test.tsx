@@ -45,6 +45,7 @@ describe('Bots', () => {
     const field = within(result).getByRole<HTMLInputElement>('textbox', { name: 'Token' });
     const plain = field.value;
     expect(plain).toMatch(/^wb_[a-z0-9]{40}$/);
+    expect(field.name).toBe('bot_token');
     expect(within(result).getByText('Kopiere den Token jetzt')).toBeTruthy();
 
     await user.click(within(result).getByRole('button', { name: 'Fertig' }));

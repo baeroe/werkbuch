@@ -43,6 +43,8 @@ export function useCopy(): { state: CopyState; copy: (text: string, field: HTMLI
 
 type CopyFieldProps = {
   label: string;
+  /** The field's name for the browser, e.g. "invitation_link"; a field without one is called "copy". */
+  name?: string;
   value: string;
   /** Under the field while nothing was copied yet. */
   hint?: ReactNode;
@@ -51,7 +53,7 @@ type CopyFieldProps = {
   className?: string;
 };
 
-export function CopyField({ label, value, hint, buttonLabel = 'Kopieren', className }: CopyFieldProps) {
+export function CopyField({ label, name = 'copy', value, hint, buttonLabel = 'Kopieren', className }: CopyFieldProps) {
   const id = useId();
   const field = useRef<HTMLInputElement>(null);
   const { state, copy } = useCopy();
@@ -65,7 +67,7 @@ export function CopyField({ label, value, hint, buttonLabel = 'Kopieren', classN
         <input
           ref={field}
           id={id}
-          name={id}
+          name={name}
           autoComplete="off"
           readOnly
           value={value}

@@ -78,6 +78,7 @@ function WebhookDialog({ open, onOpenChange, webhook, projects, bots, onSecret }
       once: 'Du siehst es nur dieses eine Mal. Später kannst du nur ein neues erzeugen, das dann das alte ablöst.',
       label: 'Geheimnis',
       value: secret,
+      name: 'webhook_secret',
       copyLabel: 'Geheimnis kopieren',
     });
   }

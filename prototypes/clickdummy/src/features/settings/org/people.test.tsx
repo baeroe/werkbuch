@@ -128,6 +128,7 @@ describe('People', () => {
     // the dialog ends in the link, valid for seven days
     const link = await within(await screen.findByRole('dialog', { name: 'Einladung ist angelegt' })).findByRole<HTMLInputElement>('textbox', { name: 'Einladungslink' });
     expect(link.value).toMatch(/\/invitations\/\w+$/);
+    expect(link.name).toBe('invitation_link');
     expect((await listInvitations()).items.map((invitation) => invitation.email)).toEqual(['carla@example.com']);
 
     await user.click(screen.getByRole('button', { name: 'Link kopieren' }));

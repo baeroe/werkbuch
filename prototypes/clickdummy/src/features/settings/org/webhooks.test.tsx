@@ -63,8 +63,10 @@ describe('Webhooks', () => {
     await user.click(within(form).getByRole('button', { name: /^Anlegen/ }));
 
     const result = await screen.findByRole('dialog', { name: 'Webhook ist angelegt' });
-    const secret = within(result).getByRole<HTMLInputElement>('textbox', { name: 'Geheimnis' }).value;
+    const field = within(result).getByRole<HTMLInputElement>('textbox', { name: 'Geheimnis' });
+    const secret = field.value;
     expect(secret).toMatch(/^whsec_/);
+    expect(field.name).toBe('webhook_secret');
     expect(within(result).getByText('Kopiere das Geheimnis jetzt')).toBeTruthy();
 
     await user.click(within(result).getByRole('button', { name: 'Fertig' }));

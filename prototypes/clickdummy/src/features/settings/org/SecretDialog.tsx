@@ -20,6 +20,8 @@ export interface Secret {
   once: string;
   /** Names the field: "Token", "Geheimnis". */
   label: string;
+  /** The field's name for the browser: "bot_token", "webhook_secret". */
+  name: string;
   value: string;
   copyLabel: string;
   /** Something the person must know before they close it, e.g. that the token has admin rights. */
@@ -49,7 +51,7 @@ export function SecretDialog({ secret, onClose }: { secret: Secret | null; onClo
           {current.once}
         </Banner>
         {current.warning}
-        <CopyField label={current.label} value={current.value} buttonLabel={current.copyLabel} />
+        <CopyField label={current.label} name={current.name} value={current.value} buttonLabel={current.copyLabel} />
       </div>
     </Dialog>
   );

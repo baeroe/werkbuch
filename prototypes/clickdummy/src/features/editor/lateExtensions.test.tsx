@@ -43,6 +43,6 @@ it('waits for its late extensions without calling use() conditionally', async ()
   // the frame stands while the chunk is on its way, then the editor takes its place
   await waitFor(() => expect(container.querySelector('[aria-busy="true"]')).not.toBeNull());
   await waitFor(() => expect(screen.getByRole('textbox', { name: 'Kommentar' })).toBeTruthy(), { timeout: 3000 });
-  const reported = errors.mock.calls.map((call) => call.map(String).join(' ')).join('\n');
-  expect(reported).not.toMatch(/called use\(\)|order of Hooks/);
+  // React reports nothing at all: no broken rule of hooks, no use() called conditionally
+  expect(errors).not.toHaveBeenCalled();
 });

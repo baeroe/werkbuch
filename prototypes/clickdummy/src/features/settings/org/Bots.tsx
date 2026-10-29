@@ -196,6 +196,7 @@ function TokenDialog({ open, onOpenChange, bot, onCreated }: TokenDialogProps) {
           once: 'Du siehst ihn nur dieses eine Mal. Später kannst du ihn nicht mehr abrufen, nur einen neuen anlegen.',
           label: 'Token',
           value: plain_text,
+          name: 'bot_token',
           copyLabel: 'Token kopieren',
           warning: bot.is_default_bot ? <AdminWarning title="Dieser Token hat Admin-Rechte" /> : undefined,
         });

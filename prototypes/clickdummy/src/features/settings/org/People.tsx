@@ -85,7 +85,7 @@ function InviteDialog({ open, onOpenChange, projects }: { open: boolean; onOpenC
         description={`Für ${sent.email}. Der Link ist sieben Tage gültig, eine neue Einladung an dieselbe Adresse ersetzt ihn.`}
         footer={<DialogClose render={<Button variant="primary">Fertig</Button>} />}
       >
-        <CopyField label="Einladungslink" buttonLabel="Link kopieren" value={sent.link} hint="Die Einladung geht per E-Mail raus. Ohne Mailserver gibst du den Link selbst weiter." />
+        <CopyField label="Einladungslink" name="invitation_link" buttonLabel="Link kopieren" value={sent.link} hint="Die Einladung geht per E-Mail raus. Ohne Mailserver gibst du den Link selbst weiter." />
       </Dialog>
     );
   }
@@ -192,7 +192,7 @@ function InvitationRow({ invitation, projects, zone }: { invitation: Invitation;
           }
         />
         <PopoverContent title="Einladungslink" align="end" className="w-[min(28rem,calc(100vw-2rem))] p-3">
-          <CopyField className="mt-2" label="Einladungslink" buttonLabel="Link kopieren" value={invitation.link} />
+          <CopyField className="mt-2" label="Einladungslink" name="invitation_link" buttonLabel="Link kopieren" value={invitation.link} />
         </PopoverContent>
       </Popover>
     </Row>
