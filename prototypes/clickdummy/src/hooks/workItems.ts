@@ -4,7 +4,7 @@
  * error brings the old state back and offers "Erneut versuchen".
  */
 
-import { useQueries, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
+import { useQueries, useQuery, useQueryClient, type QueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Page, PageArgs } from '@/api/client';
 import {
@@ -58,10 +58,24 @@ export interface InfiniteWorkItems {
   /** A further page is on its way. */
   loadingMore: boolean;
   moreError: Error | null;
-  /** Loads the next page. */
+  /** Loads the next page, or the one that failed again. */
   loadMore: () => void;
   /** Loads every page that is left and answers all items (⌘A selects them). */
   loadAll: () => Promise<WorkItem[]>;
+}
+
+/** How many pages each list has loaded in this visit: a list shown again (Back) starts with all of them. */
+const loadedPages = new Map<string, number>();
+
+/** The cursors of the first `depth` pages of a list, as far as the cache knows them. */
+function cachedCursors(queryClient: QueryClient, args: ListWorkItemsArgs, depth: number): (string | null)[] {
+  const cursors: (string | null)[] = [null];
+  while (cursors.length < depth) {
+    const next = queryClient.getQueryData<Page<WorkItem>>(pageKey(args, cursors.at(-1)!))?.next_cursor;
+    if (!next) break;
+    cursors.push(next);
+  }
+  return cursors;
 }
 
 /** The items of the pages so far as one `Page`, and how the pages stand; a module function, so its result stays stable. */
@@ -77,7 +91,8 @@ function combinePages(results: UseQueryResult<Page<WorkItem>>[]) {
     error: first.error,
     refetch: first.refetch,
     isFetching: results.some((result) => result.isFetching),
-    loadingMore: results.slice(1).some((result) => result.data === undefined && !result.isError),
+    // also while a page that failed is asked for again
+    loadingMore: results.slice(1).some((result) => result.data === undefined && (result.isFetching || !result.isError)),
     moreError: results.slice(1).find((result) => result.isError)?.error ?? null,
     nextCursor: last.data?.next_cursor ?? null,
   };
@@ -94,9 +109,17 @@ export function useInfiniteWorkItems(args: ListWorkItemsArgs = {}, options: Hook
   const queryClient = useQueryClient();
   const enabled = options.enabled !== false;
   const argsKey = JSON.stringify(args);
-  // the cursors of the pages to show: the first page has none, each further one the cursor its predecessor answered
-  const [state, setState] = useState<{ argsKey: string; cursors: (string | null)[] }>({ argsKey, cursors: [null] });
-  const cursors = state.argsKey === argsKey ? state.cursors : [null];
+  // the cursors of the pages to show: the first page has none, each further one the cursor its predecessor answered;
+  // a list shown again starts with the pages it had (from the cache), so Back finds the place it left
+  const [state, setState] = useState(() => ({ argsKey, cursors: cachedCursors(queryClient, args, loadedPages.get(argsKey) ?? 1) }));
+  let cursors = state.cursors;
+  if (state.argsKey !== argsKey) {
+    cursors = cachedCursors(queryClient, args, loadedPages.get(argsKey) ?? 1);
+    setState({ argsKey, cursors });
+  }
+  useEffect(() => {
+    loadedPages.set(argsKey, cursors.length);
+  }, [argsKey, cursors.length]);
 
   const { data, isError, error, refetch, isFetching, loadingMore, moreError, nextCursor } = useQueries({
     queries: cursors.map((cursor) => ({
@@ -108,9 +131,16 @@ export function useInfiniteWorkItems(args: ListWorkItemsArgs = {}, options: Hook
   });
 
   const loadMore = useCallback(() => {
+    // a page that failed is asked for again; otherwise the next one
+    const failed = cursors.slice(1).filter((cursor) => queryClient.getQueryState(pageKey(args, cursor))?.status === 'error');
+    if (failed.length > 0) {
+      failed.forEach((cursor) => void queryClient.refetchQueries({ queryKey: pageKey(args, cursor), exact: true }));
+      return;
+    }
     if (!nextCursor) return;
     setState({ argsKey, cursors: [...cursors, nextCursor] });
-  }, [argsKey, cursors, nextCursor]);
+    // `args` is what `argsKey` spells
+  }, [argsKey, cursors, nextCursor, queryClient]);
 
   const loadAll = useCallback(async (): Promise<WorkItem[]> => {
     const all = [...cursors];
@@ -139,8 +169,8 @@ export function useInfiniteWorkItems(args: ListWorkItemsArgs = {}, options: Hook
     error,
     isFetching,
     refetch,
-    // a page on its way counts as more, so what offers it stays (with the focus) until the page is there
-    hasMore: nextCursor !== null || loadingMore,
+    // a page on its way or one that failed counts as more: what offers it stays (with the focus, and "Erneut versuchen")
+    hasMore: nextCursor !== null || loadingMore || moreError !== null,
     loadingMore,
     moreError,
     loadMore,
