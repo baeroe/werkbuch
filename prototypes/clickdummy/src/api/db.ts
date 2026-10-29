@@ -46,7 +46,8 @@ import type {
 import { createSeed } from './seed';
 
 export const DB_KEY = 'werkbuch:db';
-export const SCHEMA_VERSION = 1;
+/** 2: relation events name the other item by id (`{ label, item_id }`), not by key. */
+export const SCHEMA_VERSION = 2;
 
 /** An earlier identifier of a project: keys like `OLD-12` keep resolving after a rename. */
 export interface ProjectAlias {

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -229,5 +229,16 @@ describe('the template editor', () => {
     renderTemplates('/projects/APP/templates/tpl_nope');
     expect(await screen.findByText('Diese Vorlage gibt es nicht')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Zu den Vorlagen' })).toBeTruthy();
+  });
+});
+
+describe('uploads in a template', () => {
+  it('an image in a rich text property of the template belongs to the template', async () => {
+    renderTemplates('/projects/OPS/templates/tpl_ops_certs');
+    const editor = await screen.findByRole('textbox', { name: 'Schritte zum Nachstellen' });
+    const file = new File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])], 'ablauf.png', { type: 'image/png' });
+
+    fireEvent.paste(editor, { clipboardData: { files: [file], types: ['Files'], getData: () => '' } });
+    await waitFor(() => expect(getDb().attachments.find((entry) => entry.filename === 'ablauf.png')?.owner).toEqual({ type: 'template', id: 'tpl_ops_certs' }));
   });
 });

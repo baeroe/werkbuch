@@ -2,8 +2,10 @@
  * The inbox of the signed-in person and their notification settings (spec 4.14). Newest first.
  */
 
-import type { Notification, NotificationChannel, NotificationEvent, NotificationPreference } from '@/types';
+import type { Notification, NotificationChannel, NotificationEvent, NotificationPreference, User } from '@/types';
+import { canSeeProject } from './access';
 import { notFound, paginate, read, write, type Page, type PageArgs } from './client';
+import type { Db } from './db';
 import { channelEnabled } from './events';
 
 export interface ListNotificationsArgs extends PageArgs {
@@ -11,11 +13,23 @@ export interface ListNotificationsArgs extends PageArgs {
   mentions_only?: boolean;
 }
 
+/**
+ * Whether the person still sees what a notification is about: an item of a project they see (a removed member loses
+ * the notifications of a private project with it), or the project of a failed template run.
+ */
+function stillVisible(db: Db, me: User, notification: Notification): boolean {
+  const projectId = notification.work_item_id !== null ? db.items.find((item) => item.id === notification.work_item_id)?.project_id : notification.project_id;
+  if (projectId === undefined) return false;
+  if (projectId === null) return true;
+  const project = db.projects.find((entry) => entry.id === projectId);
+  return project !== undefined && canSeeProject(db, me, project);
+}
+
 export function listNotifications(args: ListNotificationsArgs = {}): Promise<Page<Notification>> {
   return read(({ db, me }) =>
     paginate(
       db.notifications
-        .filter((notification) => notification.user_id === me.id)
+        .filter((notification) => notification.user_id === me.id && stillVisible(db, me, notification))
         .filter((notification) => !args.unread_only || notification.read_at === null)
         .filter((notification) => !args.mentions_only || notification.event === 'mentioned')
         .sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0)),

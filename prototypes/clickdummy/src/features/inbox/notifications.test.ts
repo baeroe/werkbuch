@@ -97,6 +97,12 @@ describe('changedFields', () => {
     expect(changedFields(['label_ids', 'start_date', 'parent_id'], propertyLabel)).toBe('Labels, Start-Date und Eltern-Item');
   });
 
+  it('names the type, the relations and the files, the other changes the API tells about', () => {
+    expect(changedFields(['type_id', 'values.customer'], propertyLabel)).toBe('Typ und Kunde');
+    expect(changedFields(['relation'], propertyLabel)).toBe('Relationen');
+    expect(changedFields(['attachment'], propertyLabel)).toBe('Anhänge');
+  });
+
   it('takes the label of a property for values.<key>', () => {
     expect(changedFields(['values.customer'], propertyLabel)).toBe('Kunde');
   });

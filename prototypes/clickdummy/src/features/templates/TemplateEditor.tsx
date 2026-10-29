@@ -710,19 +710,22 @@ export function TemplateEditor({ project, template, base, denied, onDelete }: Te
           {typeProperties.length > 0 && (
             <div className="mt-5 border-t border-line pt-4">
               <h3 className="font-display text-md font-bold tracking-title text-ink">Felder des Typs {type?.name}</h3>
-              <div className="mt-3 grid gap-4 md:grid-cols-2">
-                {typeProperties.map(({ property, required }) => (
-                  <TemplateProperty
-                    key={property.id}
-                    property={property}
-                    required={required}
-                    value={payload.values[property.key]}
-                    projectId={project.id}
-                    denied={denied}
-                    onChange={(value) => setPayload({ values: { ...latest.current.payload.values, [property.key]: value } })}
-                  />
-                ))}
-              </div>
+              {/* what a rich text value uploads belongs to the template too (a new one links it when it is saved) */}
+              <UploadOwnerContext.Provider value={owner}>
+                <div className="mt-3 grid gap-4 md:grid-cols-2">
+                  {typeProperties.map(({ property, required }) => (
+                    <TemplateProperty
+                      key={property.id}
+                      property={property}
+                      required={required}
+                      value={payload.values[property.key]}
+                      projectId={project.id}
+                      denied={denied}
+                      onChange={(value) => setPayload({ values: { ...latest.current.payload.values, [property.key]: value } })}
+                    />
+                  ))}
+                </div>
+              </UploadOwnerContext.Provider>
             </div>
           )}
         </section>

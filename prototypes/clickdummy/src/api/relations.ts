@@ -8,7 +8,7 @@
 import type { Relation } from '@/types';
 import { canSeeProject, requireWritable } from './access';
 import { FieldErrors, newId, notFound, write } from './client';
-import { recordEvent } from './events';
+import { notifyPeople, recordEvent } from './events';
 import { projectOf } from './lookup';
 import { requireItem } from './workItems';
 
@@ -41,13 +41,15 @@ export function addRelation(source_id: string, type_id: string, target_id: strin
       [source, target, type!.outward_label],
       [target, source, type!.inward_label ?? type!.outward_label],
     ] as const) {
-      recordEvent(ctx, {
+      const event = recordEvent(ctx, {
         type: 'work_item.relation_added',
         actor_id: me.id,
         subject: { type: 'work_item', id: item.id },
         project_id: item.project_id,
         changes: { relation: { old: null, new: { label, item_id: other.id } } },
       });
+      // a relation is one of the "sonstige Änderungen" (spec 4.14); the notification names no other item
+      notifyPeople(ctx, { event: 'item_changed', item, actor_id: me.id, event_id: event.id, data: { fields: ['relation'] } });
     }
     return relation;
   });
@@ -70,13 +72,14 @@ export function removeRelation(id: string): Promise<void> {
       [source, target, type.outward_label],
       [target, source, type.inward_label ?? type.outward_label],
     ] as const) {
-      recordEvent(ctx, {
+      const event = recordEvent(ctx, {
         type: 'work_item.relation_removed',
         actor_id: me.id,
         subject: { type: 'work_item', id: item.id },
         project_id: item.project_id,
         changes: { relation: { old: { label, item_id: other.id }, new: null } },
       });
+      notifyPeople(ctx, { event: 'item_changed', item, actor_id: me.id, event_id: event.id, data: { fields: ['relation'] } });
     }
   });
 }

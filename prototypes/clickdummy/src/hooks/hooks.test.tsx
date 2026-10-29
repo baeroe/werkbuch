@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { updateWorkItem } from '@/api/workItems';
 import { toast } from '@/components/ui/toast';
+import { now } from '@/lib/clock';
 import { resetApi } from '@/test/api';
 import type { Page } from '@/api/client';
 import type { WorkItemDetail, WorkItem } from '@/types';
@@ -155,6 +156,24 @@ describe('item mutations', () => {
     act(() => result.current.archive.mutate('WEB-39'));
     await waitFor(() => expect(result.current.archive.isError).toBe(true));
     expect(archived).toEqual([false, true, false]);
+  });
+
+  it('stamps an optimistic archive with the demo clock, not with the computer\'s', async () => {
+    const { result } = renderHook(() => ({ detail: useWorkItem('WEB-39'), bulk: useBulkUpdateWorkItems(), archive: useArchiveWorkItem() }), { wrapper });
+    await waitFor(() => expect(result.current.detail.data).toBeDefined());
+    const stamps = watch(() => queryClient.getQueryData<WorkItemDetail>(qk.workItems.detail('WEB-39'))?.item.archived_at);
+    const near = (iso: string | null | undefined) => iso !== null && iso !== undefined && Math.abs(Date.parse(iso) - now().getTime()) < 60_000;
+
+    // the call fails, so only the optimistic stamp shows (and then the old state again)
+    localStorage.setItem('api:fail', '1');
+    act(() => result.current.archive.mutate('WEB-39'));
+    await waitFor(() => expect(result.current.archive.isError).toBe(true));
+    act(() => result.current.bulk.mutate({ ids: ['WEB-39'], patch: { archived: true } }));
+    await waitFor(() => expect(result.current.bulk.isError).toBe(true));
+
+    const optimistic = stamps.filter((stamp) => stamp !== null);
+    expect(optimistic).toHaveLength(2);
+    expect(optimistic.every(near)).toBe(true);
   });
 
   it('a transition the workflow does not allow rolls back and names the reason without a retry action', async () => {

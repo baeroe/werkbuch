@@ -16,6 +16,7 @@ import { useAddComment } from '@/hooks/comments';
 import { notifyError } from '@/lib/errors';
 import { usePermissions } from '@/lib/permissions';
 import type { RichText, WorkItem } from '@/types';
+import { UploadOwnerContext } from '@/features/editor/pasteImages';
 import { isEmptyDoc, RichTextEditor } from '@/features/editor/RichTextEditor';
 import { useDetail, useUnsavedGuard } from './shared';
 
@@ -124,18 +125,21 @@ export function CommentComposer({ item }: { item: WorkItem }) {
 
   return (
     <div ref={box} className="mt-3">
-      <RichTextEditor
-        value={draft}
-        onChange={(doc) => {
-          setDraft(doc);
-          setProblem(null);
-        }}
-        preset="comment"
-        projectId={item.project_id}
-        onSubmit={send}
-        autoFocus
-        aria-describedby={problem ? problemId : undefined}
-      />
+      {/* the comment does not exist yet: its images belong to nobody until it is sent, then to the comment (spec 4.16) */}
+      <UploadOwnerContext.Provider value={null}>
+        <RichTextEditor
+          value={draft}
+          onChange={(doc) => {
+            setDraft(doc);
+            setProblem(null);
+          }}
+          preset="comment"
+          projectId={item.project_id}
+          onSubmit={send}
+          autoFocus
+          aria-describedby={problem ? problemId : undefined}
+        />
+      </UploadOwnerContext.Provider>
       <div aria-live="polite">
         {problem && (
           <p id={problemId} className="mt-1.5 text-sm font-medium text-danger">

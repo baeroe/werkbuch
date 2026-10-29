@@ -6,6 +6,7 @@
 import { isBlankDoc, mentionedIds, plainText } from '@/lib/richtext';
 import type { Comment, RichText, WorkItem } from '@/types';
 import { isOrgAdmin, requireWritable } from './access';
+import { linkAttachments } from './attachments';
 import { clone, forbidden, invalid, newId, notFound, write } from './client';
 import type { Db } from './db';
 import { addSubscriber, notifyPeople, recordEvent } from './events';
@@ -39,6 +40,8 @@ export function addComment(work_item_id: string, body: RichText): Promise<Commen
       reactions: [],
     };
     db.comments.push(comment);
+    // the images of the comment were uploaded before it existed: they belong to it now (spec 4.16)
+    linkAttachments(db, project.id, [comment.body], { type: 'comment', id: comment.id });
     addSubscriber(db, item, me.id); // who comments watches (unless they switched it off by hand)
 
     const mentioned = mentionedIds(body);
@@ -78,6 +81,7 @@ export function editComment(id: string, body: RichText): Promise<Comment> {
     const previous = comment.body;
     comment.body = clone(body);
     comment.edited_at = stamp;
+    linkAttachments(db, project.id, [comment.body], { type: 'comment', id: comment.id });
     recordEvent(ctx, {
       type: 'comment.updated',
       actor_id: me.id,

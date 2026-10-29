@@ -99,26 +99,27 @@ export function channelEnabled(db: Db, userId: string, event: NotificationEvent,
   return channel === 'inbox' ? true : MAIL_BY_DEFAULT.includes(event);
 }
 
-export interface NotifyInput {
+export type NotifyInput = {
   event: NotificationEvent;
-  item: WorkItem;
-  actor_id: string;
+  /** Who caused it, and is never told; null when nobody did (a template run of the scheduler). */
+  actor_id: string | null;
   event_id: string | null;
   data?: NotificationData;
   /** Who is told. Defaults to everybody watching the item and the project lead. */
   recipients?: Iterable<string>;
-}
+} & ({ item: WorkItem; project_id?: undefined } | { item?: undefined; project_id: string });
 
 /**
  * Puts a notification into the inbox of each recipient who should get one: never the person who caused the event,
- * never bots, deactivated accounts or accounts without access, and only where the inbox is switched on.
+ * never bots, deactivated accounts or accounts without access, and only where the inbox is switched on. It is about an
+ * item, or about a project alone (a failed template run).
  */
 export function notifyPeople(ctx: Pick<Ctx, 'db' | 'stamp'>, input: NotifyInput): void {
   const { db } = ctx;
-  const project = db.projects.find((entry) => entry.id === input.item.project_id);
+  const project = db.projects.find((entry) => entry.id === (input.item?.project_id ?? input.project_id));
   if (!project) return;
 
-  const recipients = new Set(input.recipients ?? [...input.item.subscriber_ids, project.lead_id]);
+  const recipients = new Set(input.recipients ?? [...(input.item?.subscriber_ids ?? []), project.lead_id]);
   for (const userId of recipients) {
     if (userId === input.actor_id) continue;
     const user = db.users.find((entry) => entry.id === userId);
@@ -132,7 +133,7 @@ export function notifyPeople(ctx: Pick<Ctx, 'db' | 'stamp'>, input: NotifyInput)
       event_id: input.event_id,
       event: input.event,
       project_id: project.id,
-      work_item_id: input.item.id,
+      work_item_id: input.item?.id ?? null,
       actor_id: input.actor_id,
       data: input.data ?? {},
       read_at: null,

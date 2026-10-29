@@ -137,7 +137,8 @@ export function createBot(input: CreateBotInput): Promise<User> {
     errors.throwIfAny();
 
     const bot: User = {
-      id: `u_${input.handle.replace(/-/g, '_')}`,
+      // an id of its own: a handle can change and be taken again, an id never
+      id: newId('u'),
       type: 'bot',
       name: input.name.trim(),
       handle: input.handle,

@@ -10,13 +10,14 @@
  *   the title. The reading order is the same everywhere.
  */
 
-import { useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useMemo, useRef, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { BlockedHint } from '@/components/items/BlockedHint';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { useUiStore } from '@/store/ui';
 import type { Attachment, WorkItem, WorkItemDetail } from '@/types';
-import { rememberAttachments, UploadOwnerContext } from '@/features/editor/pasteImages';
+import { UploadOwnerContext } from '@/features/editor/pasteImages';
+import { usePrimeAttachments } from '@/hooks/attachments';
 import { Activity } from './Activity';
 import { Attachments } from './Attachments';
 import { Children } from './Children';
@@ -39,8 +40,8 @@ export function ItemDetailProvider({ detail, surface, children }: { detail: Work
   const actions = useRef<DetailActions>({});
   const itemId = detail.item.id;
 
-  // images and files of the item's texts resolve from its attachments
-  useEffect(() => rememberAttachments(detail.attachments), [detail.attachments]);
+  // the images and files of the item's texts come with the detail: they show without asking for each one
+  usePrimeAttachments(detail.attachments);
 
   const context = useMemo<DetailContextValue>(
     () => ({

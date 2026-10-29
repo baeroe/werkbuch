@@ -25,7 +25,7 @@ import {
   type ListWorkItemsArgs,
   type WorkItemPatch,
 } from '@/api/workItems';
-import { today } from '@/lib/clock';
+import { now, today } from '@/lib/clock';
 import { useSession } from '@/store/session';
 import type { FilterContext, PropertyValue, WorkItem } from '@/types';
 import { qk, type HookOptions } from './keys';
@@ -173,7 +173,7 @@ export function useBulkUpdateWorkItems() {
       if (add_label_ids || remove_label_ids) {
         next.label_ids = [...(fields.label_ids ?? item.label_ids), ...(add_label_ids ?? [])].filter((id) => !(remove_label_ids ?? []).includes(id));
       }
-      if (archived !== undefined) next.archived_at = archived ? new Date().toISOString() : null;
+      if (archived !== undefined) next.archived_at = archived ? now().toISOString() : null;
       return next;
     },
     failureTitle: 'Mehrfachbearbeitung nicht gespeichert',
@@ -193,7 +193,7 @@ export function useArchiveWorkItem() {
   return useItemMutation({
     mutationFn: archiveWorkItem,
     ids: (id: string) => [id],
-    apply: (item) => ({ ...item, archived_at: new Date().toISOString() }),
+    apply: (item) => ({ ...item, archived_at: now().toISOString() }),
     failureTitle: 'Archivieren nicht gespeichert',
   });
 }

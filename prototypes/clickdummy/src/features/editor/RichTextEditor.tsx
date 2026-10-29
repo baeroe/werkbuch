@@ -28,16 +28,16 @@ import { TaskItem, TaskList } from '@tiptap/extension-list';
 import { Placeholder } from '@tiptap/extensions';
 import { EditorContent, Extension, NodeViewWrapper, ReactNodeViewRenderer, useEditor, type AnyExtension, type Editor, type ReactNodeViewProps } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import { ImageOff, Paperclip } from 'lucide-react';
+import { ImageIcon, ImageOff, Paperclip } from 'lucide-react';
 import { Suspense, use, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { cx } from '@/components/ui/cx';
-import { useUploadAttachment } from '@/hooks/attachments';
+import { useAttachment, useUploadAttachment } from '@/hooks/attachments';
 import { notifyError } from '@/lib/errors';
 import { isMac } from '@/lib/platform';
 import type { RichText } from '@/types';
 import './editor.css';
 import { mentionExtension, referenceExtension } from './mentions';
-import { AttachmentFile, AttachmentImage, UploadOwnerContext, uploadFiles, uploadPlaceholders, useKnownAttachment, type EditorEnv } from './pasteImages';
+import { AttachmentFile, AttachmentImage, UploadOwnerContext, uploadFiles, uploadPlaceholders, type EditorEnv } from './pasteImages';
 import { PRESET_LABEL, PRESET_PLACEHOLDER, PRESETS, type EditorPreset } from './presets';
 import { slashMenu } from './slashMenu';
 
@@ -94,12 +94,21 @@ function showsDoc(editor: Editor, doc: RichText): boolean {
 /* -------------------------------------------------------------------------- node views */
 
 function ImageView({ node }: ReactNodeViewProps) {
-  const attachment = useKnownAttachment(node.attrs.attachmentId as string | null);
+  const id = node.attrs.attachmentId as string | null;
+  const query = useAttachment(id);
+  const attachment = query.data;
+  // a disabled query (no id) is pending too, but nothing is on its way
+  const loading = query.isPending && id !== null;
   const alt = typeof node.attrs.alt === 'string' ? node.attrs.alt : '';
   return (
     <NodeViewWrapper className="rt-image" data-drag-handle="">
       {attachment ? (
         <img src={attachment.url} alt={alt} draggable={false} />
+      ) : loading ? (
+        <span className="rt-image-missing" aria-busy="true">
+          <ImageIcon className="size-4 shrink-0" aria-hidden="true" />
+          {alt ? `${alt}: Bild wird geladen …` : 'Bild wird geladen …'}
+        </span>
       ) : (
         <span className="rt-image-missing">
           <ImageOff className="size-4 shrink-0" aria-hidden="true" />
@@ -111,7 +120,7 @@ function ImageView({ node }: ReactNodeViewProps) {
 }
 
 function FileView({ node }: ReactNodeViewProps) {
-  const attachment = useKnownAttachment(node.attrs.attachmentId as string | null);
+  const attachment = useAttachment(node.attrs.attachmentId as string | null).data;
   const name = String(node.attrs.filename ?? attachment?.filename ?? 'Datei');
   return (
     <NodeViewWrapper as="span" className="rt-file">

@@ -5,19 +5,19 @@
  * - `image` for the safe image formats, shown inline
  * - `attachment` for every other file, a chip to download it
  *
- * Who owns an upload comes from `UploadOwnerContext` (the item of a description or comment); without it the upload
- * belongs to nobody until something saved links it (`createWorkItem` takes `attachment_ids`).
+ * Who owns an upload comes from `UploadOwnerContext` (the item of a description, the comment being edited, the
+ * template); without it the upload belongs to nobody until the text it stands in is saved: the server then makes the
+ * new comment, item or template its owner (spec 4.16).
  *
- * The fake API has no call that resolves an attachment id, so the URLs live in a small registry here: every upload
- * goes in, and so do the attachments of an item detail (`rememberAttachments`). An image whose attachment is not
- * known shows a placeholder with its name.
+ * The nodes show their attachment through `useAttachment(id)` (getAttachment); an upload puts its answer into that
+ * cache, so the new image shows at once.
  */
 
 import { Node, mergeAttributes, type Editor } from '@tiptap/react';
 import { Plugin, PluginKey, type EditorState } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import Image from '@tiptap/extension-image';
-import { createContext, useSyncExternalStore } from 'react';
+import { createContext } from 'react';
 import type { Attachment, RichText } from '@/types';
 import { INLINE_IMAGE_TYPES } from './presets';
 
@@ -25,46 +25,6 @@ import { INLINE_IMAGE_TYPES } from './presets';
 
 /** The owner of what the editors below upload: `{ type: 'work_item', id }` in an item detail. */
 export const UploadOwnerContext = createContext<Attachment['owner']>(null);
-
-/* -------------------------------------------------------------------------- registry */
-
-export interface KnownAttachment {
-  url: string;
-  filename: string;
-  mime: string;
-  size: number;
-}
-
-const known = new Map<string, KnownAttachment>();
-const listeners = new Set<() => void>();
-
-/** Makes attachments resolvable for the editors and viewers (uploads, the attachments of an item detail). */
-export function rememberAttachments(list: readonly Attachment[]): void {
-  let changed = false;
-  for (const attachment of list) {
-    const current = known.get(attachment.id);
-    if (current && current.url === attachment.url && current.filename === attachment.filename) continue;
-    known.set(attachment.id, { url: attachment.url, filename: attachment.filename, mime: attachment.mime, size: attachment.size });
-    changed = true;
-  }
-  if (changed) listeners.forEach((listener) => listener());
-}
-
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
-
-/** The URL and name of an attachment, once it is known in this session. */
-export function useKnownAttachment(id: string | null | undefined): KnownAttachment | undefined {
-  return useSyncExternalStore(
-    subscribe,
-    () => (id ? known.get(id) : undefined),
-    () => undefined,
-  );
-}
 
 /* ------------------------------------------------------------------------------ nodes */
 
@@ -222,7 +182,6 @@ export function uploadFiles(editor: Editor, files: readonly File[], pos: number,
 
     env.upload(file).then(
       (attachment) => {
-        rememberAttachments([attachment]);
         if (editor.isDestroyed) return;
         const at = placeholderPos(editor.state, id) ?? editor.state.selection.to;
         editor

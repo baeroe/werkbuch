@@ -79,6 +79,8 @@ const FIELD_NAMES: Record<string, string> = {
   due_date: 'Due-Date',
   parent_id: 'Eltern-Item',
   type_id: 'Typ',
+  relation: 'Relationen',
+  attachment: 'Anhänge',
 };
 
 const LIST = new Intl.ListFormat('de-DE', { style: 'long', type: 'conjunction' });

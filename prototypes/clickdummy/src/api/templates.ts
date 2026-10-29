@@ -11,7 +11,8 @@ import type { Template, TemplatePayload, TemplateRun, WorkItem } from '@/types';
 import { canSeeProject, requireRole, requireWritable } from './access';
 import { ApiError, clone, FieldErrors, newId, notFound, paginate, read, write, type Ctx, type Page } from './client';
 import type { Db } from './db';
-import { recordEvent } from './events';
+import { linkAttachments, richValues } from './attachments';
+import { notifyPeople, recordEvent } from './events';
 import { createItem, defaultBot } from './itemRules';
 import { findProject } from './lookup';
 
@@ -71,6 +72,8 @@ export function saveTemplate(input: TemplateInput): Promise<Template> {
     template.next_run_at = nextRun(ctx, template);
     if (existing) db.templates[db.templates.indexOf(existing)] = template;
     else db.templates.push(template);
+    // uploads made before a new template had its id belong to it now (spec 4.16)
+    linkAttachments(db, project.id, [template.payload.description, ...richValues(template.payload.values)], { type: 'template', id: template.id });
     return template;
   });
 }
@@ -147,33 +150,22 @@ export function runTemplateNow(id: string): Promise<{ run: TemplateRun; item: Wo
       run.error = failureText(db, payload, error);
       template.last_run_at = stamp;
       db.template_runs.push(run);
-      // the lead of the project and the author of the template hear about it; the template stays on
-      const lead = db.projects.find((entry) => entry.id === project.id)!.lead_id;
-      db.notifications.push(
-        ...[...new Set([lead, template.created_by])].flatMap((userId) => {
-          const user = db.users.find((entry) => entry.id === userId);
-          if (!user || user.type === 'bot' || user.disabled_at !== null) return [];
-          return [{
-            id: newId('n'),
-            user_id: userId,
-            event_id: null,
-            event: 'template_run_failed' as const,
-            project_id: project.id,
-            work_item_id: null,
-            actor_id: null,
-            data: { template_id: template.id, error: run.error ?? undefined },
-            read_at: null,
-            mailed_at: null,
-            created_at: stamp,
-          }];
-        }),
-      );
-      recordEvent(ctx, {
+      const event = recordEvent(ctx, {
         type: 'template.run_failed',
         actor_id: bot.id,
         subject: { type: 'template', id: template.id },
         project_id: project.id,
         changes: { error: { old: null, new: run.error } },
+      });
+      // the lead of the project and the author of the template hear about it, where their inbox takes it (spec 4.14);
+      // nobody caused it, so whoever pressed "Jetzt ausführen" hears about it too. The template stays on.
+      notifyPeople(ctx, {
+        event: 'template_run_failed',
+        project_id: project.id,
+        actor_id: null,
+        event_id: event.id,
+        data: { template_id: template.id, error: run.error ?? undefined },
+        recipients: [project.lead_id, template.created_by],
       });
       return { run, item: null };
     }

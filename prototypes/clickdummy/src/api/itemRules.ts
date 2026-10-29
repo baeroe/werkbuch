@@ -14,6 +14,7 @@ import { canTransition, isClosedCategory, statesInOrder } from '@/domain/workflo
 import { mentionedIds, plainText } from '@/lib/richtext';
 import type { Priority, PropertyValue, RichText, User, WorkItem } from '@/types';
 import { canBeAssigned } from './access';
+import { linkAttachments, richValues } from './attachments';
 import { clone, conflict, FieldErrors, invalid, sameJson, type Ctx } from './client';
 import type { Db } from './db';
 import { addSubscriber, notifyPeople, recordEvent } from './events';
@@ -115,6 +116,13 @@ function checkAssignee(db: Db, errors: FieldErrors, projectId: string, assigneeI
   }
 }
 
+/** A resolution to choose must exist and be in use; the same 422 for a move and an update. */
+function checkResolution(db: Db, errors: FieldErrors, resolutionId: string): void {
+  const resolution = db.resolutions.find((entry) => entry.id === resolutionId);
+  if (!resolution) errors.add('resolution_id', 'Diese Resolution gibt es nicht.');
+  else if (resolution.archived_at !== null) errors.add('resolution_id', 'Diese Resolution ist archiviert. Wähle eine andere.');
+}
+
 /** Throws 422 for a state the workflow does not have and 409 for a move it does not allow. */
 export function assertTransition(db: Db, item: WorkItem, toStateId: string): void {
   const workflow = workflowOf(db, projectOf(db, item));
@@ -209,7 +217,7 @@ export function createItem(ctx: Ctx, actor: User, input: CreateWorkItemInput): W
   const number = lastNumber + 1;
   db.counters[project.id] = number;
 
-  const closed = isClosedCategory(target.category);
+  // the item is created in the start state; another state is a move from there, with all a move does (below)
   const item: WorkItem = {
     id: `wi_${project.identifier.toLowerCase()}_${number}`,
     project_id: project.id,
@@ -219,8 +227,8 @@ export function createItem(ctx: Ctx, actor: User, input: CreateWorkItemInput): W
     title,
     description: input.description ? clone(input.description) : null,
     description_version: 1,
-    state_id: target.id,
-    resolution_id: resolutionAfterTransition(initial.category, target.category, null, null, db.resolutions),
+    state_id: initial.id,
+    resolution_id: resolutionAfterTransition(initial.category, initial.category, null, null, db.resolutions),
     assignee_id: assigneeId,
     priority,
     label_ids: labelIds,
@@ -232,8 +240,8 @@ export function createItem(ctx: Ctx, actor: User, input: CreateWorkItemInput): W
     created_by: actor.id,
     created_at: stamp,
     updated_at: stamp,
-    started_at: target.category === 'started' ? stamp : null,
-    closed_at: closed ? stamp : null,
+    started_at: initial.category === 'started' ? stamp : null,
+    closed_at: isClosedCategory(initial.category) ? stamp : null,
     archived_at: null,
     template_id: input.template_id ?? null,
     subscriber_ids: [],
@@ -246,6 +254,7 @@ export function createItem(ctx: Ctx, actor: User, input: CreateWorkItemInput): W
     const attachment = db.attachments.find((entry) => entry.id === id);
     if (attachment && attachment.owner === null && attachment.project_id === project.id) attachment.owner = { type: 'work_item', id: item.id };
   }
+  linkAttachments(db, project.id, [item.description, ...richValues(values)], { type: 'work_item', id: item.id });
 
   const event = recordEvent(ctx, {
     type: 'work_item.created',
@@ -263,6 +272,8 @@ export function createItem(ctx: Ctx, actor: User, input: CreateWorkItemInput): W
     }
   }
   if (item.description) handleMentions(ctx, actor, item, mentionedIds(item.description), item.description);
+  // the history shows the move, and the automations of a move run: assignee on start, closing the parent
+  if (target.id !== initial.id) moveItem(ctx, actor, item, target.id, null);
   return item;
 }
 
@@ -324,6 +335,11 @@ export function moveItem(ctx: Ctx, actor: User, item: WorkItem, toStateId: strin
   const { db, stamp } = ctx;
   if (item.archived_at !== null) throw conflict('archived', `${item.key} ist archiviert und schreibgeschützt. Stelle es zuerst wieder her.`);
   assertTransition(db, item, toStateId);
+  if (chosenResolution !== null) {
+    const errors = new FieldErrors();
+    checkResolution(db, errors, chosenResolution);
+    errors.throwIfAny();
+  }
 
   const workflow = workflowOf(db, projectOf(db, item));
   const from = stateOf(workflow, item.state_id)!;
@@ -361,20 +377,20 @@ export function moveItem(ctx: Ctx, actor: User, item: WorkItem, toStateId: strin
 
 /* -------------------------------------------------------------------- patch */
 
+/** What `checkPatch` found: the title and values as they will be stored, and whether the description changes. */
+interface CheckedPatch {
+  title: string | undefined;
+  values: Record<string, PropertyValue> | undefined;
+  descriptionChanged: boolean;
+}
+
 /**
- * Changes fields of an item. Everything is checked before anything changes: field errors give a 422, a changed
- * description a 409 `description_conflict` (when the caller says which version it edited), a move the workflow
- * forbids a 409 `transition_not_allowed`.
+ * Checks a patch against an item and changes nothing: field errors give a 422, a changed description a 409
+ * `description_conflict` (when the caller says which version it edited), a move the workflow forbids a 409
+ * `transition_not_allowed`. That an item is archived is left to the caller: a bulk edit checks the patch of an archived
+ * item before it restores it, so a refused patch leaves the item archived.
  */
-export function patchItem(
-  ctx: Ctx,
-  actor: User,
-  item: WorkItem,
-  patch: WorkItemPatch,
-  options: { base_description_version?: number; reason?: string | null } = {},
-): void {
-  const { db, stamp } = ctx;
-  if (item.archived_at !== null) throw conflict('archived', `${item.key} ist archiviert und schreibgeschützt. Stelle es zuerst wieder her.`);
+export function checkPatch(db: Db, item: WorkItem, patch: WorkItemPatch, options: { base_description_version?: number } = {}): CheckedPatch {
   const project = projectOf(db, item);
   const type = db.types.find((entry) => entry.id === item.type_id)!;
   const errors = new FieldErrors();
@@ -387,9 +403,7 @@ export function patchItem(
   if (patch.label_ids !== undefined) checkLabels(db, errors, patch.label_ids);
   if (patch.assignee_id && patch.assignee_id !== item.assignee_id) checkAssignee(db, errors, project.id, patch.assignee_id);
   if (patch.parent_id && patch.parent_id !== item.parent_id) checkParent(db, errors, project.id, patch.parent_id, item.id);
-  if (patch.resolution_id && !db.resolutions.some((entry) => entry.id === patch.resolution_id && entry.archived_at === null)) {
-    errors.add('resolution_id', 'Diese Resolution gibt es nicht.');
-  }
+  if (patch.resolution_id) checkResolution(db, errors, patch.resolution_id);
   if (patch.rank !== undefined && (typeof patch.rank !== 'string' || patch.rank === '')) errors.add('rank', 'Der Rang ist ungültig.');
   let values: Record<string, PropertyValue> | undefined;
   if (patch.values) {
@@ -408,6 +422,23 @@ export function patchItem(
     const who = lastEdit ? userName(db, lastEdit.actor_id) : 'Jemand';
     throw conflict('description_conflict', `${who} hat die Beschreibung inzwischen geändert.`, { current: item });
   }
+  return { title, values, descriptionChanged };
+}
+
+/**
+ * Changes fields of an item. Everything is checked before anything changes (`checkPatch`); an archived item is
+ * read-only (409 `archived`).
+ */
+export function patchItem(
+  ctx: Ctx,
+  actor: User,
+  item: WorkItem,
+  patch: WorkItemPatch,
+  options: { base_description_version?: number; reason?: string | null } = {},
+): void {
+  const { db, stamp } = ctx;
+  if (item.archived_at !== null) throw conflict('archived', `${item.key} ist archiviert und schreibgeschützt. Stelle es zuerst wieder her.`);
+  const { title, values, descriptionChanged } = checkPatch(db, item, patch, options);
 
   // checks passed: change
   const changes: Record<string, { old: unknown; new: unknown }> = {};
@@ -451,6 +482,7 @@ export function patchItem(
     item.description_version += 1;
   }
   if (patch.rank !== undefined) item.rank = patch.rank; // the order is not history
+  if (descriptionChanged || values) linkAttachments(db, item.project_id, [descriptionChanged ? item.description : null, ...richValues(values)], { type: 'work_item', id: item.id });
 
   if (Object.keys(changes).length > 0) {
     item.updated_at = stamp;

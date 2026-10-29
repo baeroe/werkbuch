@@ -411,3 +411,25 @@ describe('calls that overlap keep their own answer', () => {
     }
   });
 });
+
+describe('uploads in comments', () => {
+  const png = () => new File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])], 'beweis.png', { type: 'image/png' });
+
+  it('an image in a new comment belongs to the comment once it is sent, not to the item', async () => {
+    const user = userEvent.setup();
+    renderWithData(<ItemPeek itemId="WEB-47" />);
+    await user.click(await screen.findByRole('button', { name: /Kommentar schreiben/ }));
+    const editor = await screen.findByRole('textbox', { name: 'Kommentar' });
+    await waitFor(() => expect(document.activeElement).toBe(editor));
+    await user.keyboard('Hier der Beweis');
+
+    fireEvent.paste(editor, { clipboardData: { files: [png()], types: ['Files'], getData: () => '' } });
+    await waitFor(() => expect(getDb().attachments.some((entry) => entry.filename === 'beweis.png')).toBe(true));
+    await waitFor(() => expect(editor.querySelector('.rt-image')).not.toBeNull());
+    await user.keyboard(modEnter);
+
+    await waitFor(() => expect(currentToasts().some((entry) => entry.title === 'Kommentar gesendet')).toBe(true));
+    const sent = getDb().comments.at(-1)!;
+    expect(getDb().attachments.find((entry) => entry.filename === 'beweis.png')?.owner).toEqual({ type: 'comment', id: sent.id });
+  });
+});

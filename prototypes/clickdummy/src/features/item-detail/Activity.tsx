@@ -10,7 +10,7 @@
  */
 
 import { Ellipsis, Pencil, RotateCw, SmilePlus, Trash2, Zap } from 'lucide-react';
-import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
 import { addDays, formatDay, formatPropertyValue } from '@/components/fields/format';
 import { archivedReason, useToday, useUserMap } from '@/components/fields/itemData';
@@ -38,7 +38,8 @@ import { notifyError } from '@/lib/errors';
 import { usePermissions } from '@/lib/permissions';
 import { runWithUndo } from '@/lib/undo';
 import { useSession } from '@/store/session';
-import type { ActivityEntry, Comment, ItemEvent, Priority, Property, PropertyValue, RelationChange, RichText, User, WorkItem, WorkItemDetail } from '@/types';
+import type { ActivityEntry, Attachment, Comment, ItemEvent, Priority, Property, PropertyValue, RelationChange, RichText, User, WorkItem, WorkItemDetail } from '@/types';
+import { UploadOwnerContext } from '@/features/editor/pasteImages';
 import { isEmptyDoc, RichTextEditor, RichTextView } from '@/features/editor/RichTextEditor';
 import { CommentComposer } from './CommentComposer';
 import { focusWhenLost, Section, useDetail } from './shared';
@@ -440,6 +441,7 @@ function Reactions({ comment, users, canReact }: { comment: Comment; users: Map<
 
 function CommentEditor({ comment, projectId, onDone }: { comment: Comment; projectId: string; onDone: () => void }) {
   const edit = useEditComment();
+  const owner = useMemo<Attachment['owner']>(() => ({ type: 'comment', id: comment.id }), [comment.id]);
   const [draft, setDraft] = useState<RichText | null>(comment.body);
   /** The text as it is now. Refs, because the retry of an error toast runs the `save` of an older render. */
   const latest = useRef<RichText | null>(comment.body);
@@ -480,20 +482,23 @@ function CommentEditor({ comment, projectId, onDone }: { comment: Comment; proje
   };
   return (
     <div ref={box} className="mt-1" onKeyDown={onKeyDown}>
-      <RichTextEditor
-        value={draft}
-        onChange={(doc) => {
-          latest.current = doc;
-          setDraft(doc);
-          setProblem(null);
-        }}
-        preset="comment"
-        projectId={projectId}
-        onSubmit={save}
-        autoFocus
-        aria-label="Kommentar bearbeiten"
-        aria-describedby={problem ? problemId : undefined}
-      />
+      {/* what is added while editing belongs to the comment */}
+      <UploadOwnerContext.Provider value={owner}>
+        <RichTextEditor
+          value={draft}
+          onChange={(doc) => {
+            latest.current = doc;
+            setDraft(doc);
+            setProblem(null);
+          }}
+          preset="comment"
+          projectId={projectId}
+          onSubmit={save}
+          autoFocus
+          aria-label="Kommentar bearbeiten"
+          aria-describedby={problem ? problemId : undefined}
+        />
+      </UploadOwnerContext.Provider>
       <div aria-live="polite">
         {problem && (
           <p id={problemId} className="mt-1.5 text-sm font-medium text-danger">

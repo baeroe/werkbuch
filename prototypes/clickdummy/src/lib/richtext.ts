@@ -1,6 +1,6 @@
 /*
  * Small helpers for Tiptap documents (the stored form of every rich text): plain text for search and previews, the
- * people mentioned in a text, and a document built from plain paragraphs.
+ * people mentioned in a text, its attachments, and a document built from plain paragraphs.
  */
 
 import type { RichText } from '@/types';
@@ -44,6 +44,17 @@ export function mentionedIds(doc: RichText | null | undefined): string[] {
   const found = new Set<string>();
   const visit = (node: RichText) => {
     if (node.type === 'mention' && typeof node.attrs?.id === 'string') found.add(node.attrs.id);
+    node.content?.forEach(visit);
+  };
+  if (doc) visit(doc);
+  return [...found];
+}
+
+/** The attachment ids of the images and files of a document (`image`, `attachment` nodes), without repeats. */
+export function attachmentIds(doc: RichText | null | undefined): string[] {
+  const found = new Set<string>();
+  const visit = (node: RichText) => {
+    if ((node.type === 'image' || node.type === 'attachment') && typeof node.attrs?.attachmentId === 'string') found.add(node.attrs.attachmentId);
     node.content?.forEach(visit);
   };
   if (doc) visit(doc);

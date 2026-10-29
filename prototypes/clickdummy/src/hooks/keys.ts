@@ -39,6 +39,7 @@ export const qk = {
   relationTypes: resource('relation-types'),
   resolutions: resource('resolutions'),
   workItems: { ...resource('work-items'), meta: () => ['work-items', 'meta'] as const },
+  attachments: resource('attachments'),
   activity: resource('activity'),
   views: resource('views'),
   favorites: resource('favorites'),

@@ -5,6 +5,7 @@
 
 import { childProgress } from '@/domain/progress';
 import { matchesFilter, sortItems } from '@/domain/filter';
+import { isClosedCategory } from '@/domain/workflow';
 import type {
   ActivityEntry,
   BulkResult,
@@ -22,9 +23,10 @@ import type {
 import { canSeeProject, requireRole, requireWritable, visibleProjectIds, visibleProjects } from './access';
 import { ApiError, conflict, FieldErrors, invalid, notFound, paginate, read, write, type Page, type PageArgs } from './client';
 import type { Db } from './db';
-import { addSubscriber, recordEvent, removeSubscriber } from './events';
+import { addSubscriber, notifyPeople, recordEvent, removeSubscriber } from './events';
 import {
   archiveItem,
+  checkPatch,
   createItem,
   moveItem,
   patchItem,
@@ -227,7 +229,9 @@ export type BulkPatch = Pick<WorkItemPatch, 'state_id' | 'resolution_id' | 'assi
 
 /**
  * Applies one change to many items. Each item follows its own rules: what they allow is changed, what they refuse
- * is reported with the reason (e.g. `transition_not_allowed`, `not_closed`, `forbidden`) and the rest goes on.
+ * is reported with the reason (e.g. `transition_not_allowed`, `not_closed`, `forbidden`) and the rest goes on. A
+ * refused item stays as it was: everything is checked before the first change (archiving wants a closed item after
+ * the patch, restoring a patch that passes).
  */
 export function bulkUpdateWorkItems(ids: string[], patch: BulkPatch): Promise<BulkResult> {
   return write((ctx) => {
@@ -239,13 +243,23 @@ export function bulkUpdateWorkItems(ids: string[], patch: BulkPatch): Promise<Bu
         const { item, project } = requireItem(ctx.db, ctx.me, id);
         requireWritable(ctx.db, ctx.me, project, 'member');
 
-        if (archived === false) restoreItem(ctx, ctx.me, item);
         const itemPatch: WorkItemPatch = { ...fields };
         if (add_label_ids || remove_label_ids) {
           const base = fields.label_ids ?? item.label_ids;
           itemPatch.label_ids = [...base, ...(add_label_ids ?? [])].filter((label) => !(remove_label_ids ?? []).includes(label));
         }
-        if (Object.keys(itemPatch).length > 0) patchItem(ctx, ctx.me, item, itemPatch);
+        const patching = Object.keys(itemPatch).length > 0;
+        if (archived === true) {
+          // the state the item has once the patch is through (a patch may close it on the way)
+          const state = stateOf(workflowOf(ctx.db, project), itemPatch.state_id ?? item.state_id);
+          if (!state || !isClosedCategory(state.category)) throw conflict('not_closed', 'Nur geschlossene Items (Completed oder Canceled) lassen sich archivieren.');
+        }
+        if (archived === false) {
+          if (item.archived_at === null) throw conflict('not_archived', `${item.key} ist nicht archiviert.`);
+          if (patching) checkPatch(ctx.db, item, itemPatch);
+          restoreItem(ctx, ctx.me, item);
+        }
+        if (patching) patchItem(ctx, ctx.me, item, itemPatch);
         if (archived === true) archiveItem(ctx, ctx.me, item);
         result.updated.push(item.id);
       } catch (error) {
@@ -286,7 +300,9 @@ export function changeWorkItemType(id: string, type_id: string, values: Record<s
     item.type_id = type_id;
     item.values = merged;
     item.updated_at = stamp;
-    recordEvent(ctx, { type: 'work_item.updated', actor_id: me.id, subject: { type: 'work_item', id: item.id }, project_id: project.id, changes });
+    const event = recordEvent(ctx, { type: 'work_item.updated', actor_id: me.id, subject: { type: 'work_item', id: item.id }, project_id: project.id, changes });
+    // the type is one of the "sonstige Änderungen" (spec 4.14)
+    notifyPeople(ctx, { event: 'item_changed', item, actor_id: me.id, event_id: event.id, data: { fields: Object.keys(changes) } });
     return item;
   });
 }
@@ -324,8 +340,12 @@ export function deleteWorkItem(id: string): Promise<void> {
     db.items.forEach((entry) => {
       if (entry.parent_id === item.id) entry.parent_id = null;
     });
+    const commentIds = new Set(db.comments.filter((comment) => comment.work_item_id === item.id).map((comment) => comment.id));
     db.comments = db.comments.filter((comment) => comment.work_item_id !== item.id);
-    db.attachments = db.attachments.filter((attachment) => !(attachment.owner?.type === 'work_item' && attachment.owner.id === item.id));
+    // the files of the item and the images of its comments
+    db.attachments = db.attachments.filter(
+      (attachment) => !(attachment.owner?.type === 'work_item' && attachment.owner.id === item.id) && !(attachment.owner?.type === 'comment' && commentIds.has(attachment.owner.id)),
+    );
     db.relations = db.relations.filter((relation) => relation.source_id !== item.id && relation.target_id !== item.id);
     db.notifications = db.notifications.filter((notification) => notification.work_item_id !== item.id);
     db.events = db.events.filter((event) => event.subject.id !== item.id);

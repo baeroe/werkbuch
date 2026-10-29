@@ -30,14 +30,29 @@ function invalidateAll(queryClient: QueryClient, what: Keys | 'all'): Promise<un
   return Promise.all(what.map((queryKey) => queryClient.invalidateQueries({ queryKey })));
 }
 
+export interface ApiMutationOptions<TVars, TData> {
+  /** Runs with the answer before the reload, e.g. to put what the answer holds into the cache. */
+  onSuccess?: (data: TData, vars: TVars, queryClient: QueryClient) => void;
+  /**
+   * How long the finished call stays in the mutation cache once nothing observes it. 0 for answers that hold a secret
+   * shown once (a token, a webhook secret): it is dropped as soon as its dialog lets go of it.
+   */
+  gcTime?: number;
+}
+
 export function useApiMutation<TVars, TData>(
   mutationFn: (vars: TVars) => Promise<TData>,
   invalidate: Invalidate<TData, TVars>,
+  options: ApiMutationOptions<TVars, TData> = {},
 ): UseMutationResult<TData, Error, TVars> {
   const queryClient = useQueryClient();
   return useMutation<TData, Error, TVars>({
     mutationFn,
-    onSuccess: (data, vars) => invalidateAll(queryClient, typeof invalidate === 'function' ? invalidate(data, vars) : invalidate),
+    gcTime: options.gcTime,
+    onSuccess: (data, vars) => {
+      options.onSuccess?.(data, vars, queryClient);
+      return invalidateAll(queryClient, typeof invalidate === 'function' ? invalidate(data, vars) : invalidate);
+    },
   });
 }
 

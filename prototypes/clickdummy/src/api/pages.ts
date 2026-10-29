@@ -6,6 +6,7 @@
 
 import { rankBetween } from '@/domain/rank';
 import { requireRole, requireWritable } from './access';
+import { linkAttachments } from './attachments';
 import { clone, conflict, FieldErrors, invalid, newId, notFound, paginate, read, write, type Ctx, type Page } from './client';
 import { saveDb, type Db } from './db';
 import { recordEvent } from './events';
@@ -91,6 +92,7 @@ export function createPage(input: CreatePageInput): Promise<WikiPage> {
       updated_at: stamp,
     };
     db.pages.push(page);
+    linkAttachments(db, project.id, [page.content], { type: 'page', id: page.id });
     recordEvent(ctx, { type: 'page.created', actor_id: me.id, subject: { type: 'page', id: page.id }, project_id: project.id });
     return page;
   });
@@ -161,6 +163,7 @@ export function savePage(id: string, input: SavePageInput): Promise<WikiPage> {
     page.version += 1;
     page.updated_by = me.id;
     page.updated_at = stamp;
+    linkAttachments(db, page.project_id, [page.content], { type: 'page', id: page.id });
     recordEvent(ctx, { type: 'page.updated', actor_id: me.id, subject: { type: 'page', id: page.id }, project_id: page.project_id });
     return page;
   });
