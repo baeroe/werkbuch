@@ -263,3 +263,22 @@ test('Flow 7: without its last transition into Review, „Agentur-Freigabe“ is
   await expect(page.getByText('Review ist vom Startstatus aus nicht erreichbar')).toBeVisible();
   await expect(page.getByRole('status').filter({ hasText: 'gespeichert' })).toHaveCount(0);
 });
+
+test.describe('on a phone (390 px), beside the flows', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test('the table keeps targets of at least 44 px: rows, group rows and their toggles', async ({ page }) => {
+    await page.goto('/projects/WEB?layout=table');
+    const table = page.getByRole('grid', { name: 'Items' });
+    const rows = table.locator('tbody tr[role="row"]');
+    await expect(rows.first()).toBeVisible();
+
+    const heights = await rows.evaluateAll((elements) => elements.map((row) => row.getBoundingClientRect().height));
+    expect(heights.length).toBeGreaterThan(5);
+    expect(Math.min(...heights)).toBeGreaterThanOrEqual(44);
+    // the toggle of each group row (a group row is one cell over all columns)
+    const toggles = await table.locator('tbody tr[role="row"]:has(td[colspan]) button').evaluateAll((buttons) => buttons.map((button) => button.getBoundingClientRect().height));
+    expect(toggles.length).toBeGreaterThan(0);
+    expect(Math.min(...toggles)).toBeGreaterThanOrEqual(44);
+  });
+});

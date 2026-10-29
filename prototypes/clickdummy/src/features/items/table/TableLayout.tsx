@@ -5,7 +5,8 @@
  * Keyboard, as in a spreadsheet: the arrows (and j/k) choose a cell, Enter edits it (the picker or editor of the
  * field opens), Escape cancels, and the focus comes back to the cell. Enter on the first column opens the item's page,
  * the space bar its preview. Without the right to change an item, Enter on a field says why.
- * The rows are virtualized inside the table's own scroll box, which fills the window below the toolbar.
+ * The rows are virtualized inside the table's own scroll box, which fills the window below the toolbar. Below md the
+ * rows, the group rows and their toggles are 44 px high (touch targets); the virtualizer measures each row.
  */
 
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -20,6 +21,7 @@ import { cx } from '@/components/ui/cx';
 import { toast } from '@/components/ui/toast';
 import { useProperties } from '@/hooks/properties';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
+import { useIsWide } from '@/lib/media';
 import { usePermissions } from '@/lib/permissions';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { useUiStore } from '@/store/ui';
@@ -88,16 +90,20 @@ export function TableLayout({ items, groups, display, selection, onSelect, onSel
     return () => window.removeEventListener('resize', measure);
   }, [measure]);
 
+  // a row is 40 px plus its line from md on, 44 px plus its line below (touch targets)
+  const wide = useIsWide();
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scroller.current,
-    estimateSize: () => 41,
+    estimateSize: () => (wide ? 41 : 45),
     overscan: 10,
     getItemKey: (index) => rows[index]?.key ?? index,
     // the sticky header covers the first 40 px of the box
     scrollPaddingStart: 41,
     useFlushSync: false,
   });
+  // across the md line the rows change their height: measure them again
+  useEffect(() => virtualizer.measure(), [wide, virtualizer]);
   const virtualRows = virtualizer.getVirtualItems();
   const padTop = virtualRows[0]?.start ?? 0;
   const padBottom = virtualizer.getTotalSize() - (virtualRows.at(-1)?.end ?? 0);
@@ -281,13 +287,13 @@ export function TableLayout({ items, groups, display, selection, onSelect, onSel
               const folded = collapsed.has(row.group.key);
               return (
                 <tr key={virtual.key} ref={virtualizer.measureElement} data-index={virtual.index} role="row" aria-rowindex={rowIndex}>
-                  <td role="gridcell" colSpan={columns.length + 1} className="h-10 border-b border-line bg-sunken p-0">
+                  <td role="gridcell" colSpan={columns.length + 1} className="h-11 border-b border-line bg-sunken p-0 md:h-10">
                     <div className="sticky left-0 inline-flex max-w-[calc(100vw-3rem)] px-1">
                       <button
                         type="button"
                         aria-expanded={!folded}
                         onClick={() => toggleGroup(row.group.key)}
-                        className="flex h-9 min-w-0 cursor-pointer items-center gap-2 rounded-ctl px-2 text-left transition-colors duration-120 hover:bg-hover"
+                        className="flex h-11 min-w-0 cursor-pointer items-center gap-2 rounded-ctl px-2 text-left transition-colors duration-120 hover:bg-hover md:h-9"
                       >
                         <ChevronDown className={cx('size-3.5 shrink-0 text-muted transition-transform duration-160', folded && '-rotate-90')} aria-hidden="true" />
                         <GroupIcon groupBy={display.group_by} groupKey={row.group.key} />
@@ -345,7 +351,7 @@ export function TableLayout({ items, groups, display, selection, onSelect, onSel
                     clickSelect(item.id, true);
                   }}
                   className={cx(
-                    'sticky left-0 z-10 h-10 border-r border-b border-line bg-surface px-2 [--focus-offset:-2px]',
+                    'sticky left-0 z-10 h-11 border-r border-b border-line bg-surface px-2 [--focus-offset:-2px] md:h-10',
                     look,
                   )}
                 >
@@ -379,7 +385,7 @@ export function TableLayout({ items, groups, display, selection, onSelect, onSel
                       key={entry.field}
                       role="gridcell"
                       {...cellFocus(col)}
-                      className={cx('h-10 border-b border-line px-2 [--focus-offset:-2px]', entry.numeric && 'text-right', look === pressed ? hoverWash : look)}
+                      className={cx('h-11 border-b border-line px-2 [--focus-offset:-2px] md:h-10', entry.numeric && 'text-right', look === pressed ? hoverWash : look)}
                     >
                       <div className={cx('flex min-w-0 items-center', entry.numeric && 'justify-end')}>
                         <Cell
