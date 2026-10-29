@@ -6,14 +6,12 @@
  * The order lists every key a board needs as a column, also empty ones: all states of the workflow, all categories,
  * all priorities, the types of the project. Keys that only exist through items (people, labels, parents, projects)
  * come in a fixed order: people by name, labels by name, parents by key; "Nicht zugewiesen", "Ohne Label" and
- * "Ohne Eltern-Item" last. Only epics are parents (two levels, `domain/hierarchy`): the order names no other parent,
- * so a quick add in a parent's column always makes a child the API takes. Lists leave empty groups out.
+ * "Ohne Eltern-Item" last. Lists leave empty groups out.
  */
 
 import { PRIORITY_LABELS } from '@/components/ui/PriorityIcon';
 import { PRIORITY_ORDER } from '@/domain/filter';
 import { ALL_KEY, effectiveGroupBy, NONE_KEY, type GroupContext } from '@/domain/grouping';
-import { canHaveChildren } from '@/domain/hierarchy';
 import { CATEGORY_ORDER, statesInOrder } from '@/domain/workflow';
 import type { FilterContext, GroupBy, Label, Project, StateCategory, User, Workflow, WorkItem, WorkItemType } from '@/types';
 
@@ -108,12 +106,7 @@ export function groupContext(ctx: FilterContext, catalogs: GroupCatalogs, { item
       }
       case 'parent': {
         const shown = present((item) => (item.parent_id ? [item.parent_id] : []));
-        // a parent that has not loaded keeps its column: the API lets nothing but an epic have children
-        const epics = [...shown].filter((id) => {
-          const parent = parentOf(id);
-          return !parent || canHaveChildren(types.find((type) => type.id === parent.type_id));
-        });
-        const named = epics.map((id) => ({ id, key: parentOf(id)?.key ?? id }));
+        const named = [...shown].map((id) => ({ id, key: parentOf(id)?.key ?? id }));
         return [...named.sort((a, b) => COLLATOR.compare(a.key, b.key)).map((entry) => entry.id), NONE_KEY];
       }
       case 'none':

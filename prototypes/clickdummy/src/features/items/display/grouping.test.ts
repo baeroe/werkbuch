@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { types as seededTypes } from '@/api/seed/config';
 import { agency, standard } from '@/domain/fixtures';
 import { groupItems, NONE_KEY } from '@/domain/grouping';
 import type { FilterContext, Project, User, WorkItem } from '@/types';
@@ -108,16 +107,6 @@ describe('rows of a group', () => {
 });
 
 describe('group names and order', () => {
-  it('gives columns by parent to epics only, then "Ohne Eltern-Item" (two levels)', () => {
-    const epic = item('epic', { key: 'WEB-30', type_id: 't_epic' });
-    // a task with a child only exists in data from before the two levels; the API refuses it now
-    const task = item('task', { key: 'WEB-42' });
-    const items = [item('a', { parent_id: 'epic' }), item('b', { parent_id: 'task' }), item('c')];
-    const typed: GroupCatalogs = { ...catalogs, types: seededTypes, parents: [epic, task] };
-
-    expect(groupContext(ctx, typed, { items }).orderFor('parent')).toEqual(['epic', NONE_KEY]);
-  });
-
   it('lists every state of the workflow of a project list, empty ones included, by name', () => {
     const items = [item('a', { state_id: 'std_progress' })];
     const groups = groupItems(items, 'state', groupContext(ctx, catalogs, { items, project: catalogs.projects[0] }));
