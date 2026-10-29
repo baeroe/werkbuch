@@ -23,7 +23,7 @@ import { asUser, resetApi } from '@/test/api';
 import { AssigneePicker } from './AssigneePicker';
 import { useItemCommands, type ItemCommandScope } from './commands';
 import { ItemDialogsHost } from './ItemDialogs';
-import { ParentPicker } from './ParentPicker';
+import { ParentPicker, useProjectItems } from './ParentPicker';
 import { PropertyField, PropertyValueInput } from './PropertyField';
 import { StatePicker } from './StatePicker';
 import { TypeChangeDialog, TypePicker } from './TypePicker';
@@ -520,6 +520,52 @@ describe('item commands', () => {
     // the question host lives as long as the module: it is closed, so the next test starts without it
     await user.click(within(dialog).getByRole('button', { name: /^Typ behalten/ }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('t hands the children it knows to the dialog, which refuses while its own read of the item is on its way', async () => {
+    const user = userEvent.setup();
+    // the dialog reads WEB-30 by its id; that read is held back until the test ends
+    const original = workItemsApi.getWorkItem;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    vi.spyOn(workItemsApi, 'getWorkItem').mockImplementation(async (ref) => {
+      if (ref === 'wi_web_30') await held;
+      return original(ref);
+    });
+    /** The items of WEB, as the commands load them for the children: once they show, the commands know. */
+    function WebItems() {
+      const items = useProjectItems('p_web').data?.items;
+      return <p>{items ? `${items.length} Items in WEB` : ''}</p>;
+    }
+    try {
+      renderWithData(
+        <MemoryRouter>
+          {/* the cursor names WEB-30 by its key: the commands load it under that key, not the dialog's */}
+          <Screen scope="detail" cursor="WEB-30" />
+          <WebItems />
+          <CommandPalette />
+          <ItemDialogsHost />
+        </MemoryRouter>,
+      );
+      await screen.findByText(/Items in WEB/);
+      await waitFor(() => expect(listCommands().find((command) => command.id === 'item.type')?.group).toBe('Aktionen für WEB-30'));
+      await ready();
+      act(() => {
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 't', bubbles: true, cancelable: true }));
+      });
+      const list = await screen.findByRole('listbox', { name: 'Typ ändern …' });
+      await user.click(within(list).getByRole('option', { name: 'Task' }));
+
+      // the dialog cannot know it from the item yet: the command's knowledge says no
+      const dialog = await screen.findByRole('dialog', { name: 'Typ von WEB-30 auf Task ändern' });
+      expect(within(dialog).getByText('WEB-30 hat Kind-Items. Nur Epics können Kind-Items haben.')).toBeTruthy();
+      expect(within(dialog).queryByText('Item wird geladen …')).toBeNull();
+      await user.click(within(dialog).getByRole('button', { name: /^Typ behalten/ }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    } finally {
+      release();
+      vi.restoreAllMocks();
+    }
   });
 
   it('Done from the palette asks for the resolution, and Enter moves the item', async () => {
