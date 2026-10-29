@@ -13,7 +13,15 @@ Stand: 2026-10-29 · Status: freigegeben
 > - **Bots (4.2):** Die Oberfläche nennt Bot-Konten durchgehend „Bot“, auch wenn sie einer Person gehören. Die persönliche Seite „API und MCP“ spricht von MCP-Clients statt von Agenten.
 > - **Gestaltung (5.4):** Die Heute-Markierung folgt im Nachtheft der Textmarker-Regel aus `DESIGN.md`: gelbe Schrift mit Schein statt gelber Fläche.
 >
-> Die übrigen Abweichungen des Klickdummys stehen in `prototypes/clickdummy/README.md` und kommen hierher, sobald Rafael sie bestätigt.
+> Außerdem hat Rafael die übrigen Abweichungen des Klickdummys bestätigt (Details in `prototypes/clickdummy/README.md`, „Abweichungen von der Spec“):
+> - **Status (4.5):** Statt einer freien Farbe hat jeder Status eine von sieben Icon-Formen; die Farbe folgt der Kategorie.
+> - **Typen (4.6):** Statt einer freien Farbe wählt man einen von sechs Typ-Tönen (DESIGN.md).
+> - **Zugriff (4.8):** Items übernehmen und erwähnt werden können Projektmitglieder und Org-Admins; Bots nur, wenn sie Mitglied sind, der Standard-Bot nur als ausdrückliches Mitglied.
+> - **Labels (4.7):** keine Standard-Markierung.
+> - **Filter (4.11):** „blockiert andere“ ist ein eigenes Feld; „heute“ und Zeitstempel zählen in der Zeitzone der Organisation; eine Bedingung auf eine Property trifft Items ohne diese Property nie. Ein Board nach Kategorie behält beim Zug in die eigene Kategorie den Status, sonst nimmt es den ersten erlaubten Status der Zielkategorie.
+> - **Vorlagen (4.12):** Wochentage zählen 0 = Sonntag, Wochenintervalle ab Montag, `{week}` und `{month}` sind zweistellig; ein Plan, der nach N Läufen endet, holt höchstens bis N nach.
+> - **Relationen (4.9):** Die Gegenrichtung von „blockiert“ heißt „wird blockiert von“.
+> - **Bedienung (5.1, 5.3):** „Erneut versuchen“ nur bei 5xx oder ohne Antwort, ein 409 zeigt das Konflikt-Banner; Esc in einem Feld der Vorschau verlässt erst das Feld; Rich-Text-Properties sind in Listen nur als schlichte Absätze bearbeitbar; zusätzliche Tasten wie im README (`/`, `f`, Board- und Timeline-Tasten, Inbox `e`, `u`, ⇧E, `#`).
 
 **Herkunft der Entscheidungen:** Jede Entscheidung trägt eine Herkunft. **Vorgabe** heißt, Rafael hat es von sich aus verlangt. **Abgestimmt** heißt, es wurde im Gespräch vorgeschlagen und bestätigt. **Spec** heißt, die Entscheidung fiel beim Ausformulieren und muss noch geprüft werden. Alle Spec-Entscheidungen stehen gesammelt in Abschnitt 12.
 
