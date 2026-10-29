@@ -1,8 +1,10 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { registerShortcut } from '@/lib/shortcuts/registry';
+import { X } from 'lucide-react';
 import { Button } from './Button';
 import { Dialog } from './Dialog';
+import { IconButton } from './IconButton';
 import { Input } from './Input';
 import { Kbd } from './Kbd';
 import { currentToasts, dismissToast, toast } from './toast';
@@ -32,16 +34,96 @@ describe('Kbd on a Mac', () => {
   });
 });
 
-it('Button with pending shows a busy state and is disabled', () => {
-  render(
-    <Button variant="primary" pending>
-      Speichern
-    </Button>,
-  );
+describe('Button and the focus', () => {
+  it('a focused Button keeps the focus while it is pending: busy and aria-disabled, never disabled, and a click does nothing', () => {
+    const onClick = vi.fn();
+    const { rerender } = render(
+      <Button variant="primary" onClick={onClick}>
+        Speichern
+      </Button>,
+    );
+    const button = screen.getByRole('button', { name: 'Speichern' });
+    act(() => button.focus());
 
-  const button = screen.getByRole('button', { name: 'Speichern' });
-  expect(button.getAttribute('aria-busy')).toBe('true');
-  expect(button.hasAttribute('disabled')).toBe(true);
+    rerender(
+      <Button variant="primary" pending onClick={onClick}>
+        Speichern
+      </Button>,
+    );
+    // Chromium moves the focus of a disabled element to <body>: pending must not disable the element
+    expect(screen.getByRole('button', { name: 'Speichern' })).toBe(button);
+    expect(button.hasAttribute('disabled')).toBe(false);
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect(button.getAttribute('aria-busy')).toBe('true');
+    expect(document.activeElement).toBe(button);
+    fireEvent.click(button);
+    expect(onClick).not.toHaveBeenCalled();
+
+    rerender(
+      <Button variant="primary" onClick={onClick}>
+        Speichern
+      </Button>,
+    );
+    expect(document.activeElement).toBe(button);
+    fireEvent.click(button);
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('a pending submit Button sends its form no second time', () => {
+    const onSubmit = vi.fn((event: { preventDefault: () => void }) => event.preventDefault());
+    render(
+      <form onSubmit={onSubmit}>
+        <Button variant="primary" type="submit" pending>
+          Anlegen
+        </Button>
+      </form>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }));
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('a focused Button stays the same element, with the focus, when its disabledReason comes and goes', () => {
+    // a button that can be blocked gets its disabledReason on every render, null while it is allowed
+    const { rerender } = render(
+      <Button variant="secondary" disabledReason={null}>
+        Jetzt ausführen
+      </Button>,
+    );
+    const button = screen.getByRole('button', { name: 'Jetzt ausführen' });
+    act(() => button.focus());
+
+    rerender(
+      <Button variant="secondary" disabledReason="Erst speichern: Der Lauf nimmt die gespeicherte Fassung.">
+        Jetzt ausführen
+      </Button>,
+    );
+    expect(screen.getByRole('button', { name: /Jetzt ausführen/ })).toBe(button);
+    expect(document.activeElement).toBe(button);
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+
+    rerender(
+      <Button variant="secondary" disabledReason={null}>
+        Jetzt ausführen
+      </Button>,
+    );
+    expect(screen.getByRole('button', { name: 'Jetzt ausführen' })).toBe(button);
+    expect(document.activeElement).toBe(button);
+    expect(button.hasAttribute('aria-disabled')).toBe(false);
+  });
+
+  it('a focused IconButton without tooltip stays the same element when its disabledReason comes and goes', () => {
+    const { rerender } = render(<IconButton icon={X} label="Entfernen" tooltip={false} disabledReason={null} />);
+    const button = screen.getByRole('button', { name: 'Entfernen' });
+    act(() => button.focus());
+
+    rerender(<IconButton icon={X} label="Entfernen" tooltip={false} disabledReason="Der Lead lässt sich nicht entfernen." />);
+    expect(screen.getByRole('button', { name: 'Entfernen' })).toBe(button);
+    expect(document.activeElement).toBe(button);
+
+    rerender(<IconButton icon={X} label="Entfernen" tooltip={false} disabledReason={null} />);
+    expect(screen.getByRole('button', { name: 'Entfernen' })).toBe(button);
+    expect(document.activeElement).toBe(button);
+  });
 });
 
 it('toast with action calls onExpire after the duration unless the action ran', () => {

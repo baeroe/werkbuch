@@ -42,27 +42,38 @@ type ButtonProps = Omit<ComponentProps<'button'>, 'children'> & {
   icon?: LucideIcon;
   /** Register notation ("c", "mod+backspace"); shown as kbd and exposed as aria-keyshortcuts. */
   shortcut?: string;
-  /** A running mutation: busy and disabled, the icon turns into a spinner. */
+  /**
+   * A running mutation: busy, the icon turns into a spinner, and a click does nothing. The button stays focusable
+   * (`aria-disabled`, not `disabled`), so a focused button keeps the focus through the call.
+   */
   pending?: boolean;
-  /** Not allowed right now: stays focusable and explains why (tooltip, aria-describedby). */
+  /**
+   * Not allowed right now: stays focusable and explains why (tooltip, aria-describedby). Pass it on every render of a
+   * button that can be blocked, also as null: the button then sits in its tooltip throughout and stays the same
+   * element, with the focus, when the reason comes and goes.
+   */
   disabledReason?: string | null;
   children: ReactNode;
 };
 
-export function Button({ variant, size = 'md', icon: Icon, shortcut, pending = false, disabledReason, disabled, onClick, className, children, type = 'button', ...rest }: ButtonProps) {
+export function Button(props: ButtonProps) {
+  const { variant, size = 'md', icon: Icon, shortcut, pending = false, disabledReason, disabled, onClick, className, children, type = 'button', ...rest } = props;
   const reasonId = useId();
   const blocked = Boolean(disabledReason) && !disabled && !pending;
   const state: ButtonState = pending ? 'pending' : disabled || blocked ? 'disabled' : 'idle';
+  // Chromium moves the focus of a button that turns `disabled` to <body>: pending and blocked only look and act disabled
+  const inert = pending || blocked;
 
   const button = (
     <button
       type={type}
-      disabled={disabled || pending}
+      disabled={disabled}
       aria-busy={pending || undefined}
-      aria-disabled={blocked || undefined}
+      aria-disabled={inert || undefined}
       aria-describedby={blocked ? reasonId : undefined}
       aria-keyshortcuts={shortcut ? ariaKeyshortcuts(shortcut) : undefined}
-      onClick={blocked ? (event) => event.preventDefault() : onClick}
+      // preventDefault also keeps a submit button from sending its form (a click, or Enter in one of its fields)
+      onClick={inert ? (event) => event.preventDefault() : onClick}
       className={buttonClass({ variant, size, state }, cx(shortcut && (size === 'md' ? 'pr-2' : 'pr-1.5'), className))}
       {...rest}
     >
@@ -81,5 +92,10 @@ export function Button({ variant, size = 'md', icon: Icon, shortcut, pending = f
     </button>
   );
 
-  return blocked ? <Tooltip content={disabledReason}>{button}</Tooltip> : button;
+  if (!('disabledReason' in props)) return button;
+  return (
+    <Tooltip content={disabledReason} disabled={!blocked}>
+      {button}
+    </Tooltip>
+  );
 }

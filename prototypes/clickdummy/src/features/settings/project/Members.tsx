@@ -123,8 +123,7 @@ export function Members({ project, canManage }: SectionProps) {
     if (!user) return;
     try {
       await add.mutateAsync({ project_id: project.id, user_id: user.id, role: newRole });
-      // With nobody chosen the button is blocked again, and a blocked button is drawn anew inside its tooltip: the focus
-      // would go with the old one and fall to the page. It moves to the field first, which is ready for the next person.
+      // With nobody chosen the button is blocked again: the focus moves to the field, which is ready for the next person.
       document.getElementById(personFieldId)?.focus();
       setCandidate(null);
       toast({ title: `${user.name} ist jetzt ${ROLE_LABEL[newRole]} in ${project.identifier}`, tone: 'success' });

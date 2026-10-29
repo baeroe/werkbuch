@@ -68,8 +68,8 @@ export function Workflow({ project, canManage }: SectionProps) {
   const trigger = useRef<HTMLButtonElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   // where the focus goes when the question closes: back to the button that asked, and after a switch to the name of the
-  // workflow the project has now. The button is blocked then (the workflow that was chosen is the current one) and drawn
-  // anew inside its tooltip, so the one that had the focus is gone.
+  // workflow the project has now. The button is blocked then (the workflow that was chosen is the current one), and the
+  // name says what changed.
   const returnTo = useRef<HTMLElement | null>(null);
 
   const current = workflows.data?.items.find((workflow) => workflow.id === project.workflow_id);

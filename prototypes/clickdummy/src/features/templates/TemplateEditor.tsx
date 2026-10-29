@@ -83,8 +83,8 @@ export function focusHeadingWhenLost(): void {
 
 /**
  * Watches the focus for a moment (the router draws a navigation as a transition, a closing menu gives the focus back to
- * its trigger first, a pending button is disabled and lets go of it): whenever it is lost meanwhile, `target` gets it,
- * once it can take it; the main area does when nothing could by the end.
+ * its trigger first): whenever it is lost meanwhile, `target` gets it, once it can take it; the main area does when
+ * nothing could by the end.
  */
 function watchLostFocus(target: () => HTMLElement | null | undefined, ms = 800): void {
   const until = performance.now() + ms;
@@ -95,16 +95,13 @@ function watchLostFocus(target: () => HTMLElement | null | undefined, ms = 800):
   const look = () => {
     if (lost()) {
       const element = target();
-      if (element?.isConnected && !(element instanceof HTMLButtonElement && element.disabled)) element.focus();
+      if (element?.isConnected) element.focus();
       else if (performance.now() >= until) return void document.getElementById('main')?.focus();
     }
     if (performance.now() < until) requestAnimationFrame(look);
   };
   requestAnimationFrame(look);
 }
-
-/** The control that started a call: a pending button lets go of the focus and gets it back when the call is over. */
-const startedBy = (): HTMLElement | null => (document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null);
 
 interface Draft {
   name: string;
@@ -331,7 +328,6 @@ export function TemplateEditor({ project, template, base, denied, onDelete }: Te
     setBlocked(null);
     setErrors({});
     const values = Object.fromEntries(Object.entries(current.payload.values).filter(([, value]) => !isEmptyValue(value)));
-    const trigger = startedBy();
     try {
       const saved = await saveTemplate.mutateAsync({
         id: template?.id,
@@ -357,12 +353,10 @@ export function TemplateEditor({ project, template, base, denied, onDelete }: Te
       }
       notifyError(isNew ? 'Vorlage nicht angelegt' : 'Vorlage nicht gespeichert', error, () => void saveNow());
     }
-    watchLostFocus(() => trigger);
   }
 
   async function runNow() {
     if (!template) return;
-    const trigger = startedBy();
     try {
       const { run, item } = await runTemplate.mutateAsync(template.id);
       if (item) {
@@ -377,7 +371,6 @@ export function TemplateEditor({ project, template, base, denied, onDelete }: Te
     } catch (error) {
       notifyError(`„${template.name}“ nicht ausgeführt`, error, () => void runNow());
     }
-    watchLostFocus(() => trigger);
   }
 
   function remove() {
