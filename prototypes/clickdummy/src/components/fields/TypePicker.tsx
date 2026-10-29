@@ -93,8 +93,9 @@ type TypeChangeDialogProps = {
 export function TypeChangeDialog({ item, target, open, onOpenChange, finalFocus }: TypeChangeDialogProps) {
   const formId = useId();
   const change = useChangeWorkItemType();
-  // the children and the parent as they are now
-  const detail = useWorkItem(open ? item.id : null).data;
+  // the children and the parent as they are now; also while the dialog fades out, so a refusal does not turn into the
+  // form for a moment
+  const detail = useWorkItem(item.id).data;
   if (!target) return null;
   const refusal = typeRefusal(detail?.item ?? item, target, (detail?.children.length ?? 0) > 0);
   return (
