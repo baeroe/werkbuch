@@ -2,7 +2,8 @@
  * The seven flows of the clickdummy (plan, Task 13, step 1; spec 1, success criteria 2–6). Every step runs on the
  * keyboard, only the board drag uses the mouse (dnd-kit listens to pointer events). A flow may start on a route
  * opened by its address; everything after that is typed. Beside them, checks on a phone measure the table's targets
- * and the path of an item with and without a parent.
+ * and the path of an item with and without a parent, and a check in both themes looks at how the highlighter marks
+ * today.
  *
  * Every test has a fresh browser context: empty localStorage, so the seed data, Mara Lindqvist signed in and the
  * demo clock at Wednesday, 2026-10-28, 10:00 Europe/Berlin. A console error or an uncaught exception fails the flow.
@@ -240,6 +241,85 @@ test('Flow 7: without its last transition into Review, „Agentur-Freigabe“ is
   await expect(page.getByText('3 Probleme verhindern das Speichern')).toBeVisible();
   await expect(page.getByText('Review ist vom Startstatus aus nicht erreichbar')).toBeVisible();
   await expect(page.getByRole('status').filter({ hasText: 'gespeichert' })).toHaveCount(0);
+});
+
+/**
+ * How an element marks something with the highlighter, beside what the highlighter's tokens resolve to on this page.
+ * A probe element reads the tokens, so the checks carry no colour values of their own.
+ */
+async function markLook(target: Locator) {
+  return target.evaluate((element) => {
+    const probe = (style: string) => {
+      const span = document.createElement('span');
+      span.style.cssText = style;
+      document.body.append(span);
+      const { color, backgroundColor, backgroundImage } = getComputedStyle(span);
+      span.remove();
+      return { color, backgroundColor, backgroundImage };
+    };
+    const own = getComputedStyle(element);
+    return {
+      color: own.color,
+      backgroundColor: own.backgroundColor,
+      backgroundImage: own.backgroundImage,
+      textShadow: own.textShadow,
+      boxShadow: own.boxShadow,
+      /** yellow text (night) or ink (day) */
+      markFg: probe('color: var(--mark-fg)').color,
+      paper: probe('background-color: var(--bg)').backgroundColor,
+      /** the highlighter as a yellow area */
+      fill: probe('background-color: var(--marker)').backgroundColor,
+      /** the highlighter's own area: the yellow by day, a faint wash at night */
+      wash: probe('background-color: var(--mark-bg)').backgroundColor,
+    };
+  });
+}
+
+/** The day of the calendar that is today, after opening the Due-Date of WEB-47 (due on 31.10.). */
+async function calendarToday(page: Page): Promise<Locator> {
+  await page.goto('/items/WEB-47');
+  await page.getByRole('button', { name: /^Due-Date:/ }).first().click();
+  return page.getByRole('grid').getByRole('button', { name: /, heute$/ }).locator('span');
+}
+
+test.describe('the highlighter marks today (DESIGN.md: at night yellow text with a glow instead of a yellow area)', () => {
+  test('by day the label on the timeline is a yellow chip, and the calendar marks today in yellow', async ({ page }) => {
+    await page.goto('/projects/WEB?layout=timeline');
+    const label = page.locator('[data-timeline-axis]').getByText(/^Heute /);
+    await expect(label).toHaveText('Heute 28.10.');
+    const axis = await markLook(label);
+    expect(axis.backgroundColor, 'a yellow area').toBe(axis.fill);
+    expect(axis.color, 'in ink').toBe(axis.markFg);
+    expect([axis.textShadow, axis.boxShadow], 'without a glow').toEqual(['none', 'none']);
+
+    const day = await calendarToday(page);
+    const calendar = await markLook(day);
+    expect(calendar.backgroundImage, 'a stroke of the highlighter').toContain('linear-gradient');
+    expect(calendar.color).toBe(calendar.markFg);
+  });
+
+  test.describe('at night', () => {
+    test.use({ colorScheme: 'dark' });
+
+    test('today glows in yellow on the timeline and in the calendar, without a yellow area', async ({ page }) => {
+      await page.goto('/projects/WEB?layout=timeline');
+      const label = page.locator('[data-timeline-axis]').getByText(/^Heute /);
+      await expect(label).toHaveText('Heute 28.10.');
+      const axis = await markLook(label);
+      expect(axis.color, 'yellow text').toBe(axis.markFg);
+      expect(axis.textShadow, 'that glows').not.toBe('none');
+      expect(axis.backgroundColor, 'no yellow area').not.toBe(axis.fill);
+      expect(axis.backgroundColor, 'only the faint wash of the highlighter').toBe(axis.wash);
+      // opaque paper under the wash: the week numbers behind the label stay out of its way
+      expect(await label.locator('..').evaluate((element) => getComputedStyle(element).backgroundColor), 'on the paper').toBe(axis.paper);
+
+      const day = await calendarToday(page);
+      const calendar = await markLook(day);
+      expect(calendar.color).toBe(calendar.markFg);
+      expect(calendar.textShadow).not.toBe('none');
+      expect(calendar.backgroundColor).not.toBe(calendar.fill);
+    });
+  });
 });
 
 test.describe('on a phone (390 px), beside the flows', () => {

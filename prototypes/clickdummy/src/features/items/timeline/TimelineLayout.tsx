@@ -690,12 +690,16 @@ export function TimelineLayout({ items, ctx, selection, onSelect, onSelectAll, o
                     </span>
                   </span>
                 ))}
-                {/* in the row of the weeks or days, so the name of the month beside it stays readable */}
-                <span
-                  className="absolute bottom-1 z-10 inline-flex h-6 -translate-x-1/2 items-center rounded-chip bg-marker px-1.5 text-sm font-semibold whitespace-nowrap text-on-marker tabular-nums [box-shadow:var(--mark-glow)]"
-                  style={{ left: todayX }}
-                >
-                  Heute {formatShortDay(ctx.today)}
+                {/*
+                 * in the row of the weeks or days, so the name of the month beside it stays readable. The highlighter's
+                 * own tokens (as `hl`): by day ink on the yellow area, at night yellow text with a glow over a faint
+                 * wash. The paper under it covers the week numbers behind the label; it lies on the paper of the axis, so it
+                 * needs no rounding of its own.
+                 */}
+                <span className="absolute bottom-1 z-10 flex -translate-x-1/2 bg-paper" style={{ left: todayX }}>
+                  <span className="flex h-6 items-center rounded-chip [background-color:var(--mark-bg)] px-1.5 text-sm font-semibold whitespace-nowrap tabular-nums [color:var(--mark-fg)] [text-shadow:var(--mark-glow)]">
+                    Heute {formatShortDay(ctx.today)}
+                  </span>
                 </span>
               </div>
             </div>
