@@ -40,7 +40,7 @@ import type {
   Webhook,
   WebhookDelivery,
   Workflow,
-  WorkItem,
+  WorkItemRecord,
   WorkItemType,
 } from '@/types';
 import { createSeed } from './seed';
@@ -80,7 +80,8 @@ export interface Db {
   labels: Label[];
   relation_types: RelationType[];
   resolutions: Resolution[];
-  items: WorkItem[];
+  /** Stored without what the API computes on read (`parent`). */
+  items: WorkItemRecord[];
   relations: Relation[];
   comments: Comment[];
   attachments: Attachment[];

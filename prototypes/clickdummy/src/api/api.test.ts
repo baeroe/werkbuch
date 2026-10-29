@@ -222,6 +222,44 @@ describe('work items', () => {
   });
 });
 
+describe('the parent an item names (parent, beside parent_id)', () => {
+  const relaunch = { id: 'wi_web_30', key: 'WEB-30', title: 'Relaunch Phase 1' };
+
+  it('a list names the parent of a child by id, key and title, and none for an epic or an item without a parent', async () => {
+    const page = await listWorkItems({ filter: filterOf({ field: 'project', op: 'is', value: 'p_web' }), per_page: 100 });
+    const byKey = new Map(page.items.map((item) => [item.key, item]));
+    expect(byKey.get('WEB-42')).toMatchObject({ parent_id: 'wi_web_30', parent: relaunch });
+    expect(byKey.get('WEB-30')?.parent).toBeNull();
+    expect(byKey.get('WEB-44')?.parent).toBeNull();
+  });
+
+  it('names the parent also where the filter leaves the parent out', async () => {
+    const tasks = await listWorkItems({ filter: filterOf({ field: 'project', op: 'is', value: 'p_web' }, { field: 'type', op: 'is', value: 't_task' }), per_page: 100 });
+    expect(tasks.items.some((item) => item.key === 'WEB-30')).toBe(false);
+    expect(tasks.items.find((item) => item.key === 'WEB-42')?.parent).toEqual(relaunch);
+  });
+
+  it('the detail names the parent of the item and of its children', async () => {
+    expect((await getWorkItem('WEB-42')).item.parent).toEqual(relaunch);
+    const epic = await getWorkItem('WEB-30');
+    expect(epic.item.parent).toBeNull();
+    expect(epic.children.length).toBeGreaterThan(0);
+    expect(epic.children.every((child) => child.parent?.key === 'WEB-30')).toBe(true);
+  });
+
+  it('is computed on every read, so a renamed parent shows at once, and a write answers with it', async () => {
+    await updateWorkItem('wi_web_30', { title: 'Relaunch, erste Phase' });
+    expect((await getWorkItem('WEB-42')).item.parent?.title).toBe('Relaunch, erste Phase');
+
+    expect((await updateWorkItem('wi_web_44', { parent_id: 'wi_web_30' })).parent).toEqual({ ...relaunch, title: 'Relaunch, erste Phase' });
+    expect((await updateWorkItem('wi_web_42', { parent_id: null })).parent).toBeNull();
+    const child = await createWorkItem({ project_id: 'p_web', type_id: 't_task', title: 'Pressebereich', parent_id: 'wi_web_30' });
+    expect(child.parent?.key).toBe('WEB-30');
+    // not stored: the stored item has the id only
+    expect(getDb().items.find((item) => item.key === 'WEB-44')).not.toHaveProperty('parent');
+  });
+});
+
 describe('visibility', () => {
   it('search hides private projects from non-members', async () => {
     const asMara = await search('Mail-Limits');

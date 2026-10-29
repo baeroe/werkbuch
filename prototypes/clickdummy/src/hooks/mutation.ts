@@ -8,7 +8,8 @@
  * fails the old state comes back and an error toast offers "Erneut versuchen" (Review Focus 5). Nothing stays
  * pending: `isPending` is false as soon as the call is over. The toast names the cause; the retry button only comes
  * with errors worth repeating (the server did not answer), not with a refusal (409, 422), which would be refused
- * again. A conflict that carries the stored state is left to the caller.
+ * again. A conflict that carries the stored state is left to the caller. The parent an item names (`parent`) follows
+ * the change as the server would compute it: a new `parent_id` names its item, a changed parent its new title.
  */
 
 import { useMutation, useQueryClient, type QueryClient, type QueryKey, type UseMutationResult } from '@tanstack/react-query';
@@ -16,7 +17,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { parseKey } from '@/domain/keys';
 import { notifyError } from '@/lib/errors';
 import { useSession } from '@/store/session';
-import type { WorkItem, WorkItemDetail } from '@/types';
+import type { ItemRef, WorkItem, WorkItemDetail } from '@/types';
 import type { Page } from '@/api/client';
 import { qk } from './keys';
 
@@ -129,13 +130,14 @@ function referencing(refs: readonly string[]): (item: WorkItem) => boolean {
   return (item) => ids.has(item.id) || keys.has(item.key);
 }
 
-/** Lists and details in the cache with the changed items replaced; anything else stays as it is. */
-function patchCached(data: unknown, named: (item: WorkItem) => boolean, change: (item: WorkItem) => WorkItem): unknown {
+/** Lists and details in the cache with every item passed through `change`; an item it leaves alone stays as it is. */
+function patchCached(data: unknown, change: (item: WorkItem) => WorkItem): unknown {
   if (isPage(data)) {
-    return { ...data, items: data.items.map((item) => (named(item) ? change(item) : item)) };
+    return { ...data, items: data.items.map(change) };
   }
-  if (isDetail(data) && named(data.item)) {
+  if (isDetail(data)) {
     const item = change(data.item);
+    if (item === data.item) return data;
     return {
       ...data,
       item,
@@ -144,6 +146,24 @@ function patchCached(data: unknown, named: (item: WorkItem) => boolean, change: 
     };
   }
   return data;
+}
+
+/** The parent as an item resource names it. */
+const refOf = (item: WorkItem): ItemRef => ({ id: item.id, key: item.key, title: item.title });
+const sameRef = (a: ItemRef, b: ItemRef) => a.id === b.id && a.key === b.key && a.title === b.title;
+
+/** Every item in the cache by id, in the copy that loaded last (lists and details may hold older copies). */
+function cachedItems(queryClient: QueryClient): Map<string, WorkItem> {
+  const queries = queryClient
+    .getQueryCache()
+    .findAll({ queryKey: qk.workItems.all })
+    .sort((a, b) => b.state.dataUpdatedAt - a.state.dataUpdatedAt);
+  const found = new Map<string, WorkItem>();
+  for (const { state } of queries) {
+    const items = isPage(state.data) ? state.data.items : isDetail(state.data) ? [state.data.item, ...state.data.children] : [];
+    for (const item of items) if (!found.has(item.id)) found.set(item.id, item);
+  }
+  return found;
 }
 
 interface ItemMutation<TVars, TData> {
@@ -166,7 +186,24 @@ export function useItemMutation<TVars, TData>(config: ItemMutation<TVars, TData>
       await queryClient.cancelQueries({ queryKey: qk.workItems.all });
       const snapshot = queryClient.getQueriesData<unknown>({ queryKey: qk.workItems.all });
       const named = referencing(config.ids(vars));
-      for (const [key, data] of snapshot) queryClient.setQueryData(key, patchCached(data, named, (item) => config.apply(item, vars)));
+      const known = cachedItems(queryClient);
+      // the changed items as the change leaves them: their children name them as parent
+      const changed = new Map([...known.values()].filter(named).map((item) => [item.id, config.apply(item, vars)]));
+      // a new parent the cache does not know is named by nobody until the server answers: never by the old one
+      const parentOf = (id: string | null): ItemRef | null => {
+        const parent = id === null ? undefined : (changed.get(id) ?? known.get(id));
+        return parent ? refOf(parent) : null;
+      };
+      const change = (item: WorkItem): WorkItem => {
+        if (named(item)) {
+          const next = config.apply(item, vars);
+          return next.parent_id === item.parent_id ? next : { ...next, parent: parentOf(next.parent_id) };
+        }
+        const parent = item.parent && changed.get(item.parent.id);
+        if (!parent || item.parent_id !== parent.id || sameRef(item.parent!, refOf(parent))) return item;
+        return { ...item, parent: refOf(parent) };
+      };
+      for (const [key, data] of snapshot) queryClient.setQueryData(key, patchCached(data, change));
       return { snapshot };
     },
     onError: (error, vars, context) => {

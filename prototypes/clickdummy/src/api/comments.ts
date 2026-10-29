@@ -4,7 +4,7 @@
  */
 
 import { isBlankDoc, mentionedIds, plainText } from '@/lib/richtext';
-import type { Comment, RichText, WorkItem } from '@/types';
+import type { Comment, RichText, WorkItemRecord } from '@/types';
 import { isOrgAdmin, requireWritable } from './access';
 import { linkAttachments } from './attachments';
 import { clone, forbidden, invalid, newId, notFound, write } from './client';
@@ -14,7 +14,7 @@ import { handleMentions } from './itemRules';
 import { projectOf } from './lookup';
 import { requireItem } from './workItems';
 
-function findComment(db: Db, id: string): { comment: Comment; item: WorkItem } {
+function findComment(db: Db, id: string): { comment: Comment; item: WorkItemRecord } {
   const comment = db.comments.find((entry) => entry.id === id);
   const item = comment ? db.items.find((entry) => entry.id === comment.work_item_id) : undefined;
   if (!comment || !item) throw notFound('Der Kommentar');

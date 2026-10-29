@@ -3,7 +3,7 @@
  * people watching are notified (spec 4.14), webhooks get a delivery (spec 6.3).
  */
 
-import type { ItemEvent, NotificationChannel, NotificationData, NotificationEvent, WorkItem } from '@/types';
+import type { ItemEvent, NotificationChannel, NotificationData, NotificationEvent, WorkItemRecord } from '@/types';
 import { canSeeProject } from './access';
 import { newId, type Ctx } from './client';
 import type { Db } from './db';
@@ -27,7 +27,7 @@ export interface EventInput {
  * Makes somebody watch an item. Bots and deactivated accounts get no notifications and so do not watch. Somebody who
  * switched watching off is only subscribed again by a new mention or assignment (`explicit`).
  */
-export function addSubscriber(db: Db, item: WorkItem, userId: string | null, explicit = false): void {
+export function addSubscriber(db: Db, item: WorkItemRecord, userId: string | null, explicit = false): void {
   if (userId === null) return;
   const user = db.users.find((entry) => entry.id === userId);
   if (!user || user.type === 'bot' || user.disabled_at !== null) return;
@@ -40,7 +40,7 @@ export function addSubscriber(db: Db, item: WorkItem, userId: string | null, exp
   if (!item.subscriber_ids.includes(userId)) item.subscriber_ids.push(userId);
 }
 
-export function removeSubscriber(db: Db, item: WorkItem, userId: string): void {
+export function removeSubscriber(db: Db, item: WorkItemRecord, userId: string): void {
   item.subscriber_ids = item.subscriber_ids.filter((id) => id !== userId);
   const muted = db.unsubscribed[item.id] ?? [];
   if (!muted.includes(userId)) db.unsubscribed[item.id] = [...muted, userId];
@@ -107,7 +107,7 @@ export type NotifyInput = {
   data?: NotificationData;
   /** Who is told. Defaults to everybody watching the item and the project lead. */
   recipients?: Iterable<string>;
-} & ({ item: WorkItem; project_id?: undefined } | { item?: undefined; project_id: string });
+} & ({ item: WorkItemRecord; project_id?: undefined } | { item?: undefined; project_id: string });
 
 /**
  * Puts a notification into the inbox of each recipient who should get one: never the person who caused the event,

@@ -180,7 +180,15 @@ export interface Resolution {
 
 /* ------------------------------------------------------------------ work items */
 
-export interface WorkItem {
+/** An item named by id, key and title, as a resource embeds it (the parent of a work item). */
+export interface ItemRef {
+  id: string;
+  key: string;
+  title: string;
+}
+
+/** A work item as the fake API stores it. The API answers with `WorkItem`: these fields and what it computes on read. */
+export interface WorkItemRecord {
   id: string;
   project_id: string;
   /** Counts up per project and is never reused. */
@@ -214,6 +222,15 @@ export interface WorkItem {
   archived_at: string | null;
   template_id: string | null;
   subscriber_ids: string[];
+}
+
+/** A work item as the API answers it: the stored fields and what is computed on every read. */
+export interface WorkItem extends WorkItemRecord {
+  /**
+   * The parent beside `parent_id`, so a card names its epic without loading it, also where a filter leaves the epic
+   * out; null without a parent. The parent lies in the item's project: whoever sees the item sees it too.
+   */
+  parent: ItemRef | null;
 }
 
 export interface Relation {

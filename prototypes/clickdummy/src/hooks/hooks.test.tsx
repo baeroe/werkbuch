@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { updateWorkItem } from '@/api/workItems';
+import { createWorkItem, updateWorkItem } from '@/api/workItems';
 import { toast } from '@/components/ui/toast';
 import { now } from '@/lib/clock';
 import { resetApi } from '@/test/api';
@@ -201,6 +201,52 @@ describe('item mutations', () => {
     expect(shown.tone).toBe('error');
     expect(shown.description).toContain('nicht erlaubt');
     expect(shown.action).toBeUndefined();
+  });
+});
+
+describe('the parent an item names, while a change is on its way', () => {
+  const web = { filter: { version: 1 as const, conditions: [{ field: 'project', op: 'is' as const, value: 'p_web' }] } };
+  // the epics are not in this list
+  const tasks = { filter: { version: 1 as const, conditions: [{ field: 'project', op: 'is' as const, value: 'p_web' }, { field: 'type', op: 'is' as const, value: 't_task' }] } };
+  const parentIn = (args: typeof web | typeof tasks, key: string) =>
+    queryClient.getQueryData<Page<WorkItem>>(qk.workItems.list(args))?.items.find((entry) => entry.key === key)?.parent;
+  const relaunch = { id: 'wi_web_30', key: 'WEB-30', title: 'Relaunch Phase 1' };
+
+  it('a new parent shows at once, also in a list that leaves the parent out, and goes back when the change fails', async () => {
+    const { result } = renderHook(() => ({ web: useWorkItems(web), tasks: useWorkItems(tasks), update: useUpdateWorkItem() }), { wrapper });
+    await waitFor(() => expect(result.current.web.data && result.current.tasks.data).toBeTruthy());
+    const named = watch(() => parentIn(tasks, 'WEB-44'));
+
+    localStorage.setItem('api:fail', '1');
+    act(() => result.current.update.mutate({ id: 'wi_web_44', patch: { parent_id: 'wi_web_30' } }));
+
+    await waitFor(() => expect(result.current.update.isError).toBe(true));
+    expect(named).toEqual([null, relaunch, null]);
+  });
+
+  it('a parent the cache does not know is named once the server answers, and the old one never shows in between', async () => {
+    const phase2 = await createWorkItem({ project_id: 'p_web', type_id: 't_epic', title: 'Relaunch Phase 2' });
+    // only the tasks are loaded: neither epic is in the cache
+    const { result } = renderHook(() => ({ tasks: useWorkItems(tasks), update: useUpdateWorkItem() }), { wrapper });
+    await waitFor(() => expect(result.current.tasks.data).toBeDefined());
+    const named = watch(() => parentIn(tasks, 'WEB-42'));
+
+    act(() => result.current.update.mutate({ id: 'wi_web_42', patch: { parent_id: phase2.id } }));
+
+    await waitFor(() => expect(parentIn(tasks, 'WEB-42')?.key).toBe(phase2.key));
+    expect(named).toEqual([relaunch, null, { id: phase2.id, key: phase2.key, title: 'Relaunch Phase 2' }]);
+  });
+
+  it('a renamed parent shows its new title on its children at once, and its old one again when the change fails', async () => {
+    const { result } = renderHook(() => ({ web: useWorkItems(web), tasks: useWorkItems(tasks), update: useUpdateWorkItem() }), { wrapper });
+    await waitFor(() => expect(result.current.web.data && result.current.tasks.data).toBeTruthy());
+    const titles = watch(() => parentIn(tasks, 'WEB-42')?.title);
+
+    localStorage.setItem('api:fail', '1');
+    act(() => result.current.update.mutate({ id: 'wi_web_30', patch: { title: 'Relaunch, erste Phase' } }));
+
+    await waitFor(() => expect(result.current.update.isError).toBe(true));
+    expect(titles).toEqual(['Relaunch Phase 1', 'Relaunch, erste Phase', 'Relaunch Phase 1']);
   });
 });
 

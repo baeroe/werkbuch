@@ -5,7 +5,7 @@
  */
 
 import { mentionedIds } from '@/lib/richtext';
-import type { Attachment, Comment, ItemEvent, WorkItem } from '@/types';
+import type { Attachment, Comment, ItemEvent, WorkItemRecord } from '@/types';
 import { HERO_PNG, OUTLINE_PDF, POSTFIX_TXT } from './files';
 import { at, code, doc, p, rt, USER_IDS, type UserShort } from './helpers';
 import { itemId } from './items';
@@ -114,7 +114,7 @@ export const attachments: Attachment[] = [
  * Who watches an item: its creator, its assignee, everybody who commented and everybody mentioned in the text or in
  * a comment (spec 4.10). Bots and deactivated accounts do not watch (they get no notifications).
  */
-export function watchers(items: WorkItem[], inactive: ReadonlySet<string>): void {
+export function watchers(items: WorkItemRecord[], inactive: ReadonlySet<string>): void {
   for (const item of items) {
     const itemComments = comments.filter((entry) => entry.work_item_id === item.id);
     const candidates = [

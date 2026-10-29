@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { itemResource } from '@/api/lookup';
 import { buildItems } from '@/api/seed/items';
 import { pages } from '@/api/seed/pages';
 import { projects, users } from '@/api/seed/people';
@@ -18,7 +19,8 @@ const commands: CommandDef[] = [
   command('item.archive', 'Archivieren', 'Aktionen für WEB-47', { when: () => false }),
 ];
 
-const items = buildItems();
+const records = buildItems();
+const items = records.map((item) => itemResource({ items: records }, item));
 const byKey = (key: string) => items.find((item) => item.key === key)!;
 
 const results: SearchResults = {

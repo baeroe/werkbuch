@@ -13,13 +13,13 @@ import { resolutionAfterTransition } from '@/domain/resolution';
 import { parseDate } from '@/domain/tz';
 import { canTransition, isClosedCategory, statesInOrder } from '@/domain/workflow';
 import { mentionedIds, plainText } from '@/lib/richtext';
-import type { Priority, PropertyValue, RichText, User, WorkItem, WorkItemType } from '@/types';
+import type { Priority, PropertyValue, RichText, User, WorkItemRecord, WorkItemType } from '@/types';
 import { canBeAssigned } from './access';
 import { linkAttachments, richValues } from './attachments';
 import { ApiError, clone, conflict, FieldErrors, invalid, reasonText, sameJson, type Ctx } from './client';
 import type { Db } from './db';
 import { addSubscriber, notifyPeople, recordEvent } from './events';
-import { projectOf, stateOf, userName, workflowOf } from './lookup';
+import { itemResource, projectOf, stateOf, userName, workflowOf } from './lookup';
 import { checkValues } from './values';
 
 export const PRIORITIES: readonly Priority[] = ['urgent', 'high', 'medium', 'low', 'none'];
@@ -107,7 +107,7 @@ function checkParent(db: Db, errors: FieldErrors, projectId: string, parentId: s
   const parent = db.items.find((item) => item.id === parentId);
   if (!parent) return void errors.add('parent_id', 'Das Eltern-Item gibt es nicht.');
   if (parent.project_id !== projectId) return void errors.add('parent_id', 'Das Eltern-Item muss im selben Projekt liegen.');
-  for (let cursor: WorkItem | undefined = parent, steps = 0; cursor && steps < 1000; steps += 1) {
+  for (let cursor: WorkItemRecord | undefined = parent, steps = 0; cursor && steps < 1000; steps += 1) {
     if (cursor.id === itemId) return void errors.add('parent_id', 'Ein Item kann nicht sein eigenes Kind (oder Enkel) als Eltern-Item haben.');
     cursor = cursor.parent_id ? db.items.find((item) => item.id === cursor?.parent_id) : undefined;
   }
@@ -140,7 +140,7 @@ function checkResolution(db: Db, errors: FieldErrors, resolutionId: string): voi
 }
 
 /** Throws 422 for a state the workflow does not have and 409 for a move it does not allow. */
-export function assertTransition(db: Db, item: WorkItem, toStateId: string): void {
+export function assertTransition(db: Db, item: WorkItemRecord, toStateId: string): void {
   const workflow = workflowOf(db, projectOf(db, item));
   const target = stateOf(workflow, toStateId);
   if (!target) throw invalid({ state_id: ['Diesen Status gibt es im Workflow nicht.'] });
@@ -155,7 +155,7 @@ export function assertTransition(db: Db, item: WorkItem, toStateId: string): voi
 const excerptOf = (doc: RichText | null | undefined) => plainText(doc).slice(0, 160);
 
 /** Tells people who were just mentioned, makes them watch the item and wakes webhooks of mentioned bots. */
-export function handleMentions(ctx: Ctx, actor: User, item: WorkItem, ids: readonly string[], doc: RichText | null, commentId?: string): void {
+export function handleMentions(ctx: Ctx, actor: User, item: WorkItemRecord, ids: readonly string[], doc: RichText | null, commentId?: string): void {
   for (const id of ids) {
     const user = ctx.db.users.find((entry) => entry.id === id);
     if (!user) continue;
@@ -187,7 +187,7 @@ export function handleMentions(ctx: Ctx, actor: User, item: WorkItem, ids: reado
 /* -------------------------------------------------------------------- create */
 
 /** Creates an item (the caller has checked the permission). Numbers count up per project and are never reused. */
-export function createItem(ctx: Ctx, actor: User, input: CreateWorkItemInput): WorkItem {
+export function createItem(ctx: Ctx, actor: User, input: CreateWorkItemInput): WorkItemRecord {
   const { db, stamp } = ctx;
   const project = db.projects.find((entry) => entry.id === input.project_id);
   if (!project) throw invalid({ project_id: ['Das Projekt gibt es nicht.'] });
@@ -235,7 +235,7 @@ export function createItem(ctx: Ctx, actor: User, input: CreateWorkItemInput): W
   db.counters[project.id] = number;
 
   // the item is created in the start state; another state is a move from there, with all a move does (below)
-  const item: WorkItem = {
+  const item: WorkItemRecord = {
     id: `wi_${project.identifier.toLowerCase()}_${number}`,
     project_id: project.id,
     number,
@@ -297,7 +297,7 @@ export function createItem(ctx: Ctx, actor: User, input: CreateWorkItemInput): W
 /* --------------------------------------------------------------------- move */
 
 /** Does the work of `assign_on_start`: a person who starts an item nobody has is its assignee from then on. */
-function assignOnStart(ctx: Ctx, actor: User, item: WorkItem): void {
+function assignOnStart(ctx: Ctx, actor: User, item: WorkItemRecord): void {
   const { db } = ctx;
   if (actor.type !== 'person' || item.assignee_id !== null) return;
   const enabled = db.automations.some((entry) => entry.project_id === item.project_id && entry.key === 'assign_on_start' && entry.enabled);
@@ -318,7 +318,7 @@ function assignOnStart(ctx: Ctx, actor: User, item: WorkItem): void {
 }
 
 /** Does the work of `close_parent`: when the last open child closes, the parent follows (spec 4.13). */
-function closeParent(ctx: Ctx, child: WorkItem, depth: number): void {
+function closeParent(ctx: Ctx, child: WorkItemRecord, depth: number): void {
   const { db } = ctx;
   if (depth >= MAX_PARENT_CHAIN || child.parent_id === null) return;
   const parent = db.items.find((entry) => entry.id === child.parent_id);
@@ -327,7 +327,7 @@ function closeParent(ctx: Ctx, child: WorkItem, depth: number): void {
   if (!enabled) return;
 
   const workflow = workflowOf(db, projectOf(db, parent));
-  const categoryOf = (item: WorkItem) => stateOf(workflowOf(db, projectOf(db, item)), item.state_id)!.category;
+  const categoryOf = (item: WorkItemRecord) => stateOf(workflowOf(db, projectOf(db, item)), item.state_id)!.category;
   if (isClosedCategory(categoryOf(parent))) return;
   const children = db.items.filter((entry) => entry.parent_id === parent.id);
   if (!children.every((entry) => isClosedCategory(categoryOf(entry))) || !children.some((entry) => categoryOf(entry) === 'completed')) return;
@@ -348,7 +348,7 @@ export interface MoveOptions {
  * the history and runs the automations (assignee on start, close the parent). Staying in the state is a no-op unless
  * a resolution is chosen for a closed item. Returns whether anything changed.
  */
-export function moveItem(ctx: Ctx, actor: User, item: WorkItem, toStateId: string, chosenResolution: string | null = null, options: MoveOptions = {}): boolean {
+export function moveItem(ctx: Ctx, actor: User, item: WorkItemRecord, toStateId: string, chosenResolution: string | null = null, options: MoveOptions = {}): boolean {
   const { db, stamp } = ctx;
   if (item.archived_at !== null) throw conflict('archived', `${item.key} ist archiviert und schreibgeschützt. Stelle es zuerst wieder her.`);
   assertTransition(db, item, toStateId);
@@ -407,7 +407,7 @@ interface CheckedPatch {
  * `transition_not_allowed`. That an item is archived is left to the caller: a bulk edit checks the patch of an archived
  * item before it restores it, so a refused patch leaves the item archived.
  */
-export function checkPatch(db: Db, item: WorkItem, patch: WorkItemPatch, options: { base_description_version?: number } = {}): CheckedPatch {
+export function checkPatch(db: Db, item: WorkItemRecord, patch: WorkItemPatch, options: { base_description_version?: number } = {}): CheckedPatch {
   const project = projectOf(db, item);
   const type = db.types.find((entry) => entry.id === item.type_id)!;
   const errors = new FieldErrors();
@@ -438,7 +438,7 @@ export function checkPatch(db: Db, item: WorkItem, patch: WorkItemPatch, options
   if (descriptionChanged && options.base_description_version !== undefined && options.base_description_version !== item.description_version) {
     const lastEdit = [...db.events].reverse().find((entry) => entry.subject.id === item.id && 'description' in entry.changes);
     const who = lastEdit ? userName(db, lastEdit.actor_id) : 'Jemand';
-    throw conflict('description_conflict', `${who} hat die Beschreibung inzwischen geändert.`, { current: item });
+    throw conflict('description_conflict', `${who} hat die Beschreibung inzwischen geändert.`, { current: itemResource(db, item) });
   }
   return { title, values, descriptionChanged };
 }
@@ -450,7 +450,7 @@ export function checkPatch(db: Db, item: WorkItem, patch: WorkItemPatch, options
 export function patchItem(
   ctx: Ctx,
   actor: User,
-  item: WorkItem,
+  item: WorkItemRecord,
   patch: WorkItemPatch,
   options: { base_description_version?: number; reason?: string | null } = {},
 ): void {
@@ -549,7 +549,7 @@ export function patchItem(
 
 /* ------------------------------------------------------------------ archive */
 
-export function archiveItem(ctx: Ctx, actor: User, item: WorkItem, reason?: string): void {
+export function archiveItem(ctx: Ctx, actor: User, item: WorkItemRecord, reason?: string): void {
   const { db, stamp } = ctx;
   const workflow = workflowOf(db, projectOf(db, item));
   if (!isClosedCategory(stateOf(workflow, item.state_id)!.category)) {
@@ -567,7 +567,7 @@ export function archiveItem(ctx: Ctx, actor: User, item: WorkItem, reason?: stri
   });
 }
 
-export function restoreItem(ctx: Ctx, actor: User, item: WorkItem): void {
+export function restoreItem(ctx: Ctx, actor: User, item: WorkItemRecord): void {
   if (item.archived_at === null) throw conflict('not_archived', `${item.key} ist nicht archiviert.`);
   const previous = item.archived_at;
   item.archived_at = null;

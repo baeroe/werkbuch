@@ -8,7 +8,7 @@
  */
 
 import { generateNKeysBetween } from 'fractional-indexing';
-import type { Priority, PropertyValue, Relation, RichText, WorkItem } from '@/types';
+import type { Priority, PropertyValue, Relation, RichText, WorkItemRecord } from '@/types';
 import { at, day, doc, ol, p, rt, USER_IDS, type UserShort } from './helpers';
 
 type ProjectShort = 'WEB' | 'APP' | 'OPS';
@@ -352,7 +352,7 @@ const pad = (value: number) => String(value).padStart(2, '0');
 /** The ids of the seed items: `wi_web_47`. */
 export const itemId = (key: string): string => `wi_${key.toLowerCase().replace('-', '_')}`;
 
-function build(row: Row, rank: string): WorkItem {
+function build(row: Row, rank: string): WorkItemRecord {
   const { project, number } = parseKey(row.key);
   const closed = row.state === 'done' || row.state === 'cancelled';
   if (closed && !row.closed) throw new Error(`${row.key} is closed and needs a "closed" time`);
@@ -399,8 +399,8 @@ function build(row: Row, rank: string): WorkItem {
 }
 
 /** All seed items; the manual order of each project follows the item numbers. */
-export function buildItems(): WorkItem[] {
-  const items: WorkItem[] = [];
+export function buildItems(): WorkItemRecord[] {
+  const items: WorkItemRecord[] = [];
   for (const project of ['WEB', 'APP', 'OPS'] as const) {
     const projectRows = rows.filter((row) => parseKey(row.key).project === project).sort((a, b) => parseKey(a.key).number - parseKey(b.key).number);
     const ranks = generateNKeysBetween(null, null, projectRows.length);

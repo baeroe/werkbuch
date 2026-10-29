@@ -10,7 +10,7 @@ import type { Project, SearchResults, User, View, WorkItem } from '@/types';
 import { visibleProjects } from './access';
 import { read } from './client';
 import type { Db } from './db';
-import { findItem } from './lookup';
+import { findItem, itemResource } from './lookup';
 
 const LIMIT = 20;
 
@@ -46,7 +46,7 @@ function searchItems(db: Db, scope: Set<string>, terms: string[], query: string)
     // matches in the title beat matches in the text; newer items of a project first
     return own === null ? [] : [{ entry: item, rank: own, order: (projectOrder.get(item.project_id) ?? 0) * 100_000 - item.number }];
   });
-  return rank(found);
+  return rank(found).map((item) => itemResource(db, item));
 }
 
 export function search(q: string): Promise<SearchResults> {

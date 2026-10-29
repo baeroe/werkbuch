@@ -22,6 +22,7 @@ function item(id: string, extra: Partial<WorkItem> = {}): WorkItem {
     start_date: null,
     due_date: null,
     parent_id: null,
+    parent: null,
     rank: 'a0',
     values: {},
     created_by: 'u_mara',

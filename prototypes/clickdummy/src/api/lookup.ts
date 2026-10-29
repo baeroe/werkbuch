@@ -13,6 +13,7 @@ import type {
   User,
   Workflow,
   WorkItem,
+  WorkItemRecord,
   WorkItemType,
 } from '@/types';
 import { today } from '@/lib/clock';
@@ -31,7 +32,7 @@ export function findProject(db: Db, ref: string): Project | undefined {
   return alias ? db.projects.find((project) => project.id === alias.project_id) : undefined;
 }
 
-export function projectOf(db: Db, item: WorkItem): Project {
+export function projectOf(db: Db, item: WorkItemRecord): Project {
   const project = db.projects.find((entry) => entry.id === item.project_id);
   if (!project) throw new Error(`Item ${item.key} lost its project`);
   return project;
@@ -46,7 +47,7 @@ export function workflowOf(db: Db, project: Project): Workflow {
 /* -------------------------------------------------------------------------- items */
 
 /** An item by id or key (`WEB-47`); a former project identifier resolves to the project's current one. */
-export function findItem(db: Db, ref: string): WorkItem | undefined {
+export function findItem(db: Db, ref: string): WorkItemRecord | undefined {
   const byId = db.items.find((item) => item.id === ref);
   if (byId) return byId;
   const key = parseKey(ref);
@@ -55,11 +56,21 @@ export function findItem(db: Db, ref: string): WorkItem | undefined {
   return project ? db.items.find((item) => item.project_id === project.id && item.number === key.number) : undefined;
 }
 
+/**
+ * An item as the API answers it: the stored fields and what is computed on every read. `parent` names the parent by
+ * id, key and title (its current key and title). The parent lies in the item's project, so whoever may see the item
+ * may see it too.
+ */
+export function itemResource(db: Pick<Db, 'items'>, item: WorkItemRecord): WorkItem {
+  const parent = item.parent_id === null ? undefined : db.items.find((entry) => entry.id === item.parent_id);
+  return { ...item, parent: parent ? { id: parent.id, key: parent.key, title: parent.title } : null };
+}
+
 export function stateOf(workflow: Workflow, stateId: string): State | undefined {
   return workflow.states.find((state) => state.id === stateId);
 }
 
-export function categoryOfItem(db: Db, item: WorkItem): StateCategory {
+export function categoryOfItem(db: Db, item: WorkItemRecord): StateCategory {
   return workflowCategory(workflowOf(db, projectOf(db, item)), item.state_id);
 }
 
@@ -69,7 +80,7 @@ export function workflowCategory(workflow: Workflow, stateId: string): StateCate
   return state.category;
 }
 
-export function isItemClosed(db: Db, item: WorkItem): boolean {
+export function isItemClosed(db: Db, item: WorkItemRecord): boolean {
   return isClosedCategory(categoryOfItem(db, item));
 }
 
@@ -98,7 +109,7 @@ export function blockingSets(db: Db): { blocked: Set<string>; blocking: Set<stri
   if (!blocksType) return { blocked: blockedIds, blocking: blockingIds };
 
   const byId = new Map(db.items.map((item) => [item.id, item]));
-  const open = (item: WorkItem | undefined): item is WorkItem => item !== undefined && !isItemClosed(db, item);
+  const open = (item: WorkItemRecord | undefined): item is WorkItemRecord => item !== undefined && !isItemClosed(db, item);
   for (const relation of db.relations) {
     if (relation.type_id !== blocksType.id) continue;
     const blocker = byId.get(relation.source_id);

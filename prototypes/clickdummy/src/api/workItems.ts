@@ -20,6 +20,7 @@ import type {
   WorkItem,
   WorkItemDetail,
   WorkItemMeta,
+  WorkItemRecord,
 } from '@/types';
 import { canSeeProject, requireRole, requireWritable, visibleProjectIds, visibleProjects } from './access';
 import { ApiError, conflict, FieldErrors, invalid, notFound, paginate, read, write, type Page, type PageArgs } from './client';
@@ -35,13 +36,13 @@ import {
   type CreateWorkItemInput,
   type WorkItemPatch,
 } from './itemRules';
-import { blockingSets, filterContext, findItem, parentIds, projectOf, propertiesOfType, stateOf, workflowOf } from './lookup';
+import { blockingSets, filterContext, findItem, itemResource, parentIds, projectOf, propertiesOfType, stateOf, workflowOf } from './lookup';
 import { checkValues } from './values';
 
 export type { CreateWorkItemInput, WorkItemPatch } from './itemRules';
 
 /** The item behind a key or id, if the person may see its project; 404 otherwise. */
-export function requireItem(db: Db, me: User, ref: string): { item: WorkItem; project: Project } {
+export function requireItem(db: Db, me: User, ref: string): { item: WorkItemRecord; project: Project } {
   const item = findItem(db, ref);
   const project = item ? projectOf(db, item) : undefined;
   if (!item || !project || !canSeeProject(db, me, project)) throw notFound('Das Item');
@@ -63,7 +64,8 @@ const MANUAL_ORDER: SortSpec = { field: 'rank', direction: 'asc' };
 
 /**
  * Items the signed-in account may see, filtered and sorted by the shared engine. Archived items are hidden unless
- * `include_archived` is set or the filter itself talks about `archived`.
+ * `include_archived` is set or the filter itself talks about `archived`. Each names its parent (`parent`), also where
+ * the filter leaves the parent out.
  */
 export function listWorkItems(args: ListWorkItemsArgs = {}): Promise<Page<WorkItem>> {
   return read(({ db, me }) => {
@@ -83,7 +85,8 @@ export function listWorkItems(args: ListWorkItemsArgs = {}): Promise<Page<WorkIt
     const matching = db.items.filter(
       (item) => scope.has(item.project_id) && (archivedWanted || item.archived_at === null) && matchesFilter(item, filter, ctx),
     );
-    return paginate(sortItems(matching, sort, ctx), args);
+    const page = paginate(sortItems(matching, sort, ctx), args);
+    return { ...page, items: page.items.map((item) => itemResource(db, item)) };
   });
 }
 
@@ -100,13 +103,13 @@ export function getWorkItem(keyOrId: string): Promise<WorkItemDetail> {
         const outward = relation.source_id === item.id;
         const other = db.items.find((entry) => entry.id === (outward ? relation.target_id : relation.source_id));
         const direction = outward ? 'outward' : 'inward';
-        if (other !== undefined && canSeeProject(db, me, projectOf(db, other))) return { relation, other, direction, hidden: false };
+        if (other !== undefined && canSeeProject(db, me, projectOf(db, other))) return { relation, other: itemResource(db, other), direction, hidden: false };
         // a hidden end stays hidden: neither the item nor its id (which spells its key) leaves the server
         return { relation: outward ? { ...relation, target_id: '' } : { ...relation, source_id: '' }, other: null, direction, hidden: true };
       });
 
     return {
-      item,
+      item: itemResource(db, item),
       type: db.types.find((type) => type.id === item.type_id)!,
       state: stateOf(workflow, item.state_id)!,
       workflow,
@@ -114,7 +117,7 @@ export function getWorkItem(keyOrId: string): Promise<WorkItemDetail> {
         db.items.filter((child) => child.parent_id === item.id),
         MANUAL_ORDER,
         ctx,
-      ),
+      ).map((child) => itemResource(db, child)),
       relations,
       attachments: db.attachments.filter((attachment) => attachment.owner?.type === 'work_item' && attachment.owner.id === item.id),
       subscribed: item.subscriber_ids.includes(me.id),
@@ -192,7 +195,7 @@ export function createWorkItem(input: CreateWorkItemInput): Promise<WorkItem> {
     const project = ctx.db.projects.find((entry) => entry.id === input.project_id);
     if (!project) throw invalid({ project_id: ['Das Projekt gibt es nicht.'] });
     requireWritable(ctx.db, ctx.me, project, 'member', 'Items anlegen dürfen nur Member und Admins des Projekts.');
-    return createItem(ctx, ctx.me, input);
+    return itemResource(ctx.db, createItem(ctx, ctx.me, input));
   });
 }
 
@@ -206,7 +209,7 @@ export function updateWorkItem(id: string, patch: WorkItemPatch, options: { base
     const { item, project } = requireItem(ctx.db, ctx.me, id);
     requireWritable(ctx.db, ctx.me, project, 'member', 'Items ändern dürfen nur Member und Admins des Projekts.');
     patchItem(ctx, ctx.me, item, patch, options);
-    return item;
+    return itemResource(ctx.db, item);
   });
 }
 
@@ -216,7 +219,7 @@ export function transitionWorkItem(id: string, to_state_id: string, resolution_i
     const { item, project } = requireItem(ctx.db, ctx.me, id);
     requireWritable(ctx.db, ctx.me, project, 'member', 'Den Status ändern dürfen nur Member und Admins des Projekts.');
     moveItem(ctx, ctx.me, item, to_state_id, resolution_id ?? null);
-    return item;
+    return itemResource(ctx.db, item);
   });
 }
 
@@ -283,7 +286,7 @@ export function changeWorkItemType(id: string, type_id: string, values: Record<s
     const { item, project } = requireItem(db, me, id);
     requireWritable(db, me, project, 'member', 'Den Typ ändern dürfen nur Member und Admins des Projekts.');
     if (item.archived_at !== null) throw conflict('archived', `${item.key} ist archiviert und schreibgeschützt. Stelle es zuerst wieder her.`);
-    if (item.type_id === type_id) return item;
+    if (item.type_id === type_id) return itemResource(db, item);
 
     const errors = new FieldErrors();
     const type = db.types.find((entry) => entry.id === type_id);
@@ -308,7 +311,7 @@ export function changeWorkItemType(id: string, type_id: string, values: Record<s
     const event = recordEvent(ctx, { type: 'work_item.updated', actor_id: me.id, subject: { type: 'work_item', id: item.id }, project_id: project.id, changes });
     // the type is one of the "sonstige Änderungen" (spec 4.14)
     notifyPeople(ctx, { event: 'item_changed', item, actor_id: me.id, event_id: event.id, data: { fields: Object.keys(changes) } });
-    return item;
+    return itemResource(db, item);
   });
 }
 
@@ -318,7 +321,7 @@ export function archiveWorkItem(id: string): Promise<WorkItem> {
     const { item, project } = requireItem(ctx.db, ctx.me, id);
     requireWritable(ctx.db, ctx.me, project, 'member', 'Archivieren dürfen nur Member und Admins des Projekts.');
     archiveItem(ctx, ctx.me, item);
-    return item;
+    return itemResource(ctx.db, item);
   });
 }
 
@@ -327,7 +330,7 @@ export function restoreWorkItem(id: string): Promise<WorkItem> {
     const { item, project } = requireItem(ctx.db, ctx.me, id);
     requireWritable(ctx.db, ctx.me, project, 'member', 'Wiederherstellen dürfen nur Member und Admins des Projekts.');
     restoreItem(ctx, ctx.me, item);
-    return item;
+    return itemResource(ctx.db, item);
   });
 }
 
@@ -369,6 +372,6 @@ export function setSubscribed(id: string, on: boolean): Promise<WorkItem> {
     requireRole(db, me, project, 'viewer');
     if (on) addSubscriber(db, item, me.id, true);
     else removeSubscriber(db, item, me.id);
-    return item;
+    return itemResource(db, item);
   });
 }

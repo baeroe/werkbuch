@@ -14,7 +14,7 @@ import type { Db } from './db';
 import { linkAttachments, richValues } from './attachments';
 import { notifyPeople, recordEvent } from './events';
 import { createItem, defaultBot } from './itemRules';
-import { findProject } from './lookup';
+import { findProject, itemResource } from './lookup';
 
 export type TemplateInput = Omit<Template, 'id' | 'run_count' | 'last_run_at' | 'next_run_at' | 'created_by'> & { id?: string };
 
@@ -143,7 +143,7 @@ export function runTemplateNow(id: string): Promise<{ run: TemplateRun; item: Wo
       run.work_item_id = item.id;
       template.last_run_at = stamp;
       db.template_runs.push(run);
-      return { run, item };
+      return { run, item: itemResource(db, item) };
     } catch (error) {
       if (!(error instanceof ApiError)) throw error;
       run.status = 'failed';

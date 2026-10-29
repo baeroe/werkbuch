@@ -36,7 +36,7 @@
  * A day range like this_week means "is": inside the range, "before": before its first day, "after": after its last.
  */
 
-import type { Condition, Filter, FilterContext, Priority, RichText, SortSpec, WorkItem } from '@/types';
+import type { Condition, Filter, FilterContext, Priority, RichText, SortSpec, WorkItemRecord } from '@/types';
 import { addDays, cachedZone, endOfMonth, startOfMonth, startOfWeek } from './tz';
 import { CATEGORY_ORDER, isClosedCategory } from './workflow';
 
@@ -76,7 +76,7 @@ const CORE_FIELDS = {
   blocking: (item, ctx) => ctx.isBlocking(item.id),
   archived: (item) => item.archived_at !== null,
   title: (item) => item.title,
-} satisfies Record<string, (item: WorkItem, ctx: FilterContext) => unknown>;
+} satisfies Record<string, (item: WorkItemRecord, ctx: FilterContext) => unknown>;
 
 export type CoreFilterField = keyof typeof CORE_FIELDS;
 
@@ -224,7 +224,7 @@ function contains(actual: unknown, value: unknown, ctx: FilterContext): boolean 
 /* ----------------------------------------------------------------------- filter */
 
 /** The value of a field, or `undefined` when it does not apply: an unknown field, or a property the type lacks. */
-function readField(item: WorkItem, field: string, ctx: FilterContext): { value: unknown } | undefined {
+function readField(item: WorkItemRecord, field: string, ctx: FilterContext): { value: unknown } | undefined {
   if (Object.hasOwn(CORE_FIELDS, field)) return { value: CORE_FIELDS[field as CoreFilterField](item, ctx) };
 
   if (field.startsWith(PROPERTY_PREFIX)) {
@@ -235,7 +235,7 @@ function readField(item: WorkItem, field: string, ctx: FilterContext): { value: 
   return undefined;
 }
 
-function matchesCondition(item: WorkItem, condition: Condition, ctx: FilterContext): boolean {
+function matchesCondition(item: WorkItemRecord, condition: Condition, ctx: FilterContext): boolean {
   const field = readField(item, condition.field, ctx);
   if (field === undefined) return false;
 
@@ -269,7 +269,7 @@ function matchesCondition(item: WorkItem, condition: Condition, ctx: FilterConte
 }
 
 /** Whether the item satisfies every condition of the filter. An empty filter matches everything. */
-export function matchesFilter(item: WorkItem, filter: Filter, ctx: FilterContext): boolean {
+export function matchesFilter(item: WorkItemRecord, filter: Filter, ctx: FilterContext): boolean {
   return filter.conditions.every((condition) => matchesCondition(item, condition, ctx));
 }
 
@@ -278,7 +278,7 @@ export function matchesFilter(item: WorkItem, filter: Filter, ctx: FilterContext
 type SortKey = number | string | null;
 
 interface SortField {
-  read(item: WorkItem): SortKey;
+  read(item: WorkItemRecord): SortKey;
   /** Compare text with a collator (case, accents and numbers in the text); otherwise by plain character codes. */
   collate: boolean;
 }
@@ -327,15 +327,15 @@ const compareCodes = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
  *   descending.
  * Ranks are compared by character code on purpose: that is what fractional indexing relies on.
  */
-export function sortItems(
-  items: readonly WorkItem[],
+export function sortItems<T extends WorkItemRecord>(
+  items: readonly T[],
   sort: SortSpec,
   ctx: Pick<FilterContext, 'stateCategory'>,
-): WorkItem[] {
+): T[] {
   const direction = sort.direction === 'desc' ? -1 : 1;
   const { read, collate } = sortField(sort.field, ctx);
   const collator = new Intl.Collator('de', { numeric: true, sensitivity: 'base' });
-  const manual = (a: WorkItem, b: WorkItem) => compareCodes(a.rank, b.rank) || compareCodes(a.id, b.id);
+  const manual = (a: WorkItemRecord, b: WorkItemRecord) => compareCodes(a.rank, b.rank) || compareCodes(a.id, b.id);
 
   const compareKeys = (a: number | string, b: number | string): number => {
     if (typeof a === 'number' && typeof b === 'number') return a - b;

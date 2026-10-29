@@ -207,6 +207,8 @@ scripts/
 
 Komponenten rufen `src/api/*` nie direkt auf, nur über die Hooks in `src/hooks/`. Die Funktionen in `src/api/` tragen die Namen und Felder der REST-API aus der Spec (Abschnitt 6.1, Felder in snake_case). In der App ersetzen Aufrufe der Laravel-API diese Funktionen; Hooks und Komponenten bleiben, wie sie sind.
 
+Ein Item bringt neben `parent_id` eine kleine Zusammenfassung seines Eltern-Items mit: `parent` mit `id`, `key` und `title`, sonst `null`. So nennt eine Karte ihr Epic, auch wenn der Filter der Liste das Epic ausschließt. Die Fake-API berechnet `parent` bei jedem Lesen (Listen, Detail, Antworten auf Änderungen) und speichert es nicht (`WorkItemRecord` in `src/types.ts`); die REST-API bettet es genauso ein. Optimistische Änderungen halten es richtig: Ein neues Eltern-Item steht sofort da, ein umbenanntes Epic auch auf den Karten seiner Kinder.
+
 An zwei Stellen ist die Fake-API breiter als 6.1. Der Port übernimmt ihre Form nicht, sondern plant sie bewusst:
 - `getWorkItemMeta()` rechnet für alle sichtbaren Items auf einmal den Fortschritt der Kind-Items und „blockiert“ bzw. „blockiert andere“ aus; `useFilterContext` und die Listen hängen daran. Der Server liefert stattdessen `children_progress`, `blocked` und `blocking` am Item oder je Seite mit.
 - `listMembers()` ohne Projekt gibt die Mitgliedschaften aller sichtbaren Projekte zurück; daraus rechnen `usePermissions` und die Personenlisten der Felder. Eine Liste über alle Projekte hinweg sieht 6.1 nicht vor.
