@@ -24,6 +24,6 @@ Spec freigegeben am 2026-10-28. Es gibt noch keinen App-Code. Ablauf laut Spec, 
 
 - Nur pnpm, nie npm oder npx; Einmal-Tools mit `pnpm dlx`.
 - Git: ein Branch je Änderung (`feat/…`, `fix/…`, `docs/…`), PR gegen `main`, Conventional Commits.
-- Der CI-Pflicht-Job heißt `tests` (`.github/workflows/tests.yml`). Den Namen nie ändern. Bis zur Fundament-Phase prüft er den Klickdummy (`typecheck`, `test`, `build` in `prototypes/clickdummy`).
+- Der CI-Pflicht-Job heißt `tests` (`.github/workflows/tests.yml`). Den Namen nie ändern. Bis zur Fundament-Phase prüft er den Klickdummy (`typecheck`, `test`, `build` in `prototypes/clickdummy`). Daneben läuft `clickdummy-e2e` (Playwright: die Flows und der Review-Build); er ist kein Pflicht-Check.
 - Demo- und Testdaten sind nur fiktiv (`@example.com`, ausgedachte Firmen und Personen). Keine echten Kunden, Hosts oder Firmen.
 - README auf Englisch; Doku auf Englisch und Deutsch.
