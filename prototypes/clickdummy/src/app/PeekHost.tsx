@@ -13,8 +13,8 @@
  * - The item commands (s, a, i, p, l, t, d, shift+d, shift+p, mod+backspace and the palette's "Aktionen für …") are
  *   mounted here for the preview, in detail scope: with the focus inside the panel they act on the previewed item
  *   (`PreviewItemCommands`, see the contract in components/fields/commands.ts). `ItemPeek` mounts nothing for them.
- * - `ItemPeek` gets the panel as well: its own keys e, m and r act while the focus is inside, on an item row or
- *   nowhere in particular, and yield to the screen beside it otherwise (the inbox's e).
+ * - `ItemPeek` gets the panel as well: its e ("Titel bearbeiten") acts while the focus is inside, on an item row or
+ *   nowhere in particular, and yields to the screen beside it otherwise (the inbox's e). m and r always act.
  */
 
 import { lazy, Suspense, useLayoutEffect, useRef, type RefObject } from 'react';

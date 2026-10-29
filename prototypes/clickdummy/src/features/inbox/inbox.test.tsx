@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@/api/client';
 import { getDb, saveDb } from '@/api/db';
 import { simulateRemoteChange } from '@/api/live';
@@ -10,6 +10,7 @@ import { PeekHost } from '@/app/PeekHost';
 import * as notificationsApi from '@/api/notifications';
 import { listNotifications } from '@/api/notifications';
 import { currentToasts, dismissToast, resetToasts, runToastAction } from '@/components/ui/toast';
+import { preloadEditor } from '@/features/editor/RichTextEditor';
 import { useLiveSync } from '@/hooks/live';
 import { listShortcuts } from '@/lib/shortcuts/registry';
 import { useUiStore } from '@/store/ui';
@@ -444,6 +445,40 @@ describe('the keys', () => {
       .filter((shortcut) => shortcut.group === 'Inbox')
       .map((shortcut) => `${shortcut.scope}:${shortcut.keys}`);
     expect(keys).toEqual(expect.arrayContaining(['list:j', 'list:k', 'list:e', 'list:shift+e', 'list:#', 'list:enter']));
+  });
+});
+
+describe('the preview beside the inbox', () => {
+  beforeAll(async () => {
+    // the comment box is the editor, which measures the selection; jsdom has no layout
+    const empty = () => ({ x: 0, y: 0, top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0, toJSON: () => ({}) }) as DOMRect;
+    Range.prototype.getBoundingClientRect = empty;
+    Range.prototype.getClientRects = () => ({ length: 0, item: () => null, [Symbol.iterator]: [][Symbol.iterator] }) as unknown as DOMRectList;
+    document.elementFromPoint = () => null;
+    Element.prototype.scrollIntoView = () => {};
+    await preloadEditor();
+  });
+
+  it('m on the notification opens the comment box of the previewed item: the inbox has no m of its own', async () => {
+    const user = userEvent.setup();
+    renderInbox('/inbox', { preview: true });
+    await loaded();
+    const main = screen.getByRole('main');
+
+    // Enter on the first notification: its item opens beside the list, the focus stays on the row
+    await user.keyboard('j{Enter}');
+    const panel = await screen.findByRole('complementary', { name: 'Vorschau' });
+    await within(panel).findByRole('button', { name: /Kommentar schreiben/ });
+    await waitFor(() => expect(listShortcuts().some((shortcut) => shortcut.id === 'detail.comment.peek')).toBe(true));
+    const row = within(main).getAllByRole('link').find((link) => link.hasAttribute('data-item-link'))!;
+    expect(document.activeElement).toBe(row);
+
+    await user.keyboard('m');
+
+    const editor = await within(panel).findByRole('textbox', { name: 'Kommentar' });
+    await waitFor(() => expect(document.activeElement).toBe(editor));
+    // the notification is untouched: still unread
+    expect(within(main).getByRole('status').textContent).toBe('3 ungelesen');
   });
 });
 

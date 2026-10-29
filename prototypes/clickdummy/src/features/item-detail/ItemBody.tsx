@@ -3,9 +3,9 @@
  * - `ItemDetailProvider` goes around a whole detail (header and body): where it is shown, how other items open there,
  *   the actions of the shortcuts e (title), m (comment) and r (relation), registered here in detail scope, and the
  *   owner of what the editors inside upload (the item). The screens key it by the item, so nothing of one item's
- *   drafts carries over to the next. On the page the three keys always act; in the preview only while the focus is
- *   in its panel, on an item row or nowhere in particular (`previewKeysAct`), so the screen beside it keeps its own
- *   keys: in the inbox, e marks the notification under the cursor read.
+ *   drafts carries over to the next. m and r always act. So does e on the page; in the preview e acts only while the
+ *   focus is in its panel, on an item row or nowhere in particular (`previewKeysAct`), so a screen beside it that
+ *   binds e itself keeps it: in the inbox, e marks the notification under the cursor read.
  * - `ItemBody`: title, the archived and blocked notes, the fields, description, children, relations, attachments and
  *   the activity with its comment box. In the preview one column, as in the moodboard panel; on the page the fields
  *   stand in a column on the right from lg on (they stay in view while the main column scrolls), below lg they follow
@@ -30,9 +30,10 @@ import { Relations } from './Relations';
 import { DetailContext, type DetailActions, type DetailContextValue, type DetailSurface } from './shared';
 
 /**
- * Whether the preview's e, m and r act now: the focus is in the preview's panel, on an item row or inside one (its
- * title link after a click; the preview beside a list follows the list's cursor), or nowhere in particular. On
- * anything else of the screen beside the preview they yield to that screen's own keys.
+ * Whether the preview's e ("Titel bearbeiten") acts now: the focus is in the preview's panel, on an item row or inside
+ * one (its title link after a click; the preview beside a list follows the list's cursor), or nowhere in particular.
+ * On anything else of the screen beside the preview it yields to that screen's own e, the inbox's "Als gelesen
+ * markieren". The inbox binds no m or r, so those reach the preview from its rows.
  */
 function previewKeysAct(panel: RefObject<HTMLElement | null> | undefined): boolean {
   const focus = document.activeElement;
@@ -43,9 +44,9 @@ function previewKeysAct(panel: RefObject<HTMLElement | null> | undefined): boole
 type DetailShortcutsProps = { surface: DetailSurface; actions: DetailContextValue['actions']; panel?: RefObject<HTMLElement | null> };
 
 function DetailShortcuts({ surface, actions, panel }: DetailShortcutsProps) {
-  const when = surface === 'peek' ? () => previewKeysAct(panel) : undefined;
-  const common = { scope: 'detail', group: 'Item', when } as const;
-  useShortcut({ ...common, id: `detail.title.${surface}`, keys: 'e', label: 'Titel bearbeiten', run: () => actions.current.editTitle?.() });
+  const common = { scope: 'detail', group: 'Item' } as const;
+  const titleWhen = surface === 'peek' ? () => previewKeysAct(panel) : undefined;
+  useShortcut({ ...common, id: `detail.title.${surface}`, keys: 'e', label: 'Titel bearbeiten', when: titleWhen, run: () => actions.current.editTitle?.() });
   useShortcut({ ...common, id: `detail.comment.${surface}`, keys: 'm', label: 'Kommentar schreiben', run: () => actions.current.writeComment?.() });
   useShortcut({ ...common, id: `detail.relation.${surface}`, keys: 'r', label: 'Relation hinzufügen', run: () => actions.current.addRelation?.() });
   return null;
@@ -54,7 +55,7 @@ function DetailShortcuts({ surface, actions, panel }: DetailShortcutsProps) {
 type ItemDetailProviderProps = {
   detail: WorkItemDetail;
   surface: DetailSurface;
-  /** The preview's panel (`PeekHost`): with the focus inside, the preview's keys act. */
+  /** The preview's panel (`PeekHost`): with the focus inside, the preview's e acts (see `previewKeysAct`). */
   panel?: RefObject<HTMLElement | null>;
   children: ReactNode;
 };

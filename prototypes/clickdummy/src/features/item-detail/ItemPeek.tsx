@@ -3,8 +3,8 @@
  *
  * Contract with `PeekHost` (src/app/PeekHost.tsx): the named export `ItemPeek({ itemId, panel })` fills the preview
  * panel while `useUiStore.peekItemId` is set. The host draws the panel (tracing paper, `--panel-w`, room above for the
- * item's tab, focusable itself) and passes it as `panel`: the preview's e, m and r act while the focus is inside it
- * (or on an item row, or nowhere), see `ItemDetailProvider`. This component draws everything inside, its own close
+ * item's tab, focusable itself) and passes it as `panel`: the preview's e acts while the focus is inside it (or on an
+ * item row, or nowhere), see `ItemDetailProvider`. This component draws everything inside, its own close
  * button (`openPeek(null)`) included. What the host already does, so this component need not:
  * - Escape (scope detail): in a field (title, description, comment, any `isTyping` target) the first Escape only moves
  *   the focus to the panel, so the draft stays; the next Escape closes the preview. A field that wants Escape for
