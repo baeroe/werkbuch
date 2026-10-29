@@ -127,7 +127,7 @@ const parkedToasts = () => currentToasts().filter((item) => item.title === 'Entw
 describe('the parent of a new item', () => {
   it('offers the epics of the project only, and hides while the type is an epic without sending what it held', async () => {
     const user = userEvent.setup();
-    // as "Sub-Item" on WEB-30 opens it
+    // as "Kind-Item" on WEB-30 opens it
     renderWithData(<CreateItemDialog open defaults={{ project_id: 'p_web', type_id: 't_task', parent_id: 'wi_web_30' }} onOpenChange={() => {}} />);
     const dialog = await screen.findByRole('dialog', { name: 'Neues Item' });
 

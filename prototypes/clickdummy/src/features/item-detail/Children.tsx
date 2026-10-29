@@ -1,6 +1,6 @@
 /*
  * The children of an item (spec 4.8): their progress (closed of all, the bar in the type's tone) and each child in a
- * line that opens it. "Sub-Item" opens the create dialog with this item as parent. Only epics have children (two
+ * line that opens it. "Kind-Item" opens the create dialog with this item as parent. Only epics have children (two
  * levels, `domain/hierarchy`): other items have no section. Without children and without the right to create one, the
  * section is left out as well.
  */
@@ -34,7 +34,7 @@ export function Children({ detail }: { detail: WorkItemDetail }) {
       actions={
         !createReason && (
           <Button variant="ghost" size="sm" icon={Plus} onClick={() => useUiStore.getState().openCreate({ project_id: item.project_id, parent_id: item.id })}>
-            Sub-Item
+            Kind-Item
           </Button>
         )
       }

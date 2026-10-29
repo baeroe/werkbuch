@@ -242,7 +242,7 @@ describe('ItemPeek', () => {
 /* ------------------------------------------------------------------------------ children */
 
 describe('two levels: children under epics only, no parent for an epic', () => {
-  it('a task shows no children section and no "Sub-Item anlegen …"; it has a parent field', async () => {
+  it('a task shows no children section and no "Kind-Item anlegen …"; it has a parent field', async () => {
     const user = userEvent.setup();
     // WEB-42 is a task under WEB-30
     renderWithData(<ItemPeek itemId="WEB-42" />);
@@ -251,19 +251,19 @@ describe('two levels: children under epics only, no parent for an epic', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Weitere Aktionen' }));
     expect(await screen.findByRole('menuitem', { name: /Relation hinzufügen/ })).toBeTruthy();
-    expect(screen.queryByRole('menuitem', { name: /Sub-Item anlegen/ })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /Kind-Item anlegen/ })).toBeNull();
   });
 
-  it('an epic shows its children with "Sub-Item" and "Sub-Item anlegen …", and no parent field', async () => {
+  it('an epic shows its children with "Kind-Item" and "Kind-Item anlegen …", and no parent field', async () => {
     const user = userEvent.setup();
     renderWithData(<ItemPeek itemId="WEB-30" />);
     const children = await screen.findByRole('region', { name: 'Kinder' });
-    expect(await within(children).findByRole('button', { name: 'Sub-Item' })).toBeTruthy();
+    expect(await within(children).findByRole('button', { name: 'Kind-Item' })).toBeTruthy();
     expect(screen.queryByText('Eltern')).toBeNull();
     expect(screen.queryByRole('combobox', { name: /^Eltern-Item/ })).toBeNull();
 
     await user.click(await screen.findByRole('button', { name: 'Weitere Aktionen' }));
-    expect(await screen.findByRole('menuitem', { name: /Sub-Item anlegen/ })).toBeTruthy();
+    expect(await screen.findByRole('menuitem', { name: 'Kind-Item anlegen …' })).toBeTruthy();
   });
 });
 
@@ -281,7 +281,7 @@ describe('a new child item', () => {
     expect(getDb().items.find((entry) => entry.key === 'WEB-30')?.state_id).toBe('std_progress');
 
     // the button comes with the rights
-    await user.click(await within(children).findByRole('button', { name: 'Sub-Item' }));
+    await user.click(await within(children).findByRole('button', { name: 'Kind-Item' }));
     const dialog = await screen.findByRole('dialog', { name: 'Neues Item' });
     // the dialog offers the start status of the workflow, not the status of the parent
     expect(await within(dialog).findByRole('combobox', { name: 'Status: Backlog' })).toBeTruthy();

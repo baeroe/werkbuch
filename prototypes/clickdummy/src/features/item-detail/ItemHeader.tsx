@@ -4,8 +4,9 @@
  *   on the page the path (project, parent items, key) with the same actions.
  * - `ItemTitle`: the title, edited in place (`e`, or a click): Enter saves, Escape takes it back (and is used up, so
  *   the preview stays open), leaving the field saves.
- * The "more" menu has the item's actions: sub-item, relation, archive (closed items only) or restore, delete (with the
- * right `item.delete`) and the demo of the description conflict. Archive and delete wait for their undo toast (5 s).
+ * The "more" menu has the item's actions: child item (epics only), relation, archive (closed items only) or restore,
+ * delete (with the right `item.delete`) and the demo of the description conflict. Archive and delete wait for their
+ * undo toast (5 s).
  */
 
 import { useQueryClient } from '@tanstack/react-query';
@@ -311,7 +312,7 @@ function ItemMenu({ detail, project }: { detail: WorkItemDetail; project: Projec
       <MenuGroup key="add">
         {canCreate && (
           <MenuItem icon={CornerDownRight} onClick={() => useUiStore.getState().openCreate({ project_id: item.project_id, parent_id: item.id })}>
-            Sub-Item anlegen …
+            Kind-Item anlegen …
           </MenuItem>
         )}
         {!editReason && (
