@@ -342,7 +342,8 @@ export function TimelineLayout({ items, ctx, selection, onSelect, onSelectAll, o
   /* --------------------------------------------------------------------------- dates */
 
   const editReason = (item: WorkItem) => (item.archived_at !== null ? archivedReason(item.key) : reason('item.edit', item.project_id));
-  // the same refusal again replaces its toast instead of stacking a second one: toast() does that for errors
+  // the same refusal again refreshes the error toast on screen in place instead of stacking a second one (toast()
+  // does that for errors): it keeps its place, its time starts anew, and it is not announced a second time
   const refuse = (item: WorkItem, why: string) => toast({ title: `${item.key} nicht geändert`, description: why, tone: 'error' });
   const rangeText = (dates: DateRange) => `${formatDay(dates.start)} bis ${formatDay(dates.due)}`;
 

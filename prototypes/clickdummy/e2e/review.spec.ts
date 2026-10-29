@@ -7,13 +7,13 @@
  */
 
 import type { Page } from '@playwright/test';
-import { expect, openPalette, test as app } from './fixtures';
+import { expect, openPalette, test as base } from './fixtures';
 
 /**
  * Beyond the errors of every test (fixtures.ts): fails on console warnings and on any request that leaves the server
  * or fails, and traps window.print.
  */
-const test = app.extend<{ problems: string[] }>({
+const test = base.extend<{ problems: string[] }>({
   problems: [
     async ({ page, baseURL }, use) => {
       const problems: string[] = [];

@@ -31,7 +31,7 @@ jobs:
       - name: Build (clickdummy)
         run: pnpm --dir prototypes/clickdummy build
 
-  # the Playwright flows of the clickdummy; not a required check
+  # the Playwright flows and the review build checks of the clickdummy; not a required check
   clickdummy-e2e:
     runs-on: ubuntu-latest
     defaults:
@@ -51,7 +51,7 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Install Chromium
         run: pnpm exec playwright install --with-deps chromium
-      - name: Flows (clickdummy)
+      - name: Flows and review build (clickdummy)
         run: pnpm e2e
       - name: Keep the report
         if: failure()
