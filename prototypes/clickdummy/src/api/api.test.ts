@@ -5,7 +5,7 @@ import type { Filter, WorkItem } from '@/types';
 import { addComment, toggleReaction } from './comments';
 import { ApiError, maybeFail } from './client';
 import { DB_KEY, getDb, loadDb, migrateDb } from './db';
-import { listNotifications, markAllRead, markRead } from './notifications';
+import { listNotifications, markAllRead, markRead, markUnread } from './notifications';
 import { getPage, listPageVersions, listPages, savePage } from './pages';
 import { getProject, listProjects, updateProject } from './projects';
 import { addRelation, removeRelation } from './relations';
@@ -938,6 +938,23 @@ describe('comments, notifications and sessions', () => {
     expect((await listNotifications({ unread_only: true })).total).toBe(2);
     await markAllRead();
     expect((await listNotifications({ unread_only: true })).total).toBe(0);
+  });
+
+  it('marks notifications unread again, only those of the signed-in person', async () => {
+    // n_02 ("Heute fällig") is read; it joins the three unread ones in its place, newest first
+    await markUnread(['n_02']);
+    expect((await listNotifications({ unread_only: true })).items.map((n) => n.id)).toEqual(['n_01', 'n_02', 'n_04', 'n_03']);
+
+    // a notification of Jonas, read by him: Mara's call leaves it alone
+    asUser('u_theo');
+    await updateWorkItem('wi_app_24', { assignee_id: 'u_jonas' });
+    asUser('u_jonas');
+    const [his] = (await listNotifications({ unread_only: true })).items;
+    await markRead([his.id]);
+    asUser('u_mara');
+    await markUnread([his.id]);
+    asUser('u_jonas');
+    expect((await listNotifications({ unread_only: true })).items.map((n) => n.id)).not.toContain(his.id);
   });
 
   it('notifies the watchers when somebody else assigns an item to them', async () => {

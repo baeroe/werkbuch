@@ -8,7 +8,7 @@ import { useSession } from '@/store/session';
 import { useUiStore } from '@/store/ui';
 import { resetApi } from '@/test/api';
 import { useLiveConnected, useLiveSync, useSetLiveConnected } from './live';
-import { useMarkRead, useNotifications, useUnreadCount } from './notifications';
+import { useMarkRead, useMarkUnread, useNotifications, useUnreadCount } from './notifications';
 import { queryClient as appQueryClient } from './queryClient';
 import { useResetDemo } from './system';
 import { useCurrentUser } from './users';
@@ -61,6 +61,16 @@ describe('reading', () => {
     await act(() => result.current.read.mutateAsync([unread[0].id]));
 
     await waitFor(() => expect(result.current.count).toBe(2));
+  });
+
+  it('useUnreadCount follows markUnread as well', async () => {
+    const { result } = renderHook(() => ({ count: useUnreadCount(), unread: useMarkUnread() }), { wrapper });
+    await waitFor(() => expect(result.current.count).toBe(3));
+
+    // n_02 ("Heute fällig") is one of the read ones
+    await act(() => result.current.unread.mutateAsync(['n_02']));
+
+    await waitFor(() => expect(result.current.count).toBe(4));
   });
 
   it('the cache is reset when another person is looked at, so nothing of the first person lingers', async () => {

@@ -47,6 +47,15 @@ export function markRead(ids: string[]): Promise<void> {
   });
 }
 
+/** Marks notifications of the signed-in person as unread again (spec 4.14: "gelesen/ungelesen"); ids of others are ignored. */
+export function markUnread(ids: string[]): Promise<void> {
+  return write(({ db, me }) => {
+    for (const notification of db.notifications) {
+      if (notification.user_id === me.id && ids.includes(notification.id)) notification.read_at = null;
+    }
+  });
+}
+
 export function markAllRead(): Promise<void> {
   return write(({ db, me, stamp }) => {
     for (const notification of db.notifications) {

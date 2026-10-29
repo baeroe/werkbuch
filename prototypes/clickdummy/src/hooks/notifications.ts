@@ -5,6 +5,7 @@ import {
   listNotifications,
   markAllRead,
   markRead,
+  markUnread,
   savePreferences,
   type ListNotificationsArgs,
 } from '@/api/notifications';
@@ -24,6 +25,11 @@ export function useUnreadCount(): number {
 /** Variable: the ids to mark as read. */
 export function useMarkRead() {
   return useApiMutation(markRead, [qk.notifications.all]);
+}
+
+/** Variable: the ids to mark as unread again. */
+export function useMarkUnread() {
+  return useApiMutation(markUnread, [qk.notifications.all]);
 }
 
 export function useMarkAllRead() {
