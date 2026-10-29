@@ -10,7 +10,7 @@
 
 import { Dialog as BaseDialog } from '@base-ui/react/dialog';
 import { ChevronLeft, CircleAlert, RotateCw, Search, X } from 'lucide-react';
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { useNavigate } from 'react-router';
 import { Button } from '@/components/ui/Button';
 import { cx } from '@/components/ui/cx';
@@ -61,7 +61,8 @@ function Tips() {
   );
 }
 
-function PaletteBody() {
+/** `inputRef` belongs to the dialog: it puts the focus there when it opens, also in a sub-list with its back chip first. */
+function PaletteBody({ inputRef }: { inputRef: RefObject<HTMLInputElement | null> }) {
   const navigate = useNavigate();
   const commands = useCommands();
   const [query, setQuery] = useState('');
@@ -76,7 +77,6 @@ function PaletteBody() {
   const types = useWorkItemTypes();
   const workflows = useWorkflows();
   const projects = useProjects({ include_archived: true });
-  const inputRef = useRef<HTMLInputElement>(null);
   const listId = useId();
   useDialogScope();
 
@@ -323,11 +323,14 @@ function PaletteBody() {
 export function CommandPalette() {
   const open = useUiStore((state) => state.paletteOpen);
   const commandId = useUiStore((state) => state.paletteCommandId);
+  const inputRef = useRef<HTMLInputElement>(null);
   return (
     <BaseDialog.Root open={open} onOpenChange={(next) => useUiStore.getState().setPaletteOpen(next)}>
       <BaseDialog.Portal>
         <BaseDialog.Backdrop className="fixed inset-0 z-50 bg-scrim transition-opacity duration-160 data-ending-style:opacity-0 data-starting-style:opacity-0" />
         <BaseDialog.Popup
+          // typing goes to the input at once; in a sub-list the chip that goes back would be the first stop
+          initialFocus={inputRef}
           data-focus-ring="none"
           className={cx(
             'tracing-strong popup-motion fixed inset-x-4 top-4 z-50 mx-auto flex max-h-[calc(100dvh-2rem)] max-w-[var(--palette-w)] flex-col overflow-hidden rounded-card text-ui text-ink outline-none',
@@ -338,7 +341,7 @@ export function CommandPalette() {
         >
           <BaseDialog.Title className="sr-only">Befehlspalette</BaseDialog.Title>
           {/* a new start (another command's sub-list) starts afresh, also while the last one is still closing */}
-          <PaletteBody key={commandId ?? 'root'} />
+          <PaletteBody key={commandId ?? 'root'} inputRef={inputRef} />
         </BaseDialog.Popup>
       </BaseDialog.Portal>
     </BaseDialog.Root>

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { registerCommand } from '@/lib/commands';
@@ -47,5 +47,23 @@ describe('CommandPalette', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(first).toHaveBeenCalledTimes(1);
     expect(second).not.toHaveBeenCalled();
+  });
+
+  it('opened in a sub-list by a shortcut (s), it puts the focus into the input, not on the chip that goes back', async () => {
+    const done = vi.fn();
+    cleanups.push(
+      registerCommand({
+        id: 'test.state',
+        label: 'Status ändern …',
+        group: 'Test',
+        run: () => {},
+        subpage: () => ({ options: [{ id: 'todo', label: 'Todo', run: vi.fn() }, { id: 'done', label: 'Done', run: done }] }),
+      }),
+    );
+    useUiStore.setState({ paletteOpen: true, paletteCommandId: 'test.state' });
+    renderPalette();
+
+    const input = await screen.findByRole('combobox', { name: 'Status ändern …' });
+    await waitFor(() => expect(document.activeElement).toBe(input));
   });
 });
