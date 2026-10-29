@@ -9,7 +9,9 @@ import { resetApi } from '@/test/api';
 import type { Page } from '@/api/client';
 import type { WorkItemDetail, WorkItem } from '@/types';
 import { qk } from './keys';
-import { useArchiveWorkItem, useBulkUpdateWorkItems, useTransitionWorkItem, useUpdateWorkItem, useWorkItem, useWorkItems } from './workItems';
+import { useUpdateProject } from './projects';
+import { useSearch } from './search';
+import { useArchiveWorkItem, useBulkUpdateWorkItems, useCreateWorkItem, useTransitionWorkItem, useUpdateWorkItem, useWorkItem, useWorkItems } from './workItems';
 
 vi.mock('@/components/ui/toast', () => ({ toast: vi.fn() }));
 
@@ -199,5 +201,39 @@ describe('item mutations', () => {
     expect(shown.tone).toBe('error');
     expect(shown.description).toContain('nicht erlaubt');
     expect(shown.action).toBeUndefined();
+  });
+});
+
+describe('the search after a change', () => {
+  /** The titles of the items the palette's search finds. */
+  const titles = (data: { items: WorkItem[] } | undefined) => data?.items.map((item) => `${item.key} ${item.title}`) ?? [];
+
+  it('a renamed item is found by its new title at once: item changes make the search stale', async () => {
+    const { result } = renderHook(() => ({ search: useSearch('Kontaktformular'), update: useUpdateWorkItem() }), { wrapper });
+    await waitFor(() => expect(titles(result.current.search.data)).toContain('WEB-47 Kontaktformular sendet doppelt'));
+
+    await act(() => result.current.update.mutateAsync({ id: 'WEB-47', patch: { title: 'Kontaktformular sendet nur einmal' } }));
+
+    await waitFor(() => expect(titles(result.current.search.data)).toContain('WEB-47 Kontaktformular sendet nur einmal'));
+    expect(titles(result.current.search.data)).not.toContain('WEB-47 Kontaktformular sendet doppelt');
+  });
+
+  it('a new item is found at once as well', async () => {
+    const { result } = renderHook(() => ({ search: useSearch('Lieferschein'), create: useCreateWorkItem() }), { wrapper });
+    await waitFor(() => expect(result.current.search.isSuccess).toBe(true));
+    expect(titles(result.current.search.data)).toEqual([]);
+
+    const item = await act(() => result.current.create.mutateAsync({ project_id: 'p_app', type_id: 't_task', title: 'Lieferschein als PDF anhängen' }));
+
+    await waitFor(() => expect(titles(result.current.search.data)).toEqual([`${item.key} Lieferschein als PDF anhängen`]));
+  });
+
+  it('a renamed project as well (its update reloads everything)', async () => {
+    const { result } = renderHook(() => ({ search: useSearch('Relaunch'), update: useUpdateProject() }), { wrapper });
+    await waitFor(() => expect(result.current.search.data?.projects.map((project) => project.name)).toEqual(['Website-Relaunch']));
+
+    await act(() => result.current.update.mutateAsync({ id: 'p_web', patch: { name: 'Website-Relaunch 2027' } }));
+
+    await waitFor(() => expect(result.current.search.data?.projects.map((project) => project.name)).toEqual(['Website-Relaunch 2027']));
   });
 });

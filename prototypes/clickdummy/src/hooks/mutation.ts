@@ -174,8 +174,9 @@ export function useItemMutation<TVars, TData>(config: ItemMutation<TVars, TData>
       // a conflict that carries the stored state (`error.current`) gets no toast: the caller shows its conflict banner
       notifyError(config.failureTitle, error, () => mutation.mutate(vars));
     },
+    // the search as well: the palette would otherwise list an old title, status or key until its stale time ends
     onSettled: () =>
-      Promise.all([qk.workItems.all, qk.activity.all, qk.notifications.all].map((queryKey) => queryClient.invalidateQueries({ queryKey }))),
+      Promise.all([qk.workItems.all, qk.activity.all, qk.notifications.all, qk.search.all].map((queryKey) => queryClient.invalidateQueries({ queryKey }))),
   });
   return mutation;
 }

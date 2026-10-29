@@ -242,7 +242,8 @@ export function useFilterContext(): FilterContext | undefined {
 
 /* ---------------------------------------------------------------------- change */
 
-const ITEM_KEYS = [qk.workItems.all, qk.activity.all] as const;
+/** What a change of items makes stale; the search too, so the palette finds a new item and forgets a deleted one. */
+const ITEM_KEYS = [qk.workItems.all, qk.activity.all, qk.search.all] as const;
 
 /** Property values: an empty value removes the property, as on the server. */
 function mergeValues(current: Record<string, PropertyValue>, changes: Record<string, PropertyValue>): Record<string, PropertyValue> {
