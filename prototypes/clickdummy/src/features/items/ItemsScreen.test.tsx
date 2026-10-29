@@ -160,8 +160,13 @@ describe('a list of more than 100 items', () => {
     expect(screen.getByText(/von 214 ausgewählt/)).toBeTruthy();
     act(() => useUiStore.getState().setSelection([]));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Mehr laden' }));
+    // the button keeps the focus while the next page loads, and stays for the one after
+    const more = screen.getByRole('button', { name: 'Mehr laden' });
+    act(() => more.focus());
+    fireEvent.click(more);
     expect(await screen.findByText('200 von 214 Items geladen')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Mehr laden' })).toBe(more);
+    expect(document.activeElement).toBe(more);
 
     // mod+a takes all of them, also the ones that were not loaded yet
     act(() => void fireEvent.keyDown(document.body, { key: 'a', ctrlKey: true }));

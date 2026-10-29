@@ -139,7 +139,8 @@ export function useInfiniteWorkItems(args: ListWorkItemsArgs = {}, options: Hook
     error,
     isFetching,
     refetch,
-    hasMore: nextCursor !== null,
+    // a page on its way counts as more, so what offers it stays (with the focus) until the page is there
+    hasMore: nextCursor !== null || loadingMore,
     loadingMore,
     moreError,
     loadMore,

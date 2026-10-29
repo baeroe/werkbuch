@@ -27,6 +27,8 @@ type FrameProps = {
   closable?: boolean;
   /** Rendered inside the popup after everything else, e.g. a question that belongs to this dialog. */
   nested?: ReactNode;
+  /** A dialog over a dialog: its scrim covers the one below too (Base UI leaves it out for nested dialogs). */
+  stacked?: boolean;
 };
 
 /**
@@ -42,10 +44,13 @@ function PausePageShortcuts() {
  * Portal, scrim and popup on strong tracing paper. Shared by Dialog and AlertDialog: Base UI's alert dialog
  * re-exports these dialog parts.
  */
-export function DialogFrame({ title, description, children, footer, size = 'md', initialFocus, finalFocus, closable = true, nested }: FrameProps) {
+export function DialogFrame({ title, description, children, footer, size = 'md', initialFocus, finalFocus, closable = true, nested, stacked = false }: FrameProps) {
   return (
     <BaseDialog.Portal>
-      <BaseDialog.Backdrop className="fixed inset-0 z-50 bg-scrim transition-opacity duration-160 data-ending-style:opacity-0 data-starting-style:opacity-0" />
+      <BaseDialog.Backdrop
+        forceRender={stacked}
+        className="fixed inset-0 z-50 bg-scrim transition-opacity duration-160 data-ending-style:opacity-0 data-starting-style:opacity-0"
+      />
       <BaseDialog.Viewport className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain pt-[max(1rem,10vh)] pr-[max(1rem,env(safe-area-inset-right))] pb-[max(1rem,env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))]">
         <BaseDialog.Popup
           initialFocus={initialFocus}
@@ -129,6 +134,7 @@ export function Dialog({ open, onOpenChange, onOpenChangeComplete, defaultOpen, 
                 description={confirmClose.description}
                 size="sm"
                 closable={false}
+                stacked
                 footer={
                   <>
                     <BaseAlertDialog.Close render={<Button variant="secondary">{confirmClose.cancelLabel ?? 'Zurück'}</Button>} />
