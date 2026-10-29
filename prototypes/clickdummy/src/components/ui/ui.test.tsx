@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { registerShortcut } from '@/lib/shortcuts/registry';
 import { X } from 'lucide-react';
+import { Avatar } from './Avatar';
 import { Button } from './Button';
 import { Dialog } from './Dialog';
 import { IconButton } from './IconButton';
@@ -275,4 +276,32 @@ it('an open Dialog pauses the list shortcuts of the page behind it', async () =>
   } finally {
     off();
   }
+});
+
+describe('Avatar', () => {
+  const PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+  it('shows the picture of a person or bot that has one, and the initials or the bot glyph otherwise', () => {
+    render(
+      <>
+        <Avatar user={{ name: 'Mara Lindqvist', type: 'person', avatar_url: PIXEL }} />
+        <Avatar user={{ name: 'Kira', type: 'bot', avatar_url: PIXEL }} />
+        <Avatar user={{ name: 'Jonas Feld', type: 'person', avatar_url: null }} />
+      </>,
+    );
+
+    expect(screen.getByRole('img', { name: 'Mara Lindqvist' }).querySelector('img')?.getAttribute('src')).toBe(PIXEL);
+    expect(screen.getByRole('img', { name: 'Kira (Bot)' }).querySelector('img')?.getAttribute('src')).toBe(PIXEL);
+    const jonas = screen.getByRole('img', { name: 'Jonas Feld' });
+    expect(jonas.querySelector('img')).toBeNull();
+    expect(jonas.textContent).toBe('JF');
+  });
+
+  it('falls back to the initials when the picture does not load', () => {
+    render(<Avatar user={{ name: 'Mara Lindqvist', type: 'person', avatar_url: 'https://example.com/fehlt.png' }} />);
+    const avatar = screen.getByRole('img', { name: 'Mara Lindqvist' });
+    fireEvent.error(avatar.querySelector('img')!);
+    expect(avatar.querySelector('img')).toBeNull();
+    expect(avatar.textContent).toBe('ML');
+  });
 });

@@ -6,6 +6,7 @@ import type { Property, PropertyValue } from '@/types';
 import { MemoryRouter } from 'react-router';
 import { PeekHost } from '@/app/PeekHost';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { getDb, saveDb } from '@/api/db';
 import { listProperties } from '@/api/properties';
 import { getWorkItem } from '@/api/workItems';
 import { useWorkItems } from '@/hooks/workItems';
@@ -15,6 +16,7 @@ import { listCommands } from '@/lib/commands';
 import { listShortcuts } from '@/lib/shortcuts/registry';
 import { useUiStore } from '@/store/ui';
 import { asUser, resetApi } from '@/test/api';
+import { AssigneePicker } from './AssigneePicker';
 import { useItemCommands, type ItemCommandScope } from './commands';
 import { ItemDialogsHost } from './ItemDialogs';
 import { PropertyField, PropertyValueInput } from './PropertyField';
@@ -85,6 +87,22 @@ describe('StatePicker', () => {
     expect(trigger.getAttribute('aria-disabled')).toBe('true');
     // once the rights have loaded, the reason is the role
     await waitFor(() => expect(document.getElementById(trigger.getAttribute('aria-describedby')!)?.textContent).toContain('darfst du nur lesen'));
+  });
+});
+
+describe('AssigneePicker', () => {
+  it('offers the org admins besides the members, and the default bot only where it is a member', async () => {
+    const user = userEvent.setup();
+    const db = getDb();
+    // Mara is an org admin and here no member of APP; Automation, the default bot, is an org admin too
+    db.project_members = db.project_members.filter((member) => !(member.project_id === 'p_app' && member.user_id === 'u_mara'));
+    saveDb();
+    renderWithData(<AssigneePicker item={await stored('APP-11')} />);
+
+    await user.click(await picker(/^Assignee/));
+    const options = (await screen.findAllByRole('option')).map((option) => option.textContent ?? '');
+    expect(options.some((text) => text.includes('Mara Lindqvist'))).toBe(true);
+    expect(options.some((text) => text.includes('Automation'))).toBe(false);
   });
 });
 
@@ -196,6 +214,23 @@ describe('PropertyValueInput numbers', () => {
     await user.type(input, '1.5{Enter}');
     expect(screen.getByText(/Der Punkt trennt nur Tausender/)).toBeTruthy();
     expect(commits).toEqual([15000, 1500]);
+  });
+
+  it('refuses "0.500": a thousands group never starts with 0', async () => {
+    const user = userEvent.setup();
+    const { commits, input } = renderNumber(0, 1500);
+
+    await user.clear(input);
+    await user.type(input, '0.500{Enter}');
+    expect(screen.getByText(/Der Punkt trennt nur Tausender/)).toBeTruthy();
+    expect(commits).toEqual([]);
+
+    // a plain 0 and a group after a real leading digit stay numbers
+    await user.clear(input);
+    await user.type(input, '0{Enter}');
+    await user.clear(input);
+    await user.type(input, '10.500{Enter}');
+    expect(commits).toEqual([0, 10500]);
   });
 
   it('reads "1.234,5" with one decimal as 1234,5 and edits it without the point', async () => {

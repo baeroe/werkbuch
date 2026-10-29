@@ -25,7 +25,10 @@ type FrameProps = {
   closable?: boolean;
 };
 
-/** Mounted inside the open popup: the shortcuts of the page behind it (list, detail) pause meanwhile. */
+/**
+ * Mounted inside the open popup: meanwhile only `dialog` shortcuts and the global mod+k, escape and mod+enter run; the
+ * shortcuts of the page behind it pause.
+ */
 function PausePageShortcuts() {
   useDialogScope();
   return null;

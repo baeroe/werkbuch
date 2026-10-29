@@ -13,7 +13,7 @@
 
 import { useMemo } from 'react';
 import { useMembers, useProjects } from '@/hooks/projects';
-import { useCurrentUser } from '@/hooks/users';
+import { useCurrentUser, useUsers } from '@/hooks/users';
 import type { Project, ProjectMember, ProjectRole, User } from '@/types';
 
 export type Permission =
@@ -100,17 +100,23 @@ export interface Permissions {
   can: (permission: Permission, projectId?: string) => boolean;
   /** The reason for a tooltip or toast, or null when allowed. */
   reason: (permission: Permission, projectId?: string) => string | null;
+  /**
+   * The rights are still on their way: `can` answers false meanwhile. A screen that would otherwise show read-only
+   * for a moment waits for this (a skeleton) instead.
+   */
+  loading: boolean;
 }
 
 /** The rights of the signed-in person; nothing is allowed until they have loaded. */
 export function usePermissions(): Permissions {
   const user = useCurrentUser();
+  const users = useUsers();
   const projects = useProjects({ include_archived: true });
   const members = useMembers();
 
   const projectList = projects.data?.items;
   const memberList = members.data?.items;
-  const failed = projects.isError || members.isError;
+  const failed = users.isError || projects.isError || members.isError;
 
   return useMemo(() => {
     const data = user && projectList && memberList ? { user, projects: projectList, members: memberList } : null;
@@ -118,6 +124,6 @@ export function usePermissions(): Permissions {
       if (data) return deniedReason(data, permission, projectId);
       return failed ? 'Die Rechte konnten nicht geladen werden.' : 'Die Rechte werden noch geladen.';
     };
-    return { can: (permission, projectId) => reason(permission, projectId) === null, reason };
+    return { can: (permission, projectId) => reason(permission, projectId) === null, reason, loading: data === null && !failed };
   }, [user, projectList, memberList, failed]);
 }

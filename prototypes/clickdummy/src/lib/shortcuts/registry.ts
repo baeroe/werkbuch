@@ -13,7 +13,7 @@
  * - A key that a component has already handled (`preventDefault`, e.g. Base UI's typeahead in an open menu, or the
  *   Escape that closes a popup) is left alone, and so is a key an input method is composing (also Safari's 229).
  * - A held key (auto-repeat) runs only shortcuts that ask for it (`repeat: true`, e.g. j/k through a list).
- * - A sequence waits up to 1000 ms for its next step.
+ * - A sequence waits up to 1000 ms for its next step; a held first key ("g" a moment too long) keeps it waiting.
  * - Of the shortcuts that match, the innermost scope wins: dialog over detail over list over global; within a scope
  *   the one registered last. A shortcut whose `when()` answers false does not take part, so an outer one runs.
  * - While a modal dialog is open (`enterDialogScope`, which `Dialog` does on its own), only the dialog's own
@@ -165,6 +165,13 @@ function onKeyDown(event: KeyboardEvent): void {
   // a sequence started on the page does not go on in a field
   if (typing) clearPending();
 
+  // the key that started a sequence is still held: its repeats keep the sequence waiting for the next step
+  if (pending && event.repeat) {
+    event.preventDefault();
+    startSequence(pending.spelled, event);
+    return;
+  }
+
   // the next step of a sequence that was started
   if (pending) {
     const prefix = pending.spelled;
@@ -203,6 +210,7 @@ function onKeyDown(event: KeyboardEvent): void {
 
 function startSequence(spelled: string[], event: KeyboardEvent): void {
   event.preventDefault();
+  if (pending) clearTimeout(pending.timer);
   pending = { spelled, timer: setTimeout(clearPending, SEQUENCE_MS) };
 }
 
@@ -254,8 +262,9 @@ export function subscribeShortcuts(listener: () => void): () => void {
 }
 
 /**
- * A modal dialog opened: the shortcuts of the page behind it (scopes list and detail) pause until the returned
- * function is called. Dialogs can stack; each one calls this once.
+ * A modal dialog opened: until the returned function is called, only shortcuts of the `dialog` scope and the global
+ * `mod+k`, `escape` and `mod+enter` run; everything else of the page behind it pauses (list, detail and the other
+ * global keys such as `c` or `g i`). Dialogs can stack; each one calls this once.
  */
 export function enterDialogScope(): () => void {
   dialogLayers += 1;

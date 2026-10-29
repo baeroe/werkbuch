@@ -56,8 +56,9 @@ function parseTyped(property: Property, text: string): Parsed {
   switch (property.field_type) {
     case 'number': {
       const decimals = property.settings.decimals ?? 0;
-      // German: the comma is the decimal sign; a point only groups thousands (1.500, 1.234,5)
-      const match = /^(-?)(\d{1,3}(?:\.\d{3})+|\d+)(?:,(\d+))?$/.exec(trimmed);
+      // German: the comma is the decimal sign; a point only groups thousands (1.500, 1.234,5), and the first group
+      // starts with a digit other than 0 ("0.500" is a mistake for 0,5 or 500, not 500)
+      const match = /^(-?)([1-9]\d{0,2}(?:\.\d{3})+|\d+)(?:,(\d+))?$/.exec(trimmed);
       if (match) {
         const [, sign, whole, fraction] = match;
         const factor = 10 ** decimals;

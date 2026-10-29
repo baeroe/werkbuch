@@ -15,7 +15,7 @@ import { reasonText } from '@/api/client';
 import type { BulkPatch } from '@/api/workItems';
 import { personOption } from '@/components/fields/AssigneePicker';
 import { askResolution } from '@/components/fields/ItemDialogs';
-import { archivedReason } from '@/components/fields/itemData';
+import { archivedReason, projectPeople } from '@/components/fields/itemData';
 import { labelOption } from '@/components/fields/LabelsPicker';
 import type { PickerOption } from '@/components/fields/Picker';
 import { PRIORITY_OPTIONS } from '@/components/fields/PriorityPicker';
@@ -166,11 +166,11 @@ export function BulkBar({ items, total, onSelectAll, onClear, onArchive }: BulkB
   // the states of the workflows involved; with several, the workflow's name tells them apart
   const involved = [...new Map(items.flatMap((item) => workflowOf(item) ?? []).map((workflow) => [workflow.id, workflow])).values()];
 
-  // people who are in every project of the selection
-  const projectIds = [...new Set(items.map((item) => item.project_id))];
-  const common = users
-    .filter((user) => user.disabled_at === null && projectIds.every((projectId) => members.some((member) => member.project_id === projectId && member.user_id === user.id)))
-    .sort((a, b) => (a.type === b.type ? COLLATOR.compare(a.name, b.name) : a.type === 'person' ? -1 : 1));
+  // people who can take items of every project of the selection (members and org admins, `projectPeople`)
+  const [firstProject, ...otherProjects] = [...new Set(items.map((item) => item.project_id))];
+  const common = (firstProject ? projectPeople(users, members, firstProject) : []).filter((user) =>
+    otherProjects.every((projectId) => projectPeople(users, members, projectId).some((other) => other.id === user.id)),
+  );
   const assign = (user: User | null) => void change(user ? `zugewiesen an ${user.name}` : 'nicht mehr zugewiesen', { assignee_id: user?.id ?? null });
 
   const all = items.length === total;

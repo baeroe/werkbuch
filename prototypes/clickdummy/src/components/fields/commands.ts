@@ -69,7 +69,7 @@ import type { BulkResult, Label, Priority, Project, Property, State, User, Workf
 import { personOption } from './AssigneePicker';
 import { addDays, formatDay, formatWeekdayDay, weekdayOf } from './format';
 import { askResolution, askTypeChange } from './ItemDialogs';
-import { archivedReason, useToday } from './itemData';
+import { archivedReason, projectPeople, useToday } from './itemData';
 import { labelOption } from './LabelsPicker';
 import { parentCandidates, useProjectItems } from './ParentPicker';
 import type { PickerOption } from './Picker';
@@ -100,17 +100,22 @@ export interface ItemCommandContext {
   targets: WorkItem[];
   /** The catalogs the commands read have loaded (projects, workflows, people, labels, types, properties, rights). */
   ready: boolean;
+  /** One of them (or the items of the target's project) failed to load; `retry` asks for it again. */
+  failed: boolean;
+  retry: () => void;
   me: User | undefined;
   today: string;
   projects: Project[];
   workflows: Workflow[];
-  /** Active accounts that are members of a project. */
+  /** Who can take an item of a project (`projectPeople`). */
   peopleOf: (projectId: string) => User[];
   labels: Label[];
   types: WorkItemType[];
   properties: Property[];
   /** The items of the target's project, for the parent (single target only). */
   projectItems: WorkItem[] | undefined;
+  /** They failed to load. */
+  projectItemsFailed: boolean;
   reason: (permission: Permission, projectId: string) => string | null;
   update: ReturnType<typeof useUpdateWorkItem>;
   transition: ReturnType<typeof useTransitionWorkItem>;
@@ -453,7 +458,7 @@ async function deleteEach(ctx: ItemCommandContext, targets: WorkItem[], restore:
 /** What `mod+backspace` does now: archive closed items, delete others; or why it can do neither. */
 function removal(ctx: ItemCommandContext): { run: () => void } | { denied: string } {
   if (ctx.targets.length === 0) return { denied: 'Kein Item gewählt.' };
-  if (!ctx.ready) return { denied: LOADING };
+  if (!ctx.ready) return { denied: ctx.failed ? FAILED : LOADING };
   const archivable = ctx.targets.every((item) => item.archived_at === null && isClosed(ctx, item));
   if (archivable) {
     const denied = editReason(ctx);
@@ -471,8 +476,8 @@ interface ItemCommand {
   keys: string;
   icon: LucideIcon;
   keywords?: string[];
-  /** Whether what it reads has still to load; then it waits (its shortcut says so) instead of acting on gaps. */
-  loading?: (ctx: ItemCommandContext) => boolean;
+  /** Whether what it reads besides the catalogs is still on its way (or failed); then it waits instead of acting on gaps. */
+  loading?: (ctx: ItemCommandContext) => 'loading' | 'failed' | null;
   /** Why it is not possible for the current targets, or null. */
   denied: (ctx: ItemCommandContext) => string | null;
   /** Either a sub-list or an action. */
@@ -485,9 +490,20 @@ interface ItemCommand {
 const SINGLE = (ctx: ItemCommandContext) => (ctx.targets.length > 1 ? ONE_ONLY : editReason(ctx));
 
 const LOADING = 'Die Daten dafür werden noch geladen. Versuch es gleich noch einmal.';
+const FAILED = 'Die Daten dafür ließen sich nicht laden.';
 
-/** Whether a command waits for data: the catalogs, and whatever the command reads besides. */
-const waiting = (command: ItemCommand, ctx: ItemCommandContext) => !ctx.ready || (command.loading?.(ctx) ?? false);
+/**
+ * What keeps a command from acting now, or null. The catalogs come first: without them no reason can be told. Then the
+ * command's own reason (several items for the parent, a missing right), and only then the data the command reads
+ * besides, so the person hears the reason that holds and is not told to wait for data that would change nothing.
+ */
+function blocker(command: ItemCommand, ctx: ItemCommandContext): string | null {
+  if (!ctx.ready) return ctx.failed ? FAILED : LOADING;
+  const denied = command.denied(ctx);
+  if (denied) return denied;
+  const loading = command.loading?.(ctx) ?? null;
+  return loading === 'failed' ? FAILED : loading === 'loading' ? LOADING : null;
+}
 
 const COMMANDS: ItemCommand[] = [
   {
@@ -543,7 +559,7 @@ const COMMANDS: ItemCommand[] = [
     icon: CornerLeftUp,
     keywords: ['epic', 'parent'],
     // the candidates are the items of the project
-    loading: (ctx) => ctx.projectItems === undefined,
+    loading: (ctx) => (ctx.projectItems !== undefined ? null : ctx.projectItemsFailed ? 'failed' : 'loading'),
     denied: SINGLE,
     options: parentOptions,
     placeholder: 'Key oder Titel suchen …',
@@ -554,8 +570,11 @@ const COMMANDS: ItemCommand[] = [
 /** The palette commands and shortcuts of one source; answers the function that takes them out again. */
 export function registerItemCommands(source: ItemCommandSource): () => void {
   const ctx = () => source.context();
-  const deniedToast = (denied: string) =>
-    denied === LOADING ? toast({ title: 'Einen Moment', description: LOADING }) : toast({ title: 'Nicht möglich', description: denied, tone: 'error' });
+  const deniedToast = (denied: string) => {
+    if (denied === LOADING) toast({ title: 'Einen Moment', description: LOADING });
+    else if (denied === FAILED) toast({ title: 'Daten nicht geladen', description: FAILED, tone: 'error', action: { label: 'Erneut versuchen', onClick: () => ctx().retry() } });
+    else toast({ title: 'Nicht möglich', description: denied, tone: 'error' });
+  };
   const offs: (() => void)[] = [];
 
   for (const command of COMMANDS) {
@@ -568,7 +587,7 @@ export function registerItemCommands(source: ItemCommandSource): () => void {
       keywords: command.keywords,
       when: () => {
         const c = ctx();
-        return c.targets.length > 0 && !waiting(command, c) && command.denied(c) === null;
+        return c.targets.length > 0 && blocker(command, c) === null;
       },
       run: () => (command.act ? command.act(ctx()) : undefined),
       subpage: command.options ? () => ({ placeholder: command.placeholder, emptyText: command.emptyText, options: command.options!(ctx()) }) : undefined,
@@ -584,7 +603,7 @@ export function registerItemCommands(source: ItemCommandSource): () => void {
         when: () => ctx().targets.length > 0,
         run: () => {
           const c = ctx();
-          const denied = waiting(command, c) ? LOADING : command.denied(c);
+          const denied = blocker(command, c);
           if (denied) deniedToast(denied);
           else if (command.act) command.act(c);
           else useUiStore.getState().openPalette(command.id);
@@ -694,6 +713,20 @@ useUiStore.subscribe((state, previous) => {
 
 const targetIds = (): string[] => paletteTargets ?? currentTargetIds();
 
+/** The targets as one value, for `useSyncExternalStore`: a mount renders again when they change with the focus. */
+const targetSnapshot = (): string => targetIds().join(' ');
+
+/** Calls back when the focus moved: in, and out (once the focus has settled, which a focusout does not see yet). */
+function subscribeFocus(listener: () => void): () => void {
+  const settled = () => queueMicrotask(listener);
+  document.addEventListener('focusin', listener);
+  document.addEventListener('focusout', settled);
+  return () => {
+    document.removeEventListener('focusin', listener);
+    document.removeEventListener('focusout', settled);
+  };
+}
+
 const isDetail = (data: unknown): data is WorkItemDetail => typeof data === 'object' && data !== null && 'item' in data && 'workflow' in data;
 
 /** An item from the cache: its detail, or any list it is in (a selection always comes from a list on screen). */
@@ -732,13 +765,25 @@ export function useItemCommands(options: ItemCommandsOptions): void {
   useUiStore((state) => state.selection);
   useUiStore((state) => state.peekItemId);
   useUiStore((state) => state.paletteOpen);
-  const projects = useProjects({ include_archived: true }).data?.items;
-  const workflows = useWorkflows().data?.items;
-  const users = useUsers().data?.items;
-  const members = useMembers().data?.items;
-  const labels = useLabels().data?.items;
-  const types = useWorkItemTypes().data?.items;
-  const properties = useProperties().data?.items;
+  // and the focus: with it inside the preview the targets are the previewed item (rule 1), which may be of another
+  // project than what the last render loaded for (the parent's candidates come from the target's project)
+  useSyncExternalStore(subscribeFocus, targetSnapshot, targetSnapshot);
+  const catalogs = {
+    projects: useProjects({ include_archived: true }),
+    workflows: useWorkflows(),
+    users: useUsers(),
+    members: useMembers(),
+    labels: useLabels(),
+    types: useWorkItemTypes(),
+    properties: useProperties(),
+  };
+  const projects = catalogs.projects.data?.items;
+  const workflows = catalogs.workflows.data?.items;
+  const users = catalogs.users.data?.items;
+  const members = catalogs.members.data?.items;
+  const labels = catalogs.labels.data?.items;
+  const types = catalogs.types.data?.items;
+  const properties = catalogs.properties.data?.items;
   // loaded ahead, so the resolution question opens with its list
   useResolutions();
   const me = useCurrentUser();
@@ -755,32 +800,39 @@ export function useItemCommands(options: ItemCommandsOptions): void {
   };
   // the rights come from the same people, projects and memberships
   const ready = Boolean(projects && workflows && users && members && labels && types && properties && me);
+  // a catalog that failed stays failed until asked again: the shortcuts say so instead of "Einen Moment" for ever
+  const failedCatalogs = Object.values(catalogs).filter((query) => query.isError && query.data === undefined);
 
   const ids = targetIds();
   // a single item is loaded here, so the commands know it even before its screen has
   const single = useWorkItem(ids.length === 1 ? ids[0] : null).data?.item;
   const targets = ids.flatMap((id) => (single && (single.id === id || single.key === id) ? [single] : (cachedItem(queryClient, id) ?? [])));
-  const projectItems = useProjectItems(single?.project_id ?? '', single !== undefined).data?.items;
+  const projectItemsQuery = useProjectItems(single?.project_id ?? '', single !== undefined);
+  const projectItems = projectItemsQuery.data?.items;
   const projectItemsOf = projectItems ? single?.project_id : undefined;
+  const retry = () => {
+    failedCatalogs.forEach((query) => void query.refetch());
+    if (projectItemsQuery.isError) void projectItemsQuery.refetch();
+  };
 
   const context = (): ItemCommandContext => {
     const now = targetIds().flatMap((id) => cachedItem(queryClient, id) ?? []);
     return {
       targets: now,
       ready,
+      failed: failedCatalogs.length > 0,
+      retry,
       me,
       today,
       projects: projects ?? [],
       workflows: workflows ?? [],
-      peopleOf: (projectId) =>
-        (users ?? []).filter(
-          (user) => user.disabled_at === null && (members ?? []).some((member) => member.project_id === projectId && member.user_id === user.id),
-        ),
+      peopleOf: (projectId) => projectPeople(users ?? [], members ?? [], projectId),
       labels: labels ?? [],
       types: types ?? [],
       properties: properties ?? [],
       // only the items of the target's own project (another target loads its project on the next render)
       projectItems: now.length === 1 && now[0].project_id === projectItemsOf ? projectItems : undefined,
+      projectItemsFailed: now.length === 1 && now[0].project_id === single?.project_id && projectItemsQuery.isError && projectItems === undefined,
       reason: (permission, projectId) => reason(permission, projectId),
       ...mutations,
       settle,
@@ -799,8 +851,8 @@ export function useItemCommands(options: ItemCommandsOptions): void {
     return item.archived_at === null && state !== undefined && isClosedCategory(state.category);
   });
 
-  // registered anew when the data a command waits for arrive, so an open palette shows it then
-  const loaded = `${ready}:${projectItemsOf ?? ''}`;
+  // registered anew when the data a command waits for arrive (or fail), so an open palette shows it then
+  const loaded = `${ready}:${failedCatalogs.length}:${projectItemsOf ?? ''}`;
   useEffect(() => {
     if (!active) return;
     return registerItemCommands({ scope, group, archives, context: () => latest.current() });

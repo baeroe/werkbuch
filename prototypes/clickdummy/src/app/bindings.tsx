@@ -12,6 +12,7 @@ import { registerCommand, SHELL_COMMAND_GROUPS, useCommand } from '@/lib/command
 import { usePermissions } from '@/lib/permissions';
 import { registerShortcut } from '@/lib/shortcuts/registry';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
+import { isWide } from '@/lib/media';
 import type { ThemeChoice } from '@/lib/theme';
 import { canUndo, undoLatest } from '@/lib/undo';
 import { useUiStore } from '@/store/ui';
@@ -39,7 +40,6 @@ const PLACES: { id: string; to: string; label: string; command: string; keys?: s
 ];
 
 const ui = () => useUiStore.getState();
-const isWide = () => typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 48rem)').matches;
 
 export function useShellBindings(): void {
   const navigate = useNavigate();

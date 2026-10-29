@@ -25,7 +25,7 @@ import { LiveIndicator } from './LiveIndicator';
 import { PeekHost } from './PeekHost';
 import { SidebarContent, Sidebar } from './Sidebar';
 
-/** Mounted while the drawer is open: it is modal, so the page's list and detail shortcuts pause. */
+/** Mounted while the drawer is open: it is modal, so the page's shortcuts pause (all but mod+k, escape, mod+enter). */
 function DrawerScope() {
   useDialogScope();
   return null;

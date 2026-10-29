@@ -198,6 +198,23 @@ describe('shortcut registry', () => {
     expect(nextItem.run).toHaveBeenCalledTimes(2);
   });
 
+  it('keeps a sequence while its first key is held: "g" held, then "i" still runs "g i"', () => {
+    vi.useFakeTimers();
+    const inbox = shortcut('g i');
+    const assignMe = shortcut('i');
+
+    press('g');
+    // the keyboard repeats a held key; the repeats keep the sequence open instead of ending it
+    for (let step = 0; step < 15; step += 1) {
+      vi.advanceTimersByTime(80);
+      press('g', { repeat: true });
+    }
+    press('i');
+
+    expect(inbox.run).toHaveBeenCalledTimes(1);
+    expect(assignMe.run).not.toHaveBeenCalled();
+  });
+
   it('leaves the keys of an input method that is composing alone (Safari sends keyCode 229)', () => {
     const create = shortcut('c');
     const submit = shortcut('mod+enter');

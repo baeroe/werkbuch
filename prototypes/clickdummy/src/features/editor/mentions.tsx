@@ -1,6 +1,7 @@
 /*
  * Mentions and references in rich text (spec 4.16), and the suggestion list all three editor menus share:
- * - `@` mentions people and bots of the project (`mention` node: the user id and the handle, `@mara`)
+ * - `@` mentions people and bots with access to the project, `projectPeople` (`mention` node: the user id and the handle,
+ *   `@mara`)
  * - `#` refers to items and wiki pages the reader may see (`reference` node: the id, the kind and the label at the
  *   time of writing). A reference is resolved when it is shown: what the reader may not see reads "verborgen".
  * - the `/` menu (slashMenu.tsx) uses the same list.
@@ -18,6 +19,7 @@ import { EyeOff, FileText } from 'lucide-react';
 import { useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type ReactNode, type Ref, type RefObject } from 'react';
 import { Link, useInRouterContext } from 'react-router';
 import { ApiError } from '@/api/client';
+import { projectPeople } from '@/components/fields/itemData';
 import { TypeGlyph } from '@/components/fields/TypePicker';
 import { Avatar } from '@/components/ui/Avatar';
 import { cx } from '@/components/ui/cx';
@@ -204,7 +206,7 @@ export function popupRenderer<Extra extends object>(Component: ComponentType<Pop
 const COLLATOR = new Intl.Collator('de-DE');
 const MAX_PEOPLE = 8;
 
-/** Active people and bots of the project whose name or handle contains the query; starts of words first. */
+/** Active people and bots among `candidates` whose name or handle contains the query; starts of words first. */
 export function matchPeople(users: readonly User[], memberIds: ReadonlySet<string>, query: string): User[] {
   const needle = query.trim().toLocaleLowerCase('de-DE');
   const rank = (user: User) => {
@@ -223,11 +225,12 @@ function PeopleSuggestions({ suggestion, env, ref }: PopupProps) {
   const projectId = env.current?.projectId;
   const members = useMembers(projectId);
   const users = useUsers();
-  const memberIds = useMemo(
-    () => new Set((members.data?.items ?? []).filter((member) => member.project_id === projectId).map((member) => member.user_id)),
-    [members.data, projectId],
+  // who has access to the project: its members and the org admins, the default bot only as a member (spec 4.16, 4.2)
+  const candidates = useMemo(
+    () => new Set(projectPeople(users.data?.items ?? [], members.data?.items ?? [], projectId ?? '').map((user) => user.id)),
+    [users.data, members.data, projectId],
   );
-  const people = matchPeople(users.data?.items ?? [], memberIds, suggestion.query);
+  const people = matchPeople(users.data?.items ?? [], candidates, suggestion.query);
   const entries: SuggestionEntry[] = people.map((user) => ({
     key: user.id,
     content: (

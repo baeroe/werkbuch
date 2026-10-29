@@ -15,9 +15,10 @@
  *   (`PreviewItemCommands`, see the contract in components/fields/commands.ts). `ItemPeek` mounts nothing for them.
  */
 
-import { lazy, Suspense, useLayoutEffect, useRef, useSyncExternalStore, type RefObject } from 'react';
+import { lazy, Suspense, useLayoutEffect, useRef, type RefObject } from 'react';
 import type { DataRouter } from 'react-router';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
+import { useIsWide } from '@/lib/media';
 import { isTyping } from '@/lib/shortcuts/registry';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { useUiStore } from '@/store/ui';
@@ -25,16 +26,6 @@ import { useUiStore } from '@/store/ui';
 const ItemPeek = lazy(() => import('@/features/item-detail/ItemPeek').then((module) => ({ default: module.ItemPeek })));
 // loaded with the preview: the commands bring the field editors with them, which the shell's own bundle does not need
 const PreviewItemCommands = lazy(() => import('@/components/fields/commands').then((module) => ({ default: module.PreviewItemCommands })));
-
-/** From md on (Tailwind's md breakpoint). Without matchMedia (tests) the screen counts as wide. */
-const WIDE = '(min-width: 48rem)';
-const isWide = () => typeof window.matchMedia !== 'function' || window.matchMedia(WIDE).matches;
-function subscribeWide(callback: () => void): () => void {
-  if (typeof window.matchMedia !== 'function') return () => {};
-  const query = window.matchMedia(WIDE);
-  query.addEventListener('change', callback);
-  return () => query.removeEventListener('change', callback);
-}
 
 /**
  * Closes the preview when the route changes (not when only the search or hash changes). It listens to the router
@@ -68,7 +59,8 @@ function CloseOnEscape({ panel }: { panel: RefObject<HTMLElement | null> }) {
 
 export function PeekHost() {
   const itemId = useUiStore((state) => state.peekItemId);
-  const wide = useSyncExternalStore(subscribeWide, isWide, () => true);
+  // from md on the panel stands beside the list; below it covers the page
+  const wide = useIsWide();
   const panel = useRef<HTMLElement>(null);
   const open = itemId !== null;
 

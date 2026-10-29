@@ -35,7 +35,10 @@ export function useShortcut(def: ShortcutDef, deps: DependencyList = []): void {
   );
 }
 
-/** While `active`, a modal dialog is open: the page's list and detail shortcuts pause. */
+/**
+ * While `active`, a modal dialog is open: only `dialog` shortcuts and the global mod+k, escape and mod+enter run, the
+ * rest of the page's shortcuts pause (`enterDialogScope`).
+ */
 export function useDialogScope(active = true): void {
   useEffect(() => (active ? enterDialogScope() : undefined), [active]);
 }

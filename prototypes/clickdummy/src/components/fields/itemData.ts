@@ -11,7 +11,7 @@ import { useUsers } from '@/hooks/users';
 import { useWorkflows } from '@/hooks/workflows';
 import { today } from '@/lib/clock';
 import { usePermissions } from '@/lib/permissions';
-import type { User, WorkItem } from '@/types';
+import type { ProjectMember, User, WorkItem } from '@/types';
 
 const COLLATOR = new Intl.Collator('de-DE');
 
@@ -53,22 +53,26 @@ export function useUserMap(): Map<string, User> {
 }
 
 /**
- * The members of a project who can take an item: active accounts only, people first, then bots, each by name. Spec
- * 4.8 asks for access to the project; the pickers offer its members.
+ * Who can take an item of a project and be mentioned in it (spec 4.8, 4.16): the active people and bots with access to
+ * the project, which are its members and the org admins (they have admin rights everywhere). The default bot is an org
+ * admin only so that automations may act in every project: it is offered where it is a member itself (spec 4.2).
+ * People first, then bots, each by name.
  */
+export function projectPeople(users: readonly User[], members: readonly ProjectMember[], projectId: string): User[] {
+  const memberIds = new Set(members.filter((member) => member.project_id === projectId).map((member) => member.user_id));
+  return users
+    .filter((user) => user.disabled_at === null && (memberIds.has(user.id) || (user.org_role === 'admin' && !user.is_default_bot)))
+    .sort((a, b) => (a.type === b.type ? COLLATOR.compare(a.name, b.name) : a.type === 'person' ? -1 : 1));
+}
+
+/** `projectPeople` of a project, with the loading state of what it reads. */
 export function useProjectPeople(projectId: string) {
   const members = useMembers(projectId);
   const users = useUsers();
   const memberList = members.data?.items;
   const userList = users.data?.items;
 
-  const people = useMemo(() => {
-    if (!memberList || !userList) return undefined;
-    const ids = new Set(memberList.filter((member) => member.project_id === projectId).map((member) => member.user_id));
-    return userList
-      .filter((user) => ids.has(user.id) && user.disabled_at === null)
-      .sort((a, b) => (a.type === b.type ? COLLATOR.compare(a.name, b.name) : a.type === 'person' ? -1 : 1));
-  }, [memberList, userList, projectId]);
+  const people = useMemo(() => (memberList && userList ? projectPeople(userList, memberList, projectId) : undefined), [memberList, userList, projectId]);
 
   return {
     people,

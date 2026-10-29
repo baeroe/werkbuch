@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { useState, type ReactNode } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getDb } from '@/api/db';
+import { getDb, saveDb } from '@/api/db';
 import { Dialog } from '@/components/ui/Dialog';
 import { currentToasts, dismissToast } from '@/components/ui/toast';
 import { textDoc } from '@/lib/richtext';
@@ -61,6 +61,23 @@ describe('RichTextEditor', () => {
     expect(nodesOf(lastDoc(onChange), 'mention')[0].attrs?.label).toBe('mara');
     expect(screen.queryByRole('listbox')).toBeNull();
     expect(editor.hasAttribute('aria-activedescendant')).toBe(false);
+  });
+
+  it('"@" offers the org admins of the organisation too, and the default bot only where it is a member', async () => {
+    const user = userEvent.setup();
+    const db = getDb();
+    db.project_members = db.project_members.filter((member) => !(member.project_id === 'p_app' && member.user_id === 'u_mara'));
+    saveDb();
+    renderWithData(<RichTextEditor value={null} onChange={vi.fn()} preset="comment" projectId="p_app" />);
+
+    const editor = await screen.findByRole('textbox', { name: 'Kommentar' });
+    await user.click(editor);
+    await user.type(editor, '@ma');
+    expect(await screen.findByRole('option', { name: /Mara Lindqvist/ })).toBeTruthy();
+
+    await user.keyboard('{Escape}');
+    await user.type(editor, ' @auto');
+    expect(await screen.findByText('Niemand im Projekt heißt „auto“.')).toBeTruthy();
   });
 
   it('pasting an image file inserts an image node whose attachment id comes from uploadAttachment', async () => {
