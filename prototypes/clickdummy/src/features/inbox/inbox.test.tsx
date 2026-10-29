@@ -8,7 +8,7 @@ import { getDb, saveDb } from '@/api/db';
 import { simulateRemoteChange } from '@/api/live';
 import * as notificationsApi from '@/api/notifications';
 import { listNotifications } from '@/api/notifications';
-import { currentToasts, dismissToast, runToastAction } from '@/components/ui/toast';
+import { currentToasts, dismissToast, resetToasts, runToastAction } from '@/components/ui/toast';
 import { useLiveSync } from '@/hooks/live';
 import { listShortcuts } from '@/lib/shortcuts/registry';
 import { useUiStore } from '@/store/ui';
@@ -22,7 +22,7 @@ beforeEach(() => {
 
 // the toast store is shared by all tests: close whatever a test left open
 afterEach(() => {
-  act(() => currentToasts().forEach((item) => dismissToast(item.id)));
+  act(() => resetToasts());
   vi.restoreAllMocks();
 });
 

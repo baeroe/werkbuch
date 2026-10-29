@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { getDb } from '@/api/db';
 import { getSystemStatus } from '@/api/system';
-import { currentToasts, dismissToast } from '@/components/ui/toast';
+import { currentToasts, resetToasts } from '@/components/ui/toast';
 import { resetApi } from '@/test/api';
 import System from './System';
 
@@ -14,7 +14,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  act(() => currentToasts().forEach((item) => dismissToast(item.id)));
+  act(() => resetToasts());
 });
 
 function renderWithData(node: ReactNode) {

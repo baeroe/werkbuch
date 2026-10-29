@@ -17,6 +17,11 @@ describe('projectPeople (spec 4.8, 4.16, 4.2)', () => {
     expect(names(projectPeople(users, withoutMaraInApp, 'p_app'))).toContain('Mara Lindqvist');
   });
 
+  it('offers no bot that is no member, also when it is an org admin', () => {
+    const adminBot: User = { ...users.find((user) => user.id === 'u_kira')!, id: 'u_ops_bot', name: 'Betriebs-Bot', org_role: 'admin' };
+    expect(names(projectPeople([...users, adminBot], projectMembers, 'p_app'))).not.toContain('Betriebs-Bot');
+  });
+
   it('offers the default bot only where it is a member itself, although it is an org admin', () => {
     expect(names(projectPeople(users, projectMembers, 'p_web'))).not.toContain('Automation');
     const automationInWeb: ProjectMember[] = [...projectMembers, { project_id: 'p_web', user_id: 'u_automation', role: 'member' }];

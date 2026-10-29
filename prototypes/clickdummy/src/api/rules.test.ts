@@ -138,6 +138,31 @@ describe('resolutions', () => {
   });
 });
 
+describe('who can be assigned: the rule of the pickers', () => {
+  const assign = (itemId: string, userId: string) => updateWorkItem(itemId, { assignee_id: userId });
+
+  it('takes members, people and bots, and org admins who are people, also without membership', async () => {
+    await assign('wi_web_50', 'u_kira');
+    const db = getDb();
+    db.project_members = db.project_members.filter((member) => !(member.project_id === 'p_app' && member.user_id === 'u_mara'));
+    saveDb();
+    await assign('wi_app_16', 'u_mara');
+    expect((await getWorkItem('wi_app_16')).item.assignee_id).toBe('u_mara');
+  });
+
+  it('refuses a person who only sees a public project, a bot of another project and the default bot without membership', async () => {
+    // Ida sees APP, which is public, but is no member of it
+    expect((await failure(assign('wi_app_16', 'u_ida'))).errors?.assignee_id).toBeTruthy();
+    // Kira works in WEB and OPS, not in APP
+    expect((await failure(assign('wi_app_16', 'u_kira'))).errors?.assignee_id).toBeTruthy();
+    // Automation is an org admin, but counts only where it is a member
+    expect((await failure(assign('wi_web_50', 'u_automation'))).errors?.assignee_id).toBeTruthy();
+    getDb().project_members.push({ project_id: 'p_web', user_id: 'u_automation', role: 'member' });
+    saveDb();
+    await assign('wi_web_50', 'u_automation');
+  });
+});
+
 describe('bots', () => {
   it('createBot gives an id of its own, also for a handle a person used to have', async () => {
     await updateUser('u_mara', { handle: 'mara-l' });

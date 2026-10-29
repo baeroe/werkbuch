@@ -240,7 +240,8 @@ export function TableLayout({ items, groups, display, selection, onSelect, onSel
                   checked={allSelected}
                   indeterminate={someSelected}
                   tabIndex={-1}
-                  onCheckedChange={() => onSelect(allSelected ? [] : all)}
+                  // all of the list, also the pages not loaded yet, as ⌘A and the bulk bar do
+                  onCheckedChange={() => (allSelected ? onSelect([]) : onSelectAll ? onSelectAll() : onSelect(all))}
                 />
                 Item
                 {sortedColumn('key') && <SortArrow className="size-3.5" aria-hidden="true" />}

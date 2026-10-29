@@ -13,6 +13,7 @@
 import type { CreateWorkItemInput } from '@/api/workItems';
 import { dropTargetState } from '@/domain/board';
 import { NONE_KEY } from '@/domain/grouping';
+import { canTakeWork } from '@/domain/people';
 import { rankBetween } from '@/domain/rank';
 import { canTransition, isClosedCategory } from '@/domain/workflow';
 import type { GroupBy, Priority, Project, ProjectMember, State, StateCategory, User, Workflow, WorkItem } from '@/types';
@@ -197,11 +198,11 @@ export function quickAddFields(columnKey: string, ctx: QuickAddContext): { ok: t
 /* ------------------------------------------------------------------------- people */
 
 /**
- * Why a person cannot take an item of a project, or null: the account must be active and see the project (spec 4.8:
- * access to the project; org admins see every project, public projects are seen by everybody).
+ * Why an account cannot take an item of a project, or null: the rule of the API and the pickers (`canTakeWork`):
+ * active members, and active people who are org admins.
  */
 export function assignBlocker(user: User, project: Project, members: readonly ProjectMember[]): string | null {
   if (user.disabled_at !== null) return `${user.name} ist deaktiviert.`;
-  const sees = user.org_role === 'admin' || project.visibility === 'public' || members.some((member) => member.project_id === project.id && member.user_id === user.id);
-  return sees ? null : `${user.name} sieht das Projekt ${project.identifier} nicht und kann das Item nicht übernehmen.`;
+  const member = members.some((entry) => entry.project_id === project.id && entry.user_id === user.id);
+  return canTakeWork(user, member) ? null : `${user.name} ist nicht Mitglied im Projekt ${project.identifier} und kann das Item nicht übernehmen.`;
 }

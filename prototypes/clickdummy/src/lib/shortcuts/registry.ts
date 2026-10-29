@@ -165,8 +165,9 @@ function onKeyDown(event: KeyboardEvent): void {
   // a sequence started on the page does not go on in a field
   if (typing) clearPending();
 
-  // the key that started a sequence is still held: its repeats keep the sequence waiting for the next step
-  if (pending && event.repeat) {
+  // the key of the last step is still held: its repeats keep the sequence waiting for the next step. A repeat of any
+  // other key (j held while g was tapped) goes on below: it ends the sequence and counts on its own.
+  if (pending && event.repeat && matches(parseChord(pending.spelled.at(-1)!), event)) {
     event.preventDefault();
     startSequence(pending.spelled, event);
     return;

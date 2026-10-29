@@ -26,7 +26,7 @@ const MAX_VISIBLE = 3;
 let toasts: readonly Toast[] = [];
 /**
  * Toasts that found no room: three were showing and none of them could be pushed out (all kept). They show, oldest
- * first, as soon as a toast closes; their time starts then.
+ * first, as soon as a toast closes; their time starts then. Error toasts never wait (see `takesPlace`).
  */
 let waiting: Toast[] = [];
 let sequence = 0;
@@ -77,6 +77,12 @@ function forget(id: number) {
   focused.delete(id);
 }
 
+/**
+ * Whether a toast takes one of the three places. Errors do not: they have a region of their own (role=alert), show at
+ * once, beyond the three, and are never pushed out, so no error goes unseen or unannounced.
+ */
+const takesPlace = (item: Toast) => item.tone !== 'error';
+
 /** Puts a toast on screen and starts its time (unless a held toast pauses all of them). */
 function show(item: Toast): void {
   toasts = [...toasts, item];
@@ -86,13 +92,15 @@ function show(item: Toast): void {
 
 /**
  * Gives the toasts that wait the room there is: a free place, or the place of the oldest toast that may be pushed out
- * (that one expires). Answers the toasts it pushed out, whose `onExpire` the caller runs once the store is settled.
+ * (that one expires). Only a toast that was on screen before this pass may make room: one that just got its place has
+ * not been seen yet. Answers the toasts it pushed out, whose `onExpire` the caller runs once the store is settled.
  */
 function place(): Toast[] {
   const pushedOut: Toast[] = [];
+  const shownBefore = new Set(toasts.map((entry) => entry.id));
   while (waiting.length > 0) {
-    if (toasts.length >= MAX_VISIBLE) {
-      const oldest = toasts.find((entry) => !entry.keep);
+    if (toasts.filter(takesPlace).length >= MAX_VISIBLE) {
+      const oldest = toasts.find((entry) => takesPlace(entry) && !entry.keep && shownBefore.has(entry.id));
       if (!oldest) break;
       forget(oldest.id);
       toasts = toasts.filter((entry) => entry.id !== oldest.id);
@@ -122,11 +130,14 @@ function remove(id: number): Toast | undefined {
 
 /**
  * Shows a toast and returns its id. Three show at most: a new one pushes out the oldest that is not kept (it expires).
- * When all three are kept (undo toasts), the new one waits for the first of them to close.
+ * When all three are kept (undo toasts), the new one waits for the first of them to close. An error toast shows at
+ * once and takes no place.
  */
 export function toast({ duration = DEFAULT_DURATION, tone = 'neutral', keep = false, ...options }: ToastOptions): number {
   const id = ++sequence;
-  waiting = [...waiting, { ...options, id, duration, tone, keep }];
+  const item: Toast = { ...options, id, duration, tone, keep };
+  if (takesPlace(item)) waiting = [...waiting, item];
+  else show(item);
   const pushedOut = place();
   syncPause();
   emit();
@@ -162,6 +173,22 @@ export function setToastFocused(id: number, within: boolean): void {
 
 export function currentToasts(): readonly Toast[] {
   return toasts;
+}
+
+/** The toasts waiting for a place, oldest first (`mod+z` reaches an undo toast there too). */
+export function waitingToasts(): readonly Toast[] {
+  return waiting;
+}
+
+/** Tests only: drops every toast, the waiting ones too, with their timers and holds; runs none of their callbacks. */
+export function resetToasts(): void {
+  [...timers.keys()].forEach(forget);
+  toasts = [];
+  waiting = [];
+  hovered.clear();
+  focused.clear();
+  paused = false;
+  emit();
 }
 
 function subscribe(listener: () => void): () => void {

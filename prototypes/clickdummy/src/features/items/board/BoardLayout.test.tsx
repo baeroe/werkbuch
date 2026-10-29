@@ -5,7 +5,7 @@ import { createMemoryRouter } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getWorkItem, listWorkItems } from '@/api/workItems';
-import { currentToasts, dismissToast } from '@/components/ui/toast';
+import { currentToasts, resetToasts } from '@/components/ui/toast';
 import { TooltipProvider } from '@/components/ui/Tooltip';
 import { CommandPalette } from '@/features/palette/CommandPalette';
 import { useUiStore } from '@/store/ui';
@@ -48,7 +48,7 @@ const lastToast = () => currentToasts().at(-1);
 beforeEach(() => {
   resetApi();
   useUiStore.setState(useUiStore.getInitialState());
-  currentToasts().forEach((entry) => dismissToast(entry.id));
+  resetToasts();
   window.scrollTo = vi.fn();
 });
 

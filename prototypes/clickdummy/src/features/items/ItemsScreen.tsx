@@ -337,10 +337,11 @@ function ItemsList({ preset, project, view }: ItemsListProps) {
   const scope = useMemo(() => scopeConditions(preset, project?.id), [preset, project?.id]);
   // sub-items left out on the server, so the count of the list is the count of what it shows
   const topLevel: Condition[] = state.display.show_sub_items ? [] : [{ field: 'parent', op: 'is_empty' }];
-  // page by page (100 each); "Beobachtet" narrows on this side, so it loads all of them to know its count
+  // page by page (100 each). A grouped list loads all of them, so its group and column counts count every item of
+  // their group; "Beobachtet" narrows on this side, so it loads all of them to know its count.
   const query = useInfiniteWorkItems(
     { filter: { version: 1, conditions: [...scope, ...state.filter.conditions.filter(isComplete), ...topLevel] }, sort: state.display.sort },
-    { all: preset === 'subscribed' },
+    { all: preset === 'subscribed' || state.display.group_by !== 'none' },
   );
   // a new filter keeps the old rows until its answer is there (no flash of the loading state)
   const [lastPage, setLastPage] = useState(query.data);

@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@/api/client';
-import { currentToasts, dismissToast, runToastAction, toast } from '@/components/ui/toast';
+import { currentToasts, dismissToast, resetToasts, runToastAction, toast } from '@/components/ui/toast';
 import { canUndo, runWithUndo, undoLatest } from './undo';
 
 beforeEach(() => vi.useFakeTimers());
 
 afterEach(() => {
-  currentToasts().forEach((item) => dismissToast(item.id));
+  resetToasts();
   vi.useRealTimers();
 });
 
@@ -64,10 +64,10 @@ describe('undo toasts and newer toasts', () => {
     runWithUndo({ label: 'WEB-51 gelöscht', run });
     toast({ title: 'Link kopiert' });
     toast({ title: 'WEB-47: Priorität High', tone: 'success' });
-    toast({ title: 'Nicht möglich', tone: 'error' });
+    toast({ title: 'Ansicht gespeichert', tone: 'success' });
 
     // the oldest toast without undo made room; the undo toast still stands
-    expect(currentToasts().map((item) => item.title)).toEqual(['WEB-51 gelöscht', 'WEB-47: Priorität High', 'Nicht möglich']);
+    expect(currentToasts().map((item) => item.title)).toEqual(['WEB-51 gelöscht', 'WEB-47: Priorität High', 'Ansicht gespeichert']);
     expect(canUndo()).toBe(true);
     expect(run).not.toHaveBeenCalled();
 
@@ -122,6 +122,51 @@ describe('undo toasts and newer toasts', () => {
     expect(late).not.toHaveBeenCalled();
     vi.advanceTimersByTime(1);
     expect(late).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the queue behind three undo toasts', () => {
+  const threeUndos = () => [1, 2, 3].map((n) => ({ id: runWithUndo({ label: `WEB-5${n} gelöscht`, run: vi.fn(), undo: vi.fn() }) }));
+
+  it('shows an error toast at once, beyond the three, instead of letting it wait', () => {
+    threeUndos();
+    toast({ title: 'Status nicht geändert', tone: 'error' });
+
+    expect(currentToasts().map((item) => item.title)).toEqual(['WEB-51 gelöscht', 'WEB-52 gelöscht', 'WEB-53 gelöscht', 'Status nicht geändert']);
+  });
+
+  it('does not push out a toast that got its place in the same pass', () => {
+    const [first] = threeUndos();
+    toast({ title: 'Link kopiert' });
+    const late = vi.fn();
+    runWithUndo({ label: 'WEB-60 gelöscht', run: late });
+
+    // a place comes free: the toast that waited longest takes it, and the undo toast behind it does not push it out
+    dismissToast(first.id);
+    expect(currentToasts().map((item) => item.title)).toEqual(['WEB-52 gelöscht', 'WEB-53 gelöscht', 'Link kopiert']);
+    expect(late).not.toHaveBeenCalled();
+
+    // the next place goes to the waiting undo toast, with its whole time
+    vi.advanceTimersByTime(5000);
+    expect(currentToasts().map((item) => item.title)).toEqual(['WEB-60 gelöscht']);
+    expect(late).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(5000);
+    expect(late).toHaveBeenCalledTimes(1);
+  });
+
+  it('takes back the newest action with mod+z, also while its toast still waits', () => {
+    const shown = [vi.fn(), vi.fn(), vi.fn()];
+    shown.forEach((undo, index) => runWithUndo({ label: `WEB-5${index} gelöscht`, run: vi.fn(), undo }));
+    const newest = vi.fn();
+    const newestRun = vi.fn();
+    runWithUndo({ label: 'WEB-60 gelöscht', run: newestRun, undo: newest });
+
+    expect(canUndo()).toBe(true);
+    expect(undoLatest()).toBe(true);
+    expect(newest).toHaveBeenCalledTimes(1);
+    shown.forEach((undo) => expect(undo).not.toHaveBeenCalled());
+    vi.advanceTimersByTime(20_000);
+    expect(newestRun).not.toHaveBeenCalled();
   });
 });
 

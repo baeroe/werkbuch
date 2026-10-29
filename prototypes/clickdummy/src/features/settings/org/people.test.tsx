@@ -6,7 +6,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { listInvitations, listUsers, updateUserRole } from '@/api/users';
 import { qk } from '@/hooks/keys';
-import { currentToasts, dismissToast } from '@/components/ui/toast';
+import { currentToasts, resetToasts } from '@/components/ui/toast';
 import { useSession } from '@/store/session';
 import { asUser, resetApi } from '@/test/api';
 import OrgSettingsRoute from './OrgSettings';
@@ -18,7 +18,7 @@ beforeEach(() => {
 
 // the toast store is shared by all tests: close whatever a test left open
 afterEach(() => {
-  act(() => currentToasts().forEach((item) => dismissToast(item.id)));
+  act(() => resetToasts());
   Reflect.deleteProperty(navigator, 'clipboard');
 });
 

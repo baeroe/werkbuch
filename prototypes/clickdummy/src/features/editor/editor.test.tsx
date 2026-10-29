@@ -5,7 +5,7 @@ import { useState, type ReactNode } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb, saveDb } from '@/api/db';
 import { Dialog } from '@/components/ui/Dialog';
-import { currentToasts, dismissToast } from '@/components/ui/toast';
+import { currentToasts, resetToasts } from '@/components/ui/toast';
 import { textDoc } from '@/lib/richtext';
 import { asUser, resetApi } from '@/test/api';
 import type { RichText } from '@/types';
@@ -24,7 +24,7 @@ beforeAll(async () => {
 beforeEach(() => resetApi());
 
 afterEach(() => {
-  act(() => currentToasts().forEach((item) => dismissToast(item.id)));
+  act(() => resetToasts());
 });
 
 function renderWithData(node: ReactNode) {

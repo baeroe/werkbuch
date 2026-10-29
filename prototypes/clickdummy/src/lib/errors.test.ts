@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@/api/client';
-import { currentToasts, dismissToast, runToastAction } from '@/components/ui/toast';
+import { currentToasts, resetToasts, runToastAction } from '@/components/ui/toast';
 import { notifyError } from './errors';
 
-afterEach(() => currentToasts().forEach((item) => dismissToast(item.id)));
+afterEach(() => resetToasts());
 
 const newest = () => currentToasts().at(-1);
 

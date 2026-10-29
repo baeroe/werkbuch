@@ -10,7 +10,7 @@
  *   });
  */
 
-import { currentToasts, runToastAction, toast } from '@/components/ui/toast';
+import { currentToasts, runToastAction, toast, waitingToasts } from '@/components/ui/toast';
 import { notifyError } from './errors';
 
 /** The action label of every toast that takes something back; `mod+z` looks for it. */
@@ -45,14 +45,15 @@ export function runWithUndo({ label, run, undo, delay = 5000, failureTitle }: Un
   return toast({ title: label, duration: delay, keep: true, action: { label: UNDO_LABEL, onClick: () => undo?.() }, onExpire: execute });
 }
 
-const undoable = () => currentToasts().filter((item) => item.action?.label === UNDO_LABEL);
+/** The toasts that can take something back, oldest first: on screen, and those still waiting for a place. */
+const undoable = () => [...currentToasts(), ...waitingToasts()].filter((item) => item.action?.label === UNDO_LABEL).sort((a, b) => a.id - b.id);
 
-/** Whether a toast that can take something back is showing. */
+/** Whether a toast that can take something back is showing (or waiting to). */
 export function canUndo(): boolean {
   return undoable().length > 0;
 }
 
-/** Takes back the newest action that can still be undone; false when no such toast stands. */
+/** Takes back the newest action that can still be undone, also one whose toast still waits; false when there is none. */
 export function undoLatest(): boolean {
   const latest = undoable().at(-1);
   if (!latest) return false;

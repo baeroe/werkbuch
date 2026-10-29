@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@/api/client';
 import * as viewsApi from '@/api/views';
 import { deleteView, listFavorites, listViews } from '@/api/views';
-import { currentToasts, dismissToast, runToastAction } from '@/components/ui/toast';
+import { currentToasts, dismissToast, resetToasts, runToastAction } from '@/components/ui/toast';
 import { useUiStore } from '@/store/ui';
 import { asUser, resetApi } from '@/test/api';
 import { ViewsScreen } from './ViewsScreen';
@@ -18,7 +18,7 @@ beforeEach(() => {
 
 // the toast store is shared by all tests: close whatever a test left open
 afterEach(() => {
-  act(() => currentToasts().forEach((item) => dismissToast(item.id)));
+  act(() => resetToasts());
   vi.restoreAllMocks();
 });
 

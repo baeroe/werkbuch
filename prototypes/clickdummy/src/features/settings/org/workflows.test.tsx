@@ -7,7 +7,7 @@ import { RouterProvider } from 'react-router/dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { listWorkflows } from '@/api/workflows';
 import { getWorkItem } from '@/api/workItems';
-import { currentToasts, dismissToast } from '@/components/ui/toast';
+import { currentToasts, resetToasts } from '@/components/ui/toast';
 import { resetApi } from '@/test/api';
 import Workflows from './Workflows';
 import { WorkflowEditor } from './WorkflowEditor';
@@ -18,7 +18,7 @@ beforeEach(() => {
 
 // the toast store is shared by all tests: close whatever a test left open
 afterEach(() => {
-  act(() => currentToasts().forEach((item) => dismissToast(item.id)));
+  act(() => resetToasts());
 });
 
 function renderWithData(node: ReactNode, path = '/settings/workflows') {

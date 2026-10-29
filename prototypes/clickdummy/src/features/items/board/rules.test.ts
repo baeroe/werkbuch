@@ -197,17 +197,23 @@ describe('quick add in a column', () => {
 describe('who can take an item', () => {
   const ops = { id: 'p_ops', identifier: 'OPS', visibility: 'private' } as Project;
   const web = { id: 'p_web', identifier: 'WEB', visibility: 'public' } as Project;
-  const person = (id: string, overrides: Partial<User> = {}) => ({ id, name: id, org_role: 'member', disabled_at: null, ...overrides }) as User;
-  const members: ProjectMember[] = [{ project_id: 'p_ops', user_id: 'u_jonas', role: 'member' }];
+  const person = (id: string, overrides: Partial<User> = {}) => ({ id, name: id, type: 'person', org_role: 'member', disabled_at: null, ...overrides }) as User;
+  const members: ProjectMember[] = [
+    { project_id: 'p_ops', user_id: 'u_jonas', role: 'member' },
+    { project_id: 'p_web', user_id: 'u_kira', role: 'member' },
+  ];
 
-  it('lets active people take items of projects they see', () => {
+  it('lets members take items, and org admins who are people also without membership', () => {
     expect(assignBlocker(person('u_jonas'), ops, members)).toBeNull();
-    expect(assignBlocker(person('u_sven'), web, members)).toBeNull();
+    expect(assignBlocker(person('u_kira', { type: 'bot' }), web, members)).toBeNull();
     expect(assignBlocker(person('u_mara', { org_role: 'admin' }), ops, members)).toBeNull();
   });
 
-  it('names who has no access and who is deactivated', () => {
-    expect(assignBlocker(person('u_sven', { name: 'Sven Brandt' }), ops, members)).toBe('Sven Brandt sieht das Projekt OPS nicht und kann das Item nicht übernehmen.');
+  it('names who is no member, also of a public project, and who is deactivated', () => {
+    expect(assignBlocker(person('u_sven', { name: 'Sven Brandt' }), web, members)).toBe('Sven Brandt ist nicht Mitglied im Projekt WEB und kann das Item nicht übernehmen.');
+    expect(assignBlocker(person('u_automation', { name: 'Automation', type: 'bot', org_role: 'admin', is_default_bot: true }), ops, members)).toBe(
+      'Automation ist nicht Mitglied im Projekt OPS und kann das Item nicht übernehmen.',
+    );
     expect(assignBlocker(person('u_alt', { name: 'Alte Person', disabled_at: '2026-01-01T00:00:00Z' }), web, members)).toBe('Alte Person ist deaktiviert.');
   });
 });

@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { getDb } from '@/api/db';
-import { currentToasts, dismissToast, runToastAction } from '@/components/ui/toast';
+import { currentToasts, dismissToast, resetToasts, runToastAction } from '@/components/ui/toast';
 import { plainText } from '@/lib/richtext';
 import { useUiStore } from '@/store/ui';
 import { asUser, resetApi } from '@/test/api';
@@ -27,7 +27,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  act(() => currentToasts().forEach((item) => dismissToast(item.id)));
+  act(() => resetToasts());
 });
 
 /** The screen in a router, with the query defaults of the app (hooks/queryClient.ts): cached data count as fresh for 10 s. */

@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { getDb } from '@/api/db';
-import { currentToasts, dismissToast } from '@/components/ui/toast';
+import { currentToasts, dismissToast, resetToasts } from '@/components/ui/toast';
 import { useUiStore } from '@/store/ui';
 import { asUser, resetApi } from '@/test/api';
 import { preloadEditor } from '@/features/editor/RichTextEditor';
@@ -26,7 +26,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  act(() => currentToasts().forEach((item) => dismissToast(item.id)));
+  act(() => resetToasts());
 });
 
 function renderTemplates(path: string) {

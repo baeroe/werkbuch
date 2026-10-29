@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { listTokens } from '@/api/tokens';
 import { listUsers } from '@/api/users';
-import { currentToasts, dismissToast, runToastAction } from '@/components/ui/toast';
+import { currentToasts, dismissToast, resetToasts, runToastAction } from '@/components/ui/toast';
 import { resetApi } from '@/test/api';
 import Bots from './Bots';
 
@@ -15,7 +15,7 @@ beforeEach(() => {
 
 // the toast store is shared by all tests: close whatever a test left open
 afterEach(() => {
-  act(() => currentToasts().forEach((item) => dismissToast(item.id)));
+  act(() => resetToasts());
 });
 
 function renderWithData(node: ReactNode) {

@@ -9,7 +9,7 @@ import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PeekHost } from '@/app/PeekHost';
-import { currentToasts, dismissToast, runToastAction } from '@/components/ui/toast';
+import { currentToasts, resetToasts, runToastAction } from '@/components/ui/toast';
 import { CommandPalette } from '@/features/palette/CommandPalette';
 import { useWorkItems } from '@/hooks/workItems';
 import { listCommands } from '@/lib/commands';
@@ -38,7 +38,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  act(() => currentToasts().forEach((item) => dismissToast(item.id)));
+  act(() => resetToasts());
 });
 
 function renderWithData(node: ReactNode) {

@@ -4,7 +4,7 @@ import { createMemoryRouter } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createWorkItem, getWorkItem, listWorkItems } from '@/api/workItems';
-import { currentToasts, dismissToast } from '@/components/ui/toast';
+import { currentToasts, resetToasts } from '@/components/ui/toast';
 import { TooltipProvider } from '@/components/ui/Tooltip';
 import { useUiStore } from '@/store/ui';
 import { asUser, resetApi } from '@/test/api';
@@ -37,7 +37,7 @@ const filterOf = (conditions: unknown[]) => encodeURIComponent(JSON.stringify(co
 beforeEach(() => {
   resetApi();
   useUiStore.setState(useUiStore.getInitialState());
-  currentToasts().forEach((entry) => dismissToast(entry.id));
+  resetToasts();
   window.scrollTo = vi.fn();
 });
 

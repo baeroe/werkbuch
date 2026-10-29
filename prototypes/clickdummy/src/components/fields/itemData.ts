@@ -9,6 +9,7 @@ import { useOrganization } from '@/hooks/organization';
 import { useMembers, useProjects } from '@/hooks/projects';
 import { useUsers } from '@/hooks/users';
 import { useWorkflows } from '@/hooks/workflows';
+import { canTakeWork } from '@/domain/people';
 import { today } from '@/lib/clock';
 import { usePermissions } from '@/lib/permissions';
 import type { ProjectMember, User, WorkItem } from '@/types';
@@ -53,15 +54,14 @@ export function useUserMap(): Map<string, User> {
 }
 
 /**
- * Who can take an item of a project and be mentioned in it (spec 4.8, 4.16): the active people and bots with access to
- * the project, which are its members and the org admins (they have admin rights everywhere). The default bot is an org
- * admin only so that automations may act in every project: it is offered where it is a member itself (spec 4.2).
- * People first, then bots, each by name.
+ * Who can take an item of a project and be mentioned in it (spec 4.2, 4.8, 4.16, `canTakeWork`): its active members,
+ * people and bots, and the active people who are org admins. A bot only as a member, the default bot too. People
+ * first, then bots, each by name. The API assigns the same accounts (`canBeAssigned`).
  */
 export function projectPeople(users: readonly User[], members: readonly ProjectMember[], projectId: string): User[] {
   const memberIds = new Set(members.filter((member) => member.project_id === projectId).map((member) => member.user_id));
   return users
-    .filter((user) => user.disabled_at === null && (memberIds.has(user.id) || (user.org_role === 'admin' && !user.is_default_bot)))
+    .filter((user) => canTakeWork(user, memberIds.has(user.id)))
     .sort((a, b) => (a.type === b.type ? COLLATOR.compare(a.name, b.name) : a.type === 'person' ? -1 : 1));
 }
 

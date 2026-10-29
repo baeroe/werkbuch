@@ -10,7 +10,7 @@ import { afterEach, beforeEach } from 'vitest';
 import { listMembers } from '@/api/projects';
 import { listWorkItems } from '@/api/workItems';
 import { TooltipProvider } from '@/components/ui/Tooltip';
-import { currentToasts, dismissToast } from '@/components/ui/toast';
+import { currentToasts, resetToasts } from '@/components/ui/toast';
 import { asUser, resetApi } from '@/test/api';
 import ProjectSettings from './ProjectSettings';
 
@@ -22,7 +22,7 @@ export function useSettingsTestSetup(): void {
   });
   // the toast store is shared by all tests: close whatever a test left open
   afterEach(() => {
-    act(() => currentToasts().forEach((item) => dismissToast(item.id)));
+    act(() => resetToasts());
   });
 }
 

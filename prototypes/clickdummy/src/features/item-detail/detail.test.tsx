@@ -7,7 +7,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { ApiError, FAIL_KEY } from '@/api/client';
 import { getDb } from '@/api/db';
 import { getWorkItem, updateWorkItem } from '@/api/workItems';
-import { currentToasts, dismissToast, runToastAction } from '@/components/ui/toast';
+import { currentToasts, resetToasts, runToastAction } from '@/components/ui/toast';
 import { plainText } from '@/lib/richtext';
 import { useUiStore } from '@/store/ui';
 import { asUser, resetApi } from '@/test/api';
@@ -58,7 +58,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  act(() => currentToasts().forEach((item) => dismissToast(item.id)));
+  act(() => resetToasts());
 });
 
 function renderWithData(node: ReactNode, path = '/') {

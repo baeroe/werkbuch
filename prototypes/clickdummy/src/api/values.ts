@@ -65,7 +65,7 @@ function normalize(db: Db, project: Project, property: Property, value: Property
         const user = db.users.find((entry) => entry.id === id);
         return kept.has(id) ? user !== undefined : canBeAssigned(db, user, project);
       });
-      if (!fine) return fail(`${label}: Diese Person hat keinen Zugriff auf das Projekt.`);
+      if (!fine) return fail(`${label}: Nur aktive Mitglieder des Projekts und Org-Admins.`);
       return property.settings.multiple ? ok([...(ids as string[])]) : Array.isArray(value) ? fail(`${label} erlaubt genau eine Person.`) : ok(value);
     }
 

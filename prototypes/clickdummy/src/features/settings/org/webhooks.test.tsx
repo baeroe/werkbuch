@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { WEBHOOK_EVENTS, listDeliveries, listWebhooks, saveWebhook } from '@/api/webhooks';
-import { currentToasts, dismissToast } from '@/components/ui/toast';
+import { currentToasts, resetToasts } from '@/components/ui/toast';
 import { resetApi } from '@/test/api';
 import { EVENT_GROUPS } from './catalog';
 import { countEvents, eventsOf, selectionOf } from './events';
@@ -18,7 +18,7 @@ beforeEach(() => {
 
 // the toast store is shared by all tests: close whatever a test left open
 afterEach(() => {
-  act(() => currentToasts().forEach((item) => dismissToast(item.id)));
+  act(() => resetToasts());
 });
 
 function renderWithData(node: ReactNode) {

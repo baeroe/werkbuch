@@ -6,7 +6,7 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '@/api/db';
 import { createWorkItem } from '@/api/workItems';
-import { currentToasts, dismissToast } from '@/components/ui/toast';
+import { currentToasts, resetToasts } from '@/components/ui/toast';
 import { canUndo, undoLatest } from '@/lib/undo';
 import { useUiStore } from '@/store/ui';
 import { resetApi } from '@/test/api';
@@ -33,7 +33,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  act(() => currentToasts().forEach((item) => dismissToast(item.id)));
+  act(() => resetToasts());
 });
 
 function renderWithData(node: ReactNode) {

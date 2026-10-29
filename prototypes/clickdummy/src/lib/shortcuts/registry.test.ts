@@ -215,6 +215,23 @@ describe('shortcut registry', () => {
     expect(assignMe.run).not.toHaveBeenCalled();
   });
 
+  it('lets only the repeats of the key that started a sequence keep it waiting: j held while g is tapped still moves', () => {
+    const inbox = shortcut('g i');
+    const assignMe = shortcut('i');
+    const next = shortcut('j', { repeat: true });
+
+    press('j');
+    press('g');
+    // j is still held: its repeats move on and end the sequence that g started
+    press('j', { repeat: true });
+    press('j', { repeat: true });
+    press('i');
+
+    expect(next.run).toHaveBeenCalledTimes(3);
+    expect(inbox.run).not.toHaveBeenCalled();
+    expect(assignMe.run).toHaveBeenCalledTimes(1);
+  });
+
   it('leaves the keys of an input method that is composing alone (Safari sends keyCode 229)', () => {
     const create = shortcut('c');
     const submit = shortcut('mod+enter');

@@ -7,6 +7,7 @@
  * - 404 for what a person may not see (its existence stays hidden), 403 for what they see but may not do.
  */
 
+import { canTakeWork } from '@/domain/people';
 import type { Project, ProjectRole, User } from '@/types';
 import { forbidden, notFound, conflict } from './client';
 import type { Db } from './db';
@@ -67,7 +68,12 @@ export function requireOrgAdmin(user: User, action = 'Das dürfen nur Org-Admins
   if (!isOrgAdmin(user)) throw forbidden(action);
 }
 
-/** Whether a person can be given work in a project: the account is active and sees the project. */
+/**
+ * Whether an account can be given work in a project (assignee, person property): an active member, person or bot, or
+ * an active person who is an org admin. The pickers and mentions offer the same accounts (`canTakeWork`).
+ */
 export function canBeAssigned(db: Db, user: User | undefined, project: Project): user is User {
-  return user !== undefined && user.disabled_at === null && canSeeProject(db, user, project);
+  if (user === undefined) return false;
+  const member = db.project_members.some((entry) => entry.project_id === project.id && entry.user_id === user.id);
+  return canTakeWork(user, member);
 }

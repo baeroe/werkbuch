@@ -7,7 +7,7 @@ import * as projectsApi from '@/api/projects';
 import { archiveProject, deleteProject, getProject, listMembers, listProjects, removeMember, updateProject } from '@/api/projects';
 import { listFavorites } from '@/api/views';
 import { listWorkItems } from '@/api/workItems';
-import { currentToasts, dismissToast, runToastAction } from '@/components/ui/toast';
+import { currentToasts, resetToasts, runToastAction } from '@/components/ui/toast';
 import { useUiStore } from '@/store/ui';
 import { asUser, resetApi } from '@/test/api';
 import { ProjectsScreen } from './ProjectsScreen';
@@ -19,7 +19,7 @@ beforeEach(() => {
 
 // the toast store is shared by all tests: close whatever a test left open
 afterEach(() => {
-  act(() => currentToasts().forEach((item) => dismissToast(item.id)));
+  act(() => resetToasts());
   vi.restoreAllMocks();
 });
 

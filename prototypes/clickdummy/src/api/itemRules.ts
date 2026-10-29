@@ -112,7 +112,7 @@ function checkParent(db: Db, errors: FieldErrors, projectId: string, parentId: s
 function checkAssignee(db: Db, errors: FieldErrors, projectId: string, assigneeId: string): void {
   const project = db.projects.find((entry) => entry.id === projectId)!;
   if (!canBeAssigned(db, db.users.find((user) => user.id === assigneeId), project)) {
-    errors.add('assignee_id', 'Diese Person hat keinen Zugriff auf das Projekt oder ist deaktiviert.');
+    errors.add('assignee_id', 'Items übernehmen nur aktive Mitglieder des Projekts und Org-Admins.');
   }
 }
 

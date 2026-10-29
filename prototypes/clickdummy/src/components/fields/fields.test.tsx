@@ -10,7 +10,7 @@ import { getDb, saveDb } from '@/api/db';
 import { listProperties } from '@/api/properties';
 import { getWorkItem } from '@/api/workItems';
 import { useWorkItems } from '@/hooks/workItems';
-import { currentToasts, dismissToast } from '@/components/ui/toast';
+import { currentToasts, dismissToast, resetToasts } from '@/components/ui/toast';
 import { CommandPalette } from '@/features/palette/CommandPalette';
 import { listCommands } from '@/lib/commands';
 import { listShortcuts } from '@/lib/shortcuts/registry';
@@ -30,7 +30,7 @@ beforeEach(() => {
 
 // the toast store is shared by all tests: close whatever a test left open
 afterEach(() => {
-  act(() => currentToasts().forEach((item) => dismissToast(item.id)));
+  act(() => resetToasts());
 });
 
 function renderWithData(node: ReactNode) {

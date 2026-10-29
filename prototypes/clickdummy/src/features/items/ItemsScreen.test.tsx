@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { createMemoryRouter } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -10,6 +10,7 @@ import { currentToasts, dismissToast } from '@/components/ui/toast';
 import { TooltipProvider } from '@/components/ui/Tooltip';
 import { useUiStore } from '@/store/ui';
 import { resetApi } from '@/test/api';
+import type { WorkItem } from '@/types';
 import ItemsRoute from './routes';
 
 function renderAt(path: string) {
@@ -130,8 +131,8 @@ describe('the item list screen', () => {
 });
 
 describe('a list of more than 100 items', () => {
-  /** WEB gets 180 more open items, in this test only; they sort after the seed's. */
-  function moreItems(count = 180) {
+  /** WEB gets 180 more open items (or items with the fields given), in this test only; they sort after the seed's. */
+  function moreItems(count = 180, fields: Partial<WorkItem> = {}) {
     const db = getDb();
     const model = db.items.find((item) => item.key === 'WEB-43')!;
     for (let n = 0; n < count; n += 1) {
@@ -145,6 +146,7 @@ describe('a list of more than 100 items', () => {
         parent_id: null,
         rank: `z${String(n).padStart(4, '0')}`,
         subscriber_ids: [],
+        ...fields,
       });
     }
     saveDb();
@@ -157,7 +159,7 @@ describe('a list of more than 100 items', () => {
     'counts every matching item and says "x von N" of all of them, the first 100 loaded',
     async () => {
       moreItems();
-      const router = renderAt('/projects/WEB');
+      const router = renderAt('/projects/WEB?group=none');
       // the 34 top-level items of the seed and the 180 new ones; the first 100 load
       expect(await screen.findByText('100 von 214 Items geladen')).toBeTruthy();
 
@@ -173,7 +175,7 @@ describe('a list of more than 100 items', () => {
     '"Mehr laden" keeps the focus while the next page loads, and a page that fails can be asked for again',
     async () => {
       moreItems();
-      const router = renderAt('/projects/WEB');
+      const router = renderAt('/projects/WEB?group=none');
       const more = await screen.findByRole('button', { name: 'Mehr laden' });
       act(() => more.focus());
       fireEvent.click(more);
@@ -194,10 +196,42 @@ describe('a list of more than 100 items', () => {
   );
 
   it(
+    'loads every page of a grouped list, so the group and column counts count every item of their group',
+    async () => {
+      moreItems(180, { state_id: 'std_done', resolution_id: 'res_done', closed_at: '2026-10-27T15:00:00.000Z' });
+      // the board: its columns are not virtualized, so every count is in the DOM (the list's rows are, in jsdom)
+      const router = renderAt('/projects/WEB?layout=board');
+      // the project list shows sub-items too
+      const done = getDb().items.filter((item) => item.project_id === 'p_web' && item.state_id === 'std_done' && item.archived_at === null).length;
+      expect(done).toBeGreaterThan(180);
+
+      const column = await screen.findByRole('region', { name: 'Done' }, { timeout: 5000 });
+      await waitFor(() => expect(within(column).getByRole('heading', { name: 'Done' }).parentElement?.textContent).toContain(`${done} Items`), { timeout: 5000 });
+      expect(screen.queryByRole('button', { name: 'Mehr laden' })).toBeNull();
+      router.dispose();
+    },
+    SLOW,
+  );
+
+  it(
+    'selects every matching item from the table header too, also the ones that were not loaded yet',
+    async () => {
+      moreItems();
+      const router = renderAt('/projects/WEB?group=none&layout=table');
+      expect(await screen.findByText('100 von 214 Items geladen', {}, { timeout: 5000 })).toBeTruthy();
+
+      fireEvent.click(screen.getAllByRole('checkbox', { name: 'Alle Items auswählen' })[0]);
+      await waitFor(() => expect(useUiStore.getState().selection).toHaveLength(214));
+      router.dispose();
+    },
+    SLOW,
+  );
+
+  it(
     'selects every matching item with mod+a, also the ones that were not loaded yet',
     async () => {
       moreItems();
-      const router = renderAt('/projects/WEB');
+      const router = renderAt('/projects/WEB?group=none');
       expect(await screen.findByText('100 von 214 Items geladen')).toBeTruthy();
 
       act(() => void fireEvent.keyDown(document.body, { key: 'a', ctrlKey: true }));

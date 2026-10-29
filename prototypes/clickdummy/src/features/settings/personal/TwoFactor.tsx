@@ -17,6 +17,7 @@ import { Input } from '@/components/ui/Input';
 import { toast } from '@/components/ui/toast';
 import { now } from '@/lib/clock';
 import { notifyError } from '@/lib/errors';
+import { isWide } from '@/lib/media';
 import type { User } from '@/types';
 import { fieldErrors, useFieldErrors } from '../project/form';
 import { SettingsCard } from '../project/SettingsParts';
@@ -76,8 +77,6 @@ function CodesGuard({ active }: { active: boolean }) {
   );
 }
 
-/** From md on: a field may take the focus on its own. On a phone that would open the keyboard over the QR code. */
-const isWide = () => typeof window.matchMedia !== 'function' || window.matchMedia('(min-width: 48rem)').matches;
 
 export function TwoFactorCard({ user }: { user: User }) {
   const record = useTwoFactorOf(user.id);
@@ -108,6 +107,7 @@ export function TwoFactorCard({ user }: { user: User }) {
   // after a step, the focus goes to where the next one is (never on the first draw)
   useEffect(() => {
     if (!moved.current) return;
+    // from md on the code field may take the focus on its own; on a phone that would open the keyboard over the QR code
     const target = phase === 'setup' ? (isWide() ? codeField.current : steps.current) : phase === 'codes' ? codeList.current : on ? status.current : startButton.current;
     // a closing dialog gives its focus back first
     const frame = requestAnimationFrame(() => target?.focus());

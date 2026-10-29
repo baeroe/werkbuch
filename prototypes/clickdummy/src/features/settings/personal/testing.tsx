@@ -8,7 +8,7 @@ import { createMemoryRouter } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
 import { afterEach, beforeEach } from 'vitest';
 import { TooltipProvider } from '@/components/ui/Tooltip';
-import { currentToasts, dismissToast } from '@/components/ui/toast';
+import { currentToasts, resetToasts } from '@/components/ui/toast';
 import { asUser, resetApi } from '@/test/api';
 import PersonalSettings from './PersonalSettings';
 import { useTwoFactor } from './twoFactorStore';
@@ -21,7 +21,7 @@ export function usePersonalTestSetup(): void {
     window.scrollTo = () => {};
   });
   afterEach(() => {
-    act(() => currentToasts().forEach((item) => dismissToast(item.id)));
+    act(() => resetToasts());
   });
 }
 

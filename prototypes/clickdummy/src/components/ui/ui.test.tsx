@@ -9,12 +9,12 @@ import { Dialog, DialogClose } from './Dialog';
 import { IconButton } from './IconButton';
 import { Input } from './Input';
 import { Kbd } from './Kbd';
-import { currentToasts, dismissToast, toast } from './toast';
+import { dismissToast, resetToasts, toast } from './toast';
 import { Toaster } from './Toaster';
 
 // The toast store is shared by all tests: close whatever a test left open.
 afterEach(() => {
-  act(() => currentToasts().forEach((item) => dismissToast(item.id)));
+  act(() => resetToasts());
 });
 
 describe('Kbd on a Mac', () => {
