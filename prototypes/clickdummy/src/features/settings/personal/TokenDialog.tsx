@@ -23,7 +23,7 @@ import { SetupSnippets } from './SetupSnippets';
 const ABILITIES: { id: TokenAbility; label: string; text: string }[] = [
   { id: 'read', label: 'Lesen', text: 'Items, Projekte und alles andere ansehen, per REST-API und MCP.' },
   { id: 'write', label: 'Schreiben', text: 'Anlegen, ändern, kommentieren und löschen.' },
-  { id: 'mcp', label: 'MCP', text: 'Den MCP-Server für Agenten nutzen. Die Tools prüfen zusätzlich Lesen und Schreiben.' },
+  { id: 'mcp', label: 'MCP', text: 'Den MCP-Server aus einem MCP-Client nutzen. Die Tools prüfen zusätzlich Lesen und Schreiben.' },
 ];
 
 type Created = { token: Token; plain_text: string };
@@ -92,7 +92,7 @@ export function TokenDialog({ user, onClose }: Props) {
       description={
         created
           ? 'Kopiere ihn jetzt: werkbuch zeigt ihn nur dieses eine Mal. Wer den Token hat, handelt in deinem Namen.'
-          : 'Mit einem Token handeln Agenten und Skripte in deinem Namen, mit den Rechten deines Kontos. Leg einen pro Gerät oder Skript an, dann kannst du sie einzeln widerrufen.'
+          : 'Mit einem Token handeln MCP-Clients und Skripte in deinem Namen, mit den Rechten deines Kontos. Leg einen pro Gerät oder Skript an, dann kannst du sie einzeln widerrufen.'
       }
       footer={
         created ? (

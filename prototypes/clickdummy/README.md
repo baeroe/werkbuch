@@ -266,6 +266,7 @@ Was der Klickdummy anders macht als die Spec (`docs/superpowers/specs/2026-10-28
 - Die Heute-Markierung folgt im Nachtheft der Textmarker-Regel: gelbe Schrift mit Schein statt gelber Fläche.
 - Karten von Kind-Items zeigen auf dem Board ihr Epic vor dem Key, außer das Board ist nach Eltern-Item gruppiert.
 - Bots heißen in der Oberfläche durchgehend „Bot“, auch wenn sie einer Person gehören.
+- Die Seite „API und MCP“ spricht von MCP-Clients statt von Agenten.
 - Die Geschmacksfragen bleiben vorerst.
 
 ## Fragen für die Korrekturrunde

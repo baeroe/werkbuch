@@ -380,7 +380,7 @@ describe('API & MCP: setup snippets', () => {
 
   it('shows the command with the address of this instance and a placeholder for the token', async () => {
     renderPersonal('/me/api');
-    await screen.findByRole('heading', { name: 'Agent verbinden' });
+    await screen.findByRole('heading', { name: 'MCP-Client verbinden' });
 
     expect(snippet()).toBe(`claude mcp add --transport http werkbuch ${window.location.origin}/mcp --header "Authorization: Bearer <token>"`);
     expect(screen.getByText(/Ersetze <token> durch/)).toBeTruthy();
@@ -389,7 +389,7 @@ describe('API & MCP: setup snippets', () => {
   it('switches between Claude Code, Codex and JSON', async () => {
     const user = userEvent.setup();
     renderPersonal('/me/api');
-    await screen.findByRole('heading', { name: 'Agent verbinden' });
+    await screen.findByRole('heading', { name: 'MCP-Client verbinden' });
 
     await user.click(screen.getByRole('tab', { name: 'Codex' }));
     expect(snippet()).toContain('[mcp_servers.werkbuch]');
@@ -402,7 +402,7 @@ describe('API & MCP: setup snippets', () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     useClipboard(writeText);
     renderPersonal('/me/api');
-    await screen.findByRole('heading', { name: 'Agent verbinden' });
+    await screen.findByRole('heading', { name: 'MCP-Client verbinden' });
 
     await user.click(screen.getByRole('button', { name: 'Kopieren' }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(snippet()));

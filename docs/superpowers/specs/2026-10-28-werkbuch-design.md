@@ -10,7 +10,7 @@ Stand: 2026-10-29 · Status: freigegeben
 > - **Wiki (4.15):** Löschen fragt immer nach, auch ohne Unterseiten, und bleibt danach 5 Sekunden rückgängig.
 > - **Anlegen-Dialog (5.1):** Der Fokus startet im Titel.
 > - **Board (4.11):** Karten von Kind-Items zeigen ihr Epic vor dem Key, außer das Board ist nach Eltern-Item gruppiert. Dafür trägt ein Work Item in der API neben `parent_id` eine kurze Angabe zum Eltern-Item (`parent`: id, key, title).
-> - **Bots (4.2):** Die Oberfläche nennt Bot-Konten durchgehend „Bot“, auch wenn sie einer Person gehören.
+> - **Bots (4.2):** Die Oberfläche nennt Bot-Konten durchgehend „Bot“, auch wenn sie einer Person gehören. Die persönliche Seite „API und MCP“ spricht von MCP-Clients statt von Agenten.
 > - **Gestaltung (5.4):** Die Heute-Markierung folgt im Nachtheft der Textmarker-Regel aus `DESIGN.md`: gelbe Schrift mit Schein statt gelber Fläche.
 >
 > Die übrigen Abweichungen des Klickdummys stehen in `prototypes/clickdummy/README.md` und kommen hierher, sobald Rafael sie bestätigt.

@@ -1,5 +1,5 @@
 /*
- * The snippets that connect an agent to the MCP server, for Claude Code, Codex and JSON clients, with the address of
+ * The snippets that connect an MCP client to the MCP server, for Claude Code, Codex and JSON clients, with the address of
  * this instance (`instanceOrigin()`). Without a token they carry a placeholder; the dialog after "Neuer Token"
  * fills in the real one, once.
  */

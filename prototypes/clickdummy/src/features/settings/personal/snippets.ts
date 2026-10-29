@@ -1,6 +1,6 @@
 /*
  * Setup snippets for the MCP server (spec 6.2: laravel/mcp under `/mcp`, Bearer token with the ability `mcp`), in the
- * three forms agents are set up with: the `claude mcp add` command, the block for Codex's config.toml and the JSON of
+ * three forms MCP clients are set up with: the `claude mcp add` command, the block for Codex's config.toml and the JSON of
  * `mcpServers` (e.g. `.mcp.json`). The formats follow openbill's settings page.
  */
 

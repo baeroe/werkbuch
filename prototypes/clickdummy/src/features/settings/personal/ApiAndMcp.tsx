@@ -1,5 +1,5 @@
 /*
- * Settings → API & MCP (spec 4.2, 5.2): the person's own tokens, and the snippets that connect an agent to the MCP
+ * Settings → API & MCP (spec 4.2, 5.2): the person's own tokens, and the snippets that connect an MCP client to the MCP
  * server. A token is made in a dialog that shows its plain text once. Revoking runs after five seconds of undo.
  * Admins manage the tokens of bots in the organisation settings.
  */
@@ -62,7 +62,7 @@ export function ApiAndMcp({ user }: SectionProps) {
       <EmptyState
         icon={KeyRound}
         title="Noch keine Tokens"
-        description="Leg einen an, um einen Agenten oder ein Skript zu verbinden."
+        description="Leg einen an, um einen MCP-Client oder ein Skript zu verbinden."
         actions={
           <Button variant="primary" icon={KeyRound} onClick={() => setCreating(true)}>
             Ersten Token anlegen
@@ -109,7 +109,7 @@ export function ApiAndMcp({ user }: SectionProps) {
       <SettingsCard
         flush={shown.length > 0 && !tokens.isError}
         title="Tokens"
-        description="Mit einem Token handeln Agenten und Skripte in deinem Namen, mit den Rechten deines Kontos. Leg einen pro Gerät oder Skript an, dann kannst du sie einzeln widerrufen."
+        description="Mit einem Token handeln MCP-Clients und Skripte in deinem Namen, mit den Rechten deines Kontos. Leg einen pro Gerät oder Skript an, dann kannst du sie einzeln widerrufen."
         actions={
           <Button variant="secondary" icon={KeyRound} onClick={() => setCreating(true)}>
             Neuer Token
@@ -118,7 +118,7 @@ export function ApiAndMcp({ user }: SectionProps) {
       >
         {content}
       </SettingsCard>
-      <SettingsCard title="Agent verbinden" description="Trag den MCP-Server mit einem Token mit der Fähigkeit MCP in deinem Agenten ein.">
+      <SettingsCard title="MCP-Client verbinden" description="Trag den MCP-Server mit einem Token mit der Fähigkeit MCP in deinem MCP-Client ein.">
         <dl className="grid gap-x-6 gap-y-1 text-ui sm:grid-cols-[auto_minmax(0,1fr)]">
           <dt className="text-muted">MCP-Server</dt>
           <dd translate="no" className="min-w-0 font-medium [overflow-wrap:anywhere] text-ink">{`${origin}/mcp`}</dd>
