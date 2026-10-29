@@ -22,7 +22,7 @@ export function Children({ detail }: { detail: WorkItemDetail }) {
   const { item, children, workflow, type } = detail;
   const { reason } = usePermissions();
   const users = useUserMap();
-  const child = useChildType(item.project_id);
+  const childType = useChildType(item.project_id);
   const createReason = item.archived_at ? 'Archivierte Items bekommen keine neuen Kinder.' : reason('item.create', item.project_id);
   if (!canHaveChildren(type) || (children.length === 0 && createReason)) return null;
 
@@ -39,8 +39,8 @@ export function Children({ detail }: { detail: WorkItemDetail }) {
             variant="ghost"
             size="sm"
             icon={Plus}
-            disabledReason={child.reason}
-            onClick={() => child.typeId && useUiStore.getState().openCreate({ project_id: item.project_id, parent_id: item.id, type_id: child.typeId })}
+            disabledReason={childType.reason}
+            onClick={() => childType.typeId && useUiStore.getState().openCreate({ project_id: item.project_id, parent_id: item.id, type_id: childType.typeId })}
           >
             Kind-Item
           </Button>
