@@ -1,0 +1,15 @@
+/*
+ * The text of a wiki page. The editor's styles are unlayered, so these rules are too.
+ * - Read without the editor (viewers), it keeps the page's reading size, 15/24, like the editor of level `page`.
+ * - The editor of a page has no frame; its focus ring keeps a little air around the text instead of touching it, while
+ *   the text stays on the line of the title.
+ */
+.wiki-read .rt {
+  font-size: 0.9375rem;
+  line-height: 1.5rem;
+}
+.wiki-body .rt-editor .ProseMirror {
+  margin: -0.5rem -0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--r-ctl);
+}
