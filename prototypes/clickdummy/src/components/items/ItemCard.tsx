@@ -3,13 +3,13 @@
  * blocked hint, labels, the progress of an epic (or any item with children), then priority, due date and assignee.
  * With `showParent` a child item names its epic before the tab, as the path of the item page does („Relaunch Phase 1 ›
  * WEB-42“): muted, and it gives way first. Its full name is in the tooltip and belongs in the card's name (`partOf`);
- * it is no link of its own.
+ * it is no link of its own. The row of the tab is part of the card: a click there opens it, as one on the title does.
  * The title is a link over the whole card. A board with its own keyboard cursor and drag and drop passes `tabIndex`
  * (and the drag listeners) to the card: then the card is the tab stop, Enter opens it, and the link leaves the tab order.
  */
 
 import { Archive, Ban, ChevronRight } from 'lucide-react';
-import type { ComponentProps, KeyboardEvent } from 'react';
+import type { ComponentProps, KeyboardEvent, MouseEvent } from 'react';
 import { DayValue, useOverdue } from '@/components/fields/DateField';
 import { useToday, useUserMap } from '@/components/fields/itemData';
 import { Avatar, UnassignedAvatar } from '@/components/ui/Avatar';
@@ -47,7 +47,7 @@ export function cardEpic(item: WorkItem): ItemRef | null {
 /** The epic in the words of a card's name: „Teil von WEB-30 Relaunch Phase 1“. */
 export const partOf = (epic: ItemRef): string => `Teil von ${epic.key} ${epic.title}`;
 
-export function ItemCard({ item, compact = false, onOpen, selected = false, lifted = false, showParent = false, className, onKeyDown, tabIndex, ...rest }: ItemCardProps) {
+export function ItemCard({ item, compact = false, onOpen, selected = false, lifted = false, showParent = false, className, onClick, onKeyDown, tabIndex, ...rest }: ItemCardProps) {
   const type = useWorkItemTypes().data?.items.find((entry) => entry.id === item.type_id);
   const labels = useLabels().data?.items;
   const users = useUserMap();
@@ -85,7 +85,14 @@ export function ItemCard({ item, compact = false, onOpen, selected = false, lift
           onOpen(item.id);
         }
       }}
-      className={cx('hover:border-line-strong', compact && 'p-2.5', linkFocusRing, className)}
+      onClick={(event: MouseEvent<HTMLElement>) => {
+        onClick?.(event);
+        // the tab and the epic before it lie above the card, outside the title's link: a plain click there opens the
+        // card all the same (modifier clicks belong to the link)
+        if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        if (event.target instanceof Element && event.target.closest('[data-tab-row]')) onOpen(item.id);
+      }}
+      className={cx('hover:border-line-strong [&>[data-tab-row]]:cursor-pointer', compact && 'p-2.5', linkFocusRing, className)}
       {...rest}
     >
       <p className={cx('text-ui font-medium text-ink', compact ? 'truncate' : 'text-pretty', item.archived_at && 'text-muted')}>

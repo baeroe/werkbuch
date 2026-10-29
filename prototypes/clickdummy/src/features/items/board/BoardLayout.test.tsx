@@ -264,6 +264,19 @@ describe('the epic on the cards of child items', () => {
     router.dispose();
   });
 
+  it('a click on the epic or on the tab opens the preview, as a click anywhere on the card does', async () => {
+    const router = renderAt('/projects/WEB?layout=board');
+    await screen.findByRole('region', { name: 'In Progress' });
+
+    fireEvent.click(epicOf(cardIn('In Progress', 'WEB-42'))!);
+    expect(useUiStore.getState().peekItemId).toBe('wi_web_42');
+
+    act(() => useUiStore.getState().openPeek(null));
+    fireEvent.click(cardIn('In Progress', 'WEB-41').querySelector('[data-tab-row] [data-tone]')!);
+    expect(useUiStore.getState().peekItemId).toBe('wi_web_41');
+    router.dispose();
+  });
+
   it('an epic and an item without a parent name none', async () => {
     const router = renderAt('/projects/WEB?layout=board');
     await screen.findByRole('region', { name: 'In Progress' });

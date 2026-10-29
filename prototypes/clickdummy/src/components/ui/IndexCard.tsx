@@ -39,7 +39,7 @@ export function IndexCard({ tone, icon, tabLabel, tabPrefix, selected = false, l
       )}
       {...rest}
     >
-      <span className="absolute bottom-full left-3 flex max-w-[calc(100%-1.5rem)] items-center">
+      <span data-tab-row="" className="absolute bottom-full left-3 flex max-w-[calc(100%-1.5rem)] items-center">
         {tabPrefix}
         <TypeTab tone={tone} icon={icon} label={tabLabel} size="sm" className="shrink-0" />
       </span>
