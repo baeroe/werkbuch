@@ -40,7 +40,8 @@ export function groupNotifications(list: Notification[]): NotificationGroup[] {
 
 /**
  * Whether the browser turns a click on a link into a new tab or window (⌘ or Ctrl, ⇧), which opens the notification
- * as well. Alt saves the link instead: nothing opens.
+ * as well. Alt saves the link instead: nothing opens. Safari adds a ⇧-clicked link to the Reading List and opens
+ * nothing either; it still counts as opened here, and u takes it back.
  */
 export function opensElsewhere(event: { metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean }): boolean {
   return (event.metaKey || event.ctrlKey || event.shiftKey) && !event.altKey;

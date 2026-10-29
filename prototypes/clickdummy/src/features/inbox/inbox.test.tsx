@@ -480,6 +480,33 @@ describe('the keys', () => {
     expect(link.getAttribute('aria-current')).toBe('true');
   });
 
+  it('a ⌘-click as a Mac sends it (metaKey) does the same', async () => {
+    renderInbox();
+    await loaded();
+    const link = screen.getByRole('link', { name: /^Ungelesen: Theo Okafor hat kommentiert/ });
+
+    expect(browserClick(link, { button: 0, metaKey: true })).toBe(true);
+
+    expect(useUiStore.getState().peekItemId).toBeNull();
+    expect(link.closest('li')!.hasAttribute('data-unread')).toBe(false);
+    await waitFor(async () => expect(await unreadIds()).toEqual(['n_01', 'n_04']));
+  });
+
+  it('in the unread list, the title of a card takes its rows out and the focus on to the row that moves up', async () => {
+    renderInbox('/inbox?unread=1');
+    await loaded();
+    const title = screen.getByRole('link', { name: 'WEB-42: Startseite: Hero und Teaser bauen' });
+    act(() => title.focus());
+
+    // a ⌘-click opens the item's page in a new tab; the inbox stays, without the card
+    expect(browserClick(title, { button: 0, ctrlKey: true })).toBe(true);
+
+    await waitFor(() => expect(rows()).toHaveLength(2));
+    expect(screen.queryByRole('heading', { level: 2, name: /WEB-42/ })).toBeNull();
+    expect((document.activeElement as HTMLAnchorElement).getAttribute('href')).toBe('/items/APP-24');
+    await waitFor(async () => expect(await unreadIds()).toEqual(['n_04', 'n_03']));
+  });
+
   it('a middle click opens the item’s page in a new tab and marks the notification read', async () => {
     renderInbox();
     await loaded();
