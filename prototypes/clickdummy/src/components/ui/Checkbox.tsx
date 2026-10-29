@@ -19,7 +19,7 @@ export function Checkbox({ label, onCheckedChange, indeterminate, disabled, clas
       onCheckedChange={onCheckedChange ? (checked) => onCheckedChange(checked) : undefined}
       className={cx(
         'inline-flex size-4 shrink-0 items-center justify-center rounded-chip border border-line-input bg-surface text-on-accent transition-colors duration-120',
-        'data-checked:border-accent data-checked:bg-accent data-indeterminate:border-accent data-indeterminate:bg-accent',
+        'data-checked:border-accent data-checked:bg-accent data-indeterminate:border-accent data-indeterminate:bg-accent aria-invalid:border-danger',
         !disabled && 'data-unchecked:hover:border-ink',
         // without a label row the 16 px box gets a larger hit area: 44 px on phones, 24 px on desktop
         !label && 'relative after:absolute after:-inset-3.5 md:after:-inset-1',

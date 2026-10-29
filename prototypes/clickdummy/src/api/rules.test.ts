@@ -326,16 +326,18 @@ describe('two levels: only epics have child items, epics have no parent (correct
 
     // WEB-30, APP-5 and OPS-3 have children
     const untick = await failure(saveWorkItemType({ ...(await typeOf('t_epic')), is_epic: false }));
-    expect([untick.status, untick.message]).toEqual([422, '3 Items dieses Typs haben Kind-Items. Nur Epics können Kind-Items haben.']);
+    expect([untick.status, untick.message]).toEqual([422, '3\u00a0Items dieses Typs haben Kind-Items. Nur Epics können Kind-Items haben.']);
     // WEB-40, APP-10 and OPS-9 are bugs under an epic
     const tick = await failure(saveWorkItemType({ ...(await typeOf('t_bug')), is_epic: true }));
-    expect([tick.status, tick.message]).toEqual([422, '3 Items dieses Typs haben ein Eltern-Item. Epics haben kein Eltern-Item.']);
+    expect([tick.status, tick.message]).toEqual([422, '3\u00a0Items dieses Typs haben ein Eltern-Item. Epics haben kein Eltern-Item.']);
     expect([(await typeOf('t_epic')).is_epic, (await typeOf('t_bug')).is_epic]).toEqual([true, false]);
 
     // one Kundenwunsch under APP-5: the sentence counts it in the singular
     await createWorkItem({ project_id: 'p_app', type_id: 't_wish', title: 'Wunsch zur Beta', parent_id: 'wi_app_5', values: { customer: 'opt_hafenkontor' } });
     const one = await failure(saveWorkItemType({ ...(await typeOf('t_wish')), is_epic: true }));
-    expect(one.message).toBe('1 Item dieses Typs hat ein Eltern-Item. Epics haben kein Eltern-Item.');
+    expect(one.message).toBe('1\u00a0Item dieses Typs hat ein Eltern-Item. Epics haben kein Eltern-Item.');
+    // the API says it at the field as well
+    expect(one.errors?.is_epic).toEqual([one.message]);
     // a type whose items have neither may change its mark
     expect((await saveWorkItemType({ ...(await typeOf('t_task')), name: 'Aufgabe' })).is_epic).toBe(false);
   });

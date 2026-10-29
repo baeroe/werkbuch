@@ -57,7 +57,9 @@ function renderInbox(path = '/inbox', { preview = false } = {}) {
         path: '/inbox',
         element: preview ? (
           <>
-            <main id="main">{screenElement}</main>
+            <main id="main" tabIndex={-1}>
+              {screenElement}
+            </main>
             <PeekHost />
           </>
         ) : (
@@ -513,6 +515,23 @@ describe('the keys', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/items/WEB-47'));
     await waitFor(async () => expect(await unreadIds()).toEqual(['n_01', 'n_04', 'n_03']));
+  });
+
+  it('in the unread list, opening the last unread notification leaves the focus in the main area, not on the page', async () => {
+    // only n_01 is unread
+    const db = getDb();
+    for (const notification of db.notifications) if (notification.id !== 'n_01') notification.read_at ??= notification.created_at;
+    saveDb();
+    const user = userEvent.setup();
+    renderInbox('/inbox?unread=1', { preview: true });
+    await loaded();
+
+    await user.keyboard('j{Enter}');
+
+    expect(await screen.findByText('Alles gelesen', { selector: 'p.font-display' })).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole('main'));
+    // the keys of the list go on from there
+    expect(useUiStore.getState().peekItemId).toBe('wi_web_42');
   });
 
   it('in the unread list, opening moves the cursor and the focus on to the next row; the preview stays open', async () => {

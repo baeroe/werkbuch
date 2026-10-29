@@ -18,9 +18,11 @@ export function listWorkItemTypes(): Promise<Page<WorkItemType>> {
   return read(({ db }) => paginate(db.types));
 }
 
-/** "3 Items dieses Typs haben …", "1 Item dieses Typs hat …". */
+const COUNT = new Intl.NumberFormat('de-DE');
+
+/** "3 Items dieses Typs haben …", "1 Item dieses Typs hat …"; the number keeps to its noun. */
 function itemsOfType(count: number, what: string): string {
-  return count === 1 ? `1 Item dieses Typs hat ${what}.` : `${count} Items dieses Typs haben ${what}.`;
+  return count === 1 ? `1\u00a0Item dieses Typs hat ${what}.` : `${COUNT.format(count)}\u00a0Items dieses Typs haben ${what}.`;
 }
 
 /**

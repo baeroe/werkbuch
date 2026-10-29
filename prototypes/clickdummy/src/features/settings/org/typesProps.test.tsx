@@ -49,8 +49,14 @@ describe('Types', () => {
     await user.click(within(dialog).getByRole('checkbox', { name: /^Epic/ }));
     await user.click(within(dialog).getByRole('button', { name: /^Speichern/ }));
 
-    const alert = await within(dialog).findByRole('alert');
-    expect(alert.textContent).toContain('3 Items dieses Typs haben Kind-Items. Nur Epics können Kind-Items haben.');
+    // the refusal stands at the checkbox, which takes the focus (on a phone the top of the form is out of view)
+    const checkbox = within(dialog).getByRole('checkbox', { name: /^Epic/ });
+    await waitFor(() => expect(checkbox.getAttribute('aria-invalid')).toBe('true'));
+    expect(document.getElementById(checkbox.getAttribute('aria-describedby') ?? '')?.textContent).toBe(
+      '3\u00a0Items dieses Typs haben Kind-Items. Nur Epics können Kind-Items haben.',
+    );
+    await waitFor(() => expect(document.activeElement).toBe(checkbox));
+    expect(within(dialog).queryByRole('alert')).toBeNull();
     expect((await listWorkItemTypes()).items.find((type) => type.id === 't_epic')?.is_epic).toBe(true);
   });
 

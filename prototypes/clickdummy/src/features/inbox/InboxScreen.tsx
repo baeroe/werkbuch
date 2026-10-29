@@ -293,6 +293,7 @@ export function InboxScreen() {
   const [allReadCalls, setAllReadCalls] = useState(0);
   const allReadNow = allReadCalls > 0;
   const links = useRef(new Map<string, HTMLAnchorElement>());
+  const listRef = useRef<HTMLDivElement>(null);
   const calls = useRef(0);
   /** The calls that change what is read, one after another (see `setRead`). */
   const turn = useRef<Promise<unknown>>(Promise.resolve());
@@ -345,11 +346,19 @@ export function InboxScreen() {
     return left[Math.min(Math.min(...places), left.length - 1)] ?? null;
   }
 
-  /** The rows `ids` leave the list: the cursor and the focus go on to the row that takes their place (or the one before at the end). */
+  /**
+   * The rows `ids` leave the list: the cursor and the focus go on to the row that takes their place (or the one before
+   * at the end). When no row is left, a focus inside the list goes to the main area instead of falling to the page,
+   * where the list's keys still act.
+   */
   function moveOn(ids: readonly string[]) {
     const next = survivorOf(ids);
-    if (next) focusRow(next);
-    else setCursorId(null);
+    if (next) {
+      focusRow(next);
+      return;
+    }
+    setCursorId(null);
+    if (listRef.current?.contains(document.activeElement)) document.getElementById('main')?.focus();
   }
 
   function move(step: 1 | -1) {
@@ -641,7 +650,7 @@ export function InboxScreen() {
             Beim Aktualisieren ist ein Fehler aufgetreten. Die Liste zeigt den letzten Stand.
           </Banner>
         )}
-        <div className="flex flex-col">
+        <div ref={listRef} className="flex flex-col">
           {groups.map((group) => (
             <GroupCard
               key={group.key}

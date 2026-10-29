@@ -7,8 +7,8 @@
 
 import { Radio } from '@base-ui/react/radio';
 import { RadioGroup } from '@base-ui/react/radio-group';
-import { Archive, ArchiveRestore, Pencil, Plus, Route, Shapes, Trash2, X } from 'lucide-react';
-import { useState } from 'react';
+import { Archive, ArchiveRestore, CircleAlert, Pencil, Plus, Route, Shapes, Trash2, X } from 'lucide-react';
+import { useId, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { Chip } from '@/components/ui/Chip';
@@ -90,6 +90,9 @@ function TypeDialog({ open, onOpenChange, type, properties }: TypeDialogProps) {
   const [attempted, setAttempted] = useState(false);
 
   const nameError = attempted && name.trim() === '' ? 'Gib dem Typ einen Namen.' : fieldMessage(save.error, 'name');
+  // the two levels of items keep the Epic mark (domain/hierarchy); back at the stored mark the refusal no longer holds
+  const epicError = type && isEpic !== type.is_epic ? fieldMessage(save.error, 'is_epic') : undefined;
+  const epicErrorId = useId();
   const byId = new Map(properties.map((property) => [property.id, property]));
   const free = properties.filter((property) => !assigned.some((entry) => entry.id === property.id));
 
@@ -127,7 +130,7 @@ function TypeDialog({ open, onOpenChange, type, properties }: TypeDialogProps) {
       description="Der Typ gibt Items Gestalt: ein Reiter in seiner Farbe, ein Icon und die Properties, die zu ihm gehören."
       submitLabel={type ? 'Speichern' : 'Anlegen'}
       pending={save.isPending}
-      notice={noticeOf(save.error, ['name', 'icon', 'tone', 'properties'])}
+      notice={noticeOf(save.error, ['name', 'icon', 'tone', 'properties', 'is_epic'])}
       onSubmit={submit}
     >
       <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
@@ -148,7 +151,23 @@ function TypeDialog({ open, onOpenChange, type, properties }: TypeDialogProps) {
         <TonePicker label="Farbe des Typs" value={tone} onChange={setTone} />
       </FieldGroup>
       <Textarea label="Beschreibung" name="description" autoComplete="off" hint="Wofür der Typ da ist. Sie erscheint in der Auswahl." rows={2} value={description} onChange={(event) => setDescription(event.target.value)} />
-      <Checkbox label="Epic: Items dieses Typs erscheinen in der Timeline" checked={isEpic} onCheckedChange={setIsEpic} />
+      <div>
+        <Checkbox
+          label="Epic: Items dieses Typs erscheinen in der Timeline"
+          checked={isEpic}
+          onCheckedChange={setIsEpic}
+          aria-invalid={epicError ? true : undefined}
+          aria-describedby={epicError ? epicErrorId : undefined}
+        />
+        <div aria-live="polite">
+          {epicError && (
+            <p id={epicErrorId} className="flex items-start gap-1.5 text-sm font-medium text-danger">
+              <CircleAlert className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+              {epicError}
+            </p>
+          )}
+        </div>
+      </div>
 
       <FieldGroup legend="Properties" hint="Sie erscheinen im Formular und am Item in dieser Reihenfolge. Eine Pflicht-Property braucht beim Anlegen einen Wert.">
         {assigned.length > 0 && (
