@@ -46,8 +46,11 @@ import type {
 import { createSeed } from './seed';
 
 export const DB_KEY = 'werkbuch:db';
-/** 2: relation events name the other item by id (`{ label, item_id }`), not by key. */
-export const SCHEMA_VERSION = 2;
+/**
+ * 2: relation events name the other item by id (`{ label, item_id }`), not by key.
+ * 3: two levels of items (correction round 2026-10-29): only epics are parents, epics have none.
+ */
+export const SCHEMA_VERSION = 3;
 
 /** An earlier identifier of a project: keys like `OLD-12` keep resolving after a rename. */
 export interface ProjectAlias {

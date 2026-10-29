@@ -1,11 +1,14 @@
 /*
  * Work item types (spec 4.6). They live in the organisation, projects enable a selection. A type that has items is
- * archived instead of deleted: no new items of it can be created.
+ * archived instead of deleted: no new items of it can be created. The Epic mark keeps the two levels of items
+ * (`domain/hierarchy`): it goes only while no item of the type has children, and comes only while none has a parent.
  */
 
+import { canHaveChildren } from '@/domain/hierarchy';
 import type { TypeTone, WorkItemType } from '@/types';
 import { requireOrgAdmin } from './access';
-import { conflict, FieldErrors, newId, notFound, paginate, read, write, type Page } from './client';
+import { conflict, FieldErrors, invalid, newId, notFound, paginate, read, reasonText, write, type Page } from './client';
+import type { Db } from './db';
 
 export const TONES: readonly TypeTone[] = ['sky', 'ochre', 'moss', 'plum', 'sand', 'slate'];
 
@@ -13,6 +16,28 @@ export type WorkItemTypeInput = Omit<WorkItemType, 'id' | 'archived_at'> & { id?
 
 export function listWorkItemTypes(): Promise<Page<WorkItemType>> {
   return read(({ db }) => paginate(db.types));
+}
+
+/** "3 Items dieses Typs haben …", "1 Item dieses Typs hat …". */
+function itemsOfType(count: number, what: string): string {
+  return count === 1 ? `1 Item dieses Typs hat ${what}.` : `${count} Items dieses Typs haben ${what}.`;
+}
+
+/**
+ * Changing the Epic mark must leave the items in two levels: 422 `is_epic` while items of the type have children (the
+ * mark goes) or a parent (the mark comes). The sentence is the cause as well, so the settings show it.
+ */
+function assertEpicMark(db: Db, type: WorkItemType, isEpic: boolean): void {
+  if (canHaveChildren(type) === isEpic) return;
+  const items = db.items.filter((item) => item.type_id === type.id);
+  const refuse = (message: string) => invalid({ is_epic: [message] }, message);
+  if (!isEpic) {
+    const parents = items.filter((item) => db.items.some((child) => child.parent_id === item.id)).length;
+    if (parents > 0) throw refuse(`${itemsOfType(parents, 'Kind-Items')} ${reasonText('parent_not_epic')}`);
+  } else {
+    const children = items.filter((item) => item.parent_id !== null).length;
+    if (children > 0) throw refuse(`${itemsOfType(children, 'ein Eltern-Item')} ${reasonText('epic_has_no_parent')}`);
+  }
 }
 
 export function saveWorkItemType(input: WorkItemTypeInput): Promise<WorkItemType> {
@@ -30,6 +55,7 @@ export function saveWorkItemType(input: WorkItemTypeInput): Promise<WorkItemType
     if (!ids.every((id) => db.properties.some((property) => property.id === id))) errors.add('properties', 'Mindestens eine Property gibt es nicht.');
     if (new Set(ids).size !== ids.length) errors.add('properties', 'Eine Property ist doppelt zugeordnet.');
     errors.throwIfAny();
+    if (existing) assertEpicMark(db, existing, input.is_epic);
 
     const type: WorkItemType = {
       id: existing?.id ?? newId('t'),

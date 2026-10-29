@@ -71,6 +71,8 @@ const REASON_TEXT: Record<string, string> = {
   validation_failed: 'Die Eingabe ist nicht gültig.',
   description_conflict: 'Die Beschreibung wurde inzwischen geändert.',
   page_conflict: 'Die Seite wurde inzwischen geändert.',
+  parent_not_epic: 'Nur Epics können Kind-Items haben.',
+  epic_has_no_parent: 'Epics haben kein Eltern-Item.',
   last_admin: 'Das ist der letzte aktive Admin.',
   in_use: 'Das wird noch benutzt.',
   simulated: 'Simulierter Serverfehler.',

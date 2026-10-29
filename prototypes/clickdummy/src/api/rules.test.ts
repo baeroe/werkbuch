@@ -1,7 +1,8 @@
 /*
  * What the fake API owed after Task 3: the effects of creating an item in a later state, the notifications for the
  * other changes, notifications that follow what a person still sees, the order of a bulk edit, one answer for an
- * unknown resolution, ids of bots, the schema version, attachments to read, and uploads that find their owner.
+ * unknown resolution, ids of bots, the schema version, attachments to read, and uploads that find their owner. Since the
+ * correction round of 2026-10-29: the two levels of parents and children.
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -9,6 +10,7 @@ import { asUser, failure, resetApi } from '@/test/api';
 import type { RichText } from '@/types';
 import { getAttachment, uploadAttachment } from './attachments';
 import { addComment, editComment } from './comments';
+import { reasonText } from './client';
 import { DB_KEY, getDb, loadDb, saveDb, SCHEMA_VERSION } from './db';
 import { listNotifications } from './notifications';
 import { addRelation } from './relations';
@@ -22,7 +24,9 @@ import {
   listActivity,
   transitionWorkItem,
   updateWorkItem,
+  type BulkPatch,
 } from './workItems';
+import { listWorkItemTypes, saveWorkItemType } from './workItemTypes';
 
 beforeEach(resetApi);
 
@@ -176,6 +180,17 @@ describe('bots', () => {
 });
 
 describe('the stored document', () => {
+  it('replaces a document of schema 2 (parents that need not be epics) by the seed', () => {
+    expect(SCHEMA_VERSION).toBeGreaterThan(2);
+    const old = { ...JSON.parse(localStorage.getItem(DB_KEY)!), schema_version: 2 };
+    old.items = [];
+    localStorage.setItem(DB_KEY, JSON.stringify(old));
+
+    const db = loadDb();
+    expect(db.schema_version).toBe(SCHEMA_VERSION);
+    expect(db.items.length).toBeGreaterThan(0);
+  });
+
   it('replaces a document of schema 1 (relation events still with keys) by the seed', () => {
     expect(SCHEMA_VERSION).toBeGreaterThan(1);
     const old = { ...JSON.parse(localStorage.getItem(DB_KEY)!), schema_version: 1 };
@@ -236,5 +251,92 @@ describe('attachments', () => {
       schedule: null,
     });
     expect((await getAttachment(upload.id)).owner).toEqual({ type: 'template', id: template.id });
+  });
+});
+
+describe('two levels: only epics have child items, epics have no parent (correction round 2026-10-29)', () => {
+  it('create and update refuse a parent that is no epic, and any parent for an epic (422 at parent_id)', async () => {
+    // WEB-42 is a task under WEB-30, the epic of WEB
+    const underTask = await failure(createWorkItem({ project_id: 'p_web', type_id: 't_task', title: 'Unter einem Task', parent_id: 'wi_web_42' }));
+    expect([underTask.status, underTask.errors?.parent_id]).toEqual([422, ['Nur Epics können Kind-Items haben.']]);
+    const epicUnderEpic = await failure(createWorkItem({ project_id: 'p_web', type_id: 't_epic', title: 'Unter-Epic', parent_id: 'wi_web_30' }));
+    expect([epicUnderEpic.status, epicUnderEpic.errors?.parent_id]).toEqual([422, ['Epics haben kein Eltern-Item.']]);
+
+    const moved = await failure(updateWorkItem('WEB-48', { parent_id: 'wi_web_42' }));
+    expect([moved.status, moved.errors?.parent_id]).toEqual([422, ['Nur Epics können Kind-Items haben.']]);
+    expect((await getWorkItem('WEB-48')).item.parent_id).toBe('wi_web_30');
+    const second = await createWorkItem({ project_id: 'p_web', type_id: 't_epic', title: 'Relaunch Phase 2' });
+    const epicMoved = await failure(updateWorkItem('WEB-30', { parent_id: second.id }));
+    expect([epicMoved.status, epicMoved.errors?.parent_id]).toEqual([422, ['Epics haben kein Eltern-Item.']]);
+    expect((await getWorkItem('WEB-30')).item.parent_id).toBeNull();
+
+    // what the rules allow: a task or a bug under an epic, and an epic losing nothing
+    expect((await createWorkItem({ project_id: 'p_web', type_id: 't_task', title: 'Phase 2: Karte', parent_id: second.id })).parent_id).toBe(second.id);
+    expect((await updateWorkItem('WEB-50', { parent_id: second.id })).parent_id).toBe(second.id);
+  });
+
+  it('a bulk edit refuses each item by these rules and names the reason; a template run fails with it', async () => {
+    // the bulk bar sends no parent; the API holds the rule for any client that does. WEB-50 is a task at the top.
+    const result = await bulkUpdateWorkItems(['wi_web_48', 'wi_web_30', 'wi_web_51'], { parent_id: 'wi_web_50' } as BulkPatch);
+    expect(result).toEqual({
+      updated: [],
+      rejected: [
+        { id: 'wi_web_48', reason: 'parent_not_epic' },
+        { id: 'wi_web_30', reason: 'epic_has_no_parent' },
+        { id: 'wi_web_51', reason: 'parent_not_epic' },
+      ],
+    });
+    expect(reasonText('parent_not_epic')).toBe('Nur Epics können Kind-Items haben.');
+    expect(reasonText('epic_has_no_parent')).toBe('Epics haben kein Eltern-Item.');
+
+    const template = getDb().templates.find((entry) => entry.id === 'tpl_web_maintenance')!;
+    template.payload.parent_id = 'wi_web_42';
+    saveDb();
+    expect((await runTemplateNow('tpl_web_maintenance')).run).toMatchObject({ status: 'failed', error: 'Nur Epics können Kind-Items haben.' });
+    const again = getDb().templates.find((entry) => entry.id === 'tpl_web_maintenance')!;
+    again.payload.type_id = 't_epic';
+    again.payload.parent_id = 'wi_web_30';
+    saveDb();
+    expect((await runTemplateNow('tpl_web_maintenance')).run).toMatchObject({ status: 'failed', error: 'Epics haben kein Eltern-Item.' });
+  });
+
+  it('a type change keeps the two levels: an epic with children stays an epic, an item with a parent becomes none', async () => {
+    const fromEpic = await failure(changeWorkItemType('WEB-30', 't_task'));
+    expect([fromEpic.status, fromEpic.errors?.type_id, fromEpic.message]).toEqual([
+      422,
+      ['WEB-30 hat Kind-Items. Nur Epics können Kind-Items haben.'],
+      'WEB-30 hat Kind-Items. Nur Epics können Kind-Items haben.',
+    ]);
+    const toEpic = await failure(changeWorkItemType('WEB-48', 't_epic'));
+    expect([toEpic.status, toEpic.errors?.type_id, toEpic.message]).toEqual([
+      422,
+      ['WEB-48 hat ein Eltern-Item. Epics haben kein Eltern-Item.'],
+      'WEB-48 hat ein Eltern-Item. Epics haben kein Eltern-Item.',
+    ]);
+    expect([(await getWorkItem('WEB-30')).item.type_id, (await getWorkItem('WEB-48')).item.type_id]).toEqual(['t_epic', 't_task']);
+
+    // an epic without children may become a task, a task without a parent an epic
+    const lone = await createWorkItem({ project_id: 'p_web', type_id: 't_epic', title: 'Kleines Epic' });
+    expect((await changeWorkItemType(lone.id, 't_task')).type_id).toBe('t_task');
+    expect((await changeWorkItemType('WEB-50', 't_epic')).type_id).toBe('t_epic');
+  });
+
+  it('the type settings keep the two levels: no unticking "Epic" over children, no ticking it over parents', async () => {
+    const typeOf = async (id: string) => (await listWorkItemTypes()).items.find((type) => type.id === id)!;
+
+    // WEB-30, APP-5 and OPS-3 have children
+    const untick = await failure(saveWorkItemType({ ...(await typeOf('t_epic')), is_epic: false }));
+    expect([untick.status, untick.message]).toEqual([422, '3 Items dieses Typs haben Kind-Items. Nur Epics können Kind-Items haben.']);
+    // WEB-40, APP-10 and OPS-9 are bugs under an epic
+    const tick = await failure(saveWorkItemType({ ...(await typeOf('t_bug')), is_epic: true }));
+    expect([tick.status, tick.message]).toEqual([422, '3 Items dieses Typs haben ein Eltern-Item. Epics haben kein Eltern-Item.']);
+    expect([(await typeOf('t_epic')).is_epic, (await typeOf('t_bug')).is_epic]).toEqual([true, false]);
+
+    // one Kundenwunsch under APP-5: the sentence counts it in the singular
+    await createWorkItem({ project_id: 'p_app', type_id: 't_wish', title: 'Wunsch zur Beta', parent_id: 'wi_app_5', values: { customer: 'opt_hafenkontor' } });
+    const one = await failure(saveWorkItemType({ ...(await typeOf('t_wish')), is_epic: true }));
+    expect(one.message).toBe('1 Item dieses Typs hat ein Eltern-Item. Epics haben kein Eltern-Item.');
+    // a type whose items have neither may change its mark
+    expect((await saveWorkItemType({ ...(await typeOf('t_task')), name: 'Aufgabe' })).is_epic).toBe(false);
   });
 });

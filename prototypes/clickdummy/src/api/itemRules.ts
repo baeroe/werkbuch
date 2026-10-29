@@ -7,15 +7,16 @@
  * undoes anything else). Every change is written to the event log, which is the history of the item.
  */
 
+import { canHaveChildren, canHaveParent } from '@/domain/hierarchy';
 import { rankBetween } from '@/domain/rank';
 import { resolutionAfterTransition } from '@/domain/resolution';
 import { parseDate } from '@/domain/tz';
 import { canTransition, isClosedCategory, statesInOrder } from '@/domain/workflow';
 import { mentionedIds, plainText } from '@/lib/richtext';
-import type { Priority, PropertyValue, RichText, User, WorkItem } from '@/types';
+import type { Priority, PropertyValue, RichText, User, WorkItem, WorkItemType } from '@/types';
 import { canBeAssigned } from './access';
 import { linkAttachments, richValues } from './attachments';
-import { clone, conflict, FieldErrors, invalid, sameJson, type Ctx } from './client';
+import { ApiError, clone, conflict, FieldErrors, invalid, reasonText, sameJson, type Ctx } from './client';
 import type { Db } from './db';
 import { addSubscriber, notifyPeople, recordEvent } from './events';
 import { projectOf, stateOf, userName, workflowOf } from './lookup';
@@ -98,7 +99,10 @@ function checkLabels(db: Db, errors: FieldErrors, labelIds: readonly string[]): 
   if (!labelIds.every((id) => db.labels.some((label) => label.id === id))) errors.add('label_ids', 'Mindestens ein Label gibt es nicht.');
 }
 
-/** The parent must be another item of the same project and no descendant of the item (no cycles). */
+/**
+ * The parent must be another item of the same project and no descendant of the item (no cycles). Which types may be
+ * parent and child is `assertTwoLevels`, after the field checks.
+ */
 function checkParent(db: Db, errors: FieldErrors, projectId: string, parentId: string, itemId: string | null): void {
   const parent = db.items.find((item) => item.id === parentId);
   if (!parent) return void errors.add('parent_id', 'Das Eltern-Item gibt es nicht.');
@@ -107,6 +111,18 @@ function checkParent(db: Db, errors: FieldErrors, projectId: string, parentId: s
     if (cursor.id === itemId) return void errors.add('parent_id', 'Ein Item kann nicht sein eigenes Kind (oder Enkel) als Eltern-Item haben.');
     cursor = cursor.parent_id ? db.items.find((item) => item.id === cursor?.parent_id) : undefined;
   }
+}
+
+/**
+ * Two levels (`domain/hierarchy`, correction round 2026-10-29): an epic gets no parent, and only an epic takes children.
+ * A 422 at `parent_id` with a reason of its own, so a bulk edit names it per item. Runs after the field checks.
+ */
+function assertTwoLevels(db: Db, type: WorkItemType, parentId: string): void {
+  const refuse = (reason: 'epic_has_no_parent' | 'parent_not_epic') =>
+    new ApiError({ status: 422, reason, detail: reasonText(reason), errors: { parent_id: [reasonText(reason)] } });
+  if (!canHaveParent(type)) throw refuse('epic_has_no_parent');
+  const parent = db.items.find((item) => item.id === parentId);
+  if (parent && !canHaveChildren(db.types.find((entry) => entry.id === parent.type_id))) throw refuse('parent_not_epic');
 }
 
 function checkAssignee(db: Db, errors: FieldErrors, projectId: string, assigneeId: string): void {
@@ -201,6 +217,7 @@ export function createItem(ctx: Ctx, actor: User, input: CreateWorkItemInput): W
     }
   }
   errors.throwIfAny();
+  if (input.parent_id) assertTwoLevels(db, type!, input.parent_id);
 
   // another state than the start state is a move from the start state
   const workflow = workflowOf(db, project);
@@ -414,6 +431,7 @@ export function checkPatch(db: Db, item: WorkItem, patch: WorkItemPatch, options
     }
   }
   errors.throwIfAny();
+  if (patch.parent_id && patch.parent_id !== item.parent_id) assertTwoLevels(db, type, patch.parent_id);
 
   if (patch.state_id !== undefined) assertTransition(db, item, patch.state_id);
   const descriptionChanged = patch.description !== undefined && !sameJson(patch.description, item.description);

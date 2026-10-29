@@ -3,6 +3,7 @@
  * `itemRules.ts`; reading goes through the filter engine and the scope of the projects a person sees.
  */
 
+import { canHaveChildren, canHaveParent } from '@/domain/hierarchy';
 import { childProgress } from '@/domain/progress';
 import { matchesFilter, sortItems } from '@/domain/filter';
 import { isClosedCategory } from '@/domain/workflow';
@@ -21,7 +22,7 @@ import type {
   WorkItemMeta,
 } from '@/types';
 import { canSeeProject, requireRole, requireWritable, visibleProjectIds, visibleProjects } from './access';
-import { ApiError, conflict, FieldErrors, invalid, notFound, paginate, read, write, type Page, type PageArgs } from './client';
+import { ApiError, conflict, FieldErrors, invalid, notFound, paginate, read, reasonText, write, type Page, type PageArgs } from './client';
 import type { Db } from './db';
 import { addSubscriber, notifyPeople, recordEvent, removeSubscriber } from './events';
 import {
@@ -273,7 +274,8 @@ export function bulkUpdateWorkItems(ids: string[], patch: BulkPatch): Promise<Bu
 
 /**
  * Gives the item another type. Values of properties the new type lacks are dropped (they stay in the history), and
- * the required properties of the new type must be filled: 422 `values.<key>` otherwise.
+ * the required properties of the new type must be filled: 422 `values.<key>` otherwise. The two levels hold (422
+ * `type_id`): an item with children stays an epic, an item with a parent becomes none.
  */
 export function changeWorkItemType(id: string, type_id: string, values: Record<string, PropertyValue> = {}): Promise<WorkItem> {
   return write((ctx) => {
@@ -288,6 +290,10 @@ export function changeWorkItemType(id: string, type_id: string, values: Record<s
     if (!type || !project.enabled_type_ids.includes(type.id)) errors.add('type_id', 'Dieser Typ ist im Projekt nicht aktiviert.');
     else if (type.archived_at !== null) errors.add('type_id', 'Dieser Typ ist archiviert.');
     errors.throwIfAny();
+    // the sentence is the cause as well, so a toast names it
+    const refuse = (message: string) => invalid({ type_id: [message] }, message);
+    if (!canHaveChildren(type) && db.items.some((entry) => entry.parent_id === item.id)) throw refuse(`${item.key} hat Kind-Items. ${reasonText('parent_not_epic')}`);
+    if (!canHaveParent(type) && item.parent_id !== null) throw refuse(`${item.key} hat ein Eltern-Item. ${reasonText('epic_has_no_parent')}`);
 
     const kept = new Set(propertiesOfType(db, type!).map(({ property }) => property.key));
     const keptValues = Object.fromEntries(Object.entries(item.values).filter(([key]) => kept.has(key)));

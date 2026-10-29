@@ -816,6 +816,9 @@ describe('seed: the moodboard demo content', () => {
         const parent = db.items.find((p) => p.id === item.parent_id);
         expect(parent?.project_id, `${item.key} parent in the same project`).toBe(item.project_id);
         expect(parent?.parent_id, `${item.key} no grandparents in the demo`).toBeNull();
+        // two levels (correction round 2026-10-29): the parent is an epic, the child is none
+        expect(db.types.find((t) => t.id === parent?.type_id)?.is_epic, `${item.key} parent is an epic`).toBe(true);
+        expect(type?.is_epic, `${item.key} under a parent is no epic`).toBe(false);
       }
       // closing data goes together with the category
       expect(item.closed_at !== null, `${item.key} closed_at`).toBe(closed);
