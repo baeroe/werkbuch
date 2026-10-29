@@ -1,23 +1,37 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import type { ReactNode } from 'react';
 import { createMemoryRouter } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FAIL_KEY } from '@/api/client';
 import { getDb, saveDb } from '@/api/db';
 import { getWorkItem } from '@/api/workItems';
+import { PeekHost } from '@/app/PeekHost';
 import { currentToasts, dismissToast } from '@/components/ui/toast';
 import { TooltipProvider } from '@/components/ui/Tooltip';
+import { listShortcuts } from '@/lib/shortcuts/registry';
 import { useUiStore } from '@/store/ui';
 import { resetApi } from '@/test/api';
 import type { WorkItem } from '@/types';
 import ItemsRoute from './routes';
 
-function renderAt(path: string) {
+/** A list route; with `preview` as in the shell: in the main area, with the preview panel beside it. */
+function renderAt(path: string, { preview = false } = {}) {
+  const page = (list: ReactNode) =>
+    preview ? (
+      <>
+        <main id="main">{list}</main>
+        <PeekHost />
+      </>
+    ) : (
+      list
+    );
   const router = createMemoryRouter(
     [
-      { path: '/projects/:identifier', element: <ItemsRoute preset="project" /> },
-      { path: '/views/:viewId', element: <ItemsRoute preset="view" /> },
+      { path: '/projects/:identifier', element: page(<ItemsRoute preset="project" />) },
+      { path: '/views/:viewId', element: page(<ItemsRoute preset="view" />) },
       { path: '/elsewhere', element: <p>Woanders</p> },
     ],
     { initialEntries: [path] },
@@ -109,6 +123,30 @@ describe('the item list screen', () => {
     await waitFor(() => expect(announcer().textContent).toBe('Kein Item passt zum Filter'));
     await act(() => router.navigate(`/projects/WEB?filter=${filterOf([{ field: 'title', op: 'contains', value: 'Formular' }])}`));
     await waitFor(() => expect(announcer().textContent).toBe('2 Items'));
+    router.dispose();
+  });
+
+  it('with the preview open, e edits the title of the previewed item, from its row and from the title link in the row', async () => {
+    const user = userEvent.setup();
+    const router = renderAt('/projects/WEB', { preview: true });
+    const row = await screen.findByRole('group', { name: /^WEB-47 / });
+    act(() => row.focus());
+    // the space bar on the row opens its preview beside the list; the focus stays on the row
+    await user.keyboard(' ');
+    const panel = await screen.findByRole('complementary', { name: 'Vorschau' });
+    await within(panel).findByRole('button', { name: 'Kontaktformular sendet doppelt' });
+    await waitFor(() => expect(listShortcuts().some((shortcut) => shortcut.id === 'detail.title.peek')).toBe(true));
+    expect(document.activeElement).toBe(row);
+
+    await user.keyboard('e');
+    await waitFor(() => expect(document.activeElement).toBe(within(panel).getByRole('textbox', { name: 'Titel' })));
+
+    // Escape leaves the field; a click on the row's title focuses its link, and e edits from there as well
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(within(panel).queryByRole('textbox', { name: 'Titel' })).toBeNull());
+    act(() => row.querySelector<HTMLElement>('[data-item-link]')!.focus());
+    await user.keyboard('e');
+    await waitFor(() => expect(document.activeElement).toBe(within(panel).getByRole('textbox', { name: 'Titel' })));
     router.dispose();
   });
 

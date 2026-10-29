@@ -3,14 +3,16 @@
  * - `ItemDetailProvider` goes around a whole detail (header and body): where it is shown, how other items open there,
  *   the actions of the shortcuts e (title), m (comment) and r (relation), registered here in detail scope, and the
  *   owner of what the editors inside upload (the item). The screens key it by the item, so nothing of one item's
- *   drafts carries over to the next.
+ *   drafts carries over to the next. On the page the three keys always act; in the preview only while the focus is
+ *   in its panel, on an item row or nowhere in particular (`previewKeysAct`), so the screen beside it keeps its own
+ *   keys: in the inbox, e marks the notification under the cursor read.
  * - `ItemBody`: title, the archived and blocked notes, the fields, description, children, relations, attachments and
  *   the activity with its comment box. In the preview one column, as in the moodboard panel; on the page the fields
  *   stand in a column on the right from lg on (they stay in view while the main column scrolls), below lg they follow
  *   the title. The reading order is the same everywhere.
  */
 
-import { useMemo, useRef, type ReactNode } from 'react';
+import { useMemo, useRef, type ReactNode, type RefObject } from 'react';
 import { useNavigate } from 'react-router';
 import { BlockedHint } from '@/components/items/BlockedHint';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
@@ -27,15 +29,37 @@ import { ArchivedNote, ItemTitle } from './ItemHeader';
 import { Relations } from './Relations';
 import { DetailContext, type DetailActions, type DetailContextValue, type DetailSurface } from './shared';
 
-function DetailShortcuts({ surface, actions }: { surface: DetailSurface; actions: DetailContextValue['actions'] }) {
-  const common = { scope: 'detail', group: 'Item' } as const;
+/**
+ * Whether the preview's e, m and r act now: the focus is in the preview's panel, on an item row or inside one (its
+ * title link after a click; the preview beside a list follows the list's cursor), or nowhere in particular. On
+ * anything else of the screen beside the preview they yield to that screen's own keys.
+ */
+function previewKeysAct(panel: RefObject<HTMLElement | null> | undefined): boolean {
+  const focus = document.activeElement;
+  if (!focus || focus === document.body || focus.id === 'main') return true;
+  return Boolean(panel?.current?.contains(focus)) || focus.closest('[data-nav-target]') !== null;
+}
+
+type DetailShortcutsProps = { surface: DetailSurface; actions: DetailContextValue['actions']; panel?: RefObject<HTMLElement | null> };
+
+function DetailShortcuts({ surface, actions, panel }: DetailShortcutsProps) {
+  const when = surface === 'peek' ? () => previewKeysAct(panel) : undefined;
+  const common = { scope: 'detail', group: 'Item', when } as const;
   useShortcut({ ...common, id: `detail.title.${surface}`, keys: 'e', label: 'Titel bearbeiten', run: () => actions.current.editTitle?.() });
   useShortcut({ ...common, id: `detail.comment.${surface}`, keys: 'm', label: 'Kommentar schreiben', run: () => actions.current.writeComment?.() });
   useShortcut({ ...common, id: `detail.relation.${surface}`, keys: 'r', label: 'Relation hinzufügen', run: () => actions.current.addRelation?.() });
   return null;
 }
 
-export function ItemDetailProvider({ detail, surface, children }: { detail: WorkItemDetail; surface: DetailSurface; children: ReactNode }) {
+type ItemDetailProviderProps = {
+  detail: WorkItemDetail;
+  surface: DetailSurface;
+  /** The preview's panel (`PeekHost`): with the focus inside, the preview's keys act. */
+  panel?: RefObject<HTMLElement | null>;
+  children: ReactNode;
+};
+
+export function ItemDetailProvider({ detail, surface, panel, children }: ItemDetailProviderProps) {
   const navigate = useNavigate();
   const actions = useRef<DetailActions>({});
   const itemId = detail.item.id;
@@ -59,7 +83,7 @@ export function ItemDetailProvider({ detail, surface, children }: { detail: Work
   return (
     <DetailContext.Provider value={context}>
       <UploadOwnerContext.Provider value={owner}>
-        <DetailShortcuts surface={surface} actions={actions} />
+        <DetailShortcuts surface={surface} actions={actions} panel={panel} />
         {children}
       </UploadOwnerContext.Provider>
     </DetailContext.Provider>

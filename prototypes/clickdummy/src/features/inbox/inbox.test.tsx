@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@/api/client';
 import { getDb, saveDb } from '@/api/db';
 import { simulateRemoteChange } from '@/api/live';
+import { PeekHost } from '@/app/PeekHost';
 import * as notificationsApi from '@/api/notifications';
 import { listNotifications } from '@/api/notifications';
 import { currentToasts, dismissToast, resetToasts, runToastAction } from '@/components/ui/toast';
@@ -32,17 +33,26 @@ function LiveSync() {
   return null;
 }
 
-function renderInbox(path = '/inbox') {
+/** The inbox; with `preview` as in the shell: in the main area, with the preview panel beside it. */
+function renderInbox(path = '/inbox', { preview = false } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  const screenElement = (
+    <>
+      <LiveSync />
+      <InboxScreen />
+    </>
+  );
   const router = createMemoryRouter(
     [
       {
         path: '/inbox',
-        element: (
+        element: preview ? (
           <>
-            <LiveSync />
-            <InboxScreen />
+            <main id="main">{screenElement}</main>
+            <PeekHost />
           </>
+        ) : (
+          screenElement
         ),
       },
       { path: '*', element: <p>anderswo</p> },
@@ -349,6 +359,29 @@ describe('the keys', () => {
     expect(error.title).toBe('Benachrichtigung nicht gelöscht');
     // a server failure is worth a second try
     expect(error.action?.label).toBe('Erneut versuchen');
+  });
+
+  it('with the preview open, e still marks the notification under the cursor read instead of editing the previewed title', async () => {
+    const user = userEvent.setup();
+    renderInbox('/inbox', { preview: true });
+    await loaded();
+    const main = screen.getByRole('main');
+    await waitFor(() => expect(within(main).getByRole('status').textContent).toBe('3 ungelesen'));
+
+    // j and Enter: the item of the first notification opens beside the list, the focus stays on the row
+    await user.keyboard('j{Enter}');
+    const panel = await screen.findByRole('complementary', { name: 'Vorschau' });
+    await within(panel).findByRole('button', { name: 'Startseite: Hero und Teaser bauen' });
+    // the preview's own e ("Titel bearbeiten") is registered by now
+    await waitFor(() => expect(listShortcuts().some((shortcut) => shortcut.id === 'detail.title.peek')).toBe(true));
+    const row = within(main).getAllByRole('link').find((link) => link.hasAttribute('data-item-link'))!;
+    expect(document.activeElement).toBe(row);
+
+    await user.keyboard('e');
+
+    await waitFor(() => expect(within(main).getByRole('status').textContent).toBe('2 ungelesen'));
+    expect(document.activeElement).toBe(row);
+    expect(within(panel).queryByRole('textbox', { name: 'Titel' })).toBeNull();
   });
 
   it('Enter opens the item in the preview, does not navigate, and does not mark anything read', async () => {
