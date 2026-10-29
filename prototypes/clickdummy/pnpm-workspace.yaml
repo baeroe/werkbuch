@@ -1,0 +1,5 @@
+# The clickdummy is its own pnpm root (own lockfile), independent of the later app.
+
+# Only listed packages may run build scripts; any other package with build scripts makes
+# `pnpm install` fail until it is added here as `true` (fetches/builds a native binary) or `false`.
+allowBuilds: {}

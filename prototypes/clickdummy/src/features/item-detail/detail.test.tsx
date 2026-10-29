@@ -1,0 +1,606 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import type { ReactNode } from 'react';
+import { MemoryRouter, Route, Routes } from 'react-router';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApiError, FAIL_KEY } from '@/api/client';
+import { CreateHost } from '@/app/CreateHost';
+import { getDb, saveDb } from '@/api/db';
+import { getWorkItem, updateWorkItem } from '@/api/workItems';
+import { currentToasts, resetToasts, runToastAction, toast } from '@/components/ui/toast';
+import { plainText } from '@/lib/richtext';
+import { useUiStore } from '@/store/ui';
+import { asUser, resetApi } from '@/test/api';
+import type { ActivityEntry, Comment, ItemEvent, RichText } from '@/types';
+import { preloadEditor } from '@/features/editor/RichTextEditor';
+import { buildTimeline } from './Activity';
+import { ItemPage } from './ItemPage';
+import { ItemPeek } from './ItemPeek';
+
+/** Switches of the item API for single tests; off, every call goes to the fake API as it is. */
+const api = vi.hoisted(() => ({
+  /** Saves wait in `held` until released: a save stays on its way while something else happens. */
+  holding: false,
+  held: [] as Array<() => void>,
+  /** Every item read fails with this. */
+  readError: null as Error | null,
+}));
+
+vi.mock('@/api/workItems', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/workItems')>();
+  return {
+    ...actual,
+    updateWorkItem: vi.fn(async (...args: Parameters<typeof actual.updateWorkItem>) => {
+      if (api.holding) await new Promise<void>((resolve) => api.held.push(resolve));
+      return actual.updateWorkItem(...args);
+    }),
+    getWorkItem: vi.fn(async (...args: Parameters<typeof actual.getWorkItem>) => {
+      if (api.readError) throw api.readError;
+      return actual.getWorkItem(...args);
+    }),
+  };
+});
+
+// the toast store as it is; the spy counts the toasts asked for (the same error again replaces the one on screen)
+vi.mock('@/components/ui/toast', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/components/ui/toast')>();
+  return { ...actual, toast: vi.fn(actual.toast) };
+});
+
+beforeAll(async () => {
+  // jsdom has no layout; the editor measures the selection
+  const empty = () => ({ x: 0, y: 0, top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0, toJSON: () => ({}) }) as DOMRect;
+  Range.prototype.getBoundingClientRect = empty;
+  Range.prototype.getClientRects = () => ({ length: 0, item: () => null, [Symbol.iterator]: [][Symbol.iterator] }) as unknown as DOMRectList;
+  document.elementFromPoint = () => null;
+  Element.prototype.scrollIntoView = () => {};
+  await preloadEditor();
+});
+
+beforeEach(() => {
+  resetApi();
+  useUiStore.setState(useUiStore.getInitialState());
+  Object.assign(api, { holding: false, held: [], readError: null });
+});
+
+afterEach(() => {
+  act(() => resetToasts());
+});
+
+function renderWithData(node: ReactNode, path = '/') {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  const view = render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={[path]}>{node}</MemoryRouter>
+    </QueryClientProvider>,
+  );
+  return { ...view, client };
+}
+
+/** The steps of WEB-47 as the server holds them. */
+const storedSteps = () => plainText(getDb().items.find((entry) => entry.key === 'WEB-47')!.values.steps as RichText);
+
+/** jsdom is no Mac: mod is the Control key. */
+const modEnter = '{Control>}{Enter}{/Control}';
+
+/** Adds text where the editor's caret is. Typed keys would do the same, but jsdom mixes them up behind existing text. */
+const paste = (editor: HTMLElement, text: string) =>
+  fireEvent.paste(editor, { clipboardData: { files: [], types: ['text/plain'], getData: (type: string) => (type === 'text/plain' ? text : '') } });
+
+/** Runs `send` while the fake API is down (503), and answers the error toast it leaves. */
+async function failing(send: () => Promise<void>, title: string) {
+  localStorage.setItem(FAIL_KEY, '1');
+  try {
+    await send();
+    return await waitFor(() => {
+      const failed = currentToasts().find((item) => item.title === title);
+      expect(failed?.action?.label).toBe('Erneut versuchen');
+      return failed!;
+    });
+  } finally {
+    localStorage.removeItem(FAIL_KEY);
+  }
+}
+
+/* ----------------------------------------------------------------------------- timeline */
+
+const event = (id: string, actor: string, at: string, changes: ItemEvent['changes'], reason: string | null = null, type = 'work_item.updated'): ActivityEntry => ({
+  kind: 'event',
+  id,
+  at,
+  event: { id, type, actor_id: actor, subject: { type: 'work_item', id: 'wi_web_47' }, project_id: 'p_web', changes, reason, occurred_at: at },
+});
+const comment = (id: string, author: string, at: string): ActivityEntry => ({
+  kind: 'comment',
+  id,
+  at,
+  comment: { id, work_item_id: 'wi_web_47', author_id: author, body: { type: 'doc', content: [] }, created_at: at, edited_at: null, reactions: [] } satisfies Comment,
+});
+
+describe('buildTimeline', () => {
+  const entries: ActivityEntry[] = [
+    event('a', 'u_ida', '2026-10-27T10:00:00Z', { priority: { old: 'high', new: 'urgent' } }),
+    event('b', 'u_ida', '2026-10-27T10:04:59Z', { due_date: { old: null, new: '2026-10-31' } }),
+    event('c', 'u_ida', '2026-10-27T10:05:01Z', { label_ids: { old: [], new: ['lb_ux'] } }),
+    event('d', 'u_automation', '2026-10-27T10:05:02Z', { assignee_id: { old: null, new: 'u_jonas' } }, 'Automatisierung: Assignee beim Start'),
+    comment('e', 'u_mara', '2026-10-27T10:06:00Z'),
+    event('f', 'u_ida', '2026-10-27T10:07:00Z', { title: { old: 'A', new: 'B' } }),
+  ];
+
+  it('folds changes of one person within five minutes into one line, and starts anew after a comment', () => {
+    const lines = buildTimeline(entries, 'all');
+    expect(lines.map((line) => (line.kind === 'events' ? line.events.map((entry) => entry.id).join('+') : `comment ${line.key}`))).toEqual([
+      // c comes 5 min 1 s after the group's first change: a line of its own
+      'a+b',
+      'c',
+      'd',
+      'comment e',
+      'f',
+    ]);
+  });
+
+  it('filters comments and changes, and leaves the webhook events of bots out', () => {
+    const withBot: ActivityEntry[] = [...entries, event('g', 'u_mara', '2026-10-27T10:08:00Z', {}, null, 'bot.mentioned')];
+    expect(buildTimeline(withBot, 'comments').map((line) => line.key)).toEqual(['e']);
+    expect(buildTimeline(withBot, 'changes').map((line) => line.key)).toEqual(['a', 'c', 'd', 'f']);
+  });
+});
+
+/* ------------------------------------------------------------------------------ detail */
+
+describe('ItemPeek', () => {
+  it('shows a relation to an item the reader may not see as "verborgenes Item", without a way to remove it', async () => {
+    asUser('u_ida');
+    renderWithData(<ItemPeek itemId="WEB-47" />);
+
+    const relations = await screen.findByRole('region', { name: 'Relationen' });
+    await within(relations).findByText('verborgenes Item');
+    expect(within(relations).queryByText(/OPS-12/)).toBeNull();
+    // the visible one can go, the hidden one has no button
+    expect(within(relations).getAllByRole('button', { name: /entfernen/ }).map((button) => button.getAttribute('aria-label'))).toEqual([
+      'Relation „wird getestet von WEB-54“ entfernen',
+    ]);
+  });
+
+  it('a save on a stale description version shows the conflict: "Meine Fassung übernehmen" saves this text over the other', async () => {
+    const user = userEvent.setup();
+    const before = (await getWorkItem('WEB-47')).item;
+    renderWithData(<ItemPeek itemId="WEB-47" />);
+
+    await user.click(await screen.findByRole('button', { name: 'Weitere Aktionen' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Beschreibungskonflikt simulieren' }));
+
+    const banner = await screen.findByRole('alert', {}, { timeout: 3000 });
+    expect(banner.textContent).toContain('hat die Beschreibung inzwischen geändert');
+    // the other window's version is stored; this window still shows its own
+    expect(plainText((await getWorkItem('WEB-47')).item.description)).toContain('Nachtrag aus einem zweiten Fenster');
+
+    await user.click(within(banner).getByRole('button', { name: 'Meine Fassung übernehmen' }));
+    await waitFor(async () => {
+      const stored = (await getWorkItem('WEB-47')).item;
+      expect(plainText(stored.description)).toBe(plainText(before.description));
+      expect(stored.description_version).toBe(before.description_version + 2);
+    });
+    expect(screen.queryByText(/hat die Beschreibung inzwischen geändert/)).toBeNull();
+  });
+
+  it('"Neu laden" takes the other version into the editor and drops the conflict', async () => {
+    const user = userEvent.setup();
+    renderWithData(<ItemPeek itemId="WEB-47" />);
+
+    await user.click(await screen.findByRole('button', { name: 'Weitere Aktionen' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Beschreibungskonflikt simulieren' }));
+    const banner = await screen.findByRole('alert', {}, { timeout: 3000 });
+    await user.click(within(banner).getByRole('button', { name: 'Neu laden' }));
+
+    expect(screen.queryByRole('alert')).toBeNull();
+    const editor = screen.getByRole('textbox', { name: 'Beschreibung' });
+    await waitFor(() => expect(editor.textContent).toContain('Nachtrag aus einem zweiten Fenster'));
+  });
+
+  it('keeps the own version of an open conflict when the item closes: reopened, the banner offers it again', async () => {
+    const user = userEvent.setup();
+    const first = renderWithData(<ItemPeek itemId="WEB-47" />);
+    await user.click(await screen.findByRole('button', { name: 'Weitere Aktionen' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Beschreibungskonflikt simulieren' }));
+    await screen.findByRole('alert', {}, { timeout: 3000 });
+    // written on below the banner, then the preview closes
+    paste(screen.getByRole('textbox', { name: 'Beschreibung' }), 'Meine Ergänzung. ');
+    first.unmount();
+
+    renderWithData(<ItemPeek itemId="WEB-47" />);
+    const editor = await screen.findByRole('textbox', { name: 'Beschreibung' });
+    const banner = screen.getByRole('alert');
+    expect(banner.textContent).toContain('hat die Beschreibung inzwischen geändert');
+    expect(editor.textContent).toContain('Meine Ergänzung.');
+    expect(editor.textContent).not.toContain('Nachtrag aus einem zweiten Fenster');
+
+    await user.click(within(banner).getByRole('button', { name: 'Meine Fassung übernehmen' }));
+    await waitFor(async () => expect(plainText((await getWorkItem('WEB-47')).item.description)).toContain('Meine Ergänzung.'));
+    expect(plainText((await getWorkItem('WEB-47')).item.description)).not.toContain('Nachtrag aus einem zweiten Fenster');
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('announces the save state of the description in a status region that is there before the first save', async () => {
+    const user = userEvent.setup();
+    renderWithData(<ItemPeek itemId="WEB-47" />);
+    const section = await screen.findByRole('region', { name: 'Beschreibung' });
+    const editor = await within(section).findByRole('textbox', { name: 'Beschreibung' });
+    // a live region speaks only about changes it was there for
+    const status = within(section).getByRole('status');
+    expect(status.textContent).toBe('');
+
+    await user.click(editor);
+    paste(editor, 'Kurz vor dem Release geprüft. ');
+    await user.keyboard(modEnter);
+    await waitFor(() => expect(status.textContent).toBe('Gespeichert'));
+    expect(within(section).getByRole('status')).toBe(status);
+  });
+});
+
+/* ------------------------------------------------------------------------------ children */
+
+describe('two levels: children under epics only, no parent for an epic', () => {
+  it('a task shows no children section and no "Kind-Item anlegen …"; it has a parent field', async () => {
+    const user = userEvent.setup();
+    // WEB-42 is a task under WEB-30
+    renderWithData(<ItemPeek itemId="WEB-42" />);
+    expect(await screen.findByRole('combobox', { name: /^Eltern-Item: WEB-30/ })).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Kinder' })).toBeNull();
+
+    await user.click(await screen.findByRole('button', { name: 'Weitere Aktionen' }));
+    expect(await screen.findByRole('menuitem', { name: /Relation hinzufügen/ })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: /Kind-Item anlegen/ })).toBeNull();
+  });
+
+  it('an epic shows its children with "Kind-Item" and "Kind-Item anlegen …", and no parent field', async () => {
+    const user = userEvent.setup();
+    renderWithData(<ItemPeek itemId="WEB-30" />);
+    const children = await screen.findByRole('region', { name: 'Kinder' });
+    expect(await within(children).findByRole('button', { name: 'Kind-Item' })).toBeTruthy();
+    expect(screen.queryByText('Eltern')).toBeNull();
+    expect(screen.queryByRole('combobox', { name: /^Eltern-Item/ })).toBeNull();
+
+    await user.click(await screen.findByRole('button', { name: 'Weitere Aktionen' }));
+    expect(await screen.findByRole('menuitem', { name: 'Kind-Item anlegen …' })).toBeTruthy();
+  });
+});
+
+/** WEB as a project may be set up: its default type, and the types it enables. */
+function webTypes(change: { default_type_id?: string; enabled_type_ids?: string[] }) {
+  Object.assign(getDb().projects.find((project) => project.id === 'p_web')!, change);
+  saveDb();
+}
+
+/** The "Kind-Item" button of an epic's children section, once it acts (the rights and the types have loaded). */
+async function childButton() {
+  const button = await within(await screen.findByRole('region', { name: 'Kinder' })).findByRole('button', { name: 'Kind-Item' });
+  await waitFor(() => expect(button.getAttribute('aria-disabled')).toBeNull());
+  return button;
+}
+
+describe('a child item with Epic as the default type of the project', () => {
+  it('„Kind-Item“ on WEB-30 creates a Task under WEB-30', async () => {
+    webTypes({ default_type_id: 't_epic' });
+    const user = userEvent.setup();
+    renderWithData(
+      <>
+        <ItemPeek itemId="WEB-30" />
+        <CreateHost />
+      </>,
+    );
+
+    await user.click(await childButton());
+
+    const dialog = await screen.findByRole('dialog', { name: 'Neues Item' });
+    // the default type would be an epic, which takes no parent: the child is the project's first other type
+    expect((await within(dialog).findByRole('combobox', { name: /^Typ/ })).textContent).toContain('Task');
+    expect(await within(dialog).findByRole('combobox', { name: /^Eltern-Item: WEB-30/ })).toBeTruthy();
+    await user.type(await within(dialog).findByRole('textbox', { name: /Titel/ }), 'Referenzen: Fallstudien sammeln');
+    await user.keyboard(modEnter);
+
+    await waitFor(() =>
+      expect(getDb().items.find((entry) => entry.title === 'Referenzen: Fallstudien sammeln')).toMatchObject({ type_id: 't_task', parent_id: 'wi_web_30' }),
+    );
+  });
+
+  it('„Kind-Item anlegen …“ in the item menu opens the dialog with that type as well', async () => {
+    webTypes({ default_type_id: 't_epic' });
+    const user = userEvent.setup();
+    renderWithData(
+      <>
+        <ItemPeek itemId="WEB-30" />
+        <CreateHost />
+      </>,
+    );
+    await childButton();
+
+    await user.click(await screen.findByRole('button', { name: 'Weitere Aktionen' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Kind-Item anlegen …' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Neues Item' });
+    expect((await within(dialog).findByRole('combobox', { name: /^Typ/ })).textContent).toContain('Task');
+    expect(await within(dialog).findByRole('combobox', { name: /^Eltern-Item: WEB-30/ })).toBeTruthy();
+  });
+
+  it('without a type that may be a child, both ways say why and open nothing', async () => {
+    webTypes({ default_type_id: 't_epic', enabled_type_ids: ['t_epic'] });
+    const user = userEvent.setup();
+    renderWithData(
+      <>
+        <ItemPeek itemId="WEB-30" />
+        <CreateHost />
+      </>,
+    );
+    const button = await within(await screen.findByRole('region', { name: 'Kinder' })).findByRole('button', { name: 'Kind-Item' });
+    await waitFor(() => expect(document.getElementById(button.getAttribute('aria-describedby') ?? '')?.textContent).toBe('Im Projekt ist kein Typ aktiviert, der Kind-Item sein kann.'));
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+
+    await user.click(await screen.findByRole('button', { name: 'Weitere Aktionen' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Kind-Item anlegen …' }));
+
+    expect(currentToasts().at(-1)).toMatchObject({ title: 'Nicht möglich', description: 'Im Projekt ist kein Typ aktiviert, der Kind-Item sein kann.' });
+    expect(screen.queryByRole('dialog', { name: 'Neues Item' })).toBeNull();
+  });
+});
+
+describe('a new child item', () => {
+  it('starts in the start status of the workflow, also when its parent is further along', async () => {
+    const user = userEvent.setup();
+    renderWithData(
+      <>
+        <ItemPeek itemId="WEB-30" />
+        <CreateHost />
+      </>,
+    );
+    // WEB-30, an epic of WEB, is in progress
+    await screen.findByRole('region', { name: 'Kinder' });
+    expect(getDb().items.find((entry) => entry.key === 'WEB-30')?.state_id).toBe('std_progress');
+
+    // the button comes with the rights and acts once the types have loaded
+    await user.click(await childButton());
+    const dialog = await screen.findByRole('dialog', { name: 'Neues Item' });
+    // the dialog offers the start status of the workflow, not the status of the parent
+    expect(await within(dialog).findByRole('combobox', { name: 'Status: Backlog' })).toBeTruthy();
+    await user.type(await within(dialog).findByRole('textbox', { name: /Titel/ }), 'Kontaktseite: Anfahrtskarte einbinden');
+    await user.keyboard(modEnter);
+
+    await waitFor(() =>
+      expect(getDb().items.find((entry) => entry.title === 'Kontaktseite: Anfahrtskarte einbinden')).toMatchObject({ parent_id: 'wi_web_30', state_id: 'std_backlog' }),
+    );
+  });
+});
+
+/* ------------------------------------------------------------------------------ retries */
+
+describe('a rich text property that failed to save', () => {
+  it('keeps its text, also when the item is fetched again, and the next save sends it', async () => {
+    const user = userEvent.setup();
+    const { client } = renderWithData(<ItemPeek itemId="WEB-47" />);
+    const steps = await screen.findByRole('textbox', { name: 'Schritte zum Nachstellen' });
+    await user.click(steps);
+    paste(steps, 'Vorher den Cache leeren. ');
+
+    // the save fails, and so does the reload after it: the item stays on screen with the text in its editor
+    await failing(() => user.keyboard(modEnter), 'Änderung nicht gespeichert');
+    expect(steps.isConnected).toBe(true);
+    expect(steps.textContent).toContain('Vorher den Cache leeren.');
+    // the server answers again, with the old steps
+    await act(() => client.invalidateQueries());
+    expect(screen.getByRole('textbox', { name: 'Schritte zum Nachstellen' })).toBe(steps);
+    expect(steps.textContent).toContain('Vorher den Cache leeren.');
+
+    await user.keyboard(modEnter);
+    await waitFor(async () => expect(plainText((await getWorkItem('WEB-47')).item.values.steps as RichText)).toContain('Vorher den Cache leeren.'));
+  });
+
+  it('keeps saving when "Erneut versuchen" runs while a save is on its way: what is written later reaches the server', async () => {
+    const user = userEvent.setup();
+    renderWithData(<ItemPeek itemId="WEB-47" />);
+    const steps = await screen.findByRole('textbox', { name: 'Schritte zum Nachstellen' });
+    await user.click(steps);
+    paste(steps, 'Vorher den Cache leeren. ');
+    const failed = await failing(() => user.keyboard(modEnter), 'Änderung nicht gespeichert');
+
+    // the click on the toast takes the focus from the editor, whose blur saves; the retry comes while that save is out
+    api.holding = true;
+    act(() => steps.blur());
+    await waitFor(() => expect(api.held).toHaveLength(1));
+    act(() => runToastAction(failed.id));
+    await waitFor(() => expect(api.held).toHaveLength(2));
+    api.holding = false;
+    await act(async () => api.held.splice(0).forEach((release) => release()));
+    await waitFor(() => expect(storedSteps()).toContain('Vorher den Cache leeren.'));
+
+    await user.click(steps);
+    paste(steps, 'Danach noch ergänzt. ');
+    await user.keyboard(modEnter);
+    await waitFor(() => expect(storedSteps()).toContain('Danach noch ergänzt.'));
+  });
+
+  it('does not take back an older text when the retry of a failed save lands after a newer save', async () => {
+    const user = userEvent.setup();
+    renderWithData(<ItemPeek itemId="WEB-47" />);
+    const steps = await screen.findByRole('textbox', { name: 'Schritte zum Nachstellen' });
+    await user.click(steps);
+    paste(steps, 'Vorher den Cache leeren. ');
+    const failed = await failing(() => user.keyboard(modEnter), 'Änderung nicht gespeichert');
+    // written on after the failure, then "Erneut versuchen": the blur saves the newer text, the retry sends the older one
+    paste(steps, 'Danach noch ergänzt. ');
+    api.holding = true;
+    act(() => steps.blur());
+    await waitFor(() => expect(api.held).toHaveLength(1));
+    act(() => runToastAction(failed.id));
+    await waitFor(() => expect(api.held).toHaveLength(2));
+    const retry = vi.mocked(updateWorkItem).mock.results.at(-1)!;
+    api.holding = false;
+
+    // the newer save lands first, the retry with the older text after it
+    await act(async () => api.held[0]());
+    await waitFor(() => expect(storedSteps()).toContain('Danach noch ergänzt.'));
+    await act(async () => {
+      api.held[1]();
+      await retry.value;
+    });
+    await waitFor(() => expect(storedSteps()).toContain('Danach noch ergänzt.'));
+    expect(steps.textContent).toContain('Danach noch ergänzt.');
+  });
+});
+
+/* --------------------------------------------------------------------------- access lost */
+
+describe('an item the reader can no longer see (403)', () => {
+  const forbidden = () => new ApiError({ status: 403, reason: 'forbidden', detail: 'Dieses Projekt siehst du nicht.' });
+
+  it('the preview shows it as gone instead of what it had loaded', async () => {
+    const { client } = renderWithData(<ItemPeek itemId="WEB-47" />);
+    await screen.findByRole('textbox', { name: 'Beschreibung' });
+
+    api.readError = forbidden();
+    await act(() => client.invalidateQueries());
+    expect(await screen.findByText('Dieses Item gibt es nicht mehr')).toBeTruthy();
+    expect(screen.queryByRole('textbox', { name: 'Beschreibung' })).toBeNull();
+  });
+
+  it('the page shows its 404 page instead of what it had loaded', async () => {
+    const { client } = renderWithData(
+      <Routes>
+        <Route path="/items/:key" element={<ItemPage />} />
+      </Routes>,
+      '/items/WEB-47',
+    );
+    await screen.findByRole('textbox', { name: 'Beschreibung' });
+
+    api.readError = forbidden();
+    await act(() => client.invalidateQueries());
+    expect(await screen.findByRole('heading', { level: 1, name: 'WEB-47 gibt es nicht' })).toBeTruthy();
+    expect(screen.queryByRole('textbox', { name: 'Beschreibung' })).toBeNull();
+  });
+});
+
+describe('a bot that belongs to a person', () => {
+  it('Kira, the bot of Mara, is called „Bot“ in the activity, the people picker and the mention list, never „Agent“', async () => {
+    const user = userEvent.setup();
+    renderWithData(<ItemPeek itemId="OPS-12" />);
+
+    // the activity: Kira wrote a comment on OPS-12
+    const comment = await screen.findByRole('article', { name: 'Kommentar von Kira' });
+    expect(within(comment).getByText('Bot')).toBeTruthy();
+    expect(comment.textContent).not.toContain('Agent');
+
+    // the people picker of the assignee
+    await user.click((await screen.findAllByRole('combobox', { name: /^Assignee/ }))[0]);
+    const picked = await screen.findByRole('option', { name: /Kira/ });
+    expect(picked.textContent).toContain('Bot');
+    expect(picked.textContent).not.toContain('Agent');
+    await user.keyboard('{Escape}');
+
+    // the mention list of a comment
+    await user.click(await screen.findByRole('button', { name: /Kommentar schreiben/ }));
+    const editor = await screen.findByRole('textbox', { name: 'Kommentar' });
+    await waitFor(() => expect(document.activeElement).toBe(editor));
+    await user.keyboard('@ki');
+    const mentioned = await within(await screen.findByRole('listbox', { name: 'Personen und Bots' })).findByRole('option', { name: /Kira/ });
+    expect(mentioned.textContent).toContain('Bot');
+    expect(mentioned.textContent).not.toContain('Agent');
+  });
+});
+
+describe('"Erneut versuchen" on a comment that failed', () => {
+  it('sends the comment as it reads now, also what was written after the failure', async () => {
+    const user = userEvent.setup();
+    renderWithData(<ItemPeek itemId="WEB-47" />);
+    const { item } = await getWorkItem('WEB-47');
+    await user.click(await screen.findByRole('button', { name: /Kommentar schreiben/ }));
+    const editor = await screen.findByRole('textbox', { name: 'Kommentar' });
+    // the editor takes the focus once it is there; keys before that would be the detail's shortcuts
+    await waitFor(() => expect(document.activeElement).toBe(editor));
+    await user.keyboard('Tritt auch in Safari auf');
+
+    const failed = await failing(() => user.keyboard(modEnter), 'Kommentar nicht gesendet');
+    paste(editor, ' und in Firefox');
+    act(() => runToastAction(failed.id));
+
+    await waitFor(() => expect(currentToasts().some((entry) => entry.title === 'Kommentar gesendet')).toBe(true));
+    const sent = getDb().comments.filter((entry) => entry.work_item_id === item.id);
+    expect(plainText(sent.at(-1)!.body)).toBe('Tritt auch in Safari auf und in Firefox');
+    // all of it went out: the composer starts empty again
+    expect(await screen.findByRole('button', { name: /Kommentar schreiben/ })).toBeTruthy();
+  });
+
+  it('saves an edited comment as it reads now, also what was written after the failure', async () => {
+    const user = userEvent.setup();
+    renderWithData(<ItemPeek itemId="WEB-47" />);
+    await user.click(await screen.findByRole('button', { name: 'Aktionen für den Kommentar von Mara Lindqvist' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Bearbeiten' }));
+    const editor = await screen.findByRole('textbox', { name: 'Kommentar bearbeiten' });
+    await waitFor(() => expect(document.activeElement).toBe(editor));
+    paste(editor, ' Auch unter iOS 17.');
+
+    const failed = await failing(() => user.keyboard(modEnter), 'Kommentar nicht geändert');
+    paste(editor, ' Und auf dem iPad.');
+    act(() => runToastAction(failed.id));
+
+    await waitFor(() => expect(currentToasts().some((entry) => entry.title === 'Kommentar geändert')).toBe(true));
+    const stored = getDb().comments.find((entry) => entry.id === 'c_web47_1')!;
+    expect(plainText(stored.body)).toBe('Kann ich reproduzieren, nur unter iOS 18. Auch unter iOS 17. Und auf dem iPad.');
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Kommentar bearbeiten' })).toBeNull());
+  });
+});
+
+describe('calls that overlap keep their own answer', () => {
+  it('uploads several files at once: each has its progress line until it is stored, and each gets its toast', async () => {
+    renderWithData(<ItemPeek itemId="WEB-47" />);
+    const section = await screen.findByRole('region', { name: 'Anhänge' });
+    const input = section.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const files = [new File(['skizze'], 'skizze.png', { type: 'image/png' }), new File(['notizen'], 'notizen.txt', { type: 'text/plain' })];
+
+    fireEvent.change(input, { target: { files } });
+    expect(within(section).getByRole('progressbar', { name: 'skizze.png wird hochgeladen' })).toBeTruthy();
+    expect(within(section).getByRole('progressbar', { name: 'notizen.txt wird hochgeladen' })).toBeTruthy();
+
+    await waitFor(() => expect(within(section).queryAllByRole('progressbar')).toHaveLength(0));
+    expect(await within(section).findByText('skizze.png')).toBeTruthy();
+    expect(within(section).getByText('notizen.txt')).toBeTruthy();
+    expect(currentToasts().map((item) => item.title)).toEqual(expect.arrayContaining(['„skizze.png“ angehängt', '„notizen.txt“ angehängt']));
+  });
+
+  it('answers each reaction that failed, also when the second was sent before the first was answered; the same error stands once', async () => {
+    renderWithData(<ItemPeek itemId="WEB-47" />);
+    const thumbs = await screen.findByRole('button', { name: /^Daumen hoch, 2 Reaktionen/ });
+    const answers = () => vi.mocked(toast).mock.calls.filter(([options]) => options.title === 'Reaktion nicht gespeichert');
+    vi.mocked(toast).mockClear();
+    localStorage.setItem(FAIL_KEY, '1');
+    try {
+      fireEvent.click(thumbs);
+      fireEvent.click(thumbs);
+      await waitFor(() => expect(answers()).toHaveLength(2));
+      expect(currentToasts().filter((item) => item.title === 'Reaktion nicht gespeichert')).toHaveLength(1);
+    } finally {
+      localStorage.removeItem(FAIL_KEY);
+    }
+  });
+});
+
+describe('uploads in comments', () => {
+  const png = () => new File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])], 'beweis.png', { type: 'image/png' });
+
+  it('an image in a new comment belongs to the comment once it is sent, not to the item', async () => {
+    const user = userEvent.setup();
+    renderWithData(<ItemPeek itemId="WEB-47" />);
+    await user.click(await screen.findByRole('button', { name: /Kommentar schreiben/ }));
+    const editor = await screen.findByRole('textbox', { name: 'Kommentar' });
+    await waitFor(() => expect(document.activeElement).toBe(editor));
+    await user.keyboard('Hier der Beweis');
+
+    fireEvent.paste(editor, { clipboardData: { files: [png()], types: ['Files'], getData: () => '' } });
+    await waitFor(() => expect(getDb().attachments.some((entry) => entry.filename === 'beweis.png')).toBe(true));
+    await waitFor(() => expect(editor.querySelector('.rt-image')).not.toBeNull());
+    await user.keyboard(modEnter);
+
+    await waitFor(() => expect(currentToasts().some((entry) => entry.title === 'Kommentar gesendet')).toBe(true));
+    const sent = getDb().comments.at(-1)!;
+    expect(getDb().attachments.find((entry) => entry.filename === 'beweis.png')?.owner).toEqual({ type: 'comment', id: sent.id });
+  });
+});

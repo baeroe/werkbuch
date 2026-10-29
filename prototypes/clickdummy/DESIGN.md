@@ -48,10 +48,13 @@ Hell („Arbeitsheft“) steht auf `:root`. Dunkel („Nachtheft“) steht unter
   /* semantic */
   --danger: oklch(0.53 0.19 25); --danger-hover: oklch(0.48 0.19 25);
   --danger-soft: oklch(0.955 0.02 25); --on-danger: oklch(1 0 0);
-  /* type tabs: task sky, bug ochre, epic moss */
+  /* type tabs: task sky, bug ochre, epic moss; plum, sand and slate for further types */
   --sky: oklch(0.63 0.08 232);   --sky-tab: oklch(0.895 0.045 228); --sky-ink: oklch(0.4 0.07 236);
   --ochre: oklch(0.65 0.115 76); --ochre-tab: oklch(0.875 0.07 80); --ochre-ink: oklch(0.42 0.075 70);
   --moss: oklch(0.6 0.095 132);  --moss-tab: oklch(0.885 0.055 132); --moss-ink: oklch(0.39 0.07 132);
+  --plum: oklch(0.58 0.09 340);  --plum-tab: oklch(0.89 0.04 340);  --plum-ink: oklch(0.4 0.075 340);
+  --sand: oklch(0.62 0.06 72);   --sand-tab: oklch(0.905 0.03 72);  --sand-ink: oklch(0.42 0.05 66);
+  --slate: oklch(0.6 0.03 258);  --slate-tab: oklch(0.87 0.014 262); --slate-ink: oklch(0.38 0.035 260);
   /* status categories: colour = category, shape = status */
   --st-backlog: oklch(0.6 0.02 258); --st-unstarted: oklch(0.5 0.03 260); --st-started: var(--day-accent);
   --st-completed: oklch(0.55 0.11 155); --st-canceled: oklch(0.56 0.04 20);
@@ -63,8 +66,8 @@ Hell („Arbeitsheft“) steht auf `:root`. Dunkel („Nachtheft“) steht unter
   color-scheme: light;
   /* theme independent: shape, type, motion, sizes */
   --r-chip: 6px; --r-ctl: 10px; --r-card: 14px;
-  --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI Variable Display", "Segoe UI", sans-serif;
-  --font-ui: Figtree, "Avenir Next", "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  --font-display: "Bricolage Grotesque Variable", "Bricolage Grotesque", "Avenir Next", "Segoe UI Variable Display", "Segoe UI", sans-serif;
+  --font-ui: "Figtree Variable", Figtree, "Avenir Next", "Segoe UI Variable Text", "Segoe UI", sans-serif;
   --dur-fast: 120ms; --dur: 160ms; --dur-spring: 420ms;
   --ease-out: cubic-bezier(0.25, 1, 0.5, 1); --ease-spring: cubic-bezier(0.34, 1.3, 0.64, 1);
   --app-w: 1392px; --app-h: 960px; --side-w: 200px; --panel-w: 384px; --col-w: 180px; --palette-w: 540px;
@@ -95,6 +98,9 @@ Nachtheft (beide Dark-Blöcke identisch):
 --sky: oklch(0.7 0.08 232);   --sky-tab: oklch(0.41 0.05 234);  --sky-ink: oklch(0.92 0.04 228);
 --ochre: oklch(0.74 0.11 78); --ochre-tab: oklch(0.42 0.065 76); --ochre-ink: oklch(0.93 0.055 82);
 --moss: oklch(0.68 0.1 132);  --moss-tab: oklch(0.4 0.06 132);   --moss-ink: oklch(0.92 0.05 132);
+--plum: oklch(0.7 0.09 340);  --plum-tab: oklch(0.41 0.055 340); --plum-ink: oklch(0.92 0.04 340);
+--sand: oklch(0.74 0.06 75);  --sand-tab: oklch(0.46 0.028 68);  --sand-ink: oklch(0.94 0.03 76);
+--slate: oklch(0.7 0.03 255); --slate-tab: oklch(0.37 0.016 262); --slate-ink: oklch(0.92 0.015 255);
 --st-backlog: oklch(0.62 0.02 258); --st-unstarted: oklch(0.75 0.02 255); --st-started: var(--night-accent);
 --st-completed: oklch(0.72 0.12 155); --st-canceled: oklch(0.66 0.04 20);
 --elev-1: 0 1px 0 oklch(0.12 0.02 258 / 0.3), 0 1px 3px oklch(0.12 0.02 258 / 0.35);
@@ -109,19 +115,20 @@ color-scheme: dark;
 - Tinte `--text` ist Blauschwarz, Bleistift `--muted` ist zweite Ordnung; beide halten AA auf Papier, Karte und Transparentpapier (geprüft: Tinte 10,3–15,8 : 1, Bleistift ≥ 5,1 : 1, auch über dunklem Untergrund unter Glas).
 - **Tintenblau ist der einzige Akzent**: primäre Aktion, Links, Erwähnungen, Inbox-Zähler, Status-Kategorie Started, Heute-Linie.
 - **Textmarker nur semantisch**: Auswahl (Karte, Zeile, `::selection`), Tastaturfokus (Halo um den Tinten-Ring), Treffer in der Suche, „Heute“. Nie Deko, nie Buttonfläche. Im Nachtheft leuchtet er: gelbe Schrift mit Schein statt gelber Fläche.
-- **Typ-Reiter gedeckt**: Task Himmel, Bug Ocker, Epic Moos. Der Typ steht immer zusätzlich als Icon im Reiter.
-- **Status**: Farbe = Kategorie (5), Form = Status (gestrichelter Kreis, Kreis, halb gefüllt, Pause, Haken gefüllt, Kreuz).
+- **Typ-Reiter gedeckt**: Task Himmel, Bug Ocker, Epic Moos; weitere Typen nehmen Pflaume, Sand oder Schiefer (`plum`, `sand`, `slate`). Der Typ steht immer zusätzlich als Icon im Reiter.
+- **Status**: Farbe = Kategorie (5), Form = Status (gestrichelter Kreis, Kreis, halb gefüllt, drei Viertel gefüllt, Pause, Haken gefüllt, Kreuz).
 - **Priorität**: drei schräge Federstriche, gefüllt nach Stufe (Low 1, Medium 2, High 3, None 0); Urgent ist ein rotes Quadrat mit „!“. Immer mit zugänglichem Namen.
 
 ## Form und Glas
 
 - **Radien**: 6 für Chips, `kbd`, Reiter, Checkbox; 10 für Buttons, Eingaben, Menüeinträge und eingelassene Flächen (Kommentar, Hinweis); 14 für Karten, Panel, Palette, Fenster; rund nur für Personen-Avatare, Switch und Zähler. Verschachtelt konzentrisch: Segmented 10 mit 4 px Innenabstand → Segmente 6.
 - **Karteikarte**: weiß, 1 px Linie, Elevation 1, oben links ein echter Reiter (Lasche als Trapez mit 6er-Rundung über `perspective` + `rotateX`, deckt die Kante der Karte ab), Farbe nach Typ, darin Typ-Icon und Key in Tabellenziffern. Kein farbiger Rand links.
+- **Epic auf der Karte**: Im Board nennt die Karte eines Kind-Items vor dem Reiter ihr Epic, wie der Pfad der Item-Seite: „Relaunch Phase 1 › [Reiter mit WEB-42]“. Der Titel des Epics steht in Bleistift (12 px) mit Chevron auf dem Papier, nicht im Reiter. Er wird zuerst gekürzt (Auslassungspunkte), der Key nie. Key und Titel des Epics stehen im Tooltip und im Namen der Karte („… Teil von WEB-30 Relaunch Phase 1“). Die Zeile ist kein eigener Link: Ein Klick auf sie öffnet wie ein Klick auf den Reiter die Karte. Sie fehlt auf Epics und im Board, das nach Eltern-Item gruppiert ist (dort ist die Spalte das Epic).
 - **Transparentpapier** (Glas, nur schwebende Flächen): Papierweiß, leicht warm, `oklch(0.988 0.007 85)` bei 74 % (Seitenleiste, Panel; Nachtheft 76 %) bzw. 88 % (Palette, Menüs, Auswahl, Toasts); `backdrop-filter: blur(8px) saturate(1.08)`; Körnung als SVG-Rauschen ≈ 5 % (Nachtheft ≈ 4 %); Kante 1 px Tinte 11 % plus Lichtkante innen oben. Nachtheft: dunkles Blaugrau. Board, Liste und Lesetext stehen auf ruhigen Flächen. Hinter einer offenen Palette liegt ein leichter Schleier (`--scrim`, 22 % Papier bzw. 32 % Nacht), damit das Board lesbar bleibt.
 - **Aktive Streifen** (Treffer in der Palette, Menüeintrag, gewählte Option, aktuelle Seite): eine Lage Karte (`--raised`) mit Elevation 1 und 1 px Bleistiftkante (`--line-input`). Die Kante trägt den Zustand, weil Weiß auf Transparentpapier nur 1,04 : 1 hat.
 - **Elevation**: 1 = Karte liegt auf, 2 = Bogen schwebt (Panel, Menü), 3 = Palette, Ziehen = eigene Stufe plus Neigung.
 - **Eingaben** haben unten eine Schreiblinie in `--line-input` (≥ 3 : 1), damit das Feld als Feld erkennbar ist. Fehler: Rahmen und Schreiblinie in `--danger`, darunter die Meldung mit Icon und konkreter Abhilfe.
-- **Avatare**: Personen rund mit Initialen auf gedeckter Fläche; Bots eckig (Radius 6) in Tinte mit Lucide-`bot` bzw. Initiale und dem Zusatz „Bot“ oder „Agent“.
+- **Avatare**: Personen rund mit Initialen auf gedeckter Fläche; Bots eckig (Radius 6) in Tinte mit Lucide-`bot` bzw. Initiale und dem Zusatz „Bot“.
 
 ## Typo-Regeln
 
@@ -162,3 +169,13 @@ Fließtext max. 65ch. Überschriften `text-wrap: balance`, Display mit −0,02em
 - 2026-10-28 (Loop): Glas von 80/90 % auf 74/88 % und Blur von 10 auf 8 px, damit das Transparentpapier als Papier lesbar wird; Bleistift bleibt dabei ≥ 5,1 : 1.
 - 2026-10-28 (Loop): Neues Token `--raised` für aktive Streifen; im Nachtheft war `--surface` auf dunklem Glas nicht zu sehen.
 - 2026-10-28 (Loop): Schatten mit Variablen nie als `shadow-[var(--x)]` schreiben; Tailwind v3 liest das als Schattenfarbe. Richtig ist `[box-shadow:var(--x)]`.
+- 2026-10-28 (Klickdummy): Drei weitere Typ-Töne für eigene Typen: Pflaume (`plum`), Sand (`sand`) und Schiefer (`slate`), gebaut wie die ersten drei (Grundton, `-tab` und `-ink`, hell und dunkel). Tinte auf Reiter hält überall mindestens 5,9 : 1, der Grundton auf Karte und Papier mindestens 3 : 1 (Punkte, Fortschritt). Sand ist heller und blasser als Ocker, Schiefer grauer als Himmel; nebeneinander liegen alle Reiter mindestens ΔE 0,04 (OKLab) auseinander.
+- 2026-10-28 (Klickdummy): Status-Formen sind eine feste Menge von sieben (`dashed`, `circle`, `half`, `three-quarter`, `pause`, `check`, `cross`); `three-quarter` kam für Status wie Review dazu.
+- 2026-10-28 (Klickdummy): fontsource nennt die Schriften „Bricolage Grotesque Variable“ (mit `opsz`-Achse aus `opsz.css`) und „Figtree Variable“. Die Font-Stacks nennen diese Namen zuerst; `kbd`, `code` und `pre` nutzen die UI-Schrift (Tailwinds Mono-Standard zeigt auf `--font-ui`).
+- 2026-10-28 (Klickdummy, Felder): Feld-Editoren sind Listen auf Transparentpapier mit einem Suchfeld oben. Dessen Schreiblinie färbt sich beim Fokus in der Fokusfarbe; der aktive Eintrag zeigt den aktiven Streifen.
+- 2026-10-28 (Klickdummy, Felder): Ohne Recht (Viewer, archiviertes Item) bleibt ein Wert in voller Tinte lesbar und fokussierbar; der Tooltip nennt den Grund. Im Formular liegt er auf `--bg-sunken` ohne Schreiblinie, damit er nicht wie ein auszufüllendes Feld aussieht.
+- 2026-10-28 (Klickdummy, Felder): Überfällig heißt Datum in `--danger`, das Icon `calendar-x-2` und das Wort „überfällig“, nie nur Farbe.
+- 2026-10-28 (Klickdummy, Felder): In Listenzeilen sind die Chips am Handy nur Anzeige (24 px sind zu klein zum Zielen); ein Tipp öffnet das Item mit 44 px hohen Feldern.
+- 2026-10-29 (Klickdummy, Code): Syntax-Highlighting in Code-Blöcken nur mit Tinte, Bleistift und Tintenblau, keine eigene Farbe. Sprachwörter (Keywords, Typen, Tags) in Tintenblau und halbfett, Werte (Strings, Zahlen) in Tintenblau, Namen (Funktionen, Attribute) in Tinte und halbfett, Kommentare und Satzzeichen in Bleistift, Kommentare kursiv. Auf `--bg-sunken` hält jede Stufe in beiden Themes mindestens 5 : 1.
+- 2026-10-29 (Klickdummy, Dialoge): Eine Rückfrage über einem Dialog (etwa „Ohne Kopie schließen?“ vor dem Schließen eines Tokens) legt ihren Schleier auch über den Dialog darunter, damit sie als oberste Lage lesbar ist.
+- 2026-10-29 (Korrekturrunde): Kind-Items nennen im Board ihr Epic vor dem Reiter. Es steht auf dem Papier, nicht im Reiter: Bleistift hält auf den Reiterfarben nur 3,2 bis 4,7 : 1, auf dem Papier 5,6 : 1 (Nachtheft 7,5 : 1).
