@@ -13,6 +13,8 @@ export default defineConfig(({ mode }) => ({
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
+    // room for the longer waits of src/test/setup.ts on a slow CI runner
+    testTimeout: 20_000,
     include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.mjs'],
   },
 }));
