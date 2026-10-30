@@ -4,6 +4,8 @@ import '../css/app.css';
 import { createInertiaApp, router } from '@inertiajs/react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import type { ComponentType } from 'react';
+import { Toaster } from '@/components/ui/Toaster';
+import { TooltipProvider } from '@/components/ui/Tooltip';
 import { queryClient, resetForUser } from '@/hooks/queryClient';
 import { initI18n, reloadIfLocaleChanged } from '@/lib/i18n';
 import type { SharedProps } from '@/lib/page';
@@ -38,7 +40,14 @@ void createInertiaApp({
     initI18n(props);
     lastUserId = props.auth.user?.id ?? null;
 
-    return <QueryClientProvider client={queryClient}>{app}</QueryClientProvider>;
+    return (
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          {app}
+          <Toaster />
+        </TooltipProvider>
+      </QueryClientProvider>
+    );
   },
   progress: { color: '#2f51b6', showSpinner: false },
 });

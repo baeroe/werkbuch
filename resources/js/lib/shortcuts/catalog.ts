@@ -25,6 +25,7 @@ export const SHORTCUTS = {
   'shell.go.my_items': { keys: 'g m', scope: 'global', label: 'shortcuts.shell.go.my_items', group: 'shortcuts.group.navigation' },
   'shell.go.views': { keys: 'g v', scope: 'global', label: 'shortcuts.shell.go.views', group: 'shortcuts.group.navigation' },
   'shell.go.projects': { keys: 'g p', scope: 'global', label: 'shortcuts.shell.go.projects', group: 'shortcuts.group.navigation' },
+  'dialog.submit': { keys: 'mod+enter', scope: 'dialog', label: 'shortcuts.dialog.submit', group: 'shortcuts.group.dialog' },
 } as const satisfies Record<string, CatalogEntry>;
 
 export type ShortcutId = keyof typeof SHORTCUTS;

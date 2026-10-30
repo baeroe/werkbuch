@@ -1,0 +1,158 @@
+/*
+ * A list whose rows can be put in another order: the statuses of a workflow, the properties of a type, the options of
+ * a dropdown. Each row has a handle. With the pointer it is dragged; with the keyboard Space lifts the row, the
+ * arrows move it, Space puts it down and Escape takes it back (dnd-kit's keyboard sensor), and a screen reader hears
+ * where it is. While a row is dragged, a copy of it floats above the page as DESIGN.md wants a dragged card to
+ * (lifted, tilted, with the drag elevation); the copy is inert and cannot select text, and the row itself stays as the
+ * gap it will fill. The copy is rendered into `document.body`, because a dialog's glass would otherwise become the
+ * reference of its position.
+ */
+
+import {
+  closestCenter,
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type Announcements,
+  type DragEndEvent,
+  type Modifier,
+  type ScreenReaderInstructions,
+  type UniqueIdentifier,
+} from '@dnd-kit/core';
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { GripVertical } from 'lucide-react';
+import { useId, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
+import { t } from '@/lib/i18n';
+import { cx } from './cx';
+
+export interface SortableControls {
+  /** The handle to drag by; put it where the row wants it. */
+  handle: ReactNode;
+  dragging: boolean;
+  /** Position in the list, from 0. */
+  index: number;
+}
+
+export type SortableListProps<T extends { id: string }> = {
+  items: T[];
+  onReorder: (items: T[]) => void;
+  /** Names the list for screen readers: "Status". */
+  label: string;
+  /** Names a row for its handle and the announcements: "Backlog". */
+  nameOf: (item: T) => string;
+  renderItem: (item: T, controls: SortableControls) => ReactNode;
+  disabled?: boolean;
+  className?: string;
+  /** Classes of every row. */
+  rowClassName?: string;
+};
+
+/** A row moves up and down, never sideways. */
+const verticalOnly: Modifier = ({ transform }) => ({ ...transform, x: 0 });
+
+const prefersReducedMotion = () => typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const HANDLE_LOOK = 'inline-flex size-11 shrink-0 items-center justify-center rounded-chip text-muted md:size-7';
+
+type RowProps<T extends { id: string }> = Pick<SortableListProps<T>, 'nameOf' | 'renderItem' | 'disabled' | 'rowClassName'> & { item: T; index: number };
+
+function SortableRow<T extends { id: string }>({ item, index, nameOf, renderItem, disabled, rowClassName }: RowProps<T>) {
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: item.id, disabled });
+  // Only the bare Space and Enter lift a row. dnd-kit would lift on Ctrl+Enter (Windows, Linux) and Cmd+Enter (Mac) as
+  // well and swallow the page's save shortcut; Alt belongs to the system.
+  const { onKeyDown: lift, ...pointer } = listeners ?? ({} as NonNullable<typeof listeners>);
+  const handle = (
+    <button
+      type="button"
+      ref={setActivatorNodeRef}
+      {...attributes}
+      {...pointer}
+      onKeyDown={(event) => {
+        if (!event.ctrlKey && !event.metaKey && !event.altKey) lift?.(event);
+      }}
+      aria-roledescription={t('ui.sortable.roledescription')}
+      aria-label={t('ui.sortable.move', { name: nameOf(item) || t('ui.sortable.item') })}
+      className={cx(HANDLE_LOOK, 'touch-none transition-colors duration-120', disabled ? 'cursor-not-allowed opacity-50' : 'cursor-grab hover:bg-hover hover:text-ink active:cursor-grabbing')}
+    >
+      <GripVertical className="size-4" aria-hidden="true" />
+    </button>
+  );
+  return (
+    <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={cx(rowClassName, isDragging && 'bg-sunken opacity-50')}>
+      {renderItem(item, { handle, dragging: isDragging, index })}
+    </li>
+  );
+}
+
+export function SortableList<T extends { id: string }>({ items, onReorder, label, nameOf, renderItem, disabled, className, rowClassName }: SortableListProps<T>) {
+  const contextId = useId();
+  const screenReaderInstructions: ScreenReaderInstructions = { draggable: t('ui.sortable.instructions') };
+  const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
+
+  const nameById = (id: string | number) => nameOf(items.find((item) => item.id === id) ?? ({ id: String(id) } as T)) || t('ui.sortable.item');
+  const place = (id: string | number) => t('ui.sortable.place', { position: items.findIndex((item) => item.id === id) + 1, total: items.length });
+
+  const announcements: Announcements = {
+    onDragStart: ({ active }) => t('ui.sortable.picked_up', { name: nameById(active.id), place: place(active.id) }),
+    onDragOver: ({ active, over }) => (over ? t('ui.sortable.over', { name: nameById(active.id), place: place(over.id) }) : undefined),
+    onDragEnd: ({ active, over }) =>
+      over ? t('ui.sortable.dropped_on', { name: nameById(active.id), place: place(over.id) }) : t('ui.sortable.dropped', { name: nameById(active.id) }),
+    onDragCancel: ({ active }) => t('ui.sortable.cancelled', { name: nameById(active.id), place: place(active.id) }),
+  };
+
+  function onDragEnd({ active, over }: DragEndEvent) {
+    setActiveId(null);
+    if (!over || active.id === over.id) return;
+    const from = items.findIndex((item) => item.id === active.id);
+    const to = items.findIndex((item) => item.id === over.id);
+    if (from >= 0 && to >= 0) onReorder(arrayMove(items, from, to));
+  }
+
+  const activeIndex = activeId === null ? -1 : items.findIndex((item) => item.id === activeId);
+
+  return (
+    <DndContext
+      id={contextId}
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      modifiers={[verticalOnly]}
+      onDragStart={({ active }) => setActiveId(active.id)}
+      onDragEnd={onDragEnd}
+      onDragCancel={() => setActiveId(null)}
+      accessibility={{ announcements, screenReaderInstructions }}
+    >
+      <SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
+        <ul aria-label={label} className={cx(className, activeIndex >= 0 && 'select-none')}>
+          {items.map((item, index) => (
+            <SortableRow key={item.id} item={item} index={index} nameOf={nameOf} renderItem={renderItem} disabled={disabled} rowClassName={rowClassName} />
+          ))}
+        </ul>
+      </SortableContext>
+      {createPortal(
+        <DragOverlay dropAnimation={prefersReducedMotion() ? null : undefined} zIndex={70}>
+          {activeIndex >= 0 && (
+            // the copy only shows the row: it is inert, hidden from screen readers and cannot be selected
+            <div inert aria-hidden="true" className="-rotate-1 scale-[1.02] rounded-ctl border border-line-strong bg-surface shadow-elev-drag select-none">
+              {renderItem(items[activeIndex], {
+                handle: (
+                  <span className={HANDLE_LOOK}>
+                    <GripVertical className="size-4" aria-hidden="true" />
+                  </span>
+                ),
+                dragging: true,
+                index: activeIndex,
+              })}
+            </div>
+          )}
+        </DragOverlay>,
+        document.body,
+      )}
+    </DndContext>
+  );
+}
