@@ -2,22 +2,27 @@
 
 namespace Database\Seeders\Demo;
 
+use App\Access\OrgRole;
+use App\Access\RoleAssignments;
 use App\Enums\AccountType;
 use App\Enums\Locale;
 use App\Models\User;
 use Database\Seeders\DemoSeeder;
+use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
 
 /**
- * The six people of the clickdummy (src/api/seed/people.ts). The organization (from the config until Phase 2),
- * the organization roles and the bots follow in Phase 2.
+ * The six people of the clickdummy (src/api/seed/people.ts) with their organization roles: Mara is the admin, the
+ * others are members.
  */
 class PeopleSeeder extends Seeder
 {
+    use WithoutModelEvents;
+
     private const TIMEZONE = 'Europe/Berlin';
 
-    public function run(): void
+    public function run(RoleAssignments $roles): void
     {
         // Eloquent stores the wall-clock time of the Carbon as it is, so the moment goes in as UTC like the app time zone.
         $people = [
@@ -30,7 +35,7 @@ class PeopleSeeder extends Seeder
         ];
 
         foreach ($people as $handle => $name) {
-            User::updateOrCreate(['email' => $handle.'@feldwerk.example.com'], [
+            $user = User::updateOrCreate(['email' => $handle.'@feldwerk.example.com'], [
                 'type' => AccountType::Person,
                 'name' => $name,
                 'handle' => $handle,
@@ -39,6 +44,8 @@ class PeopleSeeder extends Seeder
                 'password' => DemoSeeder::PASSWORD,
                 'disabled_at' => $handle === 'sven' ? Carbon::parse('2026-09-18 17:00', self::TIMEZONE)->utc() : null,
             ]);
+
+            $roles->setOrgRole($user, $handle === 'mara' ? OrgRole::Admin : OrgRole::Member);
         }
     }
 }

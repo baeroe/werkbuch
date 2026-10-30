@@ -3,9 +3,10 @@
  */
 
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { expect, request, type Locator, type Page } from '@playwright/test';
+import { expect, request, test, type Locator, type Page } from '@playwright/test';
 
 export const ROOT = path.resolve(import.meta.dirname, '..');
 
@@ -46,19 +47,56 @@ export function trFramework(locale: Locale, group: string, key: string): string 
   return text;
 }
 
-/** DemoSeeder::PASSWORD and E2eSeeder::PASSWORD (database/seeders). */
+/** DemoSeeder::PASSWORD, E2eSeeder::PASSWORD, E2eSeeder::TOTP_SECRET (database/seeders). */
 const DEMO_PASSWORD = 'werkbuch-demo';
 const E2E_PASSWORD = 'e2e-password';
+const TOTP_SECRET = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP';
 
-/** The people of database/seeders: the e2e account, two of the demo team (German profile), one reset account per project. */
+const VARIANTS = ['desktop-light', 'desktop-dark', 'phone-light', 'phone-dark'];
+
+/** E2eSeeder::recoveryCodes(): eight codes `xxxxxxxxxx-xxxxxxxxxx`, derived from the name of the Playwright project. */
+function recoveryCodes(project: string): string[] {
+  return Array.from({ length: 8 }, (_, index) => {
+    const hash = createHash('sha256').update(`${project}:${index + 1}`).digest('hex');
+    return `${hash.slice(0, 10)}-${hash.slice(10, 20)}`;
+  });
+}
+
+/**
+ * The people of database/seeders: the e2e account (org admin), two of the demo team (German profile), and per Playwright
+ * project one account to reset the password, one for the password change and the 2FA setup (`security`) and one with
+ * confirmed 2FA (`twoFactor`); every run sets them back.
+ */
 export const PEOPLE = {
   e2e: { email: 'e2e@example.com', password: E2E_PASSWORD, name: 'Erik Ende' },
   mara: { email: 'mara@feldwerk.example.com', password: DEMO_PASSWORD, name: 'Mara Lindqvist' },
   theo: { email: 'theo@feldwerk.example.com', password: DEMO_PASSWORD, name: 'Theo Okafor' },
-  reset: Object.fromEntries(
-    ['desktop-light', 'desktop-dark', 'phone-light', 'phone-dark'].map((project) => [project, { email: `reset-${project}@example.com`, password: E2E_PASSWORD }]),
-  ) as Record<string, { email: string; password: string }>,
+  reset: Object.fromEntries(VARIANTS.map((project) => [project, { email: `reset-${project}@example.com`, password: E2E_PASSWORD }])) as Record<
+    string,
+    { email: string; password: string }
+  >,
+  security: Object.fromEntries(VARIANTS.map((project) => [project, { email: `security-${project}@example.com`, password: E2E_PASSWORD }])) as Record<
+    string,
+    { email: string; password: string }
+  >,
+  twoFactor: Object.fromEntries(
+    VARIANTS.map((project) => [project, { email: `twofactor-${project}@example.com`, password: E2E_PASSWORD, secret: TOTP_SECRET, recoveryCodes: recoveryCodes(project) }]),
+  ) as Record<string, { email: string; password: string; secret: string; recoveryCodes: string[] }>,
 };
+
+/**
+ * Five characters `[A-Z0-9]` from `Date.now()`, the same for the whole run (global setup draws it, the workers inherit
+ * it through the environment): makes names and handles unique per run.
+ */
+export function runId(): string {
+  process.env.E2E_RUN_ID ??= Date.now().toString(36).toUpperCase().slice(-5).padStart(5, '0');
+  return process.env.E2E_RUN_ID;
+}
+
+/** The name of the Playwright project of the running test, e.g. `desktop-light`. */
+export function variant(): string {
+  return test.info().project.name;
+}
 
 /** Presses Tab until `target` has the focus (at most `max` times). */
 export async function tabTo(page: Page, target: Locator, { max = 40, backwards = false } = {}): Promise<void> {
