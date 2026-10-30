@@ -27,3 +27,19 @@ it('keeps an unknown path below /api a plain 404 problem, also for guests', func
     $this->getJson('api/v1/nothing-here')->assertNotFound()->assertHeader('Content-Type', 'application/problem+json');
     $this->get('api/nothing-here')->assertNotFound();
 });
+
+it('does not remember an unknown path for after the sign-in, so background requests of the browser cannot hijack it', function () {
+    User::factory()->create(['email' => 'mara@example.com', 'password' => 'secret-pass']);
+
+    $this->get('/.well-known/appspecific/com.chrome.devtools.json')->assertRedirect('/login')->assertSessionMissing('url.intended');
+
+    $this->post('/login', ['email' => 'mara@example.com', 'password' => 'secret-pass'])->assertRedirect('/my-items');
+});
+
+it('still remembers a protected page for after the sign-in, also across unknown background requests', function () {
+    $this->get('/my-items')->assertRedirect('/login')->assertSessionHas('url.intended', url('/my-items'));
+
+    $this->get('/apple-touch-icon.png')->assertRedirect('/login');
+
+    $this->assertSame(url('/my-items'), session('url.intended'));
+});
