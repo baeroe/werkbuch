@@ -255,7 +255,7 @@ Basis ist die `.env.example` des Skeletons. Geändert bzw. ergänzt (Werte sind 
 
 - [ ] **Step 6: `users`-Migration als Person-Tabelle umbauen**
 
-`0001_01_01_000000_create_users_table.php` (die erste Migration wird nicht später geändert, darum jetzt endgültig): `users` mit `ulid('id')->primary()`, `string('type', 16)->default('person')`, `string('name')`, `string('handle', 32)->unique()`, `string('email')->nullable()->unique()`, `string('password')->nullable()`, `string('locale', 2)->nullable()`, `string('timezone', 64)->nullable()`, `timestamp('disabled_at')->nullable()`, `rememberToken()`, `timestamps()`; kein `email_verified_at`. `password_reset_tokens` bleibt. `sessions.user_id` wird `foreignUlid('user_id')->nullable()->index()`. Bots, Rollen, `is_default_bot`, `owner_id` und 2FA-Spalten folgen in Phase 2.
+`0001_01_01_000000_create_users_table.php` (die erste Migration wird nicht später geändert, darum jetzt endgültig): `users` mit `ulid('id')->primary()`, `string('type', 16)->default('person')`, `string('name')`, `string('handle', 32)->unique()`, `string('email')->nullable()->unique()`, `string('password')->nullable()`, `string('locale', 2)->nullable()`, `string('timezone', 64)->nullable()`, `timestamp('disabled_at')->nullable()`, `rememberToken()`, `timestamps()`; kein `email_verified_at`. `password_reset_tokens` bleibt. `sessions.user_id` wird `foreignUlid('user_id')->nullable()->index()`. Bots, Rollen, `is_default_bot`, `owner_id` und 2FA-Spalten folgen in Phase 2. Die übrigen Framework-Tabellen (`jobs`, `failed_jobs`, `job_batches`, `cache`, `cache_locks`, `sessions`, `password_reset_tokens`) behalten ihre Framework-Schlüssel (P20).
 
 - [ ] **Step 7: Enums, Model, Factory**
 
@@ -288,9 +288,10 @@ curl -sk -o /dev/null -w '%{http_code}\n' https://werkbuch.ddev.site/up
 ddev restart
 ddev exec 'ps aux | grep -cE "[q]ueue:listen|[s]chedule:work|[r]everb:start"'
 ddev composer validate
+ddev exec vendor/bin/pint
 ```
 
-Expected: `Laravel Framework 13.x`; `200`; `3`; `./composer.json is valid`.
+Expected: `Laravel Framework 13.x`; `200`; `3`; `./composer.json is valid`; Pint formatiert Skeleton- und `install:broadcasting`-Dateien hier, damit Task 2 keine Task-1-Dateien anfasst.
 
 - [ ] **Step 10: Commit**
 
@@ -306,7 +307,7 @@ Expected: `Laravel Framework 13.x`; `200`; `3`; `./composer.json is valid`.
 
 **Interfaces:**
 - Consumes: `App\Models\User`, `UserFactory` (Task 1)
-- Produces: Suiten `Unit` (ohne App), `Feature` (`Tests\TestCase` + `RefreshDatabase`, MariaDB `testing`), `Integration` (`DatabaseMigrations`); Gate-Kommando `ddev artisan test --coverage --min=100`; Architekturregeln, die alle späteren Tasks einhalten; Helfer `appFiles(string $dir): list<string>` und `codeLines(string $code, string $pattern, string $file): list<string>` in `tests/Pest.php` für Text-Scans.
+- Produces: Suiten `Unit` (ohne App), `Feature` (`Tests\TestCase` + `RefreshDatabase`, MariaDB `testing`), `Integration` (`DatabaseMigrations`); Gate-Kommando `ddev artisan test --coverage --min=100`; Architekturregeln, die alle späteren Tasks einhalten; Helfer in `tests/Pest.php`: `repo_path(string $p = ''): string` (Repo-Wurzel über `dirname(__DIR__)`, ohne App; alle Unit-Tests lesen Dateien nur darüber, nie über `base_path()`), `appFiles(string $dir): list<string>`, `rawWrites(string $code, string $file = 'code'): list<string>`, `modelWrites(string $code, string $file = 'code'): list<string>`.
 
 - [ ] **Step 1: Pakete**
 
@@ -352,6 +353,8 @@ it('knows bots and disabled accounts', function () {
         ->and(User::factory()->disabled()->create()->isDisabled())->toBeTrue();
 });
 
+it('lists the supported languages', fn () => expect(Locale::values())->toBe(['en', 'de']));
+
 it('refuses a second account with the same handle or email', function () {
     User::factory()->create(['handle' => 'mara', 'email' => 'mara@example.com']);
 
@@ -374,7 +377,7 @@ it('runs on MariaDB 11.4 with utf8mb4', function () {
 ```php
 arch('php preset')->preset()->php();
 arch('security preset')->preset()->security();
-arch('no debugging leftovers')->expect(['dd', 'dump', 'ray', 'var_dump', 'print_r'])->not->toBeUsed();
+arch('no debugging leftovers')->expect(['dd', 'ddd'])->not->toBeUsed(); // the php preset forbids dump, ray, var_dump, print_r, die
 arch('models are Eloquent models')->expect('App\Models')->toExtend(Model::class);
 arch('enums are string backed')->expect('App\Enums')->toBeStringBackedEnums();
 arch('actions are final, use AsAction and run through handle()')
@@ -393,7 +396,7 @@ it('detects raw database writes', function () {
 
 it('writes the database raw only inside app/Actions', function () {
     $hits = collect(appFiles('app'))->reject(fn (string $f) => str_starts_with($f, 'app/Actions/'))
-        ->flatMap(fn (string $f) => rawWrites((string) file_get_contents(base_path($f)), $f))->all();
+        ->flatMap(fn (string $f) => rawWrites((string) file_get_contents(repo_path($f)), $f))->all();
     expect($hits)->toBe([]);
 });
 
@@ -403,12 +406,12 @@ it('detects model writes', function () {
 
 it('never writes models in controllers, middleware, commands, jobs or auth adapters', function () {
     $hits = collect(['app/Http', 'app/Console', 'app/Jobs', 'app/Auth'])->flatMap(fn ($d) => appFiles($d))
-        ->flatMap(fn (string $f) => modelWrites((string) file_get_contents(base_path($f)), $f))->all();
+        ->flatMap(fn (string $f) => modelWrites((string) file_get_contents(repo_path($f)), $f))->all();
     expect($hits)->toBe([]);
 });
 ```
 
-Namensräume ohne Klassen (`App\Actions`, `App\Domain` bis Task 10) bestehen die `arch()`-Regeln trivial. `rawWrites()` findet `DB::table(...)` gefolgt von `->(insert|insertOrIgnore|insertGetId|update|updateOrInsert|upsert|delete|truncate|increment|decrement)(` in derselben Anweisung sowie `DB::(insert|update|delete|statement|unprepared)(`; `modelWrites()` findet `->(save|update|delete|forceFill|fill|forceDelete|restore|increment|decrement)(` und `::(create|insert|destroy|updateOrCreate|firstOrCreate)(`. Beide geben `datei:zeile` zurück und stehen in `tests/Pest.php`, ebenso `appFiles()` (rekursiv, Pfade relativ zum Root, nur `.php`). Ein fehlender Ordner liefert `[]`.
+Namensräume ohne Klassen (`App\Actions`, `App\Domain` bis Task 10) bestehen die `arch()`-Regeln trivial. `rawWrites()` findet `DB::table(...)` gefolgt von `->(insert|insertOrIgnore|insertGetId|update|updateOrInsert|upsert|delete|truncate|increment|decrement)(` in derselben Anweisung sowie `DB::(insert|update|delete|statement|unprepared)(`; `modelWrites()` findet `->(save|update|delete|forceFill|fill|forceDelete|restore|increment|decrement)(` und `::(create|insert|destroy|updateOrCreate|firstOrCreate)(`. Beide geben `datei:zeile` zurück und stehen in `tests/Pest.php`, ebenso `appFiles()` (rekursiv über `repo_path()`, Pfade relativ zum Root, nur `.php`). Ein fehlender Ordner liefert `[]`.
 
 `tests/Unit/CoverageIgnoreTest.php`: jedes `@codeCoverageIgnore` (auch `Start`/`End`) in `app/` hat danach auf derselben Zeile einen Grund von mindestens drei Wörtern; Selbsttest des Detektors mit `"// @codeCoverageIgnore"` (Treffer) und `"// @codeCoverageIgnore the CLI never runs this branch"` (kein Treffer).
 
@@ -437,7 +440,7 @@ Betreff: `test: add Pest suites with PCOV coverage, Larastan level 8, Pint and a
 **Interfaces:**
 - Consumes: –
 - Produces (Vertrag aus dem Master-Plan):
-  - `final class App\Exceptions\Problem extends RuntimeException implements Symfony\Component\HttpKernel\Exception\HttpExceptionInterface` (`getStatusCode(): int` = `$status`, `getHeaders(): array` = `[]`; so antwortet ein `Problem` auf Web-Routen mit seinem Status statt 500) mit `public readonly int $status`, `public readonly string $reason`, `public readonly ?string $detail`, `public readonly array $errors = []` (`array<string, list<string>>`), `public readonly array $extensions = []` (`array<string, mixed>`); Fabriken `forbidden(?string $detail = null): self` (403 `forbidden`), `notFound(?string $detail = null): self` (404 `not_found`), `conflict(string $reason, array $extensions = []): self` (409), `invalid(array $errors): self` (422 `validation_failed`), `locked(string $reason): self` (409). Konstante `Problem::REASONS` (`list<string>`): `transition_not_allowed`, `not_closed`, `not_archived`, `archived`, `project_archived`, `forbidden`, `not_found`, `validation_failed`, `description_conflict`, `page_conflict`, `parent_not_epic`, `epic_has_no_parent`, `last_admin`, `in_use`, `unauthenticated`, `too_many_requests`, `bad_request`, `method_not_allowed`, `payload_too_large`, `csrf_token_mismatch`, `conflict`, `server_error`, `service_unavailable`, `http_error` (alle Slugs der HTTP-Status stehen darin; die ersten 14 = `REASON_TEXT` des Klickdummys ohne `simulated`).
+  - `final class App\Exceptions\Problem extends RuntimeException implements Symfony\Component\HttpKernel\Exception\HttpExceptionInterface` (`getStatusCode(): int` = `$status`, `getHeaders(): array` = `[]`; so antwortet ein `Problem` auf Web-Routen mit seinem Status statt 500) mit `public readonly int $status`, `public readonly string $reason`, `public readonly ?string $detail`, `public readonly array $errors = []` (`array<string, list<string>>`), `public readonly array $extensions = []` (`array<string, mixed>`); Fabriken `forbidden(?string $detail = null): self` (403 `forbidden`), `notFound(): self` (404 `not_found`; ein 404 trägt nie `detail`, damit nichts über fremde Ressourcen durchsickert), `conflict(string $reason, array $extensions = []): self` (409), `invalid(array $errors): self` (422 `validation_failed`), `locked(string $reason): self` (409). Konstante `Problem::REASONS` (`list<string>`): `transition_not_allowed`, `not_closed`, `not_archived`, `archived`, `project_archived`, `forbidden`, `not_found`, `validation_failed`, `description_conflict`, `page_conflict`, `parent_not_epic`, `epic_has_no_parent`, `last_admin`, `in_use`, `unauthenticated`, `too_many_requests`, `bad_request`, `method_not_allowed`, `payload_too_large`, `csrf_token_mismatch`, `conflict`, `server_error`, `service_unavailable`, `http_error` (alle Slugs der HTTP-Status stehen darin; die ersten 14 = `REASON_TEXT` des Klickdummys ohne `simulated`).
   - `final class App\Http\Api\ProblemResponse { public static function from(Throwable $e, bool $debug): JsonResponse }` mit Body `{type: "urn:werkbuch:problem:<reason>", title, status, detail, reason, errors?, ...extensions}`, Header `Content-Type: application/problem+json` und bei 429 `Retry-After`.
   - `config('werkbuch.*')`: `version` (`'0.1.0-dev'`), `admin.email`, `admin.password` (`ADMIN_EMAIL`, `ADMIN_PASSWORD`), `trusted_proxies` (`TRUSTED_PROXIES`), `attachments_max_mb` (int, `ATTACHMENTS_MAX_MB`, 25), `notification_mail_delay` (int Minuten, `NOTIFICATION_MAIL_DELAY`, 5), `webhooks_allow_private` (bool, `WEBHOOKS_ALLOW_PRIVATE`, false), `event_consumers` (`[]`), `rate_limits.api` (600), `rate_limits.mcp` (300), `rate_limits.login_per_ip` (20).
   - `final class App\Support\TrustedRequests` mit `PROXIES = ['127.0.0.1', '::1', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', 'fc00::/7']`, `proxies(): list<string>`, `parseProxies(mixed $value): list<string>`, `hostPatterns(mixed $appUrl): list<string>` (wie openbill).
@@ -483,11 +486,11 @@ it('maps framework exceptions to reasons', function (Closure $throw, int $status
 ]);
 ```
 
-Dazu in `ProblemTest.php`: „hides internals of 5xx and model names of 404 unless debugging“ (`app.debug=false`: `detail` des Absturzes ist `__('problem.reason.server_error')`, der 404-`detail` enthält nicht `User`), „sends Retry-After with 429“ (Header `Retry-After: 30`), „leaves web routes to Laravel“ (`Problem::forbidden()` auf einer Web-Route → 403, weil `Problem` ein `HttpExceptionInterface` ist; `Content-Type` ohne `problem+json`), „has the factories of the contract“ (`forbidden()` 403, `notFound()` 404, `locked('archived')` 409, `invalid([...])->reason` `validation_failed`).
+Dazu in `ProblemTest.php`: „hides internals of 5xx unless debugging“ (`app.debug=false`: `detail` des Absturzes ist `__('problem.reason.server_error')`), „never gives a 404 a detail“ (`ModelNotFoundException` und `Problem::notFound()` → `assertJsonMissingPath('detail')`), „sends Retry-After with 429“ (Header `Retry-After: 30`), „leaves web routes to Laravel“ (`Problem::forbidden()` auf einer Web-Route → 403, weil `Problem` ein `HttpExceptionInterface` ist; `Content-Type` ohne `problem+json`), „has the factories of the contract“ (`forbidden()` 403, `notFound()` 404, `locked('archived')` 409, `invalid([...])->reason` `validation_failed`).
 
 Die Titel- und Reason-Schlüssel (`problem.title.<slug>` je Status, `problem.reason.<reason>` je `Problem::REASONS`) legt dieser Task mit englischen und deutschen Texten in `lang/en.json`/`lang/de.json` an (Datei hier anlegen; Task 5 baut darauf auf). Deutsche Reason-Texte = `REASON_TEXT` des Klickdummys wörtlich.
 
-`tests/Feature/ConfigTest.php`: Standardwerte (`25`, `5`, `false`, `[]`, `600`, `300`, `20`, `'0.1.0-dev'`); Env-Werte werden gelesen (mit `putenv` + `$this->refreshApplication()` für `ATTACHMENTS_MAX_MB=50`, `WEBHOOKS_ALLOW_PRIVATE=true`).
+`tests/Feature/ConfigTest.php`: Standardwerte (`25`, `5`, `false`, `[]`, `600`, `300`, `20`, `'0.1.0-dev'`); Env-Werte werden gelesen (mit `putenv` + `$this->refreshApplication()` für `ATTACHMENTS_MAX_MB=50`, `WEBHOOKS_ALLOW_PRIVATE=true`); `afterEach` setzt beide mit `putenv('ATTACHMENTS_MAX_MB')` bzw. `putenv('WEBHOOKS_ALLOW_PRIVATE')` zurück.
 
 `tests/Feature/TrustedProxiesTest.php`: openbills `tests/Feature/TrustedProxiesTest.php` übernehmen (Private Netze vertraut, Internet nicht, `X-Forwarded-Prefix` nie, `TRUSTED_PROXIES` ersetzt die Liste, `parseProxies`, `hostPatterns` mit `https://pm.example.com`, `http://localhost:7740`, leer und null, Framework-`TrustProxies` ersetzt), dazu:
 
@@ -508,7 +511,7 @@ Expected: FAIL (`Class "App\Exceptions\Problem" not found`).
 
 - [ ] **Step 3: Implementieren**
 
-`bootstrap/app.php`: `withRouting(web:, api: __DIR__.'/../routes/api.php', apiPrefix: 'api/v1', commands:, channels:, health: '/up')`; `$middleware->replace(FrameworkTrustProxies::class, TrustProxies::class)`; `$middleware->trustHosts(at: fn (): array => TrustedRequests::hostPatterns(config('app.url')), subdomains: false)`; `$exceptions->dontReportWhen(fn (Throwable $e) => $e instanceof Problem && $e->status < 500)`; `$exceptions->render(fn (Throwable $e, Request $r) => $r->is('api/*') && ! $e instanceof HttpResponseException ? ProblemResponse::from($e, (bool) config('app.debug')) : null)`; `$exceptions->shouldRenderJsonWhen(fn (Request $r) => $r->is('api/*') || $r->expectsJson())`. `TrustProxies::headers()` ohne `X-Forwarded-Prefix`. `ProblemResponse::from` ordnet zu (in dieser Reihenfolge, `Problem` vor dem allgemeinen HTTP-Fall): `Problem` → eigene Werte; `ValidationException` → 422/`validation_failed`/`errors()`; `AuthenticationException` → 401/`unauthenticated`; `AuthorizationException` → 403/`forbidden`; `ModelNotFoundException`, `RecordsNotFoundException` → 404/`not_found`; `TokenMismatchException` → 419/`csrf_token_mismatch`; `HttpExceptionInterface` → Status mit Slug aus `[400 bad_request, 401 unauthenticated, 403 forbidden, 404 not_found, 405 method_not_allowed, 409 conflict, 413 payload_too_large, 419 csrf_token_mismatch, 422 validation_failed, 429 too_many_requests, 500 server_error, 503 service_unavailable]`, sonst `http_error`, Header übernehmen; alles andere → 500/`server_error`. `detail`: eigener Text des `Problem` bzw. der HTTP-Exception (nicht bei 404 und ≥ 500), sonst `__("problem.reason.<reason>")`; mit `$debug` bei 500 die Exception-Meldung. `title`: `__("problem.title.<slug des Status>")`. `errors` nur, wenn nicht leer.
+`bootstrap/app.php`: `withRouting(web:, api: __DIR__.'/../routes/api.php', apiPrefix: 'api/v1', commands:, channels:, health: '/up')`; `$middleware->replace(FrameworkTrustProxies::class, TrustProxies::class)`; `$middleware->trustHosts(at: fn (): array => TrustedRequests::hostPatterns(config('app.url')), subdomains: false)`; `$exceptions->dontReportWhen(fn (Throwable $e) => $e instanceof Problem && $e->status < 500)`; `$exceptions->render(fn (Throwable $e, Request $r) => $r->is('api/*') && ! $e instanceof HttpResponseException ? ProblemResponse::from($e, (bool) config('app.debug')) : null)`; `$exceptions->shouldRenderJsonWhen(fn (Request $r) => $r->is('api/*') || $r->expectsJson())`. `TrustProxies::headers()` ohne `X-Forwarded-Prefix`. `ProblemResponse::from` ordnet zu (in dieser Reihenfolge, `Problem` vor dem allgemeinen HTTP-Fall): `Problem` → eigene Werte; `ValidationException` → 422/`validation_failed`/`errors()`; `AuthenticationException` → 401/`unauthenticated`; `HttpExceptionInterface` → Status mit Slug aus `[400 bad_request, 401 unauthenticated, 403 forbidden, 404 not_found, 405 method_not_allowed, 409 conflict, 413 payload_too_large, 419 csrf_token_mismatch, 422 validation_failed, 429 too_many_requests, 500 server_error, 503 service_unavailable]`, sonst `http_error`, Header übernehmen; alles andere → 500/`server_error`. Laravel bereitet Exceptions vor den Render-Callbacks vor (`prepareException()`): `AuthorizationException` kommt als `AccessDeniedHttpException` (403), `ModelNotFoundException`/`RecordsNotFoundException` als `NotFoundHttpException` (404), `TokenMismatchException` als `HttpException(419)` an; `ProblemResponse` hat dafür keine eigenen Zweige. `detail`: bei 404 nie (Feld fehlt, auch bei `Problem`); sonst eigener Text des `Problem` bzw. der HTTP-Exception (nicht ≥ 500), ersatzweise `__("problem.reason.<reason>")`; mit `$debug` bei 500 die Exception-Meldung. `title`: `__("problem.title.<slug des Status>")`. `errors` nur, wenn nicht leer.
 
 `tests/Unit/ArchTest.php` ergänzen: `arch('the problem is final')->expect(Problem::class)->toBeFinal()->toExtend(RuntimeException::class)->toImplement(HttpExceptionInterface::class)`; `arch('api layer classes are final')->expect('App\Http\Api')->classes()->toBeFinal()`.
 
@@ -527,7 +530,7 @@ Betreff: `feat: add Problem Details for /api, config/werkbuch.php, trusted proxi
 
 **Files:**
 - Create: `package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml`, `.node-version`, `tsconfig.json`, `vite.config.ts`, `vitest.config.ts`, `resources/views/app.blade.php`, `resources/css/tokens.css`, `resources/css/app.css`, `resources/js/app.tsx`, `resources/js/vite-env.d.ts`, `resources/js/lib/theme.ts`, `resources/js/lib/theme.test.ts`, `resources/js/lib/page.ts`, `resources/js/lib/page.test.ts`, `resources/js/test/setup.ts`, `resources/js/pages/Errors/NotFound.tsx`, `public/favicon.svg`, `app/Http/Middleware/HandleInertiaRequests.php`, `app/Support/MailSetup.php`, `config/inertia.php`, `tests/Feature/InertiaTest.php`, `tests/Unit/ThemeScriptTest.php`
-- Modify: `routes/web.php`, `bootstrap/app.php`, `prototypes/clickdummy/vite.config.ts` (nur `server.allowedHosts`), `prototypes/clickdummy/README.md` („Starten“, „Kommandos“), `.github/workflows/tests.yml` (Übergang)
+- Modify: `routes/web.php`, `bootstrap/app.php`, `composer.json`, `composer.lock`, `tests/Pest.php` (`inertiaProbe()`), `prototypes/clickdummy/vite.config.ts` (nur `server.allowedHosts`), `prototypes/clickdummy/README.md` („Starten“, „Kommandos“), `.github/workflows/tests.yml` (Übergang), `CLAUDE.md` (Klickdummy-Kommandos)
 - Delete: `prototypes/clickdummy/pnpm-lock.yaml`, `prototypes/clickdummy/pnpm-workspace.yaml`, `public/favicon.ico`
 
 **Interfaces:**
@@ -542,7 +545,7 @@ Betreff: `feat: add Problem Details for /api, config/werkbuch.php, trusted proxi
 
 - [ ] **Step 1: Workspace-Dateien**
 
-`package.json`: `"name": "werkbuch"`, `"private": true`, `"type": "module"`, `"packageManager": "pnpm@12.8.1"`, `"engines": {"node": ">=24"}`, Abhängigkeiten aus „Paketversionen“ (Root). `.node-version`: `24`.
+`package.json`: `"name": "werkbuch"`, `"private": true`, `"type": "module"`, `"packageManager": "pnpm@12.8.1"`, `"engines": {"node": ">=24"}`, alle Root-Abhängigkeiten aus „Paketversionen“ auf einmal (auch dnd-kit, `@tiptap/core`, `@tiptap/pm`, die erst Task 7 und 9 benutzen; spätere Tasks ändern `package.json` dafür nicht). `.node-version`: `24`.
 
 `pnpm-workspace.yaml`:
 
@@ -616,7 +619,7 @@ ddev composer require inertiajs/inertia-laravel:^3.5
 ddev artisan vendor:publish --provider="Inertia\ServiceProvider" --tag=inertia-config
 ```
 
-`config/inertia.php`: `testing.ensure_pages_exist = true`, `testing.page_paths = [resource_path('js/pages')]`, `testing.page_extensions = ['tsx']`. `bootstrap/app.php`: `$middleware->web(append: [HandleInertiaRequests::class])`. `routes/web.php`: Skeleton-Route `/` entfernen; `Route::fallback(fn () => Inertia::render('Errors/NotFound')->toResponse(request())->setStatusCode(404))`. `pages/Errors/NotFound.tsx`: vorläufig eine Überschrift und ein Satz auf den Tokens (Task 12 ersetzt sie).
+`config/inertia.php`: `testing.ensure_pages_exist = true`, `testing.page_paths = [resource_path('js/pages')]`, `testing.page_extensions = ['tsx']`. `bootstrap/app.php`: `$middleware->web(append: [HandleInertiaRequests::class])`. `routes/web.php`: Skeleton-Route `/` entfernen; `Route::fallback(fn () => Inertia::render('Errors/NotFound')->toResponse(request())->setStatusCode(404))`. `pages/Errors/NotFound.tsx`: vorläufig ohne Text (`<main id="main" />` auf den Tokens); Task 5 stellt auf `t()` um, Task 12 ersetzt die Seite.
 
 - [ ] **Step 5: Tests schreiben**
 
@@ -649,7 +652,7 @@ it('reports mail as configured unless the mailer only logs', function (string $m
 })->with([['smtp', true], ['log', false], ['array', false]]);
 ```
 
-`tests/Unit/ThemeScriptTest.php`: `resources/views/app.blade.php` enthält `localStorage.getItem('werkbuch:theme')`, und `resources/js/lib/theme.ts` enthält `THEME_KEY = 'werkbuch:theme'` (Drift-Test).
+`tests/Unit/ThemeScriptTest.php` (Dateien über `repo_path()`): `resources/views/app.blade.php` enthält `localStorage.getItem('werkbuch:theme')`, und `resources/js/lib/theme.ts` enthält `THEME_KEY = 'werkbuch:theme'` (Drift-Test).
 
 `resources/js/lib/theme.test.ts`:
 
@@ -689,6 +692,8 @@ Expected: alles grün; `public/build/manifest.json` existiert. Dann `ddev exec p
 
 `.github/workflows/tests.yml`: beide bestehenden Jobs installieren jetzt im Root (`pnpm/action-setup@v4` ohne `package_json_file`, `actions/setup-node@v4` mit `node-version-file: .node-version`, `cache-dependency-path: pnpm-lock.yaml`, `pnpm install --frozen-lockfile`) und rufen den Klickdummy mit `pnpm --filter werkbuch-clickdummy <script>`. Job-Namen bleiben bis Task 16.
 
+`CLAUDE.md` im selben Commit (Repo-Regel): „Stand“ Punkt 2 nennt den Klickdummy nicht mehr eigenes pnpm-Projekt, sondern Paket `werkbuch-clickdummy` im Root-Workspace; Kommandos `ddev exec pnpm clickdummy` (Port 5176) und `ddev exec pnpm --filter werkbuch-clickdummy <script>`; Flows nur in CI.
+
 - [ ] **Step 8: Commit**
 
 Betreff: `feat: add the pnpm workspace, Inertia with React, the Werkbuch tokens, fonts and the theme script`.
@@ -699,7 +704,7 @@ Betreff: `feat: add the pnpm workspace, Inertia with React, the Werkbuch tokens,
 
 **Files:**
 - Create: `app/Http/Middleware/SetLocale.php`, `lang/en/auth.php`, `lang/en/passwords.php`, `lang/de/auth.php`, `lang/de/passwords.php`, `lang/de/pagination.php`, `lang/de/validation.php`, `resources/js/lib/i18n.ts`, `resources/js/lib/i18n.test.ts`, `tests/Feature/LocaleTest.php`, `tests/Unit/TranslationsTest.php`, `tests/Feature/TranslationKeysTest.php`, `tests/Unit/FrameworkTranslationsTest.php`
-- Modify: `lang/en.json`, `lang/de.json`, `app/Http/Middleware/HandleInertiaRequests.php`, `app/Models/User.php` (`HasLocalePreference`), `bootstrap/app.php`, `resources/js/app.tsx`, `resources/js/test/setup.ts`, `resources/js/lib/page.ts`
+- Modify: `lang/en.json`, `lang/de.json`, `app/Http/Middleware/HandleInertiaRequests.php`, `app/Models/User.php` (`HasLocalePreference`), `bootstrap/app.php`, `resources/js/app.tsx`, `resources/js/test/setup.ts`, `resources/js/pages/Errors/NotFound.tsx` (Überschrift `errors.page.not_found.title` über `t()`), `tests/Pest.php` (`lang()`, `langKeys()`, `placeholders()`, `translationKeysIn()`, `usedTranslationKeys()`)
 
 **Interfaces:**
 - Consumes: Shared Props (Task 4), `Problem::REASONS` (Task 3)
@@ -752,7 +757,7 @@ it('mails in the language of the account, else the default', function () {
 });
 ```
 
-`tests/Unit/TranslationsTest.php` (ohne App; Helfer `lang()`, `langKeys()`, `placeholders()` in `tests/Pest.php`):
+`tests/Unit/TranslationsTest.php` (ohne App; Helfer `lang()`, `langKeys()`, `placeholders()` in `tests/Pest.php` lesen über `repo_path()`):
 
 ```php
 it('has the same keys in English and German, sorted', function () {
@@ -774,21 +779,25 @@ it('has a text for every problem reason and status title', function () {
 });
 ```
 
-`tests/Feature/TranslationKeysTest.php` (braucht den Translator, darum Feature; Helfer `usedTranslationKeys()` scannt rekursiv `app/`, `routes/`, `resources/views/` und `resources/js/` (`.ts`/`.tsx` ohne Tests) nach `t|tn|__|trans|@lang('…')`; `tn('a.b', …)` zählt als `a.b.one` und `a.b.other`):
+`tests/Feature/TranslationKeysTest.php` (braucht den Translator, darum Feature). Helfer: `translationKeysIn(string $code): list<string>` findet `t|tn|__|trans|@lang('…')` mit Literal, `tn('a.b', …)` zählt als `a.b.one` und `a.b.other`; `usedTranslationKeys(): Collection` wendet ihn rekursiv auf `app/`, `routes/`, `resources/views/` und `resources/js/` (`.ts`/`.tsx` ohne Tests) an:
 
 ```php
+it('finds literal keys in code', function () {
+    expect(translationKeysIn("t('a.b'); tn('c.d', 2); __('auth.failed'); @lang('mail.layout.regards'); t(`dyn.\${x}`); t(name)"))
+        ->toBe(['a.b', 'c.d.one', 'c.d.other', 'auth.failed', 'mail.layout.regards']);
+});
+
 it('defines every key used in code', function () {
     $used = usedTranslationKeys();
     [$groups, $json] = $used->partition(fn (string $k) => preg_match('/^(auth|passwords|validation|pagination)\./', $k) === 1);
-    expect($used)->not->toBeEmpty()
-        ->and($json->diff(langKeys('en'))->values()->all())->toBe([])
+    expect($json->diff(langKeys('en'))->values()->all())->toBe([])
         ->and($groups->filter(fn (string $k) => trans($k, [], 'en') === $k || trans($k, [], 'de') === $k)->values()->all())->toBe([]);
 });
 ```
 
-Dynamische Schlüssel (`` t(`problem.reason.${r}`) ``) findet der Scan nicht; sie sind in beiden Dateien vollständig zu halten (Fallstrick in CLAUDE.md).
+Bis Task 6 gibt es noch keinen Aufruf mit Literal; die Bedingung „benutzte Schlüssel nicht leer“ (`expect($used)->not->toBeEmpty()`) ergänzt Task 7. Dynamische Schlüssel (`` t(`problem.reason.${r}`) ``) findet der Scan nicht; sie sind in beiden Dateien vollständig zu halten (Fallstrick in CLAUDE.md).
 
-`tests/Unit/FrameworkTranslationsTest.php`: für `validation`, `pagination`, `auth`, `passwords`: `lang/de/<gruppe>.php` hat genau die Schlüssel von `vendor/laravel/framework/src/Illuminate/Translation/lang/en/<gruppe>.php` (ohne `custom`/`attributes`) und je Schlüssel dieselben Platzhalter; dasselbe für `lang/en/auth.php` und `lang/en/passwords.php`. `lang/de/validation.php` aus openbill übernehmen (`~/development/baeroe/openbill/lang/de/validation.php`), `attributes` mit `email` → `E-Mail`, `password` → `Passwort`, `name` → `Name`. `lang/en/auth.php`: `failed` „Email or password is not correct.“, `throttle` „Too many attempts. Try again in :seconds seconds.“; `lang/de/auth.php`: „E-Mail oder Passwort stimmen nicht.“, „Zu viele Versuche. Versuch es in :seconds Sekunden wieder.“; `passwords.token` en „This link has expired or was already used. Request a new one.“, de „Dieser Link ist abgelaufen oder wurde schon benutzt. Fordere einen neuen an.“; `passwords.reset` en „Your password is set. Sign in with it.“, de „Dein Passwort ist gesetzt. Melde dich damit an.“
+`tests/Unit/FrameworkTranslationsTest.php` (Dateien über `repo_path()`): für `validation`, `pagination`, `auth`, `passwords`: `lang/de/<gruppe>.php` hat genau die Schlüssel von `vendor/laravel/framework/src/Illuminate/Translation/lang/en/<gruppe>.php` (ohne `custom`/`attributes`) und je Schlüssel dieselben Platzhalter; dasselbe für `lang/en/auth.php` und `lang/en/passwords.php`. `lang/de/validation.php` aus openbill übernehmen (`~/development/baeroe/openbill/lang/de/validation.php`), `attributes` mit `email` → `E-Mail`, `password` → `Passwort`, `name` → `Name`. `lang/en/auth.php`: `failed` „Email or password is not correct.“, `throttle` „Too many attempts. Try again in :seconds seconds.“; `lang/de/auth.php`: „E-Mail oder Passwort stimmen nicht.“, „Zu viele Versuche. Versuch es in :seconds Sekunden wieder.“; `passwords.token` en „This link has expired or was already used. Request a new one.“, de „Dieser Link ist abgelaufen oder wurde schon benutzt. Fordere einen neuen an.“; `passwords.reset` en „Your password is set. Sign in with it.“, de „Dein Passwort ist gesetzt. Melde dich damit an.“
 
 `resources/js/lib/i18n.test.ts`:
 
@@ -887,13 +896,13 @@ Betreff: `feat: port the shortcut registry with a static catalog of shortcuts`.
 
 **Files:**
 - Create: `resources/js/types.ts`, `resources/js/api/client.ts`, `resources/js/api/client.test.ts`, `resources/js/api/http.ts`, `resources/js/api/http.test.ts`, `resources/js/api/live.ts`, `resources/js/api/live.test.ts`, `resources/js/hooks/queryClient.ts`, `resources/js/hooks/queryClient.test.ts`, `resources/js/hooks/retry.ts`, `resources/js/hooks/retry.test.tsx`, `resources/js/hooks/live.ts`, `resources/js/hooks/live.test.tsx`
-- Modify: `resources/js/app.tsx`, `resources/js/lib/page.ts` und `resources/js/lib/i18n.ts` (`Locale` aus `@/types`), `vitest.config.ts` (Schwellen `api/**`, `hooks/**`), `package.json` (`@tiptap/core`, `@tiptap/pm`)
+- Modify: `resources/js/app.tsx`, `resources/js/lib/page.ts` und `resources/js/lib/i18n.ts` (`Locale` aus `@/types`), `vitest.config.ts` (Schwellen `api/**`, `hooks/**`), `lang/en.json`, `lang/de.json` (`problem.reason_unknown`, `errors.*` dieser Task), `tests/Feature/TranslationKeysTest.php` (jetzt mit `expect($used)->not->toBeEmpty()`)
 
 **Interfaces:**
 - Consumes: `t`, `hasTranslation` (Task 5)
 - Produces:
   - `types.ts` = `src/types.ts` vollständig; einzige Änderung: `import type { JSONContent } from '@tiptap/core'`.
-  - `api/client.ts`: `interface ApiErrorInit { status: number; reason: string; detail?: string; errors?: Record<string, string[]>; extensions?: Record<string, unknown> }`, `class ApiError extends Error` (`status`, `reason`, `errors?`, `extensions`, Getter `current`; `message` = `detail` ?? `t('errors.fallback', { status, reason })`), `interface Page<T> { items: T[]; next_cursor: string | null; total: number }`, `interface PageArgs { cursor?: string | null; per_page?: number }`, `MAX_PER_PAGE = 100`, `reasonText(reason: string): string` (= `t('problem.reason.<reason>')`, unbekannt → `t('problem.reason_unknown', { reason })`). Kein `FAIL_KEY`, `read`, `write`, `paginate`, `newId` (Fake-API).
+  - `api/client.ts`: `interface ApiErrorInit { status: number; reason: string; detail?: string; errors?: Record<string, string[]>; extensions?: Record<string, unknown> }`, `class ApiError extends Error` (`status`, `reason`, `errors?`, `extensions`, Getter `current`; `message` = `detail` ?? `reasonText(reason)`; ein 404 bringt nie `detail` mit), `interface Page<T> { items: T[]; next_cursor: string | null; total: number }`, `interface PageArgs { cursor?: string | null; per_page?: number }`, `MAX_PER_PAGE = 100`, `reasonText(reason: string): string` (= `t('problem.reason.<reason>')`, unbekannt → `t('problem.reason_unknown', { reason })`). Kein `FAIL_KEY`, `read`, `write`, `paginate`, `newId` (Fake-API).
   - `api/http.ts`:
     ```ts
     export const API_BASE = '/api/v1';
@@ -936,7 +945,7 @@ it('builds query strings with arrays and one level of objects, skipping empties'
 
 Dazu in `http.test.ts`: 204 → `undefined`; Problem Details 409 → `ApiError` mit `status`, `reason`, `message` aus `detail` und `current` aus den Extensions; 422 behält `errors` je Pfad; Fehler ohne JSON (502 `text/html`) → `reason` `http_error`; Netzfehler (`fetch` wirft `TypeError`) kommt unverändert durch; 419 → einmal `GET /sanctum/csrf-cookie`, dann Wiederholung, ein zweites 419 → `ApiError` 419 `csrf_token_mismatch`; 401 → `window.location.reload()` und `ApiError` `unauthenticated`; `options.signal` erreicht `fetch`; `upload` meldet `onProgress(0.5)` bei 50/100, löst mit JSON auf, 413 → `ApiError`, Abbruch per Signal ruft `xhr.abort()`.
 
-`client.test.ts`: `ApiError` (Felder, `current`, `message` aus `detail`, sonst `errors.fallback`), `reasonText('transition_not_allowed')` = deutscher Text des Klickdummys (Setup-Sprache de), unbekannter Grund → `problem.reason_unknown` mit Code.
+`client.test.ts`: `ApiError` (Felder, `current`, `message` aus `detail`, ohne `detail` der Text von `reasonText`), `reasonText('transition_not_allowed')` = deutscher Text des Klickdummys (Setup-Sprache de), unbekannter Grund → `problem.reason_unknown` mit Code.
 
 `queryClient.test.ts`: `resetForUser('a', 'a')` lässt den Cache, `resetForUser('a', 'b')`, `('a', null)` und `(null, 'b')` leeren ihn; `(null, null)` nicht.
 
@@ -988,7 +997,7 @@ Jeder deutsche Text dieser Dateien wird ein Schlüssel nach Task 5 (`ui.<kompone
 | `StatusIcon.test.tsx`, `PriorityIcon.test.tsx` | alle sieben Formen × fünf Kategorien bzw. fünf Prioritäten mit zugänglichem Namen aus `ui.status_icon.*`/`ui.priority_icon.*` |
 | `Skeleton.test.tsx` | `SkeletonGroup` hat `aria-busy` und den Namen aus `label` |
 | `ErrorState.test.tsx` | „Erneut versuchen“ ruft `onRetry` und lädt die übrigen fehlgeschlagenen aktiven Queries; `retrying` zeigt den Busy-Zustand |
-| `ProgressBar.test.tsx` | Prozent in `de-DE` („50 %“) und `en-GB` („50%“); Grenzen 0 und 1 |
+| `ProgressBar.test.tsx` | Prozent in `de-DE` (`'50\u00a0%'`, Intl setzt ein geschütztes Leerzeichen) und `en-GB` (`'50%'`); Grenzen 0 und 1 |
 | `InPageLink.test.tsx` | Port des Klickdummy-Tests |
 | `FavoriteStar.test.tsx` | Name „„Roadmap“ in die Seitenleiste legen“ bzw. „… aus der Seitenleiste nehmen“; `pending` zeigt den Spinner mit `aria-busy` und ignoriert einen zweiten Druck |
 | `CopyField.test.tsx` | kopiert per Clipboard-API, zeigt „Kopiert“; ohne Clipboard markiert es den Text und meldet `failed` |
@@ -1008,7 +1017,7 @@ Betreff: `feat: port the basic components of the clickdummy with translations an
 
 **Files:**
 - Create in `resources/js/components/ui/`: `Dialog.tsx`, `AlertDialog.tsx`, `Popover.tsx`, `Menu.tsx`, `Select.tsx`, `Combobox.tsx`, `Tabs.tsx`, `SegmentedControl.tsx`, `Calendar.tsx`, `EmojiPicker.tsx`, `toast.ts`, `Toaster.tsx`, `FormDialog.tsx`, `SortableList.tsx`, Tests nach der Tabelle; `resources/js/lib/errors.ts`, `resources/js/lib/errors.test.ts`, `resources/js/lib/undo.ts`, `resources/js/lib/undo.test.ts`
-- Modify: `ui.test.tsx` (Teil-2-Fälle), `resources/js/app.tsx` (`TooltipProvider`, `Toaster`), `resources/js/lib/shortcuts/catalog.ts` (`dialog.submit`), `lang/en.json`, `lang/de.json`, `package.json` (dnd-kit)
+- Modify: `ui.test.tsx` (Teil-2-Fälle), `resources/js/app.tsx` (`TooltipProvider`, `Toaster`), `resources/js/lib/shortcuts/catalog.ts` (`dialog.submit`), `lang/en.json`, `lang/de.json`
 
 **Interfaces:**
 - Consumes: Teil 1 (Task 8), `useDialogScope`, `useShortcut`, `registerShortcut` (Task 6), `ApiError` (Task 7)
@@ -1021,7 +1030,7 @@ Betreff: `feat: port the basic components of the clickdummy with translations an
 
 - [ ] **Step 1: Tests portieren und ergänzen**
 
-`ui.test.tsx` übernimmt die Toast-Fälle (6), `Combobox gives its search input the name …`, `an open Dialog pauses the list shortcuts …` und `Dialog with something shown once` (2). `lib/undo.test.ts`, `lib/errors.test.ts` und `SortableList.test.tsx` (aus `sortable.test.tsx`) werden 1:1 portiert. Neu:
+`ui.test.tsx` übernimmt die Toast-Fälle (6), `Combobox gives its search input the name …`, `an open Dialog pauses the list shortcuts …` und `Dialog with something shown once` (2). `lib/undo.test.ts`, `lib/errors.test.ts` und `SortableList.test.tsx` (aus `sortable.test.tsx`) werden 1:1 portiert. Neu (für `SortableList` gelten die Pflichtfälle der Tabelle; Zeilen, die nur Zeigerereignisse oder das Drag-Overlay im Portal erreichen und jsdom nicht auslöst, bekommen `/* istanbul ignore next -- <Grund> */`, z. B. `-- pointer-only drag overlay, jsdom has no layout; covered by the settings flows in phase 3`):
 
 | Datei | Pflicht-Fälle |
 |---|---|
@@ -1033,6 +1042,7 @@ Betreff: `feat: port the basic components of the clickdummy with translations an
 | `Calendar.test.tsx` | Pfeile ±1 Tag/±7 Tage, Home/End an die Wochenenden je `weekStartsOn` 0 und 1, PageUp/PageDown ±1 Monat (31.01. → 28.02.2027), „Heute“ springt zu `today`, Auswahl und Abwahl, Monatsname „Oktober 2026“ (de) bzw. „October 2026“ (en), kein Fokuswechsel nach wirkungslosem `goTo` |
 | `EmojiPicker.test.tsx` | Suche filtert; Pfeile und Enter wählen; `🇩🇪` und `1️⃣` werden angenommen |
 | `Toaster.test.tsx` | Pause bei Zeiger und Fokus, Rest der Zeit danach; drei Plätze; Rückgängig-Toasts werden nicht verdrängt; Fehler außerhalb der drei (Deferred: Pause und Verdrängen) |
+| `SortableList.test.tsx` | Leertaste hebt die Zeile (portiert), Pfeil runter und Leertaste legen sie eine Stelle tiefer ab und rufen `onReorder` mit der neuen Reihenfolge; Escape bricht ab ohne `onReorder`; die Live-Region sagt Heben, Position und Ablegen mit `nameOf(item)` an (`ui.sortable.*`); `disabled` zeigt keine Griffe; `renderItem` bekommt `SortableControls` |
 | `FormDialog.test.tsx` | ⌘⏎ sendet genau einmal, auch zweimal schnell gedrückt; `pending` sperrt den Knopf ohne Fokusverlust; `notice` als Banner |
 
 - [ ] **Step 2: Port und grün**
@@ -1059,8 +1069,8 @@ Betreff: `feat: port dialogs, menus, pickers, toasts and the shared form parts o
   - `final class App\Support\PasswordRules { public static function rules(): array }` → `['required', 'string', Password::min(8)]` (in `Support`, weil in `App\Actions` nur Actions mit `handle()` liegen).
   - `final class App\Actions\Auth\SetPassword` (`AsAction`): `handle(User $user, string $password): void` — prüft `PasswordRules`, sonst `ValidationException` an `password`; setzt das Passwort, erneuert `remember_token`, löscht alle Zeilen in `sessions` des Kontos; in `DB::transaction`.
   - `enum App\Enums\EnsureAdminOutcome: string { Created = 'created'; Exists = 'exists'; AccountsExist = 'accounts_exist'; NotConfigured = 'not_configured'; }`
-  - `final class App\Actions\Auth\EnsureAdmin` (`AsAction`): `handle(?string $email, ?string $password): EnsureAdminOutcome` — legt die Person nur an, wenn es noch **keine** Person gibt; sonst `Exists` (E-Mail vorhanden) bzw. `AccountsExist`; ohne beide Werte `NotConfigured`; ungültige E-Mail, Passwort unter 8 Zeichen oder der Platzhalter `change-me` → `ValidationException`, nichts angelegt. Name = Teil vor `@`, `handle` = `Handle::suggest`. Phase 2 ergänzt die Org-Rolle Admin.
-  - `app:ensure-admin` (`EnsureAdminCommand`): liest `config('werkbuch.admin.email|password')`, ruft `EnsureAdmin`, gibt aus: `Created`: „Admin account <email> created.“; `Exists`: „<email> already exists; nothing changed. Remove ADMIN_PASSWORD from .env.“; `AccountsExist`: „Accounts exist already; ADMIN_EMAIL is only used on the first start.“; `NotConfigured` ohne Personen: Warnung „No account exists and ADMIN_EMAIL/ADMIN_PASSWORD are not set: nobody can sign in.“ (Exit 0); `ValidationException` → Fehlermeldung, Exit 1.
+  - `final class App\Actions\Auth\EnsureAdmin` (`AsAction`): `handle(?string $email, ?string $password): EnsureAdminOutcome` — Reihenfolge der Entscheidung: fehlt E-Mail oder Passwort → `NotConfigured`; sonst gibt es schon eine Person → `Exists` (diese E-Mail vorhanden) bzw. `AccountsExist`; sonst wird die Person angelegt → `Created`; ungültige E-Mail, Passwort unter 8 Zeichen oder der Platzhalter `change-me` → `ValidationException`, nichts angelegt. Name = Teil vor `@`, `handle` = `Handle::suggest`. Phase 2 ergänzt die Org-Rolle Admin.
+  - `app:ensure-admin` (`EnsureAdminCommand`): liest `config('werkbuch.admin.email|password')`, ruft `EnsureAdmin`, gibt aus: `Created`: „Admin account <email> created.“; `Exists`: „<email> already exists; nothing changed. Remove ADMIN_PASSWORD from .env.“; `AccountsExist`: „Accounts exist already; ADMIN_EMAIL is only used on the first start.“; `NotConfigured`: Warnung „ADMIN_EMAIL/ADMIN_PASSWORD are not set; no account created. Without any account nobody can sign in.“ (Exit 0); `ValidationException` → Fehlermeldung, Exit 1. Der Command fragt selbst nichts ab, er gibt nur das Ergebnis aus.
   - `app:reset-password {email}` (`ResetPasswordCommand`): Passwort nur per verdecktem Prompt (zweimal: „New password (at least 8 characters)“, „Repeat the new password“) oder als erste Zeile von STDIN (`--no-interaction`); nie als Argument oder Option; öffentliches statisches `$stdin = 'php://stdin'` für Tests; unbekannte E-Mail, leere Eingabe, ungleiche Wiederholung, ungültiges Passwort → Exit 1; Erfolg „New password set for <email>; all sessions ended.“
 
 - [ ] **Step 1: Failing Tests schreiben**
@@ -1102,7 +1112,7 @@ it('creates the first person from ADMIN_EMAIL and ADMIN_PASSWORD', function () {
 
 ```
 
-Dazu: „changes nothing on the next start“ (zweiter Lauf nach Passwortänderung in der UI: Ausgabe `already exists`, Passwort bleibt), „creates no second admin once people exist“ (eine Person vorhanden → Ausgabe `only used on the first start`, weiter 1 Konto), „warns without failing when nobody can sign in“ (ohne Werte → `nobody can sign in`, Exit 0), „fails and creates nothing for invalid values“ (Datensätze `['not-an-email','secret-pass']`, `['owner@example.com','short']`, `['owner@example.com','change-me']` → Exit 1, 0 Konten).
+Dazu: „changes nothing on the next start“ (zweiter Lauf nach Passwortänderung in der UI: Ausgabe `already exists`, Passwort bleibt), „creates no second admin once people exist“ (eine Person vorhanden → Ausgabe `only used on the first start`, weiter 1 Konto), „warns without failing when the values are missing“ (ohne Werte, mit und ohne vorhandene Person → `not set`, Exit 0, keine neue Person), „fails and creates nothing for invalid values“ (Datensätze `['not-an-email','secret-pass']`, `['owner@example.com','short']`, `['owner@example.com','change-me']` → Exit 1, 0 Konten).
 
 `tests/Feature/ResetPasswordCommandTest.php`: openbills `ResetPasswordCommandTest` übernehmen (Prompt zweimal, STDIN erste Zeile, leeres STDIN, unbekannte Adresse, ungleiche Wiederholung, zu kurz, kein Passwort-Argument und keine Option `password`), Klasse `ResetPasswordCommand`.
 
@@ -1127,18 +1137,18 @@ Betreff: `feat: add app:ensure-admin and app:reset-password with handles derived
 
 **Files:**
 - Create: `config/fortify.php`, `app/Providers/FortifyServiceProvider.php`, `app/Actions/Auth/Authenticate.php`, `app/Auth/FortifyResetUserPassword.php`, `app/Auth/PasswordResetLinkResponse.php`, `app/Notifications/ResetPasswordNotification.php`, `resources/views/vendor/mail/**`, `resources/views/vendor/notifications/email.blade.php`, `resources/js/features/auth/{AuthLayout,Login,ForgotPassword,ResetPassword}.tsx`, `resources/js/pages/Auth/{Login,ForgotPassword,ResetPassword}.tsx`, `tests/Feature/Auth/{LoginTest,LoginThrottleTest,PasswordResetTest,CsrfExpiryTest}.php`
-- Modify: `bootstrap/app.php`, `bootstrap/providers.php`, `app/Models/User.php`, `app/Http/Middleware/HandleInertiaRequests.php`, `lang/*`, `tests/Unit/ArchTest.php`
+- Modify: `bootstrap/app.php`, `bootstrap/providers.php`, `app/Models/User.php`, `composer.json`, `composer.lock`, `lang/*`, `tests/Unit/ArchTest.php`
 
 **Interfaces:**
 - Consumes: `SetPassword`, `PasswordRules` (Task 10), `AuthLayout`-Bausteine aus `components/ui` (Tasks 8, 9), `useSharedProps` (Task 4), `t` (Task 5)
 - Produces:
   - Routen von Fortify: `GET|POST /login` (`login`, `login.store`), `POST /logout` (`logout`), `GET|POST /forgot-password` (`password.request`, `password.email`), `GET /reset-password/{token}` (`password.reset`), `POST /reset-password` (`password.update`). `config/fortify.php`: `features = [Features::resetPasswords()]`, `views = true`, `home = '/my-items'`, `redirects.logout = '/login'`, `limiters.login = 'login'`, `lowercase_usernames = true`.
-  - `final class App\Actions\Auth\Authenticate` (`AsAction`): `handle(string $email, string $password): ?User` — nur Personen, nicht deaktiviert, Passwort stimmt; sonst `null` (Fortify zählt das als Fehlversuch).
+  - `final class App\Actions\Auth\Authenticate` (`AsAction`): `handle(string $email, string $password): ?User` — nur Personen, nicht deaktiviert, Passwort stimmt; sonst `null` (Fortify zählt das als Fehlversuch). Führt immer genau ein `Hash::check` aus, für unbekannte Adressen, Bots und Konten ohne Passwort gegen einen festen Dummy-Hash, damit die Antwortzeit nicht verrät, ob es das Konto gibt.
   - `FortifyServiceProvider::boot()`: Views als Inertia-Seiten `Auth/Login`, `Auth/ForgotPassword`, `Auth/ResetPassword` (Props `token`, `email`); `Fortify::authenticateUsing(fn (Request $r) => Authenticate::run(…))`; `Fortify::resetUserPasswordsUsing(FortifyResetUserPassword::class)`; `RateLimiter::for('login', fn (Request $r) => Limit::perMinute(config('werkbuch.rate_limits.login_per_ip'))->by($r->ip()))`; `FailedPasswordResetLinkRequestResponse` → `PasswordResetLinkResponse`; `ResetPassword::createUrlUsing(fn (User $u, string $token) => rtrim(config('app.url'), '/').'/reset-password/'.$token.'?email='.urlencode((string) $u->email))`. Die Sperre nach 5 Fehlversuchen je `lower(email)|IP` für 60 s macht Fortifys `LoginRateLimiter` (Pipeline `EnsureLoginIsNotThrottled`).
-  - `final class App\Auth\FortifyResetUserPassword implements ResetsUserPasswords`: `reset(User $user, array $input): void` → prüft `password` mit `PasswordRules::rules()` + `confirmed`, ruft `SetPassword::run`.
-  - `final class App\Auth\PasswordResetLinkResponse implements FailedPasswordResetLinkRequestResponse`: `__construct(string $status)`; `INVALID_USER` und `RESET_THROTTLED` → `back()->with('status', __('passwords.sent'))` (wie Erfolg); sonst Validierungsfehler an `email`.
-  - `User::sendPasswordResetNotification(string $token): void` → nichts für deaktivierte Konten, sonst `ResetPasswordNotification` (Schlüssel `mail.reset_password.subject|greeting|intro|action|expiry|outro`, Sprache `preferredLocale()`). Die veröffentlichten Mail-Views (`vendor:publish --tag=laravel-mail --tag=laravel-notifications`) nutzen `mail.layout.*` statt der englischen Satz-Schlüssel des Frameworks.
-  - `bootstrap/app.php`: `redirectGuestsTo(fn () => route('login'))`, `redirectUsersTo('/my-items')`; Middleware-Priorität wie openbill (ThrottleRequests vor AuthenticatesRequests); Exceptions: `ThrottleRequestsException` auf `login.store` → `back()->withErrors(['email' => __('auth.throttle', ['seconds' => <Retry-After>])])->onlyInput('email')`; `TokenMismatchException` außerhalb `/api` → `redirect()->back()->with('error', __('errors.page_expired'))`.
+  - `final class App\Auth\FortifyResetUserPassword implements ResetsUserPasswords`: `reset(User $user, array $input): void` → prüft nur `confirmed` an `password` und ruft `SetPassword::run`; die Passwortregeln prüft allein `SetPassword` (deren `ValidationException` geht unverändert durch).
+  - `final class App\Auth\PasswordResetLinkResponse implements FailedPasswordResetLinkRequestResponse`: `__construct(string $status)`; der Broker liefert hier nur `INVALID_USER` oder `RESET_THROTTLED`, beide → `back()->with('status', __('passwords.sent'))`, dieselbe Antwort wie bei Erfolg; kein weiterer Zweig.
+  - `User::sendPasswordResetNotification(string $token): void` → nichts für deaktivierte Konten, sonst `$this->notify((new ResetPasswordNotification($token))->locale($this->preferredLocale()))` (Sprache ausdrücklich gesetzt; Schlüssel `mail.reset_password.subject|greeting|intro|action|expiry|outro`). Die veröffentlichten Mail-Views (`vendor:publish --tag=laravel-mail --tag=laravel-notifications`) nutzen `mail.layout.*` statt der englischen Satz-Schlüssel des Frameworks.
+  - `bootstrap/app.php`: `redirectGuestsTo(fn () => route('login'))`, `redirectUsersTo('/my-items')`; Middleware-Priorität wie openbill (ThrottleRequests vor AuthenticatesRequests); Exceptions: `ThrottleRequestsException` auf `login.store` → `back()->withErrors(['email' => __('auth.throttle', ['seconds' => <Retry-After>])])->onlyInput('email')`; `HttpException` mit Status 419 außerhalb `/api` (Laravel hat die `TokenMismatchException` vor den Render-Callbacks schon dazu gemacht) → `redirect()->back()->with('error', __('errors.page_expired'))`.
   - `features/auth/*`: Port von `AuthLayout`, `Login`, `ForgotPassword` des Klickdummys (ohne Demo-Hinweise und Fußzeile „Klickdummy …“), dazu `ResetPassword` (Reiter „Passwort“, Titel „Neues Passwort“, Felder E-Mail (vorbelegt, `readOnly`), „Neues Passwort“, „Wiederholen“, Knopf „Passwort setzen“; Texte unter `reset_password.*`). Formulare über Inertias `useForm`; leere Felder prüft der Client mit den Texten des Klickdummys und setzt den Fokus; Serverfehler stehen am Feld, Fokus auf das erste fehlerhafte Feld. `AuthLayout` zeigt `flash.status` als Banner `info` (in einer `role="status"`-Region) und `flash.error` als Banner `danger` über dem Formular. Ein Fehler am Feld `email` auf `ResetPassword` bietet den Link „Neuen Link anfordern“ (`reset_password.request_new`) auf `/forgot-password`. Schlüssel, auf die sich Task 14 verlässt: `login.title`, `login.email`, `login.password`, `login.submit`, `login.forgot_link`, `forgot_password.email`, `forgot_password.submit`, `reset_password.email`, `reset_password.request_new`. `ForgotPassword` ohne Mailserver (`features.mail === false`): statt des Formulars ein Banner „Diese Instanz verschickt keine Mails. Ein Admin setzt dein Passwort mit `php artisan app:reset-password` zurück.“ (`forgot_password.no_mail`). Nach dem Absenden ersetzt die Bestätigung des Klickdummys das Formular (Fokus darauf), unabhängig davon, ob es das Konto gibt.
 
 - [ ] **Step 1: Failing Tests schreiben**
@@ -1177,7 +1187,9 @@ Weitere Fälle in `LoginTest.php`: „signs in the account of app:ensure-admin�
 
 ```php
 it('locks the email for this IP after five failures, even with the right password', function () {
-    foreach (range(1, 5) as $i) $this->post('/login', ['email' => $i % 2 ? 'MARA@example.com' : 'mara@example.com', 'password' => 'nope']);
+    foreach (['MARA@example.com', ' Mara@Example.com ', 'mara@example.com', ' mara@example.com', 'Mara@example.com '] as $email) {
+        $this->post('/login', ['email' => $email, 'password' => 'nope']);
+    }
     $this->post('/login', ['email' => 'mara@example.com', 'password' => 'secret-pass'])
         ->assertSessionHasErrors(['email' => __('auth.throttle', ['seconds' => 60])]);
     $this->assertGuest();
@@ -1233,7 +1245,7 @@ it('sets the new password, ends other sessions and leads to the sign-in', functi
 
 Dazu: „names the reason of a used or expired link at the field“ (Token `used` → Fehler `email` = `__('passwords.token')`), „refuses short and unrepeated passwords“ (Datensätze `['short','short']`, `['new-password','other-password']` → Fehler an `password`), „shows the reset page with token and email“ (`GET /reset-password/abc?email=lene%40example.com` → `Auth/ResetPassword` mit `token` `abc`, `email` `lene@example.com`), „shows the forgot page to guests“ (`Auth/ForgotPassword`).
 
-`CsrfExpiryTest.php` (Review Focus 4): CSRF prüft Laravel in Unit-Tests nicht, darum wirft eine Testroute die Exception selbst: `Route::middleware('web')->post('_t/expired', fn () => throw new TokenMismatchException())`; `from('/login')->post('_t/expired')` → Redirect `/login` mit `session('error') === __('errors.page_expired')`; dieselbe Exception unter `api/v1/_t/expired` → Problem Details 419 `csrf_token_mismatch`.
+`CsrfExpiryTest.php` (Review Focus 4): CSRF prüft Laravel in Unit-Tests nicht, darum wirft eine Testroute die Exception selbst (Laravel macht daraus vor dem Render-Callback `HttpException(419)`, genau wie im Betrieb): `Route::middleware('web')->post('_t/expired', fn () => throw new TokenMismatchException())`; `from('/login')->post('_t/expired')` → Redirect `/login` mit `session('error') === __('errors.page_expired')`; dieselbe Exception unter `api/v1/_t/expired` → Problem Details 419 `csrf_token_mismatch`.
 
 `ArchTest.php` ergänzen: `arch('auth adapters are final and do not compute')->expect('App\Auth')->classes()->toBeFinal()->not->toUse('App\Domain')`.
 
@@ -1288,9 +1300,9 @@ Betreff: `feat: sign in, sign out and reset passwords with Fortify, throttled an
   - `ProfileMenu`: Theme (System/Hell/Dunkel), „Persönliche Einstellungen“, „Abmelden“ (`router.post(paths.logout())`, Fehler → Toast `shell.profile.logout_failed`); ohne „Als … ansehen“ und Demo-Gruppe.
   - `bindings.tsx`: `useShellBindings()` registriert `shell.help`, `shell.undo` (mit `when: canUndo`) und `shell.go.*` (`router.visit`).
   - `HelpOverlay`: Port; `helpGroups()` mit Gruppenschlüsseln, Reihenfolge `shortcuts.group.general`, `shortcuts.group.navigation` zuerst; Titel und Beschreibung aus `shortcuts.help.*`.
-  - `PageStates`: `NotFound({ title?, description? })` (Port, Aktion „Meine Items öffnen“; ohne „Suchen“ bis Phase 6), `ErrorPage({ status }: { status: 403 | 500 | 503 })` (Texte `errors.page.<status>.title|description`, „Neu laden“).
+  - `PageStates`: `NotFound({ title?, description? })` (Port, Aktion „Meine Items öffnen“; ohne „Suchen“ bis Phase 6), `ErrorPage({ status }: { status: 403 | 500 | 503 })` (Texte `errors.page.forbidden|server_error|unavailable.title|description`, „Neu laden“; Schlüssel ohne Ziffern). `NotFound` nutzt `errors.page.not_found.title|description|open_my_items`.
   - Seiten: `pages/Items/MyItems.tsx` → `MyItemsEmpty` (Überschrift „Meine Items“, `EmptyState` mit Titel, Text und Knopf „Projekte ansehen“ aus `ItemsScreen.tsx` des Klickdummys, Preset `my`; Schlüssel `items.empty.my.title|description`, `items.empty.projects_link`; Phase 5 ersetzt den Inhalt). `pages/Errors/NotFound.tsx` → `NotFound` in der Shell. `pages/Errors/Error.tsx` → `ErrorPage`, `layout`: Shell nur mit `auth.user`, sonst ohne.
-  - Schlüssel, auf die sich Task 14 verlässt: `shell.skip_to_content`, `shell.mobile.open_navigation`, `shell.mobile.navigation`, `shell.sidebar.collapse`, `shell.sidebar.expand`, `shell.profile.logout`, `shortcuts.help.title`, `theme.system`, `theme.light`, `theme.dark`, `items.my.title`, `errors.not_found.title`, `errors.not_found.open_my_items`.
+  - Schlüssel, auf die sich Task 14 verlässt: `shell.skip_to_content`, `shell.mobile.open_navigation`, `shell.mobile.navigation`, `shell.sidebar.collapse`, `shell.sidebar.expand`, `shell.profile.logout`, `shortcuts.help.title`, `theme.system`, `theme.light`, `theme.dark`, `items.my.title`, `errors.page.not_found.title`, `errors.page.not_found.open_my_items`.
   - Routen: `Route::middleware('auth')->group(…)`: `Route::redirect('/', '/my-items')`, `Route::inertia('/my-items', 'Items/MyItems')->name('my-items')`, `Route::fallback(…)` (404 `Errors/NotFound`). Gäste landen überall auf `/login`.
   - `bootstrap/app.php`: `$exceptions->respond(fn (Response $response, Throwable $e, Request $request) => …)`: außerhalb `/api`, für Status 403, 404, 500, 503 und nicht bei `app.debug` mit 500 → `Inertia::render($status === 404 ? 'Errors/NotFound' : 'Errors/Error', ['status' => $status])->toResponse($request)->setStatusCode($status)`.
 
@@ -1316,7 +1328,7 @@ it('shows unknown paths as 404 in the shell, but only to signed-in people', func
 
 `ErrorPagesTest.php`: Testroute in `web` mit `abort(403)` → 403 `Errors/Error` mit `status` 403; `throw new LogicException` mit `app.debug=false` → 500 `Errors/Error`; mit `app.debug=true` bleibt Laravels Debug-Seite (kein Inertia-Payload).
 
-`store/ui.test.ts` = Port von `store.test.ts` ohne die Session-Fälle. `lib/links.test.ts`: jeder Pfad (`paths.project('WEB', 'board')` → `/projects/WEB?layout=board`, `paths.resetPassword('t', 'a+b@example.com')` → `/reset-password/t?email=a%2Bb%40example.com`), `appUrl`, `instanceOrigin`, `useActivePath` (genau, darunter, `also`, Query ignoriert; `vi.mock('@inertiajs/react')`). `HelpOverlay.test.tsx`: Port von `HelpOverlay.test.ts` plus „zeigt die Gruppen in übersetzter Form, Allgemein zuerst“. `LiveIndicator.test.tsx`: ohne Verbindung (gemocktes `useLiveConnected` → false) erscheint das Banner „Live-Updates pausiert“ in der `status`-Region, „Neu laden“ ruft `location.reload`; verbunden ist die Region leer. `PageStates.test.tsx`: `ErrorPage` je Status; `NotFound` mit eigenem Titel. `useDocumentTitle.test.tsx`: setzt und stellt zurück.
+`store/ui.test.ts` = Port von `store.test.ts` ohne die Session-Fälle. `lib/links.test.ts`: jeder Pfad (`paths.project('WEB', 'board')` → `/projects/WEB?layout=board`, `paths.resetPassword('t', 'a+b@example.com')` → `/reset-password/t?email=a%2Bb%40example.com`), `appUrl`, `instanceOrigin`, `useActivePath` (genau, darunter, `also`, Query ignoriert; `vi.mock('@inertiajs/react')`). `HelpOverlay.test.tsx`: Port von `HelpOverlay.test.ts` (`helpGroups()`) plus Render-Test der Komponente: mit `helpOpen` im Store und registrierten `shell.help` und `shell.go.inbox` zeigt der Dialog `shortcuts.help.title`, die Gruppen in übersetzter Form (Allgemein zuerst, dann Navigation) und je Eintrag `Kbd` mit dem Namen der Tasten; der Fokus steht auf der Liste; Escape setzt `helpOpen` auf `false`; ohne `helpOpen` ist nichts gerendert. `LiveIndicator.test.tsx`: ohne Verbindung (gemocktes `useLiveConnected` → false) erscheint das Banner „Live-Updates pausiert“ in der `status`-Region, „Neu laden“ ruft `location.reload`; verbunden ist die Region leer. `PageStates.test.tsx`: `ErrorPage` je Status; `NotFound` mit eigenem Titel. `useDocumentTitle.test.tsx`: setzt und stellt zurück.
 
 - [ ] **Step 2: Rot, implementieren, grün**
 
@@ -1343,7 +1355,7 @@ Betreff: `feat: add the shell with sidebar, profile menu, shortcut help, live ba
 - Consumes: `User`, `Locale` (Task 1)
 - Produces:
   - `DemoSeeder::PASSWORD = 'werkbuch-demo'`; `DemoSeeder::run()` verweigert `production` (`RuntimeException`) und ruft der Reihe nach die Seeder unter `database/seeders/Demo/` auf; jede Phase hängt ihren an (`ProjectsSeeder`, `ItemsSeeder` …).
-  - `Demo\PeopleSeeder`: die sechs Personen aus `src/api/seed/people.ts` per `updateOrCreate` nach E-Mail (Mara Lindqvist `mara`, Jonas Feld `jonas`, Ida Brenner `ida`, Theo Okafor `theo`, Lene Vogt `lene`, Sven Albers `sven`), E-Mail `<handle>@feldwerk.example.com`, `locale` `de`, `timezone` `Europe/Berlin`, Passwort `DemoSeeder::PASSWORD` (bei jedem Lauf neu gesetzt), Sven mit `disabled_at` `2026-09-18 17:00` Europe/Berlin. Organisation Feldwerk, Org-Rollen und die Bots folgen in Phase 2.
+  - `Demo\PeopleSeeder`: die sechs Personen aus `src/api/seed/people.ts` per `updateOrCreate` nach E-Mail (Mara Lindqvist `mara`, Jonas Feld `jonas`, Ida Brenner `ida`, Theo Okafor `theo`, Lene Vogt `lene`, Sven Albers `sven`), E-Mail `<handle>@feldwerk.example.com`, `locale` `de`, `timezone` `Europe/Berlin`, Passwort `DemoSeeder::PASSWORD` (bei jedem Lauf neu gesetzt), Sven mit `disabled_at` `2026-09-18 17:00` Europe/Berlin. Organisation Feldwerk (bis Phase 2 aus der Config, P10), Org-Rollen und die Bots folgen in Phase 2.
   - `E2eSeeder`: ruft `DemoSeeder`, dann je Person `updateOrCreate`: `e2e@example.com` („Erik Ende“, `e2e`, `locale` null, Passwort `e2e-password`) und für die Reset-Tests `reset-desktop-light@example.com`, `reset-desktop-dark@example.com`, `reset-phone-light@example.com`, `reset-phone-dark@example.com` („Rita Reset“, Handle wie der Teil vor `@`, Passwort `e2e-password`); verweigert `production`.
 
 - [ ] **Step 1: Failing Test schreiben**
@@ -1398,7 +1410,7 @@ Betreff: `feat: add the DemoSeeder scaffold with the demo people and an E2eSeede
 - Produces:
   - `pnpm build:coverage` = `vite build --mode coverage`: im Modus `coverage` hängt `vite.config.ts` `istanbul({ include: 'resources/js/**', exclude: ['resources/js/**/*.test.*', 'resources/js/test/**'], extension: ['.ts', '.tsx'], requireEnv: false, forceBuildInstrument: true })` an und setzt `build.sourcemap = true`; Ausgabe nach `public/build` wie der normale Build.
   - `e2e/fixtures.ts`: `test` und `expect`; Auto-Fixture `pageErrors` (Port aus `prototypes/clickdummy/e2e/fixtures.ts`); Auto-Fixture `coverage`: wenn `E2E_COVERAGE !== '0'`, schreibt nach jedem Test `window.__coverage__` jeder offenen Seite der App-URL nach `coverage/e2e/<testId>-<n>.json`, dazu per `exposeBinding('__werkbuchCoverage')` und Init-Skript auf `pagehide` den Stand vor jedem vollen Neuladen; scheitert, wenn eine Seite kein `__coverage__` hat („run `ddev exec pnpm build:coverage` first“).
-  - `scripts/coverage-merge.mjs` (Node, ESM, `istanbul-lib-coverage`, `istanbul-lib-report`, `istanbul-reports`) mit benannten Exporten `normalizePath(file: string, root: string): string | null` (alles vor `resources/js/` abschneiden; Pfade außerhalb oder Tests → `null`), `loadCoverage(root: string): CoverageMap` (`coverage/unit/coverage-final.json` plus alle `coverage/e2e/*.json`, Pfade normalisiert und gegen `root` aufgelöst), `uncovered(map: CoverageMap): { file: string; lines: number[] }[]` (`file` relativ zum Repo), und Hauptprogramm: schreibt `coverage/merged/coverage-final.json`, Berichte `text-summary` und `html` (`coverage/merged/html`), listet jede Datei unter 100 % mit ihren Zeilen, Exit 1 unter 100 % Zeilen; fehlt `coverage/unit/coverage-final.json`, Exit 1 mit „run `ddev exec pnpm test:coverage` first“.
+  - `scripts/coverage-merge.mjs` (Node, ESM, `istanbul-lib-coverage`, `istanbul-lib-report`, `istanbul-reports`) mit benannten Exporten `normalizePath(file: string, root: string): string | null` (alles vor `resources/js/` abschneiden; Pfade außerhalb oder Tests → `null`), `mergeCoverage(unit: CoverageMapData, e2e: CoverageMapData[], root: string): CoverageMap` (Pfade normalisiert und gegen `root` aufgelöst, dann zusammengeführt), `loadCoverage(root: string): CoverageMap` (liest `coverage/unit/coverage-final.json` und alle `coverage/e2e/*.json` und ruft `mergeCoverage`), `uncovered(map: CoverageMap, root: string): { file: string; lines: number[] }[]` (`file` relativ zu `root`), und Hauptprogramm: schreibt `coverage/merged/coverage-final.json`, Berichte `text-summary` und `html` (`coverage/merged/html`), listet jede Datei unter 100 % mit ihren Zeilen, Exit 1 unter 100 % Zeilen; fehlt `coverage/unit/coverage-final.json`, Exit 1 mit „run `ddev exec pnpm test:coverage` first“.
   - `e2e/global-setup.ts`: Ziel `WERKBUCH_URL ?? 'https://werkbuch.ddev.site'`; gegen DDEV (ohne `WERKBUCH_URL`) mit Abdeckung: `public/hot` darf nicht existieren und `public/build/manifest.json` muss existieren; leert `coverage/e2e/`; Artisan über `E2E_ARTISAN ?? 'ddev artisan'`: `cache:clear` (setzt die Login-Drosseln zurück) und `db:seed --class=E2eSeeder --no-interaction`.
   - `e2e/global-teardown.ts`: mit Abdeckung `E2E_EXEC ?? 'ddev exec'` + `pnpm coverage:merge` (vorher bei DDEV `ddev mutagen sync`, Fehler davon ignoriert); scheitert der Merge, scheitert der Lauf.
   - `e2e/helpers.ts`: `tr(locale: 'en' | 'de', key: string, params?: Record<string, string | number>): string` (liest `../lang/<locale>.json`; Tests schreiben keine UI-Texte ab), `PEOPLE` (`e2e`, `mara` und `theo` aus dem `DemoSeeder` mit `DemoSeeder::PASSWORD`, `reset` je Projektname), `login(page, email, password)` nur per Tastatur, `mailpit` (`MAILPIT_URL ?? 'https://werkbuch.ddev.site:8026'`) mit `latestTo(email: string, after: Date): Promise<{ html: string } | null>` über `GET /api/v1/search?query=to:"<email>"` und `GET /api/v1/message/<ID>` (`ignoreHTTPSErrors`).
@@ -1417,8 +1429,21 @@ it('normalizes container, runner and Mac paths to the repo', () => {
   expect(normalizePath('/repo/resources/js/lib/i18n.test.ts', '/repo')).toBeNull();
   expect(normalizePath('/repo/node_modules/x/index.js', '/repo')).toBeNull();
 });
-it('adds the hits of unit and e2e runs per line', () => { /* fixtures: line 3 hit only in unit, line 5 only in e2e → uncovered() is [] */ });
-it('lists the lines nobody ran', () => { /* line 7 hit nowhere → [{ file: 'resources/js/x.ts', lines: [7] }] */ });
+// one file, three statements on lines 3, 5 and 7, as Istanbul writes it
+const file = (hits) => ({ path: '/var/www/html/resources/js/x.ts', statementMap: {
+  0: { start: { line: 3, column: 0 }, end: { line: 3, column: 9 } },
+  1: { start: { line: 5, column: 0 }, end: { line: 5, column: 9 } },
+  2: { start: { line: 7, column: 0 }, end: { line: 7, column: 9 } } }, s: hits, fnMap: {}, f: {}, branchMap: {}, b: {} });
+const unit = { '/var/www/html/resources/js/x.ts': file({ 0: 1, 1: 0, 2: 0 }) };
+const e2e = { '/home/runner/work/werkbuch/werkbuch/resources/js/x.ts': { ...file({ 0: 0, 1: 2, 2: 0 }), path: '/home/runner/work/werkbuch/werkbuch/resources/js/x.ts' } };
+it('adds the hits of unit and e2e runs per line', () => {
+  const map = mergeCoverage(unit, [e2e], '/repo');
+  expect(map.files()).toEqual(['/repo/resources/js/x.ts']);
+  expect(map.fileCoverageFor('/repo/resources/js/x.ts').getLineCoverage()).toEqual({ 3: 1, 5: 2, 7: 0 });
+});
+it('lists the lines nobody ran', () => {
+  expect(uncovered(mergeCoverage(unit, [e2e], '/repo'), '/repo')).toEqual([{ file: 'resources/js/x.ts', lines: [7] }]);
+});
 ```
 
 `scripts/coverage-ignores.test.mjs`: jedes `istanbul ignore` in `resources/js/**/*.{ts,tsx}` hat die Form `/* istanbul ignore <next|if|else> -- <Grund mit mindestens drei Wörtern> */`; Selbsttest des Detektors.
@@ -1450,12 +1475,17 @@ Alle Abläufe nur mit der Tastatur (`page.keyboard`, `locator.press`, kein `clic
 `password-reset.spec.ts` (ohne Sitzung; `person = PEOPLE.reset[info.project.name]`):
 
 ```ts
-test('sets a new password from the mail, and the used link names its reason', async ({ page }, info) => {
+test('answers an unknown address like a known one, then sets a new password from the mail', async ({ page }, info) => {
   const person = PEOPLE.reset[info.project.name]; const start = new Date();
+  await page.goto('/forgot-password');
+  // type nobody@example.com, Enter
+  await expect(page.getByText('nobody@example.com')).toBeVisible(); // the same confirmation as for a known address
   await page.goto('/login');
-  // Tab to "Forgot password?", Enter, type the email, Enter
+  // Tab to "Forgot password?", Enter, type person.email, Enter
   await expect(page.getByText(person.email)).toBeVisible(); // the confirmation, which takes the focus
   await expect.poll(() => mailpit.latestTo(person.email, start), { timeout: 15_000 }).not.toBeNull();
+  // mails go out within the request: once the later mail is in Mailpit, a mail to the earlier unknown address would be too
+  expect(await mailpit.latestTo('nobody@example.com', start)).toBeNull();
   const { html } = (await mailpit.latestTo(person.email, start))!;
   const link = /href="([^"]+\/reset-password\/[^"]+)"/.exec(html)![1].replaceAll('&amp;', '&');
   await page.goto(link);
@@ -1470,14 +1500,6 @@ test('sets a new password from the mail, and the used link names its reason', as
   await login(page, person.email, 'new-e2e-password');
   await expect(page).toHaveURL(/\/my-items$/);
 });
-test('answers an unknown address like a known one and sends nothing', async ({ page }) => {
-  const start = new Date();
-  await page.goto('/forgot-password');
-  // type nobody@example.com, Enter
-  await expect(page.getByText('nobody@example.com')).toBeVisible();
-  await page.waitForTimeout(2000);
-  expect(await mailpit.latestTo('nobody@example.com', start)).toBeNull();
-});
 ```
 
 `reset_password.email` und `reset_password.request_new` sind JSON-Schlüssel des Bildschirms (Task 11).
@@ -1487,7 +1509,7 @@ test('answers an unknown address like a known one and sends nothing', async ({ p
 | Test | Assertions |
 |---|---|
 | starts with „Skip to content“ and lists the shortcuts with `?` | erstes Tab fokussiert den Link `shell.skip_to_content`; `?` öffnet den Dialog `shortcuts.help.title` mit `shortcuts.shell.go.inbox`; Escape schließt ihn |
-| goes to projects with `g p` and shows the 404 page inside the shell | URL `/projects`; Überschrift `errors.not_found.title`; Seitenleiste sichtbar; Enter auf `errors.not_found.open_my_items` führt nach `/my-items` |
+| goes to projects with `g p` and shows the 404 page inside the shell | URL `/projects`; Überschrift `errors.page.not_found.title`; Seitenleiste sichtbar; Enter auf `errors.page.not_found.open_my_items` führt nach `/my-items` |
 | opens the navigation drawer on the phone | nur `phone-*` (`test.skip` sonst): Knopf `shell.mobile.open_navigation` per Tab und Enter öffnet den Dialog `shell.mobile.navigation`, Escape schließt, Fokus zurück auf dem Knopf |
 | collapses the sidebar to the rail and back | nur `desktop-*`: Knopf `shell.sidebar.collapse`, danach `shell.sidebar.expand` sichtbar |
 | switches the theme from the profile menu and keeps it after reload | Profilmenü → `theme.dark` → nach `reload()` `html[data-theme=dark]`; zurück auf `theme.system` → Attribut fehlt |
@@ -1501,6 +1523,8 @@ ddev exec pnpm build:coverage
 pnpm --dir e2e test
 ```
 
+Früher Abgleich der beiden Instrumentierungen: zuerst nur `pnpm --dir e2e test tests/login.spec.ts --project desktop-light`; im Bericht des Teardowns müssen alle Dateien unter `resources/js/lib/**` und `resources/js/components/ui/**` (in Vitest allein schon 100 %) weiter 100 % zeigen. Fehlen dort Zeilen, liefern Vitest- und Build-Instrumentierung verschiedene Positionen: erst das beheben (gleiche Babel-/React-Transformation, Source Maps), dann weiter.
+
 Expected: alle Projekte grün; der Global-Teardown druckt den zusammengeführten Bericht und endet mit 100 % Zeilen. Listet er Zeilen: zuerst eine Playwright-Prüfung des Ablaufs, sonst ein Vitest-Test (z. B. `pages/Errors/Error.tsx`, Zweige ohne Verbindung); ein Ignore-Kommentar nur mit Grund. Danach `ddev exec pnpm build` (normaler Build zurück).
 
 - [ ] **Step 5: Commit**
@@ -1512,7 +1536,8 @@ Betreff: `test: add the Istanbul coverage build, merged frontend coverage and th
 ### Task 15: VitePress-Gerüst
 
 **Files:**
-- Create: `docs/package.json`, `docs/.vitepress/config.ts`, `docs/.vitepress/theme/index.ts`, `docs/.vitepress/theme/style.css`, `docs/public/favicon.svg`, `docs/en/index.md`, `docs/en/development.md`, `docs/de/index.md`, `docs/de/development.md`, `tests/Feature/DocsTest.php`
+- Create: `docs/package.json`, `docs/.vitepress/config.ts`, `docs/.vitepress/theme/index.ts`, `docs/.vitepress/theme/style.css`, `docs/public/favicon.svg`, `docs/en/index.md`, `docs/en/development.md`, `docs/de/index.md`, `docs/de/development.md`, `tests/Unit/DocsTest.php`
+- Modify: `pnpm-lock.yaml` (neuer Importer `docs`)
 
 **Interfaces:**
 - Consumes: Kommandos der Tasks 1–14
@@ -1520,23 +1545,29 @@ Betreff: `test: add the Istanbul coverage build, merged frontend coverage and th
 
 - [ ] **Step 1: Failing Test schreiben**
 
-`tests/Feature/DocsTest.php` (Feature, weil `base_path()` die App braucht):
+`tests/Unit/DocsTest.php` (ohne App, Dateien über `repo_path()`):
 
 ```php
 it('has every docs page in English and German', function () {
-    $pages = fn (string $l): array => array_map('basename', glob(base_path("docs/{$l}/*.md")) ?: []);
+    $pages = fn (string $l): array => array_map('basename', glob(repo_path("docs/{$l}/*.md")) ?: []);
     expect($pages('en'))->not->toBeEmpty()->toEqualCanonicalizing($pages('de'));
 });
+it('has the same heading structure in both languages', function () {
+    foreach (glob(repo_path('docs/en/*.md')) ?: [] as $en) {
+        $levels = fn (string $file): array => array_map('strlen', preg_match_all('/^(#{1,6}) /m', (string) preg_replace('/^```.*?^```/ms', '', (string) file_get_contents($file)), $m) ? $m[1] : []);
+        expect($levels(repo_path('docs/de/'.basename($en))))->toBe($levels($en), basename($en)); // same levels in the same order, so the same count
+    }
+});
 it('lists every page but the landing page in the sidebar', function () {
-    $config = (string) file_get_contents(base_path('docs/.vitepress/config.ts'));
-    foreach (array_diff(array_map(fn ($f) => basename($f, '.md'), glob(base_path('docs/en/*.md')) ?: []), ['index']) as $page) {
+    $config = (string) file_get_contents(repo_path('docs/.vitepress/config.ts'));
+    foreach (array_diff(array_map(fn ($f) => basename($f, '.md'), glob(repo_path('docs/en/*.md')) ?: []), ['index']) as $page) {
         expect($config)->toContain("'{$page}'");
     }
 });
-it('keeps specs, plans and history out of the site', fn () => expect((string) file_get_contents(base_path('docs/.vitepress/config.ts')))->toContain("'history/**'", "'superpowers/**'"));
+it('keeps specs, plans and history out of the site', fn () => expect((string) file_get_contents(repo_path('docs/.vitepress/config.ts')))->toContain("'history/**'", "'superpowers/**'"));
 it('documents the DDEV commands of the development page in both languages', function () {
     foreach (['en', 'de'] as $l) {
-        expect((string) file_get_contents(base_path("docs/{$l}/development.md")))
+        expect((string) file_get_contents(repo_path("docs/{$l}/development.md")))
             ->toContain('ddev start', 'ddev artisan test --coverage --min=100', 'ddev exec pnpm test:coverage', 'ddev exec pnpm build:coverage', 'pnpm --dir e2e test', 'app:ensure-admin', 'app:reset-password');
     }
 });
@@ -1566,8 +1597,8 @@ Betreff: `docs: add the VitePress scaffold with index and development pages in E
 ### Task 16: CI und Dependabot
 
 **Files:**
-- Modify: `.github/workflows/tests.yml`
-- Create: `.github/dependabot.yml`
+- Modify: `.github/workflows/tests.yml`, `CLAUDE.md` (Regel zum CI-Job)
+- Create: `.github/dependabot.yml`, `tests/Unit/CiEnvTest.php`
 
 **Interfaces:**
 - Consumes: alle Kommandos der Tasks 2–15, `e2e/ci.env` (Task 14)
@@ -1619,7 +1650,7 @@ Betreff: `docs: add the VitePress scaffold with index and development pages in E
 
 `e2e` (kein Pflicht-Check, `timeout-minutes: 30`): Services `mariadb` (wie oben, DB `werkbuch`) und `mailpit` (`axllent/mailpit:v1.32.0@sha256:0790692be935ea4420d085694f7985b1f692ca6a8771ab0e0bd8ba75ac180498`, Ports `1025:1025`, `8025:8025`); setup-php ohne Abdeckung, pnpm, Node; `composer install`; `cp e2e/ci.env .env && php artisan key:generate` (`php artisan serve` reicht nur wenige Env-Variablen an den Server weiter, darum steht alles in `.env`); `php artisan migrate --force`; `pnpm install --frozen-lockfile`; `pnpm test:coverage`; `pnpm build:coverage`; Server im Hintergrund `PHP_CLI_SERVER_WORKERS=4 php artisan serve --host=127.0.0.1 --port=8000 > serve.log 2>&1 &` und `curl -fsS --retry 30 --retry-delay 1 --retry-all-errors http://127.0.0.1:8000/up`; `pnpm --dir e2e install --frozen-lockfile`, `pnpm --dir e2e typecheck`, `pnpm --dir e2e exec playwright install --with-deps chromium`; `pnpm --dir e2e test` mit `env: { CI: 'true', WERKBUCH_URL: http://127.0.0.1:8000, MAILPIT_URL: http://127.0.0.1:8025, E2E_ARTISAN: php artisan, E2E_EXEC: '' }`; immer `coverage/merged/` als Artefakt `frontend-coverage`; bei Fehler `serve.log`, `storage/logs/`, `e2e/test-results` als Artefakt.
 
-`e2e/ci.env`: Inhalt von `.env.example` mit `APP_ENV=e2e`, `APP_DEBUG=false`, `APP_URL=http://127.0.0.1:8000`, `DB_HOST=127.0.0.1`, `DB_DATABASE=werkbuch`, `MAIL_HOST=127.0.0.1`, `MAIL_PORT=1025`, `QUEUE_CONNECTION=sync`, `BROADCAST_CONNECTION=log`, `SCOUT_DRIVER=null`, `ADMIN_EMAIL=`, `ADMIN_PASSWORD=`.
+`e2e/ci.env`: dieselben Schlüssel wie `.env.example` (`tests/Unit/CiEnvTest.php`: die Schlüsselmengen beider Dateien sind gleich, gelesen über `repo_path()`), Werte wie dort, außer `APP_ENV=e2e`, `APP_DEBUG=false`, `APP_URL=http://127.0.0.1:8000`, `DB_HOST=127.0.0.1`, `DB_DATABASE=werkbuch`, `MAIL_HOST=127.0.0.1`, `MAIL_PORT=1025`, `QUEUE_CONNECTION=sync`, `BROADCAST_CONNECTION=log`, `SCOUT_DRIVER=null`, `ADMIN_EMAIL=`, `ADMIN_PASSWORD=`.
 
 `docs`: pnpm, Node, `pnpm install --frozen-lockfile`, `DOCS_BASE=/werkbuch/ pnpm --dir docs build`, Prüfung `test -f docs/.vitepress/dist/llms.txt`.
 
@@ -1634,6 +1665,8 @@ Betreff: `docs: add the VitePress scaffold with index and development pages in E
 Run: `docker run --rm -v "$PWD:/repo" --workdir /repo rhysd/actionlint:1.7.12 -color` (Colima)
 Expected: keine Ausgabe, Exit 0. Endgültig prüft die CI am PR (alle vier Jobs grün).
 
+`CLAUDE.md` im selben Commit (Repo-Regel): Die Regel zum CI-Job lautet jetzt: `tests` (Pflicht, Name nie ändern) prüft die App (Composer, Pint, Larastan, Pest mit Abdeckung, `tsc`, Vitest mit Abdeckung, Build); `e2e`, `docs` und `clickdummy` laufen daneben und sind keine Pflicht-Checks.
+
 - [ ] **Step 5: Commit**
 
 Betreff: `ci: check the app in tests, run Playwright with merged coverage, build the docs and keep the clickdummy job`.
@@ -1643,7 +1676,7 @@ Betreff: `ci: check the app in tests, run Playwright with merged coverage, build
 ### Task 17: CLAUDE.md, README, Rulings
 
 **Files:**
-- Modify: `CLAUDE.md`, `README.md`
+- Modify: `CLAUDE.md`, `README.md`, `docs/superpowers/plans/2026-10-30-werkbuch-app.md` (Satz zum Kürzel-Register)
 - Create: `docs/superpowers/plans/2026-10-30-werkbuch-app-rulings.md` (falls nicht vorhanden)
 
 **Interfaces:**
@@ -1652,7 +1685,7 @@ Betreff: `ci: check the app in tests, run Playwright with merged coverage, build
 
 - [ ] **Step 1: `CLAUDE.md` neu schneiden**
 
-Abschnitte (Deutsch): „Was werkbuch ist“ (bleibt), „Stand“ (Phase 1 umgesetzt; Ablauf und Verweis auf Master-Plan und Phasenpläne), „Tech Stack“ (Werte aus „Paketversionen“), „Kommandos“ (alle `ddev …`-Kommandos dieses Plans, `pnpm --dir e2e …` auf dem Mac, Ports), „Regeln“ (bisherige plus: Actions-Regel, Domain ohne Laravel, i18n-Schlüsselschema und Port-Regel, Kürzel nur über `catalog.ts`, Abdeckung und Ausnahmen mit Grund, `allowBuilds`, Root-Abhängigkeiten im Container), „Architektur“ (Verträge aus dem Master-Plan, die es schon gibt: `Problem`, `config/werkbuch.php`, Shared Props, `http.ts`, `ApiError`/`Page`, `shellLayout`, `paths`), „Fallstricke“ mindestens: `ddev composer create-project` nicht benutzen; `public/hot` nach hartem Vite-Ende löschen; `ddev exec` mit Globs in einfache Quotes; Inertia-Tests verlangen die Seitendatei; Layouts als Pfeilfunktion; `phpunit.xml` erzwingt `testing`; Tailwind scannt nur `resources/`; dynamische Übersetzungsschlüssel findet der Test nicht; Cookie `locale` unverschlüsselt; nach einem Lauf von `pnpm --dir e2e test` ist der Abdeckungs-Build installiert (`ddev exec pnpm build` stellt den normalen her); Mutagen braucht `ddev mutagen sync`; `php artisan serve` liest nur `.env`; Login-Drosseln in e2e per `cache:clear`; Daemons warten auf `vendor/` und `.env`, Reverb braucht nach Codeänderungen `ddev restart`; der Klickdummy hat kein eigenes Lockfile mehr. Den Absatz zum Job `tests` auf den neuen Stand bringen (prüft die App; `clickdummy`, `e2e`, `docs` sind keine Pflicht-Checks).
+Abschnitte (Deutsch): „Was werkbuch ist“ (bleibt), „Stand“ (Phase 1 umgesetzt; Ablauf und Verweis auf Master-Plan und Phasenpläne), „Tech Stack“ (Werte aus „Paketversionen“), „Kommandos“ (alle `ddev …`-Kommandos dieses Plans, `pnpm --dir e2e …` auf dem Mac, Ports), „Regeln“ (bisherige plus: Actions-Regel, Domain ohne Laravel, i18n-Schlüsselschema und Port-Regel, Kürzel nur über `catalog.ts`, Abdeckung und Ausnahmen mit Grund, `allowBuilds`, Root-Abhängigkeiten im Container), „Architektur“ (Verträge aus dem Master-Plan, die es schon gibt: `Problem`, `config/werkbuch.php`, Shared Props, `http.ts`, `ApiError`/`Page`, `shellLayout`, `paths`), „Fallstricke“ mindestens: `ddev composer create-project` nicht benutzen; `public/hot` nach hartem Vite-Ende löschen; `ddev exec` mit Globs in einfache Quotes; Inertia-Tests verlangen die Seitendatei; Layouts als Pfeilfunktion; `phpunit.xml` erzwingt `testing`; Tailwind scannt nur `resources/`; dynamische Übersetzungsschlüssel findet der Test nicht; Cookie `locale` unverschlüsselt; nach einem Lauf von `pnpm --dir e2e test` ist der Abdeckungs-Build installiert (`ddev exec pnpm build` stellt den normalen her); Mutagen braucht `ddev mutagen sync`; `php artisan serve` liest nur `.env`; Login-Drosseln in e2e per `cache:clear`; Daemons warten auf `vendor/` und `.env`, Reverb braucht nach Codeänderungen `ddev restart`; der Klickdummy hat kein eigenes Lockfile mehr. Klickdummy-Kommandos (Task 4) und CI-Regel (Task 16) stehen schon; hier nur einordnen.
 
 - [ ] **Step 2: README**
 
@@ -1660,7 +1693,9 @@ Status-Zeile: „in development (phase 1 of 15: foundation)“, Link auf `docs/e
 
 - [ ] **Step 3: Rulings**
 
-In `2026-10-30-werkbuch-app-rulings.md` (Kopf wie die Rulings des Klickdummys) als `A1` die Paketprüfung (Tabelle „Paketversionen“, Ergebnis: alle mit Laravel 13; Hinweise zu meilisearch-php 1.x, tiptap-php/shiki-php, laravel-permission v8) mit Grund und „Falls falsch“; die Entscheidungen unten mit Wirkung über Phase 1 hinaus (P4, P5, P6, P8, P10, P12) als `A2`–`A7` mit Verweis auf diesen Plan.
+In `2026-10-30-werkbuch-app-rulings.md` (Kopf wie die Rulings des Klickdummys) als `A1` die Paketprüfung (Tabelle „Paketversionen“, Ergebnis: alle mit Laravel 13; Hinweise zu meilisearch-php 1.x, tiptap-php/shiki-php, laravel-permission v8) mit Grund und „Falls falsch“; dazu in A1: Die Framework-Tabellen `jobs`, `failed_jobs`, `job_batches`, `cache`, `cache_locks`, `sessions` und `password_reset_tokens` behalten ihre Framework-Schlüssel; ULID gilt für die eigenen Tabellen (P20). Die Entscheidungen unten mit Wirkung über Phase 1 hinaus als `A2`–`A7` mit Verweis auf diesen Plan: A2 = P4, A3 = P5, A4 = P6, A5 = P8, A6 = P10 (Organisation bis Phase 2 aus der Config, der `DemoSeeder` seedet in Phase 1 nur Personen), A7 = P12 (der Katalog `resources/js/lib/shortcuts/catalog.ts` liefert die Definitionen, das Register `registry.ts` bindet sie zur Laufzeit).
+
+Im Master-Plan `docs/superpowers/plans/2026-10-30-werkbuch-app.md` im selben Commit: Global Constraints „Tastatur zuerst“ → „…; der Kürzel-Katalog (`resources/js/lib/shortcuts/catalog.ts`) ist die einzige Quelle der Kürzel für Hilfe-Overlay und Doku, das Register (`resources/js/lib/shortcuts/registry.ts`) bindet sie zur Laufzeit.“; Phase 6 „`scripts/shortcuts-doc.mjs` erzeugt `docs/{en,de}/keyboard.md` aus dem Register“ → „… aus dem Katalog `resources/js/lib/shortcuts/catalog.ts`“.
 
 - [ ] **Step 4: Abnahme der Phase**
 
@@ -1692,9 +1727,9 @@ Betreff: `docs: update CLAUDE.md, the README status and the rulings for phase 1`
 - **P7 Login-Drosselung zweistufig.** Fortifys `LoginRateLimiter` sperrt nach 5 Fehlversuchen je `lower(email)|IP` für 60 s (Spec 4.2 wörtlich); der Routen-Limiter `login` begrenzt jede IP auf 20 Versuche pro Minute (wie openbill `throttle:20,1`, `config('werkbuch.rate_limits.login_per_ip')`). Grund: Erfolgreiche Logins zählen sonst mit, und ohne IP-Grenze ließen sich beliebig viele Adressen probieren. Falls falsch: IP-Grenze in der Config ändern.
 - **P8 „Passwort vergessen“ verrät nie, ob es ein Konto gibt; Links immer aus `APP_URL`; deaktivierte Konten bekommen keine Mail.** Grund: Laravel/Fortify melden unbekannte und gedrosselte Adressen unterscheidbar und bauen Links aus dem Host der Anfrage. Falls falsch: Rafael entscheidet für sichtbare Fehler; Tests in `PasswordResetTest` umdrehen.
 - **P9 `app:ensure-admin` legt nur das allererste Personenkonto an.** Grund: Spec 8.2 „erstes Konto, nur beim ersten Start“; ein später geändertes `ADMIN_EMAIL` soll keinen zweiten Admin erzeugen. Falls falsch: wie openbill auch anlegen, wenn nur diese E-Mail fehlt.
-- **P10 `users` in Phase 1 schon mit `type`, `handle`, `locale`, `timezone`, `disabled_at`; die Organisation in den Shared Props aus der Config.** Grund: Die erste Migration wird nicht mehr geändert, `SetLocale` und Login brauchen Sprache und Deaktivierung; die Tabelle `organization` kommt in Phase 2. Falls falsch: Phase 2 ergänzt per Migration.
+- **P10 `users` in Phase 1 schon mit `type`, `handle`, `locale`, `timezone`, `disabled_at`; die Organisation kommt bis Phase 2 aus der Config, der `DemoSeeder` seedet in Phase 1 nur Personen.** Grund: Die erste Migration wird nicht mehr geändert, `SetLocale` und Login brauchen Sprache und Deaktivierung; die Tabelle `organization` kommt in Phase 2. Falls falsch: Phase 2 ergänzt per Migration.
 - **P11 i18n mit Typen: `TranslationKey` aus `lang/en.json`, Vitest mit den deutschen Texten, keine JSON-Schlüssel in Framework-Gruppen, eigene Reset-Mail und veröffentlichte Mail-Views.** Grund: `tsc` prüft jeden statischen Schlüssel, portierte Tests behalten ihre Erwartungen, und Laravels Mail-Texte sind englische Satz-Schlüssel. Falls falsch: `t(key: string)` und nur der PHP-Scan.
-- **P12 Kürzel-Katalog `lib/shortcuts/catalog.ts` neben dem portierten Register.** Grund: Hilfe, Doppel-Prüfung (R38) und die erzeugte Tastatur-Doku (Phase 6) brauchen eine statische Quelle; zur Laufzeit registrierte Kürzel kann ein Skript nicht lesen. Falls falsch: zurück zu frei registrierten `ShortcutDef`s, Phase 6 sammelt dann aus Laufzeit-Snapshots.
+- **P12 Der Katalog `lib/shortcuts/catalog.ts` liefert die Kürzel-Definitionen, das portierte Register `registry.ts` bindet sie zur Laufzeit; Task 17 passt den Satz des Master-Plans an.** Grund: Hilfe, Doppel-Prüfung (R38) und die erzeugte Tastatur-Doku (Phase 6) brauchen eine statische Quelle; zur Laufzeit registrierte Kürzel kann ein Skript nicht lesen. Falls falsch: zurück zu frei registrierten `ShortcutDef`s, Phase 6 sammelt dann aus Laufzeit-Snapshots.
 - **P13 Seitenleiste mit allen Links des Klickdummys, aber ohne Suche-Knopf, Zähler und „anlegen“-Links; `/my-items` zeigt den echten leeren Zustand.** Grund: Spätere Phasen ändern die Seitenleiste nicht mehr, nur Inhalte; ein Link auf eine Seite späterer Phasen zeigt ehrlich die 404-Seite. Falls falsch: Links bis zu ihrer Phase ausblenden.
 - **P14 Port-Umfang: Galerie nicht portiert, `FavoriteStar` rein darstellend, `src/app` wird `resources/js/shell`, `types.ts` importiert `JSONContent` aus `@tiptap/core`.** Grund: Die Galerie bräuchte Felder späterer Phasen und eigene Abdeckung (der Klickdummy zeigt sie weiter); Daten-Hooks gehören nicht in `components/ui`; `resources/js/app/` neben `app.tsx` wäre verwirrend; Phase 1 braucht von Tiptap nur den Typ. Falls falsch: Galerie in Phase 4 unter `/_components` nur für `local`, Import in Phase 4 zurück auf `@tiptap/react`.
 - **P15 Abdeckung: Vitest mit Istanbul und Schwellen je Ordner, zusammengeführt per `scripts/coverage-merge.mjs` mit Pfad-Normalisierung; der Merge läuft dort, wo Vitest lief (`E2E_EXEC`, lokal `ddev exec`).** Grund: Container-, Runner- und Mac-Pfade unterscheiden sich; `node_modules` im Root sind Linux-Binaries. Falls falsch: Merge auf dem Mac mit eigenen Abhängigkeiten in `e2e/`.
@@ -1702,3 +1737,8 @@ Betreff: `docs: update CLAUDE.md, the README status and the rulings for phase 1`
 - **P17 Der Klickdummy zieht ins Root-Lockfile; seine Flows laufen nur noch in CI, lokal sein Dev-Server über DDEV (Port 5176).** Grund: Master-Plan (ein Workspace); die `node_modules` aus dem Container laufen nicht auf dem Mac. Falls falsch: `supportedArchitectures` mit `darwin` im Workspace ergänzen.
 - **P18 Sitzung 7 Tage ohne „Angemeldet bleiben“; Web-Fehler als Inertia-Seiten; 419 und die IP-Drossel am Login als lesbare Meldung.** Grund: Der Klickdummy hat kein solches Häkchen und ein Alltagswerkzeug soll nicht alle zwei Stunden abmelden; Inertia zeigt Fehler sonst als HTML-Overlay. Falls falsch: `SESSION_LIFETIME` senken bzw. Laravels Fehlerseiten.
 - **P19 `Problem` implementiert zusätzlich `HttpExceptionInterface`.** Grund: Der Vertrag nennt nur `extends RuntimeException`; ohne das Interface würde ein `Problem` auf einer Web-Route (z. B. Einladung annehmen, Phase 2) als 500 enden. Falls falsch: Web-Routen fangen `Problem` selbst ab.
+- **P20 ULID gilt für die eigenen Tabellen; Framework-Tabellen (`jobs`, `failed_jobs`, `job_batches`, `cache`, `cache_locks`, `sessions`, `password_reset_tokens`) behalten ihre Schlüssel.** Grund: Laravel liest und schreibt sie selbst; nur Fremdschlüssel auf `users` (`sessions.user_id`) sind ULIDs. Falls falsch: eigene Migrationen mit ULID für `jobs`/`failed_jobs`.
+- **P21 Fehler-Mapping auf vorbereitete Exceptions; ein 404 trägt nie `detail`.** Grund: Laravel macht vor den Render-Callbacks aus `AuthorizationException`, `ModelNotFoundException` und `TokenMismatchException` `HttpException`s (403, 404, 419), eigene Zweige wären tot; ein eigener 404-Text könnte Fremdes verraten. Falls falsch: `ProblemResponse` vor `prepareException()` registrieren (`$exceptions->map`).
+- **P22 Login prüft immer genau einen Hash, auch für unbekannte Adressen.** Grund: Der Reset-Pfad schützt vor Konten-Raten, die Antwortzeit des Logins soll es auch. Falls falsch: früher `null`.
+- **P23 Passwortregeln stehen nur in `SetPassword`; die Sprache der Reset-Mail wird ausdrücklich mit `->locale()` gesetzt.** Grund: eine Stelle für Regeln; `Notification::fake()` setzt die Sprache nicht selbst. Falls falsch: Regeln zusätzlich im Fortify-Adapter.
+- **P24 Unit-Tests lesen Dateien über `repo_path()` statt `base_path()`; `e2e/ci.env` hat per Test dieselben Schlüssel wie `.env.example`.** Grund: Die Unit-Suite bootet keine App; zwei Env-Dateien driften sonst auseinander. Falls falsch: Datei-Tests nach `Feature`.
