@@ -1,0 +1,24 @@
+# Meilisearch v1 for Scout (phase 6). Reachable from the web container as http://meilisearch:7700,
+# the dashboard as https://werkbuch.ddev.site:7701. Pinned like docker-compose.yml (phase 14).
+services:
+  meilisearch:
+    container_name: ddev-${DDEV_SITENAME}-meilisearch
+    image: getmeili/meilisearch:v1.56.0@sha256:1f578fa865f8251894b3bf38d6668d6209a3f451f8f65ab953e129d4c1db5ef4
+    restart: "no"
+    environment:
+      MEILI_ENV: development
+      MEILI_MASTER_KEY: ddev-werkbuch-master-key
+      MEILI_NO_ANALYTICS: "true"
+      VIRTUAL_HOST: $DDEV_HOSTNAME
+      HTTP_EXPOSE: "7702:7700"
+      HTTPS_EXPOSE: "7701:7700"
+    volumes:
+      - meilisearch:/meili_data
+    labels:
+      com.ddev.site-name: ${DDEV_SITENAME}
+      com.ddev.approot: ${DDEV_APPROOT}
+    expose:
+      - "7700"
+volumes:
+  meilisearch:
+    name: ${DDEV_SITENAME}-meilisearch

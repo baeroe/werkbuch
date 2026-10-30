@@ -1,0 +1,38 @@
+name: werkbuch
+type: laravel
+docroot: public
+php_version: "8.4"
+webserver_type: nginx-fpm
+xdebug_enabled: false
+database:
+  type: mariadb
+  version: "11.4"
+composer_version: "2"
+nodejs_version: "24"
+corepack_enable: true
+# PCOV for `ddev artisan test --coverage` (Xdebug stays off)
+webimage_extra_packages: ["php${DDEV_PHP_VERSION}-pcov"]
+web_environment:
+  - COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+# https://werkbuch.ddev.site:<https_port> → container port
+web_extra_exposed_ports:
+  - { name: vite, container_port: 5173, http_port: 5172, https_port: 5173 }
+  - { name: vitepress, container_port: 5174, http_port: 5175, https_port: 5174 }
+  - { name: clickdummy, container_port: 5176, http_port: 5177, https_port: 5176 }
+  - { name: reverb, container_port: 6001, http_port: 6002, https_port: 6001 }
+# each daemon waits until composer install and .env exist, so a fresh clone starts cleanly
+web_extra_daemons:
+  - name: queue
+    command: bash -c 'until [ -f vendor/autoload.php ] && [ -f .env ]; do sleep 5; done; exec php artisan queue:listen --queue=default,notifications,webhooks,search,media,bulk --sleep=1 --tries=3'
+    directory: /var/www/html
+  - name: scheduler
+    command: bash -c 'until [ -f vendor/autoload.php ] && [ -f .env ]; do sleep 5; done; exec php artisan schedule:work'
+    directory: /var/www/html
+  - name: reverb
+    command: bash -c 'until [ -f vendor/autoload.php ] && [ -f .env ]; do sleep 5; done; exec php artisan reverb:start --host=0.0.0.0 --port=6001'
+    directory: /var/www/html
+hooks:
+  post-start:
+    # separate database for Pest (phpunit.xml forces DB_DATABASE=testing)
+    - exec: bash -c 'C=$(command -v mariadb || command -v mysql); $C -uroot -proot -e "CREATE DATABASE IF NOT EXISTS testing; GRANT ALL ON testing.* TO '"'"'db'"'"'@'"'"'%'"'"';"'
+      service: db
