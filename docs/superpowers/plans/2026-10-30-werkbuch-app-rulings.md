@@ -27,6 +27,8 @@ Die Phasen laufen über Subagents, ohne bei jeder Unklarheit zu warten. Konflikt
 - **A16 · `cache:clear` in `beforeAll` der Reset-Spec** (Task 14). *Grund:* Der Mechanismus steht schon im `globalSetup`, und die Grenzen der App bleiben unverändert. *Falls falsch:* ein Helfer für das Zurücksetzen der Limiter.
 - **A17 · e2e mit `QUEUE_CONNECTION=database` und einem `queue:work` im Hintergrund** (Task 16, P16). *Grund:* Wie DDEV und Produktion; `sync` verdeckt den Produktionspfad (die Reset-Mail läuft über die Queue `notifications`). *Falls falsch:* ein CI-Schritt weniger.
 - **A18 · Der `FormDialog`-Flake wird in der Fixrunde von Task 16 behoben** (Ursache finden, deterministisch machen). *Grund:* Der Test sitzt im Pflicht-Job `tests`, ein Doppel-Absenden wäre ein echter Fehler. *Falls falsch:* nichts.
+- **A19 · Offene Punkte des Gesamt-Reviews als Vormerkliste in dieser Datei** (Phase 1, Final-Review). Alles, was warten kann, steht unten nach Phase. *Grund:* Der SDD-Workspace ist temporär, diese Datei bleibt. *Falls falsch:* nichts.
+- **A20 · Ein `token` als Array beim Zurücksetzen bleibt ein Feldfehler unter `token`** (Phase 1, Final-Fix). Die Seite zeigt ihn nicht an. *Grund:* Nur mit einer manipulierten Anfrage erreichbar, wie Fortify bei fehlendem Token; Hauptsache kein 500. *Falls falsch:* eine Zeile, die den Fehler an das E-Mail-Feld mit `passwords.token` hängt.
 
 ## Für spätere Phasen vorgemerkt
 
