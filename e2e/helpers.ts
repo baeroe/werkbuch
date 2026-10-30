@@ -30,6 +30,22 @@ export function tr(locale: Locale, key: string, params: Record<string, string | 
   return Object.entries(params).reduce((result, [name, value]) => result.replaceAll(`:${name}`, String(value)), text);
 }
 
+const frameworkTexts: Partial<Record<string, Record<string, string>>> = {};
+
+/** The text of `key` in the framework group lang/<locale>/<group>.php (single-quoted strings, as Laravel writes them). */
+export function trFramework(locale: Locale, group: string, key: string): string {
+  const file = `lang/${locale}/${group}.php`;
+  frameworkTexts[file] ??= Object.fromEntries(
+    [...readFileSync(path.join(ROOT, file), 'utf8').matchAll(/'([\w.]+)'\s*=>\s*'((?:[^'\\]|\\.)*)'/g)].map(([, name, text]) => [
+      name!,
+      text!.replace(/\\(['\\])/g, '$1'),
+    ]),
+  );
+  const text = frameworkTexts[file][key];
+  if (text === undefined) throw new Error(`${file} has no key "${key}"`);
+  return text;
+}
+
 /** DemoSeeder::PASSWORD and E2eSeeder::PASSWORD (database/seeders). */
 const DEMO_PASSWORD = 'werkbuch-demo';
 const E2E_PASSWORD = 'e2e-password';
@@ -77,21 +93,34 @@ const MAILPIT_URL = process.env.MAILPIT_URL ?? 'https://werkbuch.ddev.site:8026'
 
 type MailpitSearch = { messages: { ID: string; Created: string }[] };
 
-/** The mails of Mailpit, over its API. */
+/**
+ * The mails of Mailpit, over its API. Nothing compares times: the clock of the Mac and the one of the containers may
+ * differ, so a mail counts as new when its ID was not there before.
+ */
 export const mailpit = {
-  /** The newest mail to `email` that arrived after `after`, or null. */
-  async latestTo(email: string, after: Date): Promise<{ html: string } | null> {
+  /** The IDs of every mail to `email`, newest first. */
+  async idsTo(email: string): Promise<string[]> {
     const api = await request.newContext({ baseURL: MAILPIT_URL, ignoreHTTPSErrors: true });
     try {
       const search = await api.get('/api/v1/search', { params: { query: `to:"${email}"` } });
       expect(search.ok(), await search.text()).toBe(true);
       const { messages } = (await search.json()) as MailpitSearch;
-      const latest = messages
+      return messages
         .map((message) => ({ id: message.ID, created: new Date(message.Created).getTime() }))
-        .filter(({ created }) => created >= after.getTime())
-        .sort((a, b) => b.created - a.created)[0];
-      if (!latest) return null;
-      const message = await api.get(`/api/v1/message/${latest.id}`);
+        .sort((a, b) => b.created - a.created)
+        .map(({ id }) => id);
+    } finally {
+      await api.dispose();
+    }
+  },
+
+  /** The newest mail to `email` whose ID is not in `before` (from `idsTo`), or null. */
+  async newTo(email: string, before: readonly string[]): Promise<{ html: string } | null> {
+    const id = (await mailpit.idsTo(email)).find((candidate) => !before.includes(candidate));
+    if (id === undefined) return null;
+    const api = await request.newContext({ baseURL: MAILPIT_URL, ignoreHTTPSErrors: true });
+    try {
+      const message = await api.get(`/api/v1/message/${id}`);
       expect(message.ok(), await message.text()).toBe(true);
       const { HTML } = (await message.json()) as { HTML: string };
       return { html: HTML };
