@@ -5,6 +5,8 @@ namespace App\Http\Middleware;
 use App\Models\User;
 use App\Support\MailSetup;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\File;
+use Inertia\Inertia;
 use Inertia\Middleware;
 
 /**
@@ -18,6 +20,7 @@ class HandleInertiaRequests extends Middleware
     public function share(Request $request): array
     {
         $user = $request->user();
+        $locale = app()->getLocale();
 
         return [
             ...parent::share($request),
@@ -26,6 +29,9 @@ class HandleInertiaRequests extends Middleware
                 // roles and permissions arrive with Phase 2
                 'permissions' => [],
             ],
+            // the language of this request and its texts; they travel once, a change of language reloads the page
+            'locale' => $locale,
+            'translations' => Inertia::once(fn () => File::json(lang_path("{$locale}.json"))),
             // from the config until the organization is a record (Phase 2)
             'organization' => [
                 'name' => config('app.name'),

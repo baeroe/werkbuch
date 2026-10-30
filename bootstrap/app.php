@@ -3,6 +3,7 @@
 use App\Exceptions\Problem;
 use App\Http\Api\ProblemResponse;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\TrustProxies;
 use App\Support\TrustedRequests;
 use Illuminate\Foundation\Application;
@@ -25,7 +26,10 @@ return Application::configure(basePath: dirname(__DIR__))
         // reverse proxy in front: X-Forwarded-* only from TRUSTED_PROXIES (default: localhost and private networks);
         // the Host header must be the host of APP_URL (outside local and tests)
         $middleware->replace(FrameworkTrustProxies::class, TrustProxies::class);
-        $middleware->web(append: [HandleInertiaRequests::class]);
+        // the language comes first, so Inertia shares the translations of the language the request speaks;
+        // the locale cookie is plain: the browser app and the login page read it without a session
+        $middleware->web(append: [SetLocale::class, HandleInertiaRequests::class]);
+        $middleware->encryptCookies(except: [SetLocale::COOKIE]);
         $middleware->trustHosts(at: fn (): array => TrustedRequests::hostPatterns(config('app.url')), subdomains: false);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

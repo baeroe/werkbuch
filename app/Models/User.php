@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\AccountType;
 use App\Enums\Locale;
 use Database\Factories\UserFactory;
+use Illuminate\Contracts\Translation\HasLocalePreference;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
@@ -29,7 +30,7 @@ use Illuminate\Support\Carbon;
  */
 #[Fillable(['type', 'name', 'handle', 'email', 'password', 'locale', 'timezone', 'disabled_at'])]
 #[Hidden(['password', 'remember_token'])]
-class User extends Authenticatable
+class User extends Authenticatable implements HasLocalePreference
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, HasUlids, Notifiable;
@@ -47,6 +48,14 @@ class User extends Authenticatable
             'disabled_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    /**
+     * The language of notifications and mails for this account: its own, else the default of the organization.
+     */
+    public function preferredLocale(): string
+    {
+        return $this->locale->value ?? (string) config('app.locale');
     }
 
     public function isPerson(): bool

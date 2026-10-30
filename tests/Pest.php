@@ -2,6 +2,7 @@
 
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use Tests\TestCase;
@@ -101,4 +102,85 @@ function inertiaProbe(): string
     Route::middleware('web')->get('_t/page', fn () => Inertia::render('Errors/NotFound'));
 
     return '_t/page';
+}
+
+/**
+ * The messages of lang/<locale>.json.
+ *
+ * @return array<string, string>
+ */
+function lang(string $locale): array
+{
+    return json_decode((string) file_get_contents(repo_path("lang/{$locale}.json")), true, flags: JSON_THROW_ON_ERROR);
+}
+
+/**
+ * The keys of lang/<locale>.json in file order.
+ *
+ * @return list<string>
+ */
+function langKeys(string $locale): array
+{
+    return array_keys(lang($locale));
+}
+
+/**
+ * The :placeholders of a message, sorted and without repeats.
+ *
+ * @return list<string>
+ */
+function placeholders(string $text): array
+{
+    preg_match_all('/:[a-z_]+/', $text, $matches);
+    $list = array_values(array_unique($matches[0]));
+    sort($list);
+
+    return $list;
+}
+
+/**
+ * The translation keys that code names as a literal: t('a.b'), tn('a.b', n), __('a.b'), trans('a.b') and @lang('a.b').
+ * A tn() call counts as its two plural keys. Keys built at run time are not found; they have to be kept complete by hand.
+ *
+ * @return list<string>
+ */
+function translationKeysIn(string $code): array
+{
+    preg_match_all('/(?<![\w>:$])(tn|t|__|trans|@lang)\(\s*([\'"])([^\'"`\\\\\n$]+)\2\s*[,)]/', $code, $matches, PREG_SET_ORDER);
+
+    $keys = [];
+
+    foreach ($matches as [, $function, , $key]) {
+        array_push($keys, ...($function === 'tn' ? ["{$key}.one", "{$key}.other"] : [$key]));
+    }
+
+    return $keys;
+}
+
+/**
+ * Every translation key the application code names as a literal (PHP, Blade, and the TypeScript of the app without its tests).
+ *
+ * @return Collection<int, string>
+ */
+function usedTranslationKeys(): Collection
+{
+    $keys = [];
+
+    foreach (['app', 'routes', 'resources/views', 'resources/js'] as $dir) {
+        if (! is_dir(repo_path($dir))) {
+            continue;
+        }
+
+        foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator(repo_path($dir), FilesystemIterator::SKIP_DOTS)) as $file) {
+            $path = str_replace('\\', '/', $file->getPathname());
+
+            if (! preg_match('/\.(php|ts|tsx)$/', $path) || preg_match('/\.test\.tsx?$/', $path) || str_contains($path, '/resources/js/test/')) {
+                continue;
+            }
+
+            array_push($keys, ...translationKeysIn((string) file_get_contents($path)));
+        }
+    }
+
+    return collect($keys)->unique()->sort()->values();
 }
