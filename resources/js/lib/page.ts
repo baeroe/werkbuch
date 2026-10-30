@@ -1,7 +1,5 @@
 import { usePage } from '@inertiajs/react';
-
-// Moves to `@/types` with the API layer; page.ts and i18n.ts import it from there then.
-export type Locale = 'de' | 'en';
+import type { Locale } from '@/types';
 
 export interface AuthUser {
   id: string;

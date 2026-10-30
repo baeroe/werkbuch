@@ -24,6 +24,7 @@
     "problem.reason.transition_not_allowed": "Der Übergang ist im Workflow nicht erlaubt.",
     "problem.reason.unauthenticated": "Du bist nicht angemeldet.",
     "problem.reason.validation_failed": "Die Eingabe ist nicht gültig.",
+    "problem.reason_unknown": "Abgelehnt (:reason).",
     "problem.title.bad_request": "Fehlerhafte Anfrage",
     "problem.title.conflict": "Konflikt",
     "problem.title.csrf_token_mismatch": "Sitzung abgelaufen",

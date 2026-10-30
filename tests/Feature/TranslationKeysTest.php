@@ -11,6 +11,9 @@ it('skips calls that only look like translations', function () {
 
 it('defines every key used in code', function () {
     $used = usedTranslationKeys();
+
+    expect($used)->not->toBeEmpty();
+
     [$groups, $json] = $used->partition(fn (string $key) => preg_match('/^(auth|passwords|validation|pagination)\./', $key) === 1);
 
     expect($json->diff(langKeys('en'))->values()->all())->toBe([])

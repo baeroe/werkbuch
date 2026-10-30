@@ -173,6 +173,6 @@ it('translates every reason and title in both languages', function () {
 
     foreach (['en', 'de'] as $locale) {
         $file = json_decode((string) file_get_contents(lang_path($locale.'.json')), true);
-        expect($file)->toBeArray()->and(array_values(array_filter(array_keys($file), fn (string $key) => str_starts_with($key, 'problem.'))))->toEqualCanonicalizing($keys);
+        expect($file)->toBeArray()->and(array_values(array_filter(array_keys($file), fn (string $key) => str_starts_with($key, 'problem.reason.') || str_starts_with($key, 'problem.title.'))))->toEqualCanonicalizing($keys);
     }
 });

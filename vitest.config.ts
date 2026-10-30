@@ -16,7 +16,11 @@ export default defineConfig({
       include: ['resources/js/**/*.{ts,tsx}'],
       exclude: ['resources/js/**/*.test.{ts,tsx}', 'resources/js/test/**', 'resources/js/**/*.d.ts', 'resources/js/types.ts'],
       // one entry per folder, added by the task that creates the folder (plan "Abdeckung über die Tasks")
-      thresholds: { 'resources/js/lib/**': { lines: 100 } },
+      thresholds: {
+        'resources/js/lib/**': { lines: 100 },
+        'resources/js/api/**': { lines: 100 },
+        'resources/js/hooks/**': { lines: 100 },
+      },
     },
   },
 });

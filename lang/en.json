@@ -24,6 +24,7 @@
     "problem.reason.transition_not_allowed": "The workflow does not allow this transition.",
     "problem.reason.unauthenticated": "You are not signed in.",
     "problem.reason.validation_failed": "The input is not valid.",
+    "problem.reason_unknown": "Refused (:reason).",
     "problem.title.bad_request": "Bad request",
     "problem.title.conflict": "Conflict",
     "problem.title.csrf_token_mismatch": "Session expired",

@@ -1,4 +1,4 @@
-import type { Locale } from '@/lib/page';
+import type { Locale } from '@/types';
 
 /** Every key of `lang/en.json`; `lang/de.json` has the same keys (a test keeps them equal). */
 export type TranslationKey = keyof typeof import('../../../lang/en.json') & string;
