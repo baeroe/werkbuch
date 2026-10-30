@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\AccountType;
 use App\Enums\Locale;
+use App\Notifications\ResetPasswordNotification;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Translation\HasLocalePreference;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -66,5 +67,20 @@ class User extends Authenticatable implements HasLocalePreference
     public function isDisabled(): bool
     {
         return $this->disabled_at !== null;
+    }
+
+    /**
+     * The reset link goes only to active people, in the language of the account; for everyone else nothing goes out,
+     * while the form answers the same (App\Auth\PasswordResetLinkResponse).
+     *
+     * @param  string  $token
+     */
+    public function sendPasswordResetNotification(#[\SensitiveParameter] $token): void
+    {
+        if ($this->isDisabled() || ! $this->isPerson()) {
+            return;
+        }
+
+        $this->notify((new ResetPasswordNotification($token))->locale($this->preferredLocale()));
     }
 }

@@ -20,6 +20,7 @@ arch('http, console and jobs leave the database to actions')
 arch('the problem is final')->expect(Problem::class)->toBeFinal()->toExtend(RuntimeException::class)->toImplement(HttpExceptionInterface::class);
 arch('api layer classes are final')->expect('App\\Http\\Api')->classes()->toBeFinal();
 arch('models never call actions')->expect('App\Models')->not->toUse('App\Actions');
+arch('auth adapters are final and do not compute')->expect('App\Auth')->classes()->toBeFinal()->not->toUse('App\Domain');
 
 it('detects raw database writes', function () {
     $code = "<?php\nDB::table('users')->update([]);\nDB::table('users')->where('a', 1)->delete();\nDB::statement('x');\nDB::table('users')->get();";
