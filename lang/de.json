@@ -36,5 +36,13 @@
     "problem.title.service_unavailable": "Dienst nicht verfügbar",
     "problem.title.too_many_requests": "Zu viele Anfragen",
     "problem.title.unauthenticated": "Nicht angemeldet",
-    "problem.title.validation_failed": "Validierung fehlgeschlagen"
+    "problem.title.validation_failed": "Validierung fehlgeschlagen",
+    "shortcuts.group.general": "Allgemein",
+    "shortcuts.group.navigation": "Navigation",
+    "shortcuts.shell.go.inbox": "Inbox",
+    "shortcuts.shell.go.my_items": "Meine Items",
+    "shortcuts.shell.go.projects": "Projekte",
+    "shortcuts.shell.go.views": "Views",
+    "shortcuts.shell.help": "Alle Kürzel",
+    "shortcuts.shell.undo": "Rückgängig, solange der Toast steht"
 }

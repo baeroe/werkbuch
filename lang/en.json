@@ -36,5 +36,13 @@
     "problem.title.service_unavailable": "Service unavailable",
     "problem.title.too_many_requests": "Too many requests",
     "problem.title.unauthenticated": "Unauthenticated",
-    "problem.title.validation_failed": "Validation failed"
+    "problem.title.validation_failed": "Validation failed",
+    "shortcuts.group.general": "General",
+    "shortcuts.group.navigation": "Navigation",
+    "shortcuts.shell.go.inbox": "Inbox",
+    "shortcuts.shell.go.my_items": "My items",
+    "shortcuts.shell.go.projects": "Projects",
+    "shortcuts.shell.go.views": "Views",
+    "shortcuts.shell.help": "All shortcuts",
+    "shortcuts.shell.undo": "Undo while the toast is showing"
 }
