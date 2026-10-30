@@ -10,6 +10,8 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: { '@': path.resolve(import.meta.dirname, 'src') },
   },
+  // DDEV serves the dev server as https://werkbuch.ddev.site:5176
+  server: { allowedHosts: ['.ddev.site'] },
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],

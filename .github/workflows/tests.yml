@@ -15,44 +15,37 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
-        with:
-          package_json_file: prototypes/clickdummy/package.json
       - uses: actions/setup-node@v4
         with:
-          node-version-file: prototypes/clickdummy/.node-version
+          node-version-file: .node-version
           cache: pnpm
-          cache-dependency-path: prototypes/clickdummy/pnpm-lock.yaml
-      - name: Install (clickdummy)
-        run: pnpm --dir prototypes/clickdummy install --frozen-lockfile
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Install
+        run: pnpm install --frozen-lockfile
       - name: Typecheck (clickdummy)
-        run: pnpm --dir prototypes/clickdummy typecheck
+        run: pnpm --filter werkbuch-clickdummy typecheck
       - name: Unit tests (clickdummy)
-        run: pnpm --dir prototypes/clickdummy test
+        run: pnpm --filter werkbuch-clickdummy test
       - name: Build (clickdummy)
-        run: pnpm --dir prototypes/clickdummy build
+        run: pnpm --filter werkbuch-clickdummy build
 
   # the Playwright flows and the review build checks of the clickdummy; not a required check
   clickdummy-e2e:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: prototypes/clickdummy
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
-        with:
-          package_json_file: prototypes/clickdummy/package.json
       - uses: actions/setup-node@v4
         with:
-          node-version-file: prototypes/clickdummy/.node-version
+          node-version-file: .node-version
           cache: pnpm
-          cache-dependency-path: prototypes/clickdummy/pnpm-lock.yaml
-      - name: Install (clickdummy)
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Install
         run: pnpm install --frozen-lockfile
       - name: Install Chromium
-        run: pnpm exec playwright install --with-deps chromium
+        run: pnpm --filter werkbuch-clickdummy exec playwright install --with-deps chromium
       - name: Flows and review build (clickdummy)
-        run: pnpm e2e
+        run: pnpm --filter werkbuch-clickdummy e2e
       - name: Keep the report
         if: failure()
         uses: actions/upload-artifact@v4

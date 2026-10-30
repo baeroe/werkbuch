@@ -1,0 +1,127 @@
+/*
+ * Werkbuch tokens, 1:1 from DESIGN.md (binding). Light ("Arbeitsheft") on :root; dark ("Nachtheft") follows the
+ * OS unless data-theme="light", and data-theme="dark" forces it. Both dark blocks are identical on purpose.
+ * Components never read these directly for colours; they use the Tailwind names from app.css (@theme inline).
+ */
+:root {
+  /* core colours of both themes as constants (used by the token table) */
+  --day-bg: oklch(0.975 0.004 250);          --night-bg: oklch(0.235 0.02 258);
+  --day-surface: oklch(1 0 0);               --night-surface: oklch(0.275 0.022 258);
+  --day-glass: oklch(0.988 0.007 85 / 0.74); --night-glass: oklch(0.285 0.022 258 / 0.76);
+  --day-text: oklch(0.255 0.04 262);         --night-text: oklch(0.94 0.012 250);
+  --day-muted: oklch(0.5 0.03 260);          --night-muted: oklch(0.75 0.02 255);
+  --day-border: oklch(0.895 0.012 255);      --night-border: oklch(0.355 0.022 258);
+  --day-accent: oklch(0.47 0.165 266);       --night-accent: oklch(0.74 0.12 266);
+  --day-marker: oklch(0.93 0.175 104);       --night-marker: oklch(0.91 0.18 104);
+  /* paper, ink, lines */
+  --bg: var(--day-bg); --bg-sunken: oklch(0.955 0.006 250); --surface: var(--day-surface);
+  --text: var(--day-text); --muted: var(--day-muted); --faint: oklch(0.6 0.022 258);
+  --border: var(--day-border); --border-strong: oklch(0.8 0.016 255); --line-input: oklch(0.6 0.022 258);
+  --dot: oklch(0.255 0.04 262 / 0.16); --hover: oklch(0.255 0.04 262 / 0.05); --pressed: oklch(0.255 0.04 262 / 0.09);
+  /* accent: ink blue, the only one */
+  --accent: var(--day-accent); --accent-hover: oklch(0.42 0.16 266); --accent-text: var(--day-accent);
+  --accent-soft: oklch(0.945 0.025 266); --on-accent: oklch(1 0 0);
+  /* highlighter: selection, focus and marking only */
+  --marker: var(--day-marker); --on-marker: var(--day-text);
+  --mark-bg: var(--day-marker); --mark-fg: var(--day-text); --mark-glow: none;
+  --select-wash: oklch(0.93 0.175 104 / 0.5);
+  --focus-ring: var(--day-accent); --focus-halo: 0 0 0 6px oklch(0.93 0.175 104 / 0.85);
+  /* tracing paper (glass) */
+  --glass: var(--day-glass); --glass-strong: oklch(0.988 0.007 85 / 0.88); --raised: var(--day-surface);
+  --glass-edge: oklch(0.255 0.04 262 / 0.11); --glass-light: inset 0 1px 0 oklch(1 0 0 / 0.7);
+  --glass-blur: 8px;
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .1 0 0 0 0 .13 0 0 0 0 .2 0 0 0 .5 -.2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --scrim: oklch(0.975 0.004 250 / 0.22); --knock: var(--surface);
+  /* semantic */
+  --danger: oklch(0.53 0.19 25); --danger-hover: oklch(0.48 0.19 25);
+  --danger-soft: oklch(0.955 0.02 25); --on-danger: oklch(1 0 0);
+  /* type tabs: task sky, bug ochre, epic moss; plum, sand and slate for further types */
+  --sky: oklch(0.63 0.08 232);   --sky-tab: oklch(0.895 0.045 228); --sky-ink: oklch(0.4 0.07 236);
+  --ochre: oklch(0.65 0.115 76); --ochre-tab: oklch(0.875 0.07 80); --ochre-ink: oklch(0.42 0.075 70);
+  --moss: oklch(0.6 0.095 132);  --moss-tab: oklch(0.885 0.055 132); --moss-ink: oklch(0.39 0.07 132);
+  --plum: oklch(0.58 0.09 340);  --plum-tab: oklch(0.89 0.04 340);  --plum-ink: oklch(0.4 0.075 340);
+  --sand: oklch(0.62 0.06 72);   --sand-tab: oklch(0.905 0.03 72);  --sand-ink: oklch(0.42 0.05 66);
+  --slate: oklch(0.6 0.03 258);  --slate-tab: oklch(0.87 0.014 262); --slate-ink: oklch(0.38 0.035 260);
+  /* status categories: colour = category, shape = status */
+  --st-backlog: oklch(0.6 0.02 258); --st-unstarted: oklch(0.5 0.03 260); --st-started: var(--day-accent);
+  --st-completed: oklch(0.55 0.11 155); --st-canceled: oklch(0.56 0.04 20);
+  /* elevation */
+  --elev-1: 0 1px 0 oklch(0.255 0.04 262 / 0.04), 0 1px 3px oklch(0.255 0.04 262 / 0.08);
+  --elev-2: 0 1px 2px oklch(0.255 0.04 262 / 0.06), 0 12px 28px -8px oklch(0.255 0.04 262 / 0.2);
+  --elev-3: 0 2px 6px oklch(0.255 0.04 262 / 0.08), 0 28px 60px -16px oklch(0.255 0.04 262 / 0.34);
+  --elev-drag: 0 6px 12px oklch(0.255 0.04 262 / 0.1), 0 24px 40px -12px oklch(0.255 0.04 262 / 0.36);
+  color-scheme: light;
+  /* theme independent: shape, type, motion, sizes */
+  --r-chip: 6px; --r-ctl: 10px; --r-card: 14px;
+  --font-display: "Bricolage Grotesque Variable", "Bricolage Grotesque", "Avenir Next", "Segoe UI Variable Display", "Segoe UI", sans-serif;
+  --font-ui: "Figtree Variable", Figtree, "Avenir Next", "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  --dur-fast: 120ms; --dur: 160ms; --dur-spring: 420ms;
+  --ease-out: cubic-bezier(0.25, 1, 0.5, 1); --ease-spring: cubic-bezier(0.34, 1.3, 0.64, 1);
+  --app-w: 1392px; --app-h: 960px; --side-w: 200px; --panel-w: 384px; --col-w: 180px; --palette-w: 540px;
+}
+@supports (transition-timing-function: linear(0, 1)) {
+  :root { --ease-spring: linear(0, 0.053 5%, 0.178 10%, 0.336 15%, 0.499 20%, 0.649 25%, 0.776 30%, 0.877 35%, 0.951 40%, 1.002 45%, 1.033 50%, 1.049 55%, 1.054 60%, 1.052 65%, 1.046 70%, 1.037 75%, 1.028 80%, 1.02 85%, 1.013 90%, 1.007 95%, 1); }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: var(--night-bg); --bg-sunken: oklch(0.21 0.02 258); --surface: var(--night-surface);
+    --text: var(--night-text); --muted: var(--night-muted); --faint: oklch(0.62 0.02 255);
+    --border: var(--night-border); --border-strong: oklch(0.45 0.025 258); --line-input: oklch(0.62 0.02 255);
+    --dot: oklch(0.94 0.012 250 / 0.07); --hover: oklch(0.94 0.012 250 / 0.06); --pressed: oklch(0.94 0.012 250 / 0.1);
+    --accent: var(--night-accent); --accent-hover: oklch(0.8 0.1 266); --accent-text: oklch(0.78 0.11 266);
+    --accent-soft: oklch(0.335 0.06 266); --on-accent: oklch(0.2 0.035 266);
+    --marker: var(--night-marker); --on-marker: var(--night-bg);
+    --mark-bg: oklch(0.91 0.18 104 / 0.14); --mark-fg: oklch(0.93 0.17 104); --mark-glow: 0 0 12px oklch(0.91 0.18 104 / 0.5);
+    --select-wash: oklch(0.91 0.18 104 / 0.09);
+    --focus-ring: var(--night-marker); --focus-halo: 0 0 0 4px oklch(0.91 0.18 104 / 0.2), 0 0 20px 2px oklch(0.91 0.18 104 / 0.35);
+    --glass: var(--night-glass); --glass-strong: oklch(0.285 0.022 258 / 0.88); --raised: oklch(0.345 0.026 258);
+    --glass-edge: oklch(0.94 0.012 250 / 0.1); --glass-light: inset 0 1px 0 oklch(1 0 0 / 0.06);
+    --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .95 0 0 0 0 .96 0 0 0 0 1 0 0 0 .26 -.11'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    --scrim: oklch(0.17 0.02 258 / 0.32);
+    --danger: oklch(0.7 0.16 25); --danger-hover: oklch(0.76 0.14 25); --danger-soft: oklch(0.32 0.06 25); --on-danger: oklch(0.2 0.03 25);
+    --sky: oklch(0.7 0.08 232);   --sky-tab: oklch(0.41 0.05 234);  --sky-ink: oklch(0.92 0.04 228);
+    --ochre: oklch(0.74 0.11 78); --ochre-tab: oklch(0.42 0.065 76); --ochre-ink: oklch(0.93 0.055 82);
+    --moss: oklch(0.68 0.1 132);  --moss-tab: oklch(0.4 0.06 132);   --moss-ink: oklch(0.92 0.05 132);
+    --plum: oklch(0.7 0.09 340);  --plum-tab: oklch(0.41 0.055 340); --plum-ink: oklch(0.92 0.04 340);
+    --sand: oklch(0.74 0.06 75);  --sand-tab: oklch(0.46 0.028 68);  --sand-ink: oklch(0.94 0.03 76);
+    --slate: oklch(0.7 0.03 255); --slate-tab: oklch(0.37 0.016 262); --slate-ink: oklch(0.92 0.015 255);
+    --st-backlog: oklch(0.62 0.02 258); --st-unstarted: oklch(0.75 0.02 255); --st-started: var(--night-accent);
+    --st-completed: oklch(0.72 0.12 155); --st-canceled: oklch(0.66 0.04 20);
+    --elev-1: 0 1px 0 oklch(0.12 0.02 258 / 0.3), 0 1px 3px oklch(0.12 0.02 258 / 0.35);
+    --elev-2: 0 1px 2px oklch(0.12 0.02 258 / 0.35), 0 14px 32px -8px oklch(0.12 0.02 258 / 0.55);
+    --elev-3: 0 2px 6px oklch(0.12 0.02 258 / 0.4), 0 28px 64px -16px oklch(0.12 0.02 258 / 0.7);
+    --elev-drag: 0 6px 12px oklch(0.12 0.02 258 / 0.4), 0 24px 44px -12px oklch(0.12 0.02 258 / 0.7);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: var(--night-bg); --bg-sunken: oklch(0.21 0.02 258); --surface: var(--night-surface);
+  --text: var(--night-text); --muted: var(--night-muted); --faint: oklch(0.62 0.02 255);
+  --border: var(--night-border); --border-strong: oklch(0.45 0.025 258); --line-input: oklch(0.62 0.02 255);
+  --dot: oklch(0.94 0.012 250 / 0.07); --hover: oklch(0.94 0.012 250 / 0.06); --pressed: oklch(0.94 0.012 250 / 0.1);
+  --accent: var(--night-accent); --accent-hover: oklch(0.8 0.1 266); --accent-text: oklch(0.78 0.11 266);
+  --accent-soft: oklch(0.335 0.06 266); --on-accent: oklch(0.2 0.035 266);
+  --marker: var(--night-marker); --on-marker: var(--night-bg);
+  --mark-bg: oklch(0.91 0.18 104 / 0.14); --mark-fg: oklch(0.93 0.17 104); --mark-glow: 0 0 12px oklch(0.91 0.18 104 / 0.5);
+  --select-wash: oklch(0.91 0.18 104 / 0.09);
+  --focus-ring: var(--night-marker); --focus-halo: 0 0 0 4px oklch(0.91 0.18 104 / 0.2), 0 0 20px 2px oklch(0.91 0.18 104 / 0.35);
+  --glass: var(--night-glass); --glass-strong: oklch(0.285 0.022 258 / 0.88); --raised: oklch(0.345 0.026 258);
+  --glass-edge: oklch(0.94 0.012 250 / 0.1); --glass-light: inset 0 1px 0 oklch(1 0 0 / 0.06);
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .95 0 0 0 0 .96 0 0 0 0 1 0 0 0 .26 -.11'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --scrim: oklch(0.17 0.02 258 / 0.32);
+  --danger: oklch(0.7 0.16 25); --danger-hover: oklch(0.76 0.14 25); --danger-soft: oklch(0.32 0.06 25); --on-danger: oklch(0.2 0.03 25);
+  --sky: oklch(0.7 0.08 232);   --sky-tab: oklch(0.41 0.05 234);  --sky-ink: oklch(0.92 0.04 228);
+  --ochre: oklch(0.74 0.11 78); --ochre-tab: oklch(0.42 0.065 76); --ochre-ink: oklch(0.93 0.055 82);
+  --moss: oklch(0.68 0.1 132);  --moss-tab: oklch(0.4 0.06 132);   --moss-ink: oklch(0.92 0.05 132);
+  --plum: oklch(0.7 0.09 340);  --plum-tab: oklch(0.41 0.055 340); --plum-ink: oklch(0.92 0.04 340);
+  --sand: oklch(0.74 0.06 75);  --sand-tab: oklch(0.46 0.028 68);  --sand-ink: oklch(0.94 0.03 76);
+  --slate: oklch(0.7 0.03 255); --slate-tab: oklch(0.37 0.016 262); --slate-ink: oklch(0.92 0.015 255);
+  --st-backlog: oklch(0.62 0.02 258); --st-unstarted: oklch(0.75 0.02 255); --st-started: var(--night-accent);
+  --st-completed: oklch(0.72 0.12 155); --st-canceled: oklch(0.66 0.04 20);
+  --elev-1: 0 1px 0 oklch(0.12 0.02 258 / 0.3), 0 1px 3px oklch(0.12 0.02 258 / 0.35);
+  --elev-2: 0 1px 2px oklch(0.12 0.02 258 / 0.35), 0 14px 32px -8px oklch(0.12 0.02 258 / 0.55);
+  --elev-3: 0 2px 6px oklch(0.12 0.02 258 / 0.4), 0 28px 64px -16px oklch(0.12 0.02 258 / 0.7);
+  --elev-drag: 0 6px 12px oklch(0.12 0.02 258 / 0.4), 0 24px 44px -12px oklch(0.12 0.02 258 / 0.7);
+  color-scheme: dark;
+}

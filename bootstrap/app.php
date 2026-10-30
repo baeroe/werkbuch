@@ -2,6 +2,7 @@
 
 use App\Exceptions\Problem;
 use App\Http\Api\ProblemResponse;
+use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\TrustProxies;
 use App\Support\TrustedRequests;
 use Illuminate\Foundation\Application;
@@ -24,6 +25,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // reverse proxy in front: X-Forwarded-* only from TRUSTED_PROXIES (default: localhost and private networks);
         // the Host header must be the host of APP_URL (outside local and tests)
         $middleware->replace(FrameworkTrustProxies::class, TrustProxies::class);
+        $middleware->web(append: [HandleInertiaRequests::class]);
         $middleware->trustHosts(at: fn (): array => TrustedRequests::hostPatterns(config('app.url')), subdomains: false);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

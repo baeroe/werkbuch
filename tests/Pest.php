@@ -2,6 +2,8 @@
 
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Route;
+use Inertia\Inertia;
 use Tests\TestCase;
 
 pest()->extend(TestCase::class)->use(RefreshDatabase::class)->in('Feature');
@@ -88,4 +90,15 @@ function codeMatches(string $code, string $file, array $patterns): array
     sort($lines);
 
     return array_map(fn (int $line) => $file.':'.$line, $lines);
+}
+
+/**
+ * A plain Inertia page behind the web middleware, for tests of what every page shares. Returns its path; tests call it
+ * instead of a real page, so later auth rules do not change them.
+ */
+function inertiaProbe(): string
+{
+    Route::middleware('web')->get('_t/page', fn () => Inertia::render('Errors/NotFound'));
+
+    return '_t/page';
 }
