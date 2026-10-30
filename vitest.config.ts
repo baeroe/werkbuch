@@ -20,6 +20,7 @@ export default defineConfig({
         'resources/js/lib/**': { lines: 100 },
         'resources/js/api/**': { lines: 100 },
         'resources/js/hooks/**': { lines: 100 },
+        'resources/js/components/ui/**': { lines: 100 },
       },
     },
   },
