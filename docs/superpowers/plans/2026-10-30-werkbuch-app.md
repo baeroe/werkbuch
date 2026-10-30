@@ -34,7 +34,7 @@ Entscheidet der Orchestrator unterwegs etwas, das weder Spec noch dieser Plan fe
 - Rich Text wird als Tiptap-JSON gespeichert und nur serverseitig aus JSON gerendert; Nutzer-HTML wird nie ausgegeben.
 - UI-Texte und Mails nur über Schlüssel in `lang/en.json` und `lang/de.json` (gleiche Schlüssel, jeder benutzte Schlüssel existiert; Test). URLs ohne Sprachpräfix. Code, Kommentare und Commit-Messages Englisch.
 - Gestaltung nach `prototypes/clickdummy/DESIGN.md` (Werkbuch, „Arbeitsheft“). Tokens als CSS-Variablen hell/dunkel mit `@theme inline`, Tailwind-Palette entfernt, Schriften lokal (fontsource: Bricolage Grotesque, Figtree), Icons Lucide, Komponenten auf Base UI, kein shadcn, kein Radix.
-- Tastatur zuerst: jede Aktion ohne Maus; ein Kürzel-Register (`resources/js/lib/shortcuts/registry.ts`) ist die einzige Quelle für Kürzel, Hilfe-Overlay und Doku.
+- Tastatur zuerst: jede Aktion ohne Maus; der Kürzel-Katalog (`resources/js/lib/shortcuts/catalog.ts`) ist die einzige Quelle der Kürzel für Hilfe-Overlay und Doku, das Register (`resources/js/lib/shortcuts/registry.ts`) bindet sie zur Laufzeit.
 - WCAG 2.2 AA; responsiv bis 390 px (lesen, kommentieren, Status und Assignee ändern).
 - Abdeckung: 100 % Zeilen im PHP-Code (PCOV, `--min=100`) und 100 % Zeilen im Frontend (Vitest und Playwright zusammengeführt) ab Phase 1 und in jeder Phase; Ausnahmen nur mit Begründung im Kommentar. Dazu Larastan Level 8, Pint, `tsc`.
 - CI-Pflicht-Job heißt `tests` (`.github/workflows/tests.yml`); der Name ändert sich nie.
@@ -187,7 +187,7 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 - Scout mit Meilisearch für Items (Key, Titel, Klartext der Beschreibung; Kommentare ab Phase 7), Projekte, Personen und Bots; Wiki-Seiten folgen in Phase 9. Indexieren als Event-Konsument in der Queue `search`; `app:search-sync` für die Index-Einstellungen (Filterattribut `project_id`).
 - `GET /api/v1/search?q=…&types=…`: läuft immer mit dem Filter aus `Visibility`, der Browser spricht nie mit Meilisearch; ein Key wie `WEB-123` (auch eine alte Kennung) liefert das Item direkt.
 - UI-Port: Befehlspalette (⌘K, `/`): Suche nach Art gruppiert, Navigation, „Neues Item“, Befehle am ausgewählten Item, „Vorlage anwenden …“ (aktiv ab Phase 10), Theme; `?`-Hilfe vollständig.
-- Tastatur-Doku: `scripts/shortcuts-doc.mjs` erzeugt `docs/{en,de}/keyboard.md` aus dem Register; ein Test prüft, dass die Seiten aktuell sind und kein Kürzel doppelt belegt ist (R38).
+- Tastatur-Doku: `scripts/shortcuts-doc.mjs` erzeugt `docs/{en,de}/keyboard.md` aus dem Katalog `resources/js/lib/shortcuts/catalog.ts`; ein Test prüft, dass die Seiten aktuell sind und kein Kürzel doppelt belegt ist (R38).
 
 **Tests:** Suche über Projektgrenzen (privates Projekt, Nicht-Mitglied, deaktiviert), Index nach Änderung, Löschung und Archiv, Key-Sprung mit alter Kennung; Meilisearch in `Integration` echt, sonst Fake-Engine; e2e: Flow 1 komplett über ⌘K „kontakt“.
 
@@ -356,7 +356,7 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 
 ## Fortschritt
 
-- [ ] Phase 1: Fundament
+- [x] Phase 1: Fundament (PR #5)
 - [ ] Phase 2: Organisation, Konten, Rollen, Projekte
 - [ ] Phase 3: Workflows, Typen, Properties, Kataloge
 - [ ] Phase 4: Work Items, Relationen, History

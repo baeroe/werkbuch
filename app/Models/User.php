@@ -1,0 +1,86 @@
+<?php
+
+namespace App\Models;
+
+use App\Enums\AccountType;
+use App\Enums\Locale;
+use App\Notifications\ResetPasswordNotification;
+use Database\Factories\UserFactory;
+use Illuminate\Contracts\Translation\HasLocalePreference;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Concerns\HasUlids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Carbon;
+
+/**
+ * @property string $id
+ * @property AccountType $type
+ * @property string $name
+ * @property string $handle
+ * @property string|null $email
+ * @property string|null $password
+ * @property Locale|null $locale
+ * @property string|null $timezone
+ * @property Carbon|null $disabled_at
+ * @property string|null $remember_token
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
+ */
+#[Fillable(['type', 'name', 'handle', 'email', 'password', 'locale', 'timezone', 'disabled_at'])]
+#[Hidden(['password', 'remember_token'])]
+class User extends Authenticatable implements HasLocalePreference
+{
+    /** @use HasFactory<UserFactory> */
+    use HasFactory, HasUlids, Notifiable;
+
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'type' => AccountType::class,
+            'locale' => Locale::class,
+            'disabled_at' => 'datetime',
+            'password' => 'hashed',
+        ];
+    }
+
+    /**
+     * The language of notifications and mails for this account: its own, else the default of the organization.
+     */
+    public function preferredLocale(): string
+    {
+        return ($this->locale ?? Locale::default())->value;
+    }
+
+    public function isPerson(): bool
+    {
+        return $this->type === AccountType::Person;
+    }
+
+    public function isDisabled(): bool
+    {
+        return $this->disabled_at !== null;
+    }
+
+    /**
+     * The reset link goes only to active people, in the language of the account; for everyone else nothing goes out,
+     * while the form answers the same (App\Http\Controllers\Auth\PasswordResetLinkController).
+     *
+     * @param  string  $token
+     */
+    public function sendPasswordResetNotification(#[\SensitiveParameter] $token): void
+    {
+        if ($this->isDisabled() || ! $this->isPerson()) {
+            return;
+        }
+
+        $this->notify((new ResetPasswordNotification($token))->locale($this->preferredLocale()));
+    }
+}

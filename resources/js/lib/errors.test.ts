@@ -1,0 +1,68 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ApiError } from '@/api/client';
+import { currentToasts, resetToasts, runToastAction } from '@/components/ui/toast';
+import en from '../../../lang/en.json';
+import { initI18n } from './i18n';
+import { isTransient, notifyError } from './errors';
+
+afterEach(() => resetToasts());
+
+const newest = () => currentToasts().at(-1);
+
+describe('notifyError', () => {
+  it('names the cause of a refusal and offers no retry, which would only be refused again', () => {
+    const retry = vi.fn();
+
+    notifyError('Statuswechsel nicht gespeichert', new ApiError({ status: 409, reason: 'transition_not_allowed', detail: 'Von Todo geht es nicht direkt nach Done.' }), retry);
+
+    expect(newest()).toMatchObject({ title: 'Statuswechsel nicht gespeichert', description: 'Von Todo geht es nicht direkt nach Done.', tone: 'error' });
+    expect(newest()?.action).toBeUndefined();
+  });
+
+  it('offers "Erneut versuchen" when the server failed or did not answer, and the button repeats the call', () => {
+    const retry = vi.fn();
+
+    notifyError('Löschen fehlgeschlagen', new ApiError({ status: 503, reason: 'simulated', detail: 'Simulierter Serverfehler.' }), retry);
+    expect(newest()?.action?.label).toBe('Erneut versuchen');
+    runToastAction(newest()!.id);
+    expect(retry).toHaveBeenCalledTimes(1);
+
+    // no answer at all: the browser's English message is no text for people
+    notifyError('Löschen fehlgeschlagen', new TypeError('Failed to fetch'), retry);
+    expect(newest()).toMatchObject({ description: 'Der Server hat nicht geantwortet.', action: { label: 'Erneut versuchen' } });
+  });
+
+  it('speaks the language of the page', () => {
+    initI18n({ locale: 'en', translations: en });
+
+    notifyError('Could not delete', new TypeError('Failed to fetch'), vi.fn());
+
+    expect(newest()).toMatchObject({ title: 'Could not delete', description: 'The server did not answer.', action: { label: 'Try again' } });
+  });
+
+  it('offers no retry when there is nothing to repeat', () => {
+    notifyError('Löschen fehlgeschlagen', new TypeError('Failed to fetch'));
+
+    expect(newest()?.action).toBeUndefined();
+  });
+
+  it('stays silent on a conflict that carries the stored state: the caller shows its conflict banner', () => {
+    notifyError('Beschreibung nicht gespeichert', new ApiError({ status: 409, reason: 'description_conflict', extensions: { current: { title: 'neu' } } }), vi.fn());
+    expect(currentToasts()).toHaveLength(0);
+
+    // a conflict without the stored state has no banner to show it, so it gets the toast
+    notifyError('Archivieren nicht gespeichert', new ApiError({ status: 409, reason: 'not_closed', detail: 'Nur geschlossene Items lassen sich archivieren.' }));
+    expect(currentToasts()).toHaveLength(1);
+  });
+});
+
+describe('isTransient', () => {
+  it('is true for a failing server and for no answer at all, false for a refusal', () => {
+    expect(isTransient(new ApiError({ status: 500, reason: 'server_error' }))).toBe(true);
+    expect(isTransient(new ApiError({ status: 503, reason: 'service_unavailable' }))).toBe(true);
+    expect(isTransient(new TypeError('Failed to fetch'))).toBe(true);
+    expect(isTransient(new ApiError({ status: 422, reason: 'validation_failed' }))).toBe(false);
+    expect(isTransient(new ApiError({ status: 409, reason: 'conflict' }))).toBe(false);
+    expect(isTransient(new ApiError({ status: 404, reason: 'not_found' }))).toBe(false);
+  });
+});

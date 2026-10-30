@@ -6,14 +6,16 @@ Alles läuft im Browser: Es gibt keinen Server, die Daten liegen in `localStorag
 
 ## Starten
 
-Voraussetzungen: Node 24 (`.node-version`; mise wechselt automatisch) und pnpm 12. Nur pnpm, nie npm oder npx.
+Der Klickdummy ist das Paket `werkbuch-clickdummy` im pnpm-Workspace des Repos (Wurzel: `package.json` und `pnpm-workspace.yaml` im Repo-Root) und läuft im DDEV-Container (Node 24, pnpm 12). Nur pnpm, nie npm oder npx.
 
 ```sh
-pnpm install
-pnpm dev   # http://localhost:5173, die Komponenten-Galerie liegt unter /_components
+ddev exec pnpm install    # im Repo-Root, einmal für das ganze Repo
+ddev exec pnpm clickdummy # https://werkbuch.ddev.site:5176, die Komponenten-Galerie liegt unter /_components
 ```
 
 ## Kommandos
+
+Alle Kommandos laufen im Repo-Root als `ddev exec pnpm --dir prototypes/clickdummy <script>` (oder `ddev exec pnpm --filter werkbuch-clickdummy <script>`); die Tabelle nennt kurz `pnpm <script>`. Der Dev-Server (`dev`) startet über `ddev exec pnpm clickdummy` auf Port 5176.
 
 | Kommando | Was es tut |
 |---|---|
@@ -55,6 +57,8 @@ pnpm e2e:flows -g "Flow 3"              # ein Flow
 pnpm e2e:review                         # nur der Review-Build (= pnpm e2e --project review)
 ```
 
+Die Flows laufen in der CI (Job `clickdummy`), nicht im Container: `node_modules` aus DDEV enthält Linux-Binaries, auf dem Mac läuft Playwright damit nicht.
+
 Es starten nur die Server der Projekte, die laufen: Das Projekt `flows` (`e2e/flows.spec.ts`) startet einen eigenen Dev-Server auf Port 5199 (`strictPort`), ein laufender Dev-Server auf 5173/5174 bleibt also stehen; das Projekt `review` baut den Review-Build und liefert ihn auf Port 5198 aus. Ohne `--project` laufen beide, auch mit `-g`. Jeder Test beginnt mit leerem `localStorage`, also mit den Demo-Daten und Mara Lindqvist. Alles läuft über die Tastatur, nur das Ziehen im Board mit der Maus. Ein Fehler in der Konsole lässt einen Test scheitern; Helfer und diese Prüfung teilen sich beide Projekte (`e2e/fixtures.ts`).
 
 1. ⌘K, „kontakt“, Enter öffnet WEB-47; `s`, „done“, Enter: Die Resolution „Done“ ist vorbelegt, Enter setzt den Status.
@@ -65,7 +69,7 @@ Es starten nur die Server der Projekte, die laufen: Das Projekt `flows` (`e2e/fl
 6. Vorlage „Monatsbericht“: Die Vorschau zeigt 02.11.2026, 07.12.2026, 04.01.2027, 01.02.2027 und 01.03.2027.
 7. Workflow „Agentur-Freigabe“ ohne den letzten Übergang nach Review: „Review ist vom Startstatus aus nicht erreichbar“, Speichern wird abgelehnt.
 
-Neben den Flows prüft das Projekt `flows` am Handy (390 px), dass Zeilen, Gruppenzeilen und ihre Schalter in der Tabelle mindestens 44 px hoch sind, dass sich im Pfad eines Kind-Items (WEB-42 unter WEB-30) die Keys nicht überlappen, dass ein Item ohne Eltern-Item den Namen seines Projekts zeigt und dass auf einer schmalen Karte im Board das Epic zuerst gekürzt wird, der Key nie. In beiden Themes prüft es, wie der Textmarker „Heute“ markiert, auf der Timeline und im Kalender: hell als gelbe Fläche, im Nachtheft als gelbe Schrift mit Schein. Das Projekt `review` (`e2e/review.spec.ts`) prüft den Review-Build (siehe unten). In der CI läuft `pnpm e2e`, also beides, im Job `clickdummy-e2e`; er ist kein Pflicht-Check.
+Neben den Flows prüft das Projekt `flows` am Handy (390 px), dass Zeilen, Gruppenzeilen und ihre Schalter in der Tabelle mindestens 44 px hoch sind, dass sich im Pfad eines Kind-Items (WEB-42 unter WEB-30) die Keys nicht überlappen, dass ein Item ohne Eltern-Item den Namen seines Projekts zeigt und dass auf einer schmalen Karte im Board das Epic zuerst gekürzt wird, der Key nie. In beiden Themes prüft es, wie der Textmarker „Heute“ markiert, auf der Timeline und im Kalender: hell als gelbe Fläche, im Nachtheft als gelbe Schrift mit Schein. Das Projekt `review` (`e2e/review.spec.ts`) prüft den Review-Build (siehe unten). In der CI läuft `pnpm e2e`, also beides, im Job `clickdummy`; er ist kein Pflicht-Check.
 
 ## Review-Build
 
