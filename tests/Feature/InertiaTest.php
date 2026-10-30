@@ -3,6 +3,7 @@
 use App\Enums\Locale;
 use App\Models\User;
 use App\Support\MailSetup;
+use Illuminate\Support\Facades\Route;
 use Inertia\Testing\AssertableInertia as Assert;
 
 it('renders unknown paths as the Inertia 404 page', function () {
@@ -23,6 +24,13 @@ it('shares exactly the fields of the signed-in account', function () {
     $this->actingAs($user)->get(inertiaProbe())->assertInertia(fn (Assert $page) => $page
         ->where('auth.user', ['id' => $user->id, 'type' => 'person', 'name' => $user->name, 'handle' => $user->handle,
             'email' => $user->email, 'locale' => 'de', 'timezone' => null, 'avatar_url' => null]));
+});
+
+it('shares the props on a 404 from a route binding', function () {
+    Route::middleware(['web', 'auth'])->get('_t/bound/{user}', fn (User $user) => 'x');
+
+    $this->actingAs(User::factory()->create())->get('_t/bound/01JZZZZZZZZZZZZZZZZZZZZZZZ')->assertNotFound()
+        ->assertInertia(fn (Assert $page) => $page->component('Errors/NotFound')->where('locale', 'en'));
 });
 
 it('shares the flash messages of the session once', function () {

@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
+use Laravel\Sanctum\HasApiTokens;
 
 /**
  * @property string $id
@@ -34,7 +35,7 @@ use Illuminate\Support\Carbon;
 class User extends Authenticatable implements HasLocalePreference
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, HasUlids, Notifiable;
+    use HasApiTokens, HasFactory, HasUlids, Notifiable;
 
     /**
      * Get the attributes that should be cast.
