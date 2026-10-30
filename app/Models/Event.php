@@ -23,10 +23,11 @@ use Illuminate\Support\Carbon;
  * @property array<string, mixed> $meta
  * @property Carbon $occurred_at
  * @property Carbon|null $dispatched_at
+ * @property Carbon|null $redispatched_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['type', 'actor_id', 'subject_type', 'subject_id', 'project_id', 'changes', 'meta', 'occurred_at', 'dispatched_at'])]
+#[Fillable(['type', 'actor_id', 'subject_type', 'subject_id', 'project_id', 'changes', 'meta', 'occurred_at', 'dispatched_at', 'redispatched_at'])]
 final class Event extends Model
 {
     use HasUlids;
@@ -65,6 +66,7 @@ final class Event extends Model
             'meta' => 'array',
             'occurred_at' => 'datetime',
             'dispatched_at' => 'datetime',
+            'redispatched_at' => 'datetime',
         ];
     }
 }

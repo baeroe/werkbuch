@@ -64,26 +64,50 @@ it('never writes models in controllers, middleware, commands, jobs or auth adapt
     expect($hits)->toBe([]);
 });
 
+it('detects a handle() without an Actor first', function () {
+    expect(takesActorFirst((new class
+    {
+        public function handle(Actor $actor, string $name): void {}
+    })::class))->toBeTrue();
+
+    foreach ([
+        new class
+        {
+            public function handle(string $name, Actor $actor): void {}
+        },
+        new class
+        {
+            public function handle(?Actor $actor): void {}
+        },
+        new class
+        {
+            public function handle(): void {}
+        },
+    ] as $action) {
+        expect(takesActorFirst($action::class))->toBeFalse();
+    }
+});
+
 it('gives every action an Actor first', function () {
     $exempt = fn (string $file) => str_starts_with($file, 'app/Actions/Auth/') || str_starts_with($file, 'app/Actions/Setup/')
         || $file === 'app/Actions/Accounts/NextHandle.php';
 
     $offenders = collect(appFiles('app/Actions'))->reject($exempt)
         ->map(fn (string $file) => 'App\\'.str_replace('/', '\\', substr($file, strlen('app/'), -strlen('.php'))))
-        ->reject(function (string $class) {
-            $first = (new ReflectionMethod($class, 'handle'))->getParameters()[0] ?? null;
-            $type = $first?->getType();
-
-            return $type instanceof ReflectionNamedType && $type->getName() === Actor::class;
-        })->values()->all();
+        ->reject(fn (string $class) => takesActorFirst($class))->values()->all();
 
     expect($offenders)->toBe([]);
 });
 
+it('detects events recorded outside a transaction', function () {
+    expect(recordsOutsideTransaction("<?php\nEventRecorder::record(EventType::UserUpdated, \$actor, \$user, null);"))->toBeTrue()
+        ->and(recordsOutsideTransaction("<?php\nDB::transaction(fn () => EventRecorder::record(EventType::UserUpdated, \$actor, \$user, null));"))->toBeFalse()
+        ->and(recordsOutsideTransaction("<?php\n\$user->save();"))->toBeFalse();
+});
+
 it('runs every action that records events in a transaction', function () {
     $offenders = collect(appFiles('app/Actions'))
-        ->filter(fn (string $file) => str_contains((string) file_get_contents(repo_path($file)), 'EventRecorder'))
-        ->reject(fn (string $file) => str_contains((string) file_get_contents(repo_path($file)), 'DB::transaction('))
+        ->filter(fn (string $file) => recordsOutsideTransaction((string) file_get_contents(repo_path($file))))
         ->values()->all();
 
     expect($offenders)->toBe([]);

@@ -21,6 +21,8 @@ return new class extends Migration
             // microseconds keep the order of the events of one action
             $table->timestamp('occurred_at', 6)->index();
             $table->timestamp('dispatched_at')->nullable()->index();
+            // the last time app:redispatch-events picked the event up; it waits 15 minutes before the next try
+            $table->timestamp('redispatched_at')->nullable();
             $table->timestamps();
         });
 

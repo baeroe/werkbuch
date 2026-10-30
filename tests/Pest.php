@@ -195,6 +195,27 @@ function usedTranslationKeys(): Collection
 }
 
 /**
+ * Whether the handle() of a class takes a non-nullable App\Support\Actor as its first parameter.
+ *
+ * @param  class-string  $class
+ */
+function takesActorFirst(string $class): bool
+{
+    $first = (new ReflectionMethod($class, 'handle'))->getParameters()[0] ?? null;
+    $type = $first?->getType();
+
+    return $type instanceof ReflectionNamedType && ! $type->allowsNull() && $type->getName() === Actor::class;
+}
+
+/**
+ * Whether code names the EventRecorder without opening a transaction (the recorder refuses to run outside one).
+ */
+function recordsOutsideTransaction(string $code): bool
+{
+    return str_contains($code, 'EventRecorder') && ! str_contains($code, 'DB::transaction(');
+}
+
+/**
  * A plain actor for tests: the account acting in the interface (or through another channel).
  */
 function actor(User $user, string $via = Actor::VIA_UI): Actor

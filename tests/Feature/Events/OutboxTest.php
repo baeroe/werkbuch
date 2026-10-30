@@ -8,9 +8,14 @@ use App\Jobs\DispatchEvent;
 use App\Models\Event;
 use App\Models\EventConsumption;
 use App\Models\Project;
+use App\Models\User;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Database\QueryException;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
 use Tests\Support\FailingOnceConsumer;
 use Tests\Support\RecordingConsumer;
 use Tests\Support\SearchConsumer;
@@ -75,6 +80,69 @@ it('redispatches an event whose dispatch never ran, after two minutes and only o
     $this->artisan('app:redispatch-events')->expectsOutput('Redispatched 0 events.');
 
     expect(RecordingConsumer::$seen)->toBe([$event->id]);
+});
+
+it('redispatches a backlog once per fifteen minutes, not every minute', function () {
+    Queue::fake();                                   // the worker is down: nothing gets dispatched
+    $this->freezeSecond();
+    $start = now()->toImmutable();
+    recordedEvent();
+    $redispatchAt = function (string $offset, int $count) use ($start) {
+        $this->travelTo($start->add($offset));
+        $this->artisan('app:redispatch-events')->expectsOutput("Redispatched {$count} events.");
+    };
+
+    $redispatchAt('3 minutes', 1);
+    $redispatchAt('4 minutes', 0);
+    $redispatchAt('10 minutes', 0);
+    $redispatchAt('18 minutes', 0);                  // exactly fifteen minutes after the last redispatch
+    $redispatchAt('18 minutes 1 second', 1);
+    $redispatchAt('20 minutes', 0);
+
+    Queue::assertPushed(DispatchEvent::class, 3);   // the original and two redispatches
+});
+
+it('redispatches at most 500 events per run', function () {
+    Queue::fake();
+    $user = User::factory()->create();
+    $occurred = now()->subMinutes(5)->format('Y-m-d H:i:s.u');
+    Event::query()->insert(array_map(fn () => [
+        'id' => (string) Str::ulid(),
+        'type' => EventType::UserUpdated->value,
+        'actor_id' => $user->id,
+        'subject_type' => 'user',
+        'subject_id' => $user->id,
+        'meta' => '{"via":"ui","reason":null}',
+        'occurred_at' => $occurred,
+    ], range(1, 501)));
+
+    $this->artisan('app:redispatch-events')->expectsOutput('Redispatched 500 events.');
+    $this->artisan('app:redispatch-events')->expectsOutput('Redispatched 1 events.');
+    $this->artisan('app:redispatch-events')->expectsOutput('Redispatched 0 events.');
+});
+
+it('reports an event that is still not dispatched after an hour', function () {
+    Queue::fake();
+    Exceptions::fake();
+    $this->freezeSecond();
+    $start = now()->toImmutable();
+    $event = recordedEvent();
+
+    $this->travelTo($start->addMinutes(59));
+    $this->artisan('app:redispatch-events')->expectsOutput('Redispatched 1 events.');
+    Exceptions::assertNothingReported();
+
+    $this->travelTo($start->addMinutes(75));
+    $this->artisan('app:redispatch-events')->expectsOutput('Redispatched 1 events.');
+    Exceptions::assertReported(fn (RuntimeException $e) => $e->getMessage() === "Event {$event->id} is still not dispatched after 60 minutes.");
+});
+
+it('fails loudly when a consumer claims an event that does not exist', function () {
+    expect(fn () => app(Outbox::class)->consume(strtolower((string) Str::ulid()), RecordingConsumer::class))
+        ->toThrow(function (QueryException $e) {
+            expect($e)->not->toBeInstanceOf(UniqueConstraintViolationException::class);
+        })
+        ->and(RecordingConsumer::$seen)->toBe([]);
 });
 
 it('leaves neither event nor dispatch when the transaction rolls back', function () {
@@ -148,5 +216,6 @@ it('schedules the redispatcher every minute', function () {
     $task = collect(app(Schedule::class)->events())->sole(fn ($event) => str_contains((string) $event->command, 'app:redispatch-events'));
 
     expect($task->expression)->toBe('* * * * *')
-        ->and($task->withoutOverlapping)->toBeTrue();
+        ->and($task->withoutOverlapping)->toBeTrue()
+        ->and($task->expiresAt)->toBe(5);           // a crashed run frees the lock after 5 minutes, not 24 hours
 });
