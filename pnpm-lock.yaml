@@ -240,8 +240,8 @@ importers:
         specifier: 5.0.5
         version: 5.0.5(vitest@5.0.5)
       '@vitest/istanbul-lib-source-maps':
-        specifier: 1.0.2
-        version: 1.0.2
+        specifier: 2.0.0
+        version: 2.0.0
       istanbul-lib-coverage:
         specifier: ^3.2.2
         version: 3.2.2
@@ -1816,6 +1816,10 @@ packages:
     resolution: {integrity: sha512-9J/JMwOf9AoJhAywhrn7ScKTL38hsWQP/qPG60OtaAFcQ5OXPwKsxZFlbnuCKmZ61m8/lGgHYnFpdyQZUvG/iA==}
     engines: {node: '>=22'}
 
+  '@vitest/istanbul-lib-coverage@2.0.0':
+    resolution: {integrity: sha512-lrEG3C2XXDdROhFqMY1ykOdLlG6c5swv0B7VT46qH5erygXlTHvDYMVYrHQSjPk5R8HXrsYPM1UniXZakW8YOw==}
+    engines: {node: '>=22'}
+
   '@vitest/istanbul-lib-instrument@1.0.2':
     resolution: {integrity: sha512-KFlvK0uYxYjdNoQJR+6F1B45u0ZOmYgOZndqfwLiGBjYHACc8q1Wyuw/ZQeGP3UKc7XsSZ51NKQDKt0IIbGMQg==}
     engines: {node: '>=22'}
@@ -1826,6 +1830,10 @@ packages:
 
   '@vitest/istanbul-lib-source-maps@1.0.2':
     resolution: {integrity: sha512-Ia3+9WDB5UKN940ztJ5LyhqDaS/It05Uh2VQ70KIPDWlOed2ZsJTJTyMb7x6OIW4eAwWSBFknpqJafJetTTXLw==}
+    engines: {node: '>=22'}
+
+  '@vitest/istanbul-lib-source-maps@2.0.0':
+    resolution: {integrity: sha512-RSiRa3EwG+W8Y/ZW2l+X4u22GR89EvpDRwwZsfnunFGwhFokrGaXckrJcKaO6x+y5uyfqfCoPmGqDoOarksC9w==}
     engines: {node: '>=22'}
 
   '@vitest/mocker@5.0.5':
@@ -4515,6 +4523,8 @@ snapshots:
 
   '@vitest/istanbul-lib-coverage@1.0.2': {}
 
+  '@vitest/istanbul-lib-coverage@2.0.0': {}
+
   '@vitest/istanbul-lib-instrument@1.0.2':
     dependencies:
       '@babel/core': 8.0.10
@@ -4532,6 +4542,12 @@ snapshots:
       '@jridgewell/trace-mapping': 0.3.31
       '@vitest/istanbul-lib-coverage': 1.0.2
       obug: 2.2.1
+
+  '@vitest/istanbul-lib-source-maps@2.0.0':
+    dependencies:
+      '@jridgewell/trace-mapping': 0.3.31
+      '@vitest/istanbul-lib-coverage': 2.0.0
+      obug: 3.0.0
 
   '@vitest/mocker@5.0.5(vite@8.3.5(@types/node@24.19.2)(jiti@2.7.0))':
     dependencies:
