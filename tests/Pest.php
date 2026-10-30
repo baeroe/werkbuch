@@ -1,6 +1,9 @@
 <?php
 
+use App\Access\ProjectRole;
+use App\Access\RoleAssignments;
 use App\Events\EventConsumer;
+use App\Models\Project;
 use App\Models\User;
 use App\Support\Actor;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
@@ -231,4 +234,17 @@ function actor(User $user, string $via = Actor::VIA_UI): Actor
 function consumers(string ...$classes): void
 {
     config(['werkbuch.event_consumers' => $classes]);
+}
+
+/**
+ * A new account (org member) with a role in the project.
+ *
+ * @param  array<string, mixed>  $attributes
+ */
+function memberOf(Project $project, ProjectRole $role, array $attributes = []): User
+{
+    $user = User::factory()->create($attributes);
+    app(RoleAssignments::class)->setProjectRole($user, $project, $role);
+
+    return $user;
 }

@@ -2,6 +2,8 @@
 
 namespace Database\Factories;
 
+use App\Access\OrgRole;
+use App\Access\RoleAssignments;
 use App\Enums\AccountType;
 use App\Enums\Locale;
 use App\Models\User;
@@ -39,6 +41,22 @@ class UserFactory extends Factory
             'timezone' => null,
             'remember_token' => Str::random(10),
         ];
+    }
+
+    /**
+     * Every account gets its role in the organization: member, unless a state says admin.
+     */
+    public function configure(): static
+    {
+        return $this->afterCreating(fn (User $user) => app(RoleAssignments::class)->setOrgRole($user, OrgRole::Member));
+    }
+
+    /**
+     * An org admin.
+     */
+    public function admin(): static
+    {
+        return $this->afterCreating(fn (User $user) => app(RoleAssignments::class)->setOrgRole($user, OrgRole::Admin));
     }
 
     /**

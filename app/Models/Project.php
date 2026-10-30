@@ -2,9 +2,11 @@
 
 namespace App\Models;
 
+use App\Access\Visibility;
 use App\Enums\ProjectVisibility;
 use Database\Factories\ProjectFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -51,6 +53,16 @@ final class Project extends Model
 
         return self::query()->where('identifier', $identifier)->first()
             ?? self::query()->whereHas('identifiers', fn ($query) => $query->where('identifier', $identifier))->first();
+    }
+
+    /**
+     * Only the projects the account sees (App\Access\Visibility, the one access scope).
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeVisibleTo(Builder $query, User $user): void
+    {
+        $query->whereIn($query->qualifyColumn('id'), Visibility::projectIds($user));
     }
 
     /**

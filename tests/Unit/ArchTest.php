@@ -1,5 +1,6 @@
 <?php
 
+use App\Access\RoleAssignments;
 use App\Events\EventRecorder;
 use App\Exceptions\Problem;
 use App\Support\Actor;
@@ -24,6 +25,8 @@ arch('api layer classes are final')->expect('App\\Http\\Api')->classes()->toBeFi
 arch('models never call actions')->expect('App\Models')->not->toUse('App\Actions');
 arch('auth adapters are final and do not compute')->expect('App\Auth')->classes()->toBeFinal()->not->toUse('App\Domain');
 arch('only actions record events')->expect(EventRecorder::class)->toOnlyBeUsedIn(['App\Actions', 'Tests']);
+arch('role assignments only in actions')
+    ->expect(RoleAssignments::class)->toOnlyBeUsedIn(['App\Actions', 'Database\Seeders', 'Database\Factories', 'Tests']);
 
 it('detects raw database writes', function () {
     $code = "<?php\nDB::table('users')->update([]);\nDB::table('users')->where('a', 1)->delete();\nDB::statement('x');\nDB::table('users')->get();";

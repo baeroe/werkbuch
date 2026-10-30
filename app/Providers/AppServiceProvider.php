@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Access\RoleIndex;
 use App\Models\Event;
 use App\Models\Organization;
 use App\Models\PersonalAccessToken;
@@ -20,6 +21,8 @@ class AppServiceProvider extends ServiceProvider
     {
         // one row, read once per request (and per queued job)
         $this->app->scoped(Organization::class, fn () => Organization::query()->sole());
+        // the role assignments (and the visible projects), read once per request and job
+        $this->app->scoped(RoleIndex::class);
     }
 
     /**

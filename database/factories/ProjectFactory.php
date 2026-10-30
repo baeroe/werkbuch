@@ -2,6 +2,8 @@
 
 namespace Database\Factories;
 
+use App\Access\ProjectRole;
+use App\Access\RoleAssignments;
 use App\Enums\ProjectVisibility;
 use App\Models\Project;
 use App\Models\User;
@@ -40,6 +42,14 @@ class ProjectFactory extends Factory
     public function archived(): static
     {
         return $this->state(fn (array $attributes) => ['archived_at' => now()]);
+    }
+
+    /**
+     * With the account as a member in this role.
+     */
+    public function member(User $user, ProjectRole $role): static
+    {
+        return $this->afterCreating(fn (Project $project) => app(RoleAssignments::class)->setProjectRole($user, $project, $role));
     }
 
     public function identifier(string $identifier): static
