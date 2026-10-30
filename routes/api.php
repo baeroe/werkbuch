@@ -3,8 +3,12 @@
 use App\Http\Controllers\Api\BotsController;
 use App\Http\Controllers\Api\InvitationsController;
 use App\Http\Controllers\Api\OrganizationController;
+use App\Http\Controllers\Api\PasswordController;
+use App\Http\Controllers\Api\TokensController;
+use App\Http\Controllers\Api\TwoFactorController;
 use App\Http\Controllers\Api\UsersController;
 use App\Http\Middleware\EnsureAccountIsActive;
+use App\Http\Middleware\EnsureSession;
 use App\Http\Middleware\EnsureTokenAbility;
 use Illuminate\Support\Facades\Route;
 
@@ -25,4 +29,18 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
 
     Route::get('invitations', [InvitationsController::class, 'index']);
     Route::post('invitations', [InvitationsController::class, 'store']);
+
+    Route::get('tokens', [TokensController::class, 'index']);
+    Route::post('tokens', [TokensController::class, 'store']);
+    Route::delete('tokens/{token}', [TokensController::class, 'destroy']);
+
+    // the own password and second factor: only from the session of the interface, never with a token (P6)
+    Route::middleware(EnsureSession::class)->prefix('me')->group(function () {
+        Route::put('password', [PasswordController::class, 'update']);
+        Route::get('two-factor', [TwoFactorController::class, 'show']);
+        Route::post('two-factor', [TwoFactorController::class, 'store']);
+        Route::post('two-factor/confirm', [TwoFactorController::class, 'confirm'])->middleware('throttle:6,1');
+        Route::delete('two-factor', [TwoFactorController::class, 'destroy']);
+        Route::post('two-factor/recovery-codes', [TwoFactorController::class, 'recoveryCodes']);
+    });
 });

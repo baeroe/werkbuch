@@ -1,10 +1,19 @@
 <?php
 
+use App\Actions\Account\ChangePassword;
+use App\Actions\Account\ConfirmTwoFactor;
+use App\Actions\Account\DisableTwoFactor;
+use App\Actions\Account\EnableTwoFactor;
+use App\Actions\Account\GetTwoFactor;
+use App\Actions\Account\RegenerateRecoveryCodes;
 use App\Actions\Invitations\InviteUser;
 use App\Actions\Invitations\ListInvitations;
 use App\Actions\Media\ShowMedia;
 use App\Actions\Organization\GetOrganization;
 use App\Actions\Organization\UpdateOrganization;
+use App\Actions\Tokens\CreateToken;
+use App\Actions\Tokens\ListTokens;
+use App\Actions\Tokens\RevokeToken;
 use App\Actions\Users\CreateBot;
 use App\Actions\Users\DeactivateUser;
 use App\Actions\Users\ListUsers;
@@ -12,7 +21,10 @@ use App\Actions\Users\ReactivateUser;
 use App\Actions\Users\UpdateUser;
 use App\Actions\Users\UpdateUserRole;
 use App\Events\EventType;
+use App\Models\User;
 use App\Support\Actor;
+use Laravel\Fortify\Actions\EnableTwoFactorAuthentication;
+use PragmaRX\Google2FA\Google2FA;
 use Tests\Feature\Access\MatrixWorld;
 
 /*
@@ -30,6 +42,22 @@ use Tests\Feature\Access\MatrixWorld;
  */
 
 $everyone = MatrixWorld::COLUMNS;
+
+// password and second factor are the own account's, and only people sign in
+$people = array_values(array_diff($everyone, ['default_bot']));
+
+/** Starts a two-factor setup for the account past the action (a bot as well, so its refusal is the action's own); returns the secret. */
+$startTwoFactor = function (User $user): string {
+    app(EnableTwoFactorAuthentication::class)($user, true);
+
+    return decrypt((string) $user->two_factor_secret);
+};
+
+/** Turns two-factor sign-in on for the account past the actions. */
+$withTwoFactor = function (User $user) use ($startTwoFactor): void {
+    $startTwoFactor($user);
+    $user->forceFill(['two_factor_confirmed_at' => now()])->save();
+};
 
 return [
     'GetOrganization' => [
@@ -98,5 +126,68 @@ return [
         'action' => ListInvitations::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListInvitations::run($a, []),
         'allowed' => ['org_admin', 'default_bot'],
+    ],
+    'ListTokens' => [
+        'action' => ListTokens::class,
+        // the tokens of a bot: org admins only (spec 4.2), even the person who runs it may not
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListTokens::run($a, $w->bot, []),
+        'allowed' => ['org_admin', 'default_bot'],
+    ],
+    'CreateToken' => [
+        'action' => CreateToken::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => CreateToken::run($a, $w->bot, ['name' => 'Matrix', 'abilities' => ['read']]),
+        'allowed' => ['org_admin', 'default_bot'],
+        'event' => EventType::TokenCreated,
+    ],
+    'RevokeToken' => [
+        'action' => RevokeToken::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => RevokeToken::run($a, $w->bot->createToken('Matrix', ['read'])->accessToken),
+        'allowed' => ['org_admin', 'default_bot'],
+        'event' => EventType::TokenRevoked,
+    ],
+    'ChangePassword' => [
+        'action' => ChangePassword::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ChangePassword::run($a, [
+            'current_password' => MatrixWorld::PASSWORD, 'password' => 'new-matrix-password', 'password_confirmation' => 'new-matrix-password',
+        ]),
+        'allowed' => $people,
+        'event' => EventType::UserPasswordChanged,
+    ],
+    'GetTwoFactor' => [
+        'action' => GetTwoFactor::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetTwoFactor::run($a),
+        'allowed' => $people,
+    ],
+    'EnableTwoFactor' => [
+        'action' => EnableTwoFactor::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => EnableTwoFactor::run($a),
+        'allowed' => $people,
+        'event' => EventType::UserTwoFactorSetupStarted,
+    ],
+    'ConfirmTwoFactor' => [
+        'action' => ConfirmTwoFactor::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ConfirmTwoFactor::run($a, app(Google2FA::class)->getCurrentOtp($startTwoFactor($a->user))),
+        'allowed' => $people,
+        'event' => EventType::UserTwoFactorEnabled,
+    ],
+    'DisableTwoFactor' => [
+        'action' => DisableTwoFactor::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) use ($withTwoFactor) {
+            $withTwoFactor($a->user);
+
+            return DisableTwoFactor::run($a);
+        },
+        'allowed' => $people,
+        'event' => EventType::UserTwoFactorDisabled,
+    ],
+    'RegenerateRecoveryCodes' => [
+        'action' => RegenerateRecoveryCodes::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) use ($withTwoFactor) {
+            $withTwoFactor($a->user);
+
+            return RegenerateRecoveryCodes::run($a);
+        },
+        'allowed' => $people,
+        'event' => EventType::UserRecoveryCodesRegenerated,
     ],
 ];

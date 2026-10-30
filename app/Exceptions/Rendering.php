@@ -34,6 +34,11 @@ final class Rendering
             ? back()->withErrors(['email' => __('auth.throttle', ['seconds' => (int) ($e->getHeaders()['Retry-After'] ?? 60)])])->onlyInput('email')
             : null);
 
+        // the two-factor challenge: the limit shows at the field in use, like a wrong code
+        $exceptions->render(fn (ThrottleRequestsException $e, Request $request) => $request->routeIs('two-factor.login.store')
+            ? back()->withErrors([$request->filled('recovery_code') ? 'recovery_code' : 'code' => __('auth.throttle', ['seconds' => (int) ($e->getHeaders()['Retry-After'] ?? 60)])])
+            : null);
+
         // accepting an invitation: the limit shows at the page's own error, which also names a link that no longer works
         $exceptions->render(fn (ThrottleRequestsException $e, Request $request) => $request->routeIs('invitations.accept')
             ? back()->withErrors(['invitation' => __('auth.throttle', ['seconds' => (int) ($e->getHeaders()['Retry-After'] ?? 60)])])

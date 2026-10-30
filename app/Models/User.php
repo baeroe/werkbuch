@@ -16,13 +16,16 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
+use Laravel\Fortify\Fortify;
+use Laravel\Fortify\TwoFactorAuthenticatable;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
 use Spatie\Permission\Traits\HasRoles;
 
 /**
- * An account: a person or a bot (spec 4.2). Its avatar is the media collection `avatar`.
+ * An account: a person or a bot (spec 4.2). Its avatar is the media collection `avatar`. A person may sign in with a
+ * second factor (Fortify's TOTP with eight recovery codes, each good for one sign-in).
  *
  * @property string $id
  * @property AccountType $type
@@ -51,7 +54,7 @@ use Spatie\Permission\Traits\HasRoles;
 class User extends Authenticatable implements HasLocalePreference, HasMedia
 {
     /** @use HasFactory<UserFactory> */
-    use HasApiTokens, HasFactory, HasRoles, HasUlids, InteractsWithMedia, Notifiable;
+    use HasApiTokens, HasFactory, HasRoles, HasUlids, InteractsWithMedia, Notifiable, TwoFactorAuthenticatable;
 
     /**
      * Get the attributes that should be cast.
@@ -115,6 +118,32 @@ class User extends Authenticatable implements HasLocalePreference, HasMedia
     public function preferredLocale(): string
     {
         return $this->effectiveLocale()->value;
+    }
+
+    /**
+     * The recovery codes that are left (Fortify's, typed).
+     *
+     * @return list<string>
+     */
+    public function recoveryCodes(): array
+    {
+        /** @var list<string> $codes */
+        $codes = json_decode(Fortify::currentEncrypter()->decrypt((string) $this->two_factor_recovery_codes), true);
+
+        return $codes;
+    }
+
+    /**
+     * Uses up a recovery code after a sign-in with it: it leaves the list (Fortify would put a new one in its place, so
+     * the settings could never say how many are left).
+     *
+     * @param  string  $code
+     */
+    public function replaceRecoveryCode(#[\SensitiveParameter] $code): void
+    {
+        $left = array_values(array_filter($this->recoveryCodes(), fn (string $stored) => ! hash_equals($stored, $code)));
+
+        $this->forceFill(['two_factor_recovery_codes' => Fortify::currentEncrypter()->encrypt((string) json_encode($left))])->save();
     }
 
     public function isPerson(): bool

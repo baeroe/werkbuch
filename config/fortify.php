@@ -2,8 +2,9 @@
 
 use Laravel\Fortify\Features;
 
-// Sign-in, sign-out and password reset (App\Providers\FortifyServiceProvider binds the Inertia pages and the actions).
-// Registration, profile, two-factor and passkeys stay off: accounts come from invitations and app:ensure-admin.
+// Sign-in with an optional second factor (TOTP, recovery codes), sign-out and password reset
+// (App\Providers\FortifyServiceProvider binds the Inertia pages and the actions). Registration, profile and passkeys
+// stay off: accounts come from invitations and app:ensure-admin.
 return [
 
     'guard' => 'web',
@@ -33,6 +34,7 @@ return [
     // Fortify's LoginRateLimiter in the sign-in pipeline
     'limiters' => [
         'login' => 'login',
+        'two-factor' => 'two-factor',
     ],
 
     // the GET routes render the Inertia pages
@@ -40,6 +42,9 @@ return [
 
     'features' => [
         Features::resetPasswords(),
+        // set up in the personal settings over /api/v1/me/two-factor (App\Actions\Account): on only after the first code,
+        // without asking for the password again (P19: only from the session, the confirmation is limited)
+        Features::twoFactorAuthentication(['confirm' => true, 'confirmPassword' => false]),
     ],
 
 ];

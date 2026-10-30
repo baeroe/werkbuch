@@ -3,15 +3,26 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { createHash, createHmac } from 'node:crypto';
+import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
-import { expect, request, test, type APIResponse, type Locator, type Page } from '@playwright/test';
+import { expect, request, test, type APIResponse, type Browser, type BrowserContext, type Locator, type Page } from '@playwright/test';
 
 export const ROOT = path.resolve(import.meta.dirname, '..');
 
 /** Session of the setup project (git-ignored), shared by every test that does not sign in itself. */
 export const AUTH_FILE = path.join(import.meta.dirname, '.auth/user.json');
+
+/** The sessions of `signedInContext()`, one file per account (`<email>.json`, git-ignored). */
+const ACCOUNT_AUTH_DIR = path.join(import.meta.dirname, '.auth');
+
+/** Before a run (global-setup.ts): the sessions of the accounts of the last run go, the seeder has set them back. */
+export function forgetAccountSessions(): void {
+  if (!existsSync(ACCOUNT_AUTH_DIR)) return;
+  for (const file of readdirSync(ACCOUNT_AUTH_DIR)) {
+    if (file.includes('@')) rmSync(path.join(ACCOUNT_AUTH_DIR, file));
+  }
+}
 
 /** Artisan of the app under test: `E2E_ARTISAN ?? 'ddev artisan'` (`php artisan` in CI). */
 export function artisan(...args: string[]): void {
@@ -141,6 +152,51 @@ export async function tabTo(page: Page, target: Locator, { max = 40, backwards =
 /** Presses `key` until `target` has the focus, e.g. arrows through a menu. */
 export async function arrowTo(page: Page, target: Locator, key = 'ArrowDown', max = 12): Promise<void> {
   await pressUntilFocused(page, target, key, max);
+}
+
+const BASE32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+
+/**
+ * The code an authenticator app shows for `secret` (Base32) at `at` (RFC 6238: HMAC-SHA-1, 30 seconds, six digits), e.g.
+ * for the two-factor accounts of the seeder (`PEOPLE.twoFactor[…].secret`).
+ */
+export function totp(secret: string, at = Date.now()): string {
+  const bits = [...secret.replace(/=+$/, '').toUpperCase()]
+    .map((char) => {
+      const value = BASE32.indexOf(char);
+      if (value < 0) throw new Error(`"${char}" is no Base32 character`);
+      return value.toString(2).padStart(5, '0');
+    })
+    .join('');
+  const key = Buffer.from((bits.match(/.{8}/g) ?? []).map((byte) => parseInt(byte, 2)));
+  const counter = Buffer.alloc(8);
+  counter.writeBigUInt64BE(BigInt(Math.floor(at / 30_000)));
+  const hmac = createHmac('sha1', key).update(counter).digest();
+  const offset = hmac[hmac.length - 1]! & 0x0f;
+  return String((hmac.readUInt32BE(offset) & 0x7fffffff) % 1_000_000).padStart(6, '0');
+}
+
+/**
+ * A browser context of its own, signed in as `person`, with the settings of the running project (address, viewport,
+ * language, time zone, color scheme) and the clipboard. The first time an account signs in during a run, the cache is
+ * emptied first (sign-in is limited per IP); its session is kept in `e2e/.auth/<email>.json`, so later specs use it
+ * without signing in again. Close it at the end of the test.
+ */
+export async function signedInContext(browser: Browser, person: { email: string; password: string }): Promise<BrowserContext> {
+  const { baseURL, ignoreHTTPSErrors, viewport, locale, timezoneId, colorScheme } = test.info().project.use;
+  const options = { baseURL, ignoreHTTPSErrors, viewport, locale, timezoneId, colorScheme, permissions: ['clipboard-read', 'clipboard-write'] };
+  const file = path.join(ACCOUNT_AUTH_DIR, `${person.email}.json`);
+  if (existsSync(file)) return browser.newContext({ ...options, storageState: file });
+
+  artisan('cache:clear');
+  const context = await browser.newContext(options);
+  const page = await context.newPage();
+  await page.goto('/login');
+  await login(page, person.email, person.password);
+  await expect(page).toHaveURL(/\/my-items$/);
+  await context.storageState({ path: file });
+  await page.close();
+  return context;
 }
 
 /** Signs in on the open sign-in page with the keyboard only: Tab into the address, type, Tab, type, Enter. */

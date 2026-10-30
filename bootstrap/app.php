@@ -2,6 +2,7 @@
 
 use App\Exceptions\Rendering;
 use App\Http\Middleware\EnsureAccountIsActive;
+use App\Http\Middleware\EnsureSession;
 use App\Http\Middleware\EnsureTokenAbility;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\SetLocale;
@@ -61,6 +62,7 @@ return Application::configure(basePath: dirname(__DIR__))
             ThrottleRequests::class,
             ThrottleRequestsWithRedis::class,
             AuthenticatesRequests::class,
+            EnsureSession::class,
             EnsureTokenAbility::class,
             AuthenticatesSessions::class,
             SubstituteBindings::class,
