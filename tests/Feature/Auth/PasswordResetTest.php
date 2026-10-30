@@ -151,6 +151,7 @@ it('sends nothing to bots', function () {
 });
 
 it('sets the new password, ends other sessions and leads to the sign-in', function () {
+    config(['session.driver' => 'database']); // the driver that keeps sessions by account (the default outside tests)
     $user = User::factory()->create(['email' => 'lene@example.com', 'password' => 'old-password']);
     DB::table('sessions')->insert(['id' => 's1', 'user_id' => $user->id, 'payload' => '', 'last_activity' => time()]);
 

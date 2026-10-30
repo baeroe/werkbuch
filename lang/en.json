@@ -1,4 +1,5 @@
 {
+    "bots.default.description": "The default bot: automations and template schedules act on its behalf.",
     "common.back": "Back",
     "common.cancel": "Cancel",
     "common.close": "Close",
@@ -8,6 +9,7 @@
     "common.reload": "Reload",
     "common.retry": "Try again",
     "common.undo": "Undo",
+    "errors.account_disabled": "Your account is disabled. Ask someone with admin rights if that is a mistake.",
     "errors.no_answer": "The server did not answer.",
     "errors.not_done": "Not done: :label",
     "errors.page.forbidden.description": "Your account is not allowed to see this page. If that is a mistake, ask someone with admin rights.",

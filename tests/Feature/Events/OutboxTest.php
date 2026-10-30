@@ -156,7 +156,7 @@ it('leaves neither event nor dispatch when the transaction rolls back', function
         throw new RuntimeException('The action fails after recording.');
     }))->toThrow(RuntimeException::class, 'The action fails after recording.');
 
-    expect(Event::query()->count())->toBe(0)
+    expect(Event::query()->where('subject_id', $project->id)->count())->toBe(0) // the default bot of the migration has one
         ->and(RecordingConsumer::$seen)->toBe([]);
     Queue::assertNothingPushed();
 });

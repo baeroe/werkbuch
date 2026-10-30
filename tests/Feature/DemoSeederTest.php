@@ -6,9 +6,11 @@ use Database\Seeders\DemoSeeder;
 use Database\Seeders\E2eSeeder;
 use Illuminate\Support\Facades\Hash;
 
+// the default bot of the migration is always there: the tests count and read the other accounts
+
 it('seeds the six demo people of the clickdummy', function () {
     $this->seed(DemoSeeder::class);
-    expect(User::orderBy('handle')->pluck('email', 'handle')->all())->toBe([
+    expect(User::query()->where('is_default_bot', false)->orderBy('handle')->pluck('email', 'handle')->all())->toBe([
         'ida' => 'ida@feldwerk.example.com', 'jonas' => 'jonas@feldwerk.example.com', 'lene' => 'lene@feldwerk.example.com',
         'mara' => 'mara@feldwerk.example.com', 'sven' => 'sven@feldwerk.example.com', 'theo' => 'theo@feldwerk.example.com',
     ])->and(User::where('handle', 'sven')->sole()->isDisabled())->toBeTrue()
@@ -25,26 +27,26 @@ it('runs again without duplicates and resets the demo password', function () {
     $this->seed(DemoSeeder::class);
     User::where('handle', 'lene')->sole()->update(['password' => 'changed-elsewhere']);
     $this->seed(DemoSeeder::class);
-    expect(User::count())->toBe(6)->and(Hash::check(DemoSeeder::PASSWORD, User::where('handle', 'lene')->sole()->password))->toBeTrue();
+    expect(User::query()->where('is_default_bot', false)->count())->toBe(6)->and(Hash::check(DemoSeeder::PASSWORD, User::where('handle', 'lene')->sole()->password))->toBeTrue();
 });
 
 it('adds the e2e people on top', function () {
     $this->seed(E2eSeeder::class);
     $this->seed(E2eSeeder::class);
     $reset = User::where('email', 'reset-phone-dark@example.com')->sole();
-    expect(User::count())->toBe(11)->and(User::where('email', 'e2e@example.com')->sole()->locale)->toBeNull()
+    expect(User::query()->where('is_default_bot', false)->count())->toBe(11)->and(User::where('email', 'e2e@example.com')->sole()->locale)->toBeNull()
         ->and($reset->handle)->toBe('reset-phone-dark')->and($reset->name)->toBe('Rita Reset')
         ->and(Hash::check('e2e-password', $reset->password))->toBeTrue();
 });
 
 it('seeds the demo data through the database seeder, except in production', function () {
     $this->seed(DatabaseSeeder::class);
-    expect(User::count())->toBe(6);
-    User::query()->delete();
+    expect(User::query()->where('is_default_bot', false)->count())->toBe(6);
+    User::query()->where('is_default_bot', false)->delete();
 
     $this->app['env'] = 'production';
     (new DatabaseSeeder)->run();
-    expect(User::count())->toBe(0);
+    expect(User::query()->where('is_default_bot', false)->count())->toBe(0);
 });
 
 it('refuses production', function () {
@@ -52,5 +54,5 @@ it('refuses production', function () {
     // Called directly: db:seed itself asks for a confirmation in production.
     expect(fn () => (new DemoSeeder)->run())->toThrow(RuntimeException::class)
         ->and(fn () => (new E2eSeeder)->run())->toThrow(RuntimeException::class)
-        ->and(User::count())->toBe(0);
+        ->and(User::query()->where('is_default_bot', false)->count())->toBe(0);
 });

@@ -81,3 +81,51 @@ it('restores the previous team and leaves no membership when an assignment fails
     expect(getPermissionsTeamId())->toBe('01jbx0000000000000000previous')
         ->and(ProjectMember::query()->where('user_id', $user->id)->exists())->toBeFalse();
 });
+
+it('forgets the roles read inside a transaction that rolls back', function () {
+    $user = User::factory()->create();
+    $project = Project::factory()->private()->create();
+
+    try {
+        DB::transaction(function () use ($user, $project) {
+            app(RoleAssignments::class)->setProjectRole($user, $project, ProjectRole::Admin);
+            app(RoleAssignments::class)->setOrgRole($user, OrgRole::Admin);
+
+            expect(Visibility::roleIn($user, $project))->toBe(ProjectRole::Admin)
+                ->and(Visibility::orgRole($user))->toBe(OrgRole::Admin)
+                ->and(Visibility::projectIds($user)->all())->toBe([$project->id]);
+
+            throw new RuntimeException('roll back');
+        });
+    } catch (RuntimeException) {
+        // the assignments are gone, and so must be what was read of them
+    }
+
+    expect(Visibility::orgRole($user))->toBe(OrgRole::Member)
+        ->and(Visibility::roleIn($user, $project))->toBeNull()
+        ->and(Visibility::projectIds($user)->all())->toBe([]);
+});
+
+it('takes the highest of several roles in one team, whatever the row order', function (array $order) {
+    $user = User::factory()->create();
+    $project = Project::factory()->private()->create();
+    $roleId = fn (OrgRole|ProjectRole $role): int => (int) DB::table('roles')->where('name', $role->roleName())->value('id');
+    DB::table('model_has_roles')->where('model_id', $user->id)->delete();
+
+    foreach ($order as $role) {
+        DB::table('model_has_roles')->insert([
+            'role_id' => $roleId($role),
+            'model_type' => 'user',
+            'model_id' => $user->id,
+            'team_id' => $role instanceof OrgRole ? Organization::current()->id : $project->id,
+        ]);
+    }
+    Visibility::forget();
+
+    expect(Visibility::orgRole($user))->toBe(OrgRole::Admin)
+        ->and(app(RoleIndex::class)->projectRoles($user))->toBe([$project->id => ProjectRole::Admin])
+        ->and(app(RoleIndex::class)->members($project))->toBe([$user->id => ProjectRole::Admin]);
+})->with([
+    'highest first' => [[OrgRole::Admin, OrgRole::Member, ProjectRole::Admin, ProjectRole::Viewer, ProjectRole::Member]],
+    'highest last' => [[OrgRole::Member, OrgRole::Admin, ProjectRole::Viewer, ProjectRole::Member, ProjectRole::Admin]],
+]);

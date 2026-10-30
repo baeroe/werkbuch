@@ -3,12 +3,15 @@
 namespace App\Providers;
 
 use App\Access\RoleIndex;
+use App\Access\Visibility;
 use App\Models\Event;
 use App\Models\Organization;
 use App\Models\PersonalAccessToken;
 use App\Models\Project;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Database\Events\TransactionRolledBack;
+use Illuminate\Support\Facades\Event as Events;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Sanctum\Sanctum;
 
@@ -41,5 +44,8 @@ class AppServiceProvider extends ServiceProvider
         ]);
 
         Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);
+
+        // roles and visible projects read inside a transaction that rolls back would otherwise outlive it and grant access
+        Events::listen(TransactionRolledBack::class, fn () => Visibility::forget());
     }
 }

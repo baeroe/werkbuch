@@ -1,14 +1,20 @@
 <?php
 
 use App\Enums\Locale;
+use App\Models\Event;
 use App\Models\Organization;
 use App\Models\User;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
-it('has no default bot until one exists', function () {
-    expect(fn () => User::defaultBot())->toThrow(ModelNotFoundException::class);
+it('has the default bot of the migration, and none without it', function () {
+    $migrated = User::defaultBot();
+    Event::query()->delete(); // accounts with history stay (they are disabled, never deleted)
+    $migrated->delete();
 
-    $bot = User::factory()->defaultBot()->create();
+    expect($migrated->handle)->toBe('automation')
+        ->and(fn () => User::defaultBot())->toThrow(ModelNotFoundException::class);
+
+    $bot = User::factory()->bot()->create(['is_default_bot' => true]);
 
     expect(User::defaultBot()->is($bot))->toBeTrue()
         ->and($bot->is_default_bot)->toBeTrue()

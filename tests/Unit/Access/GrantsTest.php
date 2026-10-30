@@ -105,3 +105,8 @@ it('ranks the project roles', function () {
         ->and(ProjectRole::Member->rank())->toBe(1)
         ->and(ProjectRole::Admin->rank())->toBe(2);
 });
+
+it('ranks the org roles', function () {
+    expect(OrgRole::Member->rank())->toBe(0)
+        ->and(OrgRole::Admin->rank())->toBe(1);
+});

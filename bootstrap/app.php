@@ -1,6 +1,7 @@
 <?php
 
 use App\Exceptions\Rendering;
+use App\Http\Middleware\EnsureAccountIsActive;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\TrustProxies;
@@ -19,6 +20,7 @@ use Illuminate\Http\Middleware\TrustProxies as FrameworkTrustProxies;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Routing\Middleware\ThrottleRequestsWithRedis;
+use Illuminate\Session\Middleware\AuthenticateSession;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 
@@ -38,7 +40,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // the language comes before Inertia, so Inertia shares the translations of the language the request speaks;
         // the locale cookie is plain (HttpOnly, but not encrypted): the server reads it for guests, so the login page speaks
         // the language of the last session
-        $middleware->web(append: [SetLocale::class, HandleInertiaRequests::class]);
+        // a session ends on its next request when the password changed (AuthenticateSession compares the hash, any session
+        // driver) or the account was disabled (EnsureAccountIsActive)
+        $middleware->web(append: [SetLocale::class, HandleInertiaRequests::class, AuthenticateSession::class, EnsureAccountIsActive::class]);
         $middleware->encryptCookies(except: [SetLocale::COOKIE]);
         $middleware->trustHosts(at: fn (): array => TrustedRequests::hostPatterns(config('app.url')), subdomains: false);
         // Laravel's priority list with the rate limit moved before auth (requests that fail auth count as well), and the

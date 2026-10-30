@@ -7,7 +7,6 @@ use App\Models\Project;
 use App\Models\User;
 use Closure;
 use Illuminate\Database\Eloquent\Relations\Relation;
-use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -37,9 +36,7 @@ final class RoleIndex
      */
     public function orgRoles(): array
     {
-        return $this->orgRoles ??= array_filter(array_map(OrgRole::fromRoleName(...), $this->assignments(OrgRole::cases())
-            ->where('model_has_roles.team_id', Organization::current()->id)
-            ->pluck('roles.name', 'model_has_roles.model_id')->all()));
+        return $this->orgRoles ??= $this->highest(OrgRole::cases(), 'team_id', Organization::current()->id, 'model_id');
     }
 
     /**
@@ -86,21 +83,44 @@ final class RoleIndex
      */
     private function projectRolesWhere(string $column, string $value, string $key): array
     {
-        return array_filter(array_map(ProjectRole::fromRoleName(...), $this->assignments(ProjectRole::cases())
-            ->where("model_has_roles.{$column}", $value)
-            ->pluck('roles.name', "model_has_roles.{$key}")->all()));
+        return $this->highest(ProjectRole::cases(), $column, $value, $key);
     }
 
     /**
-     * The assignments of accounts to the given roles.
+     * The assignments to the given roles where `model_has_roles.$column` is `$value`, keyed by `model_has_roles.$key`.
+     * Holds an account several of them in one team (spatie does not prevent it), the highest counts, never the row order.
      *
-     * @param  list<OrgRole>|list<ProjectRole>  $roles
+     * @template TRole of OrgRole|ProjectRole
+     *
+     * @param  list<TRole>  $roles
+     * @return array<string, TRole>
      */
-    private function assignments(array $roles): Builder
+    private function highest(array $roles, string $column, string $value, string $key): array
     {
-        return DB::table('model_has_roles')
+        $byName = [];
+
+        foreach ($roles as $role) {
+            $byName[$role->roleName()] = $role;
+        }
+
+        $rows = DB::table('model_has_roles')
             ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
             ->where('model_has_roles.model_type', Relation::getMorphAlias(User::class))
-            ->whereIn('roles.name', array_map(fn (OrgRole|ProjectRole $role) => $role->roleName(), $roles));
+            ->whereIn('roles.name', array_keys($byName))
+            ->where("model_has_roles.{$column}", $value)
+            ->get(['roles.name as role', "model_has_roles.{$key} as holder"]);
+
+        $highest = [];
+
+        foreach ($rows as $row) {
+            $role = $byName[(string) $row->role];
+            $held = $highest[(string) $row->holder] ?? null;
+
+            if ($held === null || $role->rank() > $held->rank()) {
+                $highest[(string) $row->holder] = $role;
+            }
+        }
+
+        return $highest;
     }
 }

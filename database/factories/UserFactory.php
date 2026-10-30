@@ -73,14 +73,6 @@ class UserFactory extends Factory
     }
 
     /**
-     * The bot of the system.
-     */
-    public function defaultBot(): static
-    {
-        return $this->bot()->state(fn (array $attributes) => ['is_default_bot' => true]);
-    }
-
-    /**
      * A disabled account.
      */
     public function disabled(): static

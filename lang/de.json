@@ -1,4 +1,5 @@
 {
+    "bots.default.description": "Der Standard-Bot: Automatisierungen und Zeitpläne von Vorlagen handeln in seinem Namen.",
     "common.back": "Zurück",
     "common.cancel": "Abbrechen",
     "common.close": "Schließen",
@@ -8,6 +9,7 @@
     "common.reload": "Neu laden",
     "common.retry": "Erneut versuchen",
     "common.undo": "Rückgängig",
+    "errors.account_disabled": "Dein Konto ist deaktiviert. Falls das ein Versehen ist, frag jemanden mit Admin-Rechten.",
     "errors.no_answer": "Der Server hat nicht geantwortet.",
     "errors.not_done": "Nicht ausgeführt: :label",
     "errors.page.forbidden.description": "Dein Konto darf diese Seite nicht sehen. Falls das ein Versehen ist, frag jemanden mit Admin-Rechten.",

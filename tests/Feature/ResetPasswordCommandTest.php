@@ -15,6 +15,7 @@ function passwordOnStdin(string $contents): void
 }
 
 it('asks twice without echo and ends all sessions of the account', function () {
+    config(['session.driver' => 'database']); // the driver that keeps sessions by account (the default outside tests)
     $user = User::factory()->create(['password' => 'old-password', 'remember_token' => 'old-token']);
     DB::table('sessions')->insert(['id' => 'sess-1', 'user_id' => $user->id, 'ip_address' => null, 'user_agent' => null, 'payload' => '', 'last_activity' => time()]);
 

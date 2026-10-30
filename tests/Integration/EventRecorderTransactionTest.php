@@ -19,7 +19,7 @@ it('records events only inside a transaction', function () {
 
     expect(fn () => EventRecorder::record(EventType::UserUpdated, actor($user), $user, null))
         ->toThrow(LogicException::class, 'Events are recorded inside the transaction of an action.')
-        ->and(Event::query()->count())->toBe(0);
+        ->and(Event::query()->where('subject_id', $user->id)->count())->toBe(0); // the default bot of the migration has one
 });
 
 it('hands the event to the consumers only after the commit', function () {

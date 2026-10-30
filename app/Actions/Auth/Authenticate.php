@@ -11,7 +11,7 @@ use Lorisleiva\Actions\Concerns\AsAction;
 /**
  * Checks the sign-in of a person: an active person whose password matches, else null (Fortify counts that as a failed
  * attempt). Every call checks exactly one hash, also for unknown addresses, bots and accounts without a password, so the
- * answer time does not tell whether an account exists.
+ * answer time does not tell whether an account exists. A password hashed with older settings is hashed anew on success.
  */
 final class Authenticate
 {
@@ -29,13 +29,22 @@ final class Authenticate
         return Cache::rememberForever($key, fn (): string => Hash::make(Str::random(40)));
     }
 
-    public function handle(string $email, string $password): ?User
+    public function handle(string $email, #[\SensitiveParameter] string $password): ?User
     {
         $user = User::query()->where('email', $email)->first();
         // fetched for every attempt, so known and unknown addresses do the same work
         $dummy = self::dummyHash();
         $matches = Hash::check($password, $user->password ?? $dummy);
 
-        return $matches && $user?->isPerson() && ! $user->isDisabled() ? $user : null;
+        if (! $matches || ! $user?->isPerson() || $user->isDisabled()) {
+            return null;
+        }
+
+        // the hasher settings went up since the password was set: store it with the current ones (technical, no event)
+        if (Hash::needsRehash((string) $user->password)) {
+            $user->forceFill(['password' => $password])->save();
+        }
+
+        return $user;
     }
 }

@@ -38,7 +38,7 @@ it('needs an account', function () {
 })->throws(AuthenticationException::class);
 
 it('lets automations act as the default bot', function () {
-    $bot = User::factory()->defaultBot()->create();
+    $bot = User::query()->where('handle', 'automation')->sole();
 
     $actor = Actor::automation('Automatisierung: Auto-Archiv');
 

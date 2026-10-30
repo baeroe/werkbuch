@@ -23,4 +23,15 @@ enum OrgRole: string
     {
         return str_starts_with($name, 'org-') ? self::tryFrom(substr($name, strlen('org-'))) : null;
     }
+
+    /**
+     * The order of the roles: a higher rank may do everything a lower one may.
+     */
+    public function rank(): int
+    {
+        return match ($this) {
+            self::Member => 0,
+            self::Admin => 1,
+        };
+    }
 }
