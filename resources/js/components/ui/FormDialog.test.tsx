@@ -12,7 +12,11 @@ const submitChord = () => new KeyboardEvent('keydown', { key: 'Enter', bubbles: 
 const sendWithShortcut = () => document.activeElement!.dispatchEvent(submitChord());
 const tick = () => act(() => new Promise<void>((resolve) => setTimeout(resolve, 5)));
 
-/** A screen as the settings use the dialog: a send starts a call that makes the button pending until it is over. */
+/**
+ * A screen as the settings use the dialog: a send starts a call that makes the button pending until the test ends it
+ * with `endCall` (no timer, so a slow machine cannot end the call early).
+ */
+let endCall = () => {};
 function Harness({ onSubmit, children }: { onSubmit: () => void; children?: ReactNode }) {
   const [open, setOpen] = useState(true);
   const [pending, setPending] = useState(false);
@@ -26,7 +30,7 @@ function Harness({ onSubmit, children }: { onSubmit: () => void; children?: Reac
       onSubmit={() => {
         onSubmit();
         setPending(true);
-        setTimeout(() => setPending(false), 50);
+        endCall = () => setPending(false);
       }}
     >
       {children ?? <Input label="Name" name="name" />}
@@ -53,7 +57,10 @@ describe('FormDialog', () => {
     expect(onSubmit).toHaveBeenCalledTimes(1);
 
     // the call is over: the next press sends again
+    expect(screen.getByRole('button', { name: 'Anlegen' }).hasAttribute('aria-busy')).toBe(true);
+    act(() => endCall());
     await waitFor(() => expect(screen.getByRole('button', { name: 'Anlegen' }).hasAttribute('aria-busy')).toBe(false));
+    await tick();
     act(() => void sendWithShortcut());
     expect(onSubmit).toHaveBeenCalledTimes(2);
   });

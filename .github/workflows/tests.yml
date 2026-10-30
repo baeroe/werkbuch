@@ -8,10 +8,16 @@ on:
 permissions:
   contents: read
 
+# a new push to a pull request replaces the run that is still going
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # required check: the name must stay `tests`
   tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     services:
       mariadb:
@@ -152,7 +158,7 @@ jobs:
         run: composer install --no-interaction --no-progress --prefer-dist
 
       # `php artisan serve` passes only a few environment variables on to the server, so the whole configuration
-      # stands in .env. QUEUE_CONNECTION=sync there: the reset mail goes out in the request, no queue worker needed.
+      # stands in .env.
       - name: Environment
         run: cp e2e/ci.env .env && php artisan key:generate
 
@@ -162,6 +168,7 @@ jobs:
       - name: pnpm install
         run: pnpm install --frozen-lockfile
 
+      # the Vitest half of the merged coverage: coverage/merged joins it with the Playwright coverage
       - name: Vitest with coverage
         run: pnpm test:coverage
 
@@ -173,6 +180,11 @@ jobs:
         run: |
           PHP_CLI_SERVER_WORKERS=4 php artisan serve --host=127.0.0.1 --port=8000 > serve.log 2>&1 &
           curl -fsS --retry 30 --retry-delay 1 --retry-all-errors http://127.0.0.1:8000/up
+
+      # QUEUE_CONNECTION=database as in production: the worker runs the queued jobs (the reset mail goes out on the
+      # queue `notifications`) like the `queue` daemon of DDEV
+      - name: Queue worker
+        run: php artisan queue:work --queue=default,notifications --sleep=1 --tries=3 > queue.log 2>&1 &
 
       - name: Playwright
         run: |
@@ -202,6 +214,7 @@ jobs:
           name: e2e-results
           path: |
             serve.log
+            queue.log
             storage/logs
             e2e/test-results
           if-no-files-found: ignore
@@ -210,6 +223,7 @@ jobs:
   # required check.
   docs:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -237,6 +251,7 @@ jobs:
   # the clickdummy: domain tests, typecheck, review build and the Playwright flows. Not a required check.
   clickdummy:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 

@@ -43,7 +43,7 @@ test('answers an unknown address like a known one, then sets a new password from
   await expect(page.getByText(person.email)).toBeVisible();
   await expect(page.getByText(person.email).locator('..')).toBeFocused();
 
-  // the queue worker sends the mail; once the later mail is in Mailpit, a mail to the earlier unknown address would be too
+  // a queue worker sends the mail (the `queue` daemon in DDEV, a background step in CI); once the later mail is in Mailpit, a mail to the earlier unknown address would be too
   await expect.poll(() => mailpit.latestTo(person.email, start), { timeout: 15_000 }).not.toBeNull();
   expect(await mailpit.latestTo('nobody@example.com', start)).toBeNull();
 
