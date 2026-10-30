@@ -10,7 +10,7 @@ export function Skeleton({ className }: { className?: string }) {
 /** Wraps the skeletons of one view and tells screen readers that it is loading. */
 export function SkeletonGroup({ label = t('common.loading'), className, children }: { label?: string; className?: string; children: ReactNode }) {
   return (
-    <div role="status" aria-busy="true" className={className}>
+    <div role="status" className={className}>
       <span className="sr-only">{label}</span>
       {children}
     </div>

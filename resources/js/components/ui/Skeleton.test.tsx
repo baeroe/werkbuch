@@ -15,7 +15,7 @@ describe('Skeleton', () => {
 });
 
 describe('SkeletonGroup', () => {
-  it('is a busy status named by its label, around its skeletons', () => {
+  it('is a status with its label as text, around its skeletons, and not permanently busy', () => {
     render(
       <SkeletonGroup label="Items laden" className="space-y-2">
         <Skeleton className="h-4" />
@@ -23,7 +23,8 @@ describe('SkeletonGroup', () => {
     );
 
     const group = screen.getByRole('status');
-    expect(group.getAttribute('aria-busy')).toBe('true');
+    // aria-busy on a live region can suppress the one-time announcement
+    expect(group.hasAttribute('aria-busy')).toBe(false);
     expect(group.textContent).toBe('Items laden');
     expect(group.className).toContain('space-y-2');
     expect(group.querySelector('[aria-hidden="true"]')).not.toBeNull();
