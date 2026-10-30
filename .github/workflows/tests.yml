@@ -12,40 +12,259 @@ jobs:
   # required check: the name must stay `tests`
   tests:
     runs-on: ubuntu-latest
+
+    services:
+      mariadb:
+        image: mariadb:11.4.13@sha256:1292844148b311e4ed4300022a996d39083f415a963e970cf47cad1b3b18e3a6
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: testing
+          MARIADB_USER: db
+          MARIADB_PASSWORD: db
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    env:
+      DB_CONNECTION: mariadb
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: testing
+      DB_USERNAME: db
+      DB_PASSWORD: db
+
     steps:
       - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: intl, zip, bcmath, pdo_mysql
+          coverage: pcov
+
+      # version comes from "packageManager" in package.json
       - uses: pnpm/action-setup@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version-file: .node-version
           cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-      - name: Install
-        run: pnpm install --frozen-lockfile
-      - name: Typecheck (clickdummy)
-        run: pnpm --filter werkbuch-clickdummy typecheck
-      - name: Unit tests (clickdummy)
-        run: pnpm --filter werkbuch-clickdummy test
-      - name: Build (clickdummy)
-        run: pnpm --filter werkbuch-clickdummy build
 
-  # the Playwright flows and the review build checks of the clickdummy; not a required check
-  clickdummy-e2e:
+      - name: Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
+
+      - name: Composer
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Environment
+        run: cp .env.example .env && php artisan key:generate
+
+      - name: Pint
+        run: vendor/bin/pint --test
+
+      - name: Larastan
+        run: vendor/bin/phpstan analyse --no-progress --memory-limit=1G
+
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: TypeScript
+        run: pnpm typecheck
+
+      # 100 % lines of resources/js (the Playwright coverage joins in the e2e job)
+      - name: Vitest with coverage
+        run: pnpm test:coverage
+
+      - name: Build
+        run: pnpm build
+
+      - name: Pest with coverage
+        run: php artisan test --coverage --min=100
+
+  # Playwright against `php artisan serve` with MariaDB and Mailpit as services; merges the Playwright coverage with
+  # the Vitest coverage (100 % lines of the frontend). Not a required check.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      mariadb:
+        image: mariadb:11.4.13@sha256:1292844148b311e4ed4300022a996d39083f415a963e970cf47cad1b3b18e3a6
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: werkbuch
+          MARIADB_USER: db
+          MARIADB_PASSWORD: db
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+      mailpit:
+        image: axllent/mailpit:v1.32.0@sha256:0790692be935ea4420d085694f7985b1f692ca6a8771ab0e0bd8ba75ac180498
+        ports:
+          - 1025:1025
+          - 8025:8025
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: intl, zip, bcmath, pdo_mysql
+          coverage: none
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            e2e/pnpm-lock.yaml
+
+      - name: Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
+
+      - name: Composer
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      # `php artisan serve` passes only a few environment variables on to the server, so the whole configuration
+      # stands in .env. QUEUE_CONNECTION=sync there: the reset mail goes out in the request, no queue worker needed.
+      - name: Environment
+        run: cp e2e/ci.env .env && php artisan key:generate
+
+      - name: Migrate
+        run: php artisan migrate --force
+
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: Vitest with coverage
+        run: pnpm test:coverage
+
+      # the Istanbul build the server serves
+      - name: Build with coverage
+        run: pnpm build:coverage
+
+      - name: Server
+        run: |
+          PHP_CLI_SERVER_WORKERS=4 php artisan serve --host=127.0.0.1 --port=8000 > serve.log 2>&1 &
+          curl -fsS --retry 30 --retry-delay 1 --retry-all-errors http://127.0.0.1:8000/up
+
+      - name: Playwright
+        run: |
+          pnpm --dir e2e install --frozen-lockfile
+          pnpm --dir e2e typecheck
+          pnpm --dir e2e exec playwright install --with-deps chromium
+
+      - name: Tests
+        run: pnpm --dir e2e test
+        env:
+          CI: 'true'
+          WERKBUCH_URL: http://127.0.0.1:8000
+          MAILPIT_URL: http://127.0.0.1:8025
+          E2E_ARTISAN: php artisan
+          E2E_EXEC: ''
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frontend-coverage
+          path: coverage/merged
+          if-no-files-found: warn
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-results
+          path: |
+            serve.log
+            storage/logs
+            e2e/test-results
+          if-no-files-found: ignore
+
+  # the VitePress site in en and de; the config uses `lastUpdated`, so the whole history is checked out. Not a
+  # required check.
+  docs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - uses: pnpm/action-setup@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version-file: .node-version
           cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-      - name: Install
+
+      - name: pnpm install
         run: pnpm install --frozen-lockfile
+
+      # built like GitHub Pages serves it (below /werkbuch/)
+      - name: Build
+        run: pnpm --dir docs build
+        env:
+          DOCS_BASE: /werkbuch/
+
+      - name: llms.txt
+        run: test -f docs/.vitepress/dist/llms.txt
+
+  # the clickdummy: domain tests, typecheck, review build and the Playwright flows. Not a required check.
+  clickdummy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm --filter werkbuch-clickdummy typecheck
+
+      - name: Unit tests
+        run: pnpm --filter werkbuch-clickdummy test
+
+      - name: Build
+        run: pnpm --filter werkbuch-clickdummy build
+
       - name: Install Chromium
         run: pnpm --filter werkbuch-clickdummy exec playwright install --with-deps chromium
-      - name: Flows and review build (clickdummy)
+
+      - name: Flows and review build
         run: pnpm --filter werkbuch-clickdummy e2e
+
       - name: Keep the report
         if: failure()
         uses: actions/upload-artifact@v4
