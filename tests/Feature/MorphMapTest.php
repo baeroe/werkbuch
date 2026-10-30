@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Event;
 use App\Models\Project;
 use App\Models\User;
 use Illuminate\Database\ClassMorphViolationException;
@@ -16,3 +17,5 @@ it('refuses a model without an entry', function () {
 })->throws(ClassMorphViolationException::class);
 
 it('maps the project to its short name', fn () => expect((new Project)->getMorphClass())->toBe('project'));
+
+it('maps the event to its short name', fn () => expect((new Event)->getMorphClass())->toBe('event'));

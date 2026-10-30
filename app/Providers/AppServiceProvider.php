@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Models\Event;
 use App\Models\Organization;
 use App\Models\PersonalAccessToken;
 use App\Models\Project;
@@ -33,6 +34,7 @@ class AppServiceProvider extends ServiceProvider
             'token' => PersonalAccessToken::class,
             'organization' => Organization::class,
             'project' => Project::class,
+            'event' => Event::class,
         ]);
 
         Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);

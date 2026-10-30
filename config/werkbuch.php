@@ -21,7 +21,8 @@ return [
     // webhooks to private and loopback addresses are refused unless this is on
     'webhooks_allow_private' => (bool) env('WEBHOOKS_ALLOW_PRIVATE', false),
 
-    // classes that receive every domain event (extension point)
+    // classes implementing App\Events\EventConsumer: each receives every domain event once, after the commit, in its own
+    // queue (App\Events\Outbox); later phases add notifications, webhooks, search, live updates and automations
     'event_consumers' => [],
 
     // requests per minute

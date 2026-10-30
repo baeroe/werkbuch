@@ -1,5 +1,8 @@
 <?php
 
+use App\Events\EventConsumer;
+use App\Models\User;
+use App\Support\Actor;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Collection;
@@ -46,15 +49,21 @@ function appFiles(string $dir): array
 }
 
 /**
- * Locations (file:line) of raw database writes: DB::table(...) chains that write, and DB::insert() and friends.
+ * Locations (file:line) of raw database writes: DB::table(...) chains that write, and DB::insert() and friends, also
+ * through DB::connection(...). A chain may span lines and carry closures with statements of their own; arguments are
+ * matched as balanced parentheses, so a write inside a closure argument does not count, a write at the end of the chain does.
  *
  * @return list<string>
  */
 function rawWrites(string $code, string $file = 'code'): array
 {
+    $args = '(?(DEFINE)(?<args>\((?:[^()]++|(?&args))*\)))';
+    $db = 'DB::(?:connection\s*(?&args)\s*->\s*)?';
+    $writes = 'insert|insertOrIgnore|insertGetId|update|updateOrInsert|upsert|delete|truncate|increment|decrement';
+
     return codeMatches($code, $file, [
-        '/DB::table\([^;]*?->(?:insert|insertOrIgnore|insertGetId|update|updateOrInsert|upsert|delete|truncate|increment|decrement)\(/s',
-        '/DB::(?:insert|update|delete|statement|unprepared)\(/',
+        '/'.$db.'table\s*(?&args)(?:\s*->\s*\w+\s*(?&args))*?\s*->\s*(?:'.$writes.')\s*\('.$args.'/',
+        '/'.$db.'(?:insert|update|delete|statement|unprepared)\s*\('.$args.'/',
     ]);
 }
 
@@ -183,4 +192,22 @@ function usedTranslationKeys(): Collection
     }
 
     return collect($keys)->unique()->sort()->values();
+}
+
+/**
+ * A plain actor for tests: the account acting in the interface (or through another channel).
+ */
+function actor(User $user, string $via = Actor::VIA_UI): Actor
+{
+    return new Actor($user, $via);
+}
+
+/**
+ * Sets the classes that receive every event (`werkbuch.event_consumers`).
+ *
+ * @param  class-string<EventConsumer>  ...$classes
+ */
+function consumers(string ...$classes): void
+{
+    config(['werkbuch.event_consumers' => $classes]);
 }

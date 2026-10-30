@@ -1,6 +1,8 @@
 <?php
 
+use App\Events\EventRecorder;
 use App\Exceptions\Problem;
+use App\Support\Actor;
 use Illuminate\Database\Eloquent\Model;
 use Lorisleiva\Actions\Concerns\AsAction;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
@@ -21,10 +23,29 @@ arch('the problem is final')->expect(Problem::class)->toBeFinal()->toExtend(Runt
 arch('api layer classes are final')->expect('App\\Http\\Api')->classes()->toBeFinal();
 arch('models never call actions')->expect('App\Models')->not->toUse('App\Actions');
 arch('auth adapters are final and do not compute')->expect('App\Auth')->classes()->toBeFinal()->not->toUse('App\Domain');
+arch('only actions record events')->expect(EventRecorder::class)->toOnlyBeUsedIn(['App\Actions', 'Tests']);
 
 it('detects raw database writes', function () {
     $code = "<?php\nDB::table('users')->update([]);\nDB::table('users')->where('a', 1)->delete();\nDB::statement('x');\nDB::table('users')->get();";
     expect(rawWrites($code))->toBe(['code:2', 'code:3', 'code:4']);
+});
+
+it('detects raw writes through a connection, over several lines and past closures', function () {
+    $code = <<<'PHP'
+        <?php
+        DB::connection('mariadb')->table('users')->update([]);
+        DB::table('users')
+            ->where(fn ($query) => $query->where('a', 1))
+            ->delete();
+        DB::table('users')->where(function ($query) {
+            $query->where('a', 1);
+        })->increment('logins');
+        DB::connection()->statement('x');
+        DB::connection('mariadb')->table('users')->where(fn ($query) => $query->whereIn('id', [1]))->get();
+        DB::table('users')->get(); $user->update([]);
+        PHP;
+
+    expect(rawWrites($code))->toBe(['code:2', 'code:3', 'code:6', 'code:9']);
 });
 
 it('writes the database raw only inside app/Actions', function () {
@@ -41,4 +62,29 @@ it('never writes models in controllers, middleware, commands, jobs or auth adapt
     $hits = collect(['app/Http', 'app/Console', 'app/Jobs', 'app/Auth'])->flatMap(fn ($d) => appFiles($d))
         ->flatMap(fn (string $f) => modelWrites((string) file_get_contents(repo_path($f)), $f))->all();
     expect($hits)->toBe([]);
+});
+
+it('gives every action an Actor first', function () {
+    $exempt = fn (string $file) => str_starts_with($file, 'app/Actions/Auth/') || str_starts_with($file, 'app/Actions/Setup/')
+        || $file === 'app/Actions/Accounts/NextHandle.php';
+
+    $offenders = collect(appFiles('app/Actions'))->reject($exempt)
+        ->map(fn (string $file) => 'App\\'.str_replace('/', '\\', substr($file, strlen('app/'), -strlen('.php'))))
+        ->reject(function (string $class) {
+            $first = (new ReflectionMethod($class, 'handle'))->getParameters()[0] ?? null;
+            $type = $first?->getType();
+
+            return $type instanceof ReflectionNamedType && $type->getName() === Actor::class;
+        })->values()->all();
+
+    expect($offenders)->toBe([]);
+});
+
+it('runs every action that records events in a transaction', function () {
+    $offenders = collect(appFiles('app/Actions'))
+        ->filter(fn (string $file) => str_contains((string) file_get_contents(repo_path($file)), 'EventRecorder'))
+        ->reject(fn (string $file) => str_contains((string) file_get_contents(repo_path($file)), 'DB::transaction('))
+        ->values()->all();
+
+    expect($offenders)->toBe([]);
 });
