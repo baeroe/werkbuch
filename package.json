@@ -9,9 +9,11 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:coverage": "vite build --mode coverage",
     "typecheck": "tsc -p .",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "coverage:merge": "node scripts/coverage-merge.mjs",
     "clickdummy": "pnpm --dir prototypes/clickdummy dev --host 0.0.0.0 --port 5176 --strictPort"
   },
   "dependencies": {
@@ -40,6 +42,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
     "@vitest/coverage-istanbul": "5.0.5",
+    "@vitest/istanbul-lib-source-maps": "1.0.2",
     "istanbul-lib-coverage": "^3.2.2",
     "istanbul-lib-report": "^3.0.1",
     "istanbul-reports": "^3.2.0",

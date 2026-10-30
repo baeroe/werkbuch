@@ -3,11 +3,14 @@ import react from '@vitejs/plugin-react';
 import laravel from 'laravel-vite-plugin';
 import path from 'node:path';
 import { defineConfig } from 'vite';
+import istanbul from 'vite-plugin-istanbul';
 
 // Set inside the DDEV web container, e.g. https://werkbuch.ddev.site
 const ddevUrl = process.env.DDEV_PRIMARY_URL_WITHOUT_PORT;
 
-export default defineConfig({
+// `vite build --mode coverage` (pnpm build:coverage): the same build, instrumented for the Playwright suite
+// (e2e/fixtures.ts collects `window.__coverage__`, scripts/coverage-merge.mjs merges it with Vitest's)
+export default defineConfig(({ mode }) => ({
   plugins: [
     laravel({
       input: ['resources/css/app.css', 'resources/js/app.tsx'],
@@ -15,7 +18,19 @@ export default defineConfig({
     }),
     react(),
     tailwindcss(),
+    ...(mode === 'coverage'
+      ? [
+          istanbul({
+            include: 'resources/js/**',
+            exclude: ['resources/js/**/*.test.*', 'resources/js/test/**'],
+            extension: ['.ts', '.tsx'],
+            requireEnv: false,
+            forceBuildInstrument: true,
+          }),
+        ]
+      : []),
   ],
+  ...(mode === 'coverage' ? { build: { sourcemap: true } } : {}),
   resolve: {
     alias: { '@': path.resolve(import.meta.dirname, 'resources/js') },
   },
@@ -42,4 +57,4 @@ export default defineConfig({
       ],
     },
   },
-});
+}));

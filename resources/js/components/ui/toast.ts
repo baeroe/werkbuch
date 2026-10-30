@@ -64,7 +64,7 @@ function startTimer(id: number) {
   // defensive: every caller has just set the timer of this id and its handle is empty (cleared on pause)
   /* istanbul ignore next -- unreachable guards: callers set the timer first and a paused or new timer has no handle */
   if (!timer) return;
-  /* istanbul ignore next -- see above */
+  /* istanbul ignore next -- the same unreachable guard as above */
   if (timer.handle) clearTimeout(timer.handle);
   timer.started = Date.now();
   timer.handle = setTimeout(() => dismissToast(id), timer.remaining);

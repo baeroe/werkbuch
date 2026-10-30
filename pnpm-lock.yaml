@@ -239,6 +239,9 @@ importers:
       '@vitest/coverage-istanbul':
         specifier: 5.0.5
         version: 5.0.5(vitest@5.0.5)
+      '@vitest/istanbul-lib-source-maps':
+        specifier: 1.0.2
+        version: 1.0.2
       istanbul-lib-coverage:
         specifier: ^3.2.2
         version: 3.2.2
