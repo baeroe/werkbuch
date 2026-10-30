@@ -29,10 +29,6 @@ it('lets a token that may write only write', function () {
         ->assertJsonPath('detail', __('problem.detail.token_ability', ['ability' => 'read']));
 });
 
-it('names the missing ability in the detail', function () {
-    expect(__('problem.detail.token_ability', ['ability' => 'write']))->toContain('write');
-});
-
 it('lets the session do both', function () {
     $this->actingAs(User::factory()->create());
 

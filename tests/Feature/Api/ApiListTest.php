@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Support\ListResult;
 use App\Support\PageArgs;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\Cursor;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Validation\ValidationException;
 
@@ -67,4 +68,13 @@ it('shows when an account was disabled', function () {
     User::factory()->disabled()->create();
 
     $this->getJson('/api/v1/_t/people')->assertJsonPath('data.0.disabled_at', now()->toJSON());
+});
+
+it('refuses a cursor of another list at cursor', function () {
+    User::factory()->count(2)->create();
+    // well-formed, but without the column this list orders by: a cursor made up or taken from another list
+    $foreign = (new Cursor(['name' => 'Mara'], true))->encode();
+
+    $this->getJson('/api/v1/_t/people?per_page=1&cursor='.$foreign)->assertUnprocessable()
+        ->assertJsonPath('reason', 'validation_failed')->assertJsonPath('errors.cursor.0', __('field.cursor.invalid'));
 });

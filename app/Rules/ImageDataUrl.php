@@ -6,15 +6,22 @@ use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
 
 /**
- * A picture sent as a data URL (P15): `data:image/(png|jpeg|webp|gif);base64,…`, at most 2 MB once decoded, and the
- * bytes really are a picture of the type the head names. SVG never (it can carry scripts). A value equal to the
- * current URL of the picture passes: forms send the picture back unchanged.
+ * A picture sent as a data URL (P15): `data:image/(png|jpeg|webp|gif);base64,…`, at most 2 MB once decoded and at most
+ * 4096 pixels per side, and the bytes really are a picture of the type the head names. SVG never (it can carry
+ * scripts). A value equal to the current URL of the picture passes: forms send the picture back unchanged.
  */
 final class ImageDataUrl implements ValidationRule
 {
     public const MAX_BYTES = 2 * 1024 * 1024;
 
-    public const PATTERN = '#^data:(image/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/]*={0,2})$#';
+    /** The longest side in pixels: larger pictures only cost memory where they are shown as small squares. */
+    public const MAX_EDGE = 4096;
+
+    /** @var list<string> */
+    public const MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+
+    // \z, not $: a trailing line break must not pass
+    public const PATTERN = '#^data:(image/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/]*={0,2})\z#';
 
     public function __construct(private readonly ?string $current = null) {}
 
@@ -44,6 +51,12 @@ final class ImageDataUrl implements ValidationRule
 
         if ($size === false || $size['mime'] !== $match[1] || base64_encode($bytes) !== $match[2]) {
             $fail(__('field.image.invalid'));
+
+            return;
+        }
+
+        if ($size[0] > self::MAX_EDGE || $size[1] > self::MAX_EDGE) {
+            $fail(__('field.image.too_wide', ['max' => self::MAX_EDGE]));
         }
     }
 }

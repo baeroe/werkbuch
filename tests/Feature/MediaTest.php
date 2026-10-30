@@ -22,7 +22,8 @@ it('serves the logo to every signed-in account with its type and nosniff', funct
     $logo = organizationLogo('webp');
 
     $response = $this->actingAs(User::factory()->create())->get("/media/{$logo->uuid}")->assertOk()
-        ->assertHeader('Content-Type', 'image/webp')->assertHeader('X-Content-Type-Options', 'nosniff');
+        ->assertHeader('Content-Type', 'image/webp')->assertHeader('X-Content-Type-Options', 'nosniff')
+        ->assertHeader('Content-Security-Policy', "default-src 'none'; sandbox");
 
     expect($response->headers->get('Cache-Control'))->toContain('private')->toContain('max-age=86400')
         ->and($response->baseResponse->getFile()->getPathname())->toBe($logo->getPath());
@@ -54,6 +55,13 @@ it('keeps pictures of anything else hidden until their own rule exists', functio
     $logo->forceFill(['model_type' => $project->getMorphClass(), 'model_id' => $project->id])->save();
 
     $this->actingAs(User::factory()->admin()->create())->get("/media/{$logo->uuid}")->assertNotFound();
+});
+
+it('serves only the logo of the organization, no other picture it holds', function () {
+    organizationLogo();
+    $other = Organization::current()->addMediaFromBase64(imageDataUrl())->usingFileName('other.png')->toMediaCollection('letterhead');
+
+    $this->actingAs(User::factory()->admin()->create())->get("/media/{$other->uuid}")->assertNotFound();
 });
 
 it('keeps the logo on the private disk', function () {

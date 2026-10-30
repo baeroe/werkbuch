@@ -21,6 +21,8 @@ final class MediaController extends Controller
         return response()->file($media->getPath(), [
             'Content-Type' => $media->mime_type,
             'X-Content-Type-Options' => 'nosniff',
+            // opened on its own, a picture runs nothing and loads nothing
+            'Content-Security-Policy' => "default-src 'none'; sandbox",
             'Cache-Control' => 'private, max-age=86400',
         ])->setPrivate();
     }

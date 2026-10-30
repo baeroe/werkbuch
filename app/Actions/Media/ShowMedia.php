@@ -11,19 +11,20 @@ use Lorisleiva\Actions\Concerns\AsAction;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 /**
- * Who may see a picture (P15): the logo and the avatars every signed-in account. A picture of anything else stays
- * hidden (404) until its owner brings its rule; project pictures follow the visibility of the project (Task 11).
+ * Who may see a picture (P15): the logo and the avatars every signed-in account. Any other picture, also another
+ * collection of the same owners, stays hidden (404) until it brings its rule; project pictures follow the visibility
+ * of the project (Task 11).
  */
 final class ShowMedia
 {
     use AsAction;
 
-    /** The owners whose pictures every account sees. */
-    private const PUBLIC_OWNERS = [Organization::class, User::class];
+    /** The collections every account sees, per owner. */
+    private const PUBLIC = [Organization::class => 'logo', User::class => 'avatar'];
 
     public function handle(Actor $actor, Media $media): Media
     {
-        if (! in_array(Relation::getMorphedModel($media->model_type), self::PUBLIC_OWNERS, true)) {
+        if ((self::PUBLIC[Relation::getMorphedModel($media->model_type) ?? ''] ?? null) !== $media->collection_name) {
             throw Problem::notFound();
         }
 

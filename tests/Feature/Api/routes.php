@@ -1,9 +1,10 @@
 <?php
 
 /*
- * The route matrix (RouteMatrixTest): every route below /api/v1 with its method and URI. Placeholders ({user}, {token},
- * …) are filled in by the test. Rows with `'session' => true` only work from the session of the interface (P6): every
- * token gets 403 session_required.
+ * The route matrix (RouteMatrixTest): every route below /api/v1 with its method and URI, the URI with the placeholders
+ * of the route ({user}, {token}, …). A row with placeholders brings their values from the MatrixWorld:
+ * `'params' => fn (MatrixWorld $w) => ['user' => $w->target->id]`; a placeholder without a value fails the test. Rows
+ * with `'session' => true` only work from the session of the interface (P6): every token gets 403 session_required.
  */
 
 return [

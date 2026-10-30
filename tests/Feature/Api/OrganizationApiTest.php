@@ -5,8 +5,11 @@ use App\Events\EventType;
 use App\Models\Event;
 use App\Models\Organization;
 use App\Models\User;
+use App\Support\ImageInput;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
+use Spatie\MediaLibrary\MediaCollections\Exceptions\FileUnacceptableForCollection;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 beforeEach(function () {
@@ -137,3 +140,63 @@ it('replaces the current organization of the request after a change', function (
         ->and(Organization::current()->name)->toBe('Feldwerk')
         ->and(organizationEvents()->sole()->changes)->toBe(['name' => ['old' => config('app.name'), 'new' => 'Feldwerk'], 'locale' => ['old' => 'en', 'new' => 'de']]);
 });
+
+it('says what is wrong with values of the wrong type', function () {
+    $this->actingAs(User::factory()->admin()->create())
+        ->patchJson('/api/v1/organization', ['name' => 123, 'timezone' => 5, 'logo_url' => ['data:image/png;base64,']])
+        ->assertUnprocessable()
+        ->assertJsonPath('errors.name', [__('field.name.invalid')])
+        ->assertJsonPath('errors.timezone', [__('field.timezone.unknown')])
+        ->assertJsonPath('errors.logo_url', [__('field.image.invalid')]);
+});
+
+it('refuses a data URL with a trailing line break', function () {
+    // straight into the action: over HTTP the middleware would trim it away
+    $admin = User::factory()->admin()->create();
+
+    expect(fn () => UpdateOrganization::run(actor($admin), ['logo_url' => imageDataUrl()."\n"]))->toThrow(ValidationException::class);
+    expect(Media::query()->count())->toBe(0);
+});
+
+it('refuses pictures larger than 4096 pixels on a side', function (int $width, int $height) {
+    $this->actingAs(User::factory()->admin()->create())->patchJson('/api/v1/organization', ['logo_url' => imageDataUrl('png', $width, $height)])
+        ->assertUnprocessable()->assertJsonPath('errors.logo_url.0', __('field.image.too_wide', ['max' => 4096]));
+})->with([[4097, 1], [1, 4097]]);
+
+it('takes a picture of exactly 4096 pixels on a side', function () {
+    $this->actingAs(User::factory()->admin()->create())->patchJson('/api/v1/organization', ['logo_url' => imageDataUrl('png', 4096, 1)])->assertOk();
+});
+
+it('lets the logo collection take only pictures', function () {
+    expect(fn () => Organization::current()->addMediaFromString('<svg/>')->usingFileName('logo.svg')->toMediaCollection('logo'))
+        ->toThrow(FileUnacceptableForCollection::class);
+});
+
+it('removes the file of the old logo once the change is committed', function () {
+    $admin = User::factory()->admin()->create();
+    UpdateOrganization::run(actor($admin), ['logo_url' => imageDataUrl()]);
+    $old = Media::query()->sole()->getPathRelativeToRoot();
+
+    UpdateOrganization::run(actor($admin), ['logo_url' => imageDataUrl('gif')]);
+
+    expect(Storage::disk('local')->exists($old))->toBeFalse()
+        ->and(Storage::disk('local')->exists(Media::query()->sole()->getPathRelativeToRoot()))->toBeTrue();
+});
+
+it('keeps the old logo whole when the change fails after the picture was applied', function (?string $next) {
+    $admin = User::factory()->admin()->create();
+    UpdateOrganization::run(actor($admin), ['logo_url' => imageDataUrl()]);
+    $old = Media::query()->sole();
+    $url = ImageInput::url(Organization::query()->sole(), 'logo');
+
+    // the event is written after the picture: failing there rolls back the transaction of the change
+    Event::creating(fn () => throw new RuntimeException('event store down'));
+
+    expect(fn () => UpdateOrganization::run(actor($admin), ['logo_url' => $next === null ? null : imageDataUrl($next)]))
+        ->toThrow(RuntimeException::class, 'event store down');
+
+    expect(Media::query()->pluck('uuid')->all())->toBe([$old->uuid])
+        ->and(Storage::disk('local')->exists($old->getPathRelativeToRoot()))->toBeTrue()
+        ->and(ImageInput::url(Organization::query()->sole(), 'logo'))->toBe($url);
+    $this->actingAs($admin)->get("/media/{$old->uuid}")->assertOk();
+})->with(['replaced' => 'webp', 'removed' => null]);

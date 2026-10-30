@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\Locale;
+use App\Rules\ImageDataUrl;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
@@ -38,7 +39,7 @@ final class Organization extends Model implements HasMedia
 
     public function registerMediaCollections(): void
     {
-        $this->addMediaCollection('logo')->singleFile();
+        $this->addMediaCollection('logo')->singleFile()->acceptsMimeTypes(ImageDataUrl::MIME_TYPES);
     }
 
     /**

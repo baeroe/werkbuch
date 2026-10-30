@@ -268,11 +268,11 @@ function forgetApiAuth(): void
 }
 
 /**
- * A tiny real image as a data URL (PNG unless another type is asked for).
+ * A small real image as a data URL (PNG unless another type is asked for).
  */
-function imageDataUrl(string $type = 'png'): string
+function imageDataUrl(string $type = 'png', int $width = 2, int $height = 2): string
 {
-    $image = imagecreatetruecolor(2, 2);
+    $image = imagecreatetruecolor($width, $height);
     ob_start();
     match ($type) {
         'jpeg' => imagejpeg($image),

@@ -3,7 +3,11 @@
 namespace App\Support;
 
 use App\Rules\ImageDataUrl;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 use Spatie\MediaLibrary\HasMedia;
+use Spatie\MediaLibrary\MediaCollections\Filesystem;
+use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 /**
  * Pictures (logo, avatar, project picture) travel as data URLs in the JSON of a PATCH (P15) and live in the media
@@ -18,7 +22,17 @@ final class ImageInput
      */
     public static function rules(?string $current = null): array
     {
-        return ['nullable', 'string', new ImageDataUrl($current)];
+        return ['bail', 'nullable', 'string', new ImageDataUrl($current)];
+    }
+
+    /**
+     * The field messages of the rules that are not ImageDataUrl's own (P9).
+     *
+     * @return array<string, string>
+     */
+    public static function messages(string $field): array
+    {
+        return ["{$field}.string" => __('field.image.invalid')];
     }
 
     /**
@@ -33,18 +47,23 @@ final class ImageInput
 
     /**
      * Applies a validated value: null removes the picture, a data URL replaces it, the current URL changes nothing.
+     * The rows of the old picture go at once (a rollback brings them back), its files only after the commit: a change
+     * that fails later in its transaction keeps the old picture whole.
      *
      * @return array{old: string|null, new: string|null}|null what changed, for the `changes` of the event; null if nothing
      */
-    public static function apply(HasMedia $model, string $collection, ?string $value, ?string $current): ?array
+    public static function apply(Model&HasMedia $model, string $collection, ?string $value, ?string $current): ?array
     {
         if ($value === $current) {
             return null;
         }
 
-        if ($value === null) {
-            $model->clearMediaCollection($collection);
+        $old = $model->getMedia($collection);
+        $old->each(fn (Media $media) => $media->deleteQuietly());
+        $model->unsetRelation('media');
+        DB::afterCommit(fn () => $old->each(fn (Media $media) => app(Filesystem::class)->removeAllFiles($media)));
 
+        if ($value === null) {
             return ['old' => $current, 'new' => null];
         }
 
