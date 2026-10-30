@@ -17,7 +17,7 @@ use Laravel\Fortify\Fortify;
 
 /**
  * Sign-in, sign-out and password reset through Fortify: the Inertia pages, the limits and the hand-over to the actions.
- * The routes are in routes/auth.php; POST /forgot-password is werkbuch's own (App\Http\Controllers\Auth).
+ * The routes are in routes/auth.php; POST /forgot-password and POST /reset-password are werkbuch's own (App\Http\Controllers\Auth).
  */
 final class FortifyServiceProvider extends ServiceProvider
 {
@@ -54,8 +54,9 @@ final class FortifyServiceProvider extends ServiceProvider
 
         Fortify::resetUserPasswordsUsing(FortifyResetUserPassword::class);
 
-        // the limits per IP over all addresses; bootstrap/app.php shows their 429 as an error at the email field
+        // the limits per IP over all addresses (each its own budget); bootstrap/app.php shows their 429 as an error at the email field
         RateLimiter::for('login', fn (Request $request) => Limit::perMinute((int) config('werkbuch.rate_limits.login_per_ip'))->by((string) $request->ip()));
         RateLimiter::for('password-reset', fn (Request $request) => Limit::perMinute((int) config('werkbuch.rate_limits.password_reset_per_ip'))->by((string) $request->ip()));
+        RateLimiter::for('password-update', fn (Request $request) => Limit::perMinute((int) config('werkbuch.rate_limits.password_update_per_ip'))->by((string) $request->ip()));
     }
 }

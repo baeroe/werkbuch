@@ -31,6 +31,8 @@ return [
         'login_per_ip' => 20,
         // requests for a reset link (POST /forgot-password), over all addresses
         'password_reset_per_ip' => 6,
+        // new passwords from a reset link (POST /reset-password), over all addresses
+        'password_update_per_ip' => 10,
     ],
 
 ];

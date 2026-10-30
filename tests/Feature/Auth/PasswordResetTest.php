@@ -198,6 +198,37 @@ it('refuses a password that is no text at the field', function () {
     expect(Hash::check('old-password', $user->fresh()->password))->toBeTrue();
 });
 
+it('refuses an address or a token that is no text at the field instead of failing', function (string $field) {
+    $user = User::factory()->create(['email' => 'lene@example.com', 'password' => 'old-password']);
+    // a pending token: the broker would compare an array token against its hash
+    $data = ['token' => Password::createToken($user), 'email' => 'lene@example.com', 'password' => 'new-password', 'password_confirmation' => 'new-password'];
+    $data[$field] = [$data[$field]];
+
+    $this->from('/reset-password/x')->post('/reset-password', $data)
+        ->assertRedirect('/reset-password/x')->assertSessionHasErrors($field);
+    expect(Hash::check('old-password', $user->fresh()->password))->toBeTrue();
+})->with(['email', 'token']);
+
+it('limits the new passwords per IP, apart from the reset links, and names the wait at the email field', function () {
+    Queue::fake();
+    $this->freezeTime();
+    $attempt = fn () => $this->from('/reset-password/x')->post('/reset-password', ['token' => 'wrong', 'email' => 'lene@example.com', 'password' => 'new-password', 'password_confirmation' => 'new-password']);
+
+    foreach (range(1, 10) as $i) {
+        $attempt()->assertSessionHasErrors(['email' => __('passwords.token')]);
+    }
+    $this->travel(15)->seconds();
+
+    $attempt()->assertRedirect('/reset-password/x')
+        ->assertSessionHasErrors(['email' => __('auth.throttle', ['seconds' => 45])])
+        ->assertSessionMissing('_old_input.password');
+    // the budget of the reset links is untouched
+    $this->from('/forgot-password')->post('/forgot-password', ['email' => 'lene@example.com'])->assertSessionHas('status');
+
+    $this->travel(46)->seconds();
+    $attempt()->assertSessionHasErrors(['email' => __('passwords.token')]);
+});
+
 it('shows the reset page with token and email', function () {
     $this->get('/reset-password/abc?email=lene%40example.com')->assertOk()
         ->assertInertia(fn (Assert $p) => $p->component('Auth/ResetPassword')->where('token', 'abc')->where('email', 'lene@example.com'));

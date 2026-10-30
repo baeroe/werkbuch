@@ -77,9 +77,9 @@ return Application::configure(basePath: dirname(__DIR__))
             ? ProblemResponse::from($e, (bool) config('app.debug'))
             : null);
 
-        // the limits per IP of the sign-in and of the reset links show at the email field (like the lock per address),
-        // instead of a 429 page
-        $exceptions->render(fn (ThrottleRequestsException $e, Request $request) => $request->routeIs('login.store', 'password.email')
+        // the limits per IP of the sign-in, of the reset links and of the new passwords show at the email field (like the
+        // lock per address), instead of a 429 page
+        $exceptions->render(fn (ThrottleRequestsException $e, Request $request) => $request->routeIs('login.store', 'password.email', 'password.update')
             ? back()->withErrors(['email' => __('auth.throttle', ['seconds' => (int) ($e->getHeaders()['Retry-After'] ?? 60)])])->onlyInput('email')
             : null);
 

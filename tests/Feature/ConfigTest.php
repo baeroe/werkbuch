@@ -36,7 +36,9 @@ it('has the documented defaults', function () {
         ->and(config('werkbuch.event_consumers'))->toBe([])
         ->and(config('werkbuch.rate_limits.api'))->toBe(600)
         ->and(config('werkbuch.rate_limits.mcp'))->toBe(300)
-        ->and(config('werkbuch.rate_limits.login_per_ip'))->toBe(20);
+        ->and(config('werkbuch.rate_limits.login_per_ip'))->toBe(20)
+        ->and(config('werkbuch.rate_limits.password_reset_per_ip'))->toBe(6)
+        ->and(config('werkbuch.rate_limits.password_update_per_ip'))->toBe(10);
 });
 
 it('reads the environment', function () {
