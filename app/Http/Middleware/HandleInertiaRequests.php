@@ -2,6 +2,12 @@
 
 namespace App\Http\Middleware;
 
+use App\Access\Grants;
+use App\Access\Permission;
+use App\Access\Visibility;
+use App\Http\Resources\OrganizationResource;
+use App\Http\Resources\UserResource;
+use App\Models\Organization;
 use App\Models\User;
 use App\Support\MailSetup;
 use Illuminate\Http\Request;
@@ -21,25 +27,19 @@ class HandleInertiaRequests extends Middleware
     {
         $user = $request->user();
         $locale = app()->getLocale();
+        $account = $user instanceof User ? $user : null;
 
         return [
             ...parent::share($request),
             'auth' => [
-                'user' => $user instanceof User ? $this->account($user) : null,
-                // roles and permissions arrive with Phase 2
-                'permissions' => [],
+                // the account as the API shows it, and the rights it holds in the organization (lib/permissions.ts)
+                'user' => $account === null ? null : (new UserResource($account))->resolve($request),
+                'permissions' => $account === null ? [] : array_map(fn (Permission $p) => $p->value, Grants::of(Visibility::orgRole($account))),
             ],
             // the language of this request and its texts; they travel once, a change of language reloads the page
             'locale' => $locale,
             'translations' => Inertia::once(fn () => File::json(lang_path("{$locale}.json"))),
-            // from the config until the organization is a record (Phase 2)
-            'organization' => [
-                'name' => config('app.name'),
-                'locale' => config('app.locale'),
-                'timezone' => config('app.timezone'),
-                'week_start' => 1,
-                'logo_url' => null,
-            ],
+            'organization' => (new OrganizationResource(Organization::current()))->resolve($request),
             'features' => [
                 'mail' => MailSetup::configured(),
                 // the live connection (Reverb) is wired up in Phase 8
@@ -49,24 +49,6 @@ class HandleInertiaRequests extends Middleware
                 'status' => $request->session()->get('status'),
                 'error' => $request->session()->get('error'),
             ],
-        ];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function account(User $user): array
-    {
-        return [
-            'id' => $user->id,
-            'type' => $user->type->value,
-            'name' => $user->name,
-            'handle' => $user->handle,
-            'email' => $user->email,
-            'locale' => $user->locale?->value,
-            'timezone' => $user->timezone,
-            // avatars arrive with Phase 2
-            'avatar_url' => null,
         ];
     }
 }

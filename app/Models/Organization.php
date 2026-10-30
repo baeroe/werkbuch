@@ -7,9 +7,11 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
+use Spatie\MediaLibrary\HasMedia;
+use Spatie\MediaLibrary\InteractsWithMedia;
 
 /**
- * The one organization of the installation; its row is created by the migration.
+ * The one organization of the installation; its row is created by the migration. Its logo is the media collection `logo`.
  *
  * @property string $id
  * @property string $name
@@ -20,9 +22,9 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $updated_at
  */
 #[Fillable(['name', 'locale', 'timezone', 'week_start'])]
-final class Organization extends Model
+final class Organization extends Model implements HasMedia
 {
-    use HasUlids;
+    use HasUlids, InteractsWithMedia;
 
     protected $table = 'organization';
 
@@ -32,6 +34,11 @@ final class Organization extends Model
     public static function current(): self
     {
         return app(self::class);
+    }
+
+    public function registerMediaCollections(): void
+    {
+        $this->addMediaCollection('logo')->singleFile();
     }
 
     /**

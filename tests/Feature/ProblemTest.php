@@ -47,6 +47,17 @@ it('renders validation errors as 422 validation_failed with errors by path', fun
         ->assertJsonPath('errors.title.0', __('validation.required', ['attribute' => 'title']));
 });
 
+it('carries an own sentence on a conflict and an own reason on a refusal', function () {
+    apiRoute('get', '_t/default-bot', fn () => throw Problem::conflict('default_bot', detail: 'The default bot always stays an admin.'));
+    apiRoute('get', '_t/session', fn () => throw Problem::forbidden(__('problem.reason.session_required'), 'session_required'));
+
+    $this->getJson('api/v1/_t/default-bot')->assertStatus(409)->assertJsonPath('reason', 'default_bot')
+        ->assertJsonPath('detail', 'The default bot always stays an admin.');
+    $this->getJson('api/v1/_t/session')->assertForbidden()->assertHeader('Content-Type', 'application/problem+json')
+        ->assertJsonPath('type', 'urn:werkbuch:problem:session_required')->assertJsonPath('reason', 'session_required')
+        ->assertJsonPath('title', __('problem.title.forbidden'))->assertJsonPath('detail', __('problem.reason.session_required'));
+});
+
 it('maps framework exceptions to reasons with the translated detail, never the framework message', function (Closure $throw, int $status, string $reason) {
     config(['app.debug' => false]);
     apiRoute('get', '_t/x', $throw);
@@ -159,7 +170,8 @@ it('does not report refusals below 500', function () {
 
 it('has the factories of the contract', function () {
     expect(Problem::forbidden()->status)->toBe(403)->and(Problem::forbidden()->getStatusCode())->toBe(403)
-        ->and(Problem::forbidden()->getHeaders())->toBe([])
+        ->and(Problem::forbidden()->getHeaders())->toBe([])->and(Problem::forbidden()->reason)->toBe('forbidden')
+        ->and(Problem::conflict('conflict')->detail)->toBeNull()
         ->and(Problem::notFound()->status)->toBe(404)->and(Problem::notFound()->detail)->toBeNull()
         ->and(Problem::locked('archived')->status)->toBe(409)->and(Problem::locked('archived')->reason)->toBe('archived')
         ->and(Problem::invalid(['title' => ['required']])->reason)->toBe('validation_failed')

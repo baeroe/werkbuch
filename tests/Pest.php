@@ -248,3 +248,38 @@ function memberOf(Project $project, ProjectRole $role, array $attributes = []): 
 
     return $user;
 }
+
+/**
+ * The plain text of a new API token of the account with these abilities (`read`, `write`, `mcp`).
+ *
+ * @param  list<string>  $abilities
+ */
+function apiToken(User $user, array $abilities): string
+{
+    return $user->createToken('test', $abilities)->plainTextToken;
+}
+
+/**
+ * Sanctum's guard keeps the account of the first request; call this before a request with another (or a revoked) token.
+ */
+function forgetApiAuth(): void
+{
+    app('auth')->forgetGuards();
+}
+
+/**
+ * A tiny real image as a data URL (PNG unless another type is asked for).
+ */
+function imageDataUrl(string $type = 'png'): string
+{
+    $image = imagecreatetruecolor(2, 2);
+    ob_start();
+    match ($type) {
+        'jpeg' => imagejpeg($image),
+        'gif' => imagegif($image),
+        'webp' => imagewebp($image),
+        default => imagepng($image),
+    };
+
+    return "data:image/{$type};base64,".base64_encode((string) ob_get_clean());
+}

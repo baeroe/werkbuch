@@ -1,8 +1,13 @@
 <?php
 
+use App\Http\Controllers\MediaController;
+use App\Http\Middleware\EnsureAccountIsActive;
+use App\Http\Middleware\EnsureTokenAbility;
 use Illuminate\Http\Request;
+use Illuminate\Session\Middleware\AuthenticateSession;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
+use Laravel\Sanctum\Http\Middleware\AuthenticateSession as SanctumAuthenticateSession;
 
 require __DIR__.'/auth.php';
 
@@ -10,6 +15,12 @@ Route::middleware('auth')->group(function () {
     Route::redirect('/', '/my-items');
     Route::inertia('/my-items', 'Items/MyItems')->name('my-items');
 });
+
+// pictures (logo, avatars, project pictures) from the private disk, for the session and for tokens that may read (P15);
+// Sanctum's own AuthenticateSession instead of the framework's, which only knows session guards and fails on Sanctum's
+Route::middleware(['auth:sanctum', SanctumAuthenticateSession::class, EnsureAccountIsActive::class, EnsureTokenAbility::class])
+    ->withoutMiddleware(AuthenticateSession::class)
+    ->get('/media/{media:uuid}', [MediaController::class, 'show'])->name('media.show');
 
 // Every unknown path of the browser app is the Inertia 404 page for signed-in people (the status stays 404) and the
 // sign-in for guests: no auth middleware here, because the fallback also catches unknown /api paths, and those stay an
