@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Auth\InvitationController;
 use App\Http\Controllers\Auth\NewPasswordController as SetNewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController as SendPasswordResetLinkController;
 use Illuminate\Support\Facades\Route;
@@ -18,6 +19,13 @@ Route::middleware('guest:'.config('fortify.guard'))->group(function () {
     Route::post('/forgot-password', [SendPasswordResetLinkController::class, 'store'])->middleware('throttle:password-reset')->name('password.email');
     Route::get('/reset-password/{token}', [NewPasswordController::class, 'create'])->name('password.reset');
     Route::post('/reset-password', [SetNewPasswordController::class, 'store'])->middleware('throttle:password-update')->name('password.update');
+});
+
+// The page of an invitation link and its form: only with the signature the link was issued with (relative, so APP_URL
+// may differ from the host the browser reaches), for guests; the invitation row decides whether it still works.
+Route::middleware(['guest:'.config('fortify.guard'), 'signed:relative'])->group(function () {
+    Route::get('/invitations/{invitation}', [InvitationController::class, 'show'])->name('invitations.show');
+    Route::post('/invitations/{invitation}', [InvitationController::class, 'accept'])->middleware('throttle:invitation')->name('invitations.accept');
 });
 
 Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->middleware('auth:'.config('fortify.guard'))->name('logout');

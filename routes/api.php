@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\BotsController;
+use App\Http\Controllers\Api\InvitationsController;
 use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\UsersController;
 use App\Http\Middleware\EnsureAccountIsActive;
@@ -21,4 +22,7 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
 
     Route::get('bots', [BotsController::class, 'index']);
     Route::post('bots', [BotsController::class, 'store']);
+
+    Route::get('invitations', [InvitationsController::class, 'index']);
+    Route::post('invitations', [InvitationsController::class, 'store']);
 });

@@ -18,21 +18,25 @@ import { LiveIndicator } from './LiveIndicator';
 import { MobileBar } from './MobileBar';
 import { Sidebar } from './Sidebar';
 
-/** Shows what the server flashed as an error (an expired page, a refusal) once per visit. */
-function useFlashError(): void {
+/**
+ * Shows what the server flashed once per visit: a message of success (`status`, e.g. the welcome after accepting an
+ * invitation) and an error (an expired page, a refusal).
+ */
+function useFlash(): void {
   const { flash } = useSharedProps();
   // every visit brings a new `flash` object, also when the text is the same as before
   const shown = useRef<typeof flash | null>(null);
   useEffect(() => {
     if (shown.current === flash) return;
     shown.current = flash;
+    if (flash.status) toast({ title: flash.status, tone: 'success' });
     if (flash.error) toast({ title: flash.error, tone: 'error' });
   }, [flash]);
 }
 
 export function Shell({ children }: { children: ReactNode }) {
   useShellBindings();
-  useFlashError();
+  useFlash();
   const collapsed = useUiStore((state) => state.sidebarCollapsed);
 
   return (

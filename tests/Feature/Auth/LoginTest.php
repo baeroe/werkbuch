@@ -125,12 +125,12 @@ it('rate-limits before it authenticates', function () {
     expect(array_search(ThrottleRequests::class, $priority, true))->toBeLessThan(array_search(AuthenticatesRequests::class, $priority, true));
 });
 
-it('registers only the routes of sign-in, sign-out and password reset', function () {
+it('registers only the routes of sign-in, sign-out, password reset and invitations', function () {
     $auth = collect(Route::getRoutes()->getRoutes())
         ->filter(fn (RoutingRoute $route) => str_starts_with($route->getActionName(), 'Laravel\\Fortify\\') || str_starts_with($route->getActionName(), 'App\\Http\\Controllers\\Auth\\'))
         ->map(fn (RoutingRoute $route) => $route->getName())->sort()->values()->all();
 
-    expect($auth)->toBe(['login', 'login.store', 'logout', 'password.email', 'password.request', 'password.reset', 'password.update'])
+    expect($auth)->toBe(['invitations.accept', 'invitations.show', 'login', 'login.store', 'logout', 'password.email', 'password.request', 'password.reset', 'password.update'])
         ->and(collect(Route::getRoutes()->getRoutes())->filter(fn (RoutingRoute $route) => str_starts_with($route->uri(), 'user/'))->all())->toBe([]);
 });
 

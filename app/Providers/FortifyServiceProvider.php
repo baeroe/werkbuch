@@ -54,9 +54,10 @@ final class FortifyServiceProvider extends ServiceProvider
 
         Fortify::resetUserPasswordsUsing(FortifyResetUserPassword::class);
 
-        // the limits per IP over all addresses (each its own budget); bootstrap/app.php shows their 429 as an error at the email field
+        // the limits per IP over all addresses (each its own budget); App\Exceptions\Rendering shows their 429 as an error at the email field (accepting an invitation: at the invitation)
         RateLimiter::for('login', fn (Request $request) => Limit::perMinute((int) config('werkbuch.rate_limits.login_per_ip'))->by((string) $request->ip()));
         RateLimiter::for('password-reset', fn (Request $request) => Limit::perMinute((int) config('werkbuch.rate_limits.password_reset_per_ip'))->by((string) $request->ip()));
         RateLimiter::for('password-update', fn (Request $request) => Limit::perMinute((int) config('werkbuch.rate_limits.password_update_per_ip'))->by((string) $request->ip()));
+        RateLimiter::for('invitation', fn (Request $request) => Limit::perMinute((int) config('werkbuch.rate_limits.invitation_accept_per_ip'))->by((string) $request->ip()));
     }
 }

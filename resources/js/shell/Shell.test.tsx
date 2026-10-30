@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { currentToasts, resetToasts } from '@/components/ui/toast';
 import { Shell } from './Shell';
 
-// What the server flashed as an error shows as a toast once per visit. The browser suite cannot provoke a flashed
+// What the server flashed shows as a toast once per visit: a status as a success, an error as an error. The browser suite cannot provoke a flashed
 // error inside the shell (a refused request needs a stale CSRF token, which a same-origin browser never sends).
 
 type Flash = { status: string | null; error: string | null };
@@ -30,6 +30,7 @@ afterEach(() => {
 
 /** The error toasts with how often each was shown again (the same error refreshes the toast on screen). */
 const errors = () => currentToasts().filter((item) => item.tone === 'error').map((item) => [item.title, item.round]);
+const successes = () => currentToasts().filter((item) => item.tone === 'success').map((item) => item.title);
 
 describe('Shell', () => {
   it('shows a flashed error as a toast once per visit', () => {
@@ -47,10 +48,27 @@ describe('Shell', () => {
     expect(errors()).toEqual([['Die Seite ist abgelaufen.', 1]]);
   });
 
-  it('shows nothing when the visit flashed no error', () => {
+  it('shows a flashed status as a success toast once per visit', () => {
+    flash = { status: 'Willkommen, Lea.', error: null };
+    const { rerender } = render(<Shell>Inhalt</Shell>);
+    expect(successes()).toEqual(['Willkommen, Lea.']);
+    expect(errors()).toEqual([]);
+
+    // the same visit renders again: the toast is not shown again
+    rerender(<Shell>Inhalt</Shell>);
+    expect(successes()).toEqual(['Willkommen, Lea.']);
+
+    // dismissed meanwhile, the same flash object does not bring it back
+    act(() => resetToasts());
+    rerender(<Shell>Inhalt</Shell>);
+    expect(successes()).toEqual([]);
+  });
+
+  it('shows nothing when the visit flashed nothing', () => {
     render(<Shell>Inhalt</Shell>);
 
     expect(screen.getByText('Inhalt')).toBeTruthy();
     expect(errors()).toEqual([]);
+    expect(successes()).toEqual([]);
   });
 });

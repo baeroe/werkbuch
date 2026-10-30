@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { expect, request, test, type Locator, type Page } from '@playwright/test';
+import { expect, request, test, type APIResponse, type Locator, type Page } from '@playwright/test';
 
 export const ROOT = path.resolve(import.meta.dirname, '..');
 
@@ -220,4 +220,19 @@ export async function signOut(page: Page, locale: Locale, name: string): Promise
   await arrowTo(page, menu.getByRole('menuitem', { name: tr(locale, 'shell.profile.logout') }));
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/\/login$/);
+}
+
+/**
+ * A call of the REST API with the session of the page (the cookies of its context, CSRF token from the cookie), so a
+ * spec can set something up as the signed-in person without going through the screens. Sanctum treats the call as
+ * coming from the app (stateful) because of the `Referer`.
+ */
+export async function api(page: Page, method: string, path: string, body?: unknown): Promise<APIResponse> {
+  const baseURL = test.info().project.use.baseURL!;
+  const token = (await page.context().cookies(baseURL)).find((cookie) => cookie.name === 'XSRF-TOKEN');
+  return page.request.fetch(new URL(path, baseURL).toString(), {
+    method,
+    data: body,
+    headers: { Accept: 'application/json', Referer: `${baseURL}/`, ...(token && { 'X-XSRF-TOKEN': decodeURIComponent(token.value) }) },
+  });
 }

@@ -34,6 +34,8 @@ return [
         'password_reset_per_ip' => 6,
         // new passwords from a reset link (POST /reset-password), over all addresses
         'password_update_per_ip' => 10,
+        // accepting an invitation (POST /invitations/{invitation}), over all links
+        'invitation_accept_per_ip' => 10,
     ],
 
 ];

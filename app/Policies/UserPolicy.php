@@ -9,7 +9,7 @@ use Illuminate\Auth\Access\Response;
 
 /**
  * Who may manage accounts (spec 4.2, 4.3): everybody their own profile, org admins (`org.manage`) every profile, the
- * roles, the e-mail addresses, the bots and who is active. Every account sees the list of accounts.
+ * roles, the e-mail addresses, the bots, who is active and the invitations. Every account sees the list of accounts.
  */
 final class UserPolicy
 {
@@ -47,6 +47,16 @@ final class UserPolicy
     public function createBot(User $user): Response
     {
         return self::admins($user, __('problem.detail.create_bot_admins_only'));
+    }
+
+    public function invite(User $user): Response
+    {
+        return self::admins($user, __('problem.detail.invite_admins_only'));
+    }
+
+    public function viewInvitations(User $user): Response
+    {
+        return self::admins($user, __('problem.detail.invitations_admins_only'));
     }
 
     private static function admins(User $user, string $refusal): Response

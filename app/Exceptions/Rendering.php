@@ -34,6 +34,11 @@ final class Rendering
             ? back()->withErrors(['email' => __('auth.throttle', ['seconds' => (int) ($e->getHeaders()['Retry-After'] ?? 60)])])->onlyInput('email')
             : null);
 
+        // accepting an invitation: the limit shows at the page's own error, which also names a link that no longer works
+        $exceptions->render(fn (ThrottleRequestsException $e, Request $request) => $request->routeIs('invitations.accept')
+            ? back()->withErrors(['invitation' => __('auth.throttle', ['seconds' => (int) ($e->getHeaders()['Retry-After'] ?? 60)])])
+            : null);
+
         // an expired session (CSRF token mismatch; Laravel has already turned it into a 419) leads back with a message:
         // guests to the sign-in (the page they came from would send them there and lose the message), signed-in people
         // to the page they came from

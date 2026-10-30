@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Access\RoleIndex;
 use App\Access\Visibility;
 use App\Models\Event;
+use App\Models\Invitation;
 use App\Models\Organization;
 use App\Models\PersonalAccessToken;
 use App\Models\Project;
@@ -41,6 +42,7 @@ class AppServiceProvider extends ServiceProvider
             'organization' => Organization::class,
             'project' => Project::class,
             'event' => Event::class,
+            'invitation' => Invitation::class,
         ]);
 
         Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);

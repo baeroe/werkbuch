@@ -19,4 +19,6 @@ return [
     'reactivate an account' => ['POST', '/api/v1/users/{user}/reactivate', 'params' => fn (MatrixWorld $w) => ['user' => $w->target->id]],
     'list bots' => ['GET', '/api/v1/bots'],
     'create a bot' => ['POST', '/api/v1/bots'],
+    'list invitations' => ['GET', '/api/v1/invitations'],
+    'invite a person' => ['POST', '/api/v1/invitations'],
 ];

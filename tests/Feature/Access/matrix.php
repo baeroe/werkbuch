@@ -1,5 +1,7 @@
 <?php
 
+use App\Actions\Invitations\InviteUser;
+use App\Actions\Invitations\ListInvitations;
 use App\Actions\Media\ShowMedia;
 use App\Actions\Organization\GetOrganization;
 use App\Actions\Organization\UpdateOrganization;
@@ -20,7 +22,8 @@ use Tests\Feature\Access\MatrixWorld;
  * `'system' => true` are work of jobs without REST: they run once as the system and must not fail.
  *
  * Not in the matrix, on purpose:
- * - App\Actions\Auth\*: they run before any sign-in (login, password reset, first admin, invitation), without an actor
+ * - App\Actions\Auth\*: they run before any sign-in (login, password reset, first admin, CheckInvitation and
+ *   AcceptInvitation for the link of an invitation, whose signature and row are the only credentials), without an actor
  *   whose rights could be checked (A4, P18).
  * - App\Actions\Setup\*: migrations and console commands set up roles and the default bot, nobody acts.
  * - App\Actions\Accounts\NextHandle: a reading helper that finds a free handle for the actions above, without an actor (P24).
@@ -84,5 +87,16 @@ return [
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => CreateBot::run($a, ['name' => 'Neu', 'handle' => 'matrix-neu', 'owner_id' => $w->target->id]),
         'allowed' => ['org_admin', 'default_bot'],
         'event' => EventType::BotCreated,
+    ],
+    'InviteUser' => [
+        'action' => InviteUser::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => InviteUser::run($a, ['email' => "matrix-{$column}@example.com", 'org_role' => 'member']),
+        'allowed' => ['org_admin', 'default_bot'],
+        'event' => EventType::UserInvited,
+    ],
+    'ListInvitations' => [
+        'action' => ListInvitations::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListInvitations::run($a, []),
+        'allowed' => ['org_admin', 'default_bot'],
     ],
 ];
