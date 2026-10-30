@@ -2,7 +2,9 @@
 
 namespace App\Providers;
 
+use App\Models\Organization;
 use App\Models\PersonalAccessToken;
+use App\Models\Project;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\ServiceProvider;
@@ -15,7 +17,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // one row, read once per request (and per queued job)
+        $this->app->scoped(Organization::class, fn () => Organization::query()->sole());
     }
 
     /**
@@ -28,6 +31,8 @@ class AppServiceProvider extends ServiceProvider
         Relation::enforceMorphMap([
             'user' => User::class,
             'token' => PersonalAccessToken::class,
+            'organization' => Organization::class,
+            'project' => Project::class,
         ]);
 
         Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);

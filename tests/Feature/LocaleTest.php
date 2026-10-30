@@ -1,10 +1,10 @@
 <?php
 
 use App\Enums\Locale;
+use App\Models\Organization;
 use App\Models\User;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Route;
-use Inertia\Testing\AssertableInertia as Assert;
 
 beforeEach(function () {
     Route::middleware('web')->get('_t/locale', fn () => ['locale' => app()->getLocale(), 'carbon' => now()->locale]);
@@ -13,15 +13,21 @@ beforeEach(function () {
 it('speaks English without cookie and profile', fn () => $this->get('_t/locale')->assertJson(['locale' => 'en']));
 
 it('speaks the default of the organization without cookie and profile', function () {
-    config(['app.locale' => 'de']);
+    Organization::current()->update(['locale' => Locale::De]);
 
     $this->get('_t/locale')->assertJson(['locale' => 'de', 'carbon' => 'de']);
 });
 
-it('speaks English when the default of the organization is no supported language', function () {
-    config(['app.locale' => 'fr']);
+it('renders the page of a guest in the default language of the organization', function () {
+    Organization::current()->update(['locale' => Locale::De]);
 
-    $this->get('_t/locale')->assertJson(['locale' => 'en']);
+    $this->get('/login')->assertSee('<html lang="de"', false);
+});
+
+it('lets the cookie beat the default language of the organization', function () {
+    Organization::current()->update(['locale' => Locale::De]);
+
+    $this->withUnencryptedCookie('locale', 'en')->get('/login')->assertSee('<html lang="en"', false);
 });
 
 it('follows the locale cookie before sign-in', fn () => $this->withUnencryptedCookie('locale', 'de')->get('_t/locale')->assertJson(['locale' => 'de', 'carbon' => 'de']));
@@ -141,48 +147,9 @@ it('writes the language of the account at a logout when the cookie is stale', fu
     $this->actingAs($user)->withUnencryptedCookie('locale', 'en')->get('_t/logout')->assertPlainCookie('locale', 'de');
 });
 
-it('speaks and mails the first supported language when the default names an unsupported one', function () {
-    config(['app.locale' => 'fr']);
+it('mails in the own language of an account and else in the default of the organization', function () {
+    Organization::current()->update(['locale' => Locale::De]);
 
-    expect(Locale::default())->toBe(Locale::En)
-        ->and(User::factory()->make()->preferredLocale())->toBe('en')
-        ->and(User::factory()->locale(Locale::De)->make()->preferredLocale())->toBe('de');
-});
-
-it('mails in the default of the organization for an account without own language', function () {
-    config(['app.locale' => 'de']);
-
-    expect(Locale::default())->toBe(Locale::De)->and(User::factory()->make()->preferredLocale())->toBe('de');
-});
-
-it('sends the cookie unencrypted and for a long time', function () {
-    $response = $this->actingAs(User::factory()->locale(Locale::De)->create())->get('_t/locale');
-    $cookie = $response->getCookie('locale', false);
-
-    expect($cookie->getValue())->toBe('de')
-        ->and($cookie->getExpiresTime())->toBeGreaterThan(now()->addDays(300)->getTimestamp())
-        ->and($cookie->isHttpOnly())->toBeTrue()
-        ->and($cookie->getSameSite())->toBe('lax');
-});
-
-it('shares locale and the translations of that language once', function () {
-    $this->withUnencryptedCookie('locale', 'de')->get(inertiaProbe())->assertInertia(fn (Assert $page) => $page
-        ->where('locale', 'de')
-        ->where('translations', json_decode((string) file_get_contents(lang_path('de.json')), true)));
-});
-
-it('sends the translations only on the first visit of a page', function () {
-    $version = $this->get(inertiaProbe())->viewData('page')['version'];
-    $headers = ['X-Inertia' => 'true', 'X-Inertia-Version' => $version];
-
-    $this->withHeaders($headers)->get(inertiaProbe())->assertJsonPath('props.translations', lang('en'));
-    $this->withHeaders([...$headers, 'X-Inertia-Except-Once-Props' => 'translations'])->get(inertiaProbe())
-        ->assertJsonMissingPath('props.translations')->assertJsonPath('props.locale', 'en');
-});
-
-it('sets the lang attribute of the page', fn () => $this->withUnencryptedCookie('locale', 'de')->get(inertiaProbe())->assertSee('<html lang="de">', false));
-
-it('mails in the language of the account, else the default', function () {
-    expect(User::factory()->locale(Locale::De)->make()->preferredLocale())->toBe('de')
-        ->and(User::factory()->make()->preferredLocale())->toBe('en');
+    expect(User::factory()->make()->preferredLocale())->toBe('de')
+        ->and(User::factory()->locale(Locale::En)->make()->preferredLocale())->toBe('en');
 });

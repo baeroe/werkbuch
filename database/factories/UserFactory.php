@@ -32,6 +32,7 @@ class UserFactory extends Factory
             'type' => AccountType::Person,
             'name' => fake()->name(),
             'handle' => $handle,
+            'is_default_bot' => false,
             'email' => $handle.'@example.com',
             'password' => static::$password ??= Hash::make('password'),
             'locale' => null,
@@ -43,13 +44,22 @@ class UserFactory extends Factory
     /**
      * A bot account: no email, no password.
      */
-    public function bot(): static
+    public function bot(?User $owner = null): static
     {
         return $this->state(fn (array $attributes) => [
             'type' => AccountType::Bot,
             'email' => null,
             'password' => null,
+            'owner_id' => $owner?->id,
         ]);
+    }
+
+    /**
+     * The bot of the system.
+     */
+    public function defaultBot(): static
+    {
+        return $this->bot()->state(fn (array $attributes) => ['is_default_bot' => true]);
     }
 
     /**

@@ -2,6 +2,7 @@
 
 use App\Actions\Auth\SendPasswordResetLink;
 use App\Enums\Locale;
+use App\Models\Organization;
 use App\Models\User;
 use App\Notifications\ResetPasswordNotification;
 use Illuminate\Support\Facades\DB;
@@ -32,7 +33,7 @@ it('puts the token and the address into the link', function () {
 
 it('mails in the language of the organization when the account has none', function () {
     Notification::fake();
-    config(['app.locale' => 'de']);
+    Organization::current()->update(['locale' => Locale::De]);
     $user = User::factory()->create(['email' => 'lene@example.com']);
 
     $this->post('/forgot-password', ['email' => 'lene@example.com']);

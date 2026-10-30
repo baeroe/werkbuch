@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Project;
 use App\Models\User;
 use Illuminate\Database\ClassMorphViolationException;
 use Illuminate\Database\Eloquent\Model;
@@ -13,3 +14,5 @@ it('maps the account to its short name', function () {
 it('refuses a model without an entry', function () {
     (new class extends Model {})->getMorphClass();
 })->throws(ClassMorphViolationException::class);
+
+it('maps the project to its short name', fn () => expect((new Project)->getMorphClass())->toBe('project'));
