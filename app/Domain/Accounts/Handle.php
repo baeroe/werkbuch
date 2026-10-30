@@ -8,7 +8,7 @@ namespace App\Domain\Accounts;
  */
 final class Handle
 {
-    public const PATTERN = '/^[a-z0-9-]{3,32}$/';
+    public const PATTERN = '/^[a-z0-9-]{3,32}\z/';
 
     public const MIN_LENGTH = 3;
 

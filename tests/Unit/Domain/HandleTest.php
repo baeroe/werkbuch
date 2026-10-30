@@ -6,7 +6,7 @@ it('validates handles', function (string $handle, bool $valid) {
     expect(Handle::isValid($handle))->toBe($valid);
 })->with([
     ['mara', true], ['jo-2', true], ['abc', true], [str_repeat('a', 32), true],
-    ['ab', false], ['Mara', false], ['mara_l', false], ['ma ra', false], [str_repeat('a', 33), false], ['', false],
+    ['ab', false], ["abc\n", false], ['Mara', false], ['mara_l', false], ['ma ra', false], [str_repeat('a', 33), false], ['', false],
 ]);
 
 it('suggests a handle from an email address', function (string $source, string $handle) {
