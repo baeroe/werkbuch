@@ -1,7 +1,9 @@
 <?php
 
+use App\Exceptions\Problem;
 use Illuminate\Database\Eloquent\Model;
 use Lorisleiva\Actions\Concerns\AsAction;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 arch('php preset')->preset()->php();
 arch('security preset')->preset()->security();
@@ -15,6 +17,8 @@ arch('the domain is plain PHP')
 arch('domain classes are final')->expect('App\Domain')->classes()->toBeFinal();
 arch('http, console and jobs leave the database to actions')
     ->expect(['App\Http', 'App\Console', 'App\Jobs', 'App\Auth'])->not->toUse('Illuminate\Support\Facades\DB');
+arch('the problem is final')->expect(Problem::class)->toBeFinal()->toExtend(RuntimeException::class)->toImplement(HttpExceptionInterface::class);
+arch('api layer classes are final')->expect('App\\Http\\Api')->classes()->toBeFinal();
 arch('models never call actions')->expect('App\Models')->not->toUse('App\Actions');
 
 it('detects raw database writes', function () {
