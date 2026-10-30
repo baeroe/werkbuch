@@ -1,5 +1,6 @@
 <?php
 
+use App\Actions\Auth\SendPasswordResetLink;
 use App\Enums\Locale;
 use App\Models\User;
 use App\Notifications\ResetPasswordNotification;
@@ -7,6 +8,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\Queue;
 use Inertia\Testing\AssertableInertia as Assert;
 
 it('builds the reset link from APP_URL, not from the request host, and mails in the language of the account', function () {
@@ -77,6 +79,68 @@ it('answers a known address like the others', function () {
     Notification::assertSentTimes(ResetPasswordNotification::class, 1);
 });
 
+it('answers at once with the same response and leaves the link to a job on the notifications queue', function (Closure $make, string $email) {
+    $make();
+    $tokens = DB::table('password_reset_tokens')->count();
+    Queue::fake();
+    Notification::fake();
+
+    $response = $this->from('/forgot-password')->post('/forgot-password', ['email' => $email]);
+
+    $response->assertRedirect('/forgot-password')->assertSessionHas('status', __('passwords.sent'))->assertSessionHasNoErrors();
+    SendPasswordResetLink::assertPushedOn('notifications', 1, fn ($action, array $parameters) => $parameters === [strtolower($email)]);
+    // no broker in the request: no token written, no mail sent
+    expect(DB::table('password_reset_tokens')->count())->toBe($tokens);
+    Notification::assertNothingSent();
+})->with([
+    'known' => [fn () => User::factory()->create(['email' => 'lene@example.com']), 'Lene@Example.com'],
+    'unknown' => [fn () => null, 'nobody@example.com'],
+    'disabled' => [fn () => User::factory()->disabled()->create(['email' => 'sven@example.com']), 'sven@example.com'],
+    'throttled' => [fn () => Password::createToken(User::factory()->create(['email' => 'lene@example.com'])), 'lene@example.com'],
+]);
+
+it('refuses an empty or malformed address at the field without a job', function (mixed $email) {
+    Queue::fake();
+
+    $this->from('/forgot-password')->post('/forgot-password', ['email' => $email])
+        ->assertRedirect('/forgot-password')->assertSessionHasErrors('email')->assertSessionMissing('status');
+    SendPasswordResetLink::assertNotPushed();
+})->with(['empty' => '', 'malformed' => 'lene', 'array' => [['lene@example.com']]]);
+
+it('mails the link from the job only to an existing, active person', function () {
+    Notification::fake();
+    $lene = User::factory()->create(['email' => 'lene@example.com']);
+    User::factory()->disabled()->create(['email' => 'sven@example.com']);
+    User::factory()->bot()->create(['email' => 'bot@example.com']);
+
+    foreach (['lene@example.com', 'sven@example.com', 'bot@example.com', 'nobody@example.com', 'lene@example.com'] as $email) {
+        SendPasswordResetLink::run($email);
+    }
+
+    Notification::assertSentTimes(ResetPasswordNotification::class, 1);
+    Notification::assertSentTo($lene, ResetPasswordNotification::class);
+});
+
+it('limits the reset links per IP and names the wait at the email field', function () {
+    Queue::fake();
+    $this->freezeTime();
+
+    foreach (range(1, 6) as $i) {
+        $this->from('/forgot-password')->post('/forgot-password', ['email' => "u{$i}@example.com"])->assertSessionHas('status');
+    }
+    $this->travel(20)->seconds();
+
+    $this->from('/forgot-password')->withHeader('X-Inertia', 'true')->post('/forgot-password', ['email' => 'lene@example.com'])
+        ->assertRedirect('/forgot-password')
+        ->assertSessionHasErrors(['email' => __('auth.throttle', ['seconds' => 40])])
+        ->assertSessionHasInput('email', 'lene@example.com')
+        ->assertSessionMissing('status');
+    SendPasswordResetLink::assertPushed(6);
+
+    $this->travel(41)->seconds();
+    $this->from('/forgot-password')->post('/forgot-password', ['email' => 'lene@example.com'])->assertSessionHas('status');
+});
+
 it('sends nothing to bots', function () {
     Notification::fake();
     User::factory()->bot()->create(['email' => 'bot@example.com']);
@@ -125,6 +189,14 @@ it('refuses short and unrepeated passwords', function (string $password, string 
         ->assertRedirect('/reset-password/x')->assertSessionHasErrors('password')->assertSessionDoesntHaveErrors('email');
     expect(Hash::check('old-password', $user->fresh()->password))->toBeTrue();
 })->with([['short', 'short'], ['new-password', 'other-password']]);
+
+it('refuses a password that is no text at the field', function () {
+    $user = User::factory()->create(['email' => 'lene@example.com', 'password' => 'old-password']);
+
+    $this->from('/reset-password/x')->post('/reset-password', ['token' => Password::createToken($user), 'email' => 'lene@example.com', 'password' => ['new-password'], 'password_confirmation' => ['new-password']])
+        ->assertRedirect('/reset-password/x')->assertSessionHasErrors('password');
+    expect(Hash::check('old-password', $user->fresh()->password))->toBeTrue();
+});
 
 it('shows the reset page with token and email', function () {
     $this->get('/reset-password/abc?email=lene%40example.com')->assertOk()

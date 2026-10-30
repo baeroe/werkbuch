@@ -29,6 +29,8 @@ return [
         'api' => 600,
         'mcp' => 300,
         'login_per_ip' => 20,
+        // requests for a reset link (POST /forgot-password), over all addresses
+        'password_reset_per_ip' => 6,
     ],
 
 ];

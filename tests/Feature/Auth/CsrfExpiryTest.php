@@ -14,7 +14,7 @@ beforeEach(function () {
 });
 
 it('leads an expired session back to the sign-in with a readable message', function () {
-    $this->from('/login')->post('_t/expired')->assertRedirect('/login');
+    $this->from('/login')->post('_t/expired')->assertStatus(303)->assertRedirect('/login');
 
     expect(session('error'))->toBe(__('errors.page_expired'));
     $this->get('/login')->assertInertia(fn (Assert $p) => $p->component('Auth/Login')->where('flash.error', __('errors.page_expired')));
@@ -34,7 +34,7 @@ it('names the expiry in the language of the visitor', function () {
 
 it('keeps a signed-in person on the page and names the expiry in the language of the account', function () {
     $this->actingAs(User::factory()->locale(Locale::De)->create())
-        ->from('/settings')->post('_t/expired')->assertRedirect('/settings');
+        ->from('/settings')->post('_t/expired')->assertStatus(303)->assertRedirect('/settings');
 
     expect(session('error'))->toBe(trans('errors.page_expired', [], 'de'));
 });

@@ -9,7 +9,7 @@ use Illuminate\Validation\ValidationException;
 use Laravel\Fortify\Contracts\ResetsUserPasswords;
 
 /**
- * Fortify's step "set the new password" of the reset link: checks that the password was repeated and hands over to
+ * Fortify's step "set the new password" of the reset link: checks that the password is text and was repeated, and hands over to
  * SetPassword, the only place with the password rules (its ValidationException passes through unchanged).
  */
 final class FortifyResetUserPassword implements ResetsUserPasswords
@@ -23,7 +23,7 @@ final class FortifyResetUserPassword implements ResetsUserPasswords
      */
     public function reset(User $user, array $input): void
     {
-        Validator::make($input, ['password' => ['confirmed']])->validate();
+        Validator::make($input, ['password' => ['string', 'confirmed']])->validate();
 
         $this->setPassword->handle($user, (string) $input['password']);
     }

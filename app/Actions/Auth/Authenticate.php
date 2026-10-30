@@ -3,7 +3,9 @@
 namespace App\Actions\Auth;
 
 use App\Models\User;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Lorisleiva\Actions\Concerns\AsAction;
 
 /**
@@ -16,15 +18,23 @@ final class Authenticate
     use AsAction;
 
     /**
-     * A bcrypt hash (cost 12, the default of BCRYPT_ROUNDS) of a random secret nobody knows: what an attempt without a
-     * usable password is checked against.
+     * The hash an attempt without a usable password is checked against: a random secret nobody knows, hashed with the
+     * configured hasher and its settings (so it costs as much as a real check and the hasher accepts it). Made once per
+     * hasher configuration and kept in the cache, so no request pays for making it.
      */
-    public const DUMMY_HASH = '$2y$12$CVpjV8T7k2J0HONkBQQ4GuDCxFKVSaOowxJEWsh7yzIb5RzPZ5W7W';
+    public static function dummyHash(): string
+    {
+        $key = 'auth.dummy-hash:'.hash('sha256', (string) json_encode([config('hashing.driver'), config('hashing.bcrypt'), config('hashing.argon')]));
+
+        return Cache::rememberForever($key, fn (): string => Hash::make(Str::random(40)));
+    }
 
     public function handle(string $email, string $password): ?User
     {
         $user = User::query()->where('email', $email)->first();
-        $matches = Hash::check($password, $user->password ?? self::DUMMY_HASH);
+        // fetched for every attempt, so known and unknown addresses do the same work
+        $dummy = self::dummyHash();
+        $matches = Hash::check($password, $user->password ?? $dummy);
 
         return $matches && $user?->isPerson() && ! $user->isDisabled() ? $user : null;
     }

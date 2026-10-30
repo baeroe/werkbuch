@@ -75,8 +75,9 @@ return Application::configure(basePath: dirname(__DIR__))
             ? ProblemResponse::from($e, (bool) config('app.debug'))
             : null);
 
-        // the limit per IP of the sign-in shows at the email field, like the lock per address, instead of a 429 page
-        $exceptions->render(fn (ThrottleRequestsException $e, Request $request) => $request->routeIs('login.store')
+        // the limits per IP of the sign-in and of the reset links show at the email field (like the lock per address),
+        // instead of a 429 page
+        $exceptions->render(fn (ThrottleRequestsException $e, Request $request) => $request->routeIs('login.store', 'password.email')
             ? back()->withErrors(['email' => __('auth.throttle', ['seconds' => (int) ($e->getHeaders()['Retry-After'] ?? 60)])])->onlyInput('email')
             : null);
 
@@ -84,7 +85,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // guests to the sign-in (the page they came from would send them there and lose the message), signed-in people
         // to the page they came from
         $exceptions->render(fn (HttpExceptionInterface $e, Request $request) => $e->getStatusCode() === 419 && ! $request->is('api/*')
-            ? ($request->user() === null ? redirect()->route('login') : redirect()->back())->with('error', __('errors.page_expired'))
+            ? ($request->user() === null ? redirect()->route('login', status: 303) : redirect()->back(303))->with('error', __('errors.page_expired'))
             : null);
 
         $exceptions->shouldRenderJsonWhen(

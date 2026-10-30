@@ -4,9 +4,6 @@ namespace App\Providers;
 
 use App\Actions\Auth\Authenticate;
 use App\Auth\FortifyResetUserPassword;
-use App\Auth\PasswordResetLinkResponse;
-use App\Models\User;
-use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -16,17 +13,19 @@ use Laravel\Fortify\Actions\AttemptToAuthenticate;
 use Laravel\Fortify\Actions\CanonicalizeUsername;
 use Laravel\Fortify\Actions\EnsureLoginIsNotThrottled;
 use Laravel\Fortify\Actions\PrepareAuthenticatedSession;
-use Laravel\Fortify\Contracts\FailedPasswordResetLinkRequestResponse;
 use Laravel\Fortify\Fortify;
 
 /**
- * Sign-in, sign-out and password reset through Fortify: its routes, the Inertia pages and the hand-over to the actions.
+ * Sign-in, sign-out and password reset through Fortify: the Inertia pages, the limits and the hand-over to the actions.
+ * The routes are in routes/auth.php; POST /forgot-password is werkbuch's own (App\Http\Controllers\Auth).
  */
 final class FortifyServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        $this->app->bind(FailedPasswordResetLinkRequestResponse::class, PasswordResetLinkResponse::class);
+        // Fortify's route file would also register password confirmation (/user/confirm-password), which werkbuch does
+        // not offer; routes/auth.php registers the routes werkbuch uses
+        Fortify::ignoreRoutes();
     }
 
     public function boot(): void
@@ -44,7 +43,8 @@ final class FortifyServiceProvider extends ServiceProvider
         ));
 
         // Fortify's own pipeline drops the lock per lower(email)|IP as soon as a named limiter is configured: keep it,
-        // before the address is lowered (the lock key lowers it itself)
+        // before the address is lowered (the lock key lowers it itself). Two-factor sign-in (Phase 2) has to add
+        // RedirectsIfTwoFactorAuthenticatable before AttemptToAuthenticate here, the default pipeline no longer applies.
         Fortify::authenticateThrough(fn () => [
             EnsureLoginIsNotThrottled::class,
             CanonicalizeUsername::class,
@@ -54,10 +54,8 @@ final class FortifyServiceProvider extends ServiceProvider
 
         Fortify::resetUserPasswordsUsing(FortifyResetUserPassword::class);
 
-        // the limit per IP over all addresses; bootstrap/app.php shows its 429 as an error at the email field
+        // the limits per IP over all addresses; bootstrap/app.php shows their 429 as an error at the email field
         RateLimiter::for('login', fn (Request $request) => Limit::perMinute((int) config('werkbuch.rate_limits.login_per_ip'))->by((string) $request->ip()));
-
-        // the link always points to APP_URL: a forged Host header must not lead the mail elsewhere
-        ResetPassword::createUrlUsing(fn (User $user, string $token) => rtrim((string) config('app.url'), '/').'/reset-password/'.$token.'?email='.urlencode((string) $user->email));
+        RateLimiter::for('password-reset', fn (Request $request) => Limit::perMinute((int) config('werkbuch.rate_limits.password_reset_per_ip'))->by((string) $request->ip()));
     }
 }
