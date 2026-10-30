@@ -22,8 +22,7 @@ final class SetLocale
     {
         return self::profile($request)
             ?? self::cookie($request)
-            ?? Locale::tryFrom((string) config('app.locale'))->value
-            ?? Locale::En->value;
+            ?? Locale::default()->value;
     }
 
     /**
@@ -36,10 +35,16 @@ final class SetLocale
         app()->setLocale($locale);
         Carbon::setLocale($locale);
 
+        $before = self::profile($request);
+
         $response = $next($request);
 
-        if (self::profile($request) !== null && self::cookie($request) !== $locale) {
-            $response->headers->setCookie(cookie()->forever(self::COOKIE, $locale));
+        // The request may sign in, sign out or change the profile language: the cookie follows the profile as it is
+        // afterwards, and keeps the language the request began with when it signed out.
+        $remembered = self::profile($request) ?? $before;
+
+        if ($remembered !== null && self::cookie($request) !== $remembered) {
+            $response->headers->setCookie(cookie()->forever(self::COOKIE, $remembered));
         }
 
         return $response;

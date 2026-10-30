@@ -51,3 +51,10 @@ it('names the account fields in German', function () {
 
     expect($attributes)->toMatchArray(['email' => 'E-Mail', 'password' => 'Passwort', 'name' => 'Name']);
 });
+
+it('words the throttled and unknown-address answers like the ones that reveal nothing', function (string $locale) {
+    $passwords = require repo_path("lang/{$locale}/passwords.php");
+
+    expect($passwords['throttled'])->toBe($passwords['sent'])
+        ->and($passwords['user'])->toBe($passwords['token']);
+})->with(['en', 'de']);

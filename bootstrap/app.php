@@ -27,7 +27,8 @@ return Application::configure(basePath: dirname(__DIR__))
         // the Host header must be the host of APP_URL (outside local and tests)
         $middleware->replace(FrameworkTrustProxies::class, TrustProxies::class);
         // the language comes first, so Inertia shares the translations of the language the request speaks;
-        // the locale cookie is plain: the browser app and the login page read it without a session
+        // the locale cookie is plain (HttpOnly, but not encrypted): the server reads it for guests, so the login page speaks
+        // the language of the last session
         $middleware->web(append: [SetLocale::class, HandleInertiaRequests::class]);
         $middleware->encryptCookies(except: [SetLocale::COOKIE]);
         $middleware->trustHosts(at: fn (): array => TrustedRequests::hostPatterns(config('app.url')), subdomains: false);

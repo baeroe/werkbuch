@@ -55,7 +55,7 @@ class User extends Authenticatable implements HasLocalePreference
      */
     public function preferredLocale(): string
     {
-        return $this->locale->value ?? (string) config('app.locale');
+        return ($this->locale ?? Locale::default())->value;
     }
 
     public function isPerson(): bool

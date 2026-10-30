@@ -68,23 +68,91 @@ it('lets the cookie decide for an account without own language', function () {
     $this->actingAs(User::factory()->create())->withUnencryptedCookie('locale', 'de')->get('_t/locale')->assertJson(['locale' => 'de']);
 });
 
-it('keeps the language of the last session in the cookie for the login after logout', function () {
-    Route::middleware('web')->post('_t/logout', function () {
-        auth()->logout();
-        session()->invalidate();
+it('remembers the language of an account that signs in during the request', function () {
+    $user = User::factory()->locale(Locale::De)->create();
+    Route::middleware('web')->get('_t/login', function () use ($user) {
+        auth()->login($user);
 
         return response()->noContent();
     });
+
+    $this->withUnencryptedCookie('locale', 'en')->get('_t/login')->assertPlainCookie('locale', 'de');
+});
+
+it('lets the cookie follow a change of the profile language', function () {
+    $user = User::factory()->locale(Locale::En)->create();
+    Route::middleware('web')->get('_t/change', function () use ($user) {
+        $user->update(['locale' => Locale::De]);
+
+        return response()->noContent();
+    });
+
+    $this->actingAs($user)->withUnencryptedCookie('locale', 'en')->get('_t/change')->assertPlainCookie('locale', 'de');
+});
+
+it('keeps the language of the account in the cookie for the login page after a logout', function () {
+    $user = User::factory()->locale(Locale::En)->create();
+    Route::middleware('web')->group(function () use ($user) {
+        Route::get('_t/login', function () use ($user) {
+            auth()->login($user);
+
+            return response()->noContent();
+        });
+        Route::get('_t/change', function () use ($user) {
+            $user->update(['locale' => Locale::De]);
+
+            return response()->noContent();
+        });
+        Route::get('_t/logout', function () {
+            auth()->logout();
+            session()->invalidate();
+
+            return response()->noContent();
+        });
+    });
+
+    // a browser: every answer's cookies go into the next request
+    $jar = [];
+    $visit = function (string $uri) use (&$jar) {
+        $response = $this->withUnencryptedCookies($jar)->get($uri);
+        foreach ($response->headers->getCookies() as $cookie) {
+            $jar[$cookie->getName()] = $cookie->getValue();
+        }
+
+        return $response;
+    };
+
+    $visit('_t/login')->assertPlainCookie('locale', 'en');
+    $visit('_t/change')->assertPlainCookie('locale', 'de');
+    $visit('_t/logout')->assertNoContent();
+    expect($jar['locale'])->toBe('de');
+    $this->app['auth']->forgetGuards();
+    $visit('_t/locale')->assertJson(['locale' => 'de']);
+});
+
+it('writes the language of the account at a logout when the cookie is stale', function () {
     $user = User::factory()->locale(Locale::De)->create();
+    Route::middleware('web')->get('_t/logout', function () {
+        auth()->logout();
 
-    $first = $this->actingAs($user)->get('_t/locale');
-    $cookie = $first->getCookie('locale', false);
-    expect($cookie?->getValue())->toBe('de');
+        return response()->noContent();
+    });
 
-    $this->post('_t/logout')->assertNoContent();
-    $this->flushSession();
-    auth()->forgetGuards();
-    $this->withUnencryptedCookie('locale', $cookie->getValue())->get('_t/locale')->assertJson(['locale' => 'de']);
+    $this->actingAs($user)->withUnencryptedCookie('locale', 'en')->get('_t/logout')->assertPlainCookie('locale', 'de');
+});
+
+it('speaks and mails the first supported language when the default names an unsupported one', function () {
+    config(['app.locale' => 'fr']);
+
+    expect(Locale::default())->toBe(Locale::En)
+        ->and(User::factory()->make()->preferredLocale())->toBe('en')
+        ->and(User::factory()->locale(Locale::De)->make()->preferredLocale())->toBe('de');
+});
+
+it('mails in the default of the organization for an account without own language', function () {
+    config(['app.locale' => 'de']);
+
+    expect(Locale::default())->toBe(Locale::De)->and(User::factory()->make()->preferredLocale())->toBe('de');
 });
 
 it('sends the cookie unencrypted and for a long time', function () {
