@@ -19,6 +19,21 @@ export function artisan(...args: string[]): void {
   execFileSync(command!, [...prefix, ...args], { cwd: ROOT, stdio: 'inherit' });
 }
 
+/**
+ * Against DDEV (`E2E_EXEC ?? 'ddev exec'` starts with `ddev`): waits until Mutagen has synced the Mac and the container
+ * both ways. Mutagen syncs in the background, seconds late: right after `ddev exec pnpm build:coverage` the Mac may still
+ * have the old public/build or none at all (Vite emptied it, the new files are on their way), and the coverage/e2e the
+ * Mac writes reaches the container late. Elsewhere (CI, DDEV without Mutagen) it does nothing.
+ */
+export function syncMutagen(): void {
+  if ((process.env.E2E_EXEC ?? 'ddev exec').split(/\s+/).find(Boolean) !== 'ddev') return;
+  try {
+    execFileSync('ddev', ['mutagen', 'sync'], { cwd: ROOT, stdio: 'ignore' });
+  } catch {
+    // no Mutagen: the files are there already
+  }
+}
+
 export type Locale = 'en' | 'de';
 
 const texts: Partial<Record<Locale, Record<string, string>>> = {};
@@ -98,22 +113,34 @@ export function variant(): string {
   return test.info().project.name;
 }
 
-/** Presses Tab until `target` has the focus (at most `max` times). */
-export async function tabTo(page: Page, target: Locator, { max = 40, backwards = false } = {}): Promise<void> {
+/**
+ * Whether `target` has the focus once the focus has settled. Base UI moves the focus one animation frame late (floating-ui's
+ * `enqueueFocus`): into a menu that just opened, and to the first item when the arrows wrap around. Read at once,
+ * `document.activeElement` is still the element before, and the next key would skip past the target.
+ */
+async function focusSettledOn(page: Page, target: Locator): Promise<boolean> {
+  // two frames: the first one runs the focus Base UI queued, the second one comes after it
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  return target.evaluate((element) => element === document.activeElement).catch(() => false);
+}
+
+/** Presses `key` until `target` has the focus (at most `max` times), checking only once the focus has settled. */
+async function pressUntilFocused(page: Page, target: Locator, key: string, max: number): Promise<void> {
   for (let step = 0; step < max; step += 1) {
-    if (await target.evaluate((element) => element === document.activeElement).catch(() => false)) return;
-    await page.keyboard.press(backwards ? 'Shift+Tab' : 'Tab');
+    if (await focusSettledOn(page, target)) return;
+    await page.keyboard.press(key);
   }
   await expect(target).toBeFocused();
 }
 
+/** Presses Tab until `target` has the focus (at most `max` times). */
+export async function tabTo(page: Page, target: Locator, { max = 40, backwards = false } = {}): Promise<void> {
+  await pressUntilFocused(page, target, backwards ? 'Shift+Tab' : 'Tab', max);
+}
+
 /** Presses `key` until `target` has the focus, e.g. arrows through a menu. */
 export async function arrowTo(page: Page, target: Locator, key = 'ArrowDown', max = 12): Promise<void> {
-  for (let step = 0; step < max; step += 1) {
-    if (await target.evaluate((element) => element === document.activeElement).catch(() => false)) return;
-    await page.keyboard.press(key);
-  }
-  await expect(target).toBeFocused();
+  await pressUntilFocused(page, target, key, max);
 }
 
 /** Signs in on the open sign-in page with the keyboard only: Tab into the address, type, Tab, type, Enter. */
