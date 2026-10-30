@@ -2,6 +2,7 @@
 
 namespace App\Exceptions;
 
+use InvalidArgumentException;
 use RuntimeException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
@@ -30,6 +31,10 @@ final class Problem extends RuntimeException implements HttpExceptionInterface
         public readonly array $errors = [],
         public readonly array $extensions = [],
     ) {
+        if (! in_array($reason, self::REASONS, true)) {
+            throw new InvalidArgumentException("Unknown problem reason [{$reason}]: add it to Problem::REASONS and the translations.");
+        }
+
         parent::__construct($detail ?? $reason);
     }
 

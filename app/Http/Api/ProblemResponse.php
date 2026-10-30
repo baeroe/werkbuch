@@ -44,7 +44,6 @@ final class ProblemResponse
             case $e instanceof HttpExceptionInterface:
                 $status = $e->getStatusCode();
                 $reason = self::SLUGS[$status] ?? 'http_error';
-                $own = $e->getMessage();
                 $headers = $e->getHeaders();
                 break;
             default:
@@ -58,10 +57,10 @@ final class ProblemResponse
             'status' => $status,
         ];
 
-        // a 404 never explains itself; the own text of a server error stays inside unless debugging
+        // a 404 never explains itself; only a Problem brings its own text, framework messages never reach the body
+        // (a crash shows its message only while debugging)
         if ($status !== 404) {
-            $keep = $own !== null && $own !== '' && ($status < 500 || $debug);
-            $body['detail'] = $keep ? $own : __('problem.reason.'.$reason);
+            $body['detail'] = $own ?? __('problem.reason.'.$reason);
         }
 
         $body['reason'] = $reason;

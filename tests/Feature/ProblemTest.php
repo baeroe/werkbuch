@@ -47,11 +47,18 @@ it('renders validation errors as 422 validation_failed with errors by path', fun
         ->assertJsonPath('errors.title.0', __('validation.required', ['attribute' => 'title']));
 });
 
-it('maps framework exceptions to reasons', function (Closure $throw, int $status, string $reason) {
+it('maps framework exceptions to reasons with the translated detail, never the framework message', function (Closure $throw, int $status, string $reason) {
+    config(['app.debug' => false]);
     apiRoute('get', '_t/x', $throw);
 
-    $this->getJson('api/v1/_t/x')->assertStatus($status)->assertJsonPath('reason', $reason)
+    $response = $this->getJson('api/v1/_t/x')->assertStatus($status)->assertJsonPath('reason', $reason)
         ->assertJsonPath('type', 'urn:werkbuch:problem:'.$reason)->assertHeader('Content-Type', 'application/problem+json');
+
+    if ($status === 404) {
+        $response->assertJsonMissingPath('detail');
+    } else {
+        $response->assertJsonPath('detail', __('problem.reason.'.$reason));
+    }
 })->with([
     'auth' => [fn () => throw new AuthenticationException, 401, 'unauthenticated'],
     'policy' => [fn () => throw new AuthorizationException, 403, 'forbidden'],
@@ -60,6 +67,7 @@ it('maps framework exceptions to reasons', function (Closure $throw, int $status
     'csrf' => [fn () => throw new TokenMismatchException, 419, 'csrf_token_mismatch'],
     'throttle' => [fn () => throw new ThrottleRequestsException(headers: ['Retry-After' => 30]), 429, 'too_many_requests'],
     'method' => [fn () => abort(405), 405, 'method_not_allowed'],
+    'bad request' => [fn () => abort(400, 'framework text'), 400, 'bad_request'],
     'other http' => [fn () => abort(418), 418, 'http_error'],
     'crash' => [fn () => throw new LogicException('secret internals'), 500, 'server_error'],
 ]);
@@ -70,17 +78,45 @@ it('hides internals of 5xx unless debugging', function () {
 
     config(['app.debug' => false]);
     $this->getJson('api/v1/_t/crash')->assertStatus(500)->assertJsonPath('detail', __('problem.reason.server_error'));
-    $this->getJson('api/v1/_t/unavailable')->assertStatus(503)->assertJsonPath('detail', __('problem.reason.service_unavailable'));
 
     config(['app.debug' => true]);
     $this->getJson('api/v1/_t/crash')->assertStatus(500)->assertJsonPath('detail', 'secret internals');
-    $this->getJson('api/v1/_t/unavailable')->assertStatus(503)->assertJsonPath('detail', 'secret maintenance details');
+    // an HTTP exception's own message is framework text: it stays out, debug or not
+    $this->getJson('api/v1/_t/unavailable')->assertStatus(503)->assertJsonPath('detail', __('problem.reason.service_unavailable'));
 });
 
-it('names the HTTP exception message as detail below 500', function () {
-    apiRoute('get', '_t/teapot', fn () => abort(418, 'I am a teapot.'));
+it('keeps framework messages out of the body, also the route list of a 405', function () {
+    apiRoute('get', '_t/only-get', fn () => 'ok');
 
-    $this->getJson('api/v1/_t/teapot')->assertStatus(418)->assertJsonPath('detail', 'I am a teapot.');
+    $response = $this->postJson('api/v1/_t/only-get')->assertStatus(405)
+        ->assertJsonPath('detail', __('problem.reason.method_not_allowed'));
+
+    expect($response->getContent())->not->toContain('only-get')->and($response->getContent())->not->toContain('GET');
+});
+
+it('answers 400 with the translated detail for a foreign Host', function () {
+    config(['app.url' => 'https://pm.example.com']);
+    $this->app['env'] = 'production';
+
+    try {
+        $this->getJson('http://evil.example.net/api/v1/anything')->assertStatus(400)
+            ->assertJsonPath('reason', 'bad_request')->assertJsonPath('detail', __('problem.reason.bad_request'));
+    } finally {
+        Request::setTrustedHosts([]);
+    }
+});
+
+it('translates the detail into the request locale', function () {
+    apiRoute('get', '_t/forbidden', fn () => throw new AuthorizationException('English framework text'));
+
+    app()->setLocale('de');
+    $this->getJson('api/v1/_t/forbidden')->assertForbidden()->assertJsonPath('detail', 'Dafür fehlt die Berechtigung.');
+});
+
+it('rejects a reason without translation', function () {
+    expect(fn () => Problem::conflict('made_up'))->toThrow(InvalidArgumentException::class, 'made_up')
+        ->and(fn () => Problem::locked('made_up'))->toThrow(InvalidArgumentException::class)
+        ->and(fn () => new Problem(409, 'made_up'))->toThrow(InvalidArgumentException::class);
 });
 
 it('never gives a 404 a detail', function () {

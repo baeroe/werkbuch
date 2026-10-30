@@ -24,6 +24,11 @@ afterEach(function () {
 });
 
 it('has the documented defaults', function () {
+    // independent of the developer's .env
+    setEnv('ATTACHMENTS_MAX_MB', null);
+    setEnv('WEBHOOKS_ALLOW_PRIVATE', null);
+    $this->refreshApplication();
+
     expect(config('werkbuch.version'))->toBe('0.1.0-dev')
         ->and(config('werkbuch.attachments_max_mb'))->toBe(25)
         ->and(config('werkbuch.notification_mail_delay'))->toBe(5)
