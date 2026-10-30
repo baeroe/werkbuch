@@ -3,6 +3,12 @@
 use App\Actions\Media\ShowMedia;
 use App\Actions\Organization\GetOrganization;
 use App\Actions\Organization\UpdateOrganization;
+use App\Actions\Users\CreateBot;
+use App\Actions\Users\DeactivateUser;
+use App\Actions\Users\ListUsers;
+use App\Actions\Users\ReactivateUser;
+use App\Actions\Users\UpdateUser;
+use App\Actions\Users\UpdateUserRole;
 use App\Events\EventType;
 use App\Support\Actor;
 use Tests\Feature\Access\MatrixWorld;
@@ -38,5 +44,45 @@ return [
         'action' => ShowMedia::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => ShowMedia::run($a, $w->logo),
         'allowed' => $everyone,
+    ],
+    'ListUsers' => [
+        'action' => ListUsers::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListUsers::run($a, []),
+        'allowed' => $everyone,
+    ],
+    'UpdateUser' => [
+        'action' => UpdateUser::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => UpdateUser::run($a, $w->target, ['name' => 'Neu']),
+        'allowed' => ['org_admin', 'default_bot'],
+        'event' => EventType::UserUpdated,
+    ],
+    'UpdateUserRole' => [
+        'action' => UpdateUserRole::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => UpdateUserRole::run($a, $w->target, 'admin'),
+        'allowed' => ['org_admin', 'default_bot'],
+        'event' => EventType::UserRoleChanged,
+    ],
+    'DeactivateUser' => [
+        'action' => DeactivateUser::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => DeactivateUser::run($a, $w->target),
+        'allowed' => ['org_admin', 'default_bot'],
+        'event' => EventType::UserDeactivated,
+    ],
+    'ReactivateUser' => [
+        'action' => ReactivateUser::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $w->target->update(['disabled_at' => now()]);
+
+            return ReactivateUser::run($a, $w->target);
+        },
+        'allowed' => ['org_admin', 'default_bot'],
+        'event' => EventType::UserReactivated,
+    ],
+    'CreateBot' => [
+        'action' => CreateBot::class,
+        // the responsible person named: by default it is the actor, and the default bot is no person
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => CreateBot::run($a, ['name' => 'Neu', 'handle' => 'matrix-neu', 'owner_id' => $w->target->id]),
+        'allowed' => ['org_admin', 'default_bot'],
+        'event' => EventType::BotCreated,
     ],
 ];

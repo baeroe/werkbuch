@@ -4,12 +4,14 @@ namespace App\Http\Resources;
 
 use App\Access\Visibility;
 use App\Models\User;
+use App\Support\ImageInput;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
  * An account as `User` of resources/js/types.ts: language and time zone are the effective ones, the description only
- * comes with bots. The role in the organization comes from the RoleIndex (one query for all accounts per request).
+ * comes with bots. The role in the organization comes from the RoleIndex (one query for all accounts per request); lists
+ * load the avatars with the accounts (`with('media')`).
  *
  * @mixin User
  */
@@ -34,8 +36,7 @@ final class UserResource extends JsonResource
             'owner_id' => $user->owner_id,
             'description' => $this->when($user->isBot(), fn () => (string) $user->description),
             'disabled_at' => $user->disabled_at?->toJSON(),
-            // avatars arrive with the people (Task 8)
-            'avatar_url' => null,
+            'avatar_url' => ImageInput::url($user, 'avatar'),
             'locale' => $user->effectiveLocale()->value,
             'timezone' => $user->effectiveTimezone(),
         ];

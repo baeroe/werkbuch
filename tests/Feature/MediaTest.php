@@ -1,6 +1,7 @@
 <?php
 
 use App\Actions\Organization\UpdateOrganization;
+use App\Actions\Users\UpdateUser;
 use App\Models\Organization;
 use App\Models\Project;
 use App\Models\User;
@@ -69,4 +70,20 @@ it('keeps the logo on the private disk', function () {
 
     expect($logo->disk)->toBe('local')->and(Storage::disk('local')->exists($logo->getPathRelativeToRoot()))->toBeTrue()
         ->and(Organization::current()->getFirstMedia('logo')?->is($logo))->toBeTrue();
+});
+
+it('serves the avatar of an account to every signed-in account', function () {
+    $lene = User::factory()->create();
+    UpdateUser::run(actor($lene), $lene, ['avatar_url' => imageDataUrl('gif')]);
+    $avatar = Media::query()->sole();
+
+    $this->actingAs(User::factory()->bot()->create())->get("/media/{$avatar->uuid}")->assertOk()
+        ->assertHeader('Content-Type', 'image/gif')->assertHeader('X-Content-Type-Options', 'nosniff');
+    expect($avatar->collection_name)->toBe('avatar')->and($avatar->disk)->toBe('local');
+});
+
+it('serves only the avatar of an account, no other picture it holds', function () {
+    $other = User::factory()->create()->addMediaFromBase64(imageDataUrl())->usingFileName('other.png')->toMediaCollection('portrait');
+
+    $this->actingAs(User::factory()->admin()->create())->get("/media/{$other->uuid}")->assertNotFound();
 });

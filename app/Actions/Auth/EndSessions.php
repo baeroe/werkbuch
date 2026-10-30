@@ -21,7 +21,8 @@ final class EndSessions
             return;
         }
 
-        DB::table((string) config('session.table'))
+        // the sessions live on the connection the session store uses, not necessarily the default one
+        DB::connection(config('session.connection'))->table((string) config('session.table'))
             ->where('user_id', $user->id)
             ->when($except !== null, fn ($query) => $query->where('id', '!=', $except))
             ->delete();

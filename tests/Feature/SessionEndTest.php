@@ -4,9 +4,11 @@ use App\Actions\Auth\EndSessions;
 use App\Actions\Auth\SetPassword;
 use App\Http\Middleware\EnsureAccountIsActive;
 use App\Models\User;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Schema;
 
 it('signs out every other session after a password change, whatever the session driver', function () {
     User::factory()->create(['email' => 'lene@example.com', 'password' => 'old-password']);
@@ -77,4 +79,27 @@ it('answers 401 under /api for a disabled account', function () {
     Auth::forgetGuards();
     $this->withToken($disabled->createToken('ci')->plainTextToken)->getJson('/api/v1/_t/active')
         ->assertUnauthorized()->assertHeader('Content-Type', 'application/problem+json');
+});
+
+it('ends the sessions on the connection the session store uses', function () {
+    // a store of its own, apart from the default connection
+    config([
+        'database.connections.session_store' => ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => ''],
+        'session.driver' => 'database', 'session.connection' => 'session_store', 'session.table' => 'sessions',
+    ]);
+    Schema::connection('session_store')->create('sessions', function (Blueprint $table) {
+        $table->string('id')->primary();
+        $table->string('user_id')->nullable();
+        $table->longText('payload');
+        $table->integer('last_activity');
+    });
+    $user = User::factory()->create();
+    foreach (['session_store', 'mariadb'] as $connection) {
+        DB::connection($connection)->table('sessions')->insert(['id' => $connection, 'user_id' => $user->id, 'payload' => '', 'last_activity' => time()]);
+    }
+
+    EndSessions::run($user);
+
+    expect(DB::connection('session_store')->table('sessions')->count())->toBe(0)
+        ->and(DB::table('sessions')->pluck('id')->all())->toBe(['mariadb']);
 });

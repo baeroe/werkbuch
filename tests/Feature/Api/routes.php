@@ -1,5 +1,7 @@
 <?php
 
+use Tests\Feature\Access\MatrixWorld;
+
 /*
  * The route matrix (RouteMatrixTest): every route below /api/v1 with its method and URI, the URI with the placeholders
  * of the route ({user}, {token}, …). A row with placeholders brings their values from the MatrixWorld:
@@ -10,4 +12,11 @@
 return [
     'show organization' => ['GET', '/api/v1/organization'],
     'change organization' => ['PATCH', '/api/v1/organization'],
+    'list accounts' => ['GET', '/api/v1/users'],
+    'change an account' => ['PATCH', '/api/v1/users/{user}', 'params' => fn (MatrixWorld $w) => ['user' => $w->target->id]],
+    'set the role of an account' => ['PUT', '/api/v1/users/{user}/role', 'params' => fn (MatrixWorld $w) => ['user' => $w->target->id]],
+    'deactivate an account' => ['POST', '/api/v1/users/{user}/deactivate', 'params' => fn (MatrixWorld $w) => ['user' => $w->target->id]],
+    'reactivate an account' => ['POST', '/api/v1/users/{user}/reactivate', 'params' => fn (MatrixWorld $w) => ['user' => $w->target->id]],
+    'list bots' => ['GET', '/api/v1/bots'],
+    'create a bot' => ['POST', '/api/v1/bots'],
 ];

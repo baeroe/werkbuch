@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\AccountType;
 use App\Enums\Locale;
 use App\Notifications\ResetPasswordNotification;
+use App\Rules\ImageDataUrl;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Translation\HasLocalePreference;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -16,9 +17,13 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
 use Laravel\Sanctum\HasApiTokens;
+use Spatie\MediaLibrary\HasMedia;
+use Spatie\MediaLibrary\InteractsWithMedia;
 use Spatie\Permission\Traits\HasRoles;
 
 /**
+ * An account: a person or a bot (spec 4.2). Its avatar is the media collection `avatar`.
+ *
  * @property string $id
  * @property AccountType $type
  * @property string $name
@@ -43,10 +48,10 @@ use Spatie\Permission\Traits\HasRoles;
     'disabled_at', 'two_factor_secret', 'two_factor_recovery_codes', 'two_factor_confirmed_at',
 ])]
 #[Hidden(['password', 'remember_token', 'two_factor_secret', 'two_factor_recovery_codes'])]
-class User extends Authenticatable implements HasLocalePreference
+class User extends Authenticatable implements HasLocalePreference, HasMedia
 {
     /** @use HasFactory<UserFactory> */
-    use HasApiTokens, HasFactory, HasRoles, HasUlids, Notifiable;
+    use HasApiTokens, HasFactory, HasRoles, HasUlids, InteractsWithMedia, Notifiable;
 
     /**
      * Get the attributes that should be cast.
@@ -63,6 +68,11 @@ class User extends Authenticatable implements HasLocalePreference
             'two_factor_confirmed_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    public function registerMediaCollections(): void
+    {
+        $this->addMediaCollection('avatar')->singleFile()->acceptsMimeTypes(ImageDataUrl::MIME_TYPES);
     }
 
     /**
