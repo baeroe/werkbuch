@@ -21,6 +21,7 @@ export default defineConfig({
         'resources/js/api/**': { lines: 100 },
         'resources/js/hooks/**': { lines: 100 },
         'resources/js/components/ui/**': { lines: 100 },
+        'resources/js/store/**': { lines: 100 },
       },
     },
   },

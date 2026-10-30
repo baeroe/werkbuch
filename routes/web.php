@@ -1,15 +1,23 @@
 <?php
 
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
 require __DIR__.'/auth.php';
 
-// Every unknown path of the browser app is the Inertia 404 page (the status stays 404). The fallback also catches
-// unknown /api paths: those stay an ordinary 404, which bootstrap/app.php answers as Problem Details.
+Route::middleware('auth')->group(function () {
+    Route::redirect('/', '/my-items');
+    Route::inertia('/my-items', 'Items/MyItems')->name('my-items');
+});
+
+// Every unknown path of the browser app is the Inertia 404 page for signed-in people (the status stays 404) and the
+// sign-in for guests: no auth middleware here, because the fallback also catches unknown /api paths, and those stay an
+// ordinary 404 that bootstrap/app.php answers as Problem Details, for guests as well.
 Route::fallback(function (Request $request) {
     abort_if($request->is('api/*'), 404);
+    throw_unless($request->user(), AuthenticationException::class);
 
     return Inertia::render('Errors/NotFound')->toResponse($request)->setStatusCode(404);
 });

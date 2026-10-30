@@ -25,6 +25,8 @@ use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Routing\Middleware\ThrottleRequestsWithRedis;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
+use Inertia\Inertia;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -87,6 +89,24 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (HttpExceptionInterface $e, Request $request) => $e->getStatusCode() === 419 && ! $request->is('api/*')
             ? ($request->user() === null ? redirect()->route('login', status: 303) : redirect()->back(303))->with('error', __('errors.page_expired'))
             : null);
+
+        // the browser app shows a refusal (403), an unknown page (404), a failure (500) and an outage (503) as an Inertia page
+        // in the shell (the status stays); /api keeps its problem documents, and in debug mode a 500 stays Laravel's own page.
+        // Where the web group did not run (maintenance mode, an untrusted host), the page would lack its shared props:
+        // Laravel's own page stays.
+        $exceptions->respond(function (Response $response, Throwable $e, Request $request) {
+            $status = $response->getStatusCode();
+
+            if ($request->is('api/*')
+                || ! in_array($status, [403, 404, 500, 503], true)
+                || ($status === 500 && config('app.debug'))
+                || Inertia::getShared('locale') === null) {
+                return $response;
+            }
+
+            return Inertia::render($status === 404 ? 'Errors/NotFound' : 'Errors/Error', ['status' => $status])
+                ->toResponse($request)->setStatusCode($status);
+        });
 
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),

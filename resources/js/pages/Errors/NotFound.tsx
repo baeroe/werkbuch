@@ -1,10 +1,8 @@
-import { t } from '@/lib/i18n';
+import { ErrorLayout } from '@/shell/layout';
+import { NotFound } from '@/shell/PageStates';
 
-// Placeholder: Task 12 replaces the page.
-export default function NotFound() {
-  return (
-    <main id="main" className="min-h-screen bg-paper text-ink">
-      <h1>{t('errors.page.not_found.title')}</h1>
-    </main>
-  );
+export default function NotFoundPage() {
+  return <NotFound />;
 }
+
+NotFoundPage.layout = ErrorLayout;
