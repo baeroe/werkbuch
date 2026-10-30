@@ -96,6 +96,7 @@ Die Verträge zwischen den Phasen stehen im Master-Plan (Abschnitt „Verträge 
 - Inertia-Tests (`assertInertia`) verlangen die Seitendatei in `resources/js/pages` (`ensure_pages_exist`); Seite und Route in einem Zug anlegen.
 - Ein `(page) => …`-Layout muss eine Pfeilfunktion sein: Inertia v3 behandelt nur Funktionen ohne `prototype` so, eine `function`-Deklaration rendert es als Komponente mit den Seiten-Props (React-Fehler #31). `ErrorLayout` ist deshalb bewusst eine `function`.
 - Tailwind scannt nur `resources/`; Klassen in `app/` oder `docs/` greifen nicht.
+- `Locale::default()` und damit `SetLocale` (jeder Web-Request) brauchen die migrierte Organisationszeile: ohne `organization`-Zeile (Migration nicht gelaufen, Tabelle geleert) scheitert jede Seite mit `ModelNotFoundException`.
 - Tests, die die Organisation ändern, nehmen `Organization::current()->update([...])`, nie eine frisch geladene Instanz (die `scoped`-Instanz bliebe veraltet). Datenbank-Defaults stehen nach `create()` nicht im Modell (`null` statt `false`): Factories setzen sie ausdrücklich. `migrate:fresh` leert auch die Dev-Datenbank (Demo-Daten danach neu seeden).
 - Eloquent speichert die Wanduhr der App-Zeitzone (UTC): lokale Zeiten vorher mit `->utc()` umrechnen.
 - `Request::cookies->get()` wirft bei `locale[]=de` einen 500; Cookies über `cookies->all()` lesen.
