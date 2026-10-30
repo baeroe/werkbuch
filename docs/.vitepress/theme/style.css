@@ -1,0 +1,94 @@
+/* werkbuch tokens ("Arbeitsheft" and "Nachtheft", prototypes/clickdummy/DESIGN.md; values of resources/css/tokens.css), light and dark */
+:root {
+    --wb-bg: oklch(0.975 0.004 250);
+    --wb-bg-sunken: oklch(0.955 0.006 250);
+    --wb-surface: oklch(1 0 0);
+    --wb-ink: oklch(0.255 0.04 262);
+    --wb-muted: oklch(0.5 0.03 260);
+    --wb-faint: oklch(0.6 0.022 258);
+    --wb-border: oklch(0.895 0.012 255);
+    --wb-accent: oklch(0.47 0.165 266);
+    --wb-accent-hover: oklch(0.42 0.16 266);
+    --wb-accent-soft: oklch(0.945 0.025 266);
+    --wb-on-accent: oklch(1 0 0);
+    --wb-marker: oklch(0.93 0.175 104);
+    --wb-elev: 0 1px 2px oklch(0.255 0.04 262 / 0.06), 0 12px 28px -8px oklch(0.255 0.04 262 / 0.2);
+
+    /* fonts come from fontsource (theme/index.ts): nothing is loaded from outside at runtime */
+    --vp-font-family-base: 'Figtree Variable', Figtree, 'Avenir Next', 'Segoe UI Variable Text', 'Segoe UI', sans-serif;
+    --vp-font-family-mono: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace;
+    --wb-font-display: 'Bricolage Grotesque Variable', 'Bricolage Grotesque', 'Avenir Next', 'Segoe UI Variable Display', 'Segoe UI', sans-serif;
+}
+
+.dark {
+    --wb-bg: oklch(0.235 0.02 258);
+    --wb-bg-sunken: oklch(0.21 0.02 258);
+    --wb-surface: oklch(0.275 0.022 258);
+    --wb-ink: oklch(0.94 0.012 250);
+    --wb-muted: oklch(0.75 0.02 255);
+    --wb-faint: oklch(0.62 0.02 255);
+    --wb-border: oklch(0.355 0.022 258);
+    --wb-accent: oklch(0.74 0.12 266);
+    --wb-accent-hover: oklch(0.8 0.1 266);
+    --wb-accent-soft: oklch(0.335 0.06 266);
+    --wb-on-accent: oklch(0.2 0.035 266);
+    --wb-marker: oklch(0.91 0.18 104);
+    --wb-elev: 0 1px 2px oklch(0.12 0.02 258 / 0.35), 0 14px 32px -8px oklch(0.12 0.02 258 / 0.55);
+}
+
+:root,
+.dark {
+    --vp-c-bg: var(--wb-bg);
+    --vp-c-bg-alt: var(--wb-bg-sunken);
+    --vp-c-bg-elv: var(--wb-surface);
+    --vp-c-bg-soft: var(--wb-bg-sunken);
+    --vp-c-text-1: var(--wb-ink);
+    --vp-c-text-2: var(--wb-muted);
+    --vp-c-text-3: var(--wb-faint);
+    --vp-c-divider: var(--wb-border);
+    --vp-c-gutter: var(--wb-border);
+    --vp-c-border: var(--wb-border);
+
+    --vp-c-brand-1: var(--wb-accent);
+    --vp-c-brand-2: var(--wb-accent-hover);
+    --vp-c-brand-3: var(--wb-accent);
+    --vp-c-brand-soft: var(--wb-accent-soft);
+
+    --vp-button-brand-bg: var(--wb-accent);
+    --vp-button-brand-hover-bg: var(--wb-accent-hover);
+    --vp-button-brand-active-bg: var(--wb-accent-hover);
+    --vp-button-brand-text: var(--wb-on-accent);
+    --vp-button-brand-hover-text: var(--wb-on-accent);
+    --vp-button-brand-active-text: var(--wb-on-accent);
+    --vp-button-alt-bg: var(--wb-bg-sunken);
+    --vp-button-alt-text: var(--wb-ink);
+    --vp-button-alt-hover-bg: var(--wb-border);
+    --vp-button-alt-hover-text: var(--wb-ink);
+
+    --vp-code-block-bg: var(--wb-bg-sunken);
+    --vp-home-hero-name-color: var(--wb-accent);
+}
+
+/* display type for titles, like the app */
+.vp-doc h1,
+.vp-doc h2,
+.VPHero .name,
+.VPHero .text {
+    font-family: var(--wb-font-display);
+    font-optical-sizing: auto;
+    letter-spacing: -0.01em;
+}
+
+/* the highlighter marks the selection, like in the app */
+::selection {
+    background: color-mix(in oklch, var(--wb-marker) 50%, transparent);
+}
+
+.VPButton {
+    border-radius: 999px !important;
+}
+
+.vp-doc img {
+    border-radius: 12px;
+    box-shadow: var(--wb-elev);
+}
