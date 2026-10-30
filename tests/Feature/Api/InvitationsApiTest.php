@@ -1,5 +1,7 @@
 <?php
 
+use App\Access\OrgRole;
+use App\Access\RoleAssignments;
 use App\Events\EventType;
 use App\Models\Event;
 use App\Models\Invitation;
@@ -7,7 +9,7 @@ use App\Models\Project;
 use App\Models\User;
 use App\Support\InvitationLinks;
 
-const INVITATION_SHAPE = ['id', 'email', 'org_role', 'projects', 'link', 'created_by', 'created_at', 'expires_at'];
+const INVITATION_SHAPE = ['id', 'email', 'org_role', 'projects', 'link', 'state', 'created_by', 'created_at', 'expires_at'];
 
 it('invites an address and answers the link and the invitation', function () {
     $admin = User::factory()->admin()->create();
@@ -25,6 +27,7 @@ it('invites an address and answers the link and the invitation', function () {
             'org_role' => 'member',
             'projects' => [['project_id' => $web->id, 'role' => 'viewer']],
             'link' => $response->json('link'),
+            'state' => 'open',
             'created_by' => $admin->id,
             'created_at' => $invitation->created_at->toJSON(),
             'expires_at' => $invitation->created_at->addDays(7)->toJSON(),
@@ -123,6 +126,65 @@ it('pages through the invitations', function () {
 
     expect(array_merge($first->json('data.*.id'), $second->json('data.*.id')))->toHaveCount(3)->and(count(array_unique(array_merge($first->json('data.*.id'), $second->json('data.*.id')))))->toBe(3);
 });
+
+it('shows the link only to the session and to tokens that write, never to a read-only token', function () {
+    $admin = User::factory()->admin()->create();
+    $invitation = Invitation::factory()->create(['invited_by' => $admin->id]);
+    Invitation::factory()->create(['invited_by' => $admin->id]);
+
+    $links = fn () => $this->getJson('/api/v1/invitations')->assertOk()->json('data.*.link');
+
+    $this->withToken(apiToken($admin, ['read']));
+    expect($links())->toBe([null, null]);
+
+    forgetApiAuth();
+    $this->withToken(apiToken($admin, ['read', 'mcp']));
+    expect($links())->toBe([null, null]);
+
+    forgetApiAuth();
+    $this->withToken(apiToken($admin, ['read', 'write']));
+    expect($links())->toContain(InvitationLinks::for($invitation))->each->toStartWith(config('app.url'));
+
+    forgetApiAuth();
+    $this->withToken(apiToken($admin, ['write']))->postJson('/api/v1/invitations', ['email' => 'lea@example.com', 'org_role' => 'member'])
+        ->assertCreated()->assertJsonPath('invitation.link', fn ($link) => str_starts_with($link, config('app.url')))
+        ->assertJsonPath('link', fn ($link) => str_starts_with($link, config('app.url')));
+});
+
+it('shows the link to the session of the interface', function () {
+    $admin = User::factory()->admin()->create();
+    $invitation = Invitation::factory()->create(['invited_by' => $admin->id]);
+
+    $this->actingAs($admin)->getJson('/api/v1/invitations')->assertOk()->assertJsonPath('data.0.link', InvitationLinks::for($invitation));
+});
+
+it('names the state of each invitation, closed when its link no longer works', function () {
+    $admin = User::factory()->admin()->create();
+    $demoted = User::factory()->admin()->create();
+    $open = Invitation::factory()->create(['invited_by' => $admin->id, 'email' => 'open@example.com']);
+    $byDemoted = Invitation::factory()->create(['invited_by' => $demoted->id, 'email' => 'demoted@example.com']);
+    $taken = Invitation::factory()->create(['invited_by' => $admin->id, 'email' => 'taken@example.com']);
+    User::factory()->create(['email' => 'taken@example.com']);
+    app(RoleAssignments::class)->setOrgRole($demoted, OrgRole::Member);
+
+    $states = collect($this->actingAs($admin)->getJson('/api/v1/invitations')->assertOk()->assertJsonPath('meta.total', 3)->json('data'))->pluck('state', 'id');
+
+    expect($states->all())->toBe([$open->id => 'open', $byDemoted->id => 'closed', $taken->id => 'closed']);
+});
+
+it('wants the projects as a list, each project once', function (Closure $projects, string $field, string $message) {
+    app()->setLocale('de');
+    $web = Project::factory()->create();
+
+    $this->actingAs(User::factory()->admin()->create())->postJson('/api/v1/invitations', [
+        'email' => 'lea@example.com', 'org_role' => 'member', 'projects' => $projects($web),
+    ])->assertUnprocessable()->assertJsonValidationErrors([$field => $message]);
+
+    expect(Invitation::query()->exists())->toBeFalse();
+})->with([
+    'an object with keys' => [fn (Project $web) => ['a' => ['project_id' => $web->id, 'role' => 'member']], 'projects', 'Die Projekte müssen eine Liste sein.'],
+    'the same project twice' => [fn (Project $web) => [['project_id' => $web->id, 'role' => 'member'], ['project_id' => $web->id, 'role' => 'viewer']], 'projects.0.project_id', 'Ein Projekt darf nur einmal vorkommen.'],
+]);
 
 it('works with a token of an admin and refuses one of a member', function () {
     $admin = User::factory()->admin()->create();

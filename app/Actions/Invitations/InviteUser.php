@@ -25,8 +25,8 @@ use Illuminate\Validation\ValidationException;
 use Lorisleiva\Actions\Concerns\AsAction;
 
 /**
- * Invites an address to the organization (org admins): the role in the organization and optionally projects (visible to
- * the admin) with a role each. The invitation is valid for seven days; a new one for the same address replaces the
+ * Invites an address to the organization (org admins): the role in the organization and optionally projects (a list, visible to
+ * the admin, each once) with a role each. The invitation is valid for seven days; a new one for the same address replaces the
  * open one, whose link then closes (P7). An address that already has an account cannot be invited. When the instance
  * can send mail, the link goes out as a queued mail after the commit; otherwise the admin copies it.
  */
@@ -50,8 +50,8 @@ final class InviteUser
         $valid = Validator::make($input, [
             'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users', 'email')],
             'org_role' => ['required', 'string', Rule::in(array_column(OrgRole::cases(), 'value'))],
-            'projects' => ['nullable', 'array'],
-            'projects.*.project_id' => ['required', 'string', Rule::in(Visibility::projectIds($actor->user)->all())],
+            'projects' => ['nullable', 'array', 'list'],
+            'projects.*.project_id' => ['required', 'string', 'distinct', Rule::in(Visibility::projectIds($actor->user)->all())],
             'projects.*.role' => ['required', 'string', Rule::in(array_column(ProjectRole::cases(), 'value'))],
         ], [
             ...AccountInput::messages(),
@@ -60,9 +60,11 @@ final class InviteUser
             'org_role.string' => __('field.org_role.unknown'),
             'org_role.in' => __('field.org_role.unknown'),
             'projects.array' => __('field.projects.invalid'),
+            'projects.list' => __('field.projects.invalid'),
             'projects.*.project_id.required' => __('field.projects.unknown'),
             'projects.*.project_id.string' => __('field.projects.unknown'),
             'projects.*.project_id.in' => __('field.projects.unknown'),
+            'projects.*.project_id.distinct' => __('field.projects.duplicate'),
             'projects.*.role.required' => __('field.project_role.unknown'),
             'projects.*.role.string' => __('field.project_role.unknown'),
             'projects.*.role.in' => __('field.project_role.unknown'),

@@ -3,6 +3,7 @@
 use App\Http\Controllers\Auth\InvitationController;
 use App\Http\Controllers\Auth\NewPasswordController as SetNewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController as SendPasswordResetLinkController;
+use App\Http\Middleware\InvitationsForGuests;
 use Illuminate\Support\Facades\Route;
 use Laravel\Fortify\Http\Controllers\AuthenticatedSessionController;
 use Laravel\Fortify\Http\Controllers\NewPasswordController;
@@ -23,7 +24,7 @@ Route::middleware('guest:'.config('fortify.guard'))->group(function () {
 
 // The page of an invitation link and its form: only with the signature the link was issued with (relative, so APP_URL
 // may differ from the host the browser reaches), for guests; the invitation row decides whether it still works.
-Route::middleware(['guest:'.config('fortify.guard'), 'signed:relative'])->group(function () {
+Route::middleware([InvitationsForGuests::class, 'signed:relative'])->group(function () {
     Route::get('/invitations/{invitation}', [InvitationController::class, 'show'])->name('invitations.show');
     Route::post('/invitations/{invitation}', [InvitationController::class, 'accept'])->middleware('throttle:invitation')->name('invitations.accept');
 });

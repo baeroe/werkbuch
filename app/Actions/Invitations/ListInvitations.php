@@ -12,7 +12,9 @@ use Illuminate\Validation\ValidationException;
 use Lorisleiva\Actions\Concerns\AsAction;
 
 /**
- * The open invitations (org admins): not accepted and not run out. Ordered by ULID, so the oldest comes first.
+ * The invitations nobody accepted and that have not run out (org admins), the oldest first (ULID). One whose link no
+ * longer works for another reason (inviter demoted or deactivated, an account with the address) stays in the list; the
+ * resource names it `closed` (CheckInvitation), so the screens can show it as such.
  */
 final class ListInvitations
 {
@@ -28,6 +30,6 @@ final class ListInvitations
     {
         Authorize::check($actor, 'viewInvitations', User::class);
 
-        return ListResult::of(Invitation::query()->open()->orderBy('id'), PageArgs::from($input));
+        return ListResult::of(Invitation::query()->open()->with('inviter')->orderBy('id'), PageArgs::from($input));
     }
 }

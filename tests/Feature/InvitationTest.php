@@ -307,8 +307,12 @@ it('limits accepting to ten attempts per IP and shows the limit at the invitatio
     $this->withServerVariables(['REMOTE_ADDR' => '10.9.9.9'])->post($link, ['name' => 'Lea Sommer', 'password' => 'secret-pass'])->assertRedirect('/my-items');
 });
 
-it('sends signed-in people to their items instead of the invitation', function () {
+it('sends signed-in people to their items with a note instead of the invitation', function () {
     $invitation = invite();
+    $link = InvitationLinks::for($invitation);
 
-    $this->actingAs(User::factory()->create())->get(InvitationLinks::for($invitation))->assertRedirect('/my-items');
+    $this->actingAs(User::factory()->create())->get($link)->assertRedirect('/my-items')->assertSessionHas('status', __('invitation.sign_out_first'));
+    $this->post($link, ['name' => 'Lea', 'password' => 'secret-pass'])->assertRedirect('/my-items')->assertSessionHas('status', __('invitation.sign_out_first'));
+
+    expect(User::query()->where('email', 'lea@example.com')->exists())->toBeFalse();
 });

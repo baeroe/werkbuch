@@ -672,7 +672,10 @@ export interface Invitation {
   org_role: OrgRole;
   /** Projects to join on acceptance. */
   projects: { project_id: string; role: ProjectRole }[];
-  link: string;
+  /** `null` for a read-only token (whoever holds the link can create an account). */
+  link: string | null;
+  /** Whether the link works: `closed` after the inviter lost the admin role or an account with the address exists. */
+  state: 'open' | 'closed';
   created_by: string;
   created_at: string;
   /** Seven days after creation; a new invitation replaces the old one. */
