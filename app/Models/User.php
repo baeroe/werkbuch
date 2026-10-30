@@ -71,7 +71,7 @@ class User extends Authenticatable implements HasLocalePreference
 
     /**
      * The reset link goes only to active people, in the language of the account; for everyone else nothing goes out,
-     * while the form answers the same (App\Auth\PasswordResetLinkResponse).
+     * while the form answers the same (App\Http\Controllers\Auth\PasswordResetLinkController).
      *
      * @param  string  $token
      */

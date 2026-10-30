@@ -29,7 +29,7 @@ PHP 8.4, Laravel 13 (`^13.39`), MariaDB 11.4, Inertia v3 mit React 19, TypeScrip
 Alles für die App läuft in DDEV (kein PHP, Composer oder Node auf dem Host); nur `e2e/` läuft auf dem Mac.
 
 ```bash
-ddev start && ddev composer install && ddev exec pnpm install && ddev artisan migrate   # erster Start (.env aus .env.example)
+cp .env.example .env && ddev start && ddev composer install && ddev exec pnpm install && ddev artisan key:generate && ddev artisan migrate   # erster Start (DDEV erzeugt keinen APP_KEY)
 ddev artisan app:ensure-admin                  # erstes Konto aus ADMIN_EMAIL/ADMIN_PASSWORD (nur wenn es noch keine Person gibt)
 ddev artisan app:reset-password <email>        # neues Passwort, beendet alle Sitzungen
 ddev artisan db:seed --class=DemoSeeder        # fiktive Demo-Personen (Feldwerk)
@@ -97,4 +97,4 @@ Die Verträge zwischen den Phasen stehen im Master-Plan (Abschnitt „Verträge 
 - Eloquent speichert die Wanduhr der App-Zeitzone (UTC): lokale Zeiten vorher mit `->utc()` umrechnen.
 - `Request::cookies->get()` wirft bei `locale[]=de` einen 500; Cookies über `cookies->all()` lesen.
 - PCOV meldet bei jedem PHP-Aufruf „JIT is incompatible with third party extensions“; `.ddev/php/jit.ini` schaltet das JIT aus und hält die Ausgabe sauber.
-- Playwright: Chrome meldet jede 404/500-Antwort als Konsolenfehler; erwartete Fehler stehen in der Fixture `allowedErrors`. Login-Drosseln setzt `cache:clear` zurück (`globalSetup`, `beforeAll` der Reset-Spec). Reset-Mails prüft der Test über Mailpit.
+- Playwright: Chrome meldet jede 404/500-Antwort als Konsolenfehler; erwartete Fehler stehen in der Fixture `allowedErrors`. Login-Drosseln setzt `cache:clear` zurück (`globalSetup`, `beforeAll` der Reset-Spec). Reset-Mails prüft der Test über Mailpit, und zwar über neue Nachrichten-IDs und eine Adresse je Lauf, nie über Zeitstempel (Mac- und Container-Uhr können abweichen).
