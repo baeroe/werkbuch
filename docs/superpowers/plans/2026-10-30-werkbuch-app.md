@@ -356,7 +356,7 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 
 ## Fortschritt
 
-- [ ] Phase 1: Fundament
+- [x] Phase 1: Fundament (PR #5)
 - [ ] Phase 2: Organisation, Konten, Rollen, Projekte
 - [ ] Phase 3: Workflows, Typen, Properties, Kataloge
 - [ ] Phase 4: Work Items, Relationen, History
