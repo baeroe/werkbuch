@@ -193,7 +193,7 @@ export interface ItemRef {
   title: string;
 }
 
-/** A work item as the fake API stores it. The API answers with `WorkItem`: these fields and what it computes on read. */
+/** The stored fields of a work item as the API sends them. The API answers with `WorkItem`: these and what it computes on read. */
 export interface WorkItemRecord {
   id: string;
   project_id: string;
@@ -203,7 +203,10 @@ export interface WorkItemRecord {
   key: string;
   type_id: string;
   title: string;
-  description: RichText | null;
+  /** The description as Markdown (what REST and MCP read). */
+  description: string | null;
+  /** The description as a Tiptap document (what the editor reads and sends). */
+  description_json: RichText | null;
   /** Counts up on every change of the description (conflict detection). */
   description_version: number;
   state_id: string;
@@ -216,8 +219,10 @@ export interface WorkItemRecord {
   parent_id: string | null;
   /** Fractional-indexing key for the manual order. */
   rank: string;
-  /** Property values, keyed by `Property.key`. */
+  /** Property values, keyed by `Property.key`; rich text values as Tiptap documents. */
   values: Record<string, PropertyValue>;
+  /** The rich text values as Markdown, keyed by `Property.key`. */
+  values_markdown: Record<string, string>;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -226,8 +231,8 @@ export interface WorkItemRecord {
   /** Entry into a Completed or Canceled status; cleared on reopening. */
   closed_at: string | null;
   archived_at: string | null;
+  /** Always null until templates come (Phase 10). */
   template_id: string | null;
-  subscriber_ids: string[];
 }
 
 /** A work item as the API answers it: the stored fields and what is computed on every read. */
@@ -237,6 +242,14 @@ export interface WorkItem extends WorkItemRecord {
    * out; null without a parent. The parent lies in the item's project: whoever sees the item sees it too.
    */
   parent: ItemRef | null;
+  /** Closed children out of all children; null for an item without children. */
+  children_progress: { done: number; total: number } | null;
+  /** Another item that is still open blocks this one (spec 4.9). */
+  blocked: boolean;
+  /** This item is still open and blocks at least one other item (spec 4.9). */
+  blocking: boolean;
+  /** Whether the signed-in account watches the item. */
+  subscribed: boolean;
 }
 
 export interface Relation {
@@ -278,9 +291,20 @@ export interface ItemEvent {
   subject: { type: string; id: string };
   project_id: string | null;
   changes: Record<string, { old: unknown; new: unknown }>;
-  /** Why an automation acted, e.g. "Automatisierung: Auto-Archiv". */
+  /** A move (`work_item.state_changed`): both states as they were then, so a renamed or removed state keeps its name. */
+  states: { old: StateSnapshot; new: StateSnapshot } | null;
+  /** Why it happened, e.g. `workflow_changed`, `state_removed` (`RemapStates`) or the reason of an automation. */
   reason: string | null;
+  /** How it happened: `ui`, `api`, `mcp`, `automation`, `template`, `system`. */
+  via: string;
   occurred_at: string;
+}
+
+/** A state as an event of the history recorded it. */
+export interface StateSnapshot {
+  id: string;
+  name: string;
+  category: StateCategory;
 }
 
 /* ----------------------------------------------------------------------- views */
@@ -613,13 +637,13 @@ export interface SystemStatus {
   mail_configured: boolean;
 }
 
-/* --------------------------------------------------------------- API shapes (fake API) */
+/* --------------------------------------------------------------------- API shapes */
 
 /** One end of a relation, seen from a work item. */
 export interface RelationEntry {
   /**
-   * The relation. When the reader may not see the other end, that end's id is blanked (`''`): item ids spell the key
-   * (`wi_ops_12`), so neither may leave the server. The relation's own `id` and `type_id` stay.
+   * The relation. When the reader may not see the other end, that end's id is blanked (`''`): nothing of an unseen item
+   * leaves the server, neither title nor key nor id (P19). The relation's own `id` and `type_id` stay.
    */
   relation: Relation;
   /** The item at the other end; null when the reader may not see it (shown as "verborgenes Item", without title). */
@@ -629,7 +653,7 @@ export interface RelationEntry {
   hidden: boolean;
 }
 
-/** What `getWorkItem` returns: the item with everything the detail view shows besides the activity. */
+/** What `getWorkItem` returns: the item with everything the detail view shows besides the activity (one call, `include`). */
 export interface WorkItemDetail {
   item: WorkItem;
   type: WorkItemType;
@@ -637,20 +661,21 @@ export interface WorkItemDetail {
   workflow: Workflow;
   children: WorkItem[];
   relations: RelationEntry[];
+  /** Empty until attachments come (Phase 7). */
   attachments: Attachment[];
-  /** Whether the signed-in account watches the item. */
+  /** Whether the signed-in account watches the item: `item.subscribed`. */
   subscribed: boolean;
 }
 
-/**
- * Facts about all items the signed-in account may see, for cards and rows: the progress of items with children, and
- * the items that are blocked or block others (a blocker counts while it is open).
- */
-export interface WorkItemMeta {
-  /** Item id → closed and all children, for items that have children. */
-  progress: Record<string, { done: number; total: number }>;
-  blocked: string[];
-  blocking: string[];
+/** How many items stand in a state (`/state-usage`), for the mapping of states; states without items are left out. */
+export interface StateUsage {
+  state_id: string;
+  items: number;
+}
+
+/** What deleting a type or a resolution did: a type or resolution that items use is archived instead. */
+export interface CatalogDeleteOutcome {
+  outcome: 'deleted' | 'archived';
 }
 
 /** One line of an item's activity: a comment or an event of the history, in chronological order. */

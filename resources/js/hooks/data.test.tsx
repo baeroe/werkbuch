@@ -236,6 +236,8 @@ const PROBES: Record<string, QueryKey> = {
   relationTypes: qk.relationTypes.all,
   resolutions: qk.resolutions.all,
   workItems: qk.workItems.all,
+  activity: qk.activity.all,
+  stateUsage: qk.stateUsage.all,
 };
 const ALL = Object.keys(PROBES);
 
@@ -267,11 +269,11 @@ describe('mutations', () => {
     ['useSaveWorkItemType', useSaveWorkItemType, types[1], 'PUT /api/v1/work-item-types/t_bug', () => ({ body: { data: types[1] } }), ['workItemTypes']],
     ['useDeleteWorkItemType', useDeleteWorkItemType, 't_wish', 'DELETE /api/v1/work-item-types/t_wish', () => ({ body: { outcome: 'deleted' } }), ['projects', 'workItemTypes']],
     ['useSaveProperty', useSaveProperty, properties[1], 'PUT /api/v1/properties/pr_effort', () => ({ body: { data: properties[1] } }), ['properties']],
-    ['useDeleteProperty', useDeleteProperty, 'pr_effort', 'DELETE /api/v1/properties/pr_effort', () => ({ body: { affected_items: 0 } }), ['workItemTypes', 'properties']],
+    ['useDeleteProperty', useDeleteProperty, 'pr_effort', 'DELETE /api/v1/properties/pr_effort', () => ({ body: { affected_items: 0 } }), ['workItemTypes', 'properties', 'workItems']],
     ['useSaveLabel', useSaveLabel, { name: 'Neu', color: 'sky' }, 'POST /api/v1/labels', () => ({ status: 201, body: { data: labels[0] } }), ['labels']],
-    ['useDeleteLabel', useDeleteLabel, 'lb_ux', 'DELETE /api/v1/labels/lb_ux', () => ({ body: { affected_items: 0 } }), ['labels']],
+    ['useDeleteLabel', useDeleteLabel, 'lb_ux', 'DELETE /api/v1/labels/lb_ux', () => ({ body: { affected_items: 0 } }), ['labels', 'workItems']],
     ['useSaveRelationType', useSaveRelationType, relationTypes[3], 'PUT /api/v1/relation-types/rt_tests', () => ({ body: { data: relationTypes[3] } }), ['relationTypes']],
-    ['useDeleteRelationType', useDeleteRelationType, 'rt_tests', 'DELETE /api/v1/relation-types/rt_tests', () => ({ body: { affected_relations: 0 } }), ['relationTypes']],
+    ['useDeleteRelationType', useDeleteRelationType, 'rt_tests', 'DELETE /api/v1/relation-types/rt_tests', () => ({ body: { affected_relations: 0 } }), ['relationTypes', 'workItems']],
     ['useSaveResolution', useSaveResolution, resolutions[2], 'PUT /api/v1/resolutions/res_duplicate', () => ({ body: { data: resolutions[2] } }), ['resolutions']],
     ['useDeleteResolution', useDeleteResolution, 'res_duplicate', 'DELETE /api/v1/resolutions/res_duplicate', () => ({ body: { outcome: 'deleted' } }), ['resolutions']],
     ['useToggleFavorite', useToggleFavorite, { kind: 'project', id: 'p1' }, 'POST /api/v1/favorites/toggle', () => ({ body: { kind: 'project', id: 'p1', favorite: true } }), ['favorites']],

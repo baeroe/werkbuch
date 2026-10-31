@@ -3,7 +3,7 @@
  * them.
  */
 
-import type { Label, RelationType, Resolution } from '@/types';
+import type { CatalogDeleteOutcome, Label, RelationType, Resolution } from '@/types';
 import type { Page, PageArgs } from './client';
 import { del, getPage, saveOne } from './http';
 
@@ -55,7 +55,7 @@ export function saveResolution(input: SaveInput<Resolution>): Promise<Resolution
   return save<Resolution>('/resolutions', input);
 }
 
-/** The answer is `{ outcome }` without `data`. */
-export function deleteResolution(id: string): Promise<{ outcome: 'deleted' | 'archived' }> {
-  return del<{ outcome: 'deleted' | 'archived' }>(`/resolutions/${encodeURIComponent(id)}`);
+/** The answer is `{ outcome }` without `data`: a resolution that items carry is archived instead of deleted. */
+export function deleteResolution(id: string): Promise<CatalogDeleteOutcome> {
+  return del<CatalogDeleteOutcome>(`/resolutions/${encodeURIComponent(id)}`);
 }

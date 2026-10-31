@@ -13,7 +13,7 @@ export function useSaveProperty() {
   return useApiMutation(saveProperty, [qk.properties.all]);
 }
 
-/** Answers `{ affected_items }`; the types lose the property, so they reload as well. */
+/** Answers `{ affected_items }`; the types lose the property and the items its values, so both reload as well. */
 export function useDeleteProperty() {
-  return useApiMutation(deleteProperty, [qk.properties.all, qk.workItemTypes.all]);
+  return useApiMutation(deleteProperty, [qk.properties.all, qk.workItemTypes.all, qk.workItems.all]);
 }
