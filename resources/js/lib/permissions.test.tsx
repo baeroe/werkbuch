@@ -145,12 +145,13 @@ describe('usePermissions', () => {
     expect(await screen.findByText('nein: Die Rechte konnten nicht geladen werden.')).toBeTruthy();
   });
 
-  it('allows nothing on a page without a signed-in person', async () => {
+  it('allows nothing on a page without a signed-in person, and asks the API for nothing', async () => {
     signedIn = null;
     api = mockApi({ 'GET /api/v1/projects': () => ({ body: list([project('WEB', 'admin')]) }) });
     show();
 
-    await vi.waitFor(() => expect(api.calls).toHaveLength(1));
+    await new Promise((done) => setTimeout(done, 20));
+    expect(api.calls).toHaveLength(0);
     expect(screen.getByText('lädt')).toBeTruthy();
   });
 });

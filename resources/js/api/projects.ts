@@ -39,6 +39,7 @@ export function createProject(input: CreateProjectInput): Promise<Project> {
   return one(post<{ data: Project }>('/projects', input));
 }
 
+/** `enabled_type_ids` and `default_type_id` stay in the type as in the clickdummy; the server ignores them until Phase 3. */
 export type UpdateProjectPatch = Partial<
   Pick<Project, 'name' | 'description' | 'image_url' | 'lead_id' | 'visibility' | 'enabled_type_ids' | 'default_type_id' | 'identifier'>
 >;

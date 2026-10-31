@@ -123,7 +123,8 @@ export interface Permissions {
 /** The rights of the signed-in person; nothing is allowed until the projects have loaded. */
 export function usePermissions(): Permissions {
   const user = useCurrentUser();
-  const projects = useProjects({ include_archived: true });
+  // a guest page has no rights to load
+  const projects = useProjects({ include_archived: true }, { enabled: user !== undefined });
 
   const projectList = projects.data?.items;
   const failed = projects.isError;

@@ -19,8 +19,8 @@ import { qk, type HookOptions } from './keys';
 import { useApiMutation } from './mutation';
 
 /** The projects the signed-in account sees, each with the own role (`my_role`). */
-export function useProjects(args: ListProjectsArgs = {}) {
-  return useQuery({ queryKey: qk.projects.list(args), queryFn: () => listProjects(args) });
+export function useProjects(args: ListProjectsArgs = {}, options: HookOptions = {}) {
+  return useQuery({ queryKey: qk.projects.list(args), queryFn: () => listProjects(args), enabled: options.enabled !== false });
 }
 
 /** One project by identifier (a former identifier works; compare `identifier` of the answer to redirect). */

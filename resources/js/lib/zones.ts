@@ -81,16 +81,17 @@ function shortName(zone: string, at: Date): string {
 
 /**
  * The common zones plus `current` (the zone the form shows) and `fallback` (the one that applies without a choice of
- * its own, e.g. the organisation's for a profile), each once, by name, labelled "Name (short)".
+ * its own, e.g. the organisation's for a profile), each once, by name, labelled "Name (short)". `current` and
+ * `fallback` stay even when the browser does not know them (with their plain name): a form never loses its value.
  */
 export function zoneOptions(current: string, fallback: string): ZoneOption[] {
   const at = new Date();
 
   return [...new Set([...COMMON_ZONES, current, fallback])]
-    .filter(known)
+    .filter((zone) => zone === current || zone === fallback || known(zone))
     .sort((a, b) => a.localeCompare(b))
     .map((zone) => {
-      const short = shortName(zone, at);
+      const short = known(zone) ? shortName(zone, at) : '';
       return { value: zone, label: short ? `${zone} (${short})` : zone };
     });
 }

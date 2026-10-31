@@ -24,13 +24,22 @@ describe('zoneOptions', () => {
     expect(options.length).toBeLessThanOrEqual(50);
   });
 
-  it('offers only zones the browser knows, each once, in alphabetical order', () => {
-    const values = zoneOptions('Mars/Olympus_Mons', 'UTC').map((option) => option.value);
+  it('offers common zones the browser knows, each once, in alphabetical order', () => {
+    const values = zoneOptions('UTC', 'UTC').map((option) => option.value);
 
-    expect(values).not.toContain('Mars/Olympus_Mons');
     expect(new Set(values).size).toBe(values.length);
     expect(values).toEqual([...values].sort((a, b) => a.localeCompare(b)));
     for (const value of values) expect(() => new Intl.DateTimeFormat('de', { timeZone: value })).not.toThrow();
+  });
+
+  it('keeps the zone of the form and the fallback with their plain name, even when the browser does not know them', () => {
+    const options = zoneOptions('Mars/Olympus_Mons', 'Mars/Phobos');
+
+    expect(options).toEqual(expect.arrayContaining([
+      { value: 'Mars/Olympus_Mons', label: 'Mars/Olympus_Mons' },
+      { value: 'Mars/Phobos', label: 'Mars/Phobos' },
+    ]));
+    expect(options.map((option) => option.value)).toEqual([...options.map((option) => option.value)].sort((a, b) => a.localeCompare(b)));
   });
 
   it('labels a zone with its short name today, in the language of the page', () => {

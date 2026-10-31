@@ -35,8 +35,22 @@ export function useInviteUser() {
   return useApiMutation(inviteUser, [qk.invitations.all]);
 }
 
+/**
+ * A change of the own role reloads the page (the shared props carry the role) and the projects (their `my_role`), so
+ * the rights of the interface follow it at once.
+ */
 export function useUpdateUserRole() {
-  return useApiMutation(({ user_id, org_role }: { user_id: string; org_role: OrgRole }) => updateUserRole(user_id, org_role), [qk.users.all]);
+  const me = useCurrentUser();
+  const own = (user_id: string) => user_id === me?.id;
+  return useApiMutation(
+    ({ user_id, org_role }: { user_id: string; org_role: OrgRole }) => updateUserRole(user_id, org_role),
+    (_user, { user_id }) => (own(user_id) ? [qk.users.all, qk.projects.all] : [qk.users.all]),
+    {
+      onSuccess: (_user, { user_id }) => {
+        if (own(user_id)) router.reload();
+      },
+    },
+  );
 }
 
 export function useDeactivateUser() {

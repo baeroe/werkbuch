@@ -225,6 +225,26 @@ describe('mutations', () => {
     expect(router.reload).toHaveBeenCalledTimes(1);
   });
 
+  it('useUpdateUserRole reloads the page and the projects for the own account, only the people for another one', async () => {
+    api = mockApi({
+      'PUT /api/v1/users/u_ida/role': () => ({ body: { data: { ...ida, org_role: 'admin' } } }),
+      'PUT /api/v1/users/u_mara/role': () => ({ body: { data: { ...mara, org_role: 'member' } } }),
+    });
+    const stale = () => ALL.filter((name) => queryClient.getQueryState(PROBES[name]!)?.isInvalidated);
+    const seed = () => Object.values(PROBES).forEach((key) => queryClient.setQueryData(key, 'cached'));
+    const { result } = renderHook(() => useUpdateUserRole(), { wrapper });
+
+    seed();
+    await act(() => result.current.mutateAsync({ user_id: 'u_ida', org_role: 'admin' }));
+    expect(stale()).toEqual(['users']);
+    expect(router.reload).not.toHaveBeenCalled();
+
+    seed();
+    await act(() => result.current.mutateAsync({ user_id: 'u_mara', org_role: 'member' }));
+    expect(stale()).toEqual(['users', 'projects']);
+    expect(router.reload).toHaveBeenCalledTimes(1);
+  });
+
   it('useCreateToken does not keep the answer with the plain text once its dialog lets go of it', async () => {
     api = mockApi({
       'POST /api/v1/tokens': () => ({ status: 201, body: { token, plain_text: 'tok_1|wb_geheim' } }),
