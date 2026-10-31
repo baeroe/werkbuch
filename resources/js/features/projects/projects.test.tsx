@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { currentToasts, resetToasts, runToastAction } from '@/components/ui/toast';
 import { useUiStore } from '@/store/ui';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
-import { ida, lene, list, mara, organization, project } from '@/test/fixtures';
+import { agency, ida, lene, list, mara, organization, project, standard, types } from '@/test/fixtures';
 import type { Project, User } from '@/types';
 import { ProjectsScreen } from './ProjectsScreen';
 
@@ -36,6 +36,8 @@ const app = project('APP', 'viewer', { name: 'Kunden-App', lead_id: 'u_mara', is
 const ops = project('OPS', 'admin', { name: 'Infrastruktur', visibility: 'private', is_member: false, lead_id: 'u_gone' });
 const old = project('OLD', 'admin', { name: 'Altes Projekt', archived_at: '2026-09-01T10:00:00.000Z' });
 
+const archivedType = { ...types[0]!, id: 't_old', name: 'Altlast', archived_at: '2026-09-01T10:00:00.000Z' };
+
 const problem = (status: number, reason: string, extra: Record<string, unknown> = {}) => ({ status, body: { type: 'about:blank', title: reason, status, reason, ...extra } });
 const unavailable = () => problem(503, 'service_unavailable', { detail: 'Der Server ist gerade nicht erreichbar.' });
 
@@ -48,6 +50,8 @@ function renderScreen(overrides: Record<string, MockRoute> = {}, { create = fals
     'GET /api/v1/projects': () => ({ body: list([web, app, old]) }),
     'GET /api/v1/users': () => ({ body: list([mara, ida, lene]) }),
     'GET /api/v1/favorites': () => ({ body: list([{ user_id: 'u_lene', kind: 'project', id: 'p_web', position: 0 }]) }),
+    'GET /api/v1/workflows': () => ({ body: list([agency, standard]) }),
+    'GET /api/v1/work-item-types': () => ({ body: list([...types, archivedType]) }),
     ...overrides,
   });
   if (offline) globalThis.fetch = () => Promise.reject(new TypeError('Failed to fetch'));
@@ -285,6 +289,7 @@ describe('CreateProjectDialog', () => {
 
     await user.click(screen.getByRole('button', { name: 'Neues Projekt' }));
     const dialog = await screen.findByRole('dialog', { name: 'Neues Projekt' });
+    await within(dialog).findByRole('textbox', { name: 'Name' });
     const identifier = within(dialog).getByRole('textbox', { name: 'Kennung' });
     expect(within(dialog).getByText(/Die Items heißen dann KEY-1, KEY-2 und so weiter\./)).toBeTruthy();
 
@@ -297,7 +302,14 @@ describe('CreateProjectDialog', () => {
     await user.click(within(dialog).getByRole('button', { name: /Projekt anlegen/ }));
 
     await waitFor(() => expect(toastTitles()).toContain('Projekt WER angelegt'));
-    expect(lastCall('POST', '/api/v1/projects')!.body).toEqual({ name: 'Website Relaunch', identifier: 'WER', visibility: 'private' });
+    expect(lastCall('POST', '/api/v1/projects')!.body).toEqual({
+      name: 'Website Relaunch',
+      identifier: 'WER',
+      visibility: 'private',
+      workflow_id: 'wf_standard',
+      enabled_type_ids: ['t_task', 't_bug', 't_epic', 't_wish'],
+      default_type_id: 't_task',
+    });
     expect(useUiStore.getState().flashIds).toContain('p_new');
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Neues Projekt' })).toBeNull());
 
@@ -312,6 +324,7 @@ describe('CreateProjectDialog', () => {
 
     await user.click(screen.getByRole('button', { name: 'Neues Projekt' }));
     const dialog = await screen.findByRole('dialog', { name: 'Neues Projekt' });
+    await within(dialog).findByRole('textbox', { name: 'Name' });
     const identifier = within(dialog).getByRole('textbox', { name: 'Kennung' });
     await user.clear(identifier);
     await user.type(identifier, 'site');
@@ -329,6 +342,7 @@ describe('CreateProjectDialog', () => {
 
     await user.click(screen.getByRole('button', { name: 'Neues Projekt' }));
     const dialog = await screen.findByRole('dialog', { name: 'Neues Projekt' });
+    await within(dialog).findByRole('textbox', { name: 'Name' });
     await user.type(within(dialog).getByRole('textbox', { name: 'Name' }), 'Betrieb');
     await user.click(within(dialog).getByRole('button', { name: /Projekt anlegen/ }));
 
@@ -350,12 +364,120 @@ describe('CreateProjectDialog', () => {
 
     await user.click(screen.getByRole('button', { name: 'Neues Projekt' }));
     const dialog = await screen.findByRole('dialog', { name: 'Neues Projekt' });
+    await within(dialog).findByRole('textbox', { name: 'Name' });
     await user.type(within(dialog).getByRole('textbox', { name: 'Name' }), 'Betrieb');
     await user.click(within(dialog).getByRole('button', { name: /Projekt anlegen/ }));
 
     const alert = await within(dialog).findByRole('alert');
     expect(alert.textContent).toContain('Das Projekt ist nicht gültig');
     expect(alert.textContent).toContain('Die Person gibt es nicht.');
+  });
+
+  it('waits with the form until the workflows and types are there, and says so on the button', async () => {
+    const user = userEvent.setup();
+    renderScreen({}, { hold: '/work-item-types' });
+    await screen.findByText('Kunden-App');
+
+    await user.click(screen.getByRole('button', { name: 'Neues Projekt' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Neues Projekt' });
+    expect(within(dialog).getByText('Das Formular wird geladen …')).toBeTruthy();
+    expect(within(dialog).queryByRole('textbox', { name: 'Name' })).toBeNull();
+    const send = within(dialog).getByRole('button', { name: /Projekt anlegen/ });
+    expect(send.getAttribute('aria-disabled')).toBe('true');
+    expect(send.getAttribute('aria-describedby')).toBeTruthy();
+    expect(document.getElementById(send.getAttribute('aria-describedby')!)!.textContent).toBe('Das Formular lädt noch …');
+  });
+
+  it('preselects the default workflow and every active type, and sends what it picks with the topmost type as the default', async () => {
+    const user = userEvent.setup();
+    renderScreen({ 'POST /api/v1/projects': (body) => ({ status: 201, body: { data: created(body as Partial<Project>) } }) });
+    await screen.findByText('Kunden-App');
+
+    await user.click(screen.getByRole('button', { name: 'Neues Projekt' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Neues Projekt' });
+    const name = await within(dialog).findByRole('textbox', { name: 'Name' });
+    await waitFor(() => expect(document.activeElement).toBe(name));
+    const workflow = within(dialog).getByRole('combobox', { name: /Workflow/ });
+    expect(workflow.textContent).toContain('Standard');
+    expect(within(dialog).getByText('Der Standard-Workflow: Jeder Status ist von überall erreichbar.')).toBeTruthy();
+    // archived types are not offered
+    expect(within(dialog).queryByText('Altlast')).toBeNull();
+    expect(within(dialog).getByText('Standardtyp ist Task, der oberste angehakte.')).toBeTruthy();
+
+    await user.type(name, 'Agentur');
+    await user.click(workflow);
+    await user.click(await screen.findByRole('option', { name: 'Agentur-Freigabe' }));
+    expect(within(dialog).getByText('Mit interner Prüfung und Kundenfreigabe vor dem Abschluss.')).toBeTruthy();
+    await user.click(within(dialog).getByRole('checkbox', { name: 'Task' }));
+    await user.click(within(dialog).getByRole('checkbox', { name: 'Kundenwunsch' }));
+    expect(within(dialog).getByText('Standardtyp ist Bug, der oberste angehakte.')).toBeTruthy();
+    await user.click(within(dialog).getByRole('button', { name: /Projekt anlegen/ }));
+
+    await waitFor(() => expect(toastTitles()).toContain('Projekt AGE angelegt'));
+    expect(lastCall('POST', '/api/v1/projects')!.body).toEqual({
+      name: 'Agentur',
+      identifier: 'AGE',
+      visibility: 'public',
+      workflow_id: 'wf_agency',
+      enabled_type_ids: ['t_bug', 't_epic'],
+      default_type_id: 't_bug',
+    });
+  });
+
+  it('says that a type must stay ticked, and shows the refusal of the server at the list of types', async () => {
+    const user = userEvent.setup();
+    renderScreen({
+      'POST /api/v1/projects': () => problem(422, 'validation_failed', { errors: { enabled_type_ids: ['Mindestens ein Typ muss aktiviert sein.'] } }),
+    });
+    await screen.findByText('Kunden-App');
+
+    await user.click(screen.getByRole('button', { name: 'Neues Projekt' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Neues Projekt' });
+    await user.type(await within(dialog).findByRole('textbox', { name: 'Name' }), 'Leer');
+    for (const name of ['Task', 'Bug', 'Epic', 'Kundenwunsch']) await user.click(within(dialog).getByRole('checkbox', { name }));
+    expect(within(dialog).getByText('Mindestens ein Typ muss aktiviert sein.')).toBeTruthy();
+    await user.click(within(dialog).getByRole('button', { name: /Projekt anlegen/ }));
+
+    const task = within(dialog).getByRole('checkbox', { name: 'Task' });
+    await waitFor(() => expect(task.getAttribute('aria-invalid')).toBe('true'));
+    await waitFor(() => expect(document.activeElement).toBe(task));
+    expect(lastCall('POST', '/api/v1/projects')!.body).toMatchObject({ enabled_type_ids: [] });
+    expect(lastCall('POST', '/api/v1/projects')!.body).not.toHaveProperty('default_type_id');
+    expect(within(dialog).queryByRole('alert')).toBeNull();
+
+    // ticking a type again takes the error away
+    await user.click(task);
+    expect(task.getAttribute('aria-invalid')).toBeNull();
+    expect(within(dialog).getByText('Standardtyp ist Task, der oberste angehakte.')).toBeTruthy();
+  });
+
+  it('says when the workflows or the types could not be loaded, and loads them again on request', async () => {
+    const user = userEvent.setup();
+    let failWorkflows = true;
+    let failTypes = true;
+    renderScreen({
+      'GET /api/v1/workflows': () => (failWorkflows ? unavailable() : { body: list([standard]) }),
+      'GET /api/v1/work-item-types': () => (failTypes ? unavailable() : { body: list(types) }),
+    });
+    await screen.findByText('Kunden-App');
+
+    await user.click(screen.getByRole('button', { name: 'Neues Projekt' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Neues Projekt' });
+    const alert = await within(dialog).findByRole('alert');
+    expect(alert.textContent).toContain('Workflows und Typen konnten nicht geladen werden');
+    expect(alert.textContent).toContain('Ohne sie lässt sich kein Projekt anlegen.');
+    const send = within(dialog).getByRole('button', { name: /Projekt anlegen/ });
+    expect(document.getElementById(send.getAttribute('aria-describedby')!)!.textContent).toBe('Ohne Workflows und Typen lässt sich kein Projekt anlegen.');
+
+    // only the types fail now: one more try loads what failed
+    failWorkflows = false;
+    await user.click(within(alert).getByRole('button', { name: 'Erneut versuchen' }));
+    await waitFor(() => expect(api!.calls.filter((call) => call.url.startsWith('/api/v1/workflows'))).toHaveLength(2));
+    expect(await within(dialog).findByRole('alert')).toBeTruthy();
+    failTypes = false;
+    await user.click(within(within(dialog).getByRole('alert')).getByRole('button', { name: 'Erneut versuchen' }));
+    expect(await within(dialog).findByRole('textbox', { name: 'Name' })).toBeTruthy();
+    expect(api!.calls.filter((call) => call.url.startsWith('/api/v1/workflows'))).toHaveLength(2);
   });
 
   it('creates one project for a double send, and says when the server failed', async () => {
@@ -365,6 +487,7 @@ describe('CreateProjectDialog', () => {
 
     await user.click(screen.getByRole('button', { name: 'Neues Projekt' }));
     const dialog = await screen.findByRole('dialog', { name: 'Neues Projekt' });
+    await within(dialog).findByRole('textbox', { name: 'Name' });
     await user.type(within(dialog).getByRole('textbox', { name: 'Name' }), 'Betrieb');
     const form = dialog.querySelector('form')!;
     act(() => {

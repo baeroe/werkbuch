@@ -351,7 +351,8 @@ export async function openNavigation(page: Page, locale: Locale, { backwards = f
 
 /**
  * Creates a project with the keyboard only: "Create project" in the sidebar, the name, the identifier the dialog
- * suggests, ⌘↵. Answers the identifier. Name it `E2E …`: the e2e seeder removes those projects before every run.
+ * suggests, the default workflow and the active types it preselects, ⌘↵. Answers the identifier. Name it `E2E …`: the
+ * e2e seeder removes those projects before every run.
  */
 export async function createProjectFromSidebar(page: Page, name: string): Promise<string> {
   const navigation = await openNavigation(page, 'en');
@@ -362,6 +363,8 @@ export async function createProjectFromSidebar(page: Page, name: string): Promis
   await expect(dialog).toBeVisible();
   // the address asked for the dialog once and keeps nothing of it
   await expect(page).toHaveURL(/\/projects$/);
+  // the form waits for the workflows and types, then the name takes the focus
+  await expect(dialog.getByRole('combobox', { name: new RegExp(`^${tr('en', 'projects.create.workflow')}`) })).toBeVisible();
   const nameField = dialog.getByRole('textbox', { name: tr('en', 'projects.create.name') });
   await expect(nameField).toBeFocused();
   await page.keyboard.type(name);

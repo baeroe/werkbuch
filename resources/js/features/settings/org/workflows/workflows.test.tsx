@@ -163,7 +163,7 @@ describe('the list of workflows', () => {
     expect(within(standardCard).getByText('Standard', { selector: 'span:not(.sr-only)' })).toBeTruthy();
     expect(within(standardCard).getByText('Frei')).toBeTruthy();
     expect(within(standardCard).getByText('Jeder Status darf in jeden wechseln.')).toBeTruthy();
-    expect(within(standardCard).getByRole('link', { name: /WEB/ }).getAttribute('href')).toBe('/projects/WEB/settings');
+    expect(within(standardCard).getByRole('link', { name: /WEB/ }).getAttribute('href')).toBe('/projects/WEB/settings/workflow');
 
     const agencyCard = await card('Agentur-Freigabe');
     expect(within(agencyCard).getByText('Mit Übergangsmatrix')).toBeTruthy();
@@ -176,8 +176,8 @@ describe('the list of workflows', () => {
     expect(within(agencyCard).getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([
       '/settings/workflows?workflow=wf_agency',
       '/settings/workflows?workflow=new&from=wf_agency',
-      '/projects/APP/settings',
-      '/projects/OPS/settings',
+      '/projects/APP/settings/workflow',
+      '/projects/OPS/settings/workflow',
     ]);
     expect(within(agencyCard).getByRole('link', { name: 'Bearbeiten Agentur-Freigabe' })).toBeTruthy();
 

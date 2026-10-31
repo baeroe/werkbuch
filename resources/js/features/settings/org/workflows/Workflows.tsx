@@ -99,7 +99,7 @@ function WorkflowCard({ workflow, users, canEdit, onDelete }: CardProps) {
             <ul className="flex flex-wrap gap-1.5">
               {users.map((project) => (
                 <li key={project.id}>
-                  <Link href={paths.projectSettings(project.identifier)} className="inline-flex max-w-64 rounded-chip no-underline">
+                  <Link href={paths.projectSettings(project.identifier, 'workflow')} className="inline-flex max-w-64 rounded-chip no-underline">
                     <Chip icon={<ProjectBadge project={project} />}>
                       <span translate="no">{project.identifier}</span> {project.name}
                     </Chip>

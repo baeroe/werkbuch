@@ -232,6 +232,33 @@ describe('FormDialog', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
+  it('stays open while it is locked: "Abbrechen" is blocked, Escape and the close button do nothing', async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    const { rerender } = render(
+      <FormDialog open onOpenChange={onOpenChange} title="Workflow wechseln" submitLabel="Wechseln" pending locked onSubmit={() => {}}>
+        <p>Text</p>
+      </FormDialog>,
+    );
+    await screen.findByRole('dialog', { name: 'Workflow wechseln' });
+
+    expect(screen.getByRole('button', { name: 'Abbrechen' })).toHaveProperty('disabled', true);
+    await user.keyboard('{Escape}');
+    await user.click(screen.getByRole('button', { name: 'Schließen' }));
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog', { name: 'Workflow wechseln' })).toBeTruthy();
+
+    // unlocked, the same Escape closes it (the counter-check)
+    rerender(
+      <FormDialog open onOpenChange={onOpenChange} title="Workflow wechseln" submitLabel="Wechseln" onSubmit={() => {}}>
+        <p>Text</p>
+      </FormDialog>,
+    );
+    expect(screen.getByRole('button', { name: 'Abbrechen' })).toHaveProperty('disabled', false);
+    await user.keyboard('{Escape}');
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
   it('binds the submit shortcut of the catalog only while it is open', async () => {
     const { rerender } = render(
       <FormDialog open onOpenChange={() => {}} title="Bot anlegen" submitLabel="Anlegen" onSubmit={() => {}}>

@@ -1,7 +1,6 @@
 /*
- * The settings of a project (spec 5.2) in the shared settings frame: General and Members, one address each
- * (`/projects/{identifier}/settings/{section?}`, General without a section; Workflow, Types and Automations join with
- * their phases). Project admins and org admins change them; everybody else reads, with the reason from `usePermissions`
+ * The settings of a project (spec 5.2) in the shared settings frame: General, Members, Workflow and Types, one address
+ * each (`/projects/{identifier}/settings/{section?}`, General without a section; Automations join with Phase 10). Project admins and org admins change them; everybody else reads, with the reason from `usePermissions`
  * (spec 4.3). The server answers an old identifier with a 301; a rename made here (or elsewhere, while the page is open)
  * moves the address to the identifier the project has now.
  */
@@ -25,8 +24,10 @@ import { ReadOnlyBanner, SettingsError, SettingsSkeleton } from '../frame/parts'
 import { SectionNav, SectionNavSkeleton, SettingsFrame } from '../frame/SettingsFrame';
 import { General } from './General';
 import { Members } from './Members';
+import { Types } from './Types';
+import { Workflow } from './Workflow';
 
-const SECTIONS = ['general', 'members'] as const;
+const SECTIONS = ['general', 'members', 'workflow', 'types'] as const;
 type Section = (typeof SECTIONS)[number];
 
 const isSection = (slug: string): slug is Section => (SECTIONS as readonly string[]).includes(slug);
@@ -131,6 +132,8 @@ export function ProjectSettings({ identifier, section }: { identifier: string; s
           <Fragment key={known.id}>
             {current === 'general' && <General {...props} />}
             {current === 'members' && <Members {...props} />}
+            {current === 'workflow' && <Workflow {...props} />}
+            {current === 'types' && <Types {...props} />}
           </Fragment>
         </>
       )}
