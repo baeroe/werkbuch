@@ -14,8 +14,10 @@ require __DIR__.'/auth.php';
 Route::middleware('auth')->group(function () {
     Route::redirect('/', '/my-items');
     Route::inertia('/my-items', 'Items/MyItems')->name('my-items');
-    // the settings of the organization; an unknown section is the page's business (it says so and keeps the list)
-    Route::get('/settings/{section?}', fn (?string $section = null) => Inertia::render('Settings/Organization', ['section' => $section ?? 'general']))
+    // the settings of the organization, one address per section; an unknown section is the page's business (it says so
+    // and keeps the list)
+    Route::redirect('/settings', '/settings/general');
+    Route::get('/settings/{section}', fn (string $section) => Inertia::render('Settings/Organization', ['section' => $section]))
         ->name('settings');
 });
 

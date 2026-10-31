@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { initI18n } from '@/lib/i18n';
 import en from '../../../../lang/en.json';
 import { Select, type SelectOption } from './Select';
@@ -48,7 +48,36 @@ describe('Select', () => {
     expect(document.activeElement).toBe(screen.getByRole('combobox', { name: /Status/ }));
   });
 
-  it('shows the icon of the chosen option, marks it in the list and leaves a disabled option out of reach', async () => {
+  it('gives the focus back to the field as the list closes, not once it has faded out, so a Tab right after stays in place', async () => {
+    const user = userEvent.setup();
+    // the list fades out and never finishes: what a Tab during the animation meets
+    const fading = vi.fn(() => [{ finished: new Promise(() => {}) }] as unknown as Animation[]);
+    Object.defineProperty(HTMLElement.prototype, 'getAnimations', { value: fading, configurable: true });
+    onTestFinished(() => void delete (HTMLElement.prototype as { getAnimations?: unknown }).getAnimations);
+    render(
+      <>
+        <Harness />
+        <button type="button">Weiter</button>
+      </>,
+    );
+    const trigger = screen.getByRole('combobox', { name: /Status/ });
+
+    await user.click(trigger);
+    await screen.findByRole('listbox');
+    await user.keyboard('{ArrowDown}{Enter}');
+    expect(document.activeElement).toBe(trigger);
+    await user.tab();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Weiter' }));
+
+    // closing without a choice gives it back too
+    await user.click(trigger);
+    await screen.findByRole('listbox');
+    await user.keyboard('{Escape}');
+    expect(document.activeElement).toBe(trigger);
+    expect(fading).toHaveBeenCalled();
+  });
+
+    it('shows the icon of the chosen option, marks it in the list and leaves a disabled option out of reach', async () => {
     const user = userEvent.setup();
     const onValueChange = vi.fn();
     render(<Harness start="todo" onValueChange={onValueChange} keepSide />);

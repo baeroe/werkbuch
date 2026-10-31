@@ -20,7 +20,7 @@ import { Textarea } from '@/components/ui/Textarea';
 import { toast } from '@/components/ui/toast';
 import { useSettle } from '@/hooks/mutation';
 import { useRevokeToken, useTokens } from '@/hooks/tokens';
-import { useCreateBot, useCurrentUser, useDeactivateUser, useReactivateUser, useUpdateUser, useUsers } from '@/hooks/users';
+import { useAllUsers, useCreateBot, useCurrentUser, useDeactivateUser, useReactivateUser, useUpdateUser } from '@/hooks/users';
 import { notifyError } from '@/lib/errors';
 import { t } from '@/lib/i18n';
 import type { Token, User } from '@/types';
@@ -52,11 +52,22 @@ export function handleFrom(name: string): string {
 
 /* ------------------------------------------------------------------- bot dialog */
 
+/**
+ * The people who can be responsible: the active ones, and the one responsible now even when deactivated meanwhile, so
+ * opening the dialog never loses the value (like `zoneOptions`).
+ */
+function ownerOptions(people: User[], current: string | null) {
+  return people
+    .filter((person) => person.disabled_at === null || person.id === current)
+    .map((person) => ({ value: person.id, label: person.name, icon: <Avatar user={person} size="sm" decorative /> }));
+}
+
 type BotDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** The bot to change; null creates a new one. */
   bot: User | null;
+  /** Every person, deactivated ones included. */
   people: User[];
   meId: string | undefined;
 };
@@ -147,7 +158,7 @@ function BotDialog({ open, onOpenChange, bot, people, meId }: BotDialogProps) {
           value={owner}
           placeholder={t('settings.bots.dialog.owner_placeholder')}
           onValueChange={setOwner}
-          options={people.map((person) => ({ value: person.id, label: person.name, icon: <Avatar user={person} size="sm" decorative /> }))}
+          options={ownerOptions(people, owner)}
         />
       )}
     </FormDialog>
@@ -327,13 +338,13 @@ function BotCard({ bot, owner, onEdit }: BotCardProps) {
 }
 
 export default function Bots(_props: SectionProps) {
-  const users = useUsers();
+  const botList = useAllUsers({ type: 'bot' });
+  const personList = useAllUsers({ type: 'person' });
   const me = useCurrentUser();
   const dialog = useDialogRound<User>();
-  const all = users.data?.items ?? [];
-  const people = all.filter((user) => user.type === 'person' && user.disabled_at === null);
+  const people = personList.data?.items ?? [];
   // the default bot first, deactivated bots last
-  const bots = all.filter((user) => user.type === 'bot').sort((a, b) => Number(b.is_default_bot) - Number(a.is_default_bot) || Number(a.disabled_at !== null) - Number(b.disabled_at !== null));
+  const bots = [...(botList.data?.items ?? [])].sort((a, b) => Number(b.is_default_bot) - Number(a.is_default_bot) || Number(a.disabled_at !== null) - Number(b.disabled_at !== null));
 
   return (
     <div className="flex flex-col gap-4">
@@ -346,7 +357,7 @@ export default function Bots(_props: SectionProps) {
           </Button>
         }
       />
-      <Loaded queries={[users]} failure={t('settings.bots.load_failed')} skeleton={<RowsSkeleton rows={2} label={t('settings.bots.loading')} />}>
+      <Loaded queries={[botList, personList]} failure={t('settings.bots.load_failed')} skeleton={<RowsSkeleton rows={2} label={t('settings.bots.loading')} />}>
         {() =>
           bots.length === 0 ? (
             <EmptyState
@@ -363,7 +374,7 @@ export default function Bots(_props: SectionProps) {
             <ul className="flex flex-col gap-3">
               {bots.map((bot) => (
                 <li key={bot.id}>
-                  <BotCard bot={bot} owner={all.find((user) => user.id === bot.owner_id)} onEdit={() => dialog.show(bot)} />
+                  <BotCard bot={bot} owner={people.find((user) => user.id === bot.owner_id)} onEdit={() => dialog.show(bot)} />
                 </li>
               ))}
             </ul>

@@ -26,7 +26,7 @@ import { Select } from '@/components/ui/Select';
 import { toast } from '@/components/ui/toast';
 import { useSettle } from '@/hooks/mutation';
 import { useProjects } from '@/hooks/projects';
-import { useCurrentUser, useDeactivateUser, useInvitations, useInviteUser, useReactivateUser, useUpdateUserRole, useUsers } from '@/hooks/users';
+import { useAllUsers, useCurrentUser, useDeactivateUser, useInvitations, useInviteUser, useReactivateUser, useUpdateUserRole } from '@/hooks/users';
 import { notifyError } from '@/lib/errors';
 import { t } from '@/lib/i18n';
 import type { Invitation, OrgRole, Project, ProjectRole, User } from '@/types';
@@ -215,7 +215,7 @@ type SelfAction = { what: 'deactivate' | 'demote'; user: User };
 
 export default function People(_props: SectionProps) {
   const settle = useSettle();
-  const users = useUsers();
+  const users = useAllUsers({ type: 'person' });
   const invitations = useInvitations();
   const projects = useProjects();
   const me = useCurrentUser();
@@ -227,7 +227,7 @@ export default function People(_props: SectionProps) {
   const [refusal, setRefusal] = useState<Refusal | null>(null);
   const [asking, setAsking] = useState<SelfAction | null>(null);
 
-  const people = (users.data?.items ?? []).filter((user) => user.type === 'person').sort((a, b) => Number(a.disabled_at !== null) - Number(b.disabled_at !== null));
+  const people = [...(users.data?.items ?? [])].sort((a, b) => Number(a.disabled_at !== null) - Number(b.disabled_at !== null));
   const otherAdmin = (user: User) => (users.data?.items ?? []).some((other) => other.id !== user.id && isActiveAdmin(other));
 
   function refuse(error: unknown, user: User, what: Refusal['what']) {
@@ -340,9 +340,9 @@ export default function People(_props: SectionProps) {
                         aria-label={t('settings.people.role_of', { name: person.name })}
                         className="w-32"
                         value={role}
-                        disabled={busyRole === person.id}
+                        // not disabled while the call runs: a disabled field would drop the keyboard focus to the page
                         onValueChange={(next) => {
-                          if (!next || next === person.org_role) return;
+                          if (!next || next === person.org_role || busyRole === person.id) return;
                           if (next === 'member') ask('demote', person, () => changeRole(person, 'member'));
                           else changeRole(person, 'admin');
                         }}

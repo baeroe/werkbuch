@@ -12,6 +12,7 @@ import {
   type ListUsersArgs,
   type UpdateUserPatch,
 } from '@/api/users';
+import type { Page } from '@/api/client';
 import { useSharedProps } from '@/lib/page';
 import type { OrgRole, User } from '@/types';
 import { qk } from './keys';
@@ -20,6 +21,26 @@ import { useApiMutation } from './mutation';
 /** All accounts, deactivated ones included (history and old assignments point to them). */
 export function useUsers(args: ListUsersArgs = {}) {
   return useQuery({ queryKey: qk.users.list(args), queryFn: () => listUsers(args) });
+}
+
+/**
+ * All accounts of every page (`next_cursor` followed to the end), for the screens that must show every one of them:
+ * the people and bots of the settings, the responsible person of a bot. One page holds at most 100.
+ */
+export function useAllUsers(args: Omit<ListUsersArgs, 'cursor' | 'per_page'> = {}) {
+  return useQuery({
+    queryKey: qk.users.list({ ...args, pages: 'all' }),
+    queryFn: async (): Promise<Page<User>> => {
+      const items: User[] = [];
+      let cursor: string | null = null;
+      do {
+        const page = await listUsers({ ...args, cursor });
+        items.push(...page.items);
+        cursor = page.next_cursor;
+      } while (cursor !== null);
+      return { items, next_cursor: null, total: items.length };
+    },
+  });
 }
 
 /** The signed-in account as the page brought it along (shared props), or undefined on a guest page. */

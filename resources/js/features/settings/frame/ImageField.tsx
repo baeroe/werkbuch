@@ -53,7 +53,10 @@ export function ImageField({ label, preview, hasImage, hint, error, disabled, on
   const id = useId();
   const input = useRef<HTMLInputElement>(null);
   const [unreadable, setUnreadable] = useState(false);
-  const shown = unreadable ? t('settings.frame.image.unreadable') : error;
+  // the server's word on the picture before this one: it is not about the new choice
+  const [settled, setSettled] = useState<string | undefined>(undefined);
+  const shown = unreadable ? t('settings.frame.image.unreadable') : error !== settled ? error : undefined;
+  const labelId = `${id}-label`;
 
   async function choose(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -62,6 +65,7 @@ export function ImageField({ label, preview, hasImage, hint, error, disabled, on
     try {
       onChange(await readSquareImage(file));
       setUnreadable(false);
+      setSettled(error);
     } catch {
       setUnreadable(true);
     }
@@ -69,14 +73,32 @@ export function ImageField({ label, preview, hasImage, hint, error, disabled, on
 
   return (
     <Field id={id} label={label} hint={hint} error={shown}>
-      <div role="group" aria-labelledby={`${id}-label`} className="flex flex-wrap items-center gap-3">
+      <div role="group" aria-labelledby={labelId} className="flex flex-wrap items-center gap-3">
         <span className="shrink-0">{preview}</span>
-        <Button id={id} variant="secondary" icon={ImagePlus} disabled={disabled} aria-describedby={describedBy(id, { hint, error: shown })} onClick={() => input.current?.click()}>
-          {t('settings.frame.image.choose')}
+        {/* the name starts with what the button says and names the field (WCAG 2.5.3): "Choose picture … Logo" */}
+        <Button
+          id={id}
+          variant="secondary"
+          icon={ImagePlus}
+          disabled={disabled}
+          aria-labelledby={`${id}-choose ${labelId}`}
+          aria-describedby={describedBy(id, { hint, error: shown })}
+          onClick={() => input.current?.click()}
+        >
+          <span id={`${id}-choose`}>{t('settings.frame.image.choose')}</span>
         </Button>
         {hasImage && (
-          <Button variant="ghost" disabled={disabled} onClick={() => onChange(null)}>
-            {t('settings.frame.image.remove')}
+          <Button
+            variant="ghost"
+            disabled={disabled}
+            aria-labelledby={`${id}-remove ${labelId}`}
+            onClick={() => {
+              setUnreadable(false);
+              setSettled(error);
+              onChange(null);
+            }}
+          >
+            <span id={`${id}-remove`}>{t('settings.frame.image.remove')}</span>
           </Button>
         )}
         <input ref={input} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden tabIndex={-1} onChange={(event) => void choose(event)} />

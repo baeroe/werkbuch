@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { arrowTo, PEOPLE, pressMod, runId, signedInContext, tabTo, tr, variant } from '../helpers';
+import { api, arrowTo, PEOPLE, pressMod, runId, signedInContext, tabTo, tr, variant } from '../helpers';
 
 // Signed in as the e2e person (Erik Ende, org admin; playwright.config.ts), in English. Whatever a test creates carries
 // the id of the run; what it changes on shared records (the name of the organization, Lene's role) it sets back.
@@ -9,6 +9,21 @@ const ORGANIZATION = 'Feldwerk';
 
 /** The browser's note on the 404 of a place that arrives with a later phase (the 404 page shows instead). */
 const notFound = (path: string) => new RegExp(`status of 404 .*\\(https?://[^/]+${path}\\)$`);
+
+/** Sets the name of the organization back over the API, whatever the test left behind. */
+async function resetOrganizationName(page: Page): Promise<void> {
+  const response = await api(page, 'PATCH', '/api/v1/organization', { name: ORGANIZATION });
+  expect(response.status(), await response.text()).toBe(200);
+}
+
+/** Makes Lene a member again over the API (a spec below signs in as her, a member). */
+async function resetLeneToMember(page: Page): Promise<void> {
+  const people = (await (await api(page, 'GET', '/api/v1/users?type=person')).json()) as { data: { id: string; email: string }[]; meta: { next_cursor: string | null } };
+  const lene = people.data.find((person) => person.email === PEOPLE.lene.email);
+  expect(lene, 'Lene on the first page of people').toBeDefined();
+  const response = await api(page, 'PUT', `/api/v1/users/${lene!.id}/role`, { org_role: 'member' });
+  expect(response.status(), await response.text()).toBe(200);
+}
 
 async function openSection(page: Page, section: 'general' | 'people' | 'bots'): Promise<void> {
   await page.goto(`/settings/${section}`);
@@ -26,21 +41,26 @@ test('changes the name of the organization with the keyboard', async ({ page }) 
   await openSection(page, 'general');
   const name = page.getByRole('textbox', { name: tr('en', 'settings.org.general.name') });
 
-  await tabTo(page, name);
-  await replaceText(page, renamed);
-  await pressMod(page, 'Enter');
-  await expect(page.getByText(tr('en', 'settings.org.general.saved'))).toBeVisible();
+  try {
+    await tabTo(page, name);
+    await replaceText(page, renamed);
+    await pressMod(page, 'Enter');
+    await expect(page.getByText(tr('en', 'settings.org.general.saved'))).toBeVisible();
 
-  await page.reload();
-  await expect(name).toHaveValue(renamed);
+    await page.reload();
+    await expect(name).toHaveValue(renamed);
 
-  // back to the name every other spec expects
-  await tabTo(page, name);
-  await replaceText(page, ORGANIZATION);
-  await pressMod(page, 'Enter');
-  await expect(page.getByText(tr('en', 'settings.org.general.saved'))).toBeVisible();
-  await page.reload();
-  await expect(name).toHaveValue(ORGANIZATION);
+    // back to the name every other spec expects
+    await tabTo(page, name);
+    await replaceText(page, ORGANIZATION);
+    await pressMod(page, 'Enter');
+    await expect(page.getByText(tr('en', 'settings.org.general.saved'))).toBeVisible();
+    await page.reload();
+    await expect(name).toHaveValue(ORGANIZATION);
+  } finally {
+    // a failure halfway must not leave the renamed organization to the specs after it
+    await resetOrganizationName(page);
+  }
 });
 
 test('invites a person, copies the link and shows it in the list', async ({ page }) => {
@@ -61,10 +81,12 @@ test('invites a person, copies the link and shows it in the list', async ({ page
   await page.keyboard.press('Enter');
   await arrowTo(page, page.getByRole('option', { name: tr('en', 'roles.project.viewer') }));
   await page.keyboard.press('Enter');
-  await expect(role).toHaveText(tr('en', 'roles.project.viewer'));
-  // the list has to be gone before Tab, or the focus slips past the guards of its layer
-  await expect(page.getByRole('listbox')).toBeHidden();
+  // Tab right after the choice, while the list still fades out: the focus stays in the dialog
+  await page.keyboard.press('Tab');
+  await expect(dialog.getByRole('button', { name: tr('en', 'common.cancel') })).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
   await expect(role).toBeFocused();
+  await expect(role).toHaveText(tr('en', 'roles.project.viewer'));
   await pressMod(page, 'Enter');
 
   const sent = page.getByRole('dialog', { name: tr('en', 'settings.people.invite_dialog.sent_title') });
@@ -90,16 +112,22 @@ test('changes the role of a person and back', async ({ page }) => {
   await openSection(page, 'people');
   const role = page.getByRole('combobox', { name: tr('en', 'settings.people.role_of', { name: lene }) });
 
-  for (const [next, key] of [
-    ['admin', 'ArrowUp'],
-    ['member', 'ArrowDown'],
-  ] as const) {
-    await tabTo(page, role);
-    await page.keyboard.press('Enter');
-    await arrowTo(page, page.getByRole('option', { name: tr('en', `roles.org.${next}`) }), key);
-    await page.keyboard.press('Enter');
-    await expect(page.getByText(tr('en', 'settings.people.role_changed', { name: lene, role: tr('en', `roles.org.${next}`) }))).toBeVisible();
-    await expect(role).toHaveText(tr('en', `roles.org.${next}`));
+  try {
+    for (const [next, key] of [
+      ['admin', 'ArrowUp'],
+      ['member', 'ArrowDown'],
+    ] as const) {
+      await tabTo(page, role);
+      await page.keyboard.press('Enter');
+      await arrowTo(page, page.getByRole('option', { name: tr('en', `roles.org.${next}`) }), key);
+      await page.keyboard.press('Enter');
+      await expect(page.getByText(tr('en', 'settings.people.role_changed', { name: lene, role: tr('en', `roles.org.${next}`) }))).toBeVisible();
+      await expect(role).toHaveText(tr('en', `roles.org.${next}`));
+      // the field stays usable while the call runs, so the keyboard focus stays on it
+      await expect(role).toBeFocused();
+    }
+  } finally {
+    await resetLeneToMember(page);
   }
 });
 

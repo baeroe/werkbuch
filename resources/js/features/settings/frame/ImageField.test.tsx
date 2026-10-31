@@ -80,7 +80,8 @@ describe('ImageField', () => {
     const click = vi.spyOn(fileInput(), 'click');
 
     expect(screen.getByRole('group', { name: 'Logo' }).textContent).toContain('Vorschau');
-    const button = screen.getByRole('button', { name: 'Logo' });
+    // the name starts with the visible text and says which picture (WCAG 2.5.3)
+    const button = screen.getByRole('button', { name: 'Bild wählen … Logo' });
     expect(button.getAttribute('aria-describedby')).toContain('-hint');
     expect(screen.queryByRole('button', { name: 'Entfernen' })).toBeNull();
 
@@ -117,6 +118,19 @@ describe('ImageField', () => {
     expect(onChange).toHaveBeenCalledTimes(1);
   });
 
+  it('lets go of the server\'s word on the old picture once a new one is chosen or it is removed, and shows a new word again', async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<ImageField label="Logo" preview={null} hasImage error="Zu groß." onChange={vi.fn()} />);
+
+    choose(png());
+    await waitFor(() => expect(screen.queryByText('Zu groß.')).toBeNull());
+
+    rerender(<ImageField label="Logo" preview={null} hasImage error="Kein Bild." onChange={vi.fn()} />);
+    expect(screen.getByText('Kein Bild.')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Entfernen Logo' }));
+    expect(screen.queryByText('Kein Bild.')).toBeNull();
+  });
+
   it('does nothing when the picker closes without a file', () => {
     const onChange = vi.fn();
     render(<ImageField label="Logo" preview={null} hasImage={false} onChange={onChange} />);
@@ -131,11 +145,11 @@ describe('ImageField', () => {
     const onChange = vi.fn();
     const { rerender } = render(<ImageField label="Logo" preview={null} hasImage onChange={onChange} />);
 
-    await user.click(screen.getByRole('button', { name: 'Entfernen' }));
+    await user.click(screen.getByRole('button', { name: 'Entfernen Logo' }));
     expect(onChange).toHaveBeenCalledWith(null);
 
     rerender(<ImageField label="Logo" preview={null} hasImage disabled onChange={onChange} />);
-    expect(screen.getByRole('button', { name: 'Entfernen' }).hasAttribute('disabled')).toBe(true);
-    expect(screen.getByRole('button', { name: 'Logo' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Entfernen Logo' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Bild wählen … Logo' }).hasAttribute('disabled')).toBe(true);
   });
 });

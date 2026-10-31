@@ -25,6 +25,7 @@ import {
 import { useChangePassword, useConfirmTwoFactor, useDisableTwoFactor, useEnableTwoFactor, useRegenerateRecoveryCodes, useTwoFactor } from './security';
 import { useCreateToken, useRevokeToken, useTokens } from './tokens';
 import {
+  useAllUsers,
   useCreateBot,
   useCurrentUser,
   useDeactivateUser,
@@ -123,6 +124,16 @@ describe('reading', () => {
       '/api/v1/tokens?user_id=u_mara',
       '/api/v1/users?type=person',
     ]);
+  });
+
+  it('useAllUsers follows the cursor through every page, with the type filter on each request', async () => {
+    const page = (data: User[], next_cursor: string | null) => ({ body: { data, links: {}, meta: { next_cursor, total: 3 } } });
+    api = mockApi({ 'GET /api/v1/users': (_body, url) => (url.searchParams.get('cursor') === 'c2' ? page([ida], null) : page([mara, ida], 'c2')) });
+    const { result } = renderHook(() => useAllUsers({ type: 'person' }), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual({ items: [mara, ida, ida], next_cursor: null, total: 3 });
+    expect(api.calls.map((call) => call.url)).toEqual(['/api/v1/users?type=person', '/api/v1/users?type=person&cursor=c2']);
   });
 
   it('useProject reads one project, and waits while the identifier is unknown or it is switched off', async () => {

@@ -9,6 +9,7 @@
 
 import { CircleAlert, KeyRound } from 'lucide-react';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { Dialog, DialogClose } from '@/components/ui/Dialog';
@@ -19,13 +20,16 @@ import { notifyError } from '@/lib/errors';
 import { t } from '@/lib/i18n';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import type { Token, TokenAbility, User } from '@/types';
-import { fieldErrors, useFieldErrors } from '../frame/form';
+import { fieldErrors, unplacedMessages, useFieldErrors } from '../frame/form';
 import { AdminWarning } from './AdminWarning';
 import { CopyButton } from './CopyButton';
 import { SetupSnippets } from './SetupSnippets';
 
 /** In this order on the page and in the request, whatever order they were ticked in. */
 export const ABILITIES: readonly TokenAbility[] = ['read', 'write', 'mcp'];
+
+/** The fields of the form; a refusal of any other path shows as a notice on top. */
+const PLACED = ['name', 'abilities', 'expires_at'];
 
 type Created = { token: Token; plain_text: string };
 
@@ -47,6 +51,7 @@ export function TokenDialog({ owner, onClose }: Props) {
   const [abilities, setAbilities] = useState<TokenAbility[]>(bot ? ['read'] : [...ABILITIES]);
   const [expires, setExpires] = useState('');
   const [created, setCreated] = useState<Created | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const tomorrow = addDays(cachedZone(owner.timezone).date(new Date()), 1);
 
@@ -60,6 +65,7 @@ export function TokenDialog({ owner, onClose }: Props) {
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (create.isPending) return;
+    setNotice(null);
     try {
       setCreated(
         await create.mutateAsync({
@@ -73,8 +79,10 @@ export function TokenDialog({ owner, onClose }: Props) {
       problems.clearAll();
     } catch (error) {
       const fields = fieldErrors(error);
-      if (Object.keys(fields).length > 0) problems.show(fields);
-      else notifyError(t('settings.tokens.dialog.not_created'), error, () => form.current?.requestSubmit());
+      if (Object.keys(fields).length > 0) {
+        problems.show(Object.fromEntries(Object.entries(fields).filter(([path]) => PLACED.includes(path))));
+        setNotice(unplacedMessages(error, PLACED).join(' ') || null);
+      } else notifyError(t('settings.tokens.dialog.not_created'), error, () => form.current?.requestSubmit());
     }
   }
 
@@ -136,6 +144,11 @@ export function TokenDialog({ owner, onClose }: Props) {
         </div>
       ) : (
         <form ref={form} id={formId} noValidate onSubmit={(event) => void submit(event)} className="flex flex-col gap-4">
+          {notice && (
+            <Banner tone="danger" role="alert" title={t('ui.form_dialog.error_title')}>
+              {notice}
+            </Banner>
+          )}
           {owner.is_default_bot && <AdminWarning title={t('settings.tokens.admin_warning.create')} />}
           <Input
             label={t('settings.tokens.dialog.name')}

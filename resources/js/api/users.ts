@@ -4,10 +4,10 @@
  */
 
 import type { Invitation, OrgRole, ProjectRole, User } from '@/types';
-import type { Page } from './client';
+import type { Page, PageArgs } from './client';
 import { getPage, one, patch as sendPatch, post, put } from './http';
 
-export interface ListUsersArgs {
+export interface ListUsersArgs extends PageArgs {
   type?: User['type'];
 }
 

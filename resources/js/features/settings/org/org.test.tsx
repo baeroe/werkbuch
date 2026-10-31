@@ -70,6 +70,11 @@ const token = (id: string, changes: Partial<Token> = {}): Token => ({
   ...changes,
 });
 
+/** The accounts endpoint with its type filter, all on one page. */
+const accounts =
+  (all: User[]): MockRoute =>
+  (_body, url) => ({ body: list(all.filter((user) => !url.searchParams.get('type') || user.type === url.searchParams.get('type'))) });
+
 const problem = (status: number, reason: string, extra: Record<string, unknown> = {}) => ({ status, body: { type: 'about:blank', title: reason, status, reason, ...extra } });
 const unavailable = () => problem(503, 'service_unavailable', { detail: 'Der Server ist gerade nicht erreichbar.' });
 
@@ -81,7 +86,7 @@ function routes(overrides: Record<string, MockRoute> = {}): Record<string, MockR
   return {
     'GET /api/v1/projects': () => ({ body: list([web, app]) }),
     'GET /api/v1/organization': () => ({ body: { data: organization } }),
-    'GET /api/v1/users': () => ({ body: list([mara, lene, sven, automation, kira]) }),
+    'GET /api/v1/users': accounts([mara, lene, sven, automation, kira]),
     'GET /api/v1/invitations': () => ({ body: list([invitation()]) }),
     'GET /api/v1/tokens': (_body, url) => ({
       body: list(
@@ -270,7 +275,7 @@ describe('General', () => {
     await user.click(screen.getByRole('button', { name: /Speichern/ }));
     await waitFor(() => expect(lastCall('PATCH', '/api/v1/organization')!.body).toEqual({ logo_url: 'data:image/png;base64,TE9HTw==' }));
 
-    await user.click(await screen.findByRole('button', { name: 'Entfernen' }));
+    await user.click(await screen.findByRole('button', { name: 'Entfernen Logo' }));
     expect(screen.getByRole('group', { name: 'Logo' }).querySelector('img')).toBeNull();
   });
 
@@ -298,7 +303,7 @@ describe('General', () => {
     expect(name.hasAttribute('readonly')).toBe(true);
     expect(screen.getByText('Nur lesen')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Speichern/ })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Logo' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Bild wählen … Logo' })).toBeNull();
     await waitFor(() => expect(screen.getByRole('group', { name: 'Logo' }).querySelector('img')?.getAttribute('src')).toBe('/media/logo'));
     // a member's click on a day changes nothing
     await userEvent.setup().click(screen.getByRole('button', { name: 'Sonntag' }));
@@ -327,6 +332,19 @@ describe('People', () => {
     expect(within(rows[0]!).getByRole('combobox', { name: 'Rolle von Mara Lindqvist' }).textContent).toContain('Admin');
   });
 
+  it('shows every person, also beyond the first page of 100, and asks for people only', async () => {
+    const crowd = Array.from({ length: 100 }, (_, index) => person(`u_p${String(index).padStart(3, '0')}`, `Person ${index}`, `p${index}`));
+    renderSettings('people', {
+      'GET /api/v1/users': (_body, url) => ({
+        body: url.searchParams.get('cursor') === 'next' ? { data: [lene], links: {}, meta: { next_cursor: null, total: 101 } } : { data: crowd, links: {}, meta: { next_cursor: 'next', total: 101 } },
+      }),
+    });
+
+    expect(await screen.findByRole('combobox', { name: 'Rolle von Lene Vogt' })).toBeTruthy();
+    expect(within(screen.getByRole('list', { name: 'Personen' })).getAllByRole('listitem')).toHaveLength(101);
+    expect(api!.calls.filter((call) => call.url.startsWith('/api/v1/users')).map((call) => call.url)).toEqual(['/api/v1/users?type=person', '/api/v1/users?type=person&cursor=next']);
+  });
+
   it('says when the people could not be loaded, and when there is nobody yet', async () => {
     const { unmount } = renderSettings('people', { 'GET /api/v1/users': unavailable });
     expect(await screen.findByText('Die Personen konnten nicht geladen werden')).toBeTruthy();
@@ -334,7 +352,7 @@ describe('People', () => {
     unmount();
     api!.restore();
 
-    renderSettings('people', { 'GET /api/v1/users': () => ({ body: list([automation]) }) });
+    renderSettings('people', { 'GET /api/v1/users': accounts([automation]) });
     expect(await screen.findByText('Noch niemand außer dir')).toBeTruthy();
   });
 
@@ -487,7 +505,7 @@ describe('People', () => {
   it('asks before one gives up one\'s own admin rights while another admin is there, and the page follows', async () => {
     const user = userEvent.setup();
     renderSettings('people', {
-      'GET /api/v1/users': () => ({ body: list([mara, jonas, lene]) }),
+      'GET /api/v1/users': accounts([mara, jonas, lene]),
       'PUT /api/v1/users/u_mara/role': () => ({ body: { data: { ...mara, org_role: 'member' } } }),
     });
 
@@ -509,7 +527,7 @@ describe('People', () => {
   it('asks before one deactivates oneself, and reloads so the server signs one out', async () => {
     const user = userEvent.setup();
     renderSettings('people', {
-      'GET /api/v1/users': () => ({ body: list([mara, jonas]) }),
+      'GET /api/v1/users': accounts([mara, jonas]),
       'POST /api/v1/users/u_mara/deactivate': () => ({ body: { data: { ...mara, disabled_at: '2026-10-30T09:00:00.000Z' } } }),
     });
 
@@ -534,7 +552,7 @@ describe('Bots', () => {
   });
 
   it('shows the default bot first, without "Deaktivieren", warns at its tokens, and names the others "Bot"', async () => {
-    renderSettings('bots', { 'GET /api/v1/users': () => ({ body: list([mara, rex, kira, automation]) }) });
+    renderSettings('bots', { 'GET /api/v1/users': accounts([mara, rex, kira, automation]) });
 
     const cards = await screen.findAllByRole('article');
     expect(cards.map((card) => within(card).getByRole('heading', { level: 3 }).textContent)).toEqual(['Automation', 'Kira', 'Rex']);
@@ -556,6 +574,32 @@ describe('Bots', () => {
     expect(disabled.textContent).toContain('Niemand');
     expect(within(disabled).queryByRole('button', { name: /Token anlegen/ })).toBeNull();
     expect(await within(disabled).findByText(/Ein deaktivierter Bot hat keine Tokens/)).toBeTruthy();
+  });
+
+  it('asks for bots and for people apart, so a hundred people never push the bots out of the list', async () => {
+    renderSettings('bots');
+
+    await screen.findAllByRole('article');
+    const asked = api!.calls.filter((call) => call.url.startsWith('/api/v1/users')).map((call) => call.url);
+    expect(asked.sort()).toEqual(['/api/v1/users?type=bot', '/api/v1/users?type=person']);
+  });
+
+  it('keeps a responsible person who was deactivated as a choice of the bot, but offers no other deactivated one', async () => {
+    const user = userEvent.setup();
+    const svens = { ...kira, owner_id: 'u_sven' };
+    const theo = { ...person('u_theo', 'Theo Okafor', 'theo'), disabled_at: '2026-10-01T10:00:00.000Z' };
+    renderSettings('bots', { 'GET /api/v1/users': accounts([mara, sven, theo, svens]) });
+    const card = (await screen.findAllByRole('article'))[0]!;
+    expect(card.textContent).toContain('Sven Albers');
+
+    await user.click(within(card).getByRole('button', { name: 'Bearbeiten Kira' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Bot „Kira“ bearbeiten' });
+    const owner = within(dialog).getByRole('combobox', { name: /Verantwortliche Person/ });
+    expect(owner.textContent).toContain('Sven Albers');
+    await user.click(owner);
+    const options = (await screen.findAllByRole('option')).map((option) => option.textContent);
+    // each with the initials of its avatar first
+    expect(options).toEqual(['MLMara Lindqvist', 'SASven Albers']);
   });
 
   it('lists the tokens of a bot with abilities, expiry and last use; an expired one says so', async () => {
@@ -586,7 +630,7 @@ describe('Bots', () => {
 
   it('offers to create the first bot when there is none', async () => {
     const user = userEvent.setup();
-    renderSettings('bots', { 'GET /api/v1/users': () => ({ body: list([mara]) }) });
+    renderSettings('bots', { 'GET /api/v1/users': accounts([mara]) });
 
     expect(await screen.findByText('Noch kein Bot')).toBeTruthy();
     await user.click(screen.getAllByRole('button', { name: 'Bot anlegen' })[1]!);
@@ -693,7 +737,7 @@ describe('Bots', () => {
     const user = userEvent.setup();
     let fail = true;
     renderSettings('bots', {
-      'GET /api/v1/users': () => ({ body: list([mara, rex]) }),
+      'GET /api/v1/users': accounts([mara, rex]),
       'POST /api/v1/users/u_rex/reactivate': () => (fail ? unavailable() : { body: { data: { ...rex, disabled_at: null } } }),
     });
 
@@ -822,6 +866,21 @@ describe('TokenDialog', () => {
     answer = created;
     act(() => runToastAction(toastNamed('Token nicht angelegt').id));
     expect(await screen.findByRole('heading', { name: 'Token angelegt' })).toBeTruthy();
+  });
+
+  it('shows a refusal of a path the form has no field for as a notice on top, and forgets it with the next try', async () => {
+    let answer: MockRoute = () => problem(422, 'validation_failed', { errors: { user_id: ['Dieses Konto darf keine Tokens haben.'], name: ['Der Name ist zu lang.'] } });
+    const { user, dialog } = await openFor('Kira', { 'POST /api/v1/tokens': (body, url) => answer(body, url) });
+
+    await user.type(within(dialog).getByRole('textbox', { name: 'Name' }), 'Deploy');
+    await user.click(within(dialog).getByRole('button', { name: /Token anlegen/ }));
+    const notice = await within(dialog).findByText('Dieses Konto darf keine Tokens haben.');
+    expect(notice.closest('[role="alert"]')?.textContent).toContain('Das hat nicht geklappt');
+    expect(within(dialog).getByText('Der Name ist zu lang.')).toBeTruthy();
+
+    answer = () => problem(422, 'validation_failed', { errors: { name: ['Der Name ist zu lang.'] } });
+    await user.click(within(dialog).getByRole('button', { name: /Token anlegen/ }));
+    await waitFor(() => expect(within(dialog).queryByText('Dieses Konto darf keine Tokens haben.')).toBeNull());
   });
 
   it('selects the text when the clipboard refuses, and says so without repeating it', async () => {

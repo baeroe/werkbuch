@@ -1,6 +1,6 @@
 import { Select as BaseSelect } from '@base-ui/react/select';
 import { Check, ChevronDown } from 'lucide-react';
-import { useId, type ReactNode } from 'react';
+import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { t } from '@/lib/i18n';
 import { cx } from './cx';
 import { describedBy, Field, fieldIds, type FieldText } from './Field';
@@ -25,12 +25,24 @@ type SelectProps = FieldText & {
   keepSide?: boolean;
 };
 
-/** Pick one value from a short list; the list floats on tracing paper below the field. */
+/**
+ * Pick one value from a short list; the list floats on tracing paper below the field. When the list closes, the focus
+ * goes back to the field at once: Base UI would give it back only once the list has faded out, and a Tab pressed
+ * meanwhile landed on the focus guard of the list and, once the list was gone, on the page behind a dialog.
+ */
 export function Select({ label, hint, error, options, value, onValueChange, placeholder = t('ui.select.placeholder'), disabled, id, className, defaultOpen, modal, keepSide, 'aria-label': ariaLabel }: SelectProps) {
   const autoId = useId();
   const triggerId = id ?? autoId;
   const valueId = `${triggerId}-value`;
   const selected = options.find((option) => option.value === value);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(defaultOpen ?? false);
+  const wasOpen = useRef(open);
+  // once Base UI has taken the list for closed (its focus trap lets go), still in the event that closed it
+  useLayoutEffect(() => {
+    if (wasOpen.current && !open) trigger.current?.focus({ preventScroll: true });
+    wasOpen.current = open;
+  }, [open]);
 
   return (
     <BaseSelect.Root
@@ -38,11 +50,13 @@ export function Select({ label, hint, error, options, value, onValueChange, plac
       value={value}
       onValueChange={(next) => onValueChange(next)}
       disabled={disabled}
-      defaultOpen={defaultOpen}
+      open={open}
+      onOpenChange={setOpen}
       modal={modal}
     >
       <Field id={triggerId} label={label} hint={hint} error={error} className={className}>
         <BaseSelect.Trigger
+          ref={trigger}
           id={triggerId}
           aria-label={ariaLabel}
           aria-labelledby={label ? `${fieldIds(triggerId).label} ${valueId}` : undefined}
