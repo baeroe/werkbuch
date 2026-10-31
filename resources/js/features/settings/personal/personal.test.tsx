@@ -275,9 +275,9 @@ describe('Profile', () => {
     expect((screen.getByRole('textbox', { name: 'Name' }) as HTMLInputElement).value).toBe('Mara Lindqvist-Berg');
   });
 
-  it('asks before an edited profile is left, but not for the reload of a save', async () => {
+  it('asks before an edited profile is left', async () => {
     const user = userEvent.setup();
-    renderSettings('profile', { 'PATCH /api/v1/users/u_mara': saved });
+    renderSettings('profile');
     await user.type(screen.getByRole('textbox', { name: 'Name' }), ' B');
 
     expect(leaveTo('/projects')).toBe('stopped');
@@ -285,17 +285,6 @@ describe('Profile', () => {
     expect(screen.getByText(/Deine Änderungen am Profil sind nicht gespeichert/)).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Weiter bearbeiten' }));
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
-
-    // the save reloads the page, in a new language even with a full reload: while it runs, that is no leave
-    let duringSave: boolean[] = [];
-    const visit: Visit = { url: new URL('/elsewhere', window.location.origin), method: 'get', prefetch: false, preserveUrl: false };
-    inertia.reload.mockImplementation(() => {
-      duringSave = [...(inertia.listeners.get('before') ?? [])].map((listener) => (listener as Listener)({ detail: { visit } }) !== false);
-    });
-    await user.click(screen.getByRole('button', { name: /Speichern/ }));
-
-    await waitFor(() => expect(toastTitles()).toContain('Profil gespeichert'));
-    expect(duringSave).toEqual([true]);
   });
 });
 
@@ -335,6 +324,25 @@ describe('Security: password', () => {
     expect(lastCall('PUT', '/api/v1/me/password')!.body).toEqual({ current_password: 'alt-passwort', password: 'neues-passwort', password_confirmation: 'neues-passwort' });
     expect((screen.getByLabelText('Aktuelles Passwort') as HTMLInputElement).value).toBe('');
     expect((screen.getByLabelText('Neues Passwort') as HTMLInputElement).value).toBe('');
+  });
+
+  it('lets go of the passwords after the call, whether it worked or not', async () => {
+    const user = userEvent.setup();
+    let answer: MockRoute = () => invalid({ current_password: ['Das aktuelle Passwort stimmt nicht.'] });
+    const { client } = renderSettings('security', { 'PUT /api/v1/me/password': (body, url) => answer(body, url) });
+    const held = () => client.getMutationCache().getAll().filter((mutation) => JSON.stringify(mutation.state.variables ?? null).includes('neues-passwort'));
+    await user.type(screen.getByLabelText('Aktuelles Passwort'), 'alt-passwort');
+    await user.type(screen.getByLabelText('Neues Passwort'), 'neues-passwort');
+    await user.type(screen.getByLabelText('Neues Passwort wiederholen'), 'neues-passwort');
+
+    await user.click(screen.getByRole('button', { name: 'Passwort ändern' }));
+    expect(await screen.findByText('Das aktuelle Passwort stimmt nicht.')).toBeTruthy();
+    await waitFor(() => expect(held()).toEqual([]));
+
+    answer = () => ({ status: 204 });
+    await user.click(screen.getByRole('button', { name: 'Passwort ändern' }));
+    await waitFor(() => expect(toastTitles()).toContain('Passwort geändert'));
+    await waitFor(() => expect(held()).toEqual([]));
   });
 
   it('shows what the server refuses at its field, the limit of tries too, and any other failure in a toast', async () => {
@@ -472,6 +480,52 @@ describe('Security: two-factor', () => {
     // the password form asks again now that the codes are gone
     expect(leaveTo('/projects')).toBe('stopped');
     expect(await screen.findByRole('alertdialog', { name: 'Änderungen verwerfen?' })).toBeTruthy();
+  });
+
+  it('keeps the recovery codes when the state cannot be loaded again after them', async () => {
+    const user = userEvent.setup();
+    let failing = false;
+    renderSettings('security', server({ 'GET /api/v1/me/two-factor': () => (failing ? unavailable() : { body: off }) }));
+    await user.click(await screen.findByRole('button', { name: 'Einrichten' }));
+    const field = await screen.findByRole('textbox', { name: 'Code aus der App' });
+
+    failing = true;
+    await user.type(field, '123456');
+    await user.click(screen.getByRole('button', { name: 'Bestätigen' }));
+
+    const codes = await screen.findByRole('list', { name: 'Recovery-Codes' });
+    await waitFor(() => expect(calls('GET', '/api/v1/me/two-factor').length).toBeGreaterThan(1));
+    expect(within(codes).getAllByRole('listitem')).toHaveLength(8);
+    expect(screen.queryByText('Der Stand der Zwei-Faktor-Authentifizierung konnte nicht geladen werden')).toBeNull();
+  });
+
+  it('throws a setup away that is left half-way, like "Abbrechen"', async () => {
+    const user = userEvent.setup();
+    const view = renderSettings('security', server());
+    await user.click(await screen.findByRole('button', { name: 'Einrichten' }));
+    await screen.findByRole('textbox', { name: 'Code aus der App' });
+    expect(calls('DELETE', '/api/v1/me/two-factor')).toEqual([]);
+
+    view.unmount();
+
+    await waitFor(() => expect(calls('DELETE', '/api/v1/me/two-factor')).toHaveLength(1));
+  });
+
+  it('leaves the server alone when the screen goes without a setup running, and stays quiet when throwing one away fails', async () => {
+    const user = userEvent.setup();
+    const first = renderSettings('security', server());
+    await screen.findByRole('button', { name: 'Einrichten' });
+    first.unmount();
+    expect(calls('DELETE', '/api/v1/me/two-factor')).toEqual([]);
+    api!.restore();
+
+    const second = renderSettings('security', server({ 'DELETE /api/v1/me/two-factor': unavailable }));
+    await user.click(await screen.findByRole('button', { name: 'Einrichten' }));
+    await screen.findByRole('textbox', { name: 'Code aus der App' });
+    second.unmount();
+
+    await waitFor(() => expect(calls('DELETE', '/api/v1/me/two-factor')).toHaveLength(1));
+    expect(toastTitles()).toEqual([]);
   });
 
   it('throws an abandoned setup away, so the next one starts anew with a new key', async () => {
@@ -655,6 +709,6 @@ describe('API & MCP', () => {
     const origin = window.location.origin;
     expect(screen.getByText('MCP-Server').nextElementSibling!.textContent).toBe(`${origin}/mcp`);
     expect(screen.getByText('REST-API').nextElementSibling!.textContent).toBe(`${origin}/api/v1`);
-    expect(screen.getByText(new RegExp(`claude mcp add --transport http werkbuch ${origin}/mcp`))).toBeTruthy();
+    expect(screen.getByText(new RegExp(`claude mcp add --transport http --scope user werkbuch ${origin}/mcp`))).toBeTruthy();
   });
 });

@@ -3,7 +3,7 @@
  * person; the language is the one of the interface and the mails, the time zone decides when "due" reminders go out
  * (08:00 their time). The e-mail address is read-only here: it is how the person signs in. Only the fields that changed
  * are sent; the avatar goes as a 128 px PNG data URL (`ImageField`, P15). Saving reloads the page (`useUpdateUser`), so
- * the shared props follow, and a new language loads the page in it.
+ * the shared props follow, and a new language loads the page in it (`reloadPage`, which the leave guard lets through).
  */
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
@@ -41,8 +41,6 @@ function ProfileAvatar({ user, image }: { user: User; image: string | null }) {
 
 export function Profile({ user }: { user: User }) {
   const form = useRef<HTMLFormElement>(null);
-  // a save may load the page in another language: that reload is no leave
-  const saving = useRef(false);
   const update = useUpdateUser();
   const organization = useOrganization().data;
   // the server's answer to a save until the reload brings the account in the shared props: the form does not flash back
@@ -69,7 +67,6 @@ export function Profile({ user }: { user: User }) {
     }
     // trailing blanks (from autofill or text expansion) are no part of a handle
     const patch = Object.fromEntries(draft.changed.map((key) => [key, key === 'handle' ? draft.value.handle.trim() : draft.value[key]]));
-    saving.current = true;
     try {
       setShown(await update.mutateAsync({ user_id: user.id, patch }));
       draft.reset();
@@ -79,14 +76,12 @@ export function Profile({ user }: { user: User }) {
       const fields = fieldErrors(error);
       if (Object.keys(fields).length > 0) problems.show(fields);
       else notifyError(t('settings.personal.profile.not_saved'), error, () => form.current?.requestSubmit());
-    } finally {
-      saving.current = false;
     }
   }
 
   return (
     <form ref={form} noValidate onSubmit={(event) => void save(event)}>
-      <LeaveGuard dirty={draft.dirty} what={t('settings.personal.profile.leave_what')} bypass={saving} />
+      <LeaveGuard dirty={draft.dirty} what={t('settings.personal.profile.leave_what')} />
       <SettingsCard
         title={t('settings.personal.section.profile')}
         description={t('settings.personal.profile.description')}

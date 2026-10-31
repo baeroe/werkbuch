@@ -6,7 +6,7 @@ const BASE = 'https://werkbuch.example.com';
 describe('mcpSnippets', () => {
   it('builds the Claude Code command with the MCP address and the token', () => {
     expect(mcpSnippets(BASE, 'wb_xxx').claude_code).toBe(
-      'claude mcp add --transport http werkbuch https://werkbuch.example.com/mcp --header "Authorization: Bearer wb_xxx"',
+      'claude mcp add --transport http --scope user werkbuch https://werkbuch.example.com/mcp --header "Authorization: Bearer wb_xxx"',
     );
   });
 

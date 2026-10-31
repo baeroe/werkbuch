@@ -9,6 +9,7 @@ import { Toaster } from '@/components/ui/Toaster';
 import { TooltipProvider } from '@/components/ui/Tooltip';
 import { queryClient, resetForUser } from '@/hooks/queryClient';
 import { initI18n, reloadIfLocaleChanged } from '@/lib/i18n';
+import { reloadPage } from '@/lib/pageReload';
 import type { SharedProps } from '@/lib/page';
 
 let lastUserId: string | null = null;
@@ -17,7 +18,7 @@ router.on('navigate', (event) => {
   const props = event.detail.page.props as unknown as SharedProps;
 
   // The texts of a page are those of one language: a visit that changes the language reloads the page.
-  reloadIfLocaleChanged(props.locale, () => window.location.reload());
+  reloadIfLocaleChanged(props.locale, () => reloadPage(() => window.location.reload()));
 
   // What the cache holds belongs to one person: sign-in, sign-out and a switch of account start with an empty one.
   const userId = props.auth.user?.id ?? null;
@@ -31,7 +32,7 @@ router.on('navigate', (event) => {
 // A visit that replaces the page (`router.reload()` after saving the profile or the organisation) ends without
 // `navigate`; when it brings another language, the page loads anew all the same.
 router.on('success', (event) => {
-  reloadIfLocaleChanged((event.detail.page.props as unknown as SharedProps).locale, () => window.location.reload());
+  reloadIfLocaleChanged((event.detail.page.props as unknown as SharedProps).locale, () => reloadPage(() => window.location.reload()));
 });
 
 void createInertiaApp({

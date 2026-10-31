@@ -28,6 +28,7 @@ import { router } from '@inertiajs/react';
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { AlertDialog } from '@/components/ui/AlertDialog';
 import { t } from '@/lib/i18n';
+import { isReloading } from '@/lib/pageReload';
 
 /** The visit Inertia announces in its `before` event; at run time it also carries the callbacks it was started with. */
 type PendingVisit = Parameters<Parameters<typeof router.on<'before'>>[1]>[0]['detail']['visit'];
@@ -55,13 +56,20 @@ export interface LeaveQuestion {
 
 type LeaveGuardProps = {
   dirty: boolean;
-  /** What is lost, for the question: "Changes to “Agency approval”". */
-  what: string;
   /** Set to true right before a navigation that is meant, so it is not stopped. */
   bypass?: RefObject<boolean>;
-  /** Other words than "Discard changes?"; `what` is not used then. */
-  question?: LeaveQuestion;
-};
+} & (
+  | {
+      /** What is lost, for the question: "Changes to “Agency approval”". */
+      what: string;
+      question?: never;
+    }
+  | {
+      /** Other words than "Discard changes?". */
+      question: LeaveQuestion;
+      what?: never;
+    }
+);
 
 /** Whether two addresses are the same page: a reload, a partial reload or a hash change leaves nothing behind. */
 const samePage = (a: URL, b: URL) => a.origin === b.origin && a.pathname + a.search === b.pathname + b.search;
@@ -73,8 +81,8 @@ export function LeaveGuard({ dirty, what, bypass, question }: LeaveGuardProps) {
   useLayoutEffect(() => {
     latest.current = { dirty, bypass };
   });
-  /** Edits that would be lost and nobody has agreed to lose. */
-  const guarding = () => latest.current.dirty && latest.current.bypass?.current !== true;
+  /** Edits that would be lost and nobody has agreed to lose; a reload the app starts itself (`reloadPage`) loses nothing. */
+  const guarding = () => latest.current.dirty && latest.current.bypass?.current !== true && !isReloading();
   // what the person confirmed runs through the guard again and must pass
   const proceeding = useRef(false);
 
@@ -134,7 +142,7 @@ export function LeaveGuard({ dirty, what, bypass, question }: LeaveGuardProps) {
   useEffect(() => {
     if (!dirty) return;
     const ask = (event: BeforeUnloadEvent) => {
-      if (bypass?.current === true) return;
+      if (bypass?.current === true || isReloading()) return;
       event.preventDefault();
       // older browsers want the return value as well
       event.returnValue = '';
@@ -174,7 +182,7 @@ export function LeaveGuard({ dirty, what, bypass, question }: LeaveGuardProps) {
       open={held !== null}
       onOpenChange={(open) => !open && setHeld(null)}
       title={question?.title ?? t('settings.frame.leave_title')}
-      description={question?.description ?? t('settings.frame.leave_description', { what })}
+      description={question ? question.description : t('settings.frame.leave_description', { what })}
       confirmLabel={question?.confirmLabel ?? t('settings.frame.leave_confirm')}
       cancelLabel={question?.cancelLabel ?? t('settings.frame.leave_cancel')}
       onConfirm={proceed}

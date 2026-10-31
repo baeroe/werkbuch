@@ -19,6 +19,9 @@ const inertia = vi.hoisted(() => {
   };
 });
 
+const reload = vi.hoisted(() => ({ reloading: false }));
+vi.mock('@/lib/pageReload', () => ({ isReloading: () => reload.reloading }));
+
 vi.mock('@inertiajs/react', () => ({
   router: {
     on: (event: string, listener: Listener) => {
@@ -78,6 +81,7 @@ beforeEach(() => {
 
 afterEach(() => {
   inertia.visit.mockReset();
+  reload.reloading = false;
 });
 
 describe('LeaveGuard (Inertia visits)', () => {
@@ -105,7 +109,6 @@ describe('LeaveGuard (Inertia visits)', () => {
     render(
       <LeaveGuard
         dirty
-        what="unused"
         question={{ title: 'Recovery-Codes gesichert?', description: 'Die Codes zeigt werkbuch nur jetzt.', confirmLabel: 'Weitergehen', cancelLabel: 'Zurück zu den Codes' }}
       />,
     );
@@ -113,7 +116,6 @@ describe('LeaveGuard (Inertia visits)', () => {
     announceInAct(visitTo('/inbox'));
     const dialog = await screen.findByRole('alertdialog', { name: 'Recovery-Codes gesichert?' });
     expect(dialog.textContent).toContain('Die Codes zeigt werkbuch nur jetzt.');
-    expect(dialog.textContent).not.toContain('unused');
     expect(screen.getByRole('button', { name: 'Zurück zu den Codes' })).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Weitergehen' }));
 
@@ -309,6 +311,19 @@ describe('LeaveGuard (closing the tab)', () => {
 
     unmount();
     expect(closeTab().defaultPrevented).toBe(false);
+  });
+});
+
+describe('LeaveGuard (the app reloads the page itself)', () => {
+  it('neither holds a visit nor lets the browser ask while the app reloads the page (a new language)', () => {
+    render(<LeaveGuard dirty what="Änderungen" />);
+    reload.reloading = true;
+
+    expect(announceInAct(visitTo('/inbox'))).toBe('goes on');
+    const event = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+    expect(screen.queryByRole('alertdialog')).toBeNull();
   });
 });
 

@@ -63,6 +63,33 @@ test('changes the name of the organization with the keyboard', async ({ page }) 
   }
 });
 
+test('loads the page anew in a new default language without asking to leave', async ({ page }) => {
+  // Erik has no language of his own: the organization's is his; the browser asks before a reload only when a page says so
+  const dialogs: string[] = [];
+  page.on('dialog', (dialog) => {
+    dialogs.push(dialog.type());
+    void dialog.accept();
+  });
+  try {
+    await openSection(page, 'general');
+    const language = page.getByRole('combobox', { name: tr('en', 'settings.org.general.locale') });
+    await tabTo(page, language);
+    await page.keyboard.press('Enter');
+    await arrowTo(page, page.getByRole('option', { name: tr('en', 'settings.org.general.locale_de') }), 'ArrowUp');
+    await page.keyboard.press('Enter');
+    await expect(language).toHaveText(tr('en', 'settings.org.general.locale_de'));
+    await pressMod(page, 'Enter');
+
+    await expect(page.locator('html')).toHaveAttribute('lang', 'de');
+    await expect(page.getByRole('heading', { level: 2, name: tr('de', 'settings.org.section.general') })).toBeVisible();
+    expect(dialogs).toEqual([]);
+  } finally {
+    // every other spec reads the English texts
+    const response = await api(page, 'PATCH', '/api/v1/organization', { locale: 'en' });
+    expect(response.status(), await response.text()).toBe(200);
+  }
+});
+
 test('invites a person, copies the link and shows it in the list', async ({ page }) => {
   const email = `invite-org-${variant()}-${runId().toLowerCase()}@example.com`;
   await openSection(page, 'people');
@@ -160,7 +187,7 @@ test('creates a bot, a token for it, and revokes it', async ({ page }) => {
   const secret = created.getByRole('textbox', { name: tr('en', 'settings.tokens.dialog.token') });
   await expect(secret).toBeFocused();
   await expect(secret).toHaveValue(/^[0-9a-z]+\|wb_/i);
-  await expect(created.getByText(/claude mcp add --transport http werkbuch/)).toBeVisible();
+  await expect(created.getByText(/claude mcp add --transport http --scope user werkbuch/)).toBeVisible();
   await tabTo(page, created.getByRole('button', { name: tr('en', 'settings.tokens.copied_confirm') }));
   await page.keyboard.press('Enter');
   await expect(created).toBeHidden();

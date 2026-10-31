@@ -8,8 +8,9 @@ export function useTwoFactor() {
   return useQuery({ queryKey: qk.twoFactor.all, queryFn: getTwoFactor });
 }
 
+/** The passwords are what the call was made with: they leave the cache with the call (`reset()` after it). */
 export function useChangePassword() {
-  return useApiMutation(changePassword, []);
+  return useApiMutation(changePassword, [], { gcTime: 0 });
 }
 
 /** Answers the secret and the QR code: a secret shown once, so the answer leaves the cache with its dialog. */

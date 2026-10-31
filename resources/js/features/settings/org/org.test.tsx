@@ -833,7 +833,7 @@ describe('TokenDialog', () => {
     const secret = screen.getByRole('textbox', { name: 'Token' }) as HTMLInputElement;
     expect(secret.value).toBe('01jtoken|wb_secret');
     await waitFor(() => expect(document.activeElement).toBe(secret));
-    expect(screen.getByText(/claude mcp add --transport http werkbuch .*\/mcp --header "Authorization: Bearer 01jtoken\|wb_secret"/)).toBeTruthy();
+    expect(screen.getByText(/claude mcp add --transport http --scope user werkbuch .*\/mcp --header "Authorization: Bearer 01jtoken\|wb_secret"/)).toBeTruthy();
     expect(screen.getByText('Im Terminal ausführen.')).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: 'Token kopieren' }));

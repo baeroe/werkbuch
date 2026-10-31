@@ -9,13 +9,16 @@
  * focus moves on to where the next one is.
  */
 
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { disableTwoFactor } from '@/api/security';
 import { AlertDialog } from '@/components/ui/AlertDialog';
 import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
 import { Input } from '@/components/ui/Input';
 import { toast } from '@/components/ui/toast';
+import { qk } from '@/hooks/keys';
 import { useConfirmTwoFactor, useDisableTwoFactor, useEnableTwoFactor, useRegenerateRecoveryCodes, useTwoFactor } from '@/hooks/security';
 import { notifyError } from '@/lib/errors';
 import { t } from '@/lib/i18n';
@@ -82,6 +85,24 @@ export function TwoFactorCard({ user, onCodesShown }: Props) {
   const on = status.data?.enabled === true;
 
   useEffect(() => onCodesShown(phase === 'codes'), [phase, onCodesShown]);
+
+  // a setup left half-way (another section, another page) is thrown away like "Abbrechen": no secret stays pending
+  const queryClient = useQueryClient();
+  const current = useRef(phase);
+  useEffect(() => {
+    current.current = phase;
+  }, [phase]);
+  useEffect(
+    () => () => {
+      if (current.current !== 'setup') return;
+      // the screen is gone, there is nobody to tell about a failure: the next setup starts anew anyway
+      void disableTwoFactor().then(
+        () => queryClient.invalidateQueries({ queryKey: qk.twoFactor.all }),
+        () => undefined,
+      );
+    },
+    [queryClient],
+  );
 
   // after a step, the focus goes to where the next one is (never on the first draw)
   useEffect(() => {
@@ -175,7 +196,8 @@ export function TwoFactorCard({ user, onCodesShown }: Props) {
   }
 
   if (status.isPending) return <SettingsSkeleton rows={1} label={t('settings.two_factor.loading')} />;
-  if (status.isError) {
+  // a refetch that fails later (after the codes came) keeps the card and its codes: only a first load shows the error
+  if (status.isError && !status.data) {
     return <SettingsError title={t('settings.two_factor.load_failed')} error={status.error} retrying={status.isFetching} onRetry={() => void status.refetch()} />;
   }
 
@@ -183,7 +205,6 @@ export function TwoFactorCard({ user, onCodesShown }: Props) {
     <>
       <LeaveGuard
         dirty={phase === 'codes'}
-        what=""
         question={{
           title: t('settings.two_factor.leave.title'),
           description: t('settings.two_factor.leave.description'),

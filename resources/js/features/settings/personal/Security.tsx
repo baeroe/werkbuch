@@ -50,10 +50,13 @@ function PasswordCard({ email, guarded }: { email: string | null; guarded: boole
     }
     try {
       await change.mutateAsync({ current_password: values.current, password: values.next, password_confirmation: values.again });
+      change.reset();
       setValues(EMPTY);
       problems.clearAll();
       toast({ title: t('settings.security.password.changed'), description: t('settings.security.password.changed_description'), tone: 'success' });
     } catch (error) {
+      // the passwords the call was made with leave the cache with it
+      change.reset();
       // a refusal (422), and the limit of tries (429), which the server names at the current password
       const fields = Object.entries(FIELD_OF).flatMap(([path, field]) => {
         const message = fieldMessage(error, path);

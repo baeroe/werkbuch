@@ -25,7 +25,7 @@ export function mcpSnippets(baseUrl: string, token: string): McpSnippets {
   const url = mcpUrl(baseUrl);
   const authorization = `Bearer ${token}`;
   return {
-    claude_code: `claude mcp add --transport http werkbuch ${url} --header "Authorization: ${authorization}"`,
+    claude_code: `claude mcp add --transport http --scope user werkbuch ${url} --header "Authorization: ${authorization}"`,
     codex: `[mcp_servers.werkbuch]\nurl = "${url}"\nhttp_headers = { "Authorization" = "${authorization}" }`,
     json: JSON.stringify({ mcpServers: { werkbuch: { type: 'http', url, headers: { Authorization: authorization } } } }, null, 2),
   };
