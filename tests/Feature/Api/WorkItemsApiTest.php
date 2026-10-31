@@ -364,3 +364,24 @@ it('lists the watchers and watches over PUT and DELETE …/subscription', functi
     $this->actingAs(User::defaultBot())->putJson('/api/v1/work-items/WEB-1/subscription')->assertForbidden()
         ->assertJsonPath('detail', __('problem.detail.bots_dont_watch'));
 });
+
+it('changes many items over POST …/bulk and names the refusals without data', function () use ($web) {
+    [$project, $mara] = $web();
+    $item = WorkItem::factory()->for($project)->create();
+    $archived = WorkItem::factory()->for($project)->archived()->create();
+    $body = ['ids' => ['web-1', 'WEB-2', 'WEB-3'], 'patch' => ['priority' => 'high']];
+
+    $this->withToken(apiToken($mara, ['read']))->postJson('/api/v1/work-items/bulk', $body)->assertForbidden();
+    forgetApiAuth();
+    $response = $this->actingAs($mara)->postJson('/api/v1/work-items/bulk', $body)->assertOk();
+    $this->actingAs($mara)->postJson('/api/v1/work-items/bulk', ['ids' => ['WEB-1'], 'patch' => ['title' => 'Neu']])
+        ->assertUnprocessable()->assertHeader('Content-Type', 'application/problem+json')
+        ->assertJsonPath('reason', 'validation_failed')
+        ->assertJsonPath('errors.patch.0', __('field.patch.invalid', ['keys' => 'state_id, resolution_id, assignee_id, priority, label_ids, add_label_ids, remove_label_ids, start_date, due_date, archived']));
+
+    expect($response->json())->toBe([
+        'updated' => [$item->id],
+        'rejected' => [['id' => 'WEB-2', 'reason' => 'archived'], ['id' => 'WEB-3', 'reason' => 'not_found']],
+    ])
+        ->and($archived->fresh()?->archived_at)->not->toBeNull();
+});

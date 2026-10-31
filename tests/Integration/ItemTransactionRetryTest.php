@@ -1,6 +1,7 @@
 <?php
 
 use App\Access\ProjectRole;
+use App\Actions\WorkItems\BulkUpdateWorkItems;
 use App\Actions\WorkItems\ChangeWorkItemType;
 use App\Actions\WorkItems\CreateWorkItem;
 use App\Actions\WorkItems\DeleteWorkItem;
@@ -62,5 +63,7 @@ it('retries the transaction after a deadlock', function (Closure $run, EventType
     'change type' => [fn (User $mara, Project $web, WorkItem $item) => ChangeWorkItemType::run(actor($mara), $item, [
         'type_id' => WorkItemType::query()->where('name', 'Bug')->value('id'),
     ]), EventType::WorkItemUpdated],
+    'bulk' => [fn (User $mara, Project $web, WorkItem $item) => expect(BulkUpdateWorkItems::run(actor($mara), ['ids' => [$item->id], 'patch' => ['priority' => 'high']]))
+        ->toBe(['updated' => [$item->id], 'rejected' => []]), EventType::WorkItemUpdated],
     'delete' => [fn (User $mara, Project $web, WorkItem $item) => DeleteWorkItem::run(actor($mara), $item), EventType::WorkItemDeleted],
 ]);

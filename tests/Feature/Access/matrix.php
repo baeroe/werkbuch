@@ -52,6 +52,7 @@ use App\Actions\Workflows\DeleteWorkflow;
 use App\Actions\Workflows\ListWorkflows;
 use App\Actions\Workflows\SaveWorkflow;
 use App\Actions\WorkItems\ArchiveWorkItem;
+use App\Actions\WorkItems\BulkUpdateWorkItems;
 use App\Actions\WorkItems\ChangeWorkItemType;
 use App\Actions\WorkItems\CreateWorkItem;
 use App\Actions\WorkItems\DeleteWorkItem;
@@ -294,6 +295,12 @@ return [
         'allowed' => $itemWriters,
         'hidden' => ['outsider_private'],
         'event' => EventType::WorkItemRestored,
+    ],
+    'BulkUpdateWorkItems' => [
+        'action' => BulkUpdateWorkItems::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => BulkUpdateWorkItems::run($a, ['ids' => [$w->item($column)->id], 'patch' => ['priority' => 'high']]),
+        // every account may send one: a refused item is a line of the answer, never a 403 or 404 (P10)
+        'allowed' => $everyone,
     ],
     'DeleteWorkItem' => [
         'action' => DeleteWorkItem::class,

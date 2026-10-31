@@ -98,6 +98,8 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
 
     Route::get('work-items', [WorkItemsController::class, 'index']);
     Route::post('work-items', [WorkItemsController::class, 'store']);
+    // before {item}: `bulk` is no item
+    Route::post('work-items/bulk', [WorkItemsController::class, 'bulk']);
     // a read by a former key moves to the current one (301); every route with {item} belongs in this group
     Route::middleware(RedirectFormerItemKey::class)->group(function () {
         Route::get('work-items/{item}', [WorkItemsController::class, 'show']);

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Actions\WorkItems\ArchiveWorkItem;
+use App\Actions\WorkItems\BulkUpdateWorkItems;
 use App\Actions\WorkItems\ChangeWorkItemType;
 use App\Actions\WorkItems\CreateWorkItem;
 use App\Actions\WorkItems\DeleteWorkItem;
@@ -49,6 +50,12 @@ final class WorkItemsController extends Controller
         WorkItem::loadForResource($item, $actor->user);
 
         return new WorkItemResource($item);
+    }
+
+    /** `ids` and one `patch` for all of them: 200 `{updated, rejected}` without `data`, a refused item is a line of it. */
+    public function bulk(Request $request): JsonResponse
+    {
+        return response()->json(BulkUpdateWorkItems::run(Actor::fromRequest($request), $request->all()));
     }
 
     /** Changes what the body sends; `base_description_version` guards the description (409 `description_conflict`). */
