@@ -27,11 +27,13 @@ import People from './People';
 import Properties from './properties/Properties';
 import { findSection, GROUP_NAMES, SECTIONS, sectionLabel, type SectionDef, type SectionProps, type SectionSlug } from './sections';
 import Types from './types/Types';
+import Workflows from './workflows/Workflows';
 
 const COMPONENTS: Record<SectionSlug, ComponentType<SectionProps>> = {
   general: General,
   people: People,
   bots: Bots,
+  workflows: Workflows,
   types: Types,
   properties: Properties,
   labels: Labels,

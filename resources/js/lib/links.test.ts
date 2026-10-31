@@ -1,6 +1,6 @@
 import { renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { appUrl, instanceOrigin, paths, useActivePath } from './links';
+import { appUrl, instanceOrigin, paths, useActivePath, useSearchParam } from './links';
 
 let currentUrl = '/';
 
@@ -48,6 +48,13 @@ describe('paths', () => {
     expect(paths.settings('relation-types')).toBe('/settings/relation-types');
     expect(paths.me()).toBe('/me');
     expect(paths.me('security')).toBe('/me/security');
+  });
+
+  it('name the editor of a workflow as a view of the workflows section', () => {
+    expect(paths.workflow('01jbworkflow')).toBe('/settings/workflows?workflow=01jbworkflow');
+    expect(paths.workflow('a&b')).toBe('/settings/workflows?workflow=a%26b');
+    expect(paths.newWorkflow()).toBe('/settings/workflows?workflow=new');
+    expect(paths.newWorkflow('wf_agency')).toBe('/settings/workflows?workflow=new&from=wf_agency');
   });
 
   it('encode what a person or a mail brings along', () => {
@@ -101,5 +108,28 @@ describe('useActivePath', () => {
     currentUrl = '/';
 
     expect(active('/', true)).toBe(true);
+  });
+});
+
+describe('useSearchParam', () => {
+  const param = (name: string) => renderHook(() => useSearchParam(name)).result.current;
+
+  it('reads one parameter of the query of the page', () => {
+    currentUrl = '/settings/workflows?workflow=new&from=wf_agency';
+
+    expect(param('workflow')).toBe('new');
+    expect(param('from')).toBe('wf_agency');
+  });
+
+  it('is null when the parameter is not there', () => {
+    currentUrl = '/settings/workflows';
+
+    expect(param('workflow')).toBeNull();
+  });
+
+  it('decodes what the path encoded', () => {
+    currentUrl = paths.workflow('a&b');
+
+    expect(param('workflow')).toBe('a&b');
   });
 });

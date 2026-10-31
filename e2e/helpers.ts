@@ -331,7 +331,8 @@ export async function allEntries(page: Page, path: string): Promise<Record<strin
 export async function removeCatalogEntries(page: Page, path: string, field: 'name' | 'label', prefix: string): Promise<void> {
   for (const entry of (await allEntries(page, path)).filter((item) => String(item[field]).startsWith(prefix))) {
     const removed = await api(page, 'DELETE', `/api/v1/${path}/${String(entry.id)}`);
-    expect(removed.status(), await removed.text()).toBe(200);
+    // 200 with what happened (labels, types …), 204 without (workflows)
+    expect([200, 204], await removed.text()).toContain(removed.status());
   }
 }
 

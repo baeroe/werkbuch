@@ -8,6 +8,8 @@ export default defineConfig({
     setupFiles: ['./resources/js/test/setup.ts'],
     // room for the longer waits of resources/js/test/setup.ts on a slow CI runner
     testTimeout: 20_000,
+    // CSS is handed over as empty text, except a file a test reads as text with `?raw` (the colour tokens)
+    css: { include: [/\/tokens\.css\?raw$/] },
     include: ['resources/js/**/*.test.{ts,tsx}', 'scripts/**/*.test.mjs'],
     coverage: {
       provider: 'istanbul',
@@ -29,6 +31,7 @@ export default defineConfig({
         'resources/js/features/settings/org/catalogs/**': { lines: 100 },
         'resources/js/features/settings/org/types/**': { lines: 100 },
         'resources/js/features/settings/org/properties/**': { lines: 100 },
+        'resources/js/features/settings/org/workflows/**': { lines: 100 },
         'resources/js/features/settings/org/*.{ts,tsx}': { lines: 100 },
         'resources/js/features/settings/project/**': { lines: 100 },
         'resources/js/features/projects/**': { lines: 100 },
