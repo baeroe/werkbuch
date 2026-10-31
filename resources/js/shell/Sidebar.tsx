@@ -174,14 +174,15 @@ function useCurrentProject(): string | undefined {
 function ProjectsSection() {
   const id = useId();
   const favorites = useFavorites();
-  const projects = useProjects();
+  // the query of the rights (archived ones included), so the list loads once; archived projects stay out of the sidebar
+  const projects = useProjects({ include_archived: true });
   const { reason } = usePermissions();
   const current = useCurrentProject();
   // the project of the current page starts open; the chevron overrides that per project
   const [toggled, setToggled] = useState<Record<string, boolean>>({});
   const favoriteProjects = (favorites.data?.items ?? [])
     .filter((favorite) => favorite.kind === 'project')
-    .flatMap((favorite) => projects.data?.items.filter((project) => project.id === favorite.id) ?? []);
+    .flatMap((favorite) => projects.data?.items.filter((project) => project.id === favorite.id && project.archived_at === null) ?? []);
 
   let rows: ReactNode;
   if (favorites.isError || projects.isError) {

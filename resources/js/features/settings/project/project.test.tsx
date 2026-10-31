@@ -5,7 +5,7 @@
  */
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode, Ref } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -16,11 +16,11 @@ import type { ProjectMember, User } from '@/types';
 import { ProjectSettings } from './ProjectSettings';
 
 type Visit = { url: URL; method: string; prefetch: boolean; preserveUrl: boolean };
-const inertia = vi.hoisted(() => ({ visit: vi.fn(), listeners: new Map<string, Set<(event: never) => unknown>>() }));
+const inertia = vi.hoisted(() => ({ visit: vi.fn(), replace: vi.fn(), url: '/projects/WEB/settings', listeners: new Map<string, Set<(event: never) => unknown>>() }));
 let signedIn: User = ida;
 
 vi.mock('@inertiajs/react', () => ({
-  usePage: () => ({ props: { auth: { user: signedIn, permissions: [] }, organization }, url: '/projects/WEB/settings' }),
+  usePage: () => ({ props: { auth: { user: signedIn, permissions: [] }, organization }, url: inertia.url }),
   Link: ({ href, children, ref, ...rest }: { href: string; children: ReactNode; ref?: Ref<HTMLAnchorElement> }) => (
     <a href={href} ref={ref} {...rest}>
       {children}
@@ -28,6 +28,7 @@ vi.mock('@inertiajs/react', () => ({
   ),
   router: {
     visit: inertia.visit,
+    replace: inertia.replace,
     reload: vi.fn(),
     on: (event: string, listener: (event: never) => unknown) => {
       const set = inertia.listeners.get(event) ?? new Set();
@@ -88,6 +89,8 @@ afterEach(() => {
   api = undefined;
   signedIn = ida;
   inertia.visit.mockReset();
+  inertia.replace.mockReset();
+  inertia.url = '/projects/WEB/settings';
   act(() => resetToasts());
 });
 
@@ -144,6 +147,21 @@ describe('ProjectSettings', () => {
 
     await waitFor(() => expect(inertia.visit).toHaveBeenCalledWith('/projects/SITE/settings/members', { replace: true }));
     expect(screen.queryByRole('textbox', { name: 'Name' })).toBeNull();
+  });
+
+  it('puts the identifier in the address in its own spelling, and leaves a right one alone', async () => {
+    inertia.url = '/projects/web/settings/members?tab=1';
+    const { unmount } = renderSettings('members');
+
+    await waitFor(() => expect(inertia.replace).toHaveBeenCalledWith({ url: '/projects/WEB/settings/members?tab=1', preserveState: true, preserveScroll: true }));
+    unmount();
+    inertia.replace.mockReset();
+    api?.restore();
+
+    inertia.url = '/projects/WEB/settings/members';
+    renderSettings('members');
+    expect(await screen.findByRole('list', { name: 'Mitglieder von WEB' })).toBeTruthy();
+    expect(inertia.replace).not.toHaveBeenCalled();
   });
 
   it('says that an unknown section does not exist, keeps the list and leads to General', async () => {
@@ -329,12 +347,18 @@ describe('DangerZone', () => {
     expect(within(dialog).getByText('„Website-Relaunch“ wird mit allem gelöscht, was darin liegt.')).toBeTruthy();
     const confirm = within(dialog).getByRole('button', { name: 'Projekt löschen' });
 
-    // a wrong identifier keeps the button blocked, and Enter in the field does nothing
+    // a wrong identifier keeps the button blocked, and Enter in the field says what it wants
     const field = within(dialog).getByRole('textbox', { name: 'Kennung eintippen' });
     await user.type(field, 'web');
     expect(confirm.getAttribute('aria-disabled')).toBe('true');
-    fireEvent.submit(dialog.querySelector('form')!);
+    expect(field.getAttribute('aria-invalid')).toBeNull();
+    await user.keyboard('{Enter}');
     expect(inertia.visit).not.toHaveBeenCalled();
+    expect(field.getAttribute('aria-invalid')).toBe('true');
+    expect(within(dialog).getByText('Das ist nicht die Kennung. Tippe genau WEB ein.')).toBeTruthy();
+    // the message goes with the next edit
+    await user.type(field, 'x');
+    expect(field.getAttribute('aria-invalid')).toBeNull();
 
     await user.clear(field);
     await user.type(field, ' WEB ');
@@ -371,7 +395,7 @@ describe('Members', () => {
     expect(rows()[0]!.textContent).toContain('@ida');
   });
 
-  it('marks the default bot, and says when there are no members', async () => {
+  it('marks the default bot', async () => {
     renderSettings('members', { 'GET /api/v1/projects/p_web/members': () => ({ body: list([member('u_automation', 'member')]) }) });
     expect(await screen.findByText('Standard-Bot')).toBeTruthy();
   });

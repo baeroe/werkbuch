@@ -146,6 +146,8 @@ test('joins a public project with one click', async ({ page, browser }) => {
     await tabTo(lene, entry.getByRole('button', { name: tr('de', 'projects.join') }), { max: 150 });
     await lene.keyboard.press('Enter');
     await expect(lene.getByText(tr('de', 'projects.joined', { name }))).toBeVisible();
+    // the button goes with the membership; the focus stays on the card
+    await expect(entry.getByRole('link', { name })).toBeFocused();
     await expect(entry).toContainText(`${tr('de', 'projects.your_role')} ${tr('de', 'roles.project.member')}`);
     await expect(entry.getByRole('button', { name: tr('de', 'projects.join') })).toHaveCount(0);
   } finally {

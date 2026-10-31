@@ -43,7 +43,7 @@ const unavailable = () => problem(503, 'service_unavailable', { detail: 'Der Ser
 
 let api: MockApi | undefined;
 
-function renderScreen(overrides: Record<string, MockRoute> = {}, { create = false, offline = false } = {}) {
+function renderScreen(overrides: Record<string, MockRoute> = {}, { create = false, offline = false, hold = '' } = {}) {
   api = mockApi({
     'GET /api/v1/projects': () => ({ body: list([web, app, old]) }),
     'GET /api/v1/users': () => ({ body: list([mara, ida, lene]) }),
@@ -51,6 +51,9 @@ function renderScreen(overrides: Record<string, MockRoute> = {}, { create = fals
     ...overrides,
   });
   if (offline) globalThis.fetch = () => Promise.reject(new TypeError('Failed to fetch'));
+  // calls to a path with `hold` in it never answer
+  const fetching = globalThis.fetch;
+  if (hold) globalThis.fetch = (input, init) => (String(input).includes(hold) ? new Promise<Response>(() => {}) : fetching(input, init));
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
@@ -174,13 +177,25 @@ describe('ProjectsScreen', () => {
     expect(inertia.replace).toHaveBeenCalledWith(expect.objectContaining({ url: '/projects?archived=1' }));
   });
 
-  it('joins a public project with one click', async () => {
+  it('joins a public project with one click, and keeps the focus on its card', async () => {
     const user = userEvent.setup();
-    renderScreen({ 'POST /api/v1/projects/p_app/join': () => ({ status: 201, body: { data: { project_id: 'p_app', user_id: 'u_lene', role: 'member' } } }) });
+    let joined = false;
+    renderScreen({
+      'GET /api/v1/projects': () => ({ body: list([web, joined ? { ...app, my_role: 'member', is_member: true } : app, old]) }),
+      'POST /api/v1/projects/p_app/join': () => {
+        joined = true;
+        return { status: 201, body: { data: { project_id: 'p_app', user_id: 'u_lene', role: 'member' } } };
+      },
+    });
 
-    await user.click(within(await screen.findByText('Kunden-App').then(() => card('Kunden-App'))).getByRole('button', { name: 'Beitreten' }));
+    await screen.findByText('Kunden-App');
+    await user.click(within(card('Kunden-App')).getByRole('button', { name: 'Beitreten' }));
 
     await waitFor(() => expect(toastTitles()).toContain('Du bist Kunden-App beigetreten'));
+    // the button is gone with the membership: the focus is on the card's link, not on the page
+    expect(within(card('Kunden-App')).queryByRole('button', { name: 'Beitreten' })).toBeNull();
+    expect(card('Kunden-App').textContent).toContain('Deine Rolle: Member');
+    expect(document.activeElement).toBe(within(card('Kunden-App')).getByRole('link', { name: 'Kunden-App' }));
   });
 
   it('says why joining failed, and tries again from the toast when the server failed', async () => {
@@ -204,11 +219,33 @@ describe('ProjectsScreen', () => {
 
     await screen.findByText('Kunden-App');
     const star = within(card('Kunden-App')).getByRole('button', { name: '„Kunden-App“ in die Seitenleiste legen' });
-    await waitFor(() => expect(star).toHaveProperty('disabled', false));
+    await waitFor(() => expect(star.getAttribute('aria-disabled')).toBeNull());
     expect(within(card('Website-Relaunch')).getByRole('button', { name: '„Website-Relaunch“ aus der Seitenleiste nehmen' })).toBeTruthy();
 
     await user.click(star);
     expect(lastCall('POST', '/api/v1/favorites/toggle')!.body).toEqual({ kind: 'project', id: 'p_app' });
+  });
+
+  it('keeps the star focusable and says why while the favorites load or could not be loaded', async () => {
+    const user = userEvent.setup();
+    renderScreen({ 'GET /api/v1/favorites': unavailable });
+
+    await screen.findByText('Kunden-App');
+    const star = within(card('Kunden-App')).getByRole('button', { name: '„Kunden-App“ in die Seitenleiste legen' });
+    expect(star.getAttribute('aria-disabled')).toBe('true');
+    expect(star.hasAttribute('disabled')).toBe(false);
+    await waitFor(() => expect(star.textContent).toContain('Die Favoriten konnten nicht geladen werden.'));
+    await user.click(star);
+    expect(api!.calls.some((call) => call.url === '/api/v1/favorites/toggle')).toBe(false);
+  });
+
+  it('says that the favorites are on their way while they load', async () => {
+    renderScreen({}, { hold: '/favorites' });
+
+    await screen.findByText('Kunden-App');
+    const star = within(card('Kunden-App')).getByRole('button', { name: '„Kunden-App“ in die Seitenleiste legen' });
+    expect(star.getAttribute('aria-disabled')).toBe('true');
+    expect(star.textContent).toContain('Favoriten werden geladen …');
   });
 
   it('says why the star could not change, and tries again from the toast', async () => {
@@ -217,7 +254,7 @@ describe('ProjectsScreen', () => {
 
     await screen.findByText('Kunden-App');
     const star = within(card('Kunden-App')).getByRole('button', { name: '„Kunden-App“ in die Seitenleiste legen' });
-    await waitFor(() => expect(star).toHaveProperty('disabled', false));
+    await waitFor(() => expect(star.getAttribute('aria-disabled')).toBeNull());
     await user.click(star);
     await waitFor(() => expect(toastTitles()).toContain('Favorit nicht geändert'));
 

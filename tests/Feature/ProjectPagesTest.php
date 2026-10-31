@@ -35,9 +35,16 @@ it('moves an old address to the new identifier for good', function () {
     $web = Project::factory()->identifier('WEB')->public()->create();
     UpdateProject::run(actor($admin), $web, ['identifier' => 'SITE']);
 
-    $this->actingAs($admin)->get('/projects/WEB/settings/members')->assertStatus(301)->assertRedirect('/projects/SITE/settings/members');
+    $this->actingAs($admin)->get('/projects/WEB/settings/members')->assertStatus(301)->assertRedirect('/projects/SITE/settings/members')
+        // no cache keeps it: a rename back to WEB must not run into a redirect stored for good
+        ->assertHeader('Cache-Control', 'no-store, private');
     $this->actingAs($admin)->get('/projects/WEB/settings')->assertStatus(301)->assertRedirect('/projects/SITE/settings');
     $this->actingAs($admin)->get('/projects/SITE/settings')->assertOk();
+
+    // and back: SITE is the former identifier now
+    UpdateProject::run(actor($admin), $web->fresh(), ['identifier' => 'WEB']);
+    $this->actingAs($admin)->get('/projects/SITE/settings')->assertStatus(301)->assertRedirect('/projects/WEB/settings');
+    $this->actingAs($admin)->get('/projects/WEB/settings')->assertOk();
 });
 
 it('shows the 404 page for a private project to somebody outside it, as for an unknown one', function () {

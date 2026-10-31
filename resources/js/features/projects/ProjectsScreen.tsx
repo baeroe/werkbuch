@@ -41,12 +41,14 @@ function Membership({ project, me }: { project: Project; me: User | undefined })
   const join = useJoinProject();
 
   // `mutateAsync`: every call ends itself, also one sent again from the toast's retry while another is on its way
-  async function enter() {
+  async function enter(card: Element | null) {
     try {
       await join.mutateAsync(project.id);
+      // the button goes with the membership: the keyboard focus moves to the link of the card instead of the page
+      card?.querySelector<HTMLElement>('[data-card-link]')?.focus();
       toast({ title: t('projects.joined', { name: project.name }), tone: 'success' });
     } catch (error) {
-      notifyError(t('projects.join_failed', { name: project.name }), error, () => void enter());
+      notifyError(t('projects.join_failed', { name: project.name }), error, () => void enter(card));
     }
   }
 
@@ -71,7 +73,7 @@ function Membership({ project, me }: { project: Project; me: User | undefined })
     <div className="flex items-center gap-2">
       {/* an org admin is an admin everywhere: they do not merely read along */}
       {me?.org_role !== 'admin' && <span className="text-sm text-muted">{t('projects.reading_only')}</span>}
-      <Button variant="secondary" size="sm" icon={UserPlus} pending={join.isPending} onClick={() => void enter()}>
+      <Button variant="secondary" size="sm" icon={UserPlus} pending={join.isPending} onClick={(event) => void enter(event.currentTarget.closest('li'))}>
         {t('projects.join')}
       </Button>
     </div>

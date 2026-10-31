@@ -407,6 +407,8 @@ describe('Security: two-factor', () => {
     renderSettings('security', server(overrides));
     await user.click(await screen.findByRole('button', { name: 'Einrichten' }));
     const field = await screen.findByRole('textbox', { name: 'Code aus der App' });
+    // the step moves the focus one animation frame later: let it land first, or a slow run types into where it lands
+    await act(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
     return { user, field };
   }
 

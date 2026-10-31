@@ -125,7 +125,7 @@ const sidebar = () => screen.getAllByRole('navigation', { name: 'Seitenleiste' }
 describe('Sidebar projects', () => {
   it('lists the starred projects in the order of the favorites, without archived ones, and opens the current one', async () => {
     url = '/projects/APP/settings/members';
-    routes['GET /api/v1/projects'] = (_body, address) => ({ body: list(address.searchParams.get('include_archived') ? [web, app, old] : [web, app]) });
+    routes['GET /api/v1/projects'] = () => ({ body: list([web, app, old]) });
     routes['GET /api/v1/favorites'] = () => ({ body: list([favorite('p_app', 0), favorite('p_old', 1), favorite('p_web', 2)]) });
     render(<Shell>Inhalt</Shell>);
 
@@ -150,6 +150,9 @@ describe('Sidebar projects', () => {
     expect(within(nav).getAllByRole('link', { name: 'Einstellungen' })).toHaveLength(2);
     await userEvent.click(apps);
     expect(apps.getAttribute('aria-expanded')).toBe('false');
+
+    // the sidebar and the rights share one list of the projects
+    expect(api!.calls.filter((call) => call.url.startsWith('/api/v1/projects')).map((call) => call.url)).toEqual(['/api/v1/projects?include_archived=1']);
   });
 
   it('says so while nothing is starred, and links "Create project" to the dialog', async () => {

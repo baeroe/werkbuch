@@ -6,7 +6,7 @@
  * moves the address to the identifier the project has now.
  */
 
-import { Link, router } from '@inertiajs/react';
+import { Link, router, usePage } from '@inertiajs/react';
 import { Archive, CircleAlert } from 'lucide-react';
 import { Fragment, useEffect } from 'react';
 import { ApiError } from '@/api/client';
@@ -50,6 +50,14 @@ export function ProjectSettings({ identifier, section }: { identifier: string; s
   useEffect(() => {
     if (moved) router.visit(paths.projectSettings(known.identifier, section), { replace: true });
   }, [moved, known?.identifier, section]);
+
+  // another spelling in the address (`/projects/web/settings`): the address gets the identifier's own, so the sidebar
+  // and the marks of the current page find it
+  const { url } = usePage();
+  const canonical = url.replace(/^\/projects\/[^/?#]+/, `/projects/${encodeURIComponent(identifier)}`);
+  useEffect(() => {
+    if (canonical !== url) router.replace({ url: canonical, preserveState: true, preserveScroll: true });
+  }, [canonical, url]);
 
   if (project.error instanceof ApiError && project.error.status === 404) {
     return <NotFound title={t('settings.project.not_found.title', { identifier })} description={t('settings.project.not_found.description')} />;

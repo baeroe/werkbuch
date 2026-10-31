@@ -23,7 +23,9 @@ final class ProjectSettingsPageController extends Controller
         $project = GetProject::run(Actor::fromRequest($request), $identifier);
 
         if ($project->resolved_by_former_identifier) {
-            return redirect()->route('projects.settings', ['identifier' => $project->identifier, 'section' => $section], 301);
+            // permanent for people, never for caches: a rename back (A → B → A) turns the target into a former identifier
+            return redirect()->route('projects.settings', ['identifier' => $project->identifier, 'section' => $section], 301)
+                ->header('Cache-Control', 'no-store, private');
         }
 
         return Inertia::render('Projects/Settings', ['identifier' => $project->identifier, 'section' => $section ?? 'general']);

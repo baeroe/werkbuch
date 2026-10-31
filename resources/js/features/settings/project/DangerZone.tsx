@@ -130,17 +130,22 @@ type DeleteDialogProps = {
 function DeleteDialog({ project, open, onOpenChange, onConfirm }: DeleteDialogProps) {
   const formId = useId();
   const [typed, setTyped] = useState('');
+  // Enter with another spelling: the field says what it wants
+  const [wrong, setWrong] = useState(false);
   // exactly the identifier; blanks around it (autofill, text expansion) do not count
   const matches = typed.trim() === project.identifier;
 
   // every question starts empty
   useEffect(() => {
-    if (!open) setTyped('');
+    if (open) return;
+    setTyped('');
+    setWrong(false);
   }, [open]);
 
   function submit(event: FormEvent) {
     event.preventDefault();
     if (matches) onConfirm();
+    else setWrong(true);
   }
 
   return (
@@ -172,10 +177,14 @@ function DeleteDialog({ project, open, onOpenChange, onConfirm }: DeleteDialogPr
             </>
           }
           value={typed}
+          error={wrong ? t('settings.project.danger.confirm_wrong', { identifier: project.identifier }) : undefined}
           autoComplete="off"
           autoCapitalize="off"
           spellCheck={false}
-          onChange={(event) => setTyped(event.target.value)}
+          onChange={(event) => {
+            setTyped(event.target.value);
+            setWrong(false);
+          }}
         />
       </form>
     </Dialog>

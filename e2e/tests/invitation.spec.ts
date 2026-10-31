@@ -22,13 +22,22 @@ async function invite(page: Page, tag: string): Promise<{ email: string; link: s
 
 /** Ends the session of the context: from here on the page is that of the invited person. */
 async function signOutQuietly(page: Page): Promise<void> {
-  // the shell's own calls (projects, favorites) end first: one that comes back without a session reloads the page
-  await page.waitForLoadState('networkidle');
   await page.context().clearCookies();
 }
 
-test('accepts an invitation with the keyboard only', async ({ page }) => {
+/**
+ * My items as the e2e person, once the calls of the sidebar (favorites, projects) are answered: one that came back
+ * after `signOutQuietly` would find no session and reload the page under the next `goto`.
+ */
+async function openMyItems(page: Page): Promise<void> {
+  const answered = (path: string) => page.waitForResponse((response) => new URL(response.url()).pathname === path);
+  const sidebar = Promise.all([answered('/api/v1/favorites'), answered('/api/v1/projects')]);
   await page.goto('/my-items');
+  await sidebar;
+}
+
+test('accepts an invitation with the keyboard only', async ({ page }) => {
+  await openMyItems(page);
   const { link } = await invite(page, 'accept');
   await signOutQuietly(page);
 
@@ -48,7 +57,7 @@ test('accepts an invitation with the keyboard only', async ({ page }) => {
 });
 
 test('shows a closed link for a replaced invitation and leads to the sign-in', async ({ page }) => {
-  await page.goto('/my-items');
+  await openMyItems(page);
   const first = await invite(page, 'closed');
   // a second invitation to the same address replaces the first
   const second = await invite(page, 'closed');
@@ -69,7 +78,7 @@ test('shows a closed link for a replaced invitation and leads to the sign-in', a
 });
 
 test('names the empty fields and focuses the first one', async ({ page }) => {
-  await page.goto('/my-items');
+  await openMyItems(page);
   const { link } = await invite(page, 'empty');
   await signOutQuietly(page);
 
