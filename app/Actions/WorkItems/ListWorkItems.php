@@ -3,9 +3,11 @@
 namespace App\Actions\WorkItems;
 
 use App\Access\Authorize;
+use App\Access\Visibility;
 use App\Domain\WorkItems\ItemKey;
 use App\Exceptions\Problem;
 use App\Models\Project;
+use App\Models\User;
 use App\Models\WorkItem;
 use App\Support\Actor;
 use App\Support\ListResult;
@@ -22,8 +24,10 @@ use Lorisleiva\Actions\Concerns\AsAction;
  *
  * - `filter[project]`: the items of one project (ULID, identifier or former identifier); unknown or unseen → 404.
  * - `filter[parent]`: the children of one item (ULID or key); unknown or unseen → 404.
- * - `filter[q]`: a key names exactly that item (also with a former identifier); any other text is a part of the title,
- *   `%` and `_` taken literally.
+ * - `filter[q]`: the key of an item the account sees names exactly that item (also with a former identifier); any other
+ *   text, a key-shaped one included (`KW-45`, the key of an unseen item), is a part of the title, `%` and `_` taken
+ *   literally. So a hidden key reads like an unknown one.
+ * - Any other filter is a 422 at `filter`.
  * - `include_archived`: archived items and the items of archived projects only come with it.
  *
  * Every item of the page is loaded for WorkItemResource with the account as reader (K5).
@@ -31,6 +35,9 @@ use Lorisleiva\Actions\Concerns\AsAction;
 final class ListWorkItems
 {
     use AsAction;
+
+    /** The filters of the list; views widen them in Phase 5. */
+    public const FILTERS = ['project', 'parent', 'q'];
 
     /**
      * @param  array<array-key, mixed>  $input  `filter` (`project`, `parent`, `q`), `include_archived` (bool), `cursor`,
@@ -44,7 +51,8 @@ final class ListWorkItems
     {
         $invalid = __('field.filter.invalid');
         $valid = Validator::make($input, [
-            'filter' => ['nullable', 'array'],
+            // only the filters there are: an unknown one (`filter[assignee]`) would silently answer every item
+            'filter' => ['nullable', 'array:'.implode(',', self::FILTERS)],
             'filter.project' => ['nullable', 'string'],
             'filter.parent' => ['nullable', 'string'],
             'filter.q' => ['nullable', 'string'],
@@ -78,7 +86,7 @@ final class ListWorkItems
 
         $q = trim($filter['q'] ?? '');
         if ($q !== '') {
-            self::search($query, $q);
+            self::search($query, $q, $actor->user);
         }
 
         $result = ListResult::of($query->orderBy('rank')->orderBy('id'), $args);
@@ -88,14 +96,16 @@ final class ListWorkItems
     }
 
     /**
-     * A key names exactly its item (an unknown key matches nothing); any other text is a part of the title.
+     * The key of an item the reader sees names exactly that item; any other text is a part of the title (as the search
+     * of the clickdummy: a key-shaped title stays findable, and an unseen key behaves like an unknown one).
      *
      * @param  Builder<WorkItem>  $query
      */
-    private static function search(Builder $query, string $q): void
+    private static function search(Builder $query, string $q, User $reader): void
     {
-        if (ItemKey::parse($q) !== null) {
-            $query->whereKey(WorkItem::findByReference($q)->id ?? '');
+        $item = ItemKey::parse($q) === null ? null : WorkItem::findByReference($q);
+        if ($item !== null && Visibility::roleIn($reader, $item->project) !== null) {
+            $query->whereKey($item->id);
 
             return;
         }

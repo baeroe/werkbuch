@@ -105,6 +105,8 @@ it('finds by key or by part of the title, with % and _ taken literally', functio
     WorkItem::factory()->for($web)->create(['title' => 'snakeXcase lassen']);
     WorkItem::factory()->for($web)->create(['title' => 'Pfad C:\\temp']);
     WorkItem::factory()->for($web)->create(['title' => 'Nenne WEB-1 nicht']);
+    WorkItem::factory()->for($web)->create(['title' => 'KW-45 Release']);
+    WorkItem::factory()->for($web)->create(['title' => 'Wartet auf OPS-1 und WEB-99']);
     WorkItem::factory()->for($ops)->create(['title' => 'Geheim']);
     $search = fn (string $q): array => $keys(ListWorkItems::run(actor($mara), ['filter' => ['q' => $q]]));
 
@@ -114,11 +116,16 @@ it('finds by key or by part of the title, with % and _ taken literally', functio
         ->and($search('ABDECKUNG'))->toBe(['WEB-1'])
         ->and($search('  web-2 '))->toBe(['WEB-2'])
         ->and($search('OLD-3'))->toBe(['WEB-3'])
-        // a key names exactly its item, never a title that holds it, and an item the account does not see is no match
+        // the key of a visible item names exactly that item, never a title that holds it
         ->and($search('WEB-1'))->toBe(['WEB-1'])
-        ->and($search('WEB-99'))->toBe([])
-        ->and($search('OPS-1'))->toBe([])
-        ->and($search('   '))->toHaveCount(6);
+        // any other key-shaped text is a part of the title: no item has the key, or the account does not see it (so a
+        // hidden key reads like an unknown one)
+        ->and($search('KW-45'))->toBe(['WEB-7'])
+        ->and($search('kw-45'))->toBe(['WEB-7'])
+        ->and($search('WEB-99'))->toBe(['WEB-8'])
+        ->and($search('OPS-1'))->toBe(['WEB-8'])
+        ->and($search('OPS-2'))->toBe([])
+        ->and($search('   '))->toHaveCount(8);
 });
 
 it('pages with a cursor and counts the total', function () use ($world, $keys) {
@@ -145,10 +152,19 @@ it('never lists items of a project that is being deleted', function () use ($wor
         ->toThrow(fn (Problem $problem) => expect($problem->status)->toBe(404));
 });
 
-it('refuses a filter that is no object of texts', function () use ($world) {
+it('refuses a filter that is no object of the known texts', function () use ($world) {
     [, , $mara] = $world();
 
-    foreach ([['filter' => 'WEB'], ['filter' => ['project' => ['WEB']]], ['filter' => ['q' => 5]]] as $input) {
+    $inputs = [
+        ['filter' => 'WEB'],
+        ['filter' => ['project' => ['WEB']]],
+        ['filter' => ['q' => 5]],
+        // only the filters there are: an unknown one would answer every item
+        ['filter' => ['assignee' => 'me']],
+        ['filter' => ['state' => ['x']]],
+        ['filter' => ['project' => 'WEB', 'projekt' => 'WEB']],
+    ];
+    foreach ($inputs as $input) {
         expect(fn () => ListWorkItems::run(actor($mara), $input))
             ->toThrow(fn (ValidationException $e) => expect(array_values($e->errors()))->toBe([[__('field.filter.invalid')]]));
     }

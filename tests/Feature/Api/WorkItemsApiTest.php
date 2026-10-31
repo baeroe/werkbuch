@@ -205,6 +205,10 @@ it('lists the items with the total', function () use ($web) {
     $this->actingAs($mara)->getJson('/api/v1/work-items?filter[q]=WEB-4')->assertOk()->assertJsonPath('meta.total', 0);
     $this->actingAs($mara)->getJson('/api/v1/work-items?filter[q]=WEB-4&include_archived=1')->assertOk()->assertJsonPath('data.0.key', 'WEB-4');
     $this->actingAs($mara)->getJson('/api/v1/work-items?filter[project]=NOPE')->assertNotFound();
+    foreach (['filter[assignee]=me', 'filter[state][]=x'] as $unknown) {
+        $this->actingAs($mara)->getJson("/api/v1/work-items?{$unknown}")->assertUnprocessable()
+            ->assertJsonPath('errors', ['filter' => [__('field.filter.invalid')]]);
+    }
 });
 
 it('shows an item and embeds children, type and workflow on request', function () use ($web) {
