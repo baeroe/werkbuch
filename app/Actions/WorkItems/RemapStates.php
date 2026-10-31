@@ -11,6 +11,7 @@ use App\Models\Resolution;
 use App\Models\WorkflowState;
 use App\Models\WorkItem;
 use App\Support\Actor;
+use App\Support\StateSnapshot;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Lorisleiva\Actions\Concerns\AsAction;
@@ -21,7 +22,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * projects whose state is a key of the mapping (old state → new state) gets the new state, archived items as well (they
  * stay archived, even in an open state); the workflow is not asked, the state the item was in goes. The resolution and
  * the stamps follow like a move (ResolutionRule without a choice, MoveStamps), and each item records a
- * `work_item.state_changed` with the reason in `meta.reason`.
+ * `work_item.state_changed` with the reason in `meta.reason` and both states in `meta.states` (StateSnapshot: the
+ * state that goes keeps its name in the history).
  *
  * No right and no lock of its own: the callers have checked theirs and hold the organization `for update` (P1, P2), so
  * every change of an item waits until the items are moved. Runs synchronously in the transaction of the caller (P2),
@@ -75,7 +77,7 @@ final class RemapStates
                         $item->updated_at = $now;
                         $item->save();
 
-                        EventRecorder::record(EventType::WorkItemStateChanged, $actor, $item, $projects[$item->project_id], $changes);
+                        EventRecorder::record(EventType::WorkItemStateChanged, $actor, $item, $projects[$item->project_id], $changes, ['states' => StateSnapshot::of($from, $to)]);
                         $moved++;
                     }
                 });

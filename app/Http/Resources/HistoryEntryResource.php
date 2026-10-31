@@ -10,7 +10,9 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * One entry of the history of a work item (`ItemEvent` in resources/js/types.ts): the event with who did it
  * (`actor_id`), how (`via`) and why (`reason`, both from `meta`) and its changes as the reader may see them
  * (`Event::$history_changes`, resolved by App\Actions\WorkItems\ListHistory: a relation names the other end only when
- * the reader sees it). It asks the database nothing (K5).
+ * the reader sees it) and, for a move, the two states as they were then (`states`, `{old, new}` with `id`, `name`,
+ * `category` from `meta.states`; `null` for other events and for events recorded before the snapshot). It asks the
+ * database nothing (K5).
  *
  * @mixin Event
  */
@@ -31,6 +33,8 @@ final class HistoryEntryResource extends JsonResource
             'subject' => ['type' => $event->subject_type, 'id' => $event->subject_id],
             'project_id' => $event->project_id,
             'changes' => $event->history_changes,
+            // the states of a `work_item.state_changed` as they were then (StateSnapshot); null elsewhere and in older events
+            'states' => $event->meta['states'] ?? null,
             'reason' => $event->meta['reason'] ?? null,
             'via' => $event->meta['via'] ?? null,
             'occurred_at' => $event->occurred_at->toJSON(),

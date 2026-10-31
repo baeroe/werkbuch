@@ -438,7 +438,7 @@ it('reads the history over GET …/history, a page at a time', function () use (
     $first = $this->withToken(apiToken($mara, ['read']))->getJson('/api/v1/work-items/web-1/history?per_page=1')->assertOk();
     forgetApiAuth();
     expect($first->json('data'))->toHaveCount(1)
-        ->and(array_keys($first->json('data.0')))->toBe(['id', 'type', 'actor_id', 'subject', 'project_id', 'changes', 'reason', 'via', 'occurred_at'])
+        ->and(array_keys($first->json('data.0')))->toBe(['id', 'type', 'actor_id', 'subject', 'project_id', 'changes', 'states', 'reason', 'via', 'occurred_at'])
         ->and($first->json('data.0.changes'))->toBe(['title' => ['old' => 'Alt', 'new' => 'Neu']])
         ->and($first->json('data.0.subject'))->toBe(['type' => 'work_item', 'id' => $item->id])
         ->and($first->json('meta.total'))->toBe(2);

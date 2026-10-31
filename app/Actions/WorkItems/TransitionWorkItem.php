@@ -16,6 +16,7 @@ use App\Models\WorkflowState;
 use App\Models\WorkItem;
 use App\Support\Actor;
 use App\Support\ItemLock;
+use App\Support\StateSnapshot;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -69,7 +70,8 @@ final class TransitionWorkItem
      * Moves an item the caller has locked (ItemLock) and may change: no right and no lock here. An archived item is
      * read-only (409 `archived`); then check() decides. Staying in the state with the same resolution changes nothing;
      * staying with another resolution is a `work_item.updated` with `changes.resolution_id`; any other move is a
-     * `work_item.state_changed` with `changes.state_id` (and `resolution_id` when it changes). `$reason` notes why in
+     * `work_item.state_changed` with `changes.state_id` (and `resolution_id` when it changes) and both states in
+     * `meta.states` (StateSnapshot, so the history names them after a rename or removal). `$reason` notes why in
      * the event (an automation); without `$checkTransition` the workflow is not asked (the caller did, CreateWorkItem).
      *
      * @return bool whether anything changed
@@ -107,7 +109,7 @@ final class TransitionWorkItem
         $locked->save();
 
         $actor = $reason === null ? $actor : new Actor($actor->user, $actor->via, $reason, $actor->token);
-        EventRecorder::record($same ? EventType::WorkItemUpdated : EventType::WorkItemStateChanged, $actor, $locked, $locked->project, $changes);
+        EventRecorder::record($same ? EventType::WorkItemUpdated : EventType::WorkItemStateChanged, $actor, $locked, $locked->project, $changes, $same ? [] : ['states' => StateSnapshot::of($from, $to)]);
 
         return true;
     }

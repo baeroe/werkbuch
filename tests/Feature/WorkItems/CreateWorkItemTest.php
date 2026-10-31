@@ -472,7 +472,9 @@ it('creates in another state when the start state may move there', function () u
         ->and($item->started_at)->toBeNull()
         // the history shows the creation in the initial state, then the move
         ->and($history->pluck('type')->all())->toBe([EventType::WorkItemCreated, EventType::WorkItemStateChanged])
-        ->and($history[1]->changes['state_id'])->toBe(['old' => Workflow::default()->initial_state_id, 'new' => $done->id]);
+        ->and($history[1]->changes['state_id'])->toBe(['old' => Workflow::default()->initial_state_id, 'new' => $done->id])
+        ->and($history[1]->meta['states']['new'])->toBe(['id' => $done->id, 'name' => 'Done', 'category' => 'completed'])
+        ->and($history[0]->meta)->not->toHaveKey('states');
 });
 
 it('creates in the initial state named as such without a move', function () use ($web) {

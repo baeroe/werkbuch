@@ -199,7 +199,17 @@ it('records the move with old and new state', function () use ($web, $state, $mo
     ])
         ->and($event->actor_id)->toBe($mara->id)
         ->and($event->project_id)->toBe($project->id)
-        ->and($event->meta['reason'])->toBeNull();
+        ->and($event->meta['reason'])->toBeNull()
+        // the states as they are now, for a history that outlives a rename or a removal
+        ->and($event->meta['states'])->toBe([
+            'old' => ['id' => $state($project, 'Backlog'), 'name' => 'Backlog', 'category' => 'backlog'],
+            'new' => ['id' => $state($project, 'Done'), 'name' => 'Done', 'category' => 'completed'],
+        ]);
+
+    // another resolution in the same state is an update, without states
+    $move($mara, $item, $state($project, 'Done'), Resolution::query()->where('label', 'Duplicate')->value('id'));
+
+    expect(eventsOf(EventType::WorkItemUpdated, $item)->sole()->meta)->not->toHaveKey('states');
 });
 
 it('notes the reason of a move in its event', function () use ($web, $state) {

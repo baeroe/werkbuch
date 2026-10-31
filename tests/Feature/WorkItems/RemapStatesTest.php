@@ -92,6 +92,10 @@ it('records each item with the person and the reason', function () use ($web, $s
         ->and($event->project_id)->toBe($project->id)
         ->and($event->meta)->toMatchArray(['via' => Actor::VIA_API, 'reason' => 'state_removed'])
         ->and($event->changes)->toBe(['state_id' => ['old' => $state($project, 'Todo'), 'new' => $state($project, 'Backlog')]])
+        ->and($event->meta['states'])->toBe([
+            'old' => ['id' => $state($project, 'Todo'), 'name' => 'Todo', 'category' => 'unstarted'],
+            'new' => ['id' => $state($project, 'Backlog'), 'name' => 'Backlog', 'category' => 'backlog'],
+        ])
         ->and(eventsOf(EventType::WorkItemStateChanged, $closed)->sole()->changes)->toBe([
             'state_id' => ['old' => $state($project, 'Done'), 'new' => $state($project, 'Cancelled')],
             'resolution_id' => ['old' => $resolution, 'new' => Resolution::query()->where('default_for', StateCategory::Canceled->value)->value('id')],

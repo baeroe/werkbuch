@@ -3,6 +3,7 @@
 use App\Access\ProjectRole;
 use App\Access\Visibility;
 use App\Actions\Projects\UpdateProject;
+use App\Actions\Workflows\SaveWorkflow;
 use App\Actions\WorkItems\AddRelation;
 use App\Actions\WorkItems\ArchiveWorkItem;
 use App\Actions\WorkItems\ChangeWorkItemType;
@@ -14,6 +15,7 @@ use App\Actions\WorkItems\SetSubscription;
 use App\Actions\WorkItems\TransitionWorkItem;
 use App\Actions\WorkItems\UpdateWorkItem;
 use App\Domain\Ranking\Rank;
+use App\Events\EventType;
 use App\Http\Resources\HistoryEntryResource;
 use App\Models\Event;
 use App\Models\Label;
@@ -21,10 +23,13 @@ use App\Models\Project;
 use App\Models\RelationType;
 use App\Models\Resolution;
 use App\Models\User;
+use App\Models\Workflow;
+use App\Models\WorkflowState;
 use App\Models\WorkItem;
 use App\Models\WorkItemType;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Tests\Support\WorkflowFixtures;
 
 /**
  * WEB (public) with Mara as its admin and lead, OPS (private) with Mara as a member, and Ida, a member of WEB who does
@@ -117,6 +122,7 @@ it('names who did it, how and why', function () use ($world, $history) {
         'subject' => ['type' => 'work_item', 'id' => $child->id],
         'project_id' => $web->id,
         'changes' => ['title' => ['old' => $child->title, 'new' => 'Über die API']],
+        'states' => null,
         'reason' => null,
         'via' => 'api',
         'occurred_at' => Event::query()->findOrFail($patched['id'])->occurred_at->toJSON(),
@@ -189,6 +195,44 @@ it('reads the label of the type as it is now, and the stored one once the type i
     ])
         ->and($relations($history($mara, $item)))->toBe([['old' => null, 'new' => ['label' => 'testet', 'item_id' => $other->id, 'key' => 'WEB-2']]])
         ->and($relations($history($mara, $other)))->toBe([['old' => null, 'new' => ['label' => 'wird getestet von', 'item_id' => $item->id, 'key' => 'WEB-1']]]);
+});
+
+it('names the states of a move as they were, also once a state is removed', function () use ($world, $history) {
+    [$web, , $mara] = $world();
+    $standard = Workflow::default();
+    $item = WorkItem::factory()->for($web)->inState('Todo')->create();
+    $state = fn (string $name): string => (string) $standard->states()->where('name', $name)->value('id');
+    [$todo, $pending, $backlog] = [$state('Todo'), $state('Pending'), $state('Backlog')];
+    TransitionWorkItem::run(actor($mara), $item, ['to_state_id' => $pending]);
+
+    // Pending goes, its items move to Backlog
+    $input = WorkflowFixtures::inputOf($standard);
+    $input['states'] = array_values(array_filter($input['states'], fn (array $state) => $state['id'] !== $pending));
+    SaveWorkflow::run(actor(User::factory()->admin()->create()), $standard, [...$input, 'state_mapping' => [$pending => $backlog]]);
+
+    [$moved, $removed] = $history($mara, $item);
+
+    expect(WorkflowState::query()->whereKey($pending)->exists())->toBeFalse()
+        ->and($moved['states'])->toBe([
+            'old' => ['id' => $todo, 'name' => 'Todo', 'category' => 'unstarted'],
+            'new' => ['id' => $pending, 'name' => 'Pending', 'category' => 'started'],
+        ])
+        ->and([$removed['reason'], $removed['states']['old']['name'], $removed['states']['new']['name']])->toBe(['state_removed', 'Pending', 'Backlog']);
+});
+
+it('shows a move recorded before the snapshot without states', function () use ($world, $history) {
+    [$web, , $mara] = $world();
+    $item = WorkItem::factory()->for($web)->create();
+    TransitionWorkItem::run(actor($mara), $item, ['to_state_id' => (string) $web->workflow()->firstOrFail()->states()->where('name', 'Todo')->value('id')]);
+    // as events were stored before meta.states
+    $event = eventsOf(EventType::WorkItemStateChanged, $item)->sole();
+    $event->update(['meta' => array_diff_key($event->meta, ['states' => true])]);
+
+    [$entry] = $history($mara, $item);
+
+    expect($entry['type'])->toBe('work_item.state_changed')
+        ->and($entry['states'])->toBeNull()
+        ->and(array_keys($entry['changes']))->toBe(['state_id']);
 });
 
 it('leaves out watching and pure reordering', function () use ($world, $history) {
