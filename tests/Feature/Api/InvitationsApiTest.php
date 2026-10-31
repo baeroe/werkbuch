@@ -35,6 +35,16 @@ it('invites an address and answers the link and the invitation', function () {
         ->and(Event::query()->where('type', EventType::UserInvited)->sole()->actor_id)->toBe($admin->id);
 });
 
+it('accepts project ids in capitals', function () {
+    $web = Project::factory()->identifier('WEB')->create();
+
+    $this->actingAs(User::factory()->admin()->create())->postJson('/api/v1/invitations', [
+        'email' => 'lea@example.com', 'org_role' => 'member', 'projects' => [['project_id' => strtoupper($web->id), 'role' => 'member']],
+    ])->assertCreated()->assertJsonPath('invitation.projects.0.project_id', $web->id);
+
+    expect(Invitation::query()->sole()->projects)->toBe([['project_id' => $web->id, 'role' => 'member']]);
+});
+
 it('invites without projects', function () {
     $this->actingAs(User::factory()->admin()->create())->postJson('/api/v1/invitations', ['email' => 'lea@example.com', 'org_role' => 'admin'])
         ->assertCreated()->assertJsonPath('invitation.projects', [])->assertJsonPath('invitation.org_role', 'admin');

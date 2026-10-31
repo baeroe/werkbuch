@@ -196,14 +196,22 @@ final class EnsureCatalog
                 continue;
             }
 
-            // a custom type of the same name (names are unique) becomes the built-in one instead of a second row
-            $same = RelationType::query()->where('name', $name)->first();
+            // a custom type of the same name (names are unique) becomes the built-in one instead of a second row; one that
+            // is built in as another kind stays what it is
+            $same = RelationType::query()->where('name', $name)->whereNull('built_in')->first();
 
             if ($same !== null) {
                 $same->update(['built_in' => $kind]);
                 EventRecorder::record(EventType::RelationTypeUpdated, $this->actor, $same, null, ['built_in' => ['old' => null, 'new' => $kind]]);
 
                 continue;
+            }
+
+            // the name is taken by a built-in one of another kind (renamed): count up until it is free
+            $base = $name;
+
+            for ($n = 2; RelationType::query()->where('name', $name)->exists(); $n++) {
+                $name = "{$base} {$n}";
             }
 
             $relationType = RelationType::query()->create([

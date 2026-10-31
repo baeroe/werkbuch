@@ -5,8 +5,8 @@ namespace App\Domain\Properties;
 /**
  * The default value of a property (spec 4.7): checked against the field type and brought into the form it is stored in.
  * `null` is always valid and means no default; so do a blank text and an empty list of options. The error codes: `text`,
- * `number`, `option`, `single`, `boolean`, `date`, `url` (no http or https), `url_invalid` (no host, or blanks or control
- * characters inside), `none` (the field type has no defaults).
+ * `number`, `option`, `single`, `boolean`, `date`, `url` (no http or https), `url_invalid` (no host, or blanks, control or format
+ * characters such as a zero width space inside), `none` (the field type has no defaults).
  */
 final class DefaultValue
 {
@@ -107,7 +107,7 @@ final class DefaultValue
 
         // any letters in host, path and query (müller.de, /straße), but a host, and no blanks or control characters; a
         // text that is no UTF-8 at all fails the match as well
-        if (! is_array($parts) || ($parts['host'] ?? '') === '' || preg_match('/[\s\p{Z}\p{Cc}]/u', $url) !== 0) {
+        if (! is_array($parts) || ($parts['host'] ?? '') === '' || preg_match('/[\s\p{Z}\p{Cc}\p{Cf}]/u', $url) !== 0) {
             return new NormalizedValue(null, 'url_invalid');
         }
 

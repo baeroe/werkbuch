@@ -77,6 +77,8 @@ it('rejects a default value that does not fit', function (FieldType $type, bool 
     'url with a control character' => [FieldType::Url, false, "https://example.com/\x07", 'url_invalid'],
     'url with a no-break space inside' => [FieldType::Url, false, "https://example.com/a\u{00A0}b", 'url_invalid'],
     'url with an em space at the end' => [FieldType::Url, false, "https://example.com/a\u{2003}", 'url_invalid'],
+    'url with a zero width space' => [FieldType::Url, false, "https://example.com/\u{200B}x", 'url_invalid'],
+    'url with a soft hyphen' => [FieldType::Url, false, "https://example.com/\u{00AD}", 'url_invalid'],
     'url with a C1 control character' => [FieldType::Url, false, "https://example.com/\u{0085}", 'url_invalid'],
     'url with a blank in the host' => [FieldType::Url, false, 'https://exa mple.com', 'url_invalid'],
     'url that is no UTF-8' => [FieldType::Url, false, "https://example.com/\xC3", 'url_invalid'],

@@ -59,15 +59,28 @@ class ProjectsSeeder extends Seeder
         $types = WorkItemType::query()->pluck('id', 'name');
 
         foreach ($projects as $identifier => $data) {
-            $project = Project::updateOrCreate(['identifier' => $identifier], [
+            // firstOrNew: workflow and types are set only when the project is created; later, items sit on the states
+            // of the workflow an admin may have chosen, and a second run must not put another workflow under them
+            $project = Project::query()->firstOrNew(['identifier' => $identifier]);
+            $project->fill([
                 'name' => $data['name'],
                 'description' => $data['description'],
                 'lead_id' => $account($data['lead'])->id,
                 'visibility' => $data['visibility'],
-                'workflow_id' => $data['workflow'] === null ? Workflow::default()->id : $workflows[$data['workflow']],
-                'default_type_id' => $types['Task'],
             ]);
-            $project->types()->sync(array_map(fn (string $name): string => $types[$name], $data['types']));
+
+            if (! $project->exists) {
+                $project->fill([
+                    'workflow_id' => $data['workflow'] === null ? Workflow::default()->id : $workflows[$data['workflow']],
+                    'default_type_id' => $types['Task'],
+                ]);
+            }
+
+            $project->save();
+
+            if ($project->wasRecentlyCreated) {
+                $project->types()->sync(array_map(fn (string $name): string => $types[$name], $data['types']));
+            }
 
             foreach ($data['members'] as $handle => $role) {
                 $roles->setProjectRole($account($handle), $project, $role);
