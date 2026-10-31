@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
@@ -87,6 +88,27 @@ final class Project extends Model implements HasMedia
     public function lead(): BelongsTo
     {
         return $this->belongsTo(User::class, 'lead_id');
+    }
+
+    /**
+     * The workflow of the project (the column has no foreign key until Task 8).
+     *
+     * @return BelongsTo<Workflow, $this>
+     */
+    public function workflow(): BelongsTo
+    {
+        return $this->belongsTo(Workflow::class);
+    }
+
+    /**
+     * The work item types switched on in the project, in the order of their creation.
+     *
+     * @return BelongsToMany<WorkItemType, $this, ProjectType>
+     */
+    public function types(): BelongsToMany
+    {
+        return $this->belongsToMany(WorkItemType::class, 'project_types', 'project_id', 'type_id')
+            ->using(ProjectType::class)->withTimestamps()->orderBy('work_item_types.id');
     }
 
     /**

@@ -6,7 +6,6 @@ use App\Actions\Users\UpdateUserRole;
 use App\Exceptions\Problem;
 use App\Models\User;
 use App\Support\Actor;
-use Illuminate\Database\QueryException;
 use Tests\Support\RaceConnections;
 
 /*
@@ -35,10 +34,7 @@ it('lets only one of two admins demote the other at the same time', function () 
         return UpdateUserRole::run(actor($erik), User::query()->findOrFail($mara->id), 'member');
     });
 
-    expect($timeout)->toBeInstanceOf(QueryException::class);
-    assert($timeout instanceof QueryException);
-    expect($timeout->getMessage())->toContain('Lock wait timeout')
-        ->and($timeout->getSql())->toStartWith('select `users`.`id` from `users`')->toEndWith('for update');
+    RaceConnections::expectLockWait($timeout, 'users', 'select `users`.`id` from `users`');
 
     RaceConnections::release();
 

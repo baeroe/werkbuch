@@ -23,8 +23,15 @@ final class RaceConnections
         DB::connection('mariadb_second')->statement('SET innodb_lock_wait_timeout = 1');
     }
 
+    /** Rolls back the transaction `hold()` left open (a test that failed before `release()`), then purges the copy. */
     public static function tearDown(): void
     {
+        $first = DB::connection('mariadb');
+
+        if ($first->transactionLevel() > 0) {
+            $first->rollBack();
+        }
+
         DB::setDefaultConnection('mariadb');
         DB::purge('mariadb_second');
     }
@@ -60,12 +67,15 @@ final class RaceConnections
         }
     }
 
-    /** The outcome is the QueryException of a lock that did not come: `select * from <table> … for update`. */
-    public static function expectLockWait(mixed $outcome, string $table): void
+    /**
+     * The outcome is the QueryException of a lock that did not come: `select * from <table> … for update`, or, for a
+     * statement of another shape, one that starts with `$sqlStart` and ends on `for update`.
+     */
+    public static function expectLockWait(mixed $outcome, string $table, ?string $sqlStart = null): void
     {
         expect($outcome)->toBeInstanceOf(QueryException::class);
         assert($outcome instanceof QueryException);
         expect($outcome->getMessage())->toContain('Lock wait timeout')
-            ->and($outcome->getSql())->toStartWith("select * from `{$table}`")->toEndWith('for update');
+            ->and($outcome->getSql())->toStartWith($sqlStart ?? "select * from `{$table}`")->toEndWith('for update');
     }
 }
