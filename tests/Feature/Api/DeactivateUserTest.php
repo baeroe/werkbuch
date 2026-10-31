@@ -99,6 +99,24 @@ it('keeps the time of an account that was deactivated before', function () {
     $this->actingAs($admin)->postJson("/api/v1/users/{$user->id}/deactivate")->assertOk()->assertJsonPath('data.disabled_at', $since);
 });
 
+it('records nothing when the account already has the state asked for', function () {
+    $admin = User::factory()->admin()->create();
+    $user = User::factory()->create();
+    $stale = User::query()->findOrFail($user->id);
+    $this->actingAs($admin);
+
+    $this->postJson("/api/v1/users/{$user->id}/reactivate")->assertOk()->assertJsonPath('data.disabled_at', null);
+    $this->postJson("/api/v1/users/{$user->id}/deactivate")->assertOk();
+    $since = $user->fresh()?->disabled_at?->toJSON();
+    $this->postJson("/api/v1/users/{$user->id}/deactivate")->assertOk()->assertJsonPath('data.disabled_at', $since);
+    expect(DeactivateUser::run(actor($admin), $stale)->disabled_at?->toJSON())->toBe($since);
+
+    ReactivateUser::run(actor($admin), $user);
+    expect(ReactivateUser::run(actor($admin), $stale)->disabled_at)->toBeNull()
+        ->and(Event::query()->where('subject_id', $user->id)->orderBy('occurred_at')->pluck('type')->all())
+        ->toBe([EventType::UserDeactivated, EventType::UserReactivated]);
+});
+
 it('lets the account see nothing at once, and everything again after reactivating', function () {
     $admin = User::factory()->admin()->create();
     $web = Project::factory()->public()->create();

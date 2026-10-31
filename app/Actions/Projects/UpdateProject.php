@@ -6,6 +6,7 @@ use App\Access\Authorize;
 use App\Access\Visibility;
 use App\Events\EventRecorder;
 use App\Events\EventType;
+use App\Exceptions\Problem;
 use App\Models\Organization;
 use App\Models\Project;
 use App\Models\ProjectMember;
@@ -25,8 +26,10 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * on resolving and stays reserved; coming back to a former identifier of the same project ends that entry (spec 4.4).
  * Only the fields the input names change; `project.updated` lists what really changed, nothing changed means no event.
  * With an identifier in the input, the change takes the lock on the organization row first and checks under it: no
- * index spans current and former identifiers, so changes of identifiers run one at a time. With a lead in the input, it
- * locks the project row, so the new lead cannot be removed from the project while it is checked to be a member.
+ * index spans current and former identifiers, so changes of identifiers run one at a time. Then it locks the project
+ * row and reads the project afresh: two changes of one project run one after the other, the second from what the first
+ * left, and the new lead cannot be removed from the project while it is checked to be a member. A project that is
+ * being deleted is gone (404).
  */
 final class UpdateProject
 {
@@ -36,6 +39,7 @@ final class UpdateProject
      * @param  array<string, mixed>  $input
      *
      * @throws ValidationException
+     * @throws Problem 404 for a project that is being deleted
      */
     public function handle(Actor $actor, Project $project, array $input): Project
     {
@@ -49,10 +53,10 @@ final class UpdateProject
                 Organization::query()->lockForUpdate()->sole();
             }
 
-            if (array_key_exists('lead_id', $input)) {
-                // the lead must stay a member: a removal of the new lead at the same time waits for this change (MemberInput::lock)
-                MemberInput::lock($project);
-            }
+            // one change of the project at a time, each from what the one before left (the old values of the event, the
+            // former identifier); the lead must stay a member: a removal of the new lead waits for this change
+            MemberInput::lock($project);
+            $project->refresh();
 
             $image = ImageInput::url($project, 'image');
 

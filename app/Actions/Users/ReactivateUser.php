@@ -12,7 +12,8 @@ use Illuminate\Support\Facades\DB;
 use Lorisleiva\Actions\Concerns\AsAction;
 
 /**
- * Activates a deactivated account again (org admins). Its old tokens stay revoked; it signs in anew.
+ * Activates a deactivated account again (org admins). Its old tokens stay revoked; it signs in anew. An active account
+ * stays as it is: no event, no write.
  */
 final class ReactivateUser
 {
@@ -23,6 +24,12 @@ final class ReactivateUser
         Authorize::check($actor, 'reactivate', $user);
 
         DB::transaction(function () use ($actor, $user): void {
+            if (User::query()->whereKey($user->id)->lockForUpdate()->value('disabled_at') === null) {
+                $user->refresh();
+
+                return;
+            }
+
             $user->update(['disabled_at' => null]);
             Visibility::forget();
             EventRecorder::record(EventType::UserReactivated, $actor, $user, null);

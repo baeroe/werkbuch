@@ -4,6 +4,7 @@ use App\Auth\TwoFactorCodes;
 use App\Events\EventType;
 use App\Models\Event;
 use App\Models\User;
+use Illuminate\Cache\Repository;
 use Illuminate\Support\Facades\Cache;
 use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Fortify\Actions\EnableTwoFactorAuthentication;
@@ -162,6 +163,25 @@ it('remembers a used code per secret, not for everybody, and only as long as its
 
     $this->travel(91)->seconds();
     expect(Cache::has('fortify.2fa_codes.'.hash('sha256', $a.'|'.$code)))->toBeFalse();
+});
+
+it('takes a code only once even when two checks read the memory before either wrote it', function () {
+    // both requests ask the memory before the first one stored the code: only the one that stores it first passes (the
+    // store of production, whose `add` is atomic; the array store of the tests has none of its own)
+    $blind = new class(Cache::store('database')->getStore()) extends Repository
+    {
+        public function get($key, $default = null): mixed
+        {
+            return value($default);
+        }
+    };
+    $engine = app(Google2FA::class);
+    $codes = new TwoFactorCodes($engine, $blind);
+    $secret = $engine->generateSecretKey();
+    $code = $engine->getCurrentOtp($secret);
+
+    expect($codes->verify($secret, $code))->toBeTrue()
+        ->and($codes->verify($secret, $code))->toBeFalse();
 });
 
 it('widens the memory with a window of its own', function () {

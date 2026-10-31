@@ -1,10 +1,15 @@
 <?php
 
+use App\Access\Visibility;
+use App\Actions\Favorites\ToggleFavorite;
 use App\Events\EventType;
+use App\Exceptions\Problem;
 use App\Models\Event;
 use App\Models\Favorite;
 use App\Models\Project;
 use App\Models\User;
+use Illuminate\Database\Query\Builder;
+use Illuminate\Support\Facades\DB;
 
 /** The shape of `Favorite` in resources/js/types.ts. */
 const FAVORITE_SHAPE = ['user_id', 'kind', 'id', 'position'];
@@ -127,3 +132,19 @@ it('drops a project that is deleted or hidden from the list at once', function (
     $this->deleteJson('/api/v1/projects/OPS')->assertStatus(202);
     $this->getJson('/api/v1/favorites')->assertJsonPath('meta.total', 0);
 });
+
+it('refuses a favorite for a project whose deletion began or ended after it was found', function (Closure $gone) {
+    $lene = User::factory()->create();
+    $web = Project::factory()->identifier('WEB')->public()->create();
+    // the rights were read before the deletion, as by a request that runs at the same time
+    expect(Visibility::projectIds($lene)->all())->toBe([$web->id]);
+    Project::retrieved(fn (Project $project) => $gone(DB::table('projects')->where('id', $project->id)));
+
+    expect(fn () => ToggleFavorite::run(actor($lene), ['kind' => 'project', 'id' => $web->id]))
+        ->toThrow(fn (Problem $problem) => expect($problem->status)->toBe(404))
+        ->and(Favorite::query()->count())->toBe(0)
+        ->and(Event::query()->where('type', EventType::FavoriteAdded)->count())->toBe(0);
+})->with([
+    'being deleted' => [fn (Builder $row) => $row->update(['deleting_at' => now()])],
+    'purged' => [fn (Builder $row) => $row->delete()],
+]);

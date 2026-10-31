@@ -59,16 +59,13 @@ final class ProjectPolicy
     }
 
     /**
-     * Joining with one click: whoever sees the project and may join (`project.join`, every role of the organization).
+     * Joining with one click: whoever sees the project. The right `project.join` belongs to every role of the
+     * organization (Grants, GrantsTest), so there is no refusal besides the 404; a role without it would need one here.
      * The public projects are the ones an account sees without being a member; org admins see every project.
      */
     public function join(User $user, Project $project): Response
     {
-        if (Visibility::roleIn($user, $project) === null) {
-            return Response::denyAsNotFound();
-        }
-
-        return Visibility::can($user, Permission::ProjectJoin) ? Response::allow() : Response::deny();
+        return $this->view($user, $project);
     }
 
     private static function inProject(User $user, Project $project, Permission $permission, string $refusal): Response

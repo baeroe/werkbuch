@@ -7,6 +7,7 @@ use App\Actions\Projects\UpdateProject;
 use App\Events\EventType;
 use App\Exceptions\Problem;
 use App\Models\Event;
+use App\Models\Project;
 use App\Models\ProjectIdentifier;
 use App\Models\User;
 use Illuminate\Validation\ValidationException;
@@ -59,6 +60,21 @@ it('does not hand a former identifier of one project to another', function () {
     }
 
     expect($app->fresh()?->identifier)->toBe('APP');
+});
+
+it('renames a project read before another rename from what is stored, with the right old values', function () {
+    $admin = User::factory()->admin()->create();
+    $web = CreateProject::run(actor($admin), ['name' => 'Website', 'identifier' => 'WEB']);
+    // read before the first rename, as by a request that runs at the same time
+    $stale = Project::query()->findOrFail($web->id);
+    UpdateProject::run(actor($admin), $web, ['identifier' => 'SITE', 'name' => 'Seite']);
+
+    expect(UpdateProject::run(actor($admin), $stale, ['identifier' => 'APP', 'name' => 'App'])->identifier)->toBe('APP')
+        ->and(ProjectIdentifier::query()->orderBy('identifier')->pluck('identifier')->all())->toBe(['SITE', 'WEB'])
+        ->and(Event::query()->where('type', EventType::ProjectUpdated)->orderBy('occurred_at')->pluck('changes')->all())->toBe([
+            ['name' => ['old' => 'Website', 'new' => 'Seite'], 'identifier' => ['old' => 'WEB', 'new' => 'SITE']],
+            ['name' => ['old' => 'Seite', 'new' => 'App'], 'identifier' => ['old' => 'SITE', 'new' => 'APP']],
+        ]);
 });
 
 it('changes nothing when the identifier stays, whatever its case', function () {

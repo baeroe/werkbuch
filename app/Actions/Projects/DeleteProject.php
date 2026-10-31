@@ -10,6 +10,7 @@ use App\Exceptions\Problem;
 use App\Jobs\PurgeProject as PurgeProjectJob;
 use App\Models\Project;
 use App\Support\Actor;
+use App\Support\MemberInput;
 use Illuminate\Support\Facades\DB;
 use Lorisleiva\Actions\Concerns\AsAction;
 
@@ -24,17 +25,16 @@ final class DeleteProject
     use AsAction;
 
     /**
-     * @throws Problem 404 for a project that is being deleted already
+     * @throws Problem 404 for a project that is being deleted already (or gone meanwhile)
      */
     public function handle(Actor $actor, Project $project): void
     {
         Authorize::check($actor, 'delete', $project);
 
         DB::transaction(function () use ($actor, $project): void {
-            // a second deletion at the same time finds the first one's mark: no second event, no second job
-            if (Project::query()->lockForUpdate()->find($project->id)?->deleting_at !== null) {
-                throw Problem::notFound();
-            }
+            // a second deletion at the same time finds the first one's mark (or no project any more): no second event,
+            // no second job
+            MemberInput::lock($project);
 
             $project->update(['deleting_at' => now()]);
             EventRecorder::record(EventType::ProjectDeleted, $actor, $project, $project, null, [

@@ -38,7 +38,7 @@ it('notes user.password_changed by the system, without the password', function (
     SetPassword::run($user, 'new-password');
 
     $event = Event::query()->where('type', EventType::UserPasswordChanged)->sole();
-    $json = (string) json_encode(Event::query()->whereKey($event->id)->toBase()->sole());
+    $json = (string) json_encode(Event::query()->whereKey($event->id)->toBase()->sole(), JSON_UNESCAPED_SLASHES);
 
     expect([$event->subject_id, $event->actor_id, $event->changes])->toBe([$user->id, $user->id, null])
         ->and($event->meta)->toBe(['via' => 'system', 'reason' => 'password_reset'])

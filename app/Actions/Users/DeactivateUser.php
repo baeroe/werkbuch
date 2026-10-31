@@ -17,7 +17,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
 /**
  * Deactivates an account instead of deleting it (spec 4.2, org admins): its tokens are revoked and its stored sessions
  * end; a session elsewhere ends on its next request (EnsureAccountIsActive). History and assignments stay. The default
- * bot and the last active admin among the people stay active. An account deactivated before keeps its time.
+ * bot and the last active admin among the people stay active. An account deactivated before keeps its time, and
+ * nothing happens to it: no event, no write.
  */
 final class DeactivateUser
 {
@@ -37,7 +38,14 @@ final class DeactivateUser
         DB::transaction(function () use ($actor, $user): void {
             LastAdmin::guard($user);
 
-            $user->update(['disabled_at' => $user->disabled_at ?? now()]);
+            // after the admins (the lock order of LastAdmin): an account deactivated meanwhile stays as it is
+            if (User::query()->whereKey($user->id)->lockForUpdate()->value('disabled_at') !== null) {
+                $user->refresh();
+
+                return;
+            }
+
+            $user->update(['disabled_at' => now()]);
             $user->tokens()->delete();
             EndSessions::run($user);
             // a deactivated account sees nothing any more, already in this request

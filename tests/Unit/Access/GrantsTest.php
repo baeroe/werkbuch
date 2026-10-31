@@ -27,6 +27,10 @@ it('grants the rights of the organization', function (OrgRole $role, Permission 
     [OrgRole::Admin, Permission::TokenOwn, true], [OrgRole::Member, Permission::TokenOwn, true],
 ]);
 
+it('lets every role of the organization join (ProjectPolicy::join has no refusal of its own)', function (OrgRole $role) {
+    expect(Grants::allows($role, Permission::ProjectJoin))->toBeTrue();
+})->with(OrgRole::cases());
+
 it('grants the rights of a project', function (ProjectRole $role, Permission $permission, bool $expected) {
     expect(Grants::allows($role, $permission))->toBe($expected);
 })->with([

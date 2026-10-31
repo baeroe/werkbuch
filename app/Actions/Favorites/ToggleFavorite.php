@@ -19,7 +19,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
 /**
  * Puts a project into the sidebar of the account, or takes it out again, and answers the new state. Only projects for
  * now: views come with Phase 5, so any other `kind` is a 422. A project the account does not see does not exist (404).
- * The account's own row is locked, so two toggles at the same time give consecutive positions and never a server error.
+ * The account's own row is locked, so two toggles at the same time give consecutive positions and never a server error;
+ * the project is read again under a shared lock, so a deletion at the same time leaves no favorite behind.
  * The events (`favorite.added`, `favorite.removed`) are personal: the project is their subject, but no project activity.
  */
 final class ToggleFavorite
@@ -51,6 +52,14 @@ final class ToggleFavorite
 
         $favorite = DB::transaction(function () use ($actor, $project): bool {
             User::query()->lockForUpdate()->findOrFail($actor->user->id);
+
+            // a deletion that began (or a purge that ended) after the check above: the project is gone; DeleteProject
+            // holds its row until it commits
+            $current = Project::query()->sharedLock()->find($project->id);
+
+            if ($current === null || $current->deleting_at !== null) {
+                throw Problem::notFound();
+            }
 
             $mine = Favorite::query()->where('user_id', $actor->user->id);
             $existing = (clone $mine)->where('favoritable_type', 'project')->where('favoritable_id', $project->id)->first();

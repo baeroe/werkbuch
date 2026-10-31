@@ -15,6 +15,7 @@ use App\Models\Project;
 use App\Models\ProjectIdentifier;
 use App\Models\ProjectMember;
 use App\Models\User;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
@@ -117,6 +118,20 @@ it('records a deletion only once, also when a second one comes with the project 
     expect(fn () => DeleteProject::run(actor($admin), $stale))->toThrow(fn (Problem $problem) => expect($problem->status)->toBe(404))
         ->and(Event::query()->where('type', EventType::ProjectDeleted)->count())->toBe(1);
     Queue::assertPushed(PurgeProject::class, 1);
+});
+
+it('answers 404 for a project purged after it was read, with no event and no job', function () {
+    Queue::fake();
+    [$web, $admin] = projectToDelete();
+    $stale = Project::query()->findOrFail($web->id);
+    // the rights were read before the purge, as by a request that runs at the same time
+    expect(Visibility::projectIds($admin)->all())->toContain($web->id);
+    DB::table('projects')->where('id', $web->id)->delete();
+
+    // ModelNotFoundException: the API answers it with 404
+    expect(fn () => DeleteProject::run(actor($admin), $stale))->toThrow(ModelNotFoundException::class)
+        ->and(Event::query()->where('type', EventType::ProjectDeleted)->count())->toBe(0);
+    Queue::assertNotPushed(PurgeProject::class);
 });
 
 it('leaves nothing to do for a job whose project is gone already', function () {
