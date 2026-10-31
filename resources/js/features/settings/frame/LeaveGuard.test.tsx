@@ -483,6 +483,19 @@ describe('LeaveGuard (Back and Forward without the Navigation API)', () => {
     await screen.findByRole('alertdialog');
   });
 
+  it('restores the entry a partial reload or a replacing visit ended on, which only ends in success', async () => {
+    render(<LeaveGuard dirty what="Änderungen" />);
+    const reloaded = { entry: 'general', props: 'fresh' };
+    window.history.replaceState(reloaded, '', '/projects/web/settings/general?tab=1');
+    act(() => void [...(inertia.listeners.get('success') ?? [])].forEach((listener) => listener({ detail: { visit: visitTo('/') } })));
+
+    goBack();
+
+    expect(window.location.href).toBe(here('/projects/web/settings/general?tab=1').href);
+    expect(window.history.state).toEqual(reloaded);
+    await screen.findByRole('alertdialog');
+  });
+
   it('lets a step pass without changes, with a deliberate leave, and to the same page', () => {
     const bypass: RefObject<boolean> = { current: true };
     const { rerender } = render(<LeaveGuard dirty what="Änderungen" bypass={bypass} />);
@@ -508,5 +521,6 @@ describe('LeaveGuard (Back and Forward without the Navigation API)', () => {
 
     expect(inertiaSees).toHaveBeenCalledTimes(1);
     expect(inertia.listeners.get('navigate')?.size).toBe(0);
+    expect(inertia.listeners.get('success')?.size).toBe(0);
   });
 });

@@ -18,6 +18,9 @@
  *   in the stack), it restores the state of the last Inertia `navigate`, and it relies on capture listeners running
  *   before bubble listeners at the target, which every browser since 2021 does. A traversal that leaves the document
  *   (a reload, another site) is left to the `beforeunload` question.
+ *   Either way, a second Back while the question is open, without a click or key on the page in between, cannot be
+ *   stopped: browsers let a page cancel a traversal only after a user activation (the Navigation API's `cancelable` is
+ *   false then, the fallback has nothing left to stop), so that step goes through and the dialog stays.
  * - Closing or reloading the tab: `beforeunload`.
  */
 
@@ -90,13 +93,17 @@ export function LeaveGuard({ dirty, what, bypass }: LeaveGuardProps) {
     return () => navigation.removeEventListener('navigate', onNavigate);
   }, []);
 
-  // Back and Forward, without it: the entry that is shown now, kept up to date by the visits of Inertia
+  // Back and Forward, without it: the entry that is shown now, kept up to date by the visits of Inertia. `navigate` comes
+  // with every new page; a partial reload or a visit that replaces the entry only ends in `success`, and its state (the
+  // page Inertia restores) has changed all the same
   useEffect(() => {
     if (navigationApi()) return;
     let shown = { state: window.history.state as unknown, url: window.location.href };
-    const off = router.on('navigate', () => {
+    const remember = () => {
       shown = { state: window.history.state as unknown, url: window.location.href };
-    });
+    };
+    const offNavigate = router.on('navigate', remember);
+    const offSuccess = router.on('success', remember);
     const onPopState = (event: PopStateEvent) => {
       if (!guarding() || proceeding.current || samePage(new URL(window.location.href), new URL(shown.url))) return;
       // before Inertia's own listener sees it
@@ -107,7 +114,8 @@ export function LeaveGuard({ dirty, what, bypass }: LeaveGuardProps) {
     };
     window.addEventListener('popstate', onPopState, true);
     return () => {
-      off();
+      offNavigate();
+      offSuccess();
       window.removeEventListener('popstate', onPopState, true);
     };
   }, []);

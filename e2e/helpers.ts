@@ -89,7 +89,8 @@ function recoveryCodes(project: string): string[] {
 }
 
 /**
- * The people of database/seeders: the e2e account (org admin), two of the demo team (German profile), and per Playwright
+ * The people of database/seeders: the e2e account (org admin), three of the demo team (German profile; Mara is org admin,
+ * Theo and Lene are members), and per Playwright
  * project one account to reset the password, one for the password change and the 2FA setup (`security`) and one with
  * confirmed 2FA (`twoFactor`); every run sets them back.
  */
@@ -97,6 +98,7 @@ export const PEOPLE = {
   e2e: { email: 'e2e@example.com', password: E2E_PASSWORD, name: 'Erik Ende' },
   mara: { email: 'mara@feldwerk.example.com', password: DEMO_PASSWORD, name: 'Mara Lindqvist' },
   theo: { email: 'theo@feldwerk.example.com', password: DEMO_PASSWORD, name: 'Theo Okafor' },
+  lene: { email: 'lene@feldwerk.example.com', password: DEMO_PASSWORD, name: 'Lene Vogt' },
   reset: Object.fromEntries(VARIANTS.map((project) => [project, { email: `reset-${project}@example.com`, password: E2E_PASSWORD }])) as Record<
     string,
     { email: string; password: string }
@@ -189,7 +191,8 @@ export async function signedInContext(browser: Browser, person: { email: string;
   if (existsSync(file)) return browser.newContext({ ...options, storageState: file });
 
   artisan('cache:clear');
-  const context = await browser.newContext(options);
+  // without a state of its own, Playwright hands a new context the one of the project (the e2e person's session)
+  const context = await browser.newContext({ ...options, storageState: { cookies: [], origins: [] } });
   const page = await context.newPage();
   await page.goto('/login');
   await login(page, person.email, person.password);
@@ -197,6 +200,18 @@ export async function signedInContext(browser: Browser, person: { email: string;
   await context.storageState({ path: file });
   await page.close();
   return context;
+}
+
+/**
+ * Presses `mod+<key>` as the app reads it: ⌘ where the page takes itself for a Mac, Ctrl elsewhere. The page decides by
+ * its own platform (`lib/platform.ts`), and Playwright's desktop devices pass for Windows even on a Mac, so the host's
+ * `ControlOrMeta` can miss.
+ */
+export async function pressMod(page: Page, key: string): Promise<void> {
+  const mac = await page.evaluate(() =>
+    /mac|iphone|ipad|ipod/i.test((navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform || navigator.platform || ''),
+  );
+  await page.keyboard.press(`${mac ? 'Meta' : 'Control'}+${key}`);
 }
 
 /** Signs in on the open sign-in page with the keyboard only: Tab into the address, type, Tab, type, Enter. */

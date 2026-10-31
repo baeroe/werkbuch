@@ -14,6 +14,9 @@ require __DIR__.'/auth.php';
 Route::middleware('auth')->group(function () {
     Route::redirect('/', '/my-items');
     Route::inertia('/my-items', 'Items/MyItems')->name('my-items');
+    // the settings of the organization; an unknown section is the page's business (it says so and keeps the list)
+    Route::get('/settings/{section?}', fn (?string $section = null) => Inertia::render('Settings/Organization', ['section' => $section ?? 'general']))
+        ->name('settings');
 });
 
 // pictures (logo, avatars, project pictures) from the private disk, for the session and for tokens that may read (P15);

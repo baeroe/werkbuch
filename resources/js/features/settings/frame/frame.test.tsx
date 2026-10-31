@@ -30,7 +30,7 @@ import {
   SettingsError,
   SettingsSkeleton,
 } from './parts';
-import { SectionNav, SettingsFrame, type SectionItem } from './SettingsFrame';
+import { SectionNav, SectionNavSkeleton, SettingsFrame, type SectionItem } from './SettingsFrame';
 import { useDialogRound } from './useDialogRound';
 import { useRemoval } from './useRemoval';
 
@@ -57,6 +57,26 @@ afterEach(() => {
 });
 
 const refusal = (status: number, detail: string) => new ApiError({ status, reason: 'service_unavailable', detail });
+
+describe('SectionNavSkeleton', () => {
+  it('says the sections are loading and fits the column of the frame: full width from lg on, a row of short bars below', () => {
+    render(<SectionNavSkeleton />);
+
+    const group = screen.getByRole('status');
+    expect(group.textContent).toBe('Bereiche werden geladen …');
+    expect(group.className).toContain('lg:flex-col');
+    const bars = group.querySelectorAll('[aria-hidden="true"]');
+    expect(bars).toHaveLength(4);
+    expect(bars[0]!.className).toContain('lg:w-full');
+    expect(bars[0]!.className).not.toMatch(/max-w-md/);
+  });
+
+  it('draws as many bars as asked for', () => {
+    render(<SectionNavSkeleton items={2} />);
+
+    expect(screen.getByRole('status').querySelectorAll('[aria-hidden="true"]')).toHaveLength(2);
+  });
+});
 
 describe('SettingsFrame', () => {
   it('sets the title, what the page is about, the navigation and the content in a grid with a column for the navigation', () => {

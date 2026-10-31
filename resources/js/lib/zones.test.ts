@@ -42,6 +42,13 @@ describe('zoneOptions', () => {
     expect(options.map((option) => option.value)).toEqual([...options.map((option) => option.value)].sort((a, b) => a.localeCompare(b)));
   });
 
+  it('adds no empty choice for an empty zone of the form or fallback', () => {
+    const values = zoneOptions('', '').map((option) => option.value);
+
+    expect(values).not.toContain('');
+    expect(values).toHaveLength(COMMON_ZONES.length);
+  });
+
   it('labels a zone with its short name today, in the language of the page', () => {
     vi.useFakeTimers({ now: new Date('2026-10-28T09:00:00Z'), toFake: ['Date'] });
     const berlin = () => zoneOptions('UTC', 'UTC').find((option) => option.value === 'Europe/Berlin')?.label;

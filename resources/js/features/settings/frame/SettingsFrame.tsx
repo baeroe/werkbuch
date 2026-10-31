@@ -9,6 +9,7 @@ import type { LucideIcon } from 'lucide-react';
 import { Lock } from 'lucide-react';
 import { useEffect, useRef, type ReactNode } from 'react';
 import { cx } from '@/components/ui/cx';
+import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
 import { t } from '@/lib/i18n';
 
 export interface SectionItem {
@@ -115,5 +116,19 @@ export function SectionNav({ label, items, current, hrefFor }: SectionNavProps) 
         ))}
       </div>
     </nav>
+  );
+}
+
+/**
+ * The navigation in outline while the page that knows its sections loads (a project, the own account): bars in the
+ * column of the frame from lg on (12.5rem, so it never pushes the content), a row of short ones below it.
+ */
+export function SectionNavSkeleton({ items = 4 }: { items?: number }) {
+  return (
+    <SkeletonGroup label={t('settings.frame.loading_sections')} className="flex gap-1 overflow-hidden py-1 lg:flex-col lg:py-0">
+      {Array.from({ length: items }, (_, index) => (
+        <Skeleton key={index} className="h-11 w-24 shrink-0 rounded-ctl lg:h-8 lg:w-full" />
+      ))}
+    </SkeletonGroup>
   );
 }
