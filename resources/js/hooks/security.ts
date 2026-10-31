@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { changePassword, confirmTwoFactor, disableTwoFactor, enableTwoFactor, getTwoFactor, regenerateRecoveryCodes } from '@/api/security';
+import { changePassword, confirmTwoFactor, disableTwoFactor, discardTwoFactorSetup, enableTwoFactor, getTwoFactor, regenerateRecoveryCodes } from '@/api/security';
 import { qk } from './keys';
 import { useApiMutation } from './mutation';
 
@@ -25,6 +25,10 @@ export function useConfirmTwoFactor() {
 
 export function useDisableTwoFactor() {
   return useApiMutation(disableTwoFactor, [qk.twoFactor.all]);
+}
+
+export function useDiscardTwoFactorSetup() {
+  return useApiMutation(discardTwoFactorSetup, [qk.twoFactor.all]);
 }
 
 export function useRegenerateRecoveryCodes() {

@@ -132,6 +132,22 @@ it('drops a setup that was started but not confirmed, and notes it as cancelled'
         ->and(EventType::UserTwoFactorSetupCancelled->webhook())->toBeFalse();
 });
 
+it('drops only an unconfirmed setup when asked to, and leaves a confirmed second factor on', function () {
+    $lene = personWithTwoFactor();
+    $mara = User::factory()->create();
+
+    // the screen throws its setup away while the confirmation ran through: the second factor stays on
+    $this->actingAs($lene)->deleteJson('/api/v1/me/two-factor?unconfirmed=1')->assertNoContent();
+    $this->actingAs($mara)->postJson('/api/v1/me/two-factor')->assertOk();
+    $this->deleteJson('/api/v1/me/two-factor?unconfirmed=1')->assertNoContent();
+
+    expect($lene->fresh()?->two_factor_confirmed_at)->not->toBeNull()
+        ->and($lene->fresh()?->two_factor_secret)->not->toBeNull()
+        ->and($mara->fresh()?->two_factor_secret)->toBeNull()
+        ->and(Event::query()->where('type', EventType::UserTwoFactorDisabled)->exists())->toBeFalse()
+        ->and(Event::query()->where('type', EventType::UserTwoFactorSetupCancelled)->where('subject_id', $mara->id)->count())->toBe(1);
+});
+
 it('makes eight new recovery codes, and the old ones stop working', function () {
     $lene = personWithTwoFactor();
     $old = $lene->recoveryCodes();

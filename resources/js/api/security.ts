@@ -36,6 +36,11 @@ export function disableTwoFactor(): Promise<void> {
   return del<void>('/me/two-factor');
 }
 
+/** Drops a setup that was never confirmed; one confirmed meanwhile stays on. */
+export function discardTwoFactorSetup(): Promise<void> {
+  return del<void>('/me/two-factor?unconfirmed=1');
+}
+
 /** New recovery codes; the old ones stop working. */
 export function regenerateRecoveryCodes(): Promise<{ recovery_codes: string[] }> {
   return post<{ recovery_codes: string[] }>('/me/two-factor/recovery-codes');

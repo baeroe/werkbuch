@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { mockApi, type MockApi } from '@/test/api';
-import { changePassword, confirmTwoFactor, disableTwoFactor, enableTwoFactor, getTwoFactor, regenerateRecoveryCodes } from './security';
+import { changePassword, confirmTwoFactor, disableTwoFactor, discardTwoFactorSetup, enableTwoFactor, getTwoFactor, regenerateRecoveryCodes } from './security';
 
 let api: MockApi;
 
@@ -15,7 +15,7 @@ describe('security', () => {
     expect(api.calls).toEqual([{ method: 'PUT', url: '/api/v1/me/password', body: input }]);
   });
 
-  it('reads, starts, confirms and switches off the second factor and renews the recovery codes', async () => {
+  it('reads, starts, confirms, throws a setup away and switches off the second factor and renews the recovery codes', async () => {
     const status = { enabled: true, confirmed_at: '2026-10-28T09:00:00.000Z', recovery_codes_left: 8 };
     const setup = { secret: 'JBSWY3DPEHPK3PXP', otpauth_url: 'otpauth://totp/werkbuch:mara', qr_svg: 'data:image/svg+xml;base64,PHN2Zy8+' };
     api = mockApi({
@@ -30,12 +30,14 @@ describe('security', () => {
     expect(await enableTwoFactor()).toEqual(setup);
     expect(await confirmTwoFactor('123456')).toEqual({ recovery_codes: ['a1b2c-d3e4f'] });
     await expect(disableTwoFactor()).resolves.toBeUndefined();
+    await expect(discardTwoFactorSetup()).resolves.toBeUndefined();
     expect(await regenerateRecoveryCodes()).toEqual({ recovery_codes: ['f6e5d-c4b3a'] });
     expect(api.calls.map(({ method, url, body }) => [method, url, body])).toEqual([
       ['GET', '/api/v1/me/two-factor', undefined],
       ['POST', '/api/v1/me/two-factor', undefined],
       ['POST', '/api/v1/me/two-factor/confirm', { code: '123456' }],
       ['DELETE', '/api/v1/me/two-factor', undefined],
+      ['DELETE', '/api/v1/me/two-factor?unconfirmed=1', undefined],
       ['POST', '/api/v1/me/two-factor/recovery-codes', undefined],
     ]);
   });

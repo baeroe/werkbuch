@@ -34,11 +34,14 @@ final class ConfirmTwoFactor
         Authorize::check($actor, 'manageSignIn', User::class);
         $user = $actor->user;
 
-        if ($user->two_factor_secret === null || $user->two_factor_confirmed_at !== null) {
-            throw Problem::conflict('two_factor_not_pending');
-        }
-
         DB::transaction(function () use ($actor, $user, $code): void {
+            // under the lock of the account: a cancel at the same time (DisableTwoFactor) comes first or finds it on
+            $user->setRawAttributes(User::query()->whereKey($user->id)->lockForUpdate()->firstOrFail()->getAttributes(), true);
+
+            if ($user->two_factor_secret === null || $user->two_factor_confirmed_at !== null) {
+                throw Problem::conflict('two_factor_not_pending');
+            }
+
             try {
                 ($this->confirm)($user, $code);
             } catch (ValidationException) {

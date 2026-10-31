@@ -404,12 +404,12 @@ describe('Security: two-factor', () => {
 
   async function startSetup(overrides: Record<string, MockRoute> = {}) {
     const user = userEvent.setup();
-    renderSettings('security', server(overrides));
+    const view = renderSettings('security', server(overrides));
     await user.click(await screen.findByRole('button', { name: 'Einrichten' }));
     const field = await screen.findByRole('textbox', { name: 'Code aus der App' });
     // the step moves the focus one animation frame later: let it land first, or a slow run types into where it lands
     await act(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
-    return { user, field };
+    return { user, field, view };
   }
 
   it('shows the cause and "Erneut versuchen" when the state cannot be loaded', async () => {
@@ -510,7 +510,23 @@ describe('Security: two-factor', () => {
 
     view.unmount();
 
-    await waitFor(() => expect(calls('DELETE', '/api/v1/me/two-factor')).toHaveLength(1));
+    // only a setup that is not confirmed: one confirmed meanwhile stays on
+    await waitFor(() => expect(calls('DELETE', '/api/v1/me/two-factor').map((call) => call.url)).toEqual(['/api/v1/me/two-factor?unconfirmed=1']));
+  });
+
+  it('leaves a setup alone whose code is being checked as the screen goes', async () => {
+    const { user, field, view } = await startSetup();
+    // the check of the code never answers: the screen goes while it runs
+    const answering = globalThis.fetch;
+    globalThis.fetch = (input, init) => (String(input).includes('/confirm') ? new Promise<Response>(() => {}) : answering(input, init));
+    await user.type(field, '123456');
+    await user.click(screen.getByRole('button', { name: 'Bestätigen' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Abbrechen' })).toHaveProperty('disabled', true));
+
+    view.unmount();
+    await act(() => Promise.resolve());
+
+    expect(calls('DELETE', '/api/v1/me/two-factor')).toEqual([]);
   });
 
   it('leaves the server alone when the screen goes without a setup running, and stays quiet when throwing one away fails', async () => {
@@ -537,7 +553,7 @@ describe('Security: two-factor', () => {
     await user.click(screen.getByRole('button', { name: 'Abbrechen' }));
 
     const start = await screen.findByRole('button', { name: 'Einrichten' });
-    await waitFor(() => expect(lastCall('DELETE', '/api/v1/me/two-factor')).toBeDefined());
+    await waitFor(() => expect(lastCall('DELETE', '/api/v1/me/two-factor')?.url).toBe('/api/v1/me/two-factor?unconfirmed=1'));
     await waitFor(() => expect(document.activeElement).toBe(start));
     expect(screen.queryByText(groupKey(SECRET))).toBeNull();
 
@@ -627,6 +643,7 @@ describe('Security: two-factor', () => {
     act(() => runToastAction(toastNamed('Zwei-Faktor nicht ausgeschaltet').id));
 
     await waitFor(() => expect(toastTitles()).toContain('Zwei-Faktor-Authentifizierung ausgeschaltet'));
+    expect(lastCall('DELETE', '/api/v1/me/two-factor')?.url).toBe('/api/v1/me/two-factor');
     const start = await screen.findByRole('button', { name: 'Einrichten' });
     await waitFor(() => expect(document.activeElement).toBe(start));
     expect(screen.getByText('Aus')).toBeTruthy();

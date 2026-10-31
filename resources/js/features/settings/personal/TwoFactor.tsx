@@ -5,13 +5,13 @@
  * once, right after, and can be copied; leaving the page before "Codes sind gesichert" asks first. What a step showed
  * once (the secret, the codes) is let go of when the step is over: out of the state and out of the mutation (whose cache
  * drops it at once, `gcTime: 0`), never logged. "Abbrechen" throws the unconfirmed secret away, so the next setup starts
- * anew. Switching it off, or issuing new recovery codes (the old ones stop working), asks first. After each step the
- * focus moves on to where the next one is.
+ * anew; the server drops only a setup that is not confirmed (`?unconfirmed=1`). Switching it off, or issuing new
+ * recovery codes (the old ones stop working), asks first. After each step the focus moves on to where the next one is.
  */
 
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { disableTwoFactor } from '@/api/security';
+import { discardTwoFactorSetup } from '@/api/security';
 import { AlertDialog } from '@/components/ui/AlertDialog';
 import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
@@ -19,7 +19,7 @@ import { Chip } from '@/components/ui/Chip';
 import { Input } from '@/components/ui/Input';
 import { toast } from '@/components/ui/toast';
 import { qk } from '@/hooks/keys';
-import { useConfirmTwoFactor, useDisableTwoFactor, useEnableTwoFactor, useRegenerateRecoveryCodes, useTwoFactor } from '@/hooks/security';
+import { useConfirmTwoFactor, useDisableTwoFactor, useDiscardTwoFactorSetup, useEnableTwoFactor, useRegenerateRecoveryCodes, useTwoFactor } from '@/hooks/security';
 import { notifyError } from '@/lib/errors';
 import { t } from '@/lib/i18n';
 import { isWide } from '@/lib/media';
@@ -63,7 +63,7 @@ export function TwoFactorCard({ user, onCodesShown }: Props) {
   const status = useTwoFactor();
   const enable = useEnableTwoFactor();
   const confirm = useConfirmTwoFactor();
-  const discard = useDisableTwoFactor();
+  const discard = useDiscardTwoFactorSetup();
   const switchOff = useDisableTwoFactor();
   const regenerate = useRegenerateRecoveryCodes();
 
@@ -86,17 +86,20 @@ export function TwoFactorCard({ user, onCodesShown }: Props) {
 
   useEffect(() => onCodesShown(phase === 'codes'), [phase, onCodesShown]);
 
-  // a setup left half-way (another section, another page) is thrown away like "Abbrechen": no secret stays pending
+  // a setup left half-way (another section, another page) is thrown away like "Abbrechen": no secret stays pending;
+  // not while its code is being checked, though: that check may just switch it on
   const queryClient = useQueryClient();
   const current = useRef(phase);
+  const checking = useRef(false);
   useEffect(() => {
     current.current = phase;
-  }, [phase]);
+    checking.current = confirm.isPending;
+  }, [phase, confirm.isPending]);
   useEffect(
     () => () => {
-      if (current.current !== 'setup') return;
+      if (current.current !== 'setup' || checking.current) return;
       // the screen is gone, there is nobody to tell about a failure: the next setup starts anew anyway
-      void disableTwoFactor().then(
+      void discardTwoFactorSetup().then(
         () => queryClient.invalidateQueries({ queryKey: qk.twoFactor.all }),
         () => undefined,
       );

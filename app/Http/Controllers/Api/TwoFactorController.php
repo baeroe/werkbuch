@@ -39,7 +39,7 @@ final class TwoFactorController extends Controller
 
     public function destroy(Request $request): Response
     {
-        DisableTwoFactor::run(Actor::fromRequest($request));
+        DisableTwoFactor::run(Actor::fromRequest($request), $request->boolean('unconfirmed'));
 
         return response()->noContent();
     }
