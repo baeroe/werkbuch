@@ -1,7 +1,8 @@
 /*
  * What the property editors read from what is typed, and when a value counts as empty. Pure rules without React:
- * numbers take a comma or a point as the decimal sign, thousands points only together with a decimal comma (13c), text
- * and addresses as the server takes them (`App\Domain\Properties\ItemValue`).
+ * numbers take a comma or a point as the decimal sign and a thousands separator only together with the other sign as
+ * decimal sign (13c); a number that reads either way ("1.500": 1500 or 1,5?) is refused, never guessed. Text and
+ * addresses as the server takes them (`App\Domain\Properties\ItemValue`).
  */
 
 import { t } from '@/lib/i18n';
@@ -34,21 +35,33 @@ export const sameValue = (a: PropertyValue | undefined, b: PropertyValue | undef
 export const idsOf = (value: PropertyValue | undefined): string[] =>
   Array.isArray(value) ? value.map(String) : typeof value === 'string' && value !== '' ? [value] : [];
 
-/** "3,5", "3.5" and "1.234,5" with a decimal comma; a point before a comma only groups thousands. */
+/** "3,5", "3.5", "1.234,5" and "1,234.5": the separator before the decimal sign only groups thousands. */
 const SIMPLE = /^(-?)(\d+)(?:[.,](\d+))?$/;
 const GROUPED = /^(-?)(\d{1,3}(?:\.\d{3})+),(\d+)$/;
+const GROUPED_POINT = /^(-?)(\d{1,3}(?:,\d{3})+)\.(\d+)$/;
+/** One separator, three digits after it, no leading zero: "1.500" and "1,500" are 1500 or 1,5. */
+const AMBIGUOUS = /^-?[1-9]\d{0,2}[.,]\d{3}$/;
+
+/** The two readings of a number that reads either way ("1.500": 1500 or 1.5), or null when it reads one way. */
+export function ambiguousNumber(text: string): { whole: number; decimal: number } | null {
+  const trimmed = text.trim();
+  if (!AMBIGUOUS.test(trimmed)) return null;
+  return { whole: Number(trimmed.replace(/[.,]/, '')), decimal: Number(trimmed.replace(',', '.')) };
+}
 
 /**
- * A typed number, rounded to the property's decimals; null when the text is no number. Comma and point are both the
- * decimal sign ("0.500" is 0,5, never 500); a point groups thousands only when a comma ends the number ("1.234,5").
+ * A typed number, rounded to the property's decimals; null when the text is no number or reads either way
+ * (`ambiguousNumber`). Comma and point are both the decimal sign ("0.500" is 0,5, never 500); the other one groups
+ * thousands only before a decimal sign ("1.234,5", "1,234.5").
  */
 export function parseNumber(text: string, decimals: number): number | null {
   const trimmed = text.trim();
-  const match = SIMPLE.exec(trimmed) ?? GROUPED.exec(trimmed);
+  if (ambiguousNumber(trimmed)) return null;
+  const match = SIMPLE.exec(trimmed) ?? GROUPED.exec(trimmed) ?? GROUPED_POINT.exec(trimmed);
   if (!match) return null;
   const [, sign, whole, fraction] = match;
-  // rounded in decimal notation, half away from zero, as the server rounds: 2,675 with two decimals is 2,68
-  const digits = `${whole!.replaceAll('.', '')}.${fraction ?? '0'}`;
+  // rounded in decimal notation, half away from zero, as the server rounds: 2,6750 with two decimals is 2,68
+  const digits = `${whole!.replaceAll(/[.,]/g, '')}.${fraction ?? '0'}`;
   const rounded = Number(`${Math.round(Number(`${digits}e${decimals}`))}e-${decimals}`);
   return sign === '-' && rounded !== 0 ? -rounded : rounded;
 }
@@ -80,10 +93,17 @@ export function parseTyped(property: Pick<Property, 'field_type' | 'settings'>, 
       const decimals = property.settings.decimals ?? 0;
       const value = parseNumber(trimmed, decimals);
       if (value !== null) return { value };
+      // "1.500" may still become "1.500,5" while one types: the question waits for Enter or for leaving the field
+      const readings = ambiguousNumber(trimmed);
+      if (readings) {
+        const whole = formatNumber(readings.whole, 0, { grouping: false });
+        const decimal = formatNumber(readings.decimal, 3, { grouping: false });
+        return { error: t('items.fields.property.number_ambiguous', { whole, decimal }), partial: true };
+      }
       // digits, points and a comma may still become a number while one types ("1." on the way to "1.234,5")
       return {
         error: t('items.fields.property.number', { example: decimals > 0 ? formatNumber(3.5, 1) : formatNumber(4) }),
-        partial: /^-?[\d.]*,?\d*$/.test(trimmed),
+        partial: /^-?[\d.,]*$/.test(trimmed),
       };
     }
     case 'url':

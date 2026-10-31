@@ -245,19 +245,38 @@ function DropdownEditor({ property, value, id, label, describedById, invalid, re
   return <Picker {...common} options={[...none, ...options]} value={ids[0] ?? ''} onValueChange={(next) => onAccept(next || null)} />;
 }
 
-/** People and bots of the project, one or several. */
+/**
+ * People and bots of the project, one or several. Someone the item has who can no longer be chosen (left the project,
+ * deactivated) stays an option while they are set, like an archived option: a change of the others keeps them, as the
+ * server does.
+ */
 function MemberEditor({ property, value, id, label, describedById, invalid, required, pending, projectId, onAccept }: EditorProps) {
   const { people, isLoading, error, retry, retrying } = useProjectPeople(projectId);
   const users = useUserMap();
   const ids = idsOf(value);
   const multiple = property.settings.multiple === true;
-  const options: PickerOption[] = (people ?? []).map((user) => ({
-    value: user.id,
-    label: user.name,
-    hint: botWord(user),
-    keywords: [user.handle],
-    icon: <Avatar user={user} size="sm" decorative />,
-  }));
+  const offered = new Set((people ?? []).map((user) => user.id));
+  const options: PickerOption[] = [
+    ...(people ?? []).map((user) => ({
+      value: user.id,
+      label: user.name,
+      hint: botWord(user),
+      keywords: [user.handle],
+      icon: <Avatar user={user} size="sm" decorative />,
+    })),
+    ...ids
+      .filter((userId) => !offered.has(userId))
+      .map((userId) => {
+        const user = users.get(userId);
+        return {
+          value: userId,
+          label: user?.name ?? t('items.fields.property.unknown_person'),
+          hint: t('items.fields.property.not_offered'),
+          keywords: user ? [user.handle] : [],
+          icon: user ? <Avatar user={user} size="sm" decorative /> : <UnassignedAvatar />,
+        };
+      }),
+  ];
   const chosen = ids.flatMap((userId) => users.get(userId) ?? []);
   const display = chosen.length ? (
     <span className="flex min-w-0 items-center gap-2">

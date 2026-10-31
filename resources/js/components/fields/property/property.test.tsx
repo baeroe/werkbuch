@@ -16,17 +16,18 @@ import type { WorkItemPatch } from '@/api/workItems';
 import { useWorkItems } from '@/hooks/workItems';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import { ida, lene, list, makeWorkItem, organization, person, project, properties, standard, theo, web47 } from '@/test/fixtures';
-import type { Project, ProjectMember, Property, PropertyValue, RichText, User, WorkItem } from '@/types';
+import type { Organization, Project, ProjectMember, Property, PropertyValue, RichText, User, WorkItem } from '@/types';
 import { DateField, DatePopover, DayValue, useOverdue } from '../DateField';
 import { useToday } from '../itemData';
-import { isEmptyValue, parseNumber, parseTyped, readsEmpty, shownText } from './parse';
+import { ambiguousNumber, isEmptyValue, parseNumber, parseTyped, readsEmpty, shownText } from './parse';
 import { PropertyField } from './PropertyField';
 import { PropertyValueInput } from './PropertyValueInput';
 
 let signedIn: User = lene;
+let org: Organization = organization;
 
 vi.mock('@inertiajs/react', () => ({
-  usePage: () => ({ props: { auth: { user: signedIn, permissions: [] }, organization }, url: '/items/WEB-47' }),
+  usePage: () => ({ props: { auth: { user: signedIn, permissions: [] }, organization: org }, url: '/items/WEB-47' }),
 }));
 
 /* -------------------------------------------------------------------------- data */
@@ -148,6 +149,7 @@ afterEach(() => {
   api?.restore();
   api = undefined;
   signedIn = lene;
+  org = organization;
   stored = item();
   vi.useRealTimers();
   act(() => resetToasts());
@@ -156,20 +158,16 @@ afterEach(() => {
 /* ------------------------------------------------------------------------- parse */
 
 describe('parse', () => {
-  it('reads a comma or a point as the decimal sign, thousands points only before a decimal comma', () => {
+  it('reads a comma or a point as the decimal sign, a thousands separator only before the other sign', () => {
     expect(parseNumber('3,46', 1)).toBe(3.5);
-    expect(parseNumber('0.500', 1)).toBe(0.5);
-    expect(parseNumber('0.500', 3)).toBe(0.5);
     expect(parseNumber(' 3.5 ', 1)).toBe(3.5);
-    expect(parseNumber('1.234,5', 1)).toBe(1234.5);
+    expect(parseNumber('1234.567', 3)).toBe(1234.567);
     expect(parseNumber('12.345.678,9', 1)).toBe(12345678.9);
-    expect(parseNumber('1500', 0)).toBe(1500);
-    // without a decimal comma a point is the decimal sign, so 1.500 is one and a half
-    expect(parseNumber('1.500', 2)).toBe(1.5);
-    // rounded half away from zero, in decimals (2,675 is no 2,67 in binary)
-    expect([parseNumber('2,675', 2), parseNumber('-2,675', 2), parseNumber('-0,04', 1)]).toEqual([2.68, -2.68, 0]);
+    expect(parseNumber('12,345,678.9', 1)).toBe(12345678.9);
+    // rounded half away from zero, in decimals (2,6750 is no 2,67 in binary)
+    expect([parseNumber('2,6750', 2), parseNumber('-2,6750', 2), parseNumber('-0,04', 1)]).toEqual([2.68, -2.68, 0]);
     expect(Object.is(parseNumber('-0,04', 1), -0)).toBe(false);
-    expect([parseNumber('drei', 1), parseNumber('1.2.3', 1), parseNumber('1.23,4', 1), parseNumber('1,234.5', 1), parseNumber('', 1), parseNumber('.5', 1)]).toEqual([
+    expect([parseNumber('drei', 1), parseNumber('1.2.3', 1), parseNumber('1.23,4', 1), parseNumber('1,23.4', 1), parseNumber('', 1), parseNumber('.5', 1)]).toEqual([
       null,
       null,
       null,
@@ -177,6 +175,37 @@ describe('parse', () => {
       null,
       null,
     ]);
+  });
+
+  it('refuses "1.500" and "1,500": one separator, three digits after it, no leading zero reads either way', () => {
+    for (const text of ['1.500', '1,500', '-1.500', '12.345', '999,999']) {
+      expect(parseNumber(text, 3)).toBeNull();
+    }
+    expect(ambiguousNumber('1.500')).toEqual({ whole: 1500, decimal: 1.5 });
+    expect(ambiguousNumber('1,500')).toEqual({ whole: 1500, decimal: 1.5 });
+    expect(ambiguousNumber('-12.345')).toEqual({ whole: -12345, decimal: -12.345 });
+  });
+
+  it('keeps "0.500" at 0,5: a leading zero is never a thousands group', () => {
+    expect([parseNumber('0.500', 1), parseNumber('0,500', 3), parseNumber('-0.500', 1)]).toEqual([0.5, 0.5, -0.5]);
+    expect(ambiguousNumber('0.500')).toBeNull();
+  });
+
+  it('reads "1.500,5" and "1,500.5" one way: the separator before the decimal sign groups thousands', () => {
+    expect([parseNumber('1.500,5', 1), parseNumber('1,500.5', 1)]).toEqual([1500.5, 1500.5]);
+    expect([ambiguousNumber('1.500,5'), ambiguousNumber('1,500.5')]).toEqual([null, null]);
+  });
+
+  it('keeps "1500", "1,5" and "1.5" as they are, and so are two or four digits after the sign', () => {
+    expect([parseNumber('1500', 0), parseNumber('1,5', 1), parseNumber('1.5', 1), parseNumber('1.50', 2), parseNumber('1,5000', 4)]).toEqual([1500, 1.5, 1.5, 1.5, 1.5]);
+    expect([ambiguousNumber('1500'), ambiguousNumber('1,5'), ambiguousNumber('1.5'), ambiguousNumber('1.5000')]).toEqual([null, null, null, null]);
+  });
+
+  it('asks which reading is meant, in the language of the page, once the typing is over', () => {
+    expect(parseTyped(effort, '1.500')).toEqual({ error: 'Mehrdeutig: 1500 oder 1,5? Schreib 1500 oder 1,5.', partial: true });
+    expect(parseTyped(effort, '1,500')).toEqual({ error: 'Mehrdeutig: 1500 oder 1,5? Schreib 1500 oder 1,5.', partial: true });
+    initI18n({ locale: 'en', translations: en });
+    expect(parseTyped(effort, '1,500')).toEqual({ error: 'Ambiguous: 1500 or 1.5? Write 1500 or 1.5.', partial: true });
   });
 
   it('says what a typed text means for each field type, and when its error may wait', () => {
@@ -280,6 +309,24 @@ describe('PropertyField, typed', () => {
     await user.tab();
     expect(await screen.findByText('Nur eine Zahl eingeben, zum Beispiel 3,5')).toBeTruthy();
     expect(patches()).toEqual([]);
+  });
+
+  it('does not guess a number that reads either way, and says both readings at the field', async () => {
+    const user = userEvent.setup();
+    renderWith(<PropertyField item={item({ effort: 3.5 })} property={effort} required={false} />);
+
+    const input = await editable('Aufwand (h)');
+    await user.clear(input);
+    // on the way to "1.500,5" nothing is said yet
+    await user.type(input, '1.500');
+    expect(input.hasAttribute('aria-invalid')).toBe(false);
+    await user.keyboard('{Enter}');
+    expect(screen.getByText('Mehrdeutig: 1500 oder 1,5? Schreib 1500 oder 1,5.')).toBeTruthy();
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(patches()).toEqual([]);
+
+    await user.type(input, ',5{Enter}');
+    await waitFor(() => expect(patches()).toEqual([{ values: { effort: 1500.5 } }]));
   });
 
   it('takes the typing back with Escape', async () => {
@@ -479,6 +526,23 @@ describe('PropertyField, chosen', () => {
     await waitFor(() => expect(patches().at(-1)).toEqual({ values: { reviewers: null } }));
   });
 
+  it('keeps the people an item has who can no longer be chosen, while they are set', async () => {
+    const user = userEvent.setup();
+    // Theo is no member of WEB, and the second account is gone
+    stored = item({ reviewers: ['u_theo', 'u_gone'] });
+    renderWith(<Live>{(entry) => <PropertyField item={entry} property={reviewers} required={false} />}</Live>);
+
+    await user.click(await picker(/^Reviewer: Theo Okafor$/));
+    expect(await optionTexts()).toEqual(['Ida Brenner', 'Lene Vogt', 'PixelBot', 'Theo Okafornicht mehr wählbar', 'Unbekanntnicht mehr wählbar']);
+    await user.click(screen.getByRole('option', { name: /Ida Brenner/ }));
+    await waitFor(() => expect(patches()).toEqual([{ values: { reviewers: ['u_ida', 'u_theo', 'u_gone'] } }]));
+
+    // taken away, Theo can no longer be chosen
+    await user.click(screen.getByRole('option', { name: /Theo Okafor/ }));
+    await waitFor(() => expect(patches().at(-1)).toEqual({ values: { reviewers: ['u_ida', 'u_gone'] } }));
+    await waitFor(() => expect(screen.queryByRole('option', { name: /Theo Okafor/ })).toBeNull());
+  });
+
   it('offers no "Niemand" or "Keine Auswahl" when the value is required', async () => {
     const user = userEvent.setup();
     renderWith(
@@ -659,6 +723,8 @@ describe('DateField', () => {
   });
 
   it('sets a day, removes it, and says when there is none', async () => {
+    // the calendar opens on the month of today
+    today();
     const user = userEvent.setup();
     renderWith(<Live>{(entry) => <DateField item={entry} field="due_date" />}</Live>);
 
@@ -714,6 +780,7 @@ describe('DateField', () => {
   });
 
   it('leaves a refusal of the server without a date to the toast', async () => {
+    today();
     const user = userEvent.setup();
     renderWith(<DateField item={item()} field="due_date" />, {
       'PATCH /api/v1/work-items/wi_web_47': () => problem(503, 'service_unavailable', { detail: 'Der Server ist gerade nicht erreichbar.' }),
@@ -727,9 +794,11 @@ describe('DateField', () => {
   });
 
   it('is read-only with the reason, and a calendar that starts open leaves the focus where it is', async () => {
+    // on the due date of WEB-47, so it does not read as overdue
+    today();
     signedIn = theo;
     renderWith(<DateField item={web47} field="due_date" />, {}, { projects: [project('WEB', 'viewer')] });
-    const value = await screen.findByRole('button', { name: /^Due-Date: 31.10.2026/ });
+    const value = await screen.findByRole('button', { name: 'Due-Date: 31.10.2026' });
     await waitFor(() => expect(value.getAttribute('aria-disabled')).toBe('true'));
 
     const before = document.activeElement;
@@ -767,5 +836,20 @@ describe('DateField', () => {
     }
     renderWith(<Probe entry={item({}, { due_date: null })} />);
     expect(seen.at(-1)).toBe(false);
+  });
+
+  it('reads overdue against today in the time zone of the organisation', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    // 23:30 UTC: already the 31st in Berlin, still the 30th in New York
+    vi.setSystemTime(new Date('2026-10-30T23:30:00.000Z'));
+    const due = item({}, { due_date: '2026-10-30', state_id: 'std_progress' });
+
+    const first = renderWith(<DateField item={due} field="due_date" />);
+    expect(await screen.findByRole('button', { name: 'Due-Date: 30.10.2026, überfällig' })).toBeTruthy();
+    first.unmount();
+
+    org = { ...organization, timezone: 'America/New_York' };
+    renderWith(<DateField item={due} field="due_date" />);
+    expect(await screen.findByRole('button', { name: 'Due-Date: 30.10.2026' })).toBeTruthy();
   });
 });

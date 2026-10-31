@@ -793,6 +793,49 @@ describe('TypePicker and the type change', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
+  it('sends no type change while a required value cannot be read, and puts the focus there', async () => {
+    const user = userEvent.setup();
+    // a type of the project that needs the effort
+    const estimate: WorkItemType = { ...task, id: 't_estimate', name: 'Schätzung', properties: [{ property_id: 'pr_effort', required: true, position: 0 }] };
+    const plain = makeWorkItem({ id: 'wi_web_62', number: 62, key: 'WEB-62' });
+    renderWith(<TypePicker item={plain} />, { ...routes(plain), 'GET /api/v1/work-item-types': () => ({ body: list([...types, estimate]) }) }, {
+      projects: [project('WEB', 'member', { enabled_type_ids: ['t_task', 't_estimate'] }), app],
+    });
+
+    await user.click(await picker(/^Typ: Task$/));
+    await user.click(await screen.findByRole('option', { name: 'Schätzung' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Typ von WEB-62 auf Schätzung ändern' });
+    const effort = await within(dialog).findByRole('textbox', { name: 'Aufwand (h)' });
+    await user.type(effort, 'drei');
+    await user.click(within(dialog).getByRole('button', { name: /^Zu Schätzung wechseln/ }));
+
+    expect(within(dialog).getByText('Nur eine Zahl eingeben, zum Beispiel 3,5')).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(effort));
+    expect(typeCalls('wi_web_62')).toEqual([]);
+
+    // one that may still become a number says so once the dialog would send
+    await user.clear(effort);
+    await user.type(effort, '1,');
+    await user.click(within(dialog).getByRole('button', { name: /^Zu Schätzung wechseln/ }));
+    expect(within(dialog).getByText('Nur eine Zahl eingeben, zum Beispiel 3,5')).toBeTruthy();
+    expect(typeCalls('wi_web_62')).toEqual([]);
+
+    await user.type(effort, '5');
+    await user.click(within(dialog).getByRole('button', { name: /^Zu Schätzung wechseln/ }));
+    await waitFor(() => expect(typeCalls('wi_web_62')).toEqual([{ type_id: 't_estimate', values: { effort: 1.5 } }]));
+  });
+
+  it('shows a refusal at a value without a field in the dialog above the fields', async () => {
+    const user = userEvent.setup();
+    // the type made a property required after the catalog was loaded
+    renderWith(<TypeChangeDialog item={web47} target={task} open onOpenChange={() => {}} />, routes(web47, { 'PUT /api/v1/work-items/wi_web_47/type': () => refused({ 'values.note': ['„Notiz“ ist ein Pflichtfeld.'] }) }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Typ von WEB-47 auf Task ändern' });
+    await user.click(await within(dialog).findByRole('button', { name: /^Zu Task wechseln/ }));
+    expect((await within(dialog).findByRole('alert')).textContent).toBe('Typ nicht geändert„Notiz“ ist ein Pflichtfeld.');
+    expect(screen.getByRole('dialog')).toBeTruthy();
+  });
+
   it('names one required field as one', async () => {
     const user = userEvent.setup();
     renderWith(<TypePicker item={web48} />, routes(web48));

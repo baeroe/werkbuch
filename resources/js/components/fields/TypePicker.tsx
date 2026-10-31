@@ -162,6 +162,9 @@ function TypeChangeForm({ formId, item, target, change, onDone }: TypeChangeForm
   const lostId = useId();
   const [values, setValues] = useState<Record<string, PropertyValue>>({});
   const [errors, setErrors] = useState<Record<string, string[]>>({});
+  // typed values that cannot be read (a number, an address), by key: the form does not send while there is one
+  const [unreadable, setUnreadable] = useState<Record<string, string>>({});
+  const [attempted, setAttempted] = useState(false);
   // mod+Enter sends the form from anywhere in the dialog (the focus starts on "Abbrechen" when nothing is to fill in)
   useShortcut('dialog.submit', () => form.current?.requestSubmit());
 
@@ -178,8 +181,24 @@ function TypeChangeForm({ formId, item, target, change, onDone }: TypeChangeForm
   const nameOf = (userId: string) => users.get(userId)?.name ?? t('items.fields.property.unknown_person');
   // a required yes/no starts off, and off is what it sends (A89: what is set is stored)
   const sent = { ...Object.fromEntries(missing.filter((property) => property.field_type === 'boolean').map((property) => [property.key, false])), ...values };
+  const fieldId = (key: string) => `${formId}-${key}`;
+  // a refusal at a key without a field here (the type became stricter meanwhile) shows above the fields, never silently
+  const shownKeys = new Set(missing.map((property) => `values.${property.key}`));
+  const general = [
+    ...(errors.type_id ?? []).slice(0, 1),
+    ...Object.entries(errors)
+      .filter(([key]) => key !== 'type_id' && !shownKeys.has(key))
+      .map(([, messages]) => messages[0]!),
+  ];
 
   function submit() {
+    setAttempted(true);
+    // a value it cannot read is no value: the form stays, with the fix at the field
+    const stuck = missing.find((property) => unreadable[property.key]);
+    if (stuck) {
+      document.getElementById(fieldId(stuck.key))?.focus();
+      return;
+    }
     settle(change.mutateAsync({ id: item.id, type_id: target.id, values: sent }), {
       onSuccess: () => {
         onDone();
@@ -208,9 +227,11 @@ function TypeChangeForm({ formId, item, target, change, onDone }: TypeChangeForm
       }}
       className="flex flex-col gap-5"
     >
-      {errors.type_id && (
+      {general.length > 0 && (
         <Banner tone="danger" role="alert" title={t('items.fields.type.failed')}>
-          {errors.type_id[0]}
+          {general.map((message) => (
+            <p key={message}>{message}</p>
+          ))}
         </Banner>
       )}
       {lost.length > 0 && (
@@ -232,12 +253,16 @@ function TypeChangeForm({ formId, item, target, change, onDone }: TypeChangeForm
           {missing.map((property) => (
             <PropertyValueInput
               key={property.key}
+              id={fieldId(property.key)}
               property={property}
               value={sent[property.key]}
               onChange={(value) => setValues((current) => ({ ...current, [property.key]: value }))}
+              onUnreadable={(message) =>
+                setUnreadable(({ [property.key]: _old, ...others }) => (message ? { ...others, [property.key]: message } : others))
+              }
               projectId={item.project_id}
               required
-              error={errors[`values.${property.key}`]?.[0] ?? null}
+              error={(attempted ? unreadable[property.key] : undefined) ?? errors[`values.${property.key}`]?.[0] ?? null}
             />
           ))}
         </section>
