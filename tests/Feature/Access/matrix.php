@@ -49,6 +49,7 @@ use App\Actions\Users\ReactivateUser;
 use App\Actions\Users\UpdateUser;
 use App\Actions\Users\UpdateUserRole;
 use App\Actions\Workflows\DeleteWorkflow;
+use App\Actions\Workflows\ListStateUsage;
 use App\Actions\Workflows\ListWorkflows;
 use App\Actions\Workflows\SaveWorkflow;
 use App\Actions\WorkItems\AddRelation;
@@ -62,6 +63,7 @@ use App\Actions\WorkItems\ListHistory;
 use App\Actions\WorkItems\ListRelations;
 use App\Actions\WorkItems\ListSubscribers;
 use App\Actions\WorkItems\ListWorkItems;
+use App\Actions\WorkItems\RemapStates;
 use App\Actions\WorkItems\RemoveRelation;
 use App\Actions\WorkItems\RestoreWorkItem;
 use App\Actions\WorkItems\SetSubscription;
@@ -334,6 +336,19 @@ return [
         'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
         'hidden' => ['outsider_private'],
     ],
+    'RemapStates' => [
+        'action' => RemapStates::class,
+        // the work of AssignWorkflow and SaveWorkflow, which checked their rights and hold the organization: an item of
+        // the world moves on to the next state of its workflow
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $item = $w->item($column);
+            $next = $w->project($column)->workflow->states()->where('id', '!=', $item->state_id)->value('id');
+
+            return RemapStates::run($a, [$item->project_id], [$item->state_id => $next], RemapStates::WORKFLOW_CHANGED);
+        },
+        'event' => EventType::WorkItemStateChanged,
+        'system' => true,
+    ],
     'ListHistory' => [
         'action' => ListHistory::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListHistory::run($a, $w->item($column), []),
@@ -380,6 +395,12 @@ return [
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => DeleteWorkflow::run($a, Workflow::factory()->create()),
         'allowed' => $catalogAdmins,
         'event' => EventType::WorkflowDeleted,
+    ],
+    'ListStateUsage' => [
+        'action' => ListStateUsage::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListStateUsage::run($a, ['project' => $w->project($column)->identifier]),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
     ],
     'ListWorkItemTypes' => [
         'action' => ListWorkItemTypes::class,

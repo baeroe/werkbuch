@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\PropertiesController;
 use App\Http\Controllers\Api\RelationsController;
 use App\Http\Controllers\Api\RelationTypesController;
 use App\Http\Controllers\Api\ResolutionsController;
+use App\Http\Controllers\Api\StateUsageController;
 use App\Http\Controllers\Api\SubscribersController;
 use App\Http\Controllers\Api\TokensController;
 use App\Http\Controllers\Api\TwoFactorController;
@@ -76,6 +77,7 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
     Route::post('workflows', [WorkflowsController::class, 'store']);
     Route::put('workflows/{workflow}', [WorkflowsController::class, 'update']);
     Route::delete('workflows/{workflow}', [WorkflowsController::class, 'destroy']);
+    Route::get('state-usage', [StateUsageController::class, 'index']);
 
     Route::get('work-item-types', [WorkItemTypesController::class, 'index']);
     Route::post('work-item-types', [WorkItemTypesController::class, 'store']);

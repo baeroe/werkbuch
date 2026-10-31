@@ -16,6 +16,7 @@ use App\Models\WorkflowState;
 use App\Models\WorkItem;
 use App\Support\Actor;
 use App\Support\ItemLock;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -147,14 +148,23 @@ final class TransitionWorkItem
             }
         }
 
-        $choices = $resolutions->map(fn (Resolution $resolution) => new ResolutionChoice(
+        return [$from, $to, ResolutionRule::after($from->category, $to->category, $locked->resolution_id, $resolutionId, self::choices($resolutions))];
+    }
+
+    /**
+     * The resolutions as ResolutionRule weighs them.
+     *
+     * @param  Collection<int, Resolution>  $resolutions
+     * @return list<ResolutionChoice>
+     */
+    public static function choices(Collection $resolutions): array
+    {
+        return array_values($resolutions->map(fn (Resolution $resolution) => new ResolutionChoice(
             $resolution->id,
             StateCategory::tryFrom((string) $resolution->default_for),
             $resolution->position,
             $resolution->archived_at !== null,
-        ));
-
-        return [$from, $to, ResolutionRule::after($from->category, $to->category, $locked->resolution_id, $resolutionId, array_values($choices->all()))];
+        ))->all());
     }
 
     /**

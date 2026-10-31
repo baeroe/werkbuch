@@ -61,26 +61,17 @@ it('lets exactly the allowed accounts run each action', function (array $row, st
     }
 })->with($rows)->with(MatrixWorld::COLUMNS);
 
-it('runs the work of jobs as the system without failing, recording only the event of its row', function () {
-    $failures = [];
+$systemRows = collect(matrixRows())->filter(fn (array $row) => $row['system'] ?? false)->map(fn (array $row) => [$row])->all();
 
-    foreach (collect(matrixRows())->filter(fn (array $row) => $row['system'] ?? false) as $name => $row) {
-        $w = MatrixWorld::build();
-        $before = Event::query()->pluck('id');
-        $outcome = matrixOutcome(fn () => ($row['run'])(Actor::system(User::defaultBot(), 'matrix'), $w, 'default_bot'));
-        $recorded = Event::query()->whereNotIn('id', $before)->pluck('type')->map(fn (EventType $type) => $type->value)->all();
+it('runs the work of jobs as the system without failing, recording only the event of its row', function (array $row) {
+    $w = MatrixWorld::build();
+    $before = Event::query()->pluck('id');
+    $outcome = matrixOutcome(fn () => ($row['run'])(Actor::system(User::defaultBot(), 'matrix'), $w, 'default_bot'));
+    $recorded = Event::query()->whereNotIn('id', $before)->pluck('type')->map(fn (EventType $type) => $type->value)->all();
 
-        if ($outcome !== 'ok') {
-            $failures[] = "{$name}: {$outcome}";
-        }
-
-        if ($recorded !== (isset($row['event']) ? [$row['event']->value] : [])) {
-            $failures[] = "{$name} recorded: ".implode(', ', $recorded);
-        }
-    }
-
-    expect($failures)->toBe([]);
-});
+    expect($outcome)->toBe('ok')
+        ->and($recorded)->toBe(isset($row['event']) ? [$row['event']->value] : []);
+})->with($systemRows);
 
 it('has exactly one row for every action (new actions need one)', function () {
     $exempt = fn (string $file) => str_starts_with($file, 'app/Actions/Auth/') || str_starts_with($file, 'app/Actions/Setup/')

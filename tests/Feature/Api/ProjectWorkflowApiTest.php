@@ -10,11 +10,16 @@ use App\Models\Event;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\Workflow;
+use App\Models\WorkflowState;
+use App\Models\WorkItem;
 
 /*
- * PUT /api/v1/projects/{project}/workflow: the one way to switch the workflow of a project (P9). Phase 3 has no items,
- * so the mapping of the states is checked for its form only (P5).
+ * PUT /api/v1/projects/{project}/workflow: the one way to switch the workflow of a project (P9). The mapping names a
+ * state of the new workflow for every state of the old one that items stand in; the items move with the switch.
  */
+
+/** The id of the state of that name in the workflow. */
+$stateOf = fn (Workflow $workflow, string $name): string => (string) $workflow->states()->where('name', $name)->value('id');
 
 it('switches the workflow of a project and records it', function () {
     $admin = User::factory()->create();
@@ -107,4 +112,75 @@ it('answers 404 for a project that is being deleted', function () {
         ->toThrow(fn (Problem $problem) => expect($problem->status)->toBe(404))
         ->and($web->fresh()?->workflow_id)->toBe(Workflow::default()->id)
         ->and(Event::query()->where('type', EventType::ProjectUpdated)->count())->toBe(0);
+});
+
+it('requires a new state for every state in use and names them', function () use ($stateOf) {
+    $admin = User::factory()->create();
+    $web = CreateProject::run(actor($admin), ['name' => 'Website', 'identifier' => 'WEB']);
+    $standard = Workflow::default();
+    $agency = Workflow::factory()->create(['name' => 'Agentur-Freigabe']);
+    WorkItem::factory()->for($web)->inState('Todo')->count(2)->create();
+    // archived items count as well
+    WorkItem::factory()->for($web)->archived()->create();
+    [$todo, $done] = [$stateOf($standard, 'Todo'), $stateOf($standard, 'Done')];
+
+    $none = $this->actingAs($admin)->putJson('/api/v1/projects/WEB/workflow', ['workflow_id' => $agency->id, 'mapping' => []])
+        ->assertUnprocessable()->assertJsonPath('reason', 'validation_failed')
+        ->assertJsonPath('states', [
+            ['state_id' => $todo, 'name' => 'Todo', 'items' => 2],
+            ['state_id' => $done, 'name' => 'Done', 'items' => 1],
+        ]);
+    $some = $this->putJson('/api/v1/projects/WEB/workflow', ['workflow_id' => $agency->id, 'mapping' => [$todo => $stateOf($agency, 'Doing')]])
+        ->assertUnprocessable()->assertJsonPath('states', [['state_id' => $done, 'name' => 'Done', 'items' => 1]]);
+
+    expect(errorsAt($none, "mapping.{$todo}"))->toBe([__('field.mapping.required', ['name' => 'Todo'])])
+        ->and(errorsAt($none, "mapping.{$done}"))->toBe([__('field.mapping.required', ['name' => 'Done'])])
+        ->and(array_keys($some->json('errors')))->toBe(["mapping.{$done}"])
+        ->and($web->fresh()?->workflow_id)->toBe($standard->id)
+        ->and(WorkItem::query()->where('state_id', $todo)->count())->toBe(2)
+        ->and(eventsOf(EventType::WorkItemStateChanged))->toBeEmpty()
+        ->and(eventsOf(EventType::ProjectUpdated, $web))->toBeEmpty();
+
+    // a project without items switches with an empty mapping
+    CreateProject::run(actor($admin), ['name' => 'Betrieb', 'identifier' => 'OPS']);
+    $this->putJson('/api/v1/projects/OPS/workflow', ['workflow_id' => $agency->id, 'mapping' => []])->assertOk();
+});
+
+it('switches the workflow and remaps the items in one go', function () use ($stateOf) {
+    $admin = User::factory()->create();
+    $web = CreateProject::run(actor($admin), ['name' => 'Website', 'identifier' => 'WEB']);
+    $standard = Workflow::default();
+    $agency = Workflow::factory()->create(['name' => 'Agentur-Freigabe']);
+    $todo = WorkItem::factory()->for($web)->inState('Todo')->create();
+    $done = WorkItem::factory()->for($web)->closed()->create();
+
+    $this->actingAs($admin)->putJson('/api/v1/projects/WEB/workflow', ['workflow_id' => $agency->id, 'mapping' => [
+        strtoupper($stateOf($standard, 'Todo')) => strtoupper($stateOf($agency, 'Doing')),
+        $stateOf($standard, 'Done') => $stateOf($agency, 'Done'),
+    ]])->assertOk()->assertJsonPath('data.workflow_id', $agency->id);
+
+    $types = Event::query()->where('project_id', $web->id)->whereIn('type', [EventType::WorkItemStateChanged, EventType::ProjectUpdated])
+        ->orderBy('occurred_at')->orderBy('id')->pluck('type')->map(fn (EventType $type) => $type->value)->all();
+
+    expect($todo->fresh()?->state_id)->toBe($stateOf($agency, 'Doing'))
+        ->and($done->fresh()?->state_id)->toBe($stateOf($agency, 'Done'))
+        ->and(WorkItem::query()->whereIn('state_id', WorkflowState::query()->where('workflow_id', $standard->id)->select('id'))->exists())->toBeFalse()
+        ->and($types)->toBe(['work_item.state_changed', 'work_item.state_changed', 'project.updated'])
+        ->and(eventsOf(EventType::WorkItemStateChanged, $todo)->sole()->meta)->toMatchArray(['reason' => 'workflow_changed', 'via' => 'ui']);
+});
+
+it('takes a mapping of an unused state without complaint', function () use ($stateOf) {
+    $admin = User::factory()->create();
+    $web = CreateProject::run(actor($admin), ['name' => 'Website', 'identifier' => 'WEB']);
+    $standard = Workflow::default();
+    $agency = Workflow::factory()->create(['name' => 'Agentur-Freigabe']);
+    $item = WorkItem::factory()->for($web)->inState('Todo')->create();
+
+    $this->actingAs($admin)->putJson('/api/v1/projects/WEB/workflow', ['workflow_id' => $agency->id, 'mapping' => [
+        $stateOf($standard, 'Todo') => $stateOf($agency, 'Backlog'),
+        $stateOf($standard, 'Pending') => $stateOf($agency, 'Doing'),
+    ]])->assertOk();
+
+    expect($item->fresh()?->state_id)->toBe($stateOf($agency, 'Backlog'))
+        ->and(eventsOf(EventType::WorkItemStateChanged))->toHaveCount(1);
 });

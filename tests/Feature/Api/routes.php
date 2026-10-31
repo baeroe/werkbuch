@@ -49,6 +49,7 @@ return [
     'create a workflow' => ['POST', '/api/v1/workflows'],
     'change a workflow' => ['PUT', '/api/v1/workflows/{workflow}', 'params' => fn (MatrixWorld $w) => ['workflow' => Workflow::factory()->create()->id]],
     'delete a workflow' => ['DELETE', '/api/v1/workflows/{workflow}', 'params' => fn (MatrixWorld $w) => ['workflow' => Workflow::factory()->create()->id]],
+    'count the items per state' => ['GET', '/api/v1/state-usage', 'body' => ['project' => 'WEB']],
     'list work item types' => ['GET', '/api/v1/work-item-types'],
     'create a work item type' => ['POST', '/api/v1/work-item-types'],
     'change a work item type' => ['PUT', '/api/v1/work-item-types/{workItemType}', 'params' => fn (MatrixWorld $w) => ['workItemType' => WorkItemType::factory()->create()->id]],

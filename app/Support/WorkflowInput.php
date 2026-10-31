@@ -10,6 +10,7 @@ use App\Domain\Workflow\TransitionGraph;
 use App\Domain\Workflow\WorkflowIssue;
 use App\Exceptions\Problem;
 use App\Models\Workflow;
+use App\Models\WorkflowState;
 use Closure;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -220,6 +221,29 @@ final class WorkflowInput
         }
 
         return $errors;
+    }
+
+    /**
+     * The states that hold items and have no target in the mapping (the mapping passed mappingErrors), in the order
+     * given: what a 422 at `mapping.<id>` (AssignWorkflow) and a 409 `state_in_use` (SaveWorkflow) name, with the number
+     * of their items.
+     *
+     * @param  array<array-key, mixed>  $mapping
+     * @param  iterable<WorkflowState>  $states  the states that go
+     * @param  array<string, int>  $counts  items per state id (ListStateUsage::counts)
+     * @return list<array{state_id: string, name: string, items: int}>
+     */
+    public static function unmapped(array $mapping, iterable $states, array $counts): array
+    {
+        $unmapped = [];
+
+        foreach ($states as $state) {
+            if (($counts[$state->id] ?? 0) > 0 && ! array_key_exists($state->id, $mapping)) {
+                $unmapped[] = ['state_id' => $state->id, 'name' => $state->name, 'items' => $counts[$state->id]];
+            }
+        }
+
+        return $unmapped;
     }
 
     /**

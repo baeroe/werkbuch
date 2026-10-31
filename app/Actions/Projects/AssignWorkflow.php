@@ -3,6 +3,8 @@
 namespace App\Actions\Projects;
 
 use App\Access\Authorize;
+use App\Actions\Workflows\ListStateUsage;
+use App\Actions\WorkItems\RemapStates;
 use App\Events\EventRecorder;
 use App\Events\EventType;
 use App\Exceptions\Problem;
@@ -21,10 +23,13 @@ use Lorisleiva\Actions\Concerns\AsAction;
 
 /**
  * Switches the workflow of a project (its admins, spec 4.5): `workflow_id` and a `mapping` of the states, state of the
- * old workflow → state of the new one. Phase 3 has no items, so only the form of the mapping counts (P5); Phase 4 asks
- * for a state for every state that holds items and moves them (`RemapStates`). Runs under the catalog lock, then the
- * lock of the project row (organization before project): the workflow cannot be deleted while the project gets it, and
- * two switches of one project run one after the other. The same workflow again changes nothing and records nothing.
+ * old workflow → state of the new one. Every state of the old workflow that an item of the project stands in (archived
+ * ones too) needs a target, else 422 at `mapping.<state_id>` with the states and their items in `extensions.states`; a
+ * mapping of a state without items is taken without complaint. The items move in the same transaction (RemapStates,
+ * `workflow_changed`), before the `project.updated`. Runs under the catalog lock, then the lock of the project row
+ * (organization before project): the workflow cannot be deleted while the project gets it, two switches of one project
+ * run one after the other, and every change of an item (which shares the catalog lock) waits for the switch and then
+ * finds its item in the new workflow. The same workflow again changes nothing and records nothing.
  */
 final class AssignWorkflow
 {
@@ -34,7 +39,7 @@ final class AssignWorkflow
      * @param  array<array-key, mixed>  $input  `workflow_id`, `mapping`
      *
      * @throws ValidationException
-     * @throws Problem 422 at `mapping.<state_id>`, 404 for a project that is being deleted
+     * @throws Problem 422 at `mapping.<state_id>` (with `extensions.states` for states in use without a target), 404 for a project that is being deleted
      */
     public function handle(Actor $actor, Project $project, array $input): Project
     {
@@ -67,6 +72,23 @@ final class AssignWorkflow
             if ($new->id === $old->id) {
                 return $project;
             }
+
+            // every state an item of the project stands in (archived ones too) needs a state in the new workflow
+            $unmapped = WorkflowInput::unmapped($valid['mapping'] ?? [], $old->states, ListStateUsage::counts([$project->id]));
+
+            if ($unmapped !== []) {
+                $errors = [];
+
+                foreach ($unmapped as $state) {
+                    $errors["mapping.{$state['state_id']}"] = [__('field.mapping.required', ['name' => $state['name']])];
+                }
+
+                throw Problem::unprocessable('validation_failed', $errors, ['states' => $unmapped]);
+            }
+
+            /** @var array<string, string> $mapping keys and targets checked above */
+            $mapping = $valid['mapping'] ?? [];
+            RemapStates::run($actor, [$project->id], $mapping, RemapStates::WORKFLOW_CHANGED);
 
             $project->update(['workflow_id' => $new->id]);
             EventRecorder::record(EventType::ProjectUpdated, $actor, $project, $project, ['workflow_id' => ['old' => $old->id, 'new' => $new->id]]);

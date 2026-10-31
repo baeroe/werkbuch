@@ -19,7 +19,7 @@ final class Problem extends RuntimeException implements HttpExceptionInterface
         'in_use', 'unauthenticated', 'too_many_requests', 'bad_request', 'method_not_allowed', 'payload_too_large',
         'csrf_token_mismatch', 'conflict', 'server_error', 'service_unavailable', 'http_error', 'default_bot', 'already_member',
         'lead_cannot_leave', 'session_required', 'two_factor_enabled', 'two_factor_not_pending', 'two_factor_disabled',
-        'invalid_workflow', 'default_workflow', 'default_type', 'built_in', 'is_default',
+        'invalid_workflow', 'default_workflow', 'default_type', 'built_in', 'is_default', 'state_in_use',
     ];
 
     /**

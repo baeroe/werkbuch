@@ -3,11 +3,13 @@
 namespace App\Actions\Workflows;
 
 use App\Access\Authorize;
+use App\Actions\WorkItems\RemapStates;
 use App\Enums\Catalog;
 use App\Events\EventRecorder;
 use App\Events\EventType;
 use App\Exceptions\Problem;
 use App\Models\Organization;
+use App\Models\Project;
 use App\Models\Workflow;
 use App\Models\WorkflowState;
 use App\Models\WorkflowTransition;
@@ -25,8 +27,12 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * state and the transitions are translated (P3). A workflow that cannot be saved (no start state, no Completed state,
  * a state the start does not reach) is refused with its findings and nothing is written. One workflow is the default
  * at all times: a new default takes the mark from the old one, the default keeps it until another one takes it.
- * Everything runs under the catalog lock, one change of the catalog at a time, each from what the one before left.
- * Only what really changes is written and recorded; the same input again writes nothing.
+ * A state that goes while items stand in it (in any project of the workflow) needs a state that takes them over in
+ * `state_mapping` (removed state → key of a state of the input, a new one with its local id too), else 409
+ * `state_in_use` naming the states and their items, and nothing is written; the items move before their states go
+ * (RemapStates, `state_removed`). Everything runs under the catalog lock, one change of the catalog at a time, each from
+ * what the one before left, and every change of an item waits for it. Only what really changes is written and
+ * recorded; the same input again writes nothing.
  */
 final class SaveWorkflow
 {
@@ -36,7 +42,7 @@ final class SaveWorkflow
      * @param  array<array-key, mixed>  $input  `name`, `description`, `is_default`, `is_free`, `initial_state_id`, `states`, `transitions`, `state_mapping`
      *
      * @throws ValidationException
-     * @throws Problem 422 `invalid_workflow`, 404 for a workflow deleted meanwhile
+     * @throws Problem 422 `invalid_workflow`, 409 `state_in_use`, 404 for a workflow deleted meanwhile
      */
     public function handle(Actor $actor, ?Workflow $workflow, array $input): Workflow
     {
@@ -65,11 +71,25 @@ final class SaveWorkflow
             $keys = array_column($valid['states'], 'key');
             $removed = $current === null ? [] : array_values(array_diff($current->states->modelKeys(), array_column($valid['states'], 'existing')));
 
-            // only its form counts until there are items to move (Phase 4, P5)
+            // the keys are states that go (a state that stays is 422, P17), the targets keys of the input
             $mappingErrors = WorkflowInput::mappingErrors('state_mapping', $valid['state_mapping'], $removed, $keys);
 
             if ($mappingErrors !== []) {
                 throw Problem::invalid($mappingErrors);
+            }
+
+            // a state that goes while items of any project of the workflow (archived ones and projects in deletion too)
+            // stand in it needs a new one
+            $projectIds = [];
+
+            if ($current !== null && $removed !== []) {
+                /** @var list<string> $projectIds */
+                $projectIds = Project::query()->where('workflow_id', $current->id)->pluck('id')->all();
+                $unmapped = WorkflowInput::unmapped($valid['state_mapping'], $current->states->whereIn('id', $removed), ListStateUsage::counts($projectIds));
+
+                if ($unmapped !== []) {
+                    throw Problem::conflict('state_in_use', ['states' => $unmapped]);
+                }
             }
 
             $before = $current === null ? null : self::snapshot($current);
@@ -131,6 +151,10 @@ final class SaveWorkflow
             }
 
             if ($removed !== []) {
+                // the items move to the states that take them over (keys of the input → ULIDs) before their states go
+                /** @var array<string, string> $sent */
+                $sent = $valid['state_mapping'];
+                RemapStates::run($actor, $projectIds, array_map(fn (string $key) => $ids[$key], $sent), RemapStates::STATE_REMOVED);
                 WorkflowState::query()->whereKey($removed)->delete();
             }
 
