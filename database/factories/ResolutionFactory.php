@@ -24,4 +24,9 @@ class ResolutionFactory extends Factory
             'archived_at' => null,
         ];
     }
+
+    public function archived(): static
+    {
+        return $this->state(fn (array $attributes) => ['archived_at' => now()]);
+    }
 }

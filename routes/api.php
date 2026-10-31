@@ -4,11 +4,14 @@ use App\Exceptions\Problem;
 use App\Http\Controllers\Api\BotsController;
 use App\Http\Controllers\Api\FavoritesController;
 use App\Http\Controllers\Api\InvitationsController;
+use App\Http\Controllers\Api\LabelsController;
 use App\Http\Controllers\Api\MembersController;
 use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\PasswordController;
 use App\Http\Controllers\Api\ProjectsController;
 use App\Http\Controllers\Api\PropertiesController;
+use App\Http\Controllers\Api\RelationTypesController;
+use App\Http\Controllers\Api\ResolutionsController;
 use App\Http\Controllers\Api\TokensController;
 use App\Http\Controllers\Api\TwoFactorController;
 use App\Http\Controllers\Api\UsersController;
@@ -69,6 +72,21 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
     Route::post('properties', [PropertiesController::class, 'store']);
     Route::put('properties/{property}', [PropertiesController::class, 'update']);
     Route::delete('properties/{property}', [PropertiesController::class, 'destroy']);
+
+    Route::get('labels', [LabelsController::class, 'index']);
+    Route::post('labels', [LabelsController::class, 'store']);
+    Route::put('labels/{label}', [LabelsController::class, 'update']);
+    Route::delete('labels/{label}', [LabelsController::class, 'destroy']);
+
+    Route::get('relation-types', [RelationTypesController::class, 'index']);
+    Route::post('relation-types', [RelationTypesController::class, 'store']);
+    Route::put('relation-types/{relationType}', [RelationTypesController::class, 'update']);
+    Route::delete('relation-types/{relationType}', [RelationTypesController::class, 'destroy']);
+
+    Route::get('resolutions', [ResolutionsController::class, 'index']);
+    Route::post('resolutions', [ResolutionsController::class, 'store']);
+    Route::put('resolutions/{resolution}', [ResolutionsController::class, 'update']);
+    Route::delete('resolutions/{resolution}', [ResolutionsController::class, 'destroy']);
 
     Route::get('favorites', [FavoritesController::class, 'index']);
     Route::post('favorites/toggle', [FavoritesController::class, 'toggle']);

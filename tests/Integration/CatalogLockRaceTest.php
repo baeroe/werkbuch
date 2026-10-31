@@ -1,15 +1,24 @@
 <?php
 
+use App\Actions\Labels\DeleteLabel;
+use App\Actions\Labels\SaveLabel;
 use App\Actions\Properties\DeleteProperty;
 use App\Actions\Properties\SaveProperty;
+use App\Actions\RelationTypes\DeleteRelationType;
+use App\Actions\RelationTypes\SaveRelationType;
+use App\Actions\Resolutions\DeleteResolution;
+use App\Actions\Resolutions\SaveResolution;
 use App\Actions\Workflows\DeleteWorkflow;
 use App\Actions\Workflows\SaveWorkflow;
 use App\Actions\WorkItemTypes\DeleteWorkItemType;
 use App\Actions\WorkItemTypes\SaveWorkItemType;
 use App\Events\EventType;
 use App\Exceptions\Problem;
+use App\Models\Label;
 use App\Models\Project;
 use App\Models\Property;
+use App\Models\RelationType;
+use App\Models\Resolution;
 use App\Models\User;
 use App\Models\Workflow;
 use App\Models\WorkItemType;
@@ -33,6 +42,12 @@ afterEach(fn () => RaceConnections::tearDown());
 /** A work item type without properties. */
 $typeInput = fn (string $name, array $overrides = []): array => ['name' => $name, 'icon' => 'flag', 'tone' => 'moss', 'is_epic' => false, 'properties' => [], ...$overrides];
 
+/** A label. */
+$labelInput = fn (string $name): array => ['name' => $name, 'color' => 'moss'];
+
+/** A relation type with a label for each direction. */
+$relationTypeInput = fn (string $name): array => ['name' => $name, 'outward_label' => 'testet', 'inward_label' => 'wird getestet von'];
+
 /** A text property. */
 $propertyInput = fn (string $key, string $label = 'Kunde'): array => ['key' => $key, 'label' => $label, 'field_type' => 'text'];
 
@@ -41,12 +56,15 @@ it('makes every change of the catalog wait for the lock of the organization', fu
     $workflow = Workflow::factory()->create(['name' => 'Alt']);
     $type = WorkItemType::factory()->create(['name' => 'Alt']);
     $property = Property::factory()->create(['key' => 'alt']);
+    $label = Label::factory()->create(['name' => 'Alt']);
+    $relationType = RelationType::factory()->create(['name' => 'Alt']);
+    $resolution = Resolution::factory()->create(['label' => 'Alt']);
 
     // connection 1: another change of the catalog is in progress
     RaceConnections::hold(fn () => CatalogLock::take());
 
     // connection 2: this change waits for it instead of checking against what it read before
-    RaceConnections::expectLockWait(RaceConnections::second(fn () => $change($admin, $workflow, $type, $property)), 'organization');
+    RaceConnections::expectLockWait(RaceConnections::second(fn () => $change($admin, $workflow, $type, $property, $label, $relationType, $resolution)), 'organization');
 })->with([
     'create a workflow' => [fn (User $admin, Workflow $workflow) => SaveWorkflow::run(actor($admin), null, WorkflowFixtures::agencyInput())],
     'change a workflow' => [fn (User $admin, Workflow $workflow) => SaveWorkflow::run(actor($admin), $workflow, [...WorkflowFixtures::inputOf($workflow), 'name' => 'Neu'])],
@@ -57,6 +75,15 @@ it('makes every change of the catalog wait for the lock of the organization', fu
     'create a property' => [fn (User $admin) => SaveProperty::run(actor($admin), null, $propertyInput('neu'))],
     'change a property' => [fn (User $admin, Workflow $workflow, WorkItemType $type, Property $property) => SaveProperty::run(actor($admin), $property, $propertyInput('alt', 'Neu'))],
     'delete a property' => [fn (User $admin, Workflow $workflow, WorkItemType $type, Property $property) => DeleteProperty::run(actor($admin), $property)],
+    'create a label' => [fn (User $admin) => SaveLabel::run(actor($admin), null, $labelInput('Neu'))],
+    'change a label' => [fn (User $admin, Workflow $workflow, WorkItemType $type, Property $property, Label $label) => SaveLabel::run(actor($admin), $label, $labelInput('Neu'))],
+    'delete a label' => [fn (User $admin, Workflow $workflow, WorkItemType $type, Property $property, Label $label) => DeleteLabel::run(actor($admin), $label)],
+    'create a relation type' => [fn (User $admin) => SaveRelationType::run(actor($admin), null, $relationTypeInput('Neu'))],
+    'change a relation type' => [fn (User $admin, Workflow $workflow, WorkItemType $type, Property $property, Label $label, RelationType $relationType) => SaveRelationType::run(actor($admin), $relationType, $relationTypeInput('Neu'))],
+    'delete a relation type' => [fn (User $admin, Workflow $workflow, WorkItemType $type, Property $property, Label $label, RelationType $relationType) => DeleteRelationType::run(actor($admin), $relationType)],
+    'create a resolution' => [fn (User $admin) => SaveResolution::run(actor($admin), null, ['label' => 'Neu'])],
+    'change a resolution' => [fn (User $admin, Workflow $workflow, WorkItemType $type, Property $property, Label $label, RelationType $relationType, Resolution $resolution) => SaveResolution::run(actor($admin), $resolution, ['label' => 'Neu'])],
+    'delete a resolution' => [fn (User $admin, Workflow $workflow, WorkItemType $type, Property $property, Label $label, RelationType $relationType, Resolution $resolution) => DeleteResolution::run(actor($admin), $resolution)],
 ]);
 
 it('lets only one of two workflows become the default', function () {
@@ -158,3 +185,99 @@ it('keeps a type that has just become the default type of a project from being a
     'archive it' => [fn (User $admin, WorkItemType $type) => SaveWorkItemType::run(actor($admin), $type, $typeInput('Alt', ['archived_at' => '2026-10-31']))],
     'delete it' => [fn (User $admin, WorkItemType $type) => DeleteWorkItemType::run(actor($admin), $type)],
 ]);
+
+it('checks labels, relation type names and resolution labels under the lock, against what another change has just saved', function (Closure $first, Closure $change, string $field) {
+    $admin = User::factory()->admin()->create();
+    $label = Label::factory()->create(['name' => 'Alt']);
+    $relationType = RelationType::factory()->create(['name' => 'Alt']);
+    $resolution = Resolution::factory()->create(['label' => 'Alt']);
+
+    // connection 1: a new entry Prüfung, the transaction stays open
+    RaceConnections::hold(fn () => $first($admin));
+
+    // it commits the moment connection 2 asks for the lock: a check before the lock would miss the name, and the
+    // unique index would end the change with a server error
+    RaceConnections::releaseBeforeLock('organization');
+    $outcome = RaceConnections::second(fn () => $change($admin, $label, $relationType, $resolution));
+
+    expect($outcome)->toBeInstanceOf(ValidationException::class);
+    assert($outcome instanceof ValidationException);
+    expect($outcome->errors())->toBe([$field => [__("field.{$field}.taken")]]);
+})->with([
+    'a new label' => [
+        fn (User $admin) => SaveLabel::run(actor($admin), null, $labelInput('Prüfung')),
+        fn (User $admin) => SaveLabel::run(actor($admin), null, $labelInput('prüfung')),
+        'name',
+    ],
+    'a renamed label' => [
+        fn (User $admin) => SaveLabel::run(actor($admin), null, $labelInput('Prüfung')),
+        fn (User $admin, Label $label) => SaveLabel::run(actor($admin), $label, $labelInput('PRÜFUNG')),
+        'name',
+    ],
+    'a new relation type' => [
+        fn (User $admin) => SaveRelationType::run(actor($admin), null, $relationTypeInput('Prüfung')),
+        fn (User $admin) => SaveRelationType::run(actor($admin), null, $relationTypeInput('prüfung')),
+        'name',
+    ],
+    'a renamed relation type' => [
+        fn (User $admin) => SaveRelationType::run(actor($admin), null, $relationTypeInput('Prüfung')),
+        fn (User $admin, Label $label, RelationType $relationType) => SaveRelationType::run(actor($admin), $relationType, $relationTypeInput('PRÜFUNG')),
+        'name',
+    ],
+    'a new resolution' => [
+        fn (User $admin) => SaveResolution::run(actor($admin), null, ['label' => 'Prüfung']),
+        fn (User $admin) => SaveResolution::run(actor($admin), null, ['label' => 'prüfung']),
+        'label',
+    ],
+    'a renamed resolution' => [
+        fn (User $admin) => SaveResolution::run(actor($admin), null, ['label' => 'Prüfung']),
+        fn (User $admin, Label $label, RelationType $relationType, Resolution $resolution) => SaveResolution::run(actor($admin), $resolution, ['label' => 'PRÜFUNG']),
+        'label',
+    ],
+]);
+
+it('keeps exactly one default per category when two resolutions take it at once', function () {
+    $admin = User::factory()->admin()->create();
+    $done = Resolution::query()->where('label', 'Done')->sole();
+    $duplicate = Resolution::query()->where('label', 'Duplicate')->sole();
+    $cannotReproduce = Resolution::query()->where('label', 'Cannot reproduce')->sole();
+    $defaultInput = fn (Resolution $resolution) => ['label' => $resolution->label, 'default_for' => 'completed'];
+
+    // connection 1: Duplicate becomes the default for Completed, the transaction stays open
+    RaceConnections::hold(fn () => SaveResolution::run(actor($admin), $duplicate, $defaultInput($duplicate)));
+
+    // connection 2: Cannot reproduce wants the mark too and waits instead of taking it from Done, which it still sees
+    RaceConnections::expectLockWait(RaceConnections::second(fn () => SaveResolution::run(actor($admin), $cannotReproduce, $defaultInput($cannotReproduce))), 'organization');
+
+    RaceConnections::release();
+
+    // once Duplicate is the default, Cannot reproduce takes the mark from Duplicate
+    expect(RaceConnections::second(fn () => SaveResolution::run(actor($admin), $cannotReproduce, $defaultInput($cannotReproduce))))->toBeInstanceOf(Resolution::class)
+        ->and(Resolution::query()->where('default_for', 'completed')->pluck('id')->all())->toBe([$cannotReproduce->id])
+        ->and(eventsOf(EventType::ResolutionUpdated, $done)->map(fn ($event) => $event->changes)->all())->toBe([
+            ['default_for' => ['old' => 'completed', 'new' => null]],
+        ])
+        ->and(eventsOf(EventType::ResolutionUpdated, $duplicate)->map(fn ($event) => $event->changes)->all())->toBe([
+            ['default_for' => ['old' => null, 'new' => 'completed']],
+            ['default_for' => ['old' => 'completed', 'new' => null]],
+        ]);
+});
+
+it('keeps a resolution that has just become the default from being deleted', function () {
+    $admin = User::factory()->admin()->create();
+    $done = Resolution::query()->where('label', 'Done')->sole();
+    $duplicate = Resolution::query()->where('label', 'Duplicate')->sole();
+
+    // connection 1: Duplicate becomes the default for Completed, the transaction stays open
+    RaceConnections::hold(fn () => SaveResolution::run(actor($admin), $duplicate, ['label' => 'Duplicate', 'default_for' => 'completed']));
+
+    // it commits the moment connection 2 asks for the lock: a check before the lock would still see Done as the default
+    RaceConnections::releaseBeforeLock('organization');
+    $outcome = RaceConnections::second(fn () => DeleteResolution::run(actor($admin), $duplicate));
+
+    expect($outcome)->toBeInstanceOf(Problem::class);
+    assert($outcome instanceof Problem);
+    expect($outcome->reason)->toBe('is_default')
+        ->and(Resolution::query()->where('default_for', 'completed')->pluck('id')->all())->toBe([$duplicate->id])
+        ->and($done->fresh()?->default_for)->toBeNull();
+});

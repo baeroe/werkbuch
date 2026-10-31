@@ -1,6 +1,9 @@
 <?php
 
+use App\Models\Label;
 use App\Models\Property;
+use App\Models\RelationType;
+use App\Models\Resolution;
 use App\Models\Workflow;
 use App\Models\WorkItemType;
 use Tests\Feature\Access\MatrixWorld;
@@ -52,6 +55,18 @@ return [
     'create a property' => ['POST', '/api/v1/properties'],
     'change a property' => ['PUT', '/api/v1/properties/{property}', 'params' => fn (MatrixWorld $w) => ['property' => Property::factory()->create()->id]],
     'delete a property' => ['DELETE', '/api/v1/properties/{property}', 'params' => fn (MatrixWorld $w) => ['property' => Property::factory()->create()->id]],
+    'list labels' => ['GET', '/api/v1/labels'],
+    'create a label' => ['POST', '/api/v1/labels'],
+    'change a label' => ['PUT', '/api/v1/labels/{label}', 'params' => fn (MatrixWorld $w) => ['label' => Label::factory()->create()->id]],
+    'delete a label' => ['DELETE', '/api/v1/labels/{label}', 'params' => fn (MatrixWorld $w) => ['label' => Label::factory()->create()->id]],
+    'list relation types' => ['GET', '/api/v1/relation-types'],
+    'create a relation type' => ['POST', '/api/v1/relation-types'],
+    'change a relation type' => ['PUT', '/api/v1/relation-types/{relationType}', 'params' => fn (MatrixWorld $w) => ['relationType' => RelationType::factory()->create()->id]],
+    'delete a relation type' => ['DELETE', '/api/v1/relation-types/{relationType}', 'params' => fn (MatrixWorld $w) => ['relationType' => RelationType::factory()->create()->id]],
+    'list resolutions' => ['GET', '/api/v1/resolutions'],
+    'create a resolution' => ['POST', '/api/v1/resolutions'],
+    'change a resolution' => ['PUT', '/api/v1/resolutions/{resolution}', 'params' => fn (MatrixWorld $w) => ['resolution' => Resolution::factory()->create()->id]],
+    'delete a resolution' => ['DELETE', '/api/v1/resolutions/{resolution}', 'params' => fn (MatrixWorld $w) => ['resolution' => Resolution::factory()->create()->id]],
     'list the own favorites' => ['GET', '/api/v1/favorites'],
     'toggle a favorite' => ['POST', '/api/v1/favorites/toggle'],
     'list tokens' => ['GET', '/api/v1/tokens'],

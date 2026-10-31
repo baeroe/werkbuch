@@ -11,6 +11,9 @@ use App\Actions\Favorites\ListFavorites;
 use App\Actions\Favorites\ToggleFavorite;
 use App\Actions\Invitations\InviteUser;
 use App\Actions\Invitations\ListInvitations;
+use App\Actions\Labels\DeleteLabel;
+use App\Actions\Labels\ListLabels;
+use App\Actions\Labels\SaveLabel;
 use App\Actions\Media\ShowMedia;
 use App\Actions\Organization\GetOrganization;
 use App\Actions\Organization\UpdateOrganization;
@@ -29,6 +32,12 @@ use App\Actions\Projects\UpdateProject;
 use App\Actions\Properties\DeleteProperty;
 use App\Actions\Properties\ListProperties;
 use App\Actions\Properties\SaveProperty;
+use App\Actions\RelationTypes\DeleteRelationType;
+use App\Actions\RelationTypes\ListRelationTypes;
+use App\Actions\RelationTypes\SaveRelationType;
+use App\Actions\Resolutions\DeleteResolution;
+use App\Actions\Resolutions\ListResolutions;
+use App\Actions\Resolutions\SaveResolution;
 use App\Actions\Tokens\CreateToken;
 use App\Actions\Tokens\ListTokens;
 use App\Actions\Tokens\RevokeToken;
@@ -45,7 +54,10 @@ use App\Actions\WorkItemTypes\DeleteWorkItemType;
 use App\Actions\WorkItemTypes\ListWorkItemTypes;
 use App\Actions\WorkItemTypes\SaveWorkItemType;
 use App\Events\EventType;
+use App\Models\Label;
 use App\Models\Property;
+use App\Models\RelationType;
+use App\Models\Resolution;
 use App\Models\User;
 use App\Models\Workflow;
 use App\Models\WorkItemType;
@@ -253,6 +265,57 @@ return [
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => DeleteProperty::run($a, Property::factory()->create()),
         'allowed' => $catalogAdmins,
         'event' => EventType::PropertyDeleted,
+    ],
+    'ListLabels' => [
+        'action' => ListLabels::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListLabels::run($a, []),
+        'allowed' => $everyone,
+    ],
+    'SaveLabel' => [
+        'action' => SaveLabel::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => SaveLabel::run($a, null, ['name' => 'Matrix', 'color' => 'moss']),
+        'allowed' => $catalogAdmins,
+        'event' => EventType::LabelCreated,
+    ],
+    'DeleteLabel' => [
+        'action' => DeleteLabel::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => DeleteLabel::run($a, Label::factory()->create()),
+        'allowed' => $catalogAdmins,
+        'event' => EventType::LabelDeleted,
+    ],
+    'ListRelationTypes' => [
+        'action' => ListRelationTypes::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListRelationTypes::run($a, []),
+        'allowed' => $everyone,
+    ],
+    'SaveRelationType' => [
+        'action' => SaveRelationType::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => SaveRelationType::run($a, null, ['name' => 'Matrix', 'outward_label' => 'tests']),
+        'allowed' => $catalogAdmins,
+        'event' => EventType::RelationTypeCreated,
+    ],
+    'DeleteRelationType' => [
+        'action' => DeleteRelationType::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => DeleteRelationType::run($a, RelationType::factory()->create()),
+        'allowed' => $catalogAdmins,
+        'event' => EventType::RelationTypeDeleted,
+    ],
+    'ListResolutions' => [
+        'action' => ListResolutions::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListResolutions::run($a, []),
+        'allowed' => $everyone,
+    ],
+    'SaveResolution' => [
+        'action' => SaveResolution::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => SaveResolution::run($a, null, ['label' => 'Matrix']),
+        'allowed' => $catalogAdmins,
+        'event' => EventType::ResolutionCreated,
+    ],
+    'DeleteResolution' => [
+        'action' => DeleteResolution::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => DeleteResolution::run($a, Resolution::factory()->create()),
+        'allowed' => $catalogAdmins,
+        'event' => EventType::ResolutionDeleted,
     ],
     'ListFavorites' => [
         'action' => ListFavorites::class,
