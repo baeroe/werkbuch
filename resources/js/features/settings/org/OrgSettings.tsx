@@ -24,12 +24,16 @@ import RelationTypes from './catalogs/RelationTypes';
 import Resolutions from './catalogs/Resolutions';
 import General from './General';
 import People from './People';
+import Properties from './properties/Properties';
 import { findSection, GROUP_NAMES, SECTIONS, sectionLabel, type SectionDef, type SectionProps, type SectionSlug } from './sections';
+import Types from './types/Types';
 
 const COMPONENTS: Record<SectionSlug, ComponentType<SectionProps>> = {
   general: General,
   people: People,
   bots: Bots,
+  types: Types,
+  properties: Properties,
   labels: Labels,
   'relation-types': RelationTypes,
   resolutions: Resolutions,

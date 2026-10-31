@@ -17,16 +17,19 @@ type ToneSelectProps = {
   /** Names the choice for screen readers: "Colour of the label". */
   label: string;
   disabled?: boolean;
+  /** The server refused the tone: the trigger is marked, so the focus lands on it. */
+  invalid?: boolean;
 };
 
-export function ToneSelect({ value, onChange, label, disabled }: ToneSelectProps) {
+export function ToneSelect({ value, onChange, label, disabled, invalid = false }: ToneSelectProps) {
   return (
     <Menu>
       <MenuTrigger
         disabled={disabled}
         aria-label={t('settings.catalog.tone_named', { label, tone: t(TONE_LABELS[value]) })}
+        aria-invalid={invalid || undefined}
         className={cx(
-          'inline-flex size-11 shrink-0 items-center justify-center rounded-ctl border border-line bg-surface shadow-elev-1 transition-colors duration-120 md:size-9',
+          'inline-flex size-11 shrink-0 items-center justify-center rounded-ctl border border-line bg-surface shadow-elev-1 transition-colors duration-120 aria-invalid:border-danger md:size-9',
           disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:border-line-input hover:bg-sunken',
         )}
       >

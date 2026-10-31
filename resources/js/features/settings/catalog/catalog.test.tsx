@@ -60,6 +60,13 @@ describe('ToneSelect', () => {
     render(<ToneSelect label="Farbe" value="plum" onChange={() => {}} disabled />);
     expect(screen.getByRole('button', { name: 'Farbe: Pflaume' }).hasAttribute('disabled')).toBe(true);
   });
+
+  it('is marked when the server refused the tone, and only then', () => {
+    const { rerender } = render(<ToneSelect label="Farbe" value="plum" onChange={() => {}} />);
+    expect(screen.getByRole('button', { name: 'Farbe: Pflaume' }).hasAttribute('aria-invalid')).toBe(false);
+    rerender(<ToneSelect label="Farbe" value="plum" onChange={() => {}} invalid />);
+    expect(screen.getByRole('button', { name: 'Farbe: Pflaume' }).getAttribute('aria-invalid')).toBe('true');
+  });
 });
 
 describe('localId', () => {

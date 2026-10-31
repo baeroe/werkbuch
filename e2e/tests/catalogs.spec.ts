@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { api, arrowTo, PEOPLE, pressMod, runId, signedInContext, tabTo, tr, variant } from '../helpers';
+import { allEntries, arrowTo, PEOPLE, pressMod, removeCatalogEntries, runId, signedInContext, tabTo, tr, variant } from '../helpers';
 
 // Signed in as the e2e person (Erik Ende, org admin), in English, with the keyboard only. Every entry a test creates is
 // called `E2E <variant> <runId> …` and goes again over the API in `finally`; the e2e seeder removes what a broken run
@@ -9,27 +9,8 @@ import { api, arrowTo, PEOPLE, pressMod, runId, signedInContext, tabTo, tr, vari
 /** The name every entry of this test starts with. */
 const prefix = () => `E2E ${variant()} ${runId()}`;
 
-/** Every entry of a catalog, following the cursor to the last page, so "not in the list" never passes on a first page. */
-async function allEntries(page: Page, path: string): Promise<Record<string, string>[]> {
-  const entries: Record<string, string>[] = [];
-  let cursor: string | null = null;
-  do {
-    const response = await api(page, 'GET', `/api/v1/${path}?per_page=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`);
-    expect(response.status(), await response.text()).toBe(200);
-    const body = (await response.json()) as { data: Record<string, string>[]; meta: { next_cursor: string | null } };
-    entries.push(...body.data);
-    cursor = body.meta.next_cursor;
-  } while (cursor !== null);
-  return entries;
-}
-
 /** Deletes the entries of a catalog whose name (or label) starts with the prefix of this test, whatever it left. */
-async function removeEntries(page: Page, path: string, field: 'name' | 'label'): Promise<void> {
-  for (const entry of (await allEntries(page, path)).filter((item) => item[field]!.startsWith(prefix()))) {
-    const removed = await api(page, 'DELETE', `/api/v1/${path}/${entry.id}`);
-    expect(removed.status(), await removed.text()).toBe(200);
-  }
-}
+const removeEntries = (page: Page, path: string, field: 'name' | 'label') => removeCatalogEntries(page, path, field, prefix());
 
 /** Puts `text` into the focused field instead of what is there. */
 async function replaceText(page: Page, text: string): Promise<void> {

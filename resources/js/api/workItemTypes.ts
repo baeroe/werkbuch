@@ -6,7 +6,12 @@ import type { WorkItemType } from '@/types';
 import type { Page, PageArgs } from './client';
 import { del, getPage, saveOne } from './http';
 
-export type WorkItemTypeInput = Omit<WorkItemType, 'id' | 'archived_at'> & { id?: string; archived_at?: string | null };
+/** The properties go in their order; the server takes the position from it (an entry's `position` is not read). */
+export type WorkItemTypeInput = Omit<WorkItemType, 'id' | 'archived_at' | 'properties'> & {
+  id?: string;
+  archived_at?: string | null;
+  properties: Pick<WorkItemType['properties'][number], 'property_id' | 'required'>[];
+};
 
 /** All types, archived ones included (items of an archived type still show it). */
 export function listWorkItemTypes(args: PageArgs = {}): Promise<Page<WorkItemType>> {

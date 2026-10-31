@@ -313,6 +313,28 @@ export async function api(page: Page, method: string, path: string, body?: unkno
   });
 }
 
+/** Every entry of a catalog (`labels`, `properties` …), following the cursor to the last page, so "not in the list" never passes on a first page. */
+export async function allEntries(page: Page, path: string): Promise<Record<string, unknown>[]> {
+  const entries: Record<string, unknown>[] = [];
+  let cursor: string | null = null;
+  do {
+    const response = await api(page, 'GET', `/api/v1/${path}?per_page=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`);
+    expect(response.status(), await response.text()).toBe(200);
+    const body = (await response.json()) as { data: Record<string, unknown>[]; meta: { next_cursor: string | null } };
+    entries.push(...body.data);
+    cursor = body.meta.next_cursor;
+  } while (cursor !== null);
+  return entries;
+}
+
+/** Deletes the entries of a catalog whose name (or label) starts with `prefix`, whatever a spec left (cleanup in `finally`). */
+export async function removeCatalogEntries(page: Page, path: string, field: 'name' | 'label', prefix: string): Promise<void> {
+  for (const entry of (await allEntries(page, path)).filter((item) => String(item[field]).startsWith(prefix))) {
+    const removed = await api(page, 'DELETE', `/api/v1/${path}/${String(entry.id)}`);
+    expect(removed.status(), await removed.text()).toBe(200);
+  }
+}
+
 /**
  * Opens the drawer of the top bar on the phone, where the sidebar lives; on the desktop the sidebar is there already.
  * `backwards` tabs up to the menu from a place further down the page.

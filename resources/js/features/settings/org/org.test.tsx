@@ -149,6 +149,8 @@ describe('OrgSettings', () => {
       ['Allgemein', '/settings/general'],
       ['Personen', '/settings/people'],
       ['Bots', '/settings/bots'],
+      ['Typen', '/settings/types'],
+      ['Properties', '/settings/properties'],
       ['Labels', '/settings/labels'],
       ['Relationstypen', '/settings/relation-types'],
       ['Resolutions', '/settings/resolutions'],

@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { AlertDialog } from './AlertDialog';
 
@@ -55,6 +55,28 @@ describe('AlertDialog', () => {
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
     expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it('gives the focus to finalFocus when it closes', async () => {
+    const user = userEvent.setup();
+    function Harness() {
+      const [open, setOpen] = useState(true);
+      const next = useRef<HTMLButtonElement>(null);
+      return (
+        <>
+          <button type="button" ref={next}>
+            Nächste Zeile
+          </button>
+          <AlertDialog open={open} onOpenChange={setOpen} title="Property löschen?" description="Die Werte verschwinden." confirmLabel="Löschen" onConfirm={() => setOpen(false)} finalFocus={next} />
+        </>
+      );
+    }
+    render(<Harness />);
+    await screen.findByRole('alertdialog');
+
+    await user.click(screen.getByRole('button', { name: 'Löschen' }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Nächste Zeile' })));
   });
 
   it('takes a custom label for the cancel button', async () => {
