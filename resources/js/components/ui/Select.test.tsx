@@ -61,17 +61,25 @@ describe('Select', () => {
       </>,
     );
     const trigger = screen.getByRole('combobox', { name: /Status/ });
+    // open, and wait until the list (its popup or an option in it) has the focus: keys before that go to the field (a
+    // slow run on CI). The list of the first round may still be there, fading: only the list of the open field counts.
+    const open = async () => {
+      await user.click(trigger);
+      await waitFor(() => expect(trigger.getAttribute('aria-expanded')).toBe('true'));
+      await waitFor(() => {
+        const focused = document.activeElement;
+        expect(screen.getAllByRole('listbox').some((list) => focused !== null && (list.contains(focused) || focused.contains(list)))).toBe(true);
+      });
+    };
 
-    await user.click(trigger);
-    await screen.findByRole('listbox');
+    await open();
     await user.keyboard('{ArrowDown}{Enter}');
     expect(document.activeElement).toBe(trigger);
     await user.tab();
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Weiter' }));
 
     // closing without a choice gives it back too
-    await user.click(trigger);
-    await screen.findByRole('listbox');
+    await open();
     await user.keyboard('{Escape}');
     expect(document.activeElement).toBe(trigger);
     expect(fading).toHaveBeenCalled();
