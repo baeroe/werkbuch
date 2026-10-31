@@ -6,7 +6,10 @@ use Tests\Feature\Access\MatrixWorld;
  * The route matrix (RouteMatrixTest): every route below /api/v1 with its method and URI, the URI with the placeholders
  * of the route ({user}, {token}, …). A row with placeholders brings their values from the MatrixWorld:
  * `'params' => fn (MatrixWorld $w) => ['user' => $w->target->id]`; a placeholder without a value fails the test. Rows
- * with `'session' => true` only work from the session of the interface (P6): every token gets 403 session_required.
+ * with `'session' => true` only work from the session of the interface (P6): every token gets 403 session_required. A
+ * row with a `'body'` sends it along; `'session' => 'action'` means the action itself (not the route) wants the session
+ * for what the body asks, so a token with the right ability gets 403 session_required there (and one without it the
+ * usual 403 forbidden). Several rows may share one route.
  */
 
 return [
@@ -14,6 +17,7 @@ return [
     'change organization' => ['PATCH', '/api/v1/organization'],
     'list accounts' => ['GET', '/api/v1/users'],
     'change an account' => ['PATCH', '/api/v1/users/{user}', 'params' => fn (MatrixWorld $w) => ['user' => $w->target->id]],
+    'change the e-mail address of an account' => ['PATCH', '/api/v1/users/{user}', 'params' => fn (MatrixWorld $w) => ['user' => $w->target->id], 'body' => ['email' => 'matrix-new@example.com'], 'session' => 'action'],
     'set the role of an account' => ['PUT', '/api/v1/users/{user}/role', 'params' => fn (MatrixWorld $w) => ['user' => $w->target->id]],
     'deactivate an account' => ['POST', '/api/v1/users/{user}/deactivate', 'params' => fn (MatrixWorld $w) => ['user' => $w->target->id]],
     'reactivate an account' => ['POST', '/api/v1/users/{user}/reactivate', 'params' => fn (MatrixWorld $w) => ['user' => $w->target->id]],

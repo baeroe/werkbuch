@@ -194,6 +194,41 @@ it('lets only org admins change an e-mail address, and keeps it in lower case', 
         ->and(userUpdates($lene))->toBe([['email' => ['old' => 'lene@example.com', 'new' => 'lene.lind@example.com']]]);
 });
 
+it('changes an e-mail address only from the session, never with a token (P6)', function () {
+    $lene = User::factory()->create(['email' => 'lene@example.com', 'name' => 'Lene']);
+    $this->withToken(apiToken(User::factory()->admin()->create(), ['read', 'write']));
+
+    $this->patchJson("/api/v1/users/{$lene->id}", ['email' => 'mallory@example.com'])
+        ->assertForbidden()->assertHeader('Content-Type', 'application/problem+json')->assertJsonPath('reason', 'session_required');
+    $this->patchJson("/api/v1/users/{$lene->id}", ['name' => 'Lene Lind', 'email' => ' Lene@Example.com '])
+        ->assertOk()->assertJsonPath('data.name', 'Lene Lind')->assertJsonPath('data.email', 'lene@example.com');
+
+    expect($lene->fresh()?->email)->toBe('lene@example.com')
+        ->and(userUpdates($lene))->toBe([['name' => ['old' => 'Lene', 'new' => 'Lene Lind']]]);
+});
+
+it('refuses the token of the default bot an e-mail change as well', function () {
+    $lene = User::factory()->create(['email' => 'lene@example.com']);
+
+    $this->withToken(apiToken(User::defaultBot(), ['write']))->patchJson("/api/v1/users/{$lene->id}", ['email' => 'mallory@example.com'])
+        ->assertForbidden()->assertJsonPath('reason', 'session_required');
+
+    expect($lene->fresh()?->email)->toBe('lene@example.com');
+});
+
+it('takes the own profile back as a whole and checks the rights only for what really changes', function () {
+    $lene = User::factory()->create(['name' => 'Lene', 'email' => 'lene@example.com']);
+    $this->actingAs($lene);
+    $profile = collect($this->getJson('/api/v1/users')->json('data'))->firstWhere('id', $lene->id);
+
+    $this->patchJson("/api/v1/users/{$lene->id}", [...array_diff_key($profile, ['locale' => true, 'timezone' => true]), 'name' => 'Lene Lind'])
+        ->assertOk()->assertJsonPath('data.name', 'Lene Lind');
+    $this->patchJson("/api/v1/users/{$lene->id}", ['email' => 'LENE@example.com'])->assertOk();
+    $this->patchJson("/api/v1/users/{$lene->id}", ['email' => 'lene.lind@example.com'])->assertForbidden()->assertJsonPath('reason', 'forbidden');
+
+    expect(userUpdates($lene))->toBe([['name' => ['old' => 'Lene', 'new' => 'Lene Lind']]]);
+});
+
 it('refuses an e-mail address that is invalid or taken', function (mixed $email, string $key) {
     User::factory()->create(['email' => 'erik@example.com']);
     $lene = User::factory()->create();

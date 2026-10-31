@@ -14,7 +14,7 @@ use Tests\Feature\Access\MatrixWorld;
 const ROUTE_MATRIX_TOKENS = ['none' => [], 'read' => ['read'], 'write' => ['write'], 'read+write' => ['read', 'write']];
 
 /**
- * @return array<string, array{0: string, 1: string, params?: Closure(MatrixWorld): array<string, string>, session?: bool}>
+ * @return array<string, array{0: string, 1: string, params?: Closure(MatrixWorld): array<string, string>, body?: array<string, mixed>, session?: bool|'action'}>
  */
 function routeMatrixRows(): array
 {
@@ -44,14 +44,16 @@ it('opens each route only to tokens with the right ability', function (array $ro
     $uri = routeMatrixUri($path, isset($row['params']) ? ($row['params'])($w) : []);
     $client = $token === 'none' ? $this : $this->withToken(apiToken($w->account('org_admin'), ROUTE_MATRIX_TOKENS[$token]));
 
-    $response = $client->json($method, $uri);
+    $response = $client->json($method, $uri, $row['body'] ?? []);
     $context = "{$method} {$uri} with {$token}: {$response->getContent()}";
     $needed = in_array($method, ['GET', 'HEAD'], true) ? 'read' : 'write';
 
     if ($token === 'none') {
         $response->assertUnauthorized()->assertHeader('Content-Type', 'application/problem+json');
-    } elseif ($row['session'] ?? false) {
+    } elseif (($row['session'] ?? false) === true) {
         $response->assertForbidden()->assertJsonPath('reason', 'session_required');
+    } elseif (in_array($needed, ROUTE_MATRIX_TOKENS[$token], true) && ($row['session'] ?? false) === 'action') {
+        $response->assertForbidden()->assertHeader('Content-Type', 'application/problem+json')->assertJsonPath('reason', 'session_required');
     } elseif (in_array($needed, ROUTE_MATRIX_TOKENS[$token], true)) {
         expect($response->getStatusCode())->not->toBeIn([401, 403, 404], $context)->toBeLessThan(500, $context);
     } else {
@@ -67,7 +69,7 @@ it('fills the placeholders of a row and fails on one without a value', function 
 });
 
 it('has a row for every REST route (new routes need one)', function () {
-    $covered = collect(routeMatrixRows())->map(fn (array $row) => $row[0].' '.ltrim($row[1], '/'))->sort()->values()->all();
+    $covered = collect(routeMatrixRows())->map(fn (array $row) => $row[0].' '.ltrim($row[1], '/'))->unique()->sort()->values()->all();
 
     $routes = collect(Route::getRoutes()->getRoutes())
         ->filter(fn (RoutingRoute $route) => str_starts_with($route->uri(), 'api/v1/'))

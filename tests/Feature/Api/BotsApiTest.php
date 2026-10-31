@@ -122,6 +122,17 @@ it('lets a bot change its own name, but not what only org admins set', function 
     $this->patchJson("/api/v1/users/{$kira->id}", ['owner_id' => null])->assertForbidden();
 });
 
+it('lets a bot send its description and responsible person back unchanged', function () {
+    $owner = User::factory()->create();
+    $kira = User::factory()->bot($owner)->create(['name' => 'Kira', 'description' => 'Sortiert Tickets.']);
+    $this->withToken(apiToken($kira, ['write']));
+
+    $this->patchJson("/api/v1/users/{$kira->id}", ['name' => 'Kira 2', 'description' => ' Sortiert Tickets. ', 'owner_id' => strtoupper($owner->id)])
+        ->assertOk()->assertJsonPath('data.name', 'Kira 2');
+
+    expect(Event::query()->where('type', EventType::UserUpdated)->sole()->changes)->toBe(['name' => ['old' => 'Kira', 'new' => 'Kira 2']]);
+});
+
 it('gives bots no e-mail address', function () {
     $kira = User::factory()->bot()->create();
 
