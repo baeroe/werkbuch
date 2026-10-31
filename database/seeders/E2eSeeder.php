@@ -4,13 +4,25 @@ namespace Database\Seeders;
 
 use App\Access\OrgRole;
 use App\Access\RoleAssignments;
+use App\Actions\Labels\DeleteLabel;
 use App\Actions\Projects\PurgeProject;
+use App\Actions\Properties\DeleteProperty;
+use App\Actions\RelationTypes\DeleteRelationType;
+use App\Actions\Resolutions\DeleteResolution;
+use App\Actions\Workflows\DeleteWorkflow;
+use App\Actions\WorkItemTypes\DeleteWorkItemType;
 use App\Enums\AccountType;
 use App\Enums\Locale;
 use App\Models\Invitation;
+use App\Models\Label;
 use App\Models\Organization;
 use App\Models\Project;
+use App\Models\Property;
+use App\Models\RelationType;
+use App\Models\Resolution;
 use App\Models\User;
+use App\Models\Workflow;
+use App\Models\WorkItemType;
 use App\Support\Actor;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -19,8 +31,8 @@ use RuntimeException;
 
 /**
  * The demo data plus the accounts of the Playwright tests (e2e/), set back to their start state on every run, without
- * the open invitations and the projects earlier runs left behind. The organization speaks English here (the specs read the English
- * texts); the demo data alone keep German. Never for production.
+ * the open invitations, the projects and the catalog entries earlier runs left behind. The organization speaks English
+ * here (the specs read the English texts); the demo data alone keep German. Never for production.
  */
 class E2eSeeder extends Seeder
 {
@@ -33,7 +45,7 @@ class E2eSeeder extends Seeder
 
     public const VARIANTS = ['desktop-light', 'desktop-dark', 'phone-light', 'phone-dark'];
 
-    /** How the names of the projects the specs create begin; every run starts without them. */
+    /** How the names of the projects and of the catalog entries the specs create begin; every run starts without them. */
     public const PROJECT_PREFIX = 'E2E ';
 
     /**
@@ -70,6 +82,8 @@ class E2eSeeder extends Seeder
             PurgeProject::run(Actor::automation('e2e_reset'), $project);
         });
 
+        $this->removeCatalogEntries();
+
         $this->person('e2e@example.com', 'Erik Ende', OrgRole::Admin);
 
         foreach (self::VARIANTS as $variant) {
@@ -85,6 +99,24 @@ class E2eSeeder extends Seeder
                 'two_factor_confirmed_at' => Carbon::now(),
             ]);
         }
+    }
+
+    /**
+     * The catalog entries earlier runs created (named or labelled "E2E …"), through the delete actions so that the
+     * rules apply as in the app. After the projects: their workflow and types are free by then. Types first, as they
+     * hold properties; none of them is a default (the specs never change those).
+     */
+    private function removeCatalogEntries(): void
+    {
+        $actor = Actor::automation('e2e_reset');
+        $like = self::PROJECT_PREFIX.'%';
+
+        WorkItemType::query()->where('name', 'like', $like)->each(fn (WorkItemType $type) => DeleteWorkItemType::run($actor, $type));
+        Property::query()->where('label', 'like', $like)->each(fn (Property $property) => DeleteProperty::run($actor, $property));
+        Workflow::query()->where('name', 'like', $like)->each(fn (Workflow $workflow) => DeleteWorkflow::run($actor, $workflow));
+        Label::query()->where('name', 'like', $like)->each(fn (Label $label) => DeleteLabel::run($actor, $label));
+        RelationType::query()->where('name', 'like', $like)->each(fn (RelationType $type) => DeleteRelationType::run($actor, $type));
+        Resolution::query()->where('label', 'like', $like)->each(fn (Resolution $resolution) => DeleteResolution::run($actor, $resolution));
     }
 
     /**

@@ -4,15 +4,22 @@ use App\Access\OrgRole;
 use App\Access\RoleIndex;
 use App\Access\Visibility;
 use App\Enums\AccountType;
+use App\Models\Event;
 use App\Models\Favorite;
+use App\Models\Label;
 use App\Models\Organization;
 use App\Models\PersonalAccessToken;
 use App\Models\Project;
 use App\Models\ProjectMember;
+use App\Models\Property;
+use App\Models\RelationType;
 use App\Models\User;
+use App\Models\Workflow;
+use App\Models\WorkItemType;
 use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\DemoSeeder;
 use Database\Seeders\E2eSeeder;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
 // the default bot of the migration is always there: the tests read it by its flag
@@ -28,6 +35,18 @@ function clickdummySeed(): array
     preg_match_all("/handle: '(\w+)',\s*email: null,\s*org_role: '(\w+)',.*?description: '([^']+)'/s", $source, $bots, PREG_SET_ORDER);
 
     return compact('people', 'projects', 'members', 'bots');
+}
+
+/** The catalog of the clickdummy (src/api/seed/config.ts), the keys and names the Demo seeders have to reproduce. */
+function clickdummyCatalog(): array
+{
+    $source = (string) file_get_contents(repo_path('prototypes/clickdummy/src/api/seed/config.ts'));
+
+    preg_match_all("/^\s+key: '(\w+)',\s*label: '([^']+)'/m", $source, $properties, PREG_SET_ORDER);
+    preg_match_all("/\{ id: 'lb_\w+', name: '([^']+)', color: '(\w+)' \}/", $source, $labels, PREG_SET_ORDER);
+    preg_match_all("/\{ id: 'rt_\w+', name: '([^']+)', outward_label: '([^']+)', inward_label: (?:'([^']+)'|null)/", $source, $relations, PREG_SET_ORDER);
+
+    return compact('properties', 'labels', 'relations');
 }
 
 it('seeds the people of the clickdummy with their organization roles', function () {
@@ -108,6 +127,106 @@ it('keeps OPS private: Ida, Theo and Lene do not see it, Ida still reads WEB and
     }
 
     expect(Visibility::roleIn(User::where('handle', 'ida')->sole(), Project::where('identifier', 'APP')->sole())?->value)->toBe('viewer');
+});
+
+it('seeds the catalog of the clickdummy', function () {
+    $this->seed(DemoSeeder::class);
+    $seed = clickdummyCatalog();
+
+    expect($seed['properties'])->toHaveCount(9)->and($seed['labels'])->toHaveCount(8)->and($seed['relations'])->toHaveCount(4);
+
+    foreach ($seed['properties'] as [, $key, $label]) {
+        expect(Property::where('key', $key)->sole()->label)->toBe($label);
+    }
+
+    foreach ($seed['labels'] as [, $name, $color]) {
+        expect(Label::where('name', $name)->sole()->color->value)->toBe($color);
+    }
+
+    foreach ($seed['relations'] as $match) {
+        $relation = RelationType::where('name', $match[1])->sole();
+
+        expect([$relation->outward_label, $relation->inward_label])->toBe([$match[2], $match[3] ?? null]);
+    }
+
+    expect(Property::count())->toBe(9)->and(Label::count())->toBe(8)->and(RelationType::count())->toBe(4)
+        ->and(RelationType::whereNull('built_in')->sole()->name)->toBe('testet');
+});
+
+it('seeds the workflows with the Agentur-Freigabe of the clickdummy', function () {
+    $this->seed(DemoSeeder::class);
+    $standard = Workflow::default();
+    $agency = Workflow::where('name', 'Agentur-Freigabe')->with(['states', 'transitions'])->sole();
+    $names = $agency->states->pluck('name', 'id');
+    $moves = $agency->transitions->map(fn ($transition) => $names[$transition->from_state_id].' > '.$names[$transition->to_state_id])->sort()->values()->all();
+
+    expect(Workflow::orderBy('id')->pluck('name')->all())->toBe(['Standard', 'Agentur-Freigabe'])
+        ->and($standard->name)->toBe('Standard')
+        ->and($standard->description)->toBe('Der Standard-Workflow: Jeder Status ist von überall erreichbar.')
+        ->and([$agency->is_default, $agency->is_free, $agency->description])->toBe([false, false, 'Mit interner Prüfung und Kundenfreigabe vor dem Abschluss.'])
+        ->and($names->values()->all())->toBe(['Backlog', 'Todo', 'In Progress', 'Review', 'Kundenfreigabe', 'Done', 'Cancelled'])
+        ->and($agency->states->pluck('category')->map->value->all())->toBe(['backlog', 'unstarted', 'started', 'started', 'started', 'completed', 'canceled'])
+        ->and($agency->states->pluck('icon')->map->value->all())->toBe(['dashed', 'circle', 'half', 'three-quarter', 'pause', 'check', 'cross'])
+        ->and($names[$agency->initial_state_id])->toBe('Backlog')
+        ->and($agency->transitions)->toHaveCount(14)
+        ->and($moves)->toContain('Review > Kundenfreigabe', 'Done > Todo', 'Cancelled > Backlog')->not->toContain('Backlog > Done')
+        ->and($agency->graph()->issues())->toBe([])
+        ->and($standard->graph()->issues())->toBe([]);
+});
+
+it('seeds the types with their properties and the German texts of the clickdummy', function () {
+    $this->seed(DemoSeeder::class);
+    $asks = fn (string $name) => WorkItemType::where('name', $name)->sole()->typeProperties()->orderBy('position')->with('property')->get()
+        ->mapWithKeys(fn ($row) => [$row->property->key => $row->required])->all();
+    $wish = WorkItemType::where('name', 'Kundenwunsch')->sole();
+
+    expect(WorkItemType::orderBy('id')->pluck('name')->all())->toBe(['Task', 'Bug', 'Epic', 'Kundenwunsch'])
+        ->and($asks('Task'))->toBe(['customer' => false, 'effort' => false])
+        ->and($asks('Bug'))->toBe(['customer' => false, 'effort' => false, 'environment' => true, 'browser' => false, 'steps' => false])
+        ->and($asks('Epic'))->toBe(['target_quarter' => false, 'customer' => false])
+        ->and($asks('Kundenwunsch'))->toBe(['customer' => true, 'ticket_url' => false, 'approved' => false, 'reviewer' => false])
+        ->and([$wish->icon, $wish->tone->value, $wish->is_epic])->toBe(['message-square-heart', 'plum', false])
+        ->and(WorkItemType::where('name', 'Bug')->sole()->description)->toBe('Ein Fehler, der behoben werden muss. Die Umgebung, in der er auftritt, ist Pflicht.')
+        ->and(WorkItemType::where('name', 'Epic')->sole()->is_epic)->toBeTrue()
+        ->and(Property::where('key', 'effort')->sole()->label)->toBe('Aufwand (h)');
+});
+
+it('seeds the options and the default of the properties', function () {
+    $this->seed(DemoSeeder::class);
+    $options = fn (string $key) => Property::where('key', $key)->sole()->options->map(fn ($option) => [$option->label, $option->color->value])->all();
+
+    expect($options('customer'))->toBe([['Studio Nordlicht', 'sky'], ['Hafenkontor', 'ochre'], ['Gärtnerei Moos', 'moss']])
+        ->and($options('environment'))->toBe([['Produktion', 'plum'], ['Staging', 'ochre'], ['Lokal', 'slate']])
+        ->and($options('target_quarter'))->toBe([['Q4 2026', 'sky'], ['Q1 2027', 'moss'], ['Q2 2027', 'sand']])
+        ->and(Property::where('key', 'approved')->sole()->default_value)->toBeFalse()
+        ->and(Property::where('key', 'effort')->sole()->settings)->toBe(['decimals' => 1])
+        ->and(Property::where('key', 'ticket_url')->sole()->field_type->value)->toBe('url')
+        ->and(Property::where('key', 'reviewer')->sole()->field_type->value)->toBe('member')
+        ->and(Property::where('key', 'steps')->sole()->field_type->value)->toBe('rich_text');
+});
+
+it('gives WEB, APP and OPS their workflow and types', function () {
+    $this->seed(DemoSeeder::class);
+    $of = fn (string $identifier) => Project::where('identifier', $identifier)->with('workflow')->sole();
+
+    foreach (['WEB' => ['Standard', ['Task', 'Bug', 'Epic']], 'OPS' => ['Standard', ['Task', 'Bug', 'Epic']], 'APP' => ['Agentur-Freigabe', ['Task', 'Bug', 'Epic', 'Kundenwunsch']]] as $identifier => [$workflow, $types]) {
+        expect($of($identifier)->workflow->name)->toBe($workflow)
+            ->and($of($identifier)->types->pluck('name')->all())->toBe($types)
+            ->and($of($identifier)->default_type_id)->toBe(WorkItemType::where('name', 'Task')->sole()->id);
+    }
+});
+
+it('seeds the catalog again without duplicates', function () {
+    $this->seed(DemoSeeder::class);
+    $counts = fn () => [Workflow::count(), WorkItemType::count(), Property::count(), Label::count(), RelationType::count(), DB::table('workflow_states')->count(), DB::table('workflow_transitions')->count(), DB::table('property_options')->count(), DB::table('type_properties')->count(), DB::table('project_types')->count()];
+    $ids = fn () => [Workflow::orderBy('name')->pluck('id')->all(), WorkItemType::orderBy('name')->pluck('id')->all(), Property::orderBy('key')->pluck('id')->all(), DB::table('property_options')->orderBy('id')->pluck('id')->all(), DB::table('workflow_states')->orderBy('id')->pluck('id')->all()];
+    [$before, $idsBefore, $events] = [$counts(), $ids(), Event::count()];
+
+    $this->seed(DemoSeeder::class);
+
+    expect($counts())->toBe($before)->and($before)->toBe([2, 4, 9, 8, 4, 13, 14, 9, 13, 10])
+        ->and($ids())->toBe($idsBefore)
+        ->and(Event::count())->toBe($events);
 });
 
 it('seeds the project favorites with the positions of the clickdummy', function () {

@@ -14,8 +14,9 @@ use Illuminate\Database\Seeder;
 
 /**
  * The three projects of the clickdummy with their members (src/api/seed/people.ts, the table „Demo-Rollen“ of its
- * README). Ida and Theo are not in OPS, which is private: the visibility tests rely on that. For now each one has the
- * default workflow, every active type and the first (Task) as the default type, as CreateProject gives them.
+ * README). Ida and Theo are not in OPS, which is private: the visibility tests rely on that. WEB and OPS work with the
+ * default workflow and Task, Bug and Epic; APP with „Agentur-Freigabe“ and additionally „Kundenwunsch“. Task is the
+ * default type of all three. Needs the CatalogSeeder before it.
  */
 class ProjectsSeeder extends Seeder
 {
@@ -29,6 +30,8 @@ class ProjectsSeeder extends Seeder
                 'description' => 'Neuer Webauftritt: Struktur, Gestaltung, Technik und der Umzug auf den neuen Server.',
                 'lead' => 'ida',
                 'visibility' => ProjectVisibility::Public,
+                'workflow' => 'Standard',
+                'types' => ['Task', 'Bug', 'Epic'],
                 'members' => ['mara' => ProjectRole::Admin, 'ida' => ProjectRole::Admin, 'jonas' => ProjectRole::Member, 'lene' => ProjectRole::Member, 'kira' => ProjectRole::Member, 'theo' => ProjectRole::Viewer],
             ],
             'APP' => [
@@ -36,6 +39,8 @@ class ProjectsSeeder extends Seeder
                 'description' => 'Die App für Bestellungen und Rückfragen. Version 2.0 ist in der Beta.',
                 'lead' => 'theo',
                 'visibility' => ProjectVisibility::Public,
+                'workflow' => 'Agentur-Freigabe',
+                'types' => ['Task', 'Bug', 'Epic', 'Kundenwunsch'],
                 'members' => ['theo' => ProjectRole::Admin, 'mara' => ProjectRole::Member, 'jonas' => ProjectRole::Member, 'lene' => ProjectRole::Member],
             ],
             'OPS' => [
@@ -43,12 +48,15 @@ class ProjectsSeeder extends Seeder
                 'description' => 'Server, Betrieb und Backups. Nur für das Technik-Team.',
                 'lead' => 'jonas',
                 'visibility' => ProjectVisibility::Private,
+                'workflow' => 'Standard',
+                'types' => ['Task', 'Bug', 'Epic'],
                 'members' => ['jonas' => ProjectRole::Admin, 'mara' => ProjectRole::Member, 'kira' => ProjectRole::Member],
             ],
         ];
 
         $account = fn (string $handle): User => User::query()->where('handle', $handle)->sole();
-        $types = WorkItemType::query()->whereNull('archived_at')->orderBy('id')->pluck('id')->all();
+        $workflows = Workflow::query()->pluck('id', 'name');
+        $types = WorkItemType::query()->pluck('id', 'name');
 
         foreach ($projects as $identifier => $data) {
             $project = Project::updateOrCreate(['identifier' => $identifier], [
@@ -56,10 +64,10 @@ class ProjectsSeeder extends Seeder
                 'description' => $data['description'],
                 'lead_id' => $account($data['lead'])->id,
                 'visibility' => $data['visibility'],
-                'workflow_id' => Workflow::default()->id,
-                'default_type_id' => $types[0],
+                'workflow_id' => $workflows[$data['workflow']],
+                'default_type_id' => $types['Task'],
             ]);
-            $project->types()->sync($types);
+            $project->types()->sync(array_map(fn (string $name): string => $types[$name], $data['types']));
 
             foreach ($data['members'] as $handle => $role) {
                 $roles->setProjectRole($account($handle), $project, $role);
