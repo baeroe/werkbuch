@@ -42,11 +42,16 @@ class WorkItemFactory extends Factory
     }
 
     /**
-     * The number (`++next_number` of the project) and the rank (after the highest of the project), unless given.
+     * The number (`++next_number` of the project, written at once, so `make()` uses one up too) and the rank (after
+     * the highest of the project), unless given. A batch (`count(n)`) is made before any of it is stored, so the ranks
+     * it gave are kept per project here: the stored maximum alone would give every item of the batch the same rank.
      */
     public function configure(): static
     {
-        return $this->afterMaking(function (WorkItem $item) {
+        /** @var array<string, string> $given the highest rank per project made by this factory */
+        $given = [];
+
+        return $this->afterMaking(function (WorkItem $item) use (&$given) {
             if ($item->getAttribute('number') === null) {
                 $project = Project::query()->findOrFail($item->project_id);
                 $project->increment('next_number');
@@ -54,10 +59,18 @@ class WorkItemFactory extends Factory
             }
 
             if ($item->getAttribute('rank') === null) {
-                $last = WorkItem::query()->where('project_id', $item->project_id)->max('rank');
-                $item->rank = Rank::between(is_string($last) ? $last : null, null);
+                $stored = WorkItem::query()->where('project_id', $item->project_id)->max('rank');
+                $item->rank = Rank::between(self::higher(is_string($stored) ? $stored : null, $given[$item->project_id] ?? null), null);
             }
+
+            $given[$item->project_id] = self::higher($item->rank, $given[$item->project_id] ?? null) ?? $item->rank;
         });
+    }
+
+    /** The higher of two ranks, byte by byte (as `ascii_bin` compares them). */
+    private static function higher(?string $a, ?string $b): ?string
+    {
+        return $a === null || ($b !== null && strcmp($b, $a) > 0) ? $b : $a;
     }
 
     /**

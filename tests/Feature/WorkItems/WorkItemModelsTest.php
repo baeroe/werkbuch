@@ -77,6 +77,28 @@ it('ranks a new item after the last one of its project', function () {
         ->and(WorkItem::factory()->create()->number)->toBe(1);
 });
 
+it('gives the items of one batch rising ranks and numbers, per project', function () {
+    [$web, $app] = Project::factory()->count(2)->create()->all();
+    $rising = function (array $ranks) {
+        for ($i = 1; $i < count($ranks); $i++) {
+            expect(strcmp($ranks[$i - 1], $ranks[$i]))->toBeLessThan(0, implode(', ', $ranks));
+        }
+    };
+
+    $first = WorkItem::factory()->for($web)->count(3)->create();
+    $other = WorkItem::factory()->for($app)->count(2)->create();
+    $second = WorkItem::factory()->for($web)->count(2)->create();
+
+    $rising([...$first->pluck('rank')->all(), ...$second->pluck('rank')->all()]);
+    $rising($other->pluck('rank')->all());
+
+    expect($first->pluck('number')->all())->toBe([1, 2, 3])
+        ->and($second->pluck('number')->all())->toBe([4, 5])
+        ->and($other->pluck('number')->all())->toBe([1, 2])
+        // the other project starts where an empty project starts
+        ->and($other->first()?->rank)->toBe($first->first()?->rank);
+});
+
 it('counts closed children and open blockers', function () {
     $computed = fn (WorkItem $item) => WorkItem::query()->withComputed()->findOrFail($item->id);
     $state = fn (WorkItem $item, StateCategory $category) => $item->update([
