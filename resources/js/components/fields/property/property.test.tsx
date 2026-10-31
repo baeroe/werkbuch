@@ -677,6 +677,9 @@ describe('DateField', () => {
   });
 
   it('refuses a start after the due date at the field', async () => {
+    // on the due date itself, so it does not read as overdue
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-31T10:00:00.000Z'));
     const user = userEvent.setup();
     const dated = item({}, { start_date: '2026-10-27', due_date: '2026-10-31' });
     renderWith(
