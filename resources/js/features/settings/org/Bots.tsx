@@ -53,12 +53,12 @@ export function handleFrom(name: string): string {
 /* ------------------------------------------------------------------- bot dialog */
 
 /**
- * The people who can be responsible: the active ones, and the one responsible now even when deactivated meanwhile, so
- * opening the dialog never loses the value (like `zoneOptions`).
+ * The people who can be responsible: the active ones, and the chosen one and the one the bot had even when deactivated
+ * meanwhile, so the dialog never loses the value and a switch away can be taken back (like `zoneOptions`).
  */
-function ownerOptions(people: User[], current: string | null) {
+function ownerOptions(people: User[], kept: (string | null)[]) {
   return people
-    .filter((person) => person.disabled_at === null || person.id === current)
+    .filter((person) => person.disabled_at === null || kept.includes(person.id))
     .map((person) => ({ value: person.id, label: person.name, icon: <Avatar user={person} size="sm" decorative /> }));
 }
 
@@ -158,7 +158,7 @@ function BotDialog({ open, onOpenChange, bot, people, meId }: BotDialogProps) {
           value={owner}
           placeholder={t('settings.bots.dialog.owner_placeholder')}
           onValueChange={setOwner}
-          options={ownerOptions(people, owner)}
+          options={ownerOptions(people, [owner, bot?.owner_id ?? null])}
         />
       )}
     </FormDialog>

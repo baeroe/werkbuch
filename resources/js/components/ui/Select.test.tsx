@@ -77,7 +77,43 @@ describe('Select', () => {
     expect(fading).toHaveBeenCalled();
   });
 
-    it('shows the icon of the chosen option, marks it in the list and leaves a disabled option out of reach', async () => {
+  it('leaves the focus on the next field when Tab leaves the open list without a choice', async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn();
+    render(
+      <>
+        <Harness onValueChange={onValueChange} />
+        <button type="button">Weiter</button>
+      </>,
+    );
+
+    await user.click(screen.getByRole('combobox', { name: /Status/ }));
+    await screen.findByRole('listbox');
+    await user.keyboard('{ArrowDown}');
+    await user.tab();
+
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Weiter' }));
+    expect(onValueChange).not.toHaveBeenCalled();
+  });
+
+  it('can be read but not changed while it is read-only, and keeps the focus', async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn();
+    render(<Harness start="todo" readOnly onValueChange={onValueChange} />);
+    const trigger = screen.getByRole('combobox', { name: /Status/ });
+    expect(trigger.getAttribute('aria-readonly')).toBe('true');
+
+    await user.tab();
+    await user.keyboard('{Enter}{ArrowDown}{Enter}{Escape}');
+
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
+    expect(onValueChange).not.toHaveBeenCalled();
+    expect(trigger.textContent).toContain('Todo');
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it('shows the icon of the chosen option, marks it in the list and leaves a disabled option out of reach', async () => {
     const user = userEvent.setup();
     const onValueChange = vi.fn();
     render(<Harness start="todo" onValueChange={onValueChange} keepSide />);

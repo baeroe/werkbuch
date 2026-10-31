@@ -5,7 +5,7 @@
  */
 
 import { ImagePlus } from 'lucide-react';
-import { useId, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import { Button } from '@/components/ui/Button';
 import { describedBy, Field } from '@/components/ui/Field';
 import { t } from '@/lib/i18n';
@@ -55,6 +55,10 @@ export function ImageField({ label, preview, hasImage, hint, error, disabled, on
   const [unreadable, setUnreadable] = useState(false);
   // the server's word on the picture before this one: it is not about the new choice
   const [settled, setSettled] = useState<string | undefined>(undefined);
+  // a new call cleared the word: the same word again is about the new picture
+  useEffect(() => {
+    if (error === undefined) setSettled(undefined);
+  }, [error]);
   const shown = unreadable ? t('settings.frame.image.unreadable') : error !== settled ? error : undefined;
   const labelId = `${id}-label`;
 

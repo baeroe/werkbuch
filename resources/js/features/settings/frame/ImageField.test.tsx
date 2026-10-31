@@ -131,6 +131,17 @@ describe('ImageField', () => {
     expect(screen.queryByText('Kein Bild.')).toBeNull();
   });
 
+  it('shows the same word of the server again after a new call has cleared it', async () => {
+    const { rerender } = render(<ImageField label="Logo" preview={null} hasImage error="Zu groß." onChange={vi.fn()} />);
+    choose(png());
+    await waitFor(() => expect(screen.queryByText('Zu groß.')).toBeNull());
+
+    rerender(<ImageField label="Logo" preview={null} hasImage onChange={vi.fn()} />);
+    rerender(<ImageField label="Logo" preview={null} hasImage error="Zu groß." onChange={vi.fn()} />);
+
+    expect(screen.getByText('Zu groß.')).toBeTruthy();
+  });
+
   it('does nothing when the picker closes without a file', () => {
     const onChange = vi.fn();
     render(<ImageField label="Logo" preview={null} hasImage={false} onChange={onChange} />);

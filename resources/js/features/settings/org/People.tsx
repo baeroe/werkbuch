@@ -340,9 +340,10 @@ export default function People(_props: SectionProps) {
                         aria-label={t('settings.people.role_of', { name: person.name })}
                         className="w-32"
                         value={role}
-                        // not disabled while the call runs: a disabled field would drop the keyboard focus to the page
+                        // read-only, not disabled, while the call runs: a disabled field would drop the keyboard focus
+                        readOnly={busyRole === person.id}
                         onValueChange={(next) => {
-                          if (!next || next === person.org_role || busyRole === person.id) return;
+                          if (!next || next === person.org_role) return;
                           if (next === 'member') ask('demote', person, () => changeRole(person, 'member'));
                           else changeRole(person, 'admin');
                         }}

@@ -14,6 +14,8 @@ type SelectProps = FieldText & {
   onValueChange: (value: string | null) => void;
   placeholder?: string;
   disabled?: boolean;
+  /** Shown and focusable, but not to be changed (`aria-readonly`), e.g. while the call for the last choice runs. */
+  readOnly?: boolean;
   id?: string;
   /** Name without a visible label. */
   'aria-label'?: string;
@@ -28,9 +30,10 @@ type SelectProps = FieldText & {
 /**
  * Pick one value from a short list; the list floats on tracing paper below the field. When the list closes, the focus
  * goes back to the field at once: Base UI would give it back only once the list has faded out, and a Tab pressed
- * meanwhile landed on the focus guard of the list and, once the list was gone, on the page behind a dialog.
+ * meanwhile landed on the focus guard of the list and, once the list was gone, on the page behind a dialog. Not when
+ * Tab left the open list: then the focus is already on the next field, where Base UI put it.
  */
-export function Select({ label, hint, error, options, value, onValueChange, placeholder = t('ui.select.placeholder'), disabled, id, className, defaultOpen, modal, keepSide, 'aria-label': ariaLabel }: SelectProps) {
+export function Select({ label, hint, error, options, value, onValueChange, placeholder = t('ui.select.placeholder'), disabled, readOnly, id, className, defaultOpen, modal, keepSide, 'aria-label': ariaLabel }: SelectProps) {
   const autoId = useId();
   const triggerId = id ?? autoId;
   const valueId = `${triggerId}-value`;
@@ -38,9 +41,10 @@ export function Select({ label, hint, error, options, value, onValueChange, plac
   const trigger = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(defaultOpen ?? false);
   const wasOpen = useRef(open);
+  const closedBy = useRef<string | null>(null);
   // once Base UI has taken the list for closed (its focus trap lets go), still in the event that closed it
   useLayoutEffect(() => {
-    if (wasOpen.current && !open) trigger.current?.focus({ preventScroll: true });
+    if (wasOpen.current && !open && closedBy.current !== 'focus-out') trigger.current?.focus({ preventScroll: true });
     wasOpen.current = open;
   }, [open]);
 
@@ -50,8 +54,12 @@ export function Select({ label, hint, error, options, value, onValueChange, plac
       value={value}
       onValueChange={(next) => onValueChange(next)}
       disabled={disabled}
+      readOnly={readOnly}
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(next, details) => {
+        closedBy.current = next ? null : details.reason;
+        setOpen(next);
+      }}
       modal={modal}
     >
       <Field id={triggerId} label={label} hint={hint} error={error} className={className}>

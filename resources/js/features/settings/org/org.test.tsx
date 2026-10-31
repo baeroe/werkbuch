@@ -449,6 +449,28 @@ describe('People', () => {
     expect(inertia.reload).not.toHaveBeenCalled();
   });
 
+  it('keeps the role field focused and read-only while its call runs', async () => {
+    const user = userEvent.setup();
+    let answer: () => void = () => {};
+    renderSettings('people', { 'PUT /api/v1/users/u_lene/role': () => ({ body: { data: { ...lene, org_role: 'admin' } } }) });
+    // hold the call until the test lets it go
+    const fetching = globalThis.fetch;
+    globalThis.fetch = (input, init) =>
+      String(input).includes('/role') ? new Promise<Response>((resolve) => (answer = () => resolve(fetching(input, init)))) : fetching(input, init);
+    const role = await screen.findByRole('combobox', { name: 'Rolle von Lene Vogt' });
+
+    await user.click(role);
+    await user.click(await screen.findByRole('option', { name: 'Admin' }));
+
+    await waitFor(() => expect(role.getAttribute('aria-readonly')).toBe('true'));
+    expect(document.activeElement).toBe(role);
+    expect(role.textContent).toContain('Admin');
+    answer();
+    await waitFor(() => expect(role.getAttribute('aria-readonly')).toBeNull());
+    expect(document.activeElement).toBe(role);
+    globalThis.fetch = fetching;
+  });
+
   it('keeps "the last active admin" on screen until it is closed, for demoting and for deactivating', async () => {
     const user = userEvent.setup();
     const lastAdmin = () => problem(409, 'last_admin', { detail: 'Das ist der letzte aktive Admin.' });
@@ -597,9 +619,17 @@ describe('Bots', () => {
     const owner = within(dialog).getByRole('combobox', { name: /Verantwortliche Person/ });
     expect(owner.textContent).toContain('Sven Albers');
     await user.click(owner);
-    const options = (await screen.findAllByRole('option')).map((option) => option.textContent);
+    const options = () => screen.getAllByRole('option').map((option) => option.textContent);
+    await screen.findAllByRole('option');
     // each with the initials of its avatar first
-    expect(options).toEqual(['MLMara Lindqvist', 'SASven Albers']);
+    expect(options()).toEqual(['MLMara Lindqvist', 'SASven Albers']);
+
+    // away from Sven and back again in the same dialog
+    await user.click(screen.getByRole('option', { name: /Mara Lindqvist/ }));
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
+    await user.click(owner);
+    await screen.findAllByRole('option');
+    expect(options()).toEqual(['MLMara Lindqvist', 'SASven Albers']);
   });
 
   it('lists the tokens of a bot with abilities, expiry and last use; an expired one says so', async () => {

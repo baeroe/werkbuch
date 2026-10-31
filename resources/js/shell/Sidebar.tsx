@@ -88,12 +88,14 @@ function Section({ title, empty, allLabel, allHref }: SectionProps) {
 
 /** Gear at the bottom: the settings of the organisation; in the rail as big as the other icons. */
 function SettingsLink({ rail = false }: { rail?: boolean }) {
+  // every section of the settings counts
   const active = useActivePath(paths.settings());
   const label = t('shell.nav.organization_settings');
   return (
     <Tooltip content={label} side={rail ? 'right' : 'top'}>
       <Link
-        href={paths.settings()}
+        // straight to the first section: /settings only redirects there
+        href={paths.settings('general')}
         aria-label={label}
         aria-current={active ? 'page' : undefined}
         className={cx(

@@ -9,11 +9,12 @@ import { Shell } from './Shell';
 
 type Flash = { status: string | null; error: string | null };
 let flash: Flash = { status: null, error: null };
+let url = '/my-items';
 
 vi.mock('@inertiajs/react', () => ({
   usePage: () => ({
     props: { auth: { user: { id: '1', type: 'person', name: 'Mara Lindqvist', handle: 'mara', email: null, locale: 'de', timezone: null, avatar_url: null }, permissions: [] }, flash, features: { mail: true, live: null } },
-    url: '/my-items',
+    url,
   }),
   router: { visit: vi.fn(), post: vi.fn() },
   Link: ({ href, children, ...rest }: { href: string; children?: ReactNode }) => (
@@ -26,6 +27,7 @@ vi.mock('@inertiajs/react', () => ({
 afterEach(() => {
   act(() => resetToasts());
   flash = { status: null, error: null };
+  url = '/my-items';
 });
 
 /** The error toasts with how often each was shown again (the same error refreshes the toast on screen). */
@@ -62,6 +64,18 @@ describe('Shell', () => {
     act(() => resetToasts());
     rerender(<Shell>Inhalt</Shell>);
     expect(successes()).toEqual([]);
+  });
+
+  it('links the gear straight to the first section of the settings, marked on every section', () => {
+    const { unmount } = render(<Shell>Inhalt</Shell>);
+    const gear = () => screen.getAllByRole('link', { name: 'Einstellungen der Organisation' })[0]!;
+    expect(gear().getAttribute('href')).toBe('/settings/general');
+    expect(gear().getAttribute('aria-current')).toBeNull();
+    unmount();
+
+    url = '/settings/people';
+    render(<Shell>Inhalt</Shell>);
+    expect(gear().getAttribute('aria-current')).toBe('page');
   });
 
   it('shows nothing when the visit flashed nothing', () => {
