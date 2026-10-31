@@ -1,0 +1,129 @@
+<?php
+
+use App\RichText\Document;
+use App\RichText\MarkdownContext;
+use Tests\Support\RichTextFixtures as F;
+
+$read = fn (string $markdown): Document => Document::fromMarkdown($markdown, new MarkdownContext);
+
+it('writes Markdown it reads as it was', function (string $markdown) use ($read) {
+    expect($read($markdown)->toMarkdown())->toBe($markdown);
+})->with([
+    'heading 1' => ['# Titel'],
+    'heading 2' => ['## Titel'],
+    'heading 3' => ['### Titel'],
+    'marks' => ['**fett** *kursiv* ~~weg~~ `code`'],
+    'link' => ['[Link](https://example.com)'],
+    'nested list' => ["- a\n  - b"],
+    'nested list below a mark' => ["- *a*\n  - b"],
+    'numbered list' => ["1. eins\n2. zwei"],
+    'numbered list from three' => ["3. drei\n4. vier"],
+    'numbers around a nested list' => ["1. a\n   - b\n   - c\n2. d"],
+    'task list' => ["- [x] erledigt\n- [ ] offen"],
+    'task with marks' => ['- [ ] **fett**'],
+    'quote' => ['> Zitat'],
+    'quote in a list' => ['- > Zitat'],
+    'code' => ["```php\n\$a = 1;\necho \$a;\n```"],
+    'code without language' => ["```\nzwei\n\nAbsätze\n```"],
+    'table' => ["| a | b |\n| --- | --- |\n| 1 | 2 |"],
+    'table with empty cells' => ["| a |  |\n| --- | --- |\n|  | 2 |"],
+    'hard break' => ["zeile  \nzwei"],
+    'rule' => ['---'],
+    'blocks of an item' => ["- a\n\n  zwei\n- b"],
+    'empty item' => ["-\n- b"],
+    'ampersand and an escaped entity' => ['Tom & Jerry \&lt; ~~weg~~'],
+    'nothing' => [''],
+]);
+
+it('writes one form of everything it reads', function (string $markdown, string $written) use ($read) {
+    expect($read($markdown)->toMarkdown())->toBe($written)
+        ->and($read($written)->toJson())->toBe($read($markdown)->toJson());
+})->with([
+    'list marker' => ['* a', '- a'],
+    'lists of one kind in a row' => ["- a\n\n* b\n\n- c\n\n1. d\n\n1) e", "- a\n\n* b\n\n- c\n\n1. d\n\n1) e"],
+    'a task list right after a list' => ["- a\n\n* [ ] b", "- a\n\n* [ ] b"],
+    'setext heading' => ["Titel\n=====", '# Titel'],
+    'emphasis with underscores' => ['__fett__ _kursiv_', '**fett** *kursiv*'],
+    'soft line break' => ["a\nb", 'a b'],
+    'heading below level 3' => ['#### Vier', 'Vier'],
+    'tilde fence' => ["~~~js\nx\n~~~", "```js\nx\n```"],
+    'bare address' => ['https://example.com/?a=1&b=2', '<https://example.com/?a=1&b=2>'],
+    'loose task list' => ["- [x] a\n\n- [ ] b", "- [x] a\n- [ ] b"],
+    'checkbox in a mixed list' => ["- [x] a\n- b", "- \\[x\\] a\n- b"],
+    'checkbox in a numbered list' => ['1. [ ] a', '1. \\[ \\] a'],
+    'link to an address werkbuch does not link' => ['[x](ftp://example.com) [y](javascript:alert(1))', 'x y'],
+]);
+
+it('reads every node from Markdown as the editor would send it', function () use ($read) {
+    $markdown = implode("\n", [
+        '## Doppelte Mails',
+        '',
+        'Das Formular **muss** *einmal* senden, ~~zweimal~~ ist falsch: `submit()`.  ',
+        'Mehr unter [Doku](https://example.com).',
+        '',
+        '- Safari',
+        '- Firefox',
+        '  1. Version 130',
+        '',
+        '3. Öffnen',
+        '4. Absenden',
+        '',
+        '- [x] Fehler nachgestellt',
+        '- [ ] Fix geprüft',
+        '',
+        '> Zwei Mails im Postfach.',
+        '',
+        '```php',
+        '$form->submit();',
+        '$form->submit();',
+        '```',
+        '',
+        '---',
+        '',
+        '| Browser | Mails |',
+        '| --- | --- |',
+        '| Safari | 2 |',
+    ]);
+
+    expect($read($markdown)->toJson())->toBe(F::everyNode())
+        ->and(Document::fromJson(F::everyNode())->toMarkdown())->toBe($markdown);
+});
+
+it('comes back the same from its Markdown', function (array $json) use ($read) {
+    expect($read(Document::fromJson($json)->toMarkdown())->toJson())->toBe($json);
+})->with([
+    'steps of WEB-47' => [F::web47Steps()],
+    'every node' => [F::everyNode()],
+    'markdown characters in text' => [F::doc(F::p('a ~~b~~ *c* [d] # e <f> & g &amp; \\h'), F::p('- kein Punkt'), F::p('1. keine Zahl'))],
+    'lists of one kind in a row' => [F::doc(
+        ['type' => 'bulletList', 'content' => [['type' => 'listItem', 'content' => [F::p('a')]]]],
+        ['type' => 'taskList', 'content' => [['type' => 'taskItem', 'attrs' => ['checked' => false], 'content' => [F::p('b')]]]],
+        ['type' => 'bulletList', 'content' => [['type' => 'listItem', 'content' => [F::p('c')]]]],
+        ['type' => 'orderedList', 'attrs' => ['start' => 1, 'type' => null], 'content' => [['type' => 'listItem', 'content' => [F::p('d'), ['type' => 'orderedList', 'attrs' => ['start' => 1, 'type' => null], 'content' => [['type' => 'listItem', 'content' => [F::p('e')]]]]]]]],
+        ['type' => 'orderedList', 'attrs' => ['start' => 5, 'type' => null], 'content' => [['type' => 'listItem', 'content' => [F::p('f')]]]],
+    )],
+]);
+
+it('writes the spaces at the edges of a strike outside of it', function () {
+    $document = Document::fromJson(F::doc(
+        F::p(F::text('a'), F::text(' weg ', 'strike'), F::text('b')),
+        F::p(F::text('c'), F::text(' ', 'strike'), F::text('d')),
+    ));
+
+    expect($document->toMarkdown())->toBe("a ~~weg~~ b\n\nc d");
+});
+
+it('leaves images out until Phase 7 brings them', function () use ($read) {
+    $document = $read('![Logo](https://example.com/logo.png)');
+
+    expect($document->isEmpty())->toBeTrue()
+        ->and($document->toMarkdown())->toBe('');
+});
+
+it('keeps HTML in Markdown as text', function () use ($read) {
+    $document = $read("<script>alert(1)</script>\n\nText <b>fett</b>");
+
+    expect($document->toJson())->toBe(F::doc(F::p('<script>alert(1)</script>'), F::p('Text <b>fett</b>')))
+        ->and($document->toHtml())->toBe('<p>&lt;script&gt;alert(1)&lt;/script&gt;</p><p>Text &lt;b&gt;fett&lt;/b&gt;</p>')
+        ->and($document->toMarkdown())->toBe("\\<script\\>alert(1)\\</script\\>\n\nText \\<b\\>fett\\</b\\>");
+});
