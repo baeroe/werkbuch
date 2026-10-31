@@ -10,7 +10,10 @@ use App\Events\EventType;
 use App\Exceptions\Problem;
 use App\Models\Event;
 use App\Models\Project;
+use App\Models\ProjectType;
 use App\Models\User;
+use App\Models\Workflow;
+use App\Models\WorkItemType;
 use Illuminate\Support\Facades\Storage;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
@@ -24,7 +27,13 @@ const PROJECT_SHAPE = [
     'default_type_id', 'archived_at', 'my_role', 'is_member',
 ];
 
-it('creates a project whose creator becomes its admin and lead', function () {
+/** The ULID of a type of the shipped catalog (Task, Bug, Epic) or of another one by its name. */
+$typeId = fn (string $name): string => WorkItemType::query()->where('name', $name)->sole()->id;
+
+/** The types switched on in the project, as rows of `project_types`. */
+$projectTypes = fn (Project $project): array => ProjectType::query()->where('project_id', $project->id)->orderBy('type_id')->pluck('type_id')->all();
+
+it('creates a project whose creator becomes its admin and lead', function () use ($typeId) {
     $lene = User::factory()->create();
 
     $response = $this->actingAs($lene)->postJson('/api/v1/projects', ['name' => ' Website ', 'identifier' => ' web ', 'description' => ' Der Auftritt. '])
@@ -33,7 +42,9 @@ it('creates a project whose creator becomes its admin and lead', function () {
         ->assertJsonPath('data.description', 'Der Auftritt.')->assertJsonPath('data.lead_id', $lene->id)
         ->assertJsonPath('data.visibility', 'public')->assertJsonPath('data.my_role', 'admin')
         ->assertJsonPath('data.image_url', null)->assertJsonPath('data.archived_at', null)
-        ->assertJsonPath('data.workflow_id', null)->assertJsonPath('data.enabled_type_ids', [])->assertJsonPath('data.default_type_id', null);
+        ->assertJsonPath('data.workflow_id', Workflow::default()->id)
+        ->assertJsonPath('data.enabled_type_ids', [$typeId('Task'), $typeId('Bug'), $typeId('Epic')])
+        ->assertJsonPath('data.default_type_id', $typeId('Task'));
 
     $project = Project::query()->findOrFail($response->json('data.id'));
     $event = eventsOf(EventType::ProjectCreated, $project)[0];
@@ -72,15 +83,141 @@ it('stores the lead in lower case, whatever case it came in', function () {
         ->and(eventsOf(EventType::ProjectUpdated, $web))->toBeEmpty();
 });
 
-it('takes no workflow and no types before Phase 3', function () {
-    // pinned so that Phase 3 shows up as a change of this test
-    $this->actingAs(User::factory()->create())->postJson('/api/v1/projects', [
-        'name' => 'Website', 'identifier' => 'WEB', 'workflow_id' => '01jbworkflowxxxxxxxxxxxxxx', 'enabled_type_ids' => ['t_task'],
-        'default_type_id' => 't_task',
-    ])->assertCreated()->assertJsonPath('data.workflow_id', null)->assertJsonPath('data.enabled_type_ids', [])
-        ->assertJsonPath('data.default_type_id', null);
+it('takes the workflow and the types it is given', function () use ($typeId, $projectTypes) {
+    $agency = Workflow::factory()->create(['name' => 'Agentur-Freigabe']);
+    [$bug, $epic] = [$typeId('Bug'), $typeId('Epic')];
 
-    expect(Project::query()->sole())->workflow_id->toBeNull()->default_type_id->toBeNull();
+    // sent in any order, kept in the order of the catalog
+    $this->actingAs(User::factory()->create())->postJson('/api/v1/projects', [
+        'name' => 'Website', 'identifier' => 'WEB', 'workflow_id' => $agency->id, 'enabled_type_ids' => [$epic, $bug], 'default_type_id' => $epic,
+    ])->assertCreated()->assertJsonPath('data.workflow_id', $agency->id)->assertJsonPath('data.enabled_type_ids', [$bug, $epic])
+        ->assertJsonPath('data.default_type_id', $epic);
+
+    $project = Project::query()->sole();
+
+    expect($project)->workflow_id->toBe($agency->id)->default_type_id->toBe($epic)
+        ->and($projectTypes($project))->toBe([$bug, $epic]);
+});
+
+it('gives a new project the default workflow, every active type and the first as default', function () use ($typeId, $projectTypes) {
+    WorkItemType::factory()->archived()->create(['name' => 'Alt']);
+    $wish = WorkItemType::factory()->create(['name' => 'Kundenwunsch']);
+
+    // null is no wish either
+    $project = CreateProject::run(actor(User::factory()->create()), [
+        'name' => 'Website', 'identifier' => 'WEB', 'workflow_id' => null, 'enabled_type_ids' => null, 'default_type_id' => null,
+    ]);
+
+    expect($project)->workflow_id->toBe(Workflow::default()->id)->default_type_id->toBe($typeId('Task'))
+        ->and($projectTypes($project))->toBe([$typeId('Task'), $typeId('Bug'), $typeId('Epic'), $wish->id]);
+});
+
+it('refuses an unknown workflow, no types, an archived or unknown type and a default that is not enabled', function (Closure $input, string $field, string $message) {
+    $this->actingAs(User::factory()->create())->postJson('/api/v1/projects', $input() + ['name' => 'Website', 'identifier' => 'WEB'])
+        ->assertUnprocessable()->assertJsonPath("errors.{$field}", [__($message)]);
+
+    expect(Project::query()->count())->toBe(0);
+})->with([
+    'unknown workflow' => [fn () => ['workflow_id' => '01jbxxxxxxxxxxxxxxxxxxxxxx'], 'workflow_id', 'field.workflow_id.unknown'],
+    'workflow no text' => [fn () => ['workflow_id' => ['x']], 'workflow_id', 'field.workflow_id.unknown'],
+    'no types' => [fn () => ['enabled_type_ids' => []], 'enabled_type_ids', 'field.enabled_type_ids.required'],
+    'types no list' => [fn () => ['enabled_type_ids' => 'all'], 'enabled_type_ids', 'field.enabled_type_ids.unknown'],
+    'types as a map' => [fn () => ['enabled_type_ids' => ['task' => $typeId('Task')]], 'enabled_type_ids', 'field.enabled_type_ids.unknown'],
+    'type no text' => [fn () => ['enabled_type_ids' => [$typeId('Task'), 5]], 'enabled_type_ids', 'field.enabled_type_ids.unknown'],
+    'type twice' => [fn () => ['enabled_type_ids' => [$typeId('Task'), $typeId('Task')]], 'enabled_type_ids', 'field.enabled_type_ids.duplicate'],
+    'unknown type' => [fn () => ['enabled_type_ids' => [$typeId('Task'), '01jbxxxxxxxxxxxxxxxxxxxxxx']], 'enabled_type_ids', 'field.enabled_type_ids.unknown'],
+    'archived type' => [fn () => ['enabled_type_ids' => [$typeId('Task'), WorkItemType::factory()->archived()->create()->id]], 'enabled_type_ids', 'field.enabled_type_ids.archived'],
+    'default not enabled' => [fn () => ['enabled_type_ids' => [$typeId('Task')], 'default_type_id' => $typeId('Bug')], 'default_type_id', 'field.default_type_id.enabled'],
+    'default not among the active types' => [fn () => ['default_type_id' => WorkItemType::factory()->archived()->create()->id], 'default_type_id', 'field.default_type_id.enabled'],
+    'default no text' => [fn () => ['default_type_id' => ['x']], 'default_type_id', 'field.default_type_id.enabled'],
+]);
+
+it('stores the workflow and the types in lower case, whatever case they came in', function () use ($typeId, $projectTypes) {
+    $admin = User::factory()->admin()->create();
+    $agency = Workflow::factory()->create(['name' => 'Agentur-Freigabe']);
+    [$task, $bug, $epic] = [$typeId('Task'), $typeId('Bug'), $typeId('Epic')];
+
+    // the collation would let upper-case ULIDs pass `exists`; stored like that, the default would be none of the types
+    $web = CreateProject::run(actor($admin), [
+        'name' => 'Website', 'identifier' => 'WEB', 'workflow_id' => strtoupper($agency->id),
+        'enabled_type_ids' => [strtoupper($bug), strtoupper($epic)], 'default_type_id' => strtoupper($epic),
+    ]);
+
+    expect($web)->workflow_id->toBe($agency->id)->default_type_id->toBe($epic)
+        ->and($projectTypes($web))->toBe([$bug, $epic]);
+
+    UpdateProject::run(actor($admin), $web, [
+        'workflow_id' => strtoupper($agency->id), 'enabled_type_ids' => [strtoupper($task), strtoupper($epic)], 'default_type_id' => strtoupper($task),
+    ]);
+
+    expect($web->fresh())->workflow_id->toBe($agency->id)->default_type_id->toBe($task)
+        ->and($projectTypes($web))->toBe([$task, $epic]);
+});
+
+it('switches types on and off and moves the default', function () use ($typeId, $projectTypes) {
+    $mara = User::factory()->create();
+    $web = CreateProject::run(actor($mara), ['name' => 'Website', 'identifier' => 'WEB']);
+    $wish = WorkItemType::factory()->create(['name' => 'Kundenwunsch']);
+    [$task, $bug, $epic] = [$typeId('Task'), $typeId('Bug'), $typeId('Epic')];
+
+    $this->actingAs($mara)->patchJson('/api/v1/projects/WEB', ['enabled_type_ids' => [$wish->id, $bug], 'default_type_id' => $wish->id])
+        ->assertOk()->assertJsonPath('data.enabled_type_ids', [$bug, $wish->id])->assertJsonPath('data.default_type_id', $wish->id);
+    // the default alone, then the same again: one change, then none
+    $this->patchJson('/api/v1/projects/WEB', ['default_type_id' => $bug])->assertOk()->assertJsonPath('data.enabled_type_ids', [$bug, $wish->id]);
+    $this->patchJson('/api/v1/projects/WEB', ['enabled_type_ids' => [$bug, $wish->id], 'default_type_id' => $bug])->assertOk();
+    // the types alone: the default must stay among them
+    $this->patchJson('/api/v1/projects/WEB', ['enabled_type_ids' => [$wish->id]])
+        ->assertUnprocessable()->assertJsonPath('errors.default_type_id', [__('field.default_type_id.enabled')]);
+    $this->patchJson('/api/v1/projects/WEB', ['default_type_id' => $task])
+        ->assertUnprocessable()->assertJsonPath('errors.default_type_id', [__('field.default_type_id.enabled')]);
+    $this->patchJson('/api/v1/projects/WEB', ['enabled_type_ids' => []])
+        ->assertUnprocessable()->assertJsonPath('errors.enabled_type_ids', [__('field.enabled_type_ids.required')]);
+
+    expect($projectTypes($web))->toBe([$bug, $wish->id])
+        ->and(eventsOf(EventType::ProjectUpdated, $web)->map(fn (Event $event) => $event->changes)->all())->toBe([
+            [
+                'enabled_type_ids' => ['old' => [$task, $bug, $epic], 'new' => [$bug, $wish->id]],
+                'default_type_id' => ['old' => $task, 'new' => $wish->id],
+            ],
+            ['default_type_id' => ['old' => $wish->id, 'new' => $bug]],
+        ]);
+});
+
+it('keeps an archived type that was switched on, but switches on no archived one', function () use ($typeId) {
+    $admin = User::factory()->admin()->create();
+    CreateProject::run(actor($admin), ['name' => 'Website', 'identifier' => 'WEB']);
+    [$task, $bug, $epic] = [$typeId('Task'), $typeId('Bug'), $typeId('Epic')];
+    WorkItemType::query()->whereKey($bug)->update(['archived_at' => now()]);
+    $old = WorkItemType::factory()->archived()->create(['name' => 'Alt']);
+
+    // Bug was on before it was archived: it may stay (P11), but not become the default
+    $this->actingAs($admin)->patchJson('/api/v1/projects/WEB', ['enabled_type_ids' => [$task, $bug]])
+        ->assertOk()->assertJsonPath('data.enabled_type_ids', [$task, $bug]);
+    $this->patchJson('/api/v1/projects/WEB', ['default_type_id' => $bug])
+        ->assertUnprocessable()->assertJsonPath('errors.default_type_id', [__('field.default_type_id.archived')]);
+    $this->patchJson('/api/v1/projects/WEB', ['enabled_type_ids' => [$task, $bug, $old->id]])
+        ->assertUnprocessable()->assertJsonPath('errors.enabled_type_ids', [__('field.enabled_type_ids.archived')]);
+
+    // once off, an archived type stays off
+    $this->patchJson('/api/v1/projects/WEB', ['enabled_type_ids' => [$task, $epic]])->assertOk();
+    $this->patchJson('/api/v1/projects/WEB', ['enabled_type_ids' => [$task, $bug, $epic]])
+        ->assertUnprocessable()->assertJsonPath('errors.enabled_type_ids', [__('field.enabled_type_ids.archived')]);
+});
+
+it('passes the own workflow back without complaint and refuses another one in a patch', function () {
+    $admin = User::factory()->admin()->create();
+    $web = CreateProject::run(actor($admin), ['name' => 'Website', 'identifier' => 'WEB']);
+    $other = Workflow::factory()->create(['name' => 'Agentur-Freigabe']);
+
+    // whoever sends the whole project back passes its workflow along (in any case)
+    $whole = $this->actingAs($admin)->getJson('/api/v1/projects/WEB')->json('data');
+    $this->patchJson('/api/v1/projects/WEB', [...$whole, 'name' => 'Webseite', 'workflow_id' => strtoupper($web->workflow_id)])
+        ->assertOk()->assertJsonPath('data.name', 'Webseite')->assertJsonPath('data.workflow_id', $web->workflow_id);
+    $this->patchJson('/api/v1/projects/WEB', ['name' => 'Neu', 'workflow_id' => $other->id])
+        ->assertUnprocessable()->assertJsonPath('errors.workflow_id', [__('field.workflow_id.separate')]);
+
+    expect($web->fresh())->workflow_id->toBe(Workflow::default()->id)->name->toBe('Webseite')
+        ->and(eventsOf(EventType::ProjectUpdated, $web)->map(fn (Event $event) => array_keys($event->changes ?? []))->all())->toBe([['name']]);
 });
 
 it('refuses a lead who is no active person', function (Closure $lead) {

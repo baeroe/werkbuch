@@ -10,6 +10,7 @@ use App\Models\Favorite;
 use App\Models\Project;
 use App\Models\User;
 use App\Support\Actor;
+use App\Support\Ids;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -47,7 +48,7 @@ final class ToggleFavorite
             'id.string' => __('field.id.invalid'),
         ])->validate();
 
-        $project = Project::query()->find(strtolower($valid['id'])) ?? throw Problem::notFound();
+        $project = Project::query()->whereKey(Ids::normalize($valid['id']))->first() ?? throw Problem::notFound();
         Authorize::check($actor, 'view', $project);
 
         $favorite = DB::transaction(function () use ($actor, $project): bool {

@@ -2,6 +2,8 @@
 
 use App\Actions\Labels\DeleteLabel;
 use App\Actions\Labels\SaveLabel;
+use App\Actions\Projects\AssignWorkflow;
+use App\Actions\Projects\UpdateProject;
 use App\Actions\Properties\DeleteProperty;
 use App\Actions\Properties\SaveProperty;
 use App\Actions\RelationTypes\DeleteRelationType;
@@ -59,12 +61,13 @@ it('makes every change of the catalog wait for the lock of the organization', fu
     $label = Label::factory()->create(['name' => 'Alt']);
     $relationType = RelationType::factory()->create(['name' => 'Alt']);
     $resolution = Resolution::factory()->create(['label' => 'Alt']);
+    $project = Project::factory()->identifier('WEB')->create();
 
     // connection 1: another change of the catalog is in progress
     RaceConnections::hold(fn () => CatalogLock::take());
 
     // connection 2: this change waits for it instead of checking against what it read before
-    RaceConnections::expectLockWait(RaceConnections::second(fn () => $change($admin, $workflow, $type, $property, $label, $relationType, $resolution)), 'organization');
+    RaceConnections::expectLockWait(RaceConnections::second(fn () => $change($admin, $workflow, $type, $property, $label, $relationType, $resolution, $project)), 'organization');
 })->with([
     'create a workflow' => [fn (User $admin, Workflow $workflow) => SaveWorkflow::run(actor($admin), null, WorkflowFixtures::agencyInput())],
     'change a workflow' => [fn (User $admin, Workflow $workflow) => SaveWorkflow::run(actor($admin), $workflow, [...WorkflowFixtures::inputOf($workflow), 'name' => 'Neu'])],
@@ -84,6 +87,9 @@ it('makes every change of the catalog wait for the lock of the organization', fu
     'create a resolution' => [fn (User $admin) => SaveResolution::run(actor($admin), null, ['label' => 'Neu'])],
     'change a resolution' => [fn (User $admin, Workflow $workflow, WorkItemType $type, Property $property, Label $label, RelationType $relationType, Resolution $resolution) => SaveResolution::run(actor($admin), $resolution, ['label' => 'Neu'])],
     'delete a resolution' => [fn (User $admin, Workflow $workflow, WorkItemType $type, Property $property, Label $label, RelationType $relationType, Resolution $resolution) => DeleteResolution::run(actor($admin), $resolution)],
+    'switch the workflow of a project' => [fn (User $admin, Workflow $workflow, WorkItemType $type, Property $property, Label $label, RelationType $relationType, Resolution $resolution, Project $project) => AssignWorkflow::run(actor($admin), $project, ['workflow_id' => $workflow->id, 'mapping' => []])],
+    'switch the types of a project' => [fn (User $admin, Workflow $workflow, WorkItemType $type, Property $property, Label $label, RelationType $relationType, Resolution $resolution, Project $project) => UpdateProject::run(actor($admin), $project, ['enabled_type_ids' => [$type->id], 'default_type_id' => $type->id])],
+    'move the default type of a project' => [fn (User $admin, Workflow $workflow, WorkItemType $type, Property $property, Label $label, RelationType $relationType, Resolution $resolution, Project $project) => UpdateProject::run(actor($admin), $project, ['default_type_id' => $type->id])],
 ]);
 
 it('lets only one of two workflows become the default', function () {
@@ -168,11 +174,8 @@ it('keeps a type that has just become the default type of a project from being a
     $type = WorkItemType::factory()->create(['name' => 'Alt']);
     $project = Project::factory()->identifier('WEB')->create();
 
-    // connection 1: the type becomes the default type of WEB, the transaction stays open (Task 8 makes it an action)
-    RaceConnections::hold(function () use ($project, $type) {
-        CatalogLock::take();
-        $project->update(['default_type_id' => $type->id]);
-    });
+    // connection 1: the type becomes the default type of WEB, the transaction stays open
+    RaceConnections::hold(fn () => UpdateProject::run(actor($admin), $project, ['default_type_id' => $type->id]));
     RaceConnections::releaseBeforeLock('organization');
     $outcome = RaceConnections::second(fn () => $change($admin, $type));
 
@@ -185,6 +188,28 @@ it('keeps a type that has just become the default type of a project from being a
     'archive it' => [fn (User $admin, WorkItemType $type) => SaveWorkItemType::run(actor($admin), $type, $typeInput('Alt', ['archived_at' => '2026-10-31']))],
     'delete it' => [fn (User $admin, WorkItemType $type) => DeleteWorkItemType::run(actor($admin), $type)],
 ]);
+
+it('never deletes a workflow that a project switches to meanwhile', function () {
+    $admin = User::factory()->admin()->create();
+    $workflow = Workflow::factory()->create(['name' => 'Agentur-Freigabe']);
+    $project = Project::factory()->identifier('WEB')->create();
+
+    // connection 1: WEB gets the workflow, the transaction stays open
+    RaceConnections::hold(fn () => AssignWorkflow::run(actor($admin), $project, ['workflow_id' => $workflow->id, 'mapping' => []]));
+
+    // connection 2: the deletion waits for the lock instead of finding the workflow unused (and failing on the foreign key)
+    RaceConnections::expectLockWait(RaceConnections::second(fn () => DeleteWorkflow::run(actor($admin), $workflow)), 'organization');
+
+    // once WEB has it, the workflow is in use
+    RaceConnections::release();
+    $outcome = RaceConnections::second(fn () => DeleteWorkflow::run(actor($admin), $workflow));
+
+    expect($outcome)->toBeInstanceOf(Problem::class);
+    assert($outcome instanceof Problem);
+    expect($outcome->reason)->toBe('in_use')
+        ->and($outcome->extensions)->toBe(['projects' => ['WEB']])
+        ->and($project->fresh()?->workflow_id)->toBe($workflow->id);
+});
 
 it('checks labels, relation type names and resolution labels under the lock, against what another change has just saved', function (Closure $first, Closure $change, string $field) {
     $admin = User::factory()->admin()->create();

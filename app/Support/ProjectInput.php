@@ -6,13 +6,15 @@ use App\Domain\Projects\Identifier;
 use App\Enums\AccountType;
 use App\Enums\ProjectVisibility;
 use App\Models\Project;
+use App\Models\WorkItemType;
 use Closure;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Exists;
+use Illuminate\Validation\ValidationException;
 
 /**
- * The rules and field messages (P9) of a project's fields that CreateProject and UpdateProject share (spec 4.4, the
- * rules of src/api/projects.ts).
+ * The rules and field messages (P9) of a project's fields that CreateProject, UpdateProject and AssignWorkflow share
+ * (spec 4.4, the rules of src/api/projects.ts), with the check of the switched-on types against the catalog.
  */
 final class ProjectInput
 {
@@ -21,7 +23,7 @@ final class ProjectInput
     public const DESCRIPTION_MAX = 2000;
 
     /**
-     * The input with its texts trimmed and the identifier and the lead the way they are stored.
+     * The input with its texts trimmed and the identifier and the IDs the way they are stored.
      *
      * @param  array<array-key, mixed>  $input
      * @return array<array-key, mixed>
@@ -39,8 +41,10 @@ final class ProjectInput
         }
 
         // ULIDs are stored in lower case; the collation would let an upper-case one pass `exists` as somebody else
-        if (is_string($input['lead_id'] ?? null)) {
-            $input['lead_id'] = strtolower($input['lead_id']);
+        foreach (['lead_id', 'workflow_id', 'enabled_type_ids', 'default_type_id', 'mapping'] as $field) {
+            if (array_key_exists($field, $input)) {
+                $input[$field] = Ids::normalize($input[$field]);
+            }
         }
 
         return $input;
@@ -90,6 +94,75 @@ final class ProjectInput
     }
 
     /**
+     * A workflow of the catalog.
+     *
+     * @return list<mixed>
+     */
+    public static function workflow(): array
+    {
+        return ['bail', 'required', 'string', Rule::exists('workflows', 'id')];
+    }
+
+    /**
+     * The switched-on types as a list: at least one, each an ID once. Whether they exist and may be switched on, says
+     * `enabledTypes()` under the catalog lock.
+     *
+     * @return list<mixed>
+     */
+    public static function types(): array
+    {
+        return [
+            'bail', 'required', 'array', 'list',
+            function (string $attribute, array $value, Closure $fail): void {
+                if (array_filter($value, fn (mixed $id) => ! is_string($id)) !== []) {
+                    $fail(__('field.enabled_type_ids.unknown'));
+                } elseif (count(array_unique($value)) !== count($value)) {
+                    $fail(__('field.enabled_type_ids.duplicate'));
+                }
+            },
+        ];
+    }
+
+    /**
+     * The switched-on types in catalog order (by ULID) and the default type, checked against the catalog: every type
+     * exists, a type switched on anew is active (one that was on already stays, also archived, P11), and the default
+     * type is one of them and active. Without a default the first type is it (P10). Callers hold the catalog lock, so
+     * no type is archived or deleted while it is checked.
+     *
+     * @param  list<string>  $enabled
+     * @param  list<string>  $current  the types switched on so far
+     * @return array{0: list<string>, 1: string}
+     *
+     * @throws ValidationException
+     */
+    public static function enabledTypes(array $enabled, ?string $default, array $current = []): array
+    {
+        $types = WorkItemType::query()->whereKey($enabled)->orderBy('id')->get(['id', 'archived_at']);
+
+        if ($types->count() !== count($enabled)) {
+            throw ValidationException::withMessages(['enabled_type_ids' => __('field.enabled_type_ids.unknown')]);
+        }
+
+        if ($types->contains(fn (WorkItemType $type) => $type->archived_at !== null && ! in_array($type->id, $current, true))) {
+            throw ValidationException::withMessages(['enabled_type_ids' => __('field.enabled_type_ids.archived')]);
+        }
+
+        $ids = array_values($types->map(fn (WorkItemType $type) => $type->id)->all());
+        $default ??= $ids[0];
+        $type = $types->find($default);
+
+        if ($type === null) {
+            throw ValidationException::withMessages(['default_type_id' => __('field.default_type_id.enabled')]);
+        }
+
+        if ($type->archived_at !== null) {
+            throw ValidationException::withMessages(['default_type_id' => __('field.default_type_id.archived')]);
+        }
+
+        return [$ids, $default];
+    }
+
+    /**
      * @return array<string, string>
      */
     public static function messages(): array
@@ -110,6 +183,15 @@ final class ProjectInput
             'lead_id.required' => __('field.lead.invalid'),
             'lead_id.string' => __('field.lead.invalid'),
             'lead_id.exists' => __('field.lead.invalid'),
+            'workflow_id.required' => __('field.required'),
+            'workflow_id.string' => __('field.workflow_id.unknown'),
+            'workflow_id.exists' => __('field.workflow_id.unknown'),
+            'enabled_type_ids.required' => __('field.enabled_type_ids.required'),
+            'enabled_type_ids.array' => __('field.enabled_type_ids.unknown'),
+            'enabled_type_ids.list' => __('field.enabled_type_ids.unknown'),
+            'default_type_id.required' => __('field.default_type_id.enabled'),
+            'default_type_id.string' => __('field.default_type_id.enabled'),
+            'mapping.array' => __('field.state_mapping.invalid'),
         ];
     }
 }

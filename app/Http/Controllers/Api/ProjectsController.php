@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Actions\Projects\ArchiveProject;
+use App\Actions\Projects\AssignWorkflow;
 use App\Actions\Projects\CreateProject;
 use App\Actions\Projects\DeleteProject;
 use App\Actions\Projects\GetProject;
@@ -41,6 +42,12 @@ final class ProjectsController extends Controller
     public function update(Request $request, Project $project): ProjectResource
     {
         return new ProjectResource(UpdateProject::run(Actor::fromRequest($request), $project, $request->all()));
+    }
+
+    /** Switches the workflow with a mapping of the states (P9: never through `PATCH`). */
+    public function assignWorkflow(Request $request, Project $project): ProjectResource
+    {
+        return new ProjectResource(AssignWorkflow::run(Actor::fromRequest($request), $project, $request->all()));
     }
 
     public function archive(Request $request, Project $project): ProjectResource

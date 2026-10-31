@@ -19,6 +19,7 @@ use App\Actions\Organization\GetOrganization;
 use App\Actions\Organization\UpdateOrganization;
 use App\Actions\Projects\AddMember;
 use App\Actions\Projects\ArchiveProject;
+use App\Actions\Projects\AssignWorkflow;
 use App\Actions\Projects\CreateProject;
 use App\Actions\Projects\DeleteProject;
 use App\Actions\Projects\GetProject;
@@ -77,7 +78,8 @@ use Tests\Support\WorkflowFixtures;
  * - App\Actions\Auth\*: they run before any sign-in (login, password reset, first admin, CheckInvitation and
  *   AcceptInvitation for the link of an invitation, whose signature and row are the only credentials), without an actor
  *   whose rights could be checked (A4, P18).
- * - App\Actions\Setup\*: migrations and console commands set up roles and the default bot, nobody acts.
+ * - App\Actions\Setup\*: migrations and console commands set up roles, the default bot and the catalog and bind the
+ *   projects to it, nobody acts.
  * - App\Actions\Accounts\NextHandle: a reading helper that finds a free handle for the actions above, without an actor (P24).
  */
 
@@ -145,6 +147,13 @@ return [
     'UpdateProject' => [
         'action' => UpdateProject::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => UpdateProject::run($a, $w->project($column), ['name' => 'Neu']),
+        'allowed' => $projectAdmins,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::ProjectUpdated,
+    ],
+    'AssignWorkflow' => [
+        'action' => AssignWorkflow::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => AssignWorkflow::run($a, $w->project($column), ['workflow_id' => Workflow::factory()->create()->id, 'mapping' => []]),
         'allowed' => $projectAdmins,
         'hidden' => ['outsider_private'],
         'event' => EventType::ProjectUpdated,

@@ -51,6 +51,7 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
     Route::delete('projects/{project}', [ProjectsController::class, 'destroy']);
     Route::post('projects/{project}/archive', [ProjectsController::class, 'archive']);
     Route::post('projects/{project}/restore', [ProjectsController::class, 'restore']);
+    Route::put('projects/{project}/workflow', [ProjectsController::class, 'assignWorkflow']);
 
     Route::post('projects/{project}/join', [MembersController::class, 'join']);
     Route::get('projects/{project}/members', [MembersController::class, 'index']);

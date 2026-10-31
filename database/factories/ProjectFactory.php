@@ -7,9 +7,14 @@ use App\Access\RoleAssignments;
 use App\Enums\ProjectVisibility;
 use App\Models\Project;
 use App\Models\User;
+use App\Models\Workflow;
+use App\Models\WorkItemType;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
+ * A project with the default workflow, every active type switched on and the first of them as the default type, as
+ * CreateProject gives it without other wishes.
+ *
  * @extends Factory<Project>
  */
 class ProjectFactory extends Factory
@@ -25,8 +30,19 @@ class ProjectFactory extends Factory
             'description' => '',
             'lead_id' => User::factory(),
             'visibility' => ProjectVisibility::Public,
+            'workflow_id' => fn () => Workflow::default()->id,
+            'default_type_id' => fn () => self::activeTypes()[0],
             'next_number' => 0,
         ];
+    }
+
+    public function configure(): static
+    {
+        return $this->afterCreating(function (Project $project) {
+            if (! $project->types()->exists()) {
+                $project->types()->sync(self::activeTypes());
+            }
+        });
     }
 
     public function public(): static
@@ -55,5 +71,16 @@ class ProjectFactory extends Factory
     public function identifier(string $identifier): static
     {
         return $this->state(fn (array $attributes) => ['identifier' => $identifier]);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function activeTypes(): array
+    {
+        /** @var list<string> $ids */
+        $ids = WorkItemType::query()->whereNull('archived_at')->orderBy('id')->pluck('id')->all();
+
+        return $ids;
     }
 }

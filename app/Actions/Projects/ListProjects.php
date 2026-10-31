@@ -35,7 +35,7 @@ final class ListProjects
             'include_archived.boolean' => __('field.include_archived.invalid'),
         ])->validate();
 
-        $query = Project::query()->with('media')->visibleTo($actor->user)
+        $query = Project::query()->with(['media', 'types:work_item_types.id'])->visibleTo($actor->user)
             ->unless((bool) ($valid['include_archived'] ?? false), fn ($query) => $query->whereNull('archived_at'))
             ->orderBy('name')
             ->orderBy('id');

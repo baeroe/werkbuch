@@ -28,8 +28,8 @@ use Spatie\MediaLibrary\InteractsWithMedia;
  * @property string $description
  * @property string $lead_id
  * @property ProjectVisibility $visibility
- * @property string|null $workflow_id
- * @property string|null $default_type_id
+ * @property string $workflow_id
+ * @property string $default_type_id
  * @property int $next_number
  * @property Carbon|null $archived_at
  * @property Carbon|null $deleting_at
@@ -91,7 +91,7 @@ final class Project extends Model implements HasMedia
     }
 
     /**
-     * The workflow of the project (the column has no foreign key until Task 8).
+     * The workflow of the project.
      *
      * @return BelongsTo<Workflow, $this>
      */
@@ -101,7 +101,7 @@ final class Project extends Model implements HasMedia
     }
 
     /**
-     * The work item types switched on in the project, in the order of their creation.
+     * The work item types switched on in the project, in catalog order (the order of their creation).
      *
      * @return BelongsToMany<WorkItemType, $this, ProjectType>
      */

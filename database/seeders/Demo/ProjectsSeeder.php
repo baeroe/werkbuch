@@ -7,12 +7,15 @@ use App\Access\RoleAssignments;
 use App\Enums\ProjectVisibility;
 use App\Models\Project;
 use App\Models\User;
+use App\Models\Workflow;
+use App\Models\WorkItemType;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 /**
  * The three projects of the clickdummy with their members (src/api/seed/people.ts, the table „Demo-Rollen“ of its
- * README). Ida and Theo are not in OPS, which is private: the visibility tests rely on that.
+ * README). Ida and Theo are not in OPS, which is private: the visibility tests rely on that. For now each one has the
+ * default workflow, every active type and the first (Task) as the default type, as CreateProject gives them.
  */
 class ProjectsSeeder extends Seeder
 {
@@ -45,6 +48,7 @@ class ProjectsSeeder extends Seeder
         ];
 
         $account = fn (string $handle): User => User::query()->where('handle', $handle)->sole();
+        $types = WorkItemType::query()->whereNull('archived_at')->orderBy('id')->pluck('id')->all();
 
         foreach ($projects as $identifier => $data) {
             $project = Project::updateOrCreate(['identifier' => $identifier], [
@@ -52,7 +56,10 @@ class ProjectsSeeder extends Seeder
                 'description' => $data['description'],
                 'lead_id' => $account($data['lead'])->id,
                 'visibility' => $data['visibility'],
+                'workflow_id' => Workflow::default()->id,
+                'default_type_id' => $types[0],
             ]);
+            $project->types()->sync($types);
 
             foreach ($data['members'] as $handle => $role) {
                 $roles->setProjectRole($account($handle), $project, $role);

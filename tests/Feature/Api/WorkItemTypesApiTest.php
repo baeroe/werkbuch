@@ -195,7 +195,8 @@ it('deletes an unused type and takes it out of the projects that had it switched
     $epic = WorkItemType::query()->where('name', 'Epic')->sole();
     $project = Project::factory()->identifier('WEB')->create();
     $project->types()->sync([$bug->id, $epic->id]);
-    Project::factory()->identifier('OPS')->create();
+    // a project without the type is not named
+    Project::factory()->identifier('OPS')->create()->types()->detach($epic->id);
 
     $this->actingAs(User::factory()->admin()->create())->deleteJson("/api/v1/work-item-types/{$epic->id}")
         ->assertOk()->assertExactJson(['outcome' => 'deleted']);
