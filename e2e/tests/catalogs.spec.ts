@@ -130,9 +130,7 @@ test('creates a symmetric relation type and cannot delete a built-in one', async
     await tabTo(page, symmetric, { backwards: true });
     await page.keyboard.press('Space');
     await expect(inward).toHaveCount(0);
-    // Enter in a text field sends the form (on the switch it would flip it)
-    await tabTo(page, outward, { backwards: true });
-    await page.keyboard.press('Enter');
+    await pressMod(page, 'Enter');
 
     await expect(page.getByText(tr('en', 'settings.relation_types.dialog.created', { name }))).toBeVisible();
     await expect(create).toBeFocused();
@@ -189,9 +187,7 @@ test('creates a resolution and archives it', async ({ page }) => {
     await tabTo(page, archive);
     await page.keyboard.press('Space');
     await expect(archive).toHaveAttribute('aria-checked', 'true');
-    // Enter in a text field sends the form (on the switch it would flip it)
-    await tabTo(page, editing.getByRole('textbox', { name: tr('en', 'settings.resolutions.dialog.label') }), { backwards: true });
-    await page.keyboard.press('Enter');
+    await pressMod(page, 'Enter');
 
     await expect(page.getByText(tr('en', 'settings.resolutions.dialog.saved', { label }))).toBeVisible();
     await expect(row).toContainText(tr('en', 'settings.resolutions.archived'));

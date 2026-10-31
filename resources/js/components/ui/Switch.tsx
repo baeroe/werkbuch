@@ -8,12 +8,22 @@ type SwitchProps = Omit<ComponentProps<typeof BaseSwitch.Root>, 'className' | 'c
   className?: string;
 };
 
-/** On/off for settings that apply at once. Round track, ink blue when on. */
-export function Switch({ label, onCheckedChange, disabled, className, ...rest }: SwitchProps) {
+/**
+ * On/off for settings that apply at once. Round track, ink blue when on. Space switches it; Enter never does: plain
+ * Enter sends the form around it (as in a checkbox), and ⌘↵ stays for the shortcut that sends a dialog.
+ */
+export function Switch({ label, onCheckedChange, onKeyDown, disabled, className, ...rest }: SwitchProps) {
   const control = (
     <BaseSwitch.Root
       disabled={disabled}
       onCheckedChange={onCheckedChange ? (checked) => onCheckedChange(checked) : undefined}
+      onKeyDown={(event) => {
+        onKeyDown?.(event);
+        if (event.key !== 'Enter') return;
+        // Base UI would switch on Enter and take the key from the shortcuts
+        event.preventBaseUIHandler();
+        if (!event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) event.currentTarget.closest('form')?.requestSubmit();
+      }}
       className={cx(
         'relative inline-flex h-5 w-9 shrink-0 rounded-full bg-line-input transition-colors duration-160 data-checked:bg-accent',
         // without a label row the track gets a larger hit area: 44 px high on phones, 24 px on desktop

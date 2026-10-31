@@ -6,6 +6,7 @@ import { isMac } from '@/lib/platform';
 import { listShortcuts } from '@/lib/shortcuts/registry';
 import { FormDialog } from './FormDialog';
 import { Input } from './Input';
+import { Switch } from './Switch';
 
 /** The key chord of the submit shortcut as the browser sends it; on a Mac `mod` is the command key. */
 const submitChord = () => new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...(isMac() ? { metaKey: true } : { ctrlKey: true }) });
@@ -62,6 +63,34 @@ describe('FormDialog', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Anlegen' }).hasAttribute('aria-busy')).toBe(false));
     await tick();
     act(() => void sendWithShortcut());
+    expect(onSubmit).toHaveBeenCalledTimes(2);
+  });
+
+  it('sends from a switch with the shortcut and with Enter, which never flip it; Space does', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    render(
+      <Harness onSubmit={onSubmit}>
+        <Switch label="Archiviert" />
+      </Harness>,
+    );
+    await screen.findByRole('dialog', { name: 'Bot anlegen' });
+    const control = screen.getByRole('switch', { name: 'Archiviert' });
+    act(() => control.focus());
+
+    act(() => void control.dispatchEvent(submitChord()));
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(control.getAttribute('aria-checked')).toBe('false');
+
+    act(() => endCall());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Anlegen' }).hasAttribute('aria-busy')).toBe(false));
+    await tick();
+    await user.keyboard('{Enter}');
+    expect(onSubmit).toHaveBeenCalledTimes(2);
+    expect(control.getAttribute('aria-checked')).toBe('false');
+
+    await user.keyboard(' ');
+    expect(control.getAttribute('aria-checked')).toBe('true');
     expect(onSubmit).toHaveBeenCalledTimes(2);
   });
 
