@@ -768,6 +768,6 @@ Expected: alles grün, PHP `Total: 100.0 %`, Frontend zusammengeführt 100 %. Vo
 
 ## Nicht in Phase 3 (vorgemerkt in Task 15)
 
-- Phase 4: `RemapStates` und die Pflicht-Zuordnung benutzter Status; 409 `state_in_use`; der zusammengeführte `StateMappingDialog` (R26) mit Zeilen und Effekten, in der UI die Zweige `outcome: 'archived'` (P28); Häkchen „Epic“ gegen Items; Archiv statt Löschen benutzter Typen, Optionen, Resolutions; `affected_items`, `affected_relations`; `DefaultValueField` gegen die Feld-Editoren.
+- Phase 4: `RemapStates` und die Pflicht-Zuordnung benutzter Status; 409 `state_in_use`; der zusammengeführte `StateMappingDialog` (R26) mit Zeilen und Effekten (dazu kommt der Satz „Status im nächsten Schritt zuordnen“ zurück in die Beschreibung der Karte „Workflow wechseln“, A95), in der UI die Zweige `outcome: 'archived'` (P28); Häkchen „Epic“ gegen Items; Archiv statt Löschen benutzter Typen, Optionen, Resolutions; `affected_items`, `affected_relations`; `DefaultValueField` gegen die Feld-Editoren.
 - Phase 5: Zählungen „bei N Items“ (Typen, Labels, Properties, Projekt-Typen, Bestätigung beim Löschen).
 - Phase 10: Auto-Close im Wechsel-Dialog und das Nachziehen der Automatisierungen beim Workflow-Wechsel.

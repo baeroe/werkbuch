@@ -16,7 +16,7 @@ The category tells werkbuch what a state means, whatever it is called. Open or c
 |---|---|
 | Backlog | Not planned yet. The item is open. |
 | Unstarted | Planned, but not started. Open. |
-| Started | In progress. Open, and counts towards the progress. |
+| Started | In progress. Open. |
 | Completed | Done. Closes the item, which gets a resolution. |
 | Canceled | Called off. Closes the item, which gets a resolution. |
 
@@ -59,7 +59,7 @@ Today that is a plain confirmation, because there are no work items yet. Once th
 
 ## Delete
 
-A workflow can only be deleted while no project uses it; archived projects count too. The default workflow can never be deleted. The interface says which projects still use a workflow, and the API answers `409` with `reason: in_use` and their identifiers.
+A workflow can only be deleted while no project uses it; archived projects count too, and so does a project being deleted until it is gone for good. The default workflow can never be deleted. The interface says which projects still use a workflow, and the API answers `409` with `reason: in_use` and their identifiers in `projects`; its `detail` marks a project that is being deleted.
 
 ## REST
 
@@ -75,7 +75,7 @@ Reading needs a token with `read`, changing one with `write`. Every account may 
 
 ### Create a workflow
 
-`POST` and `PUT` take the whole workflow; a missing field is a `422` at that field. The states come in their order. A new state carries an id you choose (any text up to 64 characters, such as `draft`), and `initial_state_id` and `transitions` refer to it. werkbuch gives every new state a ULID and answers with those.
+`POST` and `PUT` take the whole workflow; a missing field is a `422` at that field. The states come in their order. A new state carries an id you choose (any text up to 64 characters, such as `draft`, but not starting with `new:`, which werkbuch keeps for states sent without an id), and `initial_state_id` and `transitions` refer to it. werkbuch gives every new state a ULID and answers with those.
 
 ```bash
 curl -X POST https://werkbuch.example.com/api/v1/workflows \

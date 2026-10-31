@@ -1,6 +1,6 @@
 # Types and properties
 
-Types, properties, labels, relation types and resolutions are the catalogs of the organization. Org admins manage them under **Settings**, in the group **Catalogs**; everyone else can read them there, and projects pick from them. Names are unique within each catalog, regardless of upper and lower case.
+Types, properties, labels, relation types and resolutions are the catalogs of the organization. Org admins manage them under **Settings**, in the group **Catalogs**; everyone else can read them there, and projects pick from them. Names are unique within each catalog, regardless of upper and lower case and of accents ("Über" and "uber" are the same name). The labels of properties are not names: two properties may share one, their keys are unique.
 
 ## Types
 
@@ -18,7 +18,7 @@ A type has:
 
 An archived type takes no new items. Projects that have it switched on keep it, but no project can switch it on anew, and it cannot become a default type. **Restore** brings it back.
 
-A type that is the default type of a project can be neither archived nor deleted; choose another default type in those projects first. The interface and the API (`409`, `reason: default_type`) name them. Deleting a type removes it from every project that had it switched on. Once work items exist, a type that items still carry is archived instead of deleted.
+A type that is the default type of a project can be neither archived nor deleted; choose another default type in those projects first. This includes archived projects and a project being deleted until it is gone for good. The interface and the API (`409`, `reason: default_type`, the identifiers in `projects`) name them. Deleting a type removes it from every project that had it switched on. Once work items exist, a type that items still carry is archived instead of deleted.
 
 ### The types of a project
 
@@ -43,7 +43,7 @@ The field type is fixed as well. The only change allowed is from single to multi
 | Text (`text`) | One line, up to 255 characters. | – | A text; blank means none. |
 | Number (`number`) | A decimal number. | 0 to 4 decimal places. | A number, rounded to the decimal places. |
 | Dropdown (`dropdown`) | One or more options from a list. | Multiple choice; the options. | One option that is not archived, or several with multiple choice. |
-| Yes or no (`boolean`) | A switch. | – | Yes or no; no counts as no default. |
+| Yes or no (`boolean`) | A switch. | – | Yes or no; no reads the same as an empty yes-or-no field. |
 | Date (`date`) | A date without a time. | – | A date (`2026-10-31`). |
 | People picker (`member`) | People or bots with access to the project. | Multiple choice. | None. |
 | Rich text (`rich_text`) | Formatted text in the same editor as the description. | – | None. |
@@ -51,15 +51,17 @@ The field type is fixed as well. The only change allowed is from single to multi
 
 ### Options
 
-A dropdown has at least one active option. An option has a label (up to 60 characters), a tone and a place in the order; a dropdown has at most 100. An option you no longer want to offer can be **archived**: it is not offered for new values any more, and you can restore it. In the interface a saved option can only be archived; over the API, an option left out of a `PUT` is deleted.
+A dropdown has at least one active option. An option has a label (up to 60 characters), a tone (the field `color` in the API) and a place in the order; a dropdown has at most 100. An option you no longer want to offer can be **archived**: it is not offered for new values any more, and you can restore it. In the interface a saved option can only be archived; over the API, an option left out of a `PUT` is deleted.
 
 ## Labels
 
-Labels mark items across all projects, such as "UX" or "Forms". A label has a name (up to 60 characters) and a tone. There is no default label.
+Labels mark items across all projects, such as "UX" or "Forms". A label has a name (up to 60 characters) and a tone (the field `color` in the API). There is no default label.
 
 ## Relation types
 
 A relation type names the link between two items. It has a name and a label for each direction, such as "blocks" and "is blocked by", or it is **symmetric** and reads the same both ways, such as "relates to".
+
+Over the API, a symmetric relation type has `inward_label: null`; an empty text is refused.
 
 werkbuch ships three: **blocks** ("is blocked by" the other way round), **Duplicate** and **related** (symmetric). They can be renamed but not deleted. Only "blocks" will trigger anything once work items arrive: as long as the blocker is open, the blocked item shows a hint. Your own relation types are labels only.
 
@@ -81,9 +83,9 @@ Every account may read the catalogs; only org admins create, change and delete e
 | Relation types | `/api/v1/relation-types` | `/api/v1/relation-types/{id}` |
 | Resolutions | `/api/v1/resolutions` | `/api/v1/resolutions/{id}` |
 
-`POST` creates (`201`), `PUT` replaces the whole entry: every field is required except the ones that may be empty (descriptions, help texts, the default value, `inward_label`, `default_for`, `archived_at`), and a missing one is a `422` at that field. To archive, send any text in `archived_at` (werkbuch sets the time itself); `null` restores. The types of a project change with `PATCH /api/v1/projects/{project}` and the fields `enabled_type_ids` and `default_type_id`.
+`POST` creates (`201`), `PUT` replaces the whole entry: every field is required except the ones that may be empty (descriptions, help texts, the default value, `inward_label`, `default_for`, `archived_at`), and a missing one is a `422` at that field. To archive, send any text in `archived_at` (werkbuch sets the time itself); `null` restores. A field that names an entry by its id (`property_id`, `enabled_type_ids`, `default_type_id`) takes its ULID exactly as werkbuch gives it, in any case; anything else is a `422` at that field. The types of a project change with `PATCH /api/v1/projects/{project}` and the fields `enabled_type_ids` and `default_type_id`.
 
-A dropdown property with two options, the first one as default. As with the states of a workflow, new options carry ids you choose, and werkbuch answers with ULIDs:
+A dropdown property with two options, the first one as default. As with the states of a workflow, new options carry ids you choose (not starting with `new:`), and werkbuch answers with ULIDs:
 
 ```bash
 curl -X POST https://werkbuch.example.com/api/v1/properties \

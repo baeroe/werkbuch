@@ -16,7 +16,7 @@ Die Kategorie sagt werkbuch, was ein Status bedeutet, egal wie er heißt. Offen 
 |---|---|
 | Backlog | Noch nicht eingeplant. Das Item ist offen. |
 | Unstarted | Eingeplant, aber nicht begonnen. Offen. |
-| Started | In Arbeit. Offen, zählt für den Fortschritt. |
+| Started | In Arbeit. Offen. |
 | Completed | Erledigt. Schließt das Item, es bekommt eine Resolution. |
 | Canceled | Abgebrochen. Schließt das Item, es bekommt eine Resolution. |
 
@@ -59,7 +59,7 @@ Heute ist das eine einfache Bestätigung, weil es noch keine Work Items gibt. So
 
 ## Löschen
 
-Ein Workflow lässt sich nur löschen, solange kein Projekt ihn nutzt; archivierte Projekte zählen mit. Der Standard-Workflow lässt sich nie löschen. Die Oberfläche sagt, welche Projekte einen Workflow noch nutzen, und die API antwortet `409` mit `reason: in_use` und ihren Kennungen.
+Ein Workflow lässt sich nur löschen, solange kein Projekt ihn nutzt; archivierte Projekte zählen mit, ebenso ein Projekt, das gerade gelöscht wird, bis es endgültig weg ist. Der Standard-Workflow lässt sich nie löschen. Die Oberfläche sagt, welche Projekte einen Workflow noch nutzen, und die API antwortet `409` mit `reason: in_use` und ihren Kennungen in `projects`; ihr `detail` kennzeichnet ein Projekt, das gerade gelöscht wird.
 
 ## REST
 
@@ -75,7 +75,7 @@ Lesen braucht ein Token mit `read`, Ändern eines mit `write`. Lesen darf jedes 
 
 ### Workflow anlegen
 
-`POST` und `PUT` nehmen den ganzen Workflow; ein fehlendes Feld ist ein `422` an diesem Feld. Die Status kommen in ihrer Reihenfolge. Ein neuer Status trägt eine ID, die du wählst (beliebiger Text bis 64 Zeichen, etwa `draft`), und `initial_state_id` und `transitions` verweisen auf sie. werkbuch gibt jedem neuen Status eine ULID und antwortet mit diesen.
+`POST` und `PUT` nehmen den ganzen Workflow; ein fehlendes Feld ist ein `422` an diesem Feld. Die Status kommen in ihrer Reihenfolge. Ein neuer Status trägt eine ID, die du wählst (beliebiger Text bis 64 Zeichen, etwa `draft`, aber nicht mit `new:` am Anfang, das werkbuch für Status ohne ID verwendet), und `initial_state_id` und `transitions` verweisen auf sie. werkbuch gibt jedem neuen Status eine ULID und antwortet mit diesen.
 
 ```bash
 curl -X POST https://werkbuch.example.com/api/v1/workflows \
