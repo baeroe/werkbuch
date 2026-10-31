@@ -78,6 +78,14 @@ final class WorkItem extends Model
     public bool $subscribed = false;
 
     /**
+     * Set by GetWorkItem, never stored: what WorkItemResource embeds besides the item (`children`, `type`, `workflow`),
+     * loaded there already.
+     *
+     * @var list<string>
+     */
+    public array $includes = [];
+
+    /**
      * Loads everything WorkItemResource reads, for one item or a list, with a fixed number of queries (none per item):
      * `project`, `parent.project`, `labels`, `values.property`, the computed columns of withComputed() (one query, set
      * on the models as they are, never written back) and `subscribed` for the reader (K5). The resource then asks the

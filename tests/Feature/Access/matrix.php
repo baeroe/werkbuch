@@ -52,6 +52,8 @@ use App\Actions\Workflows\DeleteWorkflow;
 use App\Actions\Workflows\ListWorkflows;
 use App\Actions\Workflows\SaveWorkflow;
 use App\Actions\WorkItems\CreateWorkItem;
+use App\Actions\WorkItems\GetWorkItem;
+use App\Actions\WorkItems\ListWorkItems;
 use App\Actions\WorkItemTypes\DeleteWorkItemType;
 use App\Actions\WorkItemTypes\ListWorkItemTypes;
 use App\Actions\WorkItemTypes\SaveWorkItemType;
@@ -226,6 +228,18 @@ return [
         'allowed' => $projectAdmins,
         'hidden' => ['outsider_private'],
         'event' => EventType::ProjectMemberRemoved,
+    ],
+    'ListWorkItems' => [
+        'action' => ListWorkItems::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListWorkItems::run($a, ['filter' => ['project' => $w->project($column)->id]]),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    'GetWorkItem' => [
+        'action' => GetWorkItem::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetWorkItem::run($a, $w->item($column)),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
     ],
     'CreateWorkItem' => [
         'action' => CreateWorkItem::class,

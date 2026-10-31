@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\WorkItemTypesController;
 use App\Http\Middleware\EnsureAccountIsActive;
 use App\Http\Middleware\EnsureSession;
 use App\Http\Middleware\EnsureTokenAbility;
+use App\Http\Middleware\RedirectFormerItemKey;
 use App\Models\Project;
 use App\Models\WorkItem;
 use Illuminate\Support\Facades\Route;
@@ -94,7 +95,12 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
     Route::put('resolutions/{resolution}', [ResolutionsController::class, 'update']);
     Route::delete('resolutions/{resolution}', [ResolutionsController::class, 'destroy']);
 
+    Route::get('work-items', [WorkItemsController::class, 'index']);
     Route::post('work-items', [WorkItemsController::class, 'store']);
+    // a read by a former key moves to the current one (301); every route with {item} belongs in this group
+    Route::middleware(RedirectFormerItemKey::class)->group(function () {
+        Route::get('work-items/{item}', [WorkItemsController::class, 'show']);
+    });
 
     Route::get('favorites', [FavoritesController::class, 'index']);
     Route::post('favorites/toggle', [FavoritesController::class, 'toggle']);

@@ -167,3 +167,75 @@ it('loads a list for the resource with a fixed number of queries, after which th
     $epic->update(['title' => 'Relaunch 2026']);
     expect($epic->fresh()?->title)->toBe('Relaunch 2026');
 });
+
+it('lists the items with the total', function () use ($web) {
+    [$project, $mara] = $web();
+    WorkItem::factory()->for($project)->count(3)->create();
+    WorkItem::factory()->for($project)->archived()->create();
+
+    $response = $this->actingAs($mara)->getJson('/api/v1/work-items?filter[project]=web&per_page=2')->assertOk()
+        ->assertJsonPath('meta.total', 3)
+        ->assertJsonPath('meta.per_page', 2);
+
+    expect(array_column($response->json('data'), 'key'))->toBe(['WEB-1', 'WEB-2'])
+        ->and(array_keys($response->json('data.0')))->toBe(WORK_ITEM_SHAPE);
+
+    $this->actingAs($mara)->getJson('/api/v1/work-items?filter[q]=WEB-4')->assertOk()->assertJsonPath('meta.total', 0);
+    $this->actingAs($mara)->getJson('/api/v1/work-items?filter[q]=WEB-4&include_archived=1')->assertOk()->assertJsonPath('data.0.key', 'WEB-4');
+    $this->actingAs($mara)->getJson('/api/v1/work-items?filter[project]=NOPE')->assertNotFound();
+});
+
+it('shows an item and embeds children, type and workflow on request', function () use ($web) {
+    [$project, $mara] = $web();
+    $epic = WorkItem::factory()->for($project)->epic()->create();
+    WorkItem::factory()->for($project)->childOf($epic)->closed()->create();
+    WorkItem::factory()->for($project)->childOf($epic)->create();
+
+    $plain = $this->actingAs($mara)->getJson('/api/v1/work-items/web-1')->assertOk();
+    expect(array_keys($plain->json('data')))->toBe(WORK_ITEM_SHAPE)
+        ->and($plain->json('data.children_progress'))->toBe(['done' => 1, 'total' => 2]);
+
+    $this->actingAs($mara)->getJson("/api/v1/work-items/{$epic->id}?include=children,type,workflow")->assertOk()
+        ->assertJsonPath('data.children.0.key', 'WEB-2')
+        ->assertJsonPath('data.children.1.key', 'WEB-3')
+        ->assertJsonPath('data.type.id', $epic->type_id)
+        ->assertJsonPath('data.workflow.id', $project->workflow_id);
+    $this->actingAs($mara)->getJson('/api/v1/work-items/WEB-1?include=type')->assertOk()
+        ->assertJsonMissingPath('data.children')
+        ->assertJsonPath('data.type.is_epic', true);
+
+    $this->actingAs($mara)->getJson('/api/v1/work-items/WEB-1?include=children,comments')->assertUnprocessable()
+        ->assertJsonPath('errors.include.0', __('field.include.unknown', ['name' => 'comments', 'allowed' => 'children, type, workflow']));
+    $this->actingAs($mara)->getJson('/api/v1/work-items/WEB-1?include[]=type')->assertOk()->assertJsonPath('data.type.id', $epic->type_id);
+    $this->actingAs($mara)->getJson('/api/v1/work-items/WEB-9')->assertNotFound();
+});
+
+it('redirects a former key with 301', function () use ($web) {
+    [$project, $mara] = $web();
+    $project->update(['identifier' => 'NEW']);
+    $project->identifiers()->create(['identifier' => 'WEB']);
+    $item = WorkItem::factory()->for($project)->create();
+    $target = url('/api/v1/work-items/NEW-1');
+
+    $this->actingAs($mara)->getJson('/api/v1/work-items/web-1?include=children')->assertStatus(301)
+        ->assertHeader('Location', "{$target}?include=children")
+        // no cache keeps it: a rename back to WEB must not run into a redirect stored for good
+        ->assertHeader('Cache-Control', 'no-store, private');
+    $this->actingAs($mara)->call('HEAD', '/api/v1/work-items/WEB-1')->assertStatus(301)->assertHeader('Location', $target);
+
+    // the current key and the ULID answer at once
+    $this->actingAs($mara)->getJson('/api/v1/work-items/NEW-1')->assertOk()->assertJsonPath('data.id', $item->id);
+    $this->actingAs($mara)->getJson("/api/v1/work-items/{$item->id}")->assertOk()->assertHeaderMissing('Location');
+});
+
+it('does not redirect a former key the reader may not see', function () use ($web) {
+    [, $mara] = $web();
+    $ops = Project::factory()->identifier('OPS')->private()->create();
+    $ops->identifiers()->create(['identifier' => 'SEC']);
+    WorkItem::factory()->for($ops)->create();
+    $outsider = User::factory()->create();
+
+    $this->actingAs($outsider)->getJson('/api/v1/work-items/SEC-1')->assertNotFound()->assertHeaderMissing('Location');
+    $this->actingAs($mara)->getJson('/api/v1/work-items/SEC-1?include=children')->assertNotFound()->assertHeaderMissing('Location');
+    $this->actingAs(User::factory()->admin()->create())->getJson('/api/v1/work-items/SEC-1')->assertStatus(301);
+});

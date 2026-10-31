@@ -13,7 +13,9 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * not know the reader: callers load the item with WorkItem::loadForResource($items, $reader) first (K5), which also
  * decides `subscribed`. The description comes as Markdown (`description`) and as Tiptap JSON (`description_json`),
  * rich text values as JSON in `values` and as Markdown in `values_markdown`. `template_id` stays `null` until
- * templates come (Phase 10, P22); `children_progress` is `null` for an item without children.
+ * templates come (Phase 10, P22); `children_progress` is `null` for an item without children. What GetWorkItem loaded
+ * through `include` (`WorkItem::$includes`) comes after the fields: `children` (items in manual order), `type`
+ * (WorkItemTypeResource) and `workflow` (the workflow of the project, WorkflowResource); without it the keys are absent.
  *
  * @mixin WorkItem
  */
@@ -61,6 +63,10 @@ final class WorkItemResource extends JsonResource
             'blocked' => $item->is_blocked,
             'blocking' => $item->is_blocking,
             'subscribed' => $item->subscribed,
+            'children' => $this->when(in_array('children', $item->includes, true), fn () => $item->children
+                ->map(fn (WorkItem $child) => (new self($child))->resolve($request))->values()->all()),
+            'type' => $this->when(in_array('type', $item->includes, true), fn () => (new WorkItemTypeResource($item->type))->resolve($request)),
+            'workflow' => $this->when(in_array('workflow', $item->includes, true), fn () => (new WorkflowResource($item->project->workflow))->resolve($request)),
         ];
     }
 }
