@@ -9,7 +9,7 @@ import type { Page, PageArgs } from './client';
 import { del, get, getPage, one, patch as sendPatch, post } from './http';
 
 /** The path of a project; a reference from an address may hold anything, so it is escaped. */
-const projectPath = (id: string) => `/projects/${encodeURIComponent(id)}`;
+export const projectPath = (id: string) => `/projects/${encodeURIComponent(id)}`;
 
 export interface ListProjectsArgs extends PageArgs {
   include_archived?: boolean;
@@ -24,7 +24,7 @@ export function getProject(identifier: string): Promise<Project> {
   return one(get<{ data: Project }>(projectPath(identifier)));
 }
 
-/** Workflow and work item types come with Phase 3. */
+/** Without a workflow the project gets the default one; without types, every active type, and the first is the default. */
 export interface CreateProjectInput {
   name: string;
   identifier: string;
@@ -32,6 +32,9 @@ export interface CreateProjectInput {
   image_url?: string | null;
   lead_id?: string;
   visibility?: Project['visibility'];
+  workflow_id?: string;
+  enabled_type_ids?: string[];
+  default_type_id?: string;
 }
 
 /** Any member of the organisation may create a project; they become its admin, and the lead joins it. */
@@ -39,7 +42,7 @@ export function createProject(input: CreateProjectInput): Promise<Project> {
   return one(post<{ data: Project }>('/projects', input));
 }
 
-/** `enabled_type_ids` and `default_type_id` stay in the type as in the clickdummy; the server ignores them until Phase 3. */
+/** `enabled_type_ids` and `default_type_id` are project settings (project admins); the workflow changes through `assignWorkflow`. */
 export type UpdateProjectPatch = Partial<
   Pick<Project, 'name' | 'description' | 'image_url' | 'lead_id' | 'visibility' | 'enabled_type_ids' | 'default_type_id' | 'identifier'>
 >;

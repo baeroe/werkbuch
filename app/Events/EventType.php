@@ -44,6 +44,30 @@ enum EventType: string
 
     case OrganizationUpdated = 'organization.updated';
 
+    case WorkflowCreated = 'workflow.created';
+    case WorkflowUpdated = 'workflow.updated';
+    case WorkflowDeleted = 'workflow.deleted';
+
+    case WorkItemTypeCreated = 'work_item_type.created';
+    case WorkItemTypeUpdated = 'work_item_type.updated';
+    case WorkItemTypeDeleted = 'work_item_type.deleted';
+
+    case PropertyCreated = 'property.created';
+    case PropertyUpdated = 'property.updated';
+    case PropertyDeleted = 'property.deleted';
+
+    case LabelCreated = 'label.created';
+    case LabelUpdated = 'label.updated';
+    case LabelDeleted = 'label.deleted';
+
+    case RelationTypeCreated = 'relation_type.created';
+    case RelationTypeUpdated = 'relation_type.updated';
+    case RelationTypeDeleted = 'relation_type.deleted';
+
+    case ResolutionCreated = 'resolution.created';
+    case ResolutionUpdated = 'resolution.updated';
+    case ResolutionDeleted = 'resolution.deleted';
+
     case UserCreated = 'user.created';
     case UserUpdated = 'user.updated';
     case UserRoleChanged = 'user.role_changed';

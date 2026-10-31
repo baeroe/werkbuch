@@ -11,8 +11,8 @@ import type { ReactNode, Ref } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { currentToasts, dismissToast, resetToasts, runToastAction } from '@/components/ui/toast';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
-import { ida, lene, list, mara, organization, person, project, theo } from '@/test/fixtures';
-import type { ProjectMember, User } from '@/types';
+import { agency, ida, lene, list, mara, organization, person, project, standard, theo, types } from '@/test/fixtures';
+import type { ProjectMember, User, WorkItemType } from '@/types';
 import { ProjectSettings } from './ProjectSettings';
 
 type Visit = { url: URL; method: string; prefetch: boolean; preserveUrl: boolean };
@@ -56,6 +56,9 @@ const web = project('WEB', 'admin', { id: 'p_web', name: 'Website-Relaunch', des
 const member = (user_id: string, role: ProjectMember['role']): ProjectMember => ({ project_id: 'p_web', user_id, role });
 const members = [member('u_ida', 'admin'), member('u_theo', 'viewer'), member('u_lene', 'member'), member('u_kira', 'member'), member('u_mara', 'member')];
 
+/** An archived type, in the catalog after the others. */
+const legacy: WorkItemType = { ...types[0]!, id: 't_legacy', name: 'Altlast', description: '', archived_at: '2026-09-01T10:00:00.000Z' };
+
 const problem = (status: number, reason: string, extra: Record<string, unknown> = {}) => ({ status, body: { type: 'about:blank', title: reason, status, reason, ...extra } });
 const unavailable = () => problem(503, 'service_unavailable', { detail: 'Der Server ist gerade nicht erreichbar.' });
 
@@ -69,14 +72,19 @@ function renderSettings(section: string, overrides: Record<string, MockRoute> = 
     'GET /api/v1/projects': () => ({ body: list([shown]) }),
     'GET /api/v1/projects/p_web/members': () => ({ body: list(members) }),
     'GET /api/v1/users': () => ({ body: list([mara, ida, theo, lene, jonas, sven, kira, automation]) }),
+    'GET /api/v1/workflows': () => ({ body: list([standard, agency]) }),
+    'GET /api/v1/work-item-types': () => ({ body: list([...types, legacy]) }),
     ...overrides,
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <QueryClientProvider client={client}>
-      <ProjectSettings identifier={identifier} section={section} />
-    </QueryClientProvider>,
-  );
+  return {
+    client,
+    ...render(
+      <QueryClientProvider client={client}>
+        <ProjectSettings identifier={identifier} section={section} />
+      </QueryClientProvider>,
+    ),
+  };
 }
 
 const toastTitles = () => currentToasts().map((entry) => entry.title);
@@ -165,10 +173,10 @@ describe('ProjectSettings', () => {
   });
 
   it('says that an unknown section does not exist, keeps the list and leads to General', async () => {
-    renderSettings('workflow');
+    renderSettings('automations');
 
     expect(await screen.findByText('Diesen Bereich gibt es nicht')).toBeTruthy();
-    expect(screen.getByText('Die Einstellungen von WEB haben die Bereiche Allgemein und Mitglieder.')).toBeTruthy();
+    expect(screen.getByText('Die Einstellungen von WEB haben die Bereiche Allgemein, Mitglieder, Workflow und Typen.')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Zu Allgemein' }).getAttribute('href')).toBe('/projects/WEB/settings/general');
     expect(screen.getByRole('navigation', { name: 'Bereiche der Projekteinstellungen' }).querySelector('[aria-current]')).toBeNull();
     expect(document.title).toBe('Projekteinstellungen – werkbuch');
@@ -500,5 +508,395 @@ describe('Members', () => {
     renderSettings('members', { 'GET /api/v1/users': unavailable });
 
     expect(await screen.findByText('Die Mitglieder konnten nicht geladen werden')).toBeTruthy();
+  });
+});
+
+/* ---------------------------------------------------------------------- workflow */
+
+describe('Workflow', () => {
+  /** Calls whose path contains `fragment` wait until `release()`; everything else answers at once. */
+  let release = () => {};
+  const holdCalls = (fragment: string) => {
+    const fetching = globalThis.fetch;
+    globalThis.fetch = (input, init) =>
+      String(input).includes(fragment) ? new Promise<Response>((resolve) => (release = () => resolve(fetching(input, init)))) : fetching(input, init);
+  };
+  /** The project as the server has it: the switch changes its workflow, and every reload reads the new one. */
+  const switchable = () => {
+    let stored = web;
+    return {
+      'GET /api/v1/projects/WEB': () => ({ body: { data: stored } }),
+      'GET /api/v1/projects': () => ({ body: list([stored]) }),
+      'PUT /api/v1/projects/p_web/workflow': (body: unknown) => {
+        stored = { ...stored, workflow_id: (body as { workflow_id: string }).workflow_id };
+        return { body: { data: stored } };
+      },
+    };
+  };
+  const chooseAgency = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(await screen.findByRole('combobox', { name: /Neuer Workflow/ }));
+    await user.click(await screen.findByRole('option', { name: 'Agentur-Freigabe' }));
+  };
+
+  it('shows the workflow of the project with its statuses and rules, and where org admins change it', async () => {
+    const { unmount } = renderSettings('workflow');
+
+    const heading = await screen.findByRole('heading', { level: 3, name: 'Standard' });
+    expect(heading.getAttribute('tabindex')).toBe('-1');
+    expect(screen.getByText('Der Standard-Workflow: Jeder Status ist von überall erreichbar.')).toBeTruthy();
+    const states = within(screen.getAllByRole('list', { name: 'Status des Workflows' })[0]!).getAllByRole('listitem');
+    expect(states.map((state) => state.textContent)).toEqual(['Backlog', 'Todo', 'In Progress', 'Pending', 'Done', 'Cancelled']);
+    expect(screen.getByText('Freie Übergänge: Jeder Status ist von überall erreichbar. Neue Items starten in „Backlog“.')).toBeTruthy();
+    // a project admin who is no org admin does not get the way to the editor
+    expect(screen.queryByRole('link', { name: 'Organisation, Workflows' })).toBeNull();
+    unmount();
+    api?.restore();
+
+    signedIn = mara;
+    renderSettings('workflow', {}, { project: { ...web, workflow_id: 'wf_agency' } });
+    expect(await screen.findByRole('heading', { level: 3, name: 'Agentur-Freigabe' })).toBeTruthy();
+    expect(screen.getByText('Mit Übergangsmatrix: 14 erlaubte Übergänge. Neue Items starten in „Backlog“.')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Organisation, Workflows' }).getAttribute('href')).toBe('/settings/workflows?workflow=wf_agency');
+    // the other one is offered with its mark
+    await userEvent.setup().click(screen.getByRole('combobox', { name: /Neuer Workflow/ }));
+    expect(await screen.findByRole('option', { name: 'Standard (Standard)' })).toBeTruthy();
+  });
+
+  it('says when the workflows could not be loaded and loads them again on request', async () => {
+    const user = userEvent.setup();
+    let fail = true;
+    renderSettings('workflow', { 'GET /api/v1/workflows': () => (fail ? unavailable() : { body: list([standard, agency]) }) });
+
+    expect(await screen.findByText('Der Workflow konnte nicht geladen werden')).toBeTruthy();
+    fail = false;
+    await user.click(screen.getByRole('button', { name: 'Erneut versuchen' }));
+    expect(await screen.findByRole('heading', { level: 3, name: 'Standard' })).toBeTruthy();
+  });
+
+  it('blocks the switch until a workflow is chosen, and says so', async () => {
+    const user = userEvent.setup();
+    renderSettings('workflow');
+
+    const open = await screen.findByRole('button', { name: /Workflow wechseln …/ });
+    expect(open.getAttribute('aria-disabled')).toBe('true');
+    expect(document.getElementById(open.getAttribute('aria-describedby')!)!.textContent).toBe('Wähle zuerst den neuen Workflow.');
+    await user.click(open);
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    await chooseAgency(user);
+    expect(open.getAttribute('aria-disabled')).toBeNull();
+    // the summary of the chosen one
+    expect(screen.getByText('Mit interner Prüfung und Kundenfreigabe vor dem Abschluss.')).toBeTruthy();
+  });
+
+  it('lets somebody who does not manage the project only read the workflow', async () => {
+    signedIn = lene;
+    renderSettings('workflow', {}, { project: { ...web, my_role: 'member' } });
+
+    const open = await screen.findByRole('button', { name: /Workflow wechseln …/ });
+    expect(document.getElementById(open.getAttribute('aria-describedby')!)!.textContent).toBe('Projekteinstellungen ändern dürfen nur Admins des Projekts WEB.');
+    expect(screen.getByRole('combobox', { name: /Neuer Workflow/ })).toHaveProperty('disabled', true);
+  });
+
+  it('says when there is no other workflow', async () => {
+    renderSettings('workflow', { 'GET /api/v1/workflows': () => ({ body: list([standard]) }) });
+
+    expect(await screen.findByText('Es gibt keinen anderen Workflow. Org-Admins legen weitere in den Organisationseinstellungen an.')).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: /Neuer Workflow/ })).toBeNull();
+  });
+
+  it('switches after a plain confirmation with an empty mapping, then names the new workflow with the focus on it', async () => {
+    const user = userEvent.setup();
+    renderSettings('workflow', switchable());
+
+    await chooseAgency(user);
+    const open = screen.getByRole('button', { name: /Workflow wechseln …/ });
+    await user.click(open);
+    const dialog = await screen.findByRole('dialog', { name: 'Zu „Agentur-Freigabe“ wechseln' });
+    expect(within(dialog).getByText('WEB nutzt bisher „Standard“. Neue Items starten im Startstatus „Backlog“.')).toBeTruthy();
+
+    // "Cancel" goes back to the button that asked
+    await user.click(within(dialog).getByRole('button', { name: 'Abbrechen' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(open));
+
+    await user.click(open);
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: /^Workflow wechseln/ }));
+
+    await waitFor(() => expect(toastTitles()).toContain('Workflow gewechselt'));
+    expect(toastNamed('Workflow gewechselt').description).toBe('WEB nutzt jetzt „Agentur-Freigabe“.');
+    expect(lastCall('PUT', '/api/v1/projects/p_web/workflow')!.body).toEqual({ workflow_id: 'wf_agency', mapping: {} });
+    const heading = await screen.findByRole('heading', { level: 3, name: 'Agentur-Freigabe' });
+    await waitFor(() => expect(document.activeElement).toBe(heading));
+    // the choice is gone: the workflow it named is the current one now
+    expect(screen.getByRole('combobox', { name: /Neuer Workflow/ }).textContent).toContain('Workflow wählen …');
+    expect(screen.getByRole('button', { name: /Workflow wechseln …/ }).getAttribute('aria-disabled')).toBe('true');
+  });
+
+  it('stays open while the switch runs: Escape and "Abbrechen" do not close it', async () => {
+    const user = userEvent.setup();
+    renderSettings('workflow', switchable());
+    holdCalls('/p_web/workflow');
+
+    await chooseAgency(user);
+    await user.click(screen.getByRole('button', { name: /Workflow wechseln …/ }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: /^Workflow wechseln/ }));
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Abbrechen' }).getAttribute('aria-disabled')).toBe('true'));
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog')).toBe(dialog);
+
+    act(() => release());
+    await waitFor(() => expect(toastTitles()).toContain('Workflow gewechselt'));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('shows a refusal of the server as a notice in the dialog', async () => {
+    const user = userEvent.setup();
+    renderSettings('workflow', { 'PUT /api/v1/projects/p_web/workflow': () => problem(422, 'validation_failed', { errors: { workflow_id: ['Diesen Workflow gibt es nicht.'] } }) });
+
+    await chooseAgency(user);
+    await user.click(screen.getByRole('button', { name: /Workflow wechseln …/ }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: /^Workflow wechseln/ }));
+
+    expect((await within(dialog).findByRole('alert')).textContent).toContain('Diesen Workflow gibt es nicht.');
+    expect(toastTitles()).not.toContain('Workflow nicht gewechselt');
+  });
+
+  it('keeps the chosen workflow when the workflows fail to load again in the background', async () => {
+    const user = userEvent.setup();
+    let fail = false;
+    const { client } = renderSettings('workflow', { 'GET /api/v1/workflows': () => (fail ? unavailable() : { body: list([standard, agency]) }) });
+
+    await chooseAgency(user);
+    fail = true;
+    await act(() => client.refetchQueries());
+    // the observers hear of the failure a tick later
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+
+    expect(screen.getByRole('combobox', { name: /Neuer Workflow/ }).textContent).toContain('Agentur-Freigabe');
+    expect(screen.getByRole('button', { name: /Workflow wechseln …/ }).getAttribute('aria-disabled')).toBeNull();
+  });
+
+  it('names a refusal of a retry from the toast in a toast when the dialog was closed meanwhile', async () => {
+    const user = userEvent.setup();
+    let answer = unavailable;
+    renderSettings('workflow', { 'PUT /api/v1/projects/p_web/workflow': () => answer() });
+
+    await chooseAgency(user);
+    await user.click(screen.getByRole('button', { name: /Workflow wechseln …/ }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: /^Workflow wechseln/ }));
+    await waitFor(() => expect(toastTitles()).toContain('Workflow nicht gewechselt'));
+    await user.click(within(dialog).getByRole('button', { name: 'Abbrechen' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    answer = () => problem(422, 'validation_failed', { detail: 'Diesen Workflow gibt es nicht.', errors: { workflow_id: ['Diesen Workflow gibt es nicht.'] } });
+    act(() => runToastAction(toastNamed('Workflow nicht gewechselt').id));
+
+    await waitFor(() => expect(calls('PUT', '/api/v1/projects/p_web/workflow')).toHaveLength(2));
+    await waitFor(() => expect(currentToasts().filter((entry) => entry.title === 'Workflow nicht gewechselt')).toHaveLength(1));
+    expect(toastNamed('Workflow nicht gewechselt').description).toContain('Diesen Workflow gibt es nicht.');
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('says why the switch failed and tries again from the toast', async () => {
+    const user = userEvent.setup();
+    let fail = true;
+    const server = switchable();
+    renderSettings('workflow', { ...server, 'PUT /api/v1/projects/p_web/workflow': (body) => (fail ? unavailable() : server['PUT /api/v1/projects/p_web/workflow'](body)) });
+
+    await chooseAgency(user);
+    await user.click(screen.getByRole('button', { name: /Workflow wechseln …/ }));
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: /^Workflow wechseln/ }));
+    await waitFor(() => expect(toastTitles()).toContain('Workflow nicht gewechselt'));
+    expect(toastNamed('Workflow nicht gewechselt').description).toBe('Der Server ist gerade nicht erreichbar.');
+    expect(screen.getByRole('dialog')).toBeTruthy();
+
+    fail = false;
+    act(() => runToastAction(toastNamed('Workflow nicht gewechselt').id));
+    await waitFor(() => expect(toastTitles()).toContain('Workflow gewechselt'));
+    expect(calls('PUT', '/api/v1/projects/p_web/workflow')).toHaveLength(2);
+  });
+});
+
+/* ------------------------------------------------------------------------- types */
+
+describe('Types', () => {
+  const box = (name: string) => screen.getByRole('checkbox', { name: `${name} verwenden` });
+  const radio = (name: string) => screen.getByRole('radio', { name: `${name} als Standardtyp` });
+  const saved = (body: unknown) => ({ body: { data: { ...web, ...(body as object) } } });
+
+  it('lists the types of the organisation with the ones the project has on, archived ones only while they are on', async () => {
+    renderSettings('types', {}, { project: { ...web, enabled_type_ids: ['t_task', 't_bug', 't_legacy'] } });
+
+    const rows = within(await screen.findByRole('list', { name: 'Typen der Organisation' })).getAllByRole('listitem');
+    expect(rows).toHaveLength(5);
+    expect(box('Task').getAttribute('aria-checked')).toBe('true');
+    expect(box('Epic').getAttribute('aria-checked')).toBe('false');
+    // every checkbox keeps its tab stop next to the radios of the default type
+    expect(box('Epic').tabIndex).toBe(0);
+    expect(box('Altlast').getAttribute('aria-checked')).toBe('true');
+    expect(within(rows[4]!).getByText('Archiviert')).toBeTruthy();
+    expect(radio('Task')).toHaveProperty('checked', true);
+    // only types that are on can be the default
+    expect(radio('Epic')).toHaveProperty('disabled', true);
+
+    api?.restore();
+    renderSettings('types');
+    await screen.findAllByRole('list', { name: 'Typen der Organisation' });
+    // an archived type the project does not have stays out
+    expect(screen.getAllByRole('checkbox', { name: 'Altlast verwenden' })).toHaveLength(1);
+  });
+
+  it('lets the default follow when its type is switched off, and sends only what changed', async () => {
+    const user = userEvent.setup();
+    renderSettings('types', { 'PATCH /api/v1/projects/p_web': saved });
+
+    await screen.findByRole('list', { name: 'Typen der Organisation' });
+    await user.click(box('Task'));
+    expect(radio('Bug')).toHaveProperty('checked', true);
+    await user.click(box('Kundenwunsch'));
+    await user.click(radio('Kundenwunsch'));
+    expect(screen.getByText('Nicht gespeicherte Änderungen')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: /Speichern/ }));
+
+    await waitFor(() => expect(toastTitles()).toContain('Einstellungen gespeichert'));
+    expect(lastCall('PATCH', '/api/v1/projects/p_web')!.body).toEqual({ enabled_type_ids: ['t_bug', 't_epic', 't_wish'], default_type_id: 't_wish' });
+  });
+
+  it('keeps the last active type on', async () => {
+    const user = userEvent.setup();
+    renderSettings('types', {}, { project: { ...web, enabled_type_ids: ['t_task', 't_legacy'] } });
+
+    await screen.findByRole('list', { name: 'Typen der Organisation' });
+    expect(box('Task').hasAttribute('data-disabled')).toBe(true);
+    expect(screen.getByText('Mindestens ein Typ bleibt aktiv.')).toBeTruthy();
+    // the archived one may go; the active one stays
+    expect(box('Altlast').hasAttribute('data-disabled')).toBe(false);
+    await user.click(box('Bug'));
+    expect(box('Task').hasAttribute('data-disabled')).toBe(false);
+    expect(screen.queryByText('Mindestens ein Typ bleibt aktiv.')).toBeNull();
+  });
+
+  it('never makes an archived type the default: its radio is blocked with the reason', async () => {
+    const user = userEvent.setup();
+    renderSettings('types', { 'PATCH /api/v1/projects/p_web': saved }, { project: { ...web, enabled_type_ids: ['t_task', 't_legacy'] } });
+
+    await screen.findByRole('list', { name: 'Typen der Organisation' });
+    const archived = radio('Altlast');
+    expect(archived).toHaveProperty('disabled', true);
+    const why = document.getElementById(archived.getAttribute('aria-describedby')!)!;
+    expect(why.textContent).toBe('Ein archivierter Typ kann nicht Standardtyp sein.');
+    // in the row for everybody to read: the blocked radio takes no focus, a tooltip alone would be out of reach
+    expect(why.hidden).toBe(false);
+    expect(screen.getByText('Ein archivierter Typ kann nicht Standardtyp sein.')).toBe(why);
+    expect(radio('Task').getAttribute('aria-describedby')).toBeNull();
+
+    // the counter-check: a click on it would have sent the archived type as the default; blocked, nothing changes
+    await user.click(archived);
+    expect(radio('Task')).toHaveProperty('checked', true);
+    await user.click(screen.getByRole('button', { name: /Speichern/ }));
+    expect(screen.getByText('Keine Änderungen zu speichern.')).toBeTruthy();
+
+    // switched off it stays in the list, and on again it is the one the project had
+    await user.click(box('Altlast'));
+    expect(box('Altlast').getAttribute('aria-checked')).toBe('false');
+    await user.click(box('Altlast'));
+    await user.click(screen.getByRole('button', { name: /Speichern/ }));
+    expect(calls('PATCH', '/api/v1/projects/p_web')).toHaveLength(0);
+  });
+
+  it('shows a refusal of the server below the list, with the focus on the default type', async () => {
+    const user = userEvent.setup();
+    renderSettings('types', { 'PATCH /api/v1/projects/p_web': () => problem(422, 'validation_failed', { errors: { default_type_id: ['Ein archivierter Typ kann nicht Standardtyp sein.'] } }) });
+
+    await screen.findByRole('list', { name: 'Typen der Organisation' });
+    await user.click(radio('Bug'));
+    await user.click(screen.getByRole('button', { name: /Speichern/ }));
+
+    expect((await screen.findByRole('alert')).textContent).toBe('Ein archivierter Typ kann nicht Standardtyp sein.');
+    const group = screen.getByRole('group', { name: 'Standardtyp' });
+    expect(group.getAttribute('aria-invalid')).toBe('true');
+    await waitFor(() => expect(document.activeElement).toBe(group));
+
+    // a new choice takes the refusal away
+    await user.click(radio('Epic'));
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('says when there is nothing to save, sets the form back, and asks before leaving the edits', async () => {
+    const user = userEvent.setup();
+    renderSettings('types');
+
+    await user.click(await screen.findByRole('button', { name: /Speichern/ }));
+    expect(screen.getByText('Keine Änderungen zu speichern.')).toBeTruthy();
+
+    await user.click(box('Epic'));
+    let allowed = true;
+    act(() => {
+      allowed = startVisit('/projects');
+    });
+    expect(allowed).toBe(false);
+    expect(await screen.findByText('Deine Änderungen an den Typen sind nicht gespeichert. Gehst du jetzt weiter, sind sie weg.')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Weiter bearbeiten' }));
+
+    await user.click(screen.getByRole('button', { name: 'Zurücksetzen' }));
+    expect(box('Epic').getAttribute('aria-checked')).toBe('true');
+    expect(calls('PATCH', '/api/v1/projects/p_web')).toHaveLength(0);
+  });
+
+  it('says why saving failed and tries again from the toast', async () => {
+    const user = userEvent.setup();
+    let answer: (body: unknown) => { status?: number; body?: unknown } = unavailable;
+    renderSettings('types', { 'PATCH /api/v1/projects/p_web': (body) => answer(body) });
+
+    await screen.findByRole('list', { name: 'Typen der Organisation' });
+    await user.click(box('Epic'));
+    await user.click(screen.getByRole('button', { name: /Speichern/ }));
+    await waitFor(() => expect(toastTitles()).toContain('Typen nicht gespeichert'));
+
+    answer = saved;
+    act(() => runToastAction(toastNamed('Typen nicht gespeichert').id));
+    await waitFor(() => expect(toastTitles()).toContain('Einstellungen gespeichert'));
+  });
+
+  it('lets somebody who does not manage the project only read the types', async () => {
+    signedIn = lene;
+    renderSettings('types', {}, { project: { ...web, my_role: 'member' } });
+
+    await screen.findByRole('list', { name: 'Typen der Organisation' });
+    expect(box('Epic').hasAttribute('data-disabled')).toBe(true);
+    expect(radio('Bug')).toHaveProperty('disabled', true);
+    expect(screen.queryByRole('button', { name: /Speichern/ })).toBeNull();
+  });
+
+  it('keeps the draft when the types fail to load again in the background', async () => {
+    const user = userEvent.setup();
+    let fail = false;
+    const { client } = renderSettings('types', { 'GET /api/v1/work-item-types': () => (fail ? unavailable() : { body: list([...types, legacy]) }) });
+
+    await screen.findByRole('list', { name: 'Typen der Organisation' });
+    await user.click(box('Epic'));
+    fail = true;
+    await act(() => client.refetchQueries());
+    // the observers hear of the failure a tick later
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+
+    expect(screen.queryByText('Die Typen konnten nicht geladen werden')).toBeNull();
+    expect(box('Epic').getAttribute('aria-checked')).toBe('false');
+    expect(screen.getByText('Nicht gespeicherte Änderungen')).toBeTruthy();
+  });
+
+  it('says when the types could not be loaded and loads them again on request', async () => {
+    const user = userEvent.setup();
+    let fail = true;
+    renderSettings('types', { 'GET /api/v1/work-item-types': () => (fail ? unavailable() : { body: list(types) }) });
+
+    expect(await screen.findByText('Die Typen konnten nicht geladen werden')).toBeTruthy();
+    fail = false;
+    await user.click(screen.getByRole('button', { name: 'Erneut versuchen' }));
+    expect(await screen.findByRole('list', { name: 'Typen der Organisation' })).toBeTruthy();
   });
 });

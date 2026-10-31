@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use Database\Seeders\Demo\BotsSeeder;
+use Database\Seeders\Demo\CatalogSeeder;
 use Database\Seeders\Demo\FavoritesSeeder;
 use Database\Seeders\Demo\OrganizationSeeder;
 use Database\Seeders\Demo\PeopleSeeder;
@@ -32,6 +33,7 @@ class DemoSeeder extends Seeder
             OrganizationSeeder::class,
             PeopleSeeder::class,
             BotsSeeder::class,
+            CatalogSeeder::class,
             ProjectsSeeder::class,
             FavoritesSeeder::class,
             TokensSeeder::class,

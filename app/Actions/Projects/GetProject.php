@@ -28,6 +28,7 @@ final class GetProject
 
         Authorize::check($actor, 'view', $project);
 
+        $project->load('types:work_item_types.id');
         $project->resolved_by_former_identifier = $reference !== null && $project->identifiers()->where('identifier', strtoupper($reference))->exists();
 
         return $project;

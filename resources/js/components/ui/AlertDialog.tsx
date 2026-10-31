@@ -1,5 +1,5 @@
 import { AlertDialog as BaseAlertDialog } from '@base-ui/react/alert-dialog';
-import type { ReactElement, ReactNode } from 'react';
+import type { ReactElement, ReactNode, RefObject } from 'react';
 import { t } from '@/lib/i18n';
 import { Button } from './Button';
 import { DialogFrame } from './Dialog';
@@ -18,13 +18,15 @@ type AlertDialogProps = {
   onConfirm: () => void;
   /** The confirmed action is running. */
   pending?: boolean;
+  /** Element to focus on close; by default the one that had the focus before (gone once the confirmed action removed it). */
+  finalFocus?: RefObject<HTMLElement | null>;
 };
 
 /**
  * Confirmation only for big consequences (delete a project, switch a workflow); everything else gets
  * 5 seconds of undo. The focus starts on "Cancel".
  */
-export function AlertDialog({ open, onOpenChange, defaultOpen, trigger, title, description, confirmLabel, cancelLabel = t('common.cancel'), onConfirm, pending = false }: AlertDialogProps) {
+export function AlertDialog({ open, onOpenChange, defaultOpen, trigger, title, description, confirmLabel, cancelLabel = t('common.cancel'), onConfirm, pending = false, finalFocus }: AlertDialogProps) {
   return (
     <BaseAlertDialog.Root open={open} onOpenChange={onOpenChange ? (next) => onOpenChange(next) : undefined} defaultOpen={defaultOpen}>
       {trigger && <BaseAlertDialog.Trigger render={trigger} />}
@@ -33,6 +35,7 @@ export function AlertDialog({ open, onOpenChange, defaultOpen, trigger, title, d
         description={description}
         size="sm"
         closable={false}
+        finalFocus={finalFocus}
         footer={
           <>
             <BaseAlertDialog.Close

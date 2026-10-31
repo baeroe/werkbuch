@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\User;
+use App\Models\Workflow;
 use Tests\Feature\Access\MatrixWorld;
 
 /*
@@ -17,6 +18,7 @@ const RIGHTS_CALLS = [
     'POST members' => ['POST', '/members', 'new person'],
     'POST join' => ['POST', '/join', []],
     'POST archive' => ['POST', '/archive', []],
+    'PUT workflow' => ['PUT', '/workflow', 'new workflow'],
     'DELETE project' => ['DELETE', '', []],
 ];
 
@@ -26,17 +28,17 @@ const RIGHTS_CALLS = [
  */
 function rightsTable(): array
 {
-    $admin = [200, 200, 200, 201, 201, 200, 202];
-    $member = [200, 200, 403, 403, 409, 403, 403];
+    $admin = [200, 200, 200, 201, 201, 200, 200, 202];
+    $member = [200, 200, 403, 403, 409, 403, 403, 403];
 
     return [
         // org admin without a membership: admin rights everywhere, joining makes them a member
         'org admin' => ['org_admin', 'web' => $admin, 'ops' => $admin],
-        'project admin' => ['project_admin', 'web' => [200, 200, 200, 201, 409, 200, 202], 'ops' => [200, 200, 200, 201, 409, 200, 202]],
+        'project admin' => ['project_admin', 'web' => [200, 200, 200, 201, 409, 200, 200, 202], 'ops' => [200, 200, 200, 201, 409, 200, 200, 202]],
         'project member' => ['project_member', 'web' => $member, 'ops' => $member],
         'project viewer' => ['project_viewer', 'web' => $member, 'ops' => $member],
         // not a member: a public project is read as a viewer and joined with one click, a private one does not exist
-        'outsider' => ['outsider_public', 'web' => [200, 200, 403, 403, 201, 403, 403], 'ops' => array_fill(0, 7, 404)],
+        'outsider' => ['outsider_public', 'web' => [200, 200, 403, 403, 201, 403, 403, 403], 'ops' => array_fill(0, 8, 404)],
     ];
 }
 
@@ -55,8 +57,12 @@ it('answers each call as the tables of spec 4.3 say', function (string $column, 
     $project = $which === 'web' ? $w->web : $w->ops;
     [$method, $path, $body] = RIGHTS_CALLS[$call];
 
-    // the person a call adds is somebody new
-    $body = $body === 'new person' ? ['user_id' => User::factory()->create()->id, 'role' => 'member'] : $body;
+    // the person a call adds is somebody new, and so is the workflow a project switches to
+    $body = match ($body) {
+        'new person' => ['user_id' => User::factory()->create()->id, 'role' => 'member'],
+        'new workflow' => ['workflow_id' => Workflow::factory()->create()->id, 'mapping' => []],
+        default => $body,
+    };
 
     $this->actingAs($w->account($column))->json($method, "/api/v1/projects/{$project->identifier}{$path}", $body)
         ->assertStatus($status);

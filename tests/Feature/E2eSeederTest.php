@@ -4,10 +4,17 @@ use App\Access\OrgRole;
 use App\Access\Visibility;
 use App\Actions\Projects\CreateProject;
 use App\Actions\Projects\UpdateProject;
+use App\Events\EventType;
 use App\Models\Invitation;
+use App\Models\Label;
 use App\Models\Organization;
 use App\Models\Project;
+use App\Models\Property;
+use App\Models\RelationType;
+use App\Models\Resolution;
 use App\Models\User;
+use App\Models\Workflow;
+use App\Models\WorkItemType;
 use Database\Seeders\DemoSeeder;
 use Database\Seeders\E2eSeeder;
 use Illuminate\Support\Facades\DB;
@@ -64,6 +71,42 @@ it('takes the projects of earlier runs away with their identifiers, and keeps th
     expect(Project::query()->where('name', 'like', 'E2E %')->exists())->toBeFalse()
         ->and(DB::table('project_identifiers')->where('identifier', 'E2E')->exists())->toBeFalse()
         ->and(Project::query()->orderBy('identifier')->pluck('identifier')->all())->toBe(['APP', 'OPS', 'WEB']);
+});
+
+it('removes the catalog entries of earlier runs and keeps the demo ones', function () {
+    $this->seed(E2eSeeder::class);
+    $property = Property::factory()->create(['label' => 'E2E desktop-light ABCDE']);
+    $type = WorkItemType::factory()->create(['name' => 'E2E desktop-light ABCDE']);
+    $type->typeProperties()->create(['property_id' => $property->id, 'required' => true, 'position' => 0]);
+    // switched on in a project nobody seeds (the demo seeder sets the types of WEB, APP and OPS anew before); the
+    // factory switches every active type on, the E2E one too
+    $keep = Project::factory()->identifier('KEEP')->create(['name' => 'Behalten']);
+    Workflow::factory()->create(['name' => 'E2E desktop-light ABCDE']);
+    Label::factory()->create(['name' => 'E2E desktop-light ABCDE']);
+    RelationType::factory()->create(['name' => 'E2E desktop-light ABCDE']);
+    Resolution::factory()->create(['label' => 'E2E desktop-light ABCDE']);
+    $kept = Label::factory()->create(['name' => 'Not E2E 1']);
+    $counts = fn () => [WorkItemType::count(), Property::count(), Workflow::count(), Label::count(), RelationType::count(), Resolution::count()];
+
+    expect($counts())->toBe([5, 10, 3, 10, 5, 5])
+        ->and($keep->types()->pluck('work_item_types.id')->all())->toContain($type->id);
+
+    $this->seed(E2eSeeder::class);
+
+    expect($counts())->toBe([4, 9, 2, 9, 4, 4])
+        ->and(WorkItemType::where('name', 'like', 'E2E %')->exists())->toBeFalse()
+        ->and(Property::where('label', 'like', 'E2E %')->exists())->toBeFalse()
+        ->and(Workflow::where('name', 'like', 'E2E %')->exists())->toBeFalse()
+        ->and(Label::where('name', 'like', 'E2E %')->exists())->toBeFalse()
+        ->and(RelationType::where('name', 'like', 'E2E %')->exists())->toBeFalse()
+        ->and(Resolution::where('label', 'like', 'E2E %')->exists())->toBeFalse()
+        ->and(Workflow::orderBy('id')->pluck('name')->all())->toBe(['Standard', 'Agentur-Freigabe'])
+        ->and(WorkItemType::orderBy('id')->pluck('name')->all())->toBe(['Task', 'Bug', 'Epic', 'Kundenwunsch'])
+        ->and(Label::where('name', 'UX')->exists())->toBeTrue()
+        ->and(Label::whereKey($kept->id)->exists())->toBeTrue()
+        ->and($keep->types()->pluck('work_item_types.id')->all())->not->toContain($type->id)
+        ->and(eventsOf(EventType::WorkItemTypeDeleted))->toHaveCount(1)
+        ->and(eventsOf(EventType::LabelDeleted))->toHaveCount(1);
 });
 
 it('seeds the accounts of every Playwright project', function () {

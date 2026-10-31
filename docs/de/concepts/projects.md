@@ -12,14 +12,20 @@ Ein Projekt ist der Ort, an dem ein Team an Items arbeitet. Jedes Projekt hat ei
 | Lead | Eine aktive Person, die Mitglied des Projekts ist. Standardmäßig die Person, die es anlegt. |
 | Kennung | Siehe unten. |
 | Sichtbarkeit | Öffentlich oder privat. |
-
-Workflow, aktivierte Item-Typen und Standardtyp kommen mit den Work Items.
+| Workflow | Der Standard-Workflow, außer du wählst einen anderen. Siehe unten. |
+| Typen | Die Item-Typen, die das Projekt nutzt, einer davon der Standardtyp. Siehe unten. |
 
 ## Kennung
 
 Die Kennung besteht aus 2 bis 10 Großbuchstaben oder Ziffern und beginnt mit einem Buchstaben, zum Beispiel `WEB`. Sie ist in der ganzen Organisation eindeutig und wird zum Präfix der Keys der Items (`WEB-12`).
 
 Du kannst sie ändern. Alte Kennungen funktionieren weiter: `ALT-12` leitet auf `NEU-12` um, und Links, Lesezeichen und API-Aufrufe mit der alten Kennung finden das Projekt weiterhin. Eine alte Kennung bleibt für dieses Projekt reserviert; niemand sonst kann sie vergeben. Zurück auf eine frühere Kennung desselben Projekts zu wechseln ist erlaubt.
+
+## Workflow und Typen
+
+Jedes Projekt nutzt einen [Workflow](/de/concepts/workflows) der Organisation und aktiviert die [Typen](/de/concepts/types-and-properties), die seine Items haben dürfen, einen davon als Standardtyp für neue Items. Beim Anlegen schlägt der Dialog den Standard-Workflow und alle aktiven Typen vor, der oberste angehakte Typ wird der Standard.
+
+Projekt-Admins ändern beides in den Projekteinstellungen unter **Workflow** und **Typen**. Der Wechsel des Workflows ist ein eigener Schritt: Über die API ist er `PUT /api/v1/projects/{project}/workflow`, kein Feld des Projekts. Die Typen ändern sich mit den übrigen Feldern des Projekts (`enabled_type_ids`, `default_type_id`).
 
 ## Öffentlich und privat
 

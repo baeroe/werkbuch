@@ -45,27 +45,41 @@ type FormDialogProps = {
   onSubmit: () => void;
   /** The call is running: the button shows it and a second send is ignored. */
   pending?: boolean;
+  /**
+   * The call must run to its end with the dialog open (switching a workflow): "Cancel" is blocked, and Escape, a click
+   * outside and the close button do not close it meanwhile.
+   */
+  locked?: boolean;
   /** A refusal without a field of its own. */
   notice?: ReactNode;
   finalFocus?: RefObject<HTMLElement | null>;
   children: ReactNode;
 };
 
-export function FormDialog({ open, onOpenChange, title, description, size = 'md', submitLabel, onSubmit, pending = false, notice, finalFocus, children }: FormDialogProps) {
+export function FormDialog({ open, onOpenChange, title, description, size = 'md', submitLabel, onSubmit, pending = false, locked = false, notice, finalFocus, children }: FormDialogProps) {
   const formId = useId();
   // two sends within one tick (a key pressed twice at once) are one intent; `pending` covers every later one
   const sending = useRef(false);
   return (
     <Dialog
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={(next) => {
+        if (next || !locked) onOpenChange(next);
+      }}
       title={title}
       description={description}
       size={size}
       finalFocus={finalFocus}
       footer={
         <>
-          <DialogClose render={<Button variant="ghost">{t('common.cancel')}</Button>} />
+          <DialogClose
+            render={
+              // blocked but focusable: a native `disabled` would drop the focus of a focused button to <body>
+              <Button variant="ghost" disabledReason={locked ? t('ui.form_dialog.locked') : null}>
+                {t('common.cancel')}
+              </Button>
+            }
+          />
           <Button variant="primary" type="submit" form={formId} pending={pending} shortcut="mod+enter">
             {submitLabel}
           </Button>

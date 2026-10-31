@@ -96,10 +96,10 @@ function recoveryCodes(project: string): string[] {
  */
 export const PEOPLE = {
   e2e: { email: 'e2e@example.com', password: E2E_PASSWORD, name: 'Erik Ende' },
-  mara: { email: 'mara@feldwerk.example.com', password: DEMO_PASSWORD, name: 'Mara Lindqvist' },
-  theo: { email: 'theo@feldwerk.example.com', password: DEMO_PASSWORD, name: 'Theo Okafor' },
-  lene: { email: 'lene@feldwerk.example.com', password: DEMO_PASSWORD, name: 'Lene Vogt' },
-  ida: { email: 'ida@feldwerk.example.com', password: DEMO_PASSWORD, name: 'Ida Brenner' },
+  mara: { email: 'mara@feldwerk.example.com', password: DEMO_PASSWORD, name: 'Mara Lindqvist', locale: 'de' as const },
+  theo: { email: 'theo@feldwerk.example.com', password: DEMO_PASSWORD, name: 'Theo Okafor', locale: 'de' as const },
+  lene: { email: 'lene@feldwerk.example.com', password: DEMO_PASSWORD, name: 'Lene Vogt', locale: 'de' as const },
+  ida: { email: 'ida@feldwerk.example.com', password: DEMO_PASSWORD, name: 'Ida Brenner', locale: 'de' as const },
   reset: Object.fromEntries(VARIANTS.map((project) => [project, { email: `reset-${project}@example.com`, password: E2E_PASSWORD }])) as Record<
     string,
     { email: string; password: string }
@@ -118,7 +118,7 @@ export const PEOPLE = {
  * it through the environment): makes names and handles unique per run.
  */
 export function runId(): string {
-  process.env.E2E_RUN_ID ??= Date.now().toString(36).toUpperCase().slice(-5).padStart(5, '0');
+  process.env.E2E_RUN_ID ??= Date.now().toString(36).toUpperCase().slice(-5);
   return process.env.E2E_RUN_ID;
 }
 
@@ -187,7 +187,10 @@ export function totp(secret: string, at = Date.now()): string {
  * fresh context and opening another can hang in Chromium (`Target.createTarget`). Close the context at the end of the
  * test.
  */
-export async function signedInContext(browser: Browser, person: { email: string; password: string }): Promise<{ context: BrowserContext; page: Page }> {
+export async function signedInContext(
+  browser: Browser,
+  person: { email: string; password: string; locale?: 'de' | 'en' },
+): Promise<{ context: BrowserContext; page: Page }> {
   const { baseURL, ignoreHTTPSErrors, viewport, locale, timezoneId, colorScheme } = test.info().project.use;
   const options = { baseURL, ignoreHTTPSErrors, viewport, locale, timezoneId, colorScheme, permissions: ['clipboard-read', 'clipboard-write'] };
   const file = path.join(ACCOUNT_AUTH_DIR, `${person.email}.json`);
@@ -203,6 +206,9 @@ export async function signedInContext(browser: Browser, person: { email: string;
   await page.goto('/login');
   await login(page, person.email, person.password);
   await expect(page).toHaveURL(/\/my-items$/);
+  // an account in another language than the sign-in page loads the page anew right after the visit: wait for that load,
+  // or the test's first `goto` is interrupted by it
+  await expect(page.locator('html')).toHaveAttribute('lang', person.locale ?? 'en');
   await context.storageState({ path: file });
   return { context, page };
 }
@@ -313,6 +319,29 @@ export async function api(page: Page, method: string, path: string, body?: unkno
   });
 }
 
+/** Every entry of a catalog (`labels`, `properties` …), following the cursor to the last page, so "not in the list" never passes on a first page. */
+export async function allEntries(page: Page, path: string): Promise<Record<string, unknown>[]> {
+  const entries: Record<string, unknown>[] = [];
+  let cursor: string | null = null;
+  do {
+    const response = await api(page, 'GET', `/api/v1/${path}?per_page=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`);
+    expect(response.status(), await response.text()).toBe(200);
+    const body = (await response.json()) as { data: Record<string, unknown>[]; meta: { next_cursor: string | null } };
+    entries.push(...body.data);
+    cursor = body.meta.next_cursor;
+  } while (cursor !== null);
+  return entries;
+}
+
+/** Deletes the entries of a catalog whose name (or label) starts with `prefix`, whatever a spec left (cleanup in `finally`). */
+export async function removeCatalogEntries(page: Page, path: string, field: 'name' | 'label', prefix: string): Promise<void> {
+  for (const entry of (await allEntries(page, path)).filter((item) => String(item[field]).startsWith(prefix))) {
+    const removed = await api(page, 'DELETE', `/api/v1/${path}/${String(entry.id)}`);
+    // 200 with what happened (labels, types …), 204 without (workflows)
+    expect([200, 204], await removed.text()).toContain(removed.status());
+  }
+}
+
 /**
  * Opens the drawer of the top bar on the phone, where the sidebar lives; on the desktop the sidebar is there already.
  * `backwards` tabs up to the menu from a place further down the page.
@@ -328,7 +357,8 @@ export async function openNavigation(page: Page, locale: Locale, { backwards = f
 
 /**
  * Creates a project with the keyboard only: "Create project" in the sidebar, the name, the identifier the dialog
- * suggests, ⌘↵. Answers the identifier. Name it `E2E …`: the e2e seeder removes those projects before every run.
+ * suggests, the default workflow and the active types it preselects, ⌘↵. Answers the identifier. Name it `E2E …`: the
+ * e2e seeder removes those projects before every run.
  */
 export async function createProjectFromSidebar(page: Page, name: string): Promise<string> {
   const navigation = await openNavigation(page, 'en');
@@ -339,6 +369,8 @@ export async function createProjectFromSidebar(page: Page, name: string): Promis
   await expect(dialog).toBeVisible();
   // the address asked for the dialog once and keeps nothing of it
   await expect(page).toHaveURL(/\/projects$/);
+  // the form waits for the workflows and types, then the name takes the focus
+  await expect(dialog.getByRole('combobox', { name: new RegExp(`^${tr('en', 'projects.create.workflow')}`) })).toBeVisible();
   const nameField = dialog.getByRole('textbox', { name: tr('en', 'projects.create.name') });
   await expect(nameField).toBeFocused();
   await page.keyboard.type(name);

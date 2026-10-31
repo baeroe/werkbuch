@@ -88,7 +88,7 @@ final class UpdateUser
             'timezone' => ['sometimes', 'required', 'string', 'timezone:all'],
             'avatar_url' => ['sometimes', ...ImageInput::rules($avatar)],
             'description' => $user->isBot() ? ['sometimes', 'nullable', 'string', 'max:'.AccountInput::DESCRIPTION_MAX] : ['prohibited'],
-            'owner_id' => $user->isBot() ? ['sometimes', 'nullable', 'string', AccountInput::owner()] : ['prohibited'],
+            'owner_id' => $user->isBot() ? ['sometimes', 'nullable', 'bail', 'string', 'ulid', AccountInput::owner()] : ['prohibited'],
         ], [...AccountInput::messages(), ...ImageInput::messages('avatar_url')])->validate();
 
         $changes = [];

@@ -29,6 +29,10 @@ export const paths = {
   projectSettings: (identifier: string, section?: string) => below(`/projects/${segment(identifier)}/settings`, section),
   item: (key: string) => `/items/${segment(key)}`,
   settings: (section?: string) => below('/settings', section),
+  /** The editor of a workflow, a view of the workflows section (P17). */
+  workflow: (id: string) => `/settings/workflows?workflow=${segment(id)}`,
+  /** The editor with a new workflow, as a copy of `from` when given. */
+  newWorkflow: (from?: string) => `/settings/workflows?workflow=new${from === undefined ? '' : `&from=${segment(from)}`}`,
   me: (section?: string) => below('/me', section),
   login: () => '/login',
   logout: () => '/logout',
@@ -45,6 +49,12 @@ export function appUrl(path: string): string {
 /** The address of this instance, for the REST and MCP snippets. */
 export function instanceOrigin(): string {
   return window.location.origin;
+}
+
+/** One parameter of the query of the current page (`?workflow=…`), or null when it is not there. */
+export function useSearchParam(name: string): string | null {
+  const { url } = usePage();
+  return new URL(url, window.location.origin).searchParams.get(name);
 }
 
 /** Whether the current page is `to` (with `end`) or lies below it, or is one of `also`; the query is ignored. */

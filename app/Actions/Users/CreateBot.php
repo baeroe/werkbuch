@@ -48,7 +48,7 @@ final class CreateBot
             'name' => ['required', 'string', 'max:'.AccountInput::NAME_MAX],
             'handle' => AccountInput::handle(),
             'description' => ['nullable', 'string', 'max:'.AccountInput::DESCRIPTION_MAX],
-            'owner_id' => ['required', 'string', AccountInput::owner()],
+            'owner_id' => ['bail', 'required', 'string', 'ulid', AccountInput::owner()],
         ], AccountInput::messages())->validate();
 
         return DB::transaction(function () use ($actor, $valid): User {

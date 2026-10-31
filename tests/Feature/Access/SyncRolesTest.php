@@ -14,29 +14,27 @@ use Spatie\Permission\Models\Role;
  *
  * @return array<string, list<string>>
  */
-function storedRoles(): array
-{
+$storedRoles = function (): array {
     return Role::with('permissions')->get()
         ->mapWithKeys(fn (Role $role) => [$role->name => $role->permissions->pluck('name')->sort()->values()->all()])
         ->sortKeys()->all();
-}
+};
 
 /**
  * The roles as Grants defines them, in the same shape.
  *
  * @return array<string, list<string>>
  */
-function grantedRoles(): array
-{
+$grantedRoles = function (): array {
     return collect([...OrgRole::cases(), ...ProjectRole::cases()])
         ->mapWithKeys(fn (OrgRole|ProjectRole $role) => [
             $role->roleName() => collect(Grants::of($role))->map(fn (Permission $p) => $p->value)->sort()->values()->all(),
         ])
         ->sortKeys()->all();
-}
+};
 
-it('mirrors the grants after the migrations', function () {
-    expect(storedRoles())->toBe(grantedRoles())
+it('mirrors the grants after the migrations', function () use ($storedRoles, $grantedRoles) {
+    expect($storedRoles())->toBe($grantedRoles())
         ->and(StoredPermission::query()->pluck('name')->sort()->values()->all())
         ->toBe(collect(Permission::cases())->map->value->sort()->values()->all())
         ->and(Role::query()->whereNotNull('team_id')->count())->toBe(0)
@@ -44,7 +42,7 @@ it('mirrors the grants after the migrations', function () {
         ->and(StoredPermission::query()->where('guard_name', '!=', 'web')->count())->toBe(0);
 });
 
-it('removes rights and roles that are no longer granted and restores the grants', function () {
+it('removes rights and roles that are no longer granted and restores the grants', function () use ($storedRoles, $grantedRoles) {
     $stale = StoredPermission::query()->create(['name' => 'stale.right', 'guard_name' => 'web']);
     Role::query()->create(['name' => 'ghost', 'guard_name' => 'web']);
     Role::query()->create(['name' => 'org-admin', 'guard_name' => 'web', 'team_id' => strtolower((string) str()->ulid())]);
@@ -54,7 +52,7 @@ it('removes rights and roles that are no longer granted and restores the grants'
 
     SyncRoles::run();
 
-    expect(storedRoles())->toBe(grantedRoles())
+    expect($storedRoles())->toBe($grantedRoles())
         ->and(StoredPermission::query()->where('name', 'stale.right')->exists())->toBeFalse()
         ->and(Role::query()->where('name', 'ghost')->exists())->toBeFalse()
         ->and(Role::query()->count())->toBe(5)
@@ -75,10 +73,10 @@ it('changes nothing when it runs again', function () {
     expect($snapshot())->toEqual($before);
 });
 
-it('syncs from the command', function () {
+it('syncs from the command', function () use ($storedRoles, $grantedRoles) {
     Role::findByName('project-member')->permissions()->detach();
 
     $this->artisan('app:sync-roles')->expectsOutput('Roles and permissions are in sync.')->assertSuccessful();
 
-    expect(storedRoles())->toBe(grantedRoles());
+    expect($storedRoles())->toBe($grantedRoles());
 });

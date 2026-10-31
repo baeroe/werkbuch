@@ -27,11 +27,13 @@ class TokensSeeder extends Seeder
             ['kira', 'MCP', ['read', 'write', 'mcp'], null, '2026-10-27 09:41', '2026-10-05 14:30'],
         ];
 
+        $ownerType = (new User)->getMorphClass();
+
         foreach ($tokens as [$handle, $name, $abilities, $expiresAt, $lastUsedAt, $createdAt]) {
             $owner = User::query()->where('handle', $handle)->sole();
-            $token = PersonalAccessToken::query()->where('tokenable_type', 'user')->where('tokenable_id', $owner->id)->where('name', $name)->first()
+            $token = PersonalAccessToken::query()->where('tokenable_type', $ownerType)->where('tokenable_id', $owner->id)->where('name', $name)->first()
                 ?? (new PersonalAccessToken)->forceFill([
-                    'tokenable_type' => 'user',
+                    'tokenable_type' => $ownerType,
                     'tokenable_id' => $owner->id,
                     'name' => $name,
                     'token' => hash('sha256', 'wb_'.Str::random(40)),

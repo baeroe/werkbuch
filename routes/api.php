@@ -4,13 +4,19 @@ use App\Exceptions\Problem;
 use App\Http\Controllers\Api\BotsController;
 use App\Http\Controllers\Api\FavoritesController;
 use App\Http\Controllers\Api\InvitationsController;
+use App\Http\Controllers\Api\LabelsController;
 use App\Http\Controllers\Api\MembersController;
 use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\PasswordController;
 use App\Http\Controllers\Api\ProjectsController;
+use App\Http\Controllers\Api\PropertiesController;
+use App\Http\Controllers\Api\RelationTypesController;
+use App\Http\Controllers\Api\ResolutionsController;
 use App\Http\Controllers\Api\TokensController;
 use App\Http\Controllers\Api\TwoFactorController;
 use App\Http\Controllers\Api\UsersController;
+use App\Http\Controllers\Api\WorkflowsController;
+use App\Http\Controllers\Api\WorkItemTypesController;
 use App\Http\Middleware\EnsureAccountIsActive;
 use App\Http\Middleware\EnsureSession;
 use App\Http\Middleware\EnsureTokenAbility;
@@ -45,12 +51,43 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
     Route::delete('projects/{project}', [ProjectsController::class, 'destroy']);
     Route::post('projects/{project}/archive', [ProjectsController::class, 'archive']);
     Route::post('projects/{project}/restore', [ProjectsController::class, 'restore']);
+    Route::put('projects/{project}/workflow', [ProjectsController::class, 'assignWorkflow']);
 
     Route::post('projects/{project}/join', [MembersController::class, 'join']);
     Route::get('projects/{project}/members', [MembersController::class, 'index']);
     Route::post('projects/{project}/members', [MembersController::class, 'store']);
     Route::patch('projects/{project}/members/{user}', [MembersController::class, 'update']);
     Route::delete('projects/{project}/members/{user}', [MembersController::class, 'destroy']);
+
+    Route::get('workflows', [WorkflowsController::class, 'index']);
+    Route::post('workflows', [WorkflowsController::class, 'store']);
+    Route::put('workflows/{workflow}', [WorkflowsController::class, 'update']);
+    Route::delete('workflows/{workflow}', [WorkflowsController::class, 'destroy']);
+
+    Route::get('work-item-types', [WorkItemTypesController::class, 'index']);
+    Route::post('work-item-types', [WorkItemTypesController::class, 'store']);
+    Route::put('work-item-types/{workItemType}', [WorkItemTypesController::class, 'update']);
+    Route::delete('work-item-types/{workItemType}', [WorkItemTypesController::class, 'destroy']);
+
+    Route::get('properties', [PropertiesController::class, 'index']);
+    Route::post('properties', [PropertiesController::class, 'store']);
+    Route::put('properties/{property}', [PropertiesController::class, 'update']);
+    Route::delete('properties/{property}', [PropertiesController::class, 'destroy']);
+
+    Route::get('labels', [LabelsController::class, 'index']);
+    Route::post('labels', [LabelsController::class, 'store']);
+    Route::put('labels/{label}', [LabelsController::class, 'update']);
+    Route::delete('labels/{label}', [LabelsController::class, 'destroy']);
+
+    Route::get('relation-types', [RelationTypesController::class, 'index']);
+    Route::post('relation-types', [RelationTypesController::class, 'store']);
+    Route::put('relation-types/{relationType}', [RelationTypesController::class, 'update']);
+    Route::delete('relation-types/{relationType}', [RelationTypesController::class, 'destroy']);
+
+    Route::get('resolutions', [ResolutionsController::class, 'index']);
+    Route::post('resolutions', [ResolutionsController::class, 'store']);
+    Route::put('resolutions/{resolution}', [ResolutionsController::class, 'update']);
+    Route::delete('resolutions/{resolution}', [ResolutionsController::class, 'destroy']);
 
     Route::get('favorites', [FavoritesController::class, 'index']);
     Route::post('favorites/toggle', [FavoritesController::class, 'toggle']);

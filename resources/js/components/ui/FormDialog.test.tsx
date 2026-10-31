@@ -6,6 +6,7 @@ import { isMac } from '@/lib/platform';
 import { listShortcuts } from '@/lib/shortcuts/registry';
 import { FormDialog } from './FormDialog';
 import { Input } from './Input';
+import { Switch } from './Switch';
 
 /** The key chord of the submit shortcut as the browser sends it; on a Mac `mod` is the command key. */
 const submitChord = () => new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...(isMac() ? { metaKey: true } : { ctrlKey: true }) });
@@ -62,6 +63,34 @@ describe('FormDialog', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Anlegen' }).hasAttribute('aria-busy')).toBe(false));
     await tick();
     act(() => void sendWithShortcut());
+    expect(onSubmit).toHaveBeenCalledTimes(2);
+  });
+
+  it('sends from a switch with the shortcut and with Enter, which never flip it; Space does', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    render(
+      <Harness onSubmit={onSubmit}>
+        <Switch label="Archiviert" />
+      </Harness>,
+    );
+    await screen.findByRole('dialog', { name: 'Bot anlegen' });
+    const control = screen.getByRole('switch', { name: 'Archiviert' });
+    act(() => control.focus());
+
+    act(() => void control.dispatchEvent(submitChord()));
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(control.getAttribute('aria-checked')).toBe('false');
+
+    act(() => endCall());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Anlegen' }).hasAttribute('aria-busy')).toBe(false));
+    await tick();
+    await user.keyboard('{Enter}');
+    expect(onSubmit).toHaveBeenCalledTimes(2);
+    expect(control.getAttribute('aria-checked')).toBe('false');
+
+    await user.keyboard(' ');
+    expect(control.getAttribute('aria-checked')).toBe('true');
     expect(onSubmit).toHaveBeenCalledTimes(2);
   });
 
@@ -201,6 +230,39 @@ describe('FormDialog', () => {
     expect((await screen.findByRole('textbox', { name: 'Name' }) as HTMLInputElement).value).toBe('');
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('stays open while it is locked: "Abbrechen" is blocked, Escape and the close button do nothing', async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    const { rerender } = render(
+      <FormDialog open onOpenChange={onOpenChange} title="Workflow wechseln" submitLabel="Wechseln" pending locked onSubmit={() => {}}>
+        <p>Text</p>
+      </FormDialog>,
+    );
+    await screen.findByRole('dialog', { name: 'Workflow wechseln' });
+
+    const cancel = screen.getByRole('button', { name: 'Abbrechen' });
+    expect(cancel.getAttribute('aria-disabled')).toBe('true');
+    // blocked, not disabled: the focus stays on it and a click closes nothing
+    cancel.focus();
+    await user.click(cancel);
+    expect(document.activeElement).toBe(cancel);
+    expect(cancel.getAttribute('aria-describedby')).toBeTruthy();
+    await user.keyboard('{Escape}');
+    await user.click(screen.getByRole('button', { name: 'Schließen' }));
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog', { name: 'Workflow wechseln' })).toBeTruthy();
+
+    // unlocked, the same Escape closes it (the counter-check)
+    rerender(
+      <FormDialog open onOpenChange={onOpenChange} title="Workflow wechseln" submitLabel="Wechseln" onSubmit={() => {}}>
+        <p>Text</p>
+      </FormDialog>,
+    );
+    expect(screen.getByRole('button', { name: 'Abbrechen' }).getAttribute('aria-disabled')).toBeNull();
+    await user.keyboard('{Escape}');
+    expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
   it('binds the submit shortcut of the catalog only while it is open', async () => {

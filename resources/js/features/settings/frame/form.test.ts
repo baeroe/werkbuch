@@ -126,6 +126,16 @@ describe('focus', () => {
       expect(document.activeElement?.id).toBe('main');
     });
 
+    it('goes to the fallback instead of the page when there is no other row', async () => {
+      const row = list(['only']);
+      const add = document.createElement('button');
+      document.body.append(add);
+
+      focusNeighbour(row('only'), add);
+      await paint();
+      expect(document.activeElement).toBe(add);
+    });
+
     it('moves nothing when the focus was not in a row, or the target is gone by then', async () => {
       const row = list(['one', 'two']);
 

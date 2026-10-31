@@ -12,6 +12,7 @@ use App\Models\Project;
 use App\Models\ProjectMember;
 use App\Models\User;
 use App\Support\Actor;
+use App\Support\Ids;
 use App\Support\MemberInput;
 use Closure;
 use Illuminate\Support\Facades\DB;
@@ -41,8 +42,8 @@ final class AddMember
         Authorize::check($actor, 'manageMembers', $project);
 
         // ULIDs are stored in lower case; the collation would let an upper-case one pass `exists`
-        if (is_string($input['user_id'] ?? null)) {
-            $input['user_id'] = strtolower($input['user_id']);
+        if (array_key_exists('user_id', $input)) {
+            $input['user_id'] = Ids::normalize($input['user_id']);
         }
 
         $member = DB::transaction(function () use ($actor, $project, $input): ProjectMember {
@@ -50,7 +51,7 @@ final class AddMember
 
             $valid = Validator::make($input, [
                 'user_id' => [
-                    'bail', 'required', 'string', Rule::exists('users', 'id')->whereNull('disabled_at'),
+                    'bail', 'required', 'string', 'ulid', Rule::exists('users', 'id')->whereNull('disabled_at'),
                     function (string $attribute, string $value, Closure $fail) use ($project): void {
                         if (MemberInput::isMember($project, $value)) {
                             $fail(__('field.user.already_member'));
@@ -61,6 +62,7 @@ final class AddMember
             ], [
                 'user_id.required' => __('field.user.inactive'),
                 'user_id.string' => __('field.user.inactive'),
+                'user_id.ulid' => __('field.user.inactive'),
                 'user_id.exists' => __('field.user.inactive'),
                 'role.required' => __('field.project_role.unknown'),
                 'role.string' => __('field.project_role.unknown'),

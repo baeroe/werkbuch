@@ -20,6 +20,37 @@ describe('Switch', () => {
     expect(onCheckedChange).toHaveBeenLastCalledWith(false);
   });
 
+  it('is not switched by Enter, which sends the form around it, nor by Enter with a modifier, which sends nothing', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn((event: SubmitEvent) => event.preventDefault());
+    const onKeyDown = vi.fn((_event: { key: string }) => {});
+    const { container } = render(
+      <form>
+        <Switch label="Archiviert" onKeyDown={onKeyDown} />
+      </form>,
+    );
+    container.querySelector('form')!.addEventListener('submit', onSubmit);
+    const control = screen.getByRole('switch', { name: 'Archiviert' });
+
+    await user.tab();
+    await user.keyboard('{Enter}');
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    await user.keyboard('{Control>}{Enter}{/Control}');
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(control.getAttribute('aria-checked')).toBe('false');
+    // the caller's own handler still runs, for other keys too
+    await user.keyboard('a');
+    expect(onKeyDown.mock.calls.map(([event]) => event.key)).toEqual(['Enter', 'Control', 'Enter', 'a']);
+  });
+
+  it('is not switched by Enter outside a form either', async () => {
+    const user = userEvent.setup();
+    render(<Switch label="Archiviert" />);
+    await user.tab();
+    await user.keyboard('{Enter}');
+    expect(screen.getByRole('switch', { name: 'Archiviert' }).getAttribute('aria-checked')).toBe('false');
+  });
+
   it('is switched by a click on its label, and keeps its own state without a handler', async () => {
     render(<Switch label="Benachrichtigungen" />);
 

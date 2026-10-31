@@ -28,11 +28,12 @@ class FavoritesSeeder extends Seeder
 
         $accounts = User::query()->pluck('id', 'handle');
         $projects = Project::query()->pluck('id', 'identifier');
+        $projectType = (new Project)->getMorphClass();
 
         foreach ($favorites as $handle => $positions) {
             foreach ($positions as $identifier => $position) {
                 Favorite::updateOrCreate(
-                    ['user_id' => $accounts[$handle], 'favoritable_type' => 'project', 'favoritable_id' => $projects[$identifier]],
+                    ['user_id' => $accounts[$handle], 'favoritable_type' => $projectType, 'favoritable_id' => $projects[$identifier]],
                     ['position' => $position],
                 );
             }

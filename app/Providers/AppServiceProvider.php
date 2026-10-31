@@ -6,10 +6,16 @@ use App\Access\RoleIndex;
 use App\Access\Visibility;
 use App\Models\Event;
 use App\Models\Invitation;
+use App\Models\Label;
 use App\Models\Organization;
 use App\Models\PersonalAccessToken;
 use App\Models\Project;
+use App\Models\Property;
+use App\Models\RelationType;
+use App\Models\Resolution;
 use App\Models\User;
+use App\Models\Workflow;
+use App\Models\WorkItemType;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Events\TransactionRolledBack;
 use Illuminate\Support\Facades\Event as Events;
@@ -43,6 +49,12 @@ class AppServiceProvider extends ServiceProvider
             'project' => Project::class,
             'event' => Event::class,
             'invitation' => Invitation::class,
+            'workflow' => Workflow::class,
+            'work_item_type' => WorkItemType::class,
+            'property' => Property::class,
+            'label' => Label::class,
+            'relation_type' => RelationType::class,
+            'resolution' => Resolution::class,
         ]);
 
         Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);

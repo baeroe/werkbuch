@@ -69,15 +69,16 @@ const FOCUSABLE = 'button:not([disabled]):not([aria-disabled="true"]), [role="co
 
 /**
  * A row is going away (removed, and waiting out its undo time): the focus goes to the next row, or to the one before
- * when this is the last, and to the page itself when it was the only one, so a person on the keyboard does not fall back
- * to the top of the page. Call it with the row before it is hidden; `null` (the focus was not in a row) moves nothing.
+ * when this is the last, and to `fallback` when it was the only one: the page itself by default, the control below the
+ * list inside a dialog (the page lies behind it). So a person on the keyboard does not fall back to the top. Call it
+ * with the row before it is hidden; `null` (the focus was not in a row) moves nothing.
  */
-export function focusNeighbour(row: Element | null | undefined): void {
+export function focusNeighbour(row: Element | null | undefined, fallback?: HTMLElement | null): void {
   if (!row) return;
   const neighbour = row.nextElementSibling ?? row.previousElementSibling;
   // after the next paint, when the row is out of the DOM and the target is where it will stay
   requestAnimationFrame(() => {
-    const target = neighbour?.querySelector<HTMLElement>(FOCUSABLE) ?? document.getElementById('main');
+    const target = neighbour?.querySelector<HTMLElement>(FOCUSABLE) ?? fallback ?? document.getElementById('main');
     if (target?.isConnected) target.focus();
   });
 }

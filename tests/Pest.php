@@ -1,16 +1,24 @@
 <?php
 
+use App\Access\Authorize;
 use App\Access\ProjectRole;
 use App\Access\RoleAssignments;
 use App\Events\EventConsumer;
+use App\Events\EventType;
+use App\Exceptions\Problem;
+use App\Models\Event;
 use App\Models\Project;
 use App\Models\User;
 use App\Support\Actor;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Testing\TestResponse;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
+use Symfony\Component\Finder\Finder;
 use Tests\TestCase;
 
 pest()->extend(TestCase::class)->use(RefreshDatabase::class)->in('Feature');
@@ -282,4 +290,86 @@ function imageDataUrl(string $type = 'png', int $width = 2, int $height = 2): st
     };
 
     return "data:image/{$type};base64,".base64_encode((string) ob_get_clean());
+}
+
+/**
+ * The events of a type (of one subject, when given) in the order they happened: `occurred_at`, then `id`.
+ *
+ * @return Collection<int, Event>
+ */
+function eventsOf(EventType $type, ?Model $subject = null): Collection
+{
+    return Event::query()->where('type', $type)
+        ->when($subject, fn ($query) => $query->where('subject_type', $subject->getMorphClass())->where('subject_id', $subject->getKey()))
+        ->orderBy('occurred_at')->orderBy('id')->get();
+}
+
+/**
+ * The problem Authorize::check throws for an ability (the arguments go to the policy).
+ */
+function refusal(User $user, string $ability, mixed ...$arguments): Problem
+{
+    try {
+        Authorize::check(actor($user), $ability, ...$arguments);
+    } catch (Problem $problem) {
+        return $problem;
+    }
+
+    throw new RuntimeException("[{$ability}] was allowed.");
+}
+
+/**
+ * The messages of a response at one field (paths with dots such as `states.1.name` are keys of `errors`).
+ *
+ * @return list<string>|null
+ */
+function errorsAt(TestResponse $response, string $field): ?array
+{
+    return $response->json('errors')[$field] ?? null;
+}
+
+/**
+ * The Problem a call ends with (an action run directly, without REST).
+ */
+function problemOf(Closure $call): Problem
+{
+    try {
+        $call();
+    } catch (Problem $problem) {
+        return $problem;
+    }
+
+    throw new RuntimeException('The call went through.');
+}
+
+/**
+ * The field messages a call ends with (an action run directly, without REST and its TrimStrings, P29).
+ *
+ * @return array<string, list<string>>
+ */
+function invalidOf(Closure $call): array
+{
+    try {
+        $call();
+    } catch (ValidationException $exception) {
+        return $exception->errors();
+    }
+
+    throw new RuntimeException('The call went through.');
+}
+
+/**
+ * Every page of a language below docs/<language>/, as the path without extension (`development`, `concepts/permissions`).
+ *
+ * @return list<string>
+ */
+function docsPages(string $language): array
+{
+    $pages = [];
+
+    foreach (Finder::create()->files()->in(repo_path("docs/{$language}"))->name('*.md') as $file) {
+        $pages[] = preg_replace('/\.md$/', '', str_replace(DIRECTORY_SEPARATOR, '/', $file->getRelativePathname()));
+    }
+
+    return $pages;
 }

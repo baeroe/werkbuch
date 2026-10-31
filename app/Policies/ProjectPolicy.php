@@ -36,6 +36,12 @@ final class ProjectPolicy
         return self::inProject($user, $project, Permission::ProjectManage, __('problem.detail.project_settings_admins'));
     }
 
+    /** Switching the workflow (with a mapping of the states): `project.manage`, the admins of the project. */
+    public function changeWorkflow(User $user, Project $project): Response
+    {
+        return self::inProject($user, $project, Permission::ProjectManage, __('problem.detail.project_workflow_admins'));
+    }
+
     public function archive(User $user, Project $project): Response
     {
         return self::inProject($user, $project, Permission::ProjectArchive, __('problem.detail.project_archive_admins'));

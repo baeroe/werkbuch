@@ -14,6 +14,7 @@ use App\Models\Favorite;
 use App\Models\Project;
 use App\Models\ProjectIdentifier;
 use App\Models\ProjectMember;
+use App\Models\ProjectType;
 use App\Models\User;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
@@ -74,6 +75,8 @@ it('purges the project and everything that hangs on it, keeping its events', fun
         ->and(DB::table('model_has_roles')->where('team_id', $web->id)->count())->toBe(0)
         ->and(Favorite::query()->where('favoritable_id', $web->id)->count())->toBe(0)
         ->and(ProjectIdentifier::query()->where('project_id', $web->id)->count())->toBe(0)
+        ->and(ProjectType::query()->where('project_id', $web->id)->count())->toBe(0)
+        ->and(ProjectType::query()->where('project_id', $other->id)->count())->toBe(3)
         ->and(Media::query()->count())->toBe(0)
         ->and(Storage::disk('local')->exists($image->getPathRelativeToRoot()))->toBeFalse()
         // the other project keeps its own

@@ -1,5 +1,11 @@
 <?php
 
+use App\Models\Label;
+use App\Models\Property;
+use App\Models\RelationType;
+use App\Models\Resolution;
+use App\Models\Workflow;
+use App\Models\WorkItemType;
 use Tests\Feature\Access\MatrixWorld;
 
 /*
@@ -32,11 +38,36 @@ return [
     'delete a project' => ['DELETE', '/api/v1/projects/{project}', 'params' => fn (MatrixWorld $w) => ['project' => $w->web->identifier]],
     'archive a project' => ['POST', '/api/v1/projects/{project}/archive', 'params' => fn (MatrixWorld $w) => ['project' => $w->web->identifier]],
     'restore a project' => ['POST', '/api/v1/projects/{project}/restore', 'params' => fn (MatrixWorld $w) => ['project' => $w->web->identifier]],
+    'switch the workflow of a project' => ['PUT', '/api/v1/projects/{project}/workflow', 'params' => fn (MatrixWorld $w) => ['project' => $w->web->identifier]],
     'join a project' => ['POST', '/api/v1/projects/{project}/join', 'params' => fn (MatrixWorld $w) => ['project' => $w->web->identifier]],
     'list the members of a project' => ['GET', '/api/v1/projects/{project}/members', 'params' => fn (MatrixWorld $w) => ['project' => $w->web->identifier]],
     'add a member to a project' => ['POST', '/api/v1/projects/{project}/members', 'params' => fn (MatrixWorld $w) => ['project' => $w->web->identifier]],
     'change the role of a member' => ['PATCH', '/api/v1/projects/{project}/members/{user}', 'params' => fn (MatrixWorld $w) => ['project' => $w->web->identifier, 'user' => $w->target->id]],
     'remove a member from a project' => ['DELETE', '/api/v1/projects/{project}/members/{user}', 'params' => fn (MatrixWorld $w) => ['project' => $w->web->identifier, 'user' => $w->target->id]],
+    'list workflows' => ['GET', '/api/v1/workflows'],
+    'create a workflow' => ['POST', '/api/v1/workflows'],
+    'change a workflow' => ['PUT', '/api/v1/workflows/{workflow}', 'params' => fn (MatrixWorld $w) => ['workflow' => Workflow::factory()->create()->id]],
+    'delete a workflow' => ['DELETE', '/api/v1/workflows/{workflow}', 'params' => fn (MatrixWorld $w) => ['workflow' => Workflow::factory()->create()->id]],
+    'list work item types' => ['GET', '/api/v1/work-item-types'],
+    'create a work item type' => ['POST', '/api/v1/work-item-types'],
+    'change a work item type' => ['PUT', '/api/v1/work-item-types/{workItemType}', 'params' => fn (MatrixWorld $w) => ['workItemType' => WorkItemType::factory()->create()->id]],
+    'delete a work item type' => ['DELETE', '/api/v1/work-item-types/{workItemType}', 'params' => fn (MatrixWorld $w) => ['workItemType' => WorkItemType::factory()->create()->id]],
+    'list properties' => ['GET', '/api/v1/properties'],
+    'create a property' => ['POST', '/api/v1/properties'],
+    'change a property' => ['PUT', '/api/v1/properties/{property}', 'params' => fn (MatrixWorld $w) => ['property' => Property::factory()->create()->id]],
+    'delete a property' => ['DELETE', '/api/v1/properties/{property}', 'params' => fn (MatrixWorld $w) => ['property' => Property::factory()->create()->id]],
+    'list labels' => ['GET', '/api/v1/labels'],
+    'create a label' => ['POST', '/api/v1/labels'],
+    'change a label' => ['PUT', '/api/v1/labels/{label}', 'params' => fn (MatrixWorld $w) => ['label' => Label::factory()->create()->id]],
+    'delete a label' => ['DELETE', '/api/v1/labels/{label}', 'params' => fn (MatrixWorld $w) => ['label' => Label::factory()->create()->id]],
+    'list relation types' => ['GET', '/api/v1/relation-types'],
+    'create a relation type' => ['POST', '/api/v1/relation-types'],
+    'change a relation type' => ['PUT', '/api/v1/relation-types/{relationType}', 'params' => fn (MatrixWorld $w) => ['relationType' => RelationType::factory()->create()->id]],
+    'delete a relation type' => ['DELETE', '/api/v1/relation-types/{relationType}', 'params' => fn (MatrixWorld $w) => ['relationType' => RelationType::factory()->create()->id]],
+    'list resolutions' => ['GET', '/api/v1/resolutions'],
+    'create a resolution' => ['POST', '/api/v1/resolutions'],
+    'change a resolution' => ['PUT', '/api/v1/resolutions/{resolution}', 'params' => fn (MatrixWorld $w) => ['resolution' => Resolution::factory()->create()->id]],
+    'delete a resolution' => ['DELETE', '/api/v1/resolutions/{resolution}', 'params' => fn (MatrixWorld $w) => ['resolution' => Resolution::factory()->create()->id]],
     'list the own favorites' => ['GET', '/api/v1/favorites'],
     'toggle a favorite' => ['POST', '/api/v1/favorites/toggle'],
     'list tokens' => ['GET', '/api/v1/tokens'],

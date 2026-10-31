@@ -20,4 +20,4 @@ werkbuch is an open, self-hosted project management tool for teams: projects, wo
 
 ## Status
 
-werkbuch is in development, in phase 2 of 15 (organization, accounts, roles, projects): sign-in, the app shell, people and bots, tokens, roles and permissions and projects with members are in place, work items follow. There is no release yet, and these docs only cover what a contributor needs today. Running it locally is described on the [development page](/en/development); how roles, projects and bots work is under [Concepts](/en/concepts/permissions).
+werkbuch is in development, in phase 3 of 15 (workflows, types, properties and catalogs): sign-in, the app shell, people and bots, tokens, roles and permissions, projects with members, and workflows, types, properties, labels, relation types and resolutions are in place, work items follow. There is no release yet, and these docs only cover what a contributor needs today. Running it locally is described on the [development page](/en/development); how roles, projects, workflows, types and bots work is under [Concepts](/en/concepts/permissions).

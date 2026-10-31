@@ -10,8 +10,10 @@ use App\Models\Favorite;
 use App\Models\Project;
 use App\Models\User;
 use App\Support\Actor;
+use App\Support\Ids;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Lorisleiva\Actions\Concerns\AsAction;
@@ -47,7 +49,14 @@ final class ToggleFavorite
             'id.string' => __('field.id.invalid'),
         ])->validate();
 
-        $project = Project::query()->find(strtolower($valid['id'])) ?? throw Problem::notFound();
+        $id = Ids::normalize($valid['id']);
+
+        // a canonical ULID only: the collation would let a look-alike (fullwidth digits, accents) find the project
+        if (! Str::isUlid($id)) {
+            throw Problem::notFound();
+        }
+
+        $project = Project::query()->whereKey($id)->first() ?? throw Problem::notFound();
         Authorize::check($actor, 'view', $project);
 
         $favorite = DB::transaction(function () use ($actor, $project): bool {

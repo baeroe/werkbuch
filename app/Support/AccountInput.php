@@ -26,8 +26,8 @@ final class AccountInput
      */
     public static function normalize(array $input): array
     {
-        if (is_string($input['owner_id'] ?? null)) {
-            $input['owner_id'] = strtolower($input['owner_id']);
+        if (array_key_exists('owner_id', $input)) {
+            $input['owner_id'] = Ids::normalize($input['owner_id']);
         }
 
         return $input;
@@ -81,6 +81,7 @@ final class AccountInput
             'owner_id.prohibited' => __('field.owner_id.people'),
             'owner_id.required' => __('field.owner_id.invalid'),
             'owner_id.string' => __('field.owner_id.invalid'),
+            'owner_id.ulid' => __('field.owner_id.invalid'),
             'owner_id.exists' => __('field.owner_id.invalid'),
         ];
     }

@@ -7,10 +7,10 @@ use App\Access\Visibility;
 use App\Events\EventRecorder;
 use App\Events\EventType;
 use App\Exceptions\Problem;
-use App\Models\Organization;
 use App\Models\Project;
 use App\Models\ProjectMember;
 use App\Support\Actor;
+use App\Support\CatalogLock;
 use App\Support\ImageInput;
 use App\Support\MemberInput;
 use App\Support\ProjectInput;
@@ -22,14 +22,17 @@ use Lorisleiva\Actions\Concerns\AsAction;
 
 /**
  * The settings of a project (its admins, also while it is archived): name, description, picture, visibility, lead (an
- * active person who is a member) and identifier. A new identifier keeps the old one as a former identifier, which goes
- * on resolving and stays reserved; coming back to a former identifier of the same project ends that entry (spec 4.4).
+ * active person who is a member), identifier, the switched-on types and the default type. A new identifier keeps the
+ * old one as a former identifier, which goes on resolving and stays reserved; coming back to a former identifier of the
+ * same project ends that entry (spec 4.4). A type switched on anew must be active, one that was on already may stay
+ * archived (P11); the default type (sent or the one so far) must be switched on and active. The workflow changes only
+ * with a mapping of the states (AssignWorkflow, P9): the own one sent back passes, another one is refused.
  * Only the fields the input names change; `project.updated` lists what really changed, nothing changed means no event.
- * With an identifier in the input, the change takes the lock on the organization row first and checks under it: no
- * index spans current and former identifiers, so changes of identifiers run one at a time. Then it locks the project
- * row and reads the project afresh: two changes of one project run one after the other, the second from what the first
- * left, and the new lead cannot be removed from the project while it is checked to be a member. A project that is
- * being deleted is gone (404).
+ * With an identifier or types in the input, the change takes the catalog lock (the organization row) first and checks
+ * under it: no index spans current and former identifiers, so changes of identifiers run one at a time, and no type is
+ * archived or deleted while it is checked. Then it locks the project row and reads the project afresh: two changes of
+ * one project run one after the other, the second from what the first left, and the new lead cannot be removed from
+ * the project while it is checked to be a member. A project that is being deleted is gone (404).
  */
 final class UpdateProject
 {
@@ -48,9 +51,10 @@ final class UpdateProject
         $input = ProjectInput::normalize($input);
 
         $changed = DB::transaction(function () use ($actor, $project, $input): bool {
-            if (array_key_exists('identifier', $input)) {
-                // identifiers are unique across two tables: one change of identifiers at a time, checked under the lock
-                Organization::query()->lockForUpdate()->sole();
+            if (array_intersect_key($input, array_flip(['identifier', 'enabled_type_ids', 'default_type_id'])) !== []) {
+                // identifiers are unique across two tables, and a type must not go while it is switched on: one change of
+                // identifiers and of the catalog at a time, checked under the lock (organization before project)
+                CatalogLock::take();
             }
 
             // one change of the project at a time, each from what the one before left (the old values of the event, the
@@ -67,17 +71,41 @@ final class UpdateProject
                 'image_url' => ['sometimes', ...ImageInput::rules($image)],
                 'visibility' => ['sometimes', ...ProjectInput::visibility()],
                 'lead_id' => [
-                    'sometimes', 'bail', 'required', 'string', ProjectInput::lead(),
+                    'sometimes', 'bail', 'required', 'string', 'ulid', ProjectInput::lead(),
                     function (string $attribute, string $value, Closure $fail) use ($project): void {
                         if (! ProjectMember::query()->where('project_id', $project->id)->where('user_id', $value)->exists()) {
                             $fail(__('field.lead.not_member'));
                         }
                     },
                 ],
+                // whoever sends the whole project back passes its own workflow; another one needs a mapping of the states
+                'workflow_id' => [
+                    'sometimes',
+                    function (string $attribute, mixed $value, Closure $fail) use ($project): void {
+                        if ($value !== $project->workflow_id) {
+                            $fail(__('field.workflow_id.separate'));
+                        }
+                    },
+                ],
+                'enabled_type_ids' => ['sometimes', ...ProjectInput::types()],
+                'default_type_id' => ['sometimes', 'bail', 'required', 'string', 'ulid'],
             ], ProjectInput::messages())->validate();
 
             if (array_key_exists('description', $valid)) {
                 $valid['description'] ??= '';
+            }
+
+            // the switched-on types are read only when the input names types
+            $types = null;
+
+            if (array_key_exists('enabled_type_ids', $valid) || array_key_exists('default_type_id', $valid)) {
+                /** @var list<string> $types */
+                $types = $project->types()->pluck('work_item_types.id')->all();
+                [$valid['enabled_type_ids'], $valid['default_type_id']] = ProjectInput::enabledTypes(
+                    $valid['enabled_type_ids'] ?? $types,
+                    $valid['default_type_id'] ?? $project->default_type_id,
+                    $types,
+                );
             }
 
             $current = [
@@ -86,6 +114,8 @@ final class UpdateProject
                 'description' => $project->description,
                 'visibility' => $project->visibility->value,
                 'lead_id' => $project->lead_id,
+                'enabled_type_ids' => $types,
+                'default_type_id' => $project->default_type_id,
             ];
 
             $changes = [];
@@ -110,14 +140,28 @@ final class UpdateProject
                 return false;
             }
 
-            $project->update(array_map(fn (array $change) => $change['new'], array_diff_key($changes, ['image_url' => true])));
+            if (isset($changes['enabled_type_ids'])) {
+                $project->types()->sync($changes['enabled_type_ids']['new']);
+                $project->unsetRelation('types');
+            }
+
+            $columns = array_map(fn (array $change) => $change['new'], array_diff_key($changes, ['image_url' => true, 'enabled_type_ids' => true]));
+
+            if ($columns === []) {
+                // only the types or the picture changed: the project changed all the same
+                $project->touch();
+            } else {
+                $project->update($columns);
+            }
+
             EventRecorder::record(EventType::ProjectUpdated, $actor, $project, $project, $changes);
 
             return true;
         });
 
         if ($changed) {
-            // who sees the project (visibility) counts from the next check of this request on (P33)
+            // who sees the project (visibility) counts from the next check of this request on (P33); the types change
+            // neither who sees it nor the roles, they alone would need no forgetting (P27)
             Visibility::forget();
         }
 

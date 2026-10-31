@@ -7,12 +7,10 @@ use App\Actions\Projects\RemoveMember;
 use App\Actions\Projects\UpdateProject;
 use App\Events\EventType;
 use App\Exceptions\Problem;
-use App\Models\Event;
 use App\Models\Project;
 use App\Models\User;
-use Illuminate\Database\QueryException;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Tests\Support\RaceConnections;
 
 /*
  * Changes of the members of a project take the row of the project `lockForUpdate` and check under it (MemberInput::lock):
@@ -21,42 +19,9 @@ use Illuminate\Validation\ValidationException;
  * other request and gives up waiting for a lock after one second.
  */
 
-beforeEach(function () {
-    config(['database.connections.mariadb_second' => config('database.connections.mariadb')]);
-    DB::connection('mariadb_second')->statement('SET innodb_lock_wait_timeout = 1');
-});
+beforeEach(fn () => RaceConnections::setUp());
 
-afterEach(function () {
-    DB::setDefaultConnection('mariadb');
-    DB::purge('mariadb_second');
-});
-
-/**
- * Runs the call on the second connection and returns what ended it: `ok`, the Problem, the ValidationException or the
- * QueryException of a lock that did not come.
- */
-function memberCallOnSecondConnection(Closure $call): string|Problem|ValidationException|QueryException
-{
-    DB::setDefaultConnection('mariadb_second');
-
-    try {
-        $call();
-
-        return 'ok';
-    } catch (Problem|ValidationException|QueryException $exception) {
-        return $exception;
-    } finally {
-        DB::setDefaultConnection('mariadb');
-    }
-}
-
-function expectWaitingForTheProjectLock(string|Problem|ValidationException|QueryException $outcome): void
-{
-    expect($outcome)->toBeInstanceOf(QueryException::class);
-    assert($outcome instanceof QueryException);
-    expect($outcome->getMessage())->toContain('Lock wait timeout')
-        ->and($outcome->getSql())->toStartWith('select * from `projects`')->toEndWith('for update');
-}
+afterEach(fn () => RaceConnections::tearDown());
 
 it('makes the removal of a new lead wait for the change of lead, and then refuses it', function () {
     $mara = User::factory()->create();
@@ -64,19 +29,18 @@ it('makes the removal of a new lead wait for the change of lead, and then refuse
     $lene = memberOf($web, ProjectRole::Member);
 
     // connection 1: Lene becomes the lead, the transaction stays open
-    DB::connection('mariadb')->beginTransaction();
-    UpdateProject::run(actor($mara), $web, ['lead_id' => $lene->id]);
+    RaceConnections::hold(fn () => UpdateProject::run(actor($mara), $web, ['lead_id' => $lene->id]));
 
     // connection 2: the removal of Lene waits instead of reading the old lead
-    expectWaitingForTheProjectLock(memberCallOnSecondConnection(fn () => RemoveMember::run(actor($mara), $web, $lene)));
+    RaceConnections::expectLockWait(RaceConnections::second(fn () => RemoveMember::run(actor($mara), $web, $lene)), 'projects');
 
-    DB::connection('mariadb')->commit();
+    RaceConnections::release();
 
-    $outcome = memberCallOnSecondConnection(fn () => RemoveMember::run(actor($mara), $web, $lene));
+    $outcome = RaceConnections::second(fn () => RemoveMember::run(actor($mara), $web, $lene));
 
     expect($outcome)->toBeInstanceOf(Problem::class)
         ->and($outcome instanceof Problem ? $outcome->reason : null)->toBe('lead_cannot_leave')
-        ->and(Event::query()->where('type', EventType::ProjectMemberRemoved)->count())->toBe(0);
+        ->and(eventsOf(EventType::ProjectMemberRemoved)->count())->toBe(0);
 });
 
 it('makes the change of lead wait for a removal and then finds the new lead gone', function () {
@@ -85,15 +49,14 @@ it('makes the change of lead wait for a removal and then finds the new lead gone
     $lene = memberOf($web, ProjectRole::Member);
 
     // connection 1: Lene is removed, the transaction stays open
-    DB::connection('mariadb')->beginTransaction();
-    RemoveMember::run(actor($mara), $web, $lene);
+    RaceConnections::hold(fn () => RemoveMember::run(actor($mara), $web, $lene));
 
     // connection 2: making Lene the lead waits instead of finding her a member
-    expectWaitingForTheProjectLock(memberCallOnSecondConnection(fn () => UpdateProject::run(actor($mara), $web, ['lead_id' => $lene->id])));
+    RaceConnections::expectLockWait(RaceConnections::second(fn () => UpdateProject::run(actor($mara), $web, ['lead_id' => $lene->id])), 'projects');
 
-    DB::connection('mariadb')->commit();
+    RaceConnections::release();
 
-    $outcome = memberCallOnSecondConnection(fn () => UpdateProject::run(actor($mara), $web, ['lead_id' => $lene->id]));
+    $outcome = RaceConnections::second(fn () => UpdateProject::run(actor($mara), $web, ['lead_id' => $lene->id]));
 
     expect($outcome)->toBeInstanceOf(ValidationException::class)
         ->and($outcome instanceof ValidationException ? $outcome->errors() : null)->toBe(['lead_id' => [__('field.lead.not_member')]])
@@ -107,16 +70,15 @@ it('makes a second change of the project wait for the first and records its own 
     $stale = Project::query()->findOrFail($web->id)->setConnection(null);
 
     // connection 1: the name changes, the transaction stays open
-    DB::connection('mariadb')->beginTransaction();
-    UpdateProject::run(actor($mara), $web, ['name' => 'Seite']);
+    RaceConnections::hold(fn () => UpdateProject::run(actor($mara), $web, ['name' => 'Seite']));
 
     // connection 2: the other change waits for the project instead of starting from what it read before
-    expectWaitingForTheProjectLock(memberCallOnSecondConnection(fn () => UpdateProject::run(actor($mara), $stale, ['name' => 'App'])));
+    RaceConnections::expectLockWait(RaceConnections::second(fn () => UpdateProject::run(actor($mara), $stale, ['name' => 'App'])), 'projects');
 
-    DB::connection('mariadb')->commit();
+    RaceConnections::release();
 
-    expect(memberCallOnSecondConnection(fn () => UpdateProject::run(actor($mara), $stale, ['name' => 'App'])))->toBe('ok')
-        ->and(Event::query()->where('type', EventType::ProjectUpdated)->orderBy('occurred_at')->pluck('changes')->all())->toBe([
+    expect(RaceConnections::second(fn () => UpdateProject::run(actor($mara), $stale, ['name' => 'App'])))->toBeInstanceOf(Project::class)
+        ->and(eventsOf(EventType::ProjectUpdated)->pluck('changes')->all())->toBe([
             ['name' => ['old' => 'Website', 'new' => 'Seite']],
             ['name' => ['old' => 'Seite', 'new' => 'App']],
         ]);
@@ -127,16 +89,15 @@ it('lets one of two joins of the same account through, without a server error', 
     $web = CreateProject::run(actor($mara), ['name' => 'Website', 'identifier' => 'WEB']);
     $lene = User::factory()->create();
 
-    DB::connection('mariadb')->beginTransaction();
-    JoinProject::run(actor($lene), $web);
+    RaceConnections::hold(fn () => JoinProject::run(actor($lene), $web));
 
-    expectWaitingForTheProjectLock(memberCallOnSecondConnection(fn () => JoinProject::run(actor($lene), $web)));
+    RaceConnections::expectLockWait(RaceConnections::second(fn () => JoinProject::run(actor($lene), $web)), 'projects');
 
-    DB::connection('mariadb')->commit();
+    RaceConnections::release();
 
-    $outcome = memberCallOnSecondConnection(fn () => JoinProject::run(actor($lene), $web));
+    $outcome = RaceConnections::second(fn () => JoinProject::run(actor($lene), $web));
 
     expect($outcome)->toBeInstanceOf(Problem::class)
         ->and($outcome instanceof Problem ? $outcome->reason : null)->toBe('already_member')
-        ->and(Event::query()->where('type', EventType::ProjectMemberAdded)->count())->toBe(1);
+        ->and(eventsOf(EventType::ProjectMemberAdded)->count())->toBe(1);
 });

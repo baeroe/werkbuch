@@ -16,6 +16,7 @@ use App\Support\AccountInput;
 use App\Support\Actor;
 use App\Support\InvitationLinks;
 use App\Support\MailSetup;
+use Closure;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Validator;
@@ -47,11 +48,21 @@ final class InviteUser
             $input['email'] = Str::lower(trim($input['email']));
         }
 
+        $visible = Visibility::projectIds($actor->user)->all();
+
         $valid = Validator::make($input, [
             'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users', 'email')],
             'org_role' => ['required', 'string', Rule::in(array_column(OrgRole::cases(), 'value'))],
             'projects' => ['nullable', 'array', 'list'],
-            'projects.*.project_id' => ['required', 'string', 'distinct', Rule::in(Visibility::projectIds($actor->user)->all())],
+            // a canonical ULID only, compared strictly: `in` compares loosely, and numeric texts compare as numbers
+            'projects.*.project_id' => [
+                'bail', 'required', 'string', 'ulid', 'distinct',
+                function (string $attribute, string $value, Closure $fail) use ($visible): void {
+                    if (! in_array($value, $visible, true)) {
+                        $fail(__('field.projects.unknown'));
+                    }
+                },
+            ],
             'projects.*.role' => ['required', 'string', Rule::in(array_column(ProjectRole::cases(), 'value'))],
         ], [
             ...AccountInput::messages(),
@@ -63,7 +74,7 @@ final class InviteUser
             'projects.list' => __('field.projects.invalid'),
             'projects.*.project_id.required' => __('field.projects.unknown'),
             'projects.*.project_id.string' => __('field.projects.unknown'),
-            'projects.*.project_id.in' => __('field.projects.unknown'),
+            'projects.*.project_id.ulid' => __('field.projects.unknown'),
             'projects.*.project_id.distinct' => __('field.projects.duplicate'),
             'projects.*.role.required' => __('field.project_role.unknown'),
             'projects.*.role.string' => __('field.project_role.unknown'),

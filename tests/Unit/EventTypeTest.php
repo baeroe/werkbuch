@@ -26,6 +26,12 @@ it('knows the events of this phase that have no webhook', function () {
         'user.password_changed', 'user.two_factor_setup_started', 'user.two_factor_setup_cancelled', 'user.two_factor_enabled',
         'user.two_factor_disabled', 'user.recovery_codes_regenerated', 'user.recovery_code_used',
         'bot.created', 'token.created', 'token.revoked', 'favorite.added', 'favorite.removed',
+        'workflow.created', 'workflow.updated', 'workflow.deleted',
+        'work_item_type.created', 'work_item_type.updated', 'work_item_type.deleted',
+        'property.created', 'property.updated', 'property.deleted',
+        'label.created', 'label.updated', 'label.deleted',
+        'relation_type.created', 'relation_type.updated', 'relation_type.deleted',
+        'resolution.created', 'resolution.updated', 'resolution.deleted',
     ])->sort()->values()->all());
 });
 
@@ -38,4 +44,14 @@ it('names every type as group.event', function () {
 it('takes the group from the part before the dot', function () {
     expect(EventType::WorkItemStateChanged->group())->toBe('work_item')
         ->and(EventType::TemplateRunFailed->group())->toBe('template');
+});
+
+it('groups the events of the catalogs', function () {
+    $types = [
+        EventType::WorkflowCreated, EventType::WorkItemTypeUpdated, EventType::PropertyDeleted, EventType::LabelCreated,
+        EventType::RelationTypeUpdated, EventType::ResolutionDeleted,
+    ];
+
+    expect(array_map(fn (EventType $type) => $type->group(), $types))
+        ->toBe(['workflow', 'work_item_type', 'property', 'label', 'relation_type', 'resolution']);
 });
