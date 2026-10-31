@@ -3,6 +3,8 @@
 use App\RichText\MarkdownContext;
 use App\RichText\RichTextInput;
 use App\RichText\Schema;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Validation\ValidationException;
 use Tests\Support\RichTextFixtures as F;
 
@@ -74,4 +76,34 @@ it('knows whether the input sends the field', function () use ($from) {
         ->and(RichTextInput::given(['description' => 'x'], 'description'))->toBeTrue()
         ->and(RichTextInput::given(['description_json' => null], 'description'))->toBeTrue()
         ->and($from(['title' => 'x']))->toBeNull();
+});
+
+it('reaches the action with the spaces of its text nodes, through TrimStrings and ConvertEmptyStringsToNull', function () {
+    // a test route: the REST routes with rich text come with Task 5
+    Route::post('/rich-text-echo', fn (Request $request) => [
+        'description' => RichTextInput::from($request->all(), 'description', new MarkdownContext)?->toJson(),
+        'values' => $request->input('values'),
+        'patch' => $request->input('patch'),
+        'title' => $request->input('title'),
+        'due_date' => $request->input('due_date'),
+    ]);
+    $spaced = F::doc(
+        F::p(F::text('a '), F::text('b', 'bold'), F::text(' '), F::text('c', 'italic'), F::text(' d ')),
+        F::p(['type' => 'text', 'marks' => [['type' => 'link', 'attrs' => array_replace(F::link('https://example.com'), ['title' => ''])]], 'text' => ' Doku ']),
+    );
+
+    $this->postJson('/rich-text-echo', [
+        'description_json' => $spaced,
+        'values' => ['steps' => $spaced],
+        'patch' => ['values' => ['steps' => $spaced]],
+        'title' => '  Titel  ',
+        'due_date' => '',
+    ])->assertOk()->assertExactJson([
+        'description' => $spaced,
+        'values' => ['steps' => $spaced],
+        'patch' => ['values' => ['steps' => $spaced]],
+        // everything else is still trimmed and emptied
+        'title' => 'Titel',
+        'due_date' => null,
+    ]);
 });

@@ -2,6 +2,7 @@
 
 namespace App\RichText;
 
+use Tiptap\Core\Mark;
 use Tiptap\Core\Node;
 use Tiptap\Editor;
 use Tiptap\Marks;
@@ -49,12 +50,16 @@ final class Document
 
     /**
      * Reads Markdown (CommonMark with GitHub's tables, task lists, strikethrough and autolinks). HTML in it stays
-     * text.
+     * text. Markdown longer than Schema::MAX_BYTES is refused before it is parsed (its JSON is never shorter in
+     * practice); even within that, parsing can take a while: callers parse before they take locks.
      *
      * @throws InvalidDocument
      */
     public static function fromMarkdown(string $markdown, MarkdownContext $ctx): self
     {
+        if (strlen($markdown) > Schema::MAX_BYTES) {
+            throw new InvalidDocument('size');
+        }
         $html = Markdown::toHtml($markdown);
         // tiptap-php cannot read an empty body
         $json = $html === '' ? ['type' => 'doc'] : self::editor()->setContent($html)->getDocument();
@@ -193,7 +198,7 @@ final class Document
         }
         $attrs = [];
         foreach ($spec as $name => [$default, $kind]) {
-            $value = array_key_exists($name, $given) ? $given[$name] : $default;
+            $value = $kind !== 'fixed' && array_key_exists($name, $given) ? $given[$name] : $default;
             if (! self::fits($kind, $value)) {
                 throw new InvalidDocument('shape');
             }
@@ -288,9 +293,25 @@ final class Document
             new Marks\Bold,
             new Marks\Italic,
             new Marks\Strike,
-            new Marks\Code,
+            self::code(),
             new Marks\Link(['allowedProtocols' => Schema::LINK_PROTOCOLS]),
         ]]);
+    }
+
+    /**
+     * tiptap-php's code mark, without the `code` of a code block: tiptap-php strips that mark only from code blocks at
+     * the top of the document, one in a list or a quote would keep it.
+     */
+    private static function code(): Mark
+    {
+        return new class extends Marks\Code
+        {
+            /** @return list<array<string, mixed>> */
+            public function parseHTML(): array
+            {
+                return [['tag' => 'code', 'getAttrs' => fn (\DOMElement $element) => $element->parentNode?->nodeName === 'pre' ? false : null]];
+            }
+        };
     }
 
     /** tiptap-php's task item reads and writes `data-checked` as `true`/`false`, like Tiptap's. */

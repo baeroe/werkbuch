@@ -147,6 +147,15 @@ it('drops a javascript link but keeps the text', function () {
         ->and(Document::fromJson($linked('mailto:mara@example.com'))->toJson())->toBe($linked('mailto:mara@example.com'));
 });
 
+it('keeps the editor\'s class, rel and target on every link, whatever the input says', function () {
+    $hostile = ['href' => 'https://example.com', 'target' => '_self', 'rel' => 'opener', 'class' => 'fixed inset-0 z-50 opacity-0', 'title' => 'Doku'];
+    $json = Document::fromJson(F::doc(F::p(['type' => 'text', 'marks' => [['type' => 'link', 'attrs' => $hostile]], 'text' => 'klick'])))->toJson();
+
+    expect($json['content'][0]['content'][0]['marks'][0]['attrs'])->toBe(array_replace(F::link('https://example.com'), ['title' => 'Doku']))
+        ->and(Document::fromJson(F::doc(F::p(['type' => 'text', 'marks' => [['type' => 'link', 'attrs' => ['href' => 'https://example.com', 'class' => ['x']]]], 'text' => 'klick'])))->toHtml())
+        ->toBe('<p><a target="_blank" rel="noopener noreferrer nofollow" href="https://example.com">klick</a></p>');
+});
+
 it('writes plain text block by block', function () {
     expect(Document::fromJson(F::web47Steps())->toText())->toBe(implode("\n", [
         'So lässt sich der Fehler nachstellen:',

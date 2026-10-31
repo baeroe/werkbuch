@@ -54,7 +54,9 @@ final class Schema
     /**
      * The attributes of a node or mark: name => [default, kind]. Kinds: `level` (one of HEADING_LEVELS), `int`, `count`
      * (1 or more), `bool`, `text` (a string or null), `language` (a code language or null), `widths` (a list of whole
-     * numbers or null), `align` (`left`, `center`, `right` or null), `href` (a string; see LINK_PROTOCOLS).
+     * numbers or null), `align` (`left`, `center`, `right` or null), `fixed` (always the default, whatever the input
+     * says: a link's `class`, `rel` and `target` are the editor's, never a member's, so no stored class can turn a link
+     * into a page-covering click trap). A link's `href` is a string or null; see LINK_PROTOCOLS.
      */
     public const ATTRS = [
         'heading' => ['level' => [1, 'level']],
@@ -63,7 +65,7 @@ final class Schema
         'taskItem' => ['checked' => [false, 'bool']],
         'tableCell' => self::CELL,
         'tableHeader' => self::CELL,
-        'link' => ['href' => [null, 'href'], 'target' => ['_blank', 'text'], 'rel' => ['noopener noreferrer nofollow', 'text'], 'class' => [null, 'text'], 'title' => [null, 'text']],
+        'link' => ['href' => [null, 'text'], 'target' => ['_blank', 'fixed'], 'rel' => ['noopener noreferrer nofollow', 'fixed'], 'class' => [null, 'fixed'], 'title' => [null, 'text']],
     ];
 
     /** A link keeps its mark only with one of these; any other `href` loses the mark and keeps its text (P27). */

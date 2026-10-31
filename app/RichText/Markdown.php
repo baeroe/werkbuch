@@ -8,18 +8,26 @@ use Dom\HTMLElement;
 use Dom\Node;
 use Dom\Text;
 use Dom\XPath;
+use League\CommonMark\Event\DocumentParsedEvent;
 use League\CommonMark\GithubFlavoredMarkdownConverter;
+use League\CommonMark\Node\Block\AbstractBlock;
 use League\HTMLToMarkdown\Configuration;
 use League\HTMLToMarkdown\ConfigurationAwareInterface;
+use League\HTMLToMarkdown\Converter\BlockquoteConverter;
 use League\HTMLToMarkdown\Converter\ConverterInterface;
 use League\HTMLToMarkdown\Converter\TableConverter;
 use League\HTMLToMarkdown\Converter\TextConverter;
 use League\HTMLToMarkdown\ElementInterface;
 use League\HTMLToMarkdown\HtmlConverter;
 use League\HTMLToMarkdown\PreConverterInterface;
+use SplStack;
 
 /**
  * Markdown to the HTML tiptap-php parses, and the HTML tiptap-php renders to Markdown. Document is the only caller.
+ *
+ * Reading is bounded: blocks nest at most Schema::MAX_DEPTH deep (deeper ones stay text), Markdown nested deeper than
+ * twice that is refused as `depth` before it is rendered, and HTML with more nodes than a document of
+ * Schema::MAX_BYTES can hold is refused as `size` before tiptap-php reads it (Document refuses longer Markdown first).
  *
  * Reading is CommonMark with GitHub's extensions, HTML in the text escaped (it stays text), unsafe links dropped; the
  * HTML is then shaped like the editor's: task lists as `ul[data-type=taskList] > li[data-type=taskItem][data-checked]`,
@@ -33,6 +41,7 @@ use League\HTMLToMarkdown\PreConverterInterface;
  *   (a tight list), a blank line between the blocks of an item;
  * - `**bold**`, `*italic*`, `~~strike~~`, `` `code` ``, `[text](href)` (`<href>` when the text is the address);
  * - code blocks fenced with backticks and the language; a hard break as two spaces at the end of the line;
+ * - `>` before each line of a quote, alone on a blank one;
  * - tables with the first row as the header and `| --- |` below it (Markdown has no table without a header row);
  * - `~` in text escaped, so it never becomes a strike.
  */
@@ -41,15 +50,43 @@ final class Markdown
     /** Elements that are blocks of their own; anything else in a container is put into a paragraph. */
     private const BLOCK_TAGS = ['p', 'h1', 'h2', 'h3', 'ul', 'ol', 'pre', 'blockquote', 'hr', 'table'];
 
+    /** The deepest Markdown: Schema::MAX_DEPTH blocks and as many marks inside of them. */
+    private const MAX_MARKDOWN_DEPTH = 2 * Schema::MAX_DEPTH;
+
+    /**
+     * The fewest bytes a node takes in a document's JSON: `{"type":"hardBreak"},`. Each element and text of the HTML
+     * becomes a node or a mark (which takes as much), except images and links werkbuch drops.
+     */
+    private const SMALLEST_NODE = 21;
+
     /** Elements holding blocks. */
     private const CONTAINERS = 'li, blockquote, td, th';
 
     public static function toHtml(string $markdown): string
     {
-        $html = (new GithubFlavoredMarkdownConverter(['html_input' => 'escape', 'allow_unsafe_links' => false]))->convert($markdown);
+        // deeper blocks stay text, so the nesting costs nothing (commonmark recurses without a limit and crashes)
+        $converter = new GithubFlavoredMarkdownConverter([
+            'html_input' => 'escape',
+            'allow_unsafe_links' => false,
+            'max_nesting_level' => Schema::MAX_DEPTH,
+        ]);
+        $converter->getEnvironment()->addEventListener(DocumentParsedEvent::class, self::refuseDeepInlines(...));
+        $html = $converter->convert($markdown);
         $dom = HTMLDocument::createFromString('<!DOCTYPE html><html><body>'.$html.'</body></html>', LIBXML_NOERROR);
         /** @var HTMLElement $body the string above makes one */
         $body = $dom->body;
+        $xpath = new XPath($dom);
+        $xpath->registerNamespace('h', 'http://www.w3.org/1999/xhtml');
+        // tiptap-php reads a long run of nodes in quadratic time (25 s for 130,000); a document of MAX_BYTES holds no
+        // more than MAX_BYTES / SMALLEST_NODE of them, so more is too long anyway
+        $nodes = 0;
+        foreach ($xpath->query('//h:body//node()') as $node) {
+            // not the line breaks between blocks
+            $nodes += $node instanceof Text && trim($node->data) === '' ? 0 : 1;
+        }
+        if ($nodes > intdiv(Schema::MAX_BYTES, self::SMALLEST_NODE)) {
+            throw new InvalidDocument('size');
+        }
 
         foreach ($dom->querySelectorAll('ul, ol') as $list) {
             self::taskList($list);
@@ -62,8 +99,6 @@ final class Markdown
         foreach ($dom->querySelectorAll('pre > code') as $code) {
             $code->textContent = (string) preg_replace('/\n\z/', '', (string) $code->textContent);
         }
-        $xpath = new XPath($dom);
-        $xpath->registerNamespace('h', 'http://www.w3.org/1999/xhtml');
         /** @var Text $text */
         foreach ($xpath->query('//h:body//text()[not(ancestor::h:pre)]') as $text) {
             $data = $text->previousSibling instanceof Element && $text->previousSibling->localName === 'br' ? ltrim($text->data, "\n") : $text->data;
@@ -75,6 +110,29 @@ final class Markdown
         }
 
         return $body->innerHTML;
+    }
+
+    /**
+     * A run of `*` nests marks as deep as it is long (50,000 for 100,000 stars), and commonmark's renderer recurses
+     * until PHP crashes; Markdown nested deeper than any document could be is refused before it is rendered.
+     */
+    private static function refuseDeepInlines(DocumentParsedEvent $parsed): void
+    {
+        // the open nodes as a stack: phpstan stops widening an int counter after a few rounds of the loop
+        $open = new SplStack;
+        $walker = $parsed->getDocument()->walker();
+        while ($event = $walker->next()) {
+            // the walker leaves only blocks and nodes with children, as it enters them
+            $node = $event->getNode();
+            if (! $event->isEntering()) {
+                $open->pop();
+            } elseif ($node instanceof AbstractBlock || $node->hasChildren()) {
+                $open->push($node);
+            }
+            if ($open->count() > self::MAX_MARKDOWN_DEPTH) {
+                throw new InvalidDocument('depth');
+            }
+        }
     }
 
     public static function fromHtml(string $html): string
@@ -92,6 +150,7 @@ final class Markdown
         $environment->addConverter(self::listItems());
         $environment->addConverter(self::strike());
         $environment->addConverter(self::tables());
+        $environment->addConverter(self::quotes());
         $environment->addConverter(self::text());
 
         return $converter->convert($html);
@@ -280,6 +339,23 @@ final class Markdown
             public function getSupportedTags(): array
             {
                 return $this->tables->getSupportedTags();
+            }
+        };
+    }
+
+    /** league's quotes, without the space after `>` on a blank line. */
+    private static function quotes(): ConverterInterface
+    {
+        return new class implements ConverterInterface
+        {
+            public function convert(ElementInterface $element): string
+            {
+                return (string) preg_replace('/^(>[> ]*?) +$/m', '$1', (new BlockquoteConverter)->convert($element));
+            }
+
+            public function getSupportedTags(): array
+            {
+                return ['blockquote'];
             }
         };
     }

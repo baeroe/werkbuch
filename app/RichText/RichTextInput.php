@@ -11,6 +11,13 @@ use Illuminate\Validation\ValidationException;
 final class RichTextInput
 {
     /**
+     * Request keys (dotted, `Str::is`) whose strings TrimStrings and ConvertEmptyStringsToNull leave alone: the text
+     * nodes of a document in `<field>_json` and of a rich text value in `values.<property>` (also nested, as in a bulk
+     * patch). Trimming would eat the space between two marks.
+     */
+    public const RAW_KEYS = ['*_json.*', '*values.*.content.*'];
+
+    /**
      * Whether the input sends the field in either form (a PATCH changes only what it sends).
      *
      * @param  array<string, mixed>  $input

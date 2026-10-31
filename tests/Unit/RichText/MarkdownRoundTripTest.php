@@ -1,7 +1,9 @@
 <?php
 
 use App\RichText\Document;
+use App\RichText\InvalidDocument;
 use App\RichText\MarkdownContext;
+use App\RichText\Schema;
 use Tests\Support\RichTextFixtures as F;
 
 $read = fn (string $markdown): Document => Document::fromMarkdown($markdown, new MarkdownContext);
@@ -32,6 +34,9 @@ it('writes Markdown it reads as it was', function (string $markdown) use ($read)
     'blocks of an item' => ["- a\n\n  zwei\n- b"],
     'empty item' => ["-\n- b"],
     'ampersand and an escaped entity' => ['Tom & Jerry \&lt; ~~weg~~'],
+    'code in a list item' => ["- a\n\n  ```php\n  x\n  ```"],
+    'code in a quote' => ["> ```js\n> x\n> ```"],
+    'code after text in a quote' => ["> a\n>\n> ```\n> x\n> ```"],
     'nothing' => [''],
 ]);
 
@@ -95,6 +100,10 @@ it('comes back the same from its Markdown', function (array $json) use ($read) {
     'steps of WEB-47' => [F::web47Steps()],
     'every node' => [F::everyNode()],
     'markdown characters in text' => [F::doc(F::p('a ~~b~~ *c* [d] # e <f> & g &amp; \\h'), F::p('- kein Punkt'), F::p('1. keine Zahl'))],
+    'code in a list item and in a quote' => [F::doc(
+        ['type' => 'bulletList', 'content' => [['type' => 'listItem', 'content' => [F::p('Ausführen:'), ['type' => 'codeBlock', 'attrs' => ['language' => 'bash'], 'content' => [F::text("ddev start\nddev artisan migrate")]]]]]],
+        ['type' => 'blockquote', 'content' => [F::p('Fehler:'), ['type' => 'codeBlock', 'attrs' => ['language' => null], 'content' => [F::text('500')]]]],
+    )],
     'lists of one kind in a row' => [F::doc(
         ['type' => 'bulletList', 'content' => [['type' => 'listItem', 'content' => [F::p('a')]]]],
         ['type' => 'taskList', 'content' => [['type' => 'taskItem', 'attrs' => ['checked' => false], 'content' => [F::p('b')]]]],
@@ -118,6 +127,44 @@ it('leaves images out until Phase 7 brings them', function () use ($read) {
 
     expect($document->isEmpty())->toBeTrue()
         ->and($document->toMarkdown())->toBe('');
+});
+
+it('refuses Markdown that would take long or crash before it is parsed', function (string $markdown, string $reason) use ($read) {
+    $started = microtime(true);
+    try {
+        $read($markdown);
+        $refused = null;
+    } catch (InvalidDocument $invalid) {
+        $refused = $invalid->reason;
+    }
+
+    // without the limits: 10 s for the quotes, 25 s for the code spans, a crash for nesting deeper still
+    expect($refused)->toBe($reason)
+        ->and(microtime(true) - $started)->toBeLessThan(3.0);
+})->with([
+    'one byte too long' => [str_repeat('\\*', intdiv(Schema::MAX_BYTES, 2)).'x', 'size'],
+    'quotes 10,000 deep' => [str_repeat('>', 10000).' tief', 'depth'],
+    'lists nested on one line up to the limit' => [str_repeat('- ', intdiv(Schema::MAX_BYTES, 2) - 1).'x', 'depth'],
+    'lists nested by indentation up to the limit' => [(function () {
+        $markdown = '';
+        for ($level = 0; strlen($markdown) < Schema::MAX_BYTES - 2000; $level++) {
+            $markdown .= str_repeat('  ', $level)."- a\n";
+        }
+
+        return $markdown;
+    })(), 'depth'],
+    'a run of stars nesting a thousand marks' => [str_repeat('*', 2000).'a'.str_repeat('*', 2000), 'depth'],
+    'code spans up to the limit' => [str_repeat('`a` ', intdiv(Schema::MAX_BYTES, 4)), 'size'],
+]);
+
+it('reads Markdown at the limits that a document can hold', function () use ($read) {
+    // as many nodes as a document just below MAX_BYTES holds, and marks inside blocks nested as deep as they may be
+    $words = Document::fromJson(F::doc(F::p(...array_merge(...array_fill(0, 3200, [F::text('a', 'bold'), F::text(' b')])))));
+    $deep = $read(str_repeat('> ', Schema::MAX_DEPTH - 2).'***[a](https://example.com)***');
+
+    expect(strlen((string) json_encode($words->toJson())))->toBeGreaterThan(Schema::MAX_BYTES - 10000)
+        ->and($read($words->toMarkdown())->toJson())->toBe($words->toJson())
+        ->and($deep->toText())->toBe('a');
 });
 
 it('keeps HTML in Markdown as text', function () use ($read) {
