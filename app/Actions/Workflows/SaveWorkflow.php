@@ -105,12 +105,15 @@ final class SaveWorkflow
                 $ids[$state['key']] = $row->id;
             }
 
-            // the transitions only between its own states: those that stay are kept, the others go, the missing ones come
+            // the transitions only between its own states: those that stay are kept, the others go, the missing ones
+            // come, each in one statement
             $wanted = [];
 
             foreach ($valid['transitions'] as [$from, $to]) {
                 $wanted[$ids[$from]."\n".$ids[$to]] = [$ids[$from], $ids[$to]];
             }
+
+            $obsolete = [];
 
             foreach ($current === null ? [] : $current->transitions as $transition) {
                 $pair = $transition->from_state_id."\n".$transition->to_state_id;
@@ -118,16 +121,28 @@ final class SaveWorkflow
                 if (isset($wanted[$pair])) {
                     unset($wanted[$pair]);
                 } else {
-                    $transition->delete();
+                    $obsolete[] = $transition->id;
                 }
+            }
+
+            if ($obsolete !== []) {
+                WorkflowTransition::query()->whereKey($obsolete)->delete();
             }
 
             if ($removed !== []) {
                 WorkflowState::query()->whereKey($removed)->delete();
             }
 
-            foreach ($wanted as [$from, $to]) {
-                WorkflowTransition::query()->create(['workflow_id' => $saved->id, 'from_state_id' => $from, 'to_state_id' => $to]);
+            if ($wanted !== []) {
+                $now = now();
+                WorkflowTransition::query()->insert(array_map(fn (array $pair) => [
+                    'id' => (new WorkflowTransition)->newUniqueId(),
+                    'workflow_id' => $saved->id,
+                    'from_state_id' => $pair[0],
+                    'to_state_id' => $pair[1],
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ], array_values($wanted)));
             }
 
             $saved->initial_state_id = $ids[$valid['initial_state_id']];

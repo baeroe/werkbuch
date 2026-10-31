@@ -166,12 +166,12 @@ it('checks names, icons, categories and the number of states', function (Closure
 
         return $input;
     }, 'states.1.id', fn () => __('field.states.duplicate_id')],
-    'an id that is the key of a state without one' => [function (array $input) {
+    'an id that looks like the key of a state without one' => [function (array $input) {
         $input['states'][0]['id'] = 'new:1';
         unset($input['states'][1]['id']);
 
         return $input;
-    }, 'states.1.id', fn () => __('field.states.duplicate_id')],
+    }, 'states.0.id', fn () => __('field.states.id_reserved')],
     'an id of 65 characters' => [function (array $input) {
         $input['states'][1]['id'] = str_repeat('i', 65);
 
@@ -200,6 +200,7 @@ it('keeps the ids of the states it is sent back, renames and reorders them', fun
     $input['transitions'][] = [$review, 'new:4'];
     $input['transitions'][] = ['new:4', $approval];
 
+    $this->travel(5)->minutes();
     $response = $this->actingAs($admin)->putJson("/api/v1/workflows/{$workflow->id}", $input)->assertOk();
     $states = $response->json('data.states');
     $qa = $states[4]['id'];
@@ -211,7 +212,9 @@ it('keeps the ids of the states it is sent back, renames and reorders them', fun
         ->and(Str::isUlid($qa))->toBeTrue()
         ->and($response->json('data.transitions'))->toContain([$review, $qa], [$qa, $approval])->not->toContain([$cancelled, $backlog])
         ->and(WorkflowTransition::query()->where('workflow_id', $workflow->id)->count())->toBe(15)
-        ->and(WorkflowState::query()->where('workflow_id', $workflow->id)->count())->toBe(8);
+        ->and(WorkflowState::query()->where('workflow_id', $workflow->id)->count())->toBe(8)
+        // only states and transitions changed, the workflow changed all the same
+        ->and($workflow->fresh()?->updated_at?->gte($workflow->updated_at?->copy()->addMinutes(5)))->toBeTrue();
 
     $changes = eventsOf(EventType::WorkflowUpdated, $workflow)->sole()->changes;
 
@@ -350,15 +353,16 @@ it('never deletes the default workflow', function () {
 
 it('refuses to delete a workflow a project uses, naming the projects', function () {
     $workflow = Workflow::factory()->create();
-    Project::factory()->identifier('WEB')->create(['name' => 'Website', 'workflow_id' => $workflow->id]);
+    // by name, not by identifier: Auftritt, Betrieb, Zentrale
+    Project::factory()->identifier('WEB')->create(['name' => 'Auftritt', 'workflow_id' => $workflow->id]);
     // archived projects and projects being deleted still hold their workflow
     Project::factory()->identifier('OPS')->archived()->create(['name' => 'Betrieb', 'workflow_id' => $workflow->id]);
-    Project::factory()->identifier('APP')->create(['name' => 'App', 'workflow_id' => $workflow->id, 'deleting_at' => now()]);
+    Project::factory()->identifier('APP')->create(['name' => 'Zentrale', 'workflow_id' => $workflow->id, 'deleting_at' => now()]);
     Project::factory()->identifier('DOC')->create(['name' => 'Doku']);
 
     $this->actingAs(User::factory()->admin()->create())->deleteJson("/api/v1/workflows/{$workflow->id}")
-        ->assertConflict()->assertJsonPath('reason', 'in_use')->assertJsonPath('projects', ['APP', 'OPS', 'WEB'])
-        ->assertJsonPath('detail', __('problem.detail.workflow_in_use', ['projects' => 'APP, OPS, WEB']));
+        ->assertConflict()->assertJsonPath('reason', 'in_use')->assertJsonPath('projects', ['WEB', 'OPS', 'APP'])
+        ->assertJsonPath('detail', __('problem.detail.workflow_in_use', ['projects' => 'WEB, OPS, APP']));
 
     expect(Workflow::query()->whereKey($workflow->id)->exists())->toBeTrue()
         ->and(eventsOf(EventType::WorkflowDeleted))->toBeEmpty();

@@ -6,6 +6,7 @@ use App\Events\EventType;
 use App\Models\User;
 use App\Models\Workflow;
 use App\Support\CatalogLock;
+use Illuminate\Validation\ValidationException;
 use Tests\Support\RaceConnections;
 use Tests\Support\WorkflowFixtures;
 
@@ -58,3 +59,24 @@ it('lets only one of two workflows become the default', function () {
             ['is_default' => ['old' => true, 'new' => false]],
         ]);
 });
+
+it('checks a name under the lock, against the name another change has just saved', function (Closure $change) {
+    $admin = User::factory()->admin()->create();
+    $old = Workflow::factory()->create(['name' => 'Alt']);
+
+    // connection 1: a new workflow Prüfung, the transaction stays open
+    RaceConnections::hold(fn () => SaveWorkflow::run(actor($admin), null, WorkflowFixtures::agencyInput('Prüfung')));
+
+    // it commits the moment connection 2 asks for the lock: a check before the lock would miss the name, and the
+    // unique index would end the change with a server error
+    RaceConnections::releaseBeforeLock('organization');
+    $outcome = RaceConnections::second(fn () => $change($admin, $old));
+
+    expect($outcome)->toBeInstanceOf(ValidationException::class);
+    assert($outcome instanceof ValidationException);
+    expect($outcome->errors())->toBe(['name' => [__('field.name.taken')]])
+        ->and(Workflow::query()->orderBy('id')->pluck('name')->all())->toBe(['Standard', 'Alt', 'Prüfung']);
+})->with([
+    'a new workflow' => [fn (User $admin, Workflow $old) => SaveWorkflow::run(actor($admin), null, WorkflowFixtures::standardInput('prüfung'))],
+    'a renamed workflow' => [fn (User $admin, Workflow $old) => SaveWorkflow::run(actor($admin), $old, [...WorkflowFixtures::inputOf($old), 'name' => 'PRÜFUNG'])],
+]);

@@ -34,6 +34,9 @@ final class WorkflowInput
     /** The longest id a client may give a state. */
     public const KEY_MAX = 64;
 
+    /** The start of the key of a state sent without an id (`new:<index>`); sent ids never start with it. */
+    public const NEW_KEY = 'new:';
+
     /**
      * The input with its texts trimmed and every ULID in lower case (local ids stay as they came).
      *
@@ -86,7 +89,8 @@ final class WorkflowInput
             'is_free' => ['required', 'boolean'],
             'initial_state_id' => ['required', 'string'],
             'states' => ['present', 'array', 'min:1', 'max:'.self::STATES_MAX],
-            'states.*.id' => ['nullable', 'string', 'max:'.self::KEY_MAX],
+            // `new:<index>` names a state sent without an id; no id of the client looks like one
+            'states.*.id' => ['nullable', 'string', 'max:'.self::KEY_MAX, 'doesnt_start_with:'.self::NEW_KEY],
             'states.*.name' => ['required', 'string', 'max:'.self::STATE_NAME_MAX],
             'states.*.icon' => ['required', Rule::enum(StateIcon::class)],
             'states.*.category' => ['required', Rule::enum(StateCategory::class)],
@@ -110,9 +114,9 @@ final class WorkflowInput
         // in the order they were sent: `validated()` puts a state without an id behind those with one
         foreach (array_keys($input['states']) as $index) {
             $state = $valid['states'][$index];
-            $key = $state['id'] ?? "new:{$position}";
+            $key = $state['id'] ?? self::NEW_KEY.$position;
 
-            // a sent id (or an id of the client that looks like a generated key) names one state only
+            // a sent id names one state only
             if (isset($keys[$key])) {
                 throw ValidationException::withMessages(["states.{$index}.id" => __('field.states.duplicate_id')]);
             }
@@ -235,6 +239,7 @@ final class WorkflowInput
             // the string rule fills no :max, so the sentence comes filled
             'states.*.id.string' => __('field.states.id_invalid', ['max' => self::KEY_MAX]),
             'states.*.id.max' => __('field.states.id_invalid', ['max' => self::KEY_MAX]),
+            'states.*.id.doesnt_start_with' => __('field.states.id_reserved'),
             'states.*.name.required' => __('field.states.name_required'),
             'states.*.name.string' => __('field.states.name_required'),
             'states.*.name.max' => __('field.states.name_max'),

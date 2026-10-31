@@ -89,6 +89,7 @@
     "field.states.duplicate_id": "Zwei Status haben dieselbe ID.",
     "field.states.icon": "Ein Status hat ein unbekanntes Icon.",
     "field.states.id_invalid": "Eine Status-ID ist ein Text mit höchstens :max Zeichen.",
+    "field.states.id_reserved": "Eine Status-ID darf nicht mit new: beginnen.",
     "field.states.max": "Ein Workflow hat höchstens :max Status.",
     "field.states.name_max": "Ein Statusname darf höchstens :max Zeichen haben.",
     "field.states.name_required": "Jeder Status braucht einen Namen.",

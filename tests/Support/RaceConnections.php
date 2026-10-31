@@ -51,6 +51,24 @@ final class RaceConnections
     }
 
     /**
+     * Commits the transaction `hold()` opened at the moment `mariadb_second` asks for the lock on a row of the table
+     * (`select * from <table> … for update`), once: the first request finishes while the second one is on its way, after
+     * what it read before the lock and before the lock itself. Whatever the second one checked before its lock missed
+     * what the first one wrote; whatever it checks under its lock sees it.
+     */
+    public static function releaseBeforeLock(string $table): void
+    {
+        $released = false;
+
+        DB::connection('mariadb_second')->beforeExecuting(function (string $query) use ($table, &$released): void {
+            if (! $released && str_starts_with($query, "select * from `{$table}`") && str_ends_with($query, 'for update')) {
+                $released = true;
+                self::release();
+            }
+        });
+    }
+
+    /**
      * Runs the call on `mariadb_second` (the default connection again afterwards). The result is what the call returns,
      * or the QueryException, ValidationException or Problem that ended it.
      */
