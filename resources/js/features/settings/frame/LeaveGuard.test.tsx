@@ -100,6 +100,26 @@ describe('LeaveGuard (Inertia visits)', () => {
     expect(inertia.visit).not.toHaveBeenCalled();
   });
 
+  it('asks in other words when it keeps something else than edits, and goes on with its own confirmation', async () => {
+    const user = userEvent.setup();
+    render(
+      <LeaveGuard
+        dirty
+        what="unused"
+        question={{ title: 'Recovery-Codes gesichert?', description: 'Die Codes zeigt werkbuch nur jetzt.', confirmLabel: 'Weitergehen', cancelLabel: 'Zurück zu den Codes' }}
+      />,
+    );
+
+    announceInAct(visitTo('/inbox'));
+    const dialog = await screen.findByRole('alertdialog', { name: 'Recovery-Codes gesichert?' });
+    expect(dialog.textContent).toContain('Die Codes zeigt werkbuch nur jetzt.');
+    expect(dialog.textContent).not.toContain('unused');
+    expect(screen.getByRole('button', { name: 'Zurück zu den Codes' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Weitergehen' }));
+
+    expect(inertia.visit).toHaveBeenCalledWith(here('/inbox'), expect.objectContaining({ method: 'get' }));
+  });
+
   it('"Weiter bearbeiten" and Escape stay on the page without visiting', async () => {
     const user = userEvent.setup();
     render(<LeaveGuard dirty what="Änderungen" />);

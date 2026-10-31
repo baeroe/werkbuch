@@ -21,4 +21,17 @@ it('renders the section of the address, also one the page does not know', functi
 it('leads guests from the settings to the sign-in', function () {
     $this->get('/settings')->assertRedirect('/login');
     $this->get('/settings/people')->assertRedirect('/login');
+    $this->get('/me')->assertRedirect('/login');
+    $this->get('/me/security')->assertRedirect('/login');
+});
+
+it('renders the personal settings with the profile first and the section of the address', function () {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)->get('/me')->assertOk()
+        ->assertInertia(fn (Assert $page) => $page->component('Settings/Personal')->where('section', 'profile'));
+    $this->actingAs($user)->get('/me/security')->assertOk()
+        ->assertInertia(fn (Assert $page) => $page->component('Settings/Personal')->where('section', 'security'));
+    $this->actingAs($user)->get('/me/nothing')->assertOk()
+        ->assertInertia(fn (Assert $page) => $page->component('Settings/Personal')->where('section', 'nothing'));
 });

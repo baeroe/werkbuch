@@ -28,6 +28,12 @@ router.on('navigate', (event) => {
   setSignedIn(props.auth.user !== null);
 });
 
+// A visit that replaces the page (`router.reload()` after saving the profile or the organisation) ends without
+// `navigate`; when it brings another language, the page loads anew all the same.
+router.on('success', (event) => {
+  reloadIfLocaleChanged((event.detail.page.props as unknown as SharedProps).locale, () => window.location.reload());
+});
+
 void createInertiaApp({
   // no `eager`: every page is a chunk of its own
   resolve: (name) => {

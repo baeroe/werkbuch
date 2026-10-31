@@ -45,19 +45,29 @@ const navigationApi = (): NavigationLike | undefined => (window as { navigation?
 /** What the dialog is asking about: the visit, a step in the history (Navigation API), or one that `popstate` reported. */
 type Held = { kind: 'visit'; visit: PendingVisit } | { kind: 'history'; key: string } | { kind: 'popstate'; state: unknown; url: string };
 
+/** The words of the dialog, for a guard that keeps something else than unsaved edits (recovery codes shown once). */
+export interface LeaveQuestion {
+  title: string;
+  description: string;
+  confirmLabel: string;
+  cancelLabel: string;
+}
+
 type LeaveGuardProps = {
   dirty: boolean;
   /** What is lost, for the question: "Changes to “Agency approval”". */
   what: string;
   /** Set to true right before a navigation that is meant, so it is not stopped. */
   bypass?: RefObject<boolean>;
+  /** Other words than "Discard changes?"; `what` is not used then. */
+  question?: LeaveQuestion;
 };
 
 /** Whether two addresses are the same page: a reload, a partial reload or a hash change leaves nothing behind. */
 const samePage = (a: URL, b: URL) => a.origin === b.origin && a.pathname + a.search === b.pathname + b.search;
 const staysHere = (url: URL) => samePage(url, new URL(window.location.href));
 
-export function LeaveGuard({ dirty, what, bypass }: LeaveGuardProps) {
+export function LeaveGuard({ dirty, what, bypass, question }: LeaveGuardProps) {
   const [held, setHeld] = useState<Held | null>(null);
   const latest = useRef({ dirty, bypass });
   useLayoutEffect(() => {
@@ -163,10 +173,10 @@ export function LeaveGuard({ dirty, what, bypass }: LeaveGuardProps) {
     <AlertDialog
       open={held !== null}
       onOpenChange={(open) => !open && setHeld(null)}
-      title={t('settings.frame.leave_title')}
-      description={t('settings.frame.leave_description', { what })}
-      confirmLabel={t('settings.frame.leave_confirm')}
-      cancelLabel={t('settings.frame.leave_cancel')}
+      title={question?.title ?? t('settings.frame.leave_title')}
+      description={question?.description ?? t('settings.frame.leave_description', { what })}
+      confirmLabel={question?.confirmLabel ?? t('settings.frame.leave_confirm')}
+      cancelLabel={question?.cancelLabel ?? t('settings.frame.leave_cancel')}
       onConfirm={proceed}
     />
   );

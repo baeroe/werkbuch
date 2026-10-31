@@ -19,6 +19,9 @@ Route::middleware('auth')->group(function () {
     Route::redirect('/settings', '/settings/general');
     Route::get('/settings/{section}', fn (string $section) => Inertia::render('Settings/Organization', ['section' => $section]))
         ->name('settings');
+    // the own settings: profile, security, API and MCP; the profile without a section (spec 5.2)
+    Route::get('/me/{section?}', fn (string $section = 'profile') => Inertia::render('Settings/Personal', ['section' => $section]))
+        ->name('me');
 });
 
 // pictures (logo, avatars, project pictures) from the private disk, for the session and for tokens that may read (P15);
