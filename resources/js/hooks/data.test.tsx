@@ -4,8 +4,9 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
-import { ida, list, mara, organization, project } from '@/test/fixtures';
+import { agency, ida, labels, list, mara, organization, project, properties, relationTypes, resolutions, standard, types } from '@/test/fixtures';
 import type { User } from '@/types';
+import { useDeleteLabel, useDeleteRelationType, useDeleteResolution, useLabels, useRelationTypes, useResolutions, useSaveLabel, useSaveRelationType, useSaveResolution } from './catalog';
 import { qk } from './keys';
 import { useApiMutation, useSettle } from './mutation';
 import { useOrganization, useUpdateOrganization } from './organization';
@@ -22,6 +23,7 @@ import {
   useUpdateMemberRole,
   useUpdateProject,
 } from './projects';
+import { useDeleteProperty, useProperties, useSaveProperty } from './properties';
 import { useChangePassword, useConfirmTwoFactor, useDisableTwoFactor, useEnableTwoFactor, useRegenerateRecoveryCodes, useTwoFactor } from './security';
 import { useCreateToken, useRevokeToken, useTokens } from './tokens';
 import {
@@ -37,6 +39,8 @@ import {
   useUsers,
 } from './users';
 import { useFavorites, useToggleFavorite } from './views';
+import { useDeleteWorkItemType, useSaveWorkItemType, useWorkItemTypes } from './workItemTypes';
+import { useAssignWorkflow, useDeleteWorkflow, useSaveWorkflow, useWorkflows } from './workflows';
 
 let me: User | null = mara;
 
@@ -157,6 +161,40 @@ describe('reading', () => {
     ]);
   });
 
+  it('follows next_cursor for every catalog list', async () => {
+    const page = (data: unknown[], next_cursor: string | null) => ({ body: { data, links: {}, meta: { next_cursor, total: data.length } } });
+    const twoPages = (first: unknown[], second: unknown[]): MockRoute => (_body, url) => (url.searchParams.get('cursor') === 'c2' ? page(second, null) : page(first, 'c2'));
+    api = mockApi({
+      'GET /api/v1/workflows': twoPages([standard], [agency]),
+      'GET /api/v1/work-item-types': twoPages(types.slice(0, 2), types.slice(2)),
+      'GET /api/v1/properties': twoPages(properties.slice(0, 1), properties.slice(1)),
+      'GET /api/v1/labels': twoPages(labels.slice(0, 2), labels.slice(2)),
+      'GET /api/v1/relation-types': twoPages(relationTypes.slice(0, 3), relationTypes.slice(3)),
+      'GET /api/v1/resolutions': twoPages(resolutions.slice(0, 1), resolutions.slice(1)),
+    });
+    const { result } = renderHook(
+      () => ({
+        workflows: useWorkflows(),
+        types: useWorkItemTypes(),
+        properties: useProperties(),
+        labels: useLabels(),
+        relationTypes: useRelationTypes(),
+        resolutions: useResolutions(),
+      }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(Object.values(result.current).every((query) => query.isSuccess)).toBe(true));
+    expect(result.current.workflows.data).toEqual({ items: [standard, agency], next_cursor: null, total: 2 });
+    expect(result.current.types.data?.items).toEqual(types);
+    expect(result.current.properties.data?.items).toEqual(properties);
+    expect(result.current.labels.data?.items).toEqual(labels);
+    expect(result.current.relationTypes.data?.items).toEqual(relationTypes);
+    expect(result.current.resolutions.data?.items).toEqual(resolutions);
+    expect(api.calls).toHaveLength(12);
+    expect(api.calls.filter((call) => call.url.endsWith('?cursor=c2'))).toHaveLength(6);
+  });
+
   it('useProject reads one project, and waits while the identifier is unknown or it is switched off', async () => {
     api = mockApi({ 'GET /api/v1/projects/WEB': () => ({ body: { data: web } }) });
     const { result } = renderHook(
@@ -191,6 +229,12 @@ const PROBES: Record<string, QueryKey> = {
   projects: qk.projects.all,
   members: qk.members.all,
   favorites: qk.favorites.all,
+  workflows: qk.workflows.all,
+  workItemTypes: qk.workItemTypes.all,
+  properties: qk.properties.all,
+  labels: qk.labels.all,
+  relationTypes: qk.relationTypes.all,
+  resolutions: qk.resolutions.all,
   workItems: qk.workItems.all,
 };
 const ALL = Object.keys(PROBES);
@@ -217,6 +261,19 @@ describe('mutations', () => {
     ['useAddMember', useAddMember, { project_id: 'p1', user_id: 'u_ida', role: 'member' }, 'POST /api/v1/projects/p1/members', () => ({ status: 201, body: { data: member } }), ['projects', 'members']],
     ['useUpdateMemberRole', useUpdateMemberRole, { project_id: 'p1', user_id: 'u_ida', role: 'admin' }, 'PATCH /api/v1/projects/p1/members/u_ida', () => ({ body: { data: member } }), ['projects', 'members']],
     ['useRemoveMember', useRemoveMember, { project_id: 'p1', user_id: 'u_ida' }, 'DELETE /api/v1/projects/p1/members/u_ida', () => ({}), ['projects', 'members']],
+    ['useSaveWorkflow', useSaveWorkflow, { workflow: { ...agency, id: undefined }, options: { state_mapping: { app_review: 'app_progress' } } }, 'POST /api/v1/workflows', () => ({ status: 201, body: { data: agency } }), ALL],
+    ['useDeleteWorkflow', useDeleteWorkflow, 'wf_agency', 'DELETE /api/v1/workflows/wf_agency', () => ({}), ['workflows']],
+    ['useAssignWorkflow', useAssignWorkflow, { project_id: 'p1', workflow_id: 'wf_agency', mapping: { std_todo: 'app_todo' } }, 'PUT /api/v1/projects/p1/workflow', () => ({ body: { data: web } }), ALL],
+    ['useSaveWorkItemType', useSaveWorkItemType, types[1], 'PUT /api/v1/work-item-types/t_bug', () => ({ body: { data: types[1] } }), ['workItemTypes']],
+    ['useDeleteWorkItemType', useDeleteWorkItemType, 't_wish', 'DELETE /api/v1/work-item-types/t_wish', () => ({ body: { outcome: 'deleted' } }), ['projects', 'workItemTypes']],
+    ['useSaveProperty', useSaveProperty, properties[1], 'PUT /api/v1/properties/pr_effort', () => ({ body: { data: properties[1] } }), ['properties']],
+    ['useDeleteProperty', useDeleteProperty, 'pr_effort', 'DELETE /api/v1/properties/pr_effort', () => ({ body: { affected_items: 0 } }), ['workItemTypes', 'properties']],
+    ['useSaveLabel', useSaveLabel, { name: 'Neu', color: 'sky' }, 'POST /api/v1/labels', () => ({ status: 201, body: { data: labels[0] } }), ['labels']],
+    ['useDeleteLabel', useDeleteLabel, 'lb_ux', 'DELETE /api/v1/labels/lb_ux', () => ({ body: { affected_items: 0 } }), ['labels']],
+    ['useSaveRelationType', useSaveRelationType, relationTypes[3], 'PUT /api/v1/relation-types/rt_tests', () => ({ body: { data: relationTypes[3] } }), ['relationTypes']],
+    ['useDeleteRelationType', useDeleteRelationType, 'rt_tests', 'DELETE /api/v1/relation-types/rt_tests', () => ({ body: { affected_relations: 0 } }), ['relationTypes']],
+    ['useSaveResolution', useSaveResolution, resolutions[2], 'PUT /api/v1/resolutions/res_duplicate', () => ({ body: { data: resolutions[2] } }), ['resolutions']],
+    ['useDeleteResolution', useDeleteResolution, 'res_duplicate', 'DELETE /api/v1/resolutions/res_duplicate', () => ({ body: { outcome: 'deleted' } }), ['resolutions']],
     ['useToggleFavorite', useToggleFavorite, { kind: 'project', id: 'p1' }, 'POST /api/v1/favorites/toggle', () => ({ body: { kind: 'project', id: 'p1', favorite: true } }), ['favorites']],
     ['useChangePassword', useChangePassword, { current_password: 'a', password: 'b', password_confirmation: 'b' }, 'PUT /api/v1/me/password', () => ({}), []],
     ['useEnableTwoFactor', useEnableTwoFactor, undefined, 'POST /api/v1/me/two-factor', () => ({ body: { secret: 's', otpauth_url: 'o', qr_svg: 'q' } }), ['twoFactor']],
@@ -232,6 +289,26 @@ describe('mutations', () => {
 
     expect(api.calls.map((call) => `${call.method} ${call.url.split('?')[0]}`)).toEqual([route]);
     expect(ALL.filter((name) => queryClient.getQueryState(PROBES[name]!)?.isInvalidated)).toEqual(stale);
+  });
+
+  it('reloads the types and the projects after deleting a type', async () => {
+    let types_ = [...types];
+    api = mockApi({
+      'GET /api/v1/work-item-types': () => ({ body: list(types_) }),
+      'GET /api/v1/projects': () => ({ body: list([web]) }),
+      'DELETE /api/v1/work-item-types/t_wish': () => {
+        types_ = types_.filter((type) => type.id !== 't_wish');
+        return { body: { outcome: 'deleted' } };
+      },
+    });
+    const { result } = renderHook(() => ({ types: useWorkItemTypes(), projects: useProjects(), remove: useDeleteWorkItemType() }), { wrapper });
+    await waitFor(() => expect(result.current.types.isSuccess && result.current.projects.isSuccess).toBe(true));
+    expect(result.current.types.data?.items).toHaveLength(4);
+
+    await act(() => result.current.remove.mutateAsync('t_wish'));
+
+    await waitFor(() => expect(result.current.types.data?.items).toHaveLength(3));
+    expect(api.calls.filter((call) => call.method === 'GET' && call.url === '/api/v1/projects')).toHaveLength(2);
   });
 
   it('useUpdateOrganization reloads the page, so the shared props follow', async () => {

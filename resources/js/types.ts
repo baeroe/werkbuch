@@ -76,11 +76,11 @@ export interface Project {
   image_url: string | null;
   lead_id: string;
   visibility: 'public' | 'private';
-  /** `null` until Phase 3 brings workflows and types (`enabled_type_ids` stays empty until then). */
-  workflow_id: string | null;
+  /** The workflow of the project; a project without a choice gets the default workflow. */
+  workflow_id: string;
+  /** The types the project offers; the default type is one of them. */
   enabled_type_ids: string[];
-  /** `null` until Phase 3, like `workflow_id`. */
-  default_type_id: string | null;
+  default_type_id: string;
   archived_at: string | null;
   /** The role of the signed-in account in the project (org admins: `admin`, a public project of others: `viewer`). */
   my_role: ProjectRole;

@@ -177,6 +177,11 @@ export async function one<T>(call: Promise<{ data: T }>): Promise<T> {
   return (await call).data;
 }
 
+/** A resource that is saved as a whole: `POST` to the collection without an id, `PUT` to the resource with one. */
+export function saveOne<T>(path: string, id: string | undefined, body: unknown): Promise<T> {
+  return one(id === undefined ? post<{ data: T }>(path, body) : put<{ data: T }>(`${path}/${encodeURIComponent(id)}`, body));
+}
+
 interface ListAnswer<T> {
   data: T[];
   meta: { next_cursor?: string | null; total?: number };
