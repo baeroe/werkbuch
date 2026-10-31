@@ -56,8 +56,9 @@ final class ItemValues
     /**
      * The values to store: `$existing` with what `$input` sends merged in, each checked against the properties of the
      * type. An empty value removes a property, unless it is required: when creating always, when updating only when it
-     * had a value (a property that became required later stays empty until somebody fills it). When creating, a
-     * property the input leaves out takes its default value, and every required property must have a value. People
+     * had a value (a property that became required later stays empty until somebody fills it). When creating (a new
+     * item, or a new type for an item with `$existing` the values it keeps), a property that neither the input nor
+     * `$existing` names takes its default value, and every required property must have a value. People
      * picked anew must be able to take work in the project (`Assignable`); people the item has already only need to
      * exist. ULIDs are written in lower case for dropdowns and people only, never in texts (K19).
      *
@@ -124,7 +125,7 @@ final class ItemValues
 
         if ($mode === 'create') {
             foreach ($entries as $key => $entry) {
-                if (! array_key_exists($key, $input) && ($default = self::default($entry->property)) !== null) {
+                if (! array_key_exists($key, $input) && ! array_key_exists($key, $existing) && ($default = self::default($entry->property)) !== null) {
                     $values[$key] = $default;
                 }
 

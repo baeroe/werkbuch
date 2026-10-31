@@ -8,6 +8,7 @@ use App\Domain\Properties\FieldType;
 use App\Domain\Workflow\StateCategory;
 use App\Domain\WorkItems\Priority;
 use App\Events\EventType;
+use App\Models\Event;
 use App\Models\Label;
 use App\Models\Project;
 use App\Models\Property;
@@ -18,6 +19,7 @@ use App\Models\WorkItem;
 use App\Models\WorkItemSubscriber;
 use App\Models\WorkItemType;
 use App\Support\ItemValues;
+use Database\Seeders\Demo\CatalogSeeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Support\RichTextFixtures;
@@ -454,4 +456,67 @@ it('stores the values with the item', function () use ($web, $askFor, $task) {
     $item = CreateWorkItem::run(actor($mara), ['project_id' => $project->id, 'title' => 'Item', 'values' => ['tags' => array_map(strtoupper(...), [$ids[2], $ids[0]]), 'ref' => $text]]);
 
     expect(ItemValues::of($item->load('values.property')))->toBe(['tags' => [$ids[2], $ids[0]], 'ref' => $text]);
+});
+
+it('creates in another state when the start state may move there', function () use ($web) {
+    [$project, $mara] = $web();
+    $done = Workflow::default()->states()->where('name', 'Done')->firstOrFail();
+
+    $item = CreateWorkItem::run(actor($mara), ['project_id' => $project->id, 'title' => 'Schon erledigt', 'state_id' => strtoupper($done->id)]);
+    $history = Event::query()->where('subject_id', $item->id)->orderBy('occurred_at')->orderBy('id')->get();
+
+    expect($item->state_id)->toBe($done->id)
+        ->and($item->fresh()?->state_id)->toBe($done->id)
+        ->and($item->resolution_id)->toBe(Resolution::query()->where('default_for', StateCategory::Completed->value)->value('id'))
+        ->and($item->closed_at)->not->toBeNull()
+        ->and($item->started_at)->toBeNull()
+        // the history shows the creation in the initial state, then the move
+        ->and($history->pluck('type')->all())->toBe([EventType::WorkItemCreated, EventType::WorkItemStateChanged])
+        ->and($history[1]->changes['state_id'])->toBe(['old' => Workflow::default()->initial_state_id, 'new' => $done->id]);
+});
+
+it('creates in the initial state named as such without a move', function () use ($web) {
+    [$project, $mara] = $web();
+
+    $item = CreateWorkItem::run(actor($mara), ['project_id' => $project->id, 'title' => 'Item', 'state_id' => Workflow::default()->initial_state_id]);
+
+    expect($item->state_id)->toBe(Workflow::default()->initial_state_id)
+        ->and(eventsOf(EventType::WorkItemStateChanged))->toBeEmpty();
+});
+
+it('refuses to create in a state the start state may not reach', function () use ($web) {
+    [$project, $mara] = $web();
+    $this->seed(CatalogSeeder::class);
+    $agency = Workflow::query()->where('name', 'Agentur-Freigabe')->firstOrFail();
+    $project->update(['workflow_id' => $agency->id]);
+    $create = fn (mixed $state) => CreateWorkItem::run(actor($mara), ['project_id' => $project->id, 'title' => 'Item', 'state_id' => $state]);
+
+    $refused = problemOf(fn () => $create($agency->states()->where('name', 'Done')->value('id')));
+    $unknown = invalidOf(fn () => $create(Workflow::default()->initial_state_id));
+
+    expect([$refused->status, $refused->reason])->toBe([409, 'transition_not_allowed'])
+        ->and($refused->detail)->toBe(__('problem.detail.transition_from_start', ['initial' => 'Backlog', 'target' => 'Done', 'workflow' => 'Agentur-Freigabe']))
+        ->and($unknown)->toBe(['state_id' => [__('field.state_id.unknown')]])
+        ->and(invalidOf(fn () => $create(['x'])))->toBe(['state_id' => [__('field.state_id.unknown')]])
+        ->and(WorkItem::query()->count())->toBe(0)
+        ->and($project->fresh()?->next_number)->toBe(0)
+        ->and(Event::query()->where('type', 'like', 'work_item.%')->count())->toBe(0)
+        ->and($create($agency->states()->where('name', 'Todo')->value('id'))->number)->toBe(1);
+});
+
+it('reads the parent under a shared lock, after the project', function () use ($web) {
+    [$project, $mara] = $web();
+    WorkItem::factory()->for($project)->epic()->create();
+    $queries = [];
+    DB::listen(function ($query) use (&$queries) {
+        $queries[] = $query->sql;
+    });
+
+    CreateWorkItem::run(actor($mara), ['project_id' => $project->id, 'title' => 'Kind', 'parent_id' => 'WEB-1']);
+    $project = array_key_first(array_filter($queries, fn (string $sql) => str_starts_with($sql, 'select * from `projects`') && str_ends_with($sql, 'for update')));
+    $parent = array_key_first(array_filter($queries, fn (string $sql) => str_starts_with($sql, 'select * from `work_items`') && str_ends_with($sql, 'lock in share mode')));
+
+    expect($parent)->not->toBeNull()
+        ->and($parent)->toBeGreaterThan($project)
+        ->and($queries[$parent])->toContain('`id` = ?');
 });

@@ -6,16 +6,22 @@ use App\Actions\WorkItems\UpdateWorkItem;
 use App\Domain\Properties\FieldType;
 use App\Domain\WorkItems\Priority;
 use App\Events\EventType;
+use App\Exceptions\Problem;
+use App\Models\Event;
 use App\Models\Label;
 use App\Models\Project;
 use App\Models\Property;
+use App\Models\Resolution;
 use App\Models\User;
+use App\Models\Workflow;
 use App\Models\WorkItem;
 use App\Models\WorkItemSubscriber;
 use App\Models\WorkItemType;
 use App\Models\WorkItemValue;
 use App\Support\Actor;
 use App\Support\ItemLock;
+use Database\Seeders\Demo\CatalogSeeder;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Support\RichTextFixtures as F;
 
@@ -395,4 +401,63 @@ it('acts on an item named by a former key', function () use ($web) {
         ->assertJsonPath('data.title', 'Umbenannt');
 
     expect($item->fresh()?->title)->toBe('Umbenannt');
+});
+
+it('moves an item with state_id in a patch, after its fields', function () use ($web, $update) {
+    [$project, $mara, , $item] = $web();
+    $done = $project->workflow()->firstOrFail()->states()->where('name', 'Done')->value('id');
+    $duplicate = Resolution::query()->where('label', 'Duplicate')->value('id');
+
+    $changed = $update($mara, $item, ['title' => 'Formular erledigt', 'state_id' => strtoupper((string) $done), 'resolution_id' => $duplicate]);
+    $history = Event::query()->where('subject_id', $item->id)->orderBy('occurred_at')->orderBy('id')->get();
+
+    expect([$changed->title, $changed->state_id, $changed->resolution_id])->toBe(['Formular erledigt', $done, $duplicate])
+        ->and($changed->closed_at)->not->toBeNull()
+        ->and($history->pluck('type')->all())->toBe([EventType::WorkItemUpdated, EventType::WorkItemStateChanged])
+        ->and($history[0]->changes)->toBe(['title' => ['old' => 'Formular prüfen', 'new' => 'Formular erledigt']])
+        ->and($history[1]->changes)->toBe([
+            'state_id' => ['old' => $item->state_id, 'new' => $done],
+            'resolution_id' => ['old' => null, 'new' => $duplicate],
+        ]);
+});
+
+it('changes the resolution alone in a patch, and tells whether a move changed anything', function () use ($web) {
+    [$project, $mara] = $web();
+    $closed = WorkItem::factory()->for($project)->closed()->create();
+    $duplicate = Resolution::query()->where('label', 'Duplicate')->value('id');
+    $apply = fn (array $input) => DB::transaction(fn () => UpdateWorkItem::apply(actor($mara), ItemLock::take($closed), $input));
+
+    expect($apply(['resolution_id' => $duplicate]))->toBeTrue()
+        ->and($apply(['resolution_id' => $duplicate, 'state_id' => $closed->state_id]))->toBeFalse()
+        ->and($apply(['resolution_id' => null]))->toBeFalse()
+        ->and($closed->fresh()?->resolution_id)->toBe($duplicate)
+        ->and(eventsOf(EventType::WorkItemUpdated, $closed)->sole()->changes)->toBe(['resolution_id' => ['old' => $closed->resolution_id, 'new' => $duplicate]])
+        ->and(invalidOf(fn () => $apply(['state_id' => null])))->toBe(['state_id' => [__('field.state_id.unknown')]]);
+});
+
+it('refuses the whole patch when the move is not allowed', function () use ($web, $update) {
+    [$project, $mara, , $item] = $web();
+    $this->seed(CatalogSeeder::class);
+    $agency = Workflow::query()->where('name', 'Agentur-Freigabe')->firstOrFail();
+    $project->update(['workflow_id' => $agency->id]);
+    $item->update(['state_id' => $agency->states()->where('name', 'Todo')->value('id')]);
+    $archived = Resolution::factory()->create(['archived_at' => now()]);
+
+    $refused = problemOf(fn () => $update($mara, $item, ['title' => 'Neu', 'state_id' => $agency->states()->where('name', 'Done')->value('id')]));
+    $invalid = invalidOf(fn () => $update($mara, $item, ['title' => 'Neu', 'state_id' => $agency->states()->where('name', 'Cancelled')->value('id'), 'resolution_id' => $archived->id]));
+
+    // apply() checks the move before its first change: a caller that goes on after a refusal (a bulk edit) keeps nothing
+    $kept = DB::transaction(function () use ($mara, $item, $agency) {
+        try {
+            UpdateWorkItem::apply(actor($mara), ItemLock::take($item), ['title' => 'Neu', 'state_id' => $agency->states()->where('name', 'Done')->value('id')]);
+        } catch (Problem $problem) {
+            return $problem->reason;
+        }
+    });
+
+    expect([$refused->status, $refused->reason])->toBe([409, 'transition_not_allowed'])
+        ->and($invalid)->toBe(['resolution_id' => [__('field.resolution_id.archived')]])
+        ->and($kept)->toBe('transition_not_allowed')
+        ->and($item->fresh()?->title)->toBe('Formular prüfen')
+        ->and(Event::query()->where('subject_id', $item->id)->count())->toBe(0);
 });

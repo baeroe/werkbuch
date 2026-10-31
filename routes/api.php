@@ -101,6 +101,8 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
     Route::middleware(RedirectFormerItemKey::class)->group(function () {
         Route::get('work-items/{item}', [WorkItemsController::class, 'show']);
         Route::patch('work-items/{item}', [WorkItemsController::class, 'update']);
+        Route::post('work-items/{item}/transition', [WorkItemsController::class, 'transition']);
+        Route::put('work-items/{item}/type', [WorkItemsController::class, 'changeType']);
     });
 
     Route::get('favorites', [FavoritesController::class, 'index']);

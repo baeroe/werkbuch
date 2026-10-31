@@ -72,6 +72,8 @@ return [
     'create a work item' => ['POST', '/api/v1/work-items', 'body' => ['project_id' => 'WEB', 'title' => 'Matrix']],
     'show a work item' => ['GET', '/api/v1/work-items/{item}', 'params' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key]],
     'change a work item' => ['PATCH', '/api/v1/work-items/{item}', 'params' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key], 'body' => ['title' => 'Matrix']],
+    'move a work item' => ['POST', '/api/v1/work-items/{item}/transition', 'params' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key]],
+    'change the type of a work item' => ['PUT', '/api/v1/work-items/{item}/type', 'params' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key]],
     'list the own favorites' => ['GET', '/api/v1/favorites'],
     'toggle a favorite' => ['POST', '/api/v1/favorites/toggle'],
     'list tokens' => ['GET', '/api/v1/tokens'],

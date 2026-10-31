@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Actions\WorkItems\ChangeWorkItemType;
 use App\Actions\WorkItems\CreateWorkItem;
 use App\Actions\WorkItems\GetWorkItem;
 use App\Actions\WorkItems\ListWorkItems;
+use App\Actions\WorkItems\TransitionWorkItem;
 use App\Actions\WorkItems\UpdateWorkItem;
 use App\Http\Api\ApiList;
 use App\Http\Controllers\Controller;
@@ -49,5 +51,17 @@ final class WorkItemsController extends Controller
     public function update(Request $request, WorkItem $item): WorkItemResource
     {
         return new WorkItemResource(UpdateWorkItem::run(Actor::fromRequest($request), $item, $request->all()));
+    }
+
+    /** `to_state_id` and, for a closed state, `resolution_id`: 409 `transition_not_allowed` when the workflow forbids it. */
+    public function transition(Request $request, WorkItem $item): WorkItemResource
+    {
+        return new WorkItemResource(TransitionWorkItem::run(Actor::fromRequest($request), $item, $request->all()));
+    }
+
+    /** `type_id` and the `values` the new type asks for. */
+    public function changeType(Request $request, WorkItem $item): WorkItemResource
+    {
+        return new WorkItemResource(ChangeWorkItemType::run(Actor::fromRequest($request), $item, $request->all()));
     }
 }

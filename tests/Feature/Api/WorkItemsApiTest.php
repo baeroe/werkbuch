@@ -6,6 +6,7 @@ use App\Http\Resources\WorkItemResource;
 use App\Models\Project;
 use App\Models\Property;
 use App\Models\User;
+use App\Models\Workflow;
 use App\Models\WorkItem;
 use App\Models\WorkItemRelation;
 use App\Models\WorkItemSubscriber;
@@ -127,6 +128,48 @@ it('changes an item over PATCH and refuses a description edited on an old versio
         ->and(array_keys($response->json('current')))->toBe(WORK_ITEM_SHAPE)
         ->and($response->json('current.description'))->toBe('**Plan**')
         ->and($response->json('current.values'))->toBe([]);
+});
+
+it('moves an item over POST …/transition and answers a refused move as problem details', function () use ($web) {
+    [$project, $mara] = $web();
+    $agency = Workflow::factory()->matrix([[0, 1]])->create(['name' => 'Agentur-Freigabe']);
+    $project->update(['workflow_id' => $agency->id]);
+    $item = WorkItem::factory()->for($project)->create();
+    [$backlog, $doing, $done] = $agency->states()->pluck('id')->all();
+
+    $this->withToken(apiToken($mara, ['read']))->postJson('/api/v1/work-items/WEB-1/transition', ['to_state_id' => $doing])->assertForbidden();
+    forgetApiAuth();
+    $refused = $this->actingAs($mara)->postJson('/api/v1/work-items/web-1/transition', ['to_state_id' => $done])
+        ->assertStatus(409)->assertHeader('Content-Type', 'application/problem+json');
+
+    expect($refused->json())->toMatchArray([
+        'reason' => 'transition_not_allowed',
+        'detail' => __('problem.detail.transition_not_allowed', ['from' => 'Backlog', 'to' => 'Done', 'workflow' => 'Agentur-Freigabe']),
+    ]);
+
+    $this->actingAs($mara)->postJson("/api/v1/work-items/{$item->id}/transition", ['to_state_id' => $doing])
+        ->assertOk()
+        ->assertJsonPath('data.state_id', $doing)
+        ->assertJsonPath('data.resolution_id', null);
+    $this->actingAs($mara)->postJson('/api/v1/work-items/WEB-1/transition', ['to_state_id' => 'Done'])
+        ->assertUnprocessable()->assertJsonPath('errors.state_id.0', __('field.state_id.unknown'));
+
+    expect($item->fresh()?->state_id)->toBe($doing)
+        ->and($backlog)->toBe($agency->initial_state_id);
+});
+
+it('changes the type over PUT …/type', function () use ($web) {
+    [$project, $mara, $task] = $web();
+    $bug = WorkItemType::query()->where('name', 'Bug')->firstOrFail();
+    $item = WorkItem::factory()->for($project)->create(['type_id' => $bug->id]);
+
+    $this->actingAs($mara)->putJson('/api/v1/work-items/WEB-1/type', ['type_id' => $task->id, 'values' => ['customer' => '  Feldwerk ']])
+        ->assertOk()
+        ->assertJsonPath('data.id', $item->id)
+        ->assertJsonPath('data.type_id', $task->id)
+        ->assertJsonPath('data.values.customer', 'Feldwerk');
+    $this->actingAs($mara)->putJson('/api/v1/work-items/WEB-1/type', ['type_id' => $bug->id, 'values' => (object) []])
+        ->assertOk()->assertJsonPath('data.type_id', $bug->id)->assertJsonPath('data.values', []);
 });
 
 it('names every field error in one answer', function () use ($web) {

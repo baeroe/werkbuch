@@ -36,7 +36,7 @@ final class UpdateWorkItem
     use AsAction;
 
     /**
-     * @param  array<array-key, mixed>  $input  `title`, `description` or `description_json`, `base_description_version`, `priority`, `label_ids`, `start_date`, `due_date`, `parent_id` (ULID or key), `values` (property key → value; only the keys sent), `rank`, `assignee_id`
+     * @param  array<array-key, mixed>  $input  `title`, `description` or `description_json`, `base_description_version`, `priority`, `label_ids`, `start_date`, `due_date`, `parent_id` (ULID or key), `values` (property key → value; only the keys sent), `rank`, `assignee_id`, `state_id` and `resolution_id` (a move, TransitionWorkItem)
      *
      * @throws ValidationException
      * @throws Problem
@@ -75,7 +75,9 @@ final class UpdateWorkItem
      * search; **one** `work_item.updated` names the changes as `{old, new}` (`values.<key>`, `label_ids` as lists in
      * catalog order, `description` as Tiptap JSON, `rank`); a new assignee is a `work_item.assigned` of its own
      * (`changes.assignee_id`) and watches the item from now on (reason `assigned`), even after unsubscribing before
-     * (spec 4.10). `updated_at` moves only when something changed. `$reason` notes why in the events (an automation).
+     * (spec 4.10). A `state_id` or `resolution_id` is a move (TransitionWorkItem::move()): checked with the rest, made
+     * after the fields (its own `work_item.state_changed`). `updated_at` moves only when something changed. `$reason`
+     * notes why in the events (an automation).
      *
      * @param  array<array-key, mixed>  $input  as ItemInput::documents() answers it (read before the locks)
      * @param  array<string, list<string>>  $refused  the field errors of ItemInput::documents()
@@ -100,6 +102,15 @@ final class UpdateWorkItem
         $base = $fields['base_description_version'] ?? null;
         if ($descriptionChanged && $base !== null && $base !== $locked->description_version) {
             throw self::conflict($actor, $locked);
+        }
+
+        // a move (`state_id`, `resolution_id`) is checked with the rest and made after the fields, like a transition
+        $moving = array_key_exists('state_id', $input) || array_key_exists('resolution_id', $input);
+        $state = array_key_exists('state_id', $input) ? $input['state_id'] : $locked->state_id;
+        $state = is_string($state) ? $state : '';
+        $resolution = TransitionWorkItem::resolutionOf($input['resolution_id'] ?? null);
+        if ($moving) {
+            TransitionWorkItem::check($locked, $state, $resolution);
         }
 
         $actor = $reason === null ? $actor : new Actor($actor->user, $actor->via, $reason, $actor->token);
@@ -167,12 +178,11 @@ final class UpdateWorkItem
             $locked->assignee_id = $fields['assignee_id'];
         }
 
-        if ($changes === [] && ! $assignee) {
-            return false;
+        $changed = $changes !== [] || $assignee;
+        if ($changed) {
+            $locked->updated_at = $locked->freshTimestamp();
+            $locked->save();
         }
-
-        $locked->updated_at = $locked->freshTimestamp();
-        $locked->save();
 
         if ($changes !== []) {
             EventRecorder::record(EventType::WorkItemUpdated, $actor, $locked, $locked->project, $changes);
@@ -182,7 +192,11 @@ final class UpdateWorkItem
             EventRecorder::record(EventType::WorkItemAssigned, $actor, $locked, $locked->project, ['assignee_id' => ['old' => $previous, 'new' => $locked->assignee_id]]);
         }
 
-        return true;
+        if ($moving) {
+            $changed = TransitionWorkItem::move($actor, $locked, $state, $resolution, $reason) || $changed;
+        }
+
+        return $changed;
     }
 
     /**

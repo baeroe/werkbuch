@@ -51,9 +51,11 @@ use App\Actions\Users\UpdateUserRole;
 use App\Actions\Workflows\DeleteWorkflow;
 use App\Actions\Workflows\ListWorkflows;
 use App\Actions\Workflows\SaveWorkflow;
+use App\Actions\WorkItems\ChangeWorkItemType;
 use App\Actions\WorkItems\CreateWorkItem;
 use App\Actions\WorkItems\GetWorkItem;
 use App\Actions\WorkItems\ListWorkItems;
+use App\Actions\WorkItems\TransitionWorkItem;
 use App\Actions\WorkItems\UpdateWorkItem;
 use App\Actions\WorkItemTypes\DeleteWorkItemType;
 use App\Actions\WorkItemTypes\ListWorkItemTypes;
@@ -252,6 +254,24 @@ return [
     'UpdateWorkItem' => [
         'action' => UpdateWorkItem::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => UpdateWorkItem::run($a, $w->item($column), ['title' => 'Matrix']),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::WorkItemUpdated,
+    ],
+    'TransitionWorkItem' => [
+        'action' => TransitionWorkItem::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => TransitionWorkItem::run($a, $w->item($column), [
+            'to_state_id' => $w->project($column)->workflow->states()->where('name', 'In Progress')->value('id'),
+        ]),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::WorkItemStateChanged,
+    ],
+    'ChangeWorkItemType' => [
+        'action' => ChangeWorkItemType::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ChangeWorkItemType::run($a, $w->item($column), [
+            'type_id' => WorkItemType::query()->where('name', 'Bug')->value('id'),
+        ]),
         'allowed' => $itemWriters,
         'hidden' => ['outsider_private'],
         'event' => EventType::WorkItemUpdated,

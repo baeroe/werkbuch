@@ -241,9 +241,11 @@ final class ItemInput
     }
 
     /**
+     * A type for an item of the project (ChangeWorkItemType as well): switched on in the project and not archived.
+     *
      * @param  callable(string, string): void  $fail
      */
-    private static function type(mixed $id, Project $project, callable $fail): ?WorkItemType
+    public static function type(mixed $id, Project $project, callable $fail): ?WorkItemType
     {
         $id = is_string($id) && Str::isUlid($id) ? strtolower($id) : null;
         $type = $id === null ? null : $project->types()->whereKey($id)->first();
@@ -356,7 +358,9 @@ final class ItemInput
 
     /**
      * The parent by ULID or key (`WEB-12`, any case, also a former identifier), with its type. An item of a project the
-     * reader does not see is unknown, never "in another project".
+     * reader does not see is unknown, never "in another project". One of the project is read again under a shared lock
+     * (after the locks of the caller: the project, the item itself): a change of its type or its deletion waits until
+     * the caller is done, and the caller sees the parent as such a change left it (gone meanwhile: unknown).
      *
      * @param  callable(string, string): void  $fail
      */
@@ -367,6 +371,9 @@ final class ItemInput
         }
 
         $parent = is_string($ref) ? WorkItem::findByReference($ref) : null;
+        if ($parent?->project_id === $project->id) {
+            $parent = WorkItem::query()->sharedLock()->find($parent->id);
+        }
         if ($parent === null || ($parent->project_id !== $project->id && Visibility::roleIn($reader, $parent->project) === null)) {
             $fail('parent_id', __('field.parent_id.unknown'));
         } elseif ($parent->project_id !== $project->id) {
@@ -379,10 +386,12 @@ final class ItemInput
     }
 
     /**
+     * The `values` of an input: a map (an empty list is an empty map), anything else is `field.values.invalid`.
+     *
      * @param  callable(string, string): void  $fail
      * @return array<array-key, mixed>
      */
-    private static function values(mixed $values, callable $fail): array
+    public static function values(mixed $values, callable $fail): array
     {
         if (! is_array($values) || ($values !== [] && array_is_list($values))) {
             $fail('values', __('field.values.invalid'));
