@@ -322,6 +322,8 @@
     "problem.detail.labels_admins_only": "Labels ändern nur Org-Admins.",
     "problem.detail.last_admin": "Das ist der letzte aktive Admin. Mache zuerst jemand anderen zum Admin.",
     "problem.detail.members_admins_only": "Mitglieder verwalten nur Admins des Projekts.",
+    "problem.detail.not_archived": ":key ist nicht archiviert.",
+    "problem.detail.not_closed": "Nur geschlossene Items (Completed oder Canceled) lassen sich archivieren.",
     "problem.detail.organization_admins_only": "Die Organisation ändern nur Org-Admins.",
     "problem.detail.people_only": "Das gibt es nur für Personen; Bots melden sich nicht an.",
     "problem.detail.project_archive_admins": "Archivieren dürfen nur Admins des Projekts.",

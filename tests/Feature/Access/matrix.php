@@ -51,10 +51,15 @@ use App\Actions\Users\UpdateUserRole;
 use App\Actions\Workflows\DeleteWorkflow;
 use App\Actions\Workflows\ListWorkflows;
 use App\Actions\Workflows\SaveWorkflow;
+use App\Actions\WorkItems\ArchiveWorkItem;
 use App\Actions\WorkItems\ChangeWorkItemType;
 use App\Actions\WorkItems\CreateWorkItem;
+use App\Actions\WorkItems\DeleteWorkItem;
 use App\Actions\WorkItems\GetWorkItem;
+use App\Actions\WorkItems\ListSubscribers;
 use App\Actions\WorkItems\ListWorkItems;
+use App\Actions\WorkItems\RestoreWorkItem;
+use App\Actions\WorkItems\SetSubscription;
 use App\Actions\WorkItems\TransitionWorkItem;
 use App\Actions\WorkItems\UpdateWorkItem;
 use App\Actions\WorkItemTypes\DeleteWorkItemType;
@@ -275,6 +280,41 @@ return [
         'allowed' => $itemWriters,
         'hidden' => ['outsider_private'],
         'event' => EventType::WorkItemUpdated,
+    ],
+    'ArchiveWorkItem' => [
+        'action' => ArchiveWorkItem::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ArchiveWorkItem::run($a, $w->item($column, 'closed')),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::WorkItemArchived,
+    ],
+    'RestoreWorkItem' => [
+        'action' => RestoreWorkItem::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => RestoreWorkItem::run($a, $w->item($column, 'archived')),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::WorkItemRestored,
+    ],
+    'DeleteWorkItem' => [
+        'action' => DeleteWorkItem::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => DeleteWorkItem::run($a, $w->item($column)),
+        'allowed' => $projectAdmins,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::WorkItemDeleted,
+    ],
+    'ListSubscribers' => [
+        'action' => ListSubscribers::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListSubscribers::run($a, $w->item($column)),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    'SetSubscription' => [
+        'action' => SetSubscription::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => SetSubscription::run($a, $w->item($column), true),
+        // every person who reads the item; bots watch nothing
+        'allowed' => ['org_admin', 'project_admin', 'project_member', 'project_viewer', 'outsider_public'],
+        'hidden' => ['outsider_private'],
+        'event' => EventType::WorkItemSubscribed,
     ],
     'ListWorkflows' => [
         'action' => ListWorkflows::class,

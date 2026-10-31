@@ -20,6 +20,9 @@ use Illuminate\Support\Carbon;
  * @property string $target_id
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
+ * @property-read RelationType $type
+ * @property-read WorkItem $source
+ * @property-read WorkItem $target
  */
 #[Fillable(['type_id', 'source_id', 'target_id'])]
 final class WorkItemRelation extends Model

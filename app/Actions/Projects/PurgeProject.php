@@ -15,7 +15,9 @@ use Spatie\MediaLibrary\MediaCollections\Models\Media;
 /**
  * Removes a project that DeleteProject marked (`deleting_at`), run by the job App\Jobs\PurgeProject: the roles in it
  * (spatie's rows of the team = project, which have no foreign key), favorites, memberships, former identifiers, its
- * media and the project itself. Its events stay (P10). Later phases add their data here (items, pages, attachments).
+ * media and the project itself. Its work items go with the project by cascade (`work_items.project_id`), and with them
+ * their values, labels, subscriptions and relations, also those to items of other projects, without an event at the
+ * other end (A26). Its events stay (P10). Later phases add their data here (pages, attachments).
  *
  * The one writing action without an event of its own: it only cleans up after `project.deleted` (P26).
  */

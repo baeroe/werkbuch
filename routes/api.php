@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\ProjectsController;
 use App\Http\Controllers\Api\PropertiesController;
 use App\Http\Controllers\Api\RelationTypesController;
 use App\Http\Controllers\Api\ResolutionsController;
+use App\Http\Controllers\Api\SubscribersController;
 use App\Http\Controllers\Api\TokensController;
 use App\Http\Controllers\Api\TwoFactorController;
 use App\Http\Controllers\Api\UsersController;
@@ -103,6 +104,12 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
         Route::patch('work-items/{item}', [WorkItemsController::class, 'update']);
         Route::post('work-items/{item}/transition', [WorkItemsController::class, 'transition']);
         Route::put('work-items/{item}/type', [WorkItemsController::class, 'changeType']);
+        Route::post('work-items/{item}/archive', [WorkItemsController::class, 'archive']);
+        Route::post('work-items/{item}/restore', [WorkItemsController::class, 'restore']);
+        Route::delete('work-items/{item}', [WorkItemsController::class, 'destroy']);
+        Route::get('work-items/{item}/subscribers', [SubscribersController::class, 'index']);
+        Route::put('work-items/{item}/subscription', [SubscribersController::class, 'store']);
+        Route::delete('work-items/{item}/subscription', [SubscribersController::class, 'destroy']);
     });
 
     Route::get('favorites', [FavoritesController::class, 'index']);

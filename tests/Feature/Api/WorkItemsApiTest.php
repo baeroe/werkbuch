@@ -308,3 +308,59 @@ it('does not redirect a former key the reader may not see', function () use ($we
     $this->actingAs($mara)->getJson('/api/v1/work-items/SEC-1?include=children')->assertNotFound()->assertHeaderMissing('Location');
     $this->actingAs(User::factory()->admin()->create())->getJson('/api/v1/work-items/SEC-1')->assertStatus(301);
 });
+
+it('archives over POST …/archive and restores over POST …/restore', function () use ($web) {
+    [$project, $mara] = $web();
+    $item = WorkItem::factory()->for($project)->closed()->create();
+    WorkItem::factory()->for($project)->create();
+
+    $this->withToken(apiToken($mara, ['read']))->postJson('/api/v1/work-items/WEB-1/archive')->assertForbidden();
+    forgetApiAuth();
+    $this->actingAs($mara)->postJson('/api/v1/work-items/web-1/archive')->assertOk()
+        ->assertJsonPath('data.id', $item->id)
+        ->assertJsonPath('data.archived_at', $item->fresh()?->archived_at?->toJSON());
+    $this->actingAs($mara)->postJson('/api/v1/work-items/WEB-2/archive')->assertStatus(409)
+        ->assertHeader('Content-Type', 'application/problem+json')->assertJsonPath('reason', 'not_closed');
+    $this->actingAs($mara)->postJson("/api/v1/work-items/{$item->id}/restore")->assertOk()
+        ->assertJsonPath('data.archived_at', null);
+    $this->actingAs($mara)->postJson('/api/v1/work-items/WEB-1/restore')->assertStatus(409)
+        ->assertJsonPath('reason', 'not_archived')
+        ->assertJsonPath('detail', __('problem.detail.not_archived', ['key' => 'WEB-1']));
+});
+
+it('deletes over DELETE with 204', function () use ($web) {
+    [$project, $mara] = $web();
+    $item = WorkItem::factory()->for($project)->create();
+    $member = memberOf($project, ProjectRole::Member);
+
+    $this->actingAs($member)->deleteJson('/api/v1/work-items/WEB-1')->assertForbidden()
+        ->assertJsonPath('detail', __('problem.detail.items_delete_admins_only'));
+    $this->withToken(apiToken($mara, ['read']))->deleteJson('/api/v1/work-items/WEB-1')->assertForbidden();
+    forgetApiAuth();
+    $this->actingAs($mara)->deleteJson('/api/v1/work-items/web-1')->assertNoContent();
+    $this->actingAs($mara)->deleteJson("/api/v1/work-items/{$item->id}")->assertNotFound();
+
+    expect(WorkItem::query()->count())->toBe(0);
+});
+
+it('lists the watchers and watches over PUT and DELETE …/subscription', function () use ($web) {
+    [$project, $mara] = $web();
+    $lene = memberOf($project, ProjectRole::Viewer, ['name' => 'Lene']);
+    $item = WorkItem::factory()->for($project)->create();
+
+    $this->actingAs($lene)->putJson('/api/v1/work-items/WEB-1/subscription')->assertOk()
+        ->assertJsonPath('data.id', $item->id)->assertJsonPath('data.subscribed', true);
+    $this->actingAs($mara)->putJson("/api/v1/work-items/{$item->id}/subscription")->assertOk()
+        ->assertJsonPath('data.subscribed', true);
+
+    $listed = $this->actingAs($lene)->getJson('/api/v1/work-items/web-1/subscribers')->assertOk();
+    expect($listed->json('data.*.name'))->toBe(['Lene', 'Mara'])
+        ->and(array_keys($listed->json('data.0')))->toContain('id', 'name', 'handle', 'avatar_url')
+        ->and($listed->json())->toHaveKeys(['data'])->not->toHaveKey('meta');
+
+    $this->actingAs($lene)->deleteJson('/api/v1/work-items/WEB-1/subscription')->assertOk()
+        ->assertJsonPath('data.subscribed', false);
+    $this->actingAs($lene)->getJson('/api/v1/work-items/WEB-1/subscribers')->assertJsonPath('data.*.name', ['Mara']);
+    $this->actingAs(User::defaultBot())->putJson('/api/v1/work-items/WEB-1/subscription')->assertForbidden()
+        ->assertJsonPath('detail', __('problem.detail.bots_dont_watch'));
+});

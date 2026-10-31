@@ -28,6 +28,9 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * an open one clears it; `started_at` is set on the first start, `closed_at` on closing and cleared on reopening. The
  * locks of P1 (ItemLock::take), then everything checked against the item as locked; an archived project and an
  * archived item are read-only (409 `project_archived`, `archived`).
+ *
+ * The transaction runs up to three times (`DB::transaction(…, 3)`) like every change that locks items: a deadlock with a
+ * change of several items (a deletion locks the item and then its children) is retried by Laravel.
  */
 final class TransitionWorkItem
 {
@@ -54,7 +57,7 @@ final class TransitionWorkItem
             self::move($actor, $locked, is_string($to) ? $to : '', self::resolutionOf($input['resolution_id'] ?? null));
 
             return $locked;
-        });
+        }, 3);
 
         WorkItem::loadForResource($item, $actor->user);
 

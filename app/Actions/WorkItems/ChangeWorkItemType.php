@@ -28,6 +28,9 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * locks of P1 (ItemLock::take) and everything checked against the item as locked; its children are counted under the
  * lock of the item, which every new child waits for (ItemInput reads a parent under a shared lock). An archived project
  * and an archived item are read-only (409 `project_archived`, `archived`).
+ *
+ * The transaction runs up to three times (`DB::transaction(…, 3)`): the shared lock of a parent after the own locks can
+ * meet a deletion that locks the parent first and its children after (a deadlock Laravel retries).
  */
 final class ChangeWorkItemType
 {
@@ -64,7 +67,7 @@ final class ChangeWorkItemType
             self::retype($actor, $locked, $id, $read['values'], $refused);
 
             return $locked;
-        });
+        }, 3);
 
         WorkItem::loadForResource($item, $actor->user);
 

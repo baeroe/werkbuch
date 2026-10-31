@@ -30,6 +30,9 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * (`current`) and the name of whoever changed the description last, when it has moved on meanwhile; without a version
  * the last write wins (spec 4.8). The check runs under the lock of the item, so of two edits on the same version the
  * second one always sees the first.
+ *
+ * The transaction runs up to three times (`DB::transaction(…, 3)`): the shared lock of a parent after the own locks can
+ * meet a deletion that locks the parent first and its children after (a deadlock Laravel retries).
  */
 final class UpdateWorkItem
 {
@@ -61,7 +64,7 @@ final class UpdateWorkItem
             self::apply($actor, $locked, $input, refused: $refused);
 
             return $locked;
-        });
+        }, 3);
 
         WorkItem::loadForResource($item, $actor->user);
 

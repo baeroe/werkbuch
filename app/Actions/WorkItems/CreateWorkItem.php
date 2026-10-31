@@ -38,6 +38,9 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * (no type or property goes meanwhile), then the project `for update` (one number and one last rank at a time, P1), a
  * parent shared (ItemInput), and every field checked under them. A refusal leaves nothing behind: no item, no number
  * used up, no event.
+ *
+ * The transaction runs up to three times (`DB::transaction(…, 3)`): the shared lock of a parent after the own locks can
+ * meet a deletion that locks the parent first and its children after (a deadlock Laravel retries).
  */
 final class CreateWorkItem
 {
@@ -130,7 +133,7 @@ final class CreateWorkItem
             }
 
             return $item;
-        });
+        }, 3);
     }
 
     /**

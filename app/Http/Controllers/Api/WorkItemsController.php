@@ -2,10 +2,13 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Actions\WorkItems\ArchiveWorkItem;
 use App\Actions\WorkItems\ChangeWorkItemType;
 use App\Actions\WorkItems\CreateWorkItem;
+use App\Actions\WorkItems\DeleteWorkItem;
 use App\Actions\WorkItems\GetWorkItem;
 use App\Actions\WorkItems\ListWorkItems;
+use App\Actions\WorkItems\RestoreWorkItem;
 use App\Actions\WorkItems\TransitionWorkItem;
 use App\Actions\WorkItems\UpdateWorkItem;
 use App\Http\Api\ApiList;
@@ -15,6 +18,7 @@ use App\Models\WorkItem;
 use App\Support\Actor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 
 /**
  * The work items. `{item}` is bound by ULID or key (`WEB-12`, any case, also with a former identifier, routes/api.php);
@@ -63,5 +67,25 @@ final class WorkItemsController extends Controller
     public function changeType(Request $request, WorkItem $item): WorkItemResource
     {
         return new WorkItemResource(ChangeWorkItemType::run(Actor::fromRequest($request), $item, $request->all()));
+    }
+
+    /** Only a closed item (409 `not_closed`). */
+    public function archive(Request $request, WorkItem $item): WorkItemResource
+    {
+        return new WorkItemResource(ArchiveWorkItem::run(Actor::fromRequest($request), $item));
+    }
+
+    /** Only an archived item (409 `not_archived`). */
+    public function restore(Request $request, WorkItem $item): WorkItemResource
+    {
+        return new WorkItemResource(RestoreWorkItem::run(Actor::fromRequest($request), $item));
+    }
+
+    /** 204: the item is gone, its children have no parent any more. */
+    public function destroy(Request $request, WorkItem $item): Response
+    {
+        DeleteWorkItem::run(Actor::fromRequest($request), $item);
+
+        return response()->noContent();
     }
 }

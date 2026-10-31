@@ -6,16 +6,23 @@ use App\Actions\Projects\CreateProject;
 use App\Actions\Projects\DeleteProject;
 use App\Actions\Projects\PurgeProject as PurgeProjectAction;
 use App\Actions\Projects\UpdateProject;
+use App\Actions\WorkItems\CreateWorkItem;
 use App\Events\EventType;
 use App\Exceptions\Problem;
 use App\Jobs\PurgeProject;
 use App\Models\Event;
 use App\Models\Favorite;
+use App\Models\Label;
 use App\Models\Project;
 use App\Models\ProjectIdentifier;
 use App\Models\ProjectMember;
 use App\Models\ProjectType;
 use App\Models\User;
+use App\Models\WorkItem;
+use App\Models\WorkItemRelation;
+use App\Models\WorkItemSubscriber;
+use App\Models\WorkItemType;
+use App\Models\WorkItemValue;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
@@ -87,6 +94,39 @@ it('purges the project and everything that hangs on it, keeping its events', fun
         ->and($deleted->actor_id)->toBe($admin->id)
         ->and($deleted->meta)->toMatchArray(['identifier' => 'WEB', 'name' => 'Website'])
         ->and(Event::query()->where('project_id', $web->id)->count())->toBeGreaterThan(1);
+});
+
+it('removes the items of the project with their values, labels, relations to other projects and subscriptions, and keeps the events', function () {
+    [$web, $admin] = projectToDelete();
+    $other = CreateProject::run(actor($admin), ['name' => 'Andere', 'identifier' => 'APP']);
+    $bug = WorkItemType::query()->where('name', 'Bug')->firstOrFail();
+    $label = Label::factory()->create();
+    $create = fn (Project $project, string $title) => CreateWorkItem::run(actor($admin), [
+        'project_id' => $project->id, 'type_id' => $bug->id, 'title' => $title, 'label_ids' => [$label->id], 'values' => ['effort' => 2],
+    ]);
+    $epic = WorkItem::factory()->for($web)->epic()->create();
+    $child = WorkItem::factory()->childOf($epic)->create();
+    $item = $create($web, 'Geht mit');
+    $kept = $create($other, 'Bleibt');
+    $outward = WorkItemRelation::factory()->create(['source_id' => $item->id, 'target_id' => $kept->id]);
+    $inward = WorkItemRelation::factory()->blocks()->create(['source_id' => $kept->id, 'target_id' => $child->id]);
+    $events = Event::query()->where('project_id', $web->id)->count();
+
+    $this->actingAs($admin)->deleteJson('/api/v1/projects/WEB')->assertStatus(202);
+
+    $ids = [$epic->id, $child->id, $item->id];
+    expect(WorkItem::query()->whereKey($ids)->count())->toBe(0)
+        ->and(WorkItemValue::query()->whereIn('work_item_id', $ids)->count())->toBe(0)
+        ->and(DB::table('work_item_labels')->whereIn('work_item_id', $ids)->count())->toBe(0)
+        ->and(WorkItemSubscriber::query()->whereIn('work_item_id', $ids)->count())->toBe(0)
+        ->and(WorkItemRelation::query()->whereKey([$outward->id, $inward->id])->count())->toBe(0)
+        // the other project keeps its item as it was, without an event for the relations that went (A26)
+        ->and(WorkItem::query()->find($kept->id)?->title)->toBe('Bleibt')
+        ->and(WorkItemValue::query()->where('work_item_id', $kept->id)->count())->toBe(1)
+        ->and(DB::table('work_item_labels')->where('work_item_id', $kept->id)->count())->toBe(1)
+        ->and(eventsOf(EventType::WorkItemRelationRemoved))->toHaveCount(0)
+        ->and(eventsOf(EventType::WorkItemCreated, $item))->toHaveCount(1)
+        ->and(Event::query()->where('project_id', $web->id)->count())->toBe($events + 1);
 });
 
 it('lets only admins of the project delete it', function () {
