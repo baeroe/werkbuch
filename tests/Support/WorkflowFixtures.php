@@ -6,10 +6,12 @@ use App\Domain\Workflow\State;
 use App\Domain\Workflow\StateCategory;
 use App\Domain\Workflow\StateIcon;
 use App\Domain\Workflow\TransitionGraph;
+use App\Http\Resources\WorkflowResource;
+use App\Models\Workflow;
 
 /**
  * The two workflows of the clickdummy (`src/domain/fixtures.ts`), as a graph for the domain tests and as REST input for
- * the feature tests and the rights matrix.
+ * the feature tests and the rights matrix; and a saved workflow as input again.
  */
 final class WorkflowFixtures
 {
@@ -111,6 +113,16 @@ final class WorkflowFixtures
             'states' => self::AGENCY_STATES,
             'transitions' => self::AGENCY_TRANSITIONS,
         ];
+    }
+
+    /**
+     * A saved workflow as the server answers it, which a client sends back to change it (`PUT` replaces it as a whole).
+     *
+     * @return array<string, mixed>
+     */
+    public static function inputOf(Workflow $workflow): array
+    {
+        return (new WorkflowResource($workflow->load(['states', 'transitions'])))->resolve();
     }
 
     /**

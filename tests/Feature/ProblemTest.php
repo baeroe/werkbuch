@@ -38,6 +38,23 @@ it('keeps the explanation of a Problem and lets extensions never overwrite the c
     $this->getJson('api/v1/_t/greedy')->assertStatus(409)->assertJsonPath('status', 409)->assertJsonPath('extra', true);
 });
 
+it('renders an unprocessable Problem with its own reason, the errors and the extensions', function () {
+    apiRoute('get', '_t/unprocessable', fn () => throw Problem::unprocessable(
+        'invalid_workflow',
+        ['no_completed_state' => ['Kein Completed.']],
+        ['issues' => [['code' => 'no_completed_state']]],
+        'So nicht.',
+    ));
+
+    $this->getJson('api/v1/_t/unprocessable')->assertStatus(422)
+        ->assertHeader('Content-Type', 'application/problem+json')
+        ->assertExactJson([
+            'type' => 'urn:werkbuch:problem:invalid_workflow', 'title' => __('problem.title.validation_failed'),
+            'status' => 422, 'detail' => 'So nicht.', 'reason' => 'invalid_workflow',
+            'errors' => ['no_completed_state' => ['Kein Completed.']], 'issues' => [['code' => 'no_completed_state']],
+        ]);
+});
+
 it('renders validation errors as 422 validation_failed with errors by path', function () {
     apiRoute('post', '_t/validate', fn (Request $r) => $r->validate(['title' => 'required']));
 

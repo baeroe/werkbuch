@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Workflow;
 use Tests\Feature\Access\MatrixWorld;
 
 /*
@@ -37,6 +38,10 @@ return [
     'add a member to a project' => ['POST', '/api/v1/projects/{project}/members', 'params' => fn (MatrixWorld $w) => ['project' => $w->web->identifier]],
     'change the role of a member' => ['PATCH', '/api/v1/projects/{project}/members/{user}', 'params' => fn (MatrixWorld $w) => ['project' => $w->web->identifier, 'user' => $w->target->id]],
     'remove a member from a project' => ['DELETE', '/api/v1/projects/{project}/members/{user}', 'params' => fn (MatrixWorld $w) => ['project' => $w->web->identifier, 'user' => $w->target->id]],
+    'list workflows' => ['GET', '/api/v1/workflows'],
+    'create a workflow' => ['POST', '/api/v1/workflows'],
+    'change a workflow' => ['PUT', '/api/v1/workflows/{workflow}', 'params' => fn (MatrixWorld $w) => ['workflow' => Workflow::factory()->create()->id]],
+    'delete a workflow' => ['DELETE', '/api/v1/workflows/{workflow}', 'params' => fn (MatrixWorld $w) => ['workflow' => Workflow::factory()->create()->id]],
     'list the own favorites' => ['GET', '/api/v1/favorites'],
     'toggle a favorite' => ['POST', '/api/v1/favorites/toggle'],
     'list tokens' => ['GET', '/api/v1/tokens'],

@@ -35,12 +35,17 @@ use App\Actions\Users\ListUsers;
 use App\Actions\Users\ReactivateUser;
 use App\Actions\Users\UpdateUser;
 use App\Actions\Users\UpdateUserRole;
+use App\Actions\Workflows\DeleteWorkflow;
+use App\Actions\Workflows\ListWorkflows;
+use App\Actions\Workflows\SaveWorkflow;
 use App\Events\EventType;
 use App\Models\User;
+use App\Models\Workflow;
 use App\Support\Actor;
 use Laravel\Fortify\Actions\EnableTwoFactorAuthentication;
 use PragmaRX\Google2FA\Google2FA;
 use Tests\Feature\Access\MatrixWorld;
+use Tests\Support\WorkflowFixtures;
 
 /*
  * The rights matrix (RightsMatrixTest): every action × every kind of account. A row names the action, how to run it in
@@ -65,6 +70,9 @@ $peopleButAdmin = array_values(array_diff($people, ['org_admin']));
 // the settings of a project: its admins (org admins are admins in every project); the outsider of the private project
 // does not see it
 $projectAdmins = ['org_admin', 'project_admin', 'default_bot'];
+
+// the catalogs: every account reads them, only org admins change them (`org.manage_catalog`, P8)
+$catalogAdmins = ['org_admin', 'default_bot'];
 
 /** Starts a two-factor setup for the account past the action (a bot as well, so its refusal is the action's own); returns the secret. */
 $startTwoFactor = function (User $user): string {
@@ -184,6 +192,23 @@ return [
         'allowed' => $projectAdmins,
         'hidden' => ['outsider_private'],
         'event' => EventType::ProjectMemberRemoved,
+    ],
+    'ListWorkflows' => [
+        'action' => ListWorkflows::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListWorkflows::run($a, []),
+        'allowed' => $everyone,
+    ],
+    'SaveWorkflow' => [
+        'action' => SaveWorkflow::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => SaveWorkflow::run($a, null, WorkflowFixtures::standardInput('Matrix')),
+        'allowed' => $catalogAdmins,
+        'event' => EventType::WorkflowCreated,
+    ],
+    'DeleteWorkflow' => [
+        'action' => DeleteWorkflow::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => DeleteWorkflow::run($a, Workflow::factory()->create()),
+        'allowed' => $catalogAdmins,
+        'event' => EventType::WorkflowDeleted,
     ],
     'ListFavorites' => [
         'action' => ListFavorites::class,

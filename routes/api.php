@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\ProjectsController;
 use App\Http\Controllers\Api\TokensController;
 use App\Http\Controllers\Api\TwoFactorController;
 use App\Http\Controllers\Api\UsersController;
+use App\Http\Controllers\Api\WorkflowsController;
 use App\Http\Middleware\EnsureAccountIsActive;
 use App\Http\Middleware\EnsureSession;
 use App\Http\Middleware\EnsureTokenAbility;
@@ -51,6 +52,11 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
     Route::post('projects/{project}/members', [MembersController::class, 'store']);
     Route::patch('projects/{project}/members/{user}', [MembersController::class, 'update']);
     Route::delete('projects/{project}/members/{user}', [MembersController::class, 'destroy']);
+
+    Route::get('workflows', [WorkflowsController::class, 'index']);
+    Route::post('workflows', [WorkflowsController::class, 'store']);
+    Route::put('workflows/{workflow}', [WorkflowsController::class, 'update']);
+    Route::delete('workflows/{workflow}', [WorkflowsController::class, 'destroy']);
 
     Route::get('favorites', [FavoritesController::class, 'index']);
     Route::post('favorites/toggle', [FavoritesController::class, 'toggle']);
