@@ -5,6 +5,7 @@ use App\Models\Property;
 use App\Models\RelationType;
 use App\Models\Resolution;
 use App\Models\Workflow;
+use App\Models\WorkItemRelation;
 use App\Models\WorkItemType;
 use Tests\Feature\Access\MatrixWorld;
 
@@ -81,6 +82,12 @@ return [
     'list the subscribers of a work item' => ['GET', '/api/v1/work-items/{item}/subscribers', 'params' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key]],
     'watch a work item' => ['PUT', '/api/v1/work-items/{item}/subscription', 'params' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key]],
     'stop watching a work item' => ['DELETE', '/api/v1/work-items/{item}/subscription', 'params' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key]],
+    'list the relations of a work item' => ['GET', '/api/v1/work-items/{item}/relations', 'params' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key]],
+    'add a relation' => ['POST', '/api/v1/work-items/{item}/relations', 'params' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key], 'body' => ['type_id' => '', 'target_id' => 'WEB-1']],
+    'remove a relation' => ['DELETE', '/api/v1/relations/{relation}', 'params' => fn (MatrixWorld $w) => ['relation' => WorkItemRelation::factory()->create([
+        'source_id' => $w->item('project_admin')->id,
+        'target_id' => $w->item('project_admin')->id,
+    ])->id]],
     'list the own favorites' => ['GET', '/api/v1/favorites'],
     'toggle a favorite' => ['POST', '/api/v1/favorites/toggle'],
     'list tokens' => ['GET', '/api/v1/tokens'],

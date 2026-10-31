@@ -60,7 +60,7 @@ it('checks what to include only for an item the account sees', function () use (
             ->toThrow(fn (ValidationException $e) => expect(array_keys($e->errors()))->toBe(['include']));
     }
     expect(fn () => GetWorkItem::run(actor($mara), 'WEB-1', ['comments']))->toThrow(ValidationException::class, __('field.include.unknown', [
-        'name' => 'comments', 'allowed' => 'children, type, workflow',
+        'name' => 'comments', 'allowed' => 'children, type, workflow, relations',
     ]));
 
     // blanks around a name and empty names do not matter, the order of INCLUDES does

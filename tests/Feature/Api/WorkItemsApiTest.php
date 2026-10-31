@@ -5,6 +5,7 @@ use App\Domain\Properties\FieldType;
 use App\Http\Resources\WorkItemResource;
 use App\Models\Project;
 use App\Models\Property;
+use App\Models\RelationType;
 use App\Models\User;
 use App\Models\Workflow;
 use App\Models\WorkItem;
@@ -274,7 +275,7 @@ it('shows an item and embeds children, type and workflow on request', function (
         ->assertJsonPath('data.type.is_epic', true);
 
     $this->actingAs($mara)->getJson('/api/v1/work-items/WEB-1?include=children,comments')->assertUnprocessable()
-        ->assertJsonPath('errors.include.0', __('field.include.unknown', ['name' => 'comments', 'allowed' => 'children, type, workflow']));
+        ->assertJsonPath('errors.include.0', __('field.include.unknown', ['name' => 'comments', 'allowed' => 'children, type, workflow, relations']));
     $this->actingAs($mara)->getJson('/api/v1/work-items/WEB-1?include[]=type')->assertOk()->assertJsonPath('data.type.id', $epic->type_id);
     $this->actingAs($mara)->getJson('/api/v1/work-items/WEB-9')->assertNotFound();
 });
@@ -384,4 +385,45 @@ it('changes many items over POST …/bulk and names the refusals without data', 
         'rejected' => [['id' => 'WEB-2', 'reason' => 'archived'], ['id' => 'WEB-3', 'reason' => 'not_found']],
     ])
         ->and($archived->fresh()?->archived_at)->not->toBeNull();
+});
+
+it('lists, adds and removes relations over REST', function () use ($web) {
+    [$project, $mara] = $web();
+    $item = WorkItem::factory()->for($project)->create();
+    $other = WorkItem::factory()->for($project)->create();
+    $relates = RelationType::query()->where('built_in', 'relates')->firstOrFail();
+
+    $this->withToken(apiToken($mara, ['read']))->postJson('/api/v1/work-items/WEB-1/relations', ['type_id' => $relates->id, 'target_id' => 'WEB-2'])->assertForbidden();
+    forgetApiAuth();
+    $added = $this->actingAs($mara)->postJson('/api/v1/work-items/web-1/relations', ['type_id' => $relates->id, 'target_id' => 'web-2'])->assertCreated();
+    $relation = WorkItemRelation::query()->sole();
+
+    expect($added->json())->toBe(['data' => [
+        'relation' => ['id' => $relation->id, 'type_id' => $relates->id, 'source_id' => $item->id, 'target_id' => $other->id],
+        'other' => $added->json('data.other'),
+        'direction' => 'outward',
+        'hidden' => false,
+    ]])
+        ->and(array_keys($added->json('data.other')))->toBe(WORK_ITEM_SHAPE)
+        ->and($added->json('data.other.key'))->toBe('WEB-2');
+
+    $this->actingAs($mara)->postJson('/api/v1/work-items/WEB-2/relations', ['type_id' => $relates->id, 'target_id' => 'WEB-1'])
+        ->assertUnprocessable()->assertHeader('Content-Type', 'application/problem+json')
+        ->assertJsonPath('errors', ['target_id' => [__('field.target_id.duplicate')]]);
+    $this->actingAs($mara)->postJson('/api/v1/work-items/WEB-1/relations', ['type_id' => '', 'target_id' => 'WEB-9'])
+        ->assertUnprocessable()->assertJsonPath('errors', ['target_id' => [__('field.target_id.unknown')]]);
+
+    $listed = $this->actingAs($mara)->getJson('/api/v1/work-items/WEB-2/relations')->assertOk();
+    expect($listed->json('data.0.direction'))->toBe('inward')
+        ->and($listed->json('data.0.other.key'))->toBe('WEB-1')
+        ->and($listed->json())->toHaveKeys(['data'])->not->toHaveKey('meta');
+    $this->actingAs($mara)->getJson('/api/v1/work-items/WEB-2?include=relations')->assertOk()
+        ->assertJsonPath('data.relations.0.relation.id', $relation->id);
+
+    // a relation by its ULID, also in capitals; anything else is no relation
+    $this->actingAs($mara)->deleteJson('/api/v1/relations/WEB-1')->assertNotFound();
+    $this->actingAs($mara)->deleteJson('/api/v1/relations/'.strtoupper($relation->id))->assertNoContent();
+    $this->actingAs($mara)->deleteJson("/api/v1/relations/{$relation->id}")->assertNotFound();
+
+    expect(WorkItemRelation::query()->count())->toBe(0);
 });

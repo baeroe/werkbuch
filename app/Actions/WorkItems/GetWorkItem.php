@@ -15,15 +15,16 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * that does not exist, one the account does not see and one of a project being deleted are the same 404. Asked for by
  * a former key, the item says so (`resolved_by_former_identifier`); the caller redirects and decides nothing itself.
  *
- * `include` names what the resource embeds besides the item (`children` in manual order, `type`, `workflow`); all of it
- * is loaded here, the resource asks nothing.
+ * `include` names what the resource embeds besides the item (`children` in manual order, `type`, `workflow`, and
+ * `relations` as the account reads them: ListRelations::of() with the account as reader, hidden ends blanked); all of
+ * it is loaded here, the resource asks nothing.
  */
 final class GetWorkItem
 {
     use AsAction;
 
     /** What an item can embed, in the order the resource answers it. */
-    public const INCLUDES = ['children', 'type', 'workflow'];
+    public const INCLUDES = ['children', 'type', 'workflow', 'relations'];
 
     /**
      * @param  array<array-key, mixed>  $include  names out of INCLUDES (blanks around them and empty ones are ignored)
@@ -51,6 +52,9 @@ final class GetWorkItem
         }
         if (in_array('workflow', $include, true)) {
             $item->project->load(['workflow.states', 'workflow.transitions']);
+        }
+        if (in_array('relations', $include, true)) {
+            $item->relation_entries = ListRelations::of($item, $actor->user);
         }
 
         return $item;

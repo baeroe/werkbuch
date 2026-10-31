@@ -51,14 +51,17 @@ use App\Actions\Users\UpdateUserRole;
 use App\Actions\Workflows\DeleteWorkflow;
 use App\Actions\Workflows\ListWorkflows;
 use App\Actions\Workflows\SaveWorkflow;
+use App\Actions\WorkItems\AddRelation;
 use App\Actions\WorkItems\ArchiveWorkItem;
 use App\Actions\WorkItems\BulkUpdateWorkItems;
 use App\Actions\WorkItems\ChangeWorkItemType;
 use App\Actions\WorkItems\CreateWorkItem;
 use App\Actions\WorkItems\DeleteWorkItem;
 use App\Actions\WorkItems\GetWorkItem;
+use App\Actions\WorkItems\ListRelations;
 use App\Actions\WorkItems\ListSubscribers;
 use App\Actions\WorkItems\ListWorkItems;
+use App\Actions\WorkItems\RemoveRelation;
 use App\Actions\WorkItems\RestoreWorkItem;
 use App\Actions\WorkItems\SetSubscription;
 use App\Actions\WorkItems\TransitionWorkItem;
@@ -73,6 +76,7 @@ use App\Models\RelationType;
 use App\Models\Resolution;
 use App\Models\User;
 use App\Models\Workflow;
+use App\Models\WorkItemRelation;
 use App\Models\WorkItemType;
 use App\Support\Actor;
 use Laravel\Fortify\Actions\EnableTwoFactorAuthentication;
@@ -322,6 +326,36 @@ return [
         'allowed' => ['org_admin', 'project_admin', 'project_member', 'project_viewer', 'outsider_public'],
         'hidden' => ['outsider_private'],
         'event' => EventType::WorkItemSubscribed,
+    ],
+    'ListRelations' => [
+        'action' => ListRelations::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListRelations::run($a, $w->item($column)),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    'AddRelation' => [
+        'action' => AddRelation::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => AddRelation::run($a, $w->item($column), [
+            'type_id' => RelationType::query()->where('built_in', 'relates')->value('id'),
+            'target_id' => $w->item($column)->id,
+        ]),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::WorkItemRelationAdded,
+        // one at each end
+        'events' => 2,
+    ],
+    'RemoveRelation' => [
+        'action' => RemoveRelation::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => RemoveRelation::run($a, WorkItemRelation::factory()->create([
+            'source_id' => $w->item($column)->id,
+            'target_id' => $w->item($column)->id,
+        ])),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::WorkItemRelationRemoved,
+        // one at each end
+        'events' => 2,
     ],
     'ListWorkflows' => [
         'action' => ListWorkflows::class,

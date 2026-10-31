@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\PasswordController;
 use App\Http\Controllers\Api\ProjectsController;
 use App\Http\Controllers\Api\PropertiesController;
+use App\Http\Controllers\Api\RelationsController;
 use App\Http\Controllers\Api\RelationTypesController;
 use App\Http\Controllers\Api\ResolutionsController;
 use App\Http\Controllers\Api\SubscribersController;
@@ -25,13 +26,17 @@ use App\Http\Middleware\EnsureTokenAbility;
 use App\Http\Middleware\RedirectFormerItemKey;
 use App\Models\Project;
 use App\Models\WorkItem;
+use App\Models\WorkItemRelation;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Str;
 
 // a project by its ULID, identifier or a former identifier; whether the account sees it, the action decides
 Route::bind('project', fn (string $ref) => Project::findByReference($ref) ?? throw Problem::notFound());
 // a work item by its ULID or key (`WEB-12`, any case, also with a former identifier); whether the account sees it, the
 // action decides
 Route::bind('item', fn (string $ref) => WorkItem::findByReference($ref) ?? throw Problem::notFound());
+// a relation by its ULID (any case; anything else is no relation); whether the account sees an end, the action decides
+Route::bind('relation', fn (string $ref) => (Str::isUlid($ref) ? WorkItemRelation::query()->find(strtolower($ref)) : null) ?? throw Problem::notFound());
 
 // The REST API (prefix api/v1, see bootstrap/app.php): the session of the interface (with CSRF) or a bearer token whose
 // abilities fit the method. Every route has a row in tests/Feature/Api/routes.php.
@@ -112,7 +117,10 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
         Route::get('work-items/{item}/subscribers', [SubscribersController::class, 'index']);
         Route::put('work-items/{item}/subscription', [SubscribersController::class, 'store']);
         Route::delete('work-items/{item}/subscription', [SubscribersController::class, 'destroy']);
+        Route::get('work-items/{item}/relations', [RelationsController::class, 'index']);
+        Route::post('work-items/{item}/relations', [RelationsController::class, 'store']);
     });
+    Route::delete('relations/{relation}', [RelationsController::class, 'destroy']);
 
     Route::get('favorites', [FavoritesController::class, 'index']);
     Route::post('favorites/toggle', [FavoritesController::class, 'toggle']);

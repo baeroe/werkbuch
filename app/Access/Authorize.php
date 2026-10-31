@@ -27,4 +27,10 @@ final class Authorize
 
         throw Problem::forbidden($response->message());
     }
+
+    /** Whether the policy lets the actor do it, for an action that picks among several things it may act through. */
+    public static function allows(Actor $actor, string $ability, mixed ...$arguments): bool
+    {
+        return Gate::forUser($actor->user)->inspect($ability, $arguments)->allowed();
+    }
 }

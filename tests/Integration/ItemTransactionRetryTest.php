@@ -1,17 +1,21 @@
 <?php
 
 use App\Access\ProjectRole;
+use App\Actions\WorkItems\AddRelation;
 use App\Actions\WorkItems\BulkUpdateWorkItems;
 use App\Actions\WorkItems\ChangeWorkItemType;
 use App\Actions\WorkItems\CreateWorkItem;
 use App\Actions\WorkItems\DeleteWorkItem;
+use App\Actions\WorkItems\RemoveRelation;
 use App\Actions\WorkItems\TransitionWorkItem;
 use App\Actions\WorkItems\UpdateWorkItem;
 use App\Events\EventType;
 use App\Models\Event;
 use App\Models\Project;
+use App\Models\RelationType;
 use App\Models\User;
 use App\Models\WorkItem;
+use App\Models\WorkItemRelation;
 use App\Models\WorkItemType;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Database\QueryException;
@@ -19,9 +23,10 @@ use Illuminate\Support\Facades\DB;
 
 /*
  * Changes of items that lock several item rows (a parent under a shared lock after the own item, a deletion with its
- * children) can deadlock with each other; MariaDB then rolls one of them back. Their transactions run up to three times
+ * children, both ends of a relation) can deadlock with each other; MariaDB then rolls one of them back. Their transactions run up to three times
  * (`DB::transaction(…, 3)`), and Laravel retries only a concurrency error. Here the first attempt fails with a deadlock
- * as MariaDB reports it, after its event was written; the second attempt must succeed and leave exactly one event.
+ * as MariaDB reports it, after its event was written; the second attempt must succeed and leave exactly its events (one,
+ * or one at each end of a relation).
  * Without the test transaction of the feature tests (a nested transaction is never retried), so in Integration.
  */
 
@@ -44,7 +49,7 @@ $deadlockOnce = function (): Closure {
     };
 };
 
-it('retries the transaction after a deadlock', function (Closure $run, EventType $type) use ($deadlockOnce) {
+it('retries the transaction after a deadlock', function (Closure $run, EventType $type, int $events = 1) use ($deadlockOnce) {
     $mara = User::factory()->create(['name' => 'Mara']);
     $web = Project::factory()->identifier('WEB')->member($mara, ProjectRole::Admin)->create(['lead_id' => $mara->id]);
     $item = WorkItem::factory()->for($web)->create(['created_by' => $mara->id]);
@@ -53,7 +58,7 @@ it('retries the transaction after a deadlock', function (Closure $run, EventType
     $run($mara, $web, $item);
 
     expect($thrown())->toBe(1)
-        ->and(Event::query()->where('type', $type)->count())->toBe(1);
+        ->and(Event::query()->where('type', $type)->count())->toBe($events);
 })->with([
     'create' => [fn (User $mara, Project $web) => CreateWorkItem::run(actor($mara), ['project_id' => $web->id, 'title' => 'Neu']), EventType::WorkItemCreated],
     'update' => [fn (User $mara, Project $web, WorkItem $item) => UpdateWorkItem::run(actor($mara), $item, ['title' => 'Neu']), EventType::WorkItemUpdated],
@@ -66,4 +71,12 @@ it('retries the transaction after a deadlock', function (Closure $run, EventType
     'bulk' => [fn (User $mara, Project $web, WorkItem $item) => expect(BulkUpdateWorkItems::run(actor($mara), ['ids' => [$item->id], 'patch' => ['priority' => 'high']]))
         ->toBe(['updated' => [$item->id], 'rejected' => []]), EventType::WorkItemUpdated],
     'delete' => [fn (User $mara, Project $web, WorkItem $item) => DeleteWorkItem::run(actor($mara), $item), EventType::WorkItemDeleted],
+    'relate' => [fn (User $mara, Project $web, WorkItem $item) => AddRelation::run(actor($mara), $item, [
+        'type_id' => RelationType::query()->where('built_in', 'relates')->value('id'),
+        'target_id' => WorkItem::factory()->for($web)->create()->id,
+    ]), EventType::WorkItemRelationAdded, 2],
+    'unrelate' => [fn (User $mara, Project $web, WorkItem $item) => RemoveRelation::run(actor($mara), WorkItemRelation::factory()->create([
+        'source_id' => $item->id,
+        'target_id' => WorkItem::factory()->for($web)->create()->id,
+    ])), EventType::WorkItemRelationRemoved, 2],
 ]);

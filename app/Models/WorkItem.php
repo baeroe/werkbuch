@@ -78,12 +78,20 @@ final class WorkItem extends Model
     public bool $subscribed = false;
 
     /**
-     * Set by GetWorkItem, never stored: what WorkItemResource embeds besides the item (`children`, `type`, `workflow`),
-     * loaded there already.
+     * Set by GetWorkItem, never stored: what WorkItemResource embeds besides the item (`children`, `type`, `workflow`,
+     * `relations`), loaded there already.
      *
      * @var list<string>
      */
     public array $includes = [];
+
+    /**
+     * Set by GetWorkItem with `include=relations`, never stored: the relations of the item as its reader sees them
+     * (ListRelations::of()), embedded by WorkItemResource.
+     *
+     * @var list<array{relation: WorkItemRelation, other: ?WorkItem, direction: 'outward'|'inward', hidden: bool}>
+     */
+    public array $relation_entries = [];
 
     /**
      * Loads everything WorkItemResource reads, for one item or a list, with a fixed number of queries (none per item):

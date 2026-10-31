@@ -11,11 +11,11 @@ use Tests\Feature\Access\MatrixWorld;
 /*
  * Every action × every kind of account (master plan: "jede Action steht in der Rechte-Matrix"). Allowed means: no
  * refusal (403, 404) and no other failure but a ValidationException; a row with an event succeeds and records it for
- * the account. Not allowed is a 403, and what the account must not see (`hidden`) a 404. The rows: matrix.php.
+ * the account (`events` times, 1 unless the row says otherwise: a relation is recorded at both ends). Not allowed is a 403, and what the account must not see (`hidden`) a 404. The rows: matrix.php.
  */
 
 /**
- * @return array<string, array{action: class-string, run: Closure(Actor, MatrixWorld, string): mixed, allowed?: list<string>, hidden?: list<string>, event?: EventType, system?: bool}>
+ * @return array<string, array{action: class-string, run: Closure(Actor, MatrixWorld, string): mixed, allowed?: list<string>, hidden?: list<string>, event?: EventType, events?: int, system?: bool}>
  */
 function matrixRows(): array
 {
@@ -54,7 +54,7 @@ it('lets exactly the allowed accounts run each action', function (array $row, st
         expect($outcome)->toBeIn(isset($row['event']) ? ['ok'] : ['ok', 'invalid'], "{$column} may run it");
 
         if (isset($row['event'])) {
-            expect($recorded())->toBe($before + 1, "{$column} records {$row['event']->value}");
+            expect($recorded())->toBe($before + ($row['events'] ?? 1), "{$column} records {$row['event']->value}");
         }
     } else {
         expect($outcome)->toBe(403, "{$column} is refused");
