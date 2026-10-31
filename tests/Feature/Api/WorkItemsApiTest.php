@@ -107,6 +107,28 @@ it('refuses a token that may only read', function () use ($web) {
     expect(WorkItem::query()->count())->toBe(1);
 });
 
+it('changes an item over PATCH and refuses a description edited on an old version', function () use ($web) {
+    [$project, $mara] = $web();
+    $item = WorkItem::factory()->for($project)->create(['title' => 'Alt']);
+
+    $this->withToken(apiToken($mara, ['read']))->patchJson('/api/v1/work-items/WEB-1', ['title' => 'Neu'])->assertForbidden();
+    forgetApiAuth();
+    $this->actingAs($mara)->patchJson('/api/v1/work-items/web-1', ['title' => '  Neu ', 'description' => '**Plan**', 'base_description_version' => 1])
+        ->assertOk()
+        ->assertJsonPath('data.id', $item->id)
+        ->assertJsonPath('data.title', 'Neu')
+        ->assertJsonPath('data.description', '**Plan**')
+        ->assertJsonPath('data.description_version', 2);
+
+    $response = $this->actingAs($mara)->patchJson("/api/v1/work-items/{$item->id}", ['description' => 'Andere Fassung', 'base_description_version' => 1])
+        ->assertStatus(409)->assertHeader('Content-Type', 'application/problem+json');
+
+    expect($response->json())->toMatchArray(['reason' => 'description_conflict', 'detail' => __('problem.detail.description_conflict', ['name' => 'Mara'])])
+        ->and(array_keys($response->json('current')))->toBe(WORK_ITEM_SHAPE)
+        ->and($response->json('current.description'))->toBe('**Plan**')
+        ->and($response->json('current.values'))->toBe([]);
+});
+
 it('names every field error in one answer', function () use ($web) {
     [$project, $mara] = $web();
 

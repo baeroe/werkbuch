@@ -100,6 +100,7 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
     // a read by a former key moves to the current one (301); every route with {item} belongs in this group
     Route::middleware(RedirectFormerItemKey::class)->group(function () {
         Route::get('work-items/{item}', [WorkItemsController::class, 'show']);
+        Route::patch('work-items/{item}', [WorkItemsController::class, 'update']);
     });
 
     Route::get('favorites', [FavoritesController::class, 'index']);

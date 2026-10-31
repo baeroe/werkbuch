@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Access\Assignable;
 use App\Access\Visibility;
+use App\Domain\Ranking\Rank;
 use App\Domain\WorkItems\DateRange;
 use App\Domain\WorkItems\Hierarchy;
 use App\Domain\WorkItems\Priority;
@@ -23,11 +24,14 @@ use Illuminate\Validation\ValidationException;
  * The fields of a work item as the actions that write them check them (spec 4.4, the checks of `itemRules.ts`), with
  * their field messages (P9). Every field error of one input comes in one ValidationException, the values of the
  * properties (ItemValues) included. Callers read the rich text with documents() before their locks and check the rest
- * with create() under them.
+ * with create() or patch() under them.
  */
 final class ItemInput
 {
     public const TITLE_MAX = 255;
+
+    /** The length of `work_items.rank`. */
+    public const RANK_MAX = 128;
 
     /**
      * The input with its rich text read, before any lock: `description` (or `description_json`) becomes a Document or
@@ -116,6 +120,102 @@ final class ItemInput
         }
 
         return ['type' => $type, ...$fields];
+    }
+
+    /**
+     * The fields a change of the item sends, checked under the locks of the caller against the item as locked; what the
+     * input leaves out stays out of the answer (a PATCH changes only what it sends). The same rules as create(), and:
+     * `null` clears the description, the dates, the parent and the assignee; a new start or due date is checked against
+     * the other one as stored; an assignee or parent the item already has is no new pick and is not checked again; the
+     * item is never its own parent; `values` checks only the keys sent (ItemValues in mode `update`: a property that
+     * became required later may stay empty) and answers all values afterwards; `rank` is a valid rank of at most 128
+     * characters (`work_items.rank`); `base_description_version` is the version of the description the client edited.
+     *
+     * @param  array<array-key, mixed>  $input  as documents() answers it
+     * @param  array<string, list<string>>  $refused  the field errors of documents()
+     * @return array{title?: string, description?: ?Document, priority?: Priority, label_ids?: list<string>, start_date?: ?string, due_date?: ?string, assignee_id?: ?string, parent?: ?WorkItem, values?: array<string, mixed>, rank?: string, base_description_version?: ?int}
+     *
+     * @throws ValidationException
+     */
+    public static function patch(array $input, WorkItem $locked, User $reader, array $refused = []): array
+    {
+        $errors = $refused;
+        $fail = function (string $field, string $message) use (&$errors): void {
+            $errors[$field] ??= [$message];
+        };
+        $sent = fn (string $field): bool => array_key_exists($field, $input);
+        $project = $locked->project;
+        $fields = [];
+
+        if ($sent('title')) {
+            $fields['title'] = self::title($input['title'], $fail);
+        }
+        if ($sent('description')) {
+            $fields['description'] = $input['description'] instanceof Document ? $input['description'] : null;
+        }
+        if ($sent('base_description_version')) {
+            $version = $input['base_description_version'];
+            if ($version !== null && (! is_int($version) || $version < 1)) {
+                $fail('base_description_version', __('field.base_description_version.invalid'));
+            }
+            $fields['base_description_version'] = is_int($version) ? $version : null;
+        }
+        if ($sent('priority')) {
+            // `none` is no priority; `null` is no priority name
+            $fields['priority'] = self::priority($input['priority'] ?? false, $fail);
+        }
+        if ($sent('label_ids')) {
+            $fields['label_ids'] = self::labels($input['label_ids'], $fail);
+        }
+
+        if ($sent('start_date') || $sent('due_date')) {
+            $start = $sent('start_date') ? self::day($input, 'start_date', $fail) : $locked->start_date?->format('Y-m-d');
+            $due = $sent('due_date') ? self::day($input, 'due_date', $fail) : $locked->due_date?->format('Y-m-d');
+            if (DateRange::startAfterDue($start, $due)) {
+                $fail('due_date', __('field.due_date.before_start'));
+            }
+            if ($sent('start_date')) {
+                $fields['start_date'] = $start;
+            }
+            if ($sent('due_date')) {
+                $fields['due_date'] = $due;
+            }
+        }
+
+        if ($sent('assignee_id')) {
+            $id = Ids::normalize($input['assignee_id']);
+            $fields['assignee_id'] = $id === $locked->assignee_id ? $id : self::assignee($id, $project, $fail);
+        }
+
+        if ($sent('parent_id')) {
+            $parent = self::parent($input['parent_id'], $project, $reader, $fail);
+            if ($parent?->id === $locked->id) {
+                $fail('parent_id', __('field.parent_id.self'));
+            }
+            $fields['parent'] = $parent;
+        }
+
+        if ($sent('values')) {
+            try {
+                $fields['values'] = ItemValues::check($project, $locked->type, self::values($input['values'], $fail), ItemValues::of($locked), 'update');
+            } catch (ValidationException $invalid) {
+                $errors += $invalid->errors();
+            }
+        }
+
+        if ($sent('rank')) {
+            $rank = $input['rank'];
+            if (! is_string($rank) || strlen($rank) > self::RANK_MAX || ! Rank::isValid($rank)) {
+                $fail('rank', __('field.rank.invalid'));
+            }
+            $fields['rank'] = is_string($rank) ? $rank : '';
+        }
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
+
+        return $fields;
     }
 
     /**

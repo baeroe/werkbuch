@@ -54,6 +54,7 @@ use App\Actions\Workflows\SaveWorkflow;
 use App\Actions\WorkItems\CreateWorkItem;
 use App\Actions\WorkItems\GetWorkItem;
 use App\Actions\WorkItems\ListWorkItems;
+use App\Actions\WorkItems\UpdateWorkItem;
 use App\Actions\WorkItemTypes\DeleteWorkItemType;
 use App\Actions\WorkItemTypes\ListWorkItemTypes;
 use App\Actions\WorkItemTypes\SaveWorkItemType;
@@ -247,6 +248,13 @@ return [
         'allowed' => $itemWriters,
         'hidden' => ['outsider_private'],
         'event' => EventType::WorkItemCreated,
+    ],
+    'UpdateWorkItem' => [
+        'action' => UpdateWorkItem::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => UpdateWorkItem::run($a, $w->item($column), ['title' => 'Matrix']),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::WorkItemUpdated,
     ],
     'ListWorkflows' => [
         'action' => ListWorkflows::class,
