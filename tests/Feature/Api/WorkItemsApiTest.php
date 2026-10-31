@@ -427,3 +427,35 @@ it('lists, adds and removes relations over REST', function () use ($web) {
 
     expect(WorkItemRelation::query()->count())->toBe(0);
 });
+
+it('reads the history over GET …/history, a page at a time', function () use ($web) {
+    [$project, $mara] = $web();
+    $item = WorkItem::factory()->for($project)->create(['title' => 'Alt']);
+    $this->actingAs($mara)->patchJson('/api/v1/work-items/WEB-1', ['title' => 'Neu'])->assertOk();
+    $this->actingAs($mara)->patchJson('/api/v1/work-items/WEB-1', ['priority' => 'high'])->assertOk();
+
+    // a token that may only read reads the history
+    $first = $this->withToken(apiToken($mara, ['read']))->getJson('/api/v1/work-items/web-1/history?per_page=1')->assertOk();
+    forgetApiAuth();
+    expect($first->json('data'))->toHaveCount(1)
+        ->and(array_keys($first->json('data.0')))->toBe(['id', 'type', 'actor_id', 'subject', 'project_id', 'changes', 'reason', 'via', 'occurred_at'])
+        ->and($first->json('data.0.changes'))->toBe(['title' => ['old' => 'Alt', 'new' => 'Neu']])
+        ->and($first->json('data.0.subject'))->toBe(['type' => 'work_item', 'id' => $item->id])
+        ->and($first->json('meta.total'))->toBe(2);
+
+    $this->actingAs($mara)->getJson('/api/v1/work-items/WEB-1/history?per_page=1&cursor='.$first->json('meta.next_cursor'))->assertOk()
+        ->assertJsonPath('data.0.changes.priority', ['old' => 'none', 'new' => 'high'])
+        ->assertJsonPath('meta.next_cursor', null);
+    $this->actingAs($mara)->getJson('/api/v1/work-items/WEB-1/history?per_page=101')->assertUnprocessable()
+        ->assertJsonPath('errors.per_page.0', fn (string $message) => $message !== '');
+
+    // a former key moves to the current one; an outsider reads a public project, never a private one
+    $project->update(['identifier' => 'NEW']);
+    $project->identifiers()->create(['identifier' => 'WEB']);
+    $this->actingAs($mara)->getJson('/api/v1/work-items/WEB-1/history')->assertStatus(301)
+        ->assertHeader('Location', url('/api/v1/work-items/NEW-1/history'));
+    $this->actingAs(User::factory()->create())->getJson('/api/v1/work-items/NEW-1/history')->assertOk();
+    $ops = Project::factory()->identifier('OPS')->private()->create();
+    WorkItem::factory()->for($ops)->create();
+    $this->actingAs($mara)->getJson('/api/v1/work-items/OPS-1/history')->assertNotFound();
+});

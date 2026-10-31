@@ -84,6 +84,7 @@ return [
     'stop watching a work item' => ['DELETE', '/api/v1/work-items/{item}/subscription', 'params' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key]],
     'list the relations of a work item' => ['GET', '/api/v1/work-items/{item}/relations', 'params' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key]],
     'add a relation' => ['POST', '/api/v1/work-items/{item}/relations', 'params' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key], 'body' => ['type_id' => '', 'target_id' => 'WEB-1']],
+    'show the history of a work item' => ['GET', '/api/v1/work-items/{item}/history', 'params' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key]],
     'remove a relation' => ['DELETE', '/api/v1/relations/{relation}', 'params' => fn (MatrixWorld $w) => ['relation' => WorkItemRelation::factory()->create([
         'source_id' => $w->item('project_admin')->id,
         'target_id' => $w->item('project_admin')->id,

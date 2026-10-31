@@ -3,6 +3,7 @@
 use App\Exceptions\Problem;
 use App\Http\Controllers\Api\BotsController;
 use App\Http\Controllers\Api\FavoritesController;
+use App\Http\Controllers\Api\HistoryController;
 use App\Http\Controllers\Api\InvitationsController;
 use App\Http\Controllers\Api\LabelsController;
 use App\Http\Controllers\Api\MembersController;
@@ -119,6 +120,7 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
         Route::delete('work-items/{item}/subscription', [SubscribersController::class, 'destroy']);
         Route::get('work-items/{item}/relations', [RelationsController::class, 'index']);
         Route::post('work-items/{item}/relations', [RelationsController::class, 'store']);
+        Route::get('work-items/{item}/history', [HistoryController::class, 'index']);
     });
     Route::delete('relations/{relation}', [RelationsController::class, 'destroy']);
 

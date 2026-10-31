@@ -58,6 +58,7 @@ use App\Actions\WorkItems\ChangeWorkItemType;
 use App\Actions\WorkItems\CreateWorkItem;
 use App\Actions\WorkItems\DeleteWorkItem;
 use App\Actions\WorkItems\GetWorkItem;
+use App\Actions\WorkItems\ListHistory;
 use App\Actions\WorkItems\ListRelations;
 use App\Actions\WorkItems\ListSubscribers;
 use App\Actions\WorkItems\ListWorkItems;
@@ -330,6 +331,12 @@ return [
     'ListRelations' => [
         'action' => ListRelations::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListRelations::run($a, $w->item($column)),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    'ListHistory' => [
+        'action' => ListHistory::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListHistory::run($a, $w->item($column), []),
         'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
         'hidden' => ['outsider_private'],
     ],
