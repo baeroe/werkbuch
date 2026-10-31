@@ -16,15 +16,20 @@ use App\Http\Controllers\Api\TokensController;
 use App\Http\Controllers\Api\TwoFactorController;
 use App\Http\Controllers\Api\UsersController;
 use App\Http\Controllers\Api\WorkflowsController;
+use App\Http\Controllers\Api\WorkItemsController;
 use App\Http\Controllers\Api\WorkItemTypesController;
 use App\Http\Middleware\EnsureAccountIsActive;
 use App\Http\Middleware\EnsureSession;
 use App\Http\Middleware\EnsureTokenAbility;
 use App\Models\Project;
+use App\Models\WorkItem;
 use Illuminate\Support\Facades\Route;
 
 // a project by its ULID, identifier or a former identifier; whether the account sees it, the action decides
 Route::bind('project', fn (string $ref) => Project::findByReference($ref) ?? throw Problem::notFound());
+// a work item by its ULID or key (`WEB-12`, any case, also with a former identifier); whether the account sees it, the
+// action decides
+Route::bind('item', fn (string $ref) => WorkItem::findByReference($ref) ?? throw Problem::notFound());
 
 // The REST API (prefix api/v1, see bootstrap/app.php): the session of the interface (with CSRF) or a bearer token whose
 // abilities fit the method. Every route has a row in tests/Feature/Api/routes.php.
@@ -88,6 +93,8 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
     Route::post('resolutions', [ResolutionsController::class, 'store']);
     Route::put('resolutions/{resolution}', [ResolutionsController::class, 'update']);
     Route::delete('resolutions/{resolution}', [ResolutionsController::class, 'destroy']);
+
+    Route::post('work-items', [WorkItemsController::class, 'store']);
 
     Route::get('favorites', [FavoritesController::class, 'index']);
     Route::post('favorites/toggle', [FavoritesController::class, 'toggle']);

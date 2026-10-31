@@ -68,6 +68,7 @@ return [
     'create a resolution' => ['POST', '/api/v1/resolutions'],
     'change a resolution' => ['PUT', '/api/v1/resolutions/{resolution}', 'params' => fn (MatrixWorld $w) => ['resolution' => Resolution::factory()->create()->id]],
     'delete a resolution' => ['DELETE', '/api/v1/resolutions/{resolution}', 'params' => fn (MatrixWorld $w) => ['resolution' => Resolution::factory()->create()->id]],
+    'create a work item' => ['POST', '/api/v1/work-items', 'body' => ['project_id' => 'WEB', 'title' => 'Matrix']],
     'list the own favorites' => ['GET', '/api/v1/favorites'],
     'toggle a favorite' => ['POST', '/api/v1/favorites/toggle'],
     'list tokens' => ['GET', '/api/v1/tokens'],

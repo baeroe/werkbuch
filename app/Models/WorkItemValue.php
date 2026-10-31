@@ -26,6 +26,7 @@ use Illuminate\Support\Carbon;
  * @property array<string, mixed>|null $value_json
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
+ * @property-read Property $property
  */
 #[Fillable([
     'work_item_id', 'property_id', 'position', 'value_string', 'value_number', 'value_date', 'value_bool',

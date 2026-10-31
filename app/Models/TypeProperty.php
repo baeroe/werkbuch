@@ -18,6 +18,7 @@ use Illuminate\Support\Carbon;
  * @property int $position
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
+ * @property-read Property $property
  */
 #[Fillable(['type_id', 'property_id', 'required', 'position'])]
 final class TypeProperty extends Model

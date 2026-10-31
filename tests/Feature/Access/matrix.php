@@ -51,6 +51,7 @@ use App\Actions\Users\UpdateUserRole;
 use App\Actions\Workflows\DeleteWorkflow;
 use App\Actions\Workflows\ListWorkflows;
 use App\Actions\Workflows\SaveWorkflow;
+use App\Actions\WorkItems\CreateWorkItem;
 use App\Actions\WorkItemTypes\DeleteWorkItemType;
 use App\Actions\WorkItemTypes\ListWorkItemTypes;
 use App\Actions\WorkItemTypes\SaveWorkItemType;
@@ -95,6 +96,10 @@ $projectAdmins = ['org_admin', 'project_admin', 'default_bot'];
 
 // the catalogs: every account reads them, only org admins change them (`org.manage_catalog`, P8)
 $catalogAdmins = ['org_admin', 'default_bot'];
+
+// work items: members and admins of the project (`item.create`, `item.edit`); viewers read, outsiders of the private
+// project do not see it
+$itemWriters = ['org_admin', 'project_admin', 'project_member', 'default_bot'];
 
 /** Starts a two-factor setup for the account past the action (a bot as well, so its refusal is the action's own); returns the secret. */
 $startTwoFactor = function (User $user): string {
@@ -221,6 +226,13 @@ return [
         'allowed' => $projectAdmins,
         'hidden' => ['outsider_private'],
         'event' => EventType::ProjectMemberRemoved,
+    ],
+    'CreateWorkItem' => [
+        'action' => CreateWorkItem::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => CreateWorkItem::run($a, ['project_id' => $w->project($column)->id, 'title' => 'Matrix']),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::WorkItemCreated,
     ],
     'ListWorkflows' => [
         'action' => ListWorkflows::class,

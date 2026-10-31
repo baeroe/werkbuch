@@ -10,6 +10,7 @@ use Database\Factories\WorkItemFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -53,6 +54,7 @@ use Illuminate\Support\Str;
  * @property-read bool $is_blocked only with `withComputed()`
  * @property-read bool $is_blocking only with `withComputed()`
  * @property-read Project $project
+ * @property-read WorkItemType $type
  */
 #[Fillable([
     'project_id', 'number', 'type_id', 'title', 'description', 'description_text', 'description_version', 'state_id',
@@ -69,6 +71,39 @@ final class WorkItem extends Model
      * with an address redirects to the current key (as P32 for projects).
      */
     public bool $resolved_by_former_identifier = false;
+
+    /**
+     * Set by loadForResource(), never stored: whether the reader it was loaded for watches the item.
+     */
+    public bool $subscribed = false;
+
+    /**
+     * Loads everything WorkItemResource reads, for one item or a list, with a fixed number of queries (none per item):
+     * `project`, `parent.project`, `labels`, `values.property`, the computed columns of withComputed() (one query, set
+     * on the models as they are, never written back) and `subscribed` for the reader (K5). The resource then asks the
+     * database nothing.
+     *
+     * @param  EloquentCollection<int, self>|self  $items
+     */
+    public static function loadForResource(EloquentCollection|self $items, User $reader): void
+    {
+        $items = $items instanceof self ? $items->newCollection([$items]) : $items;
+        $items->load(['project', 'parent.project', 'labels:labels.id', 'values.property']);
+        $ids = $items->modelKeys();
+
+        $computed = self::query()->select('id')->withComputed()->whereKey($ids)->get()->keyBy('id');
+        $watched = WorkItemSubscriber::query()->whereIn('work_item_id', $ids)->where('user_id', $reader->id)
+            ->whereNull('unsubscribed_at')->pluck('work_item_id')->all();
+
+        foreach ($items as $item) {
+            $row = $computed->get($item->id);
+            foreach (['children_total', 'children_done', 'is_blocked', 'is_blocking'] as $column) {
+                $item->setAttribute($column, $row?->getAttribute($column));
+                $item->syncOriginalAttribute($column);
+            }
+            $item->subscribed = in_array($item->id, $watched, true);
+        }
+    }
 
     /**
      * The item a reference names: its ULID (in any case) or its key (`WEB-12`, `web-12`, also with a former identifier
