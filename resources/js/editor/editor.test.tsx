@@ -43,6 +43,23 @@ function typesOf(doc: RichText): { nodes: Set<string>; marks: Set<string> } {
 const pasteHtml = (target: HTMLElement, html: string) =>
   fireEvent.paste(target, { clipboardData: { types: ['text/html'], files: [], getData: (type: string) => (type === 'text/html' ? html : '') } });
 
+/**
+ * The checkboxes of a read-only text are inert: no tab stop, and neither a click nor Space changes them. `focusFrom`
+ * is where Tab starts.
+ */
+async function expectStillCheckboxes(user: ReturnType<typeof userEvent.setup>, focusFrom: HTMLElement) {
+  const box = screen.getByRole('checkbox', { name: 'Testen: erledigt' });
+  expect(box).toHaveProperty('disabled', true);
+  focusFrom.focus();
+  await user.tab();
+  expect(document.activeElement).not.toBe(box);
+  await user.click(box);
+  box.focus();
+  await user.keyboard(' ');
+  expect(box).toHaveProperty('checked', true);
+  expect(box.closest('li')?.getAttribute('data-checked')).toBe('true');
+}
+
 const lastDoc = (onChange: ReturnType<typeof vi.fn>) => onChange.mock.lastCall?.[0] as RichText | null | undefined;
 
 /** A list constant of `App\RichText\Schema`, read from the PHP file, so the mirror cannot go stale. */
@@ -272,6 +289,30 @@ describe('RichTextEditor', () => {
     expect(comment.querySelector('p')?.getAttribute('data-placeholder')).toBe('Kommentar schreiben …');
   });
 
+  it('keeps the checklists of a read-only text still, and lets them work again when it may be changed', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <>
+        <button type="button">Davor</button>
+        <RichTextEditor value={tableDoc} onChange={onChange} preset="description" readOnly />
+      </>,
+    );
+    await expectStillCheckboxes(user, screen.getByRole('button', { name: 'Davor' }));
+    expect(onChange).not.toHaveBeenCalled();
+
+    rerender(
+      <>
+        <button type="button">Davor</button>
+        <RichTextEditor value={tableDoc} onChange={onChange} preset="description" />
+      </>,
+    );
+    const box = screen.getByRole('checkbox', { name: 'Testen: erledigt' });
+    expect(box).toHaveProperty('disabled', false);
+    fireEvent.click(box);
+    expect(nodesOf(lastDoc(onChange), 'taskItem')[0].attrs?.checked).toBe(false);
+  });
+
   it('holds a read-only document that it does not let anyone change', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
@@ -401,6 +442,17 @@ describe('RichTextView', () => {
     expect(document.querySelector('.rt-content')?.textContent).toBe('Neu');
     rerender(<RichTextView value={null} preset="comment" />);
     expect(document.querySelector('.rt-content')?.textContent).toBe('');
+  });
+
+  it('keeps its checklists still', async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <button type="button">Davor</button>
+        <RichTextView value={tableDoc} preset="description" />
+      </>,
+    );
+    await expectStillCheckboxes(user, screen.getByRole('button', { name: 'Davor' }));
   });
 
   it('shows a link only to http, https and mailto', () => {

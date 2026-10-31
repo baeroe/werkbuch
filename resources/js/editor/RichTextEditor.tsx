@@ -28,7 +28,8 @@
 import { TaskItem, TaskList } from '@tiptap/extension-list';
 import { Placeholder } from '@tiptap/extensions';
 import type { Schema } from '@tiptap/pm/model';
-import { EditorContent, getSchema, useEditor, type AnyExtension, type Editor } from '@tiptap/react';
+import { Plugin } from '@tiptap/pm/state';
+import { EditorContent, Extension, getSchema, useEditor, type AnyExtension, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Suspense, use, useCallback, useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from 'react';
 import { cx } from '@/components/ui/cx';
@@ -136,6 +137,24 @@ export async function preloadEditor(): Promise<void> {
 void preloadEditor();
 
 /**
+ * The checkboxes of checklists in a text nobody may change (the view, `readOnly`): disabled, so they are no tab stop and
+ * neither a click nor Space toggles them. Tiptap's own node view leaves them working and only flips them back. Plugin
+ * views hear every new state and every new editable flag, also those that come without a transaction.
+ */
+const stillChecklists = Extension.create({
+  name: 'stillChecklists',
+  addProseMirrorPlugins: () => [
+    new Plugin({
+      view: (view) => {
+        const sync = () => view.dom.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((box) => (box.disabled = !view.editable));
+        sync();
+        return { update: sync };
+      },
+    }),
+  ],
+});
+
+/**
  * The extensions of a level. `placeholder: null` builds a viewer: the same nodes, without the placeholder. The
  * placeholder is read when the editor draws, so a new one needs no new editor.
  */
@@ -157,6 +176,7 @@ function buildExtensions(preset: EditorPreset, placeholder: (() => string) | nul
             nested: true,
             a11y: { checkboxLabel: (node, checked) => t(checked ? 'editor.task.checked' : 'editor.task.unchecked', { text: node.textContent || t('editor.task.empty') }) },
           }),
+          stillChecklists,
         ]
       : []),
     ...(features.table ? [tables] : []),

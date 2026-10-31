@@ -186,6 +186,10 @@
   accent-color: var(--accent);
   cursor: pointer;
 }
+/* a text nobody may change: the box only shows the state */
+.rt ul[data-type='taskList'] input[type='checkbox']:disabled {
+  cursor: default;
+}
 .rt ul[data-type='taskList'] li[data-checked='true'] > div {
   color: var(--muted);
   text-decoration: line-through;
