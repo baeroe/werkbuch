@@ -24,16 +24,6 @@ const PROJECT_SHAPE = [
     'default_type_id', 'archived_at', 'my_role', 'is_member',
 ];
 
-/**
- * The events of a type about a project, oldest first.
- *
- * @return list<Event>
- */
-function projectEvents(Project $project, EventType $type): array
-{
-    return Event::query()->where('type', $type)->where('subject_id', $project->id)->orderBy('occurred_at')->get()->all();
-}
-
 it('creates a project whose creator becomes its admin and lead', function () {
     $lene = User::factory()->create();
 
@@ -46,7 +36,7 @@ it('creates a project whose creator becomes its admin and lead', function () {
         ->assertJsonPath('data.workflow_id', null)->assertJsonPath('data.enabled_type_ids', [])->assertJsonPath('data.default_type_id', null);
 
     $project = Project::query()->findOrFail($response->json('data.id'));
-    $event = projectEvents($project, EventType::ProjectCreated)[0];
+    $event = eventsOf(EventType::ProjectCreated, $project)[0];
 
     expect(Visibility::isMember($lene, $project))->toBeTrue()
         ->and(Visibility::roleIn($lene, $project))->toBe(ProjectRole::Admin)
@@ -79,7 +69,7 @@ it('stores the lead in lower case, whatever case it came in', function () {
 
     expect($web->lead_id)->toBe($lene->id)
         ->and(Visibility::roleIn($lene, $web))->toBe(ProjectRole::Admin)
-        ->and(projectEvents($web, EventType::ProjectUpdated))->toBe([]);
+        ->and(eventsOf(EventType::ProjectUpdated, $web))->toBeEmpty();
 });
 
 it('takes no workflow and no types before Phase 3', function () {
@@ -264,7 +254,7 @@ it('changes the settings and records only what changed', function () {
     // the same again changes nothing
     UpdateProject::run(actor($mara), $web->fresh(), ['name' => 'Webseite', 'visibility' => 'private']);
 
-    expect(array_map(fn (Event $event) => $event->changes, projectEvents($web, EventType::ProjectUpdated)))->toBe([[
+    expect(eventsOf(EventType::ProjectUpdated, $web)->map(fn (Event $event) => $event->changes)->all())->toBe([[
         'name' => ['old' => 'Website', 'new' => 'Webseite'],
         'description' => ['old' => 'Alt', 'new' => ''],
         'visibility' => ['old' => 'public', 'new' => 'private'],
@@ -325,8 +315,8 @@ it('archives and restores a project, recording each only when it changes', funct
     $this->postJson('/api/v1/projects/WEB/restore')->assertOk();
     $this->getJson('/api/v1/projects')->assertJsonPath('meta.total', 1);
 
-    $archived = projectEvents($web, EventType::ProjectArchived);
-    $restored = projectEvents($web, EventType::ProjectRestored);
+    $archived = eventsOf(EventType::ProjectArchived, $web);
+    $restored = eventsOf(EventType::ProjectRestored, $web);
 
     expect($archivedAt)->not->toBeNull()
         ->and($archived)->toHaveCount(1)->and($restored)->toHaveCount(1)
@@ -352,7 +342,7 @@ it('sets, replaces and removes the picture of a project', function () {
     $web = Project::query()->sole();
     expect($replaced)->not->toBe($created)
         ->and(Media::query()->count())->toBe(0)
-        ->and(array_map(fn (Event $event) => array_keys($event->changes ?? []), projectEvents($web, EventType::ProjectUpdated)))
+        ->and(eventsOf(EventType::ProjectUpdated, $web)->map(fn (Event $event) => array_keys($event->changes ?? []))->all())
         ->toBe([['image_url'], ['image_url']]);
 });
 

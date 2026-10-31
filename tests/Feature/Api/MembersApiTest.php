@@ -7,7 +7,6 @@ use App\Actions\Projects\CreateProject;
 use App\Actions\Projects\RemoveMember;
 use App\Events\EventType;
 use App\Exceptions\Problem;
-use App\Models\Event;
 use App\Models\Favorite;
 use App\Models\Project;
 use App\Models\User;
@@ -27,16 +26,6 @@ function projectWithPeople(string $identifier = 'WEB', string $visibility = 'pub
     $project = CreateProject::run(actor($mara), ['name' => 'Projekt '.$identifier, 'identifier' => $identifier, 'visibility' => $visibility]);
 
     return [$project, $mara, memberOf($project, ProjectRole::Member), memberOf($project, ProjectRole::Viewer)];
-}
-
-/**
- * The events of a type about a project, oldest first.
- *
- * @return list<Event>
- */
-function memberEvents(Project $project, EventType $type): array
-{
-    return Event::query()->where('type', $type)->where('subject_id', $project->id)->orderBy('occurred_at')->get()->all();
 }
 
 it('lists the members of a project for everybody who sees it', function () {
@@ -72,7 +61,7 @@ it('adds a member with a role and records it', function () {
         ->assertCreated()->assertJsonStructure(['data' => MEMBER_SHAPE])
         ->assertJsonPath('data.project_id', $web->id)->assertJsonPath('data.user_id', $lene->id)->assertJsonPath('data.role', 'viewer');
 
-    $event = memberEvents($web, EventType::ProjectMemberAdded)[0];
+    $event = eventsOf(EventType::ProjectMemberAdded, $web)[0];
 
     expect(Visibility::roleIn($lene, $web))->toBe(ProjectRole::Viewer)
         ->and(Visibility::isMember($lene, $web))->toBeTrue()
@@ -155,7 +144,7 @@ it('changes the role of a member and records old and new', function () {
     // the same again changes nothing
     $this->patchJson("/api/v1/projects/WEB/members/{$member->id}", ['role' => 'admin'])->assertOk()->assertJsonPath('data.role', 'admin');
 
-    $events = memberEvents($web, EventType::ProjectMemberRoleChanged);
+    $events = eventsOf(EventType::ProjectMemberRoleChanged, $web);
 
     expect(Visibility::roleIn($member, $web))->toBe(ProjectRole::Admin)
         ->and($events)->toHaveCount(1)
@@ -198,7 +187,7 @@ it('removes a member and records who left with which role', function () {
 
     $this->actingAs($mara)->deleteJson("/api/v1/projects/WEB/members/{$member->id}")->assertNoContent();
 
-    $event = memberEvents($web, EventType::ProjectMemberRemoved)[0];
+    $event = eventsOf(EventType::ProjectMemberRemoved, $web)[0];
 
     expect(Visibility::isMember($member, $web))->toBeFalse()
         // a public project stays visible, as to anybody else
@@ -214,7 +203,7 @@ it('keeps the lead a member', function () {
     $this->actingAs($mara)->deleteJson("/api/v1/projects/WEB/members/{$mara->id}")
         ->assertStatus(409)->assertJsonPath('reason', 'lead_cannot_leave')->assertJsonPath('detail', __('problem.reason.lead_cannot_leave'));
 
-    expect(Visibility::isMember($mara, $web))->toBeTrue()->and(memberEvents($web, EventType::ProjectMemberRemoved))->toBe([]);
+    expect(Visibility::isMember($mara, $web))->toBeTrue()->and(eventsOf(EventType::ProjectMemberRemoved, $web))->toBeEmpty();
 
     // somebody else leads: the old lead may leave now
     $this->patchJson('/api/v1/projects/WEB', ['lead_id' => memberOf($web, ProjectRole::Member)->id])->assertOk();
@@ -262,7 +251,7 @@ it('joins a public project as a member with one click', function () {
     $this->actingAs($lene)->postJson('/api/v1/projects/WEB/join')->assertCreated()->assertJsonStructure(['data' => MEMBER_SHAPE])
         ->assertJsonPath('data.project_id', $web->id)->assertJsonPath('data.user_id', $lene->id)->assertJsonPath('data.role', 'member');
 
-    $event = memberEvents($web, EventType::ProjectMemberAdded)[0];
+    $event = eventsOf(EventType::ProjectMemberAdded, $web)[0];
 
     expect(Visibility::roleIn($lene, $web))->toBe(ProjectRole::Member)
         ->and($event->actor_id)->toBe($lene->id)
@@ -285,7 +274,7 @@ it('answers a second join with the project named', function () {
     $this->actingAs($member)->postJson('/api/v1/projects/WEB/join')->assertStatus(409);
 
     expect(Visibility::roleIn($viewer, $web))->toBe(ProjectRole::Viewer)
-        ->and(memberEvents($web, EventType::ProjectMemberAdded))->toHaveCount(1);
+        ->and(eventsOf(EventType::ProjectMemberAdded, $web))->toHaveCount(1);
 });
 
 it('does not let anybody join a private project but its org admins', function () {

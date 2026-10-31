@@ -84,7 +84,6 @@ Die Spec schweigt, das Verhalten des Klickdummys ist übernommen. Rafael entsche
 
 ## Für spätere Phasen vorgemerkt
 
-- Phase 3: Globale Test-Helfer in Testdateien (`refusal`, `storedRoles`, `grantedRoles`, `docsPages`) in Closures oder nach `tests/Pest.php`; doppelte Rollenzuweisung im `E2eSeeder`, Morph-Literale `'user'`/`'project'` in Seedern, Lookup im `DemoSeederTest`, `padStart` der `runId`.
 - Phase 4: `PriorityIcon` sagt „Priorität Urgent“ (Sprachmix; hängt an der offenen Frage, ob Prioritäten deutsch heißen).
 - Phase 5: `repeat` in `useShortcut` testen (j/k); `MobileBar` schließt den Drawer bei einer Änderung der Query (Klickdummy: nur beim Pfad).
 - Phase 6: `RetriesConsumption`-Interface (`tries`/`backoff` je Konsument) und `ConsumeEvent::failed()` mit `report()`; ein Reimport als Reparaturweg der Suche; Kommentar zu den Katalog-IDs (`my_items`); Klickdummy-Kommentare in `storage.ts`/`registry.ts`; Präfix-Kollisionen (`g` gegen `g i`) im Katalog-Test; das Hilfe-Overlay nennt `mod+k`, bevor es die Palette gibt; Konsumenten vertragen Events aus Migration 000500 (`CLAUDE.md` beim ersten Konsumenten).

@@ -50,7 +50,7 @@ class E2eSeeder extends Seeder
         }, range(1, 8));
     }
 
-    public function run(RoleAssignments $roles): void
+    public function run(): void
     {
         if (app()->isProduction()) {
             throw new RuntimeException('The e2e data must never be seeded in production.');
@@ -70,16 +70,16 @@ class E2eSeeder extends Seeder
             PurgeProject::run(Actor::automation('e2e_reset'), $project);
         });
 
-        $roles->setOrgRole($this->person('e2e@example.com', 'Erik Ende'), OrgRole::Admin);
+        $this->person('e2e@example.com', 'Erik Ende', OrgRole::Admin);
 
         foreach (self::VARIANTS as $variant) {
             $this->person("reset-{$variant}@example.com", 'Rita Reset');
-            $this->person("security-{$variant}@example.com", 'Sam Security', [
+            $this->person("security-{$variant}@example.com", 'Sam Security', extra: [
                 'two_factor_secret' => null,
                 'two_factor_recovery_codes' => null,
                 'two_factor_confirmed_at' => null,
             ]);
-            $this->person("twofactor-{$variant}@example.com", 'Tom Twofactor', [
+            $this->person("twofactor-{$variant}@example.com", 'Tom Twofactor', extra: [
                 'two_factor_secret' => encrypt(self::TOTP_SECRET),
                 'two_factor_recovery_codes' => encrypt(json_encode(self::recoveryCodes($variant), JSON_THROW_ON_ERROR)),
                 'two_factor_confirmed_at' => Carbon::now(),
@@ -88,9 +88,11 @@ class E2eSeeder extends Seeder
     }
 
     /**
+     * A person with this org role (set once, whatever it was before).
+     *
      * @param  array<string, mixed>  $extra
      */
-    private function person(string $email, string $name, array $extra = []): User
+    private function person(string $email, string $name, OrgRole $role = OrgRole::Member, array $extra = []): User
     {
         $user = User::updateOrCreate(['email' => $email], [
             'type' => AccountType::Person,
@@ -101,7 +103,7 @@ class E2eSeeder extends Seeder
             ...$extra,
         ]);
 
-        app(RoleAssignments::class)->setOrgRole($user, OrgRole::Member);
+        app(RoleAssignments::class)->setOrgRole($user, $role);
 
         return $user;
     }

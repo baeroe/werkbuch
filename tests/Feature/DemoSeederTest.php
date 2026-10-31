@@ -36,9 +36,10 @@ it('seeds the people of the clickdummy with their organization roles', function 
 
     expect($people)->toHaveCount(6);
 
-    foreach ($people as [, $name, $handle]) {
+    foreach ($people as $match) {
+        [, $name, $handle] = $match;
         $user = User::where('handle', $handle)->sole();
-        $role = $people[array_search($handle, array_column($people, 2))][3] ?? 'member';
+        $role = $match[3] ?? 'member';
 
         expect([$user->name, $user->email, $user->type, $user->locale?->value, $user->timezone])
             ->toBe([$name, $handle.'@feldwerk.example.com', AccountType::Person, 'de', 'Europe/Berlin'])

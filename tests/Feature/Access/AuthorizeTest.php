@@ -10,20 +10,6 @@ beforeEach(function () {
     $this->user = User::factory()->create();
 });
 
-/**
- * The problem Authorize::check throws for an ability.
- */
-function refusal(User $user, string $ability): Problem
-{
-    try {
-        Authorize::check(actor($user), $ability);
-    } catch (Problem $problem) {
-        return $problem;
-    }
-
-    throw new RuntimeException("[{$ability}] was allowed.");
-}
-
 it('returns when the policy allows, with the arguments passed on', function () {
     Gate::define('test.allowed', fn (User $user, string $first, string $second) => $user->is($this->user) && $first === 'one' && $second === 'two');
 

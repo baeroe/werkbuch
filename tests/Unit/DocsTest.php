@@ -1,23 +1,5 @@
 <?php
 
-use Symfony\Component\Finder\Finder;
-
-/**
- * Every page of a language below docs/<language>/, as the path without extension (`development`, `concepts/permissions`).
- *
- * @return list<string>
- */
-function docsPages(string $language): array
-{
-    $pages = [];
-
-    foreach (Finder::create()->files()->in(repo_path("docs/{$language}"))->name('*.md') as $file) {
-        $pages[] = preg_replace('/\.md$/', '', str_replace(DIRECTORY_SEPARATOR, '/', $file->getRelativePathname()));
-    }
-
-    return $pages;
-}
-
 it('has every docs page in English and German', function () {
     expect(docsPages('en'))->not->toBeEmpty()->toEqualCanonicalizing(docsPages('de'));
 });

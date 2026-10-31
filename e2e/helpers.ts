@@ -118,7 +118,7 @@ export const PEOPLE = {
  * it through the environment): makes names and handles unique per run.
  */
 export function runId(): string {
-  process.env.E2E_RUN_ID ??= Date.now().toString(36).toUpperCase().slice(-5).padStart(5, '0');
+  process.env.E2E_RUN_ID ??= Date.now().toString(36).toUpperCase().slice(-5);
   return process.env.E2E_RUN_ID;
 }
 
