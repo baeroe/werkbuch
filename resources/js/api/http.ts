@@ -2,9 +2,12 @@
  * The HTTP layer of the REST API (`/api/v1`): the session cookie and the CSRF token go with every call, and a Problem
  * Details answer (RFC 9457) becomes the `ApiError` of `./client`, so a screen handles one kind of error whatever the
  * transport. A network failure (`fetch` throws) passes through unchanged: it is no answer of the API.
+ *
+ * A single resource comes wrapped in `{data}` like a list (P27): the API functions unwrap it with `one()`, a list
+ * becomes a `Page` with `getPage()`. Answers that are no resource (`{token, plain_text}`, 204) pass through as they are.
  */
 
-import { ApiError } from './client';
+import { ApiError, type Page } from './client';
 
 export const API_BASE = '/api/v1';
 
@@ -107,17 +110,34 @@ function toApiError({ status, contentType, text }: Raw): ApiError {
   });
 }
 
+/** Whether somebody is signed in on this page; `app.tsx` keeps it up to date from the shared props. */
+let signedIn = false;
+
+/**
+ * Tells the HTTP layer whether the page belongs to a signed-in person. Only then does a 401 reload the page: the
+ * session ended, and the server sends the person to the sign-in. A guest page that reloaded on a 401 would do so for ever.
+ */
+export function setSignedIn(value: boolean): void {
+  signedIn = value;
+}
+
 function settle<T>(raw: Raw): T {
-  if (raw.status === 401) {
-    // the session is gone: the reload lets the server send the person to the sign-in
+  if (raw.status === 401 && signedIn) {
     window.location.reload();
-    throw toApiError(raw);
   }
   if (raw.status < 200 || raw.status >= 300) {
     throw toApiError(raw);
   }
+  if (raw.status === 204 || raw.text === '') {
+    return undefined as T;
+  }
 
-  return (raw.status === 204 || raw.text === '' ? undefined : JSON.parse(raw.text)) as T;
+  try {
+    return JSON.parse(raw.text) as T;
+  } catch {
+    // a success without JSON is no answer of the API, e.g. the HTML of a captive portal or a proxy
+    throw new ApiError({ status: raw.status, reason: 'http_error' });
+  }
 }
 
 /** Sends the call; after a 419 (token or session out of date) it fetches a fresh token cookie and sends it once more. */
@@ -150,6 +170,23 @@ function request<T>(method: string, path: string, body: unknown, options: Reques
 
 export function get<T>(path: string, query: Query = {}, options: RequestOptions = {}): Promise<T> {
   return request<T>('GET', `${path}${toQueryString(query)}`, undefined, options);
+}
+
+/** The resource of an answer wrapped in `{data}`: every API function with a single resource unwraps it here. */
+export async function one<T>(call: Promise<{ data: T }>): Promise<T> {
+  return (await call).data;
+}
+
+interface ListAnswer<T> {
+  data: T[];
+  meta: { next_cursor?: string | null; total?: number };
+}
+
+/** A list of the API (`{data, links, meta}`) as a `Page`; without `meta.total` the total is what came. */
+export async function getPage<T>(path: string, query: Query = {}, options: RequestOptions = {}): Promise<Page<T>> {
+  const { data, meta } = await get<ListAnswer<T>>(path, query, options);
+
+  return { items: data, next_cursor: meta.next_cursor ?? null, total: meta.total ?? data.length };
 }
 
 export function post<T>(path: string, body?: unknown, options: RequestOptions = {}): Promise<T> {

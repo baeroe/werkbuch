@@ -1,7 +1,14 @@
 <?php
 
+use App\Auth\RedirectToTwoFactorChallenge;
 use App\Enums\Locale;
 use App\Models\User;
+use Laravel\Fortify\Actions\AttemptToAuthenticate;
+use Laravel\Fortify\Actions\CanonicalizeUsername;
+use Laravel\Fortify\Actions\EnableTwoFactorAuthentication;
+use Laravel\Fortify\Actions\EnsureLoginIsNotThrottled;
+use Laravel\Fortify\Actions\PrepareAuthenticatedSession;
+use Laravel\Fortify\Fortify;
 
 beforeEach(function () {
     $this->freezeTime();
@@ -88,4 +95,28 @@ it('lets the IP sign in again after a minute', function () {
     $this->travel(61)->seconds();
 
     $this->post('/login', ['email' => 'mara@example.com', 'password' => 'secret-pass'])->assertRedirect('/my-items');
+});
+
+it('signs in through the lock, the lower-cased address, the second factor and only then the session', function () {
+    // Fortify drops the lock from its own pipeline once a named limiter is set, so the pipeline is werkbuch's
+    expect(call_user_func(Fortify::$authenticateThroughCallback, request()))->toBe([
+        EnsureLoginIsNotThrottled::class,
+        CanonicalizeUsername::class,
+        RedirectToTwoFactorChallenge::class,
+        AttemptToAuthenticate::class,
+        PrepareAuthenticatedSession::class,
+    ]);
+});
+
+it('locks an address with a second factor before it asks for the code', function () {
+    $mara = User::query()->where('email', 'mara@example.com')->sole();
+    app(EnableTwoFactorAuthentication::class)($mara, true);
+    $mara->forceFill(['two_factor_confirmed_at' => now()])->save();
+    failFiveTimesAsMara();
+
+    $this->post('/login', ['email' => 'mara@example.com', 'password' => 'secret-pass'])
+        ->assertSessionHasErrors(['email' => __('auth.throttle', ['seconds' => 60])])->assertSessionMissing('login.id');
+
+    $this->travel(61)->seconds();
+    $this->post('/login', ['email' => 'mara@example.com', 'password' => 'secret-pass'])->assertRedirect('/two-factor-challenge');
 });

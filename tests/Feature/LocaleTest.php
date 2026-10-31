@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\Locale;
+use App\Models\Organization;
 use App\Models\User;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Route;
@@ -13,15 +14,21 @@ beforeEach(function () {
 it('speaks English without cookie and profile', fn () => $this->get('_t/locale')->assertJson(['locale' => 'en']));
 
 it('speaks the default of the organization without cookie and profile', function () {
-    config(['app.locale' => 'de']);
+    Organization::current()->update(['locale' => Locale::De]);
 
     $this->get('_t/locale')->assertJson(['locale' => 'de', 'carbon' => 'de']);
 });
 
-it('speaks English when the default of the organization is no supported language', function () {
-    config(['app.locale' => 'fr']);
+it('renders the page of a guest in the default language of the organization', function () {
+    Organization::current()->update(['locale' => Locale::De]);
 
-    $this->get('_t/locale')->assertJson(['locale' => 'en']);
+    $this->get('/login')->assertSee('<html lang="de"', false);
+});
+
+it('lets the cookie beat the default language of the organization', function () {
+    Organization::current()->update(['locale' => Locale::De]);
+
+    $this->withUnencryptedCookie('locale', 'en')->get('/login')->assertSee('<html lang="en"', false);
 });
 
 it('follows the locale cookie before sign-in', fn () => $this->withUnencryptedCookie('locale', 'de')->get('_t/locale')->assertJson(['locale' => 'de', 'carbon' => 'de']));
@@ -141,16 +148,8 @@ it('writes the language of the account at a logout when the cookie is stale', fu
     $this->actingAs($user)->withUnencryptedCookie('locale', 'en')->get('_t/logout')->assertPlainCookie('locale', 'de');
 });
 
-it('speaks and mails the first supported language when the default names an unsupported one', function () {
-    config(['app.locale' => 'fr']);
-
-    expect(Locale::default())->toBe(Locale::En)
-        ->and(User::factory()->make()->preferredLocale())->toBe('en')
-        ->and(User::factory()->locale(Locale::De)->make()->preferredLocale())->toBe('de');
-});
-
 it('mails in the default of the organization for an account without own language', function () {
-    config(['app.locale' => 'de']);
+    Organization::current()->update(['locale' => Locale::De]);
 
     expect(Locale::default())->toBe(Locale::De)->and(User::factory()->make()->preferredLocale())->toBe('de');
 });

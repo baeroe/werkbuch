@@ -2,18 +2,26 @@
 
 namespace App\Actions\Auth;
 
-use App\Domain\Accounts\Handle;
+use App\Access\OrgRole;
+use App\Access\RoleAssignments;
+use App\Actions\Accounts\NextHandle;
 use App\Enums\AccountType;
 use App\Enums\EnsureAdminOutcome;
+use App\Events\EventRecorder;
+use App\Events\EventType;
 use App\Models\User;
+use App\Support\Actor;
+use App\Support\PasswordRules;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Lorisleiva\Actions\Concerns\AsAction;
 
 /**
- * Creates the first account from ADMIN_EMAIL and ADMIN_PASSWORD, and only while nobody exists yet. Decides in this
- * order: values missing, account (this one or another) present, else create. Phase 2 adds the admin role of the organization.
+ * Creates the first account from ADMIN_EMAIL and ADMIN_PASSWORD, and only while no person exists yet (bots, the
+ * default bot among them, do not count). Decides in this order: values missing, account (this one or another) present,
+ * else create: an org admin with the checked password, noted as `user.created` by the system (A4, P25).
  */
 final class EnsureAdmin
 {
@@ -21,16 +29,18 @@ final class EnsureAdmin
 
     private const PLACEHOLDER_PASSWORD = 'change-me';
 
-    public function __construct(private readonly SetPassword $setPassword) {}
+    public function __construct(private readonly RoleAssignments $roles) {}
 
     /**
      * @throws ValidationException for an invalid email or password; nothing is created then
      */
-    public function handle(?string $email, ?string $password): EnsureAdminOutcome
+    public function handle(?string $email, #[\SensitiveParameter] ?string $password): EnsureAdminOutcome
     {
         if (blank($email) || blank($password)) {
             return EnsureAdminOutcome::NotConfigured;
         }
+
+        $email = Str::lower(trim($email));
 
         if (User::query()->where('email', $email)->exists()) {
             return EnsureAdminOutcome::Exists;
@@ -47,11 +57,13 @@ final class EnsureAdmin
             $user = User::query()->create([
                 'type' => AccountType::Person,
                 'name' => $name,
-                'handle' => Handle::suggest($name, fn (string $handle): bool => User::query()->where('handle', $handle)->exists()),
+                'handle' => NextHandle::run($name),
                 'email' => $email,
+                'password' => $password,
             ]);
 
-            $this->setPassword->handle($user, $password);
+            $this->roles->setOrgRole($user, OrgRole::Admin);
+            EventRecorder::record(EventType::UserCreated, Actor::system($user, 'ensure_admin'), $user, null);
         });
 
         return EnsureAdminOutcome::Created;
@@ -59,7 +71,10 @@ final class EnsureAdmin
 
     private function validate(string $email, string $password): void
     {
-        Validator::make(['email' => $email], ['email' => ['email', 'max:255']])->validate();
+        Validator::make(
+            ['email' => $email, 'password' => $password],
+            ['email' => ['email', 'max:255'], 'password' => PasswordRules::rules()],
+        )->validate();
 
         if ($password === self::PLACEHOLDER_PASSWORD) {
             throw ValidationException::withMessages(['password' => 'ADMIN_PASSWORD still is the placeholder "'.self::PLACEHOLDER_PASSWORD.'"; set a real password.']);

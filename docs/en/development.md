@@ -56,7 +56,7 @@ ddev artisan test --filter=LoginTest               # one file or test
 ddev exec vendor/bin/phpstan analyse --memory-limit=1G    # Larastan, level 8
 ddev exec vendor/bin/pint                                 # format PHP
 ddev exec pnpm typecheck                                  # tsc
-ddev exec pnpm test:coverage                              # Vitest, 100 % line coverage
+ddev exec pnpm test:coverage                              # Vitest with thresholds per folder; 100 % lines only together with Playwright
 ddev exec pnpm --dir docs build                           # these docs
 ```
 
@@ -85,6 +85,17 @@ ddev artisan app:reset-password you@example.com
 ```
 
 Without a terminal it reads the first line of STDIN instead.
+
+Lost the authenticator app and the recovery codes? `ddev artisan app:reset-two-factor you@example.com` turns the second factor of the account off and ends its sessions; afterwards the password alone signs in, and the second factor can be set up again in the settings.
+
+## Maintenance commands
+
+```bash
+ddev artisan app:sync-roles            # compares the roles and rights in the database with the code
+ddev artisan app:redispatch-events     # hands events that got stuck to their consumers again
+```
+
+`app:sync-roles` is what the migration of the roles runs; call it by hand only after a rights table in the code changed without a migration. `app:redispatch-events` runs every minute in the scheduler, so you only need it by hand to catch up after the scheduler was down.
 
 ## Documentation
 

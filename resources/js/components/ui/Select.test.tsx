@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { initI18n } from '@/lib/i18n';
 import en from '../../../../lang/en.json';
 import { Select, type SelectOption } from './Select';
@@ -46,6 +46,79 @@ describe('Select', () => {
     await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
     expect(screen.getByRole('combobox', { name: /Status/ }).textContent).toContain('In Arbeit');
     expect(document.activeElement).toBe(screen.getByRole('combobox', { name: /Status/ }));
+  });
+
+  it('gives the focus back to the field as the list closes, not once it has faded out, so a Tab right after stays in place', async () => {
+    const user = userEvent.setup();
+    // the list fades out and never finishes: what a Tab during the animation meets
+    const fading = vi.fn(() => [{ finished: new Promise(() => {}) }] as unknown as Animation[]);
+    Object.defineProperty(HTMLElement.prototype, 'getAnimations', { value: fading, configurable: true });
+    onTestFinished(() => void delete (HTMLElement.prototype as { getAnimations?: unknown }).getAnimations);
+    render(
+      <>
+        <Harness />
+        <button type="button">Weiter</button>
+      </>,
+    );
+    const trigger = screen.getByRole('combobox', { name: /Status/ });
+    // open, and wait until the list (its popup or an option in it) has the focus: keys before that go to the field (a
+    // slow run on CI). The list of the first round may still be there, fading: only the list of the open field counts.
+    const open = async () => {
+      await user.click(trigger);
+      await waitFor(() => expect(trigger.getAttribute('aria-expanded')).toBe('true'));
+      await waitFor(() => {
+        const focused = document.activeElement;
+        expect(screen.getAllByRole('listbox').some((list) => focused !== null && (list.contains(focused) || focused.contains(list)))).toBe(true);
+      });
+    };
+
+    await open();
+    await user.keyboard('{ArrowDown}{Enter}');
+    expect(document.activeElement).toBe(trigger);
+    await user.tab();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Weiter' }));
+
+    // closing without a choice gives it back too
+    await open();
+    await user.keyboard('{Escape}');
+    expect(document.activeElement).toBe(trigger);
+    expect(fading).toHaveBeenCalled();
+  });
+
+  it('leaves the focus on the next field when Tab leaves the open list without a choice', async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn();
+    render(
+      <>
+        <Harness onValueChange={onValueChange} />
+        <button type="button">Weiter</button>
+      </>,
+    );
+
+    await user.click(screen.getByRole('combobox', { name: /Status/ }));
+    await screen.findByRole('listbox');
+    await user.keyboard('{ArrowDown}');
+    await user.tab();
+
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Weiter' }));
+    expect(onValueChange).not.toHaveBeenCalled();
+  });
+
+  it('can be read but not changed while it is read-only, and keeps the focus', async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn();
+    render(<Harness start="todo" readOnly onValueChange={onValueChange} />);
+    const trigger = screen.getByRole('combobox', { name: /Status/ });
+    expect(trigger.getAttribute('aria-readonly')).toBe('true');
+
+    await user.tab();
+    await user.keyboard('{Enter}{ArrowDown}{Enter}{Escape}');
+
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
+    expect(onValueChange).not.toHaveBeenCalled();
+    expect(trigger.textContent).toContain('Todo');
+    expect(document.activeElement).toBe(trigger);
   });
 
   it('shows the icon of the chosen option, marks it in the list and leaves a disabled option out of reach', async () => {

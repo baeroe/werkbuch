@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { QueryObserver } from '@tanstack/react-query';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { queryClient, resetForUser } from './queryClient';
 
 const cached = () => queryClient.getQueryCache().getAll().length;
@@ -31,6 +32,22 @@ describe('resetForUser', () => {
     resetForUser(previous, next);
 
     expect(cached()).toBe(0);
+  });
+
+  it('drops the queries of the old account instead of loading them again, even one that is still observed', async () => {
+    // a switch of account always passes a page without the shell, so no observer of the old account is left over in
+    // the app; one that was (a reset would load it again for the new person) is dropped as well
+    const queryFn = vi.fn(() => Promise.resolve('Maras Projekte'));
+    const observer = new QueryObserver(queryClient, { queryKey: ['projects'], queryFn });
+    const unsubscribe = observer.subscribe(() => undefined);
+    await vi.waitFor(() => expect(queryClient.getQueryData(['projects'])).toBe('Maras Projekte'));
+
+    resetForUser('u_mara', 'u_ida');
+    await Promise.resolve();
+
+    expect(cached()).toBe(0);
+    expect(queryFn).toHaveBeenCalledTimes(1);
+    unsubscribe();
   });
 
   it('keeps the cache of a guest who stays a guest', () => {

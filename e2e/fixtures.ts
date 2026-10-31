@@ -46,6 +46,9 @@ async function coverageOf(page: Page): Promise<PageCoverage> {
 }
 
 export const test = base.extend<{ allowedErrors: RegExp[]; pageErrors: string[]; coverage: void }>({
+  /** The clipboard is there for every page, as in a browser a person uses: specs read what "Copy" put on it. */
+  permissions: async ({}, use) => use(['clipboard-read', 'clipboard-write']),
+
   /**
    * Errors a test expects, e.g. the browser's note on a 404 the test asks for: each entry matches
    * `console error: <text> (<url>)`.

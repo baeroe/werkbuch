@@ -2,6 +2,8 @@
 
 namespace Database\Factories;
 
+use App\Access\OrgRole;
+use App\Access\RoleAssignments;
 use App\Enums\AccountType;
 use App\Enums\Locale;
 use App\Models\User;
@@ -32,6 +34,7 @@ class UserFactory extends Factory
             'type' => AccountType::Person,
             'name' => fake()->name(),
             'handle' => $handle,
+            'is_default_bot' => false,
             'email' => $handle.'@example.com',
             'password' => static::$password ??= Hash::make('password'),
             'locale' => null,
@@ -41,14 +44,31 @@ class UserFactory extends Factory
     }
 
     /**
+     * Every account gets its role in the organization: member, unless a state says admin.
+     */
+    public function configure(): static
+    {
+        return $this->afterCreating(fn (User $user) => app(RoleAssignments::class)->setOrgRole($user, OrgRole::Member));
+    }
+
+    /**
+     * An org admin.
+     */
+    public function admin(): static
+    {
+        return $this->afterCreating(fn (User $user) => app(RoleAssignments::class)->setOrgRole($user, OrgRole::Admin));
+    }
+
+    /**
      * A bot account: no email, no password.
      */
-    public function bot(): static
+    public function bot(?User $owner = null): static
     {
         return $this->state(fn (array $attributes) => [
             'type' => AccountType::Bot,
             'email' => null,
             'password' => null,
+            'owner_id' => $owner?->id,
         ]);
     }
 

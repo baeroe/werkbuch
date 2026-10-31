@@ -2,7 +2,13 @@
 
 namespace Database\Seeders;
 
+use Database\Seeders\Demo\BotsSeeder;
+use Database\Seeders\Demo\FavoritesSeeder;
+use Database\Seeders\Demo\OrganizationSeeder;
 use Database\Seeders\Demo\PeopleSeeder;
+use Database\Seeders\Demo\ProjectsSeeder;
+use Database\Seeders\Demo\TokensSeeder;
+use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use RuntimeException;
 
@@ -12,6 +18,8 @@ use RuntimeException;
  */
 class DemoSeeder extends Seeder
 {
+    use WithoutModelEvents;
+
     public const PASSWORD = 'werkbuch-demo';
 
     public function run(): void
@@ -21,7 +29,12 @@ class DemoSeeder extends Seeder
         }
 
         $this->call([
+            OrganizationSeeder::class,
             PeopleSeeder::class,
+            BotsSeeder::class,
+            ProjectsSeeder::class,
+            FavoritesSeeder::class,
+            TokensSeeder::class,
         ]);
     }
 }

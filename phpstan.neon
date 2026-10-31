@@ -10,3 +10,8 @@ parameters:
         - config
         - database
         - routes
+    ignoreErrors:
+        # the published config names the class of Media Library Pro, which is not installed
+        -
+            identifier: class.notFound
+            path: config/media-library.php

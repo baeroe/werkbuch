@@ -6,6 +6,7 @@ use Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests;
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Routing\Route as RoutingRoute;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Route;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -37,6 +38,7 @@ it('checks exactly one hash for every attempt, so the answer time does not tell 
     $make();
     Authenticate::dummyHash(); // made once and kept; from here on only the check runs
     Hash::shouldReceive('check')->once()->andReturnUsing(fn (string $value, string $hash) => password_verify($value, $hash));
+    Hash::shouldReceive('needsRehash')->andReturnFalse(); // asked after a match, it checks nothing
 
     $user = Authenticate::run('x@example.com', 'secret-pass');
 
@@ -60,9 +62,34 @@ it('checks unknown addresses against a hash of the configured hasher, made once'
 it('makes a new dummy hash when the hasher changes', function () {
     $bcrypt = Authenticate::dummyHash();
     config(['hashing.bcrypt.rounds' => 5]);
+    Hash::forgetDrivers(); // the driver keeps the settings it was made with
 
     expect(Authenticate::dummyHash())->not->toBe($bcrypt)
         ->and(Hash::needsRehash(Authenticate::dummyHash()))->toBeFalse();
+});
+
+it('rehashes an outdated password on sign-in', function () {
+    config(['hashing.bcrypt.rounds' => 5]);
+    Hash::forgetDrivers();
+    $old = password_hash('secret-pass', PASSWORD_BCRYPT, ['cost' => 4]);
+    $user = User::factory()->create(['email' => 'mara@example.com']);
+    DB::table('users')->where('id', $user->id)->update(['password' => $old]); // past the hashed cast, which refuses foreign settings
+
+    $this->post('/login', ['email' => 'mara@example.com', 'password' => 'secret-pass'])->assertRedirect('/my-items');
+
+    $hash = (string) $user->fresh()?->password;
+    expect($hash)->not->toBe($old)
+        ->and(Hash::needsRehash($hash))->toBeFalse()
+        ->and(Hash::check('secret-pass', $hash))->toBeTrue();
+});
+
+it('leaves a current hash alone on sign-in', function () {
+    $user = User::factory()->create(['email' => 'mara@example.com', 'password' => 'secret-pass']);
+    $hash = (string) $user->password;
+
+    $this->post('/login', ['email' => 'mara@example.com', 'password' => 'secret-pass'])->assertRedirect('/my-items');
+
+    expect($user->fresh()?->password)->toBe($hash);
 });
 
 it('refuses known and unknown addresses alike with argon2id as the hasher', function (?string $email) {
@@ -98,12 +125,12 @@ it('rate-limits before it authenticates', function () {
     expect(array_search(ThrottleRequests::class, $priority, true))->toBeLessThan(array_search(AuthenticatesRequests::class, $priority, true));
 });
 
-it('registers only the routes of sign-in, sign-out and password reset', function () {
+it('registers only the routes of sign-in, the second factor, sign-out, password reset and invitations', function () {
     $auth = collect(Route::getRoutes()->getRoutes())
         ->filter(fn (RoutingRoute $route) => str_starts_with($route->getActionName(), 'Laravel\\Fortify\\') || str_starts_with($route->getActionName(), 'App\\Http\\Controllers\\Auth\\'))
         ->map(fn (RoutingRoute $route) => $route->getName())->sort()->values()->all();
 
-    expect($auth)->toBe(['login', 'login.store', 'logout', 'password.email', 'password.request', 'password.reset', 'password.update'])
+    expect($auth)->toBe(['invitations.accept', 'invitations.show', 'login', 'login.store', 'logout', 'password.email', 'password.request', 'password.reset', 'password.update', 'two-factor.login', 'two-factor.login.store'])
         ->and(collect(Route::getRoutes()->getRoutes())->filter(fn (RoutingRoute $route) => str_starts_with($route->uri(), 'user/'))->all())->toBe([]);
 });
 

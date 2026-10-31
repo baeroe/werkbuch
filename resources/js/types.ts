@@ -76,10 +76,16 @@ export interface Project {
   image_url: string | null;
   lead_id: string;
   visibility: 'public' | 'private';
-  workflow_id: string;
+  /** `null` until Phase 3 brings workflows and types (`enabled_type_ids` stays empty until then). */
+  workflow_id: string | null;
   enabled_type_ids: string[];
-  default_type_id: string;
+  /** `null` until Phase 3, like `workflow_id`. */
+  default_type_id: string | null;
   archived_at: string | null;
+  /** The role of the signed-in account in the project (org admins: `admin`, a public project of others: `viewer`). */
+  my_role: ProjectRole;
+  /** Whether the signed-in account is a member: the role alone does not say it (org admins, public projects). */
+  is_member: boolean;
 }
 
 export interface ProjectMember {
@@ -563,6 +569,20 @@ export interface WebhookDelivery {
   created_at: string;
 }
 
+/** The own second factor as `/me/two-factor` answers it; `enabled` only once the first code confirmed it. */
+export interface TwoFactorStatus {
+  enabled: boolean;
+  confirmed_at: string | null;
+  recovery_codes_left: number;
+}
+
+/** The start of the setup: the secret for typing it in, the link and the QR code (an SVG as data URL) for the app. */
+export interface TwoFactorSetup {
+  secret: string;
+  otpauth_url: string;
+  qr_svg: string;
+}
+
 export type TokenAbility = 'read' | 'write' | 'mcp';
 
 /** An API token. The plain text is shown once on creation and is not part of this record. */
@@ -672,7 +692,10 @@ export interface Invitation {
   org_role: OrgRole;
   /** Projects to join on acceptance. */
   projects: { project_id: string; role: ProjectRole }[];
-  link: string;
+  /** `null` for a read-only token (whoever holds the link can create an account). */
+  link: string | null;
+  /** Whether the link works: `closed` after the inviter lost the admin role or an account with the address exists. */
+  state: 'open' | 'closed';
   created_by: string;
   created_at: string;
   /** Seven days after creation; a new invitation replaces the old one. */

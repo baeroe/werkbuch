@@ -22,6 +22,12 @@ export default defineConfig({
         'resources/js/hooks/**': { lines: 100 },
         'resources/js/components/ui/**': { lines: 100 },
         'resources/js/store/**': { lines: 100 },
+        'resources/js/domain/**': { lines: 100 },
+        // from the task whose screens use the frame on (P30)
+        'resources/js/features/settings/frame/**': { lines: 100 },
+        'resources/js/features/settings/project/**': { lines: 100 },
+        'resources/js/features/projects/**': { lines: 100 },
+        'resources/js/features/favorites/**': { lines: 100 },
       },
     },
   },

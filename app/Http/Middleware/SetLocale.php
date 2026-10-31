@@ -11,8 +11,8 @@ use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Sets the language of the request: the signed-in account's own language, else the plain `locale` cookie, else the
- * default of the organization (config until Phase 2), else English. The cookie follows the profile, so the login page
- * after a logout stays in the language of the last session.
+ * default language of the organization. The cookie follows the profile, so the login page after a logout stays in the
+ * language of the last session.
  */
 final class SetLocale
 {

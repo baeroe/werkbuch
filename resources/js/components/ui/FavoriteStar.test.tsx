@@ -54,6 +54,19 @@ describe('FavoriteStar', () => {
     expect(onToggle).not.toHaveBeenCalled();
   });
 
+  it('stays focusable but cannot be pressed while it has a reason, and says the reason', async () => {
+    const onToggle = vi.fn();
+    render(<FavoriteStar active={false} pending={false} name="Roadmap" onToggle={onToggle} disabledReason="Favoriten werden geladen …" />);
+
+    const button = screen.getByRole('button', { name: '„Roadmap“ in die Seitenleiste legen' });
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect(button.hasAttribute('disabled')).toBe(false);
+    expect(button.getAttribute('aria-describedby')).toBeTruthy();
+    expect(document.getElementById(button.getAttribute('aria-describedby')!)!.textContent).toBe('Favoriten werden geladen …');
+    await userEvent.click(button);
+    expect(onToggle).not.toHaveBeenCalled();
+  });
+
   it('is not busy when it is not pending', () => {
     render(<FavoriteStar active={false} pending={false} name="Roadmap" onToggle={() => {}} />);
 

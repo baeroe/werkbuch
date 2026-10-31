@@ -19,14 +19,21 @@ const THEMES: { value: ThemeChoice; label: TranslationKey }[] = [
   { value: 'dark', label: 'theme.dark' },
 ];
 
-/** Signs out; whatever goes wrong shows as a toast, the page stays. */
+/** Signs out; whatever goes wrong shows as a toast with its cause, the page stays. */
 function logout(): void {
-  const failed = () => {
-    toast({ title: t('shell.profile.logout_failed'), description: t('errors.no_answer'), tone: 'error' });
+  const failed = (description: string) => {
+    toast({ title: t('shell.profile.logout_failed'), description, tone: 'error' });
     // the toast says it; Inertia's own error dialog for the response would say it twice
     return false;
   };
-  router.post(paths.logout(), {}, { onHttpException: failed, onNetworkError: failed });
+  router.post(
+    paths.logout(),
+    {},
+    {
+      onHttpException: (response) => failed(t('errors.http_status', { status: response.status })),
+      onNetworkError: () => failed(t('errors.no_answer')),
+    },
+  );
 }
 
 export function ProfileMenu({ compact = false }: { compact?: boolean }) {

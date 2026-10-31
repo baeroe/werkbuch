@@ -5,7 +5,7 @@ namespace App\Support;
 use Illuminate\Validation\Rules\Password;
 
 /**
- * The rules for a new password; SetPassword is the only place that applies them.
+ * The rules for a new password: SetPassword applies them to every password it sets, EnsureAdmin to the first account.
  */
 final class PasswordRules
 {

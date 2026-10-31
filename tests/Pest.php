@@ -1,5 +1,11 @@
 <?php
 
+use App\Access\ProjectRole;
+use App\Access\RoleAssignments;
+use App\Events\EventConsumer;
+use App\Models\Project;
+use App\Models\User;
+use App\Support\Actor;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Collection;
@@ -46,15 +52,21 @@ function appFiles(string $dir): array
 }
 
 /**
- * Locations (file:line) of raw database writes: DB::table(...) chains that write, and DB::insert() and friends.
+ * Locations (file:line) of raw database writes: DB::table(...) chains that write, and DB::insert() and friends, also
+ * through DB::connection(...). A chain may span lines and carry closures with statements of their own; arguments are
+ * matched as balanced parentheses, so a write inside a closure argument does not count, a write at the end of the chain does.
  *
  * @return list<string>
  */
 function rawWrites(string $code, string $file = 'code'): array
 {
+    $args = '(?(DEFINE)(?<args>\((?:[^()]++|(?&args))*\)))';
+    $db = 'DB::(?:connection\s*(?&args)\s*->\s*)?';
+    $writes = 'insert|insertOrIgnore|insertGetId|update|updateOrInsert|upsert|delete|truncate|increment|decrement';
+
     return codeMatches($code, $file, [
-        '/DB::table\([^;]*?->(?:insert|insertOrIgnore|insertGetId|update|updateOrInsert|upsert|delete|truncate|increment|decrement)\(/s',
-        '/DB::(?:insert|update|delete|statement|unprepared)\(/',
+        '/'.$db.'table\s*(?&args)(?:\s*->\s*\w+\s*(?&args))*?\s*->\s*(?:'.$writes.')\s*\('.$args.'/',
+        '/'.$db.'(?:insert|update|delete|statement|unprepared)\s*\('.$args.'/',
     ]);
 }
 
@@ -183,4 +195,91 @@ function usedTranslationKeys(): Collection
     }
 
     return collect($keys)->unique()->sort()->values();
+}
+
+/**
+ * Whether the handle() of a class takes a non-nullable App\Support\Actor as its first parameter.
+ *
+ * @param  class-string  $class
+ */
+function takesActorFirst(string $class): bool
+{
+    $first = (new ReflectionMethod($class, 'handle'))->getParameters()[0] ?? null;
+    $type = $first?->getType();
+
+    return $type instanceof ReflectionNamedType && ! $type->allowsNull() && $type->getName() === Actor::class;
+}
+
+/**
+ * Whether code names the EventRecorder without opening a transaction (the recorder refuses to run outside one).
+ */
+function recordsOutsideTransaction(string $code): bool
+{
+    return str_contains($code, 'EventRecorder') && ! str_contains($code, 'DB::transaction(');
+}
+
+/**
+ * A plain actor for tests: the account acting in the interface (or through another channel).
+ */
+function actor(User $user, string $via = Actor::VIA_UI): Actor
+{
+    return new Actor($user, $via);
+}
+
+/**
+ * Sets the classes that receive every event (`werkbuch.event_consumers`).
+ *
+ * @param  class-string<EventConsumer>  ...$classes
+ */
+function consumers(string ...$classes): void
+{
+    config(['werkbuch.event_consumers' => $classes]);
+}
+
+/**
+ * A new account (org member) with a role in the project.
+ *
+ * @param  array<string, mixed>  $attributes
+ */
+function memberOf(Project $project, ProjectRole $role, array $attributes = []): User
+{
+    $user = User::factory()->create($attributes);
+    app(RoleAssignments::class)->setProjectRole($user, $project, $role);
+
+    return $user;
+}
+
+/**
+ * The plain text of a new API token of the account with these abilities (`read`, `write`, `mcp`).
+ *
+ * @param  list<string>  $abilities
+ */
+function apiToken(User $user, array $abilities): string
+{
+    return $user->createToken('test', $abilities)->plainTextToken;
+}
+
+/**
+ * Sanctum's guard keeps the account of the first request; call this before a request with another (or a revoked) token.
+ */
+function forgetApiAuth(): void
+{
+    app('auth')->forgetGuards();
+}
+
+/**
+ * A small real image as a data URL (PNG unless another type is asked for).
+ */
+function imageDataUrl(string $type = 'png', int $width = 2, int $height = 2): string
+{
+    $image = imagecreatetruecolor($width, $height);
+    ob_start();
+    match ($type) {
+        'jpeg' => imagejpeg($image),
+        'gif' => imagegif($image),
+        'webp' => imagewebp($image),
+        default => imagepng($image),
+    };
+
+    return "data:image/{$type};base64,".base64_encode((string) ob_get_clean());
 }

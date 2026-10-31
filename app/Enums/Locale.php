@@ -2,17 +2,19 @@
 
 namespace App\Enums;
 
+use App\Models\Organization;
+
 enum Locale: string
 {
     case En = 'en';
     case De = 'de';
 
     /**
-     * The default language of the organization (config until Phase 2); the first case when the config names no supported one.
+     * The default language of the organization: the language before sign-in and for accounts without their own.
      */
     public static function default(): self
     {
-        return self::tryFrom((string) config('app.locale')) ?? self::cases()[0];
+        return Organization::current()->locale;
     }
 
     /**

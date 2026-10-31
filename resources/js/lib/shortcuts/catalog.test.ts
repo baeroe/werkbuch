@@ -22,4 +22,9 @@ describe('shortcut catalog', () => {
       }
     }
   });
+
+  it('saves the settings form with mod+enter on the page, apart from the dialog that uses the same keys', () => {
+    expect(SHORTCUTS['settings.save']).toMatchObject({ keys: 'mod+enter', scope: 'detail' });
+    expect(SHORTCUTS['dialog.submit']).toMatchObject({ keys: 'mod+enter', scope: 'dialog' });
+  });
 });
