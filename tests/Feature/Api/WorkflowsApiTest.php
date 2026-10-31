@@ -3,21 +3,16 @@
 use App\Actions\Workflows\DeleteWorkflow;
 use App\Actions\Workflows\SaveWorkflow;
 use App\Events\EventType;
-use App\Exceptions\Problem;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\Workflow;
 use App\Models\WorkflowState;
 use App\Models\WorkflowTransition;
 use Illuminate\Support\Str;
-use Illuminate\Testing\TestResponse;
 use Tests\Support\WorkflowFixtures;
 
 /** The shape of `Workflow` in resources/js/types.ts. */
 const WORKFLOW_SHAPE = ['id', 'name', 'description', 'is_default', 'is_free', 'initial_state_id', 'states', 'transitions'];
-
-/** The messages of the response at one field (paths with dots such as `states.1.name` are keys of `errors`). */
-$errorsAt = fn (TestResponse $response, string $field): ?array => $response->json('errors')[$field] ?? null;
 
 /** The input with every value `$from` replaced by `$to` (state ids in states, start state and transitions). */
 $replaceId = function (array $input, string $from, string $to): array {
@@ -28,17 +23,6 @@ $replaceId = function (array $input, string $from, string $to): array {
     });
 
     return $input;
-};
-
-/** The Problem a call ends with. */
-$problemOf = function (Closure $call): Problem {
-    try {
-        $call();
-    } catch (Problem $problem) {
-        return $problem;
-    }
-
-    throw new RuntimeException('The call went through.');
 };
 
 it('lists the workflows with their states in order and their transitions', function () {
@@ -124,12 +108,12 @@ it('refuses a workflow without a completed status or without its start among the
     'a start that is no state of it' => [fn (array $input) => [...$input, 'initial_state_id' => 'app_elsewhere'], 'no_initial_state', 'field.workflow.no_initial_state'],
 ]);
 
-it('checks names, icons, categories and the number of states', function (Closure $change, string $field, string $message) use ($errorsAt) {
+it('checks names, icons, categories and the number of states', function (Closure $change, string $field, string $message) {
     $response = $this->actingAs(User::factory()->admin()->create())
         ->postJson('/api/v1/workflows', $change(WorkflowFixtures::agencyInput('Neu')))->assertUnprocessable()
         ->assertJsonPath('reason', 'validation_failed');
 
-    expect($errorsAt($response, $field))->toBe([$message])
+    expect(errorsAt($response, $field))->toBe([$message])
         ->and(Workflow::query()->count())->toBe(1);
 })->with([
     'an empty name' => [fn (array $input) => [...$input, 'name' => ''], 'name', fn () => __('field.name.required')],
@@ -310,7 +294,7 @@ it('refuses to leave the organization without a default workflow', function () {
         ->and(eventsOf(EventType::WorkflowUpdated))->toBeEmpty();
 });
 
-it('checks a state mapping against the states that go and the ones that stay', function () use ($errorsAt) {
+it('checks a state mapping against the states that go and the ones that stay', function () {
     $this->actingAs(User::factory()->admin()->create());
     $standard = Workflow::default();
     $input = WorkflowFixtures::inputOf($standard);
@@ -321,8 +305,8 @@ it('checks a state mapping against the states that go and the ones that stay', f
     $staying = $this->putJson("/api/v1/workflows/{$standard->id}", [...$input, 'state_mapping' => [$todo => $progress]])->assertUnprocessable();
     $gone = $this->putJson("/api/v1/workflows/{$standard->id}", [...$input, 'state_mapping' => [$pending => $pending]])->assertUnprocessable();
 
-    expect($errorsAt($staying, "state_mapping.{$todo}"))->toBe([__('field.mapping.unknown_state')])
-        ->and($errorsAt($gone, "state_mapping.{$pending}"))->toBe([__('field.mapping.target')])
+    expect(errorsAt($staying, "state_mapping.{$todo}"))->toBe([__('field.mapping.unknown_state')])
+        ->and(errorsAt($gone, "state_mapping.{$pending}"))->toBe([__('field.mapping.target')])
         ->and(WorkflowState::query()->whereKey($pending)->exists())->toBeTrue();
 
     $this->putJson("/api/v1/workflows/{$standard->id}", [...$input, 'state_mapping' => [$pending => $progress]])->assertOk();
@@ -392,7 +376,7 @@ it('answers an unknown workflow with 404 and no detail', function (string $id) {
     'no ULID' => ['standard'],
 ]);
 
-it('replaces a workflow as a whole', function () use ($errorsAt) {
+it('replaces a workflow as a whole', function () {
     $admin = User::factory()->admin()->create();
     $standard = Workflow::default();
     $description = $standard->description;
@@ -402,7 +386,7 @@ it('replaces a workflow as a whole', function () use ($errorsAt) {
         $input = WorkflowFixtures::inputOf($standard);
         unset($input[$field]);
 
-        expect($errorsAt($this->putJson("/api/v1/workflows/{$standard->id}", $input)->assertUnprocessable(), $field))
+        expect(errorsAt($this->putJson("/api/v1/workflows/{$standard->id}", $input)->assertUnprocessable(), $field))
             ->toBe([__('field.required')], "without {$field}");
     }
 
@@ -417,14 +401,14 @@ it('replaces a workflow as a whole', function () use ($errorsAt) {
         ]);
 });
 
-it('answers 404 for a workflow deleted meanwhile', function () use ($problemOf) {
+it('answers 404 for a workflow deleted meanwhile', function () {
     $admin = User::factory()->admin()->create();
     $workflow = Workflow::factory()->create();
     $input = [...WorkflowFixtures::inputOf($workflow), 'name' => 'Neu'];
     $workflow->delete();
 
-    expect($problemOf(fn () => SaveWorkflow::run(actor($admin), $workflow, $input))->status)->toBe(404)
-        ->and($problemOf(fn () => DeleteWorkflow::run(actor($admin), $workflow))->status)->toBe(404)
+    expect(problemOf(fn () => SaveWorkflow::run(actor($admin), $workflow, $input))->status)->toBe(404)
+        ->and(problemOf(fn () => DeleteWorkflow::run(actor($admin), $workflow))->status)->toBe(404)
         ->and(WorkflowState::query()->where('workflow_id', $workflow->id)->exists())->toBeFalse()
         ->and(eventsOf(EventType::WorkflowUpdated))->toBeEmpty()
         ->and(eventsOf(EventType::WorkflowDeleted))->toBeEmpty();

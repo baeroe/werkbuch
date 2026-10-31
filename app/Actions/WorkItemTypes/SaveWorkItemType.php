@@ -50,7 +50,8 @@ final class SaveWorkItemType
 
             $valid = TypeInput::validate($input, $current);
 
-            if ($current !== null && $valid['archived']) {
+            // only on the way into the archive: saving a type archived before archives nothing, so it refuses nothing
+            if ($current !== null && $current->archived_at === null && $valid['archived']) {
                 TypeInput::refuseDefaultType($current);
             }
 

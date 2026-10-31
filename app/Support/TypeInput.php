@@ -27,7 +27,7 @@ final class TypeInput
      */
     public static function normalize(array $input): array
     {
-        $input = CatalogInput::trim($input, ['name', 'icon', 'description']);
+        $input = CatalogInput::blankArchive(CatalogInput::trim($input, ['name', 'icon', 'description']));
 
         if (is_array($input['properties'] ?? null)) {
             foreach ($input['properties'] as $index => $property) {
@@ -64,7 +64,7 @@ final class TypeInput
             'tone' => CatalogInput::tone(),
             'description' => CatalogInput::description(),
             'is_epic' => ['required', 'boolean'],
-            'properties' => ['present', 'array'],
+            'properties' => ['bail', 'present', 'array', 'list'],
             'properties.*' => ['array'],
             'properties.*.property_id' => ['required', 'string'],
             'properties.*.required' => ['required', 'boolean'],
@@ -125,6 +125,7 @@ final class TypeInput
             ...CatalogInput::required(['icon', 'tone', 'is_epic', 'properties', 'properties.*.required']),
             'is_epic.boolean' => __('field.boolean'),
             'properties.array' => __('field.properties.unknown'),
+            'properties.list' => __('field.properties.list'),
             'properties.*.array' => __('field.properties.unknown'),
             'properties.*.property_id.required' => __('field.properties.unknown'),
             'properties.*.property_id.string' => __('field.properties.unknown'),

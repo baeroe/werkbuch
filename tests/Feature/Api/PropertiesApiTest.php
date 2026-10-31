@@ -4,7 +4,6 @@ use App\Actions\Properties\DeleteProperty;
 use App\Actions\Properties\SaveProperty;
 use App\Domain\Catalog\Tone;
 use App\Events\EventType;
-use App\Exceptions\Problem;
 use App\Models\Property;
 use App\Models\PropertyOption;
 use App\Models\TypeProperty;
@@ -12,36 +11,9 @@ use App\Models\User;
 use App\Models\WorkItemType;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
-use Illuminate\Testing\TestResponse;
-use Illuminate\Validation\ValidationException;
 
 /** The shape of `Property` in resources/js/types.ts. */
 const PROPERTY_SHAPE = ['id', 'key', 'label', 'field_type', 'help', 'default_value', 'settings', 'options'];
-
-/** The messages of the response at one field (paths with dots such as `options.1.label` are keys of `errors`). */
-$errorsAt = fn (TestResponse $response, string $field): ?array => $response->json('errors')[$field] ?? null;
-
-/** The Problem a call ends with. */
-$problemOf = function (Closure $call): Problem {
-    try {
-        $call();
-    } catch (Problem $problem) {
-        return $problem;
-    }
-
-    throw new RuntimeException('The call went through.');
-};
-
-/** The field messages a call ends with. */
-$invalidOf = function (Closure $call): array {
-    try {
-        $call();
-    } catch (ValidationException $exception) {
-        return $exception->errors();
-    }
-
-    throw new RuntimeException('The call went through.');
-};
 
 /** A dropdown „Browser“ with the options Chrome (`opt_a`) and Firefox (`opt_b`), single choice, no default. */
 $browser = fn (array $overrides = []): array => [
@@ -122,11 +94,11 @@ it('creates a dropdown with options and a default among them, giving the new opt
         ->and(eventsOf(EventType::PropertyUpdated))->toBeEmpty();
 });
 
-it('refuses a key of a core field, a malformed key and a key that exists', function (string $key, string $message) use ($errorsAt, $browser) {
+it('refuses a key of a core field, a malformed key and a key that exists', function (string $key, string $message) use ($browser) {
     $response = $this->actingAs(User::factory()->admin()->create())
         ->postJson('/api/v1/properties', $browser(['key' => $key]))->assertUnprocessable();
 
-    expect($errorsAt($response, 'key'))->toBe([__($message)])
+    expect(errorsAt($response, 'key'))->toBe([__($message)])
         ->and(Property::query()->count())->toBe(1);
 })->with([
     'the core field title' => ['title', 'field.key.core'],
@@ -137,25 +109,25 @@ it('refuses a key of a core field, a malformed key and a key that exists', funct
     'a key that exists' => ['effort', 'field.key.taken'],
 ]);
 
-it('refuses a key with a line break, which only an action can receive', function () use ($invalidOf, $browser, $probe) {
+it('refuses a key with a line break, which only an action can receive', function () use ($browser, $probe) {
     // over REST, TrimStrings takes the line break away before the rules see it (P29)
     $admin = User::factory()->admin()->create();
 
-    expect($invalidOf(fn () => SaveProperty::run(actor($admin), null, $browser(['key' => "customer\n"]))))
+    expect(invalidOf(fn () => SaveProperty::run(actor($admin), null, $browser(['key' => "customer\n"]))))
         ->toBe(['key' => [__('field.key.format')]])
-        ->and($invalidOf(fn () => SaveProperty::run(actor($admin), null, $probe('date', false, "2026-10-31\n"))))
+        ->and(invalidOf(fn () => SaveProperty::run(actor($admin), null, $probe('date', false, "2026-10-31\n"))))
         ->toBe(['default_value' => [__('field.default_value.date')]])
         ->and(Property::query()->count())->toBe(1);
 });
 
-it('keeps key and field type once saved, only single may become multiple choice', function () use ($errorsAt, $browser) {
+it('keeps key and field type once saved, only single may become multiple choice', function () use ($browser) {
     $this->actingAs(User::factory()->admin()->create());
     $answer = $this->postJson('/api/v1/properties', $browser(['default_value' => 'opt_a']))->assertCreated()->json('data');
     $chrome = $answer['options'][0]['id'];
     $url = "/api/v1/properties/{$answer['id']}";
 
-    expect($errorsAt($this->putJson($url, [...$answer, 'key' => 'browsers'])->assertUnprocessable(), 'key'))->toBe([__('field.key.immutable')])
-        ->and($errorsAt($this->putJson($url, [...$answer, 'field_type' => 'member'])->assertUnprocessable(), 'field_type'))
+    expect(errorsAt($this->putJson($url, [...$answer, 'key' => 'browsers'])->assertUnprocessable(), 'key'))->toBe([__('field.key.immutable')])
+        ->and(errorsAt($this->putJson($url, [...$answer, 'field_type' => 'member'])->assertUnprocessable(), 'field_type'))
         ->toBe([__('field.field_type.immutable')])
         ->and(eventsOf(EventType::PropertyUpdated))->toBeEmpty();
 
@@ -166,12 +138,12 @@ it('keeps key and field type once saved, only single may become multiple choice'
         'default_value' => ['old' => $chrome, 'new' => [$chrome]],
         'settings' => ['old' => ['multiple' => false], 'new' => ['multiple' => true]],
     ])
-        ->and($errorsAt($this->putJson($url, [...$multiple, 'settings' => ['multiple' => false]])->assertUnprocessable(), 'settings.multiple'))
+        ->and(errorsAt($this->putJson($url, [...$multiple, 'settings' => ['multiple' => false]])->assertUnprocessable(), 'settings.multiple'))
         ->toBe([__('field.settings.multiple_back')])
         ->and(Property::query()->findOrFail($answer['id'])->settings)->toBe(['multiple' => true]);
 });
 
-it('replaces a property as a whole', function () use ($errorsAt, $browser) {
+it('replaces a property as a whole', function () use ($browser) {
     $this->actingAs(User::factory()->admin()->create());
     $effort = Property::query()->where('key', 'effort')->sole();
     $answer = $this->getJson('/api/v1/properties')->json('data.0');
@@ -183,15 +155,15 @@ it('replaces a property as a whole', function () use ($errorsAt, $browser) {
     };
 
     foreach (['key', 'field_type', 'label'] as $field) {
-        expect($errorsAt($this->putJson("/api/v1/properties/{$effort->id}", $without($answer, $field))->assertUnprocessable(), $field))
+        expect(errorsAt($this->putJson("/api/v1/properties/{$effort->id}", $without($answer, $field))->assertUnprocessable(), $field))
             ->toBe([__('field.required')], "without {$field}");
     }
 
-    expect($errorsAt($this->putJson("/api/v1/properties/{$effort->id}", $without($answer, 'settings.decimals'))->assertUnprocessable(), 'settings.decimals'))
+    expect(errorsAt($this->putJson("/api/v1/properties/{$effort->id}", $without($answer, 'settings.decimals'))->assertUnprocessable(), 'settings.decimals'))
         ->toBe([__('field.required')])
-        ->and($errorsAt($this->putJson("/api/v1/properties/{$dropdown['id']}", $without($dropdown, 'settings'))->assertUnprocessable(), 'settings.multiple'))
+        ->and(errorsAt($this->putJson("/api/v1/properties/{$dropdown['id']}", $without($dropdown, 'settings'))->assertUnprocessable(), 'settings.multiple'))
         ->toBe([__('field.required')])
-        ->and($errorsAt($this->putJson("/api/v1/properties/{$dropdown['id']}", $without($dropdown, 'options'))->assertUnprocessable(), 'options'))
+        ->and(errorsAt($this->putJson("/api/v1/properties/{$dropdown['id']}", $without($dropdown, 'options'))->assertUnprocessable(), 'options'))
         ->toBe([__('field.required')])
         ->and(eventsOf(EventType::PropertyUpdated))->toBeEmpty();
 
@@ -207,11 +179,11 @@ it('replaces a property as a whole', function () use ($errorsAt, $browser) {
     ]);
 });
 
-it('checks the default value against the field type', function (string $type, bool $multiple, mixed $value, string $message) use ($errorsAt, $probe) {
+it('checks the default value against the field type', function (string $type, bool $multiple, mixed $value, string $message) use ($probe) {
     $response = $this->actingAs(User::factory()->admin()->create())
         ->postJson('/api/v1/properties', $probe($type, $multiple, $value))->assertUnprocessable();
 
-    expect($errorsAt($response, 'default_value'))->toBe([__($message)])
+    expect(errorsAt($response, 'default_value'))->toBe([__($message)])
         ->and(Property::query()->count())->toBe(1);
 })->with([
     // the cases of DefaultValueTest that JSON carries and TrimStrings leaves as they are
@@ -233,13 +205,35 @@ it('checks the default value against the field type', function (string $type, bo
     'date is no string' => ['date', false, 20261031, 'field.default_value.date'],
     'url with another scheme' => ['url', false, 'ftp://example.com', 'field.default_value.url'],
     'url without a scheme' => ['url', false, 'example.com', 'field.default_value.url'],
-    'url without a host' => ['url', false, 'https://', 'field.default_value.url'],
+    'url without a host' => ['url', false, 'https://', 'field.default_value.url_invalid'],
     'url is no string' => ['url', false, 12, 'field.default_value.url'],
-    'url with a blank inside' => ['url', false, 'https://example.com/a b', 'field.default_value.url'],
-    'url with a control character' => ['url', false, "https://example.com/\x07", 'field.default_value.url'],
+    'url with a blank inside' => ['url', false, 'https://example.com/a b', 'field.default_value.url_invalid'],
+    'url with a tab inside' => ['url', false, "https://example.com/a\tb", 'field.default_value.url_invalid'],
+    'url with a line break inside' => ['url', false, "https://example.com/a\nb", 'field.default_value.url_invalid'],
+    'url with a control character' => ['url', false, "https://example.com/\x07", 'field.default_value.url_invalid'],
     'member has no default' => ['member', true, ['u_1'], 'field.default_value.none'],
     'rich text has no default' => ['rich_text', false, ['type' => 'doc'], 'field.default_value.none'],
 ]);
+
+it('takes web addresses with letters beyond ASCII as they are', function (string $type, mixed $value) use ($probe) {
+    $this->actingAs(User::factory()->admin()->create())
+        ->postJson('/api/v1/properties', $probe($type, false, $value))->assertCreated()->assertJsonPath('data.default_value', $value);
+})->with([
+    'an umlaut in the host' => ['url', 'https://müller.de'],
+    'an eszett in the path' => ['url', 'https://example.com/straße'],
+    'a wiki page' => ['url', 'https://de.wikipedia.org/wiki/Straße'],
+    'an umlaut in the query' => ['url', 'https://example.com/a?q=ä'],
+]);
+
+it('keeps a text default that looks like a ULID as it came', function () use ($probe) {
+    // only a dropdown names options by id: a text is no id and keeps its capitals
+    $text = strtoupper((string) Str::ulid());
+
+    expect(Str::isUlid($text))->toBeTrue();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->postJson('/api/v1/properties', $probe('text', false, $text))->assertCreated()->assertJsonPath('data.default_value', $text);
+});
 
 it('takes a blank text, an empty choice and an archived option as what they are', function () use ($probe, $browser) {
     $admin = User::factory()->admin()->create();
@@ -258,11 +252,41 @@ it('takes a blank text, an empty choice and an archived option as what they are'
     expect(Property::query()->orderBy('id')->pluck('key')->all())->toBe(['effort', 'blank', 'none_chosen']);
 });
 
-it('refuses settings and options that the field type does not have', function (array $input, string $field, string $message) use ($errorsAt) {
+it('takes a blank archive stamp of an option as active, which only an action can receive', function () use ($browser) {
+    // over REST, ConvertEmptyStringsToNull makes it null before the rules see it (P29)
+    $admin = User::factory()->admin()->create();
+    $input = $browser();
+    $input['options'][0]['archived_at'] = '';
+    $input['options'][1]['archived_at'] = '  ';
+
+    $property = SaveProperty::run(actor($admin), null, $input);
+
+    expect($property->options->pluck('archived_at')->all())->toBe([null, null]);
+});
+
+it('refuses to drop or archive the option that is the default', function (Closure $change) use ($browser) {
+    $this->actingAs(User::factory()->admin()->create());
+    $answer = $this->postJson('/api/v1/properties', $browser(['default_value' => 'opt_b']))->assertCreated()->json('data');
+
+    $this->putJson("/api/v1/properties/{$answer['id']}", $change($answer))->assertUnprocessable()
+        ->assertJsonPath('errors.default_value', [__('field.default_value.option')]);
+
+    expect(PropertyOption::query()->where('property_id', $answer['id'])->whereNull('archived_at')->count())->toBe(2)
+        ->and(eventsOf(EventType::PropertyUpdated))->toBeEmpty();
+})->with([
+    'drop it' => [fn (array $answer) => [...$answer, 'options' => [$answer['options'][0]]]],
+    'archive it' => [function (array $answer) {
+        $answer['options'][1]['archived_at'] = '2026-10-31T08:00:00.000000Z';
+
+        return $answer;
+    }],
+]);
+
+it('refuses settings and options that the field type does not have', function (array $input, string $field, string $message) {
     $response = $this->actingAs(User::factory()->admin()->create())
         ->postJson('/api/v1/properties', ['key' => 'probe', 'label' => 'Probe', ...$input])->assertUnprocessable();
 
-    expect($errorsAt($response, $field))->toBe([__($message)])
+    expect(errorsAt($response, $field))->toBe([__($message)])
         ->and(Property::query()->count())->toBe(1);
 })->with([
     'text with decimals' => [['field_type' => 'text', 'settings' => ['decimals' => 1]], 'settings', 'field.settings.invalid'],
@@ -278,11 +302,11 @@ it('refuses settings and options that the field type does not have', function (a
     'dropdown without options' => [['field_type' => 'dropdown', 'settings' => ['multiple' => false], 'options' => []], 'options', 'field.options.required'],
 ]);
 
-it('checks the key, label, help text and options of a dropdown', function (Closure $change, string $field, Closure $message) use ($errorsAt, $browser) {
+it('checks the key, label, help text and options of a dropdown', function (Closure $change, string $field, Closure $message) use ($browser) {
     $response = $this->actingAs(User::factory()->admin()->create())
         ->postJson('/api/v1/properties', $change($browser()))->assertUnprocessable();
 
-    expect($errorsAt($response, $field))->toBe([$message()])
+    expect(errorsAt($response, $field))->toBe([$message()])
         ->and(Property::query()->count())->toBe(1);
 })->with([
     'an unknown field type' => [fn (array $input) => [...$input, 'field_type' => 'select'], 'field_type', fn () => __('field.field_type.unknown')],
@@ -330,6 +354,7 @@ it('checks the key, label, help text and options of a dropdown', function (Closu
         range(1, 101),
     )], 'options', fn () => __('field.options.max', ['max' => 100])],
     'options that are no list' => [fn (array $input) => [...$input, 'options' => 'all'], 'options', fn () => __('field.options.required')],
+    'options keyed by name' => [fn (array $input) => [...$input, 'options' => ['chrome' => $input['options'][0], 'firefox' => $input['options'][1]]], 'options', fn () => __('field.options.list')],
 ]);
 
 it('drops the options it is no longer sent and keeps the others with their ids', function () use ($browser) {
@@ -429,14 +454,14 @@ it('records nothing when nothing changes', function () use ($browser) {
         ->and(PropertyOption::query()->where('property_id', $property->id)->where('updated_at', '>', now()->subMinute())->exists())->toBeFalse();
 });
 
-it('answers 404 for a property deleted meanwhile', function () use ($problemOf, $browser) {
+it('answers 404 for a property deleted meanwhile', function () use ($browser) {
     $admin = User::factory()->admin()->create();
     $property = SaveProperty::run(actor($admin), null, $browser());
     $input = [...$browser(), 'label' => 'Browser (neu)'];
     $property->delete();
 
-    expect($problemOf(fn () => SaveProperty::run(actor($admin), $property, $input))->status)->toBe(404)
-        ->and($problemOf(fn () => DeleteProperty::run(actor($admin), $property))->status)->toBe(404)
+    expect(problemOf(fn () => SaveProperty::run(actor($admin), $property, $input))->status)->toBe(404)
+        ->and(problemOf(fn () => DeleteProperty::run(actor($admin), $property))->status)->toBe(404)
         ->and(PropertyOption::query()->where('property_id', $property->id)->exists())->toBeFalse()
         ->and(eventsOf(EventType::PropertyUpdated))->toBeEmpty()
         ->and(eventsOf(EventType::PropertyDeleted))->toBeEmpty();

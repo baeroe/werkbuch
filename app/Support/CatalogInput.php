@@ -82,6 +82,22 @@ final class CatalogInput
     }
 
     /**
+     * The input with a blank archive stamp (`''`, only blanks) taken as none: active, not archived. REST makes it `null`
+     * before (ConvertEmptyStringsToNull); an action called directly gets it as it was sent.
+     *
+     * @param  array<array-key, mixed>  $input
+     * @return array<array-key, mixed>
+     */
+    public static function blankArchive(array $input): array
+    {
+        if (is_string($input['archived_at'] ?? null) && trim($input['archived_at']) === '') {
+            $input['archived_at'] = null;
+        }
+
+        return $input;
+    }
+
+    /**
      * The archive stamp to store (P25): `$sent` is what the client sent in `archived_at` (a string: archived; `null`:
      * active), or `false`/`true` for the same. An entry that already is archived keeps its stamp, only a newly archived
      * one gets the time of now; so a `PUT` with the answer of the server changes nothing.

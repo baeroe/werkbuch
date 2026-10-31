@@ -30,6 +30,10 @@ it('normalizes a default value', function (FieldType $type, int $decimals, bool 
     'date on a leap day' => [FieldType::Date, 0, false, '2028-02-29', '2028-02-29'],
     'url' => [FieldType::Url, 0, false, 'https://example.com/x', 'https://example.com/x'],
     'url trimmed, any case' => [FieldType::Url, 0, false, ' HTTP://example.com ', 'HTTP://example.com'],
+    'url with an umlaut in the host' => [FieldType::Url, 0, false, 'https://müller.de', 'https://müller.de'],
+    'url with an umlaut in the path' => [FieldType::Url, 0, false, 'https://example.com/straße', 'https://example.com/straße'],
+    'url of a wiki page' => [FieldType::Url, 0, false, 'https://de.wikipedia.org/wiki/Straße', 'https://de.wikipedia.org/wiki/Straße'],
+    'url with an umlaut in the query' => [FieldType::Url, 0, false, 'https://example.com/a?q=ä', 'https://example.com/a?q=ä'],
 ]);
 
 it('rejects a default value that does not fit', function (FieldType $type, bool $multiple, mixed $value, string $error) {
@@ -61,14 +65,15 @@ it('rejects a default value that does not fit', function (FieldType $type, bool 
     'date is no string' => [FieldType::Date, false, 20261031, 'date'],
     'url with another scheme' => [FieldType::Url, false, 'ftp://example.com', 'url'],
     'url without a scheme' => [FieldType::Url, false, 'example.com', 'url'],
-    'url without a host' => [FieldType::Url, false, 'https://', 'url'],
+    'url without a host' => [FieldType::Url, false, 'https://', 'url_invalid'],
+    'url with a broken port' => [FieldType::Url, false, 'https://example.com:abc/', 'url_invalid'],
     'url is no string' => [FieldType::Url, false, 12, 'url'],
-    'url with a blank inside' => [FieldType::Url, false, 'https://example.com/a b', 'url'],
-    'url with a line break inside' => [FieldType::Url, false, "https://example.com/a\nb", 'url'],
-    'url with a control character' => [FieldType::Url, false, "https://example.com/\x07", 'url'],
-    'url with a host PHP does not read' => [FieldType::Url, false, 'https://exa mple.com', 'url'],
-    'url with a host of an underscore' => [FieldType::Url, false, 'http://_', 'url'],
-    'url with an empty part in the host' => [FieldType::Url, false, 'https://a..b', 'url'],
+    'url with a blank inside' => [FieldType::Url, false, 'https://example.com/a b', 'url_invalid'],
+    'url with a tab inside' => [FieldType::Url, false, "https://example.com/a\tb", 'url_invalid'],
+    'url with a line break inside' => [FieldType::Url, false, "https://example.com/a\nb", 'url_invalid'],
+    'url with a control character' => [FieldType::Url, false, "https://example.com/\x07", 'url_invalid'],
+    'url with a blank in the host' => [FieldType::Url, false, 'https://exa mple.com', 'url_invalid'],
+    'url that is no UTF-8' => [FieldType::Url, false, "https://example.com/\xC3", 'url_invalid'],
     'member has no default' => [FieldType::Member, true, ['u_1'], 'none'],
     'rich text has no default' => [FieldType::RichText, false, ['type' => 'doc'], 'none'],
 ]);

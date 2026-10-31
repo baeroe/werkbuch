@@ -50,7 +50,7 @@ final class PropertyInput
         if (is_array($input['options'] ?? null)) {
             foreach ($input['options'] as $index => $option) {
                 if (is_array($option)) {
-                    $input['options'][$index] = CatalogInput::trim($option, ['label']);
+                    $input['options'][$index] = CatalogInput::blankArchive(CatalogInput::trim($option, ['label']));
 
                     if (array_key_exists('id', $option)) {
                         $input['options'][$index]['id'] = Ids::normalize($option['id']);
@@ -59,7 +59,8 @@ final class PropertyInput
             }
         }
 
-        if (array_key_exists('default_value', $input)) {
+        // only a dropdown names options by id; a text that looks like a ULID stays as it came
+        if (($input['field_type'] ?? null) === FieldType::Dropdown->value && array_key_exists('default_value', $input)) {
             $input['default_value'] = Ids::normalize($input['default_value']);
         }
 
@@ -240,7 +241,7 @@ final class PropertyInput
 
         return [
             ...$rules,
-            'options' => ['present', 'array', 'max:'.self::OPTIONS_MAX],
+            'options' => ['bail', 'present', 'array', 'list', 'max:'.self::OPTIONS_MAX],
             'options.*' => ['array'],
             // `new:<index>` names an option sent without an id; no id of the client looks like one
             'options.*.id' => ['nullable', 'string', 'max:'.self::KEY_MAX, 'doesnt_start_with:'.self::NEW_KEY],
@@ -277,6 +278,7 @@ final class PropertyInput
             ...$settings,
             'options.present' => __('field.required'),
             'options.array' => __('field.options.required'),
+            'options.list' => __('field.options.list'),
             'options.max' => __('field.options.max'),
             'options.*.array' => __('field.options.label_required'),
             // the string rule fills no :max, so the sentence comes filled
@@ -305,6 +307,7 @@ final class PropertyInput
             'boolean' => __('field.default_value.boolean'),
             'date' => __('field.default_value.date'),
             'url' => __('field.default_value.url'),
+            'url_invalid' => __('field.default_value.url_invalid'),
             default => __('field.default_value.none'),
         };
     }

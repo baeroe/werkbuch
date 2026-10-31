@@ -3,7 +3,6 @@
 use App\Actions\WorkItemTypes\DeleteWorkItemType;
 use App\Actions\WorkItemTypes\SaveWorkItemType;
 use App\Events\EventType;
-use App\Exceptions\Problem;
 use App\Http\Resources\WorkItemTypeResource;
 use App\Models\Project;
 use App\Models\Property;
@@ -12,24 +11,9 @@ use App\Models\User;
 use App\Models\WorkItemType;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
-use Illuminate\Testing\TestResponse;
 
 /** The shape of `WorkItemType` in resources/js/types.ts. */
 const WORK_ITEM_TYPE_SHAPE = ['id', 'name', 'icon', 'tone', 'description', 'is_epic', 'properties', 'archived_at'];
-
-/** The messages of the response at one field. */
-$errorsAt = fn (TestResponse $response, string $field): ?array => $response->json('errors')[$field] ?? null;
-
-/** The Problem a call ends with. */
-$problemOf = function (Closure $call): Problem {
-    try {
-        $call();
-    } catch (Problem $problem) {
-        return $problem;
-    }
-
-    throw new RuntimeException('The call went through.');
-};
 
 /** A type „Kundenanfrage“ with the given properties. */
 $request = fn (array $overrides = []): array => [
@@ -85,13 +69,13 @@ it('creates a type with a required property, in the order it is sent', function 
         ->and(eventsOf(EventType::WorkItemTypeUpdated))->toBeEmpty();
 });
 
-it('refuses an unknown icon or tone and a property that is missing or twice', function (Closure $change, string $field, Closure $message) use ($errorsAt, $request) {
+it('refuses an unknown icon or tone and a property that is missing or twice', function (Closure $change, string $field, Closure $message) use ($request) {
     $effort = Property::query()->where('key', 'effort')->sole();
 
     $response = $this->actingAs(User::factory()->admin()->create())
         ->postJson('/api/v1/work-item-types', $change($request(), $effort))->assertUnprocessable();
 
-    expect($errorsAt($response, $field))->toBe([$message()])
+    expect(errorsAt($response, $field))->toBe([$message()])
         ->and(WorkItemType::query()->count())->toBe(3);
 })->with([
     'an unknown icon' => [fn (array $input) => [...$input, 'icon' => 'square'], 'icon', fn () => __('field.icon.unknown')],
@@ -106,6 +90,7 @@ it('refuses an unknown icon or tone and a property that is missing or twice', fu
     'a property without its mark' => [fn (array $input, Property $effort) => [...$input, 'properties' => [['property_id' => $effort->id]]], 'properties.0.required', fn () => __('field.required')],
     'a mark that is no boolean' => [fn (array $input, Property $effort) => [...$input, 'properties' => [['property_id' => $effort->id, 'required' => 'ja']]], 'properties.0.required', fn () => __('field.boolean')],
     'properties that are no list' => [fn (array $input) => [...$input, 'properties' => 'all'], 'properties', fn () => __('field.properties.unknown')],
+    'properties keyed by key' => [fn (array $input, Property $effort) => [...$input, 'properties' => ['effort' => ['property_id' => $effort->id, 'required' => false]]], 'properties', fn () => __('field.properties.list')],
     'a name that exists in other capitals' => [fn (array $input) => [...$input, 'name' => 'BUG'], 'name', fn () => __('field.name.taken')],
     'a name that exists with other accents' => [fn (array $input) => [...$input, 'name' => 'Bùg'], 'name', fn () => __('field.name.taken')],
     'an epic mark that is no boolean' => [fn (array $input) => [...$input, 'is_epic' => 'ja'], 'is_epic', fn () => __('field.boolean')],
@@ -169,17 +154,40 @@ it('archives and restores a type through archived_at, stamping the time itself',
 it('refuses to archive or delete the default type of a project, naming the project', function () use ($answerOf) {
     $this->actingAs(User::factory()->admin()->create());
     $task = WorkItemType::query()->where('name', 'Task')->sole();
-    Project::factory()->identifier('WEB')->create(['default_type_id' => $task->id]);
-    $detail = __('problem.detail.default_type', ['projects' => 'WEB']);
+    // by name, not by identifier: Auftritt, Betrieb, Zentrale; archived projects and projects being deleted count too
+    Project::factory()->identifier('WEB')->create(['name' => 'Auftritt', 'default_type_id' => $task->id]);
+    Project::factory()->identifier('OPS')->archived()->create(['name' => 'Betrieb', 'default_type_id' => $task->id]);
+    Project::factory()->identifier('APP')->create(['name' => 'Zentrale', 'default_type_id' => $task->id, 'deleting_at' => now()]);
+    $detail = __('problem.detail.default_type', ['projects' => 'WEB, OPS, APP']);
 
     $this->putJson("/api/v1/work-item-types/{$task->id}", [...$answerOf($task), 'archived_at' => '2026-10-31'])->assertConflict()
-        ->assertJsonPath('reason', 'default_type')->assertJsonPath('projects', ['WEB'])->assertJsonPath('detail', $detail);
+        ->assertJsonPath('reason', 'default_type')->assertJsonPath('projects', ['WEB', 'OPS', 'APP'])->assertJsonPath('detail', $detail);
     $this->deleteJson("/api/v1/work-item-types/{$task->id}")->assertConflict()
-        ->assertJsonPath('reason', 'default_type')->assertJsonPath('projects', ['WEB'])->assertJsonPath('detail', $detail);
+        ->assertJsonPath('reason', 'default_type')->assertJsonPath('projects', ['WEB', 'OPS', 'APP'])->assertJsonPath('detail', $detail);
 
     expect($task->fresh()?->archived_at)->toBeNull()
         ->and(eventsOf(EventType::WorkItemTypeUpdated))->toBeEmpty()
         ->and(eventsOf(EventType::WorkItemTypeDeleted))->toBeEmpty();
+});
+
+it('saves an archived type unchanged, even when a project holds it as its default', function () use ($answerOf) {
+    $this->actingAs(User::factory()->admin()->create());
+    $type = WorkItemType::factory()->archived()->create(['name' => 'Alt']);
+    // a state no action makes (P11), but data from before may have it: saving archives nothing, so it refuses nothing
+    Project::factory()->identifier('WEB')->create(['default_type_id' => $type->id]);
+    $answer = $answerOf($type);
+
+    $this->putJson("/api/v1/work-item-types/{$type->id}", $answer)->assertOk()->assertJsonPath('data', $answer);
+
+    expect(eventsOf(EventType::WorkItemTypeUpdated))->toBeEmpty();
+});
+
+it('takes a blank archive stamp as active, which only an action can receive', function () use ($request) {
+    // over REST, ConvertEmptyStringsToNull makes it null before the rules see it (P29)
+    $admin = User::factory()->admin()->create();
+
+    expect(SaveWorkItemType::run(actor($admin), null, $request(['archived_at' => '']))->archived_at)->toBeNull()
+        ->and(SaveWorkItemType::run(actor($admin), null, $request(['name' => 'Rückfrage', 'archived_at' => ' ']))->archived_at)->toBeNull();
 });
 
 it('deletes an unused type and takes it out of the projects that had it switched on', function () {
@@ -201,7 +209,7 @@ it('deletes an unused type and takes it out of the projects that had it switched
         ->and(eventsOf(EventType::ProjectUpdated))->toBeEmpty();
 });
 
-it('replaces a type as a whole', function () use ($errorsAt, $answerOf) {
+it('replaces a type as a whole', function () use ($answerOf) {
     $this->actingAs(User::factory()->admin()->create());
     $task = WorkItemType::query()->where('name', 'Task')->sole();
     $answer = $answerOf($task);
@@ -210,7 +218,7 @@ it('replaces a type as a whole', function () use ($errorsAt, $answerOf) {
         $input = $answer;
         unset($input[$field]);
 
-        expect($errorsAt($this->putJson("/api/v1/work-item-types/{$task->id}", $input)->assertUnprocessable(), $field))
+        expect(errorsAt($this->putJson("/api/v1/work-item-types/{$task->id}", $input)->assertUnprocessable(), $field))
             ->toBe([__('field.required')], "without {$field}");
     }
 
@@ -261,15 +269,15 @@ it('lets members read the types and refuses changes', function () use ($request)
     expect(WorkItemType::query()->count())->toBe(3);
 });
 
-it('answers 404 for a type deleted meanwhile', function () use ($problemOf, $request) {
+it('answers 404 for a type deleted meanwhile', function () use ($request) {
     $admin = User::factory()->admin()->create();
     $effort = Property::query()->where('key', 'effort')->sole();
     $type = SaveWorkItemType::run(actor($admin), null, $request(['properties' => [['property_id' => $effort->id, 'required' => false]]]));
     $input = $request(['name' => 'Neu']);
     $type->delete();
 
-    expect($problemOf(fn () => SaveWorkItemType::run(actor($admin), $type, $input))->status)->toBe(404)
-        ->and($problemOf(fn () => DeleteWorkItemType::run(actor($admin), $type))->status)->toBe(404)
+    expect(problemOf(fn () => SaveWorkItemType::run(actor($admin), $type, $input))->status)->toBe(404)
+        ->and(problemOf(fn () => DeleteWorkItemType::run(actor($admin), $type))->status)->toBe(404)
         ->and(TypeProperty::query()->where('type_id', $type->id)->exists())->toBeFalse()
         ->and(eventsOf(EventType::WorkItemTypeUpdated))->toBeEmpty()
         ->and(eventsOf(EventType::WorkItemTypeDeleted))->toBeEmpty();
