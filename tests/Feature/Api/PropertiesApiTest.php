@@ -1,14 +1,19 @@
 <?php
 
+use App\Access\ProjectRole;
 use App\Actions\Properties\DeleteProperty;
 use App\Actions\Properties\SaveProperty;
+use App\Actions\WorkItems\UpdateWorkItem;
 use App\Domain\Catalog\Tone;
 use App\Events\EventType;
+use App\Models\Project;
 use App\Models\Property;
 use App\Models\PropertyOption;
 use App\Models\TypeProperty;
 use App\Models\User;
+use App\Models\WorkItem;
 use App\Models\WorkItemType;
+use App\Models\WorkItemValue;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 
@@ -402,6 +407,105 @@ it('drops the options it is no longer sent and keeps the others with their ids',
             ['id' => $chrome, 'label' => 'Chrome', 'color' => 'sky', 'archived' => false],
             ['id' => $edge, 'label' => 'Edge', 'color' => 'slate', 'archived' => false],
         ]);
+});
+
+it('archives an option items carry instead of dropping it, and drops an unused one', function () use ($browser) {
+    $this->actingAs(User::factory()->admin()->create());
+    $answer = $this->postJson('/api/v1/properties', $browser([
+        'options' => [
+            ['id' => 'opt_a', 'label' => 'Chrome', 'color' => 'sky'],
+            ['id' => 'opt_b', 'label' => 'Firefox', 'color' => 'ochre'],
+            ['id' => 'opt_c', 'label' => 'Safari', 'color' => 'moss'],
+        ],
+    ]))->assertCreated()->json('data');
+    [$chrome, $firefox, $safari] = array_column($answer['options'], 'id');
+    $property = Property::query()->findOrFail($answer['id']);
+    $item = WorkItem::factory()->for(Project::factory()->identifier('WEB')->create())->create();
+    WorkItemValue::query()->create(['work_item_id' => $item->id, 'property_id' => $property->id, 'position' => 0, 'value_option_id' => $chrome]);
+    $this->travelTo('2026-10-31 09:00:00');
+
+    // Chrome (in use) and Firefox (unused) are no longer sent
+    $response = $this->putJson("/api/v1/properties/{$property->id}", [...$answer, 'options' => [
+        ['id' => $safari, 'label' => 'Safari', 'color' => 'moss'],
+    ]])->assertOk();
+    $options = $response->json('data.options');
+
+    expect(array_column($options, 'id'))->toBe([$safari, $chrome])
+        ->and(array_column($options, 'archived_at'))->toBe([null, now()->toJSON()])
+        ->and(PropertyOption::query()->whereKey($firefox)->exists())->toBeFalse()
+        ->and(WorkItemValue::query()->where('property_id', $property->id)->sole()->value_option_id)->toBe($chrome)
+        ->and(eventsOf(EventType::PropertyUpdated, $property)->sole()->changes['options']['new'])->toBe([
+            ['id' => $safari, 'label' => 'Safari', 'color' => 'moss', 'archived' => false],
+            ['id' => $chrome, 'label' => 'Chrome', 'color' => 'sky', 'archived' => true],
+        ]);
+
+    // sent without it once more: it stays as it is, with its stamp, and nothing is recorded
+    $this->travelTo('2026-10-31 10:00:00');
+    $this->putJson("/api/v1/properties/{$property->id}", [...$answer, 'options' => [
+        ['id' => $safari, 'label' => 'Safari', 'color' => 'moss'],
+    ]])->assertOk()->assertJsonPath('data.options', $options);
+
+    expect(eventsOf(EventType::PropertyUpdated, $property))->toHaveCount(1);
+});
+
+it('counts the items whose values a deleted property took along', function () {
+    $mara = User::factory()->create();
+    $project = Project::factory()->identifier('WEB')->member($mara, ProjectRole::Admin)->create(['lead_id' => $mara->id]);
+    $customer = Property::factory()->create(['key' => 'customer', 'label' => 'Kunde']);
+    $size = Property::factory()->dropdown(['S', 'M'], multiple: true)->create(['key' => 'size']);
+    WorkItemType::query()->where('name', 'Task')->sole()->typeProperties()->createMany([
+        ['property_id' => $customer->id, 'required' => false, 'position' => 1],
+        ['property_id' => $size->id, 'required' => false, 'position' => 2],
+    ]);
+    [$first, $second] = WorkItem::factory()->for($project)->count(2)->create();
+    WorkItem::factory()->for($project)->create();
+    [$small, $medium] = $size->options->modelKeys();
+    UpdateWorkItem::run(actor($mara), $first, ['values' => ['customer' => 'Feldwerk', 'size' => [$small, $medium]]]);
+    UpdateWorkItem::run(actor($mara), $second, ['values' => ['customer' => 'Hafenbau']]);
+
+    // two rows of one item count once: the answer counts items, not values
+    expect(WorkItemValue::query()->where('property_id', $size->id)->count())->toBe(2);
+
+    $this->actingAs(User::factory()->admin()->create())->deleteJson("/api/v1/properties/{$size->id}")->assertOk()->assertExactJson(['affected_items' => 1]);
+    $this->deleteJson("/api/v1/properties/{$customer->id}")->assertOk()->assertExactJson(['affected_items' => 2]);
+
+    // the history keeps what the values were
+    expect(WorkItemValue::query()->count())->toBe(0)
+        ->and(eventsOf(EventType::WorkItemUpdated, $first)->sole()->changes['values.customer'])->toBe(['old' => null, 'new' => 'Feldwerk'])
+        ->and(eventsOf(EventType::WorkItemUpdated, $second)->sole()->changes['values.customer'])->toBe(['old' => null, 'new' => 'Hafenbau'])
+        // no event per item (A77)
+        ->and(eventsOf(EventType::WorkItemUpdated))->toHaveCount(2)
+        ->and(eventsOf(EventType::PropertyDeleted))->toHaveCount(2);
+
+    // a property no item has a value for counts none
+    $this->deleteJson('/api/v1/properties/'.Property::factory()->create()->id)->assertOk()->assertExactJson(['affected_items' => 0]);
+});
+
+it('reports the errors of the fields and of the options in one answer', function () use ($browser) {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $response = $this->postJson('/api/v1/properties', $browser([
+        'key' => 'Browser',
+        'label' => '',
+        'options' => [
+            ['id' => 'opt_a', 'label' => 'Chrome', 'color' => 'sky'],
+            ['id' => 'opt_b', 'label' => '', 'color' => 'ochre'],
+        ],
+    ]))->assertUnprocessable();
+
+    expect(array_keys($response->json('errors')))->toBe(['key', 'label', 'options.1.label'])
+        ->and(errorsAt($response, 'options.1.label'))->toBe([__('field.options.label_required')]);
+
+    // an invalid field type has no rules for its settings and options: only itself is reported
+    $response = $this->postJson('/api/v1/properties', $browser(['label' => '', 'field_type' => 'nope']))->assertUnprocessable();
+
+    expect(array_keys($response->json('errors')))->toBe(['field_type', 'label']);
+
+    // an existing property: the stored field type decides which settings and options are checked
+    $answer = $this->postJson('/api/v1/properties', $browser())->assertCreated()->json('data');
+    $response = $this->putJson("/api/v1/properties/{$answer['id']}", [...$answer, 'label' => '', 'options' => [['label' => '', 'color' => 'sky']]])->assertUnprocessable();
+
+    expect(array_keys($response->json('errors')))->toBe(['label', 'options.0.label']);
 });
 
 it('takes an option id of another property as a new option', function () use ($browser) {

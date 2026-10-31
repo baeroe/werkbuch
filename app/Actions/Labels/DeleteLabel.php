@@ -9,14 +9,15 @@ use App\Events\EventType;
 use App\Exceptions\Problem;
 use App\Models\Label;
 use App\Models\Organization;
+use App\Models\WorkItemLabel;
 use App\Support\Actor;
 use App\Support\CatalogLock;
 use Illuminate\Support\Facades\DB;
 use Lorisleiva\Actions\Concerns\AsAction;
 
 /**
- * Deletes a label and takes it off the items (org admins). Returns the number of items that had it, always 0 until
- * there are items (Phase 4 counts them, P5). The event names the label in `meta.name`: the subject is gone afterwards.
+ * Deletes a label and takes it off the items (org admins). Returns the number of items that had it (counted
+ * under the catalog lock, before the delete takes the labels off). The event names the label in `meta.name`: the subject is gone afterwards.
  */
 final class DeleteLabel
 {
@@ -34,10 +35,12 @@ final class DeleteLabel
 
             $label = Label::query()->find($label->id) ?? throw Problem::notFound();
 
+            $items = WorkItemLabel::query()->where('label_id', $label->id)->count();
+
             EventRecorder::record(EventType::LabelDeleted, $actor, $label, null, meta: ['name' => $label->name]);
             $label->delete();
 
-            return 0;
+            return $items;
         });
     }
 }

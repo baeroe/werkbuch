@@ -2,10 +2,13 @@
 
 use App\Actions\Resolutions\DeleteResolution;
 use App\Actions\Resolutions\SaveResolution;
+use App\Actions\WorkItems\TransitionWorkItem;
 use App\Events\EventType;
 use App\Http\Resources\ResolutionResource;
+use App\Models\Project;
 use App\Models\Resolution;
 use App\Models\User;
+use App\Models\WorkItem;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
@@ -234,6 +237,46 @@ it('deletes an unused resolution', function () use ($shipped) {
 
     expect(Resolution::query()->count())->toBe(3)
         ->and(eventsOf(EventType::ResolutionDeleted, $duplicate)->sole()->meta)->toMatchArray(['label' => 'Duplicate']);
+});
+
+it('archives a resolution in use instead of deleting it', function () use ($shipped) {
+    $duplicate = $shipped('Duplicate');
+    $item = WorkItem::factory()->for(Project::factory()->identifier('WEB')->create())->closed()->create(['resolution_id' => $duplicate->id]);
+    $this->travelTo('2026-10-31 09:00:00');
+
+    $this->actingAs(User::factory()->admin()->create())->deleteJson("/api/v1/resolutions/{$duplicate->id}")
+        ->assertOk()->assertExactJson(['outcome' => 'archived']);
+
+    $duplicate->refresh();
+
+    expect($duplicate->archived_at?->toJSON())->toBe(now()->toJSON())
+        ->and($item->fresh()?->resolution_id)->toBe($duplicate->id)
+        ->and(eventsOf(EventType::ResolutionUpdated, $duplicate)->sole()->changes)->toBe(['archived_at' => ['old' => null, 'new' => $duplicate->archived_at?->toJSON()]])
+        ->and(eventsOf(EventType::ResolutionDeleted))->toBeEmpty();
+
+    // once more: archived already, the stamp stays and nothing is recorded
+    $this->travelTo('2026-10-31 10:00:00');
+    $this->deleteJson("/api/v1/resolutions/{$duplicate->id}")->assertOk()->assertExactJson(['outcome' => 'archived']);
+
+    expect($duplicate->fresh()?->archived_at?->toJSON())->toBe($duplicate->archived_at?->toJSON())
+        ->and(eventsOf(EventType::ResolutionUpdated, $duplicate))->toHaveCount(1);
+});
+
+it('lets an item keep an archived resolution it already has, but offers it to nobody else', function () use ($shipped) {
+    $duplicate = $shipped('Duplicate');
+    $project = Project::factory()->identifier('WEB')->create();
+    $item = WorkItem::factory()->for($project)->closed()->create(['resolution_id' => $duplicate->id]);
+    $open = WorkItem::factory()->for($project)->create();
+    $duplicate->update(['archived_at' => now()]);
+    $done = (string) $project->workflow()->firstOrFail()->states()->where('name', 'Done')->value('id');
+
+    // within the same category the item keeps what it has; the default is no fallback for it
+    [, , $kept] = TransitionWorkItem::check($item->load('project'), $done, null, false);
+    // the archived one is no choice
+    $refused = invalidOf(fn () => TransitionWorkItem::check($open->load('project'), $done, $duplicate->id, false));
+
+    expect($kept)->toBe($duplicate->id)
+        ->and($refused)->toBe(['resolution_id' => [__('field.resolution_id.archived')]]);
 });
 
 it('takes a blank archive stamp and a blank category as none, which only an action can receive', function () {

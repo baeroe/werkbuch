@@ -105,6 +105,8 @@
     "field.inward_label.max": "The label of the opposite direction may have at most :max characters.",
     "field.inward_label.required": "Label the opposite direction or leave the relation symmetric.",
     "field.is_default.required": "One of the workflows must be the default workflow.",
+    "field.is_epic.has_children": "Items of this type have child items. Only epics can have child items.",
+    "field.is_epic.has_parent": "Items of this type have a parent item. Epics have no parent item.",
     "field.key.core": "The key belongs to a core field.",
     "field.key.format": "The key consists of lowercase letters, digits and _ and starts with a letter.",
     "field.key.immutable": "The key can no longer be changed.",

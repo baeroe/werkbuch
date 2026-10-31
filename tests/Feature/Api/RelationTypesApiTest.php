@@ -6,6 +6,7 @@ use App\Events\EventType;
 use App\Http\Resources\RelationTypeResource;
 use App\Models\RelationType;
 use App\Models\User;
+use App\Models\WorkItemRelation;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -150,6 +151,18 @@ it('deletes an own type and answers how many relations went with it', function (
 
     expect(RelationType::query()->count())->toBe(3)
         ->and(eventsOf(EventType::RelationTypeDeleted, $type)->sole()->meta)->toMatchArray(['name' => 'Eigener']);
+});
+
+it('counts the relations of a deleted relation type and takes them along', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $type = RelationType::factory()->create(['name' => 'Eigener']);
+    WorkItemRelation::factory()->count(2)->create(['type_id' => $type->id]);
+    // a relation of a built-in type stays and is not counted
+    $kept = WorkItemRelation::factory()->create();
+
+    $this->deleteJson("/api/v1/relation-types/{$type->id}")->assertOk()->assertExactJson(['affected_relations' => 2]);
+
+    expect(WorkItemRelation::query()->pluck('id')->all())->toBe([$kept->id]);
 });
 
 it('records nothing when nothing changes', function () {

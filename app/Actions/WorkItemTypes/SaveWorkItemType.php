@@ -9,6 +9,7 @@ use App\Events\EventType;
 use App\Exceptions\Problem;
 use App\Models\Organization;
 use App\Models\TypeProperty;
+use App\Models\WorkItem;
 use App\Models\WorkItemType;
 use App\Support\Actor;
 use App\Support\CatalogInput;
@@ -23,7 +24,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * properties it asks for in order and the archive stamp (org admins). Archiving stamps the time itself; a type that is
  * archived already keeps its stamp (P25). The default type of a project is never archived (P11). Runs under the catalog
  * lock, so the name and the default types are checked against what the change before left. Only what really changes is
- * written and recorded; the same input again writes nothing. Whether the epic mark fits the items is Phase 4's (P5).
+ * written and recorded; the same input again writes nothing. The epic mark must fit the items of the type (spec 4.8),
+ * checked under the lock.
  */
 final class SaveWorkItemType
 {
@@ -53,6 +55,10 @@ final class SaveWorkItemType
             // only on the way into the archive: saving a type archived before archives nothing, so it refuses nothing
             if ($current !== null && $current->archived_at === null && $valid['archived']) {
                 TypeInput::refuseDefaultType($current);
+            }
+
+            if ($current !== null && $current->is_epic !== $valid['is_epic']) {
+                self::checkEpicMark($current, $valid['is_epic']);
             }
 
             $before = $current === null ? null : self::snapshot($current);
@@ -102,6 +108,25 @@ final class SaveWorkItemType
 
             return $saved;
         });
+    }
+
+    /**
+     * The epic mark keeps the items in two levels (spec 4.8): it goes only while no item of the type has children, and
+     * comes only while none has a parent. Archived items count, they keep their place.
+     *
+     * @throws ValidationException 422 `is_epic`
+     */
+    private static function checkEpicMark(WorkItemType $type, bool $isEpic): void
+    {
+        $items = fn () => WorkItem::query()->where('type_id', $type->id);
+
+        if ($isEpic && $items()->whereNotNull('parent_id')->exists()) {
+            throw ValidationException::withMessages(['is_epic' => __('field.is_epic.has_parent')]);
+        }
+
+        if (! $isEpic && $items()->whereExists(fn ($children) => $children->from('work_items as children')->whereColumn('children.parent_id', 'work_items.id'))->exists()) {
+            throw ValidationException::withMessages(['is_epic' => __('field.is_epic.has_children')]);
+        }
     }
 
     /**

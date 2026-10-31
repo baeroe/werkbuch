@@ -5,7 +5,9 @@ use App\Actions\Labels\SaveLabel;
 use App\Events\EventType;
 use App\Http\Resources\LabelResource;
 use App\Models\Label;
+use App\Models\Project;
 use App\Models\User;
+use App\Models\WorkItem;
 use Illuminate\Support\Str;
 
 /** The shape of `Label` in resources/js/types.ts. */
@@ -96,6 +98,23 @@ it('deletes a label and answers how many items had it', function () {
 
     expect(Label::query()->count())->toBe(0)
         ->and(eventsOf(EventType::LabelDeleted, $label)->sole()->meta)->toMatchArray(['name' => 'UX']);
+});
+
+it('counts the items of a deleted label and takes the label off them', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $label = Label::factory()->create(['name' => 'UX']);
+    $other = Label::factory()->create(['name' => 'Backend']);
+    $project = Project::factory()->identifier('WEB')->create();
+    [$first, $second, $third] = WorkItem::factory()->for($project)->count(3)->create();
+    $first->labels()->sync([$label->id, $other->id]);
+    $second->labels()->sync([$label->id]);
+    $third->labels()->sync([$other->id]);
+
+    $this->deleteJson("/api/v1/labels/{$label->id}")->assertOk()->assertExactJson(['affected_items' => 2]);
+
+    expect($first->labels()->pluck('labels.id')->all())->toBe([$other->id])
+        ->and($second->labels()->count())->toBe(0)
+        ->and($third->labels()->pluck('labels.id')->all())->toBe([$other->id]);
 });
 
 it('records nothing when nothing changes', function () {

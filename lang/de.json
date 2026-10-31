@@ -105,6 +105,8 @@
     "field.inward_label.max": "Die Beschriftung der Gegenrichtung darf höchstens :max Zeichen haben.",
     "field.inward_label.required": "Beschrifte die Gegenrichtung oder lasse die Relation symmetrisch.",
     "field.is_default.required": "Einer der Workflows muss der Standard-Workflow sein.",
+    "field.is_epic.has_children": "Items dieses Typs haben Kind-Items. Nur Epics können Kind-Items haben.",
+    "field.is_epic.has_parent": "Items dieses Typs haben ein Eltern-Item. Epics haben kein Eltern-Item.",
     "field.key.core": "Der Schlüssel gehört einem Kernfeld.",
     "field.key.format": "Der Schlüssel besteht aus Kleinbuchstaben, Ziffern und _ und beginnt mit einem Buchstaben.",
     "field.key.immutable": "Der Schlüssel lässt sich nicht mehr ändern.",

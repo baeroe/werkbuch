@@ -18,7 +18,7 @@ A type has:
 
 An archived type takes no new items. Projects that have it switched on keep it, but no project can switch it on anew, and it cannot become a default type. **Restore** brings it back.
 
-A type that is the default type of a project can be neither archived nor deleted; choose another default type in those projects first. This includes archived projects and a project being deleted until it is gone for good. The interface and the API (`409`, `reason: default_type`, the identifiers in `projects`) name them. Deleting a type removes it from every project that had it switched on. Once work items exist, a type that items still carry is archived instead of deleted.
+A type that is the default type of a project can be neither archived nor deleted; choose another default type in those projects first. This includes archived projects and a project being deleted until it is gone for good. The interface and the API (`409`, `reason: default_type`, the identifiers in `projects`) name them. Deleting a type removes it from every project that had it switched on. A type that items still carry is archived instead of deleting it (the API answers `{"outcome": "archived"}`): the items keep it, and no new item can get it. The Epic mark follows the items: it can only be taken away while no item of the type has child items, and only be set while none has a parent item (`422` at `is_epic`; archived items count).
 
 ### The types of a project
 
@@ -51,7 +51,7 @@ The field type is fixed as well. The only change allowed is from single to multi
 
 ### Options
 
-A dropdown has at least one active option. An option has a label (up to 60 characters), a tone (the field `color` in the API) and a place in the order; a dropdown has at most 100. An option you no longer want to offer can be **archived**: it is not offered for new values any more, and you can restore it. In the interface a saved option can only be archived; over the API, an option left out of a `PUT` is deleted.
+A dropdown has at least one active option. An option has a label (up to 60 characters), a tone (the field `color` in the API) and a place in the order; a dropdown has at most 100. An option you no longer want to offer can be **archived**: it is not offered for new values any more, and you can restore it. In the interface a saved option can only be archived; over the API, an option left out of a `PUT` is deleted, unless items carry it: then it is archived instead.
 
 ## Labels
 
@@ -69,7 +69,7 @@ werkbuch ships three: **blocks** ("is blocked by" the other way round), **Duplic
 
 A resolution says how a closed item ended. An item that moves to a Completed or Canceled state gets one: the one you choose, or else the default of the category. werkbuch ships **Done** (default for Completed), **Won't do** (default for Canceled), **Duplicate** and **Cannot reproduce**, in that order.
 
-Each of the two categories always has exactly one default. Making a resolution the default of a category takes the mark from the old one; to change the default, make another resolution the default. A default can be neither archived nor deleted. An archived resolution cannot be chosen any more.
+Each of the two categories always has exactly one default. Making a resolution the default of a category takes the mark from the old one; to change the default, make another resolution the default. A default can be neither archived nor deleted. An archived resolution cannot be chosen any more. Deleting a resolution that items carry archives it instead; the items keep it.
 
 ## REST
 
@@ -139,4 +139,4 @@ curl -X POST https://werkbuch.example.com/api/v1/work-item-types \
   }'
 ```
 
-`settings` is `{"decimals": 0…4}` for a number, `{"multiple": true|false}` for a dropdown or a people picker, and empty otherwise. Deleting answers `200` with `{"outcome": "deleted"}` for types and resolutions, `{"affected_items": 0}` for properties and labels and `{"affected_relations": 0}` for relation types; the counts will name the items and relations that lost the value once there are work items.
+`settings` is `{"decimals": 0…4}` for a number, `{"multiple": true|false}` for a dropdown or a people picker, and empty otherwise. Deleting a type or a resolution answers `200` with `{"outcome": "deleted"}`, or `{"outcome": "archived"}` when items carry it. Deleting a property or a label answers `{"affected_items": 2}` and a relation type `{"affected_relations": 2}`: the items that lost a value or the label and the relations that went with the type, counted before they went. The history of an item keeps what its values were.
