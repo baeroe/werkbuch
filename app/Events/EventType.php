@@ -26,6 +26,8 @@ enum EventType: string
     case WorkItemDeleted = 'work_item.deleted';
     case WorkItemRelationAdded = 'work_item.relation_added';
     case WorkItemRelationRemoved = 'work_item.relation_removed';
+    case WorkItemSubscribed = 'work_item.subscribed';
+    case WorkItemUnsubscribed = 'work_item.unsubscribed';
 
     case CommentCreated = 'comment.created';
     case CommentUpdated = 'comment.updated';

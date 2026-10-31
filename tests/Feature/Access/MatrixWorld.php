@@ -7,6 +7,7 @@ use App\Access\RoleAssignments;
 use App\Models\Organization;
 use App\Models\Project;
 use App\Models\User;
+use App\Models\WorkItem;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
@@ -93,5 +94,23 @@ final class MatrixWorld
     public function project(string $column): Project
     {
         return $column === 'outsider_private' ? $this->ops : $this->web;
+    }
+
+    /**
+     * A fresh item in the project of the column, created by the project admin, in the states of WorkItemFactory named
+     * (`closed`, `archived`, `epic`). Only through the factory: no events, no subscribers.
+     */
+    public function item(string $column, string ...$states): WorkItem
+    {
+        $factory = WorkItem::factory()->state([
+            'project_id' => $this->project($column)->id,
+            'created_by' => $this->account('project_admin')->id,
+        ]);
+
+        foreach ($states as $state) {
+            $factory = $factory->{$state}();
+        }
+
+        return $factory->create();
     }
 }

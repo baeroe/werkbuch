@@ -15,6 +15,7 @@ use App\Models\RelationType;
 use App\Models\Resolution;
 use App\Models\User;
 use App\Models\Workflow;
+use App\Models\WorkItem;
 use App\Models\WorkItemType;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Events\TransactionRolledBack;
@@ -55,6 +56,7 @@ class AppServiceProvider extends ServiceProvider
             'label' => Label::class,
             'relation_type' => RelationType::class,
             'resolution' => Resolution::class,
+            'work_item' => WorkItem::class,
         ]);
 
         Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);

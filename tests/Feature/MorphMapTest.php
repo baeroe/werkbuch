@@ -9,6 +9,7 @@ use App\Models\RelationType;
 use App\Models\Resolution;
 use App\Models\User;
 use App\Models\Workflow;
+use App\Models\WorkItem;
 use App\Models\WorkItemType;
 use Illuminate\Database\ClassMorphViolationException;
 use Illuminate\Database\Eloquent\Model;
@@ -40,3 +41,8 @@ it('maps the models of the catalogs to their short names', function (string $ali
     'relation type' => ['relation_type', RelationType::class],
     'resolution' => ['resolution', Resolution::class],
 ]);
+
+it('maps the work item to its short name', function () {
+    expect(Relation::getMorphedModel('work_item'))->toBe(WorkItem::class)
+        ->and((new WorkItem)->getMorphClass())->toBe('work_item');
+});

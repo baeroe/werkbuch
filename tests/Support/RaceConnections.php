@@ -52,18 +52,18 @@ final class RaceConnections
 
     /**
      * Commits the transaction `hold()` opened at the moment `mariadb_second` asks for the lock on a row of the table
-     * (`select * from <table> … for update`), once: the first request finishes while the second one is on its way, after
+     * (`select * from <table> … for update`, or `… lock in share mode` with that `$sqlEnd`), once: the first request finishes while the second one is on its way, after
      * what it read before the lock and before the lock itself. Whatever the second one checked before its lock missed
      * what the first one wrote; whatever it checks under its lock sees it. The commit runs with `mariadb` as the default
      * connection, so the work of the first request after its commit (the outbox dispatching its events) stays on its
      * own connection instead of running on the second one in the middle of its statement.
      */
-    public static function releaseBeforeLock(string $table): void
+    public static function releaseBeforeLock(string $table, string $sqlEnd = 'for update'): void
     {
         $released = false;
 
-        DB::connection('mariadb_second')->beforeExecuting(function (string $query) use ($table, &$released): void {
-            if (! $released && str_starts_with($query, "select * from `{$table}`") && str_ends_with($query, 'for update')) {
+        DB::connection('mariadb_second')->beforeExecuting(function (string $query) use ($table, $sqlEnd, &$released): void {
+            if (! $released && str_starts_with($query, "select * from `{$table}`") && str_ends_with($query, $sqlEnd)) {
                 $released = true;
                 $default = DB::getDefaultConnection();
                 DB::setDefaultConnection('mariadb');
@@ -96,13 +96,14 @@ final class RaceConnections
 
     /**
      * The outcome is the QueryException of a lock that did not come: `select * from <table> … for update`, or, for a
-     * statement of another shape, one that starts with `$sqlStart`, names `<table>` and ends on `for update`.
+     * statement of another shape, one that starts with `$sqlStart`, names `<table>` and ends on `for update`. A shared
+     * lock ends on `lock in share mode` (`$sqlEnd`).
      */
-    public static function expectLockWait(mixed $outcome, string $table, ?string $sqlStart = null): void
+    public static function expectLockWait(mixed $outcome, string $table, ?string $sqlStart = null, string $sqlEnd = 'for update'): void
     {
         expect($outcome)->toBeInstanceOf(QueryException::class);
         assert($outcome instanceof QueryException);
         expect($outcome->getMessage())->toContain('Lock wait timeout')
-            ->and($outcome->getSql())->toStartWith($sqlStart ?? "select * from `{$table}`")->toContain("`{$table}`")->toEndWith('for update');
+            ->and($outcome->getSql())->toStartWith($sqlStart ?? "select * from `{$table}`")->toContain("`{$table}`")->toEndWith($sqlEnd);
     }
 }
