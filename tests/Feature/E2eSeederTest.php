@@ -14,6 +14,7 @@ use App\Models\RelationType;
 use App\Models\Resolution;
 use App\Models\User;
 use App\Models\Workflow;
+use App\Models\WorkItem;
 use App\Models\WorkItemType;
 use Database\Seeders\DemoSeeder;
 use Database\Seeders\E2eSeeder;
@@ -70,6 +71,23 @@ it('takes the projects of earlier runs away with their identifiers, and keeps th
 
     expect(Project::query()->where('name', 'like', 'E2E %')->exists())->toBeFalse()
         ->and(DB::table('project_identifiers')->where('identifier', 'E2E')->exists())->toBeFalse()
+        ->and(Project::query()->orderBy('identifier')->pluck('identifier')->all())->toBe(['APP', 'OPS', 'WEB']);
+});
+
+it('takes the items of an E2E project away with it, before the catalog entries they use', function () {
+    $this->seed(E2eSeeder::class);
+    $erik = User::where('email', 'e2e@example.com')->sole();
+    $type = WorkItemType::factory()->create(['name' => 'E2E desktop-light ABCDE']);
+    $project = CreateProject::run(actor($erik), ['name' => 'E2E desktop-light ABCDE', 'identifier' => 'EABCDEA', 'enabled_type_ids' => [$type->id], 'default_type_id' => $type->id]);
+    $epic = WorkItem::factory()->for($project)->create(['type_id' => $type->id]);
+    WorkItem::factory()->for($project)->childOf($epic)->count(2)->create();
+    $demo = WorkItem::count() - 3;
+
+    $this->seed(E2eSeeder::class);
+
+    expect(WorkItem::count())->toBe($demo)
+        ->and(WorkItem::query()->where('type_id', $type->id)->exists())->toBeFalse()
+        ->and(WorkItemType::query()->where('name', 'like', 'E2E %')->exists())->toBeFalse()
         ->and(Project::query()->orderBy('identifier')->pluck('identifier')->all())->toBe(['APP', 'OPS', 'WEB']);
 });
 

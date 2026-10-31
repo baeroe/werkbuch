@@ -16,6 +16,7 @@ use App\Models\Property;
 use App\Models\RelationType;
 use App\Models\User;
 use App\Models\Workflow;
+use App\Models\WorkItem;
 use App\Models\WorkItemType;
 use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\DemoSeeder;
@@ -285,6 +286,19 @@ it('creates no empty „Standard“ when the shipped workflow was renamed, and g
         ->and(Project::query()->whereIn('identifier', ['WEB', 'OPS'])->pluck('workflow_id')->unique()->all())->toBe([$shipped->id]);
 });
 
+it('seeds the work items of the three projects, on the states of their workflows', function () {
+    $this->seed(DemoSeeder::class);
+    $perProject = fn () => Project::query()->withCount('workItems')->orderBy('identifier')->pluck('work_items_count', 'identifier')->all();
+
+    expect($perProject())->toBe(['APP' => 22, 'OPS' => 13, 'WEB' => 36])
+        ->and(WorkItem::count())->toBe(71);
+
+    foreach (Project::query()->get() as $project) {
+        expect(WorkItem::query()->where('project_id', $project->id)->whereNotIn('state_id', DB::table('workflow_states')->where('workflow_id', $project->workflow_id)->select('id'))->exists())->toBeFalse()
+            ->and(WorkItem::query()->where('project_id', $project->id)->whereNotIn('type_id', $project->types()->select('work_item_types.id'))->exists())->toBeFalse();
+    }
+});
+
 it('seeds the project favorites with the positions of the clickdummy', function () {
     $this->seed(DemoSeeder::class);
     $projects = Project::pluck('identifier', 'id');
@@ -320,13 +334,13 @@ it('seeds the tokens of Mara and Kira with their times in UTC and a secret nobod
 it('runs again without changing anything and resets the demo password', function () {
     $this->seed(DemoSeeder::class);
     $secrets = PersonalAccessToken::orderBy('name')->pluck('token', 'name')->all();
-    $counts = fn () => [User::count(), Project::count(), ProjectMember::count(), Favorite::count(), PersonalAccessToken::count()];
+    $counts = fn () => [User::count(), Project::count(), ProjectMember::count(), Favorite::count(), PersonalAccessToken::count(), WorkItem::count(), Event::count()];
     $before = $counts();
     User::where('handle', 'lene')->sole()->update(['password' => 'changed-elsewhere']);
 
     $this->seed(DemoSeeder::class);
 
-    expect($counts())->toBe($before)->and($before)->toBe([8, 3, 13, 9, 3])
+    expect($counts())->toBe($before)->and($before)->toBe([8, 3, 13, 9, 3, 71, 53])
         ->and(PersonalAccessToken::orderBy('name')->pluck('token', 'name')->all())->toBe($secrets)
         ->and(Hash::check(DemoSeeder::PASSWORD, User::where('handle', 'lene')->sole()->password))->toBeTrue()
         ->and(Visibility::roleIn(User::where('handle', 'theo')->sole(), Project::where('identifier', 'WEB')->sole())?->value)->toBe('viewer');

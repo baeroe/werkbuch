@@ -2,9 +2,11 @@
 
 namespace Database\Seeders;
 
+use Database\Seeders\Demo\ActivitySeeder;
 use Database\Seeders\Demo\BotsSeeder;
 use Database\Seeders\Demo\CatalogSeeder;
 use Database\Seeders\Demo\FavoritesSeeder;
+use Database\Seeders\Demo\ItemsSeeder;
 use Database\Seeders\Demo\OrganizationSeeder;
 use Database\Seeders\Demo\PeopleSeeder;
 use Database\Seeders\Demo\ProjectsSeeder;
@@ -37,6 +39,8 @@ class DemoSeeder extends Seeder
             ProjectsSeeder::class,
             FavoritesSeeder::class,
             TokensSeeder::class,
+            ItemsSeeder::class,
+            ActivitySeeder::class,
         ]);
     }
 }
