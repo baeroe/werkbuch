@@ -11,6 +11,13 @@ use App\Actions\Invitations\ListInvitations;
 use App\Actions\Media\ShowMedia;
 use App\Actions\Organization\GetOrganization;
 use App\Actions\Organization\UpdateOrganization;
+use App\Actions\Projects\ArchiveProject;
+use App\Actions\Projects\CreateProject;
+use App\Actions\Projects\DeleteProject;
+use App\Actions\Projects\GetProject;
+use App\Actions\Projects\ListProjects;
+use App\Actions\Projects\PurgeProject;
+use App\Actions\Projects\UpdateProject;
 use App\Actions\Tokens\CreateToken;
 use App\Actions\Tokens\ListTokens;
 use App\Actions\Tokens\RevokeToken;
@@ -47,6 +54,10 @@ $everyone = MatrixWorld::COLUMNS;
 $people = array_values(array_diff($everyone, ['default_bot']));
 $peopleButAdmin = array_values(array_diff($people, ['org_admin']));
 
+// the settings of a project: its admins (org admins are admins in every project); the outsider of the private project
+// does not see it
+$projectAdmins = ['org_admin', 'project_admin', 'default_bot'];
+
 /** Starts a two-factor setup for the account past the action (a bot as well, so its refusal is the action's own); returns the secret. */
 $startTwoFactor = function (User $user): string {
     app(EnableTwoFactorAuthentication::class)($user, true);
@@ -76,6 +87,56 @@ return [
         'action' => ShowMedia::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => ShowMedia::run($a, $w->logo),
         'allowed' => $everyone,
+    ],
+    'ListProjects' => [
+        'action' => ListProjects::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListProjects::run($a, []),
+        'allowed' => $everyone,
+    ],
+    'GetProject' => [
+        'action' => GetProject::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetProject::run($a, $w->project($column)),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    'CreateProject' => [
+        'action' => CreateProject::class,
+        // the lead named: by default it is the actor, and the default bot is no person
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => CreateProject::run($a, ['name' => 'Neu', 'identifier' => 'NEU', 'lead_id' => $w->target->id]),
+        'allowed' => $everyone,
+        'event' => EventType::ProjectCreated,
+    ],
+    'UpdateProject' => [
+        'action' => UpdateProject::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => UpdateProject::run($a, $w->project($column), ['name' => 'Neu']),
+        'allowed' => $projectAdmins,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::ProjectUpdated,
+    ],
+    'ArchiveProject' => [
+        'action' => ArchiveProject::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ArchiveProject::run($a, $w->project($column)),
+        'allowed' => $projectAdmins,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::ProjectArchived,
+    ],
+    'DeleteProject' => [
+        'action' => DeleteProject::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => DeleteProject::run($a, $w->project($column)),
+        'allowed' => $projectAdmins,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::ProjectDeleted,
+    ],
+    'PurgeProject' => [
+        'action' => PurgeProject::class,
+        // the work of the job App\Jobs\PurgeProject after DeleteProject: the one writing action without an event of its
+        // own, it only cleans up after `project.deleted` (P26)
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $w->web->update(['deleting_at' => now()]);
+
+            return PurgeProject::run($a, $w->web);
+        },
+        'system' => true,
     ],
     'ListUsers' => [
         'action' => ListUsers::class,

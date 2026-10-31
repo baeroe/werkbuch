@@ -61,15 +61,21 @@ it('lets exactly the allowed accounts run each action', function (array $row, st
     }
 })->with($rows)->with(MatrixWorld::COLUMNS);
 
-it('runs the work of jobs as the system without failing', function () {
+it('runs the work of jobs as the system without failing, recording only the event of its row', function () {
     $failures = [];
 
     foreach (collect(matrixRows())->filter(fn (array $row) => $row['system'] ?? false) as $name => $row) {
         $w = MatrixWorld::build();
+        $before = Event::query()->pluck('id');
         $outcome = matrixOutcome(fn () => ($row['run'])(Actor::system(User::defaultBot(), 'matrix'), $w, 'default_bot'));
+        $recorded = Event::query()->whereNotIn('id', $before)->pluck('type')->map(fn (EventType $type) => $type->value)->all();
 
         if ($outcome !== 'ok') {
             $failures[] = "{$name}: {$outcome}";
+        }
+
+        if ($recorded !== (isset($row['event']) ? [$row['event']->value] : [])) {
+            $failures[] = "{$name} recorded: ".implode(', ', $recorded);
         }
     }
 

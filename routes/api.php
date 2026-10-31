@@ -1,16 +1,22 @@
 <?php
 
+use App\Exceptions\Problem;
 use App\Http\Controllers\Api\BotsController;
 use App\Http\Controllers\Api\InvitationsController;
 use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\PasswordController;
+use App\Http\Controllers\Api\ProjectsController;
 use App\Http\Controllers\Api\TokensController;
 use App\Http\Controllers\Api\TwoFactorController;
 use App\Http\Controllers\Api\UsersController;
 use App\Http\Middleware\EnsureAccountIsActive;
 use App\Http\Middleware\EnsureSession;
 use App\Http\Middleware\EnsureTokenAbility;
+use App\Models\Project;
 use Illuminate\Support\Facades\Route;
+
+// a project by its ULID, identifier or a former identifier; whether the account sees it, the action decides
+Route::bind('project', fn (string $ref) => Project::findByReference($ref) ?? throw Problem::notFound());
 
 // The REST API (prefix api/v1, see bootstrap/app.php): the session of the interface (with CSRF) or a bearer token whose
 // abilities fit the method. Every route has a row in tests/Feature/Api/routes.php.
@@ -29,6 +35,14 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
 
     Route::get('invitations', [InvitationsController::class, 'index']);
     Route::post('invitations', [InvitationsController::class, 'store']);
+
+    Route::get('projects', [ProjectsController::class, 'index']);
+    Route::post('projects', [ProjectsController::class, 'store']);
+    Route::get('projects/{project}', [ProjectsController::class, 'show']);
+    Route::patch('projects/{project}', [ProjectsController::class, 'update']);
+    Route::delete('projects/{project}', [ProjectsController::class, 'destroy']);
+    Route::post('projects/{project}/archive', [ProjectsController::class, 'archive']);
+    Route::post('projects/{project}/restore', [ProjectsController::class, 'restore']);
 
     Route::get('tokens', [TokensController::class, 'index']);
     Route::delete('tokens/{token}', [TokensController::class, 'destroy']);

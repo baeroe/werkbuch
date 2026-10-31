@@ -1,6 +1,7 @@
 <?php
 
 use App\Actions\Organization\UpdateOrganization;
+use App\Actions\Projects\CreateProject;
 use App\Actions\Users\UpdateUser;
 use App\Models\Organization;
 use App\Models\Project;
@@ -49,13 +50,38 @@ it('serves the logo to a token that may read, not to one that may only write', f
     $this->withToken(apiToken($user, ['write']))->get("/media/{$logo->uuid}")->assertForbidden();
 });
 
-it('keeps pictures of anything else hidden until their own rule exists', function () {
-    // project pictures follow the visibility of their project (Task 11); until then a picture of a project stays hidden
+it('serves only the picture of a project, no other file it holds', function () {
+    // later collections of a project (attachments) bring their own rule; until then they stay hidden, even from org admins
     $logo = organizationLogo();
     $project = Project::factory()->create();
     $logo->forceFill(['model_type' => $project->getMorphClass(), 'model_id' => $project->id])->save();
 
     $this->actingAs(User::factory()->admin()->create())->get("/media/{$logo->uuid}")->assertNotFound();
+});
+
+it('serves the picture of a project to whoever sees the project, and to nobody else', function () {
+    $lead = User::factory()->create();
+    $web = CreateProject::run(actor($lead), ['name' => 'Website', 'identifier' => 'WEB', 'image_url' => imageDataUrl('jpeg')]);
+    $ops = CreateProject::run(actor($lead), ['name' => 'Betrieb', 'identifier' => 'OPS', 'visibility' => 'private', 'image_url' => imageDataUrl()]);
+    [$webImage, $opsImage] = [$web->getFirstMedia('image'), $ops->getFirstMedia('image')];
+    $outsider = User::factory()->create();
+
+    expect($webImage?->collection_name)->toBe('image')->and($opsImage?->disk)->toBe('local');
+
+    // a public project: everybody; a private one: its members and org admins
+    $this->actingAs($outsider)->get("/media/{$webImage?->uuid}")->assertOk()->assertHeader('Content-Type', 'image/jpeg');
+    $this->actingAs($outsider)->get("/media/{$opsImage?->uuid}")->assertNotFound();
+    $this->actingAs($lead)->get("/media/{$opsImage?->uuid}")->assertOk();
+    $this->actingAs(User::factory()->admin()->create())->get("/media/{$opsImage?->uuid}")->assertOk();
+});
+
+it('hides the picture of a project that is being deleted', function () {
+    $lead = User::factory()->admin()->create();
+    $web = CreateProject::run(actor($lead), ['name' => 'Website', 'identifier' => 'WEB', 'image_url' => imageDataUrl()]);
+    $image = $web->getFirstMedia('image');
+    $web->update(['deleting_at' => now()]);
+
+    $this->actingAs($lead)->get("/media/{$image?->uuid}")->assertNotFound();
 });
 
 it('serves only the logo of the organization, no other picture it holds', function () {
