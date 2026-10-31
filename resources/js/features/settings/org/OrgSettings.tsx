@@ -1,8 +1,8 @@
 /*
  * The settings of the organisation (spec 5.2) in the shared settings frame: the list of sections on the left, the chosen
  * section on the right (below lg the list is a row above it). `/settings` shows General; an unknown section says so and
- * keeps the list. Admins change everything; a member reads the general settings and is told "Admins only" in the
- * sections that are not theirs.
+ * keeps the list. Admins change everything; a member reads the general settings and the catalogs and is told "Admins
+ * only" in the sections that are not theirs.
  */
 
 import { Link } from '@inertiajs/react';
@@ -19,6 +19,9 @@ import { NotForMembers, useOrgRight } from '../frame/access';
 import { FormSkeleton, SectionHeader } from '../frame/parts';
 import { SectionNav, SettingsFrame } from '../frame/SettingsFrame';
 import Bots from './Bots';
+import Labels from './catalogs/Labels';
+import RelationTypes from './catalogs/RelationTypes';
+import Resolutions from './catalogs/Resolutions';
 import General from './General';
 import People from './People';
 import { findSection, GROUP_NAMES, SECTIONS, sectionLabel, type SectionDef, type SectionProps, type SectionSlug } from './sections';
@@ -27,6 +30,9 @@ const COMPONENTS: Record<SectionSlug, ComponentType<SectionProps>> = {
   general: General,
   people: People,
   bots: Bots,
+  labels: Labels,
+  'relation-types': RelationTypes,
+  resolutions: Resolutions,
 };
 
 /** The chosen section, once the rights are known: its screen, a notice for members, or the reason it could not load. */

@@ -573,6 +573,22 @@ describe('useDialogRound', () => {
     act(() => result.current.show());
     expect(result.current).toMatchObject({ round: 2, open: true, target: null });
   });
+
+  it('gives the focus back to the button that opened the dialog, or to the fallback once that button is gone', () => {
+    const { result } = renderHook(() => useDialogRound());
+    const opener = document.body.appendChild(document.createElement('button'));
+    const fallback = { current: document.body.appendChild(document.createElement('button')) };
+    opener.focus();
+
+    act(() => result.current.show());
+    const target = result.current.returnFocus(fallback);
+    expect(target.current).toBe(opener);
+
+    // the empty state that offered "Create" gave way to the list
+    opener.remove();
+    expect(target.current).toBe(fallback.current);
+    fallback.current.remove();
+  });
 });
 
 describe('useRemoval', () => {

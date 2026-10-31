@@ -11,7 +11,7 @@ import type { ReactNode, Ref } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { currentToasts, dismissToast, resetToasts, runToastAction } from '@/components/ui/toast';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
-import { lene, list, mara, organization, person, project } from '@/test/fixtures';
+import { lene, list, mara, organization, person, project, relationTypes } from '@/test/fixtures';
 import type { Invitation, Token, User } from '@/types';
 import { handleFrom } from './Bots';
 import { OrgSettings } from './OrgSettings';
@@ -143,6 +143,16 @@ describe('OrgSettings', () => {
     expect(within(nav).getByRole('link', { name: 'Allgemein' }).getAttribute('aria-current')).toBe('page');
     expect(within(nav).getByRole('link', { name: 'Personen' }).getAttribute('href')).toBe('/settings/people');
     expect(within(nav).getByRole('link', { name: 'Bots' }).getAttribute('href')).toBe('/settings/bots');
+    // the catalogs follow in their own group, in the order of the clickdummy
+    expect(within(nav).getByText('Kataloge')).toBeTruthy();
+    expect(within(nav).getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')])).toEqual([
+      ['Allgemein', '/settings/general'],
+      ['Personen', '/settings/people'],
+      ['Bots', '/settings/bots'],
+      ['Labels', '/settings/labels'],
+      ['Relationstypen', '/settings/relation-types'],
+      ['Resolutions', '/settings/resolutions'],
+    ]);
     expect(screen.getByRole('heading', { level: 1, name: 'Einstellungen' })).toBeTruthy();
     expect(document.title).toBe('Allgemein – Einstellungen – werkbuch');
     // the rights are on their way: the section waits in outline
@@ -170,6 +180,20 @@ describe('OrgSettings', () => {
     expect(within(nav).getByRole('link', { name: /Personen/ }).textContent).toContain('nur für Admins');
     expect(within(nav).getByRole('link', { name: 'Allgemein' }).textContent).not.toContain('nur für Admins');
     expect(api!.calls.some((call) => call.url.startsWith('/api/v1/users'))).toBe(false);
+  });
+
+  it('lets a member read the catalogs, with the reason why they are read-only', async () => {
+    signedIn = lene;
+    renderSettings('relation-types', { 'GET /api/v1/relation-types': () => ({ body: list(relationTypes) }) });
+
+    expect(await screen.findByRole('heading', { level: 2, name: 'Relationstypen' })).toBeTruthy();
+    expect(document.title).toBe('Relationstypen – Einstellungen – werkbuch');
+    expect(await screen.findByRole('heading', { name: 'blockiert' })).toBeTruthy();
+    expect(screen.getByText('Nur lesen')).toBeTruthy();
+    expect(screen.getByText('Workflows, Typen, Properties, Labels, Relationstypen und Resolutions verwalten nur Org-Admins.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Relationstyp anlegen' })).toBeNull();
+    const nav = screen.getByRole('navigation', { name: 'Bereiche der Einstellungen' });
+    expect(within(nav).getByRole('link', { name: 'Labels' }).textContent).not.toContain('nur für Admins');
   });
 
   it('says when the rights could not be loaded, and loads the section once they can', async () => {
