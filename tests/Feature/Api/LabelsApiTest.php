@@ -74,6 +74,12 @@ it('refuses a name that exists in another case and a tone that does not exist', 
     'a tone that is no text' => [['color' => ['sky']], 'color', fn () => __('field.color.unknown')],
 ]);
 
+it('trims Unicode blanks around a name, which only an action can receive', function () {
+    $label = SaveLabel::run(actor(User::factory()->admin()->create()), null, ['name' => "\u{00A0}Backend\u{2003}", 'color' => 'sky']);
+
+    expect($label->name)->toBe('Backend');
+});
+
 it('keeps the own name when a label is saved again', function () {
     $this->actingAs(User::factory()->admin()->create());
     $label = Label::factory()->create(['name' => 'UX']);

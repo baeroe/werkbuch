@@ -5,6 +5,7 @@ namespace App\Support;
 use App\Domain\Catalog\Tone;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 /**
@@ -22,7 +23,8 @@ final class CatalogInput
     public const HELP_MAX = 500;
 
     /**
-     * The input with the named texts trimmed; anything that is no text stays as it came for the rules to refuse.
+     * The input with the named texts trimmed, Unicode blanks too (a no-break space, like REST's TrimStrings, which an
+     * action called from elsewhere does not get); anything that is no text stays as it came for the rules to refuse.
      *
      * @param  array<array-key, mixed>  $input
      * @param  list<string>  $fields
@@ -32,7 +34,7 @@ final class CatalogInput
     {
         foreach ($fields as $field) {
             if (is_string($input[$field] ?? null)) {
-                $input[$field] = trim($input[$field]);
+                $input[$field] = Str::trim($input[$field]);
             }
         }
 

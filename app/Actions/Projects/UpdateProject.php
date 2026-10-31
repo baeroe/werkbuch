@@ -71,7 +71,7 @@ final class UpdateProject
                 'image_url' => ['sometimes', ...ImageInput::rules($image)],
                 'visibility' => ['sometimes', ...ProjectInput::visibility()],
                 'lead_id' => [
-                    'sometimes', 'bail', 'required', 'string', ProjectInput::lead(),
+                    'sometimes', 'bail', 'required', 'string', 'ulid', ProjectInput::lead(),
                     function (string $attribute, string $value, Closure $fail) use ($project): void {
                         if (! ProjectMember::query()->where('project_id', $project->id)->where('user_id', $value)->exists()) {
                             $fail(__('field.lead.not_member'));
@@ -88,17 +88,19 @@ final class UpdateProject
                     },
                 ],
                 'enabled_type_ids' => ['sometimes', ...ProjectInput::types()],
-                'default_type_id' => ['sometimes', 'bail', 'required', 'string'],
+                'default_type_id' => ['sometimes', 'bail', 'required', 'string', 'ulid'],
             ], ProjectInput::messages())->validate();
 
             if (array_key_exists('description', $valid)) {
                 $valid['description'] ??= '';
             }
 
-            /** @var list<string> $types */
-            $types = $project->types()->pluck('work_item_types.id')->all();
+            // the switched-on types are read only when the input names types
+            $types = null;
 
             if (array_key_exists('enabled_type_ids', $valid) || array_key_exists('default_type_id', $valid)) {
+                /** @var list<string> $types */
+                $types = $project->types()->pluck('work_item_types.id')->all();
                 [$valid['enabled_type_ids'], $valid['default_type_id']] = ProjectInput::enabledTypes(
                     $valid['enabled_type_ids'] ?? $types,
                     $valid['default_type_id'] ?? $project->default_type_id,
@@ -143,7 +145,15 @@ final class UpdateProject
                 $project->unsetRelation('types');
             }
 
-            $project->update(array_map(fn (array $change) => $change['new'], array_diff_key($changes, ['image_url' => true, 'enabled_type_ids' => true])));
+            $columns = array_map(fn (array $change) => $change['new'], array_diff_key($changes, ['image_url' => true, 'enabled_type_ids' => true]));
+
+            if ($columns === []) {
+                // only the types or the picture changed: the project changed all the same
+                $project->touch();
+            } else {
+                $project->update($columns);
+            }
+
             EventRecorder::record(EventType::ProjectUpdated, $actor, $project, $project, $changes);
 
             return true;

@@ -12,6 +12,7 @@ use App\Models\Project;
 use App\Models\Workflow;
 use App\Support\Actor;
 use App\Support\CatalogLock;
+use App\Support\ProjectInput;
 use Illuminate\Support\Facades\DB;
 use Lorisleiva\Actions\Concerns\AsAction;
 
@@ -40,10 +41,10 @@ final class DeleteWorkflow
                 throw Problem::conflict('default_workflow', detail: __('problem.detail.default_workflow'));
             }
 
-            $projects = Project::query()->where('workflow_id', $workflow->id)->orderBy('name')->orderBy('id')->pluck('identifier')->all();
+            [$projects, $listed] = ProjectInput::holding(Project::query()->where('workflow_id', $workflow->id));
 
             if ($projects !== []) {
-                throw Problem::conflict('in_use', ['projects' => $projects], __('problem.detail.workflow_in_use', ['projects' => implode(', ', $projects)]));
+                throw Problem::conflict('in_use', ['projects' => $projects], __('problem.detail.workflow_in_use', ['projects' => $listed]));
             }
 
             EventRecorder::record(EventType::WorkflowDeleted, $actor, $workflow, null, meta: ['name' => $workflow->name]);

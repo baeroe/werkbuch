@@ -14,6 +14,7 @@ use App\Models\ProjectType;
 use App\Models\User;
 use App\Models\Workflow;
 use App\Models\WorkItemType;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
@@ -181,6 +182,28 @@ it('switches types on and off and moves the default', function () use ($typeId, 
             ],
             ['default_type_id' => ['old' => $wish->id, 'new' => $bug]],
         ]);
+});
+
+it('marks the project as changed when only its types change', function () use ($typeId) {
+    $mara = User::factory()->create();
+    $web = CreateProject::run(actor($mara), ['name' => 'Website', 'identifier' => 'WEB']);
+    $before = $web->fresh()?->updated_at;
+    $this->travel(5)->minutes();
+
+    UpdateProject::run(actor($mara), $web, ['enabled_type_ids' => [$typeId('Task'), $typeId('Bug')]]);
+
+    expect($web->fresh()?->updated_at?->greaterThan($before))->toBeTrue()
+        ->and(eventsOf(EventType::ProjectUpdated, $web))->toHaveCount(1);
+});
+
+it('reads the switched-on types only when the input names types', function () {
+    $mara = User::factory()->create();
+    $web = CreateProject::run(actor($mara), ['name' => 'Website', 'identifier' => 'WEB']);
+    DB::enableQueryLog();
+
+    UpdateProject::run(actor($mara), $web, ['name' => 'Webseite']);
+
+    expect(collect(DB::getQueryLog())->pluck('query')->filter(fn (string $sql) => str_contains($sql, 'project_types'))->all())->toBe([]);
 });
 
 it('keeps an archived type that was switched on, but switches on no archived one', function () use ($typeId) {

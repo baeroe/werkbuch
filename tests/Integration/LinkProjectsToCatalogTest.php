@@ -58,3 +58,39 @@ it('links every project of phase 2 to the default workflow and the active types'
         ->and(fn () => Workflow::default()->delete())->toThrow(QueryException::class)
         ->and(fn () => WorkItemType::query()->whereKey($types['Task'])->delete())->toThrow(QueryException::class);
 });
+
+/** A project row as Phase 2 left it, with the types given switched on. */
+$phaseTwoProject = function (string $identifier, array $types = []): string {
+    $id = strtolower((string) Str::ulid());
+    DB::table('projects')->insert([
+        'id' => $id, 'identifier' => $identifier, 'name' => $identifier, 'description' => '', 'lead_id' => User::factory()->create()->id,
+        'visibility' => 'public', 'next_number' => 0, 'created_at' => now(), 'updated_at' => now(),
+    ]);
+
+    foreach ($types as $type) {
+        DB::table('project_types')->insert(['id' => strtolower((string) Str::ulid()), 'project_id' => $id, 'type_id' => $type, 'created_at' => now(), 'updated_at' => now()]);
+    }
+
+    return $id;
+};
+
+it('never makes an archived type the default of a project', function () use ($phaseTwoProject) {
+    $this->artisan('migrate:rollback', ['--path' => LINK_MIGRATION])->assertSuccessful();
+    $types = WorkItemType::query()->orderBy('id')->pluck('id', 'name');
+    WorkItemType::query()->whereKey($types['Task'])->update(['archived_at' => now()]);
+    // switched on: the archived Task first in catalog order, then Bug
+    $id = $phaseTwoProject('WEB', [$types['Task'], $types['Bug']]);
+
+    LinkProjectsToCatalog::run();
+
+    expect(Project::query()->findOrFail($id)->default_type_id)->toBe($types['Bug']);
+});
+
+it('stops with a clear error when a project would get no active default type', function () use ($phaseTwoProject) {
+    $this->artisan('migrate:rollback', ['--path' => LINK_MIGRATION])->assertSuccessful();
+    $phaseTwoProject('WEB');
+    WorkItemType::query()->update(['archived_at' => now()]);
+
+    expect(fn () => LinkProjectsToCatalog::run())->toThrow(RuntimeException::class, 'Project WEB needs a default type, but none of its types is active')
+        ->and(Event::query()->where('type', EventType::ProjectUpdated)->exists())->toBeFalse();
+});

@@ -51,7 +51,7 @@ final class AddMember
 
             $valid = Validator::make($input, [
                 'user_id' => [
-                    'bail', 'required', 'string', Rule::exists('users', 'id')->whereNull('disabled_at'),
+                    'bail', 'required', 'string', 'ulid', Rule::exists('users', 'id')->whereNull('disabled_at'),
                     function (string $attribute, string $value, Closure $fail) use ($project): void {
                         if (MemberInput::isMember($project, $value)) {
                             $fail(__('field.user.already_member'));
@@ -62,6 +62,7 @@ final class AddMember
             ], [
                 'user_id.required' => __('field.user.inactive'),
                 'user_id.string' => __('field.user.inactive'),
+                'user_id.ulid' => __('field.user.inactive'),
                 'user_id.exists' => __('field.user.inactive'),
                 'role.required' => __('field.project_role.unknown'),
                 'role.string' => __('field.project_role.unknown'),

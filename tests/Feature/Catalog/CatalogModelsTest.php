@@ -43,7 +43,12 @@ it('orders states of the same position by id', function () {
     $workflow = Workflow::factory()->create();
     $workflow->states()->update(['position' => 0]);
 
-    expect($workflow->fresh()?->states->pluck('id')->all())->toBe($workflow->states->pluck('id')->sort()->values()->all());
+    // the rows come in id order anyway (the primary key): only the query shows that the order is asked for
+    expect($workflow->fresh()?->states->pluck('id')->all())->toBe($workflow->states->pluck('id')->sort()->values()->all())
+        ->and($workflow->states()->toBase()->orders)->toBe([
+            ['column' => 'position', 'direction' => 'asc'],
+            ['column' => 'id', 'direction' => 'asc'],
+        ]);
 });
 
 it('deletes states and transitions with their workflow', function () {
@@ -105,35 +110,36 @@ it('takes a deleted type out of the projects that had it switched on', function 
     expect(ProjectType::query()->pluck('type_id')->all())->toBe([$keep->id]);
 });
 
-it('refuses a second transition between the same pair and a second built-in type of one kind', function (Closure $duplicate) {
-    $duplicate();
+it('refuses a second transition between the same pair and a second built-in type of one kind', function (Closure $duplicate, string $index) {
+    // the index that refuses it, not any other one on the way
+    expect($duplicate)->toThrow(UniqueConstraintViolationException::class, $index);
 })->with([
-    'transition' => function () {
+    'transition' => [function () {
         $workflow = Workflow::factory()->matrix([[0, 1]])->create();
         [$from, $to] = [$workflow->states[0]->id, $workflow->states[1]->id];
         WorkflowTransition::query()->create(['workflow_id' => $workflow->id, 'from_state_id' => $from, 'to_state_id' => $to]);
-    },
-    'built-in relation type' => function () {
+    }, 'workflow_transitions_from_state_id_to_state_id_unique'],
+    'built-in relation type' => [function () {
         RelationType::factory()->create(['built_in' => 'blocks']);
         RelationType::factory()->create(['built_in' => 'blocks']);
-    },
-    'default resolution' => function () {
+    }, 'relation_types_built_in_unique'],
+    'default resolution' => [function () {
         Resolution::factory()->create(['default_for' => 'completed']);
         Resolution::factory()->create(['default_for' => 'completed']);
-    },
-    'property key' => function () {
+    }, 'resolutions_default_for_unique'],
+    'property key' => [function () {
         Property::factory()->create(['key' => 'customer']);
         Property::factory()->create(['key' => 'Customer']);
-    },
-    'label name' => function () {
+    }, 'properties_key_unique'],
+    'label name' => [function () {
         Label::factory()->create(['name' => 'Backend']);
         Label::factory()->create(['name' => 'backend']);
-    },
-    'type name' => function () {
+    }, 'labels_name_unique'],
+    'type name' => [function () {
         WorkItemType::factory()->create(['name' => 'Bug']);
         WorkItemType::factory()->create(['name' => 'bug']);
-    },
-])->throws(UniqueConstraintViolationException::class);
+    }, 'work_item_types_name_unique'],
+]);
 
 it('allows several relation types and resolutions without a built-in or default marker', function () {
     RelationType::query()->delete(); // the shipped ones carry the markers

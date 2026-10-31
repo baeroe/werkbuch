@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { cx } from '@/components/ui/cx';
 import { Dialog, DialogClose } from '@/components/ui/Dialog';
-import { Field } from '@/components/ui/Field';
+import { Field, fieldIds } from '@/components/ui/Field';
 import { Input } from '@/components/ui/Input';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { Select } from '@/components/ui/Select';
@@ -173,6 +173,7 @@ function ProjectForm({ formId, workflows, types, taken, errors, focusRequest, on
                 checked={typeIds.includes(type.id)}
                 // the first box carries the error, so the focus lands in the list after a refused send
                 aria-invalid={typesError && index === 0 ? true : undefined}
+                aria-describedby={typesError && index === 0 ? fieldIds(`${formId}-types`).error : undefined}
                 onCheckedChange={(on) => {
                   setTypeIds((state) => (on ? [...state, type.id] : state.filter((id) => id !== type.id)));
                   onEdit(['enabled_type_ids', 'default_type_id']);
@@ -227,8 +228,9 @@ export function CreateProjectDialog({ open, onOpenChange, onCreated }: CreatePro
     if (open) setErrors({});
   }, [open]);
 
-  const failed = workflows.isError || types.isError;
   const ready = workflows.data !== undefined && types.data !== undefined;
+  // only a catalog that never came: a failed refetch in the background keeps the form and what is typed in it
+  const failed = !ready && (workflows.isError || types.isError);
 
   /** The error of a field goes when the field is changed. */
   const clearErrors = (fields: string[]) =>

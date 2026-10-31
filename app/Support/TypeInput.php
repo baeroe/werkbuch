@@ -66,7 +66,8 @@ final class TypeInput
             'is_epic' => ['required', 'boolean'],
             'properties' => ['bail', 'present', 'array', 'list'],
             'properties.*' => ['array'],
-            'properties.*.property_id' => ['required', 'string'],
+            // a canonical ULID only: the collation would let a look-alike pass `whereKey` and the unique index catch it
+            'properties.*.property_id' => ['required', 'string', 'ulid'],
             'properties.*.required' => ['required', 'boolean'],
             'archived_at' => CatalogInput::archivedAt(),
         ], self::messages())->validate();
@@ -108,10 +109,10 @@ final class TypeInput
      */
     public static function refuseDefaultType(WorkItemType $type): void
     {
-        $projects = Project::query()->where('default_type_id', $type->id)->orderBy('name')->orderBy('id')->pluck('identifier')->all();
+        [$projects, $listed] = ProjectInput::holding(Project::query()->where('default_type_id', $type->id));
 
         if ($projects !== []) {
-            throw Problem::conflict('default_type', ['projects' => $projects], __('problem.detail.default_type', ['projects' => implode(', ', $projects)]));
+            throw Problem::conflict('default_type', ['projects' => $projects], __('problem.detail.default_type', ['projects' => $listed]));
         }
     }
 
@@ -129,6 +130,7 @@ final class TypeInput
             'properties.*.array' => __('field.properties.unknown'),
             'properties.*.property_id.required' => __('field.properties.unknown'),
             'properties.*.property_id.string' => __('field.properties.unknown'),
+            'properties.*.property_id.ulid' => __('field.properties.unknown'),
             'properties.*.required.boolean' => __('field.boolean'),
         ];
     }

@@ -27,7 +27,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * Makes sure the shipped catalog exists: the default workflow (spec 4.5), Task, Bug and Epic (4.6, R6), the four
  * resolutions and the three built-in relation types (4.8, 4.9). Runs from the migration, creates only what is missing
  * (a workflow, the types, the resolutions, each built-in relation type) and names it in the language of the
- * organization. Every entry it creates is one event of the default bot.
+ * organization. A custom relation type that holds the name of a missing built-in one becomes it (A98). Every entry it
+ * creates or marks is one event of the default bot.
  */
 final class EnsureCatalog
 {
@@ -77,8 +78,8 @@ final class EnsureCatalog
         }
 
         $workflow = Workflow::query()->create([
-            'name' => $this->text('catalog.builtin.workflow.name'),
-            'description' => $this->text('catalog.builtin.workflow.description'),
+            'name' => __('catalog.builtin.workflow.name', [], $this->locale),
+            'description' => __('catalog.builtin.workflow.description', [], $this->locale),
             'is_default' => true,
             'is_free' => true,
         ]);
@@ -108,9 +109,9 @@ final class EnsureCatalog
         $effort = $this->ensureEffort();
 
         $types = [
-            ['Task', 'square-check', Tone::Sky, false, $this->text('catalog.builtin.type.task.description')],
-            ['Bug', 'bug', Tone::Ochre, false, $this->text('catalog.builtin.type.bug.description')],
-            ['Epic', 'zap', Tone::Moss, true, $this->text('catalog.builtin.type.epic.description')],
+            ['Task', 'square-check', Tone::Sky, false, __('catalog.builtin.type.task.description', [], $this->locale)],
+            ['Bug', 'bug', Tone::Ochre, false, __('catalog.builtin.type.bug.description', [], $this->locale)],
+            ['Epic', 'zap', Tone::Moss, true, __('catalog.builtin.type.epic.description', [], $this->locale)],
         ];
 
         foreach ($types as [$name, $icon, $tone, $isEpic, $description]) {
@@ -143,9 +144,9 @@ final class EnsureCatalog
 
         $property = Property::query()->create([
             'key' => 'effort',
-            'label' => $this->text('catalog.builtin.property.effort.label'),
+            'label' => __('catalog.builtin.property.effort.label', [], $this->locale),
             'field_type' => FieldType::Number,
-            'help' => $this->text('catalog.builtin.property.effort.help'),
+            'help' => __('catalog.builtin.property.effort.help', [], $this->locale),
             'default_value' => null,
             'settings' => ['decimals' => 1],
         ]);
@@ -174,24 +175,34 @@ final class EnsureCatalog
     {
         $relationTypes = [
             'blocks' => [
-                $this->text('catalog.builtin.relation.blocks.name'),
-                $this->text('catalog.builtin.relation.blocks.outward'),
-                $this->text('catalog.builtin.relation.blocks.inward'),
+                __('catalog.builtin.relation.blocks.name', [], $this->locale),
+                __('catalog.builtin.relation.blocks.outward', [], $this->locale),
+                __('catalog.builtin.relation.blocks.inward', [], $this->locale),
             ],
             'duplicates' => [
-                $this->text('catalog.builtin.relation.duplicates.name'),
-                $this->text('catalog.builtin.relation.duplicates.outward'),
-                $this->text('catalog.builtin.relation.duplicates.inward'),
+                __('catalog.builtin.relation.duplicates.name', [], $this->locale),
+                __('catalog.builtin.relation.duplicates.outward', [], $this->locale),
+                __('catalog.builtin.relation.duplicates.inward', [], $this->locale),
             ],
             'relates' => [
-                $this->text('catalog.builtin.relation.relates.name'),
-                $this->text('catalog.builtin.relation.relates.outward'),
+                __('catalog.builtin.relation.relates.name', [], $this->locale),
+                __('catalog.builtin.relation.relates.outward', [], $this->locale),
                 null, // symmetric
             ],
         ];
 
         foreach ($relationTypes as $kind => [$name, $outward, $inward]) {
             if (RelationType::query()->where('built_in', $kind)->exists()) {
+                continue;
+            }
+
+            // a custom type of the same name (names are unique) becomes the built-in one instead of a second row
+            $same = RelationType::query()->where('name', $name)->first();
+
+            if ($same !== null) {
+                $same->update(['built_in' => $kind]);
+                EventRecorder::record(EventType::RelationTypeUpdated, $this->actor, $same, null, ['built_in' => ['old' => null, 'new' => $kind]]);
+
                 continue;
             }
 
@@ -203,11 +214,6 @@ final class EnsureCatalog
             ]);
             $this->record(EventType::RelationTypeCreated, $relationType, 'name');
         }
-    }
-
-    private function text(string $key): string
-    {
-        return __($key, [], $this->locale);
     }
 
     private function record(EventType $type, Model $subject, string $field): void

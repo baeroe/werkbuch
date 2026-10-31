@@ -11,7 +11,6 @@ import { Checkbox } from '@/components/ui/Checkbox';
 import { Chip } from '@/components/ui/Chip';
 import { cx } from '@/components/ui/cx';
 import { toast } from '@/components/ui/toast';
-import { Tooltip } from '@/components/ui/Tooltip';
 import { TypeTab } from '@/components/ui/TypeTab';
 import { useUpdateProject } from '@/hooks/projects';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
@@ -51,28 +50,27 @@ function TypeRow({ type, on, group, isDefault, onDefault, last, canManage, onTog
           {archived && <Chip>{t('settings.project.types.archived')}</Chip>}
         </div>
         {type.description && <p className="mt-1.5 max-w-[65ch] text-ui text-pretty text-muted">{type.description}</p>}
+        {/* visible, not only a tooltip: the blocked radio cannot take the focus, so the keyboard would never reach it */}
+        {reason && (
+          <p id={reasonId} className="mt-1.5 text-ui text-pretty text-muted">
+            {reason}
+          </p>
+        )}
       </div>
-      <Tooltip content={reason} disabled={reason === null}>
-        <label className={cx('flex min-h-11 items-center gap-2 text-ui text-ink md:min-h-8', choosable ? 'cursor-pointer' : 'cursor-not-allowed opacity-50')}>
-          <input
-            type="radio"
-            name={group}
-            value={type.id}
-            checked={isDefault}
-            disabled={!choosable}
-            onChange={onDefault}
-            aria-label={t('settings.project.types.as_default', { name: type.name })}
-            aria-describedby={reason ? reasonId : undefined}
-            className="size-4 shrink-0 cursor-[inherit] appearance-none rounded-full border border-line-input bg-surface transition-colors duration-120 checked:border-accent checked:[box-shadow:inset_0_0_0_3px_var(--color-surface),inset_0_0_0_8px_var(--color-accent)]"
-          />
-          {t('settings.project.types.default')}
-          {reason && (
-            <span id={reasonId} hidden>
-              {reason}
-            </span>
-          )}
-        </label>
-      </Tooltip>
+      <label className={cx('flex min-h-11 items-center gap-2 text-ui text-ink md:min-h-8', choosable ? 'cursor-pointer' : 'cursor-not-allowed opacity-50')}>
+        <input
+          type="radio"
+          name={group}
+          value={type.id}
+          checked={isDefault}
+          disabled={!choosable}
+          onChange={onDefault}
+          aria-label={t('settings.project.types.as_default', { name: type.name })}
+          aria-describedby={reason ? reasonId : undefined}
+          className="size-4 shrink-0 cursor-[inherit] appearance-none rounded-full border border-line-input bg-surface transition-colors duration-120 checked:border-accent checked:[box-shadow:inset_0_0_0_3px_var(--color-surface),inset_0_0_0_8px_var(--color-accent)]"
+        />
+        {t('settings.project.types.default')}
+      </label>
     </RuledRow>
   );
 }
@@ -94,7 +92,8 @@ export function Types({ project, canManage }: ProjectSectionProps) {
   const activeOn = enabled.filter((id) => active.has(id));
 
   if (types.isPending) return <SettingsSkeleton rows={4} label={t('settings.project.types.loading')} />;
-  if (types.isError) return <SettingsError title={t('settings.project.types.load_failed')} error={types.error} retrying={types.isFetching} onRetry={() => void types.refetch()} />;
+  // only without data: a failed refetch in the background keeps the draft
+  if (types.data === undefined) return <SettingsError title={t('settings.project.types.load_failed')} error={types.error} retrying={types.isFetching} onRetry={() => void types.refetch()} />;
 
   function toggle(typeId: string, on: boolean) {
     const chosen = new Set(enabled);
@@ -155,7 +154,8 @@ export function Types({ project, canManage }: ProjectSectionProps) {
         {/* Native radios in a plain group: Base UI's RadioGroup is a composite widget and would take the tab stop away
             from the checkboxes in its rows. Tab reaches the chosen radio, the arrows move the choice. */}
         <div
-          role="radiogroup"
+          // a group, not a radiogroup: it holds the list with the checkboxes too; the shared name groups the radios
+          role="group"
           aria-label={t('settings.project.types.default_group')}
           // the server refused the choice: the group takes the focus, so the person lands on what needs fixing
           aria-invalid={problem ? true : undefined}

@@ -54,7 +54,7 @@ final class CreateProject
             CatalogLock::take();
 
             $input['workflow_id'] ??= Workflow::default()->id;
-            $input['enabled_type_ids'] ??= WorkItemType::query()->whereNull('archived_at')->orderBy('id')->pluck('id')->all();
+            $input['enabled_type_ids'] ??= WorkItemType::activeIds();
 
             $valid = Validator::make($input, [
                 'name' => ['required', 'string', 'max:'.ProjectInput::NAME_MAX],
@@ -62,10 +62,10 @@ final class CreateProject
                 'description' => ['nullable', 'string', 'max:'.ProjectInput::DESCRIPTION_MAX],
                 'image_url' => ImageInput::rules(),
                 'visibility' => ['sometimes', ...ProjectInput::visibility()],
-                'lead_id' => ['required', 'string', ProjectInput::lead()],
+                'lead_id' => ['bail', 'required', 'string', 'ulid', ProjectInput::lead()],
                 'workflow_id' => ProjectInput::workflow(),
                 'enabled_type_ids' => ProjectInput::types(),
-                'default_type_id' => ['nullable', 'string'],
+                'default_type_id' => ['nullable', 'string', 'ulid'],
             ], ProjectInput::messages())->validate();
 
             [$types, $defaultType] = ProjectInput::enabledTypes($valid['enabled_type_ids'], $valid['default_type_id'] ?? null);

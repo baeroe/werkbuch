@@ -77,11 +77,14 @@ function renderSettings(section: string, overrides: Record<string, MockRoute> = 
     ...overrides,
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <QueryClientProvider client={client}>
-      <ProjectSettings identifier={identifier} section={section} />
-    </QueryClientProvider>,
-  );
+  return {
+    client,
+    ...render(
+      <QueryClientProvider client={client}>
+        <ProjectSettings identifier={identifier} section={section} />
+      </QueryClientProvider>,
+    ),
+  };
 }
 
 const toastTitles = () => currentToasts().map((entry) => entry.title);
@@ -639,7 +642,7 @@ describe('Workflow', () => {
     await user.click(screen.getByRole('button', { name: /Workflow wechseln …/ }));
     const dialog = await screen.findByRole('dialog');
     await user.click(within(dialog).getByRole('button', { name: /^Workflow wechseln/ }));
-    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Abbrechen' })).toHaveProperty('disabled', true));
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Abbrechen' }).getAttribute('aria-disabled')).toBe('true'));
     await user.keyboard('{Escape}');
     expect(screen.getByRole('dialog')).toBe(dialog);
 
@@ -659,6 +662,43 @@ describe('Workflow', () => {
 
     expect((await within(dialog).findByRole('alert')).textContent).toContain('Diesen Workflow gibt es nicht.');
     expect(toastTitles()).not.toContain('Workflow nicht gewechselt');
+  });
+
+  it('keeps the chosen workflow when the workflows fail to load again in the background', async () => {
+    const user = userEvent.setup();
+    let fail = false;
+    const { client } = renderSettings('workflow', { 'GET /api/v1/workflows': () => (fail ? unavailable() : { body: list([standard, agency]) }) });
+
+    await chooseAgency(user);
+    fail = true;
+    await act(() => client.refetchQueries());
+    // the observers hear of the failure a tick later
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+
+    expect(screen.getByRole('combobox', { name: /Neuer Workflow/ }).textContent).toContain('Agentur-Freigabe');
+    expect(screen.getByRole('button', { name: /Workflow wechseln …/ }).getAttribute('aria-disabled')).toBeNull();
+  });
+
+  it('names a refusal of a retry from the toast in a toast when the dialog was closed meanwhile', async () => {
+    const user = userEvent.setup();
+    let answer = unavailable;
+    renderSettings('workflow', { 'PUT /api/v1/projects/p_web/workflow': () => answer() });
+
+    await chooseAgency(user);
+    await user.click(screen.getByRole('button', { name: /Workflow wechseln …/ }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: /^Workflow wechseln/ }));
+    await waitFor(() => expect(toastTitles()).toContain('Workflow nicht gewechselt'));
+    await user.click(within(dialog).getByRole('button', { name: 'Abbrechen' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    answer = () => problem(422, 'validation_failed', { detail: 'Diesen Workflow gibt es nicht.', errors: { workflow_id: ['Diesen Workflow gibt es nicht.'] } });
+    act(() => runToastAction(toastNamed('Workflow nicht gewechselt').id));
+
+    await waitFor(() => expect(calls('PUT', '/api/v1/projects/p_web/workflow')).toHaveLength(2));
+    await waitFor(() => expect(currentToasts().filter((entry) => entry.title === 'Workflow nicht gewechselt')).toHaveLength(1));
+    expect(toastNamed('Workflow nicht gewechselt').description).toContain('Diesen Workflow gibt es nicht.');
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('says why the switch failed and tries again from the toast', async () => {
@@ -747,7 +787,11 @@ describe('Types', () => {
     await screen.findByRole('list', { name: 'Typen der Organisation' });
     const archived = radio('Altlast');
     expect(archived).toHaveProperty('disabled', true);
-    expect(document.getElementById(archived.getAttribute('aria-describedby')!)!.textContent).toBe('Ein archivierter Typ kann nicht Standardtyp sein.');
+    const why = document.getElementById(archived.getAttribute('aria-describedby')!)!;
+    expect(why.textContent).toBe('Ein archivierter Typ kann nicht Standardtyp sein.');
+    // in the row for everybody to read: the blocked radio takes no focus, a tooltip alone would be out of reach
+    expect(why.hidden).toBe(false);
+    expect(screen.getByText('Ein archivierter Typ kann nicht Standardtyp sein.')).toBe(why);
     expect(radio('Task').getAttribute('aria-describedby')).toBeNull();
 
     // the counter-check: a click on it would have sent the archived type as the default; blocked, nothing changes
@@ -773,7 +817,7 @@ describe('Types', () => {
     await user.click(screen.getByRole('button', { name: /Speichern/ }));
 
     expect((await screen.findByRole('alert')).textContent).toBe('Ein archivierter Typ kann nicht Standardtyp sein.');
-    const group = screen.getByRole('radiogroup', { name: 'Standardtyp' });
+    const group = screen.getByRole('group', { name: 'Standardtyp' });
     expect(group.getAttribute('aria-invalid')).toBe('true');
     await waitFor(() => expect(document.activeElement).toBe(group));
 
@@ -826,6 +870,23 @@ describe('Types', () => {
     expect(box('Epic').hasAttribute('data-disabled')).toBe(true);
     expect(radio('Bug')).toHaveProperty('disabled', true);
     expect(screen.queryByRole('button', { name: /Speichern/ })).toBeNull();
+  });
+
+  it('keeps the draft when the types fail to load again in the background', async () => {
+    const user = userEvent.setup();
+    let fail = false;
+    const { client } = renderSettings('types', { 'GET /api/v1/work-item-types': () => (fail ? unavailable() : { body: list([...types, legacy]) }) });
+
+    await screen.findByRole('list', { name: 'Typen der Organisation' });
+    await user.click(box('Epic'));
+    fail = true;
+    await act(() => client.refetchQueries());
+    // the observers hear of the failure a tick later
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+
+    expect(screen.queryByText('Die Typen konnten nicht geladen werden')).toBeNull();
+    expect(box('Epic').getAttribute('aria-checked')).toBe('false');
+    expect(screen.getByText('Nicht gespeicherte Änderungen')).toBeTruthy();
   });
 
   it('says when the types could not be loaded and loads them again on request', async () => {

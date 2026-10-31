@@ -1,8 +1,9 @@
 /*
  * The settings of a project (spec 5.2) in the shared settings frame: General, Members, Workflow and Types, one address
- * each (`/projects/{identifier}/settings/{section?}`, General without a section; Automations join with Phase 10). Project admins and org admins change them; everybody else reads, with the reason from `usePermissions`
- * (spec 4.3). The server answers an old identifier with a 301; a rename made here (or elsewhere, while the page is open)
- * moves the address to the identifier the project has now.
+ * each (`/projects/{identifier}/settings/{section?}`, General without a section; Automations join with Phase 10).
+ * Project admins and org admins change them; everybody else reads, with the reason from `usePermissions` (spec 4.3).
+ * The server answers an old identifier with a 301; a rename made here (or elsewhere, while the page is open) moves the
+ * address to the identifier the project has now.
  */
 
 import { Link, router, usePage } from '@inertiajs/react';

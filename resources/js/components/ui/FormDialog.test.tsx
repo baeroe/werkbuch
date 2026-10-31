@@ -242,7 +242,13 @@ describe('FormDialog', () => {
     );
     await screen.findByRole('dialog', { name: 'Workflow wechseln' });
 
-    expect(screen.getByRole('button', { name: 'Abbrechen' })).toHaveProperty('disabled', true);
+    const cancel = screen.getByRole('button', { name: 'Abbrechen' });
+    expect(cancel.getAttribute('aria-disabled')).toBe('true');
+    // blocked, not disabled: the focus stays on it and a click closes nothing
+    cancel.focus();
+    await user.click(cancel);
+    expect(document.activeElement).toBe(cancel);
+    expect(cancel.getAttribute('aria-describedby')).toBeTruthy();
     await user.keyboard('{Escape}');
     await user.click(screen.getByRole('button', { name: 'Schließen' }));
     expect(onOpenChange).not.toHaveBeenCalled();
@@ -254,7 +260,7 @@ describe('FormDialog', () => {
         <p>Text</p>
       </FormDialog>,
     );
-    expect(screen.getByRole('button', { name: 'Abbrechen' })).toHaveProperty('disabled', false);
+    expect(screen.getByRole('button', { name: 'Abbrechen' }).getAttribute('aria-disabled')).toBeNull();
     await user.keyboard('{Escape}');
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });

@@ -13,13 +13,14 @@ use App\Support\CatalogInput;
 use App\Support\CatalogLock;
 use Illuminate\Support\Facades\DB;
 use Lorisleiva\Actions\Concerns\AsAction;
+use RuntimeException;
 
 /**
  * Binds the projects of Phase 2 to the catalog: a project without a workflow gets the default workflow, one without
- * switched-on types every active type (P10), one without a default type the first switched-on one. Runs from the
- * migration that makes both columns required, before it does; also projects being deleted count (their row stays until
- * the purge). Idempotent: a project that has all three keeps them. Every project it changes is one `project.updated` of
- * the default bot with what changed.
+ * switched-on types every active type (P10), one without a default type the first switched-on one that is active (none
+ * is a `RuntimeException`). Runs from the migration that makes both columns required, before it does; also projects
+ * being deleted count (their row stays until the purge). Idempotent: a project that has all three keeps them. Every
+ * project it changes is one `project.updated` of the default bot with what changed.
  */
 final class LinkProjectsToCatalog
 {
@@ -32,7 +33,7 @@ final class LinkProjectsToCatalog
 
             $actor = Actor::system(User::defaultBot(), 'setup');
             $workflow = Workflow::default()->id;
-            $active = WorkItemType::query()->whereNull('archived_at')->orderBy('id')->pluck('id')->all();
+            $active = WorkItemType::activeIds();
 
             foreach (Project::query()->with('types:work_item_types.id')->orderBy('id')->get() as $project) {
                 $before = [
@@ -44,7 +45,7 @@ final class LinkProjectsToCatalog
                 $changes = CatalogInput::changes($before, [
                     'workflow_id' => $project->workflow_id ?? $workflow,
                     'enabled_type_ids' => $types,
-                    'default_type_id' => $project->default_type_id ?? $types[0],
+                    'default_type_id' => $project->default_type_id ?? self::defaultType($project, $types, $active),
                 ]);
 
                 if ($changes === []) {
@@ -59,5 +60,27 @@ final class LinkProjectsToCatalog
                 EventRecorder::record(EventType::ProjectUpdated, $actor, $project, $project, $changes);
             }
         });
+    }
+
+    /**
+     * The first switched-on type that is active: new items need a default type that takes them (P11).
+     *
+     * @param  array<int, int|string>  $types  the switched-on types, in catalog order
+     * @param  list<string>  $active  the active types of the catalog, in catalog order
+     *
+     * @throws RuntimeException when there is none: the migration cannot make the column required then
+     */
+    private static function defaultType(Project $project, array $types, array $active): string
+    {
+        foreach ($types as $type) {
+            if (in_array((string) $type, $active, true)) {
+                return (string) $type;
+            }
+        }
+
+        throw new RuntimeException(
+            "Project {$project->identifier} needs a default type, but none of its types is active (without types of its "
+            .'own it takes every active type of the catalog). Restore or create an active work item type, then migrate again.',
+        );
     }
 }

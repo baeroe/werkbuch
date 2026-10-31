@@ -6,7 +6,7 @@
 
 import { Link } from '@inertiajs/react';
 import { ArrowRightLeft } from 'lucide-react';
-import { useMemo, useRef, useState, type RefObject } from 'react';
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { ApiError } from '@/api/client';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
@@ -72,6 +72,11 @@ export function Workflow({ project, canManage }: ProjectSectionProps) {
   // the workflow the question is about, fixed when it opens, so it does not change under the person while the call runs
   const [asking, setAsking] = useState<WorkflowRecord | null>(null);
   const [open, setOpen] = useState(false);
+  // what `confirm` sees when it ends, also for a call started before the dialog closed
+  const dialogOpen = useRef(open);
+  useEffect(() => {
+    dialogOpen.current = open;
+  }, [open]);
   const [refusal, setRefusal] = useState<unknown>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -84,7 +89,8 @@ export function Workflow({ project, canManage }: ProjectSectionProps) {
   const next = others.find((workflow) => workflow.id === target);
 
   if (workflows.isPending) return <SettingsSkeleton rows={2} label={t('settings.project.workflow.loading')} />;
-  if (workflows.isError || !current) {
+  // only without data: a failed refetch in the background keeps the choice
+  if (workflows.data === undefined || !current) {
     return (
       <SettingsError title={t('settings.project.workflow.load_failed')} error={workflows.error} retrying={workflows.isFetching} onRetry={() => void workflows.refetch()} />
     );
@@ -107,7 +113,8 @@ export function Workflow({ project, canManage }: ProjectSectionProps) {
       await assign.mutateAsync({ project_id: project.id, workflow_id: to.id, mapping: {} });
     } catch (error) {
       // a refusal of the server stays in the dialog; a failure (or no answer) gets the toast with "Try again"
-      if (error instanceof ApiError && error.status === 422) setRefusal(error);
+      // a refusal of a retry from the toast, with the dialog closed meanwhile, would land in no visible place
+      if (error instanceof ApiError && error.status === 422 && dialogOpen.current) setRefusal(error);
       else notifyError(t('settings.project.workflow.not_switched'), error, () => void confirm(to));
       return;
     }

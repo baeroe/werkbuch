@@ -96,13 +96,13 @@ final class RaceConnections
 
     /**
      * The outcome is the QueryException of a lock that did not come: `select * from <table> … for update`, or, for a
-     * statement of another shape, one that starts with `$sqlStart` and ends on `for update`.
+     * statement of another shape, one that starts with `$sqlStart`, names `<table>` and ends on `for update`.
      */
     public static function expectLockWait(mixed $outcome, string $table, ?string $sqlStart = null): void
     {
         expect($outcome)->toBeInstanceOf(QueryException::class);
         assert($outcome instanceof QueryException);
         expect($outcome->getMessage())->toContain('Lock wait timeout')
-            ->and($outcome->getSql())->toStartWith($sqlStart ?? "select * from `{$table}`")->toEndWith('for update');
+            ->and($outcome->getSql())->toStartWith($sqlStart ?? "select * from `{$table}`")->toContain("`{$table}`")->toEndWith('for update');
     }
 }

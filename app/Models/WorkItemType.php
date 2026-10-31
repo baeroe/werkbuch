@@ -31,6 +31,17 @@ final class WorkItemType extends Model
     use HasFactory, HasUlids;
 
     /**
+     * The ids of the active types in catalog order (by ULID): what a project gets without a choice (P10).
+     *
+     * @return list<string>
+     */
+    public static function activeIds(): array
+    {
+        /** @var list<string> */
+        return self::query()->whereNull('archived_at')->orderBy('id')->pluck('id')->all();
+    }
+
+    /**
      * @return HasMany<TypeProperty, $this>
      */
     public function typeProperties(): HasMany

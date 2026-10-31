@@ -59,11 +59,14 @@ function renderScreen(overrides: Record<string, MockRoute> = {}, { create = fals
   const fetching = globalThis.fetch;
   if (hold) globalThis.fetch = (input, init) => (String(input).includes(hold) ? new Promise<Response>(() => {}) : fetching(input, init));
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <QueryClientProvider client={client}>
-      <ProjectsScreen create={create} />
-    </QueryClientProvider>,
-  );
+  return {
+    client,
+    ...render(
+      <QueryClientProvider client={client}>
+        <ProjectsScreen create={create} />
+      </QueryClientProvider>,
+    ),
+  };
 }
 
 const toastTitles = () => currentToasts().map((entry) => entry.title);
@@ -441,6 +444,8 @@ describe('CreateProjectDialog', () => {
     const task = within(dialog).getByRole('checkbox', { name: 'Task' });
     await waitFor(() => expect(task.getAttribute('aria-invalid')).toBe('true'));
     await waitFor(() => expect(document.activeElement).toBe(task));
+    // the box with the focus names the error, not only the live region
+    expect(document.getElementById(task.getAttribute('aria-describedby')!)!.textContent).toBe('Mindestens ein Typ muss aktiviert sein.');
     expect(lastCall('POST', '/api/v1/projects')!.body).toMatchObject({ enabled_type_ids: [] });
     expect(lastCall('POST', '/api/v1/projects')!.body).not.toHaveProperty('default_type_id');
     expect(within(dialog).queryByRole('alert')).toBeNull();
@@ -449,6 +454,27 @@ describe('CreateProjectDialog', () => {
     await user.click(task);
     expect(task.getAttribute('aria-invalid')).toBeNull();
     expect(within(dialog).getByText('Standardtyp ist Task, der oberste angehakte.')).toBeTruthy();
+  });
+
+  it('keeps the form and what is typed in it when the catalogs fail to load again in the background', async () => {
+    const user = userEvent.setup();
+    let fail = false;
+    const { client } = renderScreen({
+      'GET /api/v1/workflows': () => (fail ? unavailable() : { body: list([agency, standard]) }),
+      'GET /api/v1/work-item-types': () => (fail ? unavailable() : { body: list([...types, archivedType]) }),
+    });
+    await screen.findByText('Kunden-App');
+    await user.click(screen.getByRole('button', { name: 'Neues Projekt' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Neues Projekt' });
+    await user.type(await within(dialog).findByRole('textbox', { name: 'Name' }), 'Halb fertig');
+
+    fail = true;
+    await act(() => client.refetchQueries());
+    // the observers hear of the failure a tick later
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+
+    expect(within(dialog).queryByRole('alert')).toBeNull();
+    expect((within(dialog).getByRole('textbox', { name: 'Name' }) as HTMLInputElement).value).toBe('Halb fertig');
   });
 
   it('says when the workflows or the types could not be loaded, and loads them again on request', async () => {

@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Schema;
 
 // The catalogs of the organization (spec 4.5 to 4.8). `workflows.initial_state_id` has no foreign key (P13), and
 // `projects.workflow_id` and `default_type_id` get theirs with the shipped catalog (Task 8).
-// Names and keys are unique through the collation (utf8mb4_unicode_ci), so without regard to case.
+// Names and keys are unique through the collation (utf8mb4_unicode_ci), so without regard to case and accents.
 return new class extends Migration
 {
     public function up(): void

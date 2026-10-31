@@ -11,6 +11,8 @@ use Spatie\Permission\Models\Role;
 
 /**
  * The roles in the database with the names of their rights, sorted.
+ *
+ * @return array<string, list<string>>
  */
 $storedRoles = function (): array {
     return Role::with('permissions')->get()
@@ -20,6 +22,8 @@ $storedRoles = function (): array {
 
 /**
  * The roles as Grants defines them, in the same shape.
+ *
+ * @return array<string, list<string>>
  */
 $grantedRoles = function (): array {
     return collect([...OrgRole::cases(), ...ProjectRole::cases()])

@@ -346,7 +346,8 @@ it('refuses to delete a workflow a project uses, naming the projects', function 
 
     $this->actingAs(User::factory()->admin()->create())->deleteJson("/api/v1/workflows/{$workflow->id}")
         ->assertConflict()->assertJsonPath('reason', 'in_use')->assertJsonPath('projects', ['WEB', 'OPS', 'APP'])
-        ->assertJsonPath('detail', __('problem.detail.workflow_in_use', ['projects' => 'WEB, OPS, APP']));
+        // nobody sees a project being deleted any more: the sentence says why it still counts
+        ->assertJsonPath('detail', __('problem.detail.workflow_in_use', ['projects' => 'WEB, OPS, APP (being deleted)']));
 
     expect(Workflow::query()->whereKey($workflow->id)->exists())->toBeTrue()
         ->and(eventsOf(EventType::WorkflowDeleted))->toBeEmpty();

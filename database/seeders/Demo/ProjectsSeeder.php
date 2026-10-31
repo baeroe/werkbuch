@@ -15,8 +15,8 @@ use Illuminate\Database\Seeder;
 /**
  * The three projects of the clickdummy with their members (src/api/seed/people.ts, the table „Demo-Rollen“ of its
  * README). Ida and Theo are not in OPS, which is private: the visibility tests rely on that. WEB and OPS work with the
- * default workflow and Task, Bug and Epic; APP with „Agentur-Freigabe“ and additionally „Kundenwunsch“. Task is the
- * default type of all three. Needs the CatalogSeeder before it.
+ * default workflow (whichever it is, never one found by name) and Task, Bug and Epic; APP with „Agentur-Freigabe“ and
+ * additionally „Kundenwunsch“. Task is the default type of all three. Needs the CatalogSeeder before it.
  */
 class ProjectsSeeder extends Seeder
 {
@@ -30,7 +30,7 @@ class ProjectsSeeder extends Seeder
                 'description' => 'Neuer Webauftritt: Struktur, Gestaltung, Technik und der Umzug auf den neuen Server.',
                 'lead' => 'ida',
                 'visibility' => ProjectVisibility::Public,
-                'workflow' => 'Standard',
+                'workflow' => null, // the default workflow
                 'types' => ['Task', 'Bug', 'Epic'],
                 'members' => ['mara' => ProjectRole::Admin, 'ida' => ProjectRole::Admin, 'jonas' => ProjectRole::Member, 'lene' => ProjectRole::Member, 'kira' => ProjectRole::Member, 'theo' => ProjectRole::Viewer],
             ],
@@ -48,7 +48,7 @@ class ProjectsSeeder extends Seeder
                 'description' => 'Server, Betrieb und Backups. Nur für das Technik-Team.',
                 'lead' => 'jonas',
                 'visibility' => ProjectVisibility::Private,
-                'workflow' => 'Standard',
+                'workflow' => null, // the default workflow
                 'types' => ['Task', 'Bug', 'Epic'],
                 'members' => ['jonas' => ProjectRole::Admin, 'mara' => ProjectRole::Member, 'kira' => ProjectRole::Member],
             ],
@@ -64,7 +64,7 @@ class ProjectsSeeder extends Seeder
                 'description' => $data['description'],
                 'lead_id' => $account($data['lead'])->id,
                 'visibility' => $data['visibility'],
-                'workflow_id' => $workflows[$data['workflow']],
+                'workflow_id' => $data['workflow'] === null ? Workflow::default()->id : $workflows[$data['workflow']],
                 'default_type_id' => $types['Task'],
             ]);
             $project->types()->sync(array_map(fn (string $name): string => $types[$name], $data['types']));

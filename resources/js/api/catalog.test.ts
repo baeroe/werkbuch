@@ -57,6 +57,8 @@ describe('catalog saves', () => {
     });
 
     expect((await saveLabel({ name: 'Neu', color: 'sky' })).id).toBe('lb_new');
+    // an empty id is no id: a new entry, never a PUT to the collection
+    expect((await saveLabel({ id: '', name: 'Leer', color: 'sky' })).id).toBe('lb_new');
     expect((await saveLabel({ id: 'lb_ux', name: 'Bedienung', color: 'sky' })).name).toBe('Bedienung');
     expect((await saveRelationType({ name: 'ersetzt', outward_label: 'ersetzt', inward_label: null, built_in: null })).id).toBe('rt_new');
     expect((await saveRelationType({ id: 'rt_tests', name: 'prüft', outward_label: 'prüft', inward_label: 'wird geprüft von', built_in: null })).name).toBe('prüft');
@@ -64,6 +66,7 @@ describe('catalog saves', () => {
     expect((await saveResolution({ id: 'res_duplicate', label: 'Doppelt', default_for: null, position: 2, archived_at: null })).label).toBe('Doppelt');
     expect(api.calls.map(({ method, url, body }) => [method, url, body])).toEqual([
       ['POST', '/api/v1/labels', { name: 'Neu', color: 'sky' }],
+      ['POST', '/api/v1/labels', { name: 'Leer', color: 'sky' }],
       ['PUT', '/api/v1/labels/lb_ux', { name: 'Bedienung', color: 'sky' }],
       ['POST', '/api/v1/relation-types', { name: 'ersetzt', outward_label: 'ersetzt', inward_label: null, built_in: null }],
       ['PUT', '/api/v1/relation-types/rt_tests', { name: 'prüft', outward_label: 'prüft', inward_label: 'wird geprüft von', built_in: null }],

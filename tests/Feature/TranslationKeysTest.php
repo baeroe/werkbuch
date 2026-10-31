@@ -19,3 +19,11 @@ it('defines every key used in code', function () {
     expect($json->diff(langKeys('en'))->values()->all())->toBe([])
         ->and($groups->filter(fn (string $key) => trans($key, [], 'en') === $key || trans($key, [], 'de') === $key)->values()->all())->toBe([]);
 });
+
+it('finds the texts of the shipped catalog, which the migration names in the language of the organization', function () {
+    // a typo there would ship the raw key as a workflow name, and only in that language
+    $builtIn = collect(langKeys('en'))->filter(fn (string $key) => str_starts_with($key, 'catalog.builtin.'))->values();
+
+    expect($builtIn)->toHaveCount(15)
+        ->and($builtIn->diff(usedTranslationKeys())->values()->all())->toBe([]);
+});

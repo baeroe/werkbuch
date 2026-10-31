@@ -107,7 +107,7 @@ final class DefaultValue
 
         // any letters in host, path and query (müller.de, /straße), but a host, and no blanks or control characters; a
         // text that is no UTF-8 at all fails the match as well
-        if (! is_array($parts) || ($parts['host'] ?? '') === '' || preg_match('/[\s\x00-\x1F\x7F]/u', $url) !== 0) {
+        if (! is_array($parts) || ($parts['host'] ?? '') === '' || preg_match('/[\s\p{Z}\p{Cc}]/u', $url) !== 0) {
             return new NormalizedValue(null, 'url_invalid');
         }
 

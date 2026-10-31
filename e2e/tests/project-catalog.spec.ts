@@ -136,12 +136,19 @@ test('assigns a workflow with restricted transitions to a project', async ({ pag
     await expect(page.getByText(`${tr('en', 'settings.project.workflow.transitions_matrix.other', { count: states * (states - 1) - 1 })} `, { exact: false })).toBeVisible();
     expect((await readProject(page, project.identifier)).workflow_id).toBe(stored.id);
   } finally {
-    // the workflow can only go once no project uses it, the project in deletion included
-    const standard = (await allEntries(page, 'workflows')).find((workflow) => workflow.is_default === true)!;
-    const back = await api(page, 'PUT', `/api/v1/projects/${project.identifier}/workflow`, { workflow_id: standard.id, mapping: {} });
-    expect(back.status(), await back.text()).toBe(200);
-    await removeProject(page, project.identifier);
-    await removeCatalogEntries(page, 'workflows', 'name', prefix());
+    // the workflow can only go once no project uses it, the project in deletion included; every step runs, the
+    // E2eSeeder removes what is left on the next run
+    try {
+      const standard = (await allEntries(page, 'workflows')).find((workflow) => workflow.is_default === true)!;
+      const back = await api(page, 'PUT', `/api/v1/projects/${project.identifier}/workflow`, { workflow_id: standard.id, mapping: {} });
+      expect(back.status(), await back.text()).toBe(200);
+    } finally {
+      try {
+        await removeProject(page, project.identifier);
+      } finally {
+        await removeCatalogEntries(page, 'workflows', 'name', prefix());
+      }
+    }
   }
 });
 
@@ -168,7 +175,9 @@ test('switches a type on and makes it the default', async ({ page }) => {
 
     await expect(page.getByText(tr('en', 'settings.project.types.saved'), { exact: true })).toBeVisible();
     const saved = await readProject(page, project.identifier);
-    expect(saved.enabled_type_ids).toEqual([types.Task, types.Bug]);
+    // by inclusion, like every list in these specs: the project has exactly these two, the others stay off
+    expect(saved.enabled_type_ids).toEqual(expect.arrayContaining([types.Task, types.Bug]));
+    expect(saved.enabled_type_ids).toHaveLength(2);
     expect(saved.default_type_id).toBe(types.Bug);
   } finally {
     await removeProject(page, project.identifier);

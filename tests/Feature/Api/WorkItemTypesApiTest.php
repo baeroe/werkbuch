@@ -158,7 +158,8 @@ it('refuses to archive or delete the default type of a project, naming the proje
     Project::factory()->identifier('WEB')->create(['name' => 'Auftritt', 'default_type_id' => $task->id]);
     Project::factory()->identifier('OPS')->archived()->create(['name' => 'Betrieb', 'default_type_id' => $task->id]);
     Project::factory()->identifier('APP')->create(['name' => 'Zentrale', 'default_type_id' => $task->id, 'deleting_at' => now()]);
-    $detail = __('problem.detail.default_type', ['projects' => 'WEB, OPS, APP']);
+    // nobody sees a project being deleted any more: the sentence says why it still counts
+    $detail = __('problem.detail.default_type', ['projects' => 'WEB, OPS, APP (being deleted)']);
 
     $this->putJson("/api/v1/work-item-types/{$task->id}", [...$answerOf($task), 'archived_at' => '2026-10-31'])->assertConflict()
         ->assertJsonPath('reason', 'default_type')->assertJsonPath('projects', ['WEB', 'OPS', 'APP'])->assertJsonPath('detail', $detail);

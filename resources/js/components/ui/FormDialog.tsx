@@ -74,7 +74,8 @@ export function FormDialog({ open, onOpenChange, title, description, size = 'md'
         <>
           <DialogClose
             render={
-              <Button variant="ghost" disabled={locked}>
+              // blocked but focusable: a native `disabled` would drop the focus of a focused button to <body>
+              <Button variant="ghost" disabledReason={locked ? t('ui.form_dialog.locked') : null}>
                 {t('common.cancel')}
               </Button>
             }

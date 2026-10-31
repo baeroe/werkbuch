@@ -220,13 +220,52 @@ it('seeds the catalog again without duplicates', function () {
     $this->seed(DemoSeeder::class);
     $counts = fn () => [Workflow::count(), WorkItemType::count(), Property::count(), Label::count(), RelationType::count(), DB::table('workflow_states')->count(), DB::table('workflow_transitions')->count(), DB::table('property_options')->count(), DB::table('type_properties')->count(), DB::table('project_types')->count()];
     $ids = fn () => [Workflow::orderBy('name')->pluck('id')->all(), WorkItemType::orderBy('name')->pluck('id')->all(), Property::orderBy('key')->pluck('id')->all(), DB::table('property_options')->orderBy('id')->pluck('id')->all(), DB::table('workflow_states')->orderBy('id')->pluck('id')->all()];
-    [$before, $idsBefore, $events] = [$counts(), $ids(), Event::count()];
+    $workflows = fn () => DB::table('workflows')->orderBy('id')->get(['id', 'description', 'is_default', 'is_free', 'initial_state_id', 'updated_at'])->all();
+    [$before, $idsBefore, $events, $workflowsBefore] = [$counts(), $ids(), Event::count(), $workflows()];
+    $this->travel(5)->minutes();
 
     $this->seed(DemoSeeder::class);
 
     expect($counts())->toBe($before)->and($before)->toBe([2, 4, 9, 8, 4, 13, 14, 9, 13, 10])
         ->and($ids())->toBe($idsBefore)
+        ->and($workflows())->toEqual($workflowsBefore)
         ->and(Event::count())->toBe($events);
+});
+
+it('restores archived demo types and options when it seeds again', function () {
+    $this->seed(DemoSeeder::class);
+    $wish = WorkItemType::query()->where('name', 'Kundenwunsch')->sole();
+    $wish->update(['archived_at' => now()]);
+    Property::query()->where('key', 'customer')->sole()->options()->update(['archived_at' => now()]);
+
+    $this->seed(DemoSeeder::class);
+
+    expect($wish->fresh()?->archived_at)->toBeNull()
+        ->and(Property::query()->where('key', 'customer')->sole()->options->pluck('archived_at')->filter()->all())->toBe([]);
+});
+
+it('keeps the default workflow where an admin put it when it seeds again', function () {
+    $this->seed(DemoSeeder::class);
+    $agency = Workflow::query()->where('name', 'Agentur-Freigabe')->sole();
+    Workflow::query()->update(['is_default' => false]);
+    $agency->update(['is_default' => true]);
+
+    $this->seed(DemoSeeder::class);
+
+    expect(Workflow::default()->id)->toBe($agency->id)
+        ->and(Workflow::query()->where('is_default', true)->count())->toBe(1);
+});
+
+it('creates no empty „Standard“ when the shipped workflow was renamed, and gives WEB and OPS the default workflow', function () {
+    $this->seed(DemoSeeder::class);
+    $shipped = Workflow::default();
+    $shipped->update(['name' => 'Kanban']);
+
+    $this->seed(DemoSeeder::class);
+
+    expect(Workflow::query()->where('name', 'Standard')->exists())->toBeFalse()
+        ->and(Workflow::query()->count())->toBe(2)
+        ->and(Project::query()->whereIn('identifier', ['WEB', 'OPS'])->pluck('workflow_id')->unique()->all())->toBe([$shipped->id]);
 });
 
 it('seeds the project favorites with the positions of the clickdummy', function () {

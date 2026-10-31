@@ -153,6 +153,23 @@ it('adds a missing built-in relation type only', function () {
         ->and(Event::query()->count())->toBe($events + 1);
 });
 
+it('makes a custom relation type with the name of a missing built-in one the built-in one', function () {
+    RelationType::query()->where('built_in', 'blocks')->delete();
+    $custom = RelationType::query()->create(['name' => 'blocks', 'outward_label' => 'hält auf', 'inward_label' => 'wird aufgehalten von']);
+    $events = Event::query()->count();
+
+    EnsureCatalog::run();
+
+    $event = eventsOf(EventType::RelationTypeUpdated, $custom)->sole();
+
+    expect(RelationType::query()->count())->toBe(3)
+        ->and(RelationType::query()->where('built_in', 'blocks')->sole()->id)->toBe($custom->id)
+        ->and($custom->fresh()?->outward_label)->toBe('hält auf')
+        ->and(Event::query()->count())->toBe($events + 1)
+        ->and([$event->actor_id, $event->meta, $event->changes])
+        ->toBe([User::defaultBot()->id, ['via' => 'system', 'reason' => 'setup'], ['built_in' => ['old' => null, 'new' => 'blocks']]]);
+});
+
 it('takes the effort property it finds instead of a second one', function () {
     $effort = Property::query()->sole();
     $effort->update(['label' => 'Stunden']);

@@ -147,7 +147,7 @@ describe('issues', function () {
 });
 
 describe('categories', function () {
-    it('is closed for completed and canceled only', function () {
+    it('is true for completed and canceled only', function () {
         expect(array_map(fn (StateCategory $category) => $category->isClosed(), StateCategory::ORDER))
             ->toBe([false, false, false, true, true]);
     });

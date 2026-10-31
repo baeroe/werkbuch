@@ -81,6 +81,7 @@ final class AccountInput
             'owner_id.prohibited' => __('field.owner_id.people'),
             'owner_id.required' => __('field.owner_id.invalid'),
             'owner_id.string' => __('field.owner_id.invalid'),
+            'owner_id.ulid' => __('field.owner_id.invalid'),
             'owner_id.exists' => __('field.owner_id.invalid'),
         ];
     }

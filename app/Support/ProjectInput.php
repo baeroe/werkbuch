@@ -8,6 +8,8 @@ use App\Enums\ProjectVisibility;
 use App\Models\Project;
 use App\Models\WorkItemType;
 use Closure;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Exists;
 use Illuminate\Validation\ValidationException;
@@ -100,7 +102,7 @@ final class ProjectInput
      */
     public static function workflow(): array
     {
-        return ['bail', 'required', 'string', Rule::exists('workflows', 'id')];
+        return ['bail', 'required', 'string', 'ulid', Rule::exists('workflows', 'id')];
     }
 
     /**
@@ -114,7 +116,8 @@ final class ProjectInput
         return [
             'bail', 'required', 'array', 'list',
             function (string $attribute, array $value, Closure $fail): void {
-                if (array_filter($value, fn (mixed $id) => ! is_string($id)) !== []) {
+                // a canonical ULID only: the collation would let a look-alike (fullwidth digits, accents) pass `whereKey`
+                if (array_filter($value, fn (mixed $id) => ! Str::isUlid($id)) !== []) {
                     $fail(__('field.enabled_type_ids.unknown'));
                 } elseif (count(array_unique($value)) !== count($value)) {
                     $fail(__('field.enabled_type_ids.duplicate'));
@@ -159,7 +162,27 @@ final class ProjectInput
             throw ValidationException::withMessages(['default_type_id' => __('field.default_type_id.archived')]);
         }
 
-        return [$ids, $default];
+        // the key of the row read, never the input: the collation matches look-alikes the strict comparisons miss
+        return [$ids, $type->id];
+    }
+
+    /**
+     * The identifiers of the projects a query finds, by name, and how the sentence of a 409 lists them: a project being
+     * deleted says so, because nobody sees it any more while its row holds on to the catalog until the purge.
+     *
+     * @param  Builder<Project>  $query
+     * @return array{0: list<string>, 1: string}
+     */
+    public static function holding(Builder $query): array
+    {
+        $projects = $query->orderBy('name')->orderBy('id')->get(['identifier', 'deleting_at']);
+
+        return [
+            array_values($projects->map(fn (Project $project) => $project->identifier)->all()),
+            $projects->map(fn (Project $project) => $project->deleting_at === null
+                ? $project->identifier
+                : __('problem.detail.project_deleting', ['identifier' => $project->identifier]))->implode(', '),
+        ];
     }
 
     /**
@@ -182,15 +205,18 @@ final class ProjectInput
             'visibility.enum' => __('field.visibility.unknown'),
             'lead_id.required' => __('field.lead.invalid'),
             'lead_id.string' => __('field.lead.invalid'),
+            'lead_id.ulid' => __('field.lead.invalid'),
             'lead_id.exists' => __('field.lead.invalid'),
             'workflow_id.required' => __('field.required'),
             'workflow_id.string' => __('field.workflow_id.unknown'),
+            'workflow_id.ulid' => __('field.workflow_id.unknown'),
             'workflow_id.exists' => __('field.workflow_id.unknown'),
             'enabled_type_ids.required' => __('field.enabled_type_ids.required'),
             'enabled_type_ids.array' => __('field.enabled_type_ids.unknown'),
             'enabled_type_ids.list' => __('field.enabled_type_ids.unknown'),
             'default_type_id.required' => __('field.default_type_id.enabled'),
             'default_type_id.string' => __('field.default_type_id.enabled'),
+            'default_type_id.ulid' => __('field.default_type_id.enabled'),
             'mapping.array' => __('field.state_mapping.invalid'),
         ];
     }

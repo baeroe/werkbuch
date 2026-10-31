@@ -78,7 +78,9 @@ it('removes the catalog entries of earlier runs and keeps the demo ones', functi
     $property = Property::factory()->create(['label' => 'E2E desktop-light ABCDE']);
     $type = WorkItemType::factory()->create(['name' => 'E2E desktop-light ABCDE']);
     $type->typeProperties()->create(['property_id' => $property->id, 'required' => true, 'position' => 0]);
-    Project::where('identifier', 'WEB')->sole()->types()->attach($type->id);
+    // switched on in a project nobody seeds (the demo seeder sets the types of WEB, APP and OPS anew before); the
+    // factory switches every active type on, the E2E one too
+    $keep = Project::factory()->identifier('KEEP')->create(['name' => 'Behalten']);
     Workflow::factory()->create(['name' => 'E2E desktop-light ABCDE']);
     Label::factory()->create(['name' => 'E2E desktop-light ABCDE']);
     RelationType::factory()->create(['name' => 'E2E desktop-light ABCDE']);
@@ -86,7 +88,8 @@ it('removes the catalog entries of earlier runs and keeps the demo ones', functi
     $kept = Label::factory()->create(['name' => 'Not E2E 1']);
     $counts = fn () => [WorkItemType::count(), Property::count(), Workflow::count(), Label::count(), RelationType::count(), Resolution::count()];
 
-    expect($counts())->toBe([5, 10, 3, 10, 5, 5]);
+    expect($counts())->toBe([5, 10, 3, 10, 5, 5])
+        ->and($keep->types()->pluck('work_item_types.id')->all())->toContain($type->id);
 
     $this->seed(E2eSeeder::class);
 
@@ -101,6 +104,7 @@ it('removes the catalog entries of earlier runs and keeps the demo ones', functi
         ->and(WorkItemType::orderBy('id')->pluck('name')->all())->toBe(['Task', 'Bug', 'Epic', 'Kundenwunsch'])
         ->and(Label::where('name', 'UX')->exists())->toBeTrue()
         ->and(Label::whereKey($kept->id)->exists())->toBeTrue()
+        ->and($keep->types()->pluck('work_item_types.id')->all())->not->toContain($type->id)
         ->and(eventsOf(EventType::WorkItemTypeDeleted))->toHaveCount(1)
         ->and(eventsOf(EventType::LabelDeleted))->toHaveCount(1);
 });

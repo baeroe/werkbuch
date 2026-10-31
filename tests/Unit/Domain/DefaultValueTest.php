@@ -34,6 +34,9 @@ it('normalizes a default value', function (FieldType $type, int $decimals, bool 
     'url with an umlaut in the path' => [FieldType::Url, 0, false, 'https://example.com/straße', 'https://example.com/straße'],
     'url of a wiki page' => [FieldType::Url, 0, false, 'https://de.wikipedia.org/wiki/Straße', 'https://de.wikipedia.org/wiki/Straße'],
     'url with an umlaut in the query' => [FieldType::Url, 0, false, 'https://example.com/a?q=ä', 'https://example.com/a?q=ä'],
+    // looser than FILTER_VALIDATE_URL on purpose (A84): the host is not checked any further
+    'url with an underscore as host' => [FieldType::Url, 0, false, 'http://_', 'http://_'],
+    'url with an empty label in the host' => [FieldType::Url, 0, false, 'https://a..b', 'https://a..b'],
 ]);
 
 it('rejects a default value that does not fit', function (FieldType $type, bool $multiple, mixed $value, string $error) {
@@ -72,6 +75,9 @@ it('rejects a default value that does not fit', function (FieldType $type, bool 
     'url with a tab inside' => [FieldType::Url, false, "https://example.com/a\tb", 'url_invalid'],
     'url with a line break inside' => [FieldType::Url, false, "https://example.com/a\nb", 'url_invalid'],
     'url with a control character' => [FieldType::Url, false, "https://example.com/\x07", 'url_invalid'],
+    'url with a no-break space inside' => [FieldType::Url, false, "https://example.com/a\u{00A0}b", 'url_invalid'],
+    'url with an em space at the end' => [FieldType::Url, false, "https://example.com/a\u{2003}", 'url_invalid'],
+    'url with a C1 control character' => [FieldType::Url, false, "https://example.com/\u{0085}", 'url_invalid'],
     'url with a blank in the host' => [FieldType::Url, false, 'https://exa mple.com', 'url_invalid'],
     'url that is no UTF-8' => [FieldType::Url, false, "https://example.com/\xC3", 'url_invalid'],
     'member has no default' => [FieldType::Member, true, ['u_1'], 'none'],

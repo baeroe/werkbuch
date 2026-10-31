@@ -4,7 +4,7 @@
  * The catalogs (workflows, types, properties, labels, relation types, resolutions) are those of the clickdummy's seed.
  */
 
-import type { Label, Organization, Project, Property, ProjectRole, RelationType, Resolution, User, Workflow, WorkItemType } from '@/types';
+import type { Label, Organization, Project, ProjectRole, Property, RelationType, Resolution, User, Workflow, WorkItemType } from '@/types';
 
 export const organization: Organization = {
   id: 'org_feldwerk',

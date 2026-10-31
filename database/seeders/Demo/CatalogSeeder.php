@@ -22,7 +22,8 @@ use Illuminate\Database\Seeder;
  * The catalog of the clickdummy (src/api/seed/config.ts, src/domain/fixtures.ts): the German texts of the shipped
  * entries, the workflow „Agentur-Freigabe“, the properties, the type „Kundenwunsch“, the labels and the relation type
  * „testet“. Every entry is found by a stable key (workflow, type and label name, property key, `built_in` or name of a
- * relation type), so running it again changes nothing. It writes the rows directly, like the other demo seeders: the
+ * relation type), so running it again changes nothing. It never moves the mark of the default workflow and never
+ * creates „Standard“ (the migration does). It writes the rows directly, like the other demo seeders: the
  * demo data come without events. The shipped resolutions already are the ones of the clickdummy.
  */
 class CatalogSeeder extends Seeder
@@ -40,15 +41,18 @@ class CatalogSeeder extends Seeder
 
     private function workflows(): void
     {
-        Workflow::query()->updateOrCreate(['name' => 'Standard'], [
+        // the shipped workflow gets its German text, if it still has its name; it is never created here: the migration
+        // made it with its states, an empty one of that name would be no workflow at all
+        Workflow::query()->where('name', 'Standard')->first()?->update([
             'description' => 'Der Standard-Workflow: Jeder Status ist von überall erreichbar.',
         ]);
 
-        $agency = Workflow::query()->updateOrCreate(['name' => 'Agentur-Freigabe'], [
+        // never the default when it is made, and it keeps the mark if an admin gave it one: one default at all times
+        $agency = Workflow::query()->firstOrNew(['name' => 'Agentur-Freigabe'], ['is_default' => false]);
+        $agency->fill([
             'description' => 'Mit interner Prüfung und Kundenfreigabe vor dem Abschluss.',
-            'is_default' => false,
             'is_free' => false,
-        ]);
+        ])->save();
 
         /** @var array<string, WorkflowState> $states by name */
         $states = [];
@@ -120,7 +124,7 @@ class CatalogSeeder extends Seeder
             foreach ($options as $position => [$optionLabel, $color]) {
                 PropertyOption::query()->updateOrCreate(
                     ['property_id' => $property->id, 'label' => $optionLabel],
-                    ['color' => $color, 'position' => $position],
+                    ['color' => $color, 'position' => $position, 'archived_at' => null],
                 );
             }
 
@@ -153,6 +157,7 @@ class CatalogSeeder extends Seeder
                 'tone' => $tone,
                 'description' => $description,
                 'is_epic' => $isEpic,
+                'archived_at' => null,
             ]);
 
             // the properties it asks for, in this order (the shipped Bug asked for the effort alone)

@@ -14,8 +14,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * The work item types of the organization. `{workItemType}` is bound by ULID (a placeholder of its own: `{project}` has a
- * global binding, and `{type}` would read as one); saving replaces a type as a whole (`PUT`).
+ * The work item types of the organization. `{workItemType}` is bound by ULID (a placeholder named after its model:
+ * `{project}` has a global binding, and `{type}` would collide with the input field `type`, because `$request->type`
+ * reads the input before the route parameter); saving replaces a type as a whole (`PUT`).
  */
 final class WorkItemTypesController extends Controller
 {

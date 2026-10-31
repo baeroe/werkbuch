@@ -79,7 +79,7 @@ class ProjectFactory extends Factory
     private static function activeTypes(): array
     {
         /** @var list<string> $ids */
-        $ids = WorkItemType::query()->whereNull('archived_at')->orderBy('id')->pluck('id')->all();
+        $ids = WorkItemType::activeIds();
 
         return $ids;
     }
