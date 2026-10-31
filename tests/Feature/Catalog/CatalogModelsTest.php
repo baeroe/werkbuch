@@ -50,11 +50,13 @@ it('deletes states and transitions with their workflow', function () {
     $workflow = Workflow::factory()->matrix([[0, 1], [1, 2]])->create();
     $other = Workflow::factory()->matrix([[0, 2]])->create();
 
-    expect(WorkflowState::query()->count())->toBe(6)->and(WorkflowTransition::query()->count())->toBe(3);
+    $both = [$workflow->id, $other->id]; // the shipped workflow has states of its own
+
+    expect(WorkflowState::query()->whereIn('workflow_id', $both)->count())->toBe(6)->and(WorkflowTransition::query()->count())->toBe(3);
 
     $workflow->delete();
 
-    expect(WorkflowState::query()->pluck('workflow_id')->unique()->all())->toBe([$other->id])
+    expect(WorkflowState::query()->whereIn('workflow_id', $both)->pluck('workflow_id')->unique()->all())->toBe([$other->id])
         ->and(WorkflowTransition::query()->pluck('workflow_id')->all())->toBe([$other->id]);
 });
 
@@ -71,7 +73,7 @@ it('deletes the options and the type assignments with a property', function () {
     $property->delete();
 
     expect(DB::table('property_options')->pluck('property_id')->all())->toBe([$keep->id])
-        ->and(TypeProperty::query()->pluck('property_id')->all())->toBe([$keep->id]);
+        ->and(TypeProperty::query()->where('type_id', $type->id)->pluck('property_id')->all())->toBe([$keep->id]);
 });
 
 it('orders the properties of a type by position and the options of a property by position', function () {
@@ -134,6 +136,8 @@ it('refuses a second transition between the same pair and a second built-in type
 ])->throws(UniqueConstraintViolationException::class);
 
 it('allows several relation types and resolutions without a built-in or default marker', function () {
+    RelationType::query()->delete(); // the shipped ones carry the markers
+    Resolution::query()->delete();
     RelationType::factory()->count(2)->create();
     Resolution::factory()->count(2)->create();
     RelationType::factory()->create(['built_in' => 'blocks']);
@@ -184,6 +188,7 @@ it('keeps the settings of a property as an array, empty as well', function () {
 });
 
 it('finds the one default workflow', function () {
+    Workflow::query()->update(['is_default' => false]); // the shipped one is the default
     $default = Workflow::factory()->create(['is_default' => true]);
     Workflow::factory()->create();
 
@@ -191,6 +196,7 @@ it('finds the one default workflow', function () {
 });
 
 it('has no default workflow without the marker', function () {
+    Workflow::query()->update(['is_default' => false]);
     Workflow::factory()->create();
 
     Workflow::default();
@@ -204,6 +210,7 @@ it('knows the workflow of a project', function () {
 });
 
 it('puts the next resolution behind the last one', function () {
+    Resolution::query()->delete();
     $first = Resolution::factory()->create();
     $second = Resolution::factory()->create();
 
