@@ -352,6 +352,18 @@ describe('AssigneePicker', () => {
     await waitFor(() => expect(sent('PATCH', '/api/v1/work-items/wi_web_47')).toEqual([{ assignee_id: 'u_lene' }]));
   });
 
+  it('offers a member from the second page of the members', async () => {
+    const user = userEvent.setup();
+    // more than one page of members: Pixel and Theo come with the cursor
+    renderWith(<AssigneePicker item={web47} />, {
+      'GET /api/v1/projects/p_web/members': (_body, url) =>
+        url.searchParams.get('cursor') === 'm2' ? { body: list(webMembers.slice(2)) } : { body: { data: webMembers.slice(0, 2), links: {}, meta: { next_cursor: 'm2', total: 5 } } },
+    });
+
+    await user.click(await picker(/^Assignee/));
+    await waitFor(async () => expect(await optionTexts()).toEqual(['Mir zuweisen', 'Nicht zugewiesen', 'Ida Brenner', 'Lene Vogt', 'Mara Lindqvist', 'Theo Okafor', 'PixelBot']));
+  });
+
   it('finds people by their handle, offers no "me" for my own item and takes the assignee away', async () => {
     const user = userEvent.setup();
     const mine = { ...web47, assignee_id: 'u_lene' };

@@ -403,6 +403,22 @@ describe('Members', () => {
     expect(rows()[0]!.textContent).toContain('@ida');
   });
 
+  it('lists the members of every page, and offers a lead from the second page', async () => {
+    const user = userEvent.setup();
+    // the list stops after Ida and Theo; Lene, Kira and Mara come with the cursor
+    const paged: MockRoute = (_body, url) =>
+      url.searchParams.get('cursor') === 'c2' ? { body: list(members.slice(2)) } : { body: { data: members.slice(0, 2), links: {}, meta: { next_cursor: 'c2', total: 5 } } };
+    const { unmount } = renderSettings('members', { 'GET /api/v1/projects/p_web/members': paged });
+
+    await screen.findByRole('list', { name: 'Mitglieder von WEB' });
+    expect(rows().map((row) => row.querySelector('p')!.textContent)).toEqual(['Ida BrennerLead', 'KiraBot', 'Lene Vogt', 'Mara LindqvistOrg-Admin', 'Theo Okafor']);
+    unmount();
+
+    renderSettings('general', { 'GET /api/v1/projects/p_web/members': paged });
+    await user.click(await screen.findByRole('combobox', { name: /Lead/ }));
+    expect(await screen.findByRole('option', { name: 'Lene Vogt' })).toBeTruthy();
+  });
+
   it('marks the default bot', async () => {
     renderSettings('members', { 'GET /api/v1/projects/p_web/members': () => ({ body: list([member('u_automation', 'member')]) }) });
     expect(await screen.findByText('Standard-Bot')).toBeTruthy();

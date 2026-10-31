@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import { agency, ida, labels, list, mara, organization, project, properties, relationTypes, resolutions, standard, types } from '@/test/fixtures';
-import type { User } from '@/types';
+import type { ProjectMember, User } from '@/types';
 import { useDeleteLabel, useDeleteRelationType, useDeleteResolution, useLabels, useRelationTypes, useResolutions, useSaveLabel, useSaveRelationType, useSaveResolution } from './catalog';
 import { qk } from './keys';
 import { useApiMutation, useSettle } from './mutation';
@@ -70,7 +70,7 @@ afterEach(() => {
 
 const web = project('WEB', 'admin', { id: 'p1' });
 const token = { id: 'tok_1', user_id: 'u_mara', name: 'CI', abilities: ['read'], expires_at: null, last_used_at: null, created_at: '2026-10-28T09:00:00.000Z' };
-const member = { project_id: 'p1', user_id: 'u_ida', role: 'member' };
+const member: ProjectMember = { project_id: 'p1', user_id: 'u_ida', role: 'member' };
 const codes = { recovery_codes: ['a1b2c-d3e4f'] };
 
 describe('reading', () => {
@@ -159,6 +159,17 @@ describe('reading', () => {
       '/api/v1/projects?include_archived=1',
       '/api/v1/projects?include_archived=1&cursor=c2',
     ]);
+  });
+
+  it('useMembers follows the cursor through every page: the assignees, the lead and the members screen need all', async () => {
+    const lene: ProjectMember = { ...member, user_id: 'u_lene', role: 'member' };
+    const page = (data: ProjectMember[], next_cursor: string | null) => ({ body: { data, links: {}, meta: { next_cursor, total: 2 } } });
+    api = mockApi({ 'GET /api/v1/projects/WEB/members': (_body, url) => (url.searchParams.get('cursor') === 'm2' ? page([lene], null) : page([member], 'm2')) });
+    const { result } = renderHook(() => useMembers('WEB'), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual({ items: [member, lene], next_cursor: null, total: 2 });
+    expect(api.calls.map((call) => call.url)).toEqual(['/api/v1/projects/WEB/members', '/api/v1/projects/WEB/members?cursor=m2']);
   });
 
   it('follows next_cursor for every catalog list', async () => {

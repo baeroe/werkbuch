@@ -40,9 +40,16 @@ export function useProject(identifier: string | null | undefined, options: HookO
   });
 }
 
-/** Members of one project (P13: there is no list across projects); waits until the project is known. */
+/**
+ * Members of one project (P13: there is no list across projects), every page: the assignees, the lead and the members
+ * screen need all of them. Waits until the project is known.
+ */
 export function useMembers(project: string | null | undefined) {
-  return useQuery({ queryKey: qk.members.list({ project }), queryFn: () => listMembers(project!), enabled: !!project });
+  return useQuery({
+    queryKey: qk.members.list({ project }),
+    queryFn: () => allPages((cursor) => listMembers(project!, { cursor })),
+    enabled: !!project,
+  });
 }
 
 const PROJECT_KEYS = [qk.projects.all, qk.members.all, qk.favorites.all] as const;
