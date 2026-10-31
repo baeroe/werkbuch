@@ -27,12 +27,20 @@ test('starts with "Skip to content" and lists the shortcuts with ?', async ({ pa
   await expect(help).toBeHidden();
 });
 
-test('goes to projects with g p and shows the 404 page inside the shell', async ({ page, allowedErrors }) => {
-  allowedErrors.push(notFound('/projects'));
+test('goes to projects with g p', async ({ page }) => {
   await page.keyboard.press('g');
   await page.keyboard.press('p');
 
   await expect(page).toHaveURL(/\/projects$/);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(tr('en', 'projects.title'));
+});
+
+test('shows the 404 page inside the shell', async ({ page, allowedErrors }) => {
+  allowedErrors.push(notFound('/views'));
+  await page.keyboard.press('g');
+  await page.keyboard.press('v');
+
+  await expect(page).toHaveURL(/\/views$/);
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(tr('en', 'errors.page.not_found.title'));
   if (isPhone(page)) {
     await expect(page.getByRole('button', { name: tr('en', 'shell.mobile.open_navigation') })).toBeVisible();
@@ -60,8 +68,7 @@ test('reaches the other main places with their g sequences', async ({ page, allo
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(tr('en', 'items.my.title'));
 });
 
-test('opens the navigation drawer on the phone', async ({ page, allowedErrors }) => {
-  allowedErrors.push(notFound('/projects'));
+test('opens the navigation drawer on the phone', async ({ page }) => {
   test.skip(!isPhone(page), 'the drawer is the navigation below md');
 
   const open = page.getByRole('button', { name: tr('en', 'shell.mobile.open_navigation') });

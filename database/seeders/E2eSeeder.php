@@ -4,19 +4,23 @@ namespace Database\Seeders;
 
 use App\Access\OrgRole;
 use App\Access\RoleAssignments;
+use App\Actions\Projects\PurgeProject;
 use App\Enums\AccountType;
 use App\Enums\Locale;
+use App\Models\Invitation;
 use App\Models\Organization;
+use App\Models\Project;
 use App\Models\User;
+use App\Support\Actor;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
 use RuntimeException;
 
 /**
- * The demo data plus the accounts of the Playwright tests (e2e/), set back to their start state on every run. The
- * organization speaks English here (the specs read the English texts); the demo data alone keep German. Never for
- * production.
+ * The demo data plus the accounts of the Playwright tests (e2e/), set back to their start state on every run, without
+ * the open invitations and the projects earlier runs left behind. The organization speaks English here (the specs read the English
+ * texts); the demo data alone keep German. Never for production.
  */
 class E2eSeeder extends Seeder
 {
@@ -28,6 +32,9 @@ class E2eSeeder extends Seeder
     public const TOTP_SECRET = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP';
 
     public const VARIANTS = ['desktop-light', 'desktop-dark', 'phone-light', 'phone-dark'];
+
+    /** How the names of the projects the specs create begin; every run starts without them. */
+    public const PROJECT_PREFIX = 'E2E ';
 
     /**
      * The eight recovery codes of the two-factor account of a Playwright project, derived from its name.
@@ -52,6 +59,16 @@ class E2eSeeder extends Seeder
         $this->call(DemoSeeder::class);
 
         Organization::current()->update(['locale' => Locale::En]);
+
+        // the invitations of earlier runs: the lists of the specs stay short, and a run never meets an old link
+        Invitation::query()->whereNull('accepted_at')->where('email', 'like', '%@example.com')->delete();
+
+        // the projects earlier runs created (all named "E2E …"), with their identifiers: the suggestions of the dialog
+        // start from the same free identifiers in every run
+        Project::query()->where('name', 'like', self::PROJECT_PREFIX.'%')->each(function (Project $project): void {
+            $project->forceFill(['deleting_at' => $project->deleting_at ?? Carbon::now()])->save();
+            PurgeProject::run(Actor::automation('e2e_reset'), $project);
+        });
 
         $roles->setOrgRole($this->person('e2e@example.com', 'Erik Ende'), OrgRole::Admin);
 

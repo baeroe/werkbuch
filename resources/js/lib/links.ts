@@ -21,6 +21,8 @@ export const paths = {
   views: () => '/views',
   view: (id: string) => `/views/${segment(id)}`,
   projects: () => '/projects',
+  /** The overview with the dialog "New project" open (the sidebar's "Create project"). */
+  newProject: () => '/projects?create=1',
   project: (identifier: string, layout?: ProjectLayout) => `/projects/${segment(identifier)}${layout ? `?layout=${layout}` : ''}`,
   wiki: (identifier: string, pageId?: string) => below(`/projects/${segment(identifier)}/wiki`, pageId),
   templates: (identifier: string, templateId?: string) => below(`/projects/${segment(identifier)}/templates`, templateId),

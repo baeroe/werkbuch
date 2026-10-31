@@ -18,9 +18,11 @@ type FavoriteStarProps = {
   /** For the label: "Roadmap". */
   name: string;
   onToggle: () => void;
+  /** Nothing to toggle yet: the caller does not know the state (the favorites are still loading). */
+  disabled?: boolean;
 };
 
-export function FavoriteStar({ active, pending, name, onToggle }: FavoriteStarProps) {
+export function FavoriteStar({ active, pending, name, onToggle, disabled = false }: FavoriteStarProps) {
   return (
     <IconButton
       icon={pending ? LoaderCircle : Star}
@@ -28,6 +30,7 @@ export function FavoriteStar({ active, pending, name, onToggle }: FavoriteStarPr
       // the filled star in ink blue is the state; the spinner replaces it while the call runs
       className={cx(pending ? '[&>svg]:animate-spin' : active && 'text-accent-text! [&>svg]:fill-current')}
       aria-busy={pending || undefined}
+      disabled={disabled}
       // a second press while the first is on its way would only toggle back
       onClick={() => {
         if (!pending) onToggle();

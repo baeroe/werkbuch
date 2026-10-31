@@ -2,10 +2,15 @@
 
 use App\Access\OrgRole;
 use App\Access\Visibility;
+use App\Actions\Projects\CreateProject;
+use App\Actions\Projects\UpdateProject;
+use App\Models\Invitation;
 use App\Models\Organization;
+use App\Models\Project;
 use App\Models\User;
 use Database\Seeders\DemoSeeder;
 use Database\Seeders\E2eSeeder;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use PragmaRX\Google2FA\Google2FA;
 
@@ -32,6 +37,33 @@ it('makes Erik an org admin and everybody else of the e2e accounts a member', fu
     foreach (['reset', 'security', 'twofactor'] as $kind) {
         expect(Visibility::orgRole(User::where('email', "{$kind}-phone-dark@example.com")->sole()))->toBe(OrgRole::Member);
     }
+});
+
+it('takes the open invitations of earlier runs away, and nothing else', function () {
+    $left = Invitation::factory()->create(['email' => 'invite-org-desktop-light-abcde@example.com']);
+    $accepted = Invitation::factory()->accepted()->create(['email' => 'onboard-phone-dark-abcde@example.com']);
+    $other = Invitation::factory()->create(['email' => 'nora@feldwerk.example.com']);
+
+    $this->seed(E2eSeeder::class);
+
+    expect(Invitation::query()->whereKey($left->id)->exists())->toBeFalse()
+        ->and(Invitation::query()->whereKey($accepted->id)->exists())->toBeTrue()
+        ->and(Invitation::query()->whereKey($other->id)->exists())->toBeTrue();
+});
+
+it('takes the projects of earlier runs away with their identifiers, and keeps the demo projects', function () {
+    $this->seed(E2eSeeder::class);
+    $erik = User::where('email', 'e2e@example.com')->sole();
+    $left = CreateProject::run(actor($erik), ['name' => 'E2E desktop-light ABCDE', 'identifier' => 'E2E']);
+    UpdateProject::run(actor($erik), $left, ['identifier' => 'E2D']);
+    $going = CreateProject::run(actor($erik), ['name' => 'E2E going', 'identifier' => 'GONE']);
+    $going->forceFill(['deleting_at' => now()])->save();
+
+    $this->seed(E2eSeeder::class);
+
+    expect(Project::query()->where('name', 'like', 'E2E %')->exists())->toBeFalse()
+        ->and(DB::table('project_identifiers')->where('identifier', 'E2E')->exists())->toBeFalse()
+        ->and(Project::query()->orderBy('identifier')->pluck('identifier')->all())->toBe(['APP', 'OPS', 'WEB']);
 });
 
 it('seeds the accounts of every Playwright project', function () {

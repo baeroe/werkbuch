@@ -89,8 +89,8 @@ function recoveryCodes(project: string): string[] {
 }
 
 /**
- * The people of database/seeders: the e2e account (org admin), three of the demo team (German profile; Mara is org admin,
- * Theo and Lene are members), and per Playwright
+ * The people of database/seeders: the e2e account (org admin), four of the demo team (German profile; Mara is org admin,
+ * Theo, Lene and Ida are members; Ida is in WEB, not in the private OPS), and per Playwright
  * project one account to reset the password, one for the password change and the 2FA setup (`security`) and one with
  * confirmed 2FA (`twoFactor`); every run sets them back.
  */
@@ -99,6 +99,7 @@ export const PEOPLE = {
   mara: { email: 'mara@feldwerk.example.com', password: DEMO_PASSWORD, name: 'Mara Lindqvist' },
   theo: { email: 'theo@feldwerk.example.com', password: DEMO_PASSWORD, name: 'Theo Okafor' },
   lene: { email: 'lene@feldwerk.example.com', password: DEMO_PASSWORD, name: 'Lene Vogt' },
+  ida: { email: 'ida@feldwerk.example.com', password: DEMO_PASSWORD, name: 'Ida Brenner' },
   reset: Object.fromEntries(VARIANTS.map((project) => [project, { email: `reset-${project}@example.com`, password: E2E_PASSWORD }])) as Record<
     string,
     { email: string; password: string }
@@ -306,4 +307,44 @@ export async function api(page: Page, method: string, path: string, body?: unkno
     data: body,
     headers: { Accept: 'application/json', Referer: `${baseURL}/`, ...(token && { 'X-XSRF-TOKEN': decodeURIComponent(token.value) }) },
   });
+}
+
+/**
+ * Opens the drawer of the top bar on the phone, where the sidebar lives; on the desktop the sidebar is there already.
+ * `backwards` tabs up to the menu from a place further down the page.
+ */
+export async function openNavigation(page: Page, locale: Locale, { backwards = false } = {}): Promise<Locator> {
+  if (!isPhone(page)) return page.getByRole('navigation', { name: tr(locale, 'shell.sidebar.label') });
+  await tabTo(page, page.getByRole('button', { name: tr(locale, 'shell.mobile.open_navigation') }), { backwards, max: 150 });
+  await page.keyboard.press('Enter');
+  const drawer = page.getByRole('dialog', { name: tr(locale, 'shell.mobile.navigation') });
+  await expect(drawer).toBeVisible();
+  return drawer;
+}
+
+/**
+ * Creates a project with the keyboard only: "Create project" in the sidebar, the name, the identifier the dialog
+ * suggests, ⌘↵. Answers the identifier. Name it `E2E …`: the e2e seeder removes those projects before every run.
+ */
+export async function createProjectFromSidebar(page: Page, name: string): Promise<string> {
+  const navigation = await openNavigation(page, 'en');
+  await tabTo(page, navigation.getByRole('link', { name: tr('en', 'shell.nav.create_project') }));
+  await page.keyboard.press('Enter');
+
+  const dialog = page.getByRole('dialog', { name: tr('en', 'projects.create.title') });
+  await expect(dialog).toBeVisible();
+  // the address asked for the dialog once and keeps nothing of it
+  await expect(page).toHaveURL(/\/projects$/);
+  const nameField = dialog.getByRole('textbox', { name: tr('en', 'projects.create.name') });
+  await expect(nameField).toBeFocused();
+  await page.keyboard.type(name);
+  const identifier = await dialog.getByRole('textbox', { name: tr('en', 'projects.create.identifier') }).inputValue();
+  expect(identifier, 'the suggestion of the dialog').toMatch(/^[A-Z][A-Z0-9]{1,9}$/);
+  await expect(dialog.getByText(tr('en', 'projects.create.identifier_suggested'), { exact: false })).toBeVisible();
+
+  await pressMod(page, 'Enter');
+  await expect(page.getByText(tr('en', 'projects.created', { identifier }))).toBeVisible();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole('list', { name: tr('en', 'projects.list_label') }).getByRole('listitem').filter({ hasText: name })).toBeVisible();
+  return identifier;
 }

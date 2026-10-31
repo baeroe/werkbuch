@@ -84,6 +84,8 @@ export interface Project {
   archived_at: string | null;
   /** The role of the signed-in account in the project (org admins: `admin`, a public project of others: `viewer`). */
   my_role: ProjectRole;
+  /** Whether the signed-in account is a member: the role alone does not say it (org admins, public projects). */
+  is_member: boolean;
 }
 
 export interface ProjectMember {

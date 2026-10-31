@@ -22,6 +22,8 @@ async function invite(page: Page, tag: string): Promise<{ email: string; link: s
 
 /** Ends the session of the context: from here on the page is that of the invited person. */
 async function signOutQuietly(page: Page): Promise<void> {
+  // the shell's own calls (projects, favorites) end first: one that comes back without a session reloads the page
+  await page.waitForLoadState('networkidle');
   await page.context().clearCookies();
 }
 

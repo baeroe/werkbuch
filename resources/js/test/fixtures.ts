@@ -50,6 +50,7 @@ export function project(identifier: string, my_role: ProjectRole, changes: Parti
     default_type_id: null,
     archived_at: null,
     my_role,
+    is_member: true,
     ...changes,
   };
 }

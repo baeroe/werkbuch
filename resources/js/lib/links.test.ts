@@ -20,6 +20,7 @@ describe('paths', () => {
     expect(paths.views()).toBe('/views');
     expect(paths.view('v_roadmap')).toBe('/views/v_roadmap');
     expect(paths.projects()).toBe('/projects');
+    expect(paths.newProject()).toBe('/projects?create=1');
     expect(paths.item('WEB-47')).toBe('/items/WEB-47');
     expect(paths.login()).toBe('/login');
     expect(paths.logout()).toBe('/logout');

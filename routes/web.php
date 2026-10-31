@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\MediaController;
+use App\Http\Controllers\ProjectSettingsPageController;
 use App\Http\Middleware\EnsureAccountIsActive;
 use App\Http\Middleware\EnsureTokenAbility;
 use Illuminate\Http\Request;
@@ -22,6 +23,11 @@ Route::middleware('auth')->group(function () {
     // the own settings: profile, security, API and MCP; the profile without a section (spec 5.2)
     Route::get('/me/{section?}', fn (string $section = 'profile') => Inertia::render('Settings/Personal', ['section' => $section]))
         ->name('me');
+    // all projects; `?create=1` (the sidebar's "Create project") opens the dialog once
+    Route::get('/projects', fn (Request $request) => Inertia::render('Projects/Index', ['create' => $request->query('create') === '1']))
+        ->name('projects');
+    // never `{project}`: the binding of routes/api.php would resolve it and hide a former identifier from GetProject
+    Route::get('/projects/{identifier}/settings/{section?}', ProjectSettingsPageController::class)->name('projects.settings');
 });
 
 // pictures (logo, avatars, project pictures) from the private disk, for the session and for tokens that may read (P15);

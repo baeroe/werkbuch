@@ -17,6 +17,7 @@ import { useSharedProps } from '@/lib/page';
 import type { OrgRole, User } from '@/types';
 import { qk } from './keys';
 import { useApiMutation } from './mutation';
+import { allPages } from './pages';
 
 /** All accounts, deactivated ones included (history and old assignments point to them). */
 export function useUsers(args: ListUsersArgs = {}) {
@@ -30,16 +31,7 @@ export function useUsers(args: ListUsersArgs = {}) {
 export function useAllUsers(args: Omit<ListUsersArgs, 'cursor' | 'per_page'> = {}) {
   return useQuery({
     queryKey: qk.users.list({ ...args, pages: 'all' }),
-    queryFn: async (): Promise<Page<User>> => {
-      const items: User[] = [];
-      let cursor: string | null = null;
-      do {
-        const page = await listUsers({ ...args, cursor });
-        items.push(...page.items);
-        cursor = page.next_cursor;
-      } while (cursor !== null);
-      return { items, next_cursor: null, total: items.length };
-    },
+    queryFn: (): Promise<Page<User>> => allPages((cursor) => listUsers({ ...args, cursor })),
   });
 }
 
@@ -48,8 +40,9 @@ export function useCurrentUser(): User | undefined {
   return useSharedProps().auth.user ?? undefined;
 }
 
+/** Every open invitation, all pages: a list that stops at the first hundred would hide the newest ones. */
 export function useInvitations() {
-  return useQuery({ queryKey: qk.invitations.all, queryFn: listInvitations });
+  return useQuery({ queryKey: qk.invitations.all, queryFn: () => allPages((cursor) => listInvitations({ cursor })) });
 }
 
 export function useInviteUser() {

@@ -28,9 +28,9 @@ export function inviteUser(input: InviteUserInput): Promise<{ link: string; invi
   return post<{ link: string; invitation: Invitation }>('/invitations', input);
 }
 
-/** The invitations that have not been accepted yet (admins). */
-export function listInvitations(): Promise<Page<Invitation>> {
-  return getPage<Invitation>('/invitations');
+/** The invitations that have not been accepted yet (admins); a page at a time, like every list. */
+export function listInvitations(args: PageArgs = {}): Promise<Page<Invitation>> {
+  return getPage<Invitation>('/invitations', { ...args });
 }
 
 export function updateUserRole(user_id: string, org_role: OrgRole): Promise<User> {

@@ -54,6 +54,16 @@ describe('FavoriteStar', () => {
     expect(onToggle).not.toHaveBeenCalled();
   });
 
+  it('cannot be pressed while it is disabled, the state not being known yet', async () => {
+    const onToggle = vi.fn();
+    render(<FavoriteStar active={false} pending={false} name="Roadmap" onToggle={onToggle} disabled />);
+
+    const button = screen.getByRole('button', { name: '„Roadmap“ in die Seitenleiste legen' });
+    expect(button).toHaveProperty('disabled', true);
+    await userEvent.click(button);
+    expect(onToggle).not.toHaveBeenCalled();
+  });
+
   it('is not busy when it is not pending', () => {
     render(<FavoriteStar active={false} pending={false} name="Roadmap" onToggle={() => {}} />);
 

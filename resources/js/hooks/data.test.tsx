@@ -136,6 +136,27 @@ describe('reading', () => {
     expect(api.calls.map((call) => call.url)).toEqual(['/api/v1/users?type=person', '/api/v1/users?type=person&cursor=c2']);
   });
 
+  it('useProjects and useInvitations follow the cursor through every page as well', async () => {
+    const app = project('APP', 'member', { id: 'p2' });
+    const invitation = (id: string) => ({ id, email: `${id}@example.com` });
+    const page = (data: unknown[], next_cursor: string | null) => ({ body: { data, links: {}, meta: { next_cursor, total: 2 } } });
+    api = mockApi({
+      'GET /api/v1/projects': (_body, url) => (url.searchParams.get('cursor') === 'c2' ? page([app], null) : page([web], 'c2')),
+      'GET /api/v1/invitations': (_body, url) => (url.searchParams.get('cursor') === 'i2' ? page([invitation('b')], null) : page([invitation('a')], 'i2')),
+    });
+    const { result } = renderHook(() => ({ projects: useProjects({ include_archived: true }), invitations: useInvitations() }), { wrapper });
+
+    await waitFor(() => expect(result.current.projects.isSuccess && result.current.invitations.isSuccess).toBe(true));
+    expect(result.current.projects.data).toEqual({ items: [web, app], next_cursor: null, total: 2 });
+    expect(result.current.invitations.data?.items.map((entry) => entry.id)).toEqual(['a', 'b']);
+    expect(api.calls.map((call) => call.url).sort()).toEqual([
+      '/api/v1/invitations',
+      '/api/v1/invitations?cursor=i2',
+      '/api/v1/projects?include_archived=1',
+      '/api/v1/projects?include_archived=1&cursor=c2',
+    ]);
+  });
+
   it('useProject reads one project, and waits while the identifier is unknown or it is switched off', async () => {
     api = mockApi({ 'GET /api/v1/projects/WEB': () => ({ body: { data: web } }) });
     const { result } = renderHook(

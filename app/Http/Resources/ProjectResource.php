@@ -10,9 +10,9 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * A project as `Project` of resources/js/types.ts plus `my_role`, the role of the requesting account in it (P13), so the
- * interface needs no list of all memberships. Workflow and types come with Phase 3; until then they are empty. Lists load
- * the pictures with the projects (`with('media')`).
+ * A project as `Project` of resources/js/types.ts plus `my_role`, the role of the requesting account in it (P13), and
+ * `is_member`, whether it is a member, so the interface needs no list of all memberships. Workflow and types come with
+ * Phase 3; until then they are empty. Lists load the pictures with the projects (`with('media')`).
  *
  * @mixin Project
  */
@@ -40,6 +40,9 @@ final class ProjectResource extends JsonResource
             'default_type_id' => null,
             'archived_at' => $project->archived_at?->toJSON(),
             'my_role' => $user instanceof User ? Visibility::roleIn($user, $project)?->value : null,
+            // org admins are admins everywhere and a public project reads as a viewer: whether the account is a member
+            // (and so has nothing to join) the role alone does not say
+            'is_member' => $user instanceof User && Visibility::isMember($user, $project),
         ];
     }
 }

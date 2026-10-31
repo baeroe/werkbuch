@@ -7,9 +7,6 @@ import { api, arrowTo, PEOPLE, pressMod, runId, signedInContext, tabTo, tr, vari
 
 const ORGANIZATION = 'Feldwerk';
 
-/** The browser's note on the 404 of a place that arrives with a later phase (the 404 page shows instead). */
-const notFound = (path: string) => new RegExp(`status of 404 .*\\(https?://[^/]+${path}\\)$`);
-
 /** Sets the name of the organization back over the API, whatever the test left behind. */
 async function resetOrganizationName(page: Page): Promise<void> {
   const response = await api(page, 'PATCH', '/api/v1/organization', { name: ORGANIZATION });
@@ -252,8 +249,7 @@ test('shows members the read-only general section and no people', async ({ brows
   }
 });
 
-test('leaves an edited form only after the question', async ({ page, allowedErrors }) => {
-  allowedErrors.push(notFound('/projects'));
+test('leaves an edited form only after the question', async ({ page }) => {
   await openSection(page, 'general');
   const name = page.getByRole('textbox', { name: tr('en', 'settings.org.general.name') });
   const question = page.getByRole('alertdialog', { name: tr('en', 'settings.frame.leave_title') });

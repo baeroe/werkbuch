@@ -18,10 +18,10 @@ beforeEach(function () {
     Storage::fake('local');
 });
 
-/** The shape of `Project` in resources/js/types.ts plus `my_role` (P13). */
+/** The shape of `Project` in resources/js/types.ts with `my_role` (P13) and `is_member`. */
 const PROJECT_SHAPE = [
     'id', 'identifier', 'name', 'description', 'image_url', 'lead_id', 'visibility', 'workflow_id', 'enabled_type_ids',
-    'default_type_id', 'archived_at', 'my_role',
+    'default_type_id', 'archived_at', 'my_role', 'is_member',
 ];
 
 /**
@@ -187,6 +187,26 @@ it('names the role of the account in each project', function () {
         ->and($role(memberOf($web, ProjectRole::Member)))->toBe('member')
         // a public project without a membership: read as a viewer
         ->and($role(User::factory()->create()))->toBe('viewer');
+});
+
+it('says whether the account is a member, which the role alone does not', function () {
+    $lead = User::factory()->create();
+    $web = Project::factory()->identifier('WEB')->public()->create(['lead_id' => $lead->id]);
+    $viewer = memberOf($web, ProjectRole::Viewer);
+    $admin = User::factory()->admin()->create();
+
+    $member = fn (User $user) => $this->actingAs($user)->getJson('/api/v1/projects/WEB')->assertOk()->json('data.is_member');
+
+    // a viewer by membership and a viewer by visibility read the same role
+    expect($member($viewer))->toBeTrue()
+        ->and($member(User::factory()->create()))->toBeFalse()
+        // an org admin is an admin everywhere, member or not
+        ->and($member($admin))->toBeFalse();
+
+    app(RoleAssignments::class)->setProjectRole($admin, $web, ProjectRole::Member);
+    Visibility::forget();
+    expect($member($admin))->toBeTrue()
+        ->and($this->actingAs($admin)->getJson('/api/v1/projects')->json('data.0.is_member'))->toBeTrue();
 });
 
 it('hides a private project from those who are not members', function () {
