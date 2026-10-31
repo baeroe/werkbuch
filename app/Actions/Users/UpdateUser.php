@@ -50,6 +50,8 @@ final class UpdateUser
             }
         }
 
+        $input = AccountInput::normalize($input);
+
         if (is_string($input['email'] ?? null)) {
             $input['email'] = Str::lower($input['email']);
         }

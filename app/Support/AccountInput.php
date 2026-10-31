@@ -18,6 +18,22 @@ final class AccountInput
     public const DESCRIPTION_MAX = 500;
 
     /**
+     * The input with the responsible person the way it is stored: ULIDs are lower case, and the collation would let an
+     * upper-case one pass `exists`.
+     *
+     * @param  array<array-key, mixed>  $input
+     * @return array<array-key, mixed>
+     */
+    public static function normalize(array $input): array
+    {
+        if (is_string($input['owner_id'] ?? null)) {
+            $input['owner_id'] = strtolower($input['owner_id']);
+        }
+
+        return $input;
+    }
+
+    /**
      * A valid handle no other account holds (spec 4.2).
      *
      * @return list<mixed>

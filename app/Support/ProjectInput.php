@@ -21,7 +21,7 @@ final class ProjectInput
     public const DESCRIPTION_MAX = 2000;
 
     /**
-     * The input with its texts trimmed and the identifier the way it is stored.
+     * The input with its texts trimmed and the identifier and the lead the way they are stored.
      *
      * @param  array<array-key, mixed>  $input
      * @return array<array-key, mixed>
@@ -36,6 +36,11 @@ final class ProjectInput
 
         if (is_string($input['identifier'] ?? null)) {
             $input['identifier'] = Identifier::normalize($input['identifier']);
+        }
+
+        // ULIDs are stored in lower case; the collation would let an upper-case one pass `exists` as somebody else
+        if (is_string($input['lead_id'] ?? null)) {
+            $input['lead_id'] = strtolower($input['lead_id']);
         }
 
         return $input;

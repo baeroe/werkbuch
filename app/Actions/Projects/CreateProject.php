@@ -9,6 +9,7 @@ use App\Access\Visibility;
 use App\Enums\ProjectVisibility;
 use App\Events\EventRecorder;
 use App\Events\EventType;
+use App\Models\Organization;
 use App\Models\Project;
 use App\Models\User;
 use App\Support\Actor;
@@ -22,7 +23,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
 /**
  * Creates a project (every account with `project.create`): name, identifier, optionally description, picture,
  * visibility (public unless said otherwise) and lead (the actor unless said otherwise; an active person, P17). The
- * actor becomes its admin, another lead a member. Workflow and types come with Phase 3.
+ * actor becomes its admin, another lead a member. Workflow and types come with Phase 3 (until then they are ignored).
+ * The identifier is checked under the lock on the organization row, like every change of identifiers.
  */
 final class CreateProject
 {
@@ -42,16 +44,19 @@ final class CreateProject
         $input = ProjectInput::normalize($input);
         $input['lead_id'] ??= $actor->user->id;
 
-        $valid = Validator::make($input, [
-            'name' => ['required', 'string', 'max:'.ProjectInput::NAME_MAX],
-            'identifier' => ProjectInput::identifier(),
-            'description' => ['nullable', 'string', 'max:'.ProjectInput::DESCRIPTION_MAX],
-            'image_url' => ImageInput::rules(),
-            'visibility' => ['sometimes', ...ProjectInput::visibility()],
-            'lead_id' => ['required', 'string', ProjectInput::lead()],
-        ], ProjectInput::messages())->validate();
+        $project = DB::transaction(function () use ($actor, $input): Project {
+            // identifiers are unique across two tables: one change of identifiers at a time, checked under the lock
+            Organization::query()->lockForUpdate()->sole();
 
-        $project = DB::transaction(function () use ($actor, $valid): Project {
+            $valid = Validator::make($input, [
+                'name' => ['required', 'string', 'max:'.ProjectInput::NAME_MAX],
+                'identifier' => ProjectInput::identifier(),
+                'description' => ['nullable', 'string', 'max:'.ProjectInput::DESCRIPTION_MAX],
+                'image_url' => ImageInput::rules(),
+                'visibility' => ['sometimes', ...ProjectInput::visibility()],
+                'lead_id' => ['required', 'string', ProjectInput::lead()],
+            ], ProjectInput::messages())->validate();
+
             $project = Project::query()->create([
                 'identifier' => $valid['identifier'],
                 'name' => $valid['name'],

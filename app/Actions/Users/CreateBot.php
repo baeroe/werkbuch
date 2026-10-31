@@ -41,6 +41,7 @@ final class CreateBot
             }
         }
 
+        $input = AccountInput::normalize($input);
         $input['owner_id'] ??= $actor->user->id;
 
         $valid = Validator::make($input, [

@@ -67,6 +67,32 @@ it('makes another lead a member of the new project', function () {
         ->and(Visibility::roleIn($lene, $project))->toBe(ProjectRole::Member);
 });
 
+it('stores the lead in lower case, whatever case it came in', function () {
+    $lene = User::factory()->create();
+
+    // the collation would let the upper-case ULID pass as somebody else and make the creator a mere member
+    $this->actingAs($lene)->postJson('/api/v1/projects', ['name' => 'Website', 'identifier' => 'WEB', 'lead_id' => strtoupper($lene->id)])
+        ->assertCreated()->assertJsonPath('data.lead_id', $lene->id)->assertJsonPath('data.my_role', 'admin');
+    $web = Project::query()->sole();
+
+    $this->patchJson('/api/v1/projects/WEB', ['lead_id' => strtoupper($lene->id)])->assertOk()->assertJsonPath('data.lead_id', $lene->id);
+
+    expect($web->lead_id)->toBe($lene->id)
+        ->and(Visibility::roleIn($lene, $web))->toBe(ProjectRole::Admin)
+        ->and(projectEvents($web, EventType::ProjectUpdated))->toBe([]);
+});
+
+it('takes no workflow and no types before Phase 3', function () {
+    // pinned so that Phase 3 shows up as a change of this test
+    $this->actingAs(User::factory()->create())->postJson('/api/v1/projects', [
+        'name' => 'Website', 'identifier' => 'WEB', 'workflow_id' => '01jbworkflowxxxxxxxxxxxxxx', 'enabled_type_ids' => ['t_task'],
+        'default_type_id' => 't_task',
+    ])->assertCreated()->assertJsonPath('data.workflow_id', null)->assertJsonPath('data.enabled_type_ids', [])
+        ->assertJsonPath('data.default_type_id', null);
+
+    expect(Project::query()->sole())->workflow_id->toBeNull()->default_type_id->toBeNull();
+});
+
 it('refuses a lead who is no active person', function (Closure $lead) {
     $this->actingAs(User::factory()->create())->postJson('/api/v1/projects', ['name' => 'Website', 'identifier' => 'WEB', 'lead_id' => $lead()])
         ->assertUnprocessable()->assertJsonPath('errors.lead_id.0', __('field.lead.invalid'));

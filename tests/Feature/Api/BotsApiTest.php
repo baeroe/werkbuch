@@ -35,6 +35,20 @@ it('takes another active person as the responsible one, and a bot without a desc
         ->assertCreated()->assertJsonPath('data.owner_id', $lene->id)->assertJsonPath('data.description', '');
 });
 
+it('stores the responsible person in lower case, whatever case it came in', function () {
+    $admin = User::factory()->admin()->create();
+    $lene = User::factory()->create();
+
+    $id = $this->actingAs($admin)->postJson('/api/v1/bots', ['name' => 'Kira', 'handle' => 'kira', 'owner_id' => strtoupper($lene->id)])
+        ->assertCreated()->assertJsonPath('data.owner_id', $lene->id)->json('data.id');
+
+    // the same person in upper case is no change
+    $this->patchJson("/api/v1/users/{$id}", ['owner_id' => strtoupper($lene->id)])->assertOk()->assertJsonPath('data.owner_id', $lene->id);
+
+    expect(User::query()->findOrFail($id)->owner_id)->toBe($lene->id)
+        ->and(Event::query()->where('type', EventType::UserUpdated)->where('subject_id', $id)->count())->toBe(0);
+});
+
 it('wants an active person as the responsible one', function (Closure $owner) {
     $this->actingAs(User::factory()->admin()->create())->postJson('/api/v1/bots', ['name' => 'Kira', 'handle' => 'kira', 'owner_id' => $owner()])
         ->assertUnprocessable()->assertJsonPath('errors.owner_id', [__('field.owner_id.invalid')]);

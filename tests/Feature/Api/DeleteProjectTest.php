@@ -3,9 +3,11 @@
 use App\Access\ProjectRole;
 use App\Access\Visibility;
 use App\Actions\Projects\CreateProject;
+use App\Actions\Projects\DeleteProject;
 use App\Actions\Projects\PurgeProject as PurgeProjectAction;
 use App\Actions\Projects\UpdateProject;
 use App\Events\EventType;
+use App\Exceptions\Problem;
 use App\Jobs\PurgeProject;
 use App\Models\Event;
 use App\Models\Favorite;
@@ -101,6 +103,19 @@ it('answers a second deletion with 404', function () {
     $this->actingAs($admin)->deleteJson('/api/v1/projects/WEB')->assertStatus(202);
     $this->deleteJson('/api/v1/projects/WEB')->assertNotFound();
 
+    Queue::assertPushed(PurgeProject::class, 1);
+});
+
+it('records a deletion only once, also when a second one comes with the project read before', function () {
+    Queue::fake();
+    [$web, $admin] = projectToDelete();
+    // read before the first deletion, as by a request that runs at the same time
+    $stale = Project::query()->findOrFail($web->id);
+
+    DeleteProject::run(actor($admin), $web);
+
+    expect(fn () => DeleteProject::run(actor($admin), $stale))->toThrow(fn (Problem $problem) => expect($problem->status)->toBe(404))
+        ->and(Event::query()->where('type', EventType::ProjectDeleted)->count())->toBe(1);
     Queue::assertPushed(PurgeProject::class, 1);
 });
 
