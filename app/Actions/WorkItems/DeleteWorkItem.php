@@ -18,9 +18,10 @@ use Lorisleiva\Actions\Concerns\AsAction;
 /**
  * Deletes a work item for good (admins of the project, `item.delete`; spec 4.8), leaving a trace with everybody it
  * touched (P12): each child loses its parent with a `work_item.updated` of its own (`changes.parent_id`, `meta.reason`
- * `parent_deleted`), the other end of each relation gets a `work_item.relation_removed` (`changes.relation.old` as
- * RelationSnapshot reads it from that end, also in another project). Values, labels, relations and subscriptions go
- * with the item (cascade); its own events stay, with a last `work_item.deleted` naming its key and title.
+ * `parent_deleted`), the other end of each relation gets a new `updated_at` (a relation is a change of the item, spec
+ * 4.14) and a `work_item.relation_removed` (`changes.relation.old` as RelationSnapshot reads it from that end, also in
+ * another project). Values, labels, relations and subscriptions go with the item (cascade); its own events stay, with
+ * a last `work_item.deleted` naming its key and title.
  *
  * The locks of P1 (ItemLock::take), then the children `for update` and the relations of the item `for update` (each
  * end through its own index, so the lock covers only those rows): a second deletion of the other end of a relation
@@ -61,8 +62,11 @@ final class DeleteWorkItem
                 ]);
             }
 
+            $now = $locked->freshTimestamp();
             foreach ($relations as $relation) {
                 $other = $relation->source_id === $locked->id ? $relation->target : $relation->source;
+                $other->updated_at = $now;
+                $other->save();
                 EventRecorder::record(EventType::WorkItemRelationRemoved, $actor, $other, $other->project, [
                     'relation' => ['old' => RelationSnapshot::of($relation, $other), 'new' => null],
                 ]);

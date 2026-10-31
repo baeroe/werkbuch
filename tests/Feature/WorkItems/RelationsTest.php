@@ -395,6 +395,48 @@ it('keeps the relations of an archived project as they are', function () use ($w
     expect(WorkItemRelation::query()->count())->toBe(0);
 });
 
+it('keeps archived items read-only through relations, but lets them be the passive end', function () use ($world, $type) {
+    [$web, $ops, $mara] = $world();
+    $archived = WorkItem::factory()->for($web)->archived()->create(['updated_at' => '2026-10-01 08:00:00']);
+    $active = WorkItem::factory()->for($ops)->create();
+    $archivedOps = Project::factory()->identifier('OLD')->member($mara, ProjectRole::Member)->create(['lead_id' => $mara->id]);
+    $inArchivedProject = WorkItem::factory()->for($archivedOps)->create();
+    ArchiveProject::run(actor(User::factory()->admin()->create()), $archivedOps);
+    Carbon::setTestNow('2026-11-02 09:30:00');
+
+    // the archived item acts on nothing
+    $refused = problemOf(fn () => AddRelation::run(actor($mara), $archived, ['type_id' => $type('relates')->id, 'target_id' => $active->id]));
+    expect([$refused->status, $refused->reason, $refused->detail])->toBe([409, 'archived', __('problem.detail.item_archived', ['key' => 'WEB-1'])]);
+
+    // as a target, an archived item and an item of an archived project are passive: they get their event and updated_at
+    $relation = AddRelation::run(actor($mara), $active, ['type_id' => $type('relates')->id, 'target_id' => $archived->id]);
+    AddRelation::run(actor($mara), $active, ['type_id' => $type('relates')->id, 'target_id' => $inArchivedProject->id]);
+    expect(eventsOf(EventType::WorkItemRelationAdded, $archived))->toHaveCount(1)
+        ->and(eventsOf(EventType::WorkItemRelationAdded, $inArchivedProject))->toHaveCount(1)
+        ->and($archived->fresh()?->updated_at?->toJSON())->toBe('2026-11-02T09:30:00.000000Z');
+
+    // a member of WEB alone may edit only the archived end
+    $refused = problemOf(fn () => RemoveRelation::run(actor(memberOf($web, ProjectRole::Member)), $relation));
+    expect([$refused->status, $refused->reason, $refused->detail])->toBe([409, 'archived', __('problem.detail.item_archived', ['key' => 'WEB-1'])]);
+
+    // Mara edits OPS as well: through the active end it goes, the archived one is passive
+    RemoveRelation::run(actor($mara), $relation);
+    expect(WorkItemRelation::query()->whereKey($relation->id)->exists())->toBeFalse()
+        ->and(eventsOf(EventType::WorkItemRelationRemoved, $archived))->toHaveCount(1);
+});
+
+it('answers 404 when an end went in the meantime', function () use ($world) {
+    [$web, , $mara] = $world();
+    $source = WorkItem::factory()->for($web)->create();
+    $relation = WorkItemRelation::factory()->create(['source_id' => $source->id, 'target_id' => WorkItem::factory()->for($web)->create()->id]);
+    // bound before the end went, its ends never loaded
+    $stale = WorkItemRelation::query()->findOrFail($relation->id);
+    $source->delete();
+
+    expect(problemOf(fn () => RemoveRelation::run(actor($mara), $stale))->status)->toBe(404)
+        ->and(eventsOf(EventType::WorkItemRelationRemoved))->toHaveCount(0);
+});
+
 it('answers 404 for an item that went in the meantime', function () use ($world, $type) {
     [$web, , $mara] = $world();
     $item = WorkItem::factory()->for($web)->create();

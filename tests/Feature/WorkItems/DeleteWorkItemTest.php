@@ -70,13 +70,15 @@ it('records the removed relation at the other end, also in another project', fun
     [$project, $mara] = $web();
     $ops = Project::factory()->identifier('OPS')->private()->member($mara, ProjectRole::Member)->create();
     $item = WorkItem::factory()->for($project)->create();
-    $blocked = WorkItem::factory()->for($project)->create();
-    $elsewhere = WorkItem::factory()->for($ops)->create();
+    $blocked = WorkItem::factory()->for($project)->create(['updated_at' => '2026-10-01 08:00:00']);
+    $elsewhere = WorkItem::factory()->for($ops)->create(['updated_at' => '2026-10-01 08:00:00']);
     $blocks = RelationType::query()->where('built_in', 'blocks')->firstOrFail();
     $relates = RelationType::query()->where('built_in', 'relates')->firstOrFail();
     WorkItemRelation::factory()->create(['type_id' => $blocks->id, 'source_id' => $item->id, 'target_id' => $blocked->id]);
     WorkItemRelation::factory()->create(['type_id' => $relates->id, 'source_id' => $elsewhere->id, 'target_id' => $item->id]);
-    $unrelated = WorkItemRelation::factory()->create(['source_id' => $blocked->id, 'target_id' => WorkItem::factory()->for($project)->create()->id]);
+    $untouched = WorkItem::factory()->for($project)->create(['updated_at' => '2026-10-01 08:00:00']);
+    $unrelated = WorkItemRelation::factory()->create(['source_id' => $blocked->id, 'target_id' => $untouched->id]);
+    Carbon::setTestNow('2026-11-02 09:30:00');
 
     DeleteWorkItem::run(actor($mara), $item);
 
@@ -94,7 +96,11 @@ it('records the removed relation at the other end, also in another project', fun
         ->and($atElsewhere->project_id)->toBe($ops->id)
         ->and($atElsewhere->actor_id)->toBe($mara->id)
         ->and(WorkItemRelation::query()->pluck('id')->all())->toBe([$unrelated->id])
-        ->and(Event::query()->where('type', EventType::WorkItemRelationRemoved)->count())->toBe(2);
+        ->and(Event::query()->where('type', EventType::WorkItemRelationRemoved)->count())->toBe(2)
+        // a relation is a change of each end (spec 4.14): both other ends move, the item at the far end of a kept one does not
+        ->and($blocked->fresh()?->updated_at?->toJSON())->toBe('2026-11-02T09:30:00.000000Z')
+        ->and($elsewhere->fresh()?->updated_at?->toJSON())->toBe('2026-11-02T09:30:00.000000Z')
+        ->and($untouched->fresh()?->updated_at?->toJSON())->toBe('2026-10-01T08:00:00.000000Z');
 });
 
 it('keeps the events of the deleted item', function () use ($web) {

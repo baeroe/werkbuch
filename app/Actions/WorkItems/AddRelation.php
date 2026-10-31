@@ -28,7 +28,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * them apart.
  *
  * The locks of P1 for two items (ItemLock::pair, by id: A→B and B→A wait for each other in the same order), then under
- * them: an archived project of the source 409 `project_archived`, the type (`field.type_id.unknown_relation`), the item
+ * them: an archived project of the source 409 `project_archived`, an archived source 409 `archived` (read-only, spec
+ * 4.8; the target is the passive end and may be archived, it only gets its event and `updated_at`), the type (`field.type_id.unknown_relation`), the item
  * itself as target (`field.target_id.self`) and the same pair with the same type (`field.target_id.duplicate`; for a
  * symmetric type the other direction is the same pair), all field errors in one 422. The unique index of the table
  * only catches one direction; should it refuse the row anyway, that is the same 422. Both items get a new `updated_at`
@@ -57,6 +58,9 @@ final class AddRelation
 
                 if ($source->project->archived_at !== null) {
                     throw Problem::conflict('project_archived', [], __('problem.detail.project_archived'));
+                }
+                if ($source->archived_at !== null) {
+                    throw Problem::conflict('archived', [], __('problem.detail.item_archived', ['key' => $source->key]));
                 }
 
                 $type = self::type($input['type_id'] ?? null);
