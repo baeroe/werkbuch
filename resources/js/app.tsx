@@ -4,14 +4,12 @@ import '../css/app.css';
 import { createInertiaApp, router } from '@inertiajs/react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import type { ComponentType } from 'react';
+import { setSignedIn } from '@/api/http';
 import { Toaster } from '@/components/ui/Toaster';
 import { TooltipProvider } from '@/components/ui/Tooltip';
 import { queryClient, resetForUser } from '@/hooks/queryClient';
 import { initI18n, reloadIfLocaleChanged } from '@/lib/i18n';
 import type { SharedProps } from '@/lib/page';
-
-// Import only modules that export components here: an edit to a module with other exports would otherwise re-run
-// this entry during hot reload.
 
 let lastUserId: string | null = null;
 
@@ -25,6 +23,9 @@ router.on('navigate', (event) => {
   const userId = props.auth.user?.id ?? null;
   resetForUser(lastUserId, userId);
   lastUserId = userId;
+
+  // a 401 reloads the page only where somebody was signed in: a guest page would reload for ever
+  setSignedIn(props.auth.user !== null);
 });
 
 void createInertiaApp({
@@ -39,6 +40,7 @@ void createInertiaApp({
     const props = page.props as unknown as SharedProps;
     initI18n(props);
     lastUserId = props.auth.user?.id ?? null;
+    setSignedIn(props.auth.user !== null);
 
     return (
       <QueryClientProvider client={queryClient}>

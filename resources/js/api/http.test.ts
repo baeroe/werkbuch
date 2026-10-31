@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from './client';
-import { API_BASE, del, get, patch, post, put, toQueryString, upload } from './http';
+import { API_BASE, del, get, getPage, one, patch, post, put, setSignedIn, toQueryString, upload } from './http';
 
 const fetchMock = vi.fn();
 const reload = vi.fn();
@@ -33,6 +33,7 @@ beforeEach(() => {
   reload.mockReset();
   vi.stubGlobal('fetch', fetchMock);
   vi.stubGlobal('location', { ...window.location, reload });
+  setSignedIn(true);
   clearCookies();
 });
 
@@ -113,6 +114,21 @@ describe('requests', () => {
     fetchMock.mockResolvedValue(new Response('', { status: 200 }));
 
     await expect(post('/work-items/1/archive')).resolves.toBeUndefined();
+  });
+
+  it('turns a 2xx answer that is no JSON into an http_error', async () => {
+    fetchMock.mockResolvedValue(new Response('<html>Proxy</html>', { status: 200, headers: { 'Content-Type': 'text/html' } }));
+
+    const error = await failure(get('/work-items'));
+
+    expect(error.status).toBe(200);
+    expect(error.reason).toBe('http_error');
+  });
+
+  it('unwraps data of a single resource', async () => {
+    fetchMock.mockResolvedValue(json(200, { data: { id: 'p1', name: 'Website' } }));
+
+    await expect(one(get<{ data: { id: string; name: string } }>('/projects/p1'))).resolves.toEqual({ id: 'p1', name: 'Website' });
   });
 
   it('hands the abort signal to fetch', async () => {
@@ -201,13 +217,50 @@ describe('errors', () => {
     expect((await failure(get('/work-items'))).reason).toBe('unauthenticated');
   });
 
-  it('reloads the page on 401, so the server can send the person to the sign-in', async () => {
+  it('reloads on a 401 of a signed-in page, so the server can send the person to the sign-in', async () => {
     fetchMock.mockResolvedValue(problem(401, { reason: 'unauthenticated' }));
 
     const error = await failure(get('/work-items'));
 
     expect(error.reason).toBe('unauthenticated');
     expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not reload on a 401 while nobody is signed in: a guest page would reload for ever', async () => {
+    setSignedIn(false);
+    fetchMock.mockResolvedValue(problem(401, { reason: 'unauthenticated' }));
+
+    const error = await failure(get('/organization'));
+
+    expect(error.status).toBe(401);
+    expect(error.reason).toBe('unauthenticated');
+    expect(reload).not.toHaveBeenCalled();
+  });
+});
+
+describe('getPage', () => {
+  it('turns a Laravel list into a page with the cursor and the total', async () => {
+    fetchMock.mockResolvedValue(
+      json(200, { data: [{ id: 'a' }], links: {}, meta: { path: '/api/v1/users', per_page: 1, next_cursor: 'c2', prev_cursor: null, total: 3 } }),
+    );
+
+    await expect(getPage<{ id: string }>('/users', { per_page: 1 })).resolves.toEqual({ items: [{ id: 'a' }], next_cursor: 'c2', total: 3 });
+    expect(fetchMock.mock.calls[0]![0]).toBe('/api/v1/users?per_page=1');
+  });
+
+  it('counts the items when the list brings no total, and has no next cursor without one', async () => {
+    fetchMock.mockResolvedValue(json(200, { data: [{ id: 'a' }, { id: 'b' }], links: {}, meta: {} }));
+
+    await expect(getPage('/favorites')).resolves.toEqual({ items: [{ id: 'a' }, { id: 'b' }], next_cursor: null, total: 2 });
+  });
+
+  it('hands the abort signal to fetch', async () => {
+    const controller = new AbortController();
+    fetchMock.mockResolvedValue(json(200, { data: [], links: {}, meta: { next_cursor: null, total: 0 } }));
+
+    await getPage('/users', {}, { signal: controller.signal });
+
+    expect(fetchMock.mock.calls[0]![1].signal).toBe(controller.signal);
   });
 });
 

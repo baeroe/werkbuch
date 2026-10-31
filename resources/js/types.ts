@@ -76,10 +76,14 @@ export interface Project {
   image_url: string | null;
   lead_id: string;
   visibility: 'public' | 'private';
-  workflow_id: string;
+  /** `null` until Phase 3 brings workflows and types (`enabled_type_ids` stays empty until then). */
+  workflow_id: string | null;
   enabled_type_ids: string[];
-  default_type_id: string;
+  /** `null` until Phase 3, like `workflow_id`. */
+  default_type_id: string | null;
   archived_at: string | null;
+  /** The role of the signed-in account in the project (org admins: `admin`, a public project of others: `viewer`). */
+  my_role: ProjectRole;
 }
 
 export interface ProjectMember {
@@ -561,6 +565,20 @@ export interface WebhookDelivery {
   response_excerpt: string | null;
   error: string | null;
   created_at: string;
+}
+
+/** The own second factor as `/me/two-factor` answers it; `enabled` only once the first code confirmed it. */
+export interface TwoFactorStatus {
+  enabled: boolean;
+  confirmed_at: string | null;
+  recovery_codes_left: number;
+}
+
+/** The start of the setup: the secret for typing it in, the link and the QR code (an SVG as data URL) for the app. */
+export interface TwoFactorSetup {
+  secret: string;
+  otpauth_url: string;
+  qr_svg: string;
 }
 
 export type TokenAbility = 'read' | 'write' | 'mcp';

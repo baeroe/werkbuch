@@ -15,7 +15,11 @@ export const queryClient = new QueryClient({
   },
 });
 
-/** Clears the cache when the person behind the page changes (sign-in, sign-out, another account). */
+/**
+ * Clears the cache when the person behind the page changes (sign-in, sign-out, another account). `clear()`, not
+ * `resetQueries()`: those switches always pass a page without the shell (sign-in, invitation), so no observer of the old
+ * account is left that a reset would have to load again; the cleared queries load anew for the next person.
+ */
 export function resetForUser(previousId: string | null, nextId: string | null): void {
   if (previousId !== nextId) {
     queryClient.clear();
