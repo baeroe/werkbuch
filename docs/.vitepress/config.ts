@@ -8,21 +8,31 @@ const base = process.env.DOCS_BASE ?? '/';
 const site = process.env.DOCS_URL?.replace(/\/$/, '');
 const description = 'Open, self-hosted project management: work items with your own types, properties and workflows, wikis, views and automations.';
 
-// every page exists in docs/en and docs/de under the same file name (tests/Unit/DocsTest.php); later phases add theirs
-const pages = ['development'];
-
-const sidebar = (prefix: string, t: Record<string, string>): DefaultTheme.SidebarItem[] => [
-    { text: t.guide, items: pages.map((p) => ({ text: t[p], link: `${prefix}/${p}` })) },
+// every page exists in docs/en and docs/de under the same path (tests/Unit/DocsTest.php); later phases add theirs
+const groups: { title: string; pages: string[] }[] = [
+    { title: 'guide', pages: ['development'] },
+    { title: 'concepts', pages: ['concepts/permissions', 'concepts/projects', 'bots'] },
 ];
+
+const sidebar = (prefix: string, t: Record<string, string>): DefaultTheme.SidebarItem[] =>
+    groups.map((g) => ({ text: t[g.title], items: g.pages.map((p) => ({ text: t[p], link: `${prefix}/${p}` })) }));
 
 const en: Record<string, string> = {
     guide: 'Guide',
+    concepts: 'Concepts',
     development: 'Development',
+    'concepts/permissions': 'Roles and permissions',
+    'concepts/projects': 'Projects',
+    bots: 'Bots',
 };
 
 const de: Record<string, string> = {
     guide: 'Anleitung',
+    concepts: 'Konzepte',
     development: 'Entwicklung',
+    'concepts/permissions': 'Rollen und Rechte',
+    'concepts/projects': 'Projekte',
+    bots: 'Bots',
 };
 
 export default defineConfig({

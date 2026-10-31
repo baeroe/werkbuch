@@ -1,25 +1,41 @@
 <?php
 
-it('has every docs page in English and German', function () {
-    $pages = fn (string $l): array => array_map('basename', glob(repo_path("docs/{$l}/*.md")) ?: []);
+use Symfony\Component\Finder\Finder;
 
-    expect($pages('en'))->not->toBeEmpty()->toEqualCanonicalizing($pages('de'));
+/**
+ * Every page of a language below docs/<language>/, as the path without extension (`development`, `concepts/permissions`).
+ *
+ * @return list<string>
+ */
+function docsPages(string $language): array
+{
+    $pages = [];
+
+    foreach (Finder::create()->files()->in(repo_path("docs/{$language}"))->name('*.md') as $file) {
+        $pages[] = preg_replace('/\.md$/', '', str_replace(DIRECTORY_SEPARATOR, '/', $file->getRelativePathname()));
+    }
+
+    return $pages;
+}
+
+it('has every docs page in English and German', function () {
+    expect(docsPages('en'))->not->toBeEmpty()->toEqualCanonicalizing(docsPages('de'));
 });
 
 it('has the same heading structure in both languages', function () {
     // heading levels in order, without the comment lines of code blocks
     $levels = fn (string $file): array => array_map('strlen', preg_match_all('/^(#{1,6}) /m', (string) preg_replace('/^```.*?^```/ms', '', (string) file_get_contents($file)), $m) ? $m[1] : []);
 
-    foreach (glob(repo_path('docs/en/*.md')) ?: [] as $en) {
+    foreach (docsPages('en') as $page) {
         // same levels in the same order, so the same count
-        expect($levels(repo_path('docs/de/'.basename($en))))->toBe($levels($en), basename($en));
+        expect($levels(repo_path("docs/de/{$page}.md")))->toBe($levels(repo_path("docs/en/{$page}.md")), $page);
     }
 });
 
 it('lists every page but the landing page in the sidebar', function () {
     $config = (string) file_get_contents(repo_path('docs/.vitepress/config.ts'));
 
-    foreach (array_diff(array_map(fn ($f) => basename($f, '.md'), glob(repo_path('docs/en/*.md')) ?: []), ['index']) as $page) {
+    foreach (array_diff(docsPages('en'), ['index']) as $page) {
         expect($config)->toContain("'{$page}'");
     }
 });

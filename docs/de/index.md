@@ -20,4 +20,4 @@ werkbuch ist ein offenes, selbst gehostetes Projektmanagement-Tool für Teams: P
 
 ## Stand
 
-werkbuch ist in Entwicklung, in Phase 1 von 15 (Fundament): Anmeldung, die App-Hülle und die Werkzeugkette stehen, der Rest folgt. Es gibt noch kein Release, und diese Doku behandelt nur, was Mitwirkende heute brauchen. Das lokale Starten steht auf der [Entwicklungsseite](/de/development).
+werkbuch ist in Entwicklung, in Phase 2 von 15 (Organisation, Konten, Rollen, Projekte): Anmeldung, die App-Hülle, Personen und Bots, Tokens, Rollen und Rechte sowie Projekte mit Mitgliedern stehen, die Work Items folgen. Es gibt noch kein Release, und diese Doku behandelt nur, was Mitwirkende heute brauchen. Das lokale Starten steht auf der [Entwicklungsseite](/de/development); wie Rollen, Projekte und Bots funktionieren, steht unter [Konzepte](/de/concepts/permissions).
