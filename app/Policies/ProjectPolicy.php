@@ -46,6 +46,31 @@ final class ProjectPolicy
         return self::inProject($user, $project, Permission::ProjectArchive, __('problem.detail.project_delete_admins'));
     }
 
+    /** The member list: whoever sees the project. */
+    public function viewMembers(User $user, Project $project): Response
+    {
+        return $this->view($user, $project);
+    }
+
+    /** Add members, change roles, remove members: `project.manage`, the admins of the project (spec 4.3). */
+    public function manageMembers(User $user, Project $project): Response
+    {
+        return self::inProject($user, $project, Permission::ProjectManage, __('problem.detail.members_admins_only'));
+    }
+
+    /**
+     * Joining with one click: whoever sees the project and may join (`project.join`, every role of the organization).
+     * The public projects are the ones an account sees without being a member; org admins see every project.
+     */
+    public function join(User $user, Project $project): Response
+    {
+        if (Visibility::roleIn($user, $project) === null) {
+            return Response::denyAsNotFound();
+        }
+
+        return Visibility::can($user, Permission::ProjectJoin) ? Response::allow() : Response::deny();
+    }
+
     private static function inProject(User $user, Project $project, Permission $permission, string $refusal): Response
     {
         if (Visibility::roleIn($user, $project) === null) {

@@ -1,22 +1,30 @@
 <?php
 
+use App\Access\RoleAssignments;
 use App\Actions\Account\ChangePassword;
 use App\Actions\Account\ConfirmTwoFactor;
 use App\Actions\Account\DisableTwoFactor;
 use App\Actions\Account\EnableTwoFactor;
 use App\Actions\Account\GetTwoFactor;
 use App\Actions\Account\RegenerateRecoveryCodes;
+use App\Actions\Favorites\ListFavorites;
+use App\Actions\Favorites\ToggleFavorite;
 use App\Actions\Invitations\InviteUser;
 use App\Actions\Invitations\ListInvitations;
 use App\Actions\Media\ShowMedia;
 use App\Actions\Organization\GetOrganization;
 use App\Actions\Organization\UpdateOrganization;
+use App\Actions\Projects\AddMember;
 use App\Actions\Projects\ArchiveProject;
 use App\Actions\Projects\CreateProject;
 use App\Actions\Projects\DeleteProject;
 use App\Actions\Projects\GetProject;
+use App\Actions\Projects\JoinProject;
+use App\Actions\Projects\ListMembers;
 use App\Actions\Projects\ListProjects;
 use App\Actions\Projects\PurgeProject;
+use App\Actions\Projects\RemoveMember;
+use App\Actions\Projects\UpdateMemberRole;
 use App\Actions\Projects\UpdateProject;
 use App\Actions\Tokens\CreateToken;
 use App\Actions\Tokens\ListTokens;
@@ -137,6 +145,57 @@ return [
             return PurgeProject::run($a, $w->web);
         },
         'system' => true,
+    ],
+    'ListMembers' => [
+        'action' => ListMembers::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListMembers::run($a, $w->project($column), []),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    'JoinProject' => [
+        'action' => JoinProject::class,
+        // everybody who sees the project joins it, so a member steps out first (the lead of WEB too, below the action)
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            app(RoleAssignments::class)->removeFromProject($a->user, $w->project($column));
+
+            return JoinProject::run($a, $w->project($column));
+        },
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+        'event' => EventType::ProjectMemberAdded,
+    ],
+    'AddMember' => [
+        'action' => AddMember::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => AddMember::run($a, $w->project($column), ['user_id' => User::factory()->create()->id, 'role' => 'member']),
+        'allowed' => $projectAdmins,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::ProjectMemberAdded,
+    ],
+    'UpdateMemberRole' => [
+        'action' => UpdateMemberRole::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => UpdateMemberRole::run($a, $w->project($column), $w->target, 'viewer'),
+        'allowed' => $projectAdmins,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::ProjectMemberRoleChanged,
+    ],
+    'RemoveMember' => [
+        'action' => RemoveMember::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => RemoveMember::run($a, $w->project($column), $w->target),
+        'allowed' => $projectAdmins,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::ProjectMemberRemoved,
+    ],
+    'ListFavorites' => [
+        'action' => ListFavorites::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListFavorites::run($a),
+        'allowed' => $everyone,
+    ],
+    'ToggleFavorite' => [
+        'action' => ToggleFavorite::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ToggleFavorite::run($a, ['kind' => 'project', 'id' => $w->project($column)->id]),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+        'event' => EventType::FavoriteAdded,
     ],
     'ListUsers' => [
         'action' => ListUsers::class,

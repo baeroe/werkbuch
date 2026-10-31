@@ -11,6 +11,7 @@ use App\Models\Project;
 use App\Models\ProjectMember;
 use App\Support\Actor;
 use App\Support\ImageInput;
+use App\Support\MemberInput;
 use App\Support\ProjectInput;
 use Closure;
 use Illuminate\Support\Facades\DB;
@@ -24,7 +25,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * on resolving and stays reserved; coming back to a former identifier of the same project ends that entry (spec 4.4).
  * Only the fields the input names change; `project.updated` lists what really changed, nothing changed means no event.
  * With an identifier in the input, the change takes the lock on the organization row first and checks under it: no
- * index spans current and former identifiers, so changes of identifiers run one at a time.
+ * index spans current and former identifiers, so changes of identifiers run one at a time. With a lead in the input, it
+ * locks the project row, so the new lead cannot be removed from the project while it is checked to be a member.
  */
 final class UpdateProject
 {
@@ -45,6 +47,11 @@ final class UpdateProject
             if (array_key_exists('identifier', $input)) {
                 // identifiers are unique across two tables: one change of identifiers at a time, checked under the lock
                 Organization::query()->lockForUpdate()->sole();
+            }
+
+            if (array_key_exists('lead_id', $input)) {
+                // the lead must stay a member: a removal of the new lead at the same time waits for this change (MemberInput::lock)
+                MemberInput::lock($project);
             }
 
             $image = ImageInput::url($project, 'image');

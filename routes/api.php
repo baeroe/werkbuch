@@ -2,7 +2,9 @@
 
 use App\Exceptions\Problem;
 use App\Http\Controllers\Api\BotsController;
+use App\Http\Controllers\Api\FavoritesController;
 use App\Http\Controllers\Api\InvitationsController;
+use App\Http\Controllers\Api\MembersController;
 use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\PasswordController;
 use App\Http\Controllers\Api\ProjectsController;
@@ -43,6 +45,15 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
     Route::delete('projects/{project}', [ProjectsController::class, 'destroy']);
     Route::post('projects/{project}/archive', [ProjectsController::class, 'archive']);
     Route::post('projects/{project}/restore', [ProjectsController::class, 'restore']);
+
+    Route::post('projects/{project}/join', [MembersController::class, 'join']);
+    Route::get('projects/{project}/members', [MembersController::class, 'index']);
+    Route::post('projects/{project}/members', [MembersController::class, 'store']);
+    Route::patch('projects/{project}/members/{user}', [MembersController::class, 'update']);
+    Route::delete('projects/{project}/members/{user}', [MembersController::class, 'destroy']);
+
+    Route::get('favorites', [FavoritesController::class, 'index']);
+    Route::post('favorites/toggle', [FavoritesController::class, 'toggle']);
 
     Route::get('tokens', [TokensController::class, 'index']);
     Route::delete('tokens/{token}', [TokensController::class, 'destroy']);
