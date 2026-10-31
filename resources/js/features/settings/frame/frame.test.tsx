@@ -587,6 +587,12 @@ describe('useDialogRound', () => {
     // the empty state that offered "Create" gave way to the list
     opener.remove();
     expect(target.current).toBe(fallback.current);
+
+    // opened while nothing had the focus: never back to the page itself
+    act(() => (document.activeElement as HTMLElement).blur());
+    expect(document.activeElement).toBe(document.body);
+    act(() => result.current.show());
+    expect(result.current.returnFocus(fallback).current).toBe(fallback.current);
     fallback.current.remove();
   });
 });

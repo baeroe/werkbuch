@@ -9,12 +9,23 @@ import { api, arrowTo, PEOPLE, pressMod, runId, signedInContext, tabTo, tr, vari
 /** The name every entry of this test starts with. */
 const prefix = () => `E2E ${variant()} ${runId()}`;
 
+/** Every entry of a catalog, following the cursor to the last page, so "not in the list" never passes on a first page. */
+async function allEntries(page: Page, path: string): Promise<Record<string, string>[]> {
+  const entries: Record<string, string>[] = [];
+  let cursor: string | null = null;
+  do {
+    const response = await api(page, 'GET', `/api/v1/${path}?per_page=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`);
+    expect(response.status(), await response.text()).toBe(200);
+    const body = (await response.json()) as { data: Record<string, string>[]; meta: { next_cursor: string | null } };
+    entries.push(...body.data);
+    cursor = body.meta.next_cursor;
+  } while (cursor !== null);
+  return entries;
+}
+
 /** Deletes the entries of a catalog whose name (or label) starts with the prefix of this test, whatever it left. */
 async function removeEntries(page: Page, path: string, field: 'name' | 'label'): Promise<void> {
-  const response = await api(page, 'GET', `/api/v1/${path}?per_page=100`);
-  expect(response.status(), await response.text()).toBe(200);
-  const { data } = (await response.json()) as { data: Record<string, string>[] };
-  for (const entry of data.filter((item) => item[field]!.startsWith(prefix()))) {
+  for (const entry of (await allEntries(page, path)).filter((item) => item[field]!.startsWith(prefix()))) {
     const removed = await api(page, 'DELETE', `/api/v1/${path}/${entry.id}`);
     expect(removed.status(), await removed.text()).toBe(200);
   }
@@ -96,8 +107,7 @@ test('creates, renames and deletes a label with undo', async ({ page }) => {
     await page.keyboard.press('Enter');
     await expect(row(renamed)).toHaveCount(0);
     expect((await deleted).status()).toBe(200);
-    const labels = (await (await api(page, 'GET', '/api/v1/labels?per_page=100')).json()) as { data: { name: string }[] };
-    expect(labels.data.map((label) => label.name)).not.toContain(renamed);
+    expect((await allEntries(page, 'labels')).map((label) => label.name)).not.toContain(renamed);
   } finally {
     await removeEntries(page, 'labels', 'name');
   }
@@ -204,9 +214,12 @@ test('lets a member read the catalogs only', async ({ browser }) => {
     await page.goto('/settings/labels');
     await expect(page.getByRole('heading', { level: 2, name: tr('de', 'settings.org.section.labels') })).toBeVisible();
     await expect(page.getByText(tr('de', 'settings.access.read_only'), { exact: true })).toBeVisible();
-    await expect(page.getByRole('list', { name: tr('de', 'settings.org.section.labels') }).getByRole('listitem').first()).toBeVisible();
+    const first = page.getByRole('list', { name: tr('de', 'settings.org.section.labels') }).getByRole('heading').first();
+    await expect(first).toBeVisible();
+    const name = (await first.textContent())!;
     await expect(page.getByRole('button', { name: tr('de', 'settings.labels.create') })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: /^Label „/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: tr('de', 'settings.labels.edit', { name }) })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: tr('de', 'settings.labels.delete', { name }) })).toHaveCount(0);
   } finally {
     await context.close();
   }

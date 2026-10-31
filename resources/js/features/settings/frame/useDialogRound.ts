@@ -32,7 +32,8 @@ export function useDialogRound<T = never>() {
   const returnFocus = useCallback(
     (fallback: RefObject<HTMLElement | null>): RefObject<HTMLElement | null> => ({
       get current() {
-        return opener.current?.isConnected ? opener.current : fallback.current;
+        // the page itself is no place to come back to (the opener lost the focus before, or nothing had it)
+        return opener.current?.isConnected && opener.current !== document.body ? opener.current : fallback.current;
       },
     }),
     [],

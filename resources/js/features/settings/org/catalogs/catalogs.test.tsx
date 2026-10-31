@@ -134,7 +134,6 @@ describe('Labels', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Anlegen' }));
 
     expect(await within(dialog).findByText('Diesen Namen gibt es schon.')).toBeTruthy();
-    for (let i = 0; i < 10; i++) { console.log('DBG', document.activeElement?.outerHTML.slice(0, 80)); await new Promise((r) => setTimeout(r, 20)); }
     await waitFor(() => expect(document.activeElement).toBe(name));
     expect(callsTo('POST', '/api/v1/labels')[0]!.body).toEqual({ name: 'ux', color: 'moss' });
 
