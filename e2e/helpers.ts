@@ -96,10 +96,10 @@ function recoveryCodes(project: string): string[] {
  */
 export const PEOPLE = {
   e2e: { email: 'e2e@example.com', password: E2E_PASSWORD, name: 'Erik Ende' },
-  mara: { email: 'mara@feldwerk.example.com', password: DEMO_PASSWORD, name: 'Mara Lindqvist' },
-  theo: { email: 'theo@feldwerk.example.com', password: DEMO_PASSWORD, name: 'Theo Okafor' },
-  lene: { email: 'lene@feldwerk.example.com', password: DEMO_PASSWORD, name: 'Lene Vogt' },
-  ida: { email: 'ida@feldwerk.example.com', password: DEMO_PASSWORD, name: 'Ida Brenner' },
+  mara: { email: 'mara@feldwerk.example.com', password: DEMO_PASSWORD, name: 'Mara Lindqvist', locale: 'de' as const },
+  theo: { email: 'theo@feldwerk.example.com', password: DEMO_PASSWORD, name: 'Theo Okafor', locale: 'de' as const },
+  lene: { email: 'lene@feldwerk.example.com', password: DEMO_PASSWORD, name: 'Lene Vogt', locale: 'de' as const },
+  ida: { email: 'ida@feldwerk.example.com', password: DEMO_PASSWORD, name: 'Ida Brenner', locale: 'de' as const },
   reset: Object.fromEntries(VARIANTS.map((project) => [project, { email: `reset-${project}@example.com`, password: E2E_PASSWORD }])) as Record<
     string,
     { email: string; password: string }
@@ -187,7 +187,10 @@ export function totp(secret: string, at = Date.now()): string {
  * fresh context and opening another can hang in Chromium (`Target.createTarget`). Close the context at the end of the
  * test.
  */
-export async function signedInContext(browser: Browser, person: { email: string; password: string }): Promise<{ context: BrowserContext; page: Page }> {
+export async function signedInContext(
+  browser: Browser,
+  person: { email: string; password: string; locale?: 'de' | 'en' },
+): Promise<{ context: BrowserContext; page: Page }> {
   const { baseURL, ignoreHTTPSErrors, viewport, locale, timezoneId, colorScheme } = test.info().project.use;
   const options = { baseURL, ignoreHTTPSErrors, viewport, locale, timezoneId, colorScheme, permissions: ['clipboard-read', 'clipboard-write'] };
   const file = path.join(ACCOUNT_AUTH_DIR, `${person.email}.json`);
@@ -203,6 +206,9 @@ export async function signedInContext(browser: Browser, person: { email: string;
   await page.goto('/login');
   await login(page, person.email, person.password);
   await expect(page).toHaveURL(/\/my-items$/);
+  // an account in another language than the sign-in page loads the page anew right after the visit: wait for that load,
+  // or the test's first `goto` is interrupted by it
+  await expect(page.locator('html')).toHaveAttribute('lang', person.locale ?? 'en');
   await context.storageState({ path: file });
   return { context, page };
 }
