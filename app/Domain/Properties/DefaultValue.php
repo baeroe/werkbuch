@@ -4,8 +4,8 @@ namespace App\Domain\Properties;
 
 /**
  * The default value of a property (spec 4.7): checked against the field type and brought into the form it is stored in.
- * `null` is always valid and means no default. The error codes: `text`, `number`, `option`, `single`, `boolean`, `date`,
- * `url`, `none` (the field type has no defaults).
+ * `null` is always valid and means no default; so do a blank text and an empty list of options. The error codes: `text`,
+ * `number`, `option`, `single`, `boolean`, `date`, `url`, `none` (the field type has no defaults).
  */
 final class DefaultValue
 {
@@ -35,9 +35,12 @@ final class DefaultValue
     {
         $text = is_string($value) ? trim($value) : null;
 
-        return $text === null || mb_strlen($text) > self::TEXT_MAX
-            ? new NormalizedValue(null, 'text')
-            : new NormalizedValue($text);
+        if ($text === null || mb_strlen($text) > self::TEXT_MAX) {
+            return new NormalizedValue(null, 'text');
+        }
+
+        // a blank text is no default
+        return new NormalizedValue($text === '' ? null : $text);
     }
 
     private static function number(mixed $value, int $decimals): NormalizedValue
@@ -67,6 +70,11 @@ final class DefaultValue
 
         $ids = is_array($value) ? array_values($value) : [$value];
 
+        // no option chosen is no default
+        if ($ids === []) {
+            return new NormalizedValue(null);
+        }
+
         foreach ($ids as $id) {
             if (! is_string($id) || ! in_array($id, $optionIds, true)) {
                 return new NormalizedValue(null, 'option');
@@ -91,7 +99,10 @@ final class DefaultValue
         $url = is_string($value) ? trim($value) : '';
         $parts = parse_url($url);
 
-        if (is_array($parts) && in_array(strtolower($parts['scheme'] ?? ''), ['http', 'https'], true) && ($parts['host'] ?? '') !== '') {
+        // http or https with a host, and a URL as PHP checks one: no blanks or control characters inside, a host of
+        // letters, digits, dots and hyphens
+        if (is_array($parts) && in_array(strtolower($parts['scheme'] ?? ''), ['http', 'https'], true) && ($parts['host'] ?? '') !== ''
+            && filter_var($url, FILTER_VALIDATE_URL) !== false) {
             return new NormalizedValue($url);
         }
 

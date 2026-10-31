@@ -26,6 +26,9 @@ use App\Actions\Projects\PurgeProject;
 use App\Actions\Projects\RemoveMember;
 use App\Actions\Projects\UpdateMemberRole;
 use App\Actions\Projects\UpdateProject;
+use App\Actions\Properties\DeleteProperty;
+use App\Actions\Properties\ListProperties;
+use App\Actions\Properties\SaveProperty;
 use App\Actions\Tokens\CreateToken;
 use App\Actions\Tokens\ListTokens;
 use App\Actions\Tokens\RevokeToken;
@@ -38,9 +41,14 @@ use App\Actions\Users\UpdateUserRole;
 use App\Actions\Workflows\DeleteWorkflow;
 use App\Actions\Workflows\ListWorkflows;
 use App\Actions\Workflows\SaveWorkflow;
+use App\Actions\WorkItemTypes\DeleteWorkItemType;
+use App\Actions\WorkItemTypes\ListWorkItemTypes;
+use App\Actions\WorkItemTypes\SaveWorkItemType;
 use App\Events\EventType;
+use App\Models\Property;
 use App\Models\User;
 use App\Models\Workflow;
+use App\Models\WorkItemType;
 use App\Support\Actor;
 use Laravel\Fortify\Actions\EnableTwoFactorAuthentication;
 use PragmaRX\Google2FA\Google2FA;
@@ -209,6 +217,42 @@ return [
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => DeleteWorkflow::run($a, Workflow::factory()->create()),
         'allowed' => $catalogAdmins,
         'event' => EventType::WorkflowDeleted,
+    ],
+    'ListWorkItemTypes' => [
+        'action' => ListWorkItemTypes::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListWorkItemTypes::run($a, []),
+        'allowed' => $everyone,
+    ],
+    'SaveWorkItemType' => [
+        'action' => SaveWorkItemType::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => SaveWorkItemType::run($a, null, [
+            'name' => 'Matrix', 'icon' => 'flag', 'tone' => 'moss', 'is_epic' => false, 'properties' => [],
+        ]),
+        'allowed' => $catalogAdmins,
+        'event' => EventType::WorkItemTypeCreated,
+    ],
+    'DeleteWorkItemType' => [
+        'action' => DeleteWorkItemType::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => DeleteWorkItemType::run($a, WorkItemType::factory()->create()),
+        'allowed' => $catalogAdmins,
+        'event' => EventType::WorkItemTypeDeleted,
+    ],
+    'ListProperties' => [
+        'action' => ListProperties::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListProperties::run($a, []),
+        'allowed' => $everyone,
+    ],
+    'SaveProperty' => [
+        'action' => SaveProperty::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => SaveProperty::run($a, null, ['key' => 'matrix', 'label' => 'Matrix', 'field_type' => 'text']),
+        'allowed' => $catalogAdmins,
+        'event' => EventType::PropertyCreated,
+    ],
+    'DeleteProperty' => [
+        'action' => DeleteProperty::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => DeleteProperty::run($a, Property::factory()->create()),
+        'allowed' => $catalogAdmins,
+        'event' => EventType::PropertyDeleted,
     ],
     'ListFavorites' => [
         'action' => ListFavorites::class,

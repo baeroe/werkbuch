@@ -1,6 +1,8 @@
 <?php
 
+use App\Models\Property;
 use App\Models\Workflow;
+use App\Models\WorkItemType;
 use Tests\Feature\Access\MatrixWorld;
 
 /*
@@ -42,6 +44,14 @@ return [
     'create a workflow' => ['POST', '/api/v1/workflows'],
     'change a workflow' => ['PUT', '/api/v1/workflows/{workflow}', 'params' => fn (MatrixWorld $w) => ['workflow' => Workflow::factory()->create()->id]],
     'delete a workflow' => ['DELETE', '/api/v1/workflows/{workflow}', 'params' => fn (MatrixWorld $w) => ['workflow' => Workflow::factory()->create()->id]],
+    'list work item types' => ['GET', '/api/v1/work-item-types'],
+    'create a work item type' => ['POST', '/api/v1/work-item-types'],
+    'change a work item type' => ['PUT', '/api/v1/work-item-types/{workItemType}', 'params' => fn (MatrixWorld $w) => ['workItemType' => WorkItemType::factory()->create()->id]],
+    'delete a work item type' => ['DELETE', '/api/v1/work-item-types/{workItemType}', 'params' => fn (MatrixWorld $w) => ['workItemType' => WorkItemType::factory()->create()->id]],
+    'list properties' => ['GET', '/api/v1/properties'],
+    'create a property' => ['POST', '/api/v1/properties'],
+    'change a property' => ['PUT', '/api/v1/properties/{property}', 'params' => fn (MatrixWorld $w) => ['property' => Property::factory()->create()->id]],
+    'delete a property' => ['DELETE', '/api/v1/properties/{property}', 'params' => fn (MatrixWorld $w) => ['property' => Property::factory()->create()->id]],
     'list the own favorites' => ['GET', '/api/v1/favorites'],
     'toggle a favorite' => ['POST', '/api/v1/favorites/toggle'],
     'list tokens' => ['GET', '/api/v1/tokens'],

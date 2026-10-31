@@ -8,10 +8,12 @@ use App\Http\Controllers\Api\MembersController;
 use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\PasswordController;
 use App\Http\Controllers\Api\ProjectsController;
+use App\Http\Controllers\Api\PropertiesController;
 use App\Http\Controllers\Api\TokensController;
 use App\Http\Controllers\Api\TwoFactorController;
 use App\Http\Controllers\Api\UsersController;
 use App\Http\Controllers\Api\WorkflowsController;
+use App\Http\Controllers\Api\WorkItemTypesController;
 use App\Http\Middleware\EnsureAccountIsActive;
 use App\Http\Middleware\EnsureSession;
 use App\Http\Middleware\EnsureTokenAbility;
@@ -57,6 +59,16 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
     Route::post('workflows', [WorkflowsController::class, 'store']);
     Route::put('workflows/{workflow}', [WorkflowsController::class, 'update']);
     Route::delete('workflows/{workflow}', [WorkflowsController::class, 'destroy']);
+
+    Route::get('work-item-types', [WorkItemTypesController::class, 'index']);
+    Route::post('work-item-types', [WorkItemTypesController::class, 'store']);
+    Route::put('work-item-types/{workItemType}', [WorkItemTypesController::class, 'update']);
+    Route::delete('work-item-types/{workItemType}', [WorkItemTypesController::class, 'destroy']);
+
+    Route::get('properties', [PropertiesController::class, 'index']);
+    Route::post('properties', [PropertiesController::class, 'store']);
+    Route::put('properties/{property}', [PropertiesController::class, 'update']);
+    Route::delete('properties/{property}', [PropertiesController::class, 'destroy']);
 
     Route::get('favorites', [FavoritesController::class, 'index']);
     Route::post('favorites/toggle', [FavoritesController::class, 'toggle']);

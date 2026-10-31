@@ -2,19 +2,24 @@
 
 namespace App\Support;
 
+use App\Domain\Catalog\Tone;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
 
 /**
  * What the entries of every catalog share (workflows, types, properties, labels, relation types, resolutions): a name
- * unique over the collation of the database (case and accents do not count), an optional description, and the rule
- * that saving replaces an entry as a whole (P24): a required field that is missing is refused at that field.
+ * unique over the collation of the database (case and accents do not count), an optional description or help text, a
+ * tone, the archive stamp, and the rule that saving replaces an entry as a whole (P24): a required field that is missing
+ * is refused at that field.
  */
 final class CatalogInput
 {
     public const NAME_MAX = 60;
 
     public const DESCRIPTION_MAX = 2000;
+
+    public const HELP_MAX = 500;
 
     /**
      * The input with the named texts trimmed; anything that is no text stays as it came for the rules to refuse.
@@ -56,6 +61,41 @@ final class CatalogInput
     }
 
     /**
+     * One of the six paper colours (types, options, labels, relation types).
+     *
+     * @return list<mixed>
+     */
+    public static function tone(): array
+    {
+        return ['required', Rule::enum(Tone::class)];
+    }
+
+    /**
+     * The archive stamp as a client sends it: missing or `null` is active, a string is archived (P24, P25). The stamp
+     * itself comes from `archivedStamp()`, never from the client.
+     *
+     * @return list<mixed>
+     */
+    public static function archivedAt(): array
+    {
+        return ['nullable', 'string'];
+    }
+
+    /**
+     * The archive stamp to store (P25): `$sent` is what the client sent in `archived_at` (a string: archived; `null`:
+     * active), or `false`/`true` for the same. An entry that already is archived keeps its stamp, only a newly archived
+     * one gets the time of now; so a `PUT` with the answer of the server changes nothing.
+     */
+    public static function archivedStamp(?Carbon $current, mixed $sent): ?Carbon
+    {
+        if ($sent === null || $sent === false) {
+            return null;
+        }
+
+        return $current ?? now();
+    }
+
+    /**
      * One message for every required field that is missing (`required`, or `present` where an empty list is fine).
      *
      * @param  list<string>  $fields
@@ -85,6 +125,15 @@ final class CatalogInput
             'name.unique' => __('field.name.taken'),
             'description.string' => __('field.description.invalid'),
             'description.max' => __('field.description.max'),
+            'label.required' => __('field.label.required'),
+            'label.string' => __('field.label.invalid'),
+            'label.max' => __('field.label.max'),
+            'label.unique' => __('field.label.taken'),
+            'help.string' => __('field.help.invalid'),
+            'help.max' => __('field.help.max'),
+            'tone.enum' => __('field.tone.unknown'),
+            'color.enum' => __('field.color.unknown'),
+            'archived_at.string' => __('field.archived_at.invalid'),
         ];
     }
 }
