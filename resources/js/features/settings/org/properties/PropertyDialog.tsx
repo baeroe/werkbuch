@@ -8,7 +8,7 @@
  */
 
 import { Lock } from 'lucide-react';
-import { useState, type RefObject } from 'react';
+import { useId, useRef, useState, type RefObject } from 'react';
 import { cx } from '@/components/ui/cx';
 import { FormDialog } from '@/components/ui/FormDialog';
 import { Input } from '@/components/ui/Input';
@@ -68,7 +68,15 @@ export function PropertyDialog({ open, onOpenChange, property, finalFocus }: Pro
   const labelError = attempted && label.trim() === '' ? t('settings.properties.dialog.label_required') : fieldMessage(save.error, 'label');
   const keyError = attempted && key.trim() === '' ? t('settings.properties.dialog.key_required') : fieldMessage(save.error, 'key');
   const optionsError = attempted && fieldType === 'dropdown' && active.length === 0 ? t('settings.properties.dialog.options_required') : fieldMessage(save.error, 'options');
-  const optionPaths = options.map((_, index) => `options.${index}.label`);
+  // the options as they were sent: a refusal at `options.<n>.label` belongs to the option that was n-th then, and stays with
+  // it when the list is reordered (or goes with it when it is removed)
+  const sentOptions = useRef<string[]>([]);
+  const optionPaths = sentOptions.current.map((_, index) => `options.${index}.label`);
+  const optionError = (id: string) => {
+    const index = sentOptions.current.indexOf(id);
+    return index < 0 ? undefined : fieldMessage(save.error, `options.${index}.label`);
+  };
+  const multipleHint = useId();
   const multipleLocked = property?.settings.multiple === true;
   const settings = fieldType === 'number' ? { decimals } : hasMultiple(fieldType) ? { multiple } : {};
 
@@ -94,6 +102,7 @@ export function PropertyDialog({ open, onOpenChange, property, finalFocus }: Pro
     // a default that points at an option which is no longer offered would be refused by every form
     const offered = new Set(active.map((option) => option.id));
     const stillOffered = fieldType !== 'dropdown' || [defaultValue].flat().every((value) => typeof value === 'string' && offered.has(value));
+    sentOptions.current = fieldType === 'dropdown' ? options.map((option) => option.id) : [];
     settle(
       save.mutateAsync({
         id: property?.id,
@@ -206,8 +215,14 @@ export function PropertyDialog({ open, onOpenChange, property, finalFocus }: Pro
       {hasMultiple(fieldType) && (
         <div className="flex flex-col gap-1">
           {/* once on, it stays on (spec 4.7): the switch of a stored multiple choice is locked */}
-          <Switch label={t('settings.properties.dialog.multiple')} checked={multiple} disabled={multipleLocked} onCheckedChange={chooseMultiple} />
-          <p className="pl-12 text-sm text-pretty text-muted">
+          <Switch
+            label={t('settings.properties.dialog.multiple')}
+            aria-describedby={multipleHint}
+            checked={multiple}
+            disabled={multipleLocked}
+            onCheckedChange={chooseMultiple}
+          />
+          <p id={multipleHint} className="pl-12 text-sm text-pretty text-muted">
             {multipleLocked
               ? t('settings.properties.dialog.multiple_locked')
               : fieldType === 'member'
@@ -219,7 +234,7 @@ export function PropertyDialog({ open, onOpenChange, property, finalFocus }: Pro
 
       {fieldType === 'dropdown' && (
         <FieldGroup legend={t('settings.properties.dialog.options')} hint={t('settings.properties.dialog.options_hint')} error={optionsError}>
-          <OptionRows options={options} onChange={setOptions} labelError={(index) => fieldMessage(save.error, `options.${index}.label`)} />
+          <OptionRows options={options} onChange={setOptions} labelError={optionError} />
         </FieldGroup>
       )}
 

@@ -115,7 +115,9 @@ describe('Types', () => {
     await user.keyboard('{Escape}');
     expect(within(dialog).getByText('Pflaume')).toBeTruthy();
     await user.type(within(dialog).getByRole('textbox', { name: 'Beschreibung' }), '  Ein Einfall.  ');
-    await user.click(within(dialog).getByRole('switch', { name: 'Epic' }));
+    const epic = within(dialog).getByRole('switch', { name: 'Epic' });
+    expect(document.getElementById(epic.getAttribute('aria-describedby')!)?.textContent).toBe('Items dieses Typs erscheinen in der Timeline und können Kind-Items haben.');
+    await user.click(epic);
 
     const add = within(dialog).getByRole('combobox', { name: 'Property hinzufügen' });
     await user.click(add);
@@ -168,6 +170,28 @@ describe('Types', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Aufwand (h) entfernen' }));
     await waitFor(() => expect(document.activeElement).toBe(add));
     expect(within(dialog).queryByRole('list', { name: 'Properties des Typs' })).toBeNull();
+  });
+
+  it('keeps a property the loaded catalog does not know, named "Property", so saving does not drop it', async () => {
+    const user = userEvent.setup();
+    renderWith(
+      <Types readOnlyReason={null} />,
+      routes(types, { 'PUT /api/v1/work-item-types/t_bug': (body) => ({ body: { data: { ...types[1]!, ...(body as object) } } }) }, properties.filter((property) => property.id !== 'pr_effort')),
+    );
+
+    await user.click(within(await rowOf('Bug')).getByRole('button', { name: 'Typ „Bug“ bearbeiten' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Typ „Bug“ bearbeiten' });
+    const rows = within(within(dialog).getByRole('list', { name: 'Properties des Typs' })).getAllByRole('listitem');
+    expect(rows.map((row) => row.querySelector('p')!.textContent)).toEqual(['Kunde', 'Property', 'Umgebung']);
+    expect(within(dialog).getByRole('checkbox', { name: 'Pflicht: Property' })).toBeTruthy();
+    await user.click(within(dialog).getByRole('button', { name: 'Speichern' }));
+
+    await waitFor(() => expect(toastNamed('Typ „Bug“ gespeichert')).toBeDefined());
+    expect((callsTo('PUT', '/api/v1/work-item-types/t_bug')[0]!.body as WorkItemType).properties).toEqual([
+      { property_id: 'pr_customer', required: false },
+      { property_id: 'pr_effort', required: false },
+      { property_id: 'pr_environment', required: true },
+    ]);
   });
 
   it('says when every property is added already', async () => {

@@ -7,7 +7,8 @@
  * default; the dialog says so instead of showing this field.
  */
 
-import { useState } from 'react';
+import { CircleAlert } from 'lucide-react';
+import { useId, useState } from 'react';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { ToneDot } from '@/components/ui/Chip';
 import { Input } from '@/components/ui/Input';
@@ -67,23 +68,39 @@ function TypedDefault({ property, value, onChange, error }: DefaultValueFieldPro
   );
 }
 
+/** Yes or no: the switch is named by its visible label, the hint (or the refusal) describes it. */
+function BooleanDefault({ value, onChange, error }: Omit<DefaultValueFieldProps, 'property'>) {
+  const describedBy = useId();
+  return (
+    <div className="flex flex-col gap-1">
+      <Switch
+        label={t('settings.properties.dialog.default')}
+        aria-describedby={describedBy}
+        aria-invalid={error ? true : undefined}
+        checked={value === true}
+        onCheckedChange={onChange}
+      />
+      {error ? (
+        <p id={describedBy} className="flex items-start gap-1.5 pl-12 text-sm font-medium text-danger">
+          <CircleAlert className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+          {error}
+        </p>
+      ) : (
+        <p id={describedBy} className="pl-12 text-sm text-pretty text-muted">
+          {t('settings.properties.dialog.default_hint')}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function DefaultValueField({ property, value, onChange, error }: DefaultValueFieldProps) {
   const options = property.options.filter((option) => option.archived_at === null);
   const optionLabel = (label: string) => label.trim() || t('settings.properties.default.unnamed');
 
   switch (property.field_type) {
     case 'boolean':
-      return (
-        <FieldGroup legend={t('settings.properties.dialog.default')} hint={t('settings.properties.dialog.default_hint')} error={error}>
-          <Switch
-            label={value === true ? t('settings.properties.default.yes') : t('settings.properties.default.no')}
-            aria-label={t('settings.properties.dialog.default')}
-            aria-invalid={error ? true : undefined}
-            checked={value === true}
-            onCheckedChange={onChange}
-          />
-        </FieldGroup>
-      );
+      return <BooleanDefault value={value} onChange={onChange} error={error} />;
     case 'date':
       return (
         <Input

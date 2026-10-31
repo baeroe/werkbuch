@@ -26,6 +26,10 @@ export default defineConfig({
         // from the task whose screens use the frame on (P30)
         'resources/js/features/settings/frame/**': { lines: 100 },
         'resources/js/features/settings/catalog/**': { lines: 100 },
+        'resources/js/features/settings/org/catalogs/**': { lines: 100 },
+        'resources/js/features/settings/org/types/**': { lines: 100 },
+        'resources/js/features/settings/org/properties/**': { lines: 100 },
+        'resources/js/features/settings/org/*.{ts,tsx}': { lines: 100 },
         'resources/js/features/settings/project/**': { lines: 100 },
         'resources/js/features/projects/**': { lines: 100 },
         'resources/js/features/favorites/**': { lines: 100 },

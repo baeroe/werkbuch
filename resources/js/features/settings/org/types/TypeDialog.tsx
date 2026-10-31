@@ -6,7 +6,7 @@
  */
 
 import { X } from 'lucide-react';
-import { useState, type RefObject } from 'react';
+import { useId, useState, type RefObject } from 'react';
 import { FormDialog } from '@/components/ui/FormDialog';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { IconButton } from '@/components/ui/IconButton';
@@ -55,7 +55,6 @@ export function TypeDialog({ open, onOpenChange, type, properties, finalFocus }:
   const [assigned, setAssigned] = useState<Assigned[]>(() =>
     [...(type?.properties ?? [])]
       .sort((a, b) => a.position - b.position)
-      .filter((entry) => byId.has(entry.property_id))
       .map((entry) => ({ id: entry.property_id, required: entry.required })),
   );
   const [attempted, setAttempted] = useState(false);
@@ -65,7 +64,9 @@ export function TypeDialog({ open, onOpenChange, type, properties, finalFocus }:
   const toneError = fieldMessage(save.error, 'tone');
   const propertiesError = fieldMessage(save.error, 'properties');
   const free = properties.filter((property) => !assigned.some((entry) => entry.id === property.id));
-  const labelOf = (id: string) => byId.get(id)!.label;
+  // a property the loaded catalog does not know (yet) keeps its place: the dialog sends the whole type and would drop it
+  const labelOf = (id: string) => byId.get(id)?.label ?? t('settings.types.dialog.unknown_property');
+  const epicHint = useId();
 
   function submit() {
     setAttempted(true);
@@ -140,8 +141,10 @@ export function TypeDialog({ open, onOpenChange, type, properties, finalFocus }:
         onChange={(event) => setDescription(event.target.value)}
       />
       <div className="flex flex-col gap-1">
-        <Switch label={t('settings.types.dialog.epic')} checked={isEpic} onCheckedChange={setIsEpic} />
-        <p className="pl-12 text-sm text-pretty text-muted">{t('settings.types.dialog.epic_hint')}</p>
+        <Switch label={t('settings.types.dialog.epic')} aria-describedby={epicHint} checked={isEpic} onCheckedChange={setIsEpic} />
+        <p id={epicHint} className="pl-12 text-sm text-pretty text-muted">
+          {t('settings.types.dialog.epic_hint')}
+        </p>
       </div>
 
       <FieldGroup legend={t('settings.types.dialog.properties')} hint={t('settings.types.dialog.properties_hint')}>
@@ -153,23 +156,24 @@ export function TypeDialog({ open, onOpenChange, type, properties, finalFocus }:
             onReorder={setAssigned}
             className="mb-2 divide-y divide-line rounded-ctl border border-line bg-surface"
             renderItem={(entry, { handle }) => {
-              const property = byId.get(entry.id)!;
+              const property = byId.get(entry.id);
+              const label = labelOf(entry.id);
               return (
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-2 py-1.5">
                   {handle}
                   <div className="min-w-0 flex-1 basis-40">
-                    <p className="truncate text-ui font-medium text-ink">{property.label}</p>
-                    <p className="text-sm text-muted">{t(FIELD_TYPE_LABELS[property.field_type])}</p>
+                    <p className="truncate text-ui font-medium text-ink">{label}</p>
+                    {property && <p className="text-sm text-muted">{t(FIELD_TYPE_LABELS[property.field_type])}</p>}
                   </div>
                   <Checkbox
                     label={t('settings.types.dialog.required')}
-                    aria-label={t('settings.types.dialog.required_of', { label: property.label })}
+                    aria-label={t('settings.types.dialog.required_of', { label })}
                     checked={entry.required}
                     onCheckedChange={(required) => setAssigned((current) => current.map((candidate) => (candidate.id === entry.id ? { ...candidate, required } : candidate)))}
                   />
                   <IconButton
                     icon={X}
-                    label={t('settings.types.dialog.remove_property', { label: property.label })}
+                    label={t('settings.types.dialog.remove_property', { label })}
                     onClick={(event) => {
                       // the focus goes on to the next property (or the one before), after the last to the choice below
                       focusNeighbour(event.currentTarget.closest('li'), document.getElementById('type-add-property'));

@@ -110,24 +110,33 @@ test('creates a dropdown property and a type that requires it', async ({ page })
 
 test('refuses the key of a core field at the field', async ({ page, allowedErrors }) => {
   allowedErrors.push(/status of 422 .*\/api\/v1\/properties/);
+  // a label of this run, so a regression that accepts the key leaves nothing `finally` cannot remove
+  const label = `${prefix()} Core`;
   await page.goto('/settings/properties');
   await expect(page.getByRole('heading', { level: 2, name: tr('en', 'settings.org.section.properties') })).toBeVisible();
 
-  await tabTo(page, page.getByRole('button', { name: tr('en', 'settings.properties.create'), exact: true }));
-  await page.keyboard.press('Enter');
-  const dialog = page.getByRole('dialog', { name: tr('en', 'settings.properties.create') });
-  await tabTo(page, dialog.getByRole('textbox', { name: tr('en', 'settings.properties.dialog.label') }));
-  await page.keyboard.type('Title');
-  const key = dialog.getByRole('textbox', { name: tr('en', 'settings.properties.dialog.key') });
-  await expect(key).toHaveValue('title');
-  await pressMod(page, 'Enter');
+  try {
+    await tabTo(page, page.getByRole('button', { name: tr('en', 'settings.properties.create'), exact: true }));
+    await page.keyboard.press('Enter');
+    const dialog = page.getByRole('dialog', { name: tr('en', 'settings.properties.create') });
+    await tabTo(page, dialog.getByRole('textbox', { name: tr('en', 'settings.properties.dialog.label') }));
+    await page.keyboard.type(label);
+    const key = dialog.getByRole('textbox', { name: tr('en', 'settings.properties.dialog.key') });
+    await tabTo(page, key);
+    await page.keyboard.press('ControlOrMeta+a');
+    await page.keyboard.type('title');
+    await expect(key).toHaveValue('title');
+    await pressMod(page, 'Enter');
 
-  await expect(dialog.getByText(tr('en', 'field.key.core'))).toBeVisible();
-  await expect(key).toHaveAttribute('aria-invalid', 'true');
-  await expect(key).toBeFocused();
-  await page.keyboard.press('Escape');
-  await expect(dialog).toBeHidden();
-  expect((await allEntries(page, 'properties')).map((entry) => entry.key)).not.toContain('title');
+    await expect(dialog.getByText(tr('en', 'field.key.core'))).toBeVisible();
+    await expect(key).toHaveAttribute('aria-invalid', 'true');
+    await expect(key).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    expect((await allEntries(page, 'properties')).map((entry) => entry.label)).not.toContain(label);
+  } finally {
+    await cleanUp(page);
+  }
 });
 
 test('restores an archived type', async ({ page }) => {

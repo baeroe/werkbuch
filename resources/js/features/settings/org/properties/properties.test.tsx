@@ -356,6 +356,46 @@ describe('Properties', () => {
     expect(body.default_value).toBeNull();
   });
 
+  it('keeps a refusal of an option label with its option when the options are reordered or one is removed', async () => {
+    const user = userEvent.setup();
+    renderWith(<Properties readOnlyReason={null} />, routes(all, { 'POST /api/v1/properties': () => invalid({ 'options.1.label': ['Jede Option braucht ein Label.'] }) }));
+    answerSlowly();
+
+    const dialog = await openCreate(user);
+    await user.type(within(dialog).getByRole('textbox', { name: 'Label' }), 'Stufe');
+    await chooseFieldType(user, dialog, 'Dropdown');
+    const add = within(dialog).getByRole('button', { name: 'Option hinzufügen' });
+    await user.click(add);
+    await user.keyboard('Eins');
+    await user.click(add);
+    await user.click(add);
+    await user.keyboard('Drei');
+    await user.click(within(dialog).getByRole('button', { name: 'Anlegen' }));
+    expect(await within(dialog).findByText('Jede Option braucht ein Label.')).toBeTruthy();
+    const invalidLabels = () => within(dialog).getAllByRole('textbox', { name: /^Label von Option/ }).filter((input) => input.getAttribute('aria-invalid') === 'true');
+    // the dialog puts the focus on the refused label first; only then does the keyboard move on
+    await waitFor(() => expect(document.activeElement).toBe(within(dialog).getByRole('textbox', { name: 'Label von Option 2' })));
+
+    // "Drei" moves to the top: the refusal stays at the empty option, now third (the place it had is "Eins" now)
+    const handle = within(dialog).getByRole('button', { name: 'Drei verschieben' });
+    handle.focus();
+    await user.keyboard(' ');
+    await waitFor(() => expect(handle.getAttribute('aria-pressed')).toBe('true'));
+    await user.keyboard('{ArrowUp}');
+    await user.keyboard(' ');
+    await waitFor(() => expect(within(dialog).getByRole<HTMLInputElement>('textbox', { name: 'Label von Option 1' }).value).toBe('Drei'));
+    expect(invalidLabels().map((input) => (input as HTMLInputElement).value)).toEqual(['']);
+    expect(invalidLabels()[0]!.getAttribute('aria-label')).toBe('Label von Option 3');
+
+    // "Eins" goes: the refusal still stands at the empty option, now second
+    await user.click(within(dialog).getByRole('button', { name: 'Option 2 entfernen' }));
+    expect(invalidLabels().map((input) => input.getAttribute('aria-label'))).toEqual(['Label von Option 2']);
+    // the empty option goes: the refusal goes with it and moves to no other row
+    await user.click(within(dialog).getByRole('button', { name: 'Option 2 entfernen' }));
+    expect(invalidLabels()).toEqual([]);
+    expect(within(dialog).queryByText('Jede Option braucht ein Label.')).toBeNull();
+  });
+
   it('archives a stored option and brings it back, sends every option with its stamp, and drops a default that is archived', async () => {
     const user = userEvent.setup();
     const customer = { ...properties[0]!, default_value: 'opt_hafenkontor', settings: { multiple: false } };
@@ -398,8 +438,11 @@ describe('Properties', () => {
 
     await user.click(within(await rowOf('Kunde')).getByRole('button', { name: 'Property „Kunde“ bearbeiten' }));
     let dialog = await screen.findByRole('dialog', { name: 'Property „Kunde“ bearbeiten' });
-    expect(within(dialog).getByText('Mehrere Optionen pro Item. Einmal eingeschaltet, lässt es sich nicht zurücknehmen.')).toBeTruthy();
-    await user.click(within(dialog).getByRole('switch', { name: 'Mehrfachauswahl' }));
+    const multiple = within(dialog).getByRole('switch', { name: 'Mehrfachauswahl' });
+    expect(document.getElementById(multiple.getAttribute('aria-describedby')!)?.textContent).toBe(
+      'Mehrere Optionen pro Item. Einmal eingeschaltet, lässt es sich nicht zurücknehmen.',
+    );
+    await user.click(multiple);
     expect(within(dialog).getByRole('checkbox', { name: 'Gärtnerei Moos' }).getAttribute('aria-checked')).toBe('true');
     await user.click(within(dialog).getByRole('button', { name: 'Abbrechen' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
@@ -601,14 +644,17 @@ describe('DefaultValueField', () => {
     expect(screen.getByText('Lege zuerst Optionen an.')).toBeTruthy();
   });
 
-  it('switches yes or no', async () => {
+  it('switches yes or no, named by its visible label and described by the hint', async () => {
     const user = userEvent.setup();
     const seen = renderField(field('boolean'));
     const toggle = screen.getByRole('switch', { name: 'Standardwert' });
-    expect(screen.getByText('Nein')).toBeTruthy();
+    // the name is the label that shows beside the switch (WCAG 2.5.3)
+    expect(toggle.closest('label')!.textContent).toBe('Standardwert');
+    expect(toggle.hasAttribute('aria-label')).toBe(false);
+    expect(document.getElementById(toggle.getAttribute('aria-describedby')!)?.textContent).toBe('Optional. Neue Items starten mit diesem Wert.');
     await user.click(toggle);
     expect(seen.at(-1)).toBe(true);
-    expect(screen.getByText('Ja')).toBeTruthy();
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
     await user.click(toggle);
     expect(seen.at(-1)).toBe(false);
   });
@@ -625,8 +671,11 @@ describe('DefaultValueField', () => {
 
   it('marks a refusal at the control', () => {
     render(<DefaultValueField property={field('boolean')} value={null} onChange={() => {}} error="Der Standardwert ist Ja oder Nein." />);
-    expect(screen.getByText('Der Standardwert ist Ja oder Nein.')).toBeTruthy();
-    expect(screen.getByRole('switch', { name: 'Standardwert' }).getAttribute('aria-invalid')).toBe('true');
+    const toggle = screen.getByRole('switch', { name: 'Standardwert' });
+    expect(toggle.getAttribute('aria-invalid')).toBe('true');
+    // the refusal takes the place of the hint
+    expect(document.getElementById(toggle.getAttribute('aria-describedby')!)?.textContent).toBe('Der Standardwert ist Ja oder Nein.');
+    expect(screen.queryByText('Optional. Neue Items starten mit diesem Wert.')).toBeNull();
   });
 
   it('marks the first option of a multiple dropdown at a refusal', () => {

@@ -32,8 +32,8 @@ export interface DraftOption {
 type OptionRowsProps = {
   options: DraftOption[];
   onChange: (next: DraftOption[]) => void;
-  /** The server's refusal of an option's label, by its place in the list (`options.<index>.label`). */
-  labelError: (index: number) => string | undefined;
+  /** The server's refusal of an option's label, by the option's id (the dialog maps `options.<index>.label` to it). */
+  labelError: (id: string) => string | undefined;
 };
 
 export function OptionRows({ options, onChange, labelError }: OptionRowsProps) {
@@ -67,7 +67,7 @@ export function OptionRows({ options, onChange, labelError }: OptionRowsProps) {
             const archived = option.archivedAt !== null;
             const number = index + 1;
             const name = option.label.trim() || t('settings.properties.options.unnamed', { number });
-            const error = labelError(index);
+            const error = labelError(option.id);
             const errorId = `option-label-${option.id}-error`;
             return (
               <div className="flex flex-wrap items-center gap-2 px-2 py-1.5">
