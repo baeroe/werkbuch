@@ -33,6 +33,9 @@ export const SHORTCUTS = {
   'item.priority': { keys: 'p', scope: 'detail', label: 'shortcuts.item.priority', group: 'shortcuts.group.item' },
   'item.labels': { keys: 'l', scope: 'detail', label: 'shortcuts.item.labels', group: 'shortcuts.group.item' },
   'item.parent': { keys: 'shift+p', scope: 'detail', label: 'shortcuts.item.parent', group: 'shortcuts.group.item' },
+  'item.type': { keys: 't', scope: 'detail', label: 'shortcuts.item.type', group: 'shortcuts.group.item' },
+  'item.due': { keys: 'd', scope: 'detail', label: 'shortcuts.item.due', group: 'shortcuts.group.item' },
+  'item.start': { keys: 'shift+d', scope: 'detail', label: 'shortcuts.item.start', group: 'shortcuts.group.item' },
 } as const satisfies Record<string, CatalogEntry>;
 
 export type ShortcutId = keyof typeof SHORTCUTS;

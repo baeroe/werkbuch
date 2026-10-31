@@ -1,20 +1,25 @@
 /*
  * Properties against a fake REST API (`mockApi`): the list, the dialog (key from the label, options, settings and the
- * default value of every field type) and the refusals Playwright does not reach sensibly (422 at their fields, failed
- * deletes, load failures). The flows run in e2e/tests/types-properties.spec.ts.
+ * default value of every field type, edited with the item editors of `PropertyValueInput`) and the refusals Playwright
+ * does not reach sensibly (422 at their fields, failed deletes, load failures). The flows run in
+ * e2e/tests/types-properties.spec.ts.
  */
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { currentToasts, resetToasts } from '@/components/ui/toast';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
-import { list, properties, types } from '@/test/fixtures';
-import type { Property, PropertyValue } from '@/types';
-import { DefaultValueField, type DefaultFor } from './DefaultValueField';
+import { lene, list, organization, properties, types } from '@/test/fixtures';
+import type { Property } from '@/types';
 import Properties from './Properties';
+
+// the date of a default is picked in the calendar of the item fields, which counts days in the organisation's zone
+vi.mock('@inertiajs/react', () => ({
+  usePage: () => ({ props: { auth: { user: lene, permissions: [] }, organization }, url: '/settings/properties' }),
+}));
 
 let api: MockApi | undefined;
 
@@ -418,7 +423,7 @@ describe('Properties', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Option „Hafenkontor“ archivieren' }));
     expect(within(within(dialog).getByRole('list', { name: 'Optionen' })).getByText('Archiviert')).toBeTruthy();
     // the archived option is no longer offered as default
-    expect(within(dialog).getByRole('combobox', { name: /^Standardwert/ }).textContent).toContain('Kein Standardwert');
+    expect(within(dialog).getByRole('combobox', { name: /^Standardwert/ }).textContent).toBe('Option wählen …');
     await user.click(within(dialog).getByRole('button', { name: 'Speichern' }));
 
     await waitFor(() => expect(toastNamed('Property „Kunde“ gespeichert')).toBeDefined());
@@ -443,7 +448,11 @@ describe('Properties', () => {
       'Mehrere Optionen pro Item. Einmal eingeschaltet, lässt es sich nicht zurücknehmen.',
     );
     await user.click(multiple);
-    expect(within(dialog).getByRole('checkbox', { name: 'Gärtnerei Moos' }).getAttribute('aria-checked')).toBe('true');
+    const value = within(dialog).getByRole('combobox', { name: /^Standardwert/ });
+    expect(value.getAttribute('aria-label')).toBe('Standardwert: Gärtnerei Moos');
+    await user.click(value);
+    await waitFor(() => expect(screen.getByRole('option', { name: 'Gärtnerei Moos' }).getAttribute('aria-selected')).toBe('true'));
+    await user.keyboard('{Escape}');
     await user.click(within(dialog).getByRole('button', { name: 'Abbrechen' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 
@@ -466,15 +475,22 @@ describe('Properties', () => {
     await user.click(add);
     await user.keyboard('Telefon');
     const multiple = within(dialog).getByRole('switch', { name: 'Mehrfachauswahl' });
+    const value = () => within(dialog).getByRole('combobox', { name: /^Standardwert/ });
     await user.click(multiple);
-    await user.click(within(dialog).getByRole('checkbox', { name: 'Telefon' }));
-    await user.click(within(dialog).getByRole('checkbox', { name: 'Mail' }));
+    // ticked Telefon first, then Mail: the list keeps the order of the options
+    await user.click(value());
+    await user.click(await screen.findByRole('option', { name: 'Telefon' }));
+    await user.click(screen.getByRole('option', { name: 'Mail' }));
+    await user.keyboard('{Escape}');
+    expect(value().getAttribute('aria-label')).toBe('Standardwert: Mail, Telefon');
     await user.click(multiple);
-    expect(within(dialog).getByRole('combobox', { name: /^Standardwert/ }).textContent).toContain('Mail');
+    expect(value().getAttribute('aria-label')).toBe('Standardwert: Mail');
     await user.click(multiple);
-    await user.click(within(dialog).getByRole('checkbox', { name: 'Mail' }));
+    await user.click(value());
+    await user.click(await screen.findByRole('option', { name: 'Mail' }));
+    await user.keyboard('{Escape}');
     await user.click(multiple);
-    expect(within(dialog).getByRole('combobox', { name: /^Standardwert/ }).textContent).toContain('Kein Standardwert');
+    expect(value().textContent).toBe('Option wählen …');
   });
 
   it('clears the default when the field type changes, and has decimals for a number', async () => {
@@ -535,12 +551,12 @@ describe('Properties', () => {
     const value = within(dialog).getByRole<HTMLInputElement>('textbox', { name: /^Standardwert/ });
     expect(value.value).toBe('3,5');
     await user.clear(value);
-    await user.type(value, 'drei');
+    await user.type(value, '2,5');
     await user.click(within(dialog).getByRole('button', { name: 'Speichern' }));
 
     expect(await within(dialog).findByText('Der Standardwert muss eine Zahl sein.')).toBeTruthy();
     await waitFor(() => expect(document.activeElement).toBe(value));
-    expect(callsTo('PUT', '/api/v1/properties/pr_effort')[0]!.body).toMatchObject({ default_value: 'drei', settings: { decimals: 1 } });
+    expect(callsTo('PUT', '/api/v1/properties/pr_effort')[0]!.body).toMatchObject({ default_value: 2.5, settings: { decimals: 1 } });
     await user.click(within(dialog).getByRole('button', { name: 'Abbrechen' }));
     await waitFor(() => expect(document.activeElement).toBe(edit));
   });
@@ -548,8 +564,18 @@ describe('Properties', () => {
 
 /* ---------------------------------------------------------------- default values */
 
-describe('DefaultValueField', () => {
-  const field = (field_type: DefaultFor['field_type'], extra: Partial<DefaultFor> = {}): DefaultFor => ({ field_type, settings: {}, options: [], ...extra });
+describe('default value', () => {
+  const prop = (key: string, field_type: Property['field_type'], extra: Partial<Property> = {}): Property => ({
+    id: `pr_${key}`,
+    key,
+    label: key[0]!.toUpperCase() + key.slice(1),
+    field_type,
+    help: '',
+    default_value: null,
+    settings: {},
+    options: [],
+    ...extra,
+  });
   const options = [
     { id: 'o_a', label: 'Alpha', color: 'sky' as const, position: 0, archived_at: null },
     { id: 'o_b', label: '', color: 'moss' as const, position: 1, archived_at: null },
@@ -557,130 +583,203 @@ describe('DefaultValueField', () => {
     { id: 'o_old', label: 'Alt', color: 'sand' as const, position: 3, archived_at: '2026-10-01T08:00:00.000Z' },
   ];
 
-  function renderField(property: DefaultFor, initial: PropertyValue = null) {
-    const seen: PropertyValue[] = [];
-    function Harness() {
-      const [value, setValue] = useState<PropertyValue>(initial);
-      return (
-        <DefaultValueField
-          property={property}
-          value={value}
-          onChange={(next) => {
-            seen.push(next);
-            setValue(next);
-          }}
-        />
-      );
-    }
-    render(<Harness />);
-    return seen;
+  /** The list with this one property; a save answers with what was sent, or with `answer`. */
+  function renderProperty(property: Property, answer?: MockRoute) {
+    renderWith(
+      <Properties readOnlyReason={null} />,
+      routes([property], { [`PUT /api/v1/properties/${property.id}`]: answer ?? ((body) => ({ body: { data: { ...property, ...(body as object) } } })) }),
+    );
+  }
+
+  async function openEdit(user: ReturnType<typeof userEvent.setup>, property: Property) {
+    await user.click(within(await rowOf(property.label)).getByRole('button', { name: `Property „${property.label}“ bearbeiten` }));
+    return screen.findByRole('dialog', { name: `Property „${property.label}“ bearbeiten` });
+  }
+
+  /** Saves the dialog and answers the default value it sent. */
+  async function save(user: ReturnType<typeof userEvent.setup>, dialog: HTMLElement): Promise<unknown> {
+    const before = callsTo('PUT', '/api/v1/properties/').length;
+    await user.click(within(dialog).getByRole('button', { name: 'Speichern' }));
+    await waitFor(() => expect(callsTo('PUT', '/api/v1/properties/')).toHaveLength(before + 1));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    return (callsTo('PUT', '/api/v1/properties/').at(-1)!.body as { default_value: unknown }).default_value;
   }
 
   it('takes a text trimmed, and a blank as none', async () => {
     const user = userEvent.setup();
-    const seen = renderField(field('text'));
-    const input = screen.getByRole('textbox', { name: /^Standardwert/ });
-    expect(screen.getByText('Optional. Neue Items starten mit diesem Wert.')).toBeTruthy();
-    await user.type(input, '  Studio  ');
-    expect(seen.at(-1)).toBe('Studio');
+    const motto = prop('motto', 'text', { default_value: 'Alt' });
+    renderProperty(motto);
+
+    let dialog = await openEdit(user, motto);
+    const input = within(dialog).getByRole<HTMLInputElement>('textbox', { name: 'Standardwert' });
+    expect(input.value).toBe('Alt');
+    expect(document.getElementById(input.getAttribute('aria-describedby')!)!.textContent).toBe('Optional. Neue Items starten mit diesem Wert.');
     await user.clear(input);
-    expect(seen.at(-1)).toBeNull();
+    await user.type(input, '  Studio  ');
+    expect(await save(user, dialog)).toBe('Studio');
+
+    dialog = await openEdit(user, motto);
+    await user.clear(within(dialog).getByRole('textbox', { name: 'Standardwert' }));
+    expect(await save(user, dialog)).toBeNull();
   });
 
   it('takes an address as it is, trimmed', async () => {
     const user = userEvent.setup();
-    const seen = renderField(field('url'));
-    const input = screen.getByRole('textbox', { name: /^Standardwert/ });
-    expect(input.getAttribute('type')).toBe('url');
-    expect(input.getAttribute('inputmode')).toBe('url');
+    const link = prop('link', 'url');
+    renderProperty(link);
+
+    const dialog = await openEdit(user, link);
+    const input = within(dialog).getByRole('textbox', { name: 'Standardwert' });
+    expect([input.getAttribute('type'), input.getAttribute('inputmode')]).toEqual(['url', 'url']);
     await user.type(input, ' https://example.com/a ');
-    expect(seen.at(-1)).toBe('https://example.com/a');
+    expect(await save(user, dialog)).toBe('https://example.com/a');
   });
 
-  it('takes a number with a comma or a point, a blank as none, and leaves the rest to the server', async () => {
+  it('takes the default of a number as an item field reads it, and sends it as before', async () => {
     const user = userEvent.setup();
-    const seen = renderField(field('number', { settings: { decimals: 1 } }));
-    const input = screen.getByRole('textbox', { name: /^Standardwert/ });
+    const quote = prop('quote', 'number', { settings: { decimals: 1 } });
+    renderProperty(quote);
+
+    let dialog = await openEdit(user, quote);
+    const input = within(dialog).getByRole('textbox', { name: 'Standardwert' });
     expect(input.getAttribute('inputmode')).toBe('decimal');
-    await user.type(input, '3,5');
-    expect(seen.at(-1)).toBe(3.5);
-    await user.clear(input);
     await user.type(input, '-0.500');
-    expect(seen.at(-1)).toBe(-0.5);
-    await user.clear(input);
-    expect(seen.at(-1)).toBeNull();
-    await user.type(input, '1.000,5');
-    expect(seen.at(-1)).toBe('1.000,5');
+    expect(await save(user, dialog)).toBe(-0.5);
+
+    // a thousands point before a decimal comma
+    dialog = await openEdit(user, quote);
+    await user.type(within(dialog).getByRole('textbox', { name: 'Standardwert' }), '1.000,5');
+    expect(await save(user, dialog)).toBe(1000.5);
   });
 
-  it('offers the active options of a single dropdown and "Kein Standardwert"', async () => {
+  it('sends no default it cannot read, and puts the focus there', async () => {
     const user = userEvent.setup();
-    const seen = renderField(field('dropdown', { options }), 'o_c');
-    const select = screen.getByRole('combobox', { name: /^Standardwert/ });
-    expect(select.textContent).toContain('Gamma');
-    await user.click(select);
-    expect((await screen.findAllByRole('option')).map((option) => option.textContent)).toEqual(['Kein Standardwert', 'Alpha', 'Ohne Label', 'Gamma']);
+    const quote = prop('quote', 'number', { settings: { decimals: 1 } });
+    renderProperty(quote);
+
+    const dialog = await openEdit(user, quote);
+    const input = within(dialog).getByRole('textbox', { name: 'Standardwert' });
+    // a text that may still become a number shows nothing while it is typed …
+    await user.type(input, '1,');
+    expect(input.hasAttribute('aria-invalid')).toBe(false);
+    // … and keeps the dialog from sending, with the fix at the field
+    await user.click(within(dialog).getByRole('button', { name: 'Speichern' }));
+    expect(await within(dialog).findByText('Nur eine Zahl eingeben, zum Beispiel 3,5')).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(input));
+    expect(callsTo('PUT', '/api/v1/properties/')).toEqual([]);
+
+    await user.type(input, '5');
+    expect(within(dialog).queryByText('Nur eine Zahl eingeben, zum Beispiel 3,5')).toBeNull();
+    expect(await save(user, dialog)).toBe(1.5);
+  });
+
+  it('offers the active options of a single dropdown and "Keine Auswahl"', async () => {
+    const user = userEvent.setup();
+    const stage = prop('stage', 'dropdown', { options, default_value: 'o_c' });
+    renderProperty(stage);
+
+    let dialog = await openEdit(user, stage);
+    const value = within(dialog).getByRole('combobox', { name: /^Standardwert/ });
+    expect(value.getAttribute('aria-label')).toBe('Standardwert: Gamma');
+    await user.click(value);
+    expect((await screen.findAllByRole('option')).map((option) => option.textContent)).toEqual(['Keine Auswahl', 'Alpha', 'Ohne Label', 'Gamma']);
     await user.click(screen.getByRole('option', { name: 'Alpha' }));
-    expect(seen.at(-1)).toBe('o_a');
-    await user.click(select);
-    await user.click(await screen.findByRole('option', { name: 'Kein Standardwert' }));
-    expect(seen.at(-1)).toBeNull();
+    expect(await save(user, dialog)).toBe('o_a');
+
+    dialog = await openEdit(user, stage);
+    await user.click(within(dialog).getByRole('combobox', { name: /^Standardwert/ }));
+    await user.click(await screen.findByRole('option', { name: 'Keine Auswahl' }));
+    expect(await save(user, dialog)).toBeNull();
   });
 
   it('ticks the options of a multiple dropdown into a list in their order, and none is no default', async () => {
     const user = userEvent.setup();
-    const seen = renderField(field('dropdown', { settings: { multiple: true }, options }));
-    expect(screen.queryByRole('checkbox', { name: 'Alt' })).toBeNull();
-    await user.click(screen.getByRole('checkbox', { name: 'Gamma' }));
-    await user.click(screen.getByRole('checkbox', { name: 'Alpha' }));
-    expect(seen.at(-1)).toEqual(['o_a', 'o_c']);
-    await user.click(screen.getByRole('checkbox', { name: 'Alpha' }));
-    await user.click(screen.getByRole('checkbox', { name: 'Gamma' }));
-    expect(seen.at(-1)).toBeNull();
+    const stage = prop('stage', 'dropdown', { options, settings: { multiple: true } });
+    renderProperty(stage);
+
+    let dialog = await openEdit(user, stage);
+    await user.click(within(dialog).getByRole('combobox', { name: /^Standardwert/ }));
+    expect((await screen.findAllByRole('option')).map((option) => option.textContent)).toEqual(['Alpha', 'Ohne Label', 'Gamma']);
+    await user.click(screen.getByRole('option', { name: 'Gamma' }));
+    await user.click(screen.getByRole('option', { name: 'Alpha' }));
+    await user.keyboard('{Escape}');
+    expect(await save(user, dialog)).toEqual(['o_a', 'o_c']);
+
+    dialog = await openEdit(user, { ...stage, default_value: ['o_a'] });
+    expect(await save(user, dialog)).toBeNull();
   });
 
-  it('asks for options first when a multiple dropdown has none', () => {
-    renderField(field('dropdown', { settings: { multiple: true } }));
-    expect(screen.getByText('Lege zuerst Optionen an.')).toBeTruthy();
-  });
-
-  it('switches yes or no, named by its visible label and described by the hint', async () => {
+  it('asks for options first when a dropdown has none', async () => {
     const user = userEvent.setup();
-    const seen = renderField(field('boolean'));
-    const toggle = screen.getByRole('switch', { name: 'Standardwert' });
-    // the name is the label that shows beside the switch (WCAG 2.5.3)
-    expect(toggle.closest('label')!.textContent).toBe('Standardwert');
-    expect(toggle.hasAttribute('aria-label')).toBe(false);
+    renderWith(<Properties readOnlyReason={null} />, routes());
+
+    const dialog = await openCreate(user);
+    await chooseFieldType(user, dialog, 'Dropdown');
+    expect(within(dialog).getByText('Lege zuerst Optionen an.')).toBeTruthy();
+    expect(within(dialog).queryByRole('combobox', { name: /^Standardwert/ })).toBeNull();
+    await user.click(within(dialog).getByRole('switch', { name: 'Mehrfachauswahl' }));
+    expect(within(dialog).getByText('Lege zuerst Optionen an.')).toBeTruthy();
+  });
+
+  it('switches yes or no, named by its label and described by the hint, and stores no as no (A89)', async () => {
+    const user = userEvent.setup();
+    const billable = prop('billable', 'boolean');
+    renderProperty(billable);
+
+    let dialog = await openEdit(user, billable);
+    const toggle = within(dialog).getByRole('switch', { name: 'Standardwert' });
+    // the visible label above names it; the word beside it says the state
+    expect(within(dialog).getByText('Standardwert', { selector: 'label' })).toBeTruthy();
+    expect(toggle.closest('label')!.textContent).toBe('Nein');
     expect(document.getElementById(toggle.getAttribute('aria-describedby')!)?.textContent).toBe('Optional. Neue Items starten mit diesem Wert.');
     await user.click(toggle);
-    expect(seen.at(-1)).toBe(true);
     expect(toggle.getAttribute('aria-checked')).toBe('true');
-    await user.click(toggle);
-    expect(seen.at(-1)).toBe(false);
+    expect(await save(user, dialog)).toBe(true);
+
+    dialog = await openEdit(user, billable);
+    await user.click(within(dialog).getByRole('switch', { name: 'Standardwert' }));
+    await user.click(within(dialog).getByRole('switch', { name: 'Standardwert' }));
+    expect(await save(user, dialog)).toBe(false);
   });
 
-  it('takes a day, and an empty field as none', () => {
-    const seen = renderField(field('date'), '2026-01-02');
-    const input = screen.getByLabelText(/^Standardwert/) as HTMLInputElement;
-    expect([input.type, input.value]).toEqual(['date', '2026-01-02']);
-    fireEvent.change(input, { target: { value: '2026-10-31' } });
-    expect(seen.at(-1)).toBe('2026-10-31');
-    fireEvent.change(input, { target: { value: '' } });
-    expect(seen.at(-1)).toBeNull();
+  it('picks a day in the calendar, and removing it is none', async () => {
+    const user = userEvent.setup();
+    const launch = prop('launch', 'date', { default_value: '2026-01-02' });
+    renderProperty(launch);
+
+    let dialog = await openEdit(user, launch);
+    await user.click(within(dialog).getByRole('button', { name: 'Standardwert: 02.01.2026' }));
+    await user.click(document.querySelector<HTMLElement>('[data-day="2026-01-05"]')!);
+    expect(await save(user, dialog)).toBe('2026-01-05');
+
+    dialog = await openEdit(user, launch);
+    await user.click(within(dialog).getByRole('button', { name: 'Standardwert: 02.01.2026' }));
+    await user.click(await screen.findByRole('button', { name: 'Entfernen' }));
+    expect(await save(user, dialog)).toBeNull();
   });
 
-  it('marks a refusal at the control', () => {
-    render(<DefaultValueField property={field('boolean')} value={null} onChange={() => {}} error="Der Standardwert ist Ja oder Nein." />);
-    const toggle = screen.getByRole('switch', { name: 'Standardwert' });
-    expect(toggle.getAttribute('aria-invalid')).toBe('true');
-    // the refusal takes the place of the hint
+  it('marks a refusal at the control, in place of the hint', async () => {
+    const user = userEvent.setup();
+    const billable = prop('billable', 'boolean');
+    renderProperty(billable, () => invalid({ default_value: ['Der Standardwert ist Ja oder Nein.'] }));
+
+    const dialog = await openEdit(user, billable);
+    await user.click(within(dialog).getByRole('button', { name: 'Speichern' }));
+    const toggle = within(dialog).getByRole('switch', { name: 'Standardwert' });
+    await waitFor(() => expect(toggle.getAttribute('aria-invalid')).toBe('true'));
     expect(document.getElementById(toggle.getAttribute('aria-describedby')!)?.textContent).toBe('Der Standardwert ist Ja oder Nein.');
-    expect(screen.queryByText('Optional. Neue Items starten mit diesem Wert.')).toBeNull();
+    expect(within(dialog).queryByText('Optional. Neue Items starten mit diesem Wert.')).toBeNull();
   });
 
-  it('marks the first option of a multiple dropdown at a refusal', () => {
-    render(<DefaultValueField property={field('dropdown', { settings: { multiple: true }, options })} value={null} onChange={() => {}} error="Diese Auswahl gibt es nicht." />);
-    expect(screen.getByRole('checkbox', { name: 'Alpha' }).getAttribute('aria-invalid')).toBe('true');
-    expect(screen.getByRole('checkbox', { name: 'Gamma' }).hasAttribute('aria-invalid')).toBe(false);
+  it('marks a refused default of a multiple dropdown at its control', async () => {
+    const user = userEvent.setup();
+    const stage = prop('stage', 'dropdown', { options, settings: { multiple: true }, default_value: ['o_a'] });
+    renderProperty(stage, () => invalid({ default_value: ['Diese Auswahl gibt es nicht.'] }));
+
+    const dialog = await openEdit(user, stage);
+    await user.click(within(dialog).getByRole('button', { name: 'Speichern' }));
+    const value = within(dialog).getByRole('combobox', { name: /^Standardwert/ });
+    await waitFor(() => expect(value.getAttribute('aria-invalid')).toBe('true'));
+    expect(document.getElementById(value.getAttribute('aria-describedby')!)?.textContent).toBe('Diese Auswahl gibt es nicht.');
   });
 });

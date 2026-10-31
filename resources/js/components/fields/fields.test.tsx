@@ -1,8 +1,8 @@
 /*
  * The field editors of an item against a fake REST API (`mockApi`): what each picker offers, what it sends, how a
  * refusal comes back, and how a read-only field says why. From the clickdummy's `components/fields/fields.test.tsx`,
- * with the gaps of its review (assignee filtering) closed. The type picker and its dialog come with the property
- * editors.
+ * with the gaps of its review (assignee filtering) closed. The date and property editors have their own file
+ * (`property/property.test.tsx`).
  */
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -34,16 +34,17 @@ import {
   web47,
   web48,
 } from '@/test/fixtures';
-import type { Organization, Project, ProjectMember, Property, User, WorkItem } from '@/types';
+import type { Organization, Project, ProjectMember, Property, User, WorkItem, WorkItemType } from '@/types';
 import { AssigneePicker } from './AssigneePicker';
 import { addDays, botWord, daysBetween, formatDay, formatNumber, formatPropertyValue, formatShortDay, formatWeekdayDay, relativeDay } from './format';
-import { askResolution, ItemDialogsHost } from './ItemDialogs';
+import { askResolution, askTypeChange, ItemDialogsHost } from './ItemDialogs';
 import { projectPeople, useToday } from './itemData';
 import { LabelsPicker } from './LabelsPicker';
 import { NO_PARENT_OPTION, ParentPicker, parentCandidates, useProjectItems } from './ParentPicker';
 import { Picker, type PickerOption } from './Picker';
 import { PRIORITY_OPTIONS, PriorityPicker } from './PriorityPicker';
 import { StatePicker } from './StatePicker';
+import { TypeChangeDialog, typeChangeOf, TypePicker } from './TypePicker';
 
 let signedIn: User = lene;
 let org: Organization = organization;
@@ -645,6 +646,236 @@ describe('askResolution and ItemDialogsHost', () => {
     expect(within(dialog).queryAllByRole('radio')).toHaveLength(0);
     await user.click(within(dialog).getByRole('button', { name: /^Auf Done setzen/ }));
     expect(onConfirm).toHaveBeenCalledWith(null);
+  });
+});
+
+/* -------------------------------------------------------------------------- type */
+
+describe('TypePicker and the type change', () => {
+  const [task, bug, epic] = types as [WorkItemType, WorkItemType, WorkItemType];
+  const approved: Property = { id: 'pr_approved', key: 'approved', label: 'Freigegeben', field_type: 'boolean', help: '', default_value: null, settings: {}, options: [] };
+  // a type of the project that needs a yes/no and the environment
+  const release: WorkItemType = {
+    ...task,
+    id: 't_release',
+    name: 'Release',
+    properties: [
+      { property_id: 'pr_approved', required: true, position: 0 },
+      { property_id: 'pr_environment', required: true, position: 1 },
+    ],
+  };
+  const typed = (item: WorkItem): MockRoute => () => ({
+    body: { data: { ...item, children: item.id === web30.id ? [web48] : [], relations: [], type: types.find((type) => type.id === item.type_id), workflow: standard } },
+  });
+  const retyped = (item: WorkItem): MockRoute => (body) => ({ body: { data: { ...item, type_id: (body as { type_id: string }).type_id } } });
+  const routes = (item: WorkItem, extra: Record<string, MockRoute> = {}): Record<string, MockRoute> => ({
+    'GET /api/v1/properties': () => ({ body: list([...properties, approved]) }),
+    'GET /api/v1/work-item-types': () => ({ body: list([...types, release]) }),
+    [`GET /api/v1/work-items/${item.id}`]: typed(item),
+    [`PUT /api/v1/work-items/${item.id}/type`]: retyped(item),
+    ...extra,
+  });
+  const webWithRelease = project('WEB', 'member', { enabled_type_ids: ['t_task', 't_bug', 't_epic', 't_release'] });
+  const typeCalls = (id: string) => sent('PUT', `/api/v1/work-items/${id}/type`);
+  const refused = (errors: Record<string, string[]>) => ({ status: 422, body: { type: 'about:blank', title: 'x', status: 422, reason: 'validation_failed', errors } });
+
+  it('offers the types of the project and changes at once when nothing is lost or needed', async () => {
+    const user = userEvent.setup();
+    const plain = makeWorkItem({ id: 'wi_web_60', number: 60, key: 'WEB-60', title: 'Footer prüfen', values: { customer: 'opt_moos' } });
+    renderWith(<TypePicker item={plain} />, routes(plain));
+
+    const trigger = await picker(/^Typ: Task$/);
+    expect(trigger.getAttribute('aria-keyshortcuts')).toBe('T');
+    await user.click(trigger);
+    // Kundenwunsch is not switched on in WEB
+    expect(await optionTexts()).toEqual(['Task', 'Bug', 'Epic']);
+    await user.click(screen.getByRole('option', { name: 'Epic' }));
+
+    await waitFor(() => expect(typeCalls('wi_web_60')).toEqual([{ type_id: 't_epic', values: {} }]));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await waitFor(() => expect(toastTitles()).toContain('WEB-60 hat jetzt den Typ Epic'));
+  });
+
+  it('says so in a toast when a change at once fails', async () => {
+    const user = userEvent.setup();
+    const plain = makeWorkItem({ id: 'wi_web_60', number: 60, key: 'WEB-60' });
+    renderWith(<TypePicker item={plain} />, routes(plain, { 'PUT /api/v1/work-items/wi_web_60/type': () => problem(503, 'service_unavailable', 'Der Server ist gerade nicht erreichbar.') }));
+
+    await user.click(await picker(/^Typ: Task$/));
+    await user.click(await screen.findByRole('option', { name: 'Epic' }));
+    await waitFor(() => expect(toastTitles()).toContain('Typ nicht geändert'));
+    // trying again asks the server again
+    act(() => currentToasts().at(-1)!.action!.onClick());
+    await waitFor(() => expect(typeCalls('wi_web_60')).toHaveLength(2));
+  });
+
+  it('offers to load the types again after a failure', async () => {
+    const user = userEvent.setup();
+    let fail = true;
+    renderWith(<TypePicker item={web48} />, routes(web48, { 'GET /api/v1/properties': () => (fail ? problem(503, 'service_unavailable', 'Der Server ist gerade nicht erreichbar.') : { body: list(properties) }) }));
+
+    await user.click(await picker(/^Typ: Task$/));
+    const alert = await screen.findByRole('alert');
+    fail = false;
+    await user.click(within(alert).getByRole('button', { name: 'Erneut versuchen' }));
+    expect(await screen.findByRole('option', { name: 'Epic' })).toBeTruthy();
+  });
+
+  it('names lost values before a type change and asks for the required ones', async () => {
+    const user = userEvent.setup();
+    renderWith(<TypePicker item={web47} />, routes(web47));
+
+    const trigger = await picker(/^Typ: Bug$/);
+    await user.click(trigger);
+    await user.click(await screen.findByRole('option', { name: 'Task' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Typ von WEB-47 auf Task ändern' });
+    expect(within(dialog).getByText('Die Felder von WEB-47 richten sich danach nach Task.')).toBeTruthy();
+    const lost = await within(dialog).findByRole('list', { name: 'Diese Werte gehen verloren' });
+    expect(within(lost).getAllByRole('listitem').map((entry) => entry.textContent)).toEqual(['UmgebungProduktion']);
+    expect(within(dialog).getByText('In der History bleiben sie erhalten.')).toBeTruthy();
+    // nothing changes before the answer
+    expect(typeCalls('wi_web_47')).toEqual([]);
+
+    await user.click(within(dialog).getByRole('button', { name: /^Zu Task wechseln/ }));
+    await waitFor(() => expect(typeCalls('wi_web_47')).toEqual([{ type_id: 't_task', values: {} }]));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(toastTitles()).toContain('WEB-47 hat jetzt den Typ Task');
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+  });
+
+  it('asks for the required values of the new type with the property editors, and shows the refusal at the field', async () => {
+    const user = userEvent.setup();
+    let refuse = true;
+    const plain = makeWorkItem({ id: 'wi_web_61', number: 61, key: 'WEB-61' });
+    renderWith(
+      <TypePicker item={plain} />,
+      routes(plain, {
+        'PUT /api/v1/work-items/wi_web_61/type': (body, url) => (refuse ? refused({ 'values.environment': ['„Umgebung“ ist ein Pflichtfeld.'] }) : retyped(plain)(body, url)),
+      }),
+      { projects: [webWithRelease, app] },
+    );
+
+    await user.click(await picker(/^Typ: Task$/));
+    await user.click(await screen.findByRole('option', { name: 'Release' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Typ von WEB-61 auf Release ändern' });
+    const required = await within(dialog).findByRole('region', { name: 'Pflichtfelder von Release' });
+    expect(within(dialog).queryByRole('list')).toBeNull();
+    expect(within(required).getByText('Release braucht diese Pflichtfelder, bevor der Typ wechselt.')).toBeTruthy();
+    // a required yes/no starts off, and off is what it sends (A89)
+    expect(within(required).getByRole('switch', { name: 'Freigegeben' }).getAttribute('aria-checked')).toBe('false');
+
+    // mod+Enter sends from anywhere in the dialog
+    await user.keyboard('{Control>}{Enter}{/Control}');
+    const environment = within(required).getByRole('combobox', { name: /^Umgebung/ });
+    expect(await within(dialog).findByText('„Umgebung“ ist ein Pflichtfeld.')).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(environment));
+    expect(typeCalls('wi_web_61')).toEqual([{ type_id: 't_release', values: { approved: false } }]);
+
+    refuse = false;
+    await user.click(environment);
+    await user.click(await screen.findByRole('option', { name: 'Staging' }));
+    await user.click(within(required).getByRole('switch', { name: 'Freigegeben' }));
+    await user.click(within(dialog).getByRole('button', { name: /^Zu Release wechseln/ }));
+    await waitFor(() => expect(typeCalls('wi_web_61').at(-1)).toEqual({ type_id: 't_release', values: { approved: true, environment: 'opt_env_staging' } }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('names one required field as one', async () => {
+    const user = userEvent.setup();
+    renderWith(<TypePicker item={web48} />, routes(web48));
+
+    await user.click(await picker(/^Typ: Task$/));
+    await user.click(await screen.findByRole('option', { name: 'Bug' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Typ von WEB-48 auf Bug ändern' });
+    expect(await within(dialog).findByText('Bug braucht dieses Pflichtfeld, bevor der Typ wechselt.')).toBeTruthy();
+  });
+
+  it('refuses a type change that would break two levels', async () => {
+    const user = userEvent.setup();
+    renderWith(<TypePicker item={web30} />, routes(web30));
+
+    await user.click(await picker(/^Typ: Epic$/));
+    await user.click(await screen.findByRole('option', { name: 'Task' }));
+    let dialog = await screen.findByRole('dialog', { name: 'Typ von WEB-30 auf Task ändern' });
+    expect(within(dialog).getByText('WEB-30 hat Kind-Items. Nur Epics können Kind-Items haben.')).toBeTruthy();
+    expect(within(dialog).queryByRole('button', { name: /^Zu Task wechseln/ })).toBeNull();
+    await user.click(within(dialog).getByRole('button', { name: /^Typ behalten/ }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(typeCalls('wi_web_30')).toEqual([]);
+
+    // WEB-48 hangs under WEB-30
+    api!.restore();
+    renderWith(<TypePicker item={web48} />, routes(web48));
+    await user.click(await picker(/^Typ: Task$/));
+    await user.click(await screen.findByRole('option', { name: 'Epic' }));
+    dialog = await screen.findByRole('dialog', { name: 'Typ von WEB-48 auf Epic ändern' });
+    expect(within(dialog).getByText('WEB-48 hat ein Eltern-Item. Epics haben kein Eltern-Item.')).toBeTruthy();
+    expect(typeCalls('wi_web_48')).toEqual([]);
+  });
+
+  it('shows a refusal of the type itself above the fields, and offers to try again after a failure', async () => {
+    const user = userEvent.setup();
+    let answer: { status: number; body: unknown } = refused({ type_id: ['Der Typ ist im Projekt nicht aktiviert.'] });
+    renderWith(<TypeChangeDialog item={web47} target={task} open onOpenChange={() => {}} />, routes(web47, { 'PUT /api/v1/work-items/wi_web_47/type': () => answer }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Typ von WEB-47 auf Task ändern' });
+    await user.click(await within(dialog).findByRole('button', { name: /^Zu Task wechseln/ }));
+    expect((await within(dialog).findByRole('alert')).textContent).toBe('Typ nicht geändertDer Typ ist im Projekt nicht aktiviert.');
+
+    answer = problem(503, 'service_unavailable', 'Der Server ist gerade nicht erreichbar.');
+    await user.click(within(dialog).getByRole('button', { name: /^Zu Task wechseln/ }));
+    await waitFor(() => expect(toastTitles()).toContain('Typ nicht geändert'));
+    act(() => currentToasts().at(-1)!.action!.onClick());
+    await waitFor(() => expect(typeCalls('wi_web_47')).toHaveLength(3));
+  });
+
+  it('says why from what the caller knows before the item has loaded', () => {
+    renderWith(<TypeChangeDialog item={web30} target={task} open onOpenChange={() => {}} hasChildren />, routes(web30));
+    // the first draw already says no
+    expect(screen.getByText('WEB-30 hat Kind-Items. Nur Epics können Kind-Items haben.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Zu Task wechseln/ })).toBeNull();
+  });
+
+  it('waits for the item when nothing is known about its children, and goes on when it fails to load', async () => {
+    renderWith(<TypeChangeDialog item={web30} target={task} open onOpenChange={() => {}} />, {
+      ...routes(web30),
+      'GET /api/v1/work-items/wi_web_30': () => problem(503, 'service_unavailable', 'Der Server ist gerade nicht erreichbar.'),
+    });
+    // a task takes no children: until the item says whether it has some, the dialog waits
+    expect(screen.getByText('Item wird geladen …')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Zu Task wechseln/ })).toBeNull();
+    // the item fails to load: the change is offered, the server decides
+    expect(await screen.findByRole('button', { name: /^Zu Task wechseln/ })).toBeTruthy();
+  });
+
+  it('shows the fields loading', () => {
+    // an epic may have children: nothing to wait for but the catalogs
+    renderWith(<TypeChangeDialog item={web47} target={epic} open onOpenChange={() => {}} />, routes(web47));
+    expect(screen.getByText('Felder werden geladen …')).toBeTruthy();
+  });
+
+  it('asks for a command through ItemDialogsHost', async () => {
+    const user = userEvent.setup();
+    renderWith(<ItemDialogsHost />, routes(web47));
+
+    act(() => askTypeChange(web47, task));
+    const dialog = await screen.findByRole('dialog', { name: 'Typ von WEB-47 auf Task ändern' });
+    expect(await within(dialog).findByText('In der History bleiben sie erhalten.')).toBeTruthy();
+    await user.click(within(dialog).getByRole('button', { name: 'Abbrechen' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    act(() => askTypeChange(web30, task, true));
+    expect(await screen.findByText('WEB-30 hat Kind-Items. Nur Epics können Kind-Items haben.')).toBeTruthy();
+  });
+
+  it('counts what a change costs in the order of the fields, and a yes/no that is off as nothing', () => {
+    const item = makeWorkItem({ type_id: 't_bug', values: { environment: 'opt_env_local', effort: 2, approved: false, stray: 'x' } });
+    const stray: Property = { ...approved, id: 'pr_stray', key: 'stray', label: 'Streuner', field_type: 'text' };
+    const all = [...properties, approved, stray];
+    expect(typeChangeOf(item, epic, all, types).lost.map((entry) => entry.property.key)).toEqual(['effort', 'environment', 'stray']);
+    expect(typeChangeOf(item, bug, all, types)).toEqual({ lost: [{ property: stray, value: 'x' }], missing: [] });
+    expect(typeChangeOf(makeWorkItem({ type_id: 't_unknown' }), release, all, types).missing.map((property) => property.key)).toEqual(['approved', 'environment']);
   });
 });
 

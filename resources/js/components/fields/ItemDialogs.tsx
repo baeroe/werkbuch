@@ -1,14 +1,15 @@
 /*
  * The follow-up questions of the item commands (palette and shortcuts), which have no picker of their own on screen:
- * the resolution of a move to Completed or Canceled. A command asks (`askResolution`); `ItemDialogsHost`, mounted once
- * in the shell, shows the question. The dialog loads with the first question, so the shell's own bundle stays small.
- * The type change dialog (`askTypeChange`) joins it with the type picker.
+ * the resolution of a move to Completed or Canceled, and the type change dialog. A command asks (`askResolution`,
+ * `askTypeChange`); `ItemDialogsHost`, mounted once in the shell, shows the question. The dialogs load with the first
+ * question, so the shell's own bundle stays small.
  */
 
 import { lazy, Suspense, useSyncExternalStore } from 'react';
-import type { State, StateCategory } from '@/types';
+import type { State, StateCategory, WorkItem, WorkItemType } from '@/types';
 
 const ResolutionPrompt = lazy(() => import('./ResolutionPrompt').then((module) => ({ default: module.ResolutionPrompt })));
+const TypeChangeDialog = lazy(() => import('./TypePicker').then((module) => ({ default: module.TypeChangeDialog })));
 
 type ResolutionRequest = {
   kind: 'resolution';
@@ -18,9 +19,10 @@ type ResolutionRequest = {
   from?: { category: StateCategory; resolutionId: string | null };
   onConfirm: (resolutionId: string | null) => void;
 };
+type TypeRequest = { kind: 'type'; item: WorkItem; target: WorkItemType; hasChildren?: boolean };
 
 /** The question asked last, and whether it is shown (it stays while it fades out). */
-let state: { request: ResolutionRequest | null; open: boolean } = { request: null, open: false };
+let state: { request: ResolutionRequest | TypeRequest | null; open: boolean } = { request: null, open: false };
 const listeners = new Set<() => void>();
 
 function set(next: typeof state) {
@@ -31,6 +33,15 @@ function set(next: typeof state) {
 /** Asks for the resolution of a move into `target`; `onConfirm` gets the choice, nothing happens on Cancel. */
 export function askResolution(request: Omit<ResolutionRequest, 'kind'>): void {
   set({ request: { kind: 'resolution', ...request }, open: true });
+}
+
+/**
+ * Asks how `item` changes to `target`: the values that go, the required ones of the new type, or why the two levels
+ * refuse it. `hasChildren`: what the command knows about the item's children, so the dialog can refuse before the item
+ * loads.
+ */
+export function askTypeChange(item: WorkItem, target: WorkItemType, hasChildren?: boolean): void {
+  set({ request: { kind: 'type', item, target, hasChildren }, open: true });
 }
 
 const subscribe = (listener: () => void) => {
@@ -49,7 +60,11 @@ export function ItemDialogsHost() {
   if (!request) return null;
   return (
     <Suspense fallback={null}>
-      <ResolutionPrompt open={open} onOpenChange={close} subject={request.subject} target={request.target} from={request.from} onConfirm={request.onConfirm} />
+      {request.kind === 'resolution' ? (
+        <ResolutionPrompt open={open} onOpenChange={close} subject={request.subject} target={request.target} from={request.from} onConfirm={request.onConfirm} />
+      ) : (
+        <TypeChangeDialog key={request.item.id} item={request.item} target={request.target} open={open} onOpenChange={close} hasChildren={request.hasChildren} />
+      )}
     </Suspense>
   );
 }
