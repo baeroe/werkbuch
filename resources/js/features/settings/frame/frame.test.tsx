@@ -113,6 +113,26 @@ describe('SectionNav', () => {
     expect(screen.queryByRole('link', { current: 'page' })).toBeNull();
   });
 
+  it('keeps its keys apart when a heading comes back later in the list', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    render(
+      <SectionNav
+        label="Bereiche"
+        items={[
+          { slug: 'a', label: 'A', group: 'Kataloge' },
+          { slug: 'b', label: 'B', group: 'Betrieb' },
+          { slug: 'c', label: 'C', group: 'Kataloge' },
+        ]}
+        current="a"
+        hrefFor={hrefFor}
+      />,
+    );
+
+    expect(screen.getAllByText('Kataloge')).toHaveLength(2);
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
+
   it('is one group without a heading for sections that have no group', () => {
     render(
       <SectionNav

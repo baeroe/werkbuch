@@ -80,8 +80,9 @@ export function SectionNav({ label, items, current, hrefFor }: SectionNavProps) 
   return (
     <nav aria-label={label} className="-mx-4 overflow-x-auto px-4 py-1 lg:sticky lg:top-3 lg:mx-0 lg:overflow-visible lg:px-0 lg:py-0">
       <div className="flex gap-4 lg:flex-col lg:gap-5">
-        {groupsOf(items).map((group) => (
-          <div key={group.heading ?? ''} className="flex shrink-0 items-center gap-1 lg:flex-col lg:items-stretch">
+        {groupsOf(items).map((group, index) => (
+          // a heading may come back later in the list: the position keeps the keys apart
+          <div key={`${index}:${group.heading ?? ''}`} className="flex shrink-0 items-center gap-1 lg:flex-col lg:items-stretch">
             {group.heading && <p className="hidden px-2 pb-1 text-sm font-semibold text-muted lg:block">{group.heading}</p>}
             <ul className="flex gap-1 lg:flex-col">
               {group.items.map((item) => {

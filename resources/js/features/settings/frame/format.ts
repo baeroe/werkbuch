@@ -32,6 +32,18 @@ export const formatDate = (iso: string, timeZone: string): string => formatter(t
 /** "28.10.2026, 09:05" style. */
 export const formatDateTime = (iso: string, timeZone: string): string => formatter(timeZone, 'datetime').format(new Date(iso));
 
+const relativeFormatters = new Map<string, Intl.RelativeTimeFormat>();
+
+function relativeFormatter(): Intl.RelativeTimeFormat {
+  const locale = intlLocale();
+  let found = relativeFormatters.get(locale);
+  if (!found) {
+    found = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+    relativeFormatters.set(locale, found);
+  }
+  return found;
+}
+
 const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
   ['day', 86_400_000],
   ['hour', 3_600_000],
@@ -42,7 +54,7 @@ const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
 export function relativeTime(iso: string): string {
   const distance = new Date(iso).getTime() - Date.now();
   for (const [unit, size] of UNITS) {
-    if (Math.abs(distance) >= size) return new Intl.RelativeTimeFormat(intlLocale(), { numeric: 'auto' }).format(Math.trunc(distance / size), unit);
+    if (Math.abs(distance) >= size) return relativeFormatter().format(Math.trunc(distance / size), unit);
   }
   return t('settings.frame.just_now');
 }

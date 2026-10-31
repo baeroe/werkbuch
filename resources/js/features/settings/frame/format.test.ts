@@ -16,6 +16,7 @@ let api: MockApi | undefined;
 vi.mock('@inertiajs/react', () => ({ usePage: () => ({ props: { organization: shared } }) }));
 
 afterEach(() => {
+  initI18n({ locale: 'de', translations: de });
   vi.useRealTimers();
   shared = organization;
   api?.restore();
