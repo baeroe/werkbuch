@@ -67,13 +67,7 @@ final class SaveLabel
                 return $saved;
             }
 
-            $changes = [];
-
-            foreach (self::snapshot($saved) as $field => $new) {
-                if ($before[$field] !== $new) {
-                    $changes[$field] = ['old' => $before[$field], 'new' => $new];
-                }
-            }
+            $changes = CatalogInput::changes($before, self::snapshot($saved));
 
             if ($changes !== []) {
                 EventRecorder::record(EventType::LabelUpdated, $actor, $saved, null, $changes);

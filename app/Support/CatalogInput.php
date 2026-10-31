@@ -112,6 +112,27 @@ final class CatalogInput
     }
 
     /**
+     * What an `…updated` event records: the fields whose value differs between two snapshots, `{old, new}` each, in the
+     * order of `$after`. An entry that did not change is no key.
+     *
+     * @param  array<string, mixed>  $before
+     * @param  array<string, mixed>  $after
+     * @return array<string, array{old: mixed, new: mixed}>
+     */
+    public static function changes(array $before, array $after): array
+    {
+        $changes = [];
+
+        foreach ($after as $field => $new) {
+            if ($before[$field] !== $new) {
+                $changes[$field] = ['old' => $before[$field], 'new' => $new];
+            }
+        }
+
+        return $changes;
+    }
+
+    /**
      * One message for every required field that is missing (`required`, or `present` where an empty list is fine).
      *
      * @param  list<string>  $fields

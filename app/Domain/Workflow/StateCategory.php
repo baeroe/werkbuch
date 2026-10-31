@@ -21,4 +21,16 @@ enum StateCategory: string
     {
         return $this === self::Completed || $this === self::Canceled;
     }
+
+    /** The name of the category in a sentence, translated (fixed keys, so that the key scan finds them). */
+    public function label(): string
+    {
+        return match ($this) {
+            self::Backlog => __('catalog.category.backlog'),
+            self::Unstarted => __('catalog.category.unstarted'),
+            self::Started => __('catalog.category.started'),
+            self::Completed => __('catalog.category.completed'),
+            self::Canceled => __('catalog.category.canceled'),
+        };
+    }
 }

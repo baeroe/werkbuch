@@ -3,6 +3,7 @@
 namespace App\Actions\Resolutions;
 
 use App\Access\Authorize;
+use App\Domain\Workflow\StateCategory;
 use App\Enums\Catalog;
 use App\Events\EventRecorder;
 use App\Events\EventType;
@@ -40,7 +41,7 @@ final class DeleteResolution
             if ($resolution->default_for !== null) {
                 throw Problem::conflict('is_default', detail: __('problem.detail.default_resolution', [
                     'label' => $resolution->label,
-                    'category' => ucfirst($resolution->default_for),
+                    'category' => StateCategory::from($resolution->default_for)->label(),
                 ]));
             }
 

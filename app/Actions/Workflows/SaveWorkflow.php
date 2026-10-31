@@ -12,6 +12,7 @@ use App\Models\Workflow;
 use App\Models\WorkflowState;
 use App\Models\WorkflowTransition;
 use App\Support\Actor;
+use App\Support\CatalogInput;
 use App\Support\CatalogLock;
 use App\Support\WorkflowInput;
 use Illuminate\Support\Facades\DB;
@@ -157,13 +158,7 @@ final class SaveWorkflow
                 return $saved;
             }
 
-            $changes = [];
-
-            foreach (self::snapshot($saved) as $field => $new) {
-                if ($before[$field] !== $new) {
-                    $changes[$field] = ['old' => $before[$field], 'new' => $new];
-                }
-            }
+            $changes = CatalogInput::changes($before, self::snapshot($saved));
 
             if ($changes !== []) {
                 if (! $saved->wasChanged()) {

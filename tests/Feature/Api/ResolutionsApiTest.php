@@ -209,20 +209,22 @@ it('replaces a resolution as a whole', function () use ($shipped, $answerOf) {
         ->assertJsonPath('data.default_for', null)->assertJsonPath('data.archived_at', null);
 });
 
-it('never deletes a default', function () use ($shipped) {
+it('never deletes a default, naming its category in the language of the person', function (string $locale, string $done, string $canceled) use ($shipped) {
     $this->actingAs(User::factory()->admin()->create());
-    $done = $shipped('Done');
-    $canceled = $shipped("Won't do");
+    app()->setLocale($locale);
 
-    $this->deleteJson("/api/v1/resolutions/{$done->id}")->assertStatus(409)
+    $this->deleteJson("/api/v1/resolutions/{$shipped('Done')->id}")->assertStatus(409)
         ->assertJsonPath('reason', 'is_default')
-        ->assertJsonPath('detail', __('problem.detail.default_resolution', ['label' => 'Done', 'category' => 'Completed']));
-    $this->deleteJson("/api/v1/resolutions/{$canceled->id}")->assertStatus(409)
-        ->assertJsonPath('detail', __('problem.detail.default_resolution', ['label' => "Won't do", 'category' => 'Canceled']));
+        ->assertJsonPath('detail', $done);
+    $this->deleteJson("/api/v1/resolutions/{$shipped("Won't do")->id}")->assertStatus(409)
+        ->assertJsonPath('detail', $canceled);
 
     expect(Resolution::query()->count())->toBe(4)
         ->and(eventsOf(EventType::ResolutionDeleted))->toBeEmpty();
-});
+})->with([
+    'English' => ['en', '“Done” is the default for Completed. Choose another one first.', '“Won\'t do” is the default for Canceled. Choose another one first.'],
+    'German' => ['de', '„Done“ ist der Standard für Completed. Bestimme zuerst einen anderen.', '„Won\'t do“ ist der Standard für Canceled. Bestimme zuerst einen anderen.'],
+]);
 
 it('deletes an unused resolution', function () use ($shipped) {
     $this->actingAs(User::factory()->admin()->create());
