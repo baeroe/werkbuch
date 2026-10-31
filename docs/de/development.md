@@ -95,7 +95,7 @@ ddev artisan app:sync-roles            # gleicht Rollen und Rechte in der Datenb
 ddev artisan app:redispatch-events     # reicht liegengebliebene Events erneut an ihre Konsumenten
 ```
 
-`app:sync-roles` führt auch die Migration der Rollen aus; von Hand brauchst du es nur, wenn sich eine Rechtetabelle im Code ohne Migration geändert hat. `app:redispatch-events` läuft jede Minute im Scheduler, von Hand brauchst du es nur, um nach einem Ausfall des Schedulers aufzuholen.
+Die Migration der Rollen führt `app:sync-roles` aus; von Hand brauchst du es nur, wenn sich eine Rechtetabelle im Code ohne Migration geändert hat. `app:redispatch-events` läuft jede Minute im Scheduler, von Hand brauchst du es nur, um nach einem Ausfall des Schedulers aufzuholen.
 
 ## Dokumentation
 
