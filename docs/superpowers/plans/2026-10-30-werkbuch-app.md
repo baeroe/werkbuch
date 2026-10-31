@@ -131,11 +131,11 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 **Liefert:**
 - `app/Domain/Workflow/TransitionGraph` (Port von `src/domain/workflow.ts`: frei oder Matrix, Startstatus, mindestens ein Completed, Erreichbarkeit) mit portierten Tests.
 - Workflows mit Status (Name, Icon-Form aus sieben, Kategorie, Reihenfolge) und Übergängen; Standard-Workflow aus der Spec per Migration; Löschen nur ungenutzt.
-- Typen (Name, Lucide-Icon, einer von sechs Tönen, Beschreibung, Häkchen „Epic“, Properties mit Pflicht und Reihenfolge, Archiv statt Löschen); Task, Bug (mit „Aufwand (h)“, R6) und Epic per Migration.
+- Typen (Name, Lucide-Icon aus einer festen Liste (A68), einer von sechs Tönen, Beschreibung, Häkchen „Epic“, Properties mit Pflicht und Reihenfolge, Archiv statt Löschen); Task, Bug (mit „Aufwand (h)“, R6) und Epic per Migration.
 - Properties (Schlüssel-Regeln, acht Feldtypen mit Einstellungen, Optionen mit Archiv, Wechsel Einfach → Mehrfach), Labels (ohne Standard-Markierung, R23), Relationstypen (drei eingebaute, „wird blockiert von“), Resolutions (vier eingebaute, Standard für Completed und Canceled).
-- Projekt: Workflow wählen mit Status-Zuordnung (Job `RemapStates`, ohne Übergangsregeln, mit Actor in der History) und aktivierte Typen mit Standardtyp. Die Prüfungen gegen bestehende Items (Status mit Items löschen, Häkchen „Epic“ gegen Kinder) bekommen ihre Item-Seite in Phase 4.
-- REST: `workflows` (mit `states`, `transitions`), `work-item-types`, `properties` (mit `options`), `labels`, `relation-types`, `resolutions`, `projects/{id}/workflow`, `projects/{id}/types`.
-- UI-Port: Einstellungen Workflows (Editor mit Übergangsmatrix), Typen, Properties, Labels, Relationstypen, Resolutions; Projekteinstellungen Workflow und Typen. Status-Zuordnung und Entfernen-Helfer einmal (R26).
+- Projekt: Workflow wählen (`AssignWorkflow` mit `mapping`, in Phase 3 nur auf seine Form geprüft) und aktivierte Typen mit Standardtyp. Die Status-Zuordnung mit dem Job `RemapStates` und die Prüfungen gegen bestehende Items (Status mit Items löschen, Häkchen „Epic“ gegen Kinder) kommen mit Phase 4 (Ruling A60).
+- REST: `workflows` (mit `states`, `transitions`), `work-item-types`, `properties` (mit `options`), `labels`, `relation-types`, `resolutions`, `PUT projects/{id}/workflow`; die Typen eines Projekts über `PATCH projects/{id}` (`enabled_type_ids`, `default_type_id`), ohne eigenen Endpunkt `projects/{id}/types` (A64).
+- UI-Port: Einstellungen Workflows (Editor mit Übergangsmatrix), Typen, Properties, Labels, Relationstypen, Resolutions; Projekteinstellungen Workflow und Typen. Entfernen-Helfer einmal (`useRemoval`, R26); die Status-Zuordnung folgt mit Phase 4.
 
 **Tests:** alle Fälle aus `src/domain/workflow.test.ts` und den Workflow-, Typ- und Property-Teilen von `src/api/resources.test.ts`, Schlüssel gleich einem Kernfeld, Feldtyp unveränderlich; e2e: Flow 7 des Klickdummys (Agentur-Freigabe, „Review ist vom Startstatus aus nicht erreichbar“).
 
@@ -150,6 +150,7 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 **Liefert:**
 - `work_items`, `work_item_values` (typisiert, Spalte je Werttyp), `work_item_labels`, `work_item_relations`, `work_item_subscribers`; Key und Nummer (Review Focus 2), Rang (Port von `src/domain/rank.ts`), `parent` und `children_progress`, `blocked`, `blocking`.
 - Actions: Anlegen (Startstatus oder Prüfung wie ein Übergang, Pflicht-Properties, zwei Ebenen nach `src/domain/hierarchy.ts`), Ändern (zuletzt gewinnt; Beschreibung mit `description_version` und 409 `description_conflict`), Übergang mit Resolution (Port von `src/domain/resolution.ts`, `started_at`, `closed_at`), Typwechsel (verlorene Werte in der History, fehlende Pflichtwerte → 422), Archivieren und Wiederherstellen, Löschen (Kinder werden zu Items ohne Eltern), Mehrfachbearbeitung je Item mit Liste der Ablehnungen, Relationen (keine mit sich selbst, kein Paar doppelt, „verborgenes Item“), Beobachten. Prüfungen aus Phase 3 gegen bestehende Items (Status löschen, Epic-Häkchen, Typwechsel).
+- Aus Phase 3 (A60, A79): der Job `RemapStates` (ohne Übergangsregeln, mit Actor in der History) mit Pflicht-Zuordnung benutzter Status in `AssignWorkflow` und `SaveWorkflow` (409 `state_in_use`); die zusammengeführte Status-Zuordnung (R26: ein Dialog für „Workflow wechseln“ und „Status entfernen“) mit Zeilen und Effekten; die Item-Zweige der Katalog-UI: `outcome: 'archived'` bei Typen und Resolutions, Archiv statt Löschen benutzter Typen, Optionen und Resolutions, `affected_items`/`affected_relations`, Ablehnung des Häkchens „Epic“.
 - `App\RichText\Document` mit Standard-Knoten (JSON, Text, Markdown hin und zurück), `RichTextInput`.
 - History aus `events` mit Zusammenfassen derselben Person in wenigen Minuten (Spec 13: der Plan legt 5 Minuten fest).
 - Einfacher Listen-Endpunkt `GET /api/v1/work-items` mit Projekt-Kurzform, bis Phase 5 die Filter-Engine bringt; `GET/PATCH/DELETE /api/v1/work-items/{idOrKey}`, `POST …/transition`, `…/archive`, `…/restore`, `POST /api/v1/work-items/bulk`, `…/relations`, `…/subscribers`, `…/history`. Alte Kennungen leiten um (`OLD-12` → `NEW-12`, in UI per Redirect, in REST per 301 mit `Location`).
@@ -358,7 +359,7 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 
 - [x] Phase 1: Fundament (PR #5)
 - [x] Phase 2: Organisation, Konten, Rollen, Projekte (PR #11)
-- [ ] Phase 3: Workflows, Typen, Properties, Kataloge
+- [x] Phase 3: Workflows, Typen, Properties, Kataloge (PR folgt)
 - [ ] Phase 4: Work Items, Relationen, History
 - [ ] Phase 5: Views, Filter-Engine, Listen-Layouts
 - [ ] Phase 6: Suche und Befehlspalette

@@ -12,14 +12,20 @@ A project is where a team works on items. Every project has its own members, and
 | Lead | An active person who is a member of the project. By default the person who creates it. |
 | Identifier | See below. |
 | Visibility | Public or private. |
-
-The workflow, the enabled item types and the default type follow with the work items.
+| Workflow | The default workflow, unless you choose another one. See below. |
+| Types | The item types the project uses, one of them the default type. See below. |
 
 ## Identifier
 
 The identifier is 2 to 10 capital letters or digits and starts with a letter, for example `WEB`. It is unique across the organization and becomes the prefix of the keys of items (`WEB-12`).
 
 You can change it. Old identifiers keep working: `OLD-12` redirects to `NEW-12`, and links, bookmarks and API calls with the old identifier still find the project. An old identifier stays reserved for that project; nobody else can take it. Changing back to an earlier identifier of the same project is allowed.
+
+## Workflow and types
+
+Every project uses one [workflow](/en/concepts/workflows) of the organization, and switches on the [types](/en/concepts/types-and-properties) its items may have, one of them as the default type for new items. When you create a project, the dialog suggests the default workflow and every active type, with the topmost ticked type as the default.
+
+Project admins change both in the project settings, under **Workflow** and **Types**. Switching the workflow is a step of its own: over the API it is `PUT /api/v1/projects/{project}/workflow`, not a field of the project. The types change with the other fields of the project (`enabled_type_ids`, `default_type_id`).
 
 ## Public and private
 
