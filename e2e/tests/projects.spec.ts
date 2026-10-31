@@ -89,7 +89,7 @@ test('archives and restores a project', async ({ page }) => {
   const { name, identifier } = await createProject(page, 'R');
   await page.goto(`/projects/${identifier}/settings`);
 
-  await tabTo(page, page.getByRole('button', { name: tr('en', 'settings.project.danger.archive') }));
+  await tabTo(page, page.getByRole('button', { name: tr('en', 'settings.project.danger.archive'), exact: true }));
   const archived = page.waitForResponse((response) => response.url().endsWith('/archive'));
   await page.keyboard.press('Enter');
   await expect(page.getByText(tr('en', 'settings.project.danger.archived', { identifier }))).toBeVisible();
@@ -97,7 +97,7 @@ test('archives and restores a project', async ({ page }) => {
   expect((await archived).status()).toBe(200);
   await expect(page.getByText(tr('en', 'settings.project.archived.title'), { exact: true })).toBeVisible();
 
-  const restore = page.getByRole('button', { name: tr('en', 'settings.project.danger.restore') });
+  const restore = page.getByRole('button', { name: tr('en', 'settings.project.danger.restore'), exact: true });
   await tabTo(page, restore);
   await page.keyboard.press('Enter');
   await expect(page.getByText(tr('en', 'settings.project.danger.restored', { identifier }))).toBeVisible();
@@ -136,8 +136,7 @@ test('deletes a project after typing its identifier', async ({ page }) => {
 test('joins a public project with one click', async ({ page, browser }) => {
   const { name } = await createProject(page, 'J');
   // Lene is a member with a German profile
-  const context = await signedInContext(browser, PEOPLE.lene);
-  const lene = await context.newPage();
+  const { context, page: lene } = await signedInContext(browser, PEOPLE.lene);
   try {
     await lene.goto('/projects');
     const entry = lene.getByRole('list', { name: tr('de', 'projects.list_label') }).getByRole('listitem').filter({ hasText: name });
@@ -157,8 +156,7 @@ test('joins a public project with one click', async ({ page, browser }) => {
 
 test('hides a private project from a non-member', async ({ browser }) => {
   // Ida is in WEB, not in the private OPS
-  const context = await signedInContext(browser, PEOPLE.ida);
-  const ida = await context.newPage();
+  const { context, page: ida } = await signedInContext(browser, PEOPLE.ida);
   try {
     const answer = await ida.goto('/projects/OPS/settings');
     expect(answer?.status()).toBe(404);

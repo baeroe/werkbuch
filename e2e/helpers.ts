@@ -181,15 +181,20 @@ export function totp(secret: string, at = Date.now()): string {
 
 /**
  * A browser context of its own, signed in as `person`, with the settings of the running project (address, viewport,
- * language, time zone, color scheme) and the clipboard. The first time an account signs in during a run, the cache is
- * emptied first (sign-in is limited per IP); its session is kept in `e2e/.auth/<email>.json`, so later specs use it
- * without signing in again. Close it at the end of the test.
+ * language, time zone, color scheme) and the clipboard, and its one page. The first time an account signs in during a
+ * run, the cache is emptied first (sign-in is limited per IP); its session is kept in `e2e/.auth/<email>.json`, so later
+ * specs use it without signing in again. The page of the sign-in stays the page of the test: closing the only page of a
+ * fresh context and opening another can hang in Chromium (`Target.createTarget`). Close the context at the end of the
+ * test.
  */
-export async function signedInContext(browser: Browser, person: { email: string; password: string }): Promise<BrowserContext> {
+export async function signedInContext(browser: Browser, person: { email: string; password: string }): Promise<{ context: BrowserContext; page: Page }> {
   const { baseURL, ignoreHTTPSErrors, viewport, locale, timezoneId, colorScheme } = test.info().project.use;
   const options = { baseURL, ignoreHTTPSErrors, viewport, locale, timezoneId, colorScheme, permissions: ['clipboard-read', 'clipboard-write'] };
   const file = path.join(ACCOUNT_AUTH_DIR, `${person.email}.json`);
-  if (existsSync(file)) return browser.newContext({ ...options, storageState: file });
+  if (existsSync(file)) {
+    const context = await browser.newContext({ ...options, storageState: file });
+    return { context, page: await context.newPage() };
+  }
 
   artisan('cache:clear');
   // without a state of its own, Playwright hands a new context the one of the project (the e2e person's session)
@@ -199,8 +204,7 @@ export async function signedInContext(browser: Browser, person: { email: string;
   await login(page, person.email, person.password);
   await expect(page).toHaveURL(/\/my-items$/);
   await context.storageState({ path: file });
-  await page.close();
-  return context;
+  return { context, page };
 }
 
 /**

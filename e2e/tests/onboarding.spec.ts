@@ -79,7 +79,7 @@ test('invites a person who joins, gets a project and finds it', async ({ page, b
       await expect(option).toHaveAttribute('data-highlighted', '');
       await page.keyboard.press('Enter');
       await expect(field).toHaveValue(person);
-      await tabTo(page, page.getByRole('button', { name: tr('en', 'settings.project.members.add') }));
+      await tabTo(page, page.getByRole('button', { name: tr('en', 'settings.project.members.add'), exact: true }));
       await page.keyboard.press('Enter');
       await expect(
         page.getByText(tr('en', 'settings.project.members.role_set', { name: person, role: tr('en', 'roles.project.member'), identifier })),

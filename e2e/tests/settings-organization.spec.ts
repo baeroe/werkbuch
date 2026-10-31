@@ -197,7 +197,7 @@ test('creates a bot, a token for it, and revokes it', async ({ page }) => {
   await page.keyboard.press('Enter');
   await expect(tokens).toBeHidden();
   const undo = page.getByRole('status').filter({ hasText: tr('en', 'settings.tokens.revoked', { name: tokenName, owner: bot }) });
-  await expect(undo.getByRole('button', { name: tr('en', 'common.undo') })).toBeVisible();
+  await expect(undo.getByRole('button', { name: tr('en', 'common.undo'), exact: true })).toBeVisible();
   // the call goes out when the toast runs out
   expect((await revoked).status()).toBe(204);
   await expect(card).toContainText(tr('en', 'settings.tokens.bot_empty'));
@@ -228,8 +228,7 @@ test('warns at the tokens of the default bot', async ({ page }) => {
 
 test('shows members the read-only general section and no people', async ({ browser }) => {
   // Lene is a member with a German profile
-  const context = await signedInContext(browser, PEOPLE.lene);
-  const page = await context.newPage();
+  const { context, page } = await signedInContext(browser, PEOPLE.lene);
   try {
     await page.goto('/settings');
     await expect(page.getByText(tr('de', 'settings.access.read_only'), { exact: true })).toBeVisible();
@@ -314,5 +313,5 @@ test('says when the people could not be loaded and offers to try again', async (
   await openSection(page, 'people');
 
   await expect(page.getByText(tr('en', 'settings.people.load_failed'))).toBeVisible();
-  await expect(page.getByRole('button', { name: tr('en', 'common.retry') }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: tr('en', 'common.retry'), exact: true }).first()).toBeVisible();
 });

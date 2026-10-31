@@ -13,8 +13,7 @@ const person = () => PEOPLE.security[variant()]!;
 
 /** A page signed in as the security account, closed at the end whatever happened. */
 async function asSam(browser: Browser, run: (page: Page) => Promise<void>): Promise<void> {
-  const context = await signedInContext(browser, person());
-  const page = await context.newPage();
+  const { context, page } = await signedInContext(browser, person());
   try {
     await run(page);
   } finally {
@@ -134,10 +133,10 @@ test('sets up two-factor sign-in with a real code and turns it off again', async
       await expect(card).toContainText(tr('en', 'settings.two_factor.codes_left', { left: 8, total: 8 }));
       await expect(card).toContainText(tr('en', 'settings.two_factor.on'));
 
-      await tabTo(page, card.getByRole('button', { name: tr('en', 'settings.two_factor.disable') }));
+      await tabTo(page, card.getByRole('button', { name: tr('en', 'settings.two_factor.disable'), exact: true }));
       await page.keyboard.press('Enter');
       const question = page.getByRole('alertdialog', { name: tr('en', 'settings.two_factor.disable_dialog.title') });
-      await tabTo(page, question.getByRole('button', { name: tr('en', 'settings.two_factor.disable_dialog.confirm') }));
+      await tabTo(page, question.getByRole('button', { name: tr('en', 'settings.two_factor.disable_dialog.confirm'), exact: true }));
       await page.keyboard.press('Enter');
       await expect(page.getByText(tr('en', 'settings.two_factor.disabled'))).toBeVisible();
       await expect(card.getByRole('button', { name: tr('en', 'settings.two_factor.setup') })).toBeFocused();
@@ -166,7 +165,7 @@ test('creates a token, copies it and revokes it', async ({ browser }) => {
     expect(plain).toMatch(/^[0-9a-z]+\|wb_/i);
     await tabTo(page, created.getByRole('button', { name: tr('en', 'settings.tokens.copy') }));
     await page.keyboard.press('Enter');
-    await expect(created.getByRole('button', { name: tr('en', 'common.copied') })).toBeVisible();
+    await expect(created.getByRole('button', { name: tr('en', 'common.copied'), exact: true })).toBeVisible();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(plain);
     await tabTo(page, created.getByRole('button', { name: tr('en', 'settings.tokens.copied_confirm') }));
     await page.keyboard.press('Enter');
