@@ -2,15 +2,18 @@ import { t } from '@/lib/i18n';
 import type { Priority } from '@/types';
 import { cx } from './cx';
 
-/** Display names as in the spec (4.8). */
-export const PRIORITY_LABELS: Record<Priority, string> = { urgent: 'Urgent', high: 'High', medium: 'Medium', low: 'Low', none: 'None' };
+/** The priorities from Urgent to None. */
+export const PRIORITIES: readonly Priority[] = ['urgent', 'high', 'medium', 'low', 'none'];
+
+/** The display name (spec 4.8): Urgent, High, Medium, Low, None, in both languages (P16). */
+export const priorityName = (priority: Priority): string => t(`priority.${priority}`);
 
 const FILLED: Record<Exclude<Priority, 'urgent'>, number> = { none: 0, low: 1, medium: 2, high: 3 };
 const STROKE_HEIGHTS = ['h-1.5', 'h-2.5', 'h-3.5'];
 
 /** Three slanted pen strokes filled by level; Urgent is a red square with "!". Always with an accessible name. */
 export function PriorityIcon({ priority, className }: { priority: Priority; className?: string }) {
-  const label = t('ui.priority_icon.label', { priority: PRIORITY_LABELS[priority] });
+  const label = t('priority.label', { name: priorityName(priority) });
 
   if (priority === 'urgent') {
     return (

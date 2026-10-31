@@ -27,6 +27,12 @@ export const SHORTCUTS = {
   'shell.go.projects': { keys: 'g p', scope: 'global', label: 'shortcuts.shell.go.projects', group: 'shortcuts.group.navigation' },
   'dialog.submit': { keys: 'mod+enter', scope: 'dialog', label: 'shortcuts.dialog.submit', group: 'shortcuts.group.dialog' },
   'settings.save': { keys: 'mod+enter', scope: 'detail', label: 'shortcuts.settings.save', group: 'shortcuts.group.settings' },
+  // the field editors name these keys in their tooltips; the item commands bind them
+  'item.state': { keys: 's', scope: 'detail', label: 'shortcuts.item.state', group: 'shortcuts.group.item' },
+  'item.assignee': { keys: 'a', scope: 'detail', label: 'shortcuts.item.assignee', group: 'shortcuts.group.item' },
+  'item.priority': { keys: 'p', scope: 'detail', label: 'shortcuts.item.priority', group: 'shortcuts.group.item' },
+  'item.labels': { keys: 'l', scope: 'detail', label: 'shortcuts.item.labels', group: 'shortcuts.group.item' },
+  'item.parent': { keys: 'shift+p', scope: 'detail', label: 'shortcuts.item.parent', group: 'shortcuts.group.item' },
 } as const satisfies Record<string, CatalogEntry>;
 
 export type ShortcutId = keyof typeof SHORTCUTS;
