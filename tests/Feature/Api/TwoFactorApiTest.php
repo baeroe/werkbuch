@@ -120,14 +120,16 @@ it('turns two-factor sign-in off, and does nothing when it is off', function () 
         ->and(Event::query()->where('type', EventType::UserTwoFactorDisabled)->where('subject_id', $lene->id)->count())->toBe(1);
 });
 
-it('drops a setup that was started but not confirmed', function () {
+it('drops a setup that was started but not confirmed, and notes it as cancelled', function () {
     $lene = User::factory()->create();
     $this->actingAs($lene)->postJson('/api/v1/me/two-factor')->assertOk();
 
     $this->deleteJson('/api/v1/me/two-factor')->assertNoContent();
 
     expect($lene->fresh()?->two_factor_secret)->toBeNull()
-        ->and(Event::query()->where('type', EventType::UserTwoFactorDisabled)->count())->toBe(1);
+        ->and(Event::query()->where('type', EventType::UserTwoFactorSetupCancelled)->where('subject_id', $lene->id)->count())->toBe(1)
+        ->and(Event::query()->where('type', EventType::UserTwoFactorDisabled)->exists())->toBeFalse()
+        ->and(EventType::UserTwoFactorSetupCancelled->webhook())->toBeFalse();
 });
 
 it('makes eight new recovery codes, and the old ones stop working', function () {

@@ -35,11 +35,15 @@ final class RegenerateRecoveryCodes
             throw Problem::conflict('two_factor_disabled');
         }
 
-        DB::transaction(function () use ($actor, $user): void {
-            ($this->generate)($user);
-            EventRecorder::record(EventType::UserRecoveryCodesRegenerated, $actor, $user, null);
+        // under the lock a sign-in with a recovery code takes (PassTwoFactorChallenge), so it cannot write the old list back
+        $locked = DB::transaction(function () use ($actor, $user): User {
+            $locked = User::query()->whereKey($user->id)->lockForUpdate()->firstOrFail();
+            ($this->generate)($locked);
+            EventRecorder::record(EventType::UserRecoveryCodesRegenerated, $actor, $locked, null);
+
+            return $locked;
         });
 
-        return ['recovery_codes' => $user->recoveryCodes()];
+        return ['recovery_codes' => $locked->recoveryCodes()];
     }
 }

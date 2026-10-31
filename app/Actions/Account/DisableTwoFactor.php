@@ -12,8 +12,9 @@ use Laravel\Fortify\Actions\DisableTwoFactorAuthentication;
 use Lorisleiva\Actions\Concerns\AsAction;
 
 /**
- * Turns the second factor off (P19: without asking for the password again, only from the session) and drops a setup
- * that was started; secret and recovery codes are gone. Off already: nothing happens, no event.
+ * Turns the second factor off (P19: without asking for the password again, only from the session), event
+ * `user.two_factor_disabled`, or drops a setup that was started and not confirmed, event `user.two_factor_setup_cancelled`;
+ * secret and recovery codes are gone. Off already: nothing happens, no event.
  */
 final class DisableTwoFactor
 {
@@ -30,9 +31,11 @@ final class DisableTwoFactor
             return;
         }
 
-        DB::transaction(function () use ($actor, $user): void {
+        $type = $user->two_factor_confirmed_at === null ? EventType::UserTwoFactorSetupCancelled : EventType::UserTwoFactorDisabled;
+
+        DB::transaction(function () use ($actor, $user, $type): void {
             ($this->disable)($user);
-            EventRecorder::record(EventType::UserTwoFactorDisabled, $actor, $user, null);
+            EventRecorder::record($type, $actor, $user, null);
         });
     }
 }

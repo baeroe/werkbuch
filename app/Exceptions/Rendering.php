@@ -23,6 +23,13 @@ final class Rendering
         // refusals below 500 are expected answers, not errors
         $exceptions->dontReportWhen(fn (Throwable $e): bool => $e instanceof Problem && $e->status < 500);
 
+        // changing the own password: the limit shows at the current password, which it protects from guessing
+        $exceptions->render(fn (ThrottleRequestsException $e, Request $request) => $request->is('api/v1/me/password')
+            ? ProblemResponse::from(new Problem(429, 'too_many_requests', errors: [
+                'current_password' => [__('auth.throttle', ['seconds' => (int) ($e->getHeaders()['Retry-After'] ?? 60)])],
+            ]), false)->withHeaders($e->getHeaders())
+            : null);
+
         // every /api route answers with Problem Details; a response an exception already carries stays as it is
         $exceptions->render(fn (Throwable $e, Request $request) => $request->is('api/*') && ! $e instanceof HttpResponseException
             ? ProblemResponse::from($e, (bool) config('app.debug'))

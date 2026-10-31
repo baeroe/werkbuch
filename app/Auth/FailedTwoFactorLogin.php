@@ -4,13 +4,12 @@ namespace App\Auth;
 
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Laravel\Fortify\Contracts\FailedTwoFactorLoginResponse;
 
 /**
- * Fortify's answer to a wrong code at the two-factor challenge, with werkbuch's texts: back to the challenge, the error at
- * the field that was used (the code of the app or a recovery code).
+ * The answer to a wrong code at the two-factor challenge (App\Http\Controllers\Auth\TwoFactorChallengeController): back
+ * to the challenge, the error at the field that was used (the code of the app or a recovery code).
  */
-final class FailedTwoFactorLogin implements FailedTwoFactorLoginResponse
+final class FailedTwoFactorLogin
 {
     /**
      * @param  Request  $request

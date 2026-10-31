@@ -1,8 +1,13 @@
 <?php
 
+use App\Auth\TwoFactorCodes;
+use App\Events\EventType;
+use App\Models\Event;
 use App\Models\User;
+use Illuminate\Support\Facades\Cache;
 use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Fortify\Actions\EnableTwoFactorAuthentication;
+use Laravel\Fortify\Contracts\TwoFactorAuthenticationProvider;
 use PragmaRX\Google2FA\Google2FA;
 
 /*
@@ -52,6 +57,9 @@ it('signs in with a recovery code, which then is used up', function () {
 
     $this->assertAuthenticatedAs($mara);
     expect($mara->fresh()?->recoveryCodes())->toHaveCount(7)->not->toContain($code);
+    $used = Event::query()->where('type', EventType::UserRecoveryCodeUsed)->sole();
+    expect([$used->actor_id, $used->subject_id, $used->meta['via'], $used->meta['reason']])->toBe([$mara->id, $mara->id, 'system', 'two_factor_challenge'])
+        ->and(json_encode($used->toArray()))->not->toContain($code);
     $this->getJson('/api/v1/me/two-factor')->assertJsonPath('recovery_codes_left', 7);
 
     $this->post('/logout');
@@ -103,9 +111,72 @@ it('counts the tries per account that signs in', function () {
 });
 
 it('sends a visitor without a started sign-in to the sign-in', function () {
-    $this->get('/two-factor-challenge')->assertRedirect('/login');
-    $this->post('/two-factor-challenge', ['code' => '123456'])->assertRedirect('/two-factor-challenge')->assertSessionHasErrors('code');
+    $this->get('/two-factor-challenge')->assertRedirect('/login')->assertSessionMissing('error');
+    $this->post('/two-factor-challenge', ['code' => '123456'])->assertRedirect('/login')->assertSessionHas('error', __('two_factor_challenge.expired'));
     $this->assertGuest();
+});
+
+it('starts over when the account changed after the password: second factor off, password changed, deactivated', function (Closure $change, string $method) {
+    $mara = maraWithTwoFactor();
+    $code = currentCode($mara);
+    $this->post('/login', ['email' => 'mara@example.com', 'password' => 'secret-pass'])->assertRedirect('/two-factor-challenge');
+
+    $change($mara);
+
+    $this->call($method, '/two-factor-challenge', ['code' => $code])
+        ->assertRedirect('/login')->assertSessionHas('error', __('two_factor_challenge.expired'))->assertSessionMissing('login.id');
+    $this->assertGuest();
+    $this->get('/two-factor-challenge')->assertRedirect('/login');
+})->with([
+    'second factor off' => [fn (User $mara) => $mara->forceFill(['two_factor_secret' => null, 'two_factor_recovery_codes' => null, 'two_factor_confirmed_at' => null])->save()],
+    'password changed' => [fn (User $mara) => $mara->forceFill(['password' => 'changed-pass'])->save()],
+    'deactivated' => [fn (User $mara) => $mara->forceFill(['disabled_at' => now()])->save()],
+    'gone from the session' => [fn (User $mara) => session()->forget('login.password')],
+])->with(['GET', 'POST']);
+
+it('takes a code of the app only once per account', function () {
+    $mara = maraWithTwoFactor();
+    $code = currentCode($mara);
+    $this->post('/login', ['email' => 'mara@example.com', 'password' => 'secret-pass']);
+    $this->post('/two-factor-challenge', ['code' => $code])->assertRedirect('/my-items');
+    $this->post('/logout');
+
+    $this->post('/login', ['email' => 'mara@example.com', 'password' => 'secret-pass']);
+    $this->post('/two-factor-challenge', ['code' => $code])->assertSessionHasErrors(['code' => __('field.code.wrong')]);
+    $this->assertGuest();
+});
+
+it('remembers a used code per secret, not for everybody, and only as long as its window', function () {
+    $this->freezeTime();
+    $codes = app(TwoFactorAuthenticationProvider::class);
+    $engine = app(Google2FA::class);
+    [$a, $b] = [$engine->generateSecretKey(), $engine->generateSecretKey()];
+    $code = $engine->getCurrentOtp($a);
+
+    expect($codes)->toBeInstanceOf(TwoFactorCodes::class)
+        ->and($codes->verify($a, $code))->toBeTrue()
+        ->and($codes->verify($a, $code))->toBeFalse()
+        ->and(Cache::has('fortify.2fa_codes.'.hash('sha256', $a.'|'.$code)))->toBeTrue()
+        ->and(Cache::has('fortify.2fa_codes.'.md5($code)))->toBeFalse()
+        ->and($codes->verify($b, $engine->getCurrentOtp($b)))->toBeTrue();
+
+    $this->travel(91)->seconds();
+    expect(Cache::has('fortify.2fa_codes.'.hash('sha256', $a.'|'.$code)))->toBeFalse();
+});
+
+it('widens the memory with a window of its own', function () {
+    $this->freezeTime();
+    config(['fortify-options.two-factor-authentication.window' => 2]);
+    $engine = app(Google2FA::class);
+    $secret = $engine->generateSecretKey();
+    $code = $engine->getCurrentOtp($secret);
+
+    expect(app(TwoFactorAuthenticationProvider::class)->verify($secret, $code))->toBeTrue();
+
+    $this->travel(149)->seconds();
+    expect(Cache::has('fortify.2fa_codes.'.hash('sha256', $secret.'|'.$code)))->toBeTrue();
+    $this->travel(2)->seconds();
+    expect(Cache::has('fortify.2fa_codes.'.hash('sha256', $secret.'|'.$code)))->toBeFalse();
 });
 
 it('sends signed-in people on', function () {

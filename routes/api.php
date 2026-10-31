@@ -31,12 +31,15 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
     Route::post('invitations', [InvitationsController::class, 'store']);
 
     Route::get('tokens', [TokensController::class, 'index']);
-    Route::post('tokens', [TokensController::class, 'store']);
     Route::delete('tokens/{token}', [TokensController::class, 'destroy']);
 
-    // the own password and second factor: only from the session of the interface, never with a token (P6)
+    // only from the session of the interface, never with a token (P6): no token mints tokens (no wider abilities, no
+    // tokens of bots, no longer life), and the own password and second factor stay out of a stolen token's reach
+    Route::middleware(EnsureSession::class)->group(function () {
+        Route::post('tokens', [TokensController::class, 'store']);
+    });
     Route::middleware(EnsureSession::class)->prefix('me')->group(function () {
-        Route::put('password', [PasswordController::class, 'update']);
+        Route::put('password', [PasswordController::class, 'update'])->middleware('throttle:password-change');
         Route::get('two-factor', [TwoFactorController::class, 'show']);
         Route::post('two-factor', [TwoFactorController::class, 'store']);
         Route::post('two-factor/confirm', [TwoFactorController::class, 'confirm'])->middleware('throttle:6,1');

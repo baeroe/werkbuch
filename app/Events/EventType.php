@@ -52,9 +52,11 @@ enum EventType: string
     case UserInvited = 'user.invited';
     case UserPasswordChanged = 'user.password_changed';
     case UserTwoFactorSetupStarted = 'user.two_factor_setup_started';
+    case UserTwoFactorSetupCancelled = 'user.two_factor_setup_cancelled';
     case UserTwoFactorEnabled = 'user.two_factor_enabled';
     case UserTwoFactorDisabled = 'user.two_factor_disabled';
     case UserRecoveryCodesRegenerated = 'user.recovery_codes_regenerated';
+    case UserRecoveryCodeUsed = 'user.recovery_code_used';
 
     case TokenCreated = 'token.created';
     case TokenRevoked = 'token.revoked';

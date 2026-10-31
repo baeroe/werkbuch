@@ -247,6 +247,7 @@
     "two_factor_challenge.code_hint": "Die sechs Ziffern, die deine Authenticator-App gerade zeigt.",
     "two_factor_challenge.code_required": "Gib den Code aus der App ein.",
     "two_factor_challenge.description": "Dein Konto ist mit einem zweiten Faktor geschützt. Gib den Code aus deiner Authenticator-App ein.",
+    "two_factor_challenge.expired": "Die Anmeldung ist abgelaufen. Melde dich bitte noch einmal an.",
     "two_factor_challenge.recovery_code": "Recovery-Code",
     "two_factor_challenge.recovery_code_hint": "Jeder Code gilt für genau eine Anmeldung.",
     "two_factor_challenge.recovery_code_required": "Gib einen deiner Recovery-Codes ein.",

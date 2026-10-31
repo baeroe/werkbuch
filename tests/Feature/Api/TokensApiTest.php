@@ -100,7 +100,8 @@ it('lets people manage only their own tokens', function () {
 
     $this->getJson("/api/v1/tokens?user_id={$ida->id}")->assertForbidden()->assertJsonPath('detail', __('problem.detail.tokens_own_or_bots'));
     $this->postJson('/api/v1/tokens', ['user_id' => $ida->id, 'name' => 'CI', 'abilities' => ['read']])->assertForbidden();
-    $this->deleteJson("/api/v1/tokens/{$token->id}")->assertForbidden();
+    // a token of somebody else's account is none the actor may see
+    $this->deleteJson("/api/v1/tokens/{$token->id}")->assertNotFound()->assertJsonMissingPath('detail');
     // the bots are an admin's, even the one a person runs
     $this->getJson('/api/v1/tokens?user_id='.User::factory()->bot($lene)->create()->id)->assertForbidden();
 
@@ -171,13 +172,27 @@ it('answers 404 for an unknown token', function () {
     $this->actingAs(User::factory()->create())->deleteJson('/api/v1/tokens/01JAAAAAAAAAAAAAAAAAAAAAAA')->assertNotFound();
 });
 
-it('can be managed with a token that may write', function () {
+it('mints tokens only from the session: no token makes another one, whatever it may do', function (array $abilities) {
+    $admin = User::factory()->admin()->create();
+
+    foreach ([$admin, User::defaultBot()] as $owner) {
+        $this->withToken(apiToken($admin, $abilities))->postJson('/api/v1/tokens', ['user_id' => $owner->id, 'name' => 'CI', 'abilities' => ['read', 'write', 'mcp']])
+            ->assertForbidden()->assertJsonPath('reason', 'session_required');
+        forgetApiAuth();
+    }
+
+    expect(PersonalAccessToken::query()->where('name', 'CI')->exists())->toBeFalse();
+})->with(['write' => [['write']], 'everything' => [['read', 'write', 'mcp']]]);
+
+it('lists and revokes tokens with a token that may read and write', function () {
     $lene = User::factory()->create();
-    $plain = apiToken($lene, ['write']);
+    $other = $lene->createToken('Alt', ['read'])->accessToken;
+    $plain = apiToken($lene, ['read', 'write']);
 
-    $this->withToken($plain)->postJson('/api/v1/tokens', ['name' => 'CI', 'abilities' => ['read']])->assertCreated();
+    $this->withToken($plain)->getJson('/api/v1/tokens')->assertOk()->assertJsonPath('meta.total', 2);
+    $this->withToken($plain)->deleteJson("/api/v1/tokens/{$other->id}")->assertNoContent();
 
-    expect(Event::query()->where('type', EventType::TokenCreated)->sole()->meta)->toMatchArray(['via' => 'api']);
+    expect(Event::query()->where('type', EventType::TokenRevoked)->sole()->meta)->toMatchArray(['via' => 'api']);
 });
 
 it('passes the abilities to Sanctum explicitly', function () {

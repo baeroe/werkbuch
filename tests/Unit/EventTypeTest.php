@@ -23,8 +23,8 @@ it('knows the events of this phase that have no webhook', function () {
     expect($internal)->toBe(collect([
         'project.member_role_changed', 'organization.updated',
         'user.created', 'user.updated', 'user.role_changed', 'user.deactivated', 'user.reactivated', 'user.invited',
-        'user.password_changed', 'user.two_factor_setup_started', 'user.two_factor_enabled', 'user.two_factor_disabled',
-        'user.recovery_codes_regenerated',
+        'user.password_changed', 'user.two_factor_setup_started', 'user.two_factor_setup_cancelled', 'user.two_factor_enabled',
+        'user.two_factor_disabled', 'user.recovery_codes_regenerated', 'user.recovery_code_used',
         'bot.created', 'token.created', 'token.revoked', 'favorite.added', 'favorite.removed',
     ])->sort()->values()->all());
 });

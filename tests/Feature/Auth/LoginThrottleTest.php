@@ -1,5 +1,6 @@
 <?php
 
+use App\Auth\RedirectToTwoFactorChallenge;
 use App\Enums\Locale;
 use App\Models\User;
 use Laravel\Fortify\Actions\AttemptToAuthenticate;
@@ -7,7 +8,6 @@ use Laravel\Fortify\Actions\CanonicalizeUsername;
 use Laravel\Fortify\Actions\EnableTwoFactorAuthentication;
 use Laravel\Fortify\Actions\EnsureLoginIsNotThrottled;
 use Laravel\Fortify\Actions\PrepareAuthenticatedSession;
-use Laravel\Fortify\Actions\RedirectIfTwoFactorAuthenticatable;
 use Laravel\Fortify\Fortify;
 
 beforeEach(function () {
@@ -102,7 +102,7 @@ it('signs in through the lock, the lower-cased address, the second factor and on
     expect(call_user_func(Fortify::$authenticateThroughCallback, request()))->toBe([
         EnsureLoginIsNotThrottled::class,
         CanonicalizeUsername::class,
-        RedirectIfTwoFactorAuthenticatable::class,
+        RedirectToTwoFactorChallenge::class,
         AttemptToAuthenticate::class,
         PrepareAuthenticatedSession::class,
     ]);

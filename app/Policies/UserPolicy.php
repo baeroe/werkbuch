@@ -68,6 +68,12 @@ final class UserPolicy
             : Response::deny(__('problem.detail.tokens_own_or_bots'));
     }
 
+    /** Revoking a token: whoever may not manage the tokens of its account does not get to know the token exists (404). */
+    public function revokeToken(User $user, User $owner): Response
+    {
+        return $this->manageTokens($user, $owner)->allowed() ? Response::allow() : Response::denyAsNotFound();
+    }
+
     /** The own password and second factor: only people sign in. */
     public function manageSignIn(User $user): Response
     {

@@ -103,3 +103,23 @@ it('is only for people', function () {
     expect(fn () => ChangePassword::run(actor($bot), ['current_password' => 'x', 'password' => 'new-password', 'password_confirmation' => 'new-password']))
         ->toThrow(fn (Problem $problem) => expect([$problem->status, $problem->detail])->toBe([403, __('problem.detail.people_only')]));
 });
+
+it('limits the tries to six a minute per account and names the wait at the current password', function () {
+    $this->freezeTime();
+    $lene = User::factory()->create(['password' => 'old-password']);
+    $wrong = ['current_password' => 'nope', 'password' => 'new-password', 'password_confirmation' => 'new-password'];
+
+    foreach (range(1, 6) as $i) {
+        $this->actingAs($lene)->putJson('/api/v1/me/password', $wrong)->assertUnprocessable();
+    }
+
+    $this->putJson('/api/v1/me/password', [...$wrong, 'current_password' => 'old-password'])->assertTooManyRequests()
+        ->assertHeader('Content-Type', 'application/problem+json')->assertHeader('Retry-After', '60')
+        ->assertJsonPath('reason', 'too_many_requests')
+        ->assertJsonPath('errors.current_password', [__('auth.throttle', ['seconds' => 60])]);
+    expect(Hash::check('old-password', (string) $lene->fresh()?->password))->toBeTrue();
+
+    // another account has its own tries
+    $this->actingAs(User::factory()->create(['password' => 'other-password']))
+        ->putJson('/api/v1/me/password', [...$wrong, 'current_password' => 'other-password'])->assertNoContent();
+});

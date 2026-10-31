@@ -6,7 +6,8 @@ import { artisan, login, PEOPLE, tabTo, totp, tr, variant } from '../helpers';
 test.use({ storageState: { cookies: [], origins: [] } });
 
 // three sign-ins per project, four projects within a minute: the limit per IP would strike; the limits are tested in Pest.
-// Emptying the cache also forgets the codes used before (Fortify refuses a code a second time within its window).
+// Emptying the cache also forgets the codes used before: a code counts once per secret within its window, and the
+// two-factor accounts of all projects share one secret (E2eSeeder::TOTP_SECRET).
 test.beforeAll(() => artisan('cache:clear'));
 
 /** Signs in with the password and lands on the challenge, with the field for the code of the app focused. */

@@ -247,6 +247,7 @@
     "two_factor_challenge.code_hint": "The six digits your authenticator app shows right now.",
     "two_factor_challenge.code_required": "Enter the code from the app.",
     "two_factor_challenge.description": "Your account is protected by a second factor. Enter the code from your authenticator app.",
+    "two_factor_challenge.expired": "The sign-in has expired. Please sign in again.",
     "two_factor_challenge.recovery_code": "Recovery code",
     "two_factor_challenge.recovery_code_hint": "Each code works for exactly one sign-in.",
     "two_factor_challenge.recovery_code_required": "Enter one of your recovery codes.",

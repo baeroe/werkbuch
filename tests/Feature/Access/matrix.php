@@ -45,6 +45,7 @@ $everyone = MatrixWorld::COLUMNS;
 
 // password and second factor are the own account's, and only people sign in
 $people = array_values(array_diff($everyone, ['default_bot']));
+$peopleButAdmin = array_values(array_diff($people, ['org_admin']));
 
 /** Starts a two-factor setup for the account past the action (a bot as well, so its refusal is the action's own); returns the secret. */
 $startTwoFactor = function (User $user): string {
@@ -143,6 +144,8 @@ return [
         'action' => RevokeToken::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => RevokeToken::run($a, $w->bot->createToken('Matrix', ['read'])->accessToken),
         'allowed' => ['org_admin', 'default_bot'],
+        // a token the account may not manage is one it does not get to see
+        'hidden' => $peopleButAdmin,
         'event' => EventType::TokenRevoked,
     ],
     'ChangePassword' => [

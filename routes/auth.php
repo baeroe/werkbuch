@@ -3,12 +3,12 @@
 use App\Http\Controllers\Auth\InvitationController;
 use App\Http\Controllers\Auth\NewPasswordController as SetNewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController as SendPasswordResetLinkController;
+use App\Http\Controllers\Auth\TwoFactorChallengeController;
 use App\Http\Middleware\InvitationsForGuests;
 use Illuminate\Support\Facades\Route;
 use Laravel\Fortify\Http\Controllers\AuthenticatedSessionController;
 use Laravel\Fortify\Http\Controllers\NewPasswordController;
 use Laravel\Fortify\Http\Controllers\PasswordResetLinkController;
-use Laravel\Fortify\Http\Controllers\TwoFactorAuthenticatedSessionController;
 
 // The routes of Fortify that werkbuch uses (FortifyServiceProvider ignores Fortify's own route file, which would also
 // register password confirmation and its own setup of the second factor; werkbuch's lives under /api/v1/me).
@@ -19,8 +19,8 @@ Route::middleware('guest:'.config('fortify.guard'))->group(function () {
     Route::post('/login', [AuthenticatedSessionController::class, 'store'])->middleware('throttle:login')->name('login.store');
 
     // the second factor after the password: only for a sign-in that was started (Fortify keeps it as `login.id`)
-    Route::get('/two-factor-challenge', [TwoFactorAuthenticatedSessionController::class, 'create'])->name('two-factor.login');
-    Route::post('/two-factor-challenge', [TwoFactorAuthenticatedSessionController::class, 'store'])->middleware('throttle:two-factor')->name('two-factor.login.store');
+    Route::get('/two-factor-challenge', [TwoFactorChallengeController::class, 'create'])->name('two-factor.login');
+    Route::post('/two-factor-challenge', [TwoFactorChallengeController::class, 'store'])->middleware('throttle:two-factor')->name('two-factor.login.store');
 
     Route::get('/forgot-password', [PasswordResetLinkController::class, 'create'])->name('password.request');
     Route::post('/forgot-password', [SendPasswordResetLinkController::class, 'store'])->middleware('throttle:password-reset')->name('password.email');

@@ -22,7 +22,7 @@ return [
     'list invitations' => ['GET', '/api/v1/invitations'],
     'invite a person' => ['POST', '/api/v1/invitations'],
     'list tokens' => ['GET', '/api/v1/tokens'],
-    'create a token' => ['POST', '/api/v1/tokens'],
+    'create a token' => ['POST', '/api/v1/tokens', 'session' => true],
     'revoke a token' => ['DELETE', '/api/v1/tokens/{token}', 'params' => fn (MatrixWorld $w) => ['token' => $w->bot->createToken('Matrix', ['read'])->accessToken->id]],
     'change the own password' => ['PUT', '/api/v1/me/password', 'session' => true],
     'show the own second factor' => ['GET', '/api/v1/me/two-factor', 'session' => true],
