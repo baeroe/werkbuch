@@ -66,10 +66,12 @@ type EditorFormProps = {
   readOnlyReason: string | null;
   /** Take the focus to the title once drawn: the workflow was just created and moved to its own address. */
   focusTitle: boolean;
+  /** The workflow to copy is not there (any more): the draft is a blank one, and the form says why. */
+  missingTemplate: boolean;
   onCreated: (id: string) => void;
 };
 
-function EditorForm({ initial, existing, projects, readOnlyReason, focusTitle, onCreated }: EditorFormProps) {
+function EditorForm({ initial, existing, projects, readOnlyReason, focusTitle, missingTemplate, onCreated }: EditorFormProps) {
   const settle = useSettle();
   const save = useSaveWorkflow();
   const readOnly = readOnlyReason !== null;
@@ -139,11 +141,22 @@ function EditorForm({ initial, existing, projects, readOnlyReason, focusTitle, o
   }
 
   function removeState(id: string) {
+    // the trash button goes with its row: the focus goes to the name of the next row, or of the one above when this
+    // was the last (the start status always stays, so there is one)
+    const index = draft.states.findIndex((state) => state.id === id);
+    setFocusId((draft.states[index + 1] ?? draft.states[index - 1])!.id);
     setDraft((current) => ({
       ...current,
       states: current.states.filter((state) => state.id !== id),
       transitions: current.transitions.filter(([from, to]) => from !== id && to !== id),
     }));
+  }
+
+  /** Back to the stored workflow, without the refusals of the last send. */
+  function discard() {
+    setDraft(draftOf(base!));
+    setAttempted(false);
+    save.reset();
   }
 
   function setFree(free: boolean) {
@@ -214,7 +227,7 @@ function EditorForm({ initial, existing, projects, readOnlyReason, focusTitle, o
           readOnly ? null : (
             <>
               {dirty && base && (
-                <Button variant="ghost" onClick={() => setDraft(draftOf(base))}>
+                <Button variant="ghost" onClick={discard}>
                   {t('settings.workflows.editor.discard')}
                 </Button>
               )}
@@ -227,6 +240,12 @@ function EditorForm({ initial, existing, projects, readOnlyReason, focusTitle, o
       />
 
       {readOnlyReason && <ReadOnlyNotice reason={readOnlyReason} />}
+
+      {missingTemplate && (
+        <Banner tone="info" role="status" title={t('settings.workflows.editor.unknown_template.title')}>
+          <Measure>{t('settings.workflows.editor.unknown_template.description')}</Measure>
+        </Banner>
+      )}
 
       {usedBy.length > 0 && !readOnly && (
         <Banner title={t('settings.workflows.editor.used_by', { projects: usedBy.map((project) => project.identifier).join(', ') })}>
@@ -411,6 +430,7 @@ export function WorkflowEditor({ workflowId, copyOf, readOnlyReason, focusTitleO
             projects={projects.data!.items}
             readOnlyReason={readOnlyReason}
             focusTitle={existing !== null && existing.id === focusTitleOf}
+            missingTemplate={copyOf !== null && copied === undefined}
             onCreated={onCreated}
           />
         );

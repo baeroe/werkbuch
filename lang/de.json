@@ -1079,6 +1079,8 @@
     "settings.workflows.editor.start_required": "Wähle den Status, in dem neue Items beginnen.",
     "settings.workflows.editor.unknown.description": "Er wurde gelöscht, oder der Link stimmt nicht.",
     "settings.workflows.editor.unknown.title": "Diesen Workflow gibt es nicht",
+    "settings.workflows.editor.unknown_template.description": "Der Workflow, den du duplizieren wolltest, wurde gelöscht, oder der Link stimmt nicht. Du beginnst mit einem neuen Workflow.",
+    "settings.workflows.editor.unknown_template.title": "Diese Vorlage gibt es nicht",
     "settings.workflows.editor.used_by": "Wird von :projects benutzt",
     "settings.workflows.editor.used_by_description": "Neue Status und Übergänge gelten sofort.",
     "settings.workflows.empty.description": "Ein Workflow legt fest, welche Status ein Item durchläuft und welche Übergänge erlaubt sind.",

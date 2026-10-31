@@ -420,6 +420,48 @@ describe('the workflow editor', () => {
     await waitFor(() => expect(document.activeElement).toBe(notice.closest('[tabindex="-1"]')));
   });
 
+  it('keeps a refusal of a status with that status when an earlier row is removed', async () => {
+    const user = userEvent.setup();
+    renderAt('/settings/workflows?workflow=wf_agency', {
+      overrides: { 'PUT /api/v1/workflows/wf_agency': () => invalid({ 'states.3.name': ['Den Namen gibt es in diesem Workflow schon.'] }) },
+    });
+
+    await user.type(await screen.findByRole('textbox', { name: 'Name' }), ' neu');
+    await user.click(save());
+    // Review was the fourth status sent
+    await waitFor(() => expect(within(nameOf(4).closest('li')!).getByText('Den Namen gibt es in diesem Workflow schon.')).toBeTruthy());
+
+    await user.click(screen.getByRole('button', { name: 'Todo entfernen' }));
+    expect(nameOf(3).value).toBe('Review');
+    expect(within(nameOf(3).closest('li')!).getByText('Den Namen gibt es in diesem Workflow schon.')).toBeTruthy();
+    expect(within(nameOf(4).closest('li')!).queryByText('Den Namen gibt es in diesem Workflow schon.')).toBeNull();
+  });
+
+  it('discards the changes together with the refusals of the last send', async () => {
+    const user = userEvent.setup();
+    renderAt('/settings/workflows?workflow=wf_agency', {
+      overrides: { 'PUT /api/v1/workflows/wf_agency': () => invalid({ name: ['Diesen Namen gibt es schon.'], description: ['Die Beschreibung ist zu lang.'] }) },
+    });
+
+    await user.type(await screen.findByRole('textbox', { name: 'Name' }), ' neu');
+    await user.clear(screen.getByRole('textbox', { name: 'Name von Status 2' }));
+    await user.click(save());
+    expect(screen.getByText('Gib dem Status einen Namen.')).toBeTruthy();
+    await user.type(screen.getByRole('textbox', { name: 'Name von Status 2' }), 'Todo');
+    await user.click(save());
+    expect(await screen.findByText('Diesen Namen gibt es schon.')).toBeTruthy();
+    expect(screen.getByText('Die Beschreibung ist zu lang.')).toBeTruthy();
+
+    await user.clear(screen.getByRole('textbox', { name: 'Name von Status 2' }));
+    await user.click(screen.getByRole('button', { name: 'Verwerfen' }));
+    expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Name' }).value).toBe('Agentur-Freigabe');
+    expect(screen.queryByText('Diesen Namen gibt es schon.')).toBeNull();
+    expect(screen.queryByText('Die Beschreibung ist zu lang.')).toBeNull();
+    expect(screen.queryByText('Der Workflow wurde nicht gespeichert')).toBeNull();
+    expect(screen.queryByText('Gib dem Status einen Namen.')).toBeNull();
+    expect(issues().getAttribute('role')).toBe('status');
+  });
+
   it('says when saving failed and tries again', async () => {
     const user = userEvent.setup();
     let fail = true;
@@ -445,9 +487,15 @@ describe('the workflow editor', () => {
     expect(describedBy(keep)).toBe('Das ist der Startstatus. Wähle zuerst einen anderen Startstatus.');
 
     await user.click(screen.getByRole('button', { name: 'Pending entfernen' }));
-    // the focus goes on to the next row
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Done verschieben' })));
-    // a new status, named at once
+    // the focus goes on to the name of the next row
+    await waitFor(() => expect(document.activeElement).toBe(nameOf(4)));
+    expect(nameOf(4).value).toBe('Done');
+    // a new status, named at once; removed again as the last row, the focus goes to the name of the row above
+    await user.click(screen.getByRole('button', { name: 'Status hinzufügen' }));
+    expect(document.activeElement).toBe(nameOf(6));
+    await user.click(screen.getByRole('button', { name: 'Status 6 entfernen' }));
+    await waitFor(() => expect(document.activeElement).toBe(nameOf(5)));
+    expect(nameOf(5).value).toBe('Cancelled');
     await user.click(screen.getByRole('button', { name: 'Status hinzufügen' }));
     expect(document.activeElement).toBe(nameOf(6));
     await user.type(nameOf(6), 'QA');
@@ -585,6 +633,26 @@ describe('the workflow editor', () => {
     expect(body.initial_state_id).toBe(ids[0]);
     expect(body.transitions).toHaveLength(14);
     expect(body.transitions).toContainEqual([ids[2], ids[3]]);
+  });
+
+  it('says when the workflow to copy does not exist, and starts a new one', async () => {
+    renderAt('/settings/workflows?workflow=new&from=wf_gone');
+
+    expect(await screen.findByText('Diese Vorlage gibt es nicht')).toBeTruthy();
+    expect(screen.getByText('Der Workflow, den du duplizieren wolltest, wurde gelöscht, oder der Link stimmt nicht. Du beginnst mit einem neuen Workflow.')).toBeTruthy();
+    expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Name' }).value).toBe('');
+    expect(screen.getAllByRole<HTMLInputElement>('textbox', { name: /^Name von Status/ }).map((field) => field.value)).toEqual(['Backlog', 'Todo', 'In Progress', 'Done', 'Cancelled']);
+  });
+
+  it('says nothing about a template when there is none or it exists', async () => {
+    const { unmount } = renderAt('/settings/workflows?workflow=new');
+    expect(await screen.findByRole('textbox', { name: 'Name' })).toBeTruthy();
+    expect(screen.queryByText('Diese Vorlage gibt es nicht')).toBeNull();
+    unmount();
+
+    renderAt('/settings/workflows?workflow=new&from=wf_agency');
+    expect(await screen.findByRole('textbox', { name: 'Name' })).toBeTruthy();
+    expect(screen.queryByText('Diese Vorlage gibt es nicht')).toBeNull();
   });
 
   it('says that a workflow does not exist, with the way back', async () => {

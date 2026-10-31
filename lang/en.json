@@ -1079,6 +1079,8 @@
     "settings.workflows.editor.start_required": "Choose the status new items start in.",
     "settings.workflows.editor.unknown.description": "It was deleted, or the link is wrong.",
     "settings.workflows.editor.unknown.title": "This workflow does not exist",
+    "settings.workflows.editor.unknown_template.description": "The workflow you wanted to duplicate was deleted, or the link is wrong. You start with a new workflow.",
+    "settings.workflows.editor.unknown_template.title": "This template does not exist",
     "settings.workflows.editor.used_by": "Used by :projects",
     "settings.workflows.editor.used_by_description": "New statuses and transitions apply at once.",
     "settings.workflows.empty.description": "A workflow sets which statuses an item goes through and which transitions are allowed.",

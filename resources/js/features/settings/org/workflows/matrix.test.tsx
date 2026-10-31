@@ -8,7 +8,8 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import tokens from '../../../../../css/tokens.css?raw';
+// from the root of the project, so the path holds when the test moves
+import tokens from '/resources/css/tokens.css?raw';
 import { registerShortcut } from '@/lib/shortcuts/registry';
 import { agency } from '@/test/fixtures';
 import type { State, Transition } from '@/types';

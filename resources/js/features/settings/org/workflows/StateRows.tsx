@@ -18,7 +18,6 @@ import { CATEGORY_ORDER } from '@/domain/workflow';
 import { t } from '@/lib/i18n';
 import type { StateCategory, StateIcon } from '@/types';
 import { CATEGORY_HINTS, CATEGORY_LABELS, STATE_ICON_LABELS, STATE_ICONS } from '../../catalog/choices';
-import { focusNeighbour } from '../../frame/form';
 import { Badge, readOnlyField } from '../../frame/parts';
 import type { DraftState } from './draft';
 
@@ -64,7 +63,7 @@ type StateRowProps = {
   unreachable: boolean;
   error: string | undefined;
   onChange: (partial: Partial<DraftState>) => void;
-  onRemove: (row: Element | null) => void;
+  onRemove: () => void;
 };
 
 function StateRow({ state, index, handle, readOnly, isStart, unreachable, error, onChange, onRemove }: StateRowProps) {
@@ -115,7 +114,7 @@ function StateRow({ state, index, handle, readOnly, isStart, unreachable, error,
             icon={Trash2}
             label={t('settings.workflows.state.remove', { name })}
             disabledReason={isStart ? t('settings.workflows.state.keep_start') : null}
-            onClick={(event) => onRemove(event.currentTarget.closest('li'))}
+            onClick={onRemove}
           />
         )}
       </div>
@@ -138,11 +137,12 @@ type StateRowsProps = {
   readOnly: boolean;
   /** Statuses the start cannot reach. */
   unreachable: ReadonlySet<string>;
+  /** Removes a status; the editor puts the focus on the name of the row that takes its place. */
+  onRemove: (id: string) => void;
   /** The message for a status: a name left empty, or the server's refusal of its row. */
   errorOf: (id: string) => string | undefined;
   onChange: (states: DraftState[]) => void;
   onPatch: (id: string, partial: Partial<DraftState>) => void;
-  onRemove: (id: string) => void;
 };
 
 export function StateRows({ states, initialStateId, readOnly, unreachable, errorOf, onChange, onPatch, onRemove }: StateRowsProps) {
@@ -164,11 +164,7 @@ export function StateRows({ states, initialStateId, readOnly, unreachable, error
           unreachable={unreachable.has(state.id)}
           error={errorOf(state.id)}
           onChange={(partial) => onPatch(state.id, partial)}
-          onRemove={(row) => {
-            // the trash button goes with its row: on to the next row (or the one before; the start status always stays)
-            focusNeighbour(row);
-            onRemove(state.id);
-          }}
+          onRemove={() => onRemove(state.id)}
         />
       )}
     />
