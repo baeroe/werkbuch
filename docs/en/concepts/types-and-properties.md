@@ -51,7 +51,7 @@ The field type is fixed as well. The only change allowed is from single to multi
 
 ### Options
 
-A dropdown has at least one active option. An option has a label (up to 60 characters), a tone (the field `color` in the API) and a place in the order; a dropdown has at most 100. An option you no longer want to offer can be **archived**: it is not offered for new values any more, and you can restore it. In the interface a saved option can only be archived; over the API, an option left out of a `PUT` is deleted, unless items carry it: then it is archived instead.
+A dropdown has at least one active option. An option has a label (up to 60 characters), a tone (the field `color` in the API) and a place in the order; a dropdown has at most 100. An option you no longer want to offer can be **archived**: it is not offered for new values any more, and you can restore it. A saved option can also be **removed** (in the interface the cross next to it, over the API by leaving it out of a `PUT`): it is deleted, unless items carry it: then it is archived instead, and the interface says so after saving.
 
 ## Labels
 

@@ -55,7 +55,7 @@ New states and new transitions apply at once, in every project that uses the wor
 
 Project admins switch the workflow of their project under **Project settings → Workflow**: choose the new workflow, then **Switch workflow …** and confirm.
 
-Today that is a plain confirmation, because there are no work items yet. Once there are, you map every state that holds items to a state of the new workflow (and the same when you remove a state that still has items). werkbuch then moves the items in the background, deliberately without the transition rules, and the history names the person who started it.
+Without items it is a plain confirmation. Otherwise the dialog lists every state that holds items, with their number and a proposal (the state of the same name, else the first one of the same category), and says what the switch does to them: closed items that land in an open state lose their resolution, open ones that land in a closed state get its default. You confirm once every state has its target. The same question comes when you save a workflow without a state that still holds items (**Replace statuses**): the states that stay and the new ones are the targets. werkbuch moves the items at once, deliberately without the transition rules, and their history names the person who did it.
 
 ## Delete
 
@@ -151,7 +151,7 @@ A workflow that breaks a rule is refused with `422` and `reason: invalid_workflo
 
 ### Switch the workflow of a project
 
-The project is addressed by its identifier or its ULID. `mapping` maps states of the old workflow to states of the new one (`{"<old state id>": "<new state id>"}`). Until there are work items it may stay empty; then it will be required for every state that holds items.
+The project is addressed by its identifier or its ULID. `mapping` maps states of the old workflow to states of the new one (`{"<old state id>": "<new state id>"}`). Every state the items of the project are in (archived ones included) needs a target; one without is a `422` at `mapping.<state id>`, with the states and their items in `states`. A project without items takes an empty mapping.
 
 ```bash
 curl -X PUT https://werkbuch.example.com/api/v1/projects/WEB/workflow \

@@ -66,7 +66,11 @@ const unavailable = () => problem(503, 'service_unavailable', { detail: 'Der Ser
 
 let api: MockApi | undefined;
 
-function renderSettings(section: string, overrides: Record<string, MockRoute> = {}, { identifier = 'WEB', project: shown = web } = {}) {
+function renderSettings(
+  section: string,
+  overrides: Record<string, MockRoute> = {},
+  { identifier = 'WEB', project: shown = web, beforeRender = () => {} }: { identifier?: string; project?: typeof web; beforeRender?: () => void } = {},
+) {
   api = mockApi({
     'GET /api/v1/projects/WEB': () => ({ body: { data: shown } }),
     'GET /api/v1/projects': () => ({ body: list([shown]) }),
@@ -74,8 +78,11 @@ function renderSettings(section: string, overrides: Record<string, MockRoute> = 
     'GET /api/v1/users': () => ({ body: list([mara, ida, theo, lene, jonas, sven, kira, automation]) }),
     'GET /api/v1/workflows': () => ({ body: list([standard, agency]) }),
     'GET /api/v1/work-item-types': () => ({ body: list([...types, legacy]) }),
+    'GET /api/v1/state-usage': () => ({ body: { data: [] } }),
     ...overrides,
   });
+  // after the fake API is in place and before anything asks it: a test can hold some of its answers
+  beforeRender();
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return {
     client,
@@ -734,6 +741,114 @@ describe('Workflow', () => {
     act(() => runToastAction(toastNamed('Workflow nicht gewechselt').id));
     await waitFor(() => expect(toastTitles()).toContain('Workflow gewechselt'));
     expect(calls('PUT', '/api/v1/projects/p_web/workflow')).toHaveLength(2);
+  });
+
+  /** The items of WEB per state of the standard workflow. */
+  const counted = (usage: { state_id: string; items: number }[]) => ({ 'GET /api/v1/state-usage': () => ({ body: { data: usage } }) });
+  const choice = (name: string) => screen.getByRole('combobox', { name: `Neuer Status für „${name}“` });
+  const describedBy = (element: HTMLElement) => document.getElementById(element.getAttribute('aria-describedby')!)?.textContent;
+
+  it('switches without a mapping dialog when no item uses a state', async () => {
+    const user = userEvent.setup();
+    renderSettings('workflow', { ...switchable(), ...counted([{ state_id: 'std_todo', items: 0 }]) });
+
+    await chooseAgency(user);
+    await user.click(screen.getByRole('button', { name: /Workflow wechseln …/ }));
+    const dialog = await screen.findByRole('dialog', { name: 'Zu „Agentur-Freigabe“ wechseln' });
+    // the plain confirmation: no row to map
+    expect(within(dialog).queryByRole('list', { name: 'Status mit Items' })).toBeNull();
+    expect(within(dialog).getByText('WEB nutzt bisher „Standard“. Neue Items starten im Startstatus „Backlog“.')).toBeTruthy();
+    await user.click(within(dialog).getByRole('button', { name: /^Workflow wechseln/ }));
+
+    await waitFor(() => expect(toastTitles()).toContain('Workflow gewechselt'));
+    expect(lastCall('PUT', '/api/v1/projects/p_web/workflow')!.body).toEqual({ workflow_id: 'wf_agency', mapping: {} });
+    // the items were counted for the project
+    expect(api!.calls.some((call) => call.url === '/api/v1/state-usage?project=p_web')).toBe(true);
+  });
+
+  it('sends the mapping of the dialog', async () => {
+    const user = userEvent.setup();
+    renderSettings('workflow', {
+      ...switchable(),
+      ...counted([
+        { state_id: 'std_todo', items: 2 },
+        { state_id: 'std_pending', items: 1 },
+        { state_id: 'std_done', items: 3 },
+      ]),
+    });
+    // the card says there is a next step
+    expect(await screen.findByText('Alle Items des Projekts bekommen einen Status des neuen Workflows. Dafür ordnest du im nächsten Schritt jedem Status mit Items einen neuen zu.')).toBeTruthy();
+
+    await chooseAgency(user);
+    const open = screen.getByRole('button', { name: /Workflow wechseln …/ });
+    await user.click(open);
+    const dialog = await screen.findByRole('dialog', { name: 'Zu „Agentur-Freigabe“ wechseln' });
+    expect(
+      within(dialog).getByText(
+        'WEB nutzt bisher „Standard“. Ordne jedem Status mit Items einen Status des neuen Workflows zu. Die Items werden ohne Übergangsregeln umgeschrieben, die History nennt dich als Auslöser.',
+      ),
+    ).toBeTruthy();
+    expect(within(within(dialog).getByRole('list', { name: 'Status mit Items' })).getAllByRole('listitem')).toHaveLength(3);
+    // Pending has no namesake: the first state of its category takes it, until the person picks another
+    expect(choice('Pending').textContent).toContain('In Progress');
+    await user.click(choice('Pending'));
+    await user.click(await screen.findByRole('option', { name: 'Kundenfreigabe' }));
+    await user.click(within(dialog).getByRole('button', { name: /^Workflow wechseln/ }));
+
+    await waitFor(() => expect(toastTitles()).toContain('Workflow gewechselt'));
+    expect(toastNamed('Workflow gewechselt').description).toBe('WEB nutzt jetzt „Agentur-Freigabe“. 6 Items haben einen neuen Status.');
+    expect(lastCall('PUT', '/api/v1/projects/p_web/workflow')!.body).toEqual({
+      workflow_id: 'wf_agency',
+      mapping: { std_todo: 'app_todo', std_pending: 'app_approval', std_done: 'app_done' },
+    });
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { level: 3, name: 'Agentur-Freigabe' })));
+  });
+
+  it('blocks the switch while the items are counted, and says when they could not be', async () => {
+    const user = userEvent.setup();
+    renderSettings('workflow', { 'GET /api/v1/state-usage': () => unavailable() }, { beforeRender: () => holdCalls('/state-usage') });
+
+    await chooseAgency(user);
+    const open = screen.getByRole('button', { name: /Workflow wechseln …/ });
+    expect(describedBy(open)).toBe('Die Items des Projekts werden noch geladen.');
+    await user.click(open);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    act(() => release());
+    await waitFor(() => expect(describedBy(open)).toBe('Die Items des Projekts konnten nicht geladen werden.'));
+  });
+
+  it('adds the rows of the states the server names in its 422, marked, and switches with them', async () => {
+    const user = userEvent.setup();
+    let refuse = true;
+    const server = switchable();
+    renderSettings('workflow', {
+      ...server,
+      ...counted([{ state_id: 'std_todo', items: 1 }]),
+      'PUT /api/v1/projects/p_web/workflow': (body) =>
+        refuse
+          ? problem(422, 'validation_failed', {
+              detail: 'Für „Pending“ fehlt ein Status im neuen Workflow.',
+              errors: { 'mapping.std_pending': ['Für „Pending“ fehlt ein Status im neuen Workflow.'] },
+              states: [{ state_id: 'std_pending', name: 'Pending', items: 2 }],
+            })
+          : server['PUT /api/v1/projects/p_web/workflow'](body),
+    });
+
+    await chooseAgency(user);
+    await user.click(screen.getByRole('button', { name: /Workflow wechseln …/ }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: /^Workflow wechseln/ }));
+
+    await waitFor(() => expect(choice('Pending').getAttribute('aria-invalid')).toBe('true'));
+    expect(describedBy(choice('Pending'))).toBe('Für „Pending“ fehlt ein Status im neuen Workflow.');
+    // the mark stands at its row, not on top as well
+    expect(within(dialog).queryByRole('alert')).toBeNull();
+    expect(toastTitles()).not.toContain('Workflow nicht gewechselt');
+
+    refuse = false;
+    await user.click(within(dialog).getByRole('button', { name: /^Workflow wechseln/ }));
+    await waitFor(() => expect(toastTitles()).toContain('Workflow gewechselt'));
+    expect(lastCall('PUT', '/api/v1/projects/p_web/workflow')!.body).toEqual({ workflow_id: 'wf_agency', mapping: { std_todo: 'app_todo', std_pending: 'app_progress' } });
   });
 });
 

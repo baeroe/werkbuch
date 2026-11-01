@@ -2,8 +2,9 @@
  * Resolutions (spec 4.7): how an item ends. Moving into a status of the category Completed or Canceled sets one, chosen
  * or the default of the category; moving back clears it. Each category has exactly one default at all times (P20): a
  * new default takes the mark from the old one, and a default keeps it until another one takes it, so it can neither be
- * deleted nor archived nor lose its mark in its own dialog. Archived resolutions can no longer be chosen. Whether a
- * resolution that items carry is archived instead of deleted comes with the items (P28).
+ * deleted nor archived nor lose its mark in its own dialog. Archived resolutions can no longer be chosen. A resolution
+ * that items carry is archived instead of deleted (`outcome: 'archived'`): a toast says so, and the row stays, marked
+ * archived.
  */
 
 import { Pencil, Plus, Trash2 } from 'lucide-react';
@@ -167,6 +168,10 @@ export default function Resolutions({ readOnlyReason }: SectionProps) {
                                 label: t('settings.resolutions.deleted', { label: resolution.label }),
                                 failureTitle: t('settings.resolutions.not_deleted', { label: resolution.label }),
                                 run: () => remove.mutateAsync(resolution.id),
+                                onDone: ({ outcome }) => {
+                                  if (outcome === 'archived')
+                                    toast({ title: t('settings.resolutions.archived_instead', { label: resolution.label }), description: t('settings.resolutions.archived_instead_description') });
+                                },
                               })
                             }
                           />

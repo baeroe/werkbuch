@@ -6,9 +6,12 @@
  * stays available, because a form that can always be sent shows what is wrong; with findings left a send saves nothing
  * and takes the focus to their list. The server's answers land where they belong: 422 `invalid_workflow` as findings
  * (the statuses found by the ids that were sent), a refused name at the name field, a refused status at its row, every
- * other refusal as a notice. A removed status goes with the save without a question: without items it needs no new
- * home (409 `state_in_use` and the mapping come with Phase 4, P28). Leaving with unsaved changes asks first
- * (`LeaveGuard`). Members get the same view without any way to change it.
+ * other refusal as a notice. A save that removes statuses first counts their items (`useStateUsage` of the workflow,
+ * in every project that uses it): without items they go without a question; with items `StateMappingDialog` asks which
+ * of the statuses that stay or are new takes them over (new ones by their local ids), and the mapping goes with the
+ * save as `state_mapping`. Items that arrived meanwhile come back as 409 `state_in_use`, which opens the question (or
+ * adds their rows to it). Leaving with unsaved changes asks first (`LeaveGuard`). Members get the same view without
+ * any way to change it.
  */
 
 import { Link } from '@inertiajs/react';
@@ -27,13 +30,16 @@ import { toast } from '@/components/ui/toast';
 import { validateWorkflow, type WorkflowIssue } from '@/domain/workflow';
 import { useSettle } from '@/hooks/mutation';
 import { useProjects } from '@/hooks/projects';
+import { useStateUsage } from '@/hooks/workItems';
 import { useSaveWorkflow, useWorkflows } from '@/hooks/workflows';
 import { notifyError } from '@/lib/errors';
-import { t } from '@/lib/i18n';
+import { t, tn } from '@/lib/i18n';
 import { paths } from '@/lib/links';
-import type { Project, Workflow } from '@/types';
+import type { Project, StateUsage, Workflow } from '@/types';
 import { CATEGORY_LABELS } from '../../catalog/choices';
 import { localId } from '../../catalog/localId';
+import { mergeUsage, rowsFor } from '../../catalog/mapping';
+import { markedPaths, refusedStates, StateMappingDialog } from '../../catalog/StateMappingDialog';
 import { ReadOnlyNotice } from '../../frame/access';
 import { fieldMessage, hasReason, noticeOf, useSaveShortcut } from '../../frame/form';
 import { LeaveGuard } from '../../frame/LeaveGuard';
@@ -77,6 +83,11 @@ function EditorForm({ initial, existing, projects, readOnlyReason, focusTitle, m
   const readOnly = readOnlyReason !== null;
   // the stored workflow the draft is compared with; after a save it is the answer, with the ids the server gave
   const [base, setBase] = useState<Workflow | null>(existing);
+  // counted when a save removes statuses, never before: the count must be the one of that moment
+  const usage = useStateUsage({ workflow: base?.id ?? '' }, { enabled: false });
+  const [counting, setCounting] = useState(false);
+  // the question for the removed statuses with items; `round` starts its choices afresh at every opening
+  const [mapping, setMapping] = useState<{ round: number; open: boolean; usage: StateUsage[] } | null>(null);
   // a new draft (blank or a copy) is drawn once: its fresh ids must not change under the comparison
   const [start] = useState<Draft>(initial);
   const [draft, setDraft] = useState<Draft>(start);
@@ -112,9 +123,15 @@ function EditorForm({ initial, existing, projects, readOnlyReason, focusTitle, m
   const unreachable = useMemo(() => new Set(issues.flatMap((issue) => (issue.code === 'unreachable_state' && issue.state_id ? [issue.state_id] : []))), [issues]);
   const matrixStates = useMemo(() => draft.states.map((state, position) => ({ ...state, position })), [draft.states]);
   const usedBy = base ? projects.filter((project) => project.workflow_id === base.id) : [];
+  const removed = base ? base.states.filter((state) => !draft.states.some((kept) => kept.id === state.id)) : [];
+  const mappingRows = mapping ? rowsFor(mapping.usage, removed, matrixStates) : [];
+  const mappingOpen = mapping?.open === true;
 
   const statePaths = sent.current.states.flatMap((_, index) => STATE_FIELDS.map((field) => `states.${index}.${field}`));
-  const unplaced = save.error instanceof ApiError && save.error.status === 422 && !hasReason(save.error, 'invalid_workflow') ? noticeOf(save.error, ['name', 'initial_state_id', ...statePaths]) : null;
+  const unplaced =
+    save.error instanceof ApiError && save.error.status === 422 && !hasReason(save.error, 'invalid_workflow')
+      ? noticeOf(save.error, ['name', 'initial_state_id', 'state_mapping', ...statePaths, ...markedPaths(save.error, 'state_mapping')])
+      : null;
   const nameError = attempted && draft.name.trim() === '' ? t('settings.workflows.editor.name_required') : fieldMessage(save.error, 'name');
   const startError = issues.some((issue) => issue.code === 'no_initial_state') ? t('settings.workflows.editor.start_required') : fieldMessage(save.error, 'initial_state_id');
   const stateError = (id: string): string | undefined => {
@@ -164,7 +181,7 @@ function EditorForm({ initial, existing, projects, readOnlyReason, focusTitle, m
     setDraft((current) => ({ ...current, is_free: free, transitions: !free && current.transitions.length === 0 ? allPairs(current.states) : current.transitions }));
   }
 
-  function submit() {
+  async function submit(stateMapping?: Record<string, string>) {
     setAttempted(true);
     const blank = draft.states.find((state) => state.name.trim() === '');
     if (draft.name.trim() === '') {
@@ -185,10 +202,32 @@ function EditorForm({ initial, existing, projects, readOnlyReason, focusTitle, m
       return;
     }
 
+    if (stateMapping === undefined && removed.length > 0) {
+      // the removed statuses that hold items need a new home before anything is sent
+      setCounting(true);
+      const counted = await usage.refetch();
+      setCounting(false);
+      if (!counted.data) {
+        notifyError(t('settings.workflows.editor.usage_failed'), counted.error, () => void submit());
+        return;
+      }
+      if (rowsFor(counted.data, removed, matrixStates).length > 0) {
+        const counts = counted.data;
+        setMapping((current) => ({ round: (current?.round ?? 0) + 1, open: true, usage: counts }));
+        return;
+      }
+    }
+
+    const moved = stateMapping ? mappingRows.reduce((sum, row) => sum + row.items, 0) : 0;
     sent.current = { draft, states: draft.states.map((state) => state.id) };
-    settle(save.mutateAsync({ workflow: toInput(draft, base?.id) }), {
+    settle(save.mutateAsync({ workflow: toInput(draft, base?.id), options: stateMapping ? { state_mapping: stateMapping } : undefined }), {
       onSuccess: (saved) => {
-        toast({ title: t('settings.workflows.editor.saved', { name: saved.name }), tone: 'success' });
+        setMapping((current) => current && { ...current, open: false });
+        toast({
+          title: t('settings.workflows.editor.saved', { name: saved.name }),
+          description: moved > 0 ? tn('settings.workflows.editor.moved', moved) : undefined,
+          tone: 'success',
+        });
         if (base) {
           // the new statuses have the server's ids now: the draft starts again from the answer
           setBase(saved);
@@ -200,13 +239,25 @@ function EditorForm({ initial, existing, projects, readOnlyReason, focusTitle, m
         onCreated(saved.id);
       },
       onError: (error) => {
-        // refusals show in the form; anything else is a toast
-        if (!(error instanceof ApiError && error.status === 422)) notifyError(t('settings.workflows.editor.not_saved'), error, submit);
+        if (hasReason(error, 'state_in_use')) {
+          // items arrived in a removed status meanwhile: the question opens, or gets their rows
+          const named = refusedStates(error);
+          setMapping((current) => ({ round: current?.open ? current.round : (current?.round ?? 0) + 1, open: true, usage: mergeUsage(current?.usage ?? [], named) }));
+          return;
+        }
+        if (error instanceof ApiError && error.status === 422) {
+          // a refused target stays at its row; every other refusal shows in the form, behind no dialog
+          if (markedPaths(error, 'state_mapping').length === 0) setMapping((current) => current && { ...current, open: false });
+          return;
+        }
+        // anything else is a toast
+        notifyError(t('settings.workflows.editor.not_saved'), error, () => void submit(stateMapping));
       },
     });
   }
 
-  useSaveShortcut(form, !readOnly && !save.isPending);
+  const busy = save.isPending || counting;
+  useSaveShortcut(form, !readOnly && !busy);
 
   return (
     <form
@@ -214,7 +265,7 @@ function EditorForm({ initial, existing, projects, readOnlyReason, focusTitle, m
       noValidate
       onSubmit={(event) => {
         event.preventDefault();
-        if (!readOnly && !save.isPending) submit();
+        if (!readOnly && !busy) void submit();
       }}
       className="flex flex-col gap-4"
     >
@@ -231,7 +282,7 @@ function EditorForm({ initial, existing, projects, readOnlyReason, focusTitle, m
                   {t('settings.workflows.editor.discard')}
                 </Button>
               )}
-              <Button variant="primary" type="submit" shortcut="mod+enter" pending={save.isPending}>
+              <Button variant="primary" type="submit" shortcut="mod+enter" pending={busy}>
                 {t('settings.frame.save')}
               </Button>
             </>
@@ -369,6 +420,27 @@ function EditorForm({ initial, existing, projects, readOnlyReason, focusTitle, m
       </Panel>
 
       <LeaveGuard dirty={dirty && !readOnly} what={t('settings.workflows.editor.leave_what')} bypass={leaving} />
+
+      {mapping && (
+        <StateMappingDialog
+          key={mapping.round}
+          open={mapping.open}
+          onClose={() => setMapping((current) => current && { ...current, open: false })}
+          title={t('settings.workflows.mapping.title')}
+          description={tn(mappingRows.length === 1 ? 'settings.workflows.mapping.one_state' : 'settings.workflows.mapping.states', mappingRows.reduce((sum, row) => sum + row.items, 0), {
+            name: draft.name.trim() || base!.name,
+          })}
+          submitLabel={t('settings.workflows.mapping.submit')}
+          usage={mapping.usage}
+          from={removed}
+          to={matrixStates}
+          field="state_mapping"
+          pending={save.isPending}
+          refusal={mappingOpen ? save.error : null}
+          notice={fieldMessage(save.error, 'state_mapping') ?? null}
+          onConfirm={(chosen) => void submit(chosen)}
+        />
+      )}
     </form>
   );
 }

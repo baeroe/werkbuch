@@ -1,8 +1,8 @@
 /*
  * The options of a dropdown in the property dialog: label and tone, in an order to drag or move with the keyboard. An
- * option the server knows can only be archived (items may carry it) and brought back; a new one is removed. New options
- * get a local id (P3), so the default value can name them before they are saved. "Add option" puts the focus on the
- * label of the new one.
+ * option the server knows can be archived and brought back, or removed: the server deletes it, or archives it when
+ * items carry it, and the dialog says so after the save. New options get a local id (P3), so the default value can
+ * name them before they are saved. "Add option" puts the focus on the label of the new one.
  */
 
 import { Archive, ArchiveRestore, CircleAlert, Plus, X } from 'lucide-react';
@@ -25,7 +25,7 @@ export interface DraftOption {
   label: string;
   color: TypeTone;
   archivedAt: string | null;
-  /** Known to the server: it can only be archived, never removed, because items may carry it. */
+  /** Known to the server: removed, it may come back archived, because items may carry it. */
   saved: boolean;
 }
 
@@ -86,23 +86,22 @@ export function OptionRows({ options, onChange, labelError }: OptionRowsProps) {
                   className={cx(fieldClass(Boolean(error)), 'h-11 min-w-0 flex-1 basis-36 px-3 text-input md:h-9 md:text-md', archived && 'bg-sunken text-muted')}
                 />
                 {archived && <Badge tone="quiet">{t('settings.properties.options.archived')}</Badge>}
-                {option.saved ? (
+                {option.saved && (
                   <IconButton
                     icon={archived ? ArchiveRestore : Archive}
                     label={archived ? t('settings.properties.options.restore', { name }) : t('settings.properties.options.archive', { name })}
                     onClick={() => patch(option.id, { archivedAt: archived ? null : new Date().toISOString() })}
                   />
-                ) : (
-                  <IconButton
-                    icon={X}
-                    label={t('settings.properties.options.remove', { number })}
-                    onClick={(event) => {
-                      // on to the next option (or the one before), after the last to "Add option"
-                      focusNeighbour(event.currentTarget.closest('li'), addButton.current);
-                      onChange(options.filter((candidate) => candidate.id !== option.id));
-                    }}
-                  />
                 )}
+                <IconButton
+                  icon={X}
+                  label={t('settings.properties.options.remove', { number })}
+                  onClick={(event) => {
+                    // on to the next option (or the one before), after the last to "Add option"
+                    focusNeighbour(event.currentTarget.closest('li'), addButton.current);
+                    onChange(options.filter((candidate) => candidate.id !== option.id));
+                  }}
+                />
                 {error && (
                   <p id={errorId} className="flex basis-full items-start gap-1.5 pl-1 text-sm font-medium text-danger">
                     <CircleAlert className="mt-px size-3.5 shrink-0" aria-hidden="true" />

@@ -10,7 +10,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { currentToasts, resetToasts } from '@/components/ui/toast';
+import { currentToasts, dismissToast, resetToasts } from '@/components/ui/toast';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import { lene, list, organization, properties, types } from '@/test/fixtures';
 import type { Property } from '@/types';
@@ -174,9 +174,20 @@ describe('Properties', () => {
     question = await screen.findByRole('alertdialog', { name: 'Property „Aufwand (h)“ löschen?' });
     await user.click(within(question).getByRole('button', { name: 'Property löschen' }));
     await waitFor(() => expect(toastNamed('Property „Aufwand (h)“ gelöscht')).toBeDefined());
+    // no item had a value: nothing to count
+    expect(toastNamed('Property „Aufwand (h)“ gelöscht')!.description).toBeUndefined();
     expect(screen.queryByRole('heading', { name: 'Aufwand (h)' })).toBeNull();
     // the focus went on to the next row
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Property „Umgebung“ bearbeiten' })));
+  });
+
+  it('names how many items lost their value with a deleted property', async () => {
+    const user = userEvent.setup();
+    renderWith(<Properties readOnlyReason={null} />, routes(all, { 'DELETE /api/v1/properties/pr_effort': () => ({ body: { affected_items: 2 } }) }));
+
+    await user.click(within(await rowOf('Aufwand (h)')).getByRole('button', { name: 'Property „Aufwand (h)“ löschen' }));
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Property löschen' }));
+    await waitFor(() => expect(toastNamed('Property „Aufwand (h)“ gelöscht')?.description).toBe('Die Werte bei 2 Items sind weg, die History behält sie.'));
   });
 
   it('puts the focus on "Property anlegen" once the last property is gone, and says when a delete failed', async () => {
@@ -416,8 +427,7 @@ describe('Properties', () => {
     expect(within(dialog).getByText('Auch der Feldtyp ist fest, nur von Einfach- auf Mehrfachauswahl lässt sich wechseln.')).toBeTruthy();
     expect(within(dialog).getByRole('combobox', { name: /^Standardwert/ }).textContent).toContain('Hafenkontor');
 
-    // a stored option is archived, not removed
-    expect(within(dialog).queryByRole('button', { name: /entfernen$/ })).toBeNull();
+    // a stored option can be archived (removing it is the other way, see below)
     await user.click(within(dialog).getByRole('button', { name: 'Option „Gärtnerei Moos“ archivieren' }));
     await user.click(within(dialog).getByRole('button', { name: 'Option „Gärtnerei Moos“ wiederherstellen' }));
     await user.click(within(dialog).getByRole('button', { name: 'Option „Hafenkontor“ archivieren' }));
@@ -434,6 +444,45 @@ describe('Properties', () => {
       ['opt_hafenkontor', true],
       ['opt_moos', false],
     ]);
+  });
+
+  it('removes stored options, and says which one comes back archived because items carry it', async () => {
+    const user = userEvent.setup();
+    const customer = { ...properties[0]!, default_value: null, settings: { multiple: false } };
+    let answer: 'one' | 'two' = 'one';
+    renderWith(
+      <Properties readOnlyReason={null} />,
+      routes([customer], {
+        'PUT /api/v1/properties/pr_customer': () => {
+          // the server deletes what no item carries and archives the rest
+          const archived = (id: string) => ({ ...customer.options.find((option) => option.id === id)!, archived_at: '2026-11-01T09:00:00.000Z' });
+          const options = answer === 'one' ? [customer.options[0]!, archived('opt_hafenkontor')] : [customer.options[0]!, archived('opt_hafenkontor'), archived('opt_moos')];
+          return { body: { data: { ...customer, options } } };
+        },
+      }),
+    );
+
+    await user.click(within(await rowOf('Kunde')).getByRole('button', { name: 'Property „Kunde“ bearbeiten' }));
+    let dialog = await screen.findByRole('dialog', { name: 'Property „Kunde“ bearbeiten' });
+    // a stored option can go as well
+    await user.click(within(dialog).getByRole('button', { name: 'Option 3 entfernen' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Option 2 entfernen' }));
+    expect(within(within(dialog).getByRole('list', { name: 'Optionen' })).getAllByRole('listitem')).toHaveLength(1);
+    await user.click(within(dialog).getByRole('button', { name: 'Speichern' }));
+
+    await waitFor(() => expect(toastNamed('Property „Kunde“ gespeichert')?.description).toBe('Items tragen die Option „Hafenkontor“ noch: Sie ist archiviert, nicht gelöscht.'));
+    const body = callsTo('PUT', '/api/v1/properties/pr_customer')[0]!.body as { options: { id: string }[] };
+    expect(body.options.map((option) => option.id)).toEqual(['opt_nordlicht']);
+
+    // more than one kept are counted
+    act(() => dismissToast(toastNamed('Property „Kunde“ gespeichert')!.id));
+    answer = 'two';
+    await user.click(within(await rowOf('Kunde')).getByRole('button', { name: 'Property „Kunde“ bearbeiten' }));
+    dialog = await screen.findByRole('dialog', { name: 'Property „Kunde“ bearbeiten' });
+    await user.click(within(dialog).getByRole('button', { name: 'Option 3 entfernen' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Option 2 entfernen' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Speichern' }));
+    await waitFor(() => expect(toastNamed('Property „Kunde“ gespeichert')?.description).toBe('Items tragen 2 der entfernten Optionen noch: Sie sind archiviert, nicht gelöscht.'));
   });
 
   it('switches a dropdown to multiple choice and keeps its default as a list; a stored multiple choice stays', async () => {

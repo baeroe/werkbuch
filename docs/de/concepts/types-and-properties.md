@@ -51,7 +51,7 @@ Auch der Feldtyp ist fest. Erlaubt ist nur der Wechsel von Einfach- auf Mehrfach
 
 ### Optionen
 
-Ein Dropdown hat mindestens eine aktive Option. Eine Option hat ein Label (bis 60 Zeichen), einen Ton (in der API das Feld `color`) und einen Platz in der Reihenfolge; ein Dropdown hat höchstens 100. Eine Option, die du nicht mehr anbieten willst, lässt sich **archivieren**: Für neue Werte steht sie nicht mehr zur Wahl, und du kannst sie wiederherstellen. In der Oberfläche lässt sich eine gespeicherte Option nur archivieren; über die API wird eine Option gelöscht, die in einem `PUT` fehlt, es sei denn, Items tragen sie: Dann wird sie stattdessen archiviert.
+Ein Dropdown hat mindestens eine aktive Option. Eine Option hat ein Label (bis 60 Zeichen), einen Ton (in der API das Feld `color`) und einen Platz in der Reihenfolge; ein Dropdown hat höchstens 100. Eine Option, die du nicht mehr anbieten willst, lässt sich **archivieren**: Für neue Werte steht sie nicht mehr zur Wahl, und du kannst sie wiederherstellen. Eine gespeicherte Option lässt sich auch **entfernen** (in der Oberfläche mit dem Kreuz daneben, über die API, indem sie in einem `PUT` fehlt): Sie wird gelöscht, es sei denn, Items tragen sie: Dann wird sie stattdessen archiviert, und die Oberfläche sagt es nach dem Speichern.
 
 ## Labels
 

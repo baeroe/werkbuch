@@ -1,7 +1,9 @@
 /*
  * Settings → Workflow (spec 4.5): which workflow the project uses, and switching to another one. The workflows live in
- * the organisation; a project only picks one. In Phase 3 a project has no items, so a switch is a plain confirmation
- * with an empty mapping (P28); the rows that give each status with items a new one come with Phase 4.
+ * the organisation; a project only picks one. A switch asks for a state of the new workflow for every state the items
+ * of the project are in (`StateMappingDialog`, counted by `useStateUsage`, archived items included); without items it
+ * is a plain confirmation with an empty mapping. When items moved into another state meanwhile, the server's 422 at
+ * `mapping.<id>` adds their rows to the open question.
  */
 
 import { Link } from '@inertiajs/react';
@@ -10,17 +12,19 @@ import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { ApiError } from '@/api/client';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
-import { FormDialog } from '@/components/ui/FormDialog';
 import { Select } from '@/components/ui/Select';
 import { StatusIcon } from '@/components/ui/StatusIcon';
 import { toast } from '@/components/ui/toast';
 import { statesInOrder } from '@/domain/workflow';
+import { useStateUsage } from '@/hooks/workItems';
 import { useAssignWorkflow, useWorkflows } from '@/hooks/workflows';
 import { notifyError } from '@/lib/errors';
 import { t, tn } from '@/lib/i18n';
 import { paths } from '@/lib/links';
 import { usePermissions } from '@/lib/permissions';
-import type { Workflow as WorkflowRecord } from '@/types';
+import type { StateUsage, Workflow as WorkflowRecord } from '@/types';
+import { mergeUsage, rowsFor } from '../catalog/mapping';
+import { markedPaths, refusedStates, StateMappingDialog } from '../catalog/StateMappingDialog';
 import { noticeOf } from '../frame/form';
 import { SettingsCard, SettingsError, SettingsSkeleton } from '../frame/parts';
 import type { ProjectSectionProps } from './sectionProps';
@@ -67,10 +71,12 @@ function WorkflowSummary({ workflow, headingRef }: { workflow: WorkflowRecord; h
 export function Workflow({ project, canManage }: ProjectSectionProps) {
   const workflows = useWorkflows();
   const assign = useAssignWorkflow();
+  const usage = useStateUsage({ project: project.id });
   const { can, reason } = usePermissions();
   const [target, setTarget] = useState<string | null>(null);
-  // the workflow the question is about, fixed when it opens, so it does not change under the person while the call runs
-  const [asking, setAsking] = useState<WorkflowRecord | null>(null);
+  // what the question is about, fixed when it opens, so it does not change under the person while the call runs: the
+  // workflow, the items per state, and a count for every opening, which starts the choices afresh
+  const [asking, setAsking] = useState<{ to: WorkflowRecord; usage: StateUsage[]; round: number } | null>(null);
   const [open, setOpen] = useState(false);
   // what `confirm` sees when it ends, also for a call started before the dialog closed
   const dialogOpen = useRef(open);
@@ -97,31 +103,47 @@ export function Workflow({ project, canManage }: ProjectSectionProps) {
   }
 
   // what keeps the button from asking, in the order of what the person can do about it
-  const blocked = reason('project.manage', project.id) ?? (next ? null : t('settings.project.workflow.choose_first'));
+  const blocked =
+    reason('project.manage', project.id) ??
+    (next ? null : t('settings.project.workflow.choose_first')) ??
+    (usage.data ? null : usage.isError ? t('settings.project.workflow.usage_failed') : t('settings.project.workflow.usage_loading'));
+
+  const rows = asking ? rowsFor(asking.usage, current.states, asking.to.states) : [];
 
   function ask() {
-    if (!next) return;
-    setAsking(next);
+    const counts = usage.data;
+    if (!next || !counts) return;
+    setAsking((previous) => ({ to: next, usage: counts, round: (previous?.round ?? 0) + 1 }));
     setRefusal(null);
     returnTo.current = trigger.current;
     setOpen(true);
   }
 
-  async function confirm(to: WorkflowRecord) {
+  async function confirm(to: WorkflowRecord, mapping: Record<string, string>) {
     setRefusal(null);
+    const moved = rows.reduce((sum, row) => sum + row.items, 0);
     try {
-      await assign.mutateAsync({ project_id: project.id, workflow_id: to.id, mapping: {} });
+      await assign.mutateAsync({ project_id: project.id, workflow_id: to.id, mapping });
     } catch (error) {
       // a refusal of the server stays in the dialog; a failure (or no answer) gets the toast with "Try again"
       // a refusal of a retry from the toast, with the dialog closed meanwhile, would land in no visible place
-      if (error instanceof ApiError && error.status === 422 && dialogOpen.current) setRefusal(error);
-      else notifyError(t('settings.project.workflow.not_switched'), error, () => void confirm(to));
+      if (error instanceof ApiError && error.status === 422 && dialogOpen.current) {
+        // states that got items meanwhile come with the refusal: they get their rows
+        const named = refusedStates(error);
+        if (named.length > 0) setAsking((shown) => shown && { ...shown, usage: mergeUsage(shown.usage, named) });
+        setRefusal(error);
+      } else notifyError(t('settings.project.workflow.not_switched'), error, () => void confirm(to, mapping));
       return;
     }
     returnTo.current = heading.current;
     setTarget(null);
     setOpen(false);
-    toast({ title: t('settings.project.workflow.switched'), description: t('settings.project.workflow.switched_text', { identifier: project.identifier, name: to.name }), tone: 'success' });
+    const switched = t('settings.project.workflow.switched_text', { identifier: project.identifier, name: to.name });
+    toast({
+      title: t('settings.project.workflow.switched'),
+      description: moved > 0 ? `${switched} ${tn('settings.project.workflow.switched_items', moved)}` : switched,
+      tone: 'success',
+    });
   }
 
   return (
@@ -171,22 +193,27 @@ export function Workflow({ project, canManage }: ProjectSectionProps) {
         )}
       </SettingsCard>
       {asking && (
-        <FormDialog
+        <StateMappingDialog
+          key={asking.round}
           open={open}
-          onOpenChange={setOpen}
-          title={t('settings.project.workflow.confirm_title', { name: asking.name })}
+          onClose={() => setOpen(false)}
+          title={t('settings.project.workflow.confirm_title', { name: asking.to.name })}
+          description={
+            rows.length > 0
+              ? t('settings.project.workflow.mapping_text', { identifier: project.identifier, from: current.name })
+              : t('settings.project.workflow.confirm_text', { identifier: project.identifier, from: current.name, state: startOf(asking.to)?.name ?? '' })
+          }
           submitLabel={t('settings.project.workflow.confirm')}
+          usage={asking.usage}
+          from={current.states}
+          to={asking.to.states}
+          field="mapping"
           pending={assign.isPending}
-          // the switch runs to its end with the dialog open: closing it now would leave the person without its answer
-          locked={assign.isPending}
-          notice={noticeOf(refusal, [])}
+          refusal={refusal}
+          notice={noticeOf(refusal, markedPaths(refusal, 'mapping'))}
           finalFocus={returnTo}
-          onSubmit={() => void confirm(asking)}
-        >
-          <p className="max-w-[65ch] text-ui text-pretty text-muted">
-            {t('settings.project.workflow.confirm_text', { identifier: project.identifier, from: current.name, state: startOf(asking)?.name ?? '' })}
-          </p>
-        </FormDialog>
+          onConfirm={(mapping) => void confirm(asking.to, mapping)}
+        />
       )}
     </>
   );

@@ -6,7 +6,8 @@
  * with its archive stamp. The default value is edited with the editor items use (`PropertyValueInput`), so it reads
  * a number or an address as an item field does; a text it cannot read keeps the dialog from sending and takes the
  * focus. A default that names an option which is archived or gone is left out, as no form could offer it. People and
- * rich text have no default (A69).
+ * rich text have no default (A69). A stored option that was removed comes back archived when items carry it; the toast
+ * of the save says so.
  */
 
 import { Lock } from 'lucide-react';
@@ -134,7 +135,13 @@ export function PropertyDialog({ open, onOpenChange, property, finalFocus }: Pro
       {
         onSuccess: (saved) => {
           onOpenChange(false);
-          toast({ title: property ? t('settings.properties.dialog.saved', { label: saved.label }) : t('settings.properties.dialog.created', { label: saved.label }), tone: 'success' });
+          // a stored option that was left out and comes back: items carry it, so it is archived instead of deleted
+          const kept = saved.options.filter((option) => property?.options.some((stored) => stored.id === option.id) && !options.some((draft) => draft.id === option.id));
+          toast({
+            title: property ? t('settings.properties.dialog.saved', { label: saved.label }) : t('settings.properties.dialog.created', { label: saved.label }),
+            description: kept.length > 0 ? tn('settings.properties.dialog.kept_archived', kept.length, { name: kept[0]!.label }) : undefined,
+            tone: 'success',
+          });
         },
       },
     );

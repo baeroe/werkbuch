@@ -11,7 +11,7 @@ import userEvent from '@testing-library/user-event';
 import type { ReactNode, Ref } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WorkflowInput } from '@/api/workflows';
-import { currentToasts, dismissToast, resetToasts } from '@/components/ui/toast';
+import { currentToasts, dismissToast, resetToasts, runToastAction } from '@/components/ui/toast';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import { agency, list, project, standard } from '@/test/fixtures';
 import type { Transition, Workflow } from '@/types';
@@ -96,6 +96,7 @@ function store(workflow: Workflow) {
 const routes = (overrides: Record<string, MockRoute> = {}): Record<string, MockRoute> => ({
   'GET /api/v1/workflows': () => ({ body: list(stored) }),
   'GET /api/v1/projects': () => ({ body: list(projects) }),
+  'GET /api/v1/state-usage': () => ({ body: { data: [] } }),
   'POST /api/v1/workflows': (body) => ({ status: 201, body: { data: store(saved(body as WorkflowInput, 'wf_new')) } }),
   'PUT /api/v1/workflows/wf_standard': (body) => ({ body: { data: store(saved(body as WorkflowInput, 'wf_standard')) } }),
   'PUT /api/v1/workflows/wf_agency': (body) => ({ body: { data: store(saved(body as WorkflowInput, 'wf_agency')) } }),
@@ -511,6 +512,146 @@ describe('the workflow editor', () => {
     expect(screen.queryByRole('button', { name: 'Verwerfen' })).toBeNull();
     await user.click(save());
     expect(toastNamed('Es gibt nichts zu speichern')).toBeDefined();
+    expect(callsTo('PUT', '/api/v1/workflows/wf_standard')).toHaveLength(1);
+  });
+
+  /** The items in the states of the standard workflow, as `GET /state-usage?workflow=wf_standard` counts them. */
+  const counted = (usage: { state_id: string; items: number }[]) => ({
+    'GET /api/v1/state-usage': (_: unknown, url: URL) => ({ body: { data: url.searchParams.get('workflow') === 'wf_standard' ? usage : [] } }),
+  });
+  const mappingDialog = () => screen.findByRole('dialog', { name: 'Status ersetzen' });
+  const targetOf = (name: string) => screen.getByRole('combobox', { name: `Neuer Status für „${name}“` });
+
+  it('asks for a new state when a removed one has items', async () => {
+    const user = userEvent.setup();
+    renderAt('/settings/workflows?workflow=wf_standard', {
+      overrides: counted([
+        { state_id: 'std_pending', items: 3 },
+        { state_id: 'std_todo', items: 1 },
+      ]),
+    });
+
+    await user.click(await screen.findByRole('button', { name: 'Pending entfernen' }));
+    await user.click(save());
+    const dialog = await mappingDialog();
+    expect(callsTo('GET', '/api/v1/state-usage?workflow=wf_standard')).toHaveLength(1);
+    expect(callsTo('PUT', '/api/v1/workflows/wf_standard')).toHaveLength(0);
+    expect(
+      within(dialog).getByText(
+        'Im gelöschten Status von „Standard“ liegen noch 3 Items. Wähle, welcher Status sie übernimmt. Das Umschreiben ignoriert die Übergangsregeln und steht mit deinem Namen in der History.',
+      ),
+    ).toBeTruthy();
+    // only the removed state: Todo stays and keeps its items
+    const rows = within(within(dialog).getByRole('list', { name: 'Status mit Items' })).getAllByRole('listitem');
+    expect(rows.map((row) => row.textContent)).toEqual([expect.stringContaining('Pending3 Items')]);
+    expect(targetOf('Pending').textContent).toContain('In Progress');
+
+    // closing it sends nothing
+    await user.click(within(dialog).getByRole('button', { name: 'Abbrechen' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(callsTo('PUT', '/api/v1/workflows/wf_standard')).toHaveLength(0);
+
+    await user.click(save());
+    await user.click(within(await mappingDialog()).getByRole('button', { name: /^Ersetzen und speichern/ }));
+    await waitFor(() => expect(toastNamed('Workflow „Standard“ gespeichert')?.description).toBe('3 Items haben einen neuen Status.'));
+    expect((callsTo('PUT', '/api/v1/workflows/wf_standard')[0]!.body as Record<string, unknown>).state_mapping).toEqual({ std_pending: 'std_progress' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('sends local ids as targets', async () => {
+    const user = userEvent.setup();
+    renderAt('/settings/workflows?workflow=wf_standard', { overrides: counted([{ state_id: 'std_pending', items: 1 }]) });
+
+    await user.click(await screen.findByRole('button', { name: 'Pending entfernen' }));
+    await user.click(screen.getByRole('button', { name: 'Status hinzufügen' }));
+    await user.type(nameOf(6), 'Warten');
+    await user.click(save());
+    const dialog = await mappingDialog();
+    expect(within(dialog).getByText(/^Im gelöschten Status von „Standard“ liegt noch 1 Item\. Wähle, welcher Status es übernimmt\./)).toBeTruthy();
+    // the new state is a target before it is saved
+    await user.click(targetOf('Pending'));
+    await user.click(await screen.findByRole('option', { name: 'Warten' }));
+    await user.click(within(dialog).getByRole('button', { name: /^Ersetzen und speichern/ }));
+
+    await waitFor(() => expect(toastNamed('Workflow „Standard“ gespeichert')?.description).toBe('1 Item hat einen neuen Status.'));
+    const body = callsTo('PUT', '/api/v1/workflows/wf_standard')[0]!.body as WorkflowInput & { state_mapping: Record<string, string> };
+    const added = body.states.find((state) => state.name === 'Warten')!.id!;
+    expect(added).toMatch(/^st_/);
+    expect(body.state_mapping).toEqual({ std_pending: added });
+  });
+
+  it('opens the question when items arrived in a removed state meanwhile (409), with their row marked', async () => {
+    const user = userEvent.setup();
+    let refuse = true;
+    renderAt('/settings/workflows?workflow=wf_standard', {
+      overrides: {
+        'PUT /api/v1/workflows/wf_standard': (body) =>
+          refuse
+            ? problem(409, 'state_in_use', { states: [{ state_id: 'std_pending', name: 'Pending', items: 2 }] })
+            : { body: { data: store(saved(body as WorkflowInput, 'wf_standard')) } },
+      },
+    });
+
+    // no items when it counted: the save goes without a mapping, and the server finds two
+    await user.click(await screen.findByRole('button', { name: 'Pending entfernen' }));
+    await user.click(save());
+    const dialog = await mappingDialog();
+    expect((callsTo('PUT', '/api/v1/workflows/wf_standard')[0]!.body as Record<string, unknown>).state_mapping).toBeUndefined();
+    await waitFor(() => expect(targetOf('Pending').getAttribute('aria-invalid')).toBe('true'));
+    expect(describedBy(targetOf('Pending'))).toBe('Hier liegen inzwischen Items. Wähle, welcher Status sie übernimmt.');
+    expect(toastNamed('Workflow nicht gespeichert')).toBeUndefined();
+
+    // a second 409 while it is open keeps the question and the choice
+    await user.click(targetOf('Pending'));
+    await user.click(await screen.findByRole('option', { name: 'Todo' }));
+    await user.click(within(dialog).getByRole('button', { name: /^Ersetzen und speichern/ }));
+    await waitFor(() => expect(callsTo('PUT', '/api/v1/workflows/wf_standard')).toHaveLength(2));
+    expect(screen.getByRole('dialog', { name: 'Status ersetzen' })).toBe(dialog);
+    await waitFor(() => expect(targetOf('Pending').textContent).toContain('Todo'));
+
+    refuse = false;
+    await user.click(within(dialog).getByRole('button', { name: /^Ersetzen und speichern/ }));
+    await waitFor(() => expect(toastNamed('Workflow „Standard“ gespeichert')?.description).toBe('2 Items haben einen neuen Status.'));
+    expect((callsTo('PUT', '/api/v1/workflows/wf_standard')[2]!.body as Record<string, unknown>).state_mapping).toEqual({ std_pending: 'std_todo' });
+  });
+
+  it('marks a refused target at its row, and closes the question for a refusal of the form', async () => {
+    const user = userEvent.setup();
+    let answer = () => invalid({ 'state_mapping.std_pending': ['Diesen Status gibt es im neuen Workflow nicht.'] });
+    renderAt('/settings/workflows?workflow=wf_standard', {
+      overrides: { ...counted([{ state_id: 'std_pending', items: 1 }]), 'PUT /api/v1/workflows/wf_standard': () => answer() },
+    });
+    answerSlowly();
+
+    await user.click(await screen.findByRole('button', { name: 'Pending entfernen' }));
+    await user.click(save());
+    const dialog = await mappingDialog();
+    await user.click(within(dialog).getByRole('button', { name: /^Ersetzen und speichern/ }));
+    await waitFor(() => expect(describedBy(targetOf('Pending'))).toBe('Diesen Status gibt es im neuen Workflow nicht.'));
+    // the row says it; the form behind says nothing more
+    expect(screen.queryByText('Der Workflow wurde nicht gespeichert')).toBeNull();
+
+    answer = () => invalid({ name: ['Diesen Namen gibt es schon.'] });
+    await user.click(within(dialog).getByRole('button', { name: /^Ersetzen und speichern/ }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(await screen.findByText('Diesen Namen gibt es schon.')).toBeTruthy();
+  });
+
+  it('says when the items of the removed states could not be counted, and counts again from the toast', async () => {
+    const user = userEvent.setup();
+    let fail = true;
+    renderAt('/settings/workflows?workflow=wf_standard', {
+      overrides: { 'GET /api/v1/state-usage': () => (fail ? unavailable() : { body: { data: [] } }) },
+    });
+
+    await user.click(await screen.findByRole('button', { name: 'Pending entfernen' }));
+    await user.click(save());
+    await waitFor(() => expect(toastNamed('Die Items der entfernten Status konnten nicht gezählt werden')?.description).toBe('Der Server ist gerade nicht erreichbar.'));
+    expect(callsTo('PUT', '/api/v1/workflows/wf_standard')).toHaveLength(0);
+
+    fail = false;
+    act(() => runToastAction(toastNamed('Die Items der entfernten Status konnten nicht gezählt werden')!.id));
+    await waitFor(() => expect(toastNamed('Workflow „Standard“ gespeichert')).toBeDefined());
     expect(callsTo('PUT', '/api/v1/workflows/wf_standard')).toHaveLength(1);
   });
 

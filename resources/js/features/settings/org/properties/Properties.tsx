@@ -2,8 +2,9 @@
  * Properties (spec 4.7): the fields types are made of. A property has a label, a help text, a default value and one of
  * eight field types. Its key (`snake_case`, the name in API and MCP) and its field type are fixed once it exists; only a
  * dropdown or a choice of people may change from single to multiple choice. Options have a label and a tone, can be put
- * in order and are archived instead of deleted. Deleting a property asks first (spec 4.7); how many items lose their
- * value comes with the items (P6). Members see the list, admins change it.
+ * in order; a stored option can be archived, and one left out is deleted, or archived when items carry it. Deleting a
+ * property asks first (spec 4.7); the toast after it says how many items lost their value (`affected_items`), the
+ * question names the number only with Phase 5 (A61). Members see the list, admins change it.
  */
 
 import { Pencil, Plus, SlidersHorizontal, Trash2 } from 'lucide-react';
@@ -18,7 +19,7 @@ import { useDeleteProperty, useProperties } from '@/hooks/properties';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
 import { useSettle } from '@/hooks/mutation';
 import { notifyError } from '@/lib/errors';
-import { t } from '@/lib/i18n';
+import { t, tn } from '@/lib/i18n';
 import type { Property, WorkItemType } from '@/types';
 import { FIELD_TYPE_LABELS } from '../../catalog/choices';
 import { ReadOnlyNotice } from '../../frame/access';
@@ -62,13 +63,17 @@ export default function Properties({ readOnlyReason }: SectionProps) {
     const row = deleteButton.current?.closest('li');
     const neighbour = row?.nextElementSibling ?? row?.previousElementSibling;
     settle(remove.mutateAsync(property.id), {
-      onSuccess: () => {
+      onSuccess: ({ affected_items }) => {
         // the next row, the one before, or "Create property" above the empty list
         afterDelete.current = neighbour?.querySelector<HTMLElement>('button') ?? create.current;
         // a retry from the error toast runs without the question: nothing closes that would move the focus
         if (asking.current) close();
         else afterDelete.current?.focus();
-        toast({ title: t('settings.properties.deleted', { label: property.label }), tone: 'success' });
+        toast({
+          title: t('settings.properties.deleted', { label: property.label }),
+          description: affected_items > 0 ? tn('settings.properties.deleted_values', affected_items) : undefined,
+          tone: 'success',
+        });
       },
       onError: (error) => {
         close();

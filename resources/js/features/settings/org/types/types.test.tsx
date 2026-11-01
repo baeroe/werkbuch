@@ -355,6 +355,58 @@ describe('Types', () => {
     await waitFor(() => expect(screen.getAllByRole('heading').map((heading) => heading.textContent)).not.toContain('Kundenwunsch'));
   });
 
+  it('keeps a type in use as archived and says so', async () => {
+    const user = userEvent.setup();
+    let all = types;
+    renderWith(
+      <Types readOnlyReason={null} />,
+      routes(types, {
+        'GET /api/v1/work-item-types': () => ({ body: list(all) }),
+        'DELETE /api/v1/work-item-types/t_bug': () => {
+          all = types.map((type) => (type.id === 't_bug' ? { ...type, archived_at: '2026-11-01T09:00:00.000Z' } : type));
+          return { body: { outcome: 'archived' } };
+        },
+      }),
+    );
+
+    await user.click(within(await rowOf('Bug')).getByRole('button', { name: 'Typ „Bug“ löschen' }));
+    // the undo toast cannot know yet: the answer comes after it
+    act(() => dismissToast(toastNamed('Typ „Bug“ gelöscht')!.id));
+    await waitFor(() => expect(toastNamed('Typ „Bug“ archiviert: Items tragen ihn noch.')?.description).toBe('Neue Items dieses Typs lassen sich nicht mehr anlegen.'));
+    // the row stays, as archived, and can be restored
+    const row = await rowOf('Bug');
+    expect(within(row).getByText('Archiviert')).toBeTruthy();
+    expect(within(row).getByRole('button', { name: 'Typ „Bug“ wiederherstellen' })).toBeTruthy();
+  });
+
+  it('shows a refused Epic mark at the switch', async () => {
+    const user = userEvent.setup();
+    const refusal = 'Items dieses Typs haben Kind-Items. Nur Epics können Kind-Items haben.';
+    renderWith(<Types readOnlyReason={null} />, routes(types, { 'PUT /api/v1/work-item-types/t_epic': () => invalid({ is_epic: [refusal] }) }));
+    answerSlowly();
+
+    await user.click(within(await rowOf('Epic')).getByRole('button', { name: 'Typ „Epic“ bearbeiten' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Typ „Epic“ bearbeiten' });
+    const epic = within(dialog).getByRole('switch', { name: 'Epic' });
+    await user.click(epic);
+    await user.click(within(dialog).getByRole('button', { name: 'Speichern' }));
+
+    await waitFor(() => expect(epic.getAttribute('aria-invalid')).toBe('true'));
+    expect(
+      epic
+        .getAttribute('aria-describedby')!
+        .split(' ')
+        .map((id) => document.getElementById(id)?.textContent),
+    ).toEqual(['Items dieses Typs erscheinen in der Timeline und können Kind-Items haben.', refusal]);
+    await waitFor(() => expect(document.activeElement).toBe(epic));
+    expect(within(dialog).queryByRole('alert')).toBeNull();
+
+    // back at the stored mark the refusal no longer holds
+    await user.click(epic);
+    expect(epic.hasAttribute('aria-invalid')).toBe(false);
+    expect(within(dialog).queryByText(refusal)).toBeNull();
+  });
+
   it('offers the first type in the empty state', async () => {
     const user = userEvent.setup();
     renderWith(<Types readOnlyReason={null} />, routes([]));

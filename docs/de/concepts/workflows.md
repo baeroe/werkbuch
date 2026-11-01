@@ -55,7 +55,7 @@ Neue Status und neue Übergänge gelten sofort, in jedem Projekt, das den Workfl
 
 Projekt-Admins wechseln den Workflow ihres Projekts unter **Projekteinstellungen → Workflow**: neuen Workflow wählen, dann **Workflow wechseln …** und bestätigen.
 
-Heute ist das eine einfache Bestätigung, weil es noch keine Work Items gibt. Sobald es welche gibt, ordnest du jedem Status, der Items hat, einen Status des neuen Workflows zu (ebenso, wenn du einen Status mit Items entfernst). werkbuch schreibt die Items dann im Hintergrund um, bewusst ohne Übergangsregeln, und die History nennt die Person, die es ausgelöst hat.
+Ohne Items ist das eine einfache Bestätigung. Sonst nennt der Dialog jeden Status, der Items hat, mit ihrer Zahl und einem Vorschlag (der Status gleichen Namens, sonst der erste gleicher Kategorie), und sagt, was der Wechsel mit ihnen macht: Geschlossene Items, die in einem offenen Status landen, verlieren ihre Resolution, offene, die in einem geschlossenen landen, bekommen dessen Standard. Bestätigen kannst du, sobald jeder Status sein Ziel hat. Dieselbe Frage kommt, wenn du einen Workflow ohne einen Status speicherst, der noch Items hat (**Status ersetzen**): Ziele sind die bleibenden und die neuen Status. werkbuch schreibt die Items sofort um, bewusst ohne Übergangsregeln, und ihre History nennt die Person, die es ausgelöst hat.
 
 ## Löschen
 
@@ -151,7 +151,7 @@ Ein Workflow, der eine Regel bricht, wird mit `422` und `reason: invalid_workflo
 
 ### Workflow eines Projekts wechseln
 
-Das Projekt sprichst du über seine Kennung oder seine ULID an. `mapping` ordnet Status des alten Workflows Status des neuen zu (`{"<alte Status-ID>": "<neue Status-ID>"}`). Solange es keine Work Items gibt, darf es leer bleiben; danach ist es für jeden Status mit Items Pflicht.
+Das Projekt sprichst du über seine Kennung oder seine ULID an. `mapping` ordnet Status des alten Workflows Status des neuen zu (`{"<alte Status-ID>": "<neue Status-ID>"}`). Jeder Status, in dem Items des Projekts stehen (archivierte eingeschlossen), braucht ein Ziel; einer ohne ist ein `422` an `mapping.<Status-ID>`, mit den Status und ihren Items in `states`. Ein Projekt ohne Items nimmt eine leere Zuordnung.
 
 ```bash
 curl -X PUT https://werkbuch.example.com/api/v1/projects/WEB/workflow \

@@ -81,7 +81,7 @@ export function comparable(draft: Draft): string {
   });
 }
 
-/** The body of the save: texts trimmed, every status with its position. `state_mapping` comes with Phase 4 (P28). */
+/** The body of the save: texts trimmed, every status with its position (`state_mapping` goes beside it, `saveWorkflow`). */
 export function toInput(draft: Draft, id?: string): WorkflowInput {
   return {
     id,
