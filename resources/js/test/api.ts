@@ -64,3 +64,37 @@ export function mockApi(routes: Record<string, MockRoute>): MockApi {
     },
   };
 }
+
+/** What a body of `POST /api/v1/work-items/query` asks for, read for fake lists. */
+export interface QueriedItems {
+  /** `shorthand.project` or the value of a condition `project is`. */
+  project?: string;
+  /** `shorthand.parent`. */
+  parent?: string;
+  /** `shorthand.q` or `q`. */
+  q?: string;
+  /** A condition `epic is true`. */
+  epic: boolean;
+  lean: boolean;
+  cursor?: string;
+}
+
+export function queried(body: unknown): QueriedItems {
+  const query = (body ?? {}) as {
+    shorthand?: { project?: string; parent?: string; q?: string };
+    filter?: { conditions: { field: string; op: string; value?: unknown }[] };
+    q?: string;
+    lean?: boolean;
+    cursor?: string;
+  };
+  const conditions = query.filter?.conditions ?? [];
+  const project = conditions.find((condition) => condition.field === 'project' && condition.op === 'is')?.value as string | undefined;
+  return {
+    project: query.shorthand?.project ?? project,
+    parent: query.shorthand?.parent,
+    q: query.shorthand?.q ?? query.q,
+    epic: conditions.some((condition) => condition.field === 'epic' && condition.value === true),
+    lean: query.lean === true,
+    cursor: query.cursor,
+  };
+}

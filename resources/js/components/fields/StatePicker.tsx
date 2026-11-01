@@ -12,7 +12,7 @@ import { useResolutions } from '@/hooks/catalog';
 import { useTransitionWorkItem } from '@/hooks/workItems';
 import { t } from '@/lib/i18n';
 import { SHORTCUTS } from '@/lib/shortcuts/catalog';
-import type { State, WorkItem } from '@/types';
+import type { ListedItem, State } from '@/types';
 import { useEditReason, useItemWorkflow } from './itemData';
 import { Picker, type PickerExtras, type PickerOption } from './Picker';
 import { ResolutionPrompt } from './ResolutionPrompt';
@@ -23,7 +23,7 @@ export function stateOption(state: State): PickerOption {
 }
 
 type StatePickerProps = PickerExtras & {
-  item: WorkItem;
+  item: ListedItem;
   /** The choice is over: a state was chosen, or the list or the resolution question was closed without one. */
   onDone?: () => void;
 };

@@ -1,18 +1,25 @@
 /*
- * Work items. Reading hooks follow the API; the mutations that change an item (update, transition, bulk edit,
+ * Work items. Reading hooks follow the API: one page (`useWorkItems`), the pages of a long list one after the other
+ * (`useInfiniteWorkItems`) or of each group of it (`useGroupedWorkItems`), the groups with their counts
+ * (`useWorkItemGroups`) and the counts of named filters (`useWorkItemCounts`); the server filters, sorts, groups and
+ * counts (P1). The mutations that change an item (update, transition, bulk edit,
  * archive, restore, watching) are optimistic (`useItemMutation`): the change shows in every cached list and in the
  * detail at once, an error brings the old state back and says why. Creating, deleting and the type change wait for the
  * server: only it knows the key, the children that lose their parent, and the values of the new type.
  */
 
-import { useQuery } from '@tanstack/react-query';
+import { hashKey, useQueries, useQuery, useQueryClient, type QueryClient, type UseQueryResult } from '@tanstack/react-query';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { Page } from '@/api/client';
 import {
   archiveWorkItem,
   bulkUpdateWorkItems,
   changeWorkItemType,
+  countWorkItems,
   createWorkItem,
   deleteWorkItem,
   getWorkItem,
+  groupWorkItems,
   listActivity,
   listStateUsage,
   listWorkItems,
@@ -21,21 +28,267 @@ import {
   transitionWorkItem,
   updateWorkItem,
   type BulkPatch,
+  type GroupWorkItemsArgs,
   type ListWorkItemsArgs,
   type WorkItemPatch,
 } from '@/api/workItems';
-import type { PropertyValue, WorkItem } from '@/types';
+import type { Filter, ListedItem, PropertyValue, WorkItem } from '@/types';
 import { qk, type HookOptions } from './keys';
 import { allPages } from './pages';
 import { useApiMutation, useItemMutation } from './mutation';
 
 /* ------------------------------------------------------------------------ read */
 
-/** Items the signed-in account sees, in manual order; `project_id`, `parent_id` and `q` narrow them. */
+/** One page of the items the signed-in account sees, filtered and sorted on the server; `view_id` applies a view. */
 export function useWorkItems(args: ListWorkItemsArgs = {}, options: HookOptions = {}) {
   return useQuery({ queryKey: qk.workItems.list(args), queryFn: () => listWorkItems(args), enabled: options.enabled !== false });
 }
 
+/** The cache key of one page of a list: the first page is the one `useWorkItems(args)` reads. */
+const pageKey = (args: ListWorkItemsArgs, cursor: string | null) => qk.workItems.list(cursor === null ? args : { ...args, cursor });
+
+const pageOf = (args: ListWorkItemsArgs, cursor: string | null) => listWorkItems(cursor === null ? args : { ...args, cursor });
+
+export interface InfiniteWorkItems {
+  /** One page of everything loaded so far: the items of all pages, `total` of all matches, the cursor of the next. */
+  data: Page<ListedItem> | undefined;
+  /** The first page failed (a later one that fails shows as `moreError`). */
+  isError: boolean;
+  error: Error | null;
+  isFetching: boolean;
+  refetch: () => Promise<unknown>;
+  /** More pages are there to load. */
+  hasMore: boolean;
+  /** A further page is on its way. */
+  loadingMore: boolean;
+  moreError: Error | null;
+  /** Loads the next page, or the one that failed again. */
+  loadMore: () => void;
+  /** Loads every page that is left and answers all items (⌘A selects them). */
+  loadAll: () => Promise<ListedItem[]>;
+}
+
+/** How many pages each list has loaded in this visit: a list shown again (Back) starts with all of them. */
+const loadedPages = new Map<string, number>();
+
+/** The cursors of the first `depth` pages of a list, as far as the cache knows them. */
+function cachedCursors(queryClient: QueryClient, args: ListWorkItemsArgs, depth: number): (string | null)[] {
+  const cursors: (string | null)[] = [null];
+  while (cursors.length < depth) {
+    const next = queryClient.getQueryData<Page<ListedItem>>(pageKey(args, cursors.at(-1)!))?.next_cursor;
+    if (!next) break;
+    cursors.push(next);
+  }
+  return cursors;
+}
+
+/** The items of a list's pages as one `Page`, and how the pages stand. */
+function combinePages(results: UseQueryResult<Page<ListedItem>>[]) {
+  const [first] = results as [UseQueryResult<Page<ListedItem>>];
+  const last = results.at(-1)!;
+  const seen = new Set<string>();
+  // a page that moved (an item went away meanwhile) may repeat an item of the page before
+  const items = results.flatMap((result) => result.data?.items ?? []).filter((item) => !seen.has(item.id) && seen.add(item.id));
+  return {
+    data: first.data ? { items, total: first.data.total, next_cursor: last.data?.next_cursor ?? null } : undefined,
+    isError: first.isError,
+    error: first.error,
+    refetch: first.refetch,
+    isFetching: results.some((result) => result.isFetching),
+    // also while a page that failed is asked for again
+    loadingMore: results.slice(1).some((result) => result.data === undefined && (result.isFetching || !result.isError)),
+    moreError: results.slice(1).find((result) => result.isError)?.error ?? null,
+    nextCursor: last.data?.next_cursor ?? null,
+  };
+}
+
+type Combined = ReturnType<typeof combinePages>;
+
+/** One list of pages: an id of the caller, the arguments of every page, and whether it may load. */
+interface PagedList {
+  id: string;
+  args: ListWorkItemsArgs;
+  enabled: boolean;
+}
+
+/**
+ * Many lists of pages at once (one per group), each in the shape of `useInfiniteWorkItems`. The cursors of the pages to
+ * show are kept per list: the first page has none, each further one the cursor its predecessor answered; a list shown
+ * again starts with the pages it had (from the cache), so Back finds the place it left.
+ *
+ * Every page is a list of its own in the cache, in the `Page` shape, so the optimistic item mutations (`patchCached`)
+ * and the item commands reach it like any other list. A keyset cursor names the item a page ends with: after a change
+ * (an invalidation) a page asked for again with its old cursor may miss the item that moved across the border, so a
+ * list whose first page was invalidated keeps only that page once it has loaded again and drops the others; "Weitere
+ * laden" asks for them anew (K15). A disabled list loads nothing and shows what the cache has.
+ */
+function usePagedLists(lists: readonly PagedList[], all: boolean): Record<string, InfiniteWorkItems> {
+  const queryClient = useQueryClient();
+  const keyed = lists.map((list) => ({ ...list, argsKey: JSON.stringify(list.args) }));
+  const [state, setState] = useState<Record<string, (string | null)[]>>({});
+  let cursorsOf = state;
+  const missing = keyed.filter((list) => !(list.argsKey in state));
+  if (missing.length > 0) {
+    // a new list starts with the pages it had in this visit; lists that are gone are forgotten
+    cursorsOf = Object.fromEntries(
+      keyed.map((list) => [list.argsKey, state[list.argsKey] ?? cachedCursors(queryClient, list.args, loadedPages.get(list.argsKey) ?? 1)]),
+    );
+    setState(cursorsOf);
+  }
+  const layout = keyed.map((list) => ({ ...list, cursors: cursorsOf[list.argsKey]! }));
+  const layoutKey = JSON.stringify(layout.map((list) => [list.id, list.cursors.length]));
+
+  useEffect(() => {
+    for (const list of layout) loadedPages.set(list.argsKey, list.cursors.length);
+  });
+
+  const combine = useCallback(
+    (results: UseQueryResult<Page<ListedItem>>[]): Record<string, Combined> => {
+      const combined: Record<string, Combined> = {};
+      let at = 0;
+      for (const [id, count] of JSON.parse(layoutKey) as [string, number][]) {
+        combined[id] = combinePages(results.slice(at, at + count));
+        at += count;
+      }
+      return combined;
+    },
+    [layoutKey],
+  );
+
+  const combined = useQueries({
+    queries: layout.flatMap((list) =>
+      list.cursors.map((cursor) => ({ queryKey: pageKey(list.args, cursor), queryFn: () => pageOf(list.args, cursor), enabled: list.enabled })),
+    ),
+    combine,
+  });
+
+  // K15: an invalidated first page that has loaded again leaves its list with that page alone
+  const layoutRef = useRef(layout);
+  layoutRef.current = layout;
+  useEffect(() => {
+    const invalidated = new Set<string>();
+    return queryClient.getQueryCache().subscribe((event) => {
+      if (event.type !== 'updated') return;
+      const list = layoutRef.current.find((entry) => entry.cursors.length > 1 && event.query.queryHash === hashKey(pageKey(entry.args, null)));
+      if (!list) return;
+      if (event.action.type === 'invalidate') invalidated.add(list.argsKey);
+      if (event.action.type !== 'success' || event.action.manual || !invalidated.delete(list.argsKey)) return;
+      setState((current) => ({ ...current, [list.argsKey]: [null] }));
+      for (const cursor of list.cursors.slice(1)) queryClient.removeQueries({ queryKey: pageKey(list.args, cursor), exact: true });
+    });
+  }, [queryClient]);
+
+  const appendCursor = useCallback(
+    (argsKey: string, next: string) =>
+      setState((current) => {
+        const cursors = current[argsKey];
+        return !cursors || cursors.includes(next) ? current : { ...current, [argsKey]: [...cursors, next] };
+      }),
+    [],
+  );
+
+  const results = useMemo(() => {
+    const answer: Record<string, InfiniteWorkItems> = {};
+    for (const list of layout) {
+      const { nextCursor, ...pages } = combined[list.id]!;
+      const loadMore = () => {
+        // a page that failed is asked for again; otherwise the next one
+        const failed = list.cursors.slice(1).filter((cursor) => queryClient.getQueryState(pageKey(list.args, cursor))?.status === 'error');
+        if (failed.length > 0) {
+          failed.forEach((cursor) => void queryClient.refetchQueries({ queryKey: pageKey(list.args, cursor), exact: true }));
+          return;
+        }
+        if (nextCursor) appendCursor(list.argsKey, nextCursor);
+      };
+      const loadAll = async (): Promise<ListedItem[]> => {
+        const fetchPage = (cursor: string | null) => queryClient.fetchQuery({ queryKey: pageKey(list.args, cursor), queryFn: () => pageOf(list.args, cursor) });
+        const cursors = [...list.cursors];
+        let page = await fetchPage(cursors.at(-1)!);
+        while (page.next_cursor) {
+          const cursor = page.next_cursor;
+          cursors.push(cursor);
+          page = await fetchPage(cursor);
+        }
+        setState((current) => ({ ...current, [list.argsKey]: cursors }));
+        const seen = new Set<string>();
+        return cursors
+          .flatMap((cursor) => queryClient.getQueryData<Page<ListedItem>>(pageKey(list.args, cursor))?.items ?? [])
+          .filter((item) => !seen.has(item.id) && seen.add(item.id));
+      };
+      answer[list.id] = {
+        ...pages,
+        // a page on its way or one that failed counts as more: what offers it stays (with the focus, and "Erneut versuchen")
+        hasMore: nextCursor !== null || pages.loadingMore || pages.moreError !== null,
+        loadMore,
+        loadAll,
+      };
+    }
+    return answer;
+    // `layout` is what `layoutKey` and the cursors spell
+  }, [combined, cursorsOf, layoutKey, queryClient, appendCursor]);
+
+  // a list that narrows on the client loads on until it has everything
+  useEffect(() => {
+    if (!all) return;
+    for (const list of layout) {
+      const { nextCursor, loadingMore, moreError } = combined[list.id]!;
+      if (list.enabled && nextCursor && !loadingMore && !moreError) appendCursor(list.argsKey, nextCursor);
+    }
+  });
+
+  return results;
+}
+
+/**
+ * Every matching item, one page of 100 at a time (the keyset cursor of `listWorkItems`), for lists that may be longer;
+ * the first page is the one `useWorkItems(args)` reads. A new `args` starts at the first page again. With `all`, the
+ * pages load one after the other until none is left (a list whose count is only known in full).
+ */
+export function useInfiniteWorkItems(args: ListWorkItemsArgs = {}, options: HookOptions & { all?: boolean } = {}): InfiniteWorkItems {
+  return usePagedLists([{ id: 'list', args, enabled: options.enabled !== false }], options.all === true)['list']!;
+}
+
+/** The key of the one group of an ungrouped list. */
+export const ALL_GROUP = 'all';
+
+/**
+ * The pages of each group of a list (`group_by` with `group` = the key), one page sequence per key: `keys` are the keys
+ * `useWorkItemGroups` answered (null while they are unknown: nothing loads), `enabled` the groups that may load (a
+ * collapsed or scrolled-away group waits). Without grouping (`group_by` missing or `none`) the one key is `all` and the
+ * pages carry no group. The pages ask for the grouping the server applied (`ItemGroups.group_by`, K17).
+ */
+export function useGroupedWorkItems(
+  args: ListWorkItemsArgs,
+  keys: readonly string[] | null,
+  enabled: ReadonlySet<string> | 'all',
+): Record<string, InfiniteWorkItems> {
+  const grouped = args.group_by !== undefined && args.group_by !== 'none';
+  const lists = (keys ?? []).map((key) => ({
+    id: key,
+    args: grouped ? { ...args, group: key } : args,
+    enabled: enabled === 'all' || enabled.has(key),
+  }));
+  return usePagedLists(lists, false);
+}
+
+/** The groups of a list with their counts; waits without `args`. Under `qk.workItems`: every item change makes it stale. */
+export function useWorkItemGroups(args: GroupWorkItemsArgs | null, options: HookOptions = {}) {
+  return useQuery({
+    queryKey: qk.workItems.groups(args),
+    queryFn: () => groupWorkItems(args!),
+    enabled: args !== null && options.enabled !== false,
+  });
+}
+
+/** How many items each named filter matches (cards, tabs, the sidebar); waits without `filters`. */
+export function useWorkItemCounts(filters: Record<string, Filter> | null, options: HookOptions & { include_archived?: boolean } = {}) {
+  const { enabled, include_archived } = options;
+  return useQuery({
+    queryKey: qk.workItems.counts({ filters, include_archived }),
+    queryFn: () => countWorkItems(filters!, include_archived === undefined ? {} : { include_archived }),
+    enabled: filters !== null && enabled !== false,
+  });
+}
 /** One item with type, state, workflow, children and relations; takes a key (also a former one) or an id. */
 export function useWorkItem(keyOrId: string | null | undefined, options: HookOptions = {}) {
   return useQuery({
@@ -81,14 +334,15 @@ function mergeValues(current: Record<string, PropertyValue>, changes: Record<str
  * The item as a patch leaves it. What the server derives besides (the Markdown of the description and of rich text
  * values, `closed_at`, the resolution of a move, the flags) is left to its answer and the reload that follows.
  */
-function applyPatch(item: WorkItem, patch: WorkItemPatch): WorkItem {
+function applyPatch<T extends ListedItem>(item: T, patch: WorkItemPatch): T {
   const { values, description, ...fields } = patch;
-  const next: WorkItem = { ...item };
+  const next: T = { ...item };
   for (const [key, value] of Object.entries(fields)) {
     if (value !== undefined) (next as unknown as Record<string, unknown>)[key] = value;
   }
   if (description !== undefined) {
-    next.description_json = description;
+    // a lean item of a list holds no description; only its version counts on
+    if ('description_json' in next) (next as unknown as WorkItem).description_json = description;
     next.description_version = item.description_version + 1;
   }
   if (values) next.values = mergeValues(item.values, values);

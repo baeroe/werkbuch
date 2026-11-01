@@ -1,8 +1,8 @@
 /*
  * The parent of an item (spec 4.8): an epic of the same project (two levels, `domain/hierarchy`), never the item itself
  * or one of its children (no cycles). An epic has no parent: the item's fields show no picker for it, ⇧P says why.
- * Searching finds key and title. The change is optimistic (`useUpdateWorkItem`). The create dialog and ⇧P build their
- * lists with the helpers here.
+ * The lists read only the epics of the project, lean (`useProjectItems`). Searching finds key and title. The change
+ * is optimistic (`useUpdateWorkItem`). The create dialog and ⇧P build their lists with the helpers here.
  */
 
 import { useQuery } from '@tanstack/react-query';
@@ -16,7 +16,7 @@ import { useUpdateWorkItem } from '@/hooks/workItems';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
 import { t } from '@/lib/i18n';
 import { SHORTCUTS } from '@/lib/shortcuts/catalog';
-import type { WorkItem, WorkItemType } from '@/types';
+import type { Filter, ListedItem, WorkItemType } from '@/types';
 import { useEditReason } from './itemData';
 import { Picker, type PickerExtras, type PickerOption } from './Picker';
 import { TypeGlyph } from './TypeGlyph';
@@ -24,7 +24,7 @@ import { TypeGlyph } from './TypeGlyph';
 const NONE = '';
 
 /** The ids of an item's children, grandchildren and so on. */
-export function descendantsOf(itemId: string, items: readonly WorkItem[]): Set<string> {
+export function descendantsOf(itemId: string, items: readonly ListedItem[]): Set<string> {
   const children = new Map<string, string[]>();
   for (const entry of items) if (entry.parent_id) children.set(entry.parent_id, [...(children.get(entry.parent_id) ?? []), entry.id]);
   const found = new Set<string>();
@@ -44,9 +44,9 @@ export function descendantsOf(itemId: string, items: readonly WorkItem[]): Set<s
  */
 export function parentCandidates(
   item: { id: string | null; project_id: string },
-  projectItems: readonly WorkItem[],
+  projectItems: readonly ListedItem[],
   typeOf: (typeId: string) => WorkItemType | undefined,
-): WorkItem[] {
+): ListedItem[] {
   const below = item.id ? descendantsOf(item.id, projectItems) : new Set<string>();
   return projectItems
     .filter((entry) => entry.project_id === item.project_id && entry.id !== item.id && !below.has(entry.id) && canHaveChildren(typeOf(entry.type_id)))
@@ -62,30 +62,40 @@ export const NO_PARENT_OPTION = (): PickerOption => ({
 });
 
 /** A candidate in a parent list: its title, the key as hint and search word, the icon of its type. */
-export function parentOption(candidate: WorkItem, type: WorkItemType | undefined): PickerOption {
+export function parentOption(candidate: ListedItem, type: WorkItemType | undefined): PickerOption {
   return { value: candidate.id, label: candidate.title, hint: candidate.key, keywords: [candidate.key], icon: type ? <TypeGlyph type={type} /> : undefined };
 }
 
 /** What a parent list says when it shows nothing: the project has no epic yet, or none matches the search. */
-export function noParentText(candidates: readonly WorkItem[]): string {
+export function noParentText(candidates: readonly ListedItem[]): string {
   return candidates.length === 0 ? t('items.fields.parent.no_epic') : t('items.fields.parent.no_match');
 }
 
+/** The epics of one project: the only items that can be a parent (two levels). */
+export const epicsOf = (projectId: string): Filter => ({
+  version: 1,
+  conditions: [
+    { field: 'project', op: 'is', value: projectId },
+    { field: 'epic', op: 'is', value: true },
+  ],
+});
+
 /**
- * Every item of one project, all pages (`next_cursor` followed to the end): the parent picker and ⇧P choose from them,
- * and an epic on the second page must not be missing. Under `qk.workItems`, so the optimistic changes reach it. Loaded
- * only while a list that needs it is open (`enabled`): the callers pass their open state, so an item page reads no
- * project-wide list, and a change of an item only marks a closed list stale instead of reading the project again (A153).
+ * The epics of one project, lean and all pages (`next_cursor` followed to the end): the parent picker and ⇧P choose
+ * from them, and an epic on the second page must not be missing. Under `qk.workItems`, so the optimistic changes reach
+ * it. Loaded only while a list that needs it is open (`enabled`): the callers pass their open state, so an item page
+ * reads no project-wide list, and a change of an item only marks a closed list stale instead of reading again (A153).
  */
 export function useProjectItems(projectId: string, enabled: boolean) {
+  const args = { filter: epicsOf(projectId), lean: true };
   return useQuery({
-    queryKey: qk.workItems.list({ project_id: projectId, pages: 'all' }),
-    queryFn: () => allPages((cursor) => listWorkItems({ project_id: projectId, cursor })),
+    queryKey: qk.workItems.list({ ...args, pages: 'all' }),
+    queryFn: () => allPages((cursor) => listWorkItems({ ...args, cursor })),
     enabled,
   });
 }
 
-type ParentPickerProps = PickerExtras & { item: WorkItem };
+type ParentPickerProps = PickerExtras & { item: ListedItem };
 
 export function ParentPicker({ item, look = 'field', shortcut, open, onOpenChange, ...extras }: ParentPickerProps) {
   const [opened, setOpened] = useState(extras.defaultOpen ?? false);

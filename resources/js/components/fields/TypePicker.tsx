@@ -24,7 +24,7 @@ import { notifyError } from '@/lib/errors';
 import { t, tn } from '@/lib/i18n';
 import { SHORTCUTS } from '@/lib/shortcuts/catalog';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
-import type { Property, PropertyValue, WorkItem, WorkItemType } from '@/types';
+import type { ListedItem, Property, PropertyValue, WorkItemType } from '@/types';
 import { formatPropertyValue } from './format';
 import { useEditReason, useItemWorkflow, useUserMap } from './itemData';
 import { Picker, type PickerExtras, type PickerOption } from './Picker';
@@ -40,7 +40,7 @@ export interface TypeChange {
   missing: Property[];
 }
 
-export function typeChangeOf(item: WorkItem, target: WorkItemType, properties: Property[], types: WorkItemType[]): TypeChange {
+export function typeChangeOf(item: ListedItem, target: WorkItemType, properties: Property[], types: WorkItemType[]): TypeChange {
   const byId = new Map(properties.map((property) => [property.id, property]));
   const propertiesOf = (type: WorkItemType | undefined) =>
     [...(type?.properties ?? [])].sort((a, b) => a.position - b.position).flatMap((entry) => byId.get(entry.property_id) ?? []);
@@ -59,16 +59,16 @@ export function typeChangeOf(item: WorkItem, target: WorkItemType, properties: P
   return { lost, missing };
 }
 
-const successToast = (item: WorkItem, target: WorkItemType) => toast({ title: t('items.fields.type.changed', { key: item.key, type: target.name }), tone: 'success' });
+const successToast = (item: ListedItem, target: WorkItemType) => toast({ title: t('items.fields.type.changed', { key: item.key, type: target.name }), tone: 'success' });
 
 /** Why the two levels refuse the change, or null. */
-const refusalText = (item: WorkItem, hasChildren: boolean, target: WorkItemType): string | null => {
+const refusalText = (item: ListedItem, hasChildren: boolean, target: WorkItemType): string | null => {
   const refusal = typeChangeRefusal(hasChildren, item.parent_id !== null, target);
   return refusal ? t(`items.hierarchy.${refusal}`, { key: item.key }) : null;
 };
 
 type TypeChangeDialogProps = {
-  item: WorkItem;
+  item: ListedItem;
   /** The new type; null renders nothing. */
   target: WorkItemType | null;
   open: boolean;
@@ -146,7 +146,7 @@ export function TypeChangeDialog({ item, target, open, onOpenChange, finalFocus,
 
 type TypeChangeFormProps = {
   formId: string;
-  item: WorkItem;
+  item: ListedItem;
   target: WorkItemType;
   change: ReturnType<typeof useChangeWorkItemType>;
   onDone: () => void;
@@ -272,7 +272,7 @@ function TypeChangeForm({ formId, item, target, change, onDone }: TypeChangeForm
   );
 }
 
-type TypePickerProps = PickerExtras & { item: WorkItem };
+type TypePickerProps = PickerExtras & { item: ListedItem };
 
 export function TypePicker({ item, look = 'field', shortcut, ...extras }: TypePickerProps) {
   const settle = useSettle();

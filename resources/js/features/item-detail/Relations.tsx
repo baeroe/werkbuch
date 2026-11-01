@@ -5,7 +5,7 @@
  * P19), and it can't be removed here. Removing waits for its undo toast.
  *
  * `r`, "Relation" or "Relation hinzufügen …" in the item's menu open the dialog: the kind of relation in both
- * directions, then the item, found over the API by key or title in every project the reader sees (`filter[q]`: a key
+ * directions, then the item, found over the API by key or title in every project the reader sees (the search `q`: a key
  * names exactly that item). A refusal of the server stands at its field (`target_id`: duplicate, self, unknown;
  * `type_id`), any other one on top of the form.
  */
@@ -32,7 +32,7 @@ import { notifyError } from '@/lib/errors';
 import { t } from '@/lib/i18n';
 import { SHORTCUTS } from '@/lib/shortcuts/catalog';
 import { runWithUndo } from '@/lib/undo';
-import type { RelationEntry, RelationType, WorkItem, WorkItemDetail } from '@/types';
+import type { ListedItem, RelationEntry, RelationType, WorkItem, WorkItemDetail } from '@/types';
 import { focusWhenLost, LinkedItem, Section, useDetail } from './shared';
 
 /** How long typing in the item search pauses before the server is asked. */
@@ -77,14 +77,14 @@ function RelationDialog({ item, open, onOpenChange, finalFocus }: RelationDialog
   // "verwandt mit" unless the person chooses another kind
   const relates = relationTypes.data?.items.find((type) => type.built_in === 'relates');
   const chosenKind = kind ?? (relates ? `${relates.id}:out` : (kinds[0]?.value ?? null));
-  const [target, setTarget] = useState<WorkItem | null>(null);
+  const [target, setTarget] = useState<ListedItem | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [search, setSearch] = useState('');
   // asked only while the dialog is open: a closed one would load again with every change of an item
   const found = useWorkItems({ q: search === '' ? undefined : search, per_page: SEARCH_LIMIT }, { enabled: open });
   /** The answer to the last search, shown while the next one is on its way (the list does not blink). */
-  const [shown, setShown] = useState<WorkItem[] | null>(null);
+  const [shown, setShown] = useState<ListedItem[] | null>(null);
   const [errors, setErrorState] = useState<Errors>({});
   const [refused, setRefused] = useState(0);
   /** Errors of a submit: shown at their fields, and the focus goes to the first of them. */

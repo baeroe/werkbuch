@@ -18,7 +18,7 @@ import { canUndo, undoLatest } from '@/lib/undo';
 import { CreateHost } from '@/shell/CreateHost';
 import { useUiStore, type CreateDefaults } from '@/store/ui';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
-import { agency, ida, labels, lene, list, makeWorkItem, mara, organization, project, properties, standard, types, web30, web47, web48 } from '@/test/fixtures';
+import { agency, ida, labels, lene, list, makeWorkItem, mara, organization, project, properties, queryItems, standard, types, web30, web47, web48 } from '@/test/fixtures';
 import type { Project, Property, User, WorkItem } from '@/types';
 import { CreateItemDialog } from './CreateItemDialog';
 
@@ -94,7 +94,8 @@ let api: MockApi | undefined;
 let client: QueryClient;
 
 function renderWith(node: ReactNode, routes: Record<string, MockRoute> = {}) {
-  const fails = (path: string, body: () => { body: unknown }) => () => (failing.has(path) ? problem(503, 'service_unavailable', 'Der Server ist gerade nicht erreichbar.') : body());
+  const fails = (path: string, answer: (body: unknown) => { body: unknown }) => (body: unknown) =>
+    failing.has(path) ? problem(503, 'service_unavailable', 'Der Server ist gerade nicht erreichbar.') : answer(body);
   api = mockApi({
     'GET /api/v1/organization': () => ({ body: { data: organization } }),
     'GET /api/v1/projects': fails('projects', () => ({ body: list(projects) })),
@@ -105,7 +106,7 @@ function renderWith(node: ReactNode, routes: Record<string, MockRoute> = {}) {
     'GET /api/v1/users': () => ({ body: list([mara, ida, lene]) }),
     'GET /api/v1/projects/p_web/members': () => ({ body: list([{ project_id: 'p_web', user_id: 'u_ida', role: 'admin' }, { project_id: 'p_web', user_id: 'u_lene', role: 'member' }]) }),
     'GET /api/v1/projects/p_app/members': () => ({ body: list([{ project_id: 'p_app', user_id: 'u_lene', role: 'member' }]) }),
-    'GET /api/v1/work-items': fails('items', () => ({ body: list([web30, web47, web48]) })),
+    'POST /api/v1/work-items/query': fails('items', (body) => ({ body: list(queryItems([web30, web47, web48], body)) })),
     'GET /api/v1/work-items/wi_web_30': () => ({ body: { data: { ...web30, children: [], relations: [], type: wishTypes.find((type) => type.id === web30.type_id), workflow: standard } } }),
     'POST /api/v1/work-items': (body, url) => answerCreate(body, url),
     ...routes,
@@ -626,7 +627,7 @@ describe('CreateItemDialog', () => {
     const { dialog, title } = await openDialog({ project_id: 'p_web', type_id: 't_task', parent_id: 'wi_web_30' });
     const parent = await within(dialog).findByRole('combobox', { name: 'Eltern-Item: WEB-30 Relaunch Phase 1' });
     // the parent it was opened with is its detail; the items of the project load only when the list opens (A153)
-    const projectLists = () => api!.calls.filter((call) => call.method === 'GET' && call.url.startsWith('/api/v1/work-items?'));
+    const projectLists = () => api!.calls.filter((call) => call.method === 'POST' && call.url === '/api/v1/work-items/query');
     expect(projectLists()).toEqual([]);
     await user.click(parent);
     await waitFor(() => expect(projectLists()).toHaveLength(1));

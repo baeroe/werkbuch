@@ -9,13 +9,13 @@ import { useLabels } from '@/hooks/catalog';
 import { useUpdateWorkItem } from '@/hooks/workItems';
 import { intlLocale, t } from '@/lib/i18n';
 import { SHORTCUTS } from '@/lib/shortcuts/catalog';
-import type { Label, WorkItem } from '@/types';
+import type { Label, ListedItem } from '@/types';
 import { useEditReason } from './itemData';
 import { Picker, type PickerExtras, type PickerOption } from './Picker';
 
 export const labelOption = (label: Label): PickerOption => ({ value: label.id, label: label.name, icon: <ToneDot tone={label.color} className="size-2" /> });
 
-type LabelsPickerProps = PickerExtras & { item: WorkItem };
+type LabelsPickerProps = PickerExtras & { item: ListedItem };
 
 export function LabelsPicker({ item, look = 'field', shortcut, ...extras }: LabelsPickerProps) {
   const labels = useLabels();

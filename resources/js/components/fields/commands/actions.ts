@@ -19,18 +19,18 @@ import { t } from '@/lib/i18n';
 import { paths } from '@/lib/links';
 import { runWithUndo } from '@/lib/undo';
 import { useUiStore } from '@/store/ui';
-import type { WorkItem } from '@/types';
+import type { ListedItem } from '@/types';
 import type { ItemCommandContext } from './context';
 
 /** Confirms a change once the server agreed: "WEB-47: Priorität High". */
-const done = (item: WorkItem, what: string) => toast({ title: t('items.commands.done', { key: item.key, what }), tone: 'success' });
+const done = (item: ListedItem, what: string) => toast({ title: t('items.commands.done', { key: item.key, what }), tone: 'success' });
 
 /**
  * Changes the target with its own mutation (optimistic: a refusal brings the old state back with a toast of the
  * hook) and confirms it with a toast saying `what`.
  */
-export function apply(ctx: ItemCommandContext, what: string, change: (item: WorkItem) => Promise<unknown>): void {
-  const [item] = ctx.targets as [WorkItem];
+export function apply(ctx: ItemCommandContext, what: string, change: (item: ListedItem) => Promise<unknown>): void {
+  const [item] = ctx.targets as [ListedItem];
   ctx.settle(change(item), { onSuccess: () => done(item, what) });
 }
 
@@ -47,15 +47,15 @@ export function useRemovalDeps(): RemovalDeps {
   return { queryClient: useQueryClient(), archive: useArchiveWorkItem(), remove: useDeleteWorkItem() };
 }
 
-const isPage = (data: unknown): data is Page<WorkItem> => typeof data === 'object' && data !== null && Array.isArray((data as Page<WorkItem>).items);
+const isPage = (data: unknown): data is Page<ListedItem> => typeof data === 'object' && data !== null && Array.isArray((data as Page<ListedItem>).items);
 
 /**
  * Takes the item out of every cached list at once, and out of the preview. Answers `restore`, which puts it back where
  * it was (undo, or a call that failed) and loads the lists again.
  */
-function hideAtOnce(queryClient: QueryClient, item: WorkItem): () => void {
+function hideAtOnce(queryClient: QueryClient, item: ListedItem): () => void {
   const listKey = [...qk.workItems.all, 'list'];
-  const before = queryClient.getQueriesData<unknown>({ queryKey: listKey }).filter((entry): entry is [readonly unknown[], Page<WorkItem>] => isPage(entry[1]));
+  const before = queryClient.getQueriesData<unknown>({ queryKey: listKey }).filter((entry): entry is [readonly unknown[], Page<ListedItem>] => isPage(entry[1]));
   queryClient.setQueriesData({ queryKey: listKey }, (data: unknown) =>
     isPage(data) && data.items.some((entry) => entry.id === item.id)
       ? { ...data, items: data.items.filter((entry) => entry.id !== item.id), total: Math.max(0, data.total - 1) }
@@ -82,7 +82,7 @@ function hideAtOnce(queryClient: QueryClient, item: WorkItem): () => void {
 }
 
 /** Archives a closed item with 5 s undo. A failure brings it back on screen (the mutation's own toast says why). */
-export function archiveWithUndo(deps: RemovalDeps, item: WorkItem): void {
+export function archiveWithUndo(deps: RemovalDeps, item: ListedItem): void {
   const restore = hideAtOnce(deps.queryClient, item);
   runWithUndo({
     label: t('items.commands.archived', { key: item.key }),
@@ -96,7 +96,7 @@ export function archiveWithUndo(deps: RemovalDeps, item: WorkItem): void {
  * place of the page, so Back does not lead to an item that is gone. Answers the way back (undo, a failed delete), taken
  * only while the person is still where the delete sent them.
  */
-function leavePage(item: WorkItem): () => void {
+function leavePage(item: ListedItem): () => void {
   if (window.location.pathname !== paths.item(item.key)) return () => {};
   router.visit(paths.myItems(), { replace: true });
   return () => {
@@ -106,7 +106,7 @@ function leavePage(item: WorkItem): () => void {
 }
 
 /** Takes the item off the screen: out of the lists and the preview, and off its page. Answers how to put it back. */
-function takeAway(deps: RemovalDeps, item: WorkItem): () => void {
+function takeAway(deps: RemovalDeps, item: ListedItem): () => void {
   const restore = hideAtOnce(deps.queryClient, item);
   const back = leavePage(item);
   return () => {
@@ -116,12 +116,12 @@ function takeAway(deps: RemovalDeps, item: WorkItem): () => void {
 }
 
 /** Deletes an item with 5 s undo. A failure brings it back on screen, and "Erneut versuchen" takes it away and deletes it again. */
-export function deleteWithUndo(deps: RemovalDeps, item: WorkItem): void {
+export function deleteWithUndo(deps: RemovalDeps, item: ListedItem): void {
   const restore = takeAway(deps, item);
   runWithUndo({ label: t('items.commands.deleted', { key: item.key }), undo: restore, run: () => deleteNow(deps, item, restore) });
 }
 
-async function deleteNow(deps: RemovalDeps, item: WorkItem, restore: () => void): Promise<void> {
+async function deleteNow(deps: RemovalDeps, item: ListedItem, restore: () => void): Promise<void> {
   try {
     await deps.remove.mutateAsync(item.id);
   } catch (error) {

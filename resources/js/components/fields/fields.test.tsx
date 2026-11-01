@@ -12,8 +12,9 @@ import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import en from '../../../../lang/en.json';
 import { currentToasts, resetToasts } from '@/components/ui/toast';
+import { useWorkItems } from '@/hooks/workItems';
 import { initI18n } from '@/lib/i18n';
-import { mockApi, type MockApi, type MockRoute } from '@/test/api';
+import { mockApi, queried, type MockApi, type MockRoute } from '@/test/api';
 import {
   agency,
   ida,
@@ -26,6 +27,7 @@ import {
   person,
   project,
   properties,
+  queryItems,
   resolutions,
   standard,
   theo,
@@ -34,13 +36,13 @@ import {
   web47,
   web48,
 } from '@/test/fixtures';
-import type { Organization, Project, ProjectMember, Property, User, WorkItem, WorkItemType } from '@/types';
+import type { ListedItem, Organization, Project, ProjectMember, Property, User, WorkItem, WorkItemType } from '@/types';
 import { AssigneePicker } from './AssigneePicker';
 import { addDays, botWord, daysBetween, formatDay, formatNumber, formatPropertyValue, formatShortDay, formatWeekdayDay, relativeDay } from './format';
 import { askResolution, askTypeChange, ItemDialogsHost } from './ItemDialogs';
 import { projectPeople, useToday } from './itemData';
 import { LabelsPicker } from './LabelsPicker';
-import { NO_PARENT_OPTION, ParentPicker, parentCandidates, useProjectItems } from './ParentPicker';
+import { NO_PARENT_OPTION, ParentPicker, parentCandidates } from './ParentPicker';
 import { Picker, type PickerOption } from './Picker';
 import { PRIORITY_OPTIONS, PriorityPicker } from './PriorityPicker';
 import { StatePicker } from './StatePicker';
@@ -77,8 +79,6 @@ const problem = (status: number, reason: string, detail: string) => ({ status, b
 
 let api: MockApi | undefined;
 
-/** The items of a project as the list answers them (`filter[project]`). */
-const itemsOf = (projectId: string, items: WorkItem[]) => items.filter((item) => item.project_id === projectId);
 
 function renderWith(node: ReactNode, routes: Record<string, MockRoute> = {}, { projects = [web, app], items = [web30, web47, web48, app11] }: { projects?: Project[]; items?: WorkItem[] } = {}) {
   api = mockApi({
@@ -90,7 +90,7 @@ function renderWith(node: ReactNode, routes: Record<string, MockRoute> = {}, { p
     'GET /api/v1/projects/p_app/members': () => ({ body: list([member('u_lene', 'member', 'p_app'), member('u_kira', 'member', 'p_app')]) }),
     'GET /api/v1/labels': () => ({ body: list(labels) }),
     'GET /api/v1/work-item-types': () => ({ body: list(types) }),
-    'GET /api/v1/work-items': (_body, url) => ({ body: list(itemsOf(url.searchParams.get('filter[project]') ?? '', items)) }),
+    'POST /api/v1/work-items/query': (body) => ({ body: list(queryItems(items, body)) }),
     ...routes,
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
@@ -118,9 +118,9 @@ async function search(user: ReturnType<typeof userEvent.setup>, text: string) {
 const sent = (method: string, path: string) => api!.calls.filter((call) => call.method === method && call.url === path).map((call) => call.body);
 const toastTitles = () => currentToasts().map((entry) => entry.title);
 
-/** The item as the cache holds it now: an optimistic change and its rollback show there. */
-function FromCache({ id, projectId, children }: { id: string; projectId: string; children: (item: WorkItem) => ReactNode }) {
-  const item = useProjectItems(projectId, true).data?.items.find((entry) => entry.id === id);
+/** The item as the cache of a project list holds it now: an optimistic change and its rollback show there. */
+function FromCache({ id, projectId, children }: { id: string; projectId: string; children: (item: ListedItem) => ReactNode }) {
+  const item = useWorkItems({ project_id: projectId }).data?.items.find((entry) => entry.id === id);
   return item ? children(item) : null;
 }
 
@@ -536,7 +536,7 @@ describe('ParentPicker', () => {
     expect(withParent.getAttribute('aria-keyshortcuts')).toBe('Shift+P');
     // the icon of the parent's type comes with the parent itself; no list of the project is read before a list opens (A153)
     await waitFor(() => expect(withParent.querySelector('[data-tone="moss"]')).not.toBeNull());
-    const projectLists = () => api!.calls.filter((call) => call.method === 'GET' && call.url.startsWith('/api/v1/work-items?'));
+    const projectLists = () => api!.calls.filter((call) => call.method === 'POST' && call.url === '/api/v1/work-items/query');
     expect(projectLists()).toEqual([]);
     await user.click(withParent);
     await waitFor(() => expect(projectLists()).toHaveLength(1));
@@ -551,15 +551,36 @@ describe('ParentPicker', () => {
     await waitFor(() => expect(sent('PATCH', '/api/v1/work-items/wi_web_47')).toEqual([{ parent_id: 'wi_web_30' }]));
   });
 
-  it('reads every page of the project, so an epic on a later one is offered', async () => {
+  it('reads every page of the epics of the project, so an epic on a later one is offered', async () => {
     const user = userEvent.setup();
+    const epic = makeWorkItem({ id: 'wi_web_31', number: 31, key: 'WEB-31', type_id: 't_epic', title: 'Relaunch Phase 2' });
     renderWith(<ParentPicker item={{ ...web47, parent_id: null }} />, {
-      'GET /api/v1/work-items': (_body, url) =>
-        url.searchParams.get('cursor') === 'next' ? { body: list([web30]) } : { body: { data: [web47, web48], links: {}, meta: { next_cursor: 'next', total: 3 } } },
+      'POST /api/v1/work-items/query': (body) =>
+        queried(body).cursor === 'next' ? { body: list([web30]) } : { body: { data: [epic], links: {}, meta: { next_cursor: 'next', total: 2 } } },
     });
 
     await user.click(await picker(/^Eltern-Item/));
+    expect(await optionTexts()).toEqual(['Relaunch Phase 2WEB-31', 'Relaunch Phase 1WEB-30']);
+  });
+
+  it('offers only the epics of the project as parents, read lean', async () => {
+    const user = userEvent.setup();
+    renderWith(<ParentPicker item={{ ...web47, parent_id: null }} />);
+
+    await user.click(await picker(/^Eltern-Item/));
     expect(await optionTexts()).toEqual(['Relaunch Phase 1WEB-30']);
+    expect(sent('POST', '/api/v1/work-items/query')).toEqual([
+      {
+        filter: {
+          version: 1,
+          conditions: [
+            { field: 'project', op: 'is', value: 'p_web' },
+            { field: 'epic', op: 'is', value: true },
+          ],
+        },
+        lean: true,
+      },
+    ]);
   });
 
   it('says why there is none: the project has no epic yet, or none matches', async () => {
@@ -588,7 +609,7 @@ describe('ParentPicker', () => {
     const user = userEvent.setup();
     let fail = true;
     renderWith(<ParentPicker item={{ ...web47, parent_id: null }} />, {
-      'GET /api/v1/work-items': () => (fail ? problem(503, 'service_unavailable', 'Der Server ist gerade nicht erreichbar.') : { body: list([web30, web47]) }),
+      'POST /api/v1/work-items/query': () => (fail ? problem(503, 'service_unavailable', 'Der Server ist gerade nicht erreichbar.') : { body: list([web30]) }),
     });
 
     await user.click(await picker(/^Eltern-Item/));

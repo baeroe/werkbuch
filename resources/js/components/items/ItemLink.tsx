@@ -9,7 +9,7 @@ import { Link } from '@inertiajs/react';
 import type { MouseEvent, ReactNode } from 'react';
 import { cx } from '@/components/ui/cx';
 import { paths } from '@/lib/links';
-import type { WorkItem } from '@/types';
+import type { ListedItem } from '@/types';
 
 /** The focus ring of the link, drawn around the card or row that holds it. */
 export const linkFocusRing =
@@ -19,7 +19,7 @@ export const linkFocusRing =
 export const isPlainClick = (event: MouseEvent): boolean => event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
 
 type ItemLinkProps = {
-  item: Pick<WorkItem, 'id' | 'key'>;
+  item: Pick<ListedItem, 'id' | 'key'>;
   /** Opens the item another way than its page (the preview); without it the link goes to the page. */
   onOpen?: (itemId: string) => void;
   /** -1 when the card or row is the tab stop itself (a list with its own keyboard cursor). */

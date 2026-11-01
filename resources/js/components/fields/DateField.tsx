@@ -19,7 +19,7 @@ import { useUpdateWorkItem } from '@/hooks/workItems';
 import { t } from '@/lib/i18n';
 import { SHORTCUTS } from '@/lib/shortcuts/catalog';
 import { useDialogScope } from '@/lib/shortcuts/useShortcut';
-import type { WorkItem } from '@/types';
+import type { ListedItem } from '@/types';
 import { formatDay, formatShortDay, relativeDay } from './format';
 import { useEditReason, useItemWorkflow, useToday } from './itemData';
 import { PendingMark, ReadOnlyTrigger, triggerClass, withTooltip, type PickerExtras } from './Picker';
@@ -194,12 +194,12 @@ const FIELDS = {
 } as const;
 
 type DateFieldProps = PickerExtras & {
-  item: WorkItem;
+  item: ListedItem;
   field: 'start_date' | 'due_date';
 };
 
 /** Whether an item is overdue: an open item whose due date lies before today in the organisation's zone. */
-export function useOverdue(item: WorkItem): boolean {
+export function useOverdue(item: ListedItem): boolean {
   const { today } = useToday();
   const { workflow } = useItemWorkflow(item);
   const category = workflow?.states.find((state) => state.id === item.state_id)?.category;

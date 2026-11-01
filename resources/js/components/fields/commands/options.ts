@@ -16,7 +16,7 @@ import { allowedTargets, isClosedCategory } from '@/domain/workflow';
 import type { CommandOption } from '@/lib/commands';
 import { notifyError } from '@/lib/errors';
 import { intlLocale, t } from '@/lib/i18n';
-import type { State, User, WorkItem } from '@/types';
+import type { ListedItem, State, User } from '@/types';
 import { personOption } from '../AssigneePicker';
 import { addDays, formatDay, formatWeekdayDay } from '../format';
 import { askResolution, askTypeChange } from '../ItemDialogs';
@@ -215,7 +215,7 @@ export function parentOptions(ctx: ItemCommandContext): CommandOption[] {
   const item = targetOf(ctx);
   // the sub-list opens before the items of the project are there; it fills once they come
   if (ctx.projectItems === undefined) return [];
-  const setParent = (parent: WorkItem | null) =>
+  const setParent = (parent: ListedItem | null) =>
     apply(ctx, parent ? t('items.commands.what.parent', { parent: parent.key }) : t('items.commands.what.no_parent'), (target) =>
       ctx.update.mutateAsync({ id: target.id, patch: { parent_id: parent?.id ?? null } }),
     );

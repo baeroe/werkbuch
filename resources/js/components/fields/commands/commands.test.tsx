@@ -15,16 +15,16 @@ import { CommandPalette } from '@/features/palette/CommandPalette';
 import { listCommands } from '@/lib/commands';
 import { helpGroups } from '@/lib/shortcuts/HelpOverlay';
 import { listShortcuts } from '@/lib/shortcuts/registry';
+import { useWorkItems } from '@/hooks/workItems';
 import { useUiStore } from '@/store/ui';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
-import { ida, labels, lene, list, makeWorkItem, mara, organization, project, properties, resolutions, standard, types, web30, web47, web48 } from '@/test/fixtures';
+import { ida, labels, lene, list, makeWorkItem, mara, organization, project, properties, queryItems, resolutions, standard, types, web30, web47, web48 } from '@/test/fixtures';
 import type { Project, ProjectMember, User, WorkItem } from '@/types';
 import { addDays, formatDay, formatWeekdayDay } from '../format';
 import { ItemDialogsHost } from '../ItemDialogs';
 // the questions load lazily; loaded with the file, so the first question does not wait for the editor's modules
 import '../ResolutionPrompt';
 import '../TypePicker';
-import { useProjectItems } from '../ParentPicker';
 import { datePresets, PreviewItemCommands, useItemCommands } from './index';
 
 let signedIn: User = lene;
@@ -63,7 +63,7 @@ function renderWith(
     'GET /api/v1/labels': () => ({ body: list(labels) }),
     'GET /api/v1/work-item-types': () => ({ body: list(types) }),
     'GET /api/v1/properties': () => ({ body: list(properties) }),
-    'GET /api/v1/work-items': () => ({ body: list(items) }),
+    'POST /api/v1/work-items/query': (body) => ({ body: list(queryItems(items, body)) }),
     ...Object.fromEntries(items.map((item) => [`GET /api/v1/work-items/${item.id}`, () => detail(item)])),
     ...Object.fromEntries(items.map((item) => [`PATCH /api/v1/work-items/${item.id}`, (body: unknown) => ({ body: { data: { ...item, ...(body as object) } } })])),
     // the activity reads an empty history: no error state with its own "Erneut versuchen" and alert in these screens
@@ -106,7 +106,7 @@ function Preview() {
 
 /** The keys of the items of WEB as the list in the cache has them: archiving and deleting take them out at once. */
 function WebList() {
-  const keys = useProjectItems('p_web', true).data?.items.map((item) => item.key);
+  const keys = useWorkItems({ project_id: 'p_web' }).data?.items.map((item) => item.key);
   return <p aria-label="WEB">{keys?.join(' ')}</p>;
 }
 
@@ -264,10 +264,10 @@ describe('item commands', () => {
     renderWith(<ItemPage id="wi_web_47" />, {
       routes: {
         'GET /api/v1/projects/p_web/members': () => (failing ? problem(503, 'service_unavailable', 'Wartung.') : { body: list(members) }),
-        'GET /api/v1/work-items': () => (failing ? problem(503, 'service_unavailable', 'Wartung.') : { body: list(items) }),
+        'POST /api/v1/work-items/query': (body) => (failing ? problem(503, 'service_unavailable', 'Wartung.') : { body: list(queryItems(items, body)) }),
       },
     });
-    const projectLists = () => api!.calls.filter((call) => call.method === 'GET' && call.url.startsWith('/api/v1/work-items?'));
+    const projectLists = () => api!.calls.filter((call) => call.method === 'POST' && call.url === '/api/v1/work-items/query');
     await ready('WEB-47');
     // status needs neither: it is there; the assignee waits for what failed
     await waitFor(() => {

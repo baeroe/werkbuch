@@ -10,13 +10,13 @@ import { ApiError } from '@/api/client';
 import { useSettle } from '@/hooks/mutation';
 import { useUpdateWorkItem } from '@/hooks/workItems';
 import { t } from '@/lib/i18n';
-import type { Property, PropertyValue, WorkItem } from '@/types';
+import type { ListedItem, Property, PropertyValue } from '@/types';
 import { useEditReason } from '../itemData';
 import { isEmptyValue, sameValue } from './parse';
 import { PropertyValueInput } from './PropertyValueInput';
 
 type PropertyFieldProps = {
-  item: WorkItem;
+  item: ListedItem;
   property: Property;
   /** Required for the item's type. */
   required: boolean;

@@ -16,7 +16,7 @@ import { t, type TranslationKey } from '@/lib/i18n';
 import { SHORTCUTS, type ShortcutId } from '@/lib/shortcuts/catalog';
 import { registerShortcut } from '@/lib/shortcuts/registry';
 import { useUiStore } from '@/store/ui';
-import type { WorkItem } from '@/types';
+import type { ListedItem } from '@/types';
 import { archiveWithUndo, deleteWithUndo } from './actions';
 import { editReason, isClosed, type ItemCommandContext, type ItemCommandSource } from './context';
 import {
@@ -148,7 +148,7 @@ const deleteReason = (ctx: ItemCommandContext) => ctx.targets.map((item) => ctx.
 /** What `mod+backspace` does now: archive a closed item, delete any other; or why it can do neither. */
 function removal(ctx: ItemCommandContext): { run: () => void } | { reason: Exclude<ReturnType<typeof blocker>, null> } {
   if (!ctx.ready) return { reason: ctx.failed ? 'failed' : 'loading' };
-  const [item] = ctx.targets as [WorkItem];
+  const [item] = ctx.targets as [ListedItem];
   if (archivable(ctx)) {
     const denied = editReason(ctx);
     return denied ? { reason: { denied } } : { run: () => archiveWithUndo(ctx.removal, item) };

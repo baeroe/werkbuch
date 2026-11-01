@@ -20,7 +20,7 @@ import type { Settle } from '@/hooks/mutation';
 import type { useChangeWorkItemType, useTransitionWorkItem, useUpdateWorkItem } from '@/hooks/workItems';
 import type { Permission } from '@/lib/permissions';
 import { useUiStore } from '@/store/ui';
-import type { Label, Project, Property, User, Workflow, WorkItem, WorkItemDetail, WorkItemType } from '@/types';
+import type { Label, ListedItem, Project, Property, User, Workflow, WorkItemDetail, WorkItemType } from '@/types';
 import { archivedReason } from '../itemData';
 import type { RemovalDeps } from './actions';
 
@@ -38,7 +38,7 @@ export interface ItemCommandsOptions {
 /** What the commands read and do when they run; the hook hands in the latest of it. */
 export interface ItemCommandContext {
   /** The items to act on: none or one in Phase 4. */
-  targets: WorkItem[];
+  targets: ListedItem[];
   /** The catalogs the commands read have loaded (projects, workflows, labels, types, properties, rights, me). */
   ready: boolean;
   /** One of them failed to load; `retry` asks for it again (and for what the target's project failed to give). */
@@ -59,7 +59,7 @@ export interface ItemCommandContext {
   /** Whether the target has children (archived ones too, as the server counts them), from its detail. */
   hasChildren: boolean | undefined;
   /** The items of the target's project, for the parent, once loaded (only while the palette is open). */
-  projectItems: WorkItem[] | undefined;
+  projectItems: ListedItem[] | undefined;
   /** They failed to load. */
   projectItemsFailed: boolean;
   reason: (permission: Permission, projectId: string) => string | null;
@@ -85,19 +85,19 @@ export interface ItemCommandSource {
 /* ------------------------------------------------------------------- rules on the targets */
 
 /** The state of an item in the workflow of its project. */
-export function stateIn(projects: readonly Project[], workflows: readonly Workflow[], item: WorkItem) {
+export function stateIn(projects: readonly Project[], workflows: readonly Workflow[], item: ListedItem) {
   const project = projects.find((entry) => entry.id === item.project_id);
   return workflows.find((workflow) => workflow.id === project?.workflow_id)?.states.find((state) => state.id === item.state_id);
 }
 
-export const workflowOf = (ctx: ItemCommandContext, item: WorkItem) => {
+export const workflowOf = (ctx: ItemCommandContext, item: ListedItem) => {
   const project = ctx.projects.find((entry) => entry.id === item.project_id);
   return ctx.workflows.find((workflow) => workflow.id === project?.workflow_id);
 };
-export const stateOf = (ctx: ItemCommandContext, item: WorkItem) => stateIn(ctx.projects, ctx.workflows, item);
+export const stateOf = (ctx: ItemCommandContext, item: ListedItem) => stateIn(ctx.projects, ctx.workflows, item);
 /** Whether the item stands in a Completed or Canceled state (it archives rather than deletes). */
-export const isClosed = (ctx: ItemCommandContext, item: WorkItem) => closedIn(ctx.projects, ctx.workflows, item);
-export function closedIn(projects: readonly Project[], workflows: readonly Workflow[], item: WorkItem): boolean {
+export const isClosed = (ctx: ItemCommandContext, item: ListedItem) => closedIn(ctx.projects, ctx.workflows, item);
+export function closedIn(projects: readonly Project[], workflows: readonly Workflow[], item: ListedItem): boolean {
   const state = stateIn(projects, workflows, item);
   return state !== undefined && isClosedCategory(state.category);
 }
@@ -199,7 +199,7 @@ const isDetail = (data: unknown): data is WorkItemDetail => typeof data === 'obj
  * An item from the cache, by id or key: its detail, which the mount loads (`useWorkItem`). The lists of Phase 5 add
  * the items of a list, so a selection acts before its details load.
  */
-export function cachedItem(queryClient: QueryClient, ref: string): WorkItem | undefined {
+export function cachedItem(queryClient: QueryClient, ref: string): ListedItem | undefined {
   const details = queryClient.getQueriesData<unknown>({ queryKey: qk.workItems.all }).flatMap(([, data]) => (isDetail(data) ? [data.item] : []));
   return details.find((item) => item.id === ref || item.key === ref);
 }

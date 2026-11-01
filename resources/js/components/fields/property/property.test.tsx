@@ -16,7 +16,7 @@ import type { WorkItemPatch } from '@/api/workItems';
 import { useWorkItems } from '@/hooks/workItems';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import { ida, lene, list, makeWorkItem, organization, person, project, properties, standard, theo, web47 } from '@/test/fixtures';
-import type { Organization, Project, ProjectMember, Property, PropertyValue, RichText, User, WorkItem } from '@/types';
+import type { ListedItem, Organization, Project, ProjectMember, Property, PropertyValue, RichText, User, WorkItem } from '@/types';
 import { DateField, DatePopover, DayValue, useOverdue } from '../DateField';
 import { useToday } from '../itemData';
 import { ambiguousNumber, isEmptyValue, parseNumber, parseTyped, readsEmpty, shownText } from './parse';
@@ -94,7 +94,7 @@ function store(patch: WorkItemPatch): WorkItem {
 }
 
 /** The stored item as the cache of the list holds it: a change shows at once and stays after the reload. */
-function Live({ children }: { children: (entry: WorkItem) => ReactNode }) {
+function Live({ children }: { children: (entry: ListedItem) => ReactNode }) {
   const entry = useWorkItems({ project_id: 'p_web' }).data?.items[0];
   return entry ? children(entry) : null;
 }
@@ -106,7 +106,7 @@ function renderWith(node: ReactNode, routes: Record<string, MockRoute> = {}, { p
     'GET /api/v1/workflows': () => ({ body: list([standard]) }),
     'GET /api/v1/users': () => ({ body: list([ida, lene, theo, pixel]) }),
     'GET /api/v1/projects/p_web/members': () => ({ body: list([member('u_ida', 'admin'), member('u_lene'), member('u_pixel')]) }),
-    'GET /api/v1/work-items': () => ({ body: list([stored]) }),
+    'POST /api/v1/work-items/query': () => ({ body: list([stored]) }),
     'PATCH /api/v1/work-items/wi_web_47': (body) => ({ body: { data: store(body as WorkItemPatch) } }),
     ...routes,
   });

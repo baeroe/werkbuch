@@ -12,7 +12,7 @@
 
 import { lazy, Suspense, useSyncExternalStore, type RefObject } from 'react';
 import { useUiStore } from '@/store/ui';
-import type { State, StateCategory, WorkItem, WorkItemType } from '@/types';
+import type { ListedItem, State, StateCategory, WorkItemType } from '@/types';
 
 const ResolutionPrompt = lazy(() => import('./ResolutionPrompt').then((module) => ({ default: module.ResolutionPrompt })));
 const TypeChangeDialog = lazy(() => import('./TypePicker').then((module) => ({ default: module.TypeChangeDialog })));
@@ -25,7 +25,7 @@ type ResolutionRequest = {
   from?: { category: StateCategory; resolutionId: string | null };
   onConfirm: (resolutionId: string | null) => void;
 };
-type TypeRequest = { kind: 'type'; item: WorkItem; target: WorkItemType; hasChildren?: boolean };
+type TypeRequest = { kind: 'type'; item: ListedItem; target: WorkItemType; hasChildren?: boolean };
 
 /** The question asked last, and whether it is shown (it stays while it fades out). */
 let state: { request: ResolutionRequest | TypeRequest | null; open: boolean } = { request: null, open: false };
@@ -71,7 +71,7 @@ export function askResolution(request: Omit<ResolutionRequest, 'kind'>): void {
  * refuse it. `hasChildren`: what the command knows about the item's children, so the dialog can refuse before the item
  * loads.
  */
-export function askTypeChange(item: WorkItem, target: WorkItemType, hasChildren?: boolean): void {
+export function askTypeChange(item: ListedItem, target: WorkItemType, hasChildren?: boolean): void {
   remember();
   set({ request: { kind: 'type', item, target, hasChildren }, open: true });
 }
