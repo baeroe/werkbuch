@@ -18,7 +18,7 @@ Ein Typ hat:
 
 Ein archivierter Typ nimmt keine neuen Items an. Projekte, die ihn aktiviert haben, behalten ihn, aber kein Projekt kann ihn neu aktivieren, und er kann nicht Standardtyp werden. **Wiederherstellen** holt ihn zurück.
 
-Ein Typ, der Standardtyp eines Projekts ist, lässt sich weder archivieren noch löschen; wähle in diesen Projekten zuerst einen anderen Standardtyp. Das gilt auch für archivierte Projekte und für ein Projekt, das gerade gelöscht wird, bis es endgültig weg ist. Die Oberfläche und die API (`409`, `reason: default_type`, die Kennungen in `projects`) nennen sie. Löschen nimmt einen Typ aus jedem Projekt, das ihn aktiviert hatte. Sobald es Work Items gibt, wird ein Typ, den noch Items tragen, archiviert statt gelöscht.
+Ein Typ, der Standardtyp eines Projekts ist, lässt sich weder archivieren noch löschen; wähle in diesen Projekten zuerst einen anderen Standardtyp. Das gilt auch für archivierte Projekte und für ein Projekt, das gerade gelöscht wird, bis es endgültig weg ist. Die Oberfläche und die API (`409`, `reason: default_type`, die Kennungen in `projects`) nennen sie. Löschen nimmt einen Typ aus jedem Projekt, das ihn aktiviert hatte. Ein Typ, den noch Items tragen, wird archiviert statt gelöscht (die API antwortet `{"outcome": "archived"}`): Die Items behalten ihn, nur neue Items bekommen ihn nicht mehr. Der Epic-Haken richtet sich nach den Items: Er lässt sich nur wegnehmen, solange kein Item des Typs Kind-Items hat, und nur setzen, solange keins ein Eltern-Item hat (`422` an `is_epic`; archivierte Items zählen).
 
 ### Die Typen eines Projekts
 
@@ -51,7 +51,13 @@ Auch der Feldtyp ist fest. Erlaubt ist nur der Wechsel von Einfach- auf Mehrfach
 
 ### Optionen
 
-Ein Dropdown hat mindestens eine aktive Option. Eine Option hat ein Label (bis 60 Zeichen), einen Ton (in der API das Feld `color`) und einen Platz in der Reihenfolge; ein Dropdown hat höchstens 100. Eine Option, die du nicht mehr anbieten willst, lässt sich **archivieren**: Für neue Werte steht sie nicht mehr zur Wahl, und du kannst sie wiederherstellen. In der Oberfläche lässt sich eine gespeicherte Option nur archivieren; über die API wird eine Option gelöscht, die in einem `PUT` fehlt.
+Ein Dropdown hat mindestens eine aktive Option. Eine Option hat ein Label (bis 60 Zeichen), einen Ton (in der API das Feld `color`) und einen Platz in der Reihenfolge; ein Dropdown hat höchstens 100. Eine Option, die du nicht mehr anbieten willst, lässt sich **archivieren**: Für neue Werte steht sie nicht mehr zur Wahl, und du kannst sie wiederherstellen. Eine gespeicherte Option lässt sich auch **entfernen** (in der Oberfläche mit dem Kreuz daneben, über die API, indem sie in einem `PUT` fehlt): Sie wird gelöscht, es sei denn, Items tragen sie: Dann wird sie stattdessen archiviert, und die Oberfläche sagt es nach dem Speichern.
+
+### Pflichtwerte und Standardwerte
+
+Eine Property, die ein Typ als Pflicht hat, braucht einen Wert, wenn ein Item dieses Typs entsteht und wenn ein Item zu diesem Typ wechselt; ein gesetzter Wert lässt sich nicht wieder leeren (`422` an `values.<key>`). Wird eine Property erst später Pflicht, bleiben die Items ohne Wert gültig: Alles andere an ihnen lässt sich weiter ändern, und das Item zeigt am Feld „Pflichtfeld, noch leer. Bitte ergänzen.“ Bei einem Ja/Nein-Feld zählt aus (`false`) als Wert.
+
+Der Standardwert füllt ein neues Item, wenn die Anfrage die Property gar nicht nennt; ein mitgeschicktes `null` lässt sie leer. Ein Standardwert, der auf eine inzwischen archivierte Option zeigt, entfällt.
 
 ## Labels
 
@@ -63,13 +69,13 @@ Ein Relationstyp benennt die Verbindung zwischen zwei Items. Er hat einen Namen 
 
 Über die API hat ein symmetrischer Relationstyp `inward_label: null`; ein leerer Text wird abgelehnt.
 
-werkbuch liefert drei mit: **blockiert** (andersherum „wird blockiert von“), **Duplikat** und **verwandt** (symmetrisch). Sie lassen sich umbenennen, aber nicht löschen. Nur „blockiert“ wird etwas auslösen, sobald es Work Items gibt: Solange der Blocker offen ist, zeigt das blockierte Item einen Hinweis. Eigene Relationstypen sind reine Beschriftung.
+werkbuch liefert drei mit: **blockiert** (andersherum „wird blockiert von“), **Duplikat** und **verwandt** (symmetrisch). Sie lassen sich umbenennen, aber nicht löschen. Nur „blockiert“ löst etwas aus: Solange der Blocker offen ist, zeigt das blockierte Item einen Hinweis (siehe [Work Items](/de/concepts/work-items#relationen)). Eigene Relationstypen sind reine Beschriftung.
 
 ## Resolutions
 
 Eine Resolution sagt, wie ein geschlossenes Item ausgegangen ist. Ein Item, das in einen Status der Kategorie Completed oder Canceled wechselt, bekommt eine: die, die du wählst, sonst den Standard der Kategorie. werkbuch liefert **Done** (Standard für Completed), **Won't do** (Standard für Canceled), **Duplicate** und **Cannot reproduce** mit, in dieser Reihenfolge.
 
-Jede der beiden Kategorien hat immer genau einen Standard. Wird eine Resolution Standard einer Kategorie, verliert die bisherige die Marke; um den Standard zu wechseln, machst du eine andere Resolution zum Standard. Ein Standard lässt sich weder archivieren noch löschen. Eine archivierte Resolution steht nicht mehr zur Wahl.
+Jede der beiden Kategorien hat immer genau einen Standard. Wird eine Resolution Standard einer Kategorie, verliert die bisherige die Marke; um den Standard zu wechseln, machst du eine andere Resolution zum Standard. Ein Standard lässt sich weder archivieren noch löschen. Eine archivierte Resolution steht nicht mehr zur Wahl. Löschst du eine Resolution, die Items tragen, wird sie stattdessen archiviert; die Items behalten sie.
 
 ## REST
 
@@ -139,4 +145,4 @@ curl -X POST https://werkbuch.example.com/api/v1/work-item-types \
   }'
 ```
 
-`settings` ist `{"decimals": 0…4}` bei einer Zahl, `{"multiple": true|false}` bei einem Dropdown oder einer Personenauswahl und sonst leer. Löschen antwortet `200` mit `{"outcome": "deleted"}` bei Typen und Resolutions, `{"affected_items": 0}` bei Properties und Labels und `{"affected_relations": 0}` bei Relationstypen; die Zahlen nennen die Items und Relationen, die den Wert verloren haben, sobald es Work Items gibt.
+`settings` ist `{"decimals": 0…4}` bei einer Zahl, `{"multiple": true|false}` bei einem Dropdown oder einer Personenauswahl und sonst leer. Löschen eines Typs oder einer Resolution antwortet `200` mit `{"outcome": "deleted"}`, oder mit `{"outcome": "archived"}`, wenn Items sie tragen. Löschen einer Property oder eines Labels antwortet `{"affected_items": 2}`, bei einem Relationstyp `{"affected_relations": 2}`: die Items, die einen Wert oder das Label verloren haben, und die Relationen, die mit dem Typ gegangen sind, gezählt, bevor sie gingen. Die History eines Items behält, was seine Werte waren.

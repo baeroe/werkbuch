@@ -5,6 +5,7 @@ use App\Models\Property;
 use App\Models\RelationType;
 use App\Models\Resolution;
 use App\Models\Workflow;
+use App\Models\WorkItemRelation;
 use App\Models\WorkItemType;
 use Tests\Feature\Access\MatrixWorld;
 
@@ -48,6 +49,7 @@ return [
     'create a workflow' => ['POST', '/api/v1/workflows'],
     'change a workflow' => ['PUT', '/api/v1/workflows/{workflow}', 'params' => fn (MatrixWorld $w) => ['workflow' => Workflow::factory()->create()->id]],
     'delete a workflow' => ['DELETE', '/api/v1/workflows/{workflow}', 'params' => fn (MatrixWorld $w) => ['workflow' => Workflow::factory()->create()->id]],
+    'count the items per state' => ['GET', '/api/v1/state-usage', 'body' => ['project' => 'WEB']],
     'list work item types' => ['GET', '/api/v1/work-item-types'],
     'create a work item type' => ['POST', '/api/v1/work-item-types'],
     'change a work item type' => ['PUT', '/api/v1/work-item-types/{workItemType}', 'params' => fn (MatrixWorld $w) => ['workItemType' => WorkItemType::factory()->create()->id]],
@@ -68,6 +70,26 @@ return [
     'create a resolution' => ['POST', '/api/v1/resolutions'],
     'change a resolution' => ['PUT', '/api/v1/resolutions/{resolution}', 'params' => fn (MatrixWorld $w) => ['resolution' => Resolution::factory()->create()->id]],
     'delete a resolution' => ['DELETE', '/api/v1/resolutions/{resolution}', 'params' => fn (MatrixWorld $w) => ['resolution' => Resolution::factory()->create()->id]],
+    'list work items' => ['GET', '/api/v1/work-items'],
+    'create a work item' => ['POST', '/api/v1/work-items', 'body' => ['project_id' => 'WEB', 'title' => 'Matrix']],
+    'change many work items' => ['POST', '/api/v1/work-items/bulk', 'body' => ['ids' => ['WEB-1'], 'patch' => ['priority' => 'high']]],
+    'show a work item' => ['GET', '/api/v1/work-items/{item}', 'params' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key]],
+    'change a work item' => ['PATCH', '/api/v1/work-items/{item}', 'params' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key], 'body' => ['title' => 'Matrix']],
+    'move a work item' => ['POST', '/api/v1/work-items/{item}/transition', 'params' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key]],
+    'change the type of a work item' => ['PUT', '/api/v1/work-items/{item}/type', 'params' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key]],
+    'archive a work item' => ['POST', '/api/v1/work-items/{item}/archive', 'params' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin', 'closed')->key]],
+    'restore a work item' => ['POST', '/api/v1/work-items/{item}/restore', 'params' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin', 'archived')->key]],
+    'delete a work item' => ['DELETE', '/api/v1/work-items/{item}', 'params' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key]],
+    'list the subscribers of a work item' => ['GET', '/api/v1/work-items/{item}/subscribers', 'params' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key]],
+    'watch a work item' => ['PUT', '/api/v1/work-items/{item}/subscription', 'params' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key]],
+    'stop watching a work item' => ['DELETE', '/api/v1/work-items/{item}/subscription', 'params' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key]],
+    'list the relations of a work item' => ['GET', '/api/v1/work-items/{item}/relations', 'params' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key]],
+    'add a relation' => ['POST', '/api/v1/work-items/{item}/relations', 'params' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key], 'body' => ['type_id' => '', 'target_id' => 'WEB-1']],
+    'show the history of a work item' => ['GET', '/api/v1/work-items/{item}/history', 'params' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key]],
+    'remove a relation' => ['DELETE', '/api/v1/relations/{relation}', 'params' => fn (MatrixWorld $w) => ['relation' => WorkItemRelation::factory()->create([
+        'source_id' => $w->item('project_admin')->id,
+        'target_id' => $w->item('project_admin')->id,
+    ])->id]],
     'list the own favorites' => ['GET', '/api/v1/favorites'],
     'toggle a favorite' => ['POST', '/api/v1/favorites/toggle'],
     'list tokens' => ['GET', '/api/v1/tokens'],

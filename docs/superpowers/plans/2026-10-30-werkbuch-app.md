@@ -133,7 +133,7 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 - Workflows mit Status (Name, Icon-Form aus sieben, Kategorie, Reihenfolge) und Übergängen; Standard-Workflow aus der Spec per Migration; Löschen nur ungenutzt.
 - Typen (Name, Lucide-Icon aus einer festen Liste (A68), einer von sechs Tönen, Beschreibung, Häkchen „Epic“, Properties mit Pflicht und Reihenfolge, Archiv statt Löschen); Task, Bug (mit „Aufwand (h)“, R6) und Epic per Migration.
 - Properties (Schlüssel-Regeln, acht Feldtypen mit Einstellungen, Optionen mit Archiv, Wechsel Einfach → Mehrfach), Labels (ohne Standard-Markierung, R23), Relationstypen (drei eingebaute, „wird blockiert von“), Resolutions (vier eingebaute, Standard für Completed und Canceled).
-- Projekt: Workflow wählen (`AssignWorkflow` mit `mapping`, in Phase 3 nur auf seine Form geprüft) und aktivierte Typen mit Standardtyp. Die Status-Zuordnung mit dem Job `RemapStates` und die Prüfungen gegen bestehende Items (Status mit Items löschen, Häkchen „Epic“ gegen Kinder) kommen mit Phase 4 (Ruling A60).
+- Projekt: Workflow wählen (`AssignWorkflow` mit `mapping`, in Phase 3 nur auf seine Form geprüft) und aktivierte Typen mit Standardtyp. Die Status-Zuordnung `RemapStates` (synchron in der Transaktion, P2) und die Prüfungen gegen bestehende Items (Status mit Items löschen, Häkchen „Epic“ gegen Kinder) kommen mit Phase 4 (Ruling A60).
 - REST: `workflows` (mit `states`, `transitions`), `work-item-types`, `properties` (mit `options`), `labels`, `relation-types`, `resolutions`, `PUT projects/{id}/workflow`; die Typen eines Projekts über `PATCH projects/{id}` (`enabled_type_ids`, `default_type_id`), ohne eigenen Endpunkt `projects/{id}/types` (A64).
 - UI-Port: Einstellungen Workflows (Editor mit Übergangsmatrix), Typen, Properties, Labels, Relationstypen, Resolutions; Projekteinstellungen Workflow und Typen. Entfernen-Helfer einmal (`useRemoval`, R26); die Status-Zuordnung folgt mit Phase 4.
 
@@ -150,11 +150,11 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 **Liefert:**
 - `work_items`, `work_item_values` (typisiert, Spalte je Werttyp), `work_item_labels`, `work_item_relations`, `work_item_subscribers`; Key und Nummer (Review Focus 2), Rang (Port von `src/domain/rank.ts`), `parent` und `children_progress`, `blocked`, `blocking`.
 - Actions: Anlegen (Startstatus oder Prüfung wie ein Übergang, Pflicht-Properties, zwei Ebenen nach `src/domain/hierarchy.ts`), Ändern (zuletzt gewinnt; Beschreibung mit `description_version` und 409 `description_conflict`), Übergang mit Resolution (Port von `src/domain/resolution.ts`, `started_at`, `closed_at`), Typwechsel (verlorene Werte in der History, fehlende Pflichtwerte → 422), Archivieren und Wiederherstellen, Löschen (Kinder werden zu Items ohne Eltern), Mehrfachbearbeitung je Item mit Liste der Ablehnungen, Relationen (keine mit sich selbst, kein Paar doppelt, „verborgenes Item“), Beobachten. Prüfungen aus Phase 3 gegen bestehende Items (Status löschen, Epic-Häkchen, Typwechsel).
-- Aus Phase 3 (A60, A79): der Job `RemapStates` (ohne Übergangsregeln, mit Actor in der History) mit Pflicht-Zuordnung benutzter Status in `AssignWorkflow` und `SaveWorkflow` (409 `state_in_use`); die zusammengeführte Status-Zuordnung (R26: ein Dialog für „Workflow wechseln“ und „Status entfernen“) mit Zeilen und Effekten; die Item-Zweige der Katalog-UI: `outcome: 'archived'` bei Typen und Resolutions, Archiv statt Löschen benutzter Typen, Optionen und Resolutions, `affected_items`/`affected_relations`, Ablehnung des Häkchens „Epic“.
+- Aus Phase 3 (A60, A79): `RemapStates` (synchron in der Transaktion von `AssignWorkflow` bzw. `SaveWorkflow` statt als Job, P2/A102, von Rafael bestätigt; ohne Übergangsregeln, mit Actor in der History) mit Pflicht-Zuordnung benutzter Status in `AssignWorkflow` und `SaveWorkflow` (409 `state_in_use`); die zusammengeführte Status-Zuordnung (R26: ein Dialog für „Workflow wechseln“ und „Status entfernen“) mit Zeilen und Effekten; die Item-Zweige der Katalog-UI: `outcome: 'archived'` bei Typen und Resolutions, Archiv statt Löschen benutzter Typen, Optionen und Resolutions, `affected_items`/`affected_relations`, Ablehnung des Häkchens „Epic“.
 - `App\RichText\Document` mit Standard-Knoten (JSON, Text, Markdown hin und zurück), `RichTextInput`.
 - History aus `events` mit Zusammenfassen derselben Person in wenigen Minuten (Spec 13: der Plan legt 5 Minuten fest).
 - Einfacher Listen-Endpunkt `GET /api/v1/work-items` mit Projekt-Kurzform, bis Phase 5 die Filter-Engine bringt; `GET/PATCH/DELETE /api/v1/work-items/{idOrKey}`, `POST …/transition`, `…/archive`, `…/restore`, `POST /api/v1/work-items/bulk`, `…/relations`, `…/subscribers`, `…/history`. Alte Kennungen leiten um (`OLD-12` → `NEW-12`, in UI per Redirect, in REST per 301 mit `Location`).
-- UI-Port: Item-Seite und Vorschau (Kopf, Felder, Kinder, Relationen, Aktivität ohne Kommentare), Anlegen-Dialog mit „weitere anlegen“ und Fokus im Titel, alle Feld-Editoren aus `components/fields` mit den Item-Befehlen und Kürzeln; der Editor (`resources/js/editor`) für Beschreibungen mit den Stufen aus 4.16, noch ohne Erwähnungen, Verweise und Uploads. Große Dateien beim Port geteilt (Anlegen-Dialog, Aktivität, Item-Kopf, Item-Befehle; 13b).
+- UI-Port: Item-Seite und Vorschau (Kopf, Felder, Kinder, Relationen, Aktivität ohne Kommentare), Anlegen-Dialog mit „weitere anlegen“ und Fokus im Titel, alle Feld-Editoren aus `components/fields` mit den Item-Befehlen und Kürzeln; die Befehlspalette ohne Suche (Register, Navigation, „Neues Item“, Theme, Item-Befehle mit Unterlisten; P14/A114); der Editor (`resources/js/editor`) für Beschreibungen mit den Stufen aus 4.16, noch ohne Erwähnungen, Verweise und Uploads. Große Dateien beim Port geteilt (Anlegen-Dialog, Aktivität, Item-Kopf, Item-Befehle; 13b).
 - `DemoSeeder` mit allen Items, Relationen und Werten aus `src/api/seed/items.ts`.
 
 **Tests:** Review Focus 2, Übergänge in jeder Schicht, Pflichtwerte beim Anlegen und Leeren, Eltern- und Typregeln, Beschreibungskonflikt, Mehrfachbearbeitung mit gemischten Ablehnungen, „verborgenes Item“ über Projektgrenzen; e2e: Flow 1 (Status setzen mit vorbelegter Resolution) und Flow 3 (Pflichtfeld im Anlegen-Dialog) über die Item-Seite.
@@ -180,14 +180,14 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 
 **Abnahme:** Erfolgskriterium 4 für UI und REST (MCP folgt in Phase 13); Filtern, Sortieren und Paginieren macht der Server.
 
-## Phase 6: Suche und Befehlspalette
+## Phase 6: Suche und Suchtreffer in der Befehlspalette
 
 **Branch:** `feat/phase-06-search` · **Phasenplan:** `…phase-06-search.md`
 
 **Liefert:**
 - Scout mit Meilisearch für Items (Key, Titel, Klartext der Beschreibung; Kommentare ab Phase 7), Projekte, Personen und Bots; Wiki-Seiten folgen in Phase 9. Indexieren als Event-Konsument in der Queue `search`; `app:search-sync` für die Index-Einstellungen (Filterattribut `project_id`).
 - `GET /api/v1/search?q=…&types=…`: läuft immer mit dem Filter aus `Visibility`, der Browser spricht nie mit Meilisearch; ein Key wie `WEB-123` (auch eine alte Kennung) liefert das Item direkt.
-- UI-Port: Befehlspalette (⌘K, `/`): Suche nach Art gruppiert, Navigation, „Neues Item“, Befehle am ausgewählten Item, „Vorlage anwenden …“ (aktiv ab Phase 10), Theme; `?`-Hilfe vollständig.
+- UI-Port: Die Befehlspalette steht seit Phase 4 (⌘K, Register, Navigation, „Neues Item“, Theme, Item-Befehle am Item der Seite und der Vorschau; A114, an der Auswahl der Listen mit Phase 5); Phase 6 bringt ihre Suche: Treffer nach Art gruppiert, Sprung zu einem Key, `/`, „Vorlage anwenden …“ (aktiv ab Phase 10); `?`-Hilfe vollständig.
 - Tastatur-Doku: `scripts/shortcuts-doc.mjs` erzeugt `docs/{en,de}/keyboard.md` aus dem Katalog `resources/js/lib/shortcuts/catalog.ts`; ein Test prüft, dass die Seiten aktuell sind und kein Kürzel doppelt belegt ist (R38).
 
 **Tests:** Suche über Projektgrenzen (privates Projekt, Nicht-Mitglied, deaktiviert), Index nach Änderung, Löschung und Archiv, Key-Sprung mit alter Kennung; Meilisearch in `Integration` echt, sonst Fake-Engine; e2e: Flow 1 komplett über ⌘K „kontakt“.
@@ -360,9 +360,9 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 - [x] Phase 1: Fundament (PR #5)
 - [x] Phase 2: Organisation, Konten, Rollen, Projekte (PR #11)
 - [x] Phase 3: Workflows, Typen, Properties, Kataloge (PR #12)
-- [ ] Phase 4: Work Items, Relationen, History
+- [x] Phase 4: Work Items, Relationen, History (PR #13)
 - [ ] Phase 5: Views, Filter-Engine, Listen-Layouts
-- [ ] Phase 6: Suche und Befehlspalette
+- [ ] Phase 6: Suche und Suchtreffer in der Befehlspalette
 - [ ] Phase 7: Editor, Kommentare, Anhänge
 - [ ] Phase 8: Benachrichtigungen, Mail, Live-Updates
 - [ ] Phase 9: Wiki

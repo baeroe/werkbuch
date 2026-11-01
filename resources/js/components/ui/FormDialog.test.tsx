@@ -265,6 +265,24 @@ describe('FormDialog', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
+  it('blocks its button with a reason the screen gives, and the button still takes the focus', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    render(
+      <FormDialog open onOpenChange={() => {}} title="Status ersetzen" submitLabel="Ersetzen" submitDisabledReason="Wähle zuerst einen Status." onSubmit={onSubmit}>
+        <Input label="Name" name="name" />
+      </FormDialog>,
+    );
+
+    const button = await screen.findByRole('button', { name: /^Ersetzen/ });
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect(document.getElementById(button.getAttribute('aria-describedby')!)?.textContent).toBe('Wähle zuerst einen Status.');
+    await user.click(button);
+    expect(onSubmit).not.toHaveBeenCalled();
+    button.focus();
+    expect(document.activeElement).toBe(button);
+  });
+
   it('binds the submit shortcut of the catalog only while it is open', async () => {
     const { rerender } = render(
       <FormDialog open onOpenChange={() => {}} title="Bot anlegen" submitLabel="Anlegen" onSubmit={() => {}}>

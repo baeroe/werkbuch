@@ -3,6 +3,7 @@
 use App\Access\OrgRole;
 use App\Access\RoleIndex;
 use App\Access\Visibility;
+use App\Actions\Projects\AssignWorkflow;
 use App\Enums\AccountType;
 use App\Models\Event;
 use App\Models\Favorite;
@@ -15,6 +16,7 @@ use App\Models\Property;
 use App\Models\RelationType;
 use App\Models\User;
 use App\Models\Workflow;
+use App\Models\WorkItem;
 use App\Models\WorkItemType;
 use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\DemoSeeder;
@@ -256,6 +258,29 @@ it('keeps the default workflow where an admin put it when it seeds again', funct
         ->and(Workflow::query()->where('is_default', true)->count())->toBe(1);
 });
 
+it('keeps the workflow of a project when it seeds again', function () {
+    $this->seed(DemoSeeder::class);
+    $standard = Workflow::default();
+    $app = Project::query()->where('identifier', 'APP')->with('workflow.states')->sole();
+    $target = $standard->states()->pluck('id', 'name');
+    // every state of the old workflow gets one of the new one (a switch without items would take an empty mapping, but Phase 4 seeds items)
+    $mapping = $app->workflow->states->mapWithKeys(fn ($state) => [$state->id => $target[match ($state->name) {
+        'Review' => 'In Progress', 'Kundenfreigabe' => 'Pending', default => $state->name,
+    }]])->all();
+    AssignWorkflow::run(actor(User::factory()->admin()->create()), $app, ['workflow_id' => $standard->id, 'mapping' => $mapping]);
+    // the default type and the enabled types are kept the same way
+    $bug = WorkItemType::where('name', 'Bug')->sole();
+    $app->types()->sync([$bug->id]);
+    $app->forceFill(['default_type_id' => $bug->id])->save();
+
+    $this->seed(DemoSeeder::class);
+
+    $after = Project::query()->where('identifier', 'APP')->sole();
+    expect($after->workflow_id)->toBe($standard->id)
+        ->and($after->default_type_id)->toBe($bug->id)
+        ->and($after->types()->pluck('work_item_types.id')->all())->toBe([$bug->id]);
+});
+
 it('creates no empty „Standard“ when the shipped workflow was renamed, and gives WEB and OPS the default workflow', function () {
     $this->seed(DemoSeeder::class);
     $shipped = Workflow::default();
@@ -266,6 +291,19 @@ it('creates no empty „Standard“ when the shipped workflow was renamed, and g
     expect(Workflow::query()->where('name', 'Standard')->exists())->toBeFalse()
         ->and(Workflow::query()->count())->toBe(2)
         ->and(Project::query()->whereIn('identifier', ['WEB', 'OPS'])->pluck('workflow_id')->unique()->all())->toBe([$shipped->id]);
+});
+
+it('seeds the work items of the three projects, on the states of their workflows', function () {
+    $this->seed(DemoSeeder::class);
+    $perProject = fn () => Project::query()->withCount('workItems')->orderBy('identifier')->pluck('work_items_count', 'identifier')->all();
+
+    expect($perProject())->toBe(['APP' => 22, 'OPS' => 13, 'WEB' => 36])
+        ->and(WorkItem::count())->toBe(71);
+
+    foreach (Project::query()->get() as $project) {
+        expect(WorkItem::query()->where('project_id', $project->id)->whereNotIn('state_id', DB::table('workflow_states')->where('workflow_id', $project->workflow_id)->select('id'))->exists())->toBeFalse()
+            ->and(WorkItem::query()->where('project_id', $project->id)->whereNotIn('type_id', $project->types()->select('work_item_types.id'))->exists())->toBeFalse();
+    }
 });
 
 it('seeds the project favorites with the positions of the clickdummy', function () {
@@ -303,13 +341,13 @@ it('seeds the tokens of Mara and Kira with their times in UTC and a secret nobod
 it('runs again without changing anything and resets the demo password', function () {
     $this->seed(DemoSeeder::class);
     $secrets = PersonalAccessToken::orderBy('name')->pluck('token', 'name')->all();
-    $counts = fn () => [User::count(), Project::count(), ProjectMember::count(), Favorite::count(), PersonalAccessToken::count()];
+    $counts = fn () => [User::count(), Project::count(), ProjectMember::count(), Favorite::count(), PersonalAccessToken::count(), WorkItem::count(), Event::count()];
     $before = $counts();
     User::where('handle', 'lene')->sole()->update(['password' => 'changed-elsewhere']);
 
     $this->seed(DemoSeeder::class);
 
-    expect($counts())->toBe($before)->and($before)->toBe([8, 3, 13, 9, 3])
+    expect($counts())->toBe($before)->and($before)->toBe([8, 3, 13, 9, 3, 71, 53])
         ->and(PersonalAccessToken::orderBy('name')->pluck('token', 'name')->all())->toBe($secrets)
         ->and(Hash::check(DemoSeeder::PASSWORD, User::where('handle', 'lene')->sole()->password))->toBeTrue()
         ->and(Visibility::roleIn(User::where('handle', 'theo')->sole(), Project::where('identifier', 'WEB')->sole())?->value)->toBe('viewer');

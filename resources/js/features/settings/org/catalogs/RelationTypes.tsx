@@ -2,7 +2,8 @@
  * Relation types (spec 4.9): how items can be connected. A type has a name and a label for each direction ("blocks"
  * and "is blocked by"), or one label when it is symmetric ("relates to"). The three built-in types (blocks, duplicate,
  * related) can be renamed but not deleted. Only "blocks" does anything: the blocked item shows a hint while its blocker
- * is open. Types of one's own are labels only. How many relations went with a deleted type comes with the items (P5).
+ * is open. Types of one's own are labels only. A toast after the deletion says how many relations went with the type
+ * (`affected_relations`).
  */
 
 import { Link2, Pencil, Plus, Trash2 } from 'lucide-react';
@@ -16,7 +17,7 @@ import { Switch } from '@/components/ui/Switch';
 import { toast } from '@/components/ui/toast';
 import { useDeleteRelationType, useRelationTypes, useSaveRelationType } from '@/hooks/catalog';
 import { useSettle } from '@/hooks/mutation';
-import { t } from '@/lib/i18n';
+import { t, tn } from '@/lib/i18n';
 import type { RelationType } from '@/types';
 import { ReadOnlyNotice } from '../../frame/access';
 import { fieldMessage, noticeOf } from '../../frame/form';
@@ -222,6 +223,9 @@ export default function RelationTypes({ readOnlyReason }: SectionProps) {
                         label: t('settings.relation_types.deleted', { name: type.name }),
                         failureTitle: t('settings.relation_types.not_deleted', { name: type.name }),
                         run: () => remove.mutateAsync(type.id),
+                        onDone: ({ affected_relations }) => {
+                          if (affected_relations > 0) toast({ title: tn('settings.relation_types.removed_relations', affected_relations, { name: type.name }), tone: 'success' });
+                        },
                       })
                     }
                   />

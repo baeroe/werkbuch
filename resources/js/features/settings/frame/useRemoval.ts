@@ -3,25 +3,28 @@
  * when the toast runs out does the call go out (`runWithUndo`). Whoever takes it back finds the row where it was. A call
  * that fails brings the row back, and the error toast says why. So does one that only archives (a type with items, a
  * resolution that items carry): the call has refreshed the list by the time it is over, and what is left in it shows
- * again.
+ * again. What the answer says (how many items lost the label, that the type was only archived) only comes after the
+ * undo time, so `onDone` gets the answer and tells it in a toast of its own (K12).
  */
 
 import { useCallback, useState } from 'react';
 import { runWithUndo } from '@/lib/undo';
 import { focusNeighbour } from './form';
 
-interface Removal {
+interface Removal<T> {
   /** The id of the row; it stays out of the list until the removal is over. */
   id: string;
   /** What the toast says happened: "Label “UX” deleted". */
   label: string;
   /** The call itself. */
-  run: () => Promise<unknown>;
+  run: () => Promise<T>;
   /** Title of the error toast when the call fails. */
   failureTitle?: string;
+  /** The answer of the call, once it succeeded and the list is shown again. */
+  onDone?: (result: T) => void;
 }
 
-export function useRemoval(): { hidden: ReadonlySet<string>; remove: (removal: Removal) => void } {
+export function useRemoval(): { hidden: ReadonlySet<string>; remove: <T>(removal: Removal<T>) => void } {
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
 
   const hide = useCallback((id: string) => setHidden((current) => new Set(current).add(id)), []);
@@ -36,7 +39,7 @@ export function useRemoval(): { hidden: ReadonlySet<string>; remove: (removal: R
   );
 
   const remove = useCallback(
-    ({ id, label, run, failureTitle }: Removal) => {
+    <T>({ id, label, run, failureTitle, onDone }: Removal<T>) => {
       // the button that was pressed goes with its row: the focus moves on to the next row instead of falling to the top
       focusNeighbour(document.activeElement?.closest('li'));
       hide(id);
@@ -45,12 +48,14 @@ export function useRemoval(): { hidden: ReadonlySet<string>; remove: (removal: R
         failureTitle,
         undo: () => show(id),
         run: async () => {
+          let result: T;
           try {
-            await run();
+            result = await run();
           } finally {
             // gone from the refreshed list, or still there because it was only archived: either way it is no longer hidden
             show(id);
           }
+          onDone?.(result);
         },
       });
     },

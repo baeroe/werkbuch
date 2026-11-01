@@ -170,6 +170,34 @@ it('makes a custom relation type with the name of a missing built-in one the bui
         ->toBe([User::defaultBot()->id, ['via' => 'system', 'reason' => 'setup'], ['built_in' => ['old' => null, 'new' => 'blocks']]]);
 });
 
+it('never takes a built-in relation type of another kind for a missing one', function () {
+    Organization::current()->update(['locale' => 'de']);
+    RelationType::query()->where('built_in', 'duplicates')->update(['name' => 'blockiert']);
+    RelationType::query()->where('built_in', 'blocks')->delete();
+    $duplicates = RelationType::query()->where('built_in', 'duplicates')->sole();
+
+    EnsureCatalog::run();
+
+    $blocks = RelationType::query()->where('built_in', 'blocks')->sole();
+
+    expect($duplicates->fresh()?->built_in)->toBe('duplicates')
+        ->and($blocks->name)->toBe('blockiert 2')
+        ->and(RelationType::query()->count())->toBe(3)
+        ->and(eventsOf(EventType::RelationTypeCreated, $blocks))->toHaveCount(1)
+        ->and(eventsOf(EventType::RelationTypeUpdated, $duplicates))->toHaveCount(0);
+});
+
+it('counts up until the name of a missing built-in relation type is free', function () {
+    Organization::current()->update(['locale' => 'de']);
+    RelationType::query()->where('built_in', 'blocks')->delete();
+    RelationType::query()->where('built_in', 'duplicates')->update(['name' => 'blockiert']);
+    RelationType::query()->create(['name' => 'blockiert 2', 'outward_label' => 'a', 'inward_label' => 'b']);
+
+    EnsureCatalog::run();
+
+    expect(RelationType::query()->where('built_in', 'blocks')->sole()->name)->toBe('blockiert 3');
+});
+
 it('takes the effort property it finds instead of a second one', function () {
     $effort = Property::query()->sole();
     $effort->update(['label' => 'Stunden']);

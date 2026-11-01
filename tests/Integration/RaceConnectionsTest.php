@@ -37,3 +37,21 @@ it('commits the first connection before the lock of the second with the first as
     expect($seen)->toBe(['mariadb', 'mariadb_second'])
         ->and(DB::connection('mariadb')->transactionLevel())->toBe(0);
 });
+
+it('commits the first connection before a shared lock of the second', function () {
+    // connection 1: a change of the catalogs holds the organization for update
+    RaceConnections::hold(fn () => CatalogLock::take());
+    RaceConnections::releaseBeforeLock('organization', 'lock in share mode');
+
+    // connection 2: a change of items asks for it shared and gets it once connection 1 is done
+    expect(RaceConnections::second(fn () => DB::transaction(fn () => CatalogLock::share())))->toBeNull()
+        ->and(DB::connection('mariadb')->transactionLevel())->toBe(0);
+});
+
+it('waits for the shared lock of the organization behind a change of the catalogs', function () {
+    RaceConnections::hold(fn () => CatalogLock::share());
+
+    // shared locks share; the lock for update waits for them
+    expect(RaceConnections::second(fn () => DB::transaction(fn () => CatalogLock::share())))->toBeNull();
+    RaceConnections::expectLockWait(RaceConnections::second(fn () => DB::transaction(fn () => CatalogLock::take())), 'organization');
+});

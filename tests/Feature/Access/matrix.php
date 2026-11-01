@@ -49,8 +49,26 @@ use App\Actions\Users\ReactivateUser;
 use App\Actions\Users\UpdateUser;
 use App\Actions\Users\UpdateUserRole;
 use App\Actions\Workflows\DeleteWorkflow;
+use App\Actions\Workflows\ListStateUsage;
 use App\Actions\Workflows\ListWorkflows;
 use App\Actions\Workflows\SaveWorkflow;
+use App\Actions\WorkItems\AddRelation;
+use App\Actions\WorkItems\ArchiveWorkItem;
+use App\Actions\WorkItems\BulkUpdateWorkItems;
+use App\Actions\WorkItems\ChangeWorkItemType;
+use App\Actions\WorkItems\CreateWorkItem;
+use App\Actions\WorkItems\DeleteWorkItem;
+use App\Actions\WorkItems\GetWorkItem;
+use App\Actions\WorkItems\ListHistory;
+use App\Actions\WorkItems\ListRelations;
+use App\Actions\WorkItems\ListSubscribers;
+use App\Actions\WorkItems\ListWorkItems;
+use App\Actions\WorkItems\RemapStates;
+use App\Actions\WorkItems\RemoveRelation;
+use App\Actions\WorkItems\RestoreWorkItem;
+use App\Actions\WorkItems\SetSubscription;
+use App\Actions\WorkItems\TransitionWorkItem;
+use App\Actions\WorkItems\UpdateWorkItem;
 use App\Actions\WorkItemTypes\DeleteWorkItemType;
 use App\Actions\WorkItemTypes\ListWorkItemTypes;
 use App\Actions\WorkItemTypes\SaveWorkItemType;
@@ -61,6 +79,7 @@ use App\Models\RelationType;
 use App\Models\Resolution;
 use App\Models\User;
 use App\Models\Workflow;
+use App\Models\WorkItemRelation;
 use App\Models\WorkItemType;
 use App\Support\Actor;
 use Laravel\Fortify\Actions\EnableTwoFactorAuthentication;
@@ -95,6 +114,10 @@ $projectAdmins = ['org_admin', 'project_admin', 'default_bot'];
 
 // the catalogs: every account reads them, only org admins change them (`org.manage_catalog`, P8)
 $catalogAdmins = ['org_admin', 'default_bot'];
+
+// work items: members and admins of the project (`item.create`, `item.edit`); viewers read, outsiders of the private
+// project do not see it
+$itemWriters = ['org_admin', 'project_admin', 'project_member', 'default_bot'];
 
 /** Starts a two-factor setup for the account past the action (a bot as well, so its refusal is the action's own); returns the secret. */
 $startTwoFactor = function (User $user): string {
@@ -222,6 +245,140 @@ return [
         'hidden' => ['outsider_private'],
         'event' => EventType::ProjectMemberRemoved,
     ],
+    'ListWorkItems' => [
+        'action' => ListWorkItems::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListWorkItems::run($a, ['filter' => ['project' => $w->project($column)->id]]),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    'GetWorkItem' => [
+        'action' => GetWorkItem::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetWorkItem::run($a, $w->item($column)),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    'CreateWorkItem' => [
+        'action' => CreateWorkItem::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => CreateWorkItem::run($a, ['project_id' => $w->project($column)->id, 'title' => 'Matrix']),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::WorkItemCreated,
+    ],
+    'UpdateWorkItem' => [
+        'action' => UpdateWorkItem::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => UpdateWorkItem::run($a, $w->item($column), ['title' => 'Matrix']),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::WorkItemUpdated,
+    ],
+    'TransitionWorkItem' => [
+        'action' => TransitionWorkItem::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => TransitionWorkItem::run($a, $w->item($column), [
+            'to_state_id' => $w->project($column)->workflow->states()->where('name', 'In Progress')->value('id'),
+        ]),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::WorkItemStateChanged,
+    ],
+    'ChangeWorkItemType' => [
+        'action' => ChangeWorkItemType::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ChangeWorkItemType::run($a, $w->item($column), [
+            'type_id' => WorkItemType::query()->where('name', 'Bug')->value('id'),
+        ]),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::WorkItemUpdated,
+    ],
+    'ArchiveWorkItem' => [
+        'action' => ArchiveWorkItem::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ArchiveWorkItem::run($a, $w->item($column, 'closed')),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::WorkItemArchived,
+    ],
+    'RestoreWorkItem' => [
+        'action' => RestoreWorkItem::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => RestoreWorkItem::run($a, $w->item($column, 'archived')),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::WorkItemRestored,
+    ],
+    'BulkUpdateWorkItems' => [
+        'action' => BulkUpdateWorkItems::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => BulkUpdateWorkItems::run($a, ['ids' => [$w->item($column)->id], 'patch' => ['priority' => 'high']]),
+        // every account may send one: a refused item is a line of the answer, never a 403 or 404 (P10)
+        'allowed' => $everyone,
+    ],
+    'DeleteWorkItem' => [
+        'action' => DeleteWorkItem::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => DeleteWorkItem::run($a, $w->item($column)),
+        'allowed' => $projectAdmins,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::WorkItemDeleted,
+    ],
+    'ListSubscribers' => [
+        'action' => ListSubscribers::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListSubscribers::run($a, $w->item($column)),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    'SetSubscription' => [
+        'action' => SetSubscription::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => SetSubscription::run($a, $w->item($column), true),
+        // every person who reads the item; bots watch nothing
+        'allowed' => ['org_admin', 'project_admin', 'project_member', 'project_viewer', 'outsider_public'],
+        'hidden' => ['outsider_private'],
+        'event' => EventType::WorkItemSubscribed,
+    ],
+    'ListRelations' => [
+        'action' => ListRelations::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListRelations::run($a, $w->item($column)),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    'RemapStates' => [
+        'action' => RemapStates::class,
+        // the work of AssignWorkflow and SaveWorkflow, which checked their rights and hold the organization: an item of
+        // the world moves on to the next state of its workflow
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $item = $w->item($column);
+            $next = $w->project($column)->workflow->states()->where('id', '!=', $item->state_id)->value('id');
+
+            return RemapStates::run($a, [$item->project_id], [$item->state_id => $next], RemapStates::WORKFLOW_CHANGED);
+        },
+        'event' => EventType::WorkItemStateChanged,
+        'system' => true,
+    ],
+    'ListHistory' => [
+        'action' => ListHistory::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListHistory::run($a, $w->item($column), []),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    'AddRelation' => [
+        'action' => AddRelation::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => AddRelation::run($a, $w->item($column), [
+            'type_id' => RelationType::query()->where('built_in', 'relates')->value('id'),
+            'target_id' => $w->item($column)->id,
+        ]),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::WorkItemRelationAdded,
+        // one at each end
+        'events' => 2,
+    ],
+    'RemoveRelation' => [
+        'action' => RemoveRelation::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => RemoveRelation::run($a, WorkItemRelation::factory()->create([
+            'source_id' => $w->item($column)->id,
+            'target_id' => $w->item($column)->id,
+        ])),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::WorkItemRelationRemoved,
+        // one at each end
+        'events' => 2,
+    ],
     'ListWorkflows' => [
         'action' => ListWorkflows::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListWorkflows::run($a, []),
@@ -238,6 +395,12 @@ return [
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => DeleteWorkflow::run($a, Workflow::factory()->create()),
         'allowed' => $catalogAdmins,
         'event' => EventType::WorkflowDeleted,
+    ],
+    'ListStateUsage' => [
+        'action' => ListStateUsage::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListStateUsage::run($a, ['project' => $w->project($column)->identifier]),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
     ],
     'ListWorkItemTypes' => [
         'action' => ListWorkItemTypes::class,

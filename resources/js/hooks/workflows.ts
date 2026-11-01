@@ -11,7 +11,8 @@ export function useWorkflows() {
 
 /**
  * Rejected with 422, `errors` per field (`states.0.name`, `states.1.id`, `transitions.2`). A workflow a project uses
- * changes that project's statuses, so everything is reloaded.
+ * changes that project's statuses and may move its items (`state_mapping`), so everything is reloaded, the items and
+ * their count per state (`qk.stateUsage`) included.
  */
 export function useSaveWorkflow() {
   return useApiMutation(
@@ -24,7 +25,7 @@ export function useDeleteWorkflow() {
   return useApiMutation(deleteWorkflow, [qk.workflows.all]);
 }
 
-/** The project takes the new workflow (`workflow_id` of the project), so everything is reloaded. */
+/** The project takes the new workflow (`workflow_id` of the project) and its items move along, so everything is reloaded. */
 export function useAssignWorkflow() {
   return useApiMutation(
     ({ project_id, workflow_id, mapping }: { project_id: string; workflow_id: string; mapping: Record<string, string> }) =>

@@ -3,10 +3,12 @@
 use App\Access\Authorize;
 use App\Access\ProjectRole;
 use App\Access\RoleAssignments;
+use App\Enums\Locale;
 use App\Events\EventConsumer;
 use App\Events\EventType;
 use App\Exceptions\Problem;
 use App\Models\Event;
+use App\Models\Organization;
 use App\Models\Project;
 use App\Models\User;
 use App\Support\Actor;
@@ -372,4 +374,14 @@ function docsPages(string $language): array
     }
 
     return $pages;
+}
+
+/**
+ * The organization speaks German, and so does the test: the API answers in the language of the account, else of the
+ * organization (SetLocale:api, A151), so `app()->setLocale()` alone no longer reaches its texts.
+ */
+function speakGerman(): void
+{
+    Organization::current()->update(['locale' => Locale::De]);
+    app()->setLocale('de');
 }

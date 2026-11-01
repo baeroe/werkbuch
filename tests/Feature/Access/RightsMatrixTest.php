@@ -11,11 +11,11 @@ use Tests\Feature\Access\MatrixWorld;
 /*
  * Every action × every kind of account (master plan: "jede Action steht in der Rechte-Matrix"). Allowed means: no
  * refusal (403, 404) and no other failure but a ValidationException; a row with an event succeeds and records it for
- * the account. Not allowed is a 403, and what the account must not see (`hidden`) a 404. The rows: matrix.php.
+ * the account (`events` times, 1 unless the row says otherwise: a relation is recorded at both ends). Not allowed is a 403, and what the account must not see (`hidden`) a 404. The rows: matrix.php.
  */
 
 /**
- * @return array<string, array{action: class-string, run: Closure(Actor, MatrixWorld, string): mixed, allowed?: list<string>, hidden?: list<string>, event?: EventType, system?: bool}>
+ * @return array<string, array{action: class-string, run: Closure(Actor, MatrixWorld, string): mixed, allowed?: list<string>, hidden?: list<string>, event?: EventType, events?: int, system?: bool}>
  */
 function matrixRows(): array
 {
@@ -54,33 +54,24 @@ it('lets exactly the allowed accounts run each action', function (array $row, st
         expect($outcome)->toBeIn(isset($row['event']) ? ['ok'] : ['ok', 'invalid'], "{$column} may run it");
 
         if (isset($row['event'])) {
-            expect($recorded())->toBe($before + 1, "{$column} records {$row['event']->value}");
+            expect($recorded())->toBe($before + ($row['events'] ?? 1), "{$column} records {$row['event']->value}");
         }
     } else {
         expect($outcome)->toBe(403, "{$column} is refused");
     }
 })->with($rows)->with(MatrixWorld::COLUMNS);
 
-it('runs the work of jobs as the system without failing, recording only the event of its row', function () {
-    $failures = [];
+$systemRows = collect(matrixRows())->filter(fn (array $row) => $row['system'] ?? false)->map(fn (array $row) => [$row])->all();
 
-    foreach (collect(matrixRows())->filter(fn (array $row) => $row['system'] ?? false) as $name => $row) {
-        $w = MatrixWorld::build();
-        $before = Event::query()->pluck('id');
-        $outcome = matrixOutcome(fn () => ($row['run'])(Actor::system(User::defaultBot(), 'matrix'), $w, 'default_bot'));
-        $recorded = Event::query()->whereNotIn('id', $before)->pluck('type')->map(fn (EventType $type) => $type->value)->all();
+it('runs the work of jobs as the system without failing, recording only the event of its row', function (array $row) {
+    $w = MatrixWorld::build();
+    $before = Event::query()->pluck('id');
+    $outcome = matrixOutcome(fn () => ($row['run'])(Actor::system(User::defaultBot(), 'matrix'), $w, 'default_bot'));
+    $recorded = Event::query()->whereNotIn('id', $before)->pluck('type')->map(fn (EventType $type) => $type->value)->all();
 
-        if ($outcome !== 'ok') {
-            $failures[] = "{$name}: {$outcome}";
-        }
-
-        if ($recorded !== (isset($row['event']) ? [$row['event']->value] : [])) {
-            $failures[] = "{$name} recorded: ".implode(', ', $recorded);
-        }
-    }
-
-    expect($failures)->toBe([]);
-});
+    expect($outcome)->toBe('ok')
+        ->and($recorded)->toBe(isset($row['event']) ? [$row['event']->value] : []);
+})->with($systemRows);
 
 it('has exactly one row for every action (new actions need one)', function () {
     $exempt = fn (string $file) => str_starts_with($file, 'app/Actions/Auth/') || str_starts_with($file, 'app/Actions/Setup/')

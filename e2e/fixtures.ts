@@ -90,8 +90,28 @@ export const test = base.extend<{ allowedErrors: RegExp[]; pageErrors: string[];
       await context.exposeBinding('__werkbuchCoverage', (_source, coverage: Coverage) => write(coverage));
       await context.addInitScript((key) => {
         window.addEventListener('pagehide', () => {
-          if (window.__coverage__) sessionStorage.setItem(key, JSON.stringify(window.__coverage__));
+          if (!window.__coverage__) return;
+          // sessionStorage holds about 5 MB: a larger `__coverage__` (the editor's) must turn the test red, not lose its
+          // coverage silently. A console message during `pagehide` never reaches the test, so the failure is left as a
+          // marker and the next document reports it.
+          try {
+            sessionStorage.setItem(key, JSON.stringify(window.__coverage__));
+          } catch (error) {
+            const reason = error instanceof Error ? error.message : String(error);
+            try {
+              sessionStorage.removeItem(key);
+              sessionStorage.setItem(`${key}:failed`, reason);
+            } catch {
+              // the marker could not be written either: the only trace left is this message (it rarely reaches a test)
+              console.error(`coverage stash exceeds sessionStorage: ${reason}`);
+            }
+          }
         });
+        const failed = sessionStorage.getItem(`${key}:failed`);
+        if (failed) {
+          sessionStorage.removeItem(`${key}:failed`);
+          console.error(`coverage stash exceeds sessionStorage: ${failed}`);
+        }
         const left = sessionStorage.getItem(key);
         if (left) {
           sessionStorage.removeItem(key);

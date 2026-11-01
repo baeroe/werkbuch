@@ -77,12 +77,14 @@ describe('projects', () => {
     });
 
     expect(await listMembers('WEB')).toEqual({ items: [ida], next_cursor: null, total: 1 });
+    await listMembers('WEB', { cursor: 'c2', per_page: 50 });
     expect(await joinProject('p1')).toEqual(lene);
     expect(await addMember('p1', 'u_lene', 'viewer')).toEqual({ ...lene, role: 'viewer' });
     expect(await updateMemberRole('p1', 'u_lene', 'admin')).toEqual({ ...lene, role: 'admin' });
     await expect(removeMember('p1', 'u_lene')).resolves.toBeUndefined();
     expect(api.calls.map(({ method, url, body }) => [method, url, body])).toEqual([
       ['GET', '/api/v1/projects/WEB/members', undefined],
+      ['GET', '/api/v1/projects/WEB/members?cursor=c2&per_page=50', undefined],
       ['POST', '/api/v1/projects/p1/join', undefined],
       ['POST', '/api/v1/projects/p1/members', { user_id: 'u_lene', role: 'viewer' }],
       ['PATCH', '/api/v1/projects/p1/members/u_lene', { role: 'admin' }],

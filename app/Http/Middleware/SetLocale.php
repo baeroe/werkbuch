@@ -13,10 +13,16 @@ use Symfony\Component\HttpFoundation\Response;
  * Sets the language of the request: the signed-in account's own language, else the plain `locale` cookie, else the
  * default language of the organization. The cookie follows the profile, so the login page after a logout stays in the
  * language of the last session.
+ *
+ * In the API (`SetLocale:api`, the group `api` in bootstrap/app.php) the account is the one of the session or of the
+ * bearer token (guard `sanctum`, read before `auth:sanctum` runs, so a 401 speaks the organization's language), and
+ * the cookie plays no part: neither read nor written, a client of the API is not the browser of a person (A151).
  */
 final class SetLocale
 {
     public const COOKIE = 'locale';
+
+    public const API = 'api';
 
     public static function resolve(Request $request): string
     {
@@ -28,12 +34,16 @@ final class SetLocale
     /**
      * @param  Closure(Request): Response  $next
      */
-    public function handle(Request $request, Closure $next): Response
+    public function handle(Request $request, Closure $next, ?string $mode = null): Response
     {
-        $locale = self::resolve($request);
+        if ($mode === self::API) {
+            $user = $request->user('sanctum');
+            self::apply($user instanceof User && $user->locale !== null ? $user->locale->value : Locale::default()->value);
 
-        app()->setLocale($locale);
-        Carbon::setLocale($locale);
+            return $next($request);
+        }
+
+        self::apply(self::resolve($request));
 
         $before = self::profile($request);
 
@@ -48,6 +58,12 @@ final class SetLocale
         }
 
         return $response;
+    }
+
+    private static function apply(string $locale): void
+    {
+        app()->setLocale($locale);
+        Carbon::setLocale($locale);
     }
 
     private static function profile(Request $request): ?string

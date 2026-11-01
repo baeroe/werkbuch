@@ -122,6 +122,14 @@ final class Project extends Model implements HasMedia
     }
 
     /**
+     * @return HasMany<WorkItem, $this>
+     */
+    public function workItems(): HasMany
+    {
+        return $this->hasMany(WorkItem::class);
+    }
+
+    /**
      * @return HasMany<ProjectMember, $this>
      */
     public function memberships(): HasMany

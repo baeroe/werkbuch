@@ -14,6 +14,7 @@ use App\Models\User;
 use App\Notifications\InvitationNotification;
 use App\Support\AccountInput;
 use App\Support\Actor;
+use App\Support\Ids;
 use App\Support\InvitationLinks;
 use App\Support\MailSetup;
 use Closure;
@@ -46,6 +47,15 @@ final class InviteUser
 
         if (is_string($input['email'] ?? null)) {
             $input['email'] = Str::lower(trim($input['email']));
+        }
+
+        // a ULID in capitals is the same project (A96); the collation would let it through elsewhere, so it is written small first
+        if (is_array($input['projects'] ?? null)) {
+            foreach ($input['projects'] as $index => $entry) {
+                if (is_array($entry) && isset($entry['project_id'])) {
+                    $input['projects'][$index]['project_id'] = Ids::normalize($entry['project_id']);
+                }
+            }
         }
 
         $visible = Visibility::projectIds($actor->user)->all();

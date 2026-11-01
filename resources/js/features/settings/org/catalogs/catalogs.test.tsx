@@ -198,6 +198,15 @@ describe('Labels', () => {
     expect(callsTo('DELETE', '/api/v1/labels/lb_forms')).toHaveLength(1);
   });
 
+  it('names how many items lost a deleted label, after the call', async () => {
+    const user = userEvent.setup();
+    renderWith(<Labels readOnlyReason={null} />, routes(labels, { 'DELETE /api/v1/labels/lb_forms': () => ({ body: { affected_items: 3 } }) }));
+
+    await user.click(await screen.findByRole('button', { name: 'Label „Formulare“ löschen' }));
+    act(() => dismissToast(toastNamed('Label „Formulare“ gelöscht')!.id));
+    await waitFor(() => expect(toastNamed('Label „Formulare“ gelöscht, bei 3 Items entfernt.')).toBeDefined());
+  });
+
   it('shows a member the labels without any way to change them', async () => {
     renderWith(<Labels readOnlyReason={MEMBER} />, routes());
 
@@ -340,6 +349,15 @@ describe('RelationTypes', () => {
     expect(screen.queryByRole('heading', { name: 'testet' })).toBeNull();
     act(() => dismissToast(toastNamed('Relationstyp „testet“ gelöscht')!.id));
     await waitFor(() => expect(callsTo('DELETE', '/api/v1/relation-types/rt_tests')).toHaveLength(1));
+  });
+
+  it('names how many relations went with a deleted type', async () => {
+    const user = userEvent.setup();
+    renderWith(<RelationTypes readOnlyReason={null} />, routes(relationTypes, { 'DELETE /api/v1/relation-types/rt_tests': () => ({ body: { affected_relations: 1 } }) }));
+
+    await user.click(await screen.findByRole('button', { name: 'Relationstyp „testet“ löschen' }));
+    act(() => dismissToast(toastNamed('Relationstyp „testet“ gelöscht')!.id));
+    await waitFor(() => expect(toastNamed('Relationstyp „testet“ gelöscht, 1 Relation entfernt.')).toBeDefined());
   });
 
   it('offers the first relation type in the empty state, and shows a member the list without buttons', async () => {
@@ -501,6 +519,26 @@ describe('Resolutions', () => {
     expect(await screen.findByRole('heading', { name: 'Done' })).toBeTruthy();
     expect(screen.getByText('Nur lesen')).toBeTruthy();
     expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  it('keeps a resolution in use as archived and says so', async () => {
+    const user = userEvent.setup();
+    let all = resolutions;
+    renderWith(
+      <Resolutions readOnlyReason={null} />,
+      routes(resolutions, {
+        'GET /api/v1/resolutions': () => ({ body: list(all) }),
+        'DELETE /api/v1/resolutions/res_cannot': () => {
+          all = resolutions.map((resolution) => (resolution.id === 'res_cannot' ? { ...resolution, archived_at: '2026-11-01T09:00:00.000Z' } : resolution));
+          return { body: { outcome: 'archived' } };
+        },
+      }),
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Resolution „Cannot reproduce“ löschen' }));
+    act(() => dismissToast(toastNamed('Resolution „Cannot reproduce“ entfernt')!.id));
+    await waitFor(() => expect(toastNamed('Resolution „Cannot reproduce“ archiviert: Items tragen sie noch.')?.description).toBe('Wählen lässt sie sich nicht mehr.'));
+    expect(within(await waitFor(() => rowOf('Cannot reproduce'))).getByText('Archiviert')).toBeTruthy();
   });
 
   it('says when the resolutions could not be loaded', async () => {

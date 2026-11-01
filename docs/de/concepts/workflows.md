@@ -39,7 +39,7 @@ Ein Workflow ist entweder frei oder hat eine Übergangsmatrix.
 - **Frei:** Jeder Status darf auf jeden anderen folgen. Der Standard-Workflow ist frei.
 - **Matrix:** Nur die Paare, die du erlaubst (von → nach), sind möglich. Der Editor zeigt ein Raster mit einer Zeile je „von“-Status und einer Spalte je „nach“-Status; jede Zelle ist ein Übergang. Schaltest du **Freie Übergänge** aus, beginnt die Matrix mit allen Paaren erlaubt, und du nimmst nur weg, was du nicht willst.
 
-Im selben Status bleiben ist immer erlaubt. Sobald es Work Items gibt, gilt die Regel überall gleich: in der Oberfläche, über REST-API und MCP, in Automatisierungen und Vorlagen.
+Im selben Status bleiben ist immer erlaubt. Die Regel gilt überall gleich: in der Oberfläche und über die REST-API, mit den späteren Phasen auch in MCP, Automatisierungen und Vorlagen. Wer ein Item direkt in einem anderen Status anlegt, durchläuft dieselbe Prüfung wie ein Übergang vom Startstatus dorthin.
 
 ## Der Standard-Workflow
 
@@ -55,7 +55,7 @@ Neue Status und neue Übergänge gelten sofort, in jedem Projekt, das den Workfl
 
 Projekt-Admins wechseln den Workflow ihres Projekts unter **Projekteinstellungen → Workflow**: neuen Workflow wählen, dann **Workflow wechseln …** und bestätigen.
 
-Heute ist das eine einfache Bestätigung, weil es noch keine Work Items gibt. Sobald es welche gibt, ordnest du jedem Status, der Items hat, einen Status des neuen Workflows zu (ebenso, wenn du einen Status mit Items entfernst). werkbuch schreibt die Items dann im Hintergrund um, bewusst ohne Übergangsregeln, und die History nennt die Person, die es ausgelöst hat.
+Ohne Items ist das eine einfache Bestätigung. Sonst nennt der Dialog jeden Status, der Items hat, mit ihrer Zahl und einem Vorschlag (der Status gleichen Namens, sonst der erste gleicher Kategorie), und sagt, was der Wechsel mit ihnen macht: Geschlossene Items, die in einem offenen Status landen, verlieren ihre Resolution, offene, die in einem geschlossenen landen, bekommen dessen Standard. Bestätigen kannst du, sobald jeder Status sein Ziel hat. Dieselbe Frage kommt, wenn du einen Workflow ohne einen Status speicherst, der noch Items hat (**Status ersetzen**): Ziele sind die bleibenden und die neuen Status. werkbuch schreibt die Items sofort um, bewusst ohne Übergangsregeln, und ihre History nennt die Person, die es ausgelöst hat.
 
 ## Löschen
 
@@ -72,6 +72,7 @@ Lesen braucht ein Token mit `read`, Ändern eines mit `write`. Lesen darf jedes 
 | `PUT /api/v1/workflows/{id}` | `200` mit dem Workflow. |
 | `DELETE /api/v1/workflows/{id}` | `204`. |
 | `PUT /api/v1/projects/{project}/workflow` | `200` mit dem Projekt. |
+| `GET /api/v1/state-usage?project={project}` oder `?workflow={id}` | Wie viele Items in jedem Status stehen. |
 
 ### Workflow anlegen
 
@@ -125,7 +126,7 @@ Die Antwort (`201`, gekürzt):
 }
 ```
 
-Zum Ändern schickst du den Workflow ganz per `PUT`. Status, die ihre ULID behalten, bleiben (später mit ihren Items), weggelassene werden entfernt, und ein Status mit einer anderen ID ist ein neuer. Die Icon-Formen heißen `dashed`, `circle`, `half`, `three-quarter`, `pause`, `check` und `cross`.
+Zum Ändern schickst du den Workflow ganz per `PUT`. Status, die ihre ULID behalten, bleiben mit ihren Items, weggelassene werden entfernt, und ein Status mit einer anderen ID ist ein neuer. Die Icon-Formen heißen `dashed`, `circle`, `half`, `three-quarter`, `pause`, `check` und `cross`.
 
 ### Ein Workflow, der sich nicht speichern lässt
 
@@ -149,9 +150,41 @@ Ein Workflow, der eine Regel bricht, wird mit `422` und `reason: invalid_workflo
 }
 ```
 
+### Einen Status mit Items entfernen
+
+Ein `PUT`, der einen Status weglässt, in dem noch Items stehen (in irgendeinem Projekt des Workflows, archivierte Items und Projekte eingeschlossen), braucht dafür ein Ziel in `state_mapping`: `{"<ULID des entfernten Status>": "<Ziel>"}`. Ziel ist ein Status der Eingabe, so genannt wie in der Eingabe: die ULID eines bleibenden Status oder die ID, die du einem neuen gegeben hast. Ohne Ziel antwortet werkbuch `409` mit `reason: state_in_use` und den betroffenen Status in `states`, und nichts wird gespeichert:
+
+```json
+{
+  "type": "urn:werkbuch:problem:state_in_use",
+  "title": "Konflikt",
+  "status": 409,
+  "detail": "Für entfernte Status mit Items fehlt ein neuer Status.",
+  "reason": "state_in_use",
+  "states": [
+    { "state_id": "01m6akx71dkvjjrrvepyrpwdtc", "name": "Kundenfreigabe", "items": 1 }
+  ]
+}
+```
+
+Mit Ziel speichert werkbuch den Workflow und schreibt die Items in derselben Anfrage um, ohne die Übergangsregeln. Ein geschlossenes Item, das in einem offenen Status landet, verliert seine Resolution, ein offenes, das in einem geschlossenen landet, bekommt den Standard der Kategorie; ein archiviertes Item bleibt archiviert. Jedes Item bekommt ein `work_item.state_changed` in seine History, mit dem Grund `state_removed` und den Namen beider Status. `state_mapping` nimmt nur entfernte Status: Ein Schlüssel, der ein bleibender Status oder gar kein Status des Workflows ist, ist ein `422` an `state_mapping.<ID>`, ebenso ein Ziel, das nicht in der Eingabe steht.
+
+### Items je Status
+
+`GET /api/v1/state-usage?project=WEB` zählt die Items eines Projekts je Status, `?workflow=<id>` die aller Projekte des Workflows, die du siehst. Archivierte Items zählen mit; Status ohne Items fehlen. Die Oberfläche fragt das, bevor sie die Zuordnung anbietet.
+
+```json
+{
+  "data": [
+    { "state_id": "01m6akx71bcm10xw328kxkw7ak", "items": 4 },
+    { "state_id": "01m6akx71dkvjjrrvepyrpwdtc", "items": 1 }
+  ]
+}
+```
+
 ### Workflow eines Projekts wechseln
 
-Das Projekt sprichst du über seine Kennung oder seine ULID an. `mapping` ordnet Status des alten Workflows Status des neuen zu (`{"<alte Status-ID>": "<neue Status-ID>"}`). Solange es keine Work Items gibt, darf es leer bleiben; danach ist es für jeden Status mit Items Pflicht.
+Das Projekt sprichst du über seine Kennung oder seine ULID an. `mapping` ordnet Status des alten Workflows Status des neuen zu (`{"<alte Status-ID>": "<neue Status-ID>"}`). Jeder Status, in dem Items des Projekts stehen (archivierte eingeschlossen), braucht ein Ziel; einer ohne ist ein `422` an `mapping.<Status-ID>`, und `states` nennt die Status ohne Ziel mit ihren Items. Ein Schlüssel, der kein Status des alten Workflows ist, oder ein Ziel, das kein Status des neuen ist, ist ebenfalls ein `422`. Ein Projekt ohne Items nimmt eine leere Zuordnung. Die Items wandern in derselben Anfrage, wie oben, mit dem Grund `workflow_changed`.
 
 ```bash
 curl -X PUT https://werkbuch.example.com/api/v1/projects/WEB/workflow \

@@ -1,10 +1,25 @@
 /*
  * Fictional records for tests of the data layer, after the people and projects of the clickdummy's seed (Feldwerk).
  * Mara is org admin, Ida admin of WEB, Theo admin of APP and viewer in WEB, Lene member of WEB and APP; OPS is private.
- * The catalogs (workflows, types, properties, labels, relation types, resolutions) are those of the clickdummy's seed.
+ * The catalogs (workflows, types, properties, labels, relation types, resolutions) are those of the clickdummy's seed,
+ * the work items, relations and history a few of its items (WEB-47, WEB-30, WEB-48, OPS-12).
  */
 
-import type { Label, Organization, Project, ProjectRole, Property, RelationType, Resolution, User, Workflow, WorkItemType } from '@/types';
+import type {
+  ItemEvent,
+  Label,
+  Organization,
+  Project,
+  ProjectRole,
+  Property,
+  RelationEntry,
+  RelationType,
+  Resolution,
+  User,
+  Workflow,
+  WorkItem,
+  WorkItemType,
+} from '@/types';
 
 export const organization: Organization = {
   id: 'org_feldwerk',
@@ -231,4 +246,164 @@ export const relationTypes: RelationType[] = [
   { id: 'rt_duplicates', name: 'Duplikat', outward_label: 'ist Duplikat von', inward_label: 'hat Duplikat', built_in: 'duplicates' },
   { id: 'rt_relates', name: 'verwandt', outward_label: 'verwandt mit', inward_label: null, built_in: 'relates' },
   { id: 'rt_tests', name: 'testet', outward_label: 'testet', inward_label: 'wird getestet von', built_in: null },
+];
+
+/* ----------------------------------------------------------------- work items */
+
+/** A work item as the API answers it, with sensible defaults; override what the test is about. */
+export function makeWorkItem(overrides: Partial<WorkItem> = {}): WorkItem {
+  return {
+    id: 'wi_1',
+    project_id: 'p_web',
+    number: 1,
+    key: 'WEB-1',
+    type_id: 't_task',
+    title: 'Beispielaufgabe',
+    description: null,
+    description_json: null,
+    description_version: 1,
+    state_id: 'std_todo',
+    resolution_id: null,
+    assignee_id: null,
+    priority: 'none',
+    label_ids: [],
+    start_date: null,
+    due_date: null,
+    parent_id: null,
+    parent: null,
+    rank: 'a0',
+    values: {},
+    values_markdown: {},
+    created_by: 'u_mara',
+    created_at: '2026-10-01T08:00:00.000Z',
+    updated_at: '2026-10-01T08:00:00.000Z',
+    started_at: null,
+    closed_at: null,
+    archived_at: null,
+    template_id: null,
+    children_progress: null,
+    blocked: false,
+    blocking: false,
+    subscribed: false,
+    ...overrides,
+  };
+}
+
+/** WEB-30: an epic in progress with one child, WEB-48. */
+export const web30: WorkItem = makeWorkItem({
+  id: 'wi_web_30',
+  number: 30,
+  key: 'WEB-30',
+  type_id: 't_epic',
+  title: 'Relaunch Phase 1',
+  state_id: 'std_progress',
+  start_date: '2026-10-01',
+  due_date: '2026-11-15',
+  rank: 'a4',
+  started_at: '2026-10-01T08:00:00.000Z',
+  children_progress: { done: 0, total: 1 },
+});
+
+/** WEB-48: a task under the epic WEB-30. */
+export const web48: WorkItem = makeWorkItem({
+  id: 'wi_web_48',
+  number: 48,
+  key: 'WEB-48',
+  title: 'Startseite umbauen',
+  parent_id: 'wi_web_30',
+  parent: { id: 'wi_web_30', key: 'WEB-30', title: 'Relaunch Phase 1', type_id: 't_epic' },
+  rank: 'a5',
+});
+
+/** WEB-47: a started bug, urgent, blocked by OPS-12, with a description and the subscription of the reader. */
+export const web47: WorkItem = makeWorkItem({
+  id: 'wi_web_47',
+  number: 47,
+  key: 'WEB-47',
+  type_id: 't_bug',
+  title: 'Kontaktformular sendet doppelt',
+  description: 'Beim Absenden kommt die Mail **zweimal** an.',
+  description_json: {
+    type: 'doc',
+    content: [
+      {
+        type: 'paragraph',
+        content: [
+          { type: 'text', text: 'Beim Absenden kommt die Mail ' },
+          { type: 'text', text: 'zweimal', marks: [{ type: 'bold' }] },
+          { type: 'text', text: ' an.' },
+        ],
+      },
+    ],
+  },
+  description_version: 3,
+  state_id: 'std_progress',
+  assignee_id: 'u_ida',
+  priority: 'urgent',
+  label_ids: ['lb_forms', 'lb_production'],
+  start_date: '2026-10-27',
+  due_date: '2026-10-31',
+  values: { customer: 'opt_nordlicht', effort: 3.5, environment: 'opt_env_prod' },
+  rank: 'a3',
+  created_at: '2026-10-20T09:30:00.000Z',
+  updated_at: '2026-10-27T08:15:00.000Z',
+  started_at: '2026-10-27T08:15:00.000Z',
+  blocked: true,
+  subscribed: true,
+});
+
+/** OPS-12 (private project OPS): holds up WEB-47; open itself. */
+export const ops12: WorkItem = makeWorkItem({
+  id: 'wi_ops_12',
+  project_id: 'p_ops',
+  number: 12,
+  key: 'OPS-12',
+  title: 'Mail-Limits am Server erhöhen',
+  state_id: 'std_progress',
+  priority: 'high',
+  rank: 'a5',
+  started_at: '2026-10-26T09:00:00.000Z',
+  blocking: true,
+});
+
+/** The relations of WEB-47 as a reader of OPS sees them: OPS-12 blocks it, and an item they may not see tests it. */
+export const web47Relations: RelationEntry[] = [
+  { relation: { id: 'rel_1', type_id: 'rt_blocks', source_id: 'wi_ops_12', target_id: 'wi_web_47' }, other: ops12, direction: 'inward', hidden: false },
+  { relation: { id: 'rel_2', type_id: 'rt_tests', source_id: '', target_id: 'wi_web_47' }, other: null, direction: 'inward', hidden: true },
+];
+
+/** An entry of the history of WEB-47; override what the test is about. */
+export function itemEvent(overrides: Partial<ItemEvent> = {}): ItemEvent {
+  return {
+    id: 'ev_1',
+    type: 'work_item.created',
+    actor_id: 'u_mara',
+    subject: { type: 'work_item', id: 'wi_web_47' },
+    project_id: 'p_web',
+    changes: {},
+    states: null,
+    reason: null,
+    via: 'ui',
+    occurred_at: '2026-10-20T09:30:00.000Z',
+    ...overrides,
+  };
+}
+
+/** The history of WEB-47: created, moved to In Progress, and OPS-12 named as its blocker. */
+export const web47History: ItemEvent[] = [
+  itemEvent(),
+  itemEvent({
+    id: 'ev_2',
+    type: 'work_item.state_changed',
+    actor_id: 'u_ida',
+    changes: { state_id: { old: 'std_todo', new: 'std_progress' } },
+    states: { old: { id: 'std_todo', name: 'Todo', category: 'unstarted' }, new: { id: 'std_progress', name: 'In Progress', category: 'started' } },
+    occurred_at: '2026-10-27T08:15:00.000Z',
+  }),
+  itemEvent({
+    id: 'ev_3',
+    type: 'work_item.relation_added',
+    changes: { relation: { old: null, new: { label: 'wird blockiert von', item_id: 'wi_ops_12', key: 'OPS-12' } } },
+    occurred_at: '2026-10-27T09:00:00.000Z',
+  }),
 ];

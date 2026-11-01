@@ -32,6 +32,7 @@ it('knows the events of this phase that have no webhook', function () {
         'label.created', 'label.updated', 'label.deleted',
         'relation_type.created', 'relation_type.updated', 'relation_type.deleted',
         'resolution.created', 'resolution.updated', 'resolution.deleted',
+        'work_item.subscribed', 'work_item.unsubscribed',
     ])->sort()->values()->all());
 });
 

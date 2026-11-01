@@ -27,12 +27,6 @@ final class PropertyInput
 
     public const OPTION_LABEL_MAX = 60;
 
-    /** The longest id a client may give an option. */
-    public const KEY_MAX = 64;
-
-    /** The start of the key of an option sent without an id (`new:<index>`); sent ids never start with it. */
-    public const NEW_KEY = 'new:';
-
     /** The most decimals a number keeps. */
     public const DECIMALS_MAX = 4;
 
@@ -79,8 +73,7 @@ final class PropertyInput
      */
     public static function validate(array $input, ?Property $existing): array
     {
-        /** @var array{key: string, label: string, field_type: string, help?: ?string} $valid */
-        $valid = Validator::make($input, [
+        $basic = Validator::make($input, [
             'key' => $existing === null
                 ? ['bail', 'required', 'string', self::newKey(), Rule::unique('properties', 'key')]
                 : ['bail', 'required', self::same($existing->key, 'field.key.immutable')],
@@ -89,12 +82,27 @@ final class PropertyInput
                 : ['bail', 'required', self::same($existing->field_type->value, 'field.field_type.immutable')],
             'label' => ['bail', 'present', 'required', 'string', 'max:'.self::LABEL_MAX],
             'help' => ['nullable', 'string', 'max:'.CatalogInput::HELP_MAX],
-        ], self::messages())->validate();
+        ], self::messages());
 
+        // the settings and options have rules once the field type is known; the fields and the options answer together
+        $type = $existing->field_type ?? (is_string($input['field_type'] ?? null) ? FieldType::tryFrom($input['field_type']) : null);
+        $typedRules = $type === null ? null : Validator::make($input, self::typeRules($type), self::typeMessages($type));
+
+        $errors = [
+            ...($basic->fails() ? $basic->errors()->messages() : []),
+            ...($typedRules?->fails() ? $typedRules->errors()->messages() : []),
+        ];
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
+
+        /** @var array{key: string, label: string, field_type: string, help?: ?string} $valid */
+        $valid = $basic->validated();
         $type = FieldType::from($valid['field_type']);
 
         /** @var array{settings?: ?array{decimals?: int|string, multiple?: bool|int|string}, options?: ?array<array-key, array{id?: ?string, label: string, color: string, archived_at?: ?string}>} $typed */
-        $typed = Validator::make($input, self::typeRules($type), self::typeMessages($type))->validate();
+        $typed = $typedRules?->validated() ?? [];
 
         $settings = [];
 
@@ -164,7 +172,7 @@ final class PropertyInput
 
         foreach (array_keys($sent) as $index) {
             $option = $valid[$index];
-            $key = $option['id'] ?? self::NEW_KEY.$position;
+            $key = ClientKeys::keyOf($option, $position);
 
             // a sent id names one option only
             if (isset($keys[$key])) {
@@ -174,7 +182,7 @@ final class PropertyInput
             $keys[$key] = true;
             $options[] = [
                 'key' => $key,
-                'existing' => in_array($key, $own, true) ? $key : null,
+                'existing' => ClientKeys::resolve($own, [], $key),
                 'label' => $option['label'],
                 'color' => Tone::from($option['color']),
                 'archived' => ($option['archived_at'] ?? null) !== null,
@@ -244,7 +252,7 @@ final class PropertyInput
             'options' => ['bail', 'present', 'array', 'list', 'max:'.self::OPTIONS_MAX],
             'options.*' => ['array'],
             // `new:<index>` names an option sent without an id; no id of the client looks like one
-            'options.*.id' => ['nullable', 'string', 'max:'.self::KEY_MAX, 'doesnt_start_with:'.self::NEW_KEY],
+            'options.*.id' => ['nullable', 'string', 'max:'.ClientKeys::MAX, 'doesnt_start_with:'.ClientKeys::PREFIX],
             'options.*.label' => ['required', 'string', 'max:'.self::OPTION_LABEL_MAX],
             'options.*.color' => CatalogInput::tone(),
             'options.*.archived_at' => CatalogInput::archivedAt(),
@@ -282,8 +290,8 @@ final class PropertyInput
             'options.max' => __('field.options.max'),
             'options.*.array' => __('field.options.label_required'),
             // the string rule fills no :max, so the sentence comes filled
-            'options.*.id.string' => __('field.options.id_invalid', ['max' => self::KEY_MAX]),
-            'options.*.id.max' => __('field.options.id_invalid', ['max' => self::KEY_MAX]),
+            'options.*.id.string' => __('field.options.id_invalid', ['max' => ClientKeys::MAX]),
+            'options.*.id.max' => __('field.options.id_invalid', ['max' => ClientKeys::MAX]),
             'options.*.id.doesnt_start_with' => __('field.options.id_reserved'),
             'options.*.label.required' => __('field.options.label_required'),
             'options.*.label.string' => __('field.options.label_required'),
@@ -302,6 +310,7 @@ final class PropertyInput
         return match ($error) {
             'text' => __('field.default_value.text'),
             'number' => __('field.default_value.number'),
+            'number_range' => __('field.default_value.number_range'),
             'option' => __('field.default_value.option'),
             'single' => __('field.default_value.single'),
             'boolean' => __('field.default_value.boolean'),

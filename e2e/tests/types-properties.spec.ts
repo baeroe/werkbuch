@@ -56,6 +56,17 @@ test('creates a dropdown property and a type that requires it', async ({ page })
     await page.keyboard.press('Enter');
     await expect(dialog.getByRole('textbox', { name: tr('en', 'settings.properties.options.label_of', { number: 2 }) })).toBeFocused();
     await page.keyboard.type('South');
+
+    // the default: the editor of a dropdown in an item, found by typing
+    const defaultLabel = tr('en', 'settings.properties.dialog.default');
+    const defaultValue = dialog.getByRole('combobox', { name: new RegExp(`^${defaultLabel}`) });
+    await tabTo(page, defaultValue);
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('combobox', { name: tr('en', 'items.fields.property.search_option') })).toBeFocused();
+    await page.keyboard.type('South');
+    await page.keyboard.press('Enter');
+    await expect(defaultValue).toHaveAccessibleName(`${defaultLabel}: South`);
+    await expect(defaultValue).toBeFocused();
     await pressMod(page, 'Enter');
 
     await expect(page.getByText(tr('en', 'settings.properties.dialog.created', { label }))).toBeVisible();
@@ -103,6 +114,7 @@ test('creates a dropdown property and a type that requires it', async ({ page })
     const type = (await allEntries(page, 'work-item-types')).find((entry) => entry.name === name)!;
     expect(type.icon).toBe('zap');
     expect(type.properties).toEqual([{ property_id: property.id, required: true, position: 0 }]);
+    expect(property.default_value).toBe((property.options as { id: string; label: string }[]).find((option) => option.label === 'South')!.id);
   } finally {
     await cleanUp(page);
   }

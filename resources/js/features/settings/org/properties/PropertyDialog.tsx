@@ -3,12 +3,16 @@
  * options of a dropdown and the default value. The key follows the label until somebody types one. Key and field type
  * are fixed once the property exists; a dropdown or a choice of people may only go from single to multiple choice. The
  * dialog sends the whole property every time (P24): key, field type, the settings of its field type and every option
- * with its archive stamp. A default that names an option which is archived or gone is left out, as no form could offer
- * it.
+ * with its archive stamp. The default value is edited with the editor items use (`PropertyValueInput`), so it reads
+ * a number or an address as an item field does; a text it cannot read keeps the dialog from sending and takes the
+ * focus. A default that names an option which is archived or gone is left out, as no form could offer it. People and
+ * rich text have no default (A69). A stored option that was removed comes back archived when items carry it; the toast
+ * of the save says so.
  */
 
 import { Lock } from 'lucide-react';
 import { useId, useRef, useState, type RefObject } from 'react';
+import { PropertyValueInput } from '@/components/fields/property/PropertyValueInput';
 import { cx } from '@/components/ui/cx';
 import { FormDialog } from '@/components/ui/FormDialog';
 import { Input } from '@/components/ui/Input';
@@ -23,7 +27,6 @@ import type { FieldType, Property, PropertyValue } from '@/types';
 import { FIELD_TYPE_HINTS, FIELD_TYPE_LABELS, FIELD_TYPES } from '../../catalog/choices';
 import { fieldMessage, noticeOf } from '../../frame/form';
 import { FieldGroup, readOnlyField } from '../../frame/parts';
-import { DefaultValueField } from './DefaultValueField';
 import { keyFrom } from './keyFrom';
 import { OptionRows, type DraftOption } from './OptionRows';
 
@@ -62,6 +65,8 @@ export function PropertyDialog({ open, onOpenChange, property, finalFocus }: Pro
       .map((option) => ({ id: option.id, label: option.label, color: option.color, archivedAt: option.archived_at, saved: true })),
   );
   const [defaultValue, setDefaultValue] = useState<PropertyValue>(property?.default_value ?? null);
+  // why the default as typed cannot be read (a number, an address), while it cannot
+  const [unreadable, setUnreadable] = useState<string | null>(null);
   const [attempted, setAttempted] = useState(false);
 
   const active = options.filter((option) => option.archivedAt === null);
@@ -83,6 +88,7 @@ export function PropertyDialog({ open, onOpenChange, property, finalFocus }: Pro
   function chooseType(next: FieldType) {
     setFieldType(next);
     setDefaultValue(null);
+    setUnreadable(null);
   }
 
   /** Single to multiple keeps the chosen option, multiple to single (only before saving) the first one. */
@@ -94,7 +100,16 @@ export function PropertyDialog({ open, onOpenChange, property, finalFocus }: Pro
 
   function submit() {
     setAttempted(true);
-    const missing = label.trim() === '' ? 'property-label' : key.trim() === '' ? 'property-key' : fieldType === 'dropdown' && active.length === 0 ? 'property-add-option' : null;
+    const missing =
+      label.trim() === ''
+        ? 'property-label'
+        : key.trim() === ''
+          ? 'property-key'
+          : fieldType === 'dropdown' && active.length === 0
+            ? 'property-add-option'
+            : hasDefault(fieldType) && unreadable
+              ? 'property-default'
+              : null;
     if (missing) {
       document.getElementById(missing)?.focus();
       return;
@@ -120,7 +135,13 @@ export function PropertyDialog({ open, onOpenChange, property, finalFocus }: Pro
       {
         onSuccess: (saved) => {
           onOpenChange(false);
-          toast({ title: property ? t('settings.properties.dialog.saved', { label: saved.label }) : t('settings.properties.dialog.created', { label: saved.label }), tone: 'success' });
+          // a stored option that was left out and comes back: items carry it, so it is archived instead of deleted
+          const kept = saved.options.filter((option) => property?.options.some((stored) => stored.id === option.id) && !options.some((draft) => draft.id === option.id));
+          toast({
+            title: property ? t('settings.properties.dialog.saved', { label: saved.label }) : t('settings.properties.dialog.created', { label: saved.label }),
+            description: kept.length > 0 ? tn('settings.properties.dialog.kept_archived', kept.length, { name: kept[0]!.label }) : undefined,
+            tone: 'success',
+          });
         },
       },
     );
@@ -238,20 +259,41 @@ export function PropertyDialog({ open, onOpenChange, property, finalFocus }: Pro
         </FieldGroup>
       )}
 
-      {hasDefault(fieldType) ? (
-        <DefaultValueField
+      {!hasDefault(fieldType) ? (
+        <p className="text-sm text-pretty text-muted">{t('settings.properties.dialog.no_default', { type: t(FIELD_TYPE_LABELS[fieldType]) })}</p>
+      ) : fieldType === 'dropdown' && active.length === 0 ? (
+        <div className="flex flex-col">
+          <p className={cx(labelClass, 'mb-1.5')}>{t('settings.properties.dialog.default')}</p>
+          <p className="text-sm text-muted">{t('settings.properties.default.no_options')}</p>
+        </div>
+      ) : (
+        <PropertyValueInput
           key={fieldType}
+          id="property-default"
+          // the property as it is being edited: its settings and the options that can still be chosen
           property={{
+            id: property?.id ?? 'draft',
+            key: key || 'draft',
+            label: t('settings.properties.dialog.default'),
             field_type: fieldType,
+            help: '',
+            default_value: null,
             settings,
-            options: options.map((option, position) => ({ id: option.id, label: option.label, color: option.color, position, archived_at: option.archivedAt })),
+            options: active.map((option, position) => ({
+              id: option.id,
+              label: option.label.trim() || t('settings.properties.default.unnamed'),
+              color: option.color,
+              position,
+              archived_at: null,
+            })),
           }}
           value={defaultValue}
           onChange={setDefaultValue}
-          error={fieldMessage(save.error, 'default_value')}
+          onUnreadable={setUnreadable}
+          projectId=""
+          hint={t('settings.properties.dialog.default_hint')}
+          error={(attempted ? unreadable : null) ?? fieldMessage(save.error, 'default_value')}
         />
-      ) : (
-        <p className="text-sm text-pretty text-muted">{t('settings.properties.dialog.no_default', { type: t(FIELD_TYPE_LABELS[fieldType]) })}</p>
       )}
     </FormDialog>
   );

@@ -10,9 +10,11 @@ use App\Exceptions\Problem;
 use App\Models\Organization;
 use App\Models\Property;
 use App\Models\PropertyOption;
+use App\Models\WorkItemValue;
 use App\Support\Actor;
 use App\Support\CatalogInput;
 use App\Support\CatalogLock;
+use App\Support\ClientKeys;
 use App\Support\PropertyInput;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -21,7 +23,7 @@ use Lorisleiva\Actions\Concerns\AsAction;
 /**
  * Creates a property or replaces one as a whole (P4, P24): key, label, field type, help text, settings, the options of a
  * dropdown and the default value (org admins). New options come with ids of the client and get ULIDs, the default value
- * is translated (P3); the options it is no longer sent are deleted (Phase 4 archives the ones items use, P5). Runs under
+ * is translated (P3); the options it is no longer sent are deleted, the ones items use archived instead (spec 4.7). Runs under
  * the catalog lock, so the key is checked against what the change before left. Only what really changes is written and
  * recorded; the same input again writes nothing.
  */
@@ -79,17 +81,31 @@ final class SaveProperty
                 $ids[$option['key']] = $row->id;
             }
 
+            // an option that is no longer sent goes, unless items carry it: those are archived behind the others (spec 4.7)
             $removed = array_values(array_diff(array_keys($rows), array_column($valid['options'], 'existing')));
+            $carried = $removed === [] ? [] : WorkItemValue::query()->whereIn('value_option_id', $removed)->distinct()->pluck('value_option_id')->all();
+            // in their old order: the database answers the distinct ids in any order
+            $used = array_values(array_intersect($removed, $carried));
 
-            if ($removed !== []) {
-                PropertyOption::query()->whereKey($removed)->delete();
+            $unused = array_values(array_diff($removed, $used));
+
+            if ($unused !== []) {
+                PropertyOption::query()->whereKey($unused)->delete();
+            }
+
+            foreach ($used as $index => $id) {
+                // one archived before keeps its stamp and its place
+                if ($rows[$id]->archived_at === null) {
+                    $rows[$id]->fill(['position' => count($valid['options']) + $index, 'archived_at' => now()])->save();
+                }
             }
 
             $default = $valid['default_value'];
+            $own = array_keys($rows);
             $saved->default_value = match (true) {
                 $ids === [] || $default === null => $default,
-                is_array($default) => array_map(fn (string $key) => $ids[$key], $default),
-                default => $ids[$default],
+                is_array($default) => array_map(fn (string $key) => ClientKeys::resolve($own, $ids, $key), $default),
+                default => ClientKeys::resolve($own, $ids, $default),
             };
             $saved->save();
 

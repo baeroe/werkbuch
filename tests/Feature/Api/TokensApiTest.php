@@ -41,7 +41,7 @@ it('orders the abilities, drops repeats and never grants everything', function (
 });
 
 it('wants a name, known abilities and an expiry in the future', function (array $input, array $errors) {
-    app()->setLocale('de');
+    speakGerman();
     $this->freezeSecond();
 
     $response = $this->actingAs(User::factory()->create())->postJson('/api/v1/tokens', $input)->assertUnprocessable();

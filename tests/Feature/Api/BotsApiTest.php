@@ -62,7 +62,7 @@ it('wants an active person as the responsible one', function (Closure $owner) {
 ]);
 
 it('wants a name and a free, valid handle', function () {
-    app()->setLocale('de');
+    speakGerman();
     User::factory()->create(['handle' => 'kira']);
 
     $this->actingAs(User::factory()->admin()->create())->postJson('/api/v1/bots', ['name' => ' ', 'handle' => 'kira', 'description' => str_repeat('x', 501)])
@@ -77,7 +77,7 @@ it('wants a name and a free, valid handle', function () {
 });
 
 it('lets only org admins create bots', function () {
-    app()->setLocale('de');
+    speakGerman();
 
     $this->actingAs(User::factory()->create())->postJson('/api/v1/bots', ['name' => 'Kira', 'handle' => 'kira'])
         ->assertForbidden()->assertJsonPath('detail', 'Bots anlegen nur Org-Admins.');
@@ -112,7 +112,7 @@ it('lets an org admin change the description and the responsible person of a bot
 });
 
 it('lets a bot change its own name, but not what only org admins set', function () {
-    app()->setLocale('de');
+    speakGerman();
     $kira = User::factory()->bot(User::factory()->create())->create(['name' => 'Kira']);
     $this->withToken(apiToken($kira, ['write']));
 
@@ -158,7 +158,7 @@ it('lets the default bot be renamed and given an avatar', function () {
 });
 
 it('keeps the default bot an admin', function (string $role) {
-    app()->setLocale('de');
+    speakGerman();
     $bot = User::defaultBot();
 
     $this->actingAs(User::factory()->admin()->create())->putJson("/api/v1/users/{$bot->id}/role", ['org_role' => $role])

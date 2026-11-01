@@ -88,7 +88,7 @@ it('refuses to confirm without a setup, and a setup that is on already', functio
 ]);
 
 it('names a wrong, an empty and a malformed code at the field and keeps the setup open', function (mixed $code) {
-    app()->setLocale('de');
+    speakGerman();
     $lene = User::factory()->create();
     $this->actingAs($lene)->postJson('/api/v1/me/two-factor')->assertOk();
 

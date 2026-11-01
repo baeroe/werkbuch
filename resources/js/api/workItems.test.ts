@@ -1,0 +1,204 @@
+import { afterEach, describe, expect, it } from 'vitest';
+import { mockApi, type MockApi } from '@/test/api';
+import { standard, types, web30, web47, web47History, web47Relations, web48 } from '@/test/fixtures';
+import type { BulkResult } from '@/types';
+import {
+  archiveWorkItem,
+  bulkUpdateWorkItems,
+  changeWorkItemType,
+  createWorkItem,
+  deleteWorkItem,
+  getWorkItem,
+  listActivity,
+  listStateUsage,
+  listWorkItems,
+  restoreWorkItem,
+  setSubscribed,
+  transitionWorkItem,
+  updateWorkItem,
+} from './workItems';
+
+let api: MockApi;
+
+afterEach(() => api.restore());
+
+/** The address a call went to, with the brackets of the query readable. */
+const sent = (index = 0) => `${api.calls[index]!.method} ${decodeURIComponent(api.calls[index]!.url)}`;
+
+describe('reading work items', () => {
+  it('lists items as a page and narrows them by project, parent and text as filters', async () => {
+    api = mockApi({ 'GET /api/v1/work-items': () => ({ body: { data: [web47], links: {}, meta: { next_cursor: 'c2', total: 3 } } }) });
+
+    expect(await listWorkItems({ project_id: 'WEB', q: 'kontakt' })).toEqual({ items: [web47], next_cursor: 'c2', total: 3 });
+    expect(sent()).toBe('GET /api/v1/work-items?filter[project]=WEB&filter[q]=kontakt');
+
+    await listWorkItems({ parent_id: 'WEB-30', include_archived: true, cursor: 'c2', per_page: 50 });
+    expect(sent(1)).toBe('GET /api/v1/work-items?include_archived=1&cursor=c2&per_page=50&filter[parent]=WEB-30');
+
+    await listWorkItems();
+    expect(sent(2)).toBe('GET /api/v1/work-items');
+  });
+
+  it('reads one item with everything the detail shows in one call and takes its state from the workflow', async () => {
+    api = mockApi({
+      'GET /api/v1/work-items/WEB-47': () => ({ body: { data: { ...web47, children: [], relations: web47Relations, type: types[1], workflow: standard } } }),
+    });
+
+    expect(await getWorkItem('WEB-47')).toEqual({
+      item: web47,
+      type: types[1],
+      state: standard.states[2],
+      workflow: standard,
+      children: [],
+      relations: web47Relations,
+      attachments: [],
+      subscribed: true,
+    });
+    expect(sent()).toBe('GET /api/v1/work-items/WEB-47?include=children,relations,type,workflow');
+  });
+
+  it('keeps the children of an epic in their order and escapes a reference from an address', async () => {
+    api = mockApi({
+      'GET /api/v1/work-items/WEB-30': () => ({ body: { data: { ...web30, children: [web48], relations: [], type: types[2], workflow: standard } } }),
+      'GET /api/v1/work-items/a%2Fb': () => ({ status: 404, body: { reason: 'not_found' } }),
+    });
+
+    const detail = await getWorkItem('WEB-30');
+
+    expect(detail.children).toEqual([web48]);
+    expect(detail.subscribed).toBe(false);
+    expect(Object.keys(detail.item)).not.toContain('children');
+    await expect(getWorkItem('a/b')).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('reads the history as entries of the activity, oldest first, with the page of the server', async () => {
+    api = mockApi({ 'GET /api/v1/work-items/WEB-47/history': () => ({ body: { data: web47History, links: {}, meta: { next_cursor: 'h2', total: 4 } } }) });
+
+    const page = await listActivity('WEB-47', { per_page: 3 });
+
+    expect(sent()).toBe('GET /api/v1/work-items/WEB-47/history?per_page=3');
+    expect(page.next_cursor).toBe('h2');
+    expect(page.total).toBe(4);
+    expect(page.items.map((entry) => [entry.kind, entry.id, entry.at])).toEqual([
+      ['event', 'ev_1', '2026-10-20T09:30:00.000Z'],
+      ['event', 'ev_2', '2026-10-27T08:15:00.000Z'],
+      ['event', 'ev_3', '2026-10-27T09:00:00.000Z'],
+    ]);
+    expect(page.items[1]).toEqual({ kind: 'event', id: 'ev_2', at: '2026-10-27T08:15:00.000Z', event: web47History[1] });
+  });
+
+  it('counts the items per state of a project or of a workflow', async () => {
+    api = mockApi({ 'GET /api/v1/state-usage': () => ({ body: { data: [{ state_id: 'std_todo', items: 4 }] } }) });
+
+    expect(await listStateUsage({ project: 'WEB' })).toEqual([{ state_id: 'std_todo', items: 4 }]);
+    await listStateUsage({ workflow: 'wf_agency' });
+
+    expect([sent(), sent(1)]).toEqual(['GET /api/v1/state-usage?project=WEB', 'GET /api/v1/state-usage?workflow=wf_agency']);
+  });
+});
+
+describe('changing work items', () => {
+  const doc = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Neu' }] }] };
+
+  it('creates an item and sends its description as a Tiptap document', async () => {
+    api = mockApi({ 'POST /api/v1/work-items': () => ({ status: 201, body: { data: web47 } }) });
+
+    expect(await createWorkItem({ project_id: 'p_web', type_id: 't_bug', title: 'Kontaktformular sendet doppelt', description: doc, values: { effort: 3.5 } })).toEqual(web47);
+    await createWorkItem({ project_id: 'p_web', type_id: 't_task', title: 'Ohne Beschreibung' });
+
+    expect(api.calls.map((call) => call.body)).toEqual([
+      { project_id: 'p_web', type_id: 't_bug', title: 'Kontaktformular sendet doppelt', description_json: doc, values: { effort: 3.5 } },
+      { project_id: 'p_web', type_id: 't_task', title: 'Ohne Beschreibung' },
+    ]);
+  });
+
+  it('changes fields, the description as a document with the version it was edited on', async () => {
+    api = mockApi({ 'PATCH /api/v1/work-items/WEB-47': () => ({ body: { data: web47 } }) });
+
+    expect(await updateWorkItem('WEB-47', { description: doc }, { base_description_version: 3 })).toEqual(web47);
+    await updateWorkItem('WEB-47', { description: null, title: 'Neu' });
+    await updateWorkItem('WEB-47', { priority: 'high' });
+
+    expect(api.calls.map((call) => call.body)).toEqual([
+      { description_json: doc, base_description_version: 3 },
+      { title: 'Neu', description_json: null },
+      { priority: 'high' },
+    ]);
+  });
+
+  it('hands a description conflict on with the stored item', async () => {
+    api = mockApi({
+      'PATCH /api/v1/work-items/WEB-47': () => ({
+        status: 409,
+        body: { reason: 'description_conflict', detail: 'Ida Brenner hat die Beschreibung inzwischen geändert.', current: web47 },
+      }),
+    });
+
+    await expect(updateWorkItem('WEB-47', { description: doc }, { base_description_version: 2 })).rejects.toMatchObject({
+      status: 409,
+      reason: 'description_conflict',
+      current: web47,
+    });
+  });
+
+  it('moves an item, with or without a chosen resolution', async () => {
+    api = mockApi({ 'POST /api/v1/work-items/WEB-47/transition': () => ({ body: { data: web47 } }) });
+
+    expect(await transitionWorkItem('WEB-47', 'std_cancelled', 'res_duplicate')).toEqual(web47);
+    await transitionWorkItem('WEB-47', 'std_done');
+
+    expect(api.calls.map((call) => call.body)).toEqual([
+      { to_state_id: 'std_cancelled', resolution_id: 'res_duplicate' },
+      { to_state_id: 'std_done', resolution_id: null },
+    ]);
+  });
+
+  it('changes many items and gives the answer on as it is, without `data`', async () => {
+    const result: BulkResult = { updated: ['wi_web_47'], rejected: [{ id: 'WEB-30', reason: 'transition_not_allowed' }] };
+    api = mockApi({ 'POST /api/v1/work-items/bulk': () => ({ body: result }) });
+
+    expect(await bulkUpdateWorkItems(['wi_web_47', 'WEB-30'], { state_id: 'std_done', add_label_ids: ['lb_ux'] })).toEqual(result);
+    expect(api.calls[0]!.body).toEqual({ ids: ['wi_web_47', 'WEB-30'], patch: { state_id: 'std_done', add_label_ids: ['lb_ux'] } });
+  });
+
+  it('gives an item another type, with the values the new type asks for', async () => {
+    api = mockApi({ 'PUT /api/v1/work-items/WEB-47/type': () => ({ body: { data: web47 } }) });
+
+    expect(await changeWorkItemType('WEB-47', 't_bug', { environment: 'opt_env_prod' })).toEqual(web47);
+    await changeWorkItemType('WEB-47', 't_task');
+
+    expect(api.calls.map((call) => call.body)).toEqual([
+      { type_id: 't_bug', values: { environment: 'opt_env_prod' } },
+      { type_id: 't_task', values: {} },
+    ]);
+  });
+
+  it('archives, restores and deletes an item', async () => {
+    const archived = { ...web47, archived_at: '2026-10-31T09:00:00.000Z' };
+    api = mockApi({
+      'POST /api/v1/work-items/WEB-47/archive': () => ({ body: { data: archived } }),
+      'POST /api/v1/work-items/WEB-47/restore': () => ({ body: { data: web47 } }),
+      'DELETE /api/v1/work-items/WEB-47': () => ({ status: 204 }),
+    });
+
+    expect(await archiveWorkItem('WEB-47')).toEqual(archived);
+    expect(await restoreWorkItem('WEB-47')).toEqual(web47);
+    await expect(deleteWorkItem('WEB-47')).resolves.toBeUndefined();
+    expect(api.calls.map(({ method, url }) => `${method} ${url}`)).toEqual([
+      'POST /api/v1/work-items/WEB-47/archive',
+      'POST /api/v1/work-items/WEB-47/restore',
+      'DELETE /api/v1/work-items/WEB-47',
+    ]);
+  });
+
+  it('watches an item and stops watching it', async () => {
+    api = mockApi({
+      'PUT /api/v1/work-items/WEB-47/subscription': () => ({ body: { data: web47 } }),
+      'DELETE /api/v1/work-items/WEB-47/subscription': () => ({ body: { data: { ...web47, subscribed: false } } }),
+    });
+
+    expect((await setSubscribed('WEB-47', true)).subscribed).toBe(true);
+    expect((await setSubscribed('WEB-47', false)).subscribed).toBe(false);
+    expect(api.calls.map(({ method }) => method)).toEqual(['PUT', 'DELETE']);
+  });
+});

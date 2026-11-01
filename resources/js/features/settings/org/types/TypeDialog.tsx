@@ -2,11 +2,14 @@
  * Creating and changing a type (spec 4.6): name, icon, tone, description, the Epic mark and the properties it carries,
  * each required or not, in the order the form shows them; a preview of the tab beside the name. The dialog sends the
  * whole type every time (P24), its archive stamp included: an archived type stays archived when it is changed here, and
- * only "Restore" in the list brings it back.
+ * only "Restore" in the list brings it back. The Epic mark follows the items of the type (spec 4.8): it cannot go while
+ * one of them has children, nor come while one has a parent; that refusal (422 at `is_epic`) stands at the switch,
+ * which takes the focus, until the switch is back where it was stored (a refusal of a mark the send did not change
+ * goes on top).
  */
 
-import { X } from 'lucide-react';
-import { useId, useState, type RefObject } from 'react';
+import { CircleAlert, X } from 'lucide-react';
+import { useId, useRef, useState, type RefObject } from 'react';
 import { FormDialog } from '@/components/ui/FormDialog';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { IconButton } from '@/components/ui/IconButton';
@@ -63,10 +66,15 @@ export function TypeDialog({ open, onOpenChange, type, properties, finalFocus }:
   const iconError = fieldMessage(save.error, 'icon');
   const toneError = fieldMessage(save.error, 'tone');
   const propertiesError = fieldMessage(save.error, 'properties');
+  // the mark as it was sent, when the send changed it: a refusal at `is_epic` belongs to the switch then, and holds
+  // only while the switch is still there (back at the stored mark nothing is asked any more)
+  const sentEpic = useRef<boolean | null>(null);
+  const epicError = sentEpic.current !== null && isEpic === sentEpic.current ? fieldMessage(save.error, 'is_epic') : undefined;
   const free = properties.filter((property) => !assigned.some((entry) => entry.id === property.id));
   // a property the loaded catalog does not know (yet) keeps its place: the dialog sends the whole type and would drop it
   const labelOf = (id: string) => byId.get(id)?.label ?? t('settings.types.dialog.unknown_property');
   const epicHint = useId();
+  const epicErrorId = useId();
 
   function submit() {
     setAttempted(true);
@@ -74,6 +82,7 @@ export function TypeDialog({ open, onOpenChange, type, properties, finalFocus }:
       document.getElementById('type-name')?.focus();
       return;
     }
+    sentEpic.current = isEpic !== (type?.is_epic ?? false) ? isEpic : null;
     settle(
       save.mutateAsync({
         id: type?.id,
@@ -105,7 +114,8 @@ export function TypeDialog({ open, onOpenChange, type, properties, finalFocus }:
       description={t('settings.types.dialog.description')}
       submitLabel={type ? t('settings.frame.save') : t('settings.catalog.submit_create')}
       pending={save.isPending}
-      notice={noticeOf(save.error, ['name', 'icon', 'tone', 'properties'])}
+      // a refusal of the mark that the send did not change has no place at the switch: it goes on top
+      notice={noticeOf(save.error, ['name', 'icon', 'tone', 'properties', ...(sentEpic.current !== null ? ['is_epic'] : [])])}
       finalFocus={finalFocus}
       onSubmit={submit}
     >
@@ -141,10 +151,24 @@ export function TypeDialog({ open, onOpenChange, type, properties, finalFocus }:
         onChange={(event) => setDescription(event.target.value)}
       />
       <div className="flex flex-col gap-1">
-        <Switch label={t('settings.types.dialog.epic')} aria-describedby={epicHint} checked={isEpic} onCheckedChange={setIsEpic} />
+        <Switch
+          label={t('settings.types.dialog.epic')}
+          aria-describedby={epicError ? `${epicHint} ${epicErrorId}` : epicHint}
+          aria-invalid={epicError ? true : undefined}
+          checked={isEpic}
+          onCheckedChange={setIsEpic}
+        />
         <p id={epicHint} className="pl-12 text-sm text-pretty text-muted">
           {t('settings.types.dialog.epic_hint')}
         </p>
+        <div aria-live="polite">
+          {epicError && (
+            <p id={epicErrorId} className="flex items-start gap-1.5 pl-12 text-sm font-medium text-danger">
+              <CircleAlert className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+              {epicError}
+            </p>
+          )}
+        </div>
       </div>
 
       <FieldGroup legend={t('settings.types.dialog.properties')} hint={t('settings.types.dialog.properties_hint')}>

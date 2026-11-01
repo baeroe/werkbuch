@@ -2,9 +2,9 @@
  * Types (spec 4.6): Task, Bug and Epic come with werkbuch, more can be added. A type has a name, an icon and a tone (the
  * tab of its index cards), a description, the Epic mark (its items appear on the timeline) and the properties it
  * carries, each required or not, in the order the form shows them. An active type can be deleted, after the five seconds
- * of undo; the default type of a project cannot (409 `default_type`, the toast names the projects). An archived one can
- * be restored. How many items use a type, and archiving instead of deleting a type that items carry, come with the
- * items (P6, P28). Members see the list, admins change it.
+ * of undo; the default type of a project cannot (409 `default_type`, the toast names the projects). A type that items
+ * carry is archived instead (`outcome: 'archived'`): a toast says so, and the row stays, marked archived. An archived
+ * one can be restored. How many items use a type comes with Phase 5 (A61). Members see the list, admins change it.
  */
 
 import { ArchiveRestore, Pencil, Plus, Route, Shapes, Trash2 } from 'lucide-react';
@@ -144,6 +144,9 @@ export default function Types({ readOnlyReason }: SectionProps) {
                                 label: t('settings.types.deleted', { name: type.name }),
                                 failureTitle: t('settings.types.not_deleted', { name: type.name }),
                                 run: () => remove.mutateAsync(type.id),
+                                onDone: ({ outcome }) => {
+                                  if (outcome === 'archived') toast({ title: t('settings.types.archived_instead', { name: type.name }), description: t('settings.types.archived_instead_description') });
+                                },
                               })
                             }
                           />

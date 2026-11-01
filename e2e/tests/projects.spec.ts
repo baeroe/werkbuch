@@ -98,6 +98,9 @@ test('archives and restores a project', async ({ page }) => {
   await expect(page.getByText(tr('en', 'settings.project.archived.title'), { exact: true })).toBeVisible();
 
   const restore = page.getByRole('button', { name: tr('en', 'settings.project.danger.restore'), exact: true });
+  // a check, not a wait for time: a pending or blocked button would swallow the key
+  await expect(restore).not.toHaveAttribute('aria-busy', 'true');
+  await expect(restore).not.toHaveAttribute('aria-disabled', 'true');
   await tabTo(page, restore);
   await page.keyboard.press('Enter');
   await expect(page.getByText(tr('en', 'settings.project.danger.restored', { identifier }))).toBeVisible();

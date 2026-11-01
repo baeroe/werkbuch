@@ -52,11 +52,13 @@ type FormDialogProps = {
   locked?: boolean;
   /** A refusal without a field of its own. */
   notice?: ReactNode;
+  /** Why the form cannot be sent yet: the main button stays focusable and says so (`onSubmit` still checks). */
+  submitDisabledReason?: string | null;
   finalFocus?: RefObject<HTMLElement | null>;
   children: ReactNode;
 };
 
-export function FormDialog({ open, onOpenChange, title, description, size = 'md', submitLabel, onSubmit, pending = false, locked = false, notice, finalFocus, children }: FormDialogProps) {
+export function FormDialog({ open, onOpenChange, title, description, size = 'md', submitLabel, onSubmit, pending = false, locked = false, notice, submitDisabledReason, finalFocus, children }: FormDialogProps) {
   const formId = useId();
   // two sends within one tick (a key pressed twice at once) are one intent; `pending` covers every later one
   const sending = useRef(false);
@@ -80,7 +82,7 @@ export function FormDialog({ open, onOpenChange, title, description, size = 'md'
               </Button>
             }
           />
-          <Button variant="primary" type="submit" form={formId} pending={pending} shortcut="mod+enter">
+          <Button variant="primary" type="submit" form={formId} pending={pending} shortcut="mod+enter" {...(submitDisabledReason !== undefined && { disabledReason: submitDisabledReason })}>
             {submitLabel}
           </Button>
         </>

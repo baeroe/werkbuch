@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ItemPageController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\ProjectSettingsPageController;
 use App\Http\Middleware\EnsureAccountIsActive;
@@ -28,6 +29,8 @@ Route::middleware('auth')->group(function () {
         ->name('projects');
     // never `{project}`: the binding of routes/api.php would resolve it and hide a former identifier from GetProject
     Route::get('/projects/{identifier}/settings/{section?}', ProjectSettingsPageController::class)->name('projects.settings');
+    // the page of an item by its key; never `{item}`: the binding of routes/api.php would resolve it and hide a former key
+    Route::get('/items/{key}', ItemPageController::class)->name('items.show');
 });
 
 // pictures (logo, avatars, project pictures) from the private disk, for the session and for tokens that may read (P15);

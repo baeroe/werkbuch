@@ -1,5 +1,7 @@
 <?php
 
+use App\Access\ProjectRole;
+use App\Actions\WorkItems\CreateWorkItem;
 use App\Actions\WorkItemTypes\DeleteWorkItemType;
 use App\Actions\WorkItemTypes\SaveWorkItemType;
 use App\Events\EventType;
@@ -8,6 +10,7 @@ use App\Models\Project;
 use App\Models\Property;
 use App\Models\TypeProperty;
 use App\Models\User;
+use App\Models\WorkItem;
 use App\Models\WorkItemType;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
@@ -209,6 +212,87 @@ it('deletes an unused type and takes it out of the projects that had it switched
         ->and($event->meta['name'])->toBe('Epic')
         ->and($event->meta['projects'])->toBe(['WEB'])
         ->and(eventsOf(EventType::ProjectUpdated))->toBeEmpty();
+});
+
+it('refuses to take the Epic mark from a type whose items have children', function () use ($answerOf) {
+    $this->actingAs(User::factory()->admin()->create());
+    $epic = WorkItemType::query()->where('name', 'Epic')->sole();
+    $project = Project::factory()->identifier('WEB')->create();
+    $parent = WorkItem::factory()->for($project)->create(['type_id' => $epic->id]);
+    // an archived child counts: it keeps its place
+    WorkItem::factory()->for($project)->childOf($parent)->archived()->create();
+
+    $response = $this->putJson("/api/v1/work-item-types/{$epic->id}", [...$answerOf($epic), 'is_epic' => false])->assertUnprocessable();
+
+    expect(errorsAt($response, 'is_epic'))->toBe([__('field.is_epic.has_children')])
+        ->and($epic->fresh()?->is_epic)->toBeTrue()
+        ->and(eventsOf(EventType::WorkItemTypeUpdated))->toBeEmpty();
+});
+
+it('lets the Epic mark go when no item of the type has children', function () use ($answerOf) {
+    $this->actingAs(User::factory()->admin()->create());
+    $epic = WorkItemType::query()->where('name', 'Epic')->sole();
+    $project = Project::factory()->identifier('WEB')->create();
+    // an epic without children, and a child of another type's item: neither stops it
+    WorkItem::factory()->for($project)->create(['type_id' => $epic->id]);
+    $task = WorkItem::factory()->for($project)->create();
+    WorkItem::factory()->for($project)->childOf($task)->create();
+
+    $this->putJson("/api/v1/work-item-types/{$epic->id}", [...$answerOf($epic), 'is_epic' => false])->assertOk()->assertJsonPath('data.is_epic', false);
+
+    expect(eventsOf(EventType::WorkItemTypeUpdated, $epic)->sole()->changes['is_epic'])->toBe(['old' => true, 'new' => false]);
+});
+
+it('refuses the Epic mark for a type whose items have a parent', function () use ($answerOf) {
+    $this->actingAs(User::factory()->admin()->create());
+    $bug = WorkItemType::query()->where('name', 'Bug')->sole();
+    $project = Project::factory()->identifier('WEB')->create();
+    $parent = WorkItem::factory()->for($project)->epic()->create();
+    WorkItem::factory()->for($project)->childOf($parent)->create(['type_id' => $bug->id]);
+
+    $response = $this->putJson("/api/v1/work-item-types/{$bug->id}", [...$answerOf($bug), 'is_epic' => true])->assertUnprocessable();
+
+    expect(errorsAt($response, 'is_epic'))->toBe([__('field.is_epic.has_parent')])
+        ->and($bug->fresh()?->is_epic)->toBeFalse();
+});
+
+it('lets the Epic mark come when no item of the type has a parent', function () use ($answerOf) {
+    $this->actingAs(User::factory()->admin()->create());
+    $bug = WorkItemType::query()->where('name', 'Bug')->sole();
+    $project = Project::factory()->identifier('WEB')->create();
+    // a bug without a parent: nothing stands in the way of the mark
+    WorkItem::factory()->for($project)->create(['type_id' => $bug->id]);
+
+    $this->putJson("/api/v1/work-item-types/{$bug->id}", [...$answerOf($bug), 'is_epic' => true])->assertOk()->assertJsonPath('data.is_epic', true);
+});
+
+it('archives a type in use instead of deleting it', function () {
+    $mara = User::factory()->create();
+    $project = Project::factory()->identifier('WEB')->member($mara, ProjectRole::Admin)->create(['lead_id' => $mara->id]);
+    $bug = WorkItemType::query()->where('name', 'Bug')->sole();
+    $item = WorkItem::factory()->for($project)->create(['type_id' => $bug->id]);
+    $this->travelTo('2026-10-31 09:00:00');
+
+    $this->actingAs(User::factory()->admin()->create())->deleteJson("/api/v1/work-item-types/{$bug->id}")
+        ->assertOk()->assertExactJson(['outcome' => 'archived']);
+
+    $bug->refresh();
+    $change = eventsOf(EventType::WorkItemTypeUpdated, $bug)->sole()->changes;
+
+    expect($bug->archived_at?->toJSON())->toBe(now()->toJSON())
+        ->and($item->fresh()?->type_id)->toBe($bug->id)
+        ->and($project->types()->pluck('work_item_types.id')->all())->toContain($bug->id)
+        ->and($change)->toBe(['archived_at' => ['old' => null, 'new' => $bug->archived_at?->toJSON()]])
+        ->and(eventsOf(EventType::WorkItemTypeDeleted))->toBeEmpty()
+        ->and(invalidOf(fn () => CreateWorkItem::run(actor($mara), ['project_id' => $project->id, 'title' => 'Neu', 'type_id' => $bug->id])))
+        ->toBe(['type_id' => [__('field.type_id.archived')]]);
+
+    // once more: archived already, the stamp stays and nothing is recorded
+    $this->travelTo('2026-10-31 10:00:00');
+    $this->deleteJson("/api/v1/work-item-types/{$bug->id}")->assertOk()->assertExactJson(['outcome' => 'archived']);
+
+    expect($bug->fresh()?->archived_at?->toJSON())->toBe($bug->archived_at?->toJSON())
+        ->and(eventsOf(EventType::WorkItemTypeUpdated, $bug))->toHaveCount(1);
 });
 
 it('replaces a type as a whole', function () use ($answerOf) {

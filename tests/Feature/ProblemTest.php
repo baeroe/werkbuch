@@ -137,7 +137,7 @@ it('answers 400 with the translated detail for a foreign Host', function () {
 it('translates the detail into the request locale', function () {
     apiRoute('get', '_t/forbidden', fn () => throw new AuthorizationException('English framework text'));
 
-    app()->setLocale('de');
+    speakGerman();
     $this->getJson('api/v1/_t/forbidden')->assertForbidden()->assertJsonPath('detail', 'Dafür fehlt die Berechtigung.');
 });
 

@@ -1,11 +1,12 @@
 /*
  * The frame every screen lives in (spec 5.2): the sidebar from md on, below it a top bar whose menu opens the same
- * content as a drawer; the live banner above the screen; and the shortcut help above everything. The shell's shortcuts
- * are registered here. The preview panel, the create dialog and the command palette arrive with the phases that bring
- * their screens.
+ * content as a drawer; the live banner above the screen; the preview panel of an item beside the screen; the create
+ * dialog, the command palette, the follow-up questions of the item commands and the shortcut help above everything.
+ * The shell's shortcuts and commands are registered here.
  */
 
 import { useEffect, useRef, type ReactNode } from 'react';
+import { ItemDialogsHost } from '@/components/fields/ItemDialogs';
 import { cx } from '@/components/ui/cx';
 import { InPageLink } from '@/components/ui/InPageLink';
 import { toast } from '@/components/ui/toast';
@@ -14,8 +15,11 @@ import { useSharedProps } from '@/lib/page';
 import { HelpOverlay } from '@/lib/shortcuts/HelpOverlay';
 import { useUiStore } from '@/store/ui';
 import { useShellBindings } from './bindings';
+import { CreateHost } from './CreateHost';
 import { LiveIndicator } from './LiveIndicator';
 import { MobileBar } from './MobileBar';
+import { PaletteHost } from './PaletteHost';
+import { PeekHost } from './PeekHost';
 import { Sidebar } from './Sidebar';
 
 /**
@@ -58,6 +62,10 @@ export function Shell({ children }: { children: ReactNode }) {
         <LiveIndicator />
         {children}
       </main>
+      <PeekHost />
+      <CreateHost />
+      <PaletteHost />
+      <ItemDialogsHost />
       <HelpOverlay />
     </>
   );

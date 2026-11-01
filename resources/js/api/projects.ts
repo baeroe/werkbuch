@@ -68,8 +68,8 @@ export function deleteProject(id: string): Promise<void> {
 /* ---------------------------------------------------------------------- members */
 
 /** Members of one project. */
-export function listMembers(project: string): Promise<Page<ProjectMember>> {
-  return getPage<ProjectMember>(`${projectPath(project)}/members`);
+export function listMembers(project: string, args: PageArgs = {}): Promise<Page<ProjectMember>> {
+  return getPage<ProjectMember>(`${projectPath(project)}/members`, { ...args });
 }
 
 /** Joins a public project as a member with one click. */

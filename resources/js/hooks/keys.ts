@@ -14,8 +14,10 @@
  *   useUpdateWorkItem().mutate({ id, patch, base_description_version? })
  *   useTransitionWorkItem().mutate({ id, to_state_id, resolution_id? })
  *
- * Components never call `@/api` directly, only these hooks. Resources of later phases have their keys here already
- * (`workItems.meta` comes with the work items in Phase 4).
+ * Components never call `@/api` directly, only these hooks. Resources of later phases have their keys here already.
+ * The work items have no `meta` key: progress, blocked and blocking come with every item (P7). `stateUsage` counts the
+ * items per state for the mapping of states: whatever moves items between states, creates or deletes them makes it
+ * stale (the item mutations, saving and switching a workflow).
  */
 
 function resource<Name extends string>(name: Name) {
@@ -41,6 +43,7 @@ export const qk = {
   relationTypes: resource('relation-types'),
   resolutions: resource('resolutions'),
   workItems: resource('work-items'),
+  stateUsage: resource('state-usage'),
   attachments: resource('attachments'),
   activity: resource('activity'),
   views: resource('views'),

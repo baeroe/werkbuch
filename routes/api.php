@@ -3,6 +3,7 @@
 use App\Exceptions\Problem;
 use App\Http\Controllers\Api\BotsController;
 use App\Http\Controllers\Api\FavoritesController;
+use App\Http\Controllers\Api\HistoryController;
 use App\Http\Controllers\Api\InvitationsController;
 use App\Http\Controllers\Api\LabelsController;
 use App\Http\Controllers\Api\MembersController;
@@ -10,21 +11,34 @@ use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\PasswordController;
 use App\Http\Controllers\Api\ProjectsController;
 use App\Http\Controllers\Api\PropertiesController;
+use App\Http\Controllers\Api\RelationsController;
 use App\Http\Controllers\Api\RelationTypesController;
 use App\Http\Controllers\Api\ResolutionsController;
+use App\Http\Controllers\Api\StateUsageController;
+use App\Http\Controllers\Api\SubscribersController;
 use App\Http\Controllers\Api\TokensController;
 use App\Http\Controllers\Api\TwoFactorController;
 use App\Http\Controllers\Api\UsersController;
 use App\Http\Controllers\Api\WorkflowsController;
+use App\Http\Controllers\Api\WorkItemsController;
 use App\Http\Controllers\Api\WorkItemTypesController;
 use App\Http\Middleware\EnsureAccountIsActive;
 use App\Http\Middleware\EnsureSession;
 use App\Http\Middleware\EnsureTokenAbility;
+use App\Http\Middleware\RedirectFormerItemKey;
 use App\Models\Project;
+use App\Models\WorkItem;
+use App\Models\WorkItemRelation;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Str;
 
 // a project by its ULID, identifier or a former identifier; whether the account sees it, the action decides
 Route::bind('project', fn (string $ref) => Project::findByReference($ref) ?? throw Problem::notFound());
+// a work item by its ULID or key (`WEB-12`, any case, also with a former identifier); whether the account sees it, the
+// action decides
+Route::bind('item', fn (string $ref) => WorkItem::findByReference($ref) ?? throw Problem::notFound());
+// a relation by its ULID (any case; anything else is no relation); whether the account sees an end, the action decides
+Route::bind('relation', fn (string $ref) => (Str::isUlid($ref) ? WorkItemRelation::query()->find(strtolower($ref)) : null) ?? throw Problem::notFound());
 
 // The REST API (prefix api/v1, see bootstrap/app.php): the session of the interface (with CSRF) or a bearer token whose
 // abilities fit the method. Every route has a row in tests/Feature/Api/routes.php.
@@ -63,6 +77,7 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
     Route::post('workflows', [WorkflowsController::class, 'store']);
     Route::put('workflows/{workflow}', [WorkflowsController::class, 'update']);
     Route::delete('workflows/{workflow}', [WorkflowsController::class, 'destroy']);
+    Route::get('state-usage', [StateUsageController::class, 'index']);
 
     Route::get('work-item-types', [WorkItemTypesController::class, 'index']);
     Route::post('work-item-types', [WorkItemTypesController::class, 'store']);
@@ -88,6 +103,28 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
     Route::post('resolutions', [ResolutionsController::class, 'store']);
     Route::put('resolutions/{resolution}', [ResolutionsController::class, 'update']);
     Route::delete('resolutions/{resolution}', [ResolutionsController::class, 'destroy']);
+
+    Route::get('work-items', [WorkItemsController::class, 'index']);
+    Route::post('work-items', [WorkItemsController::class, 'store']);
+    // before {item}: `bulk` is no item
+    Route::post('work-items/bulk', [WorkItemsController::class, 'bulk']);
+    // a read by a former key moves to the current one (301); every route with {item} belongs in this group
+    Route::middleware(RedirectFormerItemKey::class)->group(function () {
+        Route::get('work-items/{item}', [WorkItemsController::class, 'show']);
+        Route::patch('work-items/{item}', [WorkItemsController::class, 'update']);
+        Route::post('work-items/{item}/transition', [WorkItemsController::class, 'transition']);
+        Route::put('work-items/{item}/type', [WorkItemsController::class, 'changeType']);
+        Route::post('work-items/{item}/archive', [WorkItemsController::class, 'archive']);
+        Route::post('work-items/{item}/restore', [WorkItemsController::class, 'restore']);
+        Route::delete('work-items/{item}', [WorkItemsController::class, 'destroy']);
+        Route::get('work-items/{item}/subscribers', [SubscribersController::class, 'index']);
+        Route::put('work-items/{item}/subscription', [SubscribersController::class, 'store']);
+        Route::delete('work-items/{item}/subscription', [SubscribersController::class, 'destroy']);
+        Route::get('work-items/{item}/relations', [RelationsController::class, 'index']);
+        Route::post('work-items/{item}/relations', [RelationsController::class, 'store']);
+        Route::get('work-items/{item}/history', [HistoryController::class, 'index']);
+    });
+    Route::delete('relations/{relation}', [RelationsController::class, 'destroy']);
 
     Route::get('favorites', [FavoritesController::class, 'index']);
     Route::post('favorites/toggle', [FavoritesController::class, 'toggle']);

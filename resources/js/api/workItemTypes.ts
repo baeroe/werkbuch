@@ -2,7 +2,7 @@
  * Work item types (spec 4.6): name, icon, tone and the properties a type carries. Only org admins change them.
  */
 
-import type { WorkItemType } from '@/types';
+import type { CatalogDeleteOutcome, WorkItemType } from '@/types';
 import type { Page, PageArgs } from './client';
 import { del, getPage, saveOne } from './http';
 
@@ -26,6 +26,6 @@ export function saveWorkItemType(input: WorkItemTypeInput): Promise<WorkItemType
 }
 
 /** The answer is `{ outcome }` without `data`: a type that items use is archived instead of deleted. */
-export function deleteWorkItemType(id: string): Promise<{ outcome: 'deleted' | 'archived' }> {
-  return del<{ outcome: 'deleted' | 'archived' }>(`/work-item-types/${encodeURIComponent(id)}`);
+export function deleteWorkItemType(id: string): Promise<CatalogDeleteOutcome> {
+  return del<CatalogDeleteOutcome>(`/work-item-types/${encodeURIComponent(id)}`);
 }

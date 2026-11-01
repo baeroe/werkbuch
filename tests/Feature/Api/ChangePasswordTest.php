@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Hash;
  */
 
 it('names a wrong current password at its field and changes nothing', function () {
-    app()->setLocale('de');
+    speakGerman();
     $lene = User::factory()->create(['password' => 'old-password']);
 
     $this->actingAs($lene)->putJson('/api/v1/me/password', ['current_password' => 'nope', 'password' => 'new-password', 'password_confirmation' => 'new-password'])
@@ -33,7 +33,7 @@ it('wants the current password', function (array $input) {
 })->with(['missing' => [[]], 'a list' => [['current_password' => ['old-password']]]]);
 
 it('names a new password that is too short or typed differently at the field', function (array $input, string $message) {
-    app()->setLocale('de');
+    speakGerman();
     $lene = User::factory()->create(['password' => 'old-password']);
 
     $this->actingAs($lene)->putJson('/api/v1/me/password', ['current_password' => 'old-password'] + $input)

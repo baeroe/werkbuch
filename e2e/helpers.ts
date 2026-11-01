@@ -342,6 +342,77 @@ export async function removeCatalogEntries(page: Page, path: string, field: 'nam
   }
 }
 
+/** A short code per Playwright project: keeps the identifiers of `createE2eProject()` within ten characters. */
+const VARIANT_CODE: Record<string, string> = { 'desktop-light': 'A', 'desktop-dark': 'B', 'phone-light': 'C', 'phone-dark': 'D' };
+
+/** Makes sure the context of the page has the CSRF cookie `api()` reads: a spec that has not loaded a page yet starts without it. */
+async function ensureCsrfCookie(page: Page): Promise<void> {
+  const baseURL = test.info().project.use.baseURL!;
+  if ((await page.context().cookies(baseURL)).some((cookie) => cookie.name === 'XSRF-TOKEN')) return;
+  const response = await page.request.get(new URL('/sanctum/csrf-cookie', baseURL).toString(), { headers: { Referer: `${baseURL}/` } });
+  expect(response.status(), await response.text()).toBe(204);
+}
+
+/** The id of the catalog entry named `name` (`workflows`, `work-item-types`), failing with the names there are. */
+async function catalogId(page: Page, path: string, name: string): Promise<string> {
+  const entries = await allEntries(page, path);
+  const entry = entries.find((item) => item.name === name);
+  if (!entry) throw new Error(`No entry "${name}" in ${path}; there are ${entries.map((item) => String(item.name)).join(', ')}`);
+  return String(entry.id);
+}
+
+/**
+ * Creates a project for a spec over the API, as the signed-in person: named `name` (start it with `E2E `, the e2e seeder
+ * removes those projects before the next run), with an identifier of its own `E<run><variant><name hash>` that no other
+ * name, variant or run shares (nine or ten characters), the default workflow and every active type unless
+ * `options.workflow` (the name of a workflow) and `options.types` (type names, the first is the default type) say
+ * otherwise. Answers its id and identifier; clean up with `removeE2eProject()` in a `finally`.
+ */
+export async function createE2eProject(
+  page: Page,
+  name: string,
+  options: { workflow?: string; types?: string[] } = {},
+): Promise<{ id: string; identifier: string }> {
+  // only `E2E …` projects are cleaned up after an aborted run (E2eSeeder); a name serves one project per run and variant
+  if (!name.startsWith('E2E ')) throw new Error(`createE2eProject: "${name}" does not start with "E2E "`);
+  await ensureCsrfCookie(page);
+  const hash = createHash('sha1').update(name).digest('hex').slice(0, 8);
+  const identifier = `E${runId()}${VARIANT_CODE[variant()]}${parseInt(hash, 16).toString(36).toUpperCase().slice(-3).padStart(3, '0')}`;
+  const types = options.types && (await Promise.all(options.types.map((type) => catalogId(page, 'work-item-types', type))));
+  const response = await api(page, 'POST', '/api/v1/projects', {
+    name,
+    identifier,
+    ...(options.workflow && { workflow_id: await catalogId(page, 'workflows', options.workflow) }),
+    ...(types && { enabled_type_ids: types, default_type_id: types[0] }),
+  });
+  expect(response.status(), await response.text()).toBe(201);
+  const { data } = (await response.json()) as { data: { id: string; identifier: string } };
+  return { id: data.id, identifier: data.identifier };
+}
+
+/**
+ * Creates a work item over the API (`POST /api/v1/work-items`, the fields of its input: `project_id`, `type_id`, `title`,
+ * `description`, `assignee_id`, `priority`, `label_ids`, `start_date`, `due_date`, `parent_id`, `values`, `state_id`);
+ * answers its id and key.
+ */
+export async function createItem(page: Page, input: Record<string, unknown>): Promise<{ id: string; key: string }> {
+  await ensureCsrfCookie(page);
+  const response = await api(page, 'POST', '/api/v1/work-items', input);
+  expect(response.status(), await response.text()).toBe(201);
+  const { data } = (await response.json()) as { data: { id: string; key: string } };
+  return { id: data.id, key: data.key };
+}
+
+/**
+ * Deletes a project of a spec with its items (cleanup in `finally`): the answer is 202, the purge runs in the queue; a
+ * project that is gone already (404) is fine.
+ */
+export async function removeE2eProject(page: Page, identifier: string): Promise<void> {
+  await ensureCsrfCookie(page);
+  const response = await api(page, 'DELETE', `/api/v1/projects/${identifier}`);
+  expect([202, 404], await response.text()).toContain(response.status());
+}
+
 /**
  * Opens the drawer of the top bar on the phone, where the sidebar lives; on the desktop the sidebar is there already.
  * `backwards` tabs up to the menu from a place further down the page.

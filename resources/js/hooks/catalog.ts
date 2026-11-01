@@ -23,9 +23,9 @@ export function useSaveLabel() {
   return useApiMutation(saveLabel, [qk.labels.all]);
 }
 
-/** Answers `{ affected_items }`. */
+/** Answers `{ affected_items }`; the items lose the label, so they reload as well. */
 export function useDeleteLabel() {
-  return useApiMutation(deleteLabel, [qk.labels.all]);
+  return useApiMutation(deleteLabel, [qk.labels.all, qk.workItems.all]);
 }
 
 /** Every relation type, all pages. */
@@ -37,9 +37,12 @@ export function useSaveRelationType() {
   return useApiMutation(saveRelationType, [qk.relationTypes.all]);
 }
 
-/** Answers `{ affected_relations }`; the built-in types cannot be deleted (409 `built_in`). */
+/**
+ * Answers `{ affected_relations }`; the built-in types cannot be deleted (409 `built_in`). The relations of that type
+ * go, so the items reload as well.
+ */
 export function useDeleteRelationType() {
-  return useApiMutation(deleteRelationType, [qk.relationTypes.all]);
+  return useApiMutation(deleteRelationType, [qk.relationTypes.all, qk.workItems.all]);
 }
 
 /** Every resolution, all pages, archived ones included. */
@@ -51,7 +54,7 @@ export function useSaveResolution() {
   return useApiMutation(saveResolution, [qk.resolutions.all]);
 }
 
-/** Answers `{ outcome: 'deleted' | 'archived' }`. */
+/** Answers `CatalogDeleteOutcome`: a resolution that items carry is archived instead, and they keep it. */
 export function useDeleteResolution() {
   return useApiMutation(deleteResolution, [qk.resolutions.all]);
 }

@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Models\Workflow;
 use App\Models\WorkflowState;
 use App\Models\WorkflowTransition;
+use App\Models\WorkItem;
 use Illuminate\Support\Str;
 use Tests\Support\WorkflowFixtures;
 
@@ -305,7 +306,7 @@ it('checks a state mapping against the states that go and the ones that stay', f
     $staying = $this->putJson("/api/v1/workflows/{$standard->id}", [...$input, 'state_mapping' => [$todo => $progress]])->assertUnprocessable();
     $gone = $this->putJson("/api/v1/workflows/{$standard->id}", [...$input, 'state_mapping' => [$pending => $pending]])->assertUnprocessable();
 
-    expect(errorsAt($staying, "state_mapping.{$todo}"))->toBe([__('field.mapping.unknown_state')])
+    expect(errorsAt($staying, "state_mapping.{$todo}"))->toBe([__('field.state_mapping.stays')])
         ->and(errorsAt($gone, "state_mapping.{$pending}"))->toBe([__('field.mapping.target')])
         ->and(WorkflowState::query()->whereKey($pending)->exists())->toBeTrue();
 
@@ -314,6 +315,92 @@ it('checks a state mapping against the states that go and the ones that stay', f
     expect(WorkflowState::query()->whereKey($pending)->exists())->toBeFalse()
         ->and(array_column(eventsOf(EventType::WorkflowUpdated, $standard)->sole()->changes['states']['new'], 'name'))
         ->toBe(['Backlog', 'Todo', 'In Progress', 'Done', 'Cancelled']);
+});
+
+/** The standard workflow as a client sends it back, without its state Pending (and the id of Pending). */
+$withoutPending = function (): array {
+    $input = WorkflowFixtures::inputOf(Workflow::default());
+    $pending = $input['states'][3]['id'];
+    $input['states'] = array_values(array_filter($input['states'], fn (array $state) => $state['id'] !== $pending));
+
+    return [$input, $pending];
+};
+
+it('refuses to remove a state with items without a new one', function () use ($withoutPending) {
+    $this->actingAs(User::factory()->admin()->create());
+    $standard = Workflow::default();
+    [$input, $pending] = $withoutPending();
+    $web = Project::factory()->identifier('WEB')->create();
+    $ops = Project::factory()->identifier('OPS')->create();
+    WorkItem::factory()->for($web)->inState('Pending')->count(2)->create();
+    WorkItem::factory()->for($ops)->inState('Pending')->create();
+    // Todo goes as well, but without items it needs nothing
+    $input['states'] = array_values(array_filter($input['states'], fn (array $state) => $state['name'] !== 'Todo'));
+
+    $this->putJson("/api/v1/workflows/{$standard->id}", $input)
+        ->assertConflict()->assertJsonPath('reason', 'state_in_use')->assertJsonPath('detail', __('problem.reason.state_in_use'))
+        ->assertJsonPath('states', [['state_id' => $pending, 'name' => 'Pending', 'items' => 3]]);
+
+    expect(WorkflowState::query()->where('workflow_id', $standard->id)->count())->toBe(6)
+        ->and(WorkItem::query()->where('state_id', $pending)->count())->toBe(3)
+        ->and(eventsOf(EventType::WorkflowUpdated))->toBeEmpty()
+        ->and(eventsOf(EventType::WorkItemStateChanged))->toBeEmpty();
+});
+
+it('maps removed states to new states by the keys of the input', function () use ($withoutPending) {
+    $this->actingAs(User::factory()->admin()->create());
+    $standard = Workflow::default();
+    [$input, $pending] = $withoutPending();
+    $web = Project::factory()->identifier('WEB')->create();
+    $item = WorkItem::factory()->for($web)->inState('Pending')->create();
+    $input['states'][] = ['id' => 'st_new', 'name' => 'Wartet', 'icon' => 'pause', 'category' => 'started'];
+
+    $this->putJson("/api/v1/workflows/{$standard->id}", [...$input, 'state_mapping' => [strtoupper($pending) => 'st_new']])->assertOk();
+
+    $new = WorkflowState::query()->where('workflow_id', $standard->id)->where('name', 'Wartet')->sole();
+    $event = eventsOf(EventType::WorkItemStateChanged, $item)->sole();
+
+    expect($item->fresh()?->state_id)->toBe($new->id)
+        ->and($event->changes)->toBe(['state_id' => ['old' => $pending, 'new' => $new->id]])
+        ->and($event->meta['reason'])->toBe('state_removed')
+        ->and(WorkflowState::query()->whereKey($pending)->exists())->toBeFalse();
+});
+
+it('remaps the items of every project of the workflow', function () use ($withoutPending) {
+    $this->actingAs(User::factory()->admin()->create());
+    $standard = Workflow::default();
+    [$input, $pending] = $withoutPending();
+    $todo = $input['states'][1]['id'];
+    $items = [
+        WorkItem::factory()->for(Project::factory()->identifier('WEB')->create())->inState('Pending')->create(),
+        WorkItem::factory()->for(Project::factory()->identifier('OPS')->create(['archived_at' => now()]))->inState('Pending')->create(),
+        // a project in deletion keeps its items until the purge: they need a state too
+        WorkItem::factory()->for(Project::factory()->identifier('OLD')->create(['deleting_at' => now()]))->inState('Pending')->create(),
+    ];
+    $agency = Workflow::factory()->create(['name' => 'Agentur-Freigabe']);
+    $elsewhere = WorkItem::factory()->for(Project::factory()->identifier('APP')->create(['workflow_id' => $agency->id]))->create();
+
+    $this->putJson("/api/v1/workflows/{$standard->id}", [...$input, 'state_mapping' => [$pending => $todo]])->assertOk();
+
+    expect(array_map(fn (WorkItem $item) => $item->fresh()?->state_id, $items))->toBe([$todo, $todo, $todo])
+        ->and($elsewhere->fresh()?->state_id)->toBe($agency->initial_state_id)
+        ->and(eventsOf(EventType::WorkItemStateChanged))->toHaveCount(3);
+});
+
+it('still refuses a mapping of a state that stays', function () use ($withoutPending) {
+    $this->actingAs(User::factory()->admin()->create());
+    $standard = Workflow::default();
+    [$input, $pending] = $withoutPending();
+    [, $todo, $progress] = array_column($input['states'], 'id');
+    $item = WorkItem::factory()->for(Project::factory()->identifier('WEB')->create())->inState('Todo')->create();
+
+    $response = $this->putJson("/api/v1/workflows/{$standard->id}", [...$input, 'state_mapping' => [$pending => $progress, $todo => $progress]])
+        ->assertUnprocessable();
+
+    expect(array_keys($response->json('errors')))->toBe(["state_mapping.{$todo}"])
+        ->and(errorsAt($response, "state_mapping.{$todo}"))->toBe([__('field.state_mapping.stays')])
+        ->and($item->fresh()?->state_id)->toBe($todo)
+        ->and(WorkflowState::query()->whereKey($pending)->exists())->toBeTrue();
 });
 
 it('deletes an unused workflow with its states and transitions', function () {

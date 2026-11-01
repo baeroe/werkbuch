@@ -18,6 +18,8 @@ arch('actions are final, use AsAction and run through handle()')
 arch('the domain is plain PHP')
     ->expect('App\Domain')->not->toUse(['Illuminate', 'Carbon', 'App\Models', 'App\Actions', 'App\Http', 'App\Support', 'App\Exceptions']);
 arch('domain classes are final')->expect('App\Domain')->classes()->toBeFinal();
+arch('rich text is final and leaves actions, http and the database alone')
+    ->expect('App\RichText')->classes()->toBeFinal()->not->toUse(['App\Actions', 'App\Http', 'Illuminate\Support\Facades\DB']);
 arch('http, console and jobs leave the database to actions')
     ->expect(['App\Http', 'App\Console', 'App\Jobs', 'App\Auth'])->not->toUse('Illuminate\Support\Facades\DB');
 arch('the problem is final')->expect(Problem::class)->toBeFinal()->toExtend(RuntimeException::class)->toImplement(HttpExceptionInterface::class);

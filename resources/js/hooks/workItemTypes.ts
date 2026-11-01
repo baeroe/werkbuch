@@ -13,7 +13,10 @@ export function useSaveWorkItemType() {
   return useApiMutation(saveWorkItemType, [qk.workItemTypes.all]);
 }
 
-/** Answers `{ outcome: 'deleted' | 'archived' }`; the projects reload because they drop the type from their settings. */
+/**
+ * Answers `CatalogDeleteOutcome`: a type that items carry is archived instead, and they keep it. The projects reload
+ * because they drop a deleted type from their settings.
+ */
 export function useDeleteWorkItemType() {
   return useApiMutation(deleteWorkItemType, [qk.workItemTypes.all, qk.projects.all]);
 }

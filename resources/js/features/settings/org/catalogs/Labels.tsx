@@ -1,7 +1,8 @@
 /*
  * Labels (spec 4.7): the organisation's list of tags, each with a name and one of the six muted tones. Items carry any
- * number of them. Deleting a label takes it off all items; the five seconds of undo come first. How many items carry a
- * label comes with the items (P6). Members see the list, admins change it.
+ * number of them. Deleting a label takes it off all items; the five seconds of undo come first, and a toast after the
+ * call says how many items lost it (`affected_items`). How many items carry a label before it goes comes with Phase 5
+ * (A61). Members see the list, admins change it.
  */
 
 import { Pencil, Plus, Tags, Trash2 } from 'lucide-react';
@@ -15,7 +16,7 @@ import { Input } from '@/components/ui/Input';
 import { toast } from '@/components/ui/toast';
 import { useDeleteLabel, useLabels, useSaveLabel } from '@/hooks/catalog';
 import { useSettle } from '@/hooks/mutation';
-import { t } from '@/lib/i18n';
+import { t, tn } from '@/lib/i18n';
 import type { Label, TypeTone } from '@/types';
 import { TONE_LABELS } from '../../catalog/choices';
 import { ToneSelect } from '../../catalog/ToneSelect';
@@ -144,6 +145,9 @@ export default function Labels({ readOnlyReason }: SectionProps) {
                               label: t('settings.labels.deleted', { name: label.name }),
                               failureTitle: t('settings.labels.not_deleted', { name: label.name }),
                               run: () => remove.mutateAsync(label.id),
+                              onDone: ({ affected_items }) => {
+                                if (affected_items > 0) toast({ title: tn('settings.labels.removed_from', affected_items, { name: label.name }), tone: 'success' });
+                              },
                             })
                           }
                         />

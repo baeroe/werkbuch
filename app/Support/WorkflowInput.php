@@ -10,6 +10,7 @@ use App\Domain\Workflow\TransitionGraph;
 use App\Domain\Workflow\WorkflowIssue;
 use App\Exceptions\Problem;
 use App\Models\Workflow;
+use App\Models\WorkflowState;
 use Closure;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -30,12 +31,6 @@ final class WorkflowInput
     public const DESCRIPTION_MAX = CatalogInput::DESCRIPTION_MAX;
 
     public const STATES_MAX = 30;
-
-    /** The longest id a client may give a state. */
-    public const KEY_MAX = 64;
-
-    /** The start of the key of a state sent without an id (`new:<index>`); sent ids never start with it. */
-    public const NEW_KEY = 'new:';
 
     /**
      * The input with its texts trimmed and every ULID in lower case (local ids stay as they came).
@@ -90,7 +85,7 @@ final class WorkflowInput
             'initial_state_id' => ['required', 'string'],
             'states' => ['present', 'array', 'min:1', 'max:'.self::STATES_MAX],
             // `new:<index>` names a state sent without an id; no id of the client looks like one
-            'states.*.id' => ['nullable', 'string', 'max:'.self::KEY_MAX, 'doesnt_start_with:'.self::NEW_KEY],
+            'states.*.id' => ['nullable', 'string', 'max:'.ClientKeys::MAX, 'doesnt_start_with:'.ClientKeys::PREFIX],
             'states.*.name' => ['required', 'string', 'max:'.self::STATE_NAME_MAX],
             'states.*.icon' => ['required', Rule::enum(StateIcon::class)],
             'states.*.category' => ['required', Rule::enum(StateCategory::class)],
@@ -114,7 +109,7 @@ final class WorkflowInput
         // in the order they were sent: `validated()` puts a state without an id behind those with one
         foreach (array_keys($input['states']) as $index) {
             $state = $valid['states'][$index];
-            $key = $state['id'] ?? self::NEW_KEY.$position;
+            $key = ClientKeys::keyOf($state, $position);
 
             // a sent id names one state only
             if (isset($keys[$key])) {
@@ -124,7 +119,7 @@ final class WorkflowInput
             $keys[$key] = true;
             $states[] = [
                 'key' => $key,
-                'existing' => in_array($key, $own, true) ? $key : null,
+                'existing' => ClientKeys::resolve($own, [], $key),
                 'name' => $state['name'],
                 'icon' => StateIcon::from($state['icon']),
                 'category' => StateCategory::from($state['category']),
@@ -200,19 +195,23 @@ final class WorkflowInput
 
     /**
      * What is wrong with a mapping of states (state id → the state that takes over its items): every key must be one
-     * of `$from`, every value one of `$to`. The errors stand at `<field>.<id>`.
+     * of `$from`, every value one of `$to`. The errors stand at `<field>.<id>`; a key among `$staying` (a state of the
+     * workflow that stays) is told so instead of "unknown".
      *
      * @param  array<array-key, mixed>  $mapping
      * @param  list<string>  $from
      * @param  list<string>  $to
+     * @param  list<string>  $staying
      * @return array<string, list<string>>
      */
-    public static function mappingErrors(string $field, array $mapping, array $from, array $to): array
+    public static function mappingErrors(string $field, array $mapping, array $from, array $to, array $staying = []): array
     {
         $errors = [];
 
         foreach ($mapping as $id => $target) {
-            if (! in_array((string) $id, $from, true)) {
+            if (in_array((string) $id, $staying, true)) {
+                $errors["{$field}.{$id}"] = [__('field.state_mapping.stays')];
+            } elseif (! in_array((string) $id, $from, true)) {
                 $errors["{$field}.{$id}"] = [__('field.mapping.unknown_state')];
             } elseif (! in_array($target, $to, true)) {
                 $errors["{$field}.{$id}"] = [__('field.mapping.target')];
@@ -220,6 +219,29 @@ final class WorkflowInput
         }
 
         return $errors;
+    }
+
+    /**
+     * The states that hold items and have no target in the mapping (the mapping passed mappingErrors), in the order
+     * given: what a 422 at `mapping.<id>` (AssignWorkflow) and a 409 `state_in_use` (SaveWorkflow) name, with the number
+     * of their items.
+     *
+     * @param  array<array-key, mixed>  $mapping
+     * @param  iterable<WorkflowState>  $states  the states that go
+     * @param  array<string, int>  $counts  items per state id (ListStateUsage::counts)
+     * @return list<array{state_id: string, name: string, items: int}>
+     */
+    public static function unmapped(array $mapping, iterable $states, array $counts): array
+    {
+        $unmapped = [];
+
+        foreach ($states as $state) {
+            if (($counts[$state->id] ?? 0) > 0 && ! array_key_exists($state->id, $mapping)) {
+                $unmapped[] = ['state_id' => $state->id, 'name' => $state->name, 'items' => $counts[$state->id]];
+            }
+        }
+
+        return $unmapped;
     }
 
     /**
@@ -237,8 +259,8 @@ final class WorkflowInput
             'states.min' => __('field.states.required'),
             'states.max' => __('field.states.max'),
             // the string rule fills no :max, so the sentence comes filled
-            'states.*.id.string' => __('field.states.id_invalid', ['max' => self::KEY_MAX]),
-            'states.*.id.max' => __('field.states.id_invalid', ['max' => self::KEY_MAX]),
+            'states.*.id.string' => __('field.states.id_invalid', ['max' => ClientKeys::MAX]),
+            'states.*.id.max' => __('field.states.id_invalid', ['max' => ClientKeys::MAX]),
             'states.*.id.doesnt_start_with' => __('field.states.id_reserved'),
             'states.*.name.required' => __('field.states.name_required'),
             'states.*.name.string' => __('field.states.name_required'),
