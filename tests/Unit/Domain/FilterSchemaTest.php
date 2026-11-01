@@ -67,12 +67,8 @@ it('writes ULIDs in small letters and lists without doubles in the order sent', 
     ]);
 });
 
-it('accepts every form of value the schema knows', function (array $condition, mixed $expected) use ($catalog, $filter) {
-    $parsed = FilterSchema::parse($filter($condition), $catalog());
-
-    expect($parsed->conditions[0]->value)->toBe($expected)
-        ->and($parsed->conditions[0]->resolved)->not->toBeNull();
-})->with([
+/** Every form of value the schema takes, with its normal form; together they use every operator. */
+$accepted = [
     'state category' => [['field' => 'state_category', 'op' => 'is', 'value' => 'started'], 'started'],
     'priorities' => [['field' => 'priority', 'op' => 'not_in', 'value' => ['none', 'low']], ['none', 'low']],
     'is with a list' => [['field' => 'type', 'op' => 'is', 'value' => ['01JBZ8V6W2K7C0M9X4R5T3N8QA']], ['01jbz8v6w2k7c0m9x4r5t3n8qa']],
@@ -103,7 +99,37 @@ it('accepts every form of value the schema knows', function (array $condition, m
     'multiple members contain me' => [['field' => 'property:reviewers', 'op' => 'contains', 'value' => 'me'], 'me'],
     'multiple options' => [['field' => 'property:platforms', 'op' => 'in', 'value' => ['01jbz8v6w2k7c0m9x4r5t3n8qa']], ['01jbz8v6w2k7c0m9x4r5t3n8qa']],
     'archived' => [['field' => 'archived', 'op' => 'is', 'value' => true], true],
-]);
+    'between one number' => [['field' => 'property:effort', 'op' => 'between', 'value' => [5, 5]], [5, 5]],
+    'between one day' => [['field' => 'due_date', 'op' => 'between', 'value' => ['2026-10-01', '2026-10-01']], ['2026-10-01', '2026-10-01']],
+    'between one relative day' => [['field' => 'created_at', 'op' => 'between', 'value' => [['relative' => '-7d'], ['relative' => '-7d']]], [['relative' => '-7d'], ['relative' => '-7d']]],
+    'between reversed ends stays as sent' => [['field' => 'property:effort', 'op' => 'between', 'value' => [8, -2]], [8, -2]],
+    'is not' => [['field' => 'state', 'op' => 'is_not', 'value' => '01JBZ8V6W2K7C0M9X4R5T3N8QA'], '01jbz8v6w2k7c0m9x4r5t3n8qa'],
+    'in' => [['field' => 'assignee', 'op' => 'in', 'value' => ['me', '01jbz8v6w2k7c0m9x4r5t3n8qa']], ['me', '01jbz8v6w2k7c0m9x4r5t3n8qa']],
+];
+
+it('accepts every form of value the schema knows', function (array $condition, mixed $expected) use ($catalog, $filter) {
+    $parsed = FilterSchema::parse($filter($condition), $catalog());
+
+    expect($parsed->conditions[0]->value)->toBe($expected)
+        ->and($parsed->conditions[0]->resolved)->not->toBeNull();
+})->with($accepted);
+
+it('reads a stored filter back as it parsed it, for every operator', function () use ($catalog, $filter, $accepted) {
+    $ops = [];
+    foreach ($accepted as $name => [$condition]) {
+        $parsed = FilterSchema::parse($filter($condition), $catalog());
+
+        expect(FilterSchema::read($parsed->toArray(), $catalog()))->toEqual($parsed, $name);
+        $ops[] = $parsed->conditions[0]->op->value;
+    }
+
+    $all = array_map(fn (Op $op) => $op->value, Op::cases());
+    sort($all);
+    $ops = array_values(array_unique($ops));
+    sort($ops);
+
+    expect($ops)->toBe($all);
+});
 
 it('refuses a filter with the path and code of what is wrong', function (mixed $json, array $errors) use ($catalog, $refusal) {
     expect($refusal($json, $catalog()))->toBe($errors);

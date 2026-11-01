@@ -21,7 +21,7 @@ use App\Domain\WorkItems\Priority;
  * `YYYY-MM-DD` or `today`, `this_week`, `this_month`, `{relative: '±N(d|w)'}`, `true`/`false`, a text of 1–255
  * characters that is not blank, a finite number below `ItemValue::NUMBER_LIMIT` in amount. `is`/`is_not` on an id,
  * enum or list field take one value or a list, `in`/`not_in` a list of 1–100 (doubles are dropped, the order stays),
- * `between` two values.
+ * `between` two values, kept as sent (equal ends included).
  */
 final class FilterSchema
 {
@@ -152,11 +152,24 @@ final class FilterSchema
         $isList = is_array($value) && array_is_list($value);
 
         return match (true) {
-            $op === Op::Between => $isList && count($value) === 2 ? self::values($field, $value) : null,
+            $op === Op::Between => $isList && count($value) === 2 ? self::range($field, $value[0], $value[1]) : null,
             $op === Op::In, $op === Op::NotIn => $isList ? self::values($field, $value) : null,
             $choice && $isList => self::values($field, $value),
             default => self::single($field, $value),
         };
+    }
+
+    /**
+     * Both ends of a `between`, each of the right form, kept as sent: equal ends are a range of one day or one number.
+     *
+     * @return array{0: array{0: mixed, 1: mixed}}|null
+     */
+    private static function range(Field $field, mixed $from, mixed $to): ?array
+    {
+        $low = self::single($field, $from);
+        $high = self::single($field, $to);
+
+        return $low === null || $high === null ? null : [[$low[0], $high[0]]];
     }
 
     /**
