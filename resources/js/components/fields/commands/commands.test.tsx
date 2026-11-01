@@ -422,7 +422,6 @@ describe('item commands', () => {
 /* -------------------------------------------------------------------------- sub-lists */
 
 describe('the sub-lists of the item commands', () => {
-  const today = cachedZone(organization.timezone).date(new Date());
   const transition = (id: string) => ({ [`POST /api/v1/work-items/${id}/transition`]: (body: unknown) => ({ body: { data: { ...web47, ...(body as object) } } }) });
 
   it('moves into an open state at once and asks for the resolution of a closed one, then gives the focus back', async () => {
@@ -566,7 +565,9 @@ describe('the sub-lists of the item commands', () => {
     // a fixed day: a run across midnight in the zone of the organisation would count from two days otherwise
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-11-04T10:00:00Z'));
-    onTestFinished(() => vi.useRealTimers());
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     const today = cachedZone(organization.timezone).date(new Date());
     const dated = { ...web50, start_date: addDays(today, 3), due_date: addDays(today, 10) };
     renderWith(<ItemPage id="wi_web_50" />, { routes: { 'GET /api/v1/work-items/wi_web_50': () => detail(dated) } });
