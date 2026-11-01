@@ -522,26 +522,110 @@ describe('pages of a list', () => {
     expect(result.current.moreError).toBeNull();
   });
 
-  it('keeps every item after a change moves one across a page border', async () => {
-    let items = ranked('abcd');
+  it('keeps every item after a change moves one across a page border, and the depth it had', async () => {
+    let items = ranked('abcdef');
     api = mockApi({
       'POST /api/v1/work-items/query': keysetServer(() => items),
-      'PATCH /api/v1/work-items/wi_c': () => ({ body: { data: items.find((item) => item.id === 'wi_c') } }),
+      'PATCH /api/v1/work-items/wi_e': () => ({ body: { data: items.find((item) => item.id === 'wi_e') } }),
     });
     const { result } = renderHook(() => ({ list: useInfiniteWorkItems({}), update: useUpdateWorkItem() }), { wrapper });
     await waitFor(() => expect(titles(result.current.list.data)).toEqual(['a', 'b']));
     act(() => result.current.list.loadMore());
     await waitFor(() => expect(titles(result.current.list.data)).toEqual(['a', 'b', 'c', 'd']));
-
-    // c moves to the top: the old cursor of the second page (after b) would now miss b
-    items = items.map((item) => (item.id === 'wi_c' ? { ...item, rank: 'a0' } : item));
-    await act(() => result.current.update.mutateAsync({ id: 'wi_c', patch: { rank: 'a0' } }));
-
-    // the first page loaded again, the others are dropped: "Weitere laden" asks for them anew
-    await waitFor(() => expect(titles(result.current.list.data)).toEqual(['c', 'a']));
-    expect(result.current.list.hasMore).toBe(true);
     act(() => result.current.list.loadMore());
-    await waitFor(() => expect(titles(result.current.list.data)).toEqual(['c', 'a', 'b', 'd']));
+    await waitFor(() => expect(titles(result.current.list.data)).toEqual(['a', 'b', 'c', 'd', 'e', 'f']));
+    const before = bodies().length;
+
+    // e moves to the top: the old cursors (after b, after d) would now miss b and d
+    items = items.map((item) => (item.id === 'wi_e' ? { ...item, rank: 'a0' } : item));
+    await act(() => result.current.update.mutateAsync({ id: 'wi_e', patch: { rank: 'a0' } }));
+
+    // the three pages come back along the new cursors, with nothing lost and nothing twice
+    await waitFor(() => expect(titles(result.current.list.data)).toEqual(['e', 'a', 'b', 'c', 'd', 'f']));
+    expect(result.current.list.hasMore).toBe(false);
+    // the first page and the two after it along the cursors the new pages answered; no old cursor (a2, a4) is sent again
+    expect(bodies().slice(before)).toEqual([{}, { cursor: 'a1' }, { cursor: 'a3' }]);
+  });
+
+  it('rebuilds a list that comes back after a change while it was away, along the new cursors', async () => {
+    let items = ranked('abcdef');
+    api = mockApi({ 'POST /api/v1/work-items/query': keysetServer(() => items) });
+    const first = renderHook(() => useInfiniteWorkItems({ q: 'zurück' }), { wrapper });
+    await waitFor(() => expect(titles(first.result.current.data)).toHaveLength(2));
+    act(() => first.result.current.loadMore());
+    await waitFor(() => expect(titles(first.result.current.data)).toHaveLength(4));
+    first.unmount();
+
+    // away (on an item page) the item moves and the lists are made stale, not loaded
+    items = items.map((item) => (item.id === 'wi_e' ? { ...item, rank: 'a0' } : item));
+    await act(() => queryClient.invalidateQueries({ queryKey: qk.workItems.all }));
+    const before = bodies().length;
+
+    const again = renderHook(() => useInfiniteWorkItems({ q: 'zurück' }), { wrapper });
+    // Back finds its place at once, then the new chain replaces it
+    expect(titles(again.result.current.data)).toEqual(['a', 'b', 'c', 'd']);
+    await waitFor(() => expect(titles(again.result.current.data)).toEqual(['e', 'a', 'b', 'c']));
+    expect(again.result.current.hasMore).toBe(true);
+    // the old cursor of the second page (after b) is never asked for again
+    expect(bodies().slice(before)).toEqual([{ shorthand: { q: 'zurück' } }, { shorthand: { q: 'zurück' }, cursor: 'a1' }]);
+  });
+
+  it('rebuilds once more when a change comes while a rebuild is on its way', async () => {
+    let items = ranked('abcdef');
+    api = mockApi({ 'POST /api/v1/work-items/query': keysetServer(() => items) });
+    // the second page of the rebuild waits until the test lets it go
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let holding = false;
+    let held = false;
+    const inner = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      if (holding && typeof init?.body === 'string' && (JSON.parse(init.body) as { cursor?: string }).cursor === 'a1') {
+        held = true;
+        await gate;
+      }
+      return inner(input, init);
+    };
+    const { result } = renderHook(() => useInfiniteWorkItems({}), { wrapper });
+    await waitFor(() => expect(titles(result.current.data)).toHaveLength(2));
+    act(() => result.current.loadMore());
+    await waitFor(() => expect(titles(result.current.data)).toHaveLength(4));
+
+    holding = true;
+    items = items.map((item) => (item.id === 'wi_e' ? { ...item, rank: 'a0' } : item));
+    await act(() => queryClient.invalidateQueries({ queryKey: qk.workItems.all }));
+    await waitFor(() => expect(held).toBe(true));
+    // meanwhile f moves to the top too
+    items = items.map((item) => (item.id === 'wi_f' ? { ...item, rank: '0' } : item));
+    await act(() => queryClient.invalidateQueries({ queryKey: qk.workItems.all }));
+    holding = false;
+    release();
+
+    await waitFor(() => expect(titles(result.current.data)).toEqual(['f', 'e', 'a', 'b']));
+  });
+
+  it('stops a rebuild at the page that failed, which offers to load it again', async () => {
+    let items = ranked('abcdef');
+    let failing = false;
+    const server = keysetServer(() => items);
+    api = mockApi({
+      'POST /api/v1/work-items/query': (body, url) =>
+        failing && (body as { cursor?: string }).cursor === 'a1' ? { status: 503, body: { reason: 'unavailable', detail: 'Wartung.' } } : server(body, url),
+    });
+    const { result } = renderHook(() => useInfiniteWorkItems({}), { wrapper });
+    await waitFor(() => expect(titles(result.current.data)).toHaveLength(2));
+    act(() => result.current.loadMore());
+    await waitFor(() => expect(titles(result.current.data)).toHaveLength(4));
+
+    failing = true;
+    items = items.map((item) => (item.id === 'wi_e' ? { ...item, rank: 'a0' } : item));
+    await act(() => queryClient.invalidateQueries({ queryKey: qk.workItems.all }));
+
+    await waitFor(() => expect(result.current.moreError).not.toBeNull());
+    expect(titles(result.current.data)).toEqual(['e', 'a']);
+    failing = false;
+    act(() => result.current.loadMore());
+    await waitFor(() => expect(titles(result.current.data)).toEqual(['e', 'a', 'b', 'c']));
   });
 
   it('keeps its pages when the first page only loads again, without an invalidation', async () => {

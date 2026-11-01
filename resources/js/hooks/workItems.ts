@@ -118,24 +118,38 @@ interface PagedList {
  *
  * Every page is a list of its own in the cache, in the `Page` shape, so the optimistic item mutations (`patchCached`)
  * and the item commands reach it like any other list. A keyset cursor names the item a page ends with: after a change
- * (an invalidation) a page asked for again with its old cursor may miss the item that moved across the border, so a
- * list whose first page was invalidated keeps only that page once it has loaded again and drops the others; "Weitere
- * laden" asks for them anew (K15). A disabled list loads nothing and shows what the cache has.
+ * a page asked for again with its old cursor may miss the item that moved across the border. So a list whose first page
+ * was invalidated (while it is shown, or while it was away and now comes back) is rebuilt (K15): the first page loads
+ * afresh, then the pages after it follow the `next_cursor` of the new pages up to the depth the list had (or until no
+ * page is left), and only then the list switches to the new chain. Meanwhile it keeps showing the pages it had, so
+ * position, focus and selection below the first page stay; the old pages are not asked for again with their old
+ * cursors and leave the cache afterwards. A disabled list loads nothing and shows what the cache has.
  */
 function usePagedLists(lists: readonly PagedList[], all: boolean): Record<string, InfiniteWorkItems> {
   const queryClient = useQueryClient();
   const keyed = lists.map((list) => ({ ...list, argsKey: JSON.stringify(list.args) }));
   const [state, setState] = useState<Record<string, (string | null)[]>>({});
+  // the lists being rebuilt after an invalidation, with the depth they had; the ref answers at once (`queryFn`)
+  const [rebuild, setRebuild] = useState<Record<string, number>>({});
+  const rebuildingNow = useRef(new Set<string>());
   let cursorsOf = state;
+  let rebuilding = rebuild;
   const missing = keyed.filter((list) => !(list.argsKey in state));
   if (missing.length > 0) {
     // a new list starts with the pages it had in this visit; lists that are gone are forgotten
     cursorsOf = Object.fromEntries(
       keyed.map((list) => [list.argsKey, state[list.argsKey] ?? cachedCursors(queryClient, list.args, loadedPages.get(list.argsKey) ?? 1)]),
     );
+    // a list that comes back after a change made its first page stale is rebuilt, not loaded with its old cursors
+    const stale = missing.filter((list) => cursorsOf[list.argsKey]!.length > 1 && queryClient.getQueryState(pageKey(list.args, null))?.isInvalidated);
+    if (stale.length > 0) {
+      rebuilding = { ...rebuild, ...Object.fromEntries(stale.map((list) => [list.argsKey, cursorsOf[list.argsKey]!.length])) };
+      stale.forEach((list) => rebuildingNow.current.add(list.argsKey));
+      setRebuild(rebuilding);
+    }
     setState(cursorsOf);
   }
-  const layout = keyed.map((list) => ({ ...list, cursors: cursorsOf[list.argsKey]! }));
+  const layout = keyed.map((list) => ({ ...list, cursors: cursorsOf[list.argsKey]!, rebuilding: list.argsKey in rebuilding }));
   const layoutKey = JSON.stringify(layout.map((list) => [list.id, list.cursors.length]));
 
   useEffect(() => {
@@ -157,26 +171,70 @@ function usePagedLists(lists: readonly PagedList[], all: boolean): Record<string
 
   const combined = useQueries({
     queries: layout.flatMap((list) =>
-      list.cursors.map((cursor) => ({ queryKey: pageKey(list.args, cursor), queryFn: () => pageOf(list.args, cursor), enabled: list.enabled })),
+      list.cursors.map((cursor, index) => ({
+        queryKey: pageKey(list.args, cursor),
+        // the invalidation asks the old pages of a list being rebuilt again: they keep what they had, no old cursor is sent
+        queryFn: () => {
+          const had = queryClient.getQueryData<Page<ListedItem>>(pageKey(list.args, cursor));
+          return index > 0 && had && rebuildingNow.current.has(list.argsKey) ? Promise.resolve(had) : pageOf(list.args, cursor);
+        },
+        // while a list is rebuilt, its old pages only show what they had
+        enabled: list.enabled && !(list.rebuilding && index > 0),
+      })),
     ),
     combine,
   });
 
-  // K15: an invalidated first page that has loaded again leaves its list with that page alone
+  // an invalidated first page starts the rebuild of its list
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
+  useEffect(
+    () =>
+      queryClient.getQueryCache().subscribe((event) => {
+        if (event.type !== 'updated' || event.action.type !== 'invalidate') return;
+        const list = layoutRef.current.find((entry) => entry.cursors.length > 1 && event.query.queryHash === hashKey(pageKey(entry.args, null)));
+        if (!list) return;
+        rebuildingNow.current.add(list.argsKey);
+        setRebuild((current) => ({ ...current, [list.argsKey]: list.cursors.length }));
+      }),
+    [queryClient],
+  );
+
+  // once the first page has loaded afresh, the new chain follows its cursors to the old depth, then replaces the old one
+  const running = useRef(new Set<string>());
   useEffect(() => {
-    const invalidated = new Set<string>();
-    return queryClient.getQueryCache().subscribe((event) => {
-      if (event.type !== 'updated') return;
-      const list = layoutRef.current.find((entry) => entry.cursors.length > 1 && event.query.queryHash === hashKey(pageKey(entry.args, null)));
-      if (!list) return;
-      if (event.action.type === 'invalidate') invalidated.add(list.argsKey);
-      if (event.action.type !== 'success' || event.action.manual || !invalidated.delete(list.argsKey)) return;
-      setState((current) => ({ ...current, [list.argsKey]: [null] }));
-      for (const cursor of list.cursors.slice(1)) queryClient.removeQueries({ queryKey: pageKey(list.args, cursor), exact: true });
-    });
-  }, [queryClient]);
+    for (const list of layout) {
+      const depth = rebuilding[list.argsKey];
+      const first = queryClient.getQueryState<Page<ListedItem>>(pageKey(list.args, null));
+      if (depth === undefined || running.current.has(list.argsKey) || first?.status !== 'success' || first.isInvalidated || first.fetchStatus !== 'idle') continue;
+      running.current.add(list.argsKey);
+      const old = list.cursors;
+      const startedAt = first.dataUpdatedAt;
+      void (async () => {
+        const chain: (string | null)[] = [null];
+        let next = first.data!.next_cursor;
+        try {
+          while (next !== null && chain.length < depth) {
+            const cursor = next;
+            chain.push(cursor);
+            next = (await queryClient.fetchQuery({ queryKey: pageKey(list.args, cursor), queryFn: () => pageOf(list.args, cursor) })).next_cursor;
+          }
+        } catch {
+          // the page that failed stays the last one: it offers "Erneut versuchen"
+        }
+        running.current.delete(list.argsKey);
+        setState((current) => ({ ...current, [list.argsKey]: chain }));
+        for (const cursor of old.slice(1)) {
+          if (!chain.includes(cursor)) queryClient.removeQueries({ queryKey: pageKey(list.args, cursor), exact: true });
+        }
+        // a change meanwhile gave the first page another answer (or made it stale): the next round rebuilds anew
+        const now = queryClient.getQueryState(pageKey(list.args, null));
+        if (now?.isInvalidated || now?.dataUpdatedAt !== startedAt) return;
+        rebuildingNow.current.delete(list.argsKey);
+        setRebuild(({ [list.argsKey]: _done, ...rest }) => rest);
+      })();
+    }
+  });
 
   const appendCursor = useCallback(
     (argsKey: string, next: string) =>
