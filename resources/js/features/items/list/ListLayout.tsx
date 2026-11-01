@@ -140,8 +140,11 @@ export function ListLayout({ groups, groupBy, display, selection, onSelect, onSe
 
   // a group loads once a row of it is rendered and it is open; its next page once its last loaded row is rendered
   const enabling = useRef(new Set<string>());
-  const asked = useRef(new Set<string>());
   useEffect(() => {
+    // asked again on every render while the end shows and nothing is on its way: a page asked for that never came (a
+    // rebuild dropped its cursor, K15) is asked for again instead of leaving the placeholder for good; `loadMore` is
+    // idempotent (the screen appends a cursor once)
+    const asked = new Set<string>();
     for (const virtual of virtualRows) {
       const row = rows[virtual.index];
       if (!row) continue;
@@ -153,9 +156,8 @@ export function ListLayout({ groups, groupBy, display, selection, onSelect, onSe
       }
       const next = rows[virtual.index + 1];
       const last = row.kind === 'more' || (row.kind === 'item' && !(next?.kind === 'item' && next.group === group));
-      const mark = `${group.key}:${group.items.length}`;
-      if (last && group.hasMore && !group.loadingMore && group.moreError === null && !asked.current.has(mark)) {
-        asked.current.add(mark);
+      if (last && group.hasMore && !group.loadingMore && group.moreError === null && !asked.has(group.key)) {
+        asked.add(group.key);
         group.loadMore();
       }
     }

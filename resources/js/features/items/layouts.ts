@@ -51,7 +51,10 @@ export interface GroupData {
   moreError: ApiError | null;
   /** The group came into view: it may load its first page. */
   enable(): void;
-  /** The next page. */
+  /**
+   * The next page. Idempotent: the layout asks again on every render while the end of the group shows and no page is on
+   * its way (a page asked for that never came is asked for again), so a second call for the same page loads nothing.
+   */
   loadMore(): void;
   /** The page that failed, again. */
   retry(): void;

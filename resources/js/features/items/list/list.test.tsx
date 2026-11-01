@@ -272,11 +272,24 @@ describe('ListLayout', () => {
     scrollPage(60 * ROW);
     await waitFor(() => expect(only.loadMore).toHaveBeenCalledTimes(1));
 
-    // asked once while the same rows stand, and not while the page is on its way
+    // not while the page is on its way
     rerenderList({ groups: [{ ...only, loadingMore: true }], groupBy: 'none' });
     scrollPage(60 * ROW + 10);
-    rerenderList({ groups: [only], groupBy: 'none' });
     expect(only.loadMore).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks again when the page it asked for did not come', async () => {
+    const only = group('all', items('a', 60), { count: 200, hasMore: true });
+    const { rerenderList } = renderList({ groups: [only], groupBy: 'none' });
+    scrollPage(60 * ROW);
+    await waitFor(() => expect(only.loadMore).toHaveBeenCalledTimes(1));
+
+    // the page was on its way, then dropped (a rebuild took its cursor away, K15): the same rows, nothing loading
+    rerenderList({ groups: [{ ...only, loadingMore: true }], groupBy: 'none' });
+    rerenderList({ groups: [{ ...only }], groupBy: 'none' });
+    expect(only.loadMore).toHaveBeenCalledTimes(2);
+    // the end stays a placeholder only while a page is on its way
+    expect(within(screen.getByRole('list')).getByRole('status').textContent).toBe('Lädt …');
   });
 
   it('keeps the rows and offers a retry when a later page fails', async () => {
