@@ -510,6 +510,7 @@
     "items.fields.loading": "loading",
     "items.fields.no": "No",
     "items.fields.parent.label": "Parent",
+    "items.fields.parent.loading": "Loading the epics of the project …",
     "items.fields.parent.no_epic": "The project has no epic yet.",
     "items.fields.parent.no_match": "No epic of the project matches.",
     "items.fields.parent.none": "No parent",

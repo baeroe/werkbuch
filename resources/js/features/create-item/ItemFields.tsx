@@ -5,7 +5,7 @@
  */
 
 import { CircleAlert } from 'lucide-react';
-import { useId, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { personOption } from '@/components/fields/AssigneePicker';
 import { DatePopover, DayValue } from '@/components/fields/DateField';
 import { formatDay } from '@/components/fields/format';
@@ -20,6 +20,7 @@ import { Chip } from '@/components/ui/Chip';
 import { canHaveParent } from '@/domain/hierarchy';
 import { allowedTargets } from '@/domain/workflow';
 import { useLabels } from '@/hooks/catalog';
+import { useWorkItem } from '@/hooks/workItems';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
 import { intlLocale, t } from '@/lib/i18n';
 import type { Priority, State, Workflow } from '@/types';
@@ -67,7 +68,11 @@ export function ItemFields({ draft, update, errors, clearError, workflow }: Item
   const errorId = (path: string) => `${ids}-${path}`;
   const describe = (path: string) => (errors[path] ? errorId(path) : undefined);
   const { people, isLoading, error, retry, retrying } = useProjectPeople(draft.projectId);
-  const projectItems = useProjectItems(draft.projectId);
+  // the items of the project only while the parent list is open (A153); a parent set before (Kind-Item) is its detail
+  const [parentOpen, setParentOpen] = useState(false);
+  const projectItems = useProjectItems(draft.projectId, parentOpen);
+  const listed = projectItems.data?.items.some((entry) => entry.id === draft.parentId) ?? false;
+  const presetParent = useWorkItem(draft.parentId, { enabled: !listed }).data?.item;
   const types = useWorkItemTypes().data?.items;
   const labels = useLabels();
   const { today } = useToday();
@@ -80,7 +85,7 @@ export function ItemFields({ draft, update, errors, clearError, workflow }: Item
   const sortedLabels = [...(labels.data?.items ?? [])].sort((a, b) => collator.compare(a.name, b.name));
   const chosenLabels = sortedLabels.filter((label) => draft.labelIds.includes(label.id));
   const items = projectItems.data?.items ?? [];
-  const parent = items.find((entry) => entry.id === draft.parentId);
+  const parent = items.find((entry) => entry.id === draft.parentId) ?? (presetParent?.id === draft.parentId ? presetParent : undefined);
   const typeOf = (typeId: string) => types?.find((type) => type.id === typeId);
   // two levels: the epics of the project are the parents, and an epic has none (the field hides)
   const takesParent = canHaveParent(typeOf(draft.typeId));
@@ -249,6 +254,7 @@ export function ItemFields({ draft, update, errors, clearError, workflow }: Item
             }}
             placeholder={t('items.fields.parent.placeholder')}
             emptyText={noParentText(candidates)}
+            onOpenChange={setParentOpen}
             load={{ isLoading: projectItems.isPending, error: projectItems.error, retry: () => void projectItems.refetch(), retrying: projectItems.isFetching }}
             invalid={Boolean(errors.parent_id)}
             describedBy={describe('parent_id')}

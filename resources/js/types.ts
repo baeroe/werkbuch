@@ -191,6 +191,8 @@ export interface ItemRef {
   id: string;
   key: string;
   title: string;
+  /** The type of the parent: its icon shows without loading the items of the project. */
+  type_id: string;
 }
 
 /** The stored fields of a work item as the API sends them. The API answers with `WorkItem`: these and what it computes on read. */

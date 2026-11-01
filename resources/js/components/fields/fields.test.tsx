@@ -120,7 +120,7 @@ const toastTitles = () => currentToasts().map((entry) => entry.title);
 
 /** The item as the cache holds it now: an optimistic change and its rollback show there. */
 function FromCache({ id, projectId, children }: { id: string; projectId: string; children: (item: WorkItem) => ReactNode }) {
-  const item = useProjectItems(projectId).data?.items.find((entry) => entry.id === id);
+  const item = useProjectItems(projectId, true).data?.items.find((entry) => entry.id === id);
   return item ? children(item) : null;
 }
 
@@ -534,9 +534,12 @@ describe('ParentPicker', () => {
 
     const withParent = await picker(/^Eltern-Item: WEB-30 Relaunch Phase 1$/);
     expect(withParent.getAttribute('aria-keyshortcuts')).toBe('Shift+P');
-    // the icon of the parent's type comes with the items of the project
+    // the icon of the parent's type comes with the parent itself; no list of the project is read before a list opens (A153)
     await waitFor(() => expect(withParent.querySelector('[data-tone="moss"]')).not.toBeNull());
+    const projectLists = () => api!.calls.filter((call) => call.method === 'GET' && call.url.startsWith('/api/v1/work-items?'));
+    expect(projectLists()).toEqual([]);
     await user.click(withParent);
+    await waitFor(() => expect(projectLists()).toHaveLength(1));
     expect(await optionTexts()).toEqual(['Kein Eltern-Item', 'Relaunch Phase 1WEB-30']);
     await user.click(screen.getByRole('option', { name: 'Kein Eltern-Item' }));
     await waitFor(() => expect(sent('PATCH', '/api/v1/work-items/wi_web_48')).toEqual([{ parent_id: null }]));

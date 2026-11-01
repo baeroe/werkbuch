@@ -159,8 +159,8 @@ function patchCached(data: unknown, change: (item: WorkItem) => WorkItem): unkno
 }
 
 /** The parent as an item resource names it. */
-const refOf = (item: WorkItem): ItemRef => ({ id: item.id, key: item.key, title: item.title });
-const sameRef = (a: ItemRef, b: ItemRef) => a.id === b.id && a.key === b.key && a.title === b.title;
+const refOf = (item: WorkItem): ItemRef => ({ id: item.id, key: item.key, title: item.title, type_id: item.type_id });
+const sameRef = (a: ItemRef, b: ItemRef) => a.id === b.id && a.key === b.key && a.title === b.title && a.type_id === b.type_id;
 
 /** Every item in the cache by id, in the copy that loaded last (lists and details may hold older copies). */
 function cachedItems(queryClient: QueryClient): Map<string, WorkItem> {

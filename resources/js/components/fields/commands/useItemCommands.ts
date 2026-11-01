@@ -54,7 +54,7 @@ export function useItemCommands(options: ItemCommandsOptions): void {
   const queryClient = useQueryClient();
   // subscribed, so the palette's heading follows the preview and the targets of an opening palette
   useUiStore((state) => state.peekItemId);
-  useUiStore((state) => state.paletteOpen);
+  const paletteOpen = useUiStore((state) => state.paletteOpen);
   // and the focus: with it inside the preview the targets are the previewed item (rule 1), which may be of another
   // project than what the last render loaded for (the people and the parent's candidates come from the target's project)
   useSyncExternalStore(subscribeFocus, targetSnapshot, targetSnapshot);
@@ -84,10 +84,12 @@ export function useItemCommands(options: ItemCommandsOptions): void {
   // with the options of this render: a page that just got its item would be one render late otherwise
   const ids = targetIds({ id: mountId, options });
   // the target is loaded here, so the commands know it even before its screen has
-  const single = useWorkItem(ids[0] ?? null).data?.item;
+  const detail = useWorkItem(ids[0] ?? null).data;
+  const single = detail?.item;
   const projectId = single?.project_id ?? '';
   const peopleQuery = useProjectPeople(projectId);
-  const projectItemsQuery = useProjectItems(projectId, single !== undefined);
+  // the items of the project only while the palette is open: ⇧P chooses from them (A153); `t` reads the children of the detail
+  const projectItemsQuery = useProjectItems(projectId, single !== undefined && paletteOpen);
   const people = peopleQuery.people;
   const projectItems = projectItemsQuery.data?.items;
   const retry = () => {
@@ -104,7 +106,8 @@ export function useItemCommands(options: ItemCommandsOptions): void {
       targets: now,
       ready,
       failed: failedCatalogs.length > 0,
-      retry,
+      // the queries of the latest render: a toast shown earlier also tries what failed since
+      retry: () => latestRetry.current(),
       me,
       today,
       projects: projects ?? [],
@@ -114,6 +117,7 @@ export function useItemCommands(options: ItemCommandsOptions): void {
       properties: properties ?? [],
       people: own ? people : undefined,
       peopleFailed: own && peopleQuery.error !== null && people === undefined,
+      hasChildren: own ? detail!.children.length > 0 : undefined,
       projectItems: own ? projectItems : undefined,
       projectItemsFailed: own && projectItemsQuery.isError && projectItems === undefined,
       reason: (permission, project) => reason(permission, project),
@@ -122,8 +126,10 @@ export function useItemCommands(options: ItemCommandsOptions): void {
     };
   };
   const latest = useRef(context);
+  const latestRetry = useRef(retry);
   useLayoutEffect(() => {
     latest.current = context;
+    latestRetry.current = retry;
   });
 
   const group = single ? t('items.commands.group', { key: single.key }) : t('items.commands.group_none');

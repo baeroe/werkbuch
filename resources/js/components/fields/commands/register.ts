@@ -43,6 +43,8 @@ interface ItemCommand {
   keywords?: TranslationKey;
   /** Whether what it reads besides the catalogs is still on its way (or failed); then it waits instead of acting on gaps. */
   loading?: (ctx: ItemCommandContext) => Wait;
+  /** Its data load when the palette opens (A153): while they are on their way, it opens its sub-list, which fills then. */
+  opensWhileLoading?: boolean;
   /** Why it is not possible for the target, or null. */
   denied: (ctx: ItemCommandContext) => string | null;
   /** Either a sub-list or an action. */
@@ -56,6 +58,7 @@ interface ItemCommand {
 const waitFor = (data: unknown, failed: boolean): Wait => (data !== undefined ? null : failed ? 'failed' : 'loading');
 const people = (ctx: ItemCommandContext) => waitFor(ctx.people, ctx.peopleFailed);
 const projectItems = (ctx: ItemCommandContext) => waitFor(ctx.projectItems, ctx.projectItemsFailed);
+const children = (ctx: ItemCommandContext) => waitFor(ctx.hasChildren, false);
 const edit = (ctx: ItemCommandContext) => editReason(ctx);
 
 const LOADING = () => t('items.commands.wait.description');
@@ -70,7 +73,8 @@ function blocker(command: ItemCommand, ctx: ItemCommandContext): Wait | { denied
   if (!ctx.ready) return ctx.failed ? 'failed' : 'loading';
   const denied = command.denied(ctx);
   if (denied) return { denied };
-  return command.loading?.(ctx) ?? null;
+  const wait = command.loading?.(ctx) ?? null;
+  return wait === 'loading' && command.opensWhileLoading ? null : wait;
 }
 
 const COMMANDS: ItemCommand[] = [
@@ -99,7 +103,7 @@ const COMMANDS: ItemCommand[] = [
     id: 'item.type',
     icon: Shapes,
     // whether the item has children: the two levels decide what it may become
-    loading: projectItems,
+    loading: children,
     denied: edit,
     options: typeOptions,
     placeholder: 'items.commands.placeholder.type',
@@ -127,6 +131,7 @@ const COMMANDS: ItemCommand[] = [
     keywords: 'items.commands.keywords.parent',
     // the candidates are the epics of the project
     loading: projectItems,
+    opensWhileLoading: true,
     denied: (ctx) => edit(ctx) ?? parentReason(ctx),
     options: parentOptions,
     placeholder: 'items.fields.parent.placeholder',

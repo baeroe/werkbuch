@@ -273,12 +273,12 @@ describe('optimistic changes', () => {
 
     // a renamed epic: its child names it with the new title, in the list and in the detail's children
     await act(() => result.current.mutateAsync({ id: 'WEB-30', patch: { title: 'Relaunch' } }));
-    expect(listed()[1]!.parent).toEqual({ id: 'wi_web_30', key: 'WEB-30', title: 'Relaunch' });
+    expect(listed()[1]!.parent).toEqual({ id: 'wi_web_30', key: 'WEB-30', title: 'Relaunch', type_id: 't_epic' });
     expect(detailOf('WEB-30').children[0]!.parent?.title).toBe('Relaunch');
 
     // a child that moves to another epic names that one
     await act(() => result.current.mutateAsync({ id: 'WEB-48', patch: { parent_id: 'wi_web_60' } }));
-    expect(listed()[1]!.parent).toEqual({ id: 'wi_web_60', key: 'WEB-60', title: 'Barrierefreiheit' });
+    expect(listed()[1]!.parent).toEqual({ id: 'wi_web_60', key: 'WEB-60', title: 'Barrierefreiheit', type_id: 't_epic' });
 
     // a parent the cache does not know is named by nobody until the server answers, and none is none
     await act(() => result.current.mutateAsync({ id: 'WEB-47', patch: { parent_id: 'wi_unknown' } }));

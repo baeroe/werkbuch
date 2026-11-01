@@ -135,8 +135,8 @@ export function typeOptions(ctx: ItemCommandContext): CommandOption[] {
     .map((type) =>
       option(typeOption(type), () => {
         const { lost, missing } = typeChangeOf(item, type, ctx.properties, ctx.types);
-        // the two levels: the dialog says why, from what the items of the project say (the command waits for them)
-        const hasChildren = ctx.projectItems!.some((entry) => entry.parent_id === item.id);
+        // the two levels: the dialog says why, from the children of the detail (the command waits for it)
+        const hasChildren = ctx.hasChildren!;
         if (lost.length > 0 || missing.length > 0 || typeChangeRefusal(hasChildren, item.parent_id !== null, type)) {
           askTypeChange(item, type, hasChildren);
           return;
@@ -204,7 +204,7 @@ export function dateOptions(ctx: ItemCommandContext, field: 'start_date' | 'due_
 const typeIn = (ctx: ItemCommandContext) => (typeId: string) => ctx.types.find((type) => type.id === typeId);
 
 /** The epics the target can hang under (`parentCandidates`). */
-const candidatesOf = (ctx: ItemCommandContext) => parentCandidates(targetOf(ctx), ctx.projectItems!, typeIn(ctx));
+const candidatesOf = (ctx: ItemCommandContext) => parentCandidates(targetOf(ctx), ctx.projectItems ?? [], typeIn(ctx));
 
 /** Why the target takes no parent: an epic stands at the top (two levels, `domain/hierarchy`). */
 export function parentReason(ctx: ItemCommandContext): string | null {
@@ -213,6 +213,8 @@ export function parentReason(ctx: ItemCommandContext): string | null {
 
 export function parentOptions(ctx: ItemCommandContext): CommandOption[] {
   const item = targetOf(ctx);
+  // the sub-list opens before the items of the project are there; it fills once they come
+  if (ctx.projectItems === undefined) return [];
   const setParent = (parent: WorkItem | null) =>
     apply(ctx, parent ? t('items.commands.what.parent', { parent: parent.key }) : t('items.commands.what.no_parent'), (target) =>
       ctx.update.mutateAsync({ id: target.id, patch: { parent_id: parent?.id ?? null } }),
@@ -221,4 +223,7 @@ export function parentOptions(ctx: ItemCommandContext): CommandOption[] {
   return [...(item.parent_id ? [option(NO_PARENT_OPTION(), () => setParent(null))] : []), ...candidates];
 }
 
-export const parentEmptyText = (ctx: ItemCommandContext): string => noParentText(candidatesOf(ctx));
+export const parentEmptyText = (ctx: ItemCommandContext): string =>
+  ctx.projectItems === undefined
+    ? t(ctx.projectItemsFailed ? 'items.commands.failed.description' : 'items.fields.parent.loading')
+    : noParentText(candidatesOf(ctx));

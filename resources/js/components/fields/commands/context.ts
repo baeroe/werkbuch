@@ -56,7 +56,9 @@ export interface ItemCommandContext {
   people: User[] | undefined;
   /** They failed to load. */
   peopleFailed: boolean;
-  /** The items of the target's project, for the parent and the two levels, once loaded. */
+  /** Whether the target has children (archived ones too, as the server counts them), from its detail. */
+  hasChildren: boolean | undefined;
+  /** The items of the target's project, for the parent, once loaded (only while the palette is open). */
   projectItems: WorkItem[] | undefined;
   /** They failed to load. */
   projectItemsFailed: boolean;

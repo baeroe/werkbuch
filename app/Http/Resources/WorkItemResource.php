@@ -49,7 +49,7 @@ final class WorkItemResource extends JsonResource
             'start_date' => $item->start_date?->format('Y-m-d'),
             'due_date' => $item->due_date?->format('Y-m-d'),
             'parent_id' => $item->parent_id,
-            'parent' => $parent === null ? null : ['id' => $parent->id, 'key' => $parent->key, 'title' => $parent->title],
+            'parent' => $parent === null ? null : ['id' => $parent->id, 'key' => $parent->key, 'title' => $parent->title, 'type_id' => $parent->type_id],
             'rank' => $item->rank,
             'values' => (object) ItemValues::of($item),
             'values_markdown' => (object) ItemValues::markdown($item),

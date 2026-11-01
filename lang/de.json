@@ -510,6 +510,7 @@
     "items.fields.loading": "wird geladen",
     "items.fields.no": "Nein",
     "items.fields.parent.label": "Eltern-Item",
+    "items.fields.parent.loading": "Die Epics des Projekts werden geladen …",
     "items.fields.parent.no_epic": "Im Projekt gibt es noch kein Epic.",
     "items.fields.parent.no_match": "Kein Epic im Projekt passt.",
     "items.fields.parent.none": "Kein Eltern-Item",

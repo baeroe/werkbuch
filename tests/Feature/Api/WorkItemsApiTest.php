@@ -222,7 +222,7 @@ it('loads a list for the resource with a fixed number of queries, after which th
         ->and($loading)->toBeLessThanOrEqual(8)
         ->and($data['WEB-1']['children_progress'])->toBe(['done' => 1, 'total' => 2])
         ->and($data['WEB-1']['subscribed'])->toBeTrue()
-        ->and($data['WEB-3']['parent'])->toBe(['id' => $epic->id, 'key' => 'WEB-1', 'title' => 'Relaunch'])
+        ->and($data['WEB-3']['parent'])->toBe(['id' => $epic->id, 'key' => 'WEB-1', 'title' => 'Relaunch', 'type_id' => $epic->type_id])
         ->and($data['WEB-3']['blocked'])->toBeTrue()
         ->and($data['WEB-3']['subscribed'])->toBeFalse()
         ->and($data['WEB-4']['blocking'])->toBeTrue()

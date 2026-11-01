@@ -7,7 +7,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { CornerLeftUp } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { listWorkItems } from '@/api/workItems';
 import { canHaveChildren } from '@/domain/hierarchy';
 import { qk } from '@/hooks/keys';
@@ -73,9 +73,11 @@ export function noParentText(candidates: readonly WorkItem[]): string {
 
 /**
  * Every item of one project, all pages (`next_cursor` followed to the end): the parent picker and ⇧P choose from them,
- * and an epic on the second page must not be missing. Under `qk.workItems`, so the optimistic changes reach it.
+ * and an epic on the second page must not be missing. Under `qk.workItems`, so the optimistic changes reach it. Loaded
+ * only while a list that needs it is open (`enabled`): the callers pass their open state, so an item page reads no
+ * project-wide list, and a change of an item only marks a closed list stale instead of reading the project again (A153).
  */
-export function useProjectItems(projectId: string, enabled = true) {
+export function useProjectItems(projectId: string, enabled: boolean) {
   return useQuery({
     queryKey: qk.workItems.list({ project_id: projectId, pages: 'all' }),
     queryFn: () => allPages((cursor) => listWorkItems({ project_id: projectId, cursor })),
@@ -85,8 +87,9 @@ export function useProjectItems(projectId: string, enabled = true) {
 
 type ParentPickerProps = PickerExtras & { item: WorkItem };
 
-export function ParentPicker({ item, look = 'field', shortcut, ...extras }: ParentPickerProps) {
-  const items = useProjectItems(item.project_id);
+export function ParentPicker({ item, look = 'field', shortcut, open, onOpenChange, ...extras }: ParentPickerProps) {
+  const [opened, setOpened] = useState(extras.defaultOpen ?? false);
+  const items = useProjectItems(item.project_id, open ?? opened);
   const types = useWorkItemTypes();
   const update = useUpdateWorkItem();
   const reason = useEditReason(item);
@@ -102,10 +105,9 @@ export function ParentPicker({ item, look = 'field', shortcut, ...extras }: Pare
     [item.parent_id, candidates, typeList],
   );
 
-  // the item names its parent itself; the icon comes with the items of the project
+  // the item names its parent itself, with its type for the icon
   const parent = item.parent_id ? item.parent : null;
-  const parentTypeId = parent ? projectItems?.find((entry) => entry.id === parent.id)?.type_id : undefined;
-  const parentType = parentTypeId ? typeList?.find((type) => type.id === parentTypeId) : undefined;
+  const parentType = parent ? typeList?.find((type) => type.id === parent.type_id) : undefined;
   const display = parent ? (
     <>
       {parentType && <TypeGlyph type={parentType} />}
@@ -124,6 +126,11 @@ export function ParentPicker({ item, look = 'field', shortcut, ...extras }: Pare
   return (
     <Picker
       {...extras}
+      open={open}
+      onOpenChange={(next) => {
+        setOpened(next);
+        onOpenChange?.(next);
+      }}
       look={look}
       shortcut={shortcut ?? (look === 'field' ? SHORTCUTS['item.parent'].keys : undefined)}
       label={t('items.fields.parent.label')}

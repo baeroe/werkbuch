@@ -106,6 +106,7 @@ function renderWith(node: ReactNode, routes: Record<string, MockRoute> = {}) {
     'GET /api/v1/projects/p_web/members': () => ({ body: list([{ project_id: 'p_web', user_id: 'u_ida', role: 'admin' }, { project_id: 'p_web', user_id: 'u_lene', role: 'member' }]) }),
     'GET /api/v1/projects/p_app/members': () => ({ body: list([{ project_id: 'p_app', user_id: 'u_lene', role: 'member' }]) }),
     'GET /api/v1/work-items': fails('items', () => ({ body: list([web30, web47, web48]) })),
+    'GET /api/v1/work-items/wi_web_30': () => ({ body: { data: { ...web30, children: [], relations: [], type: wishTypes.find((type) => type.id === web30.type_id), workflow: standard } } }),
     'POST /api/v1/work-items': (body, url) => answerCreate(body, url),
     ...routes,
   });
@@ -603,7 +604,11 @@ describe('CreateItemDialog', () => {
     // as "Kind-Item" on WEB-30 opens it
     const { dialog, title } = await openDialog({ project_id: 'p_web', type_id: 't_task', parent_id: 'wi_web_30' });
     const parent = await within(dialog).findByRole('combobox', { name: 'Eltern-Item: WEB-30 Relaunch Phase 1' });
+    // the parent it was opened with is its detail; the items of the project load only when the list opens (A153)
+    const projectLists = () => api!.calls.filter((call) => call.method === 'GET' && call.url.startsWith('/api/v1/work-items?'));
+    expect(projectLists()).toEqual([]);
     await user.click(parent);
+    await waitFor(() => expect(projectLists()).toHaveLength(1));
     const options = await screen.findAllByRole('option');
     expect(options.map((option) => option.textContent)).toEqual(['Kein Eltern-Item', 'Relaunch Phase 1WEB-30']);
     await user.keyboard('{Escape}');
@@ -628,9 +633,11 @@ describe('CreateItemDialog', () => {
     expect(await screen.findByRole('option', { name: 'UX' })).toBeTruthy();
     await user.keyboard('{Escape}');
 
+    // the epics load once the list opens (A153), and fail there
     await user.click(within(dialog).getByRole('combobox', { name: 'Eltern-Item: keins' }));
+    const retry = await screen.findByRole('button', { name: 'Erneut versuchen' });
     failing.delete('items');
-    await user.click(await screen.findByRole('button', { name: 'Erneut versuchen' }));
+    await user.click(retry);
     expect(await screen.findByRole('option', { name: /^Relaunch Phase 1/ })).toBeTruthy();
   });
 

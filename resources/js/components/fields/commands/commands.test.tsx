@@ -104,7 +104,7 @@ function Preview() {
 
 /** The keys of the items of WEB as the list in the cache has them: archiving and deleting take them out at once. */
 function WebList() {
-  const keys = useProjectItems('p_web').data?.items.map((item) => item.key);
+  const keys = useProjectItems('p_web', true).data?.items.map((item) => item.key);
   return <p aria-label="WEB">{keys?.join(' ')}</p>;
 }
 
@@ -257,7 +257,7 @@ describe('item commands', () => {
     await ready('WEB-47');
   });
 
-  it('waits for the people and the items of the project where a command needs them, and loads them again', async () => {
+  it('waits for the people where a command needs them, and loads the items of the project only with the palette', async () => {
     let failing = true;
     renderWith(<ItemPage id="wi_web_47" />, {
       routes: {
@@ -265,21 +265,30 @@ describe('item commands', () => {
         'GET /api/v1/work-items': () => (failing ? problem(503, 'service_unavailable', 'Wartung.') : { body: list(items) }),
       },
     });
+    const projectLists = () => api!.calls.filter((call) => call.method === 'GET' && call.url.startsWith('/api/v1/work-items?'));
     await ready('WEB-47');
-    // status needs neither: it is there; the assignee and the parent wait for what failed
+    // status needs neither: it is there; the assignee waits for what failed
     await waitFor(() => {
       press('a');
       expect(lastToast()).toMatchObject({ title: 'Daten nicht geladen' });
     });
-    press('P', { shiftKey: true });
-    expect(lastToast()?.title).toBe('Daten nicht geladen');
     expect(command('item.assignee')?.when?.()).toBe(false);
+    // the item page reads no list of the whole project (A153): ⇧P opens its sub-list, which loads it
+    expect(projectLists()).toEqual([]);
+    expect(command('item.parent')?.when?.()).toBe(true);
+    press('P', { shiftKey: true });
+    expect(useUiStore.getState()).toMatchObject({ paletteOpen: true, paletteCommandId: 'item.parent' });
+    expect(command('item.parent')!.subpage!().emptyText).toBe('Die Epics des Projekts werden geladen …');
+    await waitFor(() => expect(projectLists()).not.toEqual([]));
+    await waitFor(() => expect(command('item.parent')!.subpage!().emptyText).toBe('Die Daten dafür ließen sich nicht laden.'));
     expect(command('item.parent')?.when?.()).toBe(false);
 
+    // the toast of `a` tries what failed since as well
     failing = false;
     act(() => runToastAction(lastToast()!.id));
     await waitFor(() => expect(command('item.assignee')?.when?.()).toBe(true));
     await waitFor(() => expect(command('item.parent')?.when?.()).toBe(true));
+    await waitFor(() => expect(optionsOf('item.parent').length).toBeGreaterThan(0));
   });
 
   it('assigns me with i at once, and says so when I am no member of the project', async () => {
@@ -536,6 +545,23 @@ describe('the sub-lists of the item commands', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
+  it('counts an archived child for the two levels: the detail names it, the list without archived ones does not', async () => {
+    const archived = { ...web48, id: 'wi_web_49', key: 'WEB-49', parent_id: 'wi_web_30', archived_at: '2026-10-01T10:00:00Z' };
+    const epic = { ...web30, id: 'wi_web_60', key: 'WEB-60' };
+    renderWith(<ItemPage id="wi_web_60" />, {
+      routes: {
+        'GET /api/v1/work-items/wi_web_60': () => ({ body: { data: { ...epic, children: [{ ...archived, parent_id: epic.id }], relations: [], type: types.find((type) => type.id === epic.type_id), workflow: standard } } }),
+      },
+    });
+    await ready('WEB-60', 'item.type');
+
+    choose('item.type', 'Task');
+    expect(await screen.findByText('WEB-60 hat Kind-Items. Nur Epics können Kind-Items haben.')).toBeTruthy();
+    expect(sent('PUT', '/api/v1/work-items/wi_web_60/type')).toEqual([]);
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Typ behalten' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
   it('offers the days from today, sets and removes a date, and refuses a start after the due date', async () => {
     const dated = { ...web50, start_date: addDays(today, 3), due_date: addDays(today, 10) };
     renderWith(<ItemPage id="wi_web_50" />, { routes: { 'GET /api/v1/work-items/wi_web_50': () => detail(dated) } });
@@ -577,6 +603,9 @@ describe('the sub-lists of the item commands', () => {
   it('offers the epics of the project as parent, or none, and says that an epic has no parent', async () => {
     renderWith(<ItemPage id="wi_web_48" />);
     await ready('WEB-48', 'item.parent');
+    // the epics come once the palette is open
+    act(() => useUiStore.getState().openPalette('item.parent'));
+    await waitFor(() => expect(optionsOf('item.parent')).toHaveLength(2));
 
     expect(optionsOf('item.parent').map((option) => [option.label, option.hint])).toEqual([
       ['Kein Eltern-Item', undefined],

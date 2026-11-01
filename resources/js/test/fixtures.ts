@@ -311,7 +311,7 @@ export const web48: WorkItem = makeWorkItem({
   key: 'WEB-48',
   title: 'Startseite umbauen',
   parent_id: 'wi_web_30',
-  parent: { id: 'wi_web_30', key: 'WEB-30', title: 'Relaunch Phase 1' },
+  parent: { id: 'wi_web_30', key: 'WEB-30', title: 'Relaunch Phase 1', type_id: 't_epic' },
   rank: 'a5',
 });
 

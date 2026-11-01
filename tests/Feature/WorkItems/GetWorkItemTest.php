@@ -88,7 +88,7 @@ it('loads what the resource needs', function () use ($world) {
     expect($data['children_progress'])->toBe(['done' => 1, 'total' => 2])
         ->and(array_column($data['children'], 'key'))->toBe(['WEB-3', 'WEB-2'])
         ->and(array_column($data['children'], 'subscribed'))->toBe([true, false])
-        ->and($data['children'][0]['parent'])->toBe(['id' => $epic->id, 'key' => 'WEB-1', 'title' => 'Relaunch'])
+        ->and($data['children'][0]['parent'])->toBe(['id' => $epic->id, 'key' => 'WEB-1', 'title' => 'Relaunch', 'type_id' => $epic->type_id])
         ->and($data['children'][0])->not->toHaveKey('children')
         ->and($data['type']['id'])->toBe($epic->type_id)
         ->and($data['type']['is_epic'])->toBeTrue()
