@@ -30,6 +30,7 @@ export default defineConfig({
         'resources/js/components/items/**': { lines: 100 },
         'resources/js/features/palette/**': { lines: 100 },
         'resources/js/features/item-detail/**': { lines: 100 },
+        'resources/js/features/create-item/**': { lines: 100 },
         // from the task whose screens use the frame on (P30)
         'resources/js/features/settings/frame/**': { lines: 100 },
         'resources/js/features/settings/catalog/**': { lines: 100 },

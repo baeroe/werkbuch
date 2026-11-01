@@ -41,6 +41,7 @@ const ui = () => useUiStore.getState();
 export function useShellBindings(): void {
   const { can, reason } = usePermissions();
 
+  /** `c` and "Neues Item": the create dialog (`CreateHost`); on the page of a project or item it starts in that project. */
   function createItem() {
     // already open: a second "c" must not reset what is being typed
     if (ui().createOpen) return;
