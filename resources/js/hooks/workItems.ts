@@ -6,7 +6,6 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-import type { PageArgs } from '@/api/client';
 import {
   archiveWorkItem,
   bulkUpdateWorkItems,
@@ -27,6 +26,7 @@ import {
 } from '@/api/workItems';
 import type { PropertyValue, WorkItem } from '@/types';
 import { qk, type HookOptions } from './keys';
+import { allPages } from './pages';
 import { useApiMutation, useItemMutation } from './mutation';
 
 /* ------------------------------------------------------------------------ read */
@@ -45,11 +45,14 @@ export function useWorkItem(keyOrId: string | null | undefined, options: HookOpt
   });
 }
 
-/** The history of an item, oldest first. */
-export function useActivity(itemId: string | null | undefined, args: PageArgs = {}) {
+/**
+ * The whole history of an item, oldest first: every page (`next_cursor` followed to the end). The server pages from the
+ * oldest entry on, so a history that stopped at the first hundred would hide the newest changes.
+ */
+export function useActivity(itemId: string | null | undefined) {
   return useQuery({
-    queryKey: qk.activity.list({ item: itemId, ...args }),
-    queryFn: () => listActivity(itemId!, args),
+    queryKey: qk.activity.list({ item: itemId, pages: 'all' }),
+    queryFn: () => allPages((cursor) => listActivity(itemId!, { cursor })),
     enabled: !!itemId,
   });
 }

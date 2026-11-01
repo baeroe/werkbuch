@@ -290,13 +290,14 @@ export interface ItemEvent {
   actor_id: string;
   subject: { type: string; id: string };
   project_id: string | null;
-  changes: Record<string, { old: unknown; new: unknown }>;
+  /** The changed fields as `{old, new}`; `null` for events without (`work_item.deleted`). */
+  changes: Record<string, { old: unknown; new: unknown }> | null;
   /** A move (`work_item.state_changed`): both states as they were then, so a renamed or removed state keeps its name. */
   states: { old: StateSnapshot; new: StateSnapshot } | null;
   /** Why it happened, e.g. `workflow_changed`, `state_removed` (`RemapStates`) or the reason of an automation. */
   reason: string | null;
-  /** How it happened: `ui`, `api`, `mcp`, `automation`, `template`, `system`. */
-  via: string;
+  /** How it happened: `ui`, `api`, `mcp`, `automation`, `template`, `system`; `null` for events that recorded none. */
+  via: string | null;
   occurred_at: string;
 }
 

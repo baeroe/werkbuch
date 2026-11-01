@@ -85,7 +85,7 @@ describe('reading', () => {
       () => ({
         items: useWorkItems({ project_id: 'WEB' }),
         item: useWorkItem('WEB-47'),
-        activity: useActivity('WEB-47', { per_page: 50 }),
+        activity: useActivity('WEB-47'),
         usage: useStateUsage({ project: 'WEB' }),
       }),
       { wrapper },
@@ -99,10 +99,25 @@ describe('reading', () => {
     expect(result.current.usage.data).toEqual([{ state_id: 'std_progress', items: 2 }]);
     expect(api.calls.map((call) => decodeURIComponent(call.url)).sort()).toEqual([
       '/api/v1/state-usage?project=WEB',
-      '/api/v1/work-items/WEB-47/history?per_page=50',
+      '/api/v1/work-items/WEB-47/history',
       '/api/v1/work-items/WEB-47?include=children,relations,type,workflow',
       '/api/v1/work-items?filter[project]=WEB',
     ]);
+  });
+
+  it('reads every page of the history, so the newest entries are there too', async () => {
+    // the server pages from the oldest entry on: the newest ones stand on the last page
+    api = mockApi({
+      'GET /api/v1/work-items/WEB-47/history': (_body, url) =>
+        url.searchParams.get('cursor') === 'next'
+          ? { body: list(web47History.slice(2)) }
+          : { body: { data: web47History.slice(0, 2), links: {}, meta: { next_cursor: 'next', total: 3 } } },
+    });
+    const { result } = renderHook(() => useActivity('WEB-47'), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.items.map((entry) => entry.id)).toEqual(['ev_1', 'ev_2', 'ev_3']);
+    expect(api.calls.map((call) => call.url)).toEqual(['/api/v1/work-items/WEB-47/history', '/api/v1/work-items/WEB-47/history?cursor=next']);
   });
 
   it('waits while it lacks a reference or is told to', () => {
@@ -127,7 +142,7 @@ describe('optimistic changes', () => {
   it('useUpdateWorkItem changes the list and the detail at once and keeps the answer of the server', async () => {
     queryClient.setQueryData(LIST, page(web47, ops12));
     queryClient.setQueryData(qk.workItems.detail('WEB-47'), detail(web47));
-    queryClient.setQueryData(qk.activity.list({ item: 'WEB-47' }), page());
+    queryClient.setQueryData(qk.activity.list({ item: 'WEB-47', pages: 'all' }), page());
     queryClient.setQueryData(qk.stateUsage.list({ project: 'WEB' }), []);
     const answer = { ...web47, title: 'Formular sendet doppelt', updated_at: '2026-10-31T10:00:00.000Z' };
     const held = holdFetch({ data: answer });
@@ -146,7 +161,7 @@ describe('optimistic changes', () => {
     expect(result.current.data).toEqual(answer);
     // the lists, the history and the count per state load again
     expect(
-      [LIST, qk.activity.list({ item: 'WEB-47' }), qk.stateUsage.list({ project: 'WEB' })].map((queryKey) => queryClient.getQueryState(queryKey)?.isInvalidated),
+      [LIST, qk.activity.list({ item: 'WEB-47', pages: 'all' }), qk.stateUsage.list({ project: 'WEB' })].map((queryKey) => queryClient.getQueryState(queryKey)?.isInvalidated),
     ).toEqual([true, true, true]);
   });
 
