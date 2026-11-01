@@ -19,7 +19,7 @@
  *   shows the error.
  */
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ApiError } from '@/api/client';
 import type { ListWorkItemsArgs } from '@/api/workItems';
 import { placeItems } from '@/domain/grouping';
@@ -45,7 +45,7 @@ export interface ListData {
   status: 'pending' | 'error' | 'success';
   error: ApiError | null;
   retry(): void;
-  /** Every item of the list (⌘A); rejects with `ListGoneError` when the list changed meanwhile. */
+  /** Every item of the list (⌘A); rejects with `ListGoneError` when the list changed or unmounted meanwhile. */
   loadAll(): Promise<ListedItem[]>;
   /** The loaded items, each once. */
   items: ListedItem[];
@@ -174,6 +174,14 @@ export function useListData(state: ViewState, scope: Condition[], _options: { pr
 
   const latestKey = useRef(argsKey);
   latestKey.current = argsKey;
+  // a list that unmounted while ⌘A loaded: its items must not reach the selection of whatever screen comes next
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const retry = () => {
     if (answer.isError) void answer.refetch();
     if (all?.isError && !all.data) void all.refetch();
@@ -184,8 +192,8 @@ export function useListData(state: ViewState, scope: Condition[], _options: { pr
     const asked = argsKey;
     const lists = (served ?? []).filter((group) => group.count > 0).flatMap((group) => (pages[group.key] ? [pages[group.key]!] : []));
     const loaded = await Promise.all(lists.map((list) => list.loadAll()));
-    // the list changed meanwhile: its items are of no use
-    if (latestKey.current !== asked) throw new ListGoneError();
+    // the list changed or went away meanwhile: its items are of no use
+    if (!mounted.current || latestKey.current !== asked) throw new ListGoneError();
     const seen = new Set<string>();
     return loaded.flat().filter((item) => !seen.has(item.id) && seen.add(item.id));
   }, [argsKey, served, pages]);

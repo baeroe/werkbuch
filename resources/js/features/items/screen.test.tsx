@@ -576,6 +576,25 @@ describe('the item list screen', () => {
     }
   });
 
+  it('drops ⌘A of a list that went away meanwhile', async () => {
+    // a page each: ⌘A has further pages to load, and they wait
+    pageSize = 1;
+    const { unmount } = renderScreen();
+    await screen.findByText('Kontaktformular sendet doppelt');
+    const gate = hold((body) => body.cursor !== undefined);
+    act(() => rowOf(1)!.focus());
+    press('a', { ctrlKey: true });
+    await waitFor(() => expect(gate.held()).toBe(true));
+
+    unmount();
+    expect(useUiStore.getState().selection).toEqual([]);
+    await act(async () => gate.release());
+    // the items of a list that is gone are of no use: no other screen may act on them
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(useUiStore.getState().selection).toEqual([]);
+    expect(currentToasts()).toEqual([]);
+  });
+
   it('drops ⌘A of a list whose filter changed meanwhile', async () => {
     renderScreen();
     await screen.findByText('Kontaktformular sendet doppelt');
