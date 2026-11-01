@@ -501,7 +501,11 @@ describe('Properties', () => {
     expect(value.getAttribute('aria-label')).toBe('Standardwert: Gärtnerei Moos');
     await user.click(value);
     await waitFor(() => expect(screen.getByRole('option', { name: 'Gärtnerei Moos' }).getAttribute('aria-selected')).toBe('true'));
+    // Base UI focuses the search field of the list a frame after it opens: an Escape before that reaches the dialog,
+    // which closes instead of the list
+    await waitFor(() => expect(document.activeElement?.getAttribute('name')).toBe('picker-query'));
     await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('option', { name: 'Gärtnerei Moos' })).toBeNull());
     await user.click(within(dialog).getByRole('button', { name: 'Abbrechen' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 
