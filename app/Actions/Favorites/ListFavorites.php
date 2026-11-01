@@ -4,15 +4,18 @@ namespace App\Actions\Favorites;
 
 use App\Access\Visibility;
 use App\Models\Favorite;
+use App\Models\View;
 use App\Support\Actor;
 use App\Support\ListResult;
 use App\Support\PageArgs;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Validation\ValidationException;
 use Lorisleiva\Actions\Concerns\AsAction;
 
 /**
- * The own favorites in the order of the sidebar (`position`). A project the account no longer sees drops out at once
- * (removed from a private project, deleted), and comes back with the access.
+ * The own favorites, projects and views together, in the order of the sidebar (`position`, then ULID). A project the
+ * account no longer sees drops out at once (removed from a private project, deleted), and comes back with the access;
+ * a view is there while it exists (DeleteView takes its favorites with it).
  */
 final class ListFavorites
 {
@@ -28,8 +31,9 @@ final class ListFavorites
     {
         $query = Favorite::query()
             ->where('user_id', $actor->user->id)
-            ->where('favoritable_type', 'project')
-            ->whereIn('favoritable_id', Visibility::projectIds($actor->user))
+            ->where(fn (Builder $either) => $either
+                ->where(fn (Builder $q) => $q->where('favoritable_type', 'project')->whereIn('favoritable_id', Visibility::projectIds($actor->user)))
+                ->orWhere(fn (Builder $q) => $q->where('favoritable_type', 'view')->whereIn('favoritable_id', View::query()->select('id'))))
             ->orderBy('position')
             ->orderBy('id');
 

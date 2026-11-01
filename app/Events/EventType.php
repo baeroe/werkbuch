@@ -87,6 +87,10 @@ enum EventType: string
     case TokenCreated = 'token.created';
     case TokenRevoked = 'token.revoked';
 
+    case ViewCreated = 'view.created';
+    case ViewUpdated = 'view.updated';
+    case ViewDeleted = 'view.deleted';
+
     case FavoriteAdded = 'favorite.added';
     case FavoriteRemoved = 'favorite.removed';
 

@@ -7,6 +7,7 @@ use App\Access\RoleAssignments;
 use App\Models\Organization;
 use App\Models\Project;
 use App\Models\User;
+use App\Models\View;
 use App\Models\WorkItem;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
@@ -112,5 +113,11 @@ final class MatrixWorld
         }
 
         return $factory->create();
+    }
+
+    /** A fresh view of the target (a member of WEB, none of the columns), through the factory: no events. */
+    public function view(): View
+    {
+        return View::factory()->create(['created_by' => $this->target->id]);
     }
 }

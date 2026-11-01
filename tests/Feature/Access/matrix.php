@@ -48,6 +48,10 @@ use App\Actions\Users\ListUsers;
 use App\Actions\Users\ReactivateUser;
 use App\Actions\Users\UpdateUser;
 use App\Actions\Users\UpdateUserRole;
+use App\Actions\Views\DeleteView;
+use App\Actions\Views\GetView;
+use App\Actions\Views\ListViews;
+use App\Actions\Views\SaveView;
 use App\Actions\Workflows\DeleteWorkflow;
 use App\Actions\Workflows\ListStateUsage;
 use App\Actions\Workflows\ListWorkflows;
@@ -488,6 +492,33 @@ return [
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => DeleteResolution::run($a, Resolution::factory()->create()),
         'allowed' => $catalogAdmins,
         'event' => EventType::ResolutionDeleted,
+    ],
+    'ListViews' => [
+        'action' => ListViews::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListViews::run($a, []),
+        'allowed' => $everyone,
+    ],
+    'GetView' => [
+        'action' => GetView::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetView::run($a, $w->view()),
+        'allowed' => $everyone,
+    ],
+    // views belong to the team: everybody creates them, only the creator and org admins (`view.manage_any`) change one
+    'SaveView' => [
+        'action' => SaveView::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $view = $w->view();
+
+            return SaveView::run($a, [...$view->only(['icon', 'filter', 'display']), 'name' => 'Matrix'], $view);
+        },
+        'allowed' => ['org_admin', 'default_bot'],
+        'event' => EventType::ViewUpdated,
+    ],
+    'DeleteView' => [
+        'action' => DeleteView::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => DeleteView::run($a, $w->view()),
+        'allowed' => ['org_admin', 'default_bot'],
+        'event' => EventType::ViewDeleted,
     ],
     'ListFavorites' => [
         'action' => ListFavorites::class,

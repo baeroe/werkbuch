@@ -14,6 +14,7 @@ use App\Models\Property;
 use App\Models\RelationType;
 use App\Models\Resolution;
 use App\Models\User;
+use App\Models\View;
 use App\Models\Workflow;
 use App\Models\WorkItem;
 use App\Models\WorkItemType;
@@ -60,6 +61,7 @@ class AppServiceProvider extends ServiceProvider
             'relation_type' => RelationType::class,
             'resolution' => Resolution::class,
             'work_item' => WorkItem::class,
+            'view' => View::class,
         ]);
 
         Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);
