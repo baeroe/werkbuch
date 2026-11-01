@@ -171,6 +171,8 @@ export type PickerProps = Choice & {
   tabIndex?: number;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** What is typed in the search field, for a list the server narrows (an item found by key or title); '' on closing. */
+  onQueryChange?: (query: string) => void;
   defaultOpen?: boolean;
   /** false: the page stays usable while the list is open. */
   modal?: boolean;
@@ -206,6 +208,7 @@ export function Picker(props: PickerProps) {
     tabIndex,
     open,
     onOpenChange,
+    onQueryChange,
     defaultOpen,
     modal,
     keepSide,
@@ -289,10 +292,16 @@ export function Picker(props: PickerProps) {
       autoHighlight
       open={open}
       onOpenChange={(next) => {
-        if (!next) setQuery('');
+        if (!next) {
+          setQuery('');
+          onQueryChange?.('');
+        }
         onOpenChange?.(next);
       }}
-      onInputValueChange={(next) => setQuery(next)}
+      onInputValueChange={(next) => {
+        setQuery(next);
+        onQueryChange?.(next);
+      }}
       defaultOpen={defaultOpen}
       modal={modal}
     >

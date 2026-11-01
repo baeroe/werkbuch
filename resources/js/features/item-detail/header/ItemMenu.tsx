@@ -1,12 +1,13 @@
 /*
  * The actions of the detail's header: watch (on and off), copy the link, in the preview "Als Seite öffnen", and the
  * "more" menu with the item's own actions: a child item (epics only; without a type that can be a child the entry says
- * why instead of a toast, 13c), archive (closed items only) or restore, delete (with the right `item.delete`). Archive
- * and delete wait for their undo toast (5 s, `useItemRemoval`).
+ * why instead of a toast, 13c), a relation (the dialog of the relations section, as `r`), archive (closed items only)
+ * or restore, delete (with the right `item.delete`). Archive and delete wait for their undo toast (5 s,
+ * `useItemRemoval`).
  */
 
 import { Link } from '@inertiajs/react';
-import { Archive, ArchiveRestore, CornerDownRight, Ellipsis, Eye, Link2, Maximize2, Trash2 } from 'lucide-react';
+import { Archive, ArchiveRestore, ArrowRightLeft, CornerDownRight, Ellipsis, Eye, Link2, Maximize2, Trash2 } from 'lucide-react';
 import { Fragment, type ReactNode } from 'react';
 import { useEditReason } from '@/components/fields/itemData';
 import { IconButton } from '@/components/ui/IconButton';
@@ -23,7 +24,7 @@ import { usePermissions } from '@/lib/permissions';
 import { SHORTCUTS } from '@/lib/shortcuts/catalog';
 import { useUiStore } from '@/store/ui';
 import type { WorkItem, WorkItemDetail } from '@/types';
-import { useChildType } from '../shared';
+import { useChildType, useDetail } from '../shared';
 import { useRestore } from './ArchivedNote';
 import { useItemRemoval } from './useItemRemoval';
 
@@ -88,6 +89,7 @@ export function ItemMenu({ detail }: { detail: WorkItemDetail }) {
   const { restore } = useRestore(item);
   const removal = useItemRemoval(item);
   const editReason = useEditReason(item);
+  const { actions } = useDetail();
   const child = useChildType(item.project_id);
   const archived = item.archived_at !== null;
   const closed = isClosedCategory(state.category);
@@ -100,15 +102,22 @@ export function ItemMenu({ detail }: { detail: WorkItemDetail }) {
 
   // the menu holds only what the person may do; with nothing to offer there is no menu
   const sections: ReactNode[] = [
-    canCreate && (
+    (canCreate || !editReason) && (
       <MenuGroup key="add">
-        <MenuItem
-          icon={CornerDownRight}
-          disabled={child.typeId === null}
-          onClick={() => useUiStore.getState().openCreate({ project_id: item.project_id, parent_id: item.id, type_id: child.typeId! })}
-        >
-          {child.reason ? <Refused reason={child.reason}>{t('items.detail.child.create')}</Refused> : t('items.detail.child.create')}
-        </MenuItem>
+        {canCreate && (
+          <MenuItem
+            icon={CornerDownRight}
+            disabled={child.typeId === null}
+            onClick={() => useUiStore.getState().openCreate({ project_id: item.project_id, parent_id: item.id, type_id: child.typeId! })}
+          >
+            {child.reason ? <Refused reason={child.reason}>{t('items.detail.child.create')}</Refused> : t('items.detail.child.create')}
+          </MenuItem>
+        )}
+        {!editReason && (
+          <MenuItem icon={ArrowRightLeft} shortcut={SHORTCUTS['item.relation'].keys} onClick={() => actions.current.addRelation?.()}>
+            {t('items.detail.relations.menu')}
+          </MenuItem>
+        )}
       </MenuGroup>
     ),
     (canRestore || canArchive || canDelete) && (

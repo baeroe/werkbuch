@@ -1,29 +1,39 @@
 /*
  * What the building blocks of the item detail share, in the preview (`ItemPeek`) and on the page (`ItemPage`):
- * - `DetailContext`: where the detail is shown and the actions the detail's shortcuts reach (the title registers `e`).
- * - `Section`: a titled part of the detail with actions on the right.
+ * - `DetailContext`: where the detail is shown and the actions the detail's shortcuts reach (the title registers `e`,
+ *   the relations `r`).
+ * - `Section`: a titled part of the detail with actions on the right and a short note beside the heading.
+ * - `LinkedItem`: another item in one line (status, key, title), a link that opens it where the detail is.
+ * - `useUnsavedGuard`: while text is not saved yet, leaving or reloading the page asks first.
  * - `isGone`: whether a failed read means the item is gone for the reader.
  * - `useChildType`: the type a new child of the item takes ("Kind-Item anlegen …"), or why there is none.
  * - `focusWhenLost`: where the focus goes when the control that had it goes away.
  * - `useInstantDay`: the day of an instant (created, changed, archived) in the organisation's time zone (13c).
  */
 
-import { createContext, useContext, useId, type ReactNode, type RefObject } from 'react';
+import { createContext, useContext, useEffect, useId, type ReactNode, type RefObject } from 'react';
 import { ApiError } from '@/api/client';
 import { cx } from '@/components/ui/cx';
+import { StatusIcon } from '@/components/ui/StatusIcon';
 import { formatDay } from '@/components/fields/format';
+import { useItemWorkflow } from '@/components/fields/itemData';
+import { ItemKey } from '@/components/items/ItemKey';
+import { ItemLink, linkFocusRing } from '@/components/items/ItemLink';
 import { childTypeId } from '@/domain/hierarchy';
 import { cachedZone } from '@/domain/tz';
 import { useOrganization } from '@/hooks/organization';
 import { useProjects } from '@/hooks/projects';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
 import { t } from '@/lib/i18n';
+import { useUiStore } from '@/store/ui';
+import type { WorkItem } from '@/types';
 
 export type DetailSurface = 'peek' | 'page';
 
 /** What the shortcuts of the detail start; each part registers its own while it is mounted. */
 export interface DetailActions {
   editTitle?: () => void;
+  addRelation?: () => void;
 }
 
 export interface DetailContextValue {
@@ -75,16 +85,19 @@ type SectionProps = {
   title: ReactNode;
   /** Buttons on the right of the heading. */
   actions?: ReactNode;
+  /** A short note beside the heading, e.g. the save state or a count. */
+  aside?: ReactNode;
   children?: ReactNode;
   className?: string;
 };
 
-export function Section({ title, actions, children, className }: SectionProps) {
+export function Section({ title, actions, aside, children, className }: SectionProps) {
   const headingId = useId();
   return (
     <section aria-labelledby={headingId} className={cx('mt-4 border-t border-edge pt-3', className)}>
       <div className="flex min-h-7 items-center gap-2">
         <SectionHeading id={headingId}>{title}</SectionHeading>
+        {aside && <div className="min-w-0 text-sm text-muted">{aside}</div>}
         {actions && <div className="ml-auto flex shrink-0 items-center gap-1">{actions}</div>}
       </div>
       {children}
@@ -107,4 +120,48 @@ export function focusWhenLost(next: () => HTMLElement | null | undefined): void 
 export function useInstantDay(): (iso: string) => string {
   const zone = cachedZone(useOrganization().data.timezone);
   return (iso) => formatDay(zone.date(new Date(iso)));
+}
+
+/** While `active`, leaving or reloading the page asks first, so typed text is not lost on the way. */
+export function useUnsavedGuard(active: boolean): void {
+  useEffect(() => {
+    if (!active) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [active]);
+}
+
+type LinkedItemProps = {
+  item: WorkItem;
+  /** Controls after the title (remove, avatar); they sit above the link. */
+  trailing?: ReactNode;
+};
+
+/**
+ * Another item in one line: its status, key and title as a link that opens it where the detail is (the preview shows
+ * it, the page goes to its page; a click with a modifier key leaves the browser to open the page).
+ */
+export function LinkedItem({ item, trailing }: LinkedItemProps) {
+  const { surface } = useDetail();
+  const { workflow } = useItemWorkflow(item);
+  const state = workflow?.states.find((entry) => entry.id === item.state_id);
+  return (
+    <div className={cx('relative flex min-h-11 min-w-0 items-center gap-2 rounded-ctl px-2 transition-colors duration-120 hover:bg-hover md:min-h-8', linkFocusRing)}>
+      {state ? (
+        <StatusIcon icon={state.icon} category={state.category} label={t('items.blocked.state', { state: state.name })} className="size-3.5 shrink-0" />
+      ) : (
+        <span className="size-3.5 shrink-0" aria-hidden="true" />
+      )}
+      <ItemLink
+        item={item}
+        onOpen={surface === 'peek' ? (id) => useUiStore.getState().openPeek(id) : undefined}
+        className="flex min-w-0 flex-1 items-center gap-2 text-ui text-ink after:rounded-ctl"
+      >
+        <ItemKey value={item.key} className="text-sm text-muted" />
+        <span className={cx('min-w-0 truncate', item.archived_at && 'text-muted')}>{item.title}</span>
+      </ItemLink>
+      {trailing && <div className="relative z-10 flex shrink-0 items-center gap-1">{trailing}</div>}
+    </div>
+  );
 }

@@ -760,8 +760,10 @@ describe('ItemPeek', () => {
     const user = userEvent.setup();
     renderWith(<ItemPeek itemId="wi_web_47" />);
     await screen.findByText('Blockiert, solange OPS-12 offen ist');
-    const blocker = await screen.findByRole('link', { name: /OPS-12/ });
-    await user.click(blocker);
+    // the banner under the title, before the relations section names it as well
+    const [blocker] = await screen.findAllByRole('link', { name: /OPS-12/ });
+    expect(screen.getByRole('region', { name: 'Relationen' }).contains(blocker!)).toBe(false);
+    await user.click(blocker!);
     expect(useUiStore.getState().peekItemId).toBe('wi_ops_12');
   });
 });

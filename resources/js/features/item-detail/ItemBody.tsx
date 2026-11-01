@@ -1,11 +1,12 @@
 /*
  * The item detail, shared by the preview and the page (spec 5.2).
  * - `ItemDetailProvider` goes around a whole detail (header and body): where it is shown and the actions of its
- *   shortcuts, registered here in detail scope: `e` edits the title. The screens key it by the item, so nothing of one
- *   item's drafts carries over to the next. On the page `e` always acts; in the preview only while the focus is in its
- *   panel or nowhere in particular (`previewKeysAct`), so the screen beside it keeps the key otherwise.
- * - `ItemBody`: the title, the archived and blocked notes, then the fields. The description, children, relations and
- *   the activity follow with their tasks. In the preview one column, as in the moodboard panel; on the page the fields
+ *   shortcuts, registered here in detail scope: `e` edits the title, `r` adds a relation. The screens key it by the
+ *   item, so nothing of one item's drafts carries over to the next. On the page `e` always acts; in the preview only
+ *   while the focus is in its panel or nowhere in particular (`previewKeysAct`), so the screen beside it keeps the key
+ *   otherwise. `r` always acts, as in the clickdummy: no screen beside a preview binds it.
+ * - `ItemBody`: the title, the archived and blocked notes, the fields, the description, the children and the relations.
+ *   The activity follows with its task. In the preview one column, as in the moodboard panel; on the page the fields
  *   stand in a column on the right from lg on (they stay in view while the main column scrolls), below lg they follow
  *   the title. The reading order is the same everywhere.
  */
@@ -16,9 +17,12 @@ import { t } from '@/lib/i18n';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { useUiStore } from '@/store/ui';
 import type { WorkItemDetail } from '@/types';
+import { Children } from './Children';
+import { Description } from './Description';
 import { FieldsPanel } from './FieldsPanel';
 import { ArchivedNote } from './header/ArchivedNote';
 import { ItemTitle } from './header/ItemTitle';
+import { Relations } from './Relations';
 import { DetailContext, type DetailActions, type DetailContextValue, type DetailSurface } from './shared';
 
 /**
@@ -45,6 +49,7 @@ export function ItemDetailProvider({ surface, panel, children }: ItemDetailProvi
     instance: surface,
     when: surface === 'peek' ? () => previewKeysAct(panel) : undefined,
   });
+  useShortcut('item.relation', () => actions.current.addRelation?.(), { instance: surface });
   return <DetailContext.Provider value={context}>{children}</DetailContext.Provider>;
 }
 
@@ -57,6 +62,13 @@ export function ItemBody({ detail, surface }: { detail: WorkItemDetail; surface:
       <BlockedHint item={item} variant="banner" onOpen={surface === 'peek' ? (id) => useUiStore.getState().openPeek(id) : undefined} className="mt-3" />
     </>
   );
+  const main: ReactNode = (
+    <>
+      <Description detail={detail} />
+      <Children detail={detail} />
+      <Relations detail={detail} />
+    </>
+  );
 
   if (surface === 'peek') {
     return (
@@ -65,6 +77,7 @@ export function ItemBody({ detail, surface }: { detail: WorkItemDetail; surface:
         <div className="mt-4">
           <FieldsPanel detail={detail} />
         </div>
+        {main}
       </div>
     );
   }
@@ -77,7 +90,7 @@ export function ItemBody({ detail, surface }: { detail: WorkItemDetail; surface:
       >
         <FieldsPanel detail={detail} />
       </aside>
-      <div className="min-w-0 lg:[grid-area:main]" />
+      <div className="min-w-0 lg:[grid-area:main]">{main}</div>
     </div>
   );
 }
