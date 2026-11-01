@@ -28,8 +28,9 @@ async function storedDescription(page: Page, id: string): Promise<string | null>
 
 test('warns the second editor of a description and keeps both versions', async ({ page, browser }) => {
   const { id, identifier } = await createE2eProject(page, name('conflict'), { types: ['Task'] });
-  const other = await signedInContext(browser, PEOPLE.mara);
+  let other: Awaited<ReturnType<typeof signedInContext>> | undefined;
   try {
+    other = await signedInContext(browser, PEOPLE.mara);
     const item = await createItem(page, { project_id: id, title: 'E2E Startseite umbauen', description: 'Erster Stand.' });
 
     // both open the item; Mara's window loads before Erik saves
@@ -52,6 +53,8 @@ test('warns the second editor of a description and keeps both versions', async (
     await tabTo(other.page, banner.getByRole('button', { name: tr('de', 'items.detail.description.keep_mine') }), { backwards: true, max: 10 });
     await other.page.keyboard.press('Enter');
     await expect(banner).toBeHidden();
+    // the button went with the banner: the focus is back in the editor
+    await expect(mara.editor).toBeFocused();
     await expect(mara.status).toHaveText(tr('de', 'items.detail.description.saved'));
     expect(await storedDescription(page, item.id)).toBe('Von Mara. Erster Stand.');
 
@@ -69,7 +72,7 @@ test('warns the second editor of a description and keeps both versions', async (
     );
     expect(changes.map((entry) => entry.actor_id)).toEqual([idOf(PEOPLE.e2e), idOf(PEOPLE.mara)]);
   } finally {
-    await other.context.close();
+    await other?.context.close();
     await page.goto('/my-items');
     await removeE2eProject(page, identifier);
   }

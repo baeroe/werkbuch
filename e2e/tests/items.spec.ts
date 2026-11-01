@@ -164,14 +164,15 @@ test('edits the title with e', async ({ page }) => {
     // Escape takes it back
     await page.keyboard.type(' und dreifach');
     await page.keyboard.press('Escape');
-    await expect(page.getByRole('heading', { level: 1, name: 'E2E Kontaktformular sendet doppelt' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'E2E Kontaktformular sendet doppelt', exact: true })).toBeVisible();
 
     await page.keyboard.press('e');
     await expect(title).toBeFocused();
-    await pressMod(page, 'a');
+    // select all as the browser does it on the host (the page's own mod can be Ctrl on a Mac, which goes to the line start)
+    await page.keyboard.press('ControlOrMeta+a');
     await page.keyboard.type('E2E Kontaktformular sendet einmal');
     await page.keyboard.press('Enter');
-    const heading = page.getByRole('heading', { level: 1, name: 'E2E Kontaktformular sendet einmal' });
+    const heading = page.getByRole('heading', { level: 1, name: 'E2E Kontaktformular sendet einmal', exact: true });
     await expect(heading).toBeVisible();
     await expect(heading.getByRole('button')).toBeFocused();
 

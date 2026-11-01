@@ -255,6 +255,8 @@ describe('Description', () => {
     // the second save is based on the version the conflict named
     expect(descriptionSaves()[1]).toEqual(['Meine Fassung. Noch mehr. Beim Absenden kommt die Mail zweimal an.', 4]);
     await waitFor(() => expect(within(section).queryByRole('alert')).toBeNull());
+    // the button went with the banner: the focus is back in the editor
+    await waitFor(() => expect(document.activeElement).toBe(editor));
     await waitFor(() => expect(within(section).getByRole('status').textContent).toBe('Gespeichert'));
   });
 
@@ -275,6 +277,7 @@ describe('Description', () => {
     await user.click(within(banner).getByRole('button', { name: 'Neu laden' }));
     expect(within(section).queryByRole('alert')).toBeNull();
     await waitFor(() => expect(editor.textContent).toBe('Ida hat das schon geklärt.'));
+    await waitFor(() => expect(document.activeElement).toBe(editor));
     // my draft is gone: nothing left to save, and nothing asks before leaving
     fireEvent.blur(editor);
     expect(descriptionSaves()).toHaveLength(1);
@@ -411,6 +414,129 @@ describe('Description', () => {
     expect(descriptionSaves()[2]).toEqual(['Erstens. Zweitens. Beim Absenden kommt die Mail zweimal an.', 4]);
   });
 
+  it('saves what was typed when the view goes away, and asks before leaving the page meanwhile', async () => {
+    const view = renderWith(<ItemPeek itemId="wi_web_47" />);
+    const { editor } = await descriptionEditor();
+    const gate = holdNextPatch();
+    paste(editor, 'Kurz vor dem Schließen. ');
+    // the preview closes before the pause is over: the save runs all the same
+    view.unmount();
+    await waitFor(() => expect(gate.held()).toBe(true));
+    const leaving = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(leaving);
+    expect(leaving.defaultPrevented).toBe(true);
+
+    gate.release();
+    await waitFor(() => expect(descriptionSaves()).toEqual([['Kurz vor dem Schließen. Beim Absenden kommt die Mail zweimal an.', 3]]));
+    await waitFor(() => {
+      const after = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(after);
+      expect(after.defaultPrevented).toBe(false);
+    });
+    expect(currentToasts()).toEqual([]);
+  });
+
+  it('announces a conflict met by the save that runs as the view goes away, and opens the item with the banner', async () => {
+    const user = userEvent.setup();
+    const theirs = { ...web47, description_json: doc('Ida hat das schon geklärt.'), description_version: 4 };
+    let refuse = true;
+    const routes: Record<string, MockRoute> = {
+      'PATCH /api/v1/work-items/wi_web_47': (body) => {
+        if (refuse) return problem(409, 'description_conflict', { detail: 'Ida Brenner hat die Beschreibung inzwischen geändert.', current: theirs });
+        return { body: { data: { ...theirs, description_json: (body as { description_json: RichText }).description_json, description_version: 5 } } };
+      },
+    };
+    const view = renderWith(<ItemPeek itemId="wi_web_47" />, { routes });
+    const { editor } = await descriptionEditor();
+    paste(editor, 'Meine Fassung. ');
+    // a link elsewhere: the view goes while its save is still to answer
+    view.unmount();
+
+    const left = await waitFor(() => {
+      expect(lastToast()).toMatchObject({
+        title: 'Beschreibung von WEB-47 nicht gespeichert',
+        description: 'Ida Brenner hat die Beschreibung inzwischen geändert.',
+        tone: 'error',
+        action: { label: 'Öffnen' },
+      });
+      return lastToast()!;
+    });
+    // nothing typed is lost on the way out of the page either
+    const leaving = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(leaving);
+    expect(leaving.defaultPrevented).toBe(true);
+
+    // "Öffnen" brings the item back in the preview, with the banner and this window's text
+    act(() => runToastAction(left.id));
+    expect(useUiStore.getState().peekItemId).toBe('wi_web_47');
+    api!.restore();
+    items = items.map((entry) => (entry.id === web47.id ? theirs : entry));
+    refuse = false;
+    renderWith(<ItemPeek itemId="wi_web_47" />, { routes });
+    const again = await descriptionEditor();
+    const banner = await within(again.section).findByRole('alert');
+    expect(again.editor.textContent).toBe('Meine Fassung. Beim Absenden kommt die Mail zweimal an.');
+    await user.click(within(banner).getByRole('button', { name: 'Meine Fassung übernehmen' }));
+    await waitFor(() => expect(descriptionSaves()).toEqual([['Meine Fassung. Beim Absenden kommt die Mail zweimal an.', 4]]));
+    await waitFor(() => {
+      const after = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(after);
+      expect(after.defaultPrevented).toBe(false);
+    });
+  });
+
+  it('announces a conflict the banner showed as the preview closed', async () => {
+    const user = userEvent.setup();
+    const theirs = { ...web47, description_json: doc('Ida hat das schon geklärt.'), description_version: 4 };
+    const routes: Record<string, MockRoute> = {
+      'PATCH /api/v1/work-items/wi_web_47': () =>
+        problem(409, 'description_conflict', { detail: 'Ida Brenner hat die Beschreibung inzwischen geändert.', current: theirs }),
+    };
+    const view = renderWith(<ItemPeek itemId="wi_web_47" />, { routes });
+    const { editor } = await descriptionEditor();
+    paste(editor, 'Meine Fassung. ');
+    press('Enter', { ctrlKey: true }, editor);
+    await screen.findByRole('alert');
+    expect(currentToasts()).toEqual([]);
+
+    view.unmount();
+    expect(lastToast()).toMatchObject({ title: 'Beschreibung von WEB-47 nicht gespeichert', action: { label: 'Öffnen' } });
+    const leaving = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(leaving);
+    expect(leaving.defaultPrevented).toBe(true);
+
+    // back, the banner is there again; "Neu laden" settles it
+    api!.restore();
+    items = items.map((entry) => (entry.id === web47.id ? theirs : entry));
+    renderWith(<ItemPeek itemId="wi_web_47" />, { routes });
+    const again = await descriptionEditor();
+    await user.click(within(await within(again.section).findByRole('alert')).getByRole('button', { name: 'Neu laden' }));
+    const after = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(after);
+    expect(after.defaultPrevented).toBe(false);
+  });
+
+  it('shows the banner when the retry of a failed save meets a conflict', async () => {
+    const theirs = { ...web47, description_json: doc('Ida hat das schon geklärt.'), description_version: 4 };
+    let answer = problem(503, 'service_unavailable');
+    renderWith(<ItemPage itemKey="WEB-47" />, { routes: { 'PATCH /api/v1/work-items/wi_web_47': () => answer } });
+    const { section, editor } = await descriptionEditor();
+    paste(editor, 'Erstens. ');
+    press('Enter', { ctrlKey: true }, editor);
+    const failed = await waitFor(() => {
+      expect(lastToast()?.action?.label).toBe('Erneut versuchen');
+      return lastToast()!;
+    });
+
+    // somebody saved in between: the retry's 409 opens the banner, not silence
+    answer = problem(409, 'description_conflict', { detail: 'Ida Brenner hat die Beschreibung inzwischen geändert.', current: theirs });
+    act(() => runToastAction(failed.id));
+    const banner = await within(section).findByRole('alert');
+    expect(banner.textContent).toContain('Ida Brenner hat die Beschreibung inzwischen geändert.');
+    expect(editor.textContent).toBe('Erstens. Beim Absenden kommt die Mail zweimal an.');
+    await userEvent.setup().click(within(banner).getByRole('button', { name: 'Neu laden' }));
+  });
+
   it('shows a refused text under the editor', async () => {
     renderWith(<ItemPage itemKey="WEB-47" />, {
       routes: {
@@ -450,7 +576,7 @@ describe('Description', () => {
 /* ---------------------------------------------------------------------- children */
 
 describe('Children', () => {
-  it('shows the progress and opens the create dialog with the parent', async () => {
+  it('shows the progress and each child with its status and assignee', async () => {
     const user = userEvent.setup();
     items = items.map((entry) => (entry.id === web48.id ? { ...web48, assignee_id: 'u_ida' } : entry));
     items.push(makeWorkItem({ id: 'wi_web_49', number: 49, key: 'WEB-49', title: 'Footer aufräumen', parent_id: 'wi_web_30', state_id: 'std_done' }));

@@ -11,21 +11,28 @@
  * versuchen", and when that retry goes through, the version it made is the one the draft is based on now.
  *
  * An open conflict outlives the item's view, like an unsent comment: closing the preview (or opening another item)
- * keeps this window's version, and the banner offers it again when the item comes back.
+ * keeps this window's version, and the banner offers it again when the item comes back. Nothing typed goes without a
+ * word when the view goes away: what is typed is saved then; a conflict that save meets (or one the banner showed as
+ * the view closed) raises a toast naming the item, whose "Öffnen" brings it back in the preview with the banner; and
+ * while a conflict is open or a save is on its way, leaving or reloading the page asks first (`beforeunload`, kept at
+ * module level: it outlives the view). Both buttons of the banner give the focus back to the editor.
  */
 
 import { RotateCw } from 'lucide-react';
+import type { Editor } from '@tiptap/react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { ApiError } from '@/api/client';
 import { useEditReason } from '@/components/fields/itemData';
 import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
+import { toast } from '@/components/ui/toast';
 import { isEmptyDoc, RichTextEditor } from '@/editor/RichTextEditor';
 import { RichTextView } from '@/editor/RichTextView';
 import { useUpdateWorkItem } from '@/hooks/workItems';
 import { t } from '@/lib/i18n';
+import { useUiStore } from '@/store/ui';
 import type { RichText, WorkItem, WorkItemDetail } from '@/types';
-import { Section, useUnsavedGuard } from './shared';
+import { focusWhenLost, Section, useUnsavedGuard } from './shared';
 
 /** How long typing pauses before the description saves. */
 export const DESCRIPTION_PAUSE_MS = 1200;
@@ -52,6 +59,41 @@ function conflictOf(error: unknown): Conflict | null {
  * server said. Set when a save meets a conflict, also one that ran as the view closed; gone once it is resolved.
  */
 const openConflicts = new Map<string, { mine: RichText | null; message: string }>();
+
+/** Saves of a description on their way, also of views that are gone already. */
+let pendingSaves = 0;
+
+const warnOnUnload = (event: BeforeUnloadEvent) => event.preventDefault();
+let guarding = false;
+
+/** While a conflict is open or a save is on its way, leaving or reloading the page asks first; no view needs to be there. */
+function syncLeaveGuard(): void {
+  const needed = openConflicts.size > 0 || pendingSaves > 0;
+  if (needed === guarding) return;
+  guarding = needed;
+  if (needed) window.addEventListener('beforeunload', warnOnUnload);
+  else window.removeEventListener('beforeunload', warnOnUnload);
+}
+
+function keepConflict(id: string, open: { mine: RichText | null; message: string }): void {
+  openConflicts.set(id, open);
+  syncLeaveGuard();
+}
+
+function dropConflict(id: string): void {
+  openConflicts.delete(id);
+  syncLeaveGuard();
+}
+
+/** A conflict whose view is gone: the toast names the item, and "Öffnen" brings it back with the banner. */
+function announceLeftConflict(item: Pick<WorkItem, 'id' | 'key'>, message: string): void {
+  toast({
+    title: t('items.detail.description.conflict_left', { key: item.key }),
+    description: message,
+    tone: 'error',
+    action: { label: t('items.detail.description.open'), onClick: () => useUiStore.getState().openPeek(item.id) },
+  });
+}
 
 export function Description({ detail }: { detail: WorkItemDetail }) {
   const { item } = detail;
@@ -86,11 +128,20 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
   const inConflict = useRef(reopened !== null);
   /** The answer of the last save this window made itself; any other answer of the mutation is a retry from its toast. */
   const own = useRef<WorkItem | undefined>(undefined);
+  /** The error of the last save this window made itself; any other error of the mutation is a retry from its toast. */
+  const ownError = useRef<Error | null>(null);
+  /** Whether the view is still there: a conflict met afterwards is announced by a toast. */
+  const mounted = useRef(false);
+  const editor = useRef<Editor | null>(null);
+  const latestItem = useRef(item);
+  useEffect(() => {
+    latestItem.current = item;
+  });
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // a conflict left open whose text the server took in the meantime: nothing left to offer
   useEffect(() => {
-    if (!reopened) openConflicts.delete(item.id);
+    if (!reopened) dropConflict(item.id);
   }, [reopened, item.id]);
 
   // a newer description from outside shows while nothing is typed here. While text is typed, nothing the cache shows
@@ -115,6 +166,8 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
       return;
     }
     inFlight.current = true;
+    pendingSaves += 1;
+    syncLeaveGuard();
     setState('saving');
     let conflicted: Conflict | null = null;
     try {
@@ -122,7 +175,7 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
       own.current = saved;
       base.current = saved.description_version;
       held.current = doc;
-      openConflicts.delete(item.id);
+      dropConflict(item.id);
       setState('saved');
       // typed on while it saved: that is still to save
       if (same(latest.current, doc)) {
@@ -130,6 +183,7 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
         setUnsaved(false);
       }
     } catch (error) {
+      ownError.current = error as Error;
       // anything else than a conflict: the item mutation names the cause (with "Erneut versuchen" where it helps); the
       // text stays, still to save
       conflicted = conflictOf(error);
@@ -137,16 +191,24 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
       if (error instanceof ApiError && error.errors?.description_json) setError(error.errors.description_json[0]!);
     } finally {
       inFlight.current = false;
+      pendingSaves -= 1;
+      syncLeaveGuard();
     }
     if (conflicted) {
-      inConflict.current = true;
-      // kept beyond this view: the save may have run as it closed, or it closes before the conflict is resolved
-      openConflicts.set(item.id, { mine: latest.current, message: conflicted.message });
-      setConflict(conflicted);
+      openConflict(conflicted);
+      // the save ran as the view went away (a link, the preview closing): only the toast can say it now
+      if (!mounted.current) announceLeftConflict(item, conflicted.message);
     } else if (dirty.current && !same(latest.current, doc)) {
       timer.current = setTimeout(() => void save.current(), DESCRIPTION_PAUSE_MS);
     }
   };
+
+  /** A conflict: kept beyond this view (the save may have run as it closed, or it closes before it is resolved). */
+  function openConflict(found: Conflict) {
+    inConflict.current = true;
+    keepConflict(item.id, { mine: latest.current, message: found.message });
+    setConflict(found);
+  }
 
   // "Erneut versuchen" on the error toast sends the failed save once more, past this window: once it went through, the
   // draft is based on the version it made (and still to save if it was typed on meanwhile)
@@ -167,12 +229,34 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
     }
   }, [answer, update.variables]);
 
+  // that retry meeting a conflict (someone saved in between): the banner, as for a save of this window
+  const failure = update.error;
+  useEffect(() => {
+    if (!failure || failure === ownError.current || inFlight.current || inConflict.current) return;
+    ownError.current = failure;
+    const found = conflictOf(failure);
+    if (found) openConflict(found);
+  }, [failure]);
+
   // what is typed is saved when the description goes away (the preview closes, another item opens); an open conflict
   // is kept in `openConflicts` instead
-  useEffect(() => () => void save.current(), []);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      // the item as it reads last: its key may have changed since (a renamed project)
+      const shown = latestItem.current;
+      const open = inConflict.current ? openConflicts.get(shown.id) : undefined;
+      if (open) announceLeftConflict(shown, open.message);
+      void save.current();
+    };
+  }, []);
+
+  /** Back into the editor once the banner (and the button pressed in it) is gone. */
+  const focusEditor = () => focusWhenLost(() => (editor.current?.isDestroyed === false ? (editor.current.view.dom as HTMLElement) : null));
 
   function reload({ current }: Conflict) {
-    openConflicts.delete(item.id);
+    dropConflict(item.id);
     inConflict.current = false;
     dirty.current = false;
     base.current = current.description_version;
@@ -182,6 +266,7 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
     setConflict(null);
     setState('idle');
     setUnsaved(false);
+    focusEditor();
   }
 
   function keepMine({ current }: Conflict) {
@@ -189,6 +274,7 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
     base.current = current.description_version;
     inConflict.current = false;
     setConflict(null);
+    focusEditor();
     void save.current({ force: true });
   }
 
@@ -243,6 +329,7 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
             }}
             onSubmit={() => void save.current()}
             preset="description"
+            editorRef={editor}
             invalid={error !== null}
             describedBy={error ? errorId : undefined}
           />
