@@ -198,6 +198,8 @@ it('checks the default value against the field type', function (string $type, bo
     'number in exponent form' => ['number', false, '1e3', 'field.default_value.number'],
     'number is too long for a float' => ['number', false, str_repeat('9', 400), 'field.default_value.number'],
     'number is a boolean' => ['number', false, true, 'field.default_value.number'],
+    'number beyond the column' => ['number', false, 1e21, 'field.default_value.number_range'],
+    'number at the column limit' => ['number', false, -1e20, 'field.default_value.number_range'],
     'dropdown unknown option' => ['dropdown', false, 'opt_x', 'field.default_value.option'],
     'dropdown list for one value' => ['dropdown', false, ['opt_a'], 'field.default_value.single'],
     'dropdown multiple unknown option' => ['dropdown', true, ['opt_x'], 'field.default_value.option'],

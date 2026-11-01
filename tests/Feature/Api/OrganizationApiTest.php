@@ -30,7 +30,7 @@ it('names the field of every invalid value', function (array $input, string $fie
 })->with([[['name' => ' '], 'name'], [['locale' => 'fr'], 'locale'], [['timezone' => 'Mars/Olympus'], 'timezone'], [['week_start' => 3], 'week_start'], [['logo_url' => 'data:image/svg+xml;base64,PHN2Zy8+'], 'logo_url']]);
 
 it('explains every invalid value with the sentence of the field', function () {
-    app()->setLocale('de');
+    speakGerman();
 
     $this->actingAs(User::factory()->admin()->create())->patchJson('/api/v1/organization', [
         'name' => str_repeat('x', 121), 'locale' => 'fr', 'timezone' => 'Mars/Olympus', 'week_start' => 3,
@@ -47,7 +47,7 @@ it('explains every invalid value with the sentence of the field', function () {
 });
 
 it('refuses members with the sentence of the clickdummy', function () {
-    app()->setLocale('de');
+    speakGerman();
 
     $this->actingAs(User::factory()->create())->patchJson('/api/v1/organization', ['name' => 'Mine'])
         ->assertForbidden()->assertJsonPath('reason', 'forbidden')

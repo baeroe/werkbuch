@@ -310,6 +310,7 @@ final class PropertyInput
         return match ($error) {
             'text' => __('field.default_value.text'),
             'number' => __('field.default_value.number'),
+            'number_range' => __('field.default_value.number_range'),
             'option' => __('field.default_value.option'),
             'single' => __('field.default_value.single'),
             'boolean' => __('field.default_value.boolean'),

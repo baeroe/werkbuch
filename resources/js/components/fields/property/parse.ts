@@ -52,9 +52,21 @@ export function ambiguousNumber(text: string): { whole: number; decimal: number 
 /**
  * A typed number, rounded to the property's decimals; null when the text is no number or reads either way
  * (`ambiguousNumber`). Comma and point are both the decimal sign ("0.500" is 0,5, never 500); the other one groups
- * thousands only before a decimal sign ("1.234,5", "1,234.5").
+ * thousands only before a decimal sign ("1.234,5", "1,234.5"). A number at or beyond `NUMBER_LIMIT` in amount is null too.
  */
 export function parseNumber(text: string, decimals: number): number | null {
+  const value = readNumber(text, decimals);
+  return value !== null && Math.abs(value) >= NUMBER_LIMIT ? null : value;
+}
+
+/**
+ * Numbers stay below this in amount, as the server takes them (`ItemValue::NUMBER_LIMIT`): the column holds 20 digits
+ * before the decimal sign.
+ */
+export const NUMBER_LIMIT = 1e20;
+
+/** The number a text reads as, rounded, without the limit of the column. */
+function readNumber(text: string, decimals: number): number | null {
   const trimmed = text.trim();
   if (ambiguousNumber(trimmed)) return null;
   const match = SIMPLE.exec(trimmed) ?? GROUPED.exec(trimmed) ?? GROUPED_POINT.exec(trimmed);
@@ -62,7 +74,9 @@ export function parseNumber(text: string, decimals: number): number | null {
   const [, sign, whole, fraction] = match;
   // rounded in decimal notation, half away from zero, as the server rounds: 2,6750 with two decimals is 2,68
   const digits = `${whole!.replaceAll(/[.,]/g, '')}.${fraction ?? '0'}`;
-  const rounded = Number(`${Math.round(Number(`${digits}e${decimals}`))}e-${decimals}`);
+  const scaled = Math.round(Number(`${digits}e${decimals}`));
+  // from 1e21 on a number prints with an exponent ("1e+21e-2" is no number); there a float has no decimals left to round
+  const rounded = Math.abs(scaled) < 1e21 ? Number(`${scaled}e-${decimals}`) : Number(digits);
   return sign === '-' && rounded !== 0 ? -rounded : rounded;
 }
 
@@ -91,7 +105,8 @@ export function parseTyped(property: Pick<Property, 'field_type' | 'settings'>, 
   switch (property.field_type) {
     case 'number': {
       const decimals = property.settings.decimals ?? 0;
-      const value = parseNumber(trimmed, decimals);
+      const value = readNumber(trimmed, decimals);
+      if (value !== null && Math.abs(value) >= NUMBER_LIMIT) return { error: t('items.fields.property.number_range'), partial: false };
       if (value !== null) return { value };
       // "1.500" may still become "1.500,5" while one types: the question waits for Enter or for leaving the field
       const readings = ambiguousNumber(trimmed);

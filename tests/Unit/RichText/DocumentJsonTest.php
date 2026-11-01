@@ -95,17 +95,55 @@ it('refuses a document of the wrong shape', function (array $json) use ($reason)
     'a mark in code' => [F::doc(['type' => 'codeBlock', 'content' => [F::text('x', 'bold')]])],
     'attributes that are no object' => [F::doc(['type' => 'heading', 'attrs' => 'h2', 'content' => [F::text('x')]])],
     'a heading level beyond three' => [F::doc(['type' => 'heading', 'attrs' => ['level' => 4], 'content' => [F::text('x')]])],
-    'a start that is text' => [F::doc(['type' => 'orderedList', 'attrs' => ['start' => '2'], 'content' => []])],
     'a list type that is no text' => [F::doc(['type' => 'orderedList', 'attrs' => ['type' => 1], 'content' => []])],
     'a checked that is text' => [F::doc(['type' => 'taskList', 'content' => [['type' => 'taskItem', 'attrs' => ['checked' => 'true'], 'content' => [F::p('x')]]]])],
-    'a language with a backtick' => [F::doc(['type' => 'codeBlock', 'attrs' => ['language' => 'php`'], 'content' => []])],
-    'a language with a line break' => [F::doc(['type' => 'codeBlock', 'attrs' => ['language' => "php\n"], 'content' => []])],
-    'a colspan of zero' => [F::doc(['type' => 'table', 'content' => [['type' => 'tableRow', 'content' => [['type' => 'tableCell', 'attrs' => ['colspan' => 0]]]]]])],
-    'widths that are text' => [F::doc(['type' => 'table', 'content' => [['type' => 'tableRow', 'content' => [['type' => 'tableHeader', 'attrs' => ['colwidth' => ['100']]]]]]])],
-    'widths that are no list' => [F::doc(['type' => 'table', 'content' => [['type' => 'tableRow', 'content' => [['type' => 'tableHeader', 'attrs' => ['colwidth' => ['a' => 100]]]]]]])],
     'an unknown alignment' => [F::doc(['type' => 'table', 'content' => [['type' => 'tableRow', 'content' => [['type' => 'tableCell', 'attrs' => ['align' => 'justify']]]]]])],
     'a link title that is no text' => [F::doc(F::p(['type' => 'text', 'text' => 'x', 'marks' => [['type' => 'link', 'attrs' => ['href' => 'https://example.com', 'title' => 1]]]]))],
 ]);
+
+it('gives an odd list start, cell span, cell width or code language its default, as pasted HTML brings them', function (string $node, array $attrs, array $expected) {
+    $cell = fn (string $type, array $attrs) => F::doc(['type' => 'table', 'content' => [['type' => 'tableRow', 'content' => [['type' => $type, 'attrs' => $attrs, 'content' => [F::p('x')]]]]]]);
+    $json = match ($node) {
+        'orderedList' => F::doc(['type' => 'orderedList', 'attrs' => $attrs, 'content' => [['type' => 'listItem', 'content' => [F::p('x')]]]]),
+        'codeBlock' => F::doc(['type' => 'codeBlock', 'attrs' => $attrs, 'content' => [F::text('x')]]),
+        default => $cell($node, $attrs),
+    };
+    $read = Document::fromJson($json)->toJson()['content'][0];
+    $attrsOf = $node === 'orderedList' || $node === 'codeBlock' ? $read['attrs'] : $read['content'][0]['content'][0]['attrs'];
+
+    expect(array_intersect_key($attrsOf, $expected))->toBe($expected);
+})->with([
+    'a start that is text' => ['orderedList', ['start' => '2'], ['start' => 1]],
+    'a start that is no number (NaN as JSON)' => ['orderedList', ['start' => null], ['start' => 1]],
+    'a start that is NaN' => ['orderedList', ['start' => NAN], ['start' => 1]],
+    'a start that is a fraction' => ['orderedList', ['start' => 2.5], ['start' => 1]],
+    'a start below zero' => ['orderedList', ['start' => -3], ['start' => 1]],
+    'a start beyond nine digits' => ['orderedList', ['start' => 1_000_000_000], ['start' => 1]],
+    'the largest start' => ['orderedList', ['start' => Schema::LIST_START_MAX], ['start' => Schema::LIST_START_MAX]],
+    'a colspan of zero' => ['tableCell', ['colspan' => 0], ['colspan' => 1]],
+    'a colspan that is a fraction' => ['tableCell', ['colspan' => 2.5], ['colspan' => 1]],
+    'a colspan that is text' => ['tableHeader', ['colspan' => 'x'], ['colspan' => 1]],
+    'a rowspan of zero' => ['tableCell', ['rowspan' => 0], ['rowspan' => 1]],
+    'a rowspan that is text' => ['tableCell', ['rowspan' => 'x'], ['rowspan' => 1]],
+    'widths with NaN (null as JSON)' => ['tableCell', ['colwidth' => [null]], ['colwidth' => null]],
+    'widths with NaN' => ['tableCell', ['colwidth' => [NAN]], ['colwidth' => null]],
+    'widths of zero' => ['tableCell', ['colwidth' => [0]], ['colwidth' => null]],
+    'widths below zero' => ['tableHeader', ['colwidth' => [120, -5]], ['colwidth' => null]],
+    'widths that are text' => ['tableHeader', ['colwidth' => ['100']], ['colwidth' => null]],
+    'widths that are no list' => ['tableHeader', ['colwidth' => ['a' => 100]], ['colwidth' => null]],
+    'a language with a backtick' => ['codeBlock', ['language' => 'php`'], ['language' => null]],
+    'a language with a line break' => ['codeBlock', ['language' => "php\n"], ['language' => null]],
+    'a language of a class name' => ['codeBlock', ['language' => 'language-php hljs'], ['language' => null]],
+    'a language longer than 32' => ['codeBlock', ['language' => str_repeat('a', 33)], ['language' => null]],
+    'a language that is a number' => ['codeBlock', ['language' => 5], ['language' => null]],
+]);
+
+it('keeps refusing a heading level beyond three, an unknown node and an unknown mark', function () use ($reason) {
+    expect($reason(F::doc(['type' => 'heading', 'attrs' => ['level' => 0], 'content' => [F::text('x')]])))->toBe('shape')
+        ->and($reason(F::doc(['type' => 'heading', 'attrs' => ['level' => '2'], 'content' => [F::text('x')]])))->toBe('shape')
+        ->and($reason(F::doc(['type' => 'iframe'])))->toBe('node')
+        ->and($reason(F::doc(F::p(['type' => 'text', 'text' => 'x', 'marks' => [['type' => 'underline']]]))))->toBe('mark');
+});
 
 it('takes the attributes of every kind it knows', function () {
     $json = F::doc(

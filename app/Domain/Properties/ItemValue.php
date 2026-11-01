@@ -10,8 +10,8 @@ use App\Domain\WorkItems\DateRange;
  * list. Whether people may be picked (`Assignable`) and whether a document fits the schema (`Document`) is checked by
  * the caller (`ItemValues`), which also gives the ids normalized (`Ids::normalize`).
  *
- * The codes: `text` (no text or longer than 255 characters), `number`, `option` (no active option and not the one the
- * item has), `single` (a list for a property with one value), `boolean`, `date`, `url` (no http or https, or longer than
+ * The codes: `text` (no text or longer than 255 characters), `number`, `number_range` (a number the column cannot hold:
+ * not below `NUMBER_LIMIT` in amount after rounding), `option` (no active option and not the one the item has), `single` (a list for a property with one value), `boolean`, `date`, `url` (no http or https, or longer than
  * 2048 characters), `url_invalid` (no host, or blanks, control or format characters inside), `member` (no ULID),
  * `rich_text` (no document).
  */
@@ -21,6 +21,12 @@ final class ItemValue
 
     /** The size of `work_item_values.value_string`. */
     public const URL_MAX = 2048;
+
+    /**
+     * Numbers must stay below this in amount: `work_item_values.value_number` is `decimal(24,4)`, so 20 digits before
+     * the point; a larger value would fail the insert with an error of the database (a 500).
+     */
+    public const NUMBER_LIMIT = 1e20;
 
     /** A ULID as the `ulid` rule takes it: 26 characters of Crockford's alphabet, the first one 0-7. */
     private const ULID = '/^[0-7][0-9a-hjkmnp-tv-z]{25}\z/i';
@@ -107,6 +113,9 @@ final class ItemValue
         }
 
         $rounded = round((float) $value, $decimals);
+        if (abs($rounded) >= self::NUMBER_LIMIT) {
+            return new NormalizedValue(null, 'number_range');
+        }
 
         // whole numbers are stored as integers (7, not 7.0)
         return new NormalizedValue(abs($rounded) < 1e15 && floor($rounded) === $rounded ? (int) $rounded : $rounded);

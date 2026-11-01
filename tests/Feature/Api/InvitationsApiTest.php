@@ -51,7 +51,7 @@ it('invites without projects', function () {
 });
 
 it('lets only org admins invite and list', function () {
-    app()->setLocale('de');
+    speakGerman();
     $member = User::factory()->create();
 
     $this->actingAs($member)->postJson('/api/v1/invitations', ['email' => 'lea@example.com', 'org_role' => 'member'])
@@ -71,7 +71,7 @@ it('refuses the address of an existing account, also in another spelling', funct
 })->with(['lea@example.com', ' LEA@example.com ']);
 
 it('wants a valid address, a role of the organization and a list of projects with roles', function () {
-    app()->setLocale('de');
+    speakGerman();
 
     $this->actingAs(User::factory()->admin()->create())->postJson('/api/v1/invitations', ['email' => 'lea', 'org_role' => 'owner', 'projects' => 'WEB'])
         ->assertUnprocessable()
@@ -107,7 +107,7 @@ it('wants projects that exist and are visible, each with a role', function (Clos
 ]);
 
 it('says which project and which role is wrong in the language of the request', function () {
-    app()->setLocale('de');
+    speakGerman();
 
     $this->actingAs(User::factory()->admin()->create())->postJson('/api/v1/invitations', [
         'email' => 'lea@example.com', 'org_role' => 'member', 'projects' => [['project_id' => 'x', 'role' => 'owner']],
@@ -183,7 +183,7 @@ it('names the state of each invitation, closed when its link no longer works', f
 });
 
 it('wants the projects as a list, each project once', function (Closure $projects, string $field, string $message) {
-    app()->setLocale('de');
+    speakGerman();
     $web = Project::factory()->create();
 
     $this->actingAs(User::factory()->admin()->create())->postJson('/api/v1/invitations', [

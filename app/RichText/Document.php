@@ -28,8 +28,9 @@ final class Document
 
     /**
      * Reads a document the way the editor's schema does: missing attributes take their default, unknown attributes
-     * are dropped, a link to anything but Schema::LINK_PROTOCOLS loses its mark and keeps its text. Everything else
-     * that does not fit is refused.
+     * are dropped, a link to anything but Schema::LINK_PROTOCOLS loses its mark and keeps its text, an odd value of a
+     * lenient attribute (Schema::LENIENT: list start, cell spans and widths, code language) takes its default.
+     * Everything else that does not fit is refused.
      *
      * @param  array<mixed>  $json
      *
@@ -200,7 +201,7 @@ final class Document
         foreach ($spec as $name => [$default, $kind]) {
             $value = $kind !== 'fixed' && array_key_exists($name, $given) ? $given[$name] : $default;
             if (! self::fits($kind, $value)) {
-                throw new InvalidDocument('shape');
+                $value = in_array($kind, Schema::LENIENT, true) ? $default : throw new InvalidDocument('shape');
             }
             $attrs[$name] = $value;
         }
@@ -212,11 +213,11 @@ final class Document
     {
         return match ($kind) {
             'level' => in_array($value, Schema::HEADING_LEVELS, true),
-            'int' => is_int($value),
+            'int' => is_int($value) && $value >= 0 && $value <= Schema::LIST_START_MAX,
             'count' => is_int($value) && $value >= 1,
             'bool' => is_bool($value),
             'language' => $value === null || (is_string($value) && preg_match(Schema::LANGUAGE_PATTERN, $value) === 1),
-            'widths' => $value === null || (is_array($value) && array_is_list($value) && array_filter($value, 'is_int') === $value),
+            'widths' => $value === null || (is_array($value) && array_is_list($value) && array_filter($value, fn (mixed $width) => is_int($width) && $width > 0) === $value),
             'align' => in_array($value, [null, 'left', 'center', 'right'], true),
             default => $value === null || is_string($value),
         };

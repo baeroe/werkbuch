@@ -100,7 +100,7 @@ Lesen braucht ein Token mit `read`, Ändern eines mit `write`. Items sprichst du
 | `PUT`, `DELETE /api/v1/work-items/{item}/subscription` | Beobachten an oder aus; `200` mit dem Item. |
 | `GET /api/v1/work-items/{item}/history` | Die History, älteste zuerst. |
 
-Ein Item, das das Konto des Tokens nicht sieht, ist ein `404`, wie eines, das es nicht gibt. Ein unbekannter Filter oder ein unbekanntes `include` ist ein `422`, nie still übergangen.
+Ein Item, das das Konto des Tokens nicht sieht, ist ein `404`, wie eines, das es nicht gibt. Ein unbekannter Filter oder ein unbekanntes `include` ist ein `422`, nie still übergangen. Meldungen (`detail`, Feldfehler) kommen in der Sprache des Kontos, sonst in der Standardsprache der Organisation.
 
 ### Ein Item anlegen
 

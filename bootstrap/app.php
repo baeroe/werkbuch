@@ -51,6 +51,8 @@ return Application::configure(basePath: dirname(__DIR__))
         // a session ends on its next request when the password changed (AuthenticateSession compares the hash, any session
         // driver) or the account was disabled (EnsureAccountIsActive)
         $middleware->web(append: [SetLocale::class, HandleInertiaRequests::class, AuthenticateSession::class, EnsureAccountIsActive::class]);
+        // the API speaks the language of the account (session or token), else the organization's (A151)
+        $middleware->api(append: [SetLocale::class.':'.SetLocale::API]);
         $middleware->encryptCookies(except: [SetLocale::COOKIE]);
         $middleware->trustHosts(at: fn (): array => TrustedRequests::hostPatterns(config('app.url')), subdomains: false);
         // Laravel's priority list with the rate limit moved before auth (requests that fail auth count as well), and the

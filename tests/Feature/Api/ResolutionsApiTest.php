@@ -213,8 +213,8 @@ it('replaces a resolution as a whole', function () use ($shipped, $answerOf) {
 });
 
 it('never deletes a default, naming its category in the language of the person', function (string $locale, string $done, string $canceled) use ($shipped) {
-    $this->actingAs(User::factory()->admin()->create());
-    app()->setLocale($locale);
+    // the profile speaks, not the organization (A151)
+    $this->actingAs(User::factory()->admin()->create(['locale' => $locale]));
 
     $this->deleteJson("/api/v1/resolutions/{$shipped('Done')->id}")->assertStatus(409)
         ->assertJsonPath('reason', 'is_default')

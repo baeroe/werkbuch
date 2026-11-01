@@ -52,6 +52,8 @@ it('writes one form of everything it reads', function (string $markdown, string 
     'soft line break' => ["a\nb", 'a b'],
     'heading below level 3' => ['#### Vier', 'Vier'],
     'tilde fence' => ["~~~js\nx\n~~~", "```js\nx\n```"],
+    'fence with an info string no language' => ["```{r}\nx\n```", "```\nx\n```"],
+    'fence with a language longer than 32' => ['```'.str_repeat('a', 33)."\nx\n```", "```\nx\n```"],
     'bare address' => ['https://example.com/?a=1&b=2', '<https://example.com/?a=1&b=2>'],
     'loose task list' => ["- [x] a\n\n- [ ] b", "- [x] a\n- [ ] b"],
     'checkbox in a mixed list' => ["- [x] a\n- b", "- \\[x\\] a\n- b"],

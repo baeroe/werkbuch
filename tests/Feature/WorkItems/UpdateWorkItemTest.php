@@ -221,6 +221,19 @@ it('changes only the values it is sent', function () use ($web, $update, $askFor
         ->and(eventsOf(EventType::WorkItemUpdated, $item)->last()?->changes)->toBe(['values.customer' => ['old' => 'Feldwerk', 'new' => null]]);
 });
 
+it('stores a number as large as the column holds and refuses a larger one at the field', function () use ($web, $update, $askFor) {
+    [, $mara, , $item] = $web();
+    $askFor(Property::factory()->create(['key' => 'budget', 'label' => 'Budget', 'field_type' => FieldType::Number, 'settings' => ['decimals' => 2]]));
+
+    $stored = $update($mara, $item, ['values' => ['budget' => -99999999999999983616.0]]);
+
+    // decimal(24,4) holds 20 digits before the point: a larger number was an error of the database (a 500)
+    expect((float) WorkItemValue::query()->where('work_item_id', $item->id)->sole()->value_number)->toBe(-99999999999999983616.0)
+        ->and($stored->values)->toHaveCount(1)
+        ->and(invalidOf(fn () => $update($mara, $item, ['values' => ['budget' => 1e21]])))->toBe(['values.budget' => [__('field.values.number_range', ['label' => 'Budget'])]])
+        ->and(invalidOf(fn () => $update($mara, $item, ['values' => ['budget' => '100000000000000000000']])))->toBe(['values.budget' => [__('field.values.number_range', ['label' => 'Budget'])]]);
+});
+
 it('checks a new start date against the stored due date', function () use ($web, $update) {
     [, $mara, , $item] = $web();
     $item->forceFill(['start_date' => '2026-11-01', 'due_date' => '2026-11-10'])->save();

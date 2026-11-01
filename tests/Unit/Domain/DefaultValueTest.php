@@ -55,6 +55,7 @@ it('rejects a default value that does not fit', function (FieldType $type, bool 
     'number is not a number' => [FieldType::Number, false, NAN, 'number'],
     'number is too long for a float' => [FieldType::Number, false, str_repeat('9', 400), 'number'],
     'number is a boolean' => [FieldType::Number, false, true, 'number'],
+    'number beyond the column' => [FieldType::Number, false, 1e21, 'number_range'],
     'dropdown unknown option' => [FieldType::Dropdown, false, 'opt_x', 'option'],
     'dropdown list for one value' => [FieldType::Dropdown, false, ['opt_a'], 'single'],
     'dropdown multiple unknown option' => [FieldType::Dropdown, true, ['opt_x'], 'option'],

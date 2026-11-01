@@ -133,7 +133,7 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 - Workflows mit Status (Name, Icon-Form aus sieben, Kategorie, Reihenfolge) und Übergängen; Standard-Workflow aus der Spec per Migration; Löschen nur ungenutzt.
 - Typen (Name, Lucide-Icon aus einer festen Liste (A68), einer von sechs Tönen, Beschreibung, Häkchen „Epic“, Properties mit Pflicht und Reihenfolge, Archiv statt Löschen); Task, Bug (mit „Aufwand (h)“, R6) und Epic per Migration.
 - Properties (Schlüssel-Regeln, acht Feldtypen mit Einstellungen, Optionen mit Archiv, Wechsel Einfach → Mehrfach), Labels (ohne Standard-Markierung, R23), Relationstypen (drei eingebaute, „wird blockiert von“), Resolutions (vier eingebaute, Standard für Completed und Canceled).
-- Projekt: Workflow wählen (`AssignWorkflow` mit `mapping`, in Phase 3 nur auf seine Form geprüft) und aktivierte Typen mit Standardtyp. Die Status-Zuordnung mit dem Job `RemapStates` und die Prüfungen gegen bestehende Items (Status mit Items löschen, Häkchen „Epic“ gegen Kinder) kommen mit Phase 4 (Ruling A60).
+- Projekt: Workflow wählen (`AssignWorkflow` mit `mapping`, in Phase 3 nur auf seine Form geprüft) und aktivierte Typen mit Standardtyp. Die Status-Zuordnung `RemapStates` (synchron in der Transaktion, P2) und die Prüfungen gegen bestehende Items (Status mit Items löschen, Häkchen „Epic“ gegen Kinder) kommen mit Phase 4 (Ruling A60).
 - REST: `workflows` (mit `states`, `transitions`), `work-item-types`, `properties` (mit `options`), `labels`, `relation-types`, `resolutions`, `PUT projects/{id}/workflow`; die Typen eines Projekts über `PATCH projects/{id}` (`enabled_type_ids`, `default_type_id`), ohne eigenen Endpunkt `projects/{id}/types` (A64).
 - UI-Port: Einstellungen Workflows (Editor mit Übergangsmatrix), Typen, Properties, Labels, Relationstypen, Resolutions; Projekteinstellungen Workflow und Typen. Entfernen-Helfer einmal (`useRemoval`, R26); die Status-Zuordnung folgt mit Phase 4.
 
@@ -180,7 +180,7 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 
 **Abnahme:** Erfolgskriterium 4 für UI und REST (MCP folgt in Phase 13); Filtern, Sortieren und Paginieren macht der Server.
 
-## Phase 6: Suche und Befehlspalette
+## Phase 6: Suche und Suchtreffer in der Befehlspalette
 
 **Branch:** `feat/phase-06-search` · **Phasenplan:** `…phase-06-search.md`
 
@@ -362,7 +362,7 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 - [x] Phase 3: Workflows, Typen, Properties, Kataloge (PR #12)
 - [ ] Phase 4: Work Items, Relationen, History
 - [ ] Phase 5: Views, Filter-Engine, Listen-Layouts
-- [ ] Phase 6: Suche und Befehlspalette
+- [ ] Phase 6: Suche und Suchtreffer in der Befehlspalette
 - [ ] Phase 7: Editor, Kommentare, Anhänge
 - [ ] Phase 8: Benachrichtigungen, Mail, Live-Updates
 - [ ] Phase 9: Wiki

@@ -52,11 +52,14 @@ final class Schema
     private const CELL = ['colspan' => [1, 'count'], 'rowspan' => [1, 'count'], 'colwidth' => [null, 'widths'], 'align' => [null, 'align']];
 
     /**
-     * The attributes of a node or mark: name => [default, kind]. Kinds: `level` (one of HEADING_LEVELS), `int`, `count`
-     * (1 or more), `bool`, `text` (a string or null), `language` (a code language or null), `widths` (a list of whole
-     * numbers or null), `align` (`left`, `center`, `right` or null), `fixed` (always the default, whatever the input
-     * says: a link's `class`, `rel` and `target` are the editor's, never a member's, so no stored class can turn a link
-     * into a page-covering click trap). A link's `href` is a string or null; see LINK_PROTOCOLS.
+     * The attributes of a node or mark: name => [default, kind]. Kinds: `level` (one of HEADING_LEVELS), `int` (a whole
+     * number from 0 to LIST_START_MAX), `count` (1 or more), `bool`, `text` (a string or null), `language` (a code
+     * language or null), `widths` (a list of whole numbers above 0, or null), `align` (`left`, `center`, `right` or
+     * null), `fixed` (always the default, whatever the input says: a link's `class`, `rel` and `target` are the
+     * editor's, never a member's, so no stored class can turn a link into a page-covering click trap). A link's `href`
+     * is a string or null; see LINK_PROTOCOLS. A value of a kind in LENIENT that does not fit becomes the default (pasted
+     * HTML brings `colspan="0"`, `start="x"` or a long class name as language: noise that must not refuse the text);
+     * any other kind that does not fit refuses the document.
      */
     public const ATTRS = [
         'heading' => ['level' => [1, 'level']],
@@ -67,6 +70,12 @@ final class Schema
         'tableHeader' => self::CELL,
         'link' => ['href' => [null, 'text'], 'target' => ['_blank', 'fixed'], 'rel' => ['noopener noreferrer nofollow', 'fixed'], 'class' => [null, 'fixed'], 'title' => [null, 'text']],
     ];
+
+    /** The kinds whose odd values fall back to their default instead of refusing the document (A150). */
+    public const LENIENT = ['int', 'count', 'widths', 'language'];
+
+    /** The largest start of an ordered list: CommonMark takes at most nine digits, so Markdown can carry it. */
+    public const LIST_START_MAX = 999_999_999;
 
     /** A link keeps its mark only with one of these; any other `href` loses the mark and keeps its text (P27). */
     public const LINK_PROTOCOLS = ['http', 'https', 'mailto'];

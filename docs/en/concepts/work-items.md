@@ -100,7 +100,7 @@ Reading needs a token with `read`, changing one with `write`. Items are addresse
 | `PUT`, `DELETE /api/v1/work-items/{item}/subscription` | Start or stop watching; `200` with the item. |
 | `GET /api/v1/work-items/{item}/history` | The history, oldest first. |
 
-An item the account of the token does not see is a `404`, like one that does not exist. An unknown filter or `include` is a `422`, never silently ignored.
+An item the account of the token does not see is a `404`, like one that does not exist. An unknown filter or `include` is a `422`, never silently ignored. Messages (`detail`, field errors) come in the language of the account, else in the organization's default language.
 
 ### Create an item
 

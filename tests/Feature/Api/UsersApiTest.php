@@ -156,7 +156,7 @@ it('names the handle that breaks the rules', function (string $handle, string $k
 ]);
 
 it('explains every invalid value with the sentence of the field', function () {
-    app()->setLocale('de');
+    speakGerman();
     $lene = User::factory()->create();
 
     $this->actingAs($lene)->patchJson("/api/v1/users/{$lene->id}", [
@@ -181,7 +181,7 @@ it('explains every invalid value with the sentence of the field', function () {
 });
 
 it('lets only org admins change an e-mail address, and keeps it in lower case', function () {
-    app()->setLocale('de');
+    speakGerman();
     $lene = User::factory()->create(['email' => 'lene@example.com']);
 
     $this->actingAs($lene)->patchJson("/api/v1/users/{$lene->id}", ['email' => 'lene.lind@example.com'])
@@ -254,7 +254,7 @@ it('gives people neither a description nor a responsible person', function () {
 });
 
 it('refuses a member who changes the profile of somebody else', function () {
-    app()->setLocale('de');
+    speakGerman();
     $lene = User::factory()->create(['name' => 'Lene']);
 
     $this->actingAs(User::factory()->create())->patchJson("/api/v1/users/{$lene->id}", ['name' => 'Fremd'])
@@ -284,7 +284,7 @@ it('keeps the handle of the account itself free for it', function () {
 });
 
 it('lets the role change only through an org admin', function () {
-    app()->setLocale('de');
+    speakGerman();
     $member = User::factory()->create();
     $lene = User::factory()->create();
 

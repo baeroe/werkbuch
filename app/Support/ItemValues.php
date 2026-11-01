@@ -166,7 +166,9 @@ final class ItemValues
                     'work_item_id' => $item->id,
                     'property_id' => $property->id,
                     'position' => $position,
-                    self::column($property->field_type) => $one,
+                    // a number goes as its exact decimal text: PDO writes a float with 14 digits (`precision`), which
+                    // rounds a value near the limit of the column beyond it and cuts the digits of large numbers
+                    self::column($property->field_type) => $property->field_type === FieldType::Number ? sprintf('%.4F', $one) : $one,
                 ]);
             }
         }
@@ -318,6 +320,7 @@ final class ItemValues
         return match ($error) {
             'text' => __('field.values.text', [...$replace, 'max' => ItemValue::TEXT_MAX]),
             'number' => __('field.values.number', $replace),
+            'number_range' => __('field.values.number_range', $replace),
             'option' => __('field.values.option', $replace),
             'single' => __('field.values.single', $replace),
             'boolean' => __('field.values.boolean', $replace),

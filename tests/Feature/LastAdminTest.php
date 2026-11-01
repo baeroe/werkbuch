@@ -35,7 +35,7 @@ it('refuses to demote or deactivate the last active admin among the people', fun
 })->with(['demote', 'deactivate']);
 
 it('explains the refusal with the sentence of the clickdummy', function (string $call) {
-    app()->setLocale('de');
+    speakGerman();
     $mara = User::factory()->admin()->create();
 
     takeAdminAway($mara, $mara, $call)->assertConflict()

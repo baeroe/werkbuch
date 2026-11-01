@@ -21,6 +21,8 @@ it('normalizes an item value', function (FieldType $type, bool $multiple, mixed 
     'text trimmed' => [FieldType::Text, false, ' Safari ', null, 'Safari'],
     'number with a comma' => [FieldType::Number, false, '3,46', null, 3.5],
     'number whole' => [FieldType::Number, false, 7, null, 7],
+    'number just below the column limit' => [FieldType::Number, false, 99999999999999983616.0, null, 99999999999999983616.0],
+    'number just above the negative column limit' => [FieldType::Number, false, -99999999999999983616.0, null, -99999999999999983616.0],
     'dropdown active option' => [FieldType::Dropdown, false, 'opt_a', null, 'opt_a'],
     'dropdown archived option the item already has' => [FieldType::Dropdown, false, 'opt_old', 'opt_old', 'opt_old'],
     'dropdown multiple keeps an archived option it has' => [FieldType::Dropdown, true, ['opt_old', 'opt_a'], ['opt_old'], ['opt_old', 'opt_a']],
@@ -50,6 +52,11 @@ it('rejects an item value that does not fit', function (FieldType $type, bool $m
 })->with([
     'text too long' => [FieldType::Text, false, str_repeat('a', 256), null, 'text'],
     'number is text' => [FieldType::Number, false, 'abc', null, 'number'],
+    'number at the column limit' => [FieldType::Number, false, 1e20, null, 'number_range'],
+    'number at the negative column limit' => [FieldType::Number, false, -1e20, null, 'number_range'],
+    'number far beyond the column limit' => [FieldType::Number, false, 1e21, null, 'number_range'],
+    'number typed with 21 digits' => [FieldType::Number, false, '100000000000000000000', null, 'number_range'],
+    'number with 20 nines rounds to the limit' => [FieldType::Number, false, '99999999999999999999,6', null, 'number_range'],
     'dropdown archived option without it' => [FieldType::Dropdown, false, 'opt_old', null, 'option'],
     'dropdown archived option the item had another' => [FieldType::Dropdown, false, 'opt_old', 'opt_a', 'option'],
     'dropdown list for one value' => [FieldType::Dropdown, false, ['opt_a'], null, 'single'],
@@ -72,6 +79,7 @@ it('rejects an item value that does not fit', function (FieldType $type, bool $m
 
 it('keeps the limits of a text and an address', function () use ($longUrl) {
     expect(ItemValue::TEXT_MAX)->toBe(255)
+        ->and(ItemValue::NUMBER_LIMIT)->toBe(1e20)
         ->and(ItemValue::URL_MAX)->toBe(2048)
         ->and(mb_strlen($longUrl))->toBe(2049);
 });

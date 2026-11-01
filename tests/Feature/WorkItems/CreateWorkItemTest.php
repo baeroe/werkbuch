@@ -446,6 +446,19 @@ it('rolls back everything when a value is refused', function () use ($web, $askF
         ->and(eventsOf(EventType::WorkItemCreated))->toBeEmpty();
 });
 
+it('refuses a number the column cannot hold at its field, also as the default of a property', function () use ($web, $askFor, $task) {
+    [$project, $mara] = $web();
+    $budget = $askFor($task(), Property::factory()->create(['key' => 'budget', 'label' => 'Budget', 'field_type' => FieldType::Number]));
+    $create = fn (array $values) => CreateWorkItem::run(actor($mara), ['project_id' => $project->id, 'title' => 'Item', 'values' => $values]);
+
+    expect(invalidOf(fn () => $create(['budget' => 1e21])))->toBe(['values.budget' => [__('field.values.number_range', ['label' => 'Budget'])]])
+        ->and(WorkItem::query()->count())->toBe(0);
+
+    // a default stored before the rule (as JSON it holds any number) is not taken, as an archived option is not: no 500
+    $budget->forceFill(['default_value' => 1e21])->save();
+    expect($create([])->values)->toHaveCount(0);
+});
+
 it('stores the values with the item', function () use ($web, $askFor, $task) {
     [$project, $mara] = $web();
     $tags = $askFor($task(), Property::factory()->dropdown(['A', 'B', 'C'], multiple: true)->create(['key' => 'tags']));

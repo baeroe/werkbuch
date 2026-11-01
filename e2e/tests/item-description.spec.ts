@@ -44,8 +44,8 @@ test('warns the second editor of a description and keeps both versions', async (
     // Mara types on her older version: her save is refused, the banner names Erik, her text stays
     await other.page.keyboard.type('Von Mara. ');
     const banner = mara.section.getByRole('alert');
-    // the sentence is the server's (`problem.detail.description_conflict`); it names whoever saved last
-    await expect(banner).toContainText(PEOPLE.e2e.name);
+    // the sentence is the server's (`problem.detail.description_conflict`), in Mara's language; it names whoever saved last
+    await expect(banner).toContainText(tr('de', 'problem.detail.description_conflict', { name: PEOPLE.e2e.name }));
     await expect(banner).toContainText(tr('de', 'items.detail.description.conflict'));
     await expect(mara.editor).toHaveText('Von Mara. Erster Stand.');
     expect(await storedDescription(page, item.id)).toBe('Von Erik. Erster Stand.');

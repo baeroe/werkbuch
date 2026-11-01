@@ -131,7 +131,7 @@ it('lets the account see nothing at once, and everything again after reactivatin
 });
 
 it('never deactivates the default bot', function () {
-    app()->setLocale('de');
+    speakGerman();
     $bot = User::defaultBot();
     $token = apiToken($bot, ['read']);
 
@@ -145,7 +145,7 @@ it('never deactivates the default bot', function () {
 });
 
 it('lets only org admins deactivate and reactivate, with the sentences of the clickdummy', function () {
-    app()->setLocale('de');
+    speakGerman();
     $member = User::factory()->create();
     $other = User::factory()->create();
 

@@ -201,6 +201,14 @@ describe('parse', () => {
     expect([ambiguousNumber('1500'), ambiguousNumber('1,5'), ambiguousNumber('1.5'), ambiguousNumber('1.5000')]).toEqual([null, null, null, null]);
   });
 
+  it('refuses numbers the server cannot store: 20 digits before the decimal sign at most', () => {
+    expect(parseNumber('99999999999999983616', 0)).toBe(99999999999999983616);
+    expect(parseNumber('-99999999999999983616,5', 4)).toBe(-99999999999999983616);
+    expect([parseNumber('100000000000000000000', 0), parseNumber('-100000000000000000000', 2), parseNumber('99999999999999999999,6', 0)]).toEqual([null, null, null]);
+    expect(parseTyped(effort, '100000000000000000000')).toEqual({ error: 'Höchstens 20 Stellen vor dem Komma', partial: false });
+    expect(parseTyped(effort, '-1.000.000.000.000.000.000.000,5')).toEqual({ error: 'Höchstens 20 Stellen vor dem Komma', partial: false });
+  });
+
   it('asks which reading is meant, in the language of the page, once the typing is over', () => {
     expect(parseTyped(effort, '1.500')).toEqual({ error: 'Mehrdeutig: 1500 oder 1,5? Schreib 1500 oder 1,5.', partial: true });
     expect(parseTyped(effort, '1,500')).toEqual({ error: 'Mehrdeutig: 1500 oder 1,5? Schreib 1500 oder 1,5.', partial: true });
