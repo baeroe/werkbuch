@@ -32,10 +32,10 @@ import {
   type ListWorkItemsArgs,
   type WorkItemPatch,
 } from '@/api/workItems';
-import type { Filter, ListedItem, PropertyValue, WorkItem } from '@/types';
+import type { BulkResult, Filter, ListedItem, PropertyValue, WorkItem } from '@/types';
 import { qk, type HookOptions } from './keys';
 import { allPages } from './pages';
-import { useApiMutation, useItemMutation } from './mutation';
+import { invalidateItems, useApiMutation, useItemMutation } from './mutation';
 
 /* ------------------------------------------------------------------------ read */
 
@@ -525,23 +525,76 @@ export function useTransitionWorkItem() {
   });
 }
 
+/** A bulk patch as it leaves an item: the fields, the labels added and removed, the archive stamp. */
+function applyBulk<T extends ListedItem>(item: T, patch: BulkPatch): T {
+  const { archived, add_label_ids, remove_label_ids, ...fields } = patch;
+  const next = applyPatch(item, fields);
+  if (add_label_ids || remove_label_ids) {
+    next.label_ids = [...(fields.label_ids ?? item.label_ids), ...(add_label_ids ?? [])].filter((id) => !(remove_label_ids ?? []).includes(id));
+  }
+  // the server's answer replaces the stamp: the app has no clock of its own
+  if (archived !== undefined) next.archived_at = archived ? new Date().toISOString() : null;
+  return next;
+}
+
 /** Changes many items; answers `{ updated, rejected }`. Variables: `{ ids, patch }`. */
 export function useBulkUpdateWorkItems() {
   return useItemMutation({
     mutationFn: ({ ids, patch }: { ids: string[]; patch: BulkPatch }) => bulkUpdateWorkItems(ids, patch),
     ids: ({ ids }) => ids,
-    apply: (item, { patch }) => {
-      const { archived, add_label_ids, remove_label_ids, ...fields } = patch;
-      const next = applyPatch(item, fields);
-      if (add_label_ids || remove_label_ids) {
-        next.label_ids = [...(fields.label_ids ?? item.label_ids), ...(add_label_ids ?? [])].filter((id) => !(remove_label_ids ?? []).includes(id));
-      }
-      // the server's answer replaces the stamp: the app has no clock of its own
-      if (archived !== undefined) next.archived_at = archived ? new Date().toISOString() : null;
-      return next;
-    },
+    apply: (item, { patch }) => applyBulk(item, patch),
     failureTitle: 'items.failed.bulk',
   });
+}
+
+/** How many ids one bulk call takes (`BulkUpdateWorkItems::MAX_IDS`, K25). */
+export const BULK_MAX = 100;
+
+/** What a change of many items did: changed, refused by an item's rules, and not saved (a block failed, `error`). */
+export interface BulkOutcome extends BulkResult {
+  unsaved: string[];
+  error: Error | null;
+}
+
+/**
+ * One change to many items (`run(ids, patch)`), in blocks of 100 one after the other, each optimistic. A block that
+ * fails is put back and stops the rest: the ids of it and of every later block are `unsaved`, with the `error`. The
+ * answer tells everything in one (`BulkOutcome`): no toast of its own, and the lists load again once, at the end, so
+ * the items of later blocks do not come back between the blocks. It runs on after the screen that asked is gone.
+ */
+export function useBulkChange() {
+  const queryClient = useQueryClient();
+  const bulk = useItemMutation({
+    mutationFn: ({ ids, patch }: { ids: string[]; patch: BulkPatch }) => bulkUpdateWorkItems(ids, patch),
+    ids: ({ ids }) => ids,
+    apply: (item, { patch }) => applyBulk(item, patch),
+    failureTitle: 'items.failed.bulk',
+    quiet: true,
+  });
+  const { mutateAsync, isPending } = bulk;
+  const run = useCallback(
+    async (ids: readonly string[], patch: BulkPatch): Promise<BulkOutcome> => {
+      const outcome: BulkOutcome = { updated: [], rejected: [], unsaved: [], error: null };
+      try {
+        for (let from = 0; from < ids.length; from += BULK_MAX) {
+          try {
+            const block = await mutateAsync({ ids: ids.slice(from, from + BULK_MAX), patch });
+            outcome.updated.push(...block.updated);
+            outcome.rejected.push(...block.rejected);
+          } catch (error) {
+            outcome.unsaved = ids.slice(from);
+            outcome.error = error as Error;
+            break;
+          }
+        }
+      } finally {
+        void invalidateItems(queryClient);
+      }
+      return outcome;
+    },
+    [mutateAsync, queryClient],
+  );
+  return { run, isPending };
 }
 
 /** Not optimistic: the values of the new type are only known on the server. Variables: `{ id, type_id, values? }`. */
@@ -575,6 +628,50 @@ export function useRestoreWorkItem() {
 /** Deletes for good; the UI calls this when the undo toast has run out. Variable: the item id. */
 export function useDeleteWorkItem() {
   return useApiMutation(deleteWorkItem, ITEM_KEYS);
+}
+
+/** How many deletes of a selection are on their way at once. */
+export const DELETE_PARALLEL = 4;
+
+/** What deleting many items did: deleted, and failed with the first error. */
+export interface DeleteOutcome {
+  deleted: string[];
+  failed: string[];
+  error: unknown;
+}
+
+/**
+ * Deletes many items for good (there is no bulk delete): `DELETE_PARALLEL` at once, and the lists load again once, at
+ * the end, so the items still waiting are not brought back by the reload of an earlier one. No toast of its own.
+ */
+export function useDeleteWorkItems() {
+  const queryClient = useQueryClient();
+  return useCallback(
+    async (ids: readonly string[]): Promise<DeleteOutcome> => {
+      const outcome: DeleteOutcome = { deleted: [], failed: [], error: null };
+      // a reload on its way would bring back what is gone from the lists
+      await queryClient.cancelQueries({ queryKey: qk.workItems.all });
+      let next = 0;
+      const worker = async () => {
+        while (next < ids.length) {
+          const id = ids[next++]!;
+          try {
+            await deleteWorkItem(id);
+            outcome.deleted.push(id);
+          } catch (error) {
+            outcome.failed.push(id);
+            outcome.error ??= error;
+          }
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(DELETE_PARALLEL, ids.length) }, worker));
+      // in the order asked for
+      outcome.failed = ids.filter((id) => outcome.failed.includes(id));
+      void invalidateItems(queryClient);
+      return outcome;
+    },
+    [queryClient],
+  );
 }
 
 /** Watch or stop watching. Variables: `{ id, on }`. */

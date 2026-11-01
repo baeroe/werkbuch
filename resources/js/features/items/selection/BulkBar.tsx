@@ -1,6 +1,6 @@
 /*
  * The bar of a selection (spec 5.3, ported from the clickdummy): changes status, assignee, priority or labels of all
- * selected items in one go (`bulkUpdateWorkItems`, optimistic, in blocks of 100), or archives them with 5 s to take it
+ * selected items in one go (`useBulkChange`, optimistic, in blocks of 100), or archives them with 5 s to take it
  * back.
  *
  * Every item follows its own rules on the server: what they refuse (a transition its workflow forbids, an open item to
@@ -32,7 +32,7 @@ import { useLabels } from '@/hooks/catalog';
 import { useProjects } from '@/hooks/projects';
 import { useCurrentUser } from '@/hooks/users';
 import { useWorkflows } from '@/hooks/workflows';
-import { useBulkUpdateWorkItems } from '@/hooks/workItems';
+import { useBulkChange } from '@/hooks/workItems';
 import { intlLocale, t } from '@/lib/i18n';
 import { usePermissions } from '@/lib/permissions';
 import { SHORTCUTS } from '@/lib/shortcuts/catalog';
@@ -93,7 +93,7 @@ export type BulkBarProps = {
 };
 
 export function BulkBar({ items, total, onSelectAll, onClear, onArchive }: BulkBarProps) {
-  const bulk = useBulkUpdateWorkItems();
+  const bulk = useBulkChange();
   const projects = useProjects({ include_archived: true }).data?.items ?? [];
   const workflows = useWorkflows().data?.items ?? [];
   const labels = useLabels().data?.items ?? [];

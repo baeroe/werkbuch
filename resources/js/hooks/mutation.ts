@@ -191,6 +191,16 @@ export interface ItemMutationOptions<TVars, TData> {
   apply: <T extends ListedItem>(item: T, vars: TVars) => T;
   /** Title of the toast when the change fails. */
   failureTitle: TranslationKey;
+  /**
+   * The caller reports a failure and loads the lists again itself, e.g. a change in blocks that tells in one toast what
+   * every block did (`useBulkChange`): no toast and no reload of its own. A failure still puts the cache back.
+   */
+  quiet?: boolean;
+}
+
+/** Loads again what follows every change of an item: its lists and details, the history and the count per state. */
+export function invalidateItems(queryClient: QueryClient): Promise<unknown> {
+  return Promise.all([qk.workItems.all, qk.activity.all, qk.stateUsage.all].map((queryKey) => queryClient.invalidateQueries({ queryKey })));
 }
 
 export function useItemMutation<TVars, TData>(options: ItemMutationOptions<TVars, TData>): UseMutationResult<TData, Error, TVars, Snapshot> {
@@ -227,10 +237,10 @@ export function useItemMutation<TVars, TData>(options: ItemMutationOptions<TVars
     },
     onError: (error, vars, context) => {
       context?.snapshot.forEach(([key, data]) => queryClient.setQueryData(key, data));
-      notifyError(t(options.failureTitle), error, () => mutation.mutate(vars));
+      if (!options.quiet) notifyError(t(options.failureTitle), error, () => mutation.mutate(vars));
     },
     // the history and the count per state follow every change of an item
-    onSettled: () => Promise.all([qk.workItems.all, qk.activity.all, qk.stateUsage.all].map((queryKey) => queryClient.invalidateQueries({ queryKey }))),
+    onSettled: () => (options.quiet ? undefined : invalidateItems(queryClient)),
   });
   return mutation;
 }

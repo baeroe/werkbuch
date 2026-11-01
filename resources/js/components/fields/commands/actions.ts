@@ -4,8 +4,9 @@
  * selection at once; the call itself runs when the undo toast runs out. Deleting the item whose page is on screen leaves
  * the page as well. The item page's header (`useItemRemoval`) uses the same functions, so the logic exists once (K27).
  *
- * Several targets (the selection of a list) change with one bulk edit (`bulkUpdateWorkItems`, in blocks of 100, K25)
- * whose toast names the refused items; they are archived the same way, and deleted item by item.
+ * Several targets (the selection of a list) change with one bulk edit (`useBulkChange`, in blocks of 100, K25) whose
+ * one toast names the refused items and what was not saved; they are archived the same way, and deleted item by item,
+ * a few at once (`useDeleteWorkItems`). The lists load again once, after the last block or delete.
  */
 
 import { router } from '@inertiajs/react';
@@ -13,9 +14,9 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type { Page } from '@/api/client';
 import type { BulkPatch } from '@/api/workItems';
 import { toast } from '@/components/ui/toast';
-import { bulkChange, bulkToast, changeMany, subjectOf } from '@/features/items/selection/bulk';
+import { bulkChange, bulkToast, subjectOf } from '@/features/items/selection/bulk';
 import { qk } from '@/hooks/keys';
-import { useArchiveWorkItem, useBulkUpdateWorkItems, useDeleteWorkItem } from '@/hooks/workItems';
+import { useArchiveWorkItem, useBulkChange, useDeleteWorkItem, useDeleteWorkItems } from '@/hooks/workItems';
 import { notifyError } from '@/lib/errors';
 import { t } from '@/lib/i18n';
 import { paths } from '@/lib/links';
@@ -49,11 +50,12 @@ export interface RemovalDeps {
   queryClient: QueryClient;
   archive: ReturnType<typeof useArchiveWorkItem>;
   remove: ReturnType<typeof useDeleteWorkItem>;
-  bulk: ReturnType<typeof useBulkUpdateWorkItems>;
+  bulk: ReturnType<typeof useBulkChange>;
+  removeMany: ReturnType<typeof useDeleteWorkItems>;
 }
 
 export function useRemovalDeps(): RemovalDeps {
-  return { queryClient: useQueryClient(), archive: useArchiveWorkItem(), remove: useDeleteWorkItem(), bulk: useBulkUpdateWorkItems() };
+  return { queryClient: useQueryClient(), archive: useArchiveWorkItem(), remove: useDeleteWorkItem(), bulk: useBulkChange(), removeMany: useDeleteWorkItems() };
 }
 
 const isPage = (data: unknown): data is Page<ListedItem> => typeof data === 'object' && data !== null && Array.isArray((data as Page<ListedItem>).items);
@@ -61,9 +63,11 @@ const isPage = (data: unknown): data is Page<ListedItem> => typeof data === 'obj
 /**
  * Takes the items out of every cached list at once, out of the preview and out of the selection. Answers `restore`,
  * which puts the named items (all by default) back where they were (undo, or a call that failed or was refused) and
- * loads the lists again.
+ * loads the lists again (`reload: false` when the call loads them itself).
  */
-function hideAtOnce(queryClient: QueryClient, items: readonly ListedItem[]): (back?: readonly string[]) => void {
+type Restore = (back?: readonly string[], reload?: boolean) => void;
+
+function hideAtOnce(queryClient: QueryClient, items: readonly ListedItem[]): Restore {
   const ids = new Set(items.map((item) => item.id));
   const listKey = [...qk.workItems.all, 'list'];
   const before = queryClient
@@ -77,7 +81,7 @@ function hideAtOnce(queryClient: QueryClient, items: readonly ListedItem[]): (ba
   if (items.some((item) => ui.peekItemId === item.id || ui.peekItemId === item.key)) ui.openPeek(null);
   if (ui.selection.some((id) => ids.has(id))) ui.setSelection(ui.selection.filter((id) => !ids.has(id)));
 
-  return (back = [...ids]) => {
+  return (back = [...ids], reload = true) => {
     for (const [key, snapshot] of before) {
       queryClient.setQueryData(key, (current: unknown) => {
         if (!isPage(current)) return current;
@@ -92,7 +96,7 @@ function hideAtOnce(queryClient: QueryClient, items: readonly ListedItem[]): (ba
       });
     }
     // the server has the last word (a failed reload keeps what is shown)
-    void queryClient.invalidateQueries({ queryKey: qk.workItems.all });
+    if (reload) void queryClient.invalidateQueries({ queryKey: qk.workItems.all });
   };
 }
 
@@ -108,29 +112,29 @@ export function archiveWithUndo(deps: RemovalDeps, item: ListedItem): void {
 
 /**
  * Archives several items with 5 s undo: the closed ones leave the screen at once, the open ones stay. When the time is
- * up, one bulk edit archives them all; what the server refuses (an open item: `not_closed`) comes back on screen and
- * the toast names it. A failure brings every closed one back (the mutation's own toast says why).
+ * up, one bulk change archives them all (blocks of 100). What the server refuses (an open item: `not_closed`) and what
+ * was not saved (a block failed) comes back on screen, never what it archived; one toast names it, and "Erneut
+ * versuchen" archives what was not saved.
  */
 export function archiveManyWithUndo(deps: RemovalDeps, targets: readonly ListedItem[], closed: readonly ListedItem[]): void {
   const restore = hideAtOnce(deps.queryClient, closed);
   runWithUndo({
     label: t('items.commands.archived', { key: subjectOf(closed) }),
     undo: () => restore(),
-    run: async () => {
-      try {
-        const result = await changeMany(
-          deps.bulk,
-          targets.map((item) => item.id),
-          { archived: true },
-        );
-        if (result.rejected.length === 0) return;
-        restore(result.rejected.map((entry) => entry.id));
-        bulkToast(targets, result, t('items.bulk.what.archived'), 'archived');
-      } catch {
-        restore();
-      }
-    },
+    run: () => archiveEach(deps, targets, restore),
   });
+}
+
+async function archiveEach(deps: RemovalDeps, targets: readonly ListedItem[], restore: Restore): Promise<void> {
+  const outcome = await deps.bulk.run(
+    targets.map((item) => item.id),
+    { archived: true },
+  );
+  if (outcome.rejected.length === 0 && outcome.unsaved.length === 0) return;
+  // the change loads the lists itself
+  restore([...outcome.rejected.map((entry) => entry.id), ...outcome.unsaved], false);
+  const unsaved = targets.filter((item) => outcome.unsaved.includes(item.id));
+  bulkToast(targets, outcome, t('items.bulk.done.archived'), 'archived', () => void archiveEach(deps, unsaved, hideAtOnce(deps.queryClient, unsaved)));
 }
 
 /** Archives the targets: one alone, several with the closed ones (`closed`) leaving the screen at once. */
@@ -185,14 +189,13 @@ export function deleteManyWithUndo(deps: RemovalDeps, targets: readonly ListedIt
 }
 
 /**
- * Deletes item by item. What fails comes back on screen, and "Erneut versuchen" tries only those again (the others are
- * gone and would answer 404).
+ * Deletes item by item, a few at once (`useDeleteWorkItems`, which loads the lists once at the end). What fails comes
+ * back on screen, and "Erneut versuchen" tries only those again (the others are gone and would answer 404).
  */
-async function deleteEach(deps: RemovalDeps, targets: readonly ListedItem[], restore: (back?: readonly string[]) => void): Promise<void> {
-  const results = await Promise.allSettled(targets.map((item) => deps.remove.mutateAsync(item.id)));
-  const failed = targets.filter((_, index) => results[index]!.status === 'rejected');
-  if (failed.length === 0) return;
-  restore(failed.map((item) => item.id));
-  const cause = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')!.reason as unknown;
-  notifyError(t('items.commands.not_deleted', { key: subjectOf(failed) }), cause, () => void deleteEach(deps, failed, hideAtOnce(deps.queryClient, failed)));
+async function deleteEach(deps: RemovalDeps, targets: readonly ListedItem[], restore: Restore): Promise<void> {
+  const outcome = await deps.removeMany(targets.map((item) => item.id));
+  if (outcome.failed.length === 0) return;
+  restore(outcome.failed, false);
+  const failed = targets.filter((item) => outcome.failed.includes(item.id));
+  notifyError(t('items.commands.not_deleted', { key: subjectOf(failed) }), outcome.error, () => void deleteEach(deps, failed, hideAtOnce(deps.queryClient, failed)));
 }

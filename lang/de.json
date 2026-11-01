@@ -404,7 +404,7 @@
     "items.bulk.state": "Status",
     "items.bulk.subject.one": ":count Item",
     "items.bulk.subject.other": ":count Items",
-    "items.bulk.what.archived": "archiviert",
+    "items.bulk.unsaved": ":updated von :count Items :done, :unsaved nicht gespeichert",
     "items.card.children": "Kind-Items",
     "items.card.due": "Fällig am",
     "items.card.part_of": "Teil von :key :title",

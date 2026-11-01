@@ -842,7 +842,7 @@ describe('the item commands of a list', () => {
     await waitFor(() => expect(bulkCalls()[1]).toEqual({ ids: ['wi_web_47', 'wi_web_48', 'wi_web_50'], patch: { state_id: 'std_done', resolution_id: 'res_done' } }));
   });
 
-  it('says when the server refuses every item, and leaves the failure to the mutation', async () => {
+  it('says when the server refuses every item, and when nothing was saved', async () => {
     let failing = false;
     renderWith(
       <>
@@ -1030,7 +1030,101 @@ describe('the item commands of a list', () => {
     await waitFor(() => expect(webList.textContent).toBe('WEB-30 WEB-47 WEB-48'));
     act(() => dismissToast(currentToasts().find((toast) => toast.title === 'WEB-50 archiviert')!.id));
     await waitFor(() => expect(webList.textContent).toBe('WEB-30 WEB-47 WEB-48 WEB-50'));
-    await waitFor(() => expect(lastToast()).toMatchObject({ title: 'Mehrfachbearbeitung nicht gespeichert' }));
+    await waitFor(() => expect(lastToast()).toMatchObject({ title: 'Archivieren nicht gespeichert', description: 'Wartung.', action: { label: 'Erneut versuchen' } }));
+  });
+
+  it('tells in one toast what the blocks before a failed one changed and refused, and tries all the rest again', async () => {
+    const many = Array.from({ length: 250 }, (_, index) => makeWorkItem({ id: `wi_web_${100 + index}`, number: 100 + index, key: `WEB-${100 + index}`, rank: `c${index}` }));
+    let failing = true;
+    renderWith(
+      <>
+        <ListScreen />
+        <WebList />
+      </>,
+      {
+        routes: {
+          'POST /api/v1/work-items/query': (body) => ({ body: list(queryItems(many, body)) }),
+          'POST /api/v1/work-items/bulk': (body) => {
+            const { ids } = body as { ids: string[] };
+            // the second block fails while the server is away; the first refuses one item
+            if (failing && ids[0] === 'wi_web_200') return problem(503, 'service_unavailable', 'Wartung.');
+            return { body: { updated: ids.filter((id) => id !== 'wi_web_101'), rejected: ids.includes('wi_web_101') ? [{ id: 'wi_web_101', reason: 'archived' }] : [] } };
+          },
+        },
+      },
+    );
+    await waitFor(() => expect(screen.getByLabelText('WEB').textContent).toContain('WEB-349'));
+    const lists = () => api!.calls.filter((call) => call.url === '/api/v1/work-items/query').length;
+    select(...many.map((item) => item.id));
+    await ready('250 Items', 'item.priority');
+    const before = lists();
+
+    choose('item.priority', 'Low');
+    await waitFor(() =>
+      expect(lastToast()).toMatchObject({
+        title: '99 von 250 Items geändert, 150 nicht gespeichert',
+        description: 'WEB-101: Das Item ist archiviert und schreibgeschützt. Wartung.',
+        tone: 'error',
+        action: { label: 'Erneut versuchen' },
+      }),
+    );
+    // the block after the failed one was never sent; the lists loaded once, after the last block
+    expect(bulkCalls().map((call) => (call as { ids: string[] }).ids.length)).toEqual([100, 100]);
+    await waitFor(() => expect(lists()).toBe(before + 1));
+
+    // all that was not saved, in blocks of 100 again
+    failing = false;
+    act(() => runToastAction(lastToast()!.id));
+    await waitFor(() => expect(lastToast()?.title).toBe('150 Items: Priorität Low'));
+    expect(bulkCalls().slice(2)).toEqual([
+      { ids: many.slice(100, 200).map((item) => item.id), patch: { priority: 'low' } },
+      { ids: many.slice(200).map((item) => item.id), patch: { priority: 'low' } },
+    ]);
+  });
+
+  it('keeps what a block archived off the screen and brings back only what was not saved', async () => {
+    const many = Array.from({ length: 150 }, (_, index) =>
+      makeWorkItem({ id: `wi_web_${100 + index}`, number: 100 + index, key: `WEB-${100 + index}`, state_id: 'std_done', rank: `c${index}` }),
+    );
+    let failing = true;
+    // the server lists what it has not archived
+    const archived = new Set<string>();
+    renderWith(
+      <>
+        <ListScreen />
+        <WebList />
+      </>,
+      {
+        role: 'admin',
+        routes: {
+          'POST /api/v1/work-items/query': (body) => ({ body: list(queryItems(many, body).filter((item) => !archived.has(item.id))) }),
+          'POST /api/v1/work-items/bulk': (body) => {
+            const { ids } = body as { ids: string[] };
+            if (failing && ids[0] === 'wi_web_200') return problem(503, 'service_unavailable', 'Wartung.');
+            ids.forEach((id) => archived.add(id));
+            return { body: { updated: ids, rejected: [] } };
+          },
+        },
+      },
+    );
+    const webList = screen.getByLabelText('WEB');
+    await waitFor(() => expect(webList.textContent).toContain('WEB-249'));
+    select(...many.map((item) => item.id));
+    await ready('150 Items', 'item.archive');
+
+    // the list as the server has it after the first block
+    const shown = () => webList.textContent!.split(' ').filter(Boolean);
+    press('Backspace', { ctrlKey: true });
+    await waitFor(() => expect(shown()).toEqual([]));
+    act(() => dismissToast(currentToasts().find((toast) => toast.title === '150 Items archiviert')!.id));
+    await waitFor(() => expect(lastToast()).toMatchObject({ title: '100 von 150 Items archiviert, 50 nicht gespeichert', action: { label: 'Erneut versuchen' } }));
+    // only the 50 of the failed block come back; the archived 100 stay away
+    await waitFor(() => expect(shown()).toEqual(many.slice(100).map((item) => item.key)));
+
+    failing = false;
+    act(() => runToastAction(lastToast()!.id));
+    await waitFor(() => expect(bulkCalls().at(-1)).toEqual({ ids: many.slice(100).map((item) => item.id), patch: { archived: true } }));
+    await waitFor(() => expect(shown()).toEqual([]));
   });
 
   it('deletes many items one by one after the undo time and brings back what failed with a retry for it', async () => {
@@ -1078,6 +1172,70 @@ describe('the item commands of a list', () => {
     act(() => command('item.delete')!.run());
     expect(lastToast()?.title).toBe('2 Items gelöscht');
     act(() => runToastAction(lastToast()!.id));
+  });
+
+  it('deletes a few items at once and loads the lists once, after the last delete', async () => {
+    const many = Array.from({ length: 9 }, (_, index) => makeWorkItem({ id: `wi_web_${100 + index}`, number: 100 + index, key: `WEB-${100 + index}`, rank: `c${index}` }));
+    const gone = new Set<string>();
+    renderWith(
+      <>
+        <ListScreen />
+        <WebList />
+      </>,
+      {
+        role: 'admin',
+        routes: {
+          'POST /api/v1/work-items/query': (body) => ({ body: list(queryItems(many, body).filter((item) => !gone.has(item.id))) }),
+          ...Object.fromEntries(
+            many.map((item) => [
+              `DELETE /api/v1/work-items/${item.id}`,
+              () => {
+                gone.add(item.id);
+                return { status: 204 };
+              },
+            ]),
+          ),
+        },
+      },
+    );
+    const webList = screen.getByLabelText('WEB');
+    await waitFor(() => expect(webList.textContent).toContain('WEB-108'));
+    // every DELETE waits a moment; count how many are open at once, and what the list asks for meanwhile
+    let open = 0;
+    let most = 0;
+    const events: string[] = [];
+    const answering = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      const url = String(input);
+      if (init?.method !== 'DELETE') {
+        if (url.includes('/work-items/query')) events.push('reload');
+        return answering(input, init);
+      }
+      open += 1;
+      most = Math.max(most, open);
+      events.push('delete');
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      try {
+        return await answering(input, init);
+      } finally {
+        open -= 1;
+      }
+    };
+    onTestFinished(() => {
+      globalThis.fetch = answering;
+    });
+    select(...many.map((item) => item.id));
+    await ready('9 Items', 'item.delete');
+
+    act(() => command('item.delete')!.run());
+    act(() => dismissToast(lastToast()!.id));
+    await waitFor(() => expect(gone.size).toBe(9));
+    await waitFor(() => expect(events).toContain('reload'));
+    expect(most).toBe(4);
+    // no reload between the deletes (it would bring back what still waits), one after the last
+    expect(events.filter((event) => event === 'reload')).toHaveLength(1);
+    expect(events.indexOf('reload')).toBe(9);
+    expect(webList.textContent).toBe('');
   });
 
   it('refuses t and shift+p for more than one item with the reason', async () => {
