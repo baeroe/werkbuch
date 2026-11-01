@@ -11,6 +11,7 @@ import type { Filter, WorkItem, WorkItemDetail } from '@/types';
 import { qk } from './keys';
 import { useAddRelation, useRemoveRelation } from './relations';
 import {
+  ListGoneError,
   useActivity,
   useArchiveWorkItem,
   useBulkUpdateWorkItems,
@@ -696,6 +697,60 @@ describe('pages of a list', () => {
     await expect(act(() => result.current.loadAll())).rejects.toThrow();
     // the old cursor of the second page was not sent again
     expect(bodies().filter((body) => (body as { cursor?: string }).cursor === 'a2')).toHaveLength(1);
+  });
+
+  it('gives up ⌘A that waits for a rebuild when the arguments of the list change meanwhile', async () => {
+    let items = ranked('abcdef');
+    api = mockApi({ 'POST /api/v1/work-items/query': keysetServer(() => items) });
+    // the second page of the rebuild never comes back
+    let held = false;
+    const inner = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      if (typeof init?.body === 'string' && (JSON.parse(init.body) as { cursor?: string }).cursor === 'a1') {
+        held = true;
+        await new Promise(() => {});
+      }
+      return inner(input, init);
+    };
+    const { result, rerender } = renderHook(({ args }: { args: ListWorkItemsArgs }) => useInfiniteWorkItems(args), { wrapper, initialProps: { args: {} } });
+    await waitFor(() => expect(titles(result.current.data)).toHaveLength(2));
+    act(() => result.current.loadMore());
+    await waitFor(() => expect(titles(result.current.data)).toHaveLength(4));
+
+    items = items.map((item) => (item.id === 'wi_e' ? { ...item, rank: 'a0' } : item));
+    await act(() => queryClient.invalidateQueries({ queryKey: qk.workItems.all }));
+    await waitFor(() => expect(held).toBe(true));
+    const loading = result.current.loadAll();
+    // the list gets another sort: the rebuild of the old one never ends, ⌘A must not wait for it forever
+    rerender({ args: { sort: { field: 'created_at', direction: 'desc' } } });
+
+    await expect(act(() => loading)).rejects.toBeInstanceOf(ListGoneError);
+  });
+
+  it('gives up ⌘A that waits for a rebuild when the list unmounts', async () => {
+    let items = ranked('abcd');
+    api = mockApi({ 'POST /api/v1/work-items/query': keysetServer(() => items) });
+    let held = false;
+    const inner = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      if (typeof init?.body === 'string' && (JSON.parse(init.body) as { cursor?: string }).cursor === 'a1') {
+        held = true;
+        await new Promise(() => {});
+      }
+      return inner(input, init);
+    };
+    const { result, unmount } = renderHook(() => useInfiniteWorkItems({}), { wrapper });
+    await waitFor(() => expect(titles(result.current.data)).toHaveLength(2));
+    act(() => result.current.loadMore());
+    await waitFor(() => expect(titles(result.current.data)).toHaveLength(4));
+
+    items = items.map((item) => (item.id === 'wi_d' ? { ...item, rank: 'a0' } : item));
+    await act(() => queryClient.invalidateQueries({ queryKey: qk.workItems.all }));
+    await waitFor(() => expect(held).toBe(true));
+    const loading = result.current.loadAll();
+    unmount();
+
+    await expect(loading).rejects.toBeInstanceOf(ListGoneError);
   });
 
   it('stops a rebuild at the page that failed, which offers to load it again', async () => {

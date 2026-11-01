@@ -414,6 +414,34 @@ export async function removeE2eProject(page: Page, identifier: string): Promise<
 }
 
 /**
+ * Saves a view for a spec over the API, as the signed-in person: named `E2E <variant> <run> <name>` (the e2e seeder
+ * removes those views before the next run), with the filter and display given, else none and a list grouped by
+ * status. Answers its id; clean up with `removeE2eView()` in a `finally`.
+ */
+export async function createE2eView(
+  page: Page,
+  input: { name: string; filter?: { version: 1; conditions: unknown[] }; display?: Record<string, unknown> },
+): Promise<{ id: string }> {
+  await ensureCsrfCookie(page);
+  const response = await api(page, 'POST', '/api/v1/views', {
+    name: `E2E ${variant()} ${runId()} ${input.name}`.slice(0, 60),
+    icon: 'list-todo',
+    filter: input.filter ?? { version: 1, conditions: [] },
+    display: input.display ?? { layout: 'list', group_by: 'state', sort: { field: 'rank', direction: 'asc' }, fields: ['key', 'state', 'priority'], show_sub_items: true },
+  });
+  expect(response.status(), await response.text()).toBe(201);
+  const { data } = (await response.json()) as { data: { id: string } };
+  return { id: data.id };
+}
+
+/** Deletes a view of a spec (cleanup in `finally`): 204, or 404 for one that is gone already. */
+export async function removeE2eView(page: Page, id: string): Promise<void> {
+  await ensureCsrfCookie(page);
+  const response = await api(page, 'DELETE', `/api/v1/views/${id}`);
+  expect([204, 404], await response.text()).toContain(response.status());
+}
+
+/**
  * Opens the drawer of the top bar on the phone, where the sidebar lives; on the desktop the sidebar is there already.
  * `backwards` tabs up to the menu from a place further down the page.
  */

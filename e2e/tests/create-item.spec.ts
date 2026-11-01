@@ -222,7 +222,8 @@ test('creates a child item of an epic from its children section', async ({ page 
 
 test('opens the dialog from "New item" of my items', async ({ page }) => {
   await page.goto('/my-items');
-  const button = page.getByRole('button', { name: new RegExp(`^${tr('en', 'commands.create.label')}`) });
+  // the one in the toolbar: the empty list has one as well, but only while nothing is assigned to the e2e person
+  const button = page.locator('[data-items-toolbar]').getByRole('button', { name: new RegExp(`^${tr('en', 'commands.create.label')}`) });
   await expect(button).toBeVisible();
   await expect(button).not.toHaveAttribute('aria-disabled', 'true');
   await tabTo(page, button, { max: 80 });

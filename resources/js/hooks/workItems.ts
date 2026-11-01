@@ -64,7 +64,10 @@ export interface InfiniteWorkItems {
   moreError: Error | null;
   /** Loads the next page, or the one that failed again. */
   loadMore: () => void;
-  /** Loads every page that is left and answers all items (⌘A selects them). */
+  /**
+   * Loads every page that is left and answers all items (⌘A selects them). Rejects with `ListGoneError` when the list
+   * goes away while it waits for a rebuild (its arguments changed, the hook unmounted).
+   */
   loadAll: () => Promise<ListedItem[]>;
 }
 
@@ -104,6 +107,23 @@ function combinePages(results: UseQueryResult<Page<ListedItem>>[]) {
 
 type Combined = ReturnType<typeof combinePages>;
 
+/** Who waits for the rebuild of a list to end (`loadAll`). */
+interface Waiter {
+  resolve(chain: (string | null)[]): void;
+  reject(error: Error): void;
+}
+
+/**
+ * `loadAll` of a list that went away while it waited for a rebuild (its arguments changed, the screen unmounted): its
+ * items are of no use any more, the caller drops them.
+ */
+export class ListGoneError extends Error {
+  constructor() {
+    super('The list changed while its items loaded.');
+    this.name = 'ListGoneError';
+  }
+}
+
 /** One list of pages: an id of the caller, the arguments of every page, and whether it may load. */
 interface PagedList {
   id: string;
@@ -133,7 +153,7 @@ function usePagedLists(lists: readonly PagedList[], all: boolean): Record<string
   const [rebuild, setRebuild] = useState<Record<string, number>>({});
   const rebuildingNow = useRef(new Set<string>());
   // who waits for the rebuild of a list to end (`loadAll`, ⌘A)
-  const waiting = useRef(new Map<string, ((chain: (string | null)[]) => void)[]>());
+  const waiting = useRef(new Map<string, Waiter[]>());
   let cursorsOf = state;
   let rebuilding = rebuild;
   const missing = keyed.filter((list) => !(list.argsKey in state));
@@ -152,6 +172,24 @@ function usePagedLists(lists: readonly PagedList[], all: boolean): Record<string
     setState(cursorsOf);
   }
   const layout = keyed.map((list) => ({ ...list, cursors: cursorsOf[list.argsKey]!, rebuilding: list.argsKey in rebuilding }));
+
+  // a list that is gone (other arguments, or the hook unmounts) is rebuilt no more: ⌘A waiting for it gives up
+  const giveUp = useCallback((keep: ReadonlySet<string>) => {
+    for (const [argsKey, waiters] of waiting.current) {
+      if (keep.has(argsKey)) continue;
+      waiting.current.delete(argsKey);
+      waiters.forEach((waiter) => waiter.reject(new ListGoneError()));
+    }
+  }, []);
+  const mounted = useRef(true);
+  useEffect(() => giveUp(new Set(keyed.map((list) => list.argsKey))));
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      giveUp(new Set());
+    };
+  }, [giveUp]);
   const layoutKey = JSON.stringify(layout.map((list) => [list.id, list.cursors.length]));
 
   useEffect(() => {
@@ -190,6 +228,17 @@ function usePagedLists(lists: readonly PagedList[], all: boolean): Record<string
   // an invalidated first page starts the rebuild of its list
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
+
+  /** The new chain of a list once its rebuild ends; gives up at once for a list that is gone already. */
+  const waitForRebuild = useCallback((argsKey: string) => {
+    const chain = new Promise<(string | null)[]>((resolve, reject) => {
+      if (!mounted.current || !layoutRef.current.some((list) => list.argsKey === argsKey)) reject(new ListGoneError());
+      else waiting.current.set(argsKey, [...(waiting.current.get(argsKey) ?? []), { resolve, reject }]);
+    });
+    // a first page that fails ends `loadAll` before it awaits this: no unhandled rejection when the list goes later
+    chain.catch(() => {});
+    return chain;
+  }, []);
   useEffect(
     () =>
       queryClient.getQueryCache().subscribe((event) => {
@@ -234,7 +283,7 @@ function usePagedLists(lists: readonly PagedList[], all: boolean): Record<string
         if (now?.isInvalidated || now?.dataUpdatedAt !== startedAt) return;
         rebuildingNow.current.delete(list.argsKey);
         setRebuild(({ [list.argsKey]: _done, ...rest }) => rest);
-        waiting.current.get(list.argsKey)?.forEach((resolve) => resolve(chain));
+        waiting.current.get(list.argsKey)?.forEach((waiter) => waiter.resolve(chain));
         waiting.current.delete(list.argsKey);
       })();
     }
@@ -269,8 +318,10 @@ function usePagedLists(lists: readonly PagedList[], all: boolean): Record<string
           // a rebuild (K15) replaces the old cursors, which may miss an item: wait for the new chain and load on from
           // there (the first page first, so one that failed is asked again instead of waited for)
           while (rebuildingNow.current.has(list.argsKey)) {
+            // waiting from now on, so a rebuild that ends (or a list that goes) while the first page loads is not missed
+            const chain = waitForRebuild(list.argsKey);
             await fetchPage(null);
-            cursors = await new Promise<(string | null)[]>((resolve) => waiting.current.set(list.argsKey, [...(waiting.current.get(list.argsKey) ?? []), resolve]));
+            cursors = [...(await chain)];
           }
           // the first page as it stands now (a stale one loads afresh): the chain starts there
           await fetchPage(null);
@@ -302,7 +353,7 @@ function usePagedLists(lists: readonly PagedList[], all: boolean): Record<string
     }
     return answer;
     // `layout` is what `layoutKey` and the cursors spell
-  }, [combined, cursorsOf, layoutKey, queryClient, appendCursor]);
+  }, [combined, cursorsOf, layoutKey, queryClient, appendCursor, waitForRebuild]);
 
   // a list that narrows on the client loads on until it has everything
   useEffect(() => {

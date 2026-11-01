@@ -30,6 +30,7 @@
 import type { ComponentType } from 'react';
 import type { ApiError } from '@/api/client';
 import type { TranslationKey } from '@/lib/i18n';
+import type { ShortcutId } from '@/lib/shortcuts/catalog';
 import type { Display, GroupBy, GroupCount, ListedItem, Project } from '@/types';
 import { ListLayout } from './list/ListLayout';
 
@@ -80,10 +81,10 @@ export const layouts: Record<Display['layout'], ComponentType<LayoutProps>> = {
   timeline: ListLayout,
 };
 
-/** The layouts by name and key, for the switcher and the shortcuts (1–4). */
-export const LAYOUT_OPTIONS: readonly { value: Display['layout']; label: TranslationKey; shortcut: string }[] = [
-  { value: 'list', label: 'items.layout.list', shortcut: '1' },
-  { value: 'board', label: 'items.layout.board', shortcut: '2' },
-  { value: 'table', label: 'items.layout.table', shortcut: '3' },
-  { value: 'timeline', label: 'items.layout.timeline', shortcut: '4' },
+/** The layouts by name, with the shortcut of the catalog (1–4) for the switcher in the header of the list. */
+export const LAYOUT_OPTIONS: readonly { value: Display['layout']; label: TranslationKey; shortcut: ShortcutId }[] = [
+  { value: 'list', label: 'items.layout.list', shortcut: 'list.layout.list' },
+  { value: 'board', label: 'items.layout.board', shortcut: 'list.layout.board' },
+  { value: 'table', label: 'items.layout.table', shortcut: 'list.layout.table' },
+  { value: 'timeline', label: 'items.layout.timeline', shortcut: 'list.layout.timeline' },
 ];

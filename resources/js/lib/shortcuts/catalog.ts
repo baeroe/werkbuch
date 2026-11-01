@@ -59,6 +59,11 @@ export const SHORTCUTS = {
   'list.clear': { keys: 'escape', scope: 'list', label: 'shortcuts.list.clear', group: 'shortcuts.group.list' },
   'list.open': { keys: 'enter', scope: 'list', label: 'shortcuts.list.open', group: 'shortcuts.group.list' },
   'list.peek': { keys: 'space', scope: 'list', label: 'shortcuts.list.peek', group: 'shortcuts.group.list' },
+  // the layout of an item list (`features/items/ListHeader.tsx`), as the switch in its header offers them
+  'list.layout.list': { keys: '1', scope: 'list', label: 'shortcuts.list.layout.list', group: 'shortcuts.group.view' },
+  'list.layout.board': { keys: '2', scope: 'list', label: 'shortcuts.list.layout.board', group: 'shortcuts.group.view' },
+  'list.layout.table': { keys: '3', scope: 'list', label: 'shortcuts.list.layout.table', group: 'shortcuts.group.view' },
+  'list.layout.timeline': { keys: '4', scope: 'list', label: 'shortcuts.list.layout.timeline', group: 'shortcuts.group.view' },
   // registered only while the preview is open (shell/PeekHost): the first Escape in a field leaves the field
   'peek.close': { keys: 'escape', scope: 'detail', label: 'shortcuts.peek.close', group: 'shortcuts.group.item' },
 } as const satisfies Record<string, CatalogEntry>;

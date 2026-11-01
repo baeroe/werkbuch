@@ -13,6 +13,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { ApiError } from '@/api/client';
 import { mockApi, type MockApi } from '@/test/api';
 import { agency, ida, labels, lene, list, makeWorkItem, mara, organization, project, properties, standard, types } from '@/test/fixtures';
+import { SHORTCUTS } from '@/lib/shortcuts/catalog';
 import { useUiStore } from '@/store/ui';
 import type { Display, GroupBy, ListedItem, Organization } from '@/types';
 import { GroupIcon } from '../display/GroupIcon';
@@ -219,7 +220,7 @@ describe('rows of the list', () => {
 
   it('offers the list for every layout until the others come, with the names and keys of the switcher', () => {
     expect(Object.values(layouts)).toEqual([ListLayout, ListLayout, ListLayout, ListLayout]);
-    expect(LAYOUT_OPTIONS.map((option) => [option.value, option.shortcut])).toEqual([
+    expect(LAYOUT_OPTIONS.map((option) => [option.value, SHORTCUTS[option.shortcut].keys])).toEqual([
       ['list', '1'],
       ['board', '2'],
       ['table', '3'],

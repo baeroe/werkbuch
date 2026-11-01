@@ -1,7 +1,6 @@
 /*
- * "Meine Items" until the item lists arrive (Phase 5): the heading and the empty state of the preset `my`, with the
- * way to the projects and "Neues Item" (the create dialog). Without the right to create in any project the button stays
- * and says why.
+ * The empty list "Zugewiesen" of Meine Items: nothing open is assigned to the person. The way to the projects and "Neues
+ * Item" (the create dialog); without the right to create in any project the button stays and says why.
  */
 
 import { Link } from '@inertiajs/react';
@@ -12,39 +11,31 @@ import { t } from '@/lib/i18n';
 import { paths } from '@/lib/links';
 import { usePermissions } from '@/lib/permissions';
 import { SHORTCUTS } from '@/lib/shortcuts/catalog';
-import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import { useUiStore } from '@/store/ui';
 
 export function MyItemsEmpty() {
-  useDocumentTitle(t('items.my.title'));
   const { reason } = usePermissions();
   return (
-    <>
-      <header className="flex min-h-8 items-center">
-        <h1 className="truncate font-display text-lg font-bold tracking-title text-ink">{t('items.my.title')}</h1>
-      </header>
-      <EmptyState
-        className="mt-4"
-        icon={List}
-        title={t('items.empty.my.title')}
-        description={t('items.empty.my.description')}
-        actions={
-          <>
-            <Link href={paths.projects()} className={buttonClass({ variant: 'secondary' })}>
-              {t('items.empty.projects_link')}
-            </Link>
-            <Button
-              variant="primary"
-              icon={SquarePen}
-              shortcut={SHORTCUTS['item.create'].keys}
-              disabledReason={reason('item.create')}
-              onClick={() => useUiStore.getState().openCreate()}
-            >
-              {t('commands.create.label')}
-            </Button>
-          </>
-        }
-      />
-    </>
+    <EmptyState
+      icon={List}
+      title={t('items.empty.my.title')}
+      description={t('items.empty.my.description')}
+      actions={
+        <>
+          <Link href={paths.projects()} className={buttonClass({ variant: 'secondary' })}>
+            {t('items.empty.projects_link')}
+          </Link>
+          <Button
+            variant="primary"
+            icon={SquarePen}
+            shortcut={SHORTCUTS['item.create'].keys}
+            disabledReason={reason('item.create')}
+            onClick={() => useUiStore.getState().openCreate()}
+          >
+            {t('commands.create.label')}
+          </Button>
+        </>
+      }
+    />
   );
 }
