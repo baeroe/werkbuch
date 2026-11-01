@@ -23,6 +23,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 /**
@@ -161,7 +162,8 @@ class ItemsSeeder extends Seeder
                     continue;
                 }
 
-                $this->create($project, $row, $ranks[$index]);
+                // one transaction each: an item without its labels or values would stay so for good (a rerun skips it, K13)
+                DB::transaction(fn () => $this->create($project, $row, $ranks[$index]));
             }
 
             // the counter is the highest number, gaps included (APP-20 and APP-23 do not exist); never lowered
@@ -177,9 +179,11 @@ class ItemsSeeder extends Seeder
      */
     private static function deletedNumbers(Project $project): array
     {
-        return Event::query()->where('project_id', $project->id)->where('type', EventType::WorkItemDeleted)->get()
+        $numbers = Event::query()->where('project_id', $project->id)->where('type', EventType::WorkItemDeleted)->get()
             ->map(fn (Event $event) => ItemKey::parse((string) ($event->meta['key'] ?? ''))['number'] ?? null)
-            ->filter()->values()->all();
+            ->filter()->all();
+
+        return array_values($numbers);
     }
 
     /**
@@ -199,6 +203,9 @@ class ItemsSeeder extends Seeder
 
         $description = isset($row['desc']) ? $this->text($row['desc']) : null;
         $category = $row['state'] === 'done' ? 'completed' : 'canceled';
+
+        // read before anything is written: an unknown option throws before the item exists
+        $values = $this->values($row['v'] ?? []);
 
         $item = new WorkItem;
         $item->forceFill([
@@ -226,7 +233,7 @@ class ItemsSeeder extends Seeder
         ])->save();
 
         $item->labels()->sync(array_map(fn (string $label) => $this->labels[self::LABELS[$label]], $row['l'] ?? []));
-        ItemValues::store($item, $this->values($row['v'] ?? []), []);
+        ItemValues::store($item, $values, []);
     }
 
     /**

@@ -373,6 +373,8 @@ export async function createE2eProject(
   name: string,
   options: { workflow?: string; types?: string[] } = {},
 ): Promise<{ id: string; identifier: string }> {
+  // only `E2E …` projects are cleaned up after an aborted run (E2eSeeder); a name serves one project per run and variant
+  if (!name.startsWith('E2E ')) throw new Error(`createE2eProject: "${name}" does not start with "E2E "`);
   await ensureCsrfCookie(page);
   const hash = createHash('sha1').update(name).digest('hex').slice(0, 8);
   const identifier = `E${runId()}${VARIANT_CODE[variant()]}${parseInt(hash, 16).toString(36).toUpperCase().slice(-3).padStart(3, '0')}`;

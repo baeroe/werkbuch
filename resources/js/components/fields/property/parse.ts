@@ -82,9 +82,15 @@ function readNumber(text: string, decimals: number): number | null {
 
 export type Parsed = { value: PropertyValue } | { error: string; partial: boolean };
 
-/** An address the server takes: http or https, a host, no blanks or control characters (umlauts are fine). */
+/** The longest address, as the server takes it (`ItemValue::URL_MAX`). */
+export const MAX_URL = 2048;
+
+/**
+ * An address the server takes: http or https with `//` and a host, no blanks, control or format characters (a zero
+ * width space), at most MAX_URL characters; umlauts are fine.
+ */
 function isAddress(text: string): boolean {
-  if (/[\s\u0000-\u001f\u007f]/.test(text)) return false;
+  if ([...text].length > MAX_URL || /[\s\p{Cc}\p{Cf}]/u.test(text) || !/^https?:\/\//i.test(text)) return false;
   try {
     const url = new URL(text);
     // http and https always have a host: the URL parser refuses them without one

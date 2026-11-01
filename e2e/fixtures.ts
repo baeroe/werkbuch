@@ -98,12 +98,12 @@ export const test = base.extend<{ allowedErrors: RegExp[]; pageErrors: string[];
             sessionStorage.setItem(key, JSON.stringify(window.__coverage__));
           } catch (error) {
             const reason = error instanceof Error ? error.message : String(error);
-            console.error(`coverage stash exceeds sessionStorage: ${reason}`);
             try {
               sessionStorage.removeItem(key);
               sessionStorage.setItem(`${key}:failed`, reason);
             } catch {
-              // nothing left to do: the message above is all there is
+              // the marker could not be written either: the only trace left is this message (it rarely reaches a test)
+              console.error(`coverage stash exceeds sessionStorage: ${reason}`);
             }
           }
         });

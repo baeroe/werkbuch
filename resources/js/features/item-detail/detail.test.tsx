@@ -124,6 +124,8 @@ function renderWith(node: ReactNode, { routes = {}, role = 'member' }: { routes?
         },
       ]),
     ),
+    // the activity reads an empty history: no error state with its own "Erneut versuchen" and alert in these screens
+    ...Object.fromEntries(items.flatMap((item) => [item.id, item.key].map((ref) => [`GET /api/v1/work-items/${ref}/history`, () => ({ body: list([]) })]))),
     ...routes,
   });
   client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });

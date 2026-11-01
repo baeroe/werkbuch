@@ -131,7 +131,7 @@ describe('StateMappingDialog', () => {
 
     await waitFor(() => expect(screen.getAllByRole('status')).toHaveLength(3));
     expect(screen.getAllByRole('status').map((banner) => banner.textContent)).toEqual([
-      '2 geschlossene Items werden wieder geöffnet.Sie verlieren ihre Resolution.',
+      '2 geschlossene Items werden wieder geöffnet.Sie verlieren ihre Resolution; archivierte bleiben archiviert.',
       '1 offenes Item gilt danach als geschlossen.Es bekommt die Standard-Resolution seiner Kategorie.',
       '3 geschlossene Items wechseln zwischen Completed und Canceled.Sie bekommen die Standard-Resolution der neuen Kategorie.',
     ]);

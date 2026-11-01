@@ -250,6 +250,9 @@ describe('RichTextEditor', () => {
       act(() => void escape());
       expect(onEscape).toHaveBeenCalledTimes(1);
       expect(seen).toEqual([]);
+      // the Escape that cancels an IME composition belongs to it
+      act(() => void fireEvent.keyDown(editor, { key: 'Escape', code: 'Escape', keyCode: 27, isComposing: true }));
+      expect(onEscape).toHaveBeenCalledTimes(1);
 
       // without them both keys go on to the page, and mod+enter still adds no line break
       rerender(<RichTextEditor value={textDoc('Sieht gut aus')} onChange={onChange} preset="comment" />);

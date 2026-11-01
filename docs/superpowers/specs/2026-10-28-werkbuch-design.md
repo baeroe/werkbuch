@@ -17,6 +17,12 @@ Stand: 2026-11-01 · Status: freigegeben (die Änderungen vom 2026-10-31 warten 
 > - **Archiviertes Ziel einer Relation (4.8, 4.9):** Eine Relation lässt sich auf ein archiviertes Item (auch in einem archivierten Projekt) setzen; das Item, an dem man arbeitet, muss änderbar sein. Entfernen braucht ein änderbares Ende.
 > - **Optionen entfernen (4.7):** Eine gespeicherte Option lässt sich in der Oberfläche entfernen; benutzte archiviert werkbuch dabei, unbenutzte löscht es.
 > - **Mehrdeutige Zahlen (4.7):** Eine Zahl wie „1.500“ oder „1,500“ (ein Trenner, genau drei Ziffern danach) wird nicht still gelesen, sondern mit einem Hinweis auf beide Lesarten abgelehnt.
+> - **Anlegen in einem anderen Status (4.8):** Ein Item, das gleich in einem anderen Status als dem Startstatus entsteht, steht in der History als „angelegt“ und danach als Statuswechsel (P32).
+> - **Abbestellen (4.10):** Wer ein Item abbestellt, bleibt abgemeldet, bis ihm das Item wieder zugewiesen wird; andere Änderungen melden ihn nicht wieder an (A113).
+> - **Zahlen (4.7):** Zahl-Properties nehmen Beträge unter 10²⁰ (20 Stellen vor dem Komma, A152); größere sind ein Fehler am Feld.
+> - **Eingefügter Rich Text (4.16):** Seltsame Werte aus eingefügtem HTML (Start einer Liste, Zellspannen und -breiten, Sprache eines Code-Blocks) nehmen still ihren Standard, statt die ganze Beschreibung abzulehnen (A150).
+> - **Sprache der API (6.1):** Meldungen der REST-API kommen in der Sprache des Kontos, sonst in der Standardsprache der Organisation (A151).
+> - **Ungespeicherter Text (4.8):** Wird das Item archiviert oder fällt das Recht weg, während Text in der Beschreibung ungespeichert ist, bleibt er schreibgeschützt zum Kopieren stehen (A154).
 
 > **Änderungen vom 2026-10-31 (Phase 3):** Beim Umsetzen von Phase 3 (Workflows, Typen, Properties, Kataloge) hat Claude als Controller Folgendes entschieden; es ändert oder präzisiert die Spec und **wartet auf Rafaels Bestätigung** (Begründung und „Falls falsch“ in `docs/superpowers/plans/2026-10-30-werkbuch-app-rulings.md`, A56 ff.):
 > - **Namen (4.5–4.9):** Namen von Workflows, Typen, Labels, Relationstypen und Resolutions und die Schlüssel der Properties sind je Katalog eindeutig, ohne Rücksicht auf Groß- und Kleinschreibung (und auf Akzente: „Über“ und „Uber“ gelten als gleich). Längen: Name 60, Status 40, Beschreibung 2000, Hilfetext 500, Option 60 Zeichen; höchstens 30 Status je Workflow und 100 Optionen je Dropdown.

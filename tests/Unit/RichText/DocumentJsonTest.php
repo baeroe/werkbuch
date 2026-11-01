@@ -87,6 +87,7 @@ it('refuses a document of the wrong shape', function (array $json) use ($reason)
     'a doc in a doc' => [F::doc(F::doc())],
     'content that is no list' => [['type' => 'doc', 'content' => ['first' => F::p('x')]]],
     'an empty text' => [F::doc(F::p(['type' => 'text', 'text' => '']))],
+    'a text that is no UTF-8' => [F::doc(F::p(['type' => 'text', 'text' => "a\xffb"]))],
     'a text without text' => [F::doc(F::p(['type' => 'text']))],
     'content in a text' => [F::doc(F::p(['type' => 'text', 'text' => 'x', 'content' => []]))],
     'marks that are no list' => [F::doc(F::p(['type' => 'text', 'text' => 'x', 'marks' => 'bold']))],
@@ -225,6 +226,8 @@ it('knows an empty document', function () {
     expect(Document::fromJson(F::doc(['type' => 'paragraph']))->isEmpty())->toBeTrue()
         ->and(Document::fromJson(['type' => 'doc'])->isEmpty())->toBeTrue()
         ->and(Document::fromJson(F::doc(F::p('  '), ['type' => 'bulletList', 'content' => [['type' => 'listItem', 'content' => [F::p()]]]]))->isEmpty())->toBeTrue()
+        // blanks as the editor trims them: a no-break space and a zero width no-break space are no content either
+        ->and(Document::fromJson(F::doc(F::p("\u{00A0}\u{FEFF} ")))->isEmpty())->toBeTrue()
         ->and(Document::fromJson(F::doc(F::p(), F::p('a')))->isEmpty())->toBeFalse()
         ->and(Document::fromJson(F::doc(['type' => 'horizontalRule']))->isEmpty())->toBeFalse()
         ->and(Document::fromJson(F::doc(['type' => 'table', 'content' => [['type' => 'tableRow', 'content' => [['type' => 'tableCell', 'content' => [F::p()]]]]]]))->isEmpty())->toBeFalse();

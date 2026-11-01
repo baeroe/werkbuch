@@ -31,6 +31,7 @@ it('redirects a former key to the current one without caching', function () {
         // no cache keeps it: a rename back to WEB must not run into a redirect stored for good
         ->assertHeader('Cache-Control', 'no-store, private');
     $this->actingAs($admin)->get('/items/web-1')->assertStatus(301)->assertRedirect('/items/NEW-1');
+    $this->actingAs($admin)->get('/items/WEB-1?tab=activity')->assertStatus(301)->assertRedirect('/items/NEW-1?tab=activity');
     $this->actingAs($admin)->get('/items/NEW-1')->assertOk()
         ->assertInertia(fn (Assert $page) => $page->component('Items/Show')->where('itemKey', 'NEW-1'));
 });

@@ -268,10 +268,17 @@ it('keeps the workflow of a project when it seeds again', function () {
         'Review' => 'In Progress', 'Kundenfreigabe' => 'Pending', default => $state->name,
     }]])->all();
     AssignWorkflow::run(actor(User::factory()->admin()->create()), $app, ['workflow_id' => $standard->id, 'mapping' => $mapping]);
+    // the default type and the enabled types are kept the same way
+    $bug = WorkItemType::where('name', 'Bug')->sole();
+    $app->types()->sync([$bug->id]);
+    $app->forceFill(['default_type_id' => $bug->id])->save();
 
     $this->seed(DemoSeeder::class);
 
-    expect(Project::query()->where('identifier', 'APP')->sole()->workflow_id)->toBe($standard->id);
+    $after = Project::query()->where('identifier', 'APP')->sole();
+    expect($after->workflow_id)->toBe($standard->id)
+        ->and($after->default_type_id)->toBe($bug->id)
+        ->and($after->types()->pluck('work_item_types.id')->all())->toBe([$bug->id]);
 });
 
 it('creates no empty „Standard“ when the shipped workflow was renamed, and gives WEB and OPS the default workflow', function () {

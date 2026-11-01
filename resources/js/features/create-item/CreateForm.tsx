@@ -272,7 +272,9 @@ function FormBody({
   }
 
   function changeType(typeId: string) {
-    clearError('type_id', 'parent_id');
+    // a refusal of a property the new type does not have is about the old one: it goes with it
+    const kept = new Set(fieldsOf(typeId).map(({ property }) => `values.${property.key}`));
+    clearError('type_id', 'parent_id', ...Object.keys(errors).filter((path) => path.startsWith('values.') && !kept.has(path)));
     update({ typeId, values: keptValues(draft.values, typeId) });
   }
 

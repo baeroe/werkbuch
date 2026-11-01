@@ -71,8 +71,9 @@ final class SaveWorkflow
             $keys = array_column($valid['states'], 'key');
             $removed = $current === null ? [] : array_values(array_diff($current->states->modelKeys(), array_column($valid['states'], 'existing')));
 
-            // the keys are states that go (a state that stays is 422, P17), the targets keys of the input
-            $mappingErrors = WorkflowInput::mappingErrors('state_mapping', $valid['state_mapping'], $removed, $keys);
+            // the keys are states that go (a state that stays is 422, P17, and says so), the targets keys of the input
+            $staying = $current === null ? [] : array_values(array_diff($current->states->modelKeys(), $removed));
+            $mappingErrors = WorkflowInput::mappingErrors('state_mapping', $valid['state_mapping'], $removed, $keys, $staying);
 
             if ($mappingErrors !== []) {
                 throw Problem::invalid($mappingErrors);

@@ -31,8 +31,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * locks of P1 (ItemLock::take), then everything checked against the item as locked; an archived project and an
  * archived item are read-only (409 `project_archived`, `archived`).
  *
- * The transaction runs up to three times (`DB::transaction(…, 3)`) like every change that locks items: a deadlock with a
- * change of several items (a deletion locks the item and then its children) is retried by Laravel.
+ * The transaction runs up to three times (`DB::transaction(…, 3)`) like every change that locks items, defensively: it
+ * locks one item row, so it is in no lock cycle of its own today.
  */
 final class TransitionWorkItem
 {

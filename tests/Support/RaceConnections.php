@@ -52,7 +52,8 @@ final class RaceConnections
 
     /**
      * Commits the transaction `hold()` opened at the moment `mariadb_second` asks for the lock on a row of the table
-     * (`select * from <table> … for update`, or `… lock in share mode` with that `$sqlEnd`), once: the first request finishes while the second one is on its way, after
+     * (`select * from <table> … for update`, or `… lock in share mode` with that `$sqlEnd`), once: the first request
+     * finishes while the second one is on its way, after
      * what it read before the lock and before the lock itself. Whatever the second one checked before its lock missed
      * what the first one wrote; whatever it checks under its lock sees it. The commit runs with `mariadb` as the default
      * connection, so the work of the first request after its commit (the outbox dispatching its events) stays on its

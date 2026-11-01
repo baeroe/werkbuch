@@ -57,7 +57,10 @@ final class ListWorkItems
             'filter.parent' => ['nullable', 'string'],
             'filter.q' => ['nullable', 'string'],
             'include_archived' => ['nullable', 'boolean'],
+            // the list embeds nothing (`include` is for one item): never silently answered without what was asked for
+            'include' => ['prohibited'],
         ], [
+            'include.prohibited' => __('field.include.list'),
             'filter.array' => $invalid,
             'filter.*.string' => $invalid,
             'include_archived.boolean' => __('field.include_archived.invalid'),

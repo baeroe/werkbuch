@@ -17,6 +17,7 @@ use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 /**
@@ -78,6 +79,13 @@ class ActivitySeeder extends Seeder
     ];
 
     public function run(): void
+    {
+        // one transaction: a run that breaks halfway would leave items with part of their events, and a rerun skips
+        // every item that has any (K14)
+        DB::transaction(fn () => $this->seed());
+    }
+
+    private function seed(): void
     {
         // the base collection: an Eloquent one reads `only()` as a list of primary keys
         /** @var Collection<string, WorkItem> $items by key */

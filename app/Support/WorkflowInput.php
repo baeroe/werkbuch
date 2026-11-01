@@ -195,19 +195,23 @@ final class WorkflowInput
 
     /**
      * What is wrong with a mapping of states (state id → the state that takes over its items): every key must be one
-     * of `$from`, every value one of `$to`. The errors stand at `<field>.<id>`.
+     * of `$from`, every value one of `$to`. The errors stand at `<field>.<id>`; a key among `$staying` (a state of the
+     * workflow that stays) is told so instead of "unknown".
      *
      * @param  array<array-key, mixed>  $mapping
      * @param  list<string>  $from
      * @param  list<string>  $to
+     * @param  list<string>  $staying
      * @return array<string, list<string>>
      */
-    public static function mappingErrors(string $field, array $mapping, array $from, array $to): array
+    public static function mappingErrors(string $field, array $mapping, array $from, array $to, array $staying = []): array
     {
         $errors = [];
 
         foreach ($mapping as $id => $target) {
-            if (! in_array((string) $id, $from, true)) {
+            if (in_array((string) $id, $staying, true)) {
+                $errors["{$field}.{$id}"] = [__('field.state_mapping.stays')];
+            } elseif (! in_array((string) $id, $from, true)) {
                 $errors["{$field}.{$id}"] = [__('field.mapping.unknown_state')];
             } elseif (! in_array($target, $to, true)) {
                 $errors["{$field}.{$id}"] = [__('field.mapping.target')];

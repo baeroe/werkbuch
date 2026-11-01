@@ -95,7 +95,8 @@ export function OptionRows({ options, onChange, labelError }: OptionRowsProps) {
                 )}
                 <IconButton
                   icon={X}
-                  label={t('settings.properties.options.remove', { number })}
+                  // a saved option by its name, as archive and restore next to it; a new one by its place
+                  label={option.saved ? t('settings.properties.options.remove_named', { name }) : t('settings.properties.options.remove', { number })}
                   onClick={(event) => {
                     // on to the next option (or the one before), after the last to "Add option"
                     focusNeighbour(event.currentTarget.closest('li'), addButton.current);

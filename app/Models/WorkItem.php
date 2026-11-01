@@ -173,15 +173,17 @@ final class WorkItem extends Model
      */
     public function scopeWithComputed(Builder $query): void
     {
-        $children = fn () => DB::query()->from('work_items as children')->selectRaw('count(*)')->whereColumn('children.parent_id', 'work_items.id');
+        // the outer table through the model, as `visibleTo` names it (one place to change for an aliased list query)
+        $id = $query->qualifyColumn('id');
+        $children = fn () => DB::query()->from('work_items as children')->selectRaw('count(*)')->whereColumn('children.parent_id', $id);
 
         $query->addSelect([
             'children_total' => $children(),
             'children_done' => $children()
                 ->join('workflow_states as child_states', 'child_states.id', '=', 'children.state_id')
                 ->whereIn('child_states.category', self::closedCategories()),
-            'is_blocked' => self::blocks('target_id', 'source_id'),
-            'is_blocking' => self::blocks('source_id', 'target_id'),
+            'is_blocked' => self::blocks($query, 'target_id', 'source_id'),
+            'is_blocking' => self::blocks($query, 'source_id', 'target_id'),
         ]);
     }
 
@@ -335,8 +337,10 @@ final class WorkItem extends Model
 
     /**
      * Whether an open item at `$self` of a `blocks` relation (this item, open as well) has an open item at the other end.
+     *
+     * @param  Builder<self>  $outer
      */
-    private static function blocks(string $self, string $other): QueryBuilder
+    private static function blocks(Builder $outer, string $self, string $other): QueryBuilder
     {
         $open = fn (QueryBuilder $states) => $states->select('id')->from('workflow_states')->whereNotIn('category', self::closedCategories());
 
@@ -345,9 +349,9 @@ final class WorkItem extends Model
             ->join('relation_types as block_types', 'block_types.id', '=', 'blocks.type_id')
             ->join('work_items as other_end', 'other_end.id', '=', "blocks.{$other}")
             ->where('block_types.built_in', 'blocks')
-            ->whereColumn("blocks.{$self}", 'work_items.id')
+            ->whereColumn("blocks.{$self}", $outer->qualifyColumn('id'))
             ->whereIn('other_end.state_id', $open)
-            ->whereIn('work_items.state_id', $open);
+            ->whereIn($outer->qualifyColumn('state_id'), $open);
     }
 
     /**

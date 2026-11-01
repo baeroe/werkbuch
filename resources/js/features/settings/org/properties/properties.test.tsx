@@ -465,8 +465,8 @@ describe('Properties', () => {
     await user.click(within(await rowOf('Kunde')).getByRole('button', { name: 'Property „Kunde“ bearbeiten' }));
     let dialog = await screen.findByRole('dialog', { name: 'Property „Kunde“ bearbeiten' });
     // a stored option can go as well
-    await user.click(within(dialog).getByRole('button', { name: 'Option 3 entfernen' }));
-    await user.click(within(dialog).getByRole('button', { name: 'Option 2 entfernen' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Option „Gärtnerei Moos“ entfernen' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Option „Hafenkontor“ entfernen' }));
     expect(within(within(dialog).getByRole('list', { name: 'Optionen' })).getAllByRole('listitem')).toHaveLength(1);
     await user.click(within(dialog).getByRole('button', { name: 'Speichern' }));
 
@@ -479,8 +479,8 @@ describe('Properties', () => {
     answer = 'two';
     await user.click(within(await rowOf('Kunde')).getByRole('button', { name: 'Property „Kunde“ bearbeiten' }));
     dialog = await screen.findByRole('dialog', { name: 'Property „Kunde“ bearbeiten' });
-    await user.click(within(dialog).getByRole('button', { name: 'Option 3 entfernen' }));
-    await user.click(within(dialog).getByRole('button', { name: 'Option 2 entfernen' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Option „Gärtnerei Moos“ entfernen' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Option „Hafenkontor“ entfernen' }));
     await user.click(within(dialog).getByRole('button', { name: 'Speichern' }));
     await waitFor(() => expect(toastNamed('Property „Kunde“ gespeichert')?.description).toBe('Items tragen 2 der entfernten Optionen noch: Sie sind archiviert, nicht gelöscht.'));
   });

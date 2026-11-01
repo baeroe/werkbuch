@@ -168,6 +168,9 @@ it('refuses a filter that is no object of the known texts', function () use ($wo
         expect(fn () => ListWorkItems::run(actor($mara), $input))
             ->toThrow(fn (ValidationException $e) => expect(array_values($e->errors()))->toBe([[__('field.filter.invalid')]]));
     }
+    // nor does it drop an `include` it cannot give
+    expect(fn () => ListWorkItems::run(actor($mara), ['include' => 'children']))
+        ->toThrow(fn (ValidationException $e) => expect($e->errors())->toBe(['include' => [__('field.include.list')]]));
 });
 
 it('loads the page for the resource with the account as reader', function () use ($world) {

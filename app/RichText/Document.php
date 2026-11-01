@@ -61,6 +61,9 @@ final class Document
         if (strlen($markdown) > Schema::MAX_BYTES) {
             throw new InvalidDocument('size');
         }
+        if (! mb_check_encoding($markdown, 'UTF-8')) {
+            throw new InvalidDocument('shape');
+        }
         $html = Markdown::toHtml($markdown);
         // tiptap-php cannot read an empty body
         $json = $html === '' ? ['type' => 'doc'] : self::editor()->setContent($html)->getDocument();
@@ -129,7 +132,8 @@ final class Document
         if ($marks !== []) {
             $read['marks'] = $marks;
         }
-        if (! is_string($node['text'] ?? null) || $node['text'] === '') {
+        // a text that is no UTF-8 (form-encoded input can carry it) would break Markdown and the JSON column later
+        if (! is_string($node['text'] ?? null) || $node['text'] === '' || ! mb_check_encoding($node['text'], 'UTF-8')) {
             throw new InvalidDocument('shape');
         }
         $read['text'] = $node['text'];
@@ -261,7 +265,8 @@ final class Document
     /** @param array<string, mixed> $node */
     private static function hasContent(array $node): bool
     {
-        if (in_array($node['type'], self::CONTENT_ATOMS, true) || trim((string) ($node['text'] ?? '')) !== '') {
+        // blanks as the editor's `trim()` knows them (Unicode, NBSP too), not only ASCII
+        if (in_array($node['type'], self::CONTENT_ATOMS, true) || preg_match('/^[\s\x{FEFF}]*\z/u', (string) ($node['text'] ?? '')) !== 1) {
             return true;
         }
         /** @var list<array<string, mixed>> $content */

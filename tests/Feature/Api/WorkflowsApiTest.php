@@ -306,7 +306,7 @@ it('checks a state mapping against the states that go and the ones that stay', f
     $staying = $this->putJson("/api/v1/workflows/{$standard->id}", [...$input, 'state_mapping' => [$todo => $progress]])->assertUnprocessable();
     $gone = $this->putJson("/api/v1/workflows/{$standard->id}", [...$input, 'state_mapping' => [$pending => $pending]])->assertUnprocessable();
 
-    expect(errorsAt($staying, "state_mapping.{$todo}"))->toBe([__('field.mapping.unknown_state')])
+    expect(errorsAt($staying, "state_mapping.{$todo}"))->toBe([__('field.state_mapping.stays')])
         ->and(errorsAt($gone, "state_mapping.{$pending}"))->toBe([__('field.mapping.target')])
         ->and(WorkflowState::query()->whereKey($pending)->exists())->toBeTrue();
 
@@ -398,7 +398,7 @@ it('still refuses a mapping of a state that stays', function () use ($withoutPen
         ->assertUnprocessable();
 
     expect(array_keys($response->json('errors')))->toBe(["state_mapping.{$todo}"])
-        ->and(errorsAt($response, "state_mapping.{$todo}"))->toBe([__('field.mapping.unknown_state')])
+        ->and(errorsAt($response, "state_mapping.{$todo}"))->toBe([__('field.state_mapping.stays')])
         ->and($item->fresh()?->state_id)->toBe($todo)
         ->and(WorkflowState::query()->whereKey($pending)->exists())->toBeTrue();
 });

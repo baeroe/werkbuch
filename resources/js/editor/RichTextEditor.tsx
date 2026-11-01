@@ -253,8 +253,9 @@ function EditorBody({ value, onChange, preset, label, placeholder, autoFocus = f
         },
         handleDOMEvents: {
           keydown: (_view, event) => {
-            // ProseMirror would use up every Escape (it reads the legacy keyCode 27)
-            if (event.key === 'Escape') {
+            // ProseMirror would use up every Escape (it reads the legacy keyCode 27); one that ends an IME composition
+            // belongs to the composition, never to a dialog
+            if (event.key === 'Escape' && !event.isComposing) {
               const escape = latest.current.onEscape;
               if (escape) {
                 // Base UI dialogs and popups close on any Escape, preventDefault or not

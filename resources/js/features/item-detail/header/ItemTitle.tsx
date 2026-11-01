@@ -11,6 +11,7 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { ApiError } from '@/api/client';
 import { useEditReason } from '@/components/fields/itemData';
 import { cx } from '@/components/ui/cx';
+import { ariaKeyshortcuts } from '@/components/ui/Kbd';
 import { toast } from '@/components/ui/toast';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { useSettle } from '@/hooks/mutation';
@@ -154,7 +155,7 @@ export function ItemTitle({ item }: { item: WorkItem }) {
             ref={trigger}
             type="button"
             onClick={start}
-            aria-keyshortcuts="E"
+            aria-keyshortcuts={ariaKeyshortcuts(SHORTCUTS['item.title'].keys)}
             aria-describedby={hintId}
             className="-mx-1 cursor-text rounded-chip px-1 text-left text-balance transition-colors duration-120 hover:bg-hover"
           >

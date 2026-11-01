@@ -157,6 +157,7 @@ it('refuses Markdown that would take long or crash before it is parsed', functio
     })(), 'depth'],
     'a run of stars nesting a thousand marks' => [str_repeat('*', 2000).'a'.str_repeat('*', 2000), 'depth'],
     'code spans up to the limit' => [str_repeat('`a` ', intdiv(Schema::MAX_BYTES, 4)), 'size'],
+    'a text that is no UTF-8' => ["a\xffb", 'shape'],
 ]);
 
 it('reads Markdown at the limits that a document can hold', function () use ($read) {

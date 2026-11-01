@@ -11,8 +11,9 @@ use Illuminate\Database\Eloquent\Collection;
 use Lorisleiva\Actions\Concerns\AsAction;
 
 /**
- * Who watches a work item (spec 4.10), for everybody who sees it: the accounts with a subscription that was not
- * switched off (`unsubscribed_at`), by name and id, with their avatars for UserResource.
+ * Who watches a work item (spec 4.10), for everybody who sees it: the active accounts with a subscription that was not
+ * switched off (`unsubscribed_at`), by name and id, with their avatars for UserResource. A deactivated person keeps the
+ * row (it comes back with the account) but gets nothing and is no watcher meanwhile, as in the clickdummy.
  */
 final class ListSubscribers
 {
@@ -29,6 +30,7 @@ final class ListSubscribers
 
         return User::query()
             ->whereIn('id', $item->subscriptions()->whereNull('unsubscribed_at')->select('user_id'))
+            ->whereNull('disabled_at')
             ->with('media')
             ->orderBy('name')->orderBy('id')
             ->get();

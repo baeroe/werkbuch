@@ -178,6 +178,8 @@ final class ItemValue
 
         // any letters in host, path and query (müller.de, /straße), but a host, and no blanks or control characters; a
         // text that is no UTF-8 at all fails the match as well
+        // \p{Cf} also refuses ZWJ and ZWNJ (U+200D, U+200C), which IDNA allows in Persian or Indic names: on purpose, an
+        // address with invisible characters is the trap the rule is there for
         if (! is_array($parts) || ($parts['host'] ?? '') === '' || preg_match('/[\s\p{Z}\p{Cc}\p{Cf}]/u', $url) !== 0) {
             return new NormalizedValue(null, 'url_invalid');
         }

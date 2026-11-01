@@ -27,6 +27,13 @@ describe('parseKey', () => {
     expect(parseKey('ÄB-1')).toBeNull();
   });
 
+  it('reads numbers up to the column the server has, as ItemKey::parse does', () => {
+    expect(parseKey('WEB-4294967295')).toEqual({ identifier: 'WEB', number: 4294967295 });
+    expect(parseKey('WEB-4294967296')).toBeNull();
+    expect(parseKey('WEB-00000000001')).toBeNull();
+    expect(parseKey('WEB-99999999999')).toBeNull();
+  });
+
   it('rejects numbers that are not positive whole numbers', () => {
     expect(parseKey('WEB-0')).toBeNull();
     expect(parseKey('WEB--1')).toBeNull();

@@ -44,6 +44,14 @@ use SplStack;
  * - `>` before each line of a quote, alone on a blank one;
  * - tables with the first row as the header and `| --- |` below it (Markdown has no table without a header row);
  * - `~` in text escaped, so it never becomes a strike.
+ *
+ * What Markdown cannot carry and loses on the way there and back (JSON keeps all of it):
+ * - a hard break inside a heading (the heading ends there, the rest becomes a paragraph);
+ * - several blocks in a table cell (a list, a code block or a second paragraph flatten into its text);
+ * - empty paragraphs (Enter twice in the editor);
+ * - in a quote, the blanks of a line that has nothing else and a hard break that starts a paragraph (also inside a
+ *   code block in the quote);
+ * - a fence's info string that is no language (Schema::LANGUAGE_PATTERN, A150): the code block keeps no language.
  */
 final class Markdown
 {

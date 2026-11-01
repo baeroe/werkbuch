@@ -35,7 +35,7 @@ final class ListHistory
     use AsAction;
 
     /** The events of an item that are no history: watching is a setting of one person. */
-    public const LEFT_OUT = [EventType::WorkItemSubscribed, EventType::WorkItemUnsubscribed];
+    private const LEFT_OUT = [EventType::WorkItemSubscribed, EventType::WorkItemUnsubscribed];
 
     /**
      * @param  array<array-key, mixed>  $query  `cursor`, `per_page`
@@ -94,7 +94,8 @@ final class ListHistory
             $relation = $event->changes['relation'] ?? null;
             if ($relation !== null) {
                 $changes = $event->changes;
-                $changes['relation'] = ['old' => self::end($relation['old'], $others, $types), 'new' => self::end($relation['new'], $others, $types)];
+                // an end missing from an older or drifted snapshot reads as no end, never as an error
+                $changes['relation'] = ['old' => self::end($relation['old'] ?? null, $others, $types), 'new' => self::end($relation['new'] ?? null, $others, $types)];
                 $event->history_changes = $changes;
             }
         }

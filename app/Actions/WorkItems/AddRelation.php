@@ -126,6 +126,8 @@ final class AddRelation
         return WorkItemRelation::query()->where('type_id', $type->id)
             ->where(fn ($query) => $query->where($pair($source->id, $target->id))
                 ->when($type->inward_label === null, fn ($query) => $query->orWhere($pair($target->id, $source->id))))
+            // a locking read: it sees the latest commit even if a plain read started the snapshot before the locks
+            ->sharedLock()
             ->exists();
     }
 }

@@ -83,7 +83,9 @@ final class SaveProperty
 
             // an option that is no longer sent goes, unless items carry it: those are archived behind the others (spec 4.7)
             $removed = array_values(array_diff(array_keys($rows), array_column($valid['options'], 'existing')));
-            $used = $removed === [] ? [] : WorkItemValue::query()->whereIn('value_option_id', $removed)->distinct()->pluck('value_option_id')->all();
+            $carried = $removed === [] ? [] : WorkItemValue::query()->whereIn('value_option_id', $removed)->distinct()->pluck('value_option_id')->all();
+            // in their old order: the database answers the distinct ids in any order
+            $used = array_values(array_intersect($removed, $carried));
 
             $unused = array_values(array_diff($removed, $used));
 

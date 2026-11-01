@@ -141,12 +141,15 @@ test('changes assignee and priority with a and p', async ({ page }) => {
     // the palette is gone before the next key: while it closes, the page's keys still wait
     await expect(people).toBeHidden();
     await expect(field(fields, assignee, PEOPLE.e2e.name)).toBeVisible();
+    // the server's confirmation, not only the optimistic field
+    await expect(page.getByText(tr('en', 'items.commands.done', { key: item.key, what: tr('en', 'items.commands.what.assigned', { name: PEOPLE.e2e.name }) }))).toBeVisible();
 
     const priorities = await subList(page, 'p', 'shortcuts.item.priority');
     await page.keyboard.type('high');
     await page.keyboard.press('Enter');
     await expect(priorities).toBeHidden();
     await expect(field(fields, tr('en', 'items.fields.priority.label'), tr('en', 'priority.high'))).toBeVisible();
+    await expect(page.getByText(tr('en', 'items.commands.done', { key: item.key, what: tr('en', 'items.commands.what.priority', { priority: tr('en', 'priority.high') }) }))).toBeVisible();
   } finally {
     await cleanUp(page, identifier);
   }

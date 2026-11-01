@@ -131,6 +131,10 @@ it('lists the active watchers only', function () use ($web) {
     SetSubscription::run(actor($ben), $item, false);
     SetSubscription::run(actor($mara), $other, true);
     $outsider = User::factory()->create();
+    // a deactivated watcher keeps the row, but watches nothing meanwhile
+    $ida = memberOf($project, ProjectRole::Member, ['name' => 'Ida']);
+    SetSubscription::run(actor($ida), $item, true);
+    $ida->forceFill(['disabled_at' => now()])->save();
 
     expect(ListSubscribers::run(actor($outsider), $item)->pluck('name')->all())->toBe(['Anna', 'Zoe'])
         ->and(ListSubscribers::run(actor($mara), $other)->sole()->relationLoaded('media'))->toBeTrue()

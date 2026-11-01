@@ -31,8 +31,9 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * the last write wins (spec 4.8). The check runs under the lock of the item, so of two edits on the same version the
  * second one always sees the first.
  *
- * The transaction runs up to three times (`DB::transaction(…, 3)`): the shared lock of a parent after the own locks can
- * meet a deletion that locks the parent first and its children after (a deadlock Laravel retries).
+ * The transaction runs up to three times (`DB::transaction(…, 3)`): two updates that make each other's item the parent
+ * crosswise lock their own item and then the other's shared (a deadlock Laravel retries); so does an update that keeps
+ * its `parent_id` while that parent is deleted (the delete locks the parent, then its children).
  */
 final class UpdateWorkItem
 {

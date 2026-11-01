@@ -43,6 +43,13 @@ it('accepts project ids in capitals', function () {
     ])->assertCreated()->assertJsonPath('invitation.projects.0.project_id', $web->id);
 
     expect(Invitation::query()->sole()->projects)->toBe([['project_id' => $web->id, 'role' => 'member']]);
+
+    // once in capitals and once small is the same project twice
+    $twice = $this->postJson('/api/v1/invitations', [
+        'email' => 'ben@example.com', 'org_role' => 'member', 'projects' => [['project_id' => strtoupper($web->id), 'role' => 'member'], ['project_id' => $web->id, 'role' => 'admin']],
+    ])->assertUnprocessable();
+    expect(array_keys($twice->json('errors')))->toContain('projects.1.project_id')
+        ->and(Invitation::query()->count())->toBe(1);
 });
 
 it('invites without projects', function () {

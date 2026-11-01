@@ -39,8 +39,9 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * parent shared (ItemInput), and every field checked under them. A refusal leaves nothing behind: no item, no number
  * used up, no event.
  *
- * The transaction runs up to three times (`DB::transaction(…, 3)`): the shared lock of a parent after the own locks can
- * meet a deletion that locks the parent first and its children after (a deadlock Laravel retries).
+ * The transaction runs up to three times (`DB::transaction(…, 3)`), defensively: it holds the project `for update`, so
+ * a deletion (which needs the project shared) cannot meet it; the retry is there for any change that locks the parent
+ * row between the share lock of the organization and the parent's shared lock.
  */
 final class CreateWorkItem
 {

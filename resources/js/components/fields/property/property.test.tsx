@@ -221,7 +221,8 @@ describe('parse', () => {
     expect(parseTyped(effort, 'drei')).toEqual({ error: 'Nur eine Zahl eingeben, zum Beispiel 3,5', partial: false });
     expect(parseTyped({ ...effort, settings: {} }, '1,')).toEqual({ error: 'Nur eine Zahl eingeben, zum Beispiel 4', partial: true });
     expect(parseTyped(link, ' https://bäckerei-moos.example/a ')).toEqual({ value: 'https://bäckerei-moos.example/a' });
-    for (const text of ['example.com', 'ftp://example.com', 'https://example.com/a b']) {
+    // as the server refuses them: without //, with a zero width space or a C1 control, longer than 2048 characters
+    for (const text of ['example.com', 'ftp://example.com', 'https://example.com/a b', 'http:/x.de', 'https:x.de', 'https://exa\u200Bmple.com', 'https://example.com/\u0085', `https://example.com/${'a'.repeat(2029)}`]) {
       expect(parseTyped(link, text)).toEqual({ error: 'Die Adresse beginnt mit http:// oder https://, zum Beispiel https://example.com', partial: true });
     }
     expect(parseTyped(browser, '  Safari 18 ')).toEqual({ value: 'Safari 18' });
@@ -260,7 +261,11 @@ describe('PropertyField, typed', () => {
     expect(document.getElementById(input.getAttribute('aria-describedby')!)!.textContent).toBe('Name und Version.');
 
     await user.clear(input);
-    await user.type(input, '  Firefox 131 {Enter}');
+    // the Enter that ends an IME composition (Safari: keyCode 229) commits nothing
+    await user.type(input, '  Firefox 131 ');
+    fireEvent.keyDown(input, { key: 'Enter', keyCode: 229 });
+    expect(patches()).toEqual([]);
+    await user.keyboard('{Enter}');
     await waitFor(() => expect(patches()).toEqual([{ values: { browser: 'Firefox 131' } }]));
     expect(input.value).toBe('Firefox 131');
 

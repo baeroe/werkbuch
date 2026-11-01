@@ -66,6 +66,8 @@ function renderWith(
     'GET /api/v1/work-items': () => ({ body: list(items) }),
     ...Object.fromEntries(items.map((item) => [`GET /api/v1/work-items/${item.id}`, () => detail(item)])),
     ...Object.fromEntries(items.map((item) => [`PATCH /api/v1/work-items/${item.id}`, (body: unknown) => ({ body: { data: { ...item, ...(body as object) } } })])),
+    // the activity reads an empty history: no error state with its own "Erneut versuchen" and alert in these screens
+    ...Object.fromEntries(items.flatMap((item) => [item.id, item.key].map((ref) => [`GET /api/v1/work-items/${ref}/history`, () => ({ body: list([]) })]))),
     ...routes,
   });
   if (hold) {

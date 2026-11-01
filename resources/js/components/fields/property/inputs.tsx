@@ -103,7 +103,8 @@ function TypedEditor({ property, value, id, label, describedById, invalid, requi
       report(parseTyped(property, event.target.value));
     },
     onKeyDown: (event: KeyboardEvent) => {
-      if (event.nativeEvent.isComposing) return;
+      // Safari sends the Enter that ends a composition with isComposing false, but with keyCode 229
+      if (event.nativeEvent.isComposing || event.keyCode === 229) return;
       if (event.key === 'Enter' && (!multiline || event.metaKey || event.ctrlKey)) {
         // a kept value lets the Enter go on to a form around the field; a refused one keeps it in the field
         if (!commit()) event.preventDefault();

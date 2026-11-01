@@ -23,8 +23,11 @@ final class ItemPageController extends Controller
         $item = GetWorkItem::run(Actor::fromRequest($request), $key);
 
         if ($item->resolved_by_former_identifier) {
-            // permanent for people, never for caches: a rename back (A → B → A) turns the target into a former key
-            return redirect()->route('items.show', ['key' => $item->key], 301)->header('Cache-Control', 'no-store, private');
+            // permanent for people, never for caches: a rename back (A → B → A) turns the target into a former key; the
+            // query goes along, as the API's redirect keeps it
+            $query = $request->getQueryString();
+
+            return redirect()->to(route('items.show', ['key' => $item->key]).($query === null ? '' : "?{$query}"), 301)->header('Cache-Control', 'no-store, private');
         }
 
         return Inertia::render('Items/Show', ['itemKey' => $item->key]);

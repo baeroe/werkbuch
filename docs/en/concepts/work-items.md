@@ -261,7 +261,8 @@ WEB-47 is open and cannot be archived, so it keeps its priority too. The reasons
       "…": "…"
     }
   ],
-  "meta": { "per_page": 100, "next_cursor": null, "prev_cursor": null, "total": 9 }
+  "links": { "first": null, "last": null, "prev": null, "next": null },
+  "meta": { "path": "https://werkbuch.example.com/api/v1/work-items/APP-25/history", "per_page": 100, "next_cursor": null, "prev_cursor": null, "total": 9 }
 }
 ```
 

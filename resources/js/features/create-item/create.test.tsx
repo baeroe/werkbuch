@@ -199,6 +199,20 @@ describe('CreateItemDialog', () => {
     expect(within(dialog).getByRole('combobox', { name: /^Projekt/ }).textContent).toContain('Kunden-App');
   });
 
+  it('drops the refusal of a property the new type does not have when the type changes', async () => {
+    const user = userEvent.setup();
+    answerCreate = () => invalid({ 'values.approved': ['„Abgenommen“ fehlt.'] });
+    const { dialog, title } = await openDialog({ project_id: 'p_app', type_id: 't_wish' });
+
+    await user.type(title, 'Export als CSV');
+    await modEnter();
+    expect(await within(dialog).findByText('„Abgenommen“ fehlt.')).toBeTruthy();
+    // a task has no sign-off: the refusal does not move to the banner on top
+    await choose(user, within(dialog).getByRole('combobox', { name: /^Typ/ }), 'Task');
+    await waitFor(() => expect(within(dialog).queryByText('„Abgenommen“ fehlt.')).toBeNull());
+    expect(within(dialog).queryByRole('alert')).toBeNull();
+  });
+
   it('marks a missing required property at its field and keeps the dialog open', async () => {
     const user = userEvent.setup();
     answerCreate = (body) =>

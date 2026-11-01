@@ -127,6 +127,9 @@ test('creates an item of a type with a required property', async ({ page }) => {
     await expect(dialog).toBeHidden();
     expect((await readItem(page, `${identifier}-1`)).values).toEqual({ [key]: 'Mara' });
   } finally {
+    // the item first: while the purge waits in the queue it would carry the type, and deleting the type would only
+    // archive it
+    if (identifier) await api(page, 'DELETE', `/api/v1/work-items/${identifier}-1`);
     if (identifier) await removeE2eProject(page, identifier);
     await removeCatalogEntries(page, 'work-item-types', 'name', prefix);
     await removeCatalogEntries(page, 'properties', 'label', prefix);
