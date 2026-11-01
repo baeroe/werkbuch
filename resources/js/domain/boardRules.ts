@@ -7,6 +7,8 @@
  *   type, project or parent a card only changes its place within its column
  * - the reason of a refusal is a code with parameters (`BoardReason`); the sentence is the key
  *   `items.board.reason.<code>`, filled with the parameters, for the toast and the column under the dragged card
+ *   (`edit` carries the finished sentence of the permissions as `:reason`; who cannot take an item is `assignBlocker`'s
+ *   own reason, passed through as it is)
  * - the order within a column is the rank (`rankForSlot`), quick add starts in the column's status only where the
  *   workflow allows the move from the start status, like the API (`createWorkItem`).
  */
@@ -34,10 +36,10 @@ export interface BoardReason {
     | 'single_column'
     | 'label_locked'
     | 'edit'
-    | 'assign'
     | 'first_column'
     | 'last_column'
     | 'workflow_loading'
+    | 'no_room'
     | 'state_unknown'
     | 'start_transition'
     | 'start_category'
@@ -59,8 +61,8 @@ export interface BoardRules {
   columnLabel: (key: string) => string;
   /** Why the person cannot change the item (a missing right, archived), as a sentence, or null. */
   editReason?: (item: ListedItem) => string | null;
-  /** Why a person cannot take the item, as a sentence, or null (assignee boards). */
-  assignReason?: (userId: string, item: ListedItem) => string | null;
+  /** Why a person cannot take the item, or null (assignee boards): `assignBlocker` with what the board knows. */
+  assignReason?: (userId: string, item: ListedItem) => BoardReason | null;
 }
 
 /** The fields a move changes. */
@@ -131,7 +133,7 @@ export function checkMove(item: ListedItem, from: string, to: string, rules: Boa
     case 'assignee': {
       const assignee = to === NONE_KEY ? null : to;
       const blocked = assignee ? rules.assignReason?.(assignee, item) : null;
-      return blocked ? { ok: false, reason: reason('assign', { reason: blocked }) } : { ok: true, patch: { assignee_id: assignee }, closing: null };
+      return blocked ? { ok: false, reason: blocked } : { ok: true, patch: { assignee_id: assignee }, closing: null };
     }
     default:
       // the other groupings only change the place within the column (a board by label is locked above)
@@ -217,7 +219,7 @@ export function quickAddFields(columnKey: string, ctx: QuickAddContext): { ok: t
     case 'assignee': {
       if (columnKey === NONE_KEY) return { ok: true, fields };
       const blocked = ctx.assignReason?.(columnKey, { project_id: project.id } as ListedItem);
-      return blocked ? { ok: false, reason: reason('assign', { reason: blocked }) } : { ok: true, fields: { ...fields, assignee_id: columnKey } };
+      return blocked ? { ok: false, reason: blocked } : { ok: true, fields: { ...fields, assignee_id: columnKey } };
     }
     case 'type':
       if (!project.enabled_type_ids.includes(columnKey)) {

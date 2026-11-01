@@ -37,6 +37,7 @@ import type { ListedItem } from '@/types';
 import { BlockedHint } from './BlockedHint';
 import { ItemKey } from './ItemKey';
 import { ItemLink, linkFocusRing } from './ItemLink';
+import { listItemName } from './names';
 
 /** The display fields a row knows (besides `title` and `property:<key>`), with their names for the display menu. */
 export const ROW_FIELDS = {
@@ -55,10 +56,6 @@ export const ROW_FIELDS = {
 export type RowField = keyof typeof ROW_FIELDS;
 
 const chip = 'inline-flex h-6 max-w-full min-w-0 shrink-0 items-center gap-1 rounded-chip border border-line bg-surface px-1.5 text-sm text-ink';
-
-/** The name of a row or card of a list with a keyboard cursor: key, title, and whether it is selected. */
-export const listItemName = (item: Pick<ListedItem, 'key' | 'title'>, selected: boolean, ...more: string[]): string =>
-  [t('items.row.name', { key: item.key, title: item.title }), ...more, ...(selected ? [t('items.row.selected')] : [])].join(', ');
 
 type ItemRowBaseProps = Omit<ComponentProps<'div'>, 'children'> & {
   item: ListedItem;

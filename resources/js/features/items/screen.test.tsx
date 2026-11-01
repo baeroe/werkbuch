@@ -98,6 +98,13 @@ beforeAll(() => {
     },
   });
   Object.defineProperty(window, 'scrollY', { configurable: true, get: () => scrollY });
+  // a column of the board is a box of its own, 600 px high
+  Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+    configurable: true,
+    get(this: HTMLElement) {
+      return this.hasAttribute('data-board-list') ? 600 : 0;
+    },
+  });
   Element.prototype.getBoundingClientRect = function (this: Element) {
     return this.tagName === 'UL' ? new DOMRect(0, -scrollY, 1024, 0) : boundingRect.call(this);
   };
@@ -111,6 +118,7 @@ beforeAll(() => {
 
 afterAll(() => {
   Object.defineProperty(HTMLElement.prototype, 'offsetHeight', offsetHeight);
+  Reflect.deleteProperty(HTMLElement.prototype, 'clientHeight');
   if (scrollY0) Object.defineProperty(window, 'scrollY', scrollY0);
   Reflect.deleteProperty(document.documentElement, 'scrollHeight');
   Element.prototype.getBoundingClientRect = boundingRect;
@@ -390,7 +398,8 @@ describe('the item list screen', () => {
     expect(inertia.get).toHaveBeenLastCalledWith('/projects/WEB?layout=board', {}, expect.objectContaining({ preserveState: true, replace: true }));
     const switches = screen.getAllByRole('group', { name: 'Layout' });
     await waitFor(() => expect(within(switches[0]!).getByRole('button', { name: /Board/ }).getAttribute('aria-pressed')).toBe('true'));
-    expect(document.activeElement?.closest('[data-row-id]')).toBe(rowOf(1));
+    // the board loads as a chunk of its own: the focus waits for it and goes to the card of the cursor
+    await waitFor(() => expect(document.activeElement?.getAttribute('data-card-id')).toBe('wi_web_1'));
 
     press('3');
     expect(inertia.url).toBe('/projects/WEB?layout=table');
@@ -399,7 +408,7 @@ describe('the item list screen', () => {
     // back to the base: nothing left in the address
     press('1');
     expect(inertia.url).toBe('/projects/WEB');
-    expect(document.activeElement?.closest('[data-row-id]')).toBe(rowOf(1));
+    await waitFor(() => expect(document.activeElement?.closest('[data-row-id]')).toBe(rowOf(1)));
 
     // the switch itself, by click
     fireEvent.click(within(screen.getAllByRole('group', { name: 'Layout' })[0]!).getByRole('button', { name: /Tabelle/ }));

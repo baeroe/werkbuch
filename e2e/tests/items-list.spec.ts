@@ -113,11 +113,12 @@ test('switches to the board with 2 and back with 1, also in the address', async 
   const layouts = page.getByRole('group', { name: tr('en', 'items.screen.layout') }).filter({ visible: true });
   await expect(layouts.getByRole('button', { name: new RegExp(tr('en', 'items.layout.board')) })).toHaveAttribute('aria-pressed', 'true');
 
-  // a reload keeps the layout of the address
+  // a reload keeps the layout of the address: the items stand as cards
   await page.reload();
   await expect(layouts.getByRole('button', { name: new RegExp(tr('en', 'items.layout.board')) })).toHaveAttribute('aria-pressed', 'true');
-  await expect(row(page, `${identifier}-1`)).toBeVisible();
-  await tabTo(page, row(page, `${identifier}-1`), { max: 80 });
+  const card = page.getByRole('article', { name: new RegExp(`^${identifier}-1 `) });
+  await expect(card).toBeVisible();
+  await tabTo(page, card, { max: 80 });
 
   await page.keyboard.press('1');
   await expect(page).toHaveURL(new RegExp(`/projects/${identifier}$`));

@@ -84,8 +84,10 @@ describe('dropping a card on other columns', () => {
   });
 
   it('refuses a person who cannot take the item', () => {
-    const blocked = rules('assignee', { assignReason: (userId) => (userId === 'u_sven' ? 'Sven Brandt hat keinen Zugriff auf OPS.' : null) });
-    expect(checkMove(webItem('std_todo'), 'none', 'u_sven', blocked)).toEqual({ ok: false, reason: { code: 'assign', params: { reason: 'Sven Brandt hat keinen Zugriff auf OPS.' } } });
+    const why = { code: 'not_member' as const, params: { name: 'Sven Brandt', project: 'WEB' } };
+    const blocked = rules('assignee', { assignReason: (userId) => (userId === 'u_sven' ? why : null) });
+    // the reason of assignBlocker goes through as it is, not wrapped once more
+    expect(checkMove(webItem('std_todo'), 'none', 'u_sven', blocked)).toEqual({ ok: false, reason: why });
   });
 
   it('keeps cards in their column when the grouping is not one a drop can change', () => {
@@ -282,10 +284,10 @@ describe('the remaining refusals', () => {
 
   it('refuses a quick add for a person who cannot take the item', () => {
     const web = { id: 'p_web', identifier: 'WEB', enabled_type_ids: [], default_type_id: 't_task' } as unknown as Project;
-    const blocked = rules('assignee', { assignReason: () => 'kein Zugriff' });
+    const blocked = rules('assignee', { assignReason: () => ({ code: 'deactivated', params: { name: 'Sven Brandt' } }) });
     expect(quickAddFields('u_sven', { ...blocked, project: web, workflow: standard })).toEqual({
       ok: false,
-      reason: { code: 'assign', params: { reason: 'kein Zugriff' } },
+      reason: { code: 'deactivated', params: { name: 'Sven Brandt' } },
     });
   });
 

@@ -24,6 +24,8 @@ type ResolutionRequest = {
   target: State;
   from?: { category: StateCategory; resolutionId: string | null };
   onConfirm: (resolutionId: string | null) => void;
+  /** The question closed without a choice (Cancel, Escape). */
+  onCancel?: () => void;
 };
 type TypeRequest = { kind: 'type'; item: ListedItem; target: WorkItemType; hasChildren?: boolean };
 
@@ -60,10 +62,26 @@ function set(next: typeof state) {
   listeners.forEach((listener) => listener());
 }
 
-/** Asks for the resolution of a move into `target`; `onConfirm` gets the choice, nothing happens on Cancel. */
+/** Asks for the resolution of a move into `target`; `onConfirm` gets the choice, `onCancel` hears a close without one. */
 export function askResolution(request: Omit<ResolutionRequest, 'kind'>): void {
   remember();
-  set({ request: { kind: 'resolution', ...request }, open: true });
+  let answered = false;
+  set({
+    request: {
+      kind: 'resolution',
+      ...request,
+      onConfirm: (resolutionId) => {
+        answered = true;
+        request.onConfirm(resolutionId);
+      },
+      onCancel: () => {
+        if (answered) return;
+        answered = true;
+        request.onCancel?.();
+      },
+    },
+    open: true,
+  });
 }
 
 /**
@@ -87,7 +105,9 @@ const snapshot = () => state;
 export function ItemDialogsHost() {
   const { request, open } = useSyncExternalStore(subscribe, snapshot, snapshot);
   const close = (next: boolean) => {
-    if (!next) set({ ...state, open: false });
+    if (next) return;
+    set({ ...state, open: false });
+    if (request?.kind === 'resolution') request.onCancel?.();
   };
   if (!request) return null;
   return (

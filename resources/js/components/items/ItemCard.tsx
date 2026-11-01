@@ -30,7 +30,7 @@ import { t } from '@/lib/i18n';
 import type { ItemRef, ListedItem } from '@/types';
 import { BlockedHint } from './BlockedHint';
 import { isPlainClick, ItemLink, linkFocusRing } from './ItemLink';
-import { listItemName } from './ItemRowBase';
+import { listItemName } from './names';
 
 /** The fields of the display a card shows when it is given none. */
 const CARD_FIELDS = ['labels', 'priority', 'due_date', 'assignee'];

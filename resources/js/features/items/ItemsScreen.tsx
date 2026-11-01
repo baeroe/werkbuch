@@ -78,6 +78,9 @@ export type ItemsScreenProps = {
   viewId?: string;
 };
 
+/** How many frames the focus waits for a layout that is still loading (about five seconds). */
+const RESCUE_FRAMES = 300;
+
 /** What takes the focus when the element that had it went away: the list's tab stop, else the toolbar. */
 const FOCUS_TARGETS = '[data-nav-target][tabindex="0"], [data-group-key][tabindex="0"]';
 
@@ -106,13 +109,15 @@ function useFocusRescue(root: RefObject<HTMLElement | null>, layout: Display['la
     const fromRow = last.current.closest('[data-nav-target]') !== null;
     last.current = null;
     if (fromRow && !switched) return;
-    // the rows of a layout render a frame later (they measure themselves): wait a few frames for the list's tab stop
+    // the rows of a layout render a frame later (they measure themselves): wait a few frames for the list's tab stop,
+    // and as long as a skeleton stands for it (a layout that comes as a chunk of its own, the board, is loading)
     let attempts = 0;
     const rescue = () => {
       if (document.activeElement !== null && document.activeElement !== document.body) return;
       const target = root.current?.querySelector<HTMLElement>(FOCUS_TARGETS);
+      const loading = root.current?.querySelector('[data-skeleton]') != null;
       if (target) target.focus({ preventScroll: true });
-      else if (attempts++ < 5) requestAnimationFrame(rescue);
+      else if (attempts++ < 5 || (loading && attempts < RESCUE_FRAMES)) requestAnimationFrame(rescue);
       else root.current?.querySelector<HTMLElement>('[data-items-toolbar] button:not([disabled])')?.focus({ preventScroll: true });
     };
     rescue();

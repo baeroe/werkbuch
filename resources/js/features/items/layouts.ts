@@ -27,7 +27,7 @@
  * - Registers no item commands of its own; keeps chips and pickers out of the tab order.
  */
 
-import type { ComponentType } from 'react';
+import { lazy, type ComponentType } from 'react';
 import type { ApiError } from '@/api/client';
 import type { TranslationKey } from '@/lib/i18n';
 import type { ShortcutId } from '@/lib/shortcuts/catalog';
@@ -76,10 +76,13 @@ export interface LayoutProps {
   onCursor(id: string | null): void;
 }
 
-/** The layout of each `Display['layout']`; board, table and timeline get their own with their tasks. */
+/** The board comes as a chunk of its own, with its first use (the screen shows the layout in a `Suspense`). */
+const BoardLayout = lazy(() => import('./board/BoardLayout').then((module) => ({ default: module.BoardLayout })));
+
+/** The layout of each `Display['layout']`; table and timeline get their own with their tasks. */
 export const layouts: Record<Display['layout'], ComponentType<LayoutProps>> = {
   list: ListLayout,
-  board: ListLayout,
+  board: BoardLayout,
   table: ListLayout,
   timeline: ListLayout,
 };

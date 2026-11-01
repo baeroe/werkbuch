@@ -23,7 +23,7 @@ import { nextInOrder, selectRange, toggleId } from './selection';
 /* ------------------------------------------------------------------------------- focus */
 
 /** No element in particular has the focus: the page itself or the main area. */
-function focusIsNeutral(): boolean {
+export function focusIsNeutral(): boolean {
   const element = document.activeElement;
   return !element || element === document.body || element.id === 'main';
 }
@@ -67,6 +67,11 @@ export interface SelectionOptions {
   container: RefObject<HTMLElement | null>;
   /** ↓/↑ (with and without ⇧) move the cursor; false where they belong to the layout itself (the table's grid, K19). */
   arrows?: boolean;
+  /**
+   * The item j/k and ↓/↑ go to from `current`, where the layout steps in its own way (the board stays within the
+   * column); without it the next in `order`. `null` stays where it is.
+   */
+  step?: (current: string | null, step: 1 | -1) => string | null;
 }
 
 /** Registers the cursor and selection keys of a layout; answers what a click with or without ⇧ does. */
@@ -83,8 +88,8 @@ export function useSelection(options: SelectionOptions): { clickSelect: (id: str
   const inLayout = () => focusIsNeutral() || Boolean(latest.current.container.current?.contains(document.activeElement));
 
   function move(step: 1 | -1, extend: boolean) {
-    const { order: ids, cursorId: current, onCursor, focus, onSelect, selection: chosen } = latest.current;
-    const next = nextInOrder(ids, current, step);
+    const { order: ids, cursorId: current, onCursor, focus, onSelect, selection: chosen, step: stepOf } = latest.current;
+    const next = stepOf ? stepOf(current, step) : nextInOrder(ids, current, step);
     if (!next) return;
     if (extend) {
       // the range grows from where it started (the cursor when nothing was chosen yet)
