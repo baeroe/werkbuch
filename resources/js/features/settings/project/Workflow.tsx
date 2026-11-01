@@ -117,7 +117,8 @@ export function Workflow({ project, canManage }: ProjectSectionProps) {
     const counted = await usage.refetch();
     setCounting(false);
     const counts = counted.data;
-    if (!counts) {
+    // a failed recount keeps the data of the last one: old numbers would mislead the dialog
+    if (counted.isError || !counts) {
       notifyError(t('settings.project.workflow.not_counted'), counted.error, () => void ask());
       return;
     }

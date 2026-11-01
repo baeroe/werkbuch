@@ -385,6 +385,97 @@ describe('Description', () => {
     expect(descriptionSaves()[2]).toEqual(['Erstens. Zweitens. Beim Absenden kommt die Mail zweimal an.', 4]);
   });
 
+  it('forgets an open conflict once the retry of "Meine Fassung übernehmen" went through', async () => {
+    const user = userEvent.setup();
+    const theirs = { ...web47, description_json: doc('Ida hat das schon geklärt.'), description_version: 4 };
+    let answers = ['conflict', 'down'];
+    renderWith(<ItemPage itemKey="WEB-47" />, {
+      routes: {
+        'PATCH /api/v1/work-items/wi_web_47': (body) => {
+          const next = answers.shift();
+          if (next === 'conflict') return problem(409, 'description_conflict', { detail: 'Ida Brenner hat die Beschreibung inzwischen geändert.', current: theirs });
+          if (next === 'down') return problem(503, 'service_unavailable');
+          return { body: { data: { ...theirs, description_json: (body as { description_json: RichText }).description_json, description_version: 5 } } };
+        },
+      },
+    });
+    const { section, editor } = await descriptionEditor();
+    paste(editor, 'Meine Fassung. ');
+    press('Enter', { ctrlKey: true }, editor);
+    const banner = await within(section).findByRole('alert');
+
+    // keep mine meets a 503; its retry from the toast goes through: nothing is open anymore, leaving asks nothing
+    await user.click(within(banner).getByRole('button', { name: 'Meine Fassung übernehmen' }));
+    const failed = await waitFor(() => {
+      expect(lastToast()?.action?.label).toBe('Erneut versuchen');
+      return lastToast()!;
+    });
+    answers = [];
+    act(() => runToastAction(failed.id));
+    await waitFor(() => expect(within(section).getByRole('status').textContent).toBe('Gespeichert'));
+    const leaving = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(leaving);
+    expect(leaving.defaultPrevented).toBe(false);
+  });
+
+  it('saves what was typed during the last save of a view that is gone at once, and asks before leaving until then', async () => {
+    const view = renderWith(<ItemPeek itemId="wi_web_47" />);
+    const { editor } = await descriptionEditor();
+    const gate = holdNextPatch();
+    paste(editor, 'Erstens. ');
+    press('Enter', { ctrlKey: true }, editor);
+    await waitFor(() => expect(gate.held()).toBe(true));
+    // typed on while the save is on its way, then the preview closes
+    paste(editor, 'Zweitens. ');
+    view.unmount();
+    gate.release();
+
+    // the rest goes at once, not after the pause: the guard never drops in between
+    await waitFor(() => expect(descriptionSaves()).toHaveLength(2), { timeout: DESCRIPTION_PAUSE_MS / 2 });
+    expect(descriptionSaves()[1]).toEqual(['Erstens. Zweitens. Beim Absenden kommt die Mail zweimal an.', 4]);
+    await waitFor(() => {
+      const after = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(after);
+      expect(after.defaultPrevented).toBe(false);
+    });
+  });
+
+  it('keeps the typed text to copy when the item is archived meanwhile, and sends it no more', async () => {
+    const user = userEvent.setup();
+    renderWith(<ItemPage itemKey="WEB-47" />, {
+      routes: {
+        'PATCH /api/v1/work-items/wi_web_47': () => {
+          // someone archived the item in between
+          items = items.map((entry) => (entry.id === web47.id ? { ...entry, state_id: 'std_done', archived_at: '2026-11-01T09:00:00Z' } : entry));
+          return problem(409, 'archived', { detail: 'WEB-47 ist archiviert und schreibgeschützt.' });
+        },
+      },
+    });
+    const { section, editor } = await descriptionEditor();
+    paste(editor, 'Nicht verlieren. ');
+    press('Enter', { ctrlKey: true }, editor);
+
+    // the editor gives way to the stored text; the typed one stays above it, read-only, with copy and discard
+    const parked = await within(section).findByRole('alert');
+    expect(parked.textContent).toContain('Dein Text ist nicht gespeichert');
+    expect(parked.textContent).toContain('WEB-47 ist archiviert und schreibgeschützt. Stelle es zuerst wieder her.');
+    expect(parked.textContent).toContain('Nicht verlieren. Beim Absenden kommt die Mail zweimal an.');
+    expect(within(section).queryByRole('textbox')).toBeNull();
+    expect(within(parked).getByRole('button', { name: 'Kopieren' })).toBeTruthy();
+    const leaving = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(leaving);
+    expect(leaving.defaultPrevented).toBe(true);
+    // leaving the field sends nothing more: the server would refuse it
+    fireEvent.blur(parked);
+    expect(descriptionSaves()).toHaveLength(1);
+
+    await user.click(within(parked).getByRole('button', { name: 'Verwerfen' }));
+    await waitFor(() => expect(within(section).queryByRole('alert')).toBeNull());
+    const after = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(after);
+    expect(after.defaultPrevented).toBe(false);
+  });
+
   it('saves what was typed after a failed save once its retry went through', async () => {
     let down = true;
     renderWith(<ItemPage itemKey="WEB-47" />, {

@@ -655,6 +655,25 @@ describe('the workflow editor', () => {
     expect(callsTo('PUT', '/api/v1/workflows/wf_standard')).toHaveLength(1);
   });
 
+  it('does not ask with the old numbers when a later count fails', async () => {
+    const user = userEvent.setup();
+    let fail = false;
+    renderAt('/settings/workflows?workflow=wf_standard', {
+      overrides: { 'GET /api/v1/state-usage': () => (fail ? unavailable() : { body: { data: [{ state_id: 'std_pending', items: 3 }] } }) },
+    });
+
+    await user.click(await screen.findByRole('button', { name: 'Pending entfernen' }));
+    await user.click(save());
+    await user.click(within(await screen.findByRole('dialog', { name: 'Status ersetzen' })).getByRole('button', { name: 'Abbrechen' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    fail = true;
+    await user.click(save());
+    await waitFor(() => expect(toastNamed('Die Items der entfernten Status konnten nicht gezählt werden')).toBeDefined());
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(callsTo('PUT', '/api/v1/workflows/wf_standard')).toHaveLength(0);
+  });
+
   it('starts a matrix with everything allowed when a free workflow gets one, and changes shape, description and default', async () => {
     const user = userEvent.setup();
     renderAt('/settings/workflows?workflow=wf_spare');

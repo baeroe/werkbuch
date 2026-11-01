@@ -207,7 +207,8 @@ function EditorForm({ initial, existing, projects, readOnlyReason, focusTitle, m
       setCounting(true);
       const counted = await usage.refetch();
       setCounting(false);
-      if (!counted.data) {
+      // a failed recount keeps the data of the last one: old numbers would mislead the dialog
+      if (counted.isError || !counted.data) {
         notifyError(t('settings.workflows.editor.usage_failed'), counted.error, () => void submit());
         return;
       }

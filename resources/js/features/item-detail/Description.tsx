@@ -15,12 +15,20 @@
  * word when the view goes away: what is typed is saved then; a conflict that save meets (or one the banner showed as
  * the view closed) raises a toast naming the item, whose "Öffnen" brings it back in the preview with the banner; and
  * while a conflict is open or a save is on its way, leaving or reloading the page asks first (`beforeunload`, kept at
- * module level: it outlives the view). Both buttons of the banner give the focus back to the editor.
+ * module level: it outlives the view). Both buttons of the banner give the focus back to the editor. What was typed
+ * on while the last save of a view that is gone was on its way is saved at once, not after the pause, so the guard
+ * stays up until it answers.
+ *
+ * Archived meanwhile, or the edit right gone while text is typed (A154): the editor gives way to the stored text, and
+ * the unsaved text stays above it, read-only, with "Kopieren" and "Verwerfen"; it is not sent again (the server would
+ * refuse it), and leaving the page asks while it stands. What it does not cover: a save of a view that is gone that
+ * fails (5xx) lives on only in the retry of the error toast (deferred, see the rulings).
  */
 
 import { RotateCw } from 'lucide-react';
 import type { Editor } from '@tiptap/react';
 import { useEffect, useId, useRef, useState } from 'react';
+import { CopyButton } from '@/features/settings/tokens/CopyButton';
 import { ApiError } from '@/api/client';
 import { useEditReason } from '@/components/fields/itemData';
 import { Banner } from '@/components/ui/Banner';
@@ -30,6 +38,7 @@ import { isEmptyDoc, RichTextEditor } from '@/editor/RichTextEditor';
 import { RichTextView } from '@/editor/RichTextView';
 import { useUpdateWorkItem } from '@/hooks/workItems';
 import { t } from '@/lib/i18n';
+import { docToText } from '@/lib/richtext';
 import { useUiStore } from '@/store/ui';
 import type { RichText, WorkItem, WorkItemDetail } from '@/types';
 import { focusWhenLost, Section, useUnsavedGuard } from './shared';
@@ -98,6 +107,7 @@ function announceLeftConflict(item: Pick<WorkItem, 'id' | 'key'>, message: strin
 export function Description({ detail }: { detail: WorkItemDetail }) {
   const { item } = detail;
   const reason = useEditReason(item);
+  const editable = useRef(reason === null);
   const update = useUpdateWorkItem();
   const stored = item.description_json;
 
@@ -133,9 +143,12 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
   /** Whether the view is still there: a conflict met afterwards is announced by a toast. */
   const mounted = useRef(false);
   const editor = useRef<Editor | null>(null);
+  /** The text that could not be saved anymore, selected when copying fails. */
+  const parked = useRef<HTMLDivElement>(null);
   const latestItem = useRef(item);
   useEffect(() => {
     latestItem.current = item;
+    editable.current = reason === null;
   });
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -157,7 +170,8 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
   const save = useRef(async (_options?: { force?: boolean }) => {});
   save.current = async ({ force = false } = {}) => {
     clearTimeout(timer.current);
-    if (inConflict.current || inFlight.current) return;
+    // archived or the right gone: the text stays above the stored one (A154), the server would refuse it
+    if (inConflict.current || inFlight.current || !editable.current) return;
     const doc = latest.current;
     if (!force && (!dirty.current || same(doc, held.current))) {
       // nothing typed, or typed back to what the server holds
@@ -199,7 +213,9 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
       // the save ran as the view went away (a link, the preview closing): only the toast can say it now
       if (!mounted.current) announceLeftConflict(item, conflicted.message);
     } else if (dirty.current && !same(latest.current, doc)) {
-      timer.current = setTimeout(() => void save.current(), DESCRIPTION_PAUSE_MS);
+      // typed on meanwhile; with the view gone at once, so the leave guard (pendingSaves) stays up for it
+      if (mounted.current) timer.current = setTimeout(() => void save.current(), DESCRIPTION_PAUSE_MS);
+      else void save.current();
     }
   };
 
@@ -223,6 +239,8 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
       dirty.current = false;
       setUnsaved(false);
       setState('saved');
+      // "Meine Fassung übernehmen" that failed and went through on retry: no conflict left to ask about on unload
+      dropConflict(item.id);
     } else {
       clearTimeout(timer.current);
       timer.current = setTimeout(() => void save.current(), DESCRIPTION_PAUSE_MS);
@@ -269,6 +287,19 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
     focusEditor();
   }
 
+  /** "Verwerfen" of the text that could not be saved anymore: the stored description is all there is. */
+  function discardParked() {
+    dropConflict(item.id);
+    inConflict.current = false;
+    dirty.current = false;
+    latest.current = stored;
+    held.current = stored;
+    setDraft(stored);
+    setConflict(null);
+    setState('idle');
+    setUnsaved(false);
+  }
+
   function keepMine({ current }: Conflict) {
     // save over the newer version: based on it now; the history keeps the other one
     base.current = current.description_version;
@@ -300,6 +331,20 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
             </Button>
             <Button variant="primary" size="sm" onClick={() => keepMine(conflict)}>
               {t('items.detail.description.keep_mine')}
+            </Button>
+          </div>
+        </Banner>
+      )}
+      {reason && (unsaved || conflict) && (
+        <Banner tone="danger" role="alert" title={t('items.detail.description.parked')} className="mt-2">
+          <p>{reason}</p>
+          <div ref={parked} className="mt-2 rounded-md border border-line bg-surface p-2">
+            {draft && !isEmptyDoc(draft) ? <RichTextView value={draft} preset="description" /> : <p className="text-muted">{t('items.detail.description.empty')}</p>}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <CopyButton text={docToText(draft)} target={() => parked.current} size="sm" />
+            <Button variant="secondary" size="sm" onClick={discardParked}>
+              {t('items.detail.description.discard')}
             </Button>
           </div>
         </Banner>

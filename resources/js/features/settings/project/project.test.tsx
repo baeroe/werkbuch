@@ -898,6 +898,24 @@ describe('Workflow', () => {
     expect(await screen.findByRole('dialog', { name: 'Zu „Agentur-Freigabe“ wechseln' })).toBeTruthy();
   });
 
+  it('does not ask with the old numbers when a later count fails', async () => {
+    const user = userEvent.setup();
+    let fail = false;
+    renderSettings('workflow', { ...switchable(), 'GET /api/v1/state-usage': () => (fail ? unavailable() : { body: { data: [{ state_id: 'std_todo', items: 1 }] } }) });
+
+    await chooseAgency(user);
+    const open = screen.getByRole('button', { name: /Workflow wechseln …/ });
+    await user.click(open);
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Abbrechen' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    // the second count fails: the cache still holds the first numbers, the dialog must not open with them
+    fail = true;
+    await user.click(open);
+    await waitFor(() => expect(toastNamed('Die Items des Projekts konnten nicht gezählt werden')).toBeTruthy());
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
   it('adds the rows of the states the server names in its 422, marked, and switches with them', async () => {
     const user = userEvent.setup();
     let refuse = true;
