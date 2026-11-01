@@ -432,7 +432,7 @@
     "items.create.failed": "Item nicht angelegt",
     "items.create.load_failed": "Das Formular ließ sich nicht laden: :message",
     "items.create.loading": "Formular wird geladen …",
-    "items.create.none.description": "In keinem Projekt hast du die Rolle Member oder Admin. Bitte eine Admin des Projekts, dich aufzunehmen.",
+    "items.create.none.description": "Du kannst gerade in keinem Projekt Items anlegen.",
     "items.create.none.title": "Hier kannst du kein Item anlegen",
     "items.create.open": "Öffnen",
     "items.create.parked": "Entwurf verworfen",

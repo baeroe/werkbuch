@@ -432,7 +432,7 @@
     "items.create.failed": "Item not created",
     "items.create.load_failed": "The form could not be loaded: :message",
     "items.create.loading": "Loading the form …",
-    "items.create.none.description": "You have the role Member or Admin in no project. Ask an admin of the project to add you.",
+    "items.create.none.description": "You cannot create items in any project right now.",
     "items.create.none.title": "You cannot create an item here",
     "items.create.open": "Open",
     "items.create.parked": "Draft discarded",

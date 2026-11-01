@@ -755,7 +755,7 @@ describe('CreateItemDialog', () => {
     renderWith(<CreateItemDialog open defaults={null} onOpenChange={vi.fn()} />);
     const dialog = await screen.findByRole('dialog', { name: 'Neues Item' });
     expect(await within(dialog).findByText('Hier kannst du kein Item anlegen')).toBeTruthy();
-    expect(within(dialog).getByText('In keinem Projekt hast du die Rolle Member oder Admin. Bitte eine Admin des Projekts, dich aufzunehmen.')).toBeTruthy();
+    expect(within(dialog).getByText('Du kannst gerade in keinem Projekt Items anlegen.')).toBeTruthy();
     expect(within(dialog).getByRole('button', { name: /^Anlegen/ }).getAttribute('aria-disabled')).toBe('true');
   });
 });
