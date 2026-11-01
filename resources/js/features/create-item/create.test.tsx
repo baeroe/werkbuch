@@ -183,6 +183,45 @@ afterEach(() => {
 /* ------------------------------------------------------------------------- tests */
 
 describe('CreateItemDialog', () => {
+  it('keeps the dialog when the project of the draft disappears and says so', async () => {
+    const user = userEvent.setup();
+    const { dialog, title } = await openDialog({ project_id: 'p_app', type_id: 't_wish' });
+    await user.type(title, 'Export als CSV');
+
+    // the project is archived while the dialog is open
+    projects = [web, { ...app, archived_at: '2026-10-01T00:00:00Z' }, ops];
+    await act(() => client.invalidateQueries());
+    const project = await within(dialog).findByRole('combobox', { name: /^Projekt/ });
+    await waitFor(() => expect(project.textContent).toContain('Website-Relaunch'));
+    expect(within(dialog).getByText('„Kunden-App“ steht nicht mehr zur Wahl. Prüfe Projekt und Typ.')).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(project));
+    // the title stays, the type falls back to the default of the project
+    expect((title as HTMLInputElement).value).toBe('Export als CSV');
+    expect(within(dialog).getByRole('combobox', { name: /^Typ/ }).textContent).toContain('Task');
+  });
+
+  it('keeps the dialog when the type of the draft is switched off', async () => {
+    const user = userEvent.setup();
+    const { dialog, title } = await openDialog({ project_id: 'p_app', type_id: 't_wish' });
+    await user.type(title, 'Export als CSV');
+
+    projects = [web, { ...app, enabled_type_ids: ['t_task', 't_bug', 't_epic'] }, ops];
+    await act(() => client.invalidateQueries());
+    await waitFor(() => expect(within(dialog).getByRole('combobox', { name: /^Typ/ }).textContent).toContain('Task'));
+    expect(within(dialog).getByText(/steht nicht mehr zur Wahl/).textContent).toContain('Kundenwunsch');
+    expect(within(dialog).getByRole('combobox', { name: /^Projekt/ }).textContent).toContain('Kunden-App');
+  });
+
+  it('says so and sends nothing when no project takes items any more', async () => {
+    const { dialog, title } = await openDialog({ project_id: 'p_web' });
+    await waitFor(() => expect(document.activeElement).toBe(title));
+    projects = [ops];
+    await act(() => client.invalidateQueries());
+    expect(await within(dialog).findByText('Hier kannst du kein Item anlegen')).toBeTruthy();
+    await modEnter();
+    expect(posts()).toEqual([]);
+  });
+
   it('starts in the title', async () => {
     const { dialog, title } = await openDialog(null);
     await waitFor(() => expect(document.activeElement).toBe(title));

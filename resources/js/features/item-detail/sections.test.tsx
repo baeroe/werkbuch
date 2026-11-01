@@ -801,7 +801,7 @@ describe('Relations', () => {
     await user.keyboard('web-48');
     const searched = () => api!.calls.find((call) => call.url === '/api/v1/work-items/query' && queried(call.body).q === 'web-48');
     await waitFor(() => expect(searched()).toBeDefined(), { timeout: SEARCH_PAUSE_MS + 1000 });
-    expect(searched()!.body).toEqual({ shorthand: { q: 'web-48' }, per_page: 20 });
+    expect(searched()!.body).toEqual({ shorthand: { q: 'web-48' }, per_page: 20, lean: true });
     await screen.findByRole('option', { name: /Startseite umbauen/ });
     await user.keyboard('{Enter}');
     expect(within(dialog).getByRole('combobox', { name: 'Item: WEB-48 Startseite umbauen' })).toBeTruthy();
@@ -837,6 +837,32 @@ describe('Relations', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Hinzufügen' }));
     // WEB-50 blocks WEB-47: the relation runs from it
     await waitFor(() => expect(sent('POST', '/api/v1/work-items/wi_web_50/relations')).toEqual([{ type_id: 'rt_blocks', target_id: 'wi_web_47' }]));
+  });
+
+  it('offers a candidate the person may not change only as disabled for an inward relation', async () => {
+    const user = userEvent.setup();
+    // OPS is a project the member only reads
+    projects = [project('WEB', 'member'), project('OPS', 'viewer')];
+    renderWith(<ItemPage itemKey="WEB-47" />, {
+      routes: { 'POST /api/v1/work-items/query': (body) => ({ body: list(queryItems([web48, ops12], body)) }) },
+    });
+    await screen.findByRole('region', { name: 'Relationen' });
+    press('r');
+    const dialog = await screen.findByRole('dialog', { name: 'Relation hinzufügen' });
+    const search = await screen.findByPlaceholderText('Key oder Titel suchen …');
+    await waitFor(() => expect(document.activeElement).toBe(search));
+    // outward (WEB-47 becomes the source): both can be chosen
+    expect((await screen.findByRole('option', { name: /Mail-Limits/ })).getAttribute('aria-disabled')).not.toBe('true');
+
+    await user.keyboard('{Escape}');
+    await user.click(within(dialog).getByRole('combobox', { name: /^Art der Relation/ }));
+    await user.click(await screen.findByRole('option', { name: 'wird blockiert von' }));
+    // inward: the chosen item becomes the source, so it has to be one the person may change
+    await user.click(within(dialog).getByRole('combobox', { name: 'Item: keins gewählt' }));
+    const readOnly = await screen.findByRole('option', { name: /Mail-Limits/ });
+    expect(readOnly.getAttribute('aria-disabled')).toBe('true');
+    expect(readOnly.textContent).toContain('Im Projekt OPS darfst du nur lesen');
+    expect(screen.getByRole('option', { name: /Startseite umbauen/ }).getAttribute('aria-disabled')).not.toBe('true');
   });
 
   it('shows a duplicate at the field', async () => {

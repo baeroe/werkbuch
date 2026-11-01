@@ -425,6 +425,7 @@
     "items.create.blocked": "Ein Feld enthält noch eine Eingabe, die nicht passt. Korrigiere sie oder leere das Feld.",
     "items.create.blocked_title": "Noch nicht angelegt",
     "items.create.created": ":key angelegt",
+    "items.create.draft_gone": "„:name“ steht nicht mehr zur Wahl. Prüfe Projekt und Typ.",
     "items.create.failed": "Item nicht angelegt",
     "items.create.load_failed": "Das Formular ließ sich nicht laden: :message",
     "items.create.loading": "Formular wird geladen …",

@@ -167,6 +167,18 @@ function currentTargetIds(own?: { id: number; options: ItemCommandsOptions }): s
   return ui.peekItemId ? [ui.peekItemId] : [];
 }
 
+/**
+ * Whether the preview's own keys (`e`) act now, by the rules at the top: the focus inside the panel always (rule 1);
+ * otherwise only when no item page (rule 2) and no selection (rule 3) outranks the previewed item and the focus is
+ * nowhere in particular (rule 5), so the screen beside the preview keeps its keys.
+ */
+export function previewKeysAct(panel: RefObject<HTMLElement | null> | undefined): boolean {
+  const focus = document.activeElement;
+  if (panel?.current && focus && panel.current.contains(focus)) return true;
+  if (mounts.some((mount) => mount.options().itemId) || useUiStore.getState().selection.length > 0) return false;
+  return !focus || focus === document.body || focus.id === 'main';
+}
+
 /** The targets of the moment the palette opened: it takes the focus, so asking again would lose the preview. */
 let paletteTargets: string[] | null = null;
 useUiStore.subscribe((state, previous) => {

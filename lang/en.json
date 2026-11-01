@@ -425,6 +425,7 @@
     "items.create.blocked": "A field still holds an entry that does not fit. Correct it or clear the field.",
     "items.create.blocked_title": "Not created yet",
     "items.create.created": ":key created",
+    "items.create.draft_gone": "“:name” is no longer available. Check project and type.",
     "items.create.failed": "Item not created",
     "items.create.load_failed": "The form could not be loaded: :message",
     "items.create.loading": "Loading the form …",

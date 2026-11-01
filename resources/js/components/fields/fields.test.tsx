@@ -982,6 +982,26 @@ describe('Picker', () => {
     expect(onValueChange).toHaveBeenCalledWith('o4');
   });
 
+  it('keeps the focus on the trigger when the rights arrive and the read-only trigger gives way to the picker', () => {
+    const props = { label: 'Kunde', display: 'Option 2', displayText: 'Option 2', options: many.slice(0, 3), value: 'o1', onValueChange: vi.fn(), placeholder: 'Suchen …' };
+    const view = render(<Picker {...props} disabledReason="Rechte laden noch." />);
+    const readOnly = screen.getByRole('button', { name: 'Kunde: Option 2' });
+    act(() => readOnly.focus());
+    expect(document.activeElement).toBe(readOnly);
+
+    view.rerender(<Picker {...props} />);
+    const trigger = screen.getByRole('combobox', { name: 'Kunde: Option 2' });
+    expect(trigger).not.toBe(readOnly);
+    expect(document.activeElement).toBe(trigger);
+
+    // and back; a trigger that never had the focus does not take it
+    view.rerender(<Picker {...props} disabledReason="Im Projekt darfst du nur lesen." />);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Kunde: Option 2' }));
+    act(() => (document.activeElement as HTMLElement).blur());
+    view.rerender(<Picker {...props} />);
+    expect(document.activeElement).toBe(document.body);
+  });
+
   it('changes nothing when the chosen value is chosen again, and opens at once without taking the focus', async () => {
     const user = userEvent.setup();
     const onValueChange = vi.fn();

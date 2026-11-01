@@ -25,6 +25,7 @@ import { ItemDialogsHost } from '../ItemDialogs';
 // the questions load lazily; loaded with the file, so the first question does not wait for the editor's modules
 import '../ResolutionPrompt';
 import '../TypePicker';
+import { previewKeysAct } from './context';
 import { datePresets, PreviewItemCommands, useItemCommands } from './index';
 
 let signedIn: User = lene;
@@ -184,6 +185,53 @@ describe('item commands', () => {
     // the focus left the preview: the page's item again
     act(() => screen.getByRole('button', { name: 'Auf der Seite' }).focus());
     await ready('WEB-47', 'item.labels');
+  });
+
+  it('waits for the children of the item the command acts on, not of another detail', async () => {
+    renderWith(
+      <>
+        <ItemPage id="wi_web_30" />
+        <Preview />
+      </>,
+    );
+    act(() => useUiStore.getState().openPeek('wi_web_48'));
+    await ready('WEB-30', 'item.type');
+    const panel = screen.getByRole('complementary', { name: 'Vorschau' });
+    // both details are in the cache now
+    act(() => panel.focus());
+    await ready('WEB-48', 'item.type');
+    act(() => screen.getByRole('button', { name: 'Auf der Seite' }).focus());
+    await ready('WEB-30', 'item.type');
+
+    // the focus moved, the commands have not rendered again: WEB-30 has children, WEB-48 is not known to have any
+    panel.focus();
+    expect(command('item.type')?.when?.()).toBe(false);
+    await ready('WEB-48', 'item.type');
+  });
+
+  it('lets the preview keep its own keys by the same rules as the commands', async () => {
+    const panel = { current: document.createElement('aside') };
+    const inside = document.createElement('button');
+    panel.current.append(inside);
+    document.body.append(panel.current);
+    onTestFinished(() => panel.current.remove());
+
+    // nowhere in particular and nothing outranks the previewed item (rule 5)
+    expect(previewKeysAct(panel)).toBe(true);
+    // a selection outranks it (rule 3), but not the focus inside the panel (rule 1)
+    act(() => useUiStore.getState().setSelection(['wi_web_48']));
+    expect(previewKeysAct(panel)).toBe(false);
+    inside.focus();
+    expect(previewKeysAct(panel)).toBe(true);
+    inside.blur();
+    act(() => useUiStore.getState().setSelection([]));
+
+    // an item page outranks it (rule 2)
+    renderWith(<ItemPage id="wi_web_47" />);
+    await ready('WEB-47');
+    expect(previewKeysAct(panel)).toBe(false);
+    inside.focus();
+    expect(previewKeysAct(panel)).toBe(true);
   });
 
   it('acts on the previewed item when no item page is mounted, and on nothing without one', async () => {

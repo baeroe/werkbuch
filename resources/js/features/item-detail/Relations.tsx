@@ -30,6 +30,7 @@ import { useWorkItems } from '@/hooks/workItems';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
 import { notifyError } from '@/lib/errors';
 import { t } from '@/lib/i18n';
+import { usePermissions } from '@/lib/permissions';
 import { SHORTCUTS } from '@/lib/shortcuts/catalog';
 import { runWithUndo } from '@/lib/undo';
 import type { ListedItem, RelationEntry, RelationType, WorkItem, WorkItemDetail } from '@/types';
@@ -82,7 +83,8 @@ function RelationDialog({ item, open, onOpenChange, finalFocus }: RelationDialog
   const [query, setQuery] = useState('');
   const [search, setSearch] = useState('');
   // asked only while the dialog is open: a closed one would load again with every change of an item
-  const found = useWorkItems({ q: search === '' ? undefined : search, per_page: SEARCH_LIMIT }, { enabled: open });
+  const { reason } = usePermissions();
+  const found = useWorkItems({ q: search === '' ? undefined : search, per_page: SEARCH_LIMIT, lean: true }, { enabled: open });
   /** The answer to the last search, shown while the next one is on its way (the list does not blink). */
   const [shown, setShown] = useState<ListedItem[] | null>(null);
   const [errors, setErrorState] = useState<Errors>({});
@@ -113,9 +115,13 @@ function RelationDialog({ item, open, onOpenChange, finalFocus }: RelationDialog
   }, [refused]);
 
   const candidates = useMemo(() => (found.data?.items ?? shown ?? []).filter((entry) => entry.id !== item.id), [found.data, shown, item.id]);
+  // an inward kind makes the chosen item the source: it has to be one the person may change
+  const inward = chosenKind?.endsWith(':in') ?? false;
+  const denied = (entry: ListedItem) => (inward ? reason('item.edit', entry.project_id) : null);
   const options: PickerOption[] = candidates.map((entry) => {
     const type = types?.find((candidate) => candidate.id === entry.type_id);
-    return { value: entry.id, label: entry.title, hint: entry.key, keywords: [entry.key], icon: type ? <TypeGlyph type={type} /> : undefined };
+    const why = denied(entry);
+    return { value: entry.id, label: entry.title, hint: why ? `${entry.key} · ${why}` : entry.key, keywords: [entry.key], icon: type ? <TypeGlyph type={type} /> : undefined, disabled: why !== null };
   });
   const label = kinds.find((entry) => entry.value === chosenKind)?.label ?? '';
   const hint = found.isError ? undefined : t('items.detail.relations.dialog.item_hint');
@@ -123,6 +129,8 @@ function RelationDialog({ item, open, onOpenChange, finalFocus }: RelationDialog
   function submit() {
     if (!chosenKind) return setErrors({ kind: t('items.detail.relations.dialog.kind_required') });
     if (!target) return setErrors({ target: t('items.detail.relations.dialog.item_required') });
+    const refusal = denied(target);
+    if (refusal) return setErrors({ target: refusal });
     const [typeId, direction] = chosenKind.split(':') as [string, string];
     const [source, other] = direction === 'out' ? [item, target] : [target, item];
     setErrors({});

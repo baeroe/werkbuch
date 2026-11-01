@@ -117,7 +117,8 @@ export function useItemCommands(options: ItemCommandsOptions): void {
       properties: properties ?? [],
       people: own ? people : undefined,
       peopleFailed: own && peopleQuery.error !== null && people === undefined,
-      hasChildren: own ? detail!.children.length > 0 : undefined,
+      // the children are those of the detail of this very target (another detail may still be in `detail`)
+      hasChildren: own && detail?.item.id === now[0]!.id ? detail.children.length > 0 : undefined,
       projectItems: own ? projectItems : undefined,
       projectItemsFailed: own && projectItemsQuery.isError && projectItems === undefined,
       reason: (permission, project) => reason(permission, project),

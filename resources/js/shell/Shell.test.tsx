@@ -1,6 +1,6 @@
 import { router } from '@inertiajs/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, render as renderDom, screen, within } from '@testing-library/react';
+import { act, fireEvent, render as renderDom, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactElement, ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -108,6 +108,18 @@ describe('Shell', () => {
     url = '/settings/people';
     render(<Shell>Inhalt</Shell>);
     expect(gear().getAttribute('aria-current')).toBe('page');
+  });
+
+  it('closes the drawer when only the query of the address changes', async () => {
+    url = '/projects/WEB?view=open';
+    const { rerender } = render(<Shell>Inhalt</Shell>);
+    fireEvent.click(screen.getByRole('button', { name: 'Navigation öffnen' }));
+    expect(await screen.findByRole('dialog')).toBeTruthy();
+
+    // a view chosen in the list changes the query, not the path
+    url = '/projects/WEB?view=mine';
+    rerender(<Shell>Inhalt</Shell>);
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
   it('shows nothing when the visit flashed nothing', () => {

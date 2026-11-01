@@ -13,6 +13,7 @@
 
 import { useMemo, useRef, type ReactNode, type RefObject } from 'react';
 import { BlockedHint } from '@/components/items/BlockedHint';
+import { previewKeysAct } from '@/components/fields/commands/context';
 import { t } from '@/lib/i18n';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { useUiStore } from '@/store/ui';
@@ -25,16 +26,6 @@ import { ArchivedNote } from './header/ArchivedNote';
 import { ItemTitle } from './header/ItemTitle';
 import { Relations } from './Relations';
 import { DetailContext, type DetailActions, type DetailContextValue, type DetailSurface } from './shared';
-
-/**
- * Whether the preview's e ("Titel bearbeiten") acts now: the focus is in the preview's panel, or nowhere in particular
- * (the page itself or its main area). On anything else of the screen beside the preview it yields to that screen.
- */
-function previewKeysAct(panel: RefObject<HTMLElement | null> | undefined): boolean {
-  const focus = document.activeElement;
-  if (!focus || focus === document.body || focus.id === 'main') return true;
-  return Boolean(panel?.current?.contains(focus));
-}
 
 type ItemDetailProviderProps = {
   surface: DetailSurface;
