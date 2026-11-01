@@ -6,7 +6,8 @@
  *   survives; the next Escape closes the preview (R14). A field that handles Escape itself calls `preventDefault()` in
  *   its own onKeyDown; the registry then leaves the key alone.
  * - A visit to another page closes the preview (`closePeekOnNavigation`: Inertia's `navigate`, which comes when the new
- *   page is on screen; a visit that stays on the same path, such as a reload, keeps it). To show an item on another
+ *   page is on screen, and `success`, the only event of a visit that replaces the page; a visit that stays on the same
+ *   path, such as a reload, keeps it). To show an item on another
  *   page, open the preview once that page is there.
  * - From md on the page beside the panel stays usable: the panel takes no focus when it opens. Below md it covers the
  *   page and is modal: <main> turns inert and the panel takes the focus.
@@ -30,17 +31,20 @@ const ItemPeek = lazy(() => import('@/features/item-detail/ItemPeek').then((modu
 const PreviewItemCommands = lazy(() => import('@/components/fields/commands').then((module) => ({ default: module.PreviewItemCommands })));
 
 /**
- * Closes the preview when a visit arrives at another path (not when only the query changes, nor on a visit that
- * replaces the page, which Inertia does not announce). Answers the function that stops listening.
+ * Closes the preview when a visit arrives at another path (not when only the query changes). A visit that replaces
+ * the page (`replace`, a reload) ends with `success` only, never `navigate`: both are heard, as everything that has to
+ * follow each new page does. Answers the function that stops listening.
  */
 export function closePeekOnNavigation(): () => void {
   let shown = window.location.pathname;
-  return router.on('navigate', (event) => {
-    const path = new URL(event.detail.page.url, window.location.origin).pathname;
+  const arrived = (url: string) => {
+    const path = new URL(url, window.location.origin).pathname;
     if (path === shown) return;
     shown = path;
     useUiStore.getState().openPeek(null);
-  });
+  };
+  const stops = [router.on('navigate', (event) => arrived(event.detail.page.url)), router.on('success', (event) => arrived(event.detail.page.url))];
+  return () => stops.forEach((stop) => stop());
 }
 
 /** Escape: first out of a field, then the preview closes. Registered only while it is open, so the help lists it only then. */

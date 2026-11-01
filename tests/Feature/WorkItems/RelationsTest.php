@@ -343,6 +343,25 @@ it('removes a relation from the end the actor may edit', function () use ($world
         ->and(WorkItemRelation::query()->count())->toBe(1);
 });
 
+it('removes a relation whose other end lies in a project being deleted, before the purge runs', function () use ($world, $type) {
+    [$web, $ops, $mara] = $world();
+    $item = WorkItem::factory()->for($web)->create();
+    $doomed = WorkItem::factory()->for($ops)->create();
+    $relation = WorkItemRelation::factory()->create(['type_id' => $type('relates')->id, 'source_id' => $item->id, 'target_id' => $doomed->id]);
+    $ops->forceFill(['deleting_at' => now()])->save();
+    Visibility::forget();
+
+    RemoveRelation::run(actor($mara), $relation);
+
+    expect(WorkItemRelation::query()->count())->toBe(0)
+        ->and(eventsOf(EventType::WorkItemRelationRemoved, $item))->toHaveCount(1);
+    // the end it acts through still needs a live project
+    $relation = WorkItemRelation::factory()->create(['type_id' => $type('relates')->id, 'source_id' => $item->id, 'target_id' => WorkItem::factory()->for($web)->create()->id]);
+    $web->forceFill(['deleting_at' => now()])->save();
+    Visibility::forget();
+    expect(problemOf(fn () => RemoveRelation::run(actor($mara), $relation))->status)->toBe(404);
+});
+
 it('answers 404 when the relation went in the meantime', function () use ($world) {
     [$web, , $mara] = $world();
     $relation = WorkItemRelation::factory()->create(['source_id' => WorkItem::factory()->for($web)->create()->id, 'target_id' => WorkItem::factory()->for($web)->create()->id]);

@@ -553,6 +553,13 @@ describe('CreateItemDialog', () => {
     await modEnter();
     expect(await within(dialog).findByText('Höchstens 255 Zeichen, jetzt sind es 256.')).toBeTruthy();
     expect(posts()).toEqual([]);
+
+    // characters count as the server counts them: 200 emoji are 400 UTF-16 units, and well inside
+    await user.clear(title);
+    await user.click(title);
+    await user.paste('🚀'.repeat(200));
+    await modEnter();
+    await waitFor(() => expect(posts()).toHaveLength(1));
   });
 
   it('waits while a property still shows a text it cannot read', async () => {

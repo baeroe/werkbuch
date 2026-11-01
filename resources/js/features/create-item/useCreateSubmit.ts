@@ -125,8 +125,10 @@ export function useCreateSubmit(options: CreateSubmitOptions): () => void {
       return;
     }
     const title = sent.title.trim();
-    if (title === '' || title.length > MAX_TITLE) {
-      setErrors({ title: title === '' ? t('items.create.title_required') : t('items.create.title_max', { max: MAX_TITLE, count: title.length }) });
+    // characters as the server counts them (`mb_strlen`), not UTF-16 units: an emoji is one
+    const length = [...title].length;
+    if (title === '' || length > MAX_TITLE) {
+      setErrors({ title: title === '' ? t('items.create.title_required') : t('items.create.title_max', { max: MAX_TITLE, count: length }) });
       focusFirstError();
       return;
     }

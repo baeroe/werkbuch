@@ -8,7 +8,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useRef, useState, type ReactNode } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { currentToasts, dismissToast, resetToasts, runToastAction } from '@/components/ui/toast';
 import { cachedZone } from '@/domain/tz';
 import { CommandPalette } from '@/features/palette/CommandPalette';
@@ -563,6 +563,11 @@ describe('the sub-lists of the item commands', () => {
   });
 
   it('offers the days from today, sets and removes a date, and refuses a start after the due date', async () => {
+    // a fixed day: a run across midnight in the zone of the organisation would count from two days otherwise
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-04T10:00:00Z'));
+    onTestFinished(() => vi.useRealTimers());
+    const today = cachedZone(organization.timezone).date(new Date());
     const dated = { ...web50, start_date: addDays(today, 3), due_date: addDays(today, 10) };
     renderWith(<ItemPage id="wi_web_50" />, { routes: { 'GET /api/v1/work-items/wi_web_50': () => detail(dated) } });
     await ready('WEB-50', 'item.due');

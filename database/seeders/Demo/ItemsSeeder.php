@@ -3,6 +3,9 @@
 namespace Database\Seeders\Demo;
 
 use App\Domain\Ranking\Rank;
+use App\Domain\WorkItems\ItemKey;
+use App\Events\EventType;
+use App\Models\Event;
 use App\Models\Label;
 use App\Models\Project;
 use App\Models\Property;
@@ -149,10 +152,12 @@ class ItemsSeeder extends Seeder
             usort($rows, fn (array $a, array $b) => self::number($a['key']) <=> self::number($b['key']));
             // the manual order follows the numbers; an item a later run adds takes the rank of its place in the list
             $ranks = Rank::nBetween(null, null, count($rows));
+            // an item somebody deleted stays deleted: its number is never given out again (spec 4.8)
+            $deleted = self::deletedNumbers($project);
 
             foreach ($rows as $index => $row) {
                 $number = self::number($row['key']);
-                if (WorkItem::query()->where('project_id', $project->id)->where('number', $number)->exists()) {
+                if (in_array($number, $deleted, true) || WorkItem::query()->where('project_id', $project->id)->where('number', $number)->exists()) {
                     continue;
                 }
 
@@ -163,6 +168,18 @@ class ItemsSeeder extends Seeder
             $highest = max([0, ...array_map(fn (array $row) => self::number($row['key']), $rows)]);
             Project::query()->whereKey($project->id)->where('next_number', '<', $highest)->toBase()->update(['next_number' => $highest]);
         }
+    }
+
+    /**
+     * The numbers of the items deleted in the project (`work_item.deleted` keeps the key as it read then).
+     *
+     * @return list<int>
+     */
+    private static function deletedNumbers(Project $project): array
+    {
+        return Event::query()->where('project_id', $project->id)->where('type', EventType::WorkItemDeleted)->get()
+            ->map(fn (Event $event) => ItemKey::parse((string) ($event->meta['key'] ?? ''))['number'] ?? null)
+            ->filter()->values()->all();
     }
 
     /**

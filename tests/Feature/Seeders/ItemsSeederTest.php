@@ -1,6 +1,7 @@
 <?php
 
 use App\Actions\Projects\AssignWorkflow;
+use App\Actions\WorkItems\DeleteWorkItem;
 use App\Actions\WorkItems\ListHistory;
 use App\Http\Resources\HistoryEntryResource;
 use App\Models\Event;
@@ -349,6 +350,16 @@ it('adds only the items that are missing, with the rank of their place, and writ
         ->and(Event::query()->where('subject_id', $item('WEB-30')->id)->where('type', 'work_item.created')->count())->toBe(1)
         // the child was changed by hand and stays as it is
         ->and($item('WEB-31')->parent_id)->toBeNull();
+});
+
+it('never brings back an item somebody deleted, so its number is not given out again', function () use ($item) {
+    $this->seed(DemoSeeder::class);
+    $web30 = $item('WEB-30');
+    DeleteWorkItem::run(actor(User::query()->where('handle', 'mara')->sole()), $web30);
+
+    $this->seed(DemoSeeder::class);
+
+    expect(WorkItem::query()->where('project_id', $web30->project_id)->where('number', 30)->exists())->toBeFalse();
 });
 
 it('leaves the history of an item that has events of its own', function () use ($item) {

@@ -70,7 +70,9 @@ export function ItemTitle({ item }: { item: WorkItem }) {
     if (!editing.current || draft === null) return;
     const title = draft.trim();
     if (save && title === '') return setError(t('items.detail.title.required'));
-    if (save && title.length > MAX_TITLE) return setError(t('items.detail.title.too_long', { max: MAX_TITLE, count: title.length }));
+    // characters as the server counts them (`mb_strlen`), not UTF-16 units: an emoji is one
+    const length = [...title].length;
+    if (save && length > MAX_TITLE) return setError(t('items.detail.title.too_long', { max: MAX_TITLE, count: length }));
     editing.current = false;
     refocus.current = keepFocus;
     setDraft(null);
@@ -112,7 +114,7 @@ export function ItemTitle({ item }: { item: WorkItem }) {
           aria-label={t('items.detail.title.label')}
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? errorId : undefined}
-          maxLength={MAX_TITLE + 50}
+          maxLength={MAX_TITLE * 2 + 50}
           onChange={(event) => {
             setDraft(event.target.value.replace(/\n/g, ' '));
             setError(null);

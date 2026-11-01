@@ -226,6 +226,8 @@ describe('parse', () => {
     }
     expect(parseTyped(browser, '  Safari 18 ')).toEqual({ value: 'Safari 18' });
     expect(parseTyped(browser, 'x'.repeat(256))).toEqual({ error: 'Höchstens 255 Zeichen, jetzt sind es 256', partial: false });
+    // characters as the server counts them, not UTF-16 units
+    expect(parseTyped(browser, '🚀'.repeat(255))).toEqual({ value: '🚀'.repeat(255) });
     expect(parseTyped(steps, ' \n ')).toEqual({ value: null });
     expect(parseTyped(steps, 'Eins\n\nZwei')).toEqual({ value: doc(paragraph('Eins'), paragraph('Zwei')) });
 

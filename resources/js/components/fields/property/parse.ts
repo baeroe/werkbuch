@@ -124,8 +124,9 @@ export function parseTyped(property: Pick<Property, 'field_type' | 'settings'>, 
     case 'url':
       return isAddress(trimmed) ? { value: trimmed } : { error: t('items.fields.property.url'), partial: true };
     default:
-      return trimmed.length > MAX_TEXT
-        ? { error: t('items.fields.property.too_long', { max: MAX_TEXT, count: trimmed.length }), partial: false }
+      // characters as the server counts them (`mb_strlen`), not UTF-16 units
+      return [...trimmed].length > MAX_TEXT
+        ? { error: t('items.fields.property.too_long', { max: MAX_TEXT, count: [...trimmed].length }), partial: false }
         : { value: trimmed };
   }
 }

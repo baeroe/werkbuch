@@ -14,7 +14,7 @@ import { formatDay, formatPropertyValue } from '@/components/fields/format';
 import { ItemKey } from '@/components/items/ItemKey';
 import { PRIORITIES, priorityName } from '@/components/ui/PriorityIcon';
 import { useWorkItem } from '@/hooks/workItems';
-import { hasTranslation, intlLocale, t, type TranslationKey } from '@/lib/i18n';
+import { hasTranslation, intlLocale, t, tn, type TranslationKey } from '@/lib/i18n';
 import type { ItemEvent, Priority, Property, PropertyValue, RelationChange, User, WorkItemDetail } from '@/types';
 import { isGone } from '../shared';
 
@@ -61,13 +61,17 @@ function V({ children }: { children: ReactNode }) {
   return <span className="font-medium text-ink">{children}</span>;
 }
 
-/** Another item of the same project by id (a parent): its key, or "ein gelöschtes Item" once it is gone. */
+/**
+ * Another item of the same project by id (a parent): its key, "ein gelöschtes Item" once it is gone, and "ein Item"
+ * when it could not be loaded (a 5xx): the line stays readable instead of "…" for good.
+ */
 function ItemRef({ id, detail }: { id: string; detail: WorkItemDetail }) {
   const known = detail.item.parent?.id === id ? detail.item.parent : null;
   const loaded = useWorkItem(known ? null : id);
   const key = known?.key ?? loaded.data?.item.key;
   if (key) return <ItemKey value={key} className="text-ink" />;
-  return <V>{isGone(loaded.error) ? t('items.activity.unknown.item') : '…'}</V>;
+  if (loaded.error) return <V>{isGone(loaded.error) ? t('items.activity.unknown.item') : t('items.activity.unknown.item_unloaded')}</V>;
+  return <V>…</V>;
 }
 
 /* --------------------------------------------------------------------- phrases */
@@ -102,17 +106,24 @@ function labelPhrases(change: { old: unknown; new: unknown }, ctx: PhraseContext
   return parts.length ? joined(parts) : null;
 }
 
-/** A property value as it reads; a deleted property shows the raw value. */
+const ULID = /^[0-9a-hjkmnp-tv-z]{26}$/i;
+
+/**
+ * A value of a property that is gone: text and numbers as they were; the ids of options or people say nothing
+ * anymore and read as "ein Wert" or "2 Werte".
+ */
+function rawValue(value: unknown): string {
+  const list = Array.isArray(value) ? value : [value];
+  if (list.length > 0 && list.every((entry) => typeof entry === 'string' && ULID.test(entry))) return tn('items.activity.unknown.values', list.length);
+  return list.map(String).join(', ');
+}
+
+/** A property value as it reads; a deleted property shows the raw value (ids as their number). */
 function valuePhrase(key: string, change: { old: unknown; new: unknown }, ctx: PhraseContext): ReactNode {
   const property = ctx.propertyOf(key);
   const label = <V>{property?.label ?? key}</V>;
   if (property?.field_type === 'rich_text') return tx('items.activity.field.value.edited', { property: label });
-  const show = (value: unknown) =>
-    property
-      ? formatPropertyValue(property, value as PropertyValue, (id) => userName(ctx, id))
-      : Array.isArray(value)
-        ? value.map(String).join(', ')
-        : String(value);
+  const show = (value: unknown) => (property ? formatPropertyValue(property, value as PropertyValue, (id) => userName(ctx, id)) : rawValue(value));
   if (isEmpty(change.old)) return tx('items.activity.field.value.set', { property: label, new: <V>{show(change.new)}</V> });
   if (isEmpty(change.new)) return tx('items.activity.field.value.cleared', { property: label });
   return tx('items.activity.field.value.changed', { property: label, old: <V>{show(change.old)}</V>, new: <V>{show(change.new)}</V> });

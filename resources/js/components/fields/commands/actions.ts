@@ -100,7 +100,8 @@ function leavePage(item: WorkItem): () => void {
   if (window.location.pathname !== paths.item(item.key)) return () => {};
   router.visit(paths.myItems(), { replace: true });
   return () => {
-    if (window.location.pathname === paths.myItems()) router.visit(paths.item(item.key));
+    // in place of My items as well: the history reads as before the delete, Back leads where the person came from
+    if (window.location.pathname === paths.myItems()) router.visit(paths.item(item.key), { replace: true });
   };
 }
 

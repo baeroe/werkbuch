@@ -33,19 +33,23 @@ final class ItemLock
     }
 
     /**
-     * Both items afresh and under `lockForUpdate`, each with its project, in the order of the arguments.
+     * Both items afresh and under `lockForUpdate`, each with its project, in the order of the arguments. `$acting`
+     * names the items the action works through (default both): only their projects must not be in deletion; the other
+     * end is passive and may lie in a project the purge has yet to remove (a relation to it can still be removed).
      *
+     * @param  list<string>|null  $acting
      * @return array{0: WorkItem, 1: WorkItem}
      *
-     * @throws Problem 404 when an item is gone or its project is being deleted
+     * @throws Problem 404 when an item is gone or the project of an acting one is being deleted
      */
-    public static function pair(WorkItem $a, WorkItem $b): array
+    public static function pair(WorkItem $a, WorkItem $b, ?array $acting = null): array
     {
         CatalogLock::share();
 
+        $live = array_map(fn (WorkItem $item) => $item->project_id, array_filter([$a, $b], fn (WorkItem $item) => $acting === null || in_array($item->id, $acting, true)));
         $projects = [];
         foreach (self::sorted([$a->project_id, $b->project_id]) as $id) {
-            $projects[$id] = self::project($id);
+            $projects[$id] = self::project($id, in_array($id, $live, true));
         }
 
         $items = [];
@@ -59,11 +63,11 @@ final class ItemLock
         ];
     }
 
-    private static function project(string $id): Project
+    private static function project(string $id, bool $live = true): Project
     {
         $project = Project::query()->sharedLock()->find($id);
 
-        return $project !== null && $project->deleting_at === null ? $project : throw Problem::notFound();
+        return $project !== null && ($project->deleting_at === null || ! $live) ? $project : throw Problem::notFound();
     }
 
     private static function item(string $id): WorkItem

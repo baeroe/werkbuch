@@ -56,7 +56,8 @@ final class RemoveRelation
         }
 
         DB::transaction(function () use ($actor, $relation, $source, $target, $through): void {
-            [$source, $target] = ItemLock::pair($source, $target);
+            // the end it does not work through may lie in a project in deletion (hidden, but still a relation of this one)
+            [$source, $target] = ItemLock::pair($source, $target, $through);
             $locked = WorkItemRelation::query()->lockForUpdate()->find($relation->id) ?? throw Problem::notFound();
 
             $editable = array_values(array_filter([$source, $target], fn (WorkItem $end) => in_array($end->id, $through, true)));

@@ -28,7 +28,7 @@ import { ItemPeek } from './ItemPeek';
 
 type Listener = (event: { detail: { page: { url: string } } }) => void;
 
-const inertia = vi.hoisted(() => ({ url: '/items/WEB-47', visit: vi.fn(), replace: vi.fn(), listeners: new Set<Listener>() }));
+const inertia = vi.hoisted(() => ({ url: '/items/WEB-47', visit: vi.fn(), replace: vi.fn(), listeners: new Map<Listener, string>() }));
 let signedIn: User = lene;
 let org: Organization = organization;
 
@@ -37,8 +37,8 @@ vi.mock('@inertiajs/react', () => ({
   router: {
     visit: inertia.visit,
     replace: inertia.replace,
-    on: (_event: string, listener: Listener) => {
-      inertia.listeners.add(listener);
+    on: (event: string, listener: Listener) => {
+      inertia.listeners.set(listener, event);
       return () => inertia.listeners.delete(listener);
     },
   },
@@ -247,6 +247,10 @@ describe('ItemPage', () => {
     fireEvent.change(again, { target: { value: 'x'.repeat(256) } });
     await user.keyboard('{Enter}');
     expect(screen.getByText('Höchstens 255 Zeichen, jetzt sind es 256.')).toBeTruthy();
+    // characters as the server counts them: 256 emoji are 256, not 512
+    fireEvent.change(again, { target: { value: '🚀'.repeat(256) } });
+    await user.keyboard('{Enter}');
+    expect(screen.getByText('Höchstens 255 Zeichen, jetzt sind es 256.')).toBeTruthy();
 
     // a new line stays one line; Enter saves
     fireEvent.change(again, { target: { value: 'Kontaktformular\nsendet dreifach ' } });
@@ -410,7 +414,7 @@ describe('ItemPage', () => {
     expect(inertia.visit).toHaveBeenLastCalledWith('/my-items', { replace: true });
     await waitFor(() => expect(lastToast()?.title).toBe('WEB-47 gelöscht'));
     act(() => runToastAction(lastToast()!.id));
-    expect(inertia.visit).toHaveBeenLastCalledWith('/items/WEB-47');
+    expect(inertia.visit).toHaveBeenLastCalledWith('/items/WEB-47', { replace: true });
     expect(sent('DELETE', '/api/v1/work-items/wi_web_47')).toEqual([]);
 
     // again, and the toast runs out: deleted
@@ -430,7 +434,7 @@ describe('ItemPage', () => {
     await user.click(await screen.findByRole('menuitem', { name: /Löschen/ }));
     act(() => dismissToast(lastToast()!.id));
     await waitFor(() => expect(lastToast()).toMatchObject({ title: 'WEB-47 nicht gelöscht', tone: 'error' }));
-    expect(inertia.visit).toHaveBeenLastCalledWith('/items/WEB-47');
+    expect(inertia.visit).toHaveBeenLastCalledWith('/items/WEB-47', { replace: true });
 
     // deleted again from the menu, the person goes elsewhere: undo puts the item back but leaves them there
     await user.click(screen.getByRole('button', { name: 'Weitere Aktionen' }));
@@ -867,17 +871,25 @@ describe('PeekHost', () => {
     renderHost();
     act(() => useUiStore.getState().openPeek('wi_web_47'));
     await screen.findByRole('complementary', { name: 'Vorschau' });
-    const navigate = (url: string) => act(() => inertia.listeners.forEach((listener) => listener({ detail: { page: { url } } })));
+    const arrive = (type: string, url: string) =>
+      act(() => inertia.listeners.forEach((event, listener) => event === type && listener({ detail: { page: { url } } })));
 
-    navigate('/items/WEB-47?tab=activity');
+    arrive('navigate', '/items/WEB-47?tab=activity');
     expect(useUiStore.getState().peekItemId).toBe('wi_web_47');
-    navigate('/my-items');
+    arrive('navigate', '/my-items');
+    expect(useUiStore.getState().peekItemId).toBeNull();
+
+    // a visit that replaces the page announces only `success` (deleting the item of the page, a rename's replace)
+    act(() => useUiStore.getState().openPeek('wi_web_47'));
+    arrive('success', '/my-items');
+    expect(useUiStore.getState().peekItemId).toBe('wi_web_47');
+    arrive('success', '/items/WEB-30');
     expect(useUiStore.getState().peekItemId).toBeNull();
   });
 
   it('stops listening when asked', () => {
     const stop = closePeekOnNavigation();
-    expect(inertia.listeners.size).toBe(1);
+    expect([...inertia.listeners.values()]).toEqual(['navigate', 'success']);
     stop();
     expect(inertia.listeners.size).toBe(0);
   });

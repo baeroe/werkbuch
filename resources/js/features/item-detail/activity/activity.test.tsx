@@ -246,6 +246,8 @@ describe('phrases', () => {
           { label_ids: { old: ['lb_gone'], new: [] }, type_id: { old: 't_gone', new: 't_task' } },
           { resolution_id: { old: null, new: 'res_gone' }, priority: { old: 'none', new: 'mystery' } },
           { 'values.customer': { old: null, new: 'opt_gone' } },
+          // a dropdown or people property deleted since: its ids say nothing
+          { 'values.owner': { old: null, new: '01jbz8v6w2k7c0m9x4r5t3n8qa' }, 'values.team': { old: ['01jbz8v6w2k7c0m9x4r5t3n8qa', '01JBZ8V6W2K7C0M9X4R5T3N8QB'], new: ['01jbz8v6w2k7c0m9x4r5t3n8qa'] } },
         ]),
       ),
     );
@@ -255,6 +257,7 @@ describe('phrases', () => {
       'Mara Lindqvist hat das Label ein gelöschtes Label entfernt und den Typ von einen früheren Typ auf Task geändert. heute 01:10',
       'Mara Lindqvist hat die Resolution eine frühere Resolution gesetzt und die Priorität von None auf mystery geändert. heute 01:20',
       'Mara Lindqvist hat Kunde auf Unbekannte Option gesetzt. heute 01:30',
+      'Mara Lindqvist hat owner auf 1 Wert gesetzt und team von 2 Werte auf 1 Wert geändert. heute 01:40',
     ]);
   });
 
@@ -325,6 +328,15 @@ describe('phrases', () => {
       // an account the list does not know, and a code without text
       'Unbekannt hat die Priorität von High auf Low geändert. heute 01:40 | nightly_cleanup',
     ]);
+  });
+
+  it('names a parent that could not be loaded "ein Item" instead of waiting for good', async () => {
+    renderActivity(() => historyPage([event('ev_1', 0, { changes: { parent_id: { old: null, new: 'wi_web_28' } } })]), {
+      routes: { 'GET /api/v1/work-items/wi_web_28': () => ({ status: 503, body: { type: 'about:blank', title: 'unavailable', status: 503, reason: 'service_unavailable' } }) },
+    });
+
+    const timeline = await screen.findByRole('list', { name: 'Verlauf' });
+    await waitFor(() => expect(within(timeline).getAllByRole('listitem').map(textOf)).toEqual(['Mara Lindqvist hat das Eltern-Item ein Item gesetzt. heute 01:00']));
   });
 
   it('reads in English', async () => {
