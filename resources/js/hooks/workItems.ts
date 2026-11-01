@@ -44,6 +44,23 @@ export function useWorkItems(args: ListWorkItemsArgs = {}, options: HookOptions 
   return useQuery({ queryKey: qk.workItems.list(args), queryFn: () => listWorkItems(args), enabled: options.enabled !== false });
 }
 
+/**
+ * The epics the reader sees, lean and every page: of one project (the same list as `useProjectItems` of the parent
+ * picker, under the same key) or of all projects. The parent options of the filter bar; loaded only while `enabled`.
+ */
+export function useEpics(projectId: string | undefined, enabled: boolean) {
+  const filter: Filter = {
+    version: 1,
+    conditions: [...(projectId ? [{ field: 'project', op: 'is' as const, value: projectId }] : []), { field: 'epic', op: 'is', value: true }],
+  };
+  const args = { filter, lean: true };
+  return useQuery({
+    queryKey: qk.workItems.list({ ...args, pages: 'all' }),
+    queryFn: () => allPages((cursor) => listWorkItems({ ...args, cursor })),
+    enabled,
+  });
+}
+
 /** The cache key of one page of a list: the first page is the one `useWorkItems(args)` reads. */
 const pageKey = (args: ListWorkItemsArgs, cursor: string | null) => qk.workItems.list(cursor === null ? args : { ...args, cursor });
 

@@ -331,6 +331,41 @@ describe('the item list screen', () => {
     await waitFor(() => expect(announcer().textContent).toBe('Ein Item'));
   });
 
+  it('filters by title from the filter bar and keeps the filter in the address', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await screen.findByText('Kontaktformular sendet doppelt');
+    const search = screen.getByRole('searchbox', { name: 'Titel durchsuchen' });
+    await user.type(search, 'Logo{Enter}');
+    expect(inertia.url).toBe(`/projects/WEB?filter=${filterOf([{ field: 'title', op: 'contains', value: 'Logo' }])}`);
+    await waitFor(() => expect(screen.queryByText('Kontaktformular sendet doppelt')).toBeNull());
+    expect(screen.getByText('Logo austauschen')).toBeTruthy();
+    expect(queryBodies().at(-1)!.filter!.conditions).toEqual([
+      { field: 'project', op: 'is', value: 'p_web' },
+      { field: 'title', op: 'contains', value: 'Logo' },
+    ]);
+  });
+
+  it('sends no unfinished condition', async () => {
+    const unfinished: Condition[] = [
+      { field: 'state', op: 'in', value: [] },
+      { field: 'title', op: 'contains', value: 'Logo' },
+      { field: 'due_date', op: 'between', value: ['today', null] },
+    ];
+    inertia.go(`/projects/WEB?filter=${filterOf(unfinished)}`);
+    renderScreen();
+    expect(await screen.findByText('Logo austauschen')).toBeTruthy();
+    // the chips stand, the server only hears the condition that says something
+    expect(screen.getByRole('group', { name: /^Filter: Status ist kein Wert, noch ohne Wert$/ })).toBeTruthy();
+    const sent = [{ field: 'project', op: 'is', value: 'p_web' }, unfinished[1]];
+    expect(groupBodies().every((body) => JSON.stringify(body.filter!.conditions) === JSON.stringify(sent))).toBe(true);
+    expect(queryBodies().every((body) => JSON.stringify(body.filter!.conditions) === JSON.stringify(sent))).toBe(true);
+    // a list whose conditions are all unfinished is not filtered
+    act(() => inertia.go(`/projects/WEB?filter=${filterOf([unfinished[0]!])}`));
+    expect(await screen.findByText('Kontaktformular sendet doppelt')).toBeTruthy();
+    expect(queryBodies().at(-1)!.filter!.conditions).toEqual([{ field: 'project', op: 'is', value: 'p_web' }]);
+  });
+
   it('says every change of the selection in words', () => {
     const loaded = WEB_ITEMS;
     expect(selectionMessage([], [], loaded)).toBeNull();
@@ -804,7 +839,8 @@ describe('a view', () => {
     act(() => reset.focus());
     fireEvent.click(reset);
     expect(await screen.findByText('„Fällig diese Woche“ zeigt noch nichts')).toBeTruthy();
-    await waitFor(() => expect(document.activeElement).toBe(within(document.querySelector<HTMLElement>('[data-items-toolbar]')!).getByRole('button', { name: /^Neues Item/ })));
+    // the first button of the toolbar: "Filter" of the filter bar
+    await waitFor(() => expect(document.activeElement).toBe(within(document.querySelector<HTMLElement>('[data-items-toolbar]')!).getByRole('combobox', { name: 'Filter' })));
   });
 
   it('says that a view shows nothing yet', async () => {

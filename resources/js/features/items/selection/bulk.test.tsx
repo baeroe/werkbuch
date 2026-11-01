@@ -15,7 +15,6 @@ import { ItemDialogsHost } from '@/components/fields/ItemDialogs';
 import '@/components/fields/ResolutionPrompt';
 import { currentToasts, dismissToast, resetToasts, runToastAction } from '@/components/ui/toast';
 import { TooltipProvider } from '@/components/ui/Tooltip';
-import { registerShortcut } from '@/lib/shortcuts/registry';
 import { useUiStore } from '@/store/ui';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import { agency, ida, labels, lene, list, makeWorkItem, mara, organization, project, properties, resolutions, standard, types } from '@/test/fixtures';
@@ -348,32 +347,24 @@ describe('the bulk bar on the items screen', () => {
   });
 
   it('keeps / and f working while items are selected', async () => {
-    // the filter bar binds them in the list scope (`/` searches the titles, `f` adds a condition)
-    const search = vi.fn();
-    const filter = vi.fn();
-    const offs = [
-      registerShortcut({ id: 'test.search', keys: '/', scope: 'list', label: 'shortcuts.list.select', group: 'shortcuts.group.list', run: search }),
-      registerShortcut({ id: 'test.filter', keys: 'f', scope: 'list', label: 'shortcuts.list.select', group: 'shortcuts.group.list', run: filter }),
-    ];
-    try {
-      renderScreen();
-      await screen.findByText('Aufgabe 1');
-      act(() => useUiStore.getState().setSelection(['wi_web_1', 'wi_web_2']));
-      await menuReady('Priorität');
-      // the bar stands below the toolbar, which stays (with "Neues Item")
-      const toolbar = document.querySelector('[data-items-toolbar]')!;
-      expect(toolbar.contains(bar())).toBe(true);
-      expect(toolbar.textContent).toContain('Neues Item');
+    // the filter bar binds them in the list scope: `/` searches the titles, `f` adds a condition
+    renderScreen();
+    await screen.findByText('Aufgabe 1');
+    act(() => useUiStore.getState().setSelection(['wi_web_1', 'wi_web_2']));
+    await menuReady('Priorität');
+    // the bar stands below the toolbar, which stays (with "Neues Item")
+    const toolbar = document.querySelector('[data-items-toolbar]')!;
+    expect(toolbar.contains(bar())).toBe(true);
+    expect(toolbar.textContent).toContain('Neues Item');
 
-      const button = screen.getByRole('button', { name: 'Priorität' });
-      act(() => button.focus());
-      for (const key of ['/', 'f']) act(() => void button.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })));
-      expect(search).toHaveBeenCalledTimes(1);
-      expect(filter).toHaveBeenCalledTimes(1);
-      expect(useUiStore.getState().selection).toEqual(['wi_web_1', 'wi_web_2']);
-    } finally {
-      offs.forEach((off) => off());
-    }
+    const button = screen.getByRole('button', { name: 'Priorität' });
+    act(() => button.focus());
+    act(() => void button.dispatchEvent(new KeyboardEvent('keydown', { key: '/', bubbles: true, cancelable: true })));
+    expect(document.activeElement).toBe(screen.getByRole('searchbox', { name: 'Titel durchsuchen' }));
+    act(() => button.focus());
+    act(() => void button.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', bubbles: true, cancelable: true })));
+    expect(await screen.findByRole('dialog', { name: 'Feld der Bedingung' })).toBeTruthy();
+    expect(useUiStore.getState().selection).toEqual(['wi_web_1', 'wi_web_2']);
   });
 
   it('archives the closed items of the selection with undo, and the server names the open ones', async () => {

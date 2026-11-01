@@ -32,6 +32,7 @@ import { useWorkflows } from '@/hooks/workflows';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
 import type { Condition, GroupBy, GroupCount, ListedItem, Project, StateCategory } from '@/types';
 import { groupLabel, type GroupCatalogs } from './display/groupLabels';
+import { isComplete } from './filter/fieldOps';
 import type { GroupData } from './layouts';
 
 export interface ListData {
@@ -62,7 +63,8 @@ export function useListData(state: ViewState, scope: Condition[], _options: { pr
   const chosen = display.group_by;
   const grouped = chosen !== 'none';
   const common = useMemo(
-    () => ({ filter: { version: 1 as const, conditions: [...scope, ...state.filter.conditions] }, sort: display.sort, show_sub_items: display.show_sub_items }),
+    // an unfinished condition of the filter bar (a chip still without its value) never goes to the server
+    () => ({ filter: { version: 1 as const, conditions: [...scope, ...state.filter.conditions.filter(isComplete)] }, sort: display.sort, show_sub_items: display.show_sub_items }),
     [scope, state.filter.conditions, display.sort, display.show_sub_items],
   );
   const argsKey = JSON.stringify([common, chosen]);

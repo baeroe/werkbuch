@@ -4,8 +4,9 @@
  * states and the announcer):
  *
  * - The header names the list (with the star of a project or view, the tabs of Meine Items) and switches the layout
- *   (1–4). Below it the toolbar sticks to the top with "Neues Item"; the filter bar (Task 16) and the display menu
- *   (Task 17) join it there. While items are selected the bulk bar stands below them (`selection/BulkBar.tsx`).
+ *   (1–4). Below it the toolbar sticks to the top: the filter bar (`filter/FilterBar.tsx`: "Filter", the title search,
+ *   the conditions) with "Neues Item"; the display menu (Task 17) joins it there. While items are selected the bulk bar
+ *   stands below them (`selection/BulkBar.tsx`).
  * - The state (filter and display) is in the address (`useListState`), the groups and their pages come from the server
  *   (`useListData`); a new filter keeps the old rows until its answer is there.
  * - Below: a hint when the status grouping fell back to the categories, a banner on an archived project (read-only),
@@ -48,6 +49,8 @@ import type { Display, ListedItem, Project, View } from '@/types';
 import { layouts, type LayoutProps } from './layouts';
 import { ListAnnouncer } from './ListAnnouncer';
 import { ListHeader } from './ListHeader';
+import { FilterBar } from './filter/FilterBar';
+import { isComplete } from './filter/fieldOps';
 import { DelayedSkeleton, ListEmpty, ListError, ListSkeleton, ScreenSkeleton } from './ListStates';
 import { MY_TABS } from './MyTabs';
 import { BulkBar } from './selection/BulkBar';
@@ -204,8 +207,10 @@ function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: P
 
   /* --------------------------------------------------------------------- the content */
 
-  const filterChanged = !sameFilter(base.filter, state.filter);
-  const filtered = state.filter.conditions.length > 0;
+  // what is unfinished does not filter (it never goes to the server)
+  const sent = useMemo(() => state.filter.conditions.filter(isComplete), [state.filter.conditions]);
+  const filterChanged = !sameFilter(base.filter, { version: 1, conditions: sent });
+  const filtered = sent.length > 0;
   const Layout = layouts[state.display.layout];
 
   let content: ReactNode;
@@ -258,18 +263,23 @@ function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: P
         selection={selection}
         items={data.items}
         total={data.total}
-        resultKey={JSON.stringify([state.filter.conditions, state.display.show_sub_items])}
+        resultKey={JSON.stringify([sent, state.display.show_sub_items])}
         ready={data.current && data.status === 'success'}
         filtered={filtered}
       />
       <ListHeader preset={preset} project={project} view={view} layout={state.display.layout} onLayout={setLayout} />
 
       <StickyToolbar>
-        <div className="flex items-center justify-end gap-2">
-          <Button variant="primary" size="sm" icon={SquarePen} shortcut={SHORTCUTS['item.create'].keys} disabledReason={createReason} onClick={create} className="max-sm:[&_kbd]:hidden">
-            <span className="max-sm:sr-only">{t('commands.create.label')}</span>
-          </Button>
-        </div>
+        <FilterBar
+          filter={state.filter}
+          onChange={(filter) => setState({ ...state, filter })}
+          project={project}
+          actions={
+            <Button variant="primary" size="sm" icon={SquarePen} shortcut={SHORTCUTS['item.create'].keys} disabledReason={createReason} onClick={create} className="max-sm:[&_kbd]:hidden">
+              <span className="max-sm:sr-only">{t('commands.create.label')}</span>
+            </Button>
+          }
+        />
         {selected.length > 0 && (
           <div className="mt-2">
             <BulkBar items={selected} total={data.total} onSelectAll={() => void selectAll()} onClear={() => setSelection([])} onArchive={archive} />

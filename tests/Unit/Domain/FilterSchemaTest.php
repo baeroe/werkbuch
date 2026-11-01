@@ -329,48 +329,12 @@ it('describes the core fields and the properties as conditions see them', functi
 });
 
 /*
- * The operators of every field, as the filter bar has to offer them (K33). Task 16 moves this table into
- * `resources/js/features/items/filter/operators.json`, which the browser and this test then both read.
+ * The operators of every field, as the filter bar has to offer them (K33): one table per core field and per type of
+ * property, which the browser reads too.
  */
-$operators = [
-    'core' => [
-        'project' => ['is', 'is_not', 'in', 'not_in'],
-        'type' => ['is', 'is_not', 'in', 'not_in'],
-        'state' => ['is', 'is_not', 'in', 'not_in'],
-        'assignee' => ['is', 'is_not', 'in', 'not_in', 'is_empty', 'is_not_empty'],
-        'created_by' => ['is', 'is_not', 'in', 'not_in'],
-        'parent' => ['is', 'is_not', 'in', 'not_in', 'is_empty', 'is_not_empty'],
-        'state_category' => ['is', 'is_not', 'in', 'not_in'],
-        'priority' => ['is', 'is_not', 'in', 'not_in'],
-        'label' => ['is', 'is_not', 'in', 'not_in', 'is_empty', 'is_not_empty', 'contains'],
-        'start_date' => ['is', 'before', 'after', 'between', 'is_empty', 'is_not_empty'],
-        'due_date' => ['is', 'before', 'after', 'between', 'is_empty', 'is_not_empty', 'overdue'],
-        'created_at' => ['is', 'before', 'after', 'between'],
-        'updated_at' => ['is', 'before', 'after', 'between'],
-        'closed_at' => ['is', 'before', 'after', 'between', 'is_empty', 'is_not_empty'],
-        'has_children' => ['is'],
-        'blocked' => ['is'],
-        'blocking' => ['is'],
-        'archived' => ['is'],
-        'epic' => ['is'],
-        'subscribed' => ['is'],
-        'title' => ['contains'],
-    ],
-    'property' => [
-        'dropdown' => ['is', 'is_not', 'in', 'not_in', 'is_empty', 'is_not_empty'],
-        'dropdown_multiple' => ['is', 'is_not', 'in', 'not_in', 'is_empty', 'is_not_empty', 'contains'],
-        'member' => ['is', 'is_not', 'in', 'not_in', 'is_empty', 'is_not_empty'],
-        'member_multiple' => ['is', 'is_not', 'in', 'not_in', 'is_empty', 'is_not_empty', 'contains'],
-        'date' => ['is', 'before', 'after', 'between', 'is_empty', 'is_not_empty'],
-        'boolean' => ['is'],
-        'number' => ['is', 'gt', 'lt', 'between', 'is_empty', 'is_not_empty'],
-        'text' => ['contains', 'is', 'is_empty', 'is_not_empty'],
-        'url' => ['contains', 'is', 'is_empty', 'is_not_empty'],
-        'rich_text' => ['contains', 'is_empty', 'is_not_empty'],
-    ],
-];
-
-it('offers the operators of every core field and every type of property', function () use ($operators) {
+it('offers the operators of operators.json', function () {
+    // the browser offers the same list (`fieldOps.test.ts` reads the file too): per core field and per type of property
+    $operators = json_decode((string) file_get_contents(repo_path('resources/js/features/items/filter/operators.json')), true, flags: JSON_THROW_ON_ERROR);
     $names = fn (Field $field): array => array_map(fn (Op $op) => $op->value, $field->ops());
 
     $core = [];

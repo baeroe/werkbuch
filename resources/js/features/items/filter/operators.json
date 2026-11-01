@@ -1,0 +1,37 @@
+{
+  "core": {
+    "project": ["is", "is_not", "in", "not_in"],
+    "type": ["is", "is_not", "in", "not_in"],
+    "state": ["is", "is_not", "in", "not_in"],
+    "assignee": ["is", "is_not", "in", "not_in", "is_empty", "is_not_empty"],
+    "created_by": ["is", "is_not", "in", "not_in"],
+    "parent": ["is", "is_not", "in", "not_in", "is_empty", "is_not_empty"],
+    "state_category": ["is", "is_not", "in", "not_in"],
+    "priority": ["is", "is_not", "in", "not_in"],
+    "label": ["is", "is_not", "in", "not_in", "is_empty", "is_not_empty", "contains"],
+    "start_date": ["is", "before", "after", "between", "is_empty", "is_not_empty"],
+    "due_date": ["is", "before", "after", "between", "is_empty", "is_not_empty", "overdue"],
+    "created_at": ["is", "before", "after", "between"],
+    "updated_at": ["is", "before", "after", "between"],
+    "closed_at": ["is", "before", "after", "between", "is_empty", "is_not_empty"],
+    "has_children": ["is"],
+    "blocked": ["is"],
+    "blocking": ["is"],
+    "archived": ["is"],
+    "epic": ["is"],
+    "subscribed": ["is"],
+    "title": ["contains"]
+  },
+  "property": {
+    "boolean": ["is"],
+    "date": ["is", "before", "after", "between", "is_empty", "is_not_empty"],
+    "dropdown": ["is", "is_not", "in", "not_in", "is_empty", "is_not_empty"],
+    "dropdown_multiple": ["is", "is_not", "in", "not_in", "is_empty", "is_not_empty", "contains"],
+    "member": ["is", "is_not", "in", "not_in", "is_empty", "is_not_empty"],
+    "member_multiple": ["is", "is_not", "in", "not_in", "is_empty", "is_not_empty", "contains"],
+    "number": ["is", "gt", "lt", "between", "is_empty", "is_not_empty"],
+    "rich_text": ["contains", "is_empty", "is_not_empty"],
+    "text": ["contains", "is", "is_empty", "is_not_empty"],
+    "url": ["contains", "is", "is_empty", "is_not_empty"]
+  }
+}

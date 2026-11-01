@@ -59,6 +59,9 @@ export const SHORTCUTS = {
   'list.clear': { keys: 'escape', scope: 'list', label: 'shortcuts.list.clear', group: 'shortcuts.group.list' },
   'list.open': { keys: 'enter', scope: 'list', label: 'shortcuts.list.open', group: 'shortcuts.group.list' },
   'list.peek': { keys: 'space', scope: 'list', label: 'shortcuts.list.peek', group: 'shortcuts.group.list' },
+  // the filter bar of an item list (`features/items/filter/FilterBar.tsx`); `/` of a list wins over a later global one
+  'list.filter': { keys: 'f', scope: 'list', label: 'shortcuts.list.filter', group: 'shortcuts.group.list' },
+  'list.search': { keys: '/', scope: 'list', label: 'shortcuts.list.search', group: 'shortcuts.group.list' },
   // the layout of an item list (`features/items/ListHeader.tsx`), as the switch in its header offers them
   'list.layout.list': { keys: '1', scope: 'list', label: 'shortcuts.list.layout.list', group: 'shortcuts.group.view' },
   'list.layout.board': { keys: '2', scope: 'list', label: 'shortcuts.list.layout.board', group: 'shortcuts.group.view' },
