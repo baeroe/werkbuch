@@ -132,6 +132,8 @@ function usePagedLists(lists: readonly PagedList[], all: boolean): Record<string
   // the lists being rebuilt after an invalidation, with the depth they had; the ref answers at once (`queryFn`)
   const [rebuild, setRebuild] = useState<Record<string, number>>({});
   const rebuildingNow = useRef(new Set<string>());
+  // who waits for the rebuild of a list to end (`loadAll`, ⌘A)
+  const waiting = useRef(new Map<string, ((chain: (string | null)[]) => void)[]>());
   let cursorsOf = state;
   let rebuilding = rebuild;
   const missing = keyed.filter((list) => !(list.argsKey in state));
@@ -232,6 +234,8 @@ function usePagedLists(lists: readonly PagedList[], all: boolean): Record<string
         if (now?.isInvalidated || now?.dataUpdatedAt !== startedAt) return;
         rebuildingNow.current.delete(list.argsKey);
         setRebuild(({ [list.argsKey]: _done, ...rest }) => rest);
+        waiting.current.get(list.argsKey)?.forEach((resolve) => resolve(chain));
+        waiting.current.delete(list.argsKey);
       })();
     }
   });
@@ -260,12 +264,27 @@ function usePagedLists(lists: readonly PagedList[], all: boolean): Record<string
       };
       const loadAll = async (): Promise<ListedItem[]> => {
         const fetchPage = (cursor: string | null) => queryClient.fetchQuery({ queryKey: pageKey(list.args, cursor), queryFn: () => pageOf(list.args, cursor) });
-        const cursors = [...list.cursors];
-        let page = await fetchPage(cursors.at(-1)!);
-        while (page.next_cursor) {
-          const cursor = page.next_cursor;
-          cursors.push(cursor);
-          page = await fetchPage(cursor);
+        let cursors = [...list.cursors];
+        for (;;) {
+          // a rebuild (K15) replaces the old cursors, which may miss an item: wait for the new chain and load on from
+          // there (the first page first, so one that failed is asked again instead of waited for)
+          while (rebuildingNow.current.has(list.argsKey)) {
+            await fetchPage(null);
+            cursors = await new Promise<(string | null)[]>((resolve) => waiting.current.set(list.argsKey, [...(waiting.current.get(list.argsKey) ?? []), resolve]));
+          }
+          // the first page as it stands now (a stale one loads afresh): the chain starts there
+          await fetchPage(null);
+          const firstAt = queryClient.getQueryState(pageKey(list.args, null))?.dataUpdatedAt;
+          let page = await fetchPage(cursors.at(-1)!);
+          while (page.next_cursor) {
+            const cursor = page.next_cursor;
+            cursors.push(cursor);
+            page = await fetchPage(cursor);
+          }
+          // a change meanwhile gave the first page another answer (or made it stale): these cursors are old, start over
+          const first = queryClient.getQueryState(pageKey(list.args, null));
+          if (first !== undefined && first.dataUpdatedAt === firstAt && !first.isInvalidated && !rebuildingNow.current.has(list.argsKey)) break;
+          cursors = [null];
         }
         setState((current) => ({ ...current, [list.argsKey]: cursors }));
         const seen = new Set<string>();
@@ -290,7 +309,8 @@ function usePagedLists(lists: readonly PagedList[], all: boolean): Record<string
     if (!all) return;
     for (const list of layout) {
       const { nextCursor, loadingMore, moreError } = combined[list.id]!;
-      if (list.enabled && nextCursor && !loadingMore && !moreError) appendCursor(list.argsKey, nextCursor);
+      // a list being rebuilt loads on along its new chain, never from the old cursors
+      if (list.enabled && !list.rebuilding && nextCursor && !loadingMore && !moreError) appendCursor(list.argsKey, nextCursor);
     }
   });
 
