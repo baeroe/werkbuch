@@ -6,16 +6,14 @@
  * - Without a project that takes new items it says so; a project the screen named but the person only reads is passed
  *   over with the reason beside the project.
  * - A catalog that fails to reload keeps the form and its draft: only one that never arrived stops it (13c).
- * - Creating waits a tick for fields that keep their value on Enter, then checks what only the form knows (a property
- *   that still shows a text it cannot read, the title) and sends once; a press during the call does nothing.
- * - Field errors of the server (422) show at their field and the focus goes to the first; an error disappears as soon
- *   as its field changes (13c). Any other refusal shows on top, a failure without an answer as a toast with a retry.
+ * - Sending is `useCreateSubmit`: once per press, never again after the item was created (the form fades out with
+ *   the dialog). Field errors of the server (422) show at their field; an error disappears as soon as its field
+ *   changes (13c). Any other refusal shows on top.
  */
 
 import { usePage } from '@inertiajs/react';
 import { FileQuestionMark, RotateCw } from 'lucide-react';
 import { useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from 'react';
-import { ApiError } from '@/api/client';
 import type { CreateWorkItemInput } from '@/api/workItems';
 import { TypeGlyph } from '@/components/fields/TypeGlyph';
 import { Banner } from '@/components/ui/Banner';
@@ -26,26 +24,21 @@ import { ProjectBadge } from '@/components/ui/ProjectBadge';
 import { Select } from '@/components/ui/Select';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
 import { labelClass } from '@/components/ui/styles';
-import { canHaveParent } from '@/domain/hierarchy';
-import { isEmptyDoc, RichTextEditor } from '@/editor/RichTextEditor';
-import { useSettle } from '@/hooks/mutation';
+import { RichTextEditor } from '@/editor/RichTextEditor';
 import { useProjects } from '@/hooks/projects';
 import { useProperties } from '@/hooks/properties';
 import { useWorkflows } from '@/hooks/workflows';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
-import { notifyError } from '@/lib/errors';
 import { t } from '@/lib/i18n';
 import { usePermissions } from '@/lib/permissions';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import type { CreateDefaults } from '@/store/ui';
 import type { Project, Property, PropertyValue, WorkItem, WorkItemType, Workflow } from '@/types';
 import { useUnsavedGuard } from '@/features/item-detail/shared';
-import { hasContent, nextDraft, parkedTaken, parkedToRestore, type Draft } from './draft';
-import { ItemFields, startStates, type Errors } from './ItemFields';
+import { hasContent, parkedTaken, parkedToRestore, type Draft } from './draft';
+import { ItemFields, type Errors } from './ItemFields';
 import { PropertyInputs, type PropertyEntry } from './PropertyInputs';
-
-/** As the server counts it (`ItemInput::TITLE_MAX`). */
-const MAX_TITLE = 255;
+import { useCreateSubmit } from './useCreateSubmit';
 
 export type CreateFormProps = {
   formId: string;
@@ -166,7 +159,6 @@ function FormBody({
   workflows,
   properties,
 }: FormBodyProps) {
-  const settle = useSettle();
   const form = useRef<HTMLFormElement>(null);
   const descriptionError = useId();
   const fieldId = (key: string) => `${formId}-value-${key}`;
@@ -221,16 +213,23 @@ function FormBody({
   const [attempted, setAttempted] = useState(false);
   const [blocked, setBlocked] = useState<string | null>(null);
   const [focusError, setFocusError] = useState(0);
-  /** The draft and the unreadable fields as they are now, for a create that runs once pending field changes have landed. */
-  const latest = useRef({ draft, unreadable });
-  /** The last item was created and the dialog closes: nothing to keep. */
-  const done = useRef(false);
-  const scheduled = useRef(false);
-  /** A create is on its way; a second press waits for its answer. */
-  const sending = useRef(false);
-  useLayoutEffect(() => {
-    latest.current = { draft, unreadable };
-    unsaved.current = done.current ? null : draft;
+  const requestCreate = useCreateSubmit({
+    draft,
+    unreadable,
+    catalogs: { projects, types, workflows },
+    fieldsOf,
+    fieldId,
+    another,
+    send,
+    pending,
+    titleRef,
+    unsaved,
+    onClose,
+    setDraft,
+    setErrors,
+    setAttempted,
+    setBlocked,
+    focusFirstError: () => setFocusError((count) => count + 1),
   });
   useLayoutEffect(
     () => () => {
@@ -275,91 +274,6 @@ function FormBody({
   function changeType(typeId: string) {
     clearError('type_id', 'parent_id');
     update({ typeId, values: keptValues(draft.values, typeId) });
-  }
-
-  /** Creates once the fields that keep their value on Enter or blur have landed. */
-  function requestCreate() {
-    if (scheduled.current || sending.current || pending) return;
-    scheduled.current = true;
-    setTimeout(() => {
-      scheduled.current = false;
-      createNow();
-    }, 0);
-  }
-
-  function createNow() {
-    const { draft: current, unreadable: stuckValues } = latest.current;
-    const own = fieldsOf(current.typeId);
-    setAttempted(true);
-    // a value the form cannot read is no value: nothing is sent, the fix is at the field
-    const stuck = own.find(({ property }) => stuckValues[property.key]);
-    if (stuck) {
-      setBlocked(t('items.create.blocked'));
-      document.getElementById(fieldId(stuck.property.key))?.focus();
-      return;
-    }
-    const title = current.title.trim();
-    if (title === '' || title.length > MAX_TITLE) {
-      setErrors({ title: title === '' ? t('items.create.title_required') : t('items.create.title_max', { max: MAX_TITLE, count: title.length }) });
-      setFocusError((count) => count + 1);
-      return;
-    }
-    setBlocked(null);
-    setErrors({});
-    sending.current = true;
-    settle(send(toInput(current, title, own)), {
-      onSuccess: () => {
-        if (!another) {
-          done.current = true;
-          unsaved.current = null;
-          onClose();
-          return;
-        }
-        // the next one: same project, type, status and fields; new title, description and properties
-        const next = nextDraft(current);
-        latest.current = { draft: next, unreadable: {} };
-        setDraft(next);
-        setAttempted(false);
-        titleRef.current?.focus();
-      },
-      onError: (error) => {
-        if (error instanceof ApiError && error.errors) {
-          setErrors(Object.fromEntries(Object.entries(error.errors).map(([path, messages]) => [path, messages[0]!])));
-          setFocusError((count) => count + 1);
-        } else if (error instanceof ApiError && error.status < 500) {
-          setErrors({ form: error.message });
-        } else {
-          notifyError(t('items.create.failed'), error, requestCreate);
-        }
-      },
-      onSettled: () => {
-        sending.current = false;
-      },
-    });
-  }
-
-  /** The request: a status other than the start state only when the workflow offers it, a parent only below an epic. */
-  function toInput(current: Draft, title: string, own: PropertyEntry[]): CreateWorkItemInput {
-    const project = projects.find((entry) => entry.id === current.projectId)!;
-    const states = startStates(workflows.find((entry) => entry.id === project.workflow_id));
-    const target = states.slice(1).find((state) => state.id === current.stateId);
-    // a required yes/no reads "Nein" until it is switched: that is what it sends (A89)
-    const switches = own.filter(({ property, required }) => required && property.field_type === 'boolean' && !(property.key in current.values));
-    return {
-      project_id: current.projectId,
-      type_id: current.typeId,
-      title,
-      description: isEmptyDoc(current.description) ? null : current.description,
-      ...(target && { state_id: target.id }),
-      assignee_id: current.assigneeId,
-      priority: current.priority,
-      label_ids: current.labelIds,
-      start_date: current.startDate,
-      due_date: current.dueDate,
-      // an epic stands at the top: the parent its field held while hidden does not count
-      parent_id: canHaveParent(types.find((entry) => entry.id === current.typeId)) ? current.parentId : null,
-      values: { ...Object.fromEntries(switches.map(({ property }) => [property.key, property.default_value ?? false])), ...current.values },
-    };
   }
 
   const otherErrors = Object.entries(errors).filter(([path]) => path !== 'form' && !FIELD_PATHS.has(path) && !path.startsWith('values.'));

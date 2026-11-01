@@ -7,7 +7,7 @@
  */
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { StrictMode, type ReactNode } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -264,6 +264,52 @@ describe('CreateItemDialog', () => {
     expect(useUiStore.getState().peekItemId).toBe('wi_new_52');
     // nothing was left to park
     expect(parkedToasts()).toEqual([]);
+  });
+
+  it('creates nothing more once the item was created, also while the dialog closes', async () => {
+    const user = userEvent.setup();
+    // the parent has not closed it yet: the form is still there, with the title it sent
+    const { dialog, title, onOpenChange } = await openDialog();
+    await user.type(title, 'Impressum aktualisieren');
+    await modEnter();
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+
+    // mod+enter again, the button, and Enter in the title (the form's submit)
+    await modEnter();
+    await user.click(within(dialog).getByRole('button', { name: /^Anlegen/ }));
+    fireEvent.submit(title.form!);
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(posts()).toHaveLength(1);
+  });
+
+  it('creates nothing more when mod+enter comes while the dialog animates out', async () => {
+    const user = userEvent.setup();
+    renderWith(<Host />);
+    act(() => useUiStore.getState().openCreate({ project_id: 'p_web' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Neues Item' });
+    await user.type(await within(dialog).findByRole('textbox', { name: /^Titel/ }), 'Impressum aktualisieren');
+
+    // the closing animation runs until `finish`: jsdom has none, so Base UI would unmount the popup at once
+    let finish!: () => void;
+    const fading = { pending: false, playState: 'running', effect: { getTiming: () => ({ duration: 160, iterations: 1 }) }, finished: new Promise<void>((resolve) => (finish = resolve)) };
+    Element.prototype.getAnimations = () => [fading as unknown as Animation];
+    try {
+      await modEnter();
+      await waitFor(() => expect(toastTitles()).toContain('WEB-52 angelegt'));
+      await waitFor(() => expect(useUiStore.getState().createOpen).toBe(false));
+      // the form is still there, fading out, with its mod+enter registered
+      expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+      await modEnter();
+      await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+      expect(posts()).toHaveLength(1);
+    } finally {
+      fading.playState = 'finished';
+      await act(async () => finish());
+    }
+    // Base UI looks once more for animations before it lets go of the popup
+    await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+    delete (Element.prototype as Partial<Element>).getAnimations;
+    expect(toastTitles().filter((title) => title.endsWith('angelegt'))).toEqual(['WEB-52 angelegt']);
   });
 
   it('keeps project, type and fields for another item', async () => {
