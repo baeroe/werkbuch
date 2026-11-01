@@ -331,8 +331,12 @@ export function BoardLayout({ groups, groupBy, display, selection, onSelect, onS
     const rank = rankForSlot(rankOf(ids[index - 1]), rankOf(ids[index + 1]), display.sort.direction);
     // the rank would grow past what the server takes (P23): the card stays where it is
     if (rank === null) return refuse(item, { code: 'no_room', params: {} });
-    // the card keeps its element (and the focus) in its column; a refusal of the server puts it back and says why
+    // the new rank moves the card's element within its column, and a focused element that moves loses the focus in
+    // the browser. React gives it back within the commit that moved it (seen in Chromium); the card is followed all the
+    // same, as a move to another column is, so the focus stays with it whatever renders next (the rollback of a
+    // refusal included)
     mark(item.id, true);
+    follow(item.id, column.key);
     void update
       .mutateAsync({ id: item.id, patch: { rank } })
       .then(

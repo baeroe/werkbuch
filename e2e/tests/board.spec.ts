@@ -4,17 +4,18 @@ import { allEntries, createE2eProject, createItem, removeE2eProject, runId, tabT
 
 // The board of a project with the agency workflow (Agentur-Freigabe: Backlog → Todo → In Progress → Review →
 // Kundenfreigabe → Done), with the keyboard only, signed in as the e2e person (playwright.config.ts), in English. Each
-// test works in a project of its own (`E2E …`, removed after it) with one item over the API.
+// test works in a project of its own (`E2E …`, removed after it) with one or two items over the API.
 
 const name = (what: string) => `E2E board ${what} ${variant()} ${runId()}`;
 
-/** A project with the agency workflow and one item "Login form" in Todo. */
-async function boardProject(page: Page, what: string): Promise<{ identifier: string; key: string }> {
+/** A project with the agency workflow and items in Todo: "Login form", then the `more` titles. */
+async function boardProject(page: Page, what: string, more: string[] = []): Promise<{ identifier: string; key: string; keys: string[] }> {
   const workflow = (await allEntries(page, 'workflows')).find((entry) => entry.name === 'Agentur-Freigabe') as { states: { id: string; name: string }[] };
   const project = await createE2eProject(page, name(what), { workflow: 'Agentur-Freigabe', types: ['Task'] });
   const todo = workflow.states.find((state) => state.name === 'Todo')!.id;
-  const { key } = await createItem(page, { project_id: project.id, title: 'Login form', state_id: todo });
-  return { identifier: project.identifier, key };
+  const keys: string[] = [];
+  for (const title of ['Login form', ...more]) keys.push((await createItem(page, { project_id: project.id, title, state_id: todo })).key);
+  return { identifier: project.identifier, key: keys[0]!, keys };
 }
 
 const column = (page: Page, state: string) => page.getByRole('region', { name: state, exact: true });
@@ -61,6 +62,40 @@ test('refuses a move the workflow does not allow and names it', async ({ page })
 
     await page.reload();
     await expect(card(page, 'Todo', key)).toBeVisible();
+  } finally {
+    await removeE2eProject(page, identifier);
+  }
+});
+
+test('changes the place of a card in its column with alt+arrow and keeps the focus on it', async ({ page }) => {
+  await page.goto('/my-items');
+  const { identifier, keys } = await boardProject(page, 'reorder', ['Password reset']);
+  const [first, second] = keys as [string, string];
+  const order = () => column(page, 'Todo').getByRole('article');
+  try {
+    await openBoard(page, identifier, first);
+    await expect(order()).toHaveCount(2);
+
+    // down: the card itself moves in the page and keeps the focus
+    await page.keyboard.press('Alt+ArrowDown');
+    await expect(order().first()).toHaveAccessibleName(new RegExp(`^${second} `));
+    await expect(card(page, 'Todo', first)).toBeFocused();
+    await expect(page.getByRole('status', { name: tr('en', 'items.board.announcements') })).toHaveText(
+      tr('en', 'items.board.moved.place', { key: first, place: 2, count: 2, column: 'Todo' }),
+    );
+
+    await page.keyboard.press('Alt+ArrowUp');
+    await expect(order().first()).toHaveAccessibleName(new RegExp(`^${first} `));
+    await expect(card(page, 'Todo', first)).toBeFocused();
+
+    // the server has the order
+    await page.keyboard.press('Alt+ArrowDown');
+    await expect(card(page, 'Todo', first)).toBeFocused();
+    await expect(page.getByRole('status', { name: tr('en', 'items.board.announcements') })).toHaveText(
+      tr('en', 'items.board.moved.place', { key: first, place: 2, count: 2, column: 'Todo' }),
+    );
+    await page.reload();
+    await expect(order().first()).toHaveAccessibleName(new RegExp(`^${second} `));
   } finally {
     await removeE2eProject(page, identifier);
   }
