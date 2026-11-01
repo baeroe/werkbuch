@@ -182,9 +182,31 @@ final class WorkItem extends Model
             'children_done' => $children()
                 ->join('workflow_states as child_states', 'child_states.id', '=', 'children.state_id')
                 ->whereIn('child_states.category', self::closedCategories()),
-            'is_blocked' => self::blocks($query, 'target_id', 'source_id'),
-            'is_blocking' => self::blocks($query, 'source_id', 'target_id'),
+            'is_blocked' => self::blocks($query, false),
+            'is_blocking' => self::blocks($query, true),
         ]);
+    }
+
+    /**
+     * Whether the open item of the outer query blocks an open item (`$blocking`) or is blocked by one, through the
+     * built-in relation type `blocks`: a scalar subquery (`count(*) > 0`), the select of withComputed() and the
+     * condition of the filter (`App\Views\FilterQuery`) alike (K3).
+     *
+     * @param  Builder<self>  $outer
+     */
+    public static function blocks(Builder $outer, bool $blocking): QueryBuilder
+    {
+        [$self, $other] = $blocking ? ['source_id', 'target_id'] : ['target_id', 'source_id'];
+        $open = fn (QueryBuilder $states) => $states->select('id')->from('workflow_states')->whereNotIn('category', self::closedCategories());
+
+        return DB::query()->from('work_item_relations as blocks')
+            ->selectRaw('count(*) > 0')
+            ->join('relation_types as block_types', 'block_types.id', '=', 'blocks.type_id')
+            ->join('work_items as other_end', 'other_end.id', '=', "blocks.{$other}")
+            ->where('block_types.built_in', 'blocks')
+            ->whereColumn("blocks.{$self}", $outer->qualifyColumn('id'))
+            ->whereIn('other_end.state_id', $open)
+            ->whereIn($outer->qualifyColumn('state_id'), $open);
     }
 
     /**
@@ -333,25 +355,6 @@ final class WorkItem extends Model
             'is_blocked' => 'bool',
             'is_blocking' => 'bool',
         ];
-    }
-
-    /**
-     * Whether an open item at `$self` of a `blocks` relation (this item, open as well) has an open item at the other end.
-     *
-     * @param  Builder<self>  $outer
-     */
-    private static function blocks(Builder $outer, string $self, string $other): QueryBuilder
-    {
-        $open = fn (QueryBuilder $states) => $states->select('id')->from('workflow_states')->whereNotIn('category', self::closedCategories());
-
-        return DB::query()->from('work_item_relations as blocks')
-            ->selectRaw('count(*) > 0')
-            ->join('relation_types as block_types', 'block_types.id', '=', 'blocks.type_id')
-            ->join('work_items as other_end', 'other_end.id', '=', "blocks.{$other}")
-            ->where('block_types.built_in', 'blocks')
-            ->whereColumn("blocks.{$self}", $outer->qualifyColumn('id'))
-            ->whereIn('other_end.state_id', $open)
-            ->whereIn($outer->qualifyColumn('state_id'), $open);
     }
 
     /**

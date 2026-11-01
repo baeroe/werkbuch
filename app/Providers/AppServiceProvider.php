@@ -17,6 +17,7 @@ use App\Models\User;
 use App\Models\Workflow;
 use App\Models\WorkItem;
 use App\Models\WorkItemType;
+use App\Views\CatalogProperties;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Events\TransactionRolledBack;
 use Illuminate\Support\Facades\Event as Events;
@@ -34,6 +35,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->scoped(Organization::class, fn () => Organization::query()->sole());
         // the role assignments (and the visible projects), read once per request and job
         $this->app->scoped(RoleIndex::class);
+        // the properties as filters, sorts and displays look them up, read once per request and job
+        $this->app->scoped(CatalogProperties::class, fn () => CatalogProperties::load());
     }
 
     /**
