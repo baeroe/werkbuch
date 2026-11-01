@@ -463,7 +463,10 @@ describe('Description', () => {
     expect(parked.textContent).toContain('WEB-47 ist archiviert und schreibgeschützt. Stelle es zuerst wieder her.');
     expect(parked.textContent).toContain('Nicht verlieren. Beim Absenden kommt die Mail zweimal an.');
     expect(within(section).queryByRole('textbox')).toBeNull();
-    expect(within(parked).getByRole('button', { name: 'Kopieren' })).toBeTruthy();
+    // the browser refuses the clipboard: copying selects the text instead
+    vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValueOnce(new Error('denied'));
+    await user.click(within(parked).getByRole('button', { name: 'Kopieren' }));
+    expect(window.getSelection()?.toString()).toContain('Nicht verlieren.');
     const leaving = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(leaving);
     expect(leaving.defaultPrevented).toBe(true);
