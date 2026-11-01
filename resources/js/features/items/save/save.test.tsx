@@ -233,6 +233,44 @@ describe('unsaved changes', () => {
     expect(currentToasts().map((entry) => entry.title)).toContain('View „Fällig diese Woche (Kopie)“ angelegt');
   });
 
+  it('blocks saving a view with a condition on a field that is gone, and says how to get on', async () => {
+    const gone: Condition = { field: 'property:gone', op: 'is', value: 'opt_x' };
+    await openView(makeView({ created_by: 'u_lene', filter: { version: 1, conditions: [gone] }, display: display() }), '?group=priority');
+    const sentence = 'Eine Bedingung nennt ein Feld, das es nicht mehr gibt. Entferne sie mit × am Chip „Unbekanntes Feld“, dann lässt sich die View speichern.';
+    const save = await screen.findByRole('button', { name: 'Speichern' });
+    await waitFor(() => expect(reasonOf(save)).toBe(sentence));
+    expect(save.getAttribute('aria-disabled')).toBe('true');
+    const saveAs = screen.getByRole('button', { name: 'Als neue View speichern …' });
+    expect(reasonOf(saveAs)).toBe(sentence);
+    fireEvent.click(save);
+    fireEvent.click(saveAs);
+    expect(screen.queryByRole('dialog', { name: 'Als neue View speichern' })).toBeNull();
+    expect(api.calls.some((call) => call.method === 'PUT' || (call.method === 'POST' && call.url === '/api/v1/views'))).toBe(false);
+
+    // the × of the chip takes the condition away: both may be sent again
+    fireEvent.click(screen.getByRole('button', { name: 'Filter „Unbekanntes Feld“ entfernen' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Speichern' }).getAttribute('aria-disabled')).toBeNull());
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }));
+    await waitFor(() => expect(api.calls.find((call) => call.method === 'PUT')?.body).toMatchObject({ filter: { version: 1, conditions: [] } }));
+  });
+
+  it('refuses mod+enter in the dialog while a condition names a field that is gone', async () => {
+    const user = userEvent.setup();
+    inertia.go(`/projects/WEB?filter=${filterOf([{ field: 'title', op: 'contains', value: 'Logo' }])}`);
+    renderScreen();
+    const form = await openSaveAs();
+    // the field goes while the dialog is open (a link that names it in another tab is the same thing)
+    act(() => inertia.go(`/projects/WEB?filter=${filterOf([{ field: 'nonsense', op: 'is', value: 'x' }])}`));
+    const submit = within(form).getByRole('button', { name: /View anlegen/ });
+    await waitFor(() => expect(submit.getAttribute('aria-disabled')).toBe('true'));
+    const name = within(form).getByRole('textbox', { name: 'Name' });
+    await user.click(name);
+    fireEvent.keyDown(name, { key: 'Enter', ctrlKey: true });
+    fireEvent.submit(name.closest('form')!);
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+    expect(posted()).toHaveLength(0);
+  });
+
   it('lets an org admin save the view of somebody else', async () => {
     inertia.user = mara;
     await openView(makeView({ created_by: 'u_lene', display: display() }), '?group=priority');
@@ -349,9 +387,17 @@ describe('save as a new view', () => {
     await waitFor(() => expect(within(dialog()).queryByText('Wähle ein Icon aus der Liste.')).toBeNull());
 
     // a refusal without a field stands on top; a failure says so in a toast with a retry, and the dialog stays
-    createAnswer = () => ({ status: 422, body: { reason: 'validation_failed', detail: 'Der Filter ist nicht gültig.', errors: { 'filter.conditions.0.field': ['Unbekanntes Feld.'] } } });
+    // as the server answers it: the general sentence, the cause at the path (a property deleted since the list loaded)
+    createAnswer = () => ({
+      status: 422,
+      body: { reason: 'validation_failed', detail: 'Die Eingabe ist nicht gültig.', errors: { 'filter.conditions.1.field': ['Dieses Feld gibt es nicht.'] } },
+    });
     fireEvent.click(within(dialog()).getByRole('button', { name: /View anlegen/ }));
-    expect(await within(dialog()).findByText('Der Filter ist nicht gültig.')).toBeTruthy();
+    expect(await within(dialog()).findByText('Dieses Feld gibt es nicht.')).toBeTruthy();
+    // without a sentence of its own, the general one
+    createAnswer = () => ({ status: 409, body: { reason: 'conflict', detail: 'Die Eingabe ist nicht gültig.' } });
+    fireEvent.click(within(dialog()).getByRole('button', { name: /View anlegen/ }));
+    expect(await within(dialog()).findByText('Die Eingabe ist nicht gültig.')).toBeTruthy();
     createAnswer = () => ({ status: 503, body: { reason: 'unavailable', detail: 'Wartung.' } });
     fireEvent.click(within(dialog()).getByRole('button', { name: /View anlegen/ }));
     await waitFor(() => expect(currentToasts().map((entry) => entry.title)).toContain('View nicht angelegt'));
@@ -372,16 +418,19 @@ describe('save as a new view', () => {
       if (init?.method === 'POST' && String(input).endsWith('/views')) await gate;
       return inner(input, init);
     };
-    const name = within(dialog()).getByRole('textbox', { name: 'Name' });
-    act(() => name.focus());
-    fireEvent.keyDown(name, { key: 'Enter', ctrlKey: true });
-    fireEvent.keyDown(name, { key: 'Enter', ctrlKey: true });
-    await waitFor(() => expect(within(dialog()).getByRole('button', { name: /View anlegen/ }).getAttribute('aria-busy')).toBe('true'));
-    fireEvent.keyDown(name, { key: 'Enter', ctrlKey: true });
-    release();
-    await waitFor(() => expect(inertia.visit).toHaveBeenCalledWith('/views/v_new'));
-    expect(posted()).toHaveLength(1);
-    globalThis.fetch = inner;
+    try {
+      const name = within(dialog()).getByRole('textbox', { name: 'Name' });
+      act(() => name.focus());
+      fireEvent.keyDown(name, { key: 'Enter', ctrlKey: true });
+      fireEvent.keyDown(name, { key: 'Enter', ctrlKey: true });
+      await waitFor(() => expect(within(dialog()).getByRole('button', { name: /View anlegen/ }).getAttribute('aria-busy')).toBe('true'));
+      fireEvent.keyDown(name, { key: 'Enter', ctrlKey: true });
+      release();
+      await waitFor(() => expect(inertia.visit).toHaveBeenCalledWith('/views/v_new'));
+      expect(posted()).toHaveLength(1);
+    } finally {
+      globalThis.fetch = inner;
+    }
   });
 });
 

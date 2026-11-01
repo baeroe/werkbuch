@@ -24,6 +24,8 @@ type SaveAsDialogProps = {
   /** Makes the view (`useListSave().saveAs`). */
   saveAs(name: string, icon: string): Promise<View>;
   pending: boolean;
+  /** Why the view cannot be sent (a condition on a field that is gone), or null. */
+  blocked?: string | null;
   /** The scope a built-in list hands over, as it reads ("Projekt ist Website-Relaunch"), or null. */
   scopeText: string | null;
   defaultName: string;
@@ -33,7 +35,7 @@ type SaveAsDialogProps = {
 
 type Errors = { name?: string | undefined; icon?: string | undefined };
 
-export function SaveAsDialog({ open, onOpenChange, saveAs, pending, scopeText, defaultName, defaultIcon, finalFocus }: SaveAsDialogProps) {
+export function SaveAsDialog({ open, onOpenChange, saveAs, pending, blocked = null, scopeText, defaultName, defaultIcon, finalFocus }: SaveAsDialogProps) {
   const settle = useSettle();
   const [name, setName] = useState(defaultName);
   const [icon, setIcon] = useState(defaultIcon);
@@ -51,6 +53,8 @@ export function SaveAsDialog({ open, onOpenChange, saveAs, pending, scopeText, d
   }, [open, defaultName, defaultIcon]);
 
   function submit() {
+    // ⌘↵ reaches here past the blocked button: nothing goes to a server that would refuse it
+    if (blocked) return;
     const trimmed = name.trim();
     setNotice(null);
     if (trimmed === '') {
@@ -69,7 +73,8 @@ export function SaveAsDialog({ open, onOpenChange, saveAs, pending, scopeText, d
         if (error instanceof ApiError && error.status < 500) {
           const fields: Errors = { name: error.errors?.name?.[0], icon: error.errors?.icon?.[0] };
           if (fields.name || fields.icon) setErrors(fields);
-          else setNotice(error.message);
+          // the sentences of the fields the dialog does not have (the filter, the display) say more than the general one
+          else setNotice(Object.values(error.errors ?? {}).flat().join(' ') || error.message);
           return;
         }
         notifyError(t('items.save.create_failed'), error, submit);
@@ -86,6 +91,7 @@ export function SaveAsDialog({ open, onOpenChange, saveAs, pending, scopeText, d
       submitLabel={t('items.save.dialog.submit')}
       onSubmit={submit}
       pending={pending}
+      submitDisabledReason={blocked}
       notice={notice}
       finalFocus={finalFocus}
     >

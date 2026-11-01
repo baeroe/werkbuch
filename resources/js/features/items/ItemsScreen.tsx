@@ -237,11 +237,13 @@ function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: P
   const saving = useListSave({ view, state, scope });
   const [savingAs, setSavingAs] = useState(false);
   const creatorName = users.data?.items.find((user) => user.id === view?.created_by)?.name ?? t('items.save.creator');
+  // a condition on a field that is gone blocks both: the server would refuse the filter
   const saveReason =
-    view && view.created_by !== me?.id && reason('view.manage_any') !== null
+    saving.blocked ??
+    (view && view.created_by !== me?.id && reason('view.manage_any') !== null
       ? `${t('problem.detail.view_creator_only', { name: creatorName, view: view.name })} ${t('items.save.copy_instead')}`
-      : null;
-  const saveAsReason = reason('view.create');
+      : null);
+  const saveAsReason = saving.blocked ?? reason('view.create');
   /** Back to what is saved: a view drops every change, a built-in list its filter (its display was no unsaved change). */
   const discard = () => {
     const before = state;
@@ -380,6 +382,7 @@ function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: P
         onOpenChange={setSavingAs}
         saveAs={saving.saveAs}
         pending={saving.creating}
+        blocked={saving.blocked}
         scopeText={scopeText}
         defaultName={view ? copyName(view.name) : title}
         defaultIcon={view?.icon ?? 'layers'}
