@@ -1,15 +1,18 @@
 <?php
 
 use App\Access\ProjectRole;
+use App\Actions\Workflows\SaveWorkflow;
 use App\Actions\WorkItems\RemapStates;
 use App\Domain\Workflow\StateCategory;
 use App\Events\EventType;
+use App\Models\Event;
 use App\Models\Project;
 use App\Models\Resolution;
 use App\Models\User;
 use App\Models\Workflow;
 use App\Models\WorkItem;
 use App\Support\Actor;
+use Tests\Support\WorkflowFixtures;
 
 /*
  * RemapStates moves the items of projects out of states that go away (AssignWorkflow, SaveWorkflow): without asking the
@@ -152,4 +155,24 @@ it('moves nothing without a mapping', function () use ($web) {
 
     expect(RemapStates::run(actor($mara), [$project->id], [], RemapStates::WORKFLOW_CHANGED))->toBe(0)
         ->and(eventsOf(EventType::WorkItemStateChanged))->toBeEmpty();
+});
+
+it('rewrites the items of a project being deleted without recording events for them', function () use ($web, $state) {
+    [$project] = $web();
+    $admin = User::factory()->admin()->create();
+    $gone = Project::factory()->identifier('OLD')->create(['deleting_at' => now()]);
+    $live = WorkItem::factory()->for($project)->inState('Pending')->create();
+    $purged = WorkItem::factory()->for($gone)->inState('Pending')->create();
+    $input = WorkflowFixtures::inputOf(Workflow::default());
+    $pending = $state($project, 'Pending');
+    $todo = $state($project, 'Todo');
+    $input['states'] = array_values(array_filter($input['states'], fn (array $row) => $row['id'] !== $pending));
+
+    SaveWorkflow::run(actor($admin), Workflow::default(), [...$input, 'state_mapping' => [$pending => $todo]]);
+
+    // the purge takes the project with its items; an event of its own would stay in the history without a subject
+    expect($live->fresh()?->state_id)->toBe($todo)
+        ->and($purged->fresh()?->state_id)->toBe($todo)
+        ->and(eventsOf(EventType::WorkItemStateChanged)->pluck('subject_id')->all())->toBe([$live->id])
+        ->and(Event::query()->where('subject_id', $purged->id)->exists())->toBeFalse();
 });

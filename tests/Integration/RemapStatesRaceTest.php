@@ -3,6 +3,7 @@
 use App\Access\ProjectRole;
 use App\Actions\Projects\AssignWorkflow;
 use App\Actions\Workflows\SaveWorkflow;
+use App\Actions\WorkItems\CreateWorkItem;
 use App\Actions\WorkItems\TransitionWorkItem;
 use App\Models\Project;
 use App\Models\User;
@@ -124,4 +125,49 @@ it('a move into a state that is being removed fails cleanly', function () use ($
         ->and($item->fresh()?->state_id)->toBe($todo)
         ->and($waiting->fresh()?->state_id)->toBe($todo)
         ->and(WorkflowState::query()->whereKey($pending)->exists())->toBeFalse();
+});
+
+it('makes a workflow change wait for a running transition and then rewrite the moved item', function () use ($world, $stateOf) {
+    [$web, $item, $mara, $lene, $agency] = $world();
+    $default = Workflow::default();
+    // Todo goes to Backlog, In Progress to Doing: where the item ends up tells which state the switch saw; the project
+    // is read on the connection of the switch, as a request of its own would
+    $switch = fn () => AssignWorkflow::run(actor($mara), Project::query()->findOrFail($web->id), ['workflow_id' => $agency->id, 'mapping' => [
+        $stateOf($default, 'Todo') => $stateOf($agency, 'Backlog'),
+        $stateOf($default, 'In Progress') => $stateOf($agency, 'Doing'),
+    ]]);
+
+    // connection 1: Lene moves the item Todo → In Progress, the transaction stays open
+    RaceConnections::hold(fn () => TransitionWorkItem::run(actor($lene), $item, ['to_state_id' => $stateOf($default, 'In Progress')]));
+
+    // connection 2: the switch waits for the organization instead of mapping the state it read before
+    RaceConnections::expectLockWait(RaceConnections::second($switch), 'organization');
+
+    // the move commits the moment the switch asks again: under the lock it maps the state the move left
+    RaceConnections::releaseBeforeLock('organization');
+    $outcome = RaceConnections::second($switch);
+
+    expect($outcome)->toBeInstanceOf(Project::class)
+        ->and($item->fresh()?->state_id)->toBe($stateOf($agency, 'Doing'))
+        ->and($web->fresh()?->workflow_id)->toBe($agency->id);
+});
+
+it('creates an item in the start state of the new workflow when the change came first', function () use ($world, $stateOf, $switch) {
+    [$web, , $mara, $lene, $agency] = $world();
+    $create = fn () => CreateWorkItem::run(actor($lene), ['project_id' => $web->id, 'title' => 'Neues Formular']);
+
+    // connection 1: Mara switches WEB to the agency workflow, the transaction stays open
+    RaceConnections::hold(fn () => $switch($mara, $web, $agency));
+
+    // connection 2: the new item waits for the organization instead of starting in the old workflow
+    RaceConnections::expectLockWait(RaceConnections::second($create), 'organization', null, 'lock in share mode');
+
+    RaceConnections::releaseBeforeLock('organization', 'lock in share mode');
+    $created = RaceConnections::second($create);
+
+    expect($created)->toBeInstanceOf(WorkItem::class);
+    assert($created instanceof WorkItem);
+    expect(WorkItem::query()->find($created->id)?->state_id)->toBe($agency->initial_state_id)
+        ->and($agency->initial_state_id)->toBe($stateOf($agency, 'Backlog'))
+        ->and($agency->initial_state_id)->not->toBe(Workflow::default()->initial_state_id);
 });
