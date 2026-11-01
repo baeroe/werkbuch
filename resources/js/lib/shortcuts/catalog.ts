@@ -43,6 +43,22 @@ export const SHORTCUTS = {
   'item.relation': { keys: 'r', scope: 'detail', label: 'shortcuts.item.relation', group: 'shortcuts.group.item' },
   'item.title': { keys: 'e', scope: 'detail', label: 'shortcuts.item.title', group: 'shortcuts.group.item' },
   'item.remove': { keys: 'mod+backspace', scope: 'detail', label: 'shortcuts.item.remove', group: 'shortcuts.group.item' },
+  // the cursor and the selection of an item layout (`features/items/selection/useSelection.ts`); the table leaves out the
+  // arrows, they belong to its grid (K19)
+  'list.next': { keys: 'j', scope: 'list', label: 'shortcuts.list.next', group: 'shortcuts.group.list', repeat: true },
+  'list.next_arrow': { keys: 'down', scope: 'list', label: 'shortcuts.list.next', group: 'shortcuts.group.list', repeat: true },
+  'list.prev': { keys: 'k', scope: 'list', label: 'shortcuts.list.prev', group: 'shortcuts.group.list', repeat: true },
+  'list.prev_arrow': { keys: 'up', scope: 'list', label: 'shortcuts.list.prev', group: 'shortcuts.group.list', repeat: true },
+  'list.extend_next': { keys: 'shift+j', scope: 'list', label: 'shortcuts.list.extend_next', group: 'shortcuts.group.list', repeat: true },
+  'list.extend_next_arrow': { keys: 'shift+down', scope: 'list', label: 'shortcuts.list.extend_next', group: 'shortcuts.group.list', repeat: true },
+  'list.extend_prev': { keys: 'shift+k', scope: 'list', label: 'shortcuts.list.extend_prev', group: 'shortcuts.group.list', repeat: true },
+  'list.extend_prev_arrow': { keys: 'shift+up', scope: 'list', label: 'shortcuts.list.extend_prev', group: 'shortcuts.group.list', repeat: true },
+  'list.select': { keys: 'x', scope: 'list', label: 'shortcuts.list.select', group: 'shortcuts.group.list' },
+  'list.select_range': { keys: 'shift+x', scope: 'list', label: 'shortcuts.list.select_range', group: 'shortcuts.group.list' },
+  'list.select_all': { keys: 'mod+a', scope: 'list', label: 'shortcuts.list.select_all', group: 'shortcuts.group.list' },
+  'list.clear': { keys: 'escape', scope: 'list', label: 'shortcuts.list.clear', group: 'shortcuts.group.list' },
+  'list.open': { keys: 'enter', scope: 'list', label: 'shortcuts.list.open', group: 'shortcuts.group.list' },
+  'list.peek': { keys: 'space', scope: 'list', label: 'shortcuts.list.peek', group: 'shortcuts.group.list' },
   // registered only while the preview is open (shell/PeekHost): the first Escape in a field leaves the field
   'peek.close': { keys: 'escape', scope: 'detail', label: 'shortcuts.peek.close', group: 'shortcuts.group.item' },
 } as const satisfies Record<string, CatalogEntry>;

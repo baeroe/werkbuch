@@ -72,6 +72,42 @@ describe('useShortcut', () => {
     unmount();
   });
 
+  it('repeats j and k while held, not c', () => {
+    const next = vi.fn();
+    const previous = vi.fn();
+    const create = vi.fn();
+    const hooks = [renderHook(() => useShortcut('list.next', next)), renderHook(() => useShortcut('list.prev', previous)), renderHook(() => useShortcut('item.create', create))];
+
+    for (const key of ['j', 'k', 'c']) {
+      press(key);
+      press(key, { repeat: true });
+      press(key, { repeat: true });
+    }
+    expect(next).toHaveBeenCalledTimes(3);
+    expect(previous).toHaveBeenCalledTimes(3);
+    // a held c would open the create dialog again and again
+    expect(create).toHaveBeenCalledTimes(1);
+
+    hooks.forEach((hook) => hook.unmount());
+  });
+
+  it('registers only while enabled, so a layout can leave a key to its own handler', () => {
+    const run = vi.fn();
+    const { rerender, unmount } = renderHook(({ enabled }) => useShortcut('list.next_arrow', run, { enabled }), { initialProps: { enabled: false } });
+
+    // neither in the help nor on the key
+    expect(listShortcuts()).toEqual([]);
+    press('ArrowDown');
+    expect(run).not.toHaveBeenCalled();
+
+    rerender({ enabled: true });
+    expect(listShortcuts().map((entry) => entry.id)).toEqual(['list.next_arrow']);
+    press('ArrowDown');
+    expect(run).toHaveBeenCalledTimes(1);
+
+    unmount();
+  });
+
   it('registers again when a dependency changes', () => {
     const { rerender, unmount } = renderHook(({ dep }) => useShortcut('shell.help', vi.fn(), { deps: [dep] }), { initialProps: { dep: 1 } });
     const registered = listShortcuts()[0];
