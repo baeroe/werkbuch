@@ -17,6 +17,8 @@ arch('actions are final, use AsAction and run through handle()')
     ->expect('App\Actions')->classes()->toBeFinal()->toUseTrait(AsAction::class)->toHaveMethod('handle');
 arch('the domain is plain PHP')
     ->expect('App\Domain')->not->toUse(['Illuminate', 'Carbon', 'App\Models', 'App\Actions', 'App\Http', 'App\Support', 'App\Exceptions']);
+arch('filters, displays and the calendar are plain PHP')
+    ->expect(['App\Domain\Filter', 'App\Domain\Views', 'App\Domain\Time'])->not->toUse(['Illuminate', 'Carbon']);
 arch('domain classes are final')->expect('App\Domain')->classes()->toBeFinal();
 arch('rich text is final and leaves actions, http and the database alone')
     ->expect('App\RichText')->classes()->toBeFinal()->not->toUse(['App\Actions', 'App\Http', 'Illuminate\Support\Facades\DB']);
