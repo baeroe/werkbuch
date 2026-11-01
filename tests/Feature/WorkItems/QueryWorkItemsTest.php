@@ -55,9 +55,9 @@ it('answers 422 for an unknown key of the body at that key', function () use ($w
     [, , $mara] = $world();
     $unknown = __('field.query.unknown', ['keys' => implode(', ', ItemQueryInput::BODY_KEYS)]);
 
-    // the groups come with Task 8; until then they are keys like any other unknown one
-    expect($errors(fn () => QueryWorkItems::run(actor($mara), ['filters' => [], 'group_by' => 'state', 'include' => 'children'])))
-        ->toBe(['filters' => $unknown, 'group_by' => $unknown, 'include' => $unknown])
+    // the keys of the groups and the counts are no keys of a page
+    expect($errors(fn () => QueryWorkItems::run(actor($mara), ['filters' => [], 'groups' => 'state', 'include' => 'children'])))
+        ->toBe(['filters' => $unknown, 'groups' => $unknown, 'include' => $unknown])
         ->and($errors(fn () => QueryWorkItems::run(actor($mara), [0 => 'x'])))->toBe(['0' => $unknown]);
 });
 

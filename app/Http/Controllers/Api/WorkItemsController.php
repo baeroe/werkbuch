@@ -5,19 +5,23 @@ namespace App\Http\Controllers\Api;
 use App\Actions\WorkItems\ArchiveWorkItem;
 use App\Actions\WorkItems\BulkUpdateWorkItems;
 use App\Actions\WorkItems\ChangeWorkItemType;
+use App\Actions\WorkItems\CountWorkItems;
 use App\Actions\WorkItems\CreateWorkItem;
 use App\Actions\WorkItems\DeleteWorkItem;
 use App\Actions\WorkItems\GetWorkItem;
+use App\Actions\WorkItems\GroupWorkItems;
 use App\Actions\WorkItems\ListWorkItems;
 use App\Actions\WorkItems\QueryWorkItems;
 use App\Actions\WorkItems\RestoreWorkItem;
 use App\Actions\WorkItems\TransitionWorkItem;
 use App\Actions\WorkItems\UpdateWorkItem;
+use App\Domain\Views\GroupBy;
 use App\Http\Api\ApiList;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\WorkItemResource;
 use App\Models\WorkItem;
 use App\Support\Actor;
+use App\Views\GroupCount;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -47,6 +51,37 @@ final class WorkItemsController extends Controller
     public function query(Request $request): JsonResponse
     {
         return ApiList::respond(QueryWorkItems::run(Actor::fromRequest($request), $request->all()), WorkItemResource::class);
+    }
+
+    /**
+     * The groups of a query body and their numbers: `{data: {group_by, total, groups: [{key, count, item?}]}}`, `item`
+     * (`{id, key, title, type_id}`, `null` for `none`) only for parent groups.
+     */
+    public function groups(Request $request): JsonResponse
+    {
+        $groups = GroupWorkItems::run(Actor::fromRequest($request), $request->all());
+        $parents = $groups->groupBy === GroupBy::Parent;
+
+        return response()->json(['data' => [
+            'group_by' => $groups->groupBy->value,
+            'total' => $groups->total,
+            'groups' => array_map(fn (GroupCount $group): array => [
+                'key' => $group->key,
+                'count' => $group->count,
+                ...($parents ? ['item' => $group->item === null ? null : [
+                    'id' => $group->item->id,
+                    'key' => $group->item->key,
+                    'title' => $group->item->title,
+                    'type_id' => $group->item->type_id,
+                ]] : []),
+            ], $groups->groups),
+        ]]);
+    }
+
+    /** The number of items of each named filter: `{data: {<name>: count}}` (an object, also for names like `0`). */
+    public function counts(Request $request): JsonResponse
+    {
+        return response()->json(['data' => (object) CountWorkItems::run(Actor::fromRequest($request), $request->all())]);
     }
 
     /** 201: the new item was just created. */

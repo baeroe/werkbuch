@@ -29,6 +29,8 @@ use Illuminate\Database\Eloquent\Builder;
  * - `q`: the key of an item the account sees names exactly that item (also with a former identifier); any other text,
  *   a key-shaped one included, is a part of the title with `\`, `%` and `_` taken literally (Phase 4, as `search.ts`
  *   of the clickdummy): a hidden key reads like an unknown one.
+ * - `group` (with `group_by`): only the items of that group (Grouping::restrict); `group_by` alone does not change the
+ *   items, the order stays the sort.
  * - The order (sortOf): that of the request, else that of the view, else the manual order; ItemOrder applies it.
  *
  * Columns are always qualified (K3): sorts join projects and states.
@@ -56,6 +58,9 @@ final class ItemQuery
 
         if ($input->q !== null) {
             self::search($query, $input->q, $actor->user);
+        }
+        if ($input->groupBy !== null && $input->group !== null) {
+            Grouping::restrict($query, $input->groupBy, $input->group);
         }
 
         return $query;

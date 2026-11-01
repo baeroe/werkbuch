@@ -60,9 +60,11 @@ use App\Actions\WorkItems\AddRelation;
 use App\Actions\WorkItems\ArchiveWorkItem;
 use App\Actions\WorkItems\BulkUpdateWorkItems;
 use App\Actions\WorkItems\ChangeWorkItemType;
+use App\Actions\WorkItems\CountWorkItems;
 use App\Actions\WorkItems\CreateWorkItem;
 use App\Actions\WorkItems\DeleteWorkItem;
 use App\Actions\WorkItems\GetWorkItem;
+use App\Actions\WorkItems\GroupWorkItems;
 use App\Actions\WorkItems\ListHistory;
 use App\Actions\WorkItems\ListRelations;
 use App\Actions\WorkItems\ListSubscribers;
@@ -261,6 +263,22 @@ return [
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => QueryWorkItems::run($a, ['shorthand' => ['project' => $w->project($column)->id]]),
         'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
         'hidden' => ['outsider_private'],
+    ],
+    // a filter on a project the account does not see counts nothing: never 404 (K8)
+    'GroupWorkItems' => [
+        'action' => GroupWorkItems::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GroupWorkItems::run($a, [
+            'filter' => ['version' => 1, 'conditions' => [['field' => 'project', 'op' => 'is', 'value' => $w->project($column)->id]]],
+            'group_by' => 'state',
+        ]),
+        'allowed' => $everyone,
+    ],
+    'CountWorkItems' => [
+        'action' => CountWorkItems::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => CountWorkItems::run($a, [
+            'filters' => ['open' => ['version' => 1, 'conditions' => [['field' => 'project', 'op' => 'is', 'value' => $w->project($column)->id]]]],
+        ]),
+        'allowed' => $everyone,
     ],
     'GetWorkItem' => [
         'action' => GetWorkItem::class,

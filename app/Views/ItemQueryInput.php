@@ -25,8 +25,10 @@ use Illuminate\Validation\ValidationException;
  * - Body: `view_id` (a view by ULID, any case; anything else is no view: 404), `filter` (FilterSchema::parse, errors
  *   below `filter.`), `shorthand` (an object like `filter[…]` of the query string, errors below `shorthand.`), `q` (the
  *   search; not together with `shorthand.q`), `sort` (`{field, direction}`), `show_sub_items` (by default that of the
- *   view, else `true`), `include_archived`, `lean`, `cursor`, `per_page`. `null` is the same as a key left out; any
- *   other key is 422 `field.query.unknown` at it. `group_by` and `group` come with the groups (Task 8).
+ *   view, else `true`), `group_by` and `group` (the items of one group: `group` needs `group_by` and a key a group of
+ *   it can have, Grouping::key; `group_by` alone changes nothing), `include_archived`, `lean`, `cursor`, `per_page`.
+ *   `null` is the same as a key left out; any other key is 422 `field.query.unknown` at it. The groups and the counts
+ *   take fewer keys (`$keys`), the groups need `group_by`.
  * - Query string: `view`, `filter[…]` (only the short form), `sort` (`due_date`, `-due_date`), `include_archived`,
  *   `lean`, `cursor`, `per_page`; `include` is refused (the list embeds nothing, A157), other keys are passed over.
  *
@@ -36,7 +38,7 @@ use Illuminate\Validation\ValidationException;
 final readonly class ItemQueryInput
 {
     /** The keys of a query body. */
-    public const BODY_KEYS = ['view_id', 'filter', 'shorthand', 'q', 'sort', 'show_sub_items', 'include_archived', 'lean', 'cursor', 'per_page'];
+    public const BODY_KEYS = ['view_id', 'filter', 'shorthand', 'q', 'sort', 'show_sub_items', 'group_by', 'group', 'include_archived', 'lean', 'cursor', 'per_page'];
 
     public function __construct(
         public ?View $view,
@@ -53,17 +55,20 @@ final readonly class ItemQueryInput
 
     /**
      * @param  array<array-key, mixed>  $body
+     * @param  list<string>  $keys  the keys the body may have (a part of BODY_KEYS)
+     * @param  bool  $groupByRequired  whether `group_by` must be there (the groups)
      *
      * @throws Problem 404 for an unknown view, or a short-form project or parent the account does not see
      * @throws ValidationException
      */
-    public static function fromBody(array $body, Actor $actor): self
+    public static function fromBody(array $body, Actor $actor, array $keys = self::BODY_KEYS, bool $groupByRequired = false): self
     {
         $errors = [];
-        foreach (array_diff(array_map('strval', array_keys($body)), self::BODY_KEYS) as $unknown) {
-            $errors[$unknown] = __('field.query.unknown', ['keys' => implode(', ', self::BODY_KEYS)]);
+        foreach (array_diff(array_map('strval', array_keys($body)), $keys) as $unknown) {
+            $errors[$unknown] = __('field.query.unknown', ['keys' => implode(', ', $keys)]);
         }
-        $body = array_filter($body, fn (mixed $value) => $value !== null);
+        // a key the body may not have is never read (a short form would answer 404 before the 422)
+        $body = array_filter(array_intersect_key($body, array_flip($keys)), fn (mixed $value) => $value !== null);
 
         $view = array_key_exists('view_id', $body) ? self::view($body['view_id'], $actor) : null;
         $flags = self::flags($body, ['show_sub_items', 'include_archived', 'lean'], $errors);
@@ -101,6 +106,7 @@ final readonly class ItemQueryInput
             $errors['q'] = __('field.query.q_twice');
         }
 
+        [$groupBy, $group] = self::grouping($body, $groupByRequired, $errors);
         $page = self::page($body, $errors);
         if ($errors !== []) {
             throw ValidationException::withMessages($errors);
@@ -114,8 +120,8 @@ final readonly class ItemQueryInput
             $flags['show_sub_items'] ?? $view?->display()->showSubItems ?? true,
             $flags['include_archived'] ?? false,
             $flags['lean'] ?? false,
-            null,
-            null,
+            $groupBy,
+            $group,
             $page,
         );
     }
@@ -191,6 +197,40 @@ final readonly class ItemQueryInput
     }
 
     /**
+     * The input of the counts (CountWorkItems): one filter over all projects the account sees, nothing else.
+     */
+    public static function ofFilter(Filter $filter, bool $includeArchived): self
+    {
+        return new self(null, $filter, null, null, true, $includeArchived, false, null, null, new PageArgs(null, PageArgs::MAX_PER_PAGE));
+    }
+
+    /**
+     * `group_by` (a GroupBy) and `group` (a key a group of it can have, in its stored form); `group` needs `group_by`.
+     *
+     * @param  array<array-key, mixed>  $body
+     * @param  array<array-key, mixed>  $errors
+     * @return array{?GroupBy, ?string}
+     */
+    private static function grouping(array $body, bool $required, array &$errors): array
+    {
+        $by = $body['group_by'] ?? null;
+        $groupBy = is_string($by) ? GroupBy::tryFrom($by) : null;
+        if ($by !== null && $groupBy === null) {
+            $errors['group_by'] = __('field.group_by.invalid');
+        } elseif ($by === null && ($required || array_key_exists('group', $body))) {
+            $errors['group_by'] = __('field.group_by.required');
+        }
+
+        $group = $body['group'] ?? null;
+        $key = $groupBy !== null && is_string($group) ? Grouping::key($groupBy, $group) : null;
+        if ($group !== null && $groupBy !== null && $key === null) {
+            $errors['group'] = __('field.group.invalid');
+        }
+
+        return [$groupBy, $key];
+    }
+
+    /**
      * The flags the input sends (`true`, `false`, `1`, `0`, `'1'`, `'0'`), each a 422 at its key otherwise.
      *
      * @param  array<array-key, mixed>  $input
@@ -198,7 +238,7 @@ final readonly class ItemQueryInput
      * @param  array<array-key, mixed>  $errors
      * @return array<string, bool>
      */
-    private static function flags(array $input, array $keys, array &$errors): array
+    public static function flags(array $input, array $keys, array &$errors): array
     {
         $flags = [];
         foreach ($keys as $key) {

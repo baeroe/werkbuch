@@ -233,3 +233,78 @@ it('asks the database a fixed number of times for a page', function () {
 
     expect($many)->toBe($few);
 });
+
+it('pages a group without the items of the others', function () {
+    $more = WorkItem::factory()->for($this->web)->count(5)->create(['assignee_id' => null]);
+    $unassigned = [$this->items['Gamma Release']->id, ...$more->pluck('id')->all()];
+    $body = ['group_by' => 'assignee', 'group' => 'none', 'per_page' => 3];
+
+    $first = $this->actingAs($this->mara)->postJson('/api/v1/work-items/query', $body)->assertOk();
+    $second = $this->actingAs($this->mara)->postJson('/api/v1/work-items/query', [...$body, 'cursor' => $first->json('meta.next_cursor')])->assertOk();
+
+    expect($first->json('meta.total'))->toBe(6)
+        ->and(array_column($first->json('data'), 'id'))->toHaveCount(3)
+        ->and([...array_column($first->json('data'), 'id'), ...array_column($second->json('data'), 'id')])->toBe($unassigned)
+        ->and($second->json('meta.next_cursor'))->toBeNull()
+        // group_by alone leaves the items alone
+        ->and($this->actingAs($this->mara)->postJson('/api/v1/work-items/query', ['group_by' => 'assignee'])->json('meta.total'))->toBe(9);
+});
+
+it('refuses a cursor of another group', function () {
+    WorkItem::factory()->for($this->web)->count(3)->create(['assignee_id' => null]);
+    $body = ['group_by' => 'assignee', 'group' => 'none', 'per_page' => 2];
+    $cursor = $this->actingAs($this->mara)->postJson('/api/v1/work-items/query', $body)->assertOk()->json('meta.next_cursor');
+
+    foreach ([['group' => $this->mara->id], ['group_by' => 'label'], ['group_by' => null, 'group' => null]] as $other) {
+        $this->actingAs($this->mara)->postJson('/api/v1/work-items/query', [...$body, ...$other, 'cursor' => $cursor])->assertUnprocessable()
+            ->assertJsonPath('errors', ['cursor' => [__('field.cursor.invalid')]]);
+    }
+});
+
+it('takes the items of a label group', function () {
+    $ids = fn (array $body) => array_column($this->actingAs($this->mara)->postJson('/api/v1/work-items/query', ['group_by' => 'label', ...$body])->assertOk()->json('data'), 'id');
+
+    expect($ids(['group' => $this->ux->id]))->toBe(($this->ids)('Alpha', 'Delta'))
+        ->and($ids(['group' => strtoupper($this->forms->id)]))->toBe(($this->ids)('Gamma Release'))
+        ->and($ids(['group' => 'none']))->toBe(($this->ids)('Beta'));
+});
+
+it('refuses a group without group_by and an unknown group key', function () {
+    $query = fn (array $body) => $this->actingAs($this->mara)->postJson('/api/v1/work-items/query', $body)->assertUnprocessable()->json('errors');
+
+    expect($query(['group' => 'none']))->toBe(['group_by' => [__('field.group_by.required')]])
+        ->and($query(['group_by' => 'state', 'group' => 'backlog']))->toBe(['group' => [__('field.group.invalid')]])
+        ->and($query(['group_by' => 'priority', 'group' => 'asap']))->toBe(['group' => [__('field.group.invalid')]])
+        ->and($query(['group_by' => 'label', 'group' => 5]))->toBe(['group' => [__('field.group.invalid')]])
+        ->and($query(['group_by' => 'board', 'group' => 'none']))->toBe(['group_by' => [__('field.group_by.invalid')]]);
+});
+
+it('answers the groups and the counts over REST, also to a read-only token', function () {
+    $epic = WorkItem::factory()->for($this->web)->epic()->create(['title' => 'Relaunch']);
+    WorkItem::factory()->childOf($epic)->create(['title' => 'Kind']);
+    $read = apiToken($this->mara, ['read']);
+
+    $this->withToken($read)->postJson('/api/v1/work-items/groups', ['group_by' => 'parent'])->assertOk()
+        ->assertExactJson(['data' => ['group_by' => 'parent', 'total' => 6, 'groups' => [
+            ['key' => $epic->id, 'count' => 1, 'item' => ['id' => $epic->id, 'key' => $epic->key, 'title' => 'Relaunch', 'type_id' => $epic->type_id]],
+            ['key' => 'none', 'count' => 5, 'item' => null],
+        ]]]);
+    $this->withToken($read)->postJson('/api/v1/work-items/groups', ['group_by' => 'assignee'])->assertOk()
+        ->assertExactJson(['data' => ['group_by' => 'assignee', 'total' => 6, 'groups' => [
+            ['key' => $this->jonas->id, 'count' => 1],
+            ['key' => $this->mara->id, 'count' => 2],
+            ['key' => 'none', 'count' => 3],
+        ]]]);
+    $this->withToken($read)->postJson('/api/v1/work-items/counts', ['filters' => [
+        'mine' => ['version' => 1, 'conditions' => [['field' => 'assignee', 'op' => 'is', 'value' => 'me']]],
+        '0' => ['version' => 1, 'conditions' => []],
+    ]])->assertOk()->assertExactJson(['data' => ['mine' => 2, '0' => 6]]);
+    expect($this->withToken($read)->postJson('/api/v1/work-items/counts', ['filters' => ['0' => ['version' => 1, 'conditions' => []], 'a' => ['version' => 1, 'conditions' => []]]])->getContent())
+        ->toBe('{"data":{"0":6,"a":6}}');
+
+    forgetApiAuth();
+    $write = apiToken($this->mara, ['write']);
+    $this->withToken($write)->postJson('/api/v1/work-items/groups', ['group_by' => 'none'])->assertForbidden();
+    forgetApiAuth();
+    $this->withToken($write)->postJson('/api/v1/work-items/counts', ['filters' => ['a' => ['version' => 1, 'conditions' => []]]])->assertForbidden();
+});
