@@ -1,7 +1,8 @@
 /*
  * Settings → Workflow (spec 4.5): which workflow the project uses, and switching to another one. The workflows live in
  * the organisation; a project only picks one. A switch asks for a state of the new workflow for every state the items
- * of the project are in (`StateMappingDialog`, counted by `useStateUsage`, archived items included); without items it
+ * of the project are in (`StateMappingDialog`, counted by `useStateUsage` when the switch is asked, archived items
+ * included; the button is pending meanwhile, a failed count is a toast with "Try again"); without items it
  * is a plain confirmation with an empty mapping. When items moved into another state meanwhile, the server's 422 at
  * `mapping.<id>` adds their rows to the open question.
  */
@@ -71,7 +72,9 @@ function WorkflowSummary({ workflow, headingRef }: { workflow: WorkflowRecord; h
 export function Workflow({ project, canManage }: ProjectSectionProps) {
   const workflows = useWorkflows();
   const assign = useAssignWorkflow();
-  const usage = useStateUsage({ project: project.id });
+  // counted when the switch is asked, never before: the rows, the effects and the toast need the numbers of that moment
+  const usage = useStateUsage({ project: project.id }, { enabled: false });
+  const [counting, setCounting] = useState(false);
   const { can, reason } = usePermissions();
   const [target, setTarget] = useState<string | null>(null);
   // what the question is about, fixed when it opens, so it does not change under the person while the call runs: the
@@ -103,17 +106,22 @@ export function Workflow({ project, canManage }: ProjectSectionProps) {
   }
 
   // what keeps the button from asking, in the order of what the person can do about it
-  const blocked =
-    reason('project.manage', project.id) ??
-    (next ? null : t('settings.project.workflow.choose_first')) ??
-    (usage.data ? null : usage.isError ? t('settings.project.workflow.usage_failed') : t('settings.project.workflow.usage_loading'));
+  const blocked = reason('project.manage', project.id) ?? (next ? null : t('settings.project.workflow.choose_first'));
 
   const rows = asking ? rowsFor(asking.usage, current.states, asking.to.states) : [];
 
-  function ask() {
-    const counts = usage.data;
-    if (!next || !counts) return;
-    setAsking((previous) => ({ to: next, usage: counts, round: (previous?.round ?? 0) + 1 }));
+  async function ask() {
+    if (!next) return;
+    const to = next;
+    setCounting(true);
+    const counted = await usage.refetch();
+    setCounting(false);
+    const counts = counted.data;
+    if (!counts) {
+      notifyError(t('settings.project.workflow.not_counted'), counted.error, () => void ask());
+      return;
+    }
+    setAsking((previous) => ({ to, usage: counts, round: (previous?.round ?? 0) + 1 }));
     setRefusal(null);
     returnTo.current = trigger.current;
     setOpen(true);
@@ -164,7 +172,7 @@ export function Workflow({ project, canManage }: ProjectSectionProps) {
         title={t('settings.project.workflow.switch_title')}
         description={t('settings.project.workflow.switch_description')}
         footer={
-          <Button ref={trigger} variant="primary" icon={ArrowRightLeft} disabledReason={blocked} onClick={ask}>
+          <Button ref={trigger} variant="primary" icon={ArrowRightLeft} pending={counting} disabledReason={blocked} onClick={() => void ask()}>
             {t('settings.project.workflow.switch_open')}
           </Button>
         }

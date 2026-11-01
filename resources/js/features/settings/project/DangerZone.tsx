@@ -32,6 +32,9 @@ type DangerZoneProps = {
 
 export function DangerZone({ project, leaving }: DangerZoneProps) {
   const archive = useArchiveProject();
+  // its own call: archiving stays pending until every query it made stale has loaded again, and the restore button,
+  // which shows as soon as the project reads archived, must not wait for that (nor show a spinner for a call it did not make)
+  const restoring = useArchiveProject();
   const remove = useDeleteProject();
   const [confirming, setConfirming] = useState(false);
   // the undo time of an archiving is running: the button waits instead of letting it start twice
@@ -55,7 +58,7 @@ export function DangerZone({ project, leaving }: DangerZoneProps) {
 
   async function restore() {
     try {
-      await archive.mutateAsync({ id: project.id, archived: false });
+      await restoring.mutateAsync({ id: project.id, archived: false });
       toast({ title: t('settings.project.danger.restored', { identifier: project.identifier }), tone: 'success' });
     } catch (error) {
       notifyError(t('settings.project.danger.not_restored'), error, () => void restore());
@@ -94,7 +97,7 @@ export function DangerZone({ project, leaving }: DangerZoneProps) {
               </p>
             </div>
             {archived ? (
-              <Button variant="secondary" icon={ArchiveRestore} pending={archive.isPending} onClick={() => void restore()}>
+              <Button variant="secondary" icon={ArchiveRestore} pending={restoring.isPending} onClick={() => void restore()}>
                 {t('settings.project.danger.restore')}
               </Button>
             ) : (

@@ -353,6 +353,43 @@ describe('DangerZone', () => {
     await waitFor(() => expect(toastTitles()).toContain('Projekt WEB wiederhergestellt'));
   });
 
+  it('lets the project be restored while the archiving still reloads what it made stale', async () => {
+    const user = userEvent.setup();
+    let stored = web;
+    renderSettings('general', {
+      'GET /api/v1/projects/WEB': () => ({ body: { data: stored } }),
+      'GET /api/v1/projects': () => ({ body: list([stored]) }),
+      'POST /api/v1/projects/p_web/archive': () => {
+        stored = { ...web, archived_at: '2026-10-31T10:00:00.000Z' };
+        return { body: { data: stored } };
+      },
+      'POST /api/v1/projects/p_web/restore': () => {
+        stored = web;
+        return { body: { data: stored } };
+      },
+    });
+    const archive = await screen.findByRole('button', { name: 'Archivieren' });
+    // from now on the members load slowly: the archiving stays pending until they are there again
+    const waiting: (() => void)[] = [];
+    const fetching = globalThis.fetch;
+    globalThis.fetch = (input, init) =>
+      String(input).includes('/p_web/members') ? new Promise<Response>((resolve) => waiting.push(() => resolve(fetching(input, init)))) : fetching(input, init);
+
+    await user.click(archive);
+    act(() => dismissToast(toastNamed('Projekt WEB archiviert').id));
+    const restore = await screen.findByRole('button', { name: 'Wiederherstellen' });
+    await waitFor(() => expect(waiting.length).toBeGreaterThan(0));
+    // the archiving is not over, and restoring does not wait for it
+    expect(restore.getAttribute('aria-disabled')).toBeNull();
+    expect(restore.getAttribute('aria-busy')).toBeNull();
+    await user.click(restore);
+    await waitFor(() => expect(calls('POST', '/api/v1/projects/p_web/restore')).toHaveLength(1));
+
+    globalThis.fetch = fetching;
+    act(() => waiting.splice(0).forEach((resume) => resume()));
+    await waitFor(() => expect(toastTitles()).toContain('Projekt WEB wiederhergestellt'));
+  });
+
   it('deletes only after the identifier is typed, leaves for the list and comes back on undo', async () => {
     const user = userEvent.setup();
     renderSettings('general', { 'DELETE /api/v1/projects/p_web': () => ({ status: 202 }) });
@@ -804,17 +841,61 @@ describe('Workflow', () => {
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { level: 3, name: 'Agentur-Freigabe' })));
   });
 
-  it('blocks the switch while the items are counted, and says when they could not be', async () => {
+  it('counts the items when the switch is asked, with the numbers of that moment', async () => {
     const user = userEvent.setup();
-    renderSettings('workflow', { 'GET /api/v1/state-usage': () => unavailable() }, { beforeRender: () => holdCalls('/state-usage') });
+    let usage = [{ state_id: 'std_todo', items: 1 }];
+    renderSettings('workflow', { ...switchable(), 'GET /api/v1/state-usage': () => ({ body: { data: usage } }) });
+
+    await chooseAgency(user);
+    // nothing is counted before the question
+    expect(api!.calls.filter((call) => call.url.startsWith('/api/v1/state-usage'))).toHaveLength(0);
+    const open = screen.getByRole('button', { name: /Workflow wechseln …/ });
+    await user.click(open);
+    let dialog = await screen.findByRole('dialog');
+    expect(within(within(dialog).getByRole('list', { name: 'Status mit Items' })).getAllByRole('listitem').map((row) => row.textContent)).toEqual([expect.stringContaining('Todo1 Item')]);
+    await user.click(within(dialog).getByRole('button', { name: 'Abbrechen' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    // meanwhile the items moved on: the next question counts again, and rows, effects and toast follow
+    usage = [
+      { state_id: 'std_todo', items: 2 },
+      { state_id: 'std_progress', items: 3 },
+    ];
+    await user.click(open);
+    dialog = await screen.findByRole('dialog');
+    expect(api!.calls.filter((call) => call.url === '/api/v1/state-usage?project=p_web')).toHaveLength(2);
+    expect(within(within(dialog).getByRole('list', { name: 'Status mit Items' })).getAllByRole('listitem').map((row) => row.textContent)).toEqual([
+      expect.stringContaining('Todo2 Items'),
+      expect.stringContaining('In Progress3 Items'),
+    ]);
+    await user.click(choice('In Progress'));
+    await user.click(await screen.findByRole('option', { name: 'Done' }));
+    expect(within(dialog).getByRole('status').textContent).toContain('3 offene Items gelten danach als geschlossen.');
+    await user.click(within(dialog).getByRole('button', { name: /^Workflow wechseln/ }));
+    await waitFor(() => expect(toastNamed('Workflow gewechselt')?.description).toBe('WEB nutzt jetzt „Agentur-Freigabe“. 5 Items haben einen neuen Status.'));
+  });
+
+  it('is pending while it counts, and offers to count again when that fails', async () => {
+    const user = userEvent.setup();
+    let fail = true;
+    renderSettings('workflow', { 'GET /api/v1/state-usage': () => (fail ? unavailable() : { body: { data: [] } }) });
 
     await chooseAgency(user);
     const open = screen.getByRole('button', { name: /Workflow wechseln …/ });
-    expect(describedBy(open)).toBe('Die Items des Projekts werden noch geladen.');
+    holdCalls('/state-usage');
     await user.click(open);
-    expect(screen.queryByRole('dialog')).toBeNull();
+    await waitFor(() => expect(open.getAttribute('aria-busy')).toBe('true'));
     act(() => release());
-    await waitFor(() => expect(describedBy(open)).toBe('Die Items des Projekts konnten nicht geladen werden.'));
+    await waitFor(() => expect(toastNamed('Die Items des Projekts konnten nicht gezählt werden')?.description).toBe('Der Server ist gerade nicht erreichbar.'));
+    expect(open.getAttribute('aria-busy')).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    fail = false;
+    act(() => runToastAction(toastNamed('Die Items des Projekts konnten nicht gezählt werden')!.id));
+    // the second count is held as well until it is let go
+    await waitFor(() => expect(open.getAttribute('aria-busy')).toBe('true'));
+    act(() => release());
+    expect(await screen.findByRole('dialog', { name: 'Zu „Agentur-Freigabe“ wechseln' })).toBeTruthy();
   });
 
   it('adds the rows of the states the server names in its 422, marked, and switches with them', async () => {
