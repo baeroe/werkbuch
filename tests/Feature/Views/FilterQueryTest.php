@@ -19,8 +19,8 @@ use Tests\Support\FilterWorld;
 /*
  * The cases of `matchesFilter` in `src/domain/filter.test.ts` of the clickdummy, with the same names, against rows
  * (FilterWorld is `fixtures.ts`): today is Wednesday 2026-10-28 in Europe/Berlin, the week starts on Monday, the reader
- * is Mara. The property cases come with Task 4. Where the clickdummy has no time zone (its `ctx`, the UTC day), the
- * organisation is set to UTC.
+ * is Mara. The property cases are in FilterPropertiesTest. Where the clickdummy has no time zone (its `ctx`, the UTC
+ * day), the organisation is set to UTC.
  */
 
 beforeEach(function () {

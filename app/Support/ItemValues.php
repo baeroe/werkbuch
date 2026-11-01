@@ -144,7 +144,8 @@ final class ItemValues
 
     /**
      * Writes the values of the item: only the properties whose value changed against `$before` lose their rows and get
-     * new ones (a multiple choice one row per value, `position` 0, 1, …); the rows of the others stay as they are.
+     * new ones (a multiple choice one row per value, `position` 0, 1, …); the rows of the others stay as they are. A
+     * rich text value keeps its plain text beside the document (`value_text`, which the filter searches).
      *
      * @param  array<string, mixed>  $values  property key → value, as check() answers
      * @param  array<string, mixed>  $before  the values before the change (of())
@@ -169,6 +170,7 @@ final class ItemValues
                     // a number goes as its exact decimal text: PDO writes a float with 14 digits (`precision`), which
                     // rounds a value near the limit of the column beyond it and cuts the digits of large numbers
                     self::column($property->field_type) => $property->field_type === FieldType::Number ? sprintf('%.4F', $one) : $one,
+                    'value_text' => $property->field_type === FieldType::RichText ? Document::fromJson((array) $one)->toText() : null,
                 ]);
             }
         }

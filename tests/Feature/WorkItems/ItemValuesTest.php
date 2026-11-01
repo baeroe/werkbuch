@@ -204,6 +204,19 @@ it('reads every field type back as it was stored', function () use ($world, $opt
         ->and(ItemValues::markdown($item))->toBe(['notes' => "# Plan\n\nText"]);
 });
 
+it('stores the plain text of a rich text value', function () use ($world) {
+    [$project, $type] = $world();
+    $item = WorkItem::factory()->for($project)->create(['type_id' => $type->id]);
+    $values = ItemValues::check($project, $type, ['notes' => "# Plan\n\nErst **das**, dann\n\n- jenes", 'note' => 'Kurz'], [], 'create');
+
+    ItemValues::store($item, $values, []);
+    $rows = WorkItemValue::query()->where('work_item_id', $item->id)->get()->keyBy(fn (WorkItemValue $row) => $row->value_json === null ? 'note' : 'notes');
+
+    // one line per block, without the marks and node names of the JSON; other field types keep none
+    expect($rows['notes']->value_text)->toBe("Plan\nErst das, dann\njenes")
+        ->and($rows['note']->value_text)->toBeNull();
+});
+
 it('replaces only the rows of the values that changed', function () use ($world, $options) {
     [$project, $type, $properties] = $world();
     [$a, $b] = $options($properties['tags']);
