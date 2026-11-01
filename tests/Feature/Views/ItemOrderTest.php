@@ -150,6 +150,19 @@ it('breaks ties by the manual order', function () use ($sort) {
         ->and(($this->titles)($sort('due_date', 'desc')))->toBe(['first', 'second']);
 });
 
+it('replaces an order the query brings, for the list and for a page', function () use ($sort) {
+    WorkItem::factory()->create(['project_id' => $this->web->id, 'title' => 'late', 'due_date' => '2026-10-31', 'rank' => 'a0']);
+    WorkItem::factory()->create(['project_id' => $this->web->id, 'title' => 'early', 'due_date' => '2026-10-29', 'rank' => 'a1']);
+    $ordered = fn () => WorkItem::query()->orderBy('work_items.rank')->orderByDesc('work_items.title');
+
+    $first = ItemOrder::page($ordered(), $sort('due_date'), new PageArgs(null, 1));
+    $second = ItemOrder::page($ordered(), $sort('due_date'), new PageArgs($first->nextCursor()?->encode(), 1));
+
+    expect(ItemOrder::apply($ordered(), $sort('due_date'))->pluck('title')->all())->toBe(['early', 'late'])
+        ->and($first->pluck('title')->all())->toBe(['early'])
+        ->and($second->pluck('title')->all())->toBe(['late']);
+});
+
 it('sorts keys naturally: by project, then by number', function () use ($sort) {
     $app = Project::factory()->identifier('APP')->create();
     WorkItem::factory()->create(['project_id' => $this->web->id, 'title' => 'WEB-10', 'number' => 10]);

@@ -9,6 +9,7 @@ use App\Actions\WorkItems\CreateWorkItem;
 use App\Actions\WorkItems\DeleteWorkItem;
 use App\Actions\WorkItems\GetWorkItem;
 use App\Actions\WorkItems\ListWorkItems;
+use App\Actions\WorkItems\QueryWorkItems;
 use App\Actions\WorkItems\RestoreWorkItem;
 use App\Actions\WorkItems\TransitionWorkItem;
 use App\Actions\WorkItems\UpdateWorkItem;
@@ -40,6 +41,12 @@ final class WorkItemsController extends Controller
         $include = $request->query('include');
 
         return new WorkItemResource(GetWorkItem::run(Actor::fromRequest($request), $item, is_string($include) ? explode(',', $include) : (array) $include));
+    }
+
+    /** A read through a body (P15): a view, a filter, the short form, a sort; the same page format as the list. */
+    public function query(Request $request): JsonResponse
+    {
+        return ApiList::respond(QueryWorkItems::run(Actor::fromRequest($request), $request->all()), WorkItemResource::class);
     }
 
     /** 201: the new item was just created. */

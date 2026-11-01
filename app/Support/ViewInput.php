@@ -78,7 +78,7 @@ final class ViewInput
             try {
                 $filter = FilterSchema::parse($input['filter'], $catalog);
             } catch (InvalidInput $invalid) {
-                $errors = [...$errors, ...self::messages($invalid->errorsAt('filter'))];
+                $errors = [...$errors, ...SchemaMessages::filter($invalid, 'filter')];
             }
         }
 
@@ -87,7 +87,7 @@ final class ViewInput
             try {
                 $display = DisplaySchema::parse($input['display'], $catalog);
             } catch (InvalidInput $invalid) {
-                $errors = [...$errors, ...self::messages($invalid->errorsAt('display'))];
+                $errors = [...$errors, ...SchemaMessages::display($invalid, 'display')];
             }
         }
 
@@ -103,32 +103,5 @@ final class ViewInput
     {
         return is_string($icon)
             && (in_array($icon, self::ICONS, true) || (strlen($icon) <= self::ICON_MAX_BYTES && preg_match(self::EMOJI, $icon) === 1));
-    }
-
-    /**
-     * The sentence of every code of the filter and display schemas, at its path.
-     *
-     * @param  array<string, string>  $codes  path → code
-     * @return array<string, string>
-     */
-    private static function messages(array $codes): array
-    {
-        $messages = [];
-
-        foreach ($codes as $path => $code) {
-            $messages[$path] = str_starts_with($path, 'filter') ? match ($code) {
-                'too_many' => __('field.filter.too_many', ['max' => FilterSchema::MAX_CONDITIONS]),
-                'field' => __('field.filter.field'),
-                'operator' => __('field.filter.operator'),
-                'value' => __('field.filter.value'),
-                default => __('field.filter.shape'),
-            } : match ($code) {
-                'too_many' => __('field.display.too_many', ['max' => DisplaySchema::MAX_FIELDS]),
-                'invalid' => __('field.display.invalid'),
-                default => __('field.display.shape'),
-            };
-        }
-
-        return $messages;
     }
 }

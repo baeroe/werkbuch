@@ -67,6 +67,7 @@ use App\Actions\WorkItems\ListHistory;
 use App\Actions\WorkItems\ListRelations;
 use App\Actions\WorkItems\ListSubscribers;
 use App\Actions\WorkItems\ListWorkItems;
+use App\Actions\WorkItems\QueryWorkItems;
 use App\Actions\WorkItems\RemapStates;
 use App\Actions\WorkItems\RemoveRelation;
 use App\Actions\WorkItems\RestoreWorkItem;
@@ -252,6 +253,12 @@ return [
     'ListWorkItems' => [
         'action' => ListWorkItems::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListWorkItems::run($a, ['filter' => ['project' => $w->project($column)->id]]),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    'QueryWorkItems' => [
+        'action' => QueryWorkItems::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => QueryWorkItems::run($a, ['shorthand' => ['project' => $w->project($column)->id]]),
         'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
         'hidden' => ['outsider_private'],
     ],

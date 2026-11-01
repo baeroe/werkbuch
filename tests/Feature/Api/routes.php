@@ -72,6 +72,8 @@ return [
     'delete a resolution' => ['DELETE', '/api/v1/resolutions/{resolution}', 'params' => fn (MatrixWorld $w) => ['resolution' => Resolution::factory()->create()->id]],
     'list work items' => ['GET', '/api/v1/work-items'],
     'create a work item' => ['POST', '/api/v1/work-items', 'body' => ['project_id' => 'WEB', 'title' => 'Matrix']],
+    // a read through a body (P15): a read-only token may send it
+    'query work items' => ['POST', '/api/v1/work-items/query', 'body' => ['filter' => ['version' => 1, 'conditions' => []]], 'ability' => 'read'],
     'change many work items' => ['POST', '/api/v1/work-items/bulk', 'body' => ['ids' => ['WEB-1'], 'patch' => ['priority' => 'high']]],
     'show a work item' => ['GET', '/api/v1/work-items/{item}', 'params' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key]],
     'change a work item' => ['PATCH', '/api/v1/work-items/{item}', 'params' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key], 'body' => ['title' => 'Matrix']],

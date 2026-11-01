@@ -52,7 +52,7 @@ final class ItemOrder
     ];
 
     /**
-     * One page of the query in the order of the sort; the query (filtered, not yet ordered) changes with it.
+     * One page of the query in the order of the sort; the query (filtered) changes with it, an order it brings goes.
      *
      * @param  Builder<WorkItem>  $query
      * @param  string|null  $group  the group the page lists (`group_by:key`), so that a cursor of another group is refused
@@ -81,7 +81,8 @@ final class ItemOrder
     }
 
     /**
-     * Only the order, without a page (the timeline loads every item, groups count them); the query changes with it.
+     * Only the order, without a page (the timeline loads every item, groups count them); the query changes with it, an
+     * order it brings goes.
      *
      * @param  Builder<WorkItem>  $query
      * @return Builder<WorkItem>
@@ -139,6 +140,8 @@ final class ItemOrder
      */
     private static function order(Builder $query, array $keys, bool $back): void
     {
+        // the keys are the whole order: one the query brought would stand before them and break the cursor
+        $query->reorder();
         foreach ($keys as $key) {
             $query->orderBy($key['order'], $key['descending'] !== $back ? 'desc' : 'asc');
         }

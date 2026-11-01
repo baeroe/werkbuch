@@ -7,14 +7,15 @@ use Tests\Feature\Access\MatrixWorld;
 /*
  * Every REST route × every kind of token of an org admin (master plan Review Focus "Token-Fähigkeiten"). Allowed
  * means: neither 401 nor 403 nor 404 nor a server error (the request itself may still be invalid, e.g. 422); reading
- * needs `read`, everything else `write`. Without a token it is 401. The rows: routes.php; a guard keeps them in sync
+ * needs `read`, everything else `write`, unless the row names its `ability` (a read through a body, P15). Without a
+ * token it is 401. The rows: routes.php; a guard keeps them in sync
  * with the routes.
  */
 
 const ROUTE_MATRIX_TOKENS = ['none' => [], 'read' => ['read'], 'write' => ['write'], 'read+write' => ['read', 'write']];
 
 /**
- * @return array<string, array{0: string, 1: string, params?: Closure(MatrixWorld): array<string, string>, body?: array<string, mixed>, session?: bool|'action'}>
+ * @return array<string, array{0: string, 1: string, params?: Closure(MatrixWorld): array<string, string>, body?: array<string, mixed>, session?: bool|'action', ability?: 'read'|'write'}>
  */
 function routeMatrixRows(): array
 {
@@ -46,7 +47,7 @@ it('opens each route only to tokens with the right ability', function (array $ro
 
     $response = $client->json($method, $uri, $row['body'] ?? []);
     $context = "{$method} {$uri} with {$token}: {$response->getContent()}";
-    $needed = in_array($method, ['GET', 'HEAD'], true) ? 'read' : 'write';
+    $needed = $row['ability'] ?? (in_array($method, ['GET', 'HEAD'], true) ? 'read' : 'write');
 
     if ($token === 'none') {
         $response->assertUnauthorized()->assertHeader('Content-Type', 'application/problem+json');

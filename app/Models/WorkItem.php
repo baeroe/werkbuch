@@ -94,14 +94,20 @@ final class WorkItem extends Model
     public array $relation_entries = [];
 
     /**
+     * Set by loadForResource(), never stored: whether WorkItemResource leaves out the description and the Markdown of
+     * the rich text values (`lean`, P17: lists ask lean, the detail in full).
+     */
+    public bool $lean = false;
+
+    /**
      * Loads everything WorkItemResource reads, for one item or a list, with a fixed number of queries (none per item):
      * `project`, `parent.project`, `labels`, `values.property`, the computed columns of withComputed() (one query, set
      * on the models as they are, never written back) and `subscribed` for the reader (K5). The resource then asks the
-     * database nothing.
+     * database nothing. `$lean` makes the resource leave out the descriptions (P17).
      *
      * @param  EloquentCollection<int, self>|self  $items
      */
-    public static function loadForResource(EloquentCollection|self $items, User $reader): void
+    public static function loadForResource(EloquentCollection|self $items, User $reader, bool $lean = false): void
     {
         $items = $items instanceof self ? $items->newCollection([$items]) : $items;
         $items->load(['project', 'parent.project', 'labels:labels.id', 'values.property']);
@@ -118,6 +124,7 @@ final class WorkItem extends Model
                 $item->syncOriginalAttribute($column);
             }
             $item->subscribed = in_array($item->id, $watched, true);
+            $item->lean = $lean;
         }
     }
 

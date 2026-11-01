@@ -12,6 +12,7 @@ use App\Models\WorkItem;
 use App\Models\WorkItemRelation;
 use App\Models\WorkItemSubscriber;
 use App\Models\WorkItemType;
+use App\Views\Shorthand;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\RichTextFixtures as F;
 
@@ -249,9 +250,9 @@ it('lists the items with the total', function () use ($web) {
     $this->actingAs($mara)->getJson('/api/v1/work-items?filter[q]=WEB-4')->assertOk()->assertJsonPath('meta.total', 0);
     $this->actingAs($mara)->getJson('/api/v1/work-items?filter[q]=WEB-4&include_archived=1')->assertOk()->assertJsonPath('data.0.key', 'WEB-4');
     $this->actingAs($mara)->getJson('/api/v1/work-items?filter[project]=NOPE')->assertNotFound();
-    foreach (['filter[assignee]=me', 'filter[state][]=x'] as $unknown) {
+    foreach (['filter[assignee_id]=me', 'filter[state][]=x'] as $unknown) {
         $this->actingAs($mara)->getJson("/api/v1/work-items?{$unknown}")->assertUnprocessable()
-            ->assertJsonPath('errors', ['filter' => [__('field.filter.invalid')]]);
+            ->assertJsonPath('errors', ['filter' => [__('field.filter.invalid', ['keys' => implode(', ', Shorthand::KEYS)])]]);
     }
 });
 

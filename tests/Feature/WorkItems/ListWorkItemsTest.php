@@ -7,6 +7,7 @@ use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
 use App\Support\ListResult;
+use App\Views\Shorthand;
 use Illuminate\Validation\ValidationException;
 
 /** WEB (public) with Mara as its member, and the private OPS she is no member of. */
@@ -64,16 +65,20 @@ it('answers 404 for a project the account does not see', function () use ($world
     }
 });
 
-it('hides archived items and the items of archived projects unless asked', function () use ($world, $keys) {
+it('hides archived items and the items of archived projects unless asked or named', function () use ($world, $keys) {
     [$web, , $mara] = $world();
     $old = Project::factory()->identifier('OLD')->public()->archived()->create();
     WorkItem::factory()->for($web)->create();
     WorkItem::factory()->for($web)->archived()->create();
     WorkItem::factory()->for($old)->create();
 
+    WorkItem::factory()->for($old)->archived()->create();
+
     expect($keys(ListWorkItems::run(actor($mara), [])))->toBe(['WEB-1'])
-        ->and($keys(ListWorkItems::run(actor($mara), ['filter' => ['project' => 'OLD']])))->toBe([])
-        ->and($keys(ListWorkItems::run(actor($mara), ['include_archived' => '1'])))->toEqualCanonicalizing(['WEB-1', 'WEB-2', 'OLD-1'])
+        // the list of an archived project shows its open items (P5, K9)
+        ->and($keys(ListWorkItems::run(actor($mara), ['filter' => ['project' => 'OLD']])))->toBe(['OLD-1'])
+        ->and($keys(ListWorkItems::run(actor($mara), ['filter' => ['project' => 'OLD'], 'include_archived' => '1'])))->toBe(['OLD-1', 'OLD-2'])
+        ->and($keys(ListWorkItems::run(actor($mara), ['include_archived' => '1'])))->toEqualCanonicalizing(['WEB-1', 'WEB-2', 'OLD-1', 'OLD-2'])
         ->and(fn () => ListWorkItems::run(actor($mara), ['include_archived' => 'yes']))
         ->toThrow(fn (ValidationException $e) => expect($e->errors())->toBe(['include_archived' => [__('field.include_archived.invalid')]]));
 });
@@ -160,13 +165,13 @@ it('refuses a filter that is no object of the known texts', function () use ($wo
         ['filter' => ['project' => ['WEB']]],
         ['filter' => ['q' => 5]],
         // only the filters there are: an unknown one would answer every item
-        ['filter' => ['assignee' => 'me']],
+        ['filter' => ['assignee_id' => 'me']],
         ['filter' => ['state' => ['x']]],
         ['filter' => ['project' => 'WEB', 'projekt' => 'WEB']],
     ];
     foreach ($inputs as $input) {
         expect(fn () => ListWorkItems::run(actor($mara), $input))
-            ->toThrow(fn (ValidationException $e) => expect(array_values($e->errors()))->toBe([[__('field.filter.invalid')]]));
+            ->toThrow(fn (ValidationException $e) => expect($e->errors())->toBe(['filter' => [__('field.filter.invalid', ['keys' => implode(', ', Shorthand::KEYS)])]]));
     }
     // nor does it drop an `include` it cannot give
     expect(fn () => ListWorkItems::run(actor($mara), ['include' => 'children']))
