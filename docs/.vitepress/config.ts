@@ -11,7 +11,7 @@ const description = 'Open, self-hosted project management: work items with your 
 // every page exists in docs/en and docs/de under the same path (tests/Unit/DocsTest.php); later phases add theirs
 const groups: { title: string; pages: string[] }[] = [
     { title: 'guide', pages: ['development'] },
-    { title: 'concepts', pages: ['concepts/permissions', 'concepts/projects', 'concepts/workflows', 'concepts/types-and-properties', 'bots'] },
+    { title: 'concepts', pages: ['concepts/permissions', 'concepts/projects', 'concepts/workflows', 'concepts/types-and-properties', 'concepts/work-items', 'bots'] },
 ];
 
 const sidebar = (prefix: string, t: Record<string, string>): DefaultTheme.SidebarItem[] =>
@@ -25,6 +25,7 @@ const en: Record<string, string> = {
     'concepts/projects': 'Projects',
     'concepts/workflows': 'Workflows',
     'concepts/types-and-properties': 'Types and properties',
+    'concepts/work-items': 'Work items',
     bots: 'Bots',
 };
 
@@ -36,6 +37,7 @@ const de: Record<string, string> = {
     'concepts/projects': 'Projekte',
     'concepts/workflows': 'Workflows',
     'concepts/types-and-properties': 'Typen und Properties',
+    'concepts/work-items': 'Work Items',
     bots: 'Bots',
 };
 

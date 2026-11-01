@@ -39,7 +39,7 @@ A workflow is either free or has a transition matrix.
 - **Free:** every state can follow every other state. The default workflow is free.
 - **Matrix:** only the pairs you allow (from → to) are possible. The editor shows a grid with one row per "from" state and one column per "to" state; each cell is one transition. When you switch **Free transitions** off, the matrix starts with every pair allowed, so you only take away what you do not want.
 
-Staying in the same state is always allowed. Once work items arrive, the rule applies everywhere alike: in the interface, over the REST API and MCP, in automations and templates.
+Staying in the same state is always allowed. The rule applies everywhere alike: in the interface and over the REST API, and with the later phases in MCP, automations and templates. An item created directly in another state goes through the same check as a transition from the start status.
 
 ## The default workflow
 
@@ -72,6 +72,7 @@ Reading needs a token with `read`, changing one with `write`. Every account may 
 | `PUT /api/v1/workflows/{id}` | `200` with the workflow. |
 | `DELETE /api/v1/workflows/{id}` | `204`. |
 | `PUT /api/v1/projects/{project}/workflow` | `200` with the project. |
+| `GET /api/v1/state-usage?project={project}` or `?workflow={id}` | How many items stand in each state. |
 
 ### Create a workflow
 
@@ -125,7 +126,7 @@ The answer (`201`, shortened):
 }
 ```
 
-To change a workflow, send it whole with `PUT`. States that keep their ULID stay (with their items, later), states you leave out are removed, and a state with any other id is a new one. The icon shapes are `dashed`, `circle`, `half`, `three-quarter`, `pause`, `check` and `cross`.
+To change a workflow, send it whole with `PUT`. States that keep their ULID stay with their items, states you leave out are removed, and a state with any other id is a new one. The icon shapes are `dashed`, `circle`, `half`, `three-quarter`, `pause`, `check` and `cross`.
 
 ### A workflow that cannot be saved
 
@@ -149,9 +150,41 @@ A workflow that breaks a rule is refused with `422` and `reason: invalid_workflo
 }
 ```
 
+### Remove a state that holds items
+
+A `PUT` that leaves out a state some items still stand in (in any project of the workflow, archived items and projects included) needs a target for it in `state_mapping`: `{"<removed state ULID>": "<target>"}`. The target is any state of the body, named the way the body names it: the ULID of a state that stays, or the id you gave a new one. Without a target the answer is `409` with `reason: state_in_use`, the states concerned in `states`, and nothing is saved:
+
+```json
+{
+  "type": "urn:werkbuch:problem:state_in_use",
+  "title": "Conflict",
+  "status": 409,
+  "detail": "Removed statuses with items have no new status.",
+  "reason": "state_in_use",
+  "states": [
+    { "state_id": "01m6akx71dkvjjrrvepyrpwdtc", "name": "Kundenfreigabe", "items": 1 }
+  ]
+}
+```
+
+With the target, werkbuch saves the workflow and moves the items in the same request, without the transition rules. A closed item that lands in an open state loses its resolution, an open one that lands in a closed state gets the default of the category; an archived item stays archived. Every item gets a `work_item.state_changed` in its history with the reason `state_removed` and the names of both states. `state_mapping` only takes removed states: a key that is a state staying in the workflow, or no state of it at all, is a `422` at `state_mapping.<id>`, and so is a target that is not in the body.
+
+### Items per state
+
+`GET /api/v1/state-usage?project=WEB` counts the items of a project per state, `?workflow=<id>` those of every project of the workflow you can see. Archived items count; states without items are left out. The interface asks it before it offers the mapping.
+
+```json
+{
+  "data": [
+    { "state_id": "01m6akx71bcm10xw328kxkw7ak", "items": 4 },
+    { "state_id": "01m6akx71dkvjjrrvepyrpwdtc", "items": 1 }
+  ]
+}
+```
+
 ### Switch the workflow of a project
 
-The project is addressed by its identifier or its ULID. `mapping` maps states of the old workflow to states of the new one (`{"<old state id>": "<new state id>"}`). Every state the items of the project are in (archived ones included) needs a target; one without is a `422` at `mapping.<state id>`, with the states and their items in `states`. A project without items takes an empty mapping.
+The project is addressed by its identifier or its ULID. `mapping` maps states of the old workflow to states of the new one (`{"<old state id>": "<new state id>"}`). Every state the items of the project are in (archived ones included) needs a target; one without is a `422` at `mapping.<state id>`, and `states` lists the states that lack one, with their items. A key that is no state of the old workflow, or a target that is no state of the new one, is a `422` as well. A project without items takes an empty mapping. The items move in the same request, as above, with the reason `workflow_changed`.
 
 ```bash
 curl -X PUT https://werkbuch.example.com/api/v1/projects/WEB/workflow \

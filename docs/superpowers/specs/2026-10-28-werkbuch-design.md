@@ -1,6 +1,22 @@
 # werkbuch: Fachkonzept und App-Design
 
-Stand: 2026-10-31 · Status: freigegeben (die Änderungen vom 2026-10-31 warten auf Rafaels Bestätigung)
+Stand: 2026-11-01 · Status: freigegeben (die Änderungen vom 2026-10-31 warten auf Rafaels Bestätigung, außer der bestätigten Status-Zuordnung aus Phase 4)
+
+> **Änderungen vom 2026-10-31 (Phase 4):** Beim Umsetzen von Phase 4 (Work Items, Relationen, History) hat Claude als Controller Folgendes entschieden; es ändert oder präzisiert die Spec. Begründung und „Falls falsch“ stehen in `docs/superpowers/plans/2026-10-30-werkbuch-app-rulings.md`, A101 ff.
+> - **Status-Zuordnung synchron (4.5), bestätigt von Rafael am 2026-10-31:** Das Umschreiben der Items beim Entfernen eines Status oder beim Wechsel des Workflows läuft sofort in derselben Transaktion wie die Änderung, nicht als Job; 4.5 ist angepasst. Ein Job ließe ein Fenster, in dem Items Status des alten Workflows tragen.
+>
+> Die folgenden Punkte **warten auf Rafaels Bestätigung:**
+> - **Beschreibung ohne Version (4.8):** Die Konfliktwarnung greift, wenn der Client die Version mitschickt, von der er ausging (die Oberfläche tut das immer). Eine Änderung über die API ohne Version überschreibt: zuletzt gewinnt.
+> - **Rich Text in der API (4.16, 6.1):** Die Beschreibung kommt in `description` (Markdown) und `description_json` (Tiptap-JSON) und lässt sich in einer der beiden Formen schreiben, nicht in beiden. Rich-Text-Properties stehen in `values` als JSON und in `values_markdown` als Markdown.
+> - **Verborgene Blocker (4.9):** „blockiert“ und „blockiert andere“ zählen auch Blocker, die der Leser nicht sehen darf; der Hinweis nennt sie nicht.
+> - **Beobachten (4.10):** Bots beobachten keine Items (403). Im archivierten Projekt und an archivierten Items darf man beobachten und abbestellen; das Beobachten ist persönlich, nicht Projektinhalt.
+> - **Löschen (4.8):** Ein gelöschtes Item hinterlässt bei seinen Kindern („Eltern-Item gelöscht“) und bei den Items am anderen Ende seiner Relationen einen Eintrag in der History; seine eigenen Events bleiben.
+> - **Prioritäten (4.8):** heißen in beiden Sprachen Urgent, High, Medium, Low, None. Ob sie auf Deutsch übersetzt werden sollen, bleibt offen.
+> - **Zuordnung streng (4.5):** Eine Zuordnung für einen Status, der bleibt oder den es im alten Workflow nicht gibt, ist ein Fehler (422), statt still übergangen zu werden.
+> - **Archivierte Items bei der Status-Zuordnung (4.5, 4.8):** Die Zuordnung schreibt auch archivierte Items um, auch in einen offenen Status; sie bleiben archiviert. Die Alternative wäre, für einen geschlossenen Status mit archivierten Items nur geschlossene Ziele zuzulassen.
+> - **Archiviertes Ziel einer Relation (4.8, 4.9):** Eine Relation lässt sich auf ein archiviertes Item (auch in einem archivierten Projekt) setzen; das Item, an dem man arbeitet, muss änderbar sein. Entfernen braucht ein änderbares Ende.
+> - **Optionen entfernen (4.7):** Eine gespeicherte Option lässt sich in der Oberfläche entfernen; benutzte archiviert werkbuch dabei, unbenutzte löscht es.
+> - **Mehrdeutige Zahlen (4.7):** Eine Zahl wie „1.500“ oder „1,500“ (ein Trenner, genau drei Ziffern danach) wird nicht still gelesen, sondern mit einem Hinweis auf beide Lesarten abgelehnt.
 
 > **Änderungen vom 2026-10-31 (Phase 3):** Beim Umsetzen von Phase 3 (Workflows, Typen, Properties, Kataloge) hat Claude als Controller Folgendes entschieden; es ändert oder präzisiert die Spec und **wartet auf Rafaels Bestätigung** (Begründung und „Falls falsch“ in `docs/superpowers/plans/2026-10-30-werkbuch-app-rulings.md`, A56 ff.):
 > - **Namen (4.5–4.9):** Namen von Workflows, Typen, Labels, Relationstypen und Resolutions und die Schlüssel der Properties sind je Katalog eindeutig, ohne Rücksicht auf Groß- und Kleinschreibung (und auf Akzente: „Über“ und „Uber“ gelten als gleich). Längen: Name 60, Status 40, Beschreibung 2000, Hilfetext 500, Option 60 Zeichen; höchstens 30 Status je Workflow und 100 Optionen je Dropdown.
@@ -270,7 +286,7 @@ Workflows liegen zentral in der Organisation (abgestimmt). Einer davon ist der *
 
 **Änderungen an benutzten Workflows:**
 - Status und Übergänge hinzufügen wirkt sofort.
-- Wird ein Status gelöscht, der noch Items hat, oder wechselt ein Projekt den Workflow, ordnet man in einem Dialog jedem betroffenen Status einen neuen zu. Das Umschreiben läuft als Job, bewusst ohne Übergangsregeln. In der History steht es mit der Person, die es ausgelöst hat (abgestimmt).
+- Wird ein Status gelöscht, der noch Items hat, oder wechselt ein Projekt den Workflow, ordnet man in einem Dialog jedem betroffenen Status einen neuen zu. Das Umschreiben läuft sofort in derselben Transaktion wie die Änderung (bestätigt 2026-10-31, statt als Job), bewusst ohne Übergangsregeln. In der History steht es mit der Person, die es ausgelöst hat (abgestimmt).
 - Ein Workflow lässt sich nur löschen, wenn kein Projekt ihn nutzt. Der Standard-Workflow lässt sich nie löschen.
 
 ### 4.6 Work-Item-Typen

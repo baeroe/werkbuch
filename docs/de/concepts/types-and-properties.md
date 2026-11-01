@@ -53,6 +53,12 @@ Auch der Feldtyp ist fest. Erlaubt ist nur der Wechsel von Einfach- auf Mehrfach
 
 Ein Dropdown hat mindestens eine aktive Option. Eine Option hat ein Label (bis 60 Zeichen), einen Ton (in der API das Feld `color`) und einen Platz in der Reihenfolge; ein Dropdown hat höchstens 100. Eine Option, die du nicht mehr anbieten willst, lässt sich **archivieren**: Für neue Werte steht sie nicht mehr zur Wahl, und du kannst sie wiederherstellen. Eine gespeicherte Option lässt sich auch **entfernen** (in der Oberfläche mit dem Kreuz daneben, über die API, indem sie in einem `PUT` fehlt): Sie wird gelöscht, es sei denn, Items tragen sie: Dann wird sie stattdessen archiviert, und die Oberfläche sagt es nach dem Speichern.
 
+### Pflichtwerte und Standardwerte
+
+Eine Property, die ein Typ als Pflicht hat, braucht einen Wert, wenn ein Item dieses Typs entsteht und wenn ein Item zu diesem Typ wechselt; ein gesetzter Wert lässt sich nicht wieder leeren (`422` an `values.<key>`). Wird eine Property erst später Pflicht, bleiben die Items ohne Wert gültig: Alles andere an ihnen lässt sich weiter ändern, und das Item zeigt am Feld „Pflichtfeld, noch leer. Bitte ergänzen.“ Bei einem Ja/Nein-Feld zählt aus (`false`) als Wert.
+
+Der Standardwert füllt ein neues Item, wenn die Anfrage die Property gar nicht nennt; ein mitgeschicktes `null` lässt sie leer. Ein Standardwert, der auf eine inzwischen archivierte Option zeigt, entfällt.
+
 ## Labels
 
 Labels markieren Items über alle Projekte hinweg, etwa „UX“ oder „Formulare“. Ein Label hat einen Namen (bis 60 Zeichen) und einen Ton (in der API das Feld `color`). Ein Standard-Label gibt es nicht.
@@ -63,7 +69,7 @@ Ein Relationstyp benennt die Verbindung zwischen zwei Items. Er hat einen Namen 
 
 Über die API hat ein symmetrischer Relationstyp `inward_label: null`; ein leerer Text wird abgelehnt.
 
-werkbuch liefert drei mit: **blockiert** (andersherum „wird blockiert von“), **Duplikat** und **verwandt** (symmetrisch). Sie lassen sich umbenennen, aber nicht löschen. Nur „blockiert“ wird etwas auslösen, sobald es Work Items gibt: Solange der Blocker offen ist, zeigt das blockierte Item einen Hinweis. Eigene Relationstypen sind reine Beschriftung.
+werkbuch liefert drei mit: **blockiert** (andersherum „wird blockiert von“), **Duplikat** und **verwandt** (symmetrisch). Sie lassen sich umbenennen, aber nicht löschen. Nur „blockiert“ löst etwas aus: Solange der Blocker offen ist, zeigt das blockierte Item einen Hinweis (siehe [Work Items](/de/concepts/work-items#relationen)). Eigene Relationstypen sind reine Beschriftung.
 
 ## Resolutions
 

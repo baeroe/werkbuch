@@ -1,6 +1,6 @@
 # Projects
 
-A project is where a team works on items. Every project has its own members, and, as work items arrive in later phases, its own items, wiki and settings.
+A project is where a team works on items. Every project has its own members, [work items](/en/concepts/work-items) and settings, and, with a later phase, its own wiki.
 
 ## Fields
 

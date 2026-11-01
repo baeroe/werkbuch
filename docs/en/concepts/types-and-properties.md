@@ -53,6 +53,12 @@ The field type is fixed as well. The only change allowed is from single to multi
 
 A dropdown has at least one active option. An option has a label (up to 60 characters), a tone (the field `color` in the API) and a place in the order; a dropdown has at most 100. An option you no longer want to offer can be **archived**: it is not offered for new values any more, and you can restore it. A saved option can also be **removed** (in the interface the cross next to it, over the API by leaving it out of a `PUT`): it is deleted, unless items carry it: then it is archived instead, and the interface says so after saving.
 
+### Required values and defaults
+
+A property that a type requires needs a value when an item of that type is created, and when an item changes to that type; a value once set cannot be emptied again (`422` at `values.<key>`). If a property becomes required later, the items without a value stay valid: everything else about them can still be changed, and the item shows "Required, still empty. Please fill it in." at the field. For a yes-or-no field, off (`false`) counts as a value.
+
+The default value fills a new item when the request does not name the property at all; sending `null` leaves it empty. A default that points to an option archived in the meantime is skipped.
+
 ## Labels
 
 Labels mark items across all projects, such as "UX" or "Forms". A label has a name (up to 60 characters) and a tone (the field `color` in the API). There is no default label.
@@ -63,7 +69,7 @@ A relation type names the link between two items. It has a name and a label for 
 
 Over the API, a symmetric relation type has `inward_label: null`; an empty text is refused.
 
-werkbuch ships three: **blocks** ("is blocked by" the other way round), **Duplicate** and **related** (symmetric). They can be renamed but not deleted. Only "blocks" will trigger anything once work items arrive: as long as the blocker is open, the blocked item shows a hint. Your own relation types are labels only.
+werkbuch ships three: **blocks** ("is blocked by" the other way round), **Duplicate** and **related** (symmetric). They can be renamed but not deleted. Only "blocks" triggers anything: as long as the blocker is open, the blocked item shows a hint (see [work items](/en/concepts/work-items#relations)). Your own relation types are labels only.
 
 ## Resolutions
 

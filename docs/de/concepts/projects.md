@@ -1,6 +1,6 @@
 # Projekte
 
-Ein Projekt ist der Ort, an dem ein Team an Items arbeitet. Jedes Projekt hat eigene Mitglieder und, sobald die Work Items in späteren Phasen kommen, eigene Items, ein eigenes Wiki und eigene Einstellungen.
+Ein Projekt ist der Ort, an dem ein Team an Items arbeitet. Jedes Projekt hat eigene Mitglieder, eigene [Work Items](/de/concepts/work-items) und eigene Einstellungen, mit einer späteren Phase auch ein eigenes Wiki.
 
 ## Felder
 
