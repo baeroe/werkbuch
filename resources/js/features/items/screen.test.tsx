@@ -830,6 +830,33 @@ describe('a view', () => {
     expect(await screen.findByText('Kontaktformular sendet doppelt')).toBeTruthy();
   });
 
+  it('loads a view whose property is gone as a list that matches nothing (P2)', async () => {
+    views = [makeView({ ...dueWeek(), filter: { version: 1, conditions: [{ field: 'property:gone', op: 'is', value: 'opt_x' }] } })];
+    inertia.go('/views/v_due_week');
+    renderScreen({ preset: 'view', viewId: 'v_due_week' });
+    expect(await screen.findByText('Keine Treffer in „Fällig diese Woche“')).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Filter: Unbekanntes Feld property:gone' })).toBeTruthy();
+    expect(screen.queryByText('Die Items konnten nicht geladen werden')).toBeNull();
+    // the server refuses an unknown field: the list never asks it
+    expect([...queryBodies(), ...groupBodies()].some((body) => JSON.stringify(body.filter).includes('property:gone'))).toBe(false);
+
+    // the chip goes, and the list shows every item
+    fireEvent.click(screen.getByRole('button', { name: 'Filter „Unbekanntes Feld“ entfernen' }));
+    expect(await screen.findByText('Logo austauschen')).toBeTruthy();
+  });
+
+  it('asks the server for a property that is there, once the properties are known', async () => {
+    const customer: Condition = { field: 'property:customer', op: 'is', value: 'opt_moos' };
+    inertia.go(`/projects/WEB?filter=${filterOf([customer])}&group=none`);
+    renderScreen();
+    expect(await screen.findByText('Kontaktformular sendet doppelt')).toBeTruthy();
+    expect(queryBodies().every((body) => JSON.stringify(body.filter!.conditions) === JSON.stringify([{ field: 'project', op: 'is', value: 'p_web' }, customer]))).toBe(true);
+    // an unknown core field in a link matches nothing at once
+    act(() => inertia.go(`/projects/WEB?filter=${filterOf([{ field: 'nonsense', op: 'is', value: 'x' }])}&group=none`));
+    expect(await screen.findByText('Ändere die Bedingungen oder setze den Filter zurück.')).toBeTruthy();
+    expect(queryBodies().some((body) => JSON.stringify(body.filter).includes('nonsense'))).toBe(false);
+  });
+
   it('gives the focus to the toolbar when no row takes it', async () => {
     views = [dueWeek()];
     items = [];

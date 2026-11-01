@@ -17,6 +17,10 @@
  *   first page of every group that was loading before (a group stays enabled by its key). No flash of the loading
  *   state. An error of a later page or of a refetch keeps what is loaded (13c); only a list without an answer at all
  *   shows the error.
+ * - A condition on a field that is gone (a deleted property in a saved view or a link) matches nothing (P2): the
+ *   server refuses such a filter (422), so the list does not ask it and is empty. Whether a property is gone is known
+ *   once the properties are loaded; until then a list with a property condition waits. If they fail to load, the
+ *   conditions go to the server as they are.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -26,13 +30,14 @@ import { placeItems } from '@/domain/grouping';
 import type { ItemsPreset, ViewState } from '@/domain/viewState';
 import { useLabels } from '@/hooks/catalog';
 import { useProjects } from '@/hooks/projects';
+import { useProperties } from '@/hooks/properties';
 import { useAllUsers } from '@/hooks/users';
 import { ALL_GROUP, ListGoneError, useGroupedWorkItems, useWorkItemGroups, type InfiniteWorkItems } from '@/hooks/workItems';
 import { useWorkflows } from '@/hooks/workflows';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
 import type { Condition, GroupBy, GroupCount, ListedItem, Project, StateCategory } from '@/types';
 import { groupLabel, type GroupCatalogs } from './display/groupLabels';
-import { isComplete } from './filter/fieldOps';
+import { fieldDef, isComplete, PROPERTY_PREFIX } from './filter/fieldOps';
 import type { GroupData } from './layouts';
 
 export interface ListData {
@@ -69,10 +74,21 @@ export function useListData(state: ViewState, scope: Condition[], _options: { pr
   );
   const argsKey = JSON.stringify([common, chosen]);
 
+  /* --------------------------------------------------------------- unknown fields */
+
+  const properties = useProperties();
+  const known = properties.data?.items;
+  const conditions = common.filter.conditions;
+  const isProperty = (condition: Condition) => condition.field.startsWith(PROPERTY_PREFIX);
+  // a property condition waits for the list of properties (unless it failed to load: then the server decides)
+  const waiting = known === undefined && !properties.isError && conditions.some(isProperty);
+  const matchesNothing = conditions.some((condition) => (known !== undefined || !isProperty(condition)) && fieldDef(condition.field, known ?? []) === null);
+  const ask = !waiting && !matchesNothing;
+
   /* ----------------------------------------------------------------------- groups */
 
-  const answer = useWorkItemGroups(grouped ? { ...common, group_by: chosen } : null);
-  const effective: GroupBy | undefined = grouped ? answer.data?.group_by : 'none';
+  const answer = useWorkItemGroups(grouped && ask ? { ...common, group_by: chosen } : null);
+  const effective: GroupBy | undefined = matchesNothing ? chosen : grouped ? answer.data?.group_by : 'none';
 
   // the groups that may load, by key: a group the layout enabled stays so for the next state (its rows stay until then)
   const [enabled, setEnabled] = useState<ReadonlySet<string>>(() => new Set());
@@ -83,7 +99,7 @@ export function useListData(state: ViewState, scope: Condition[], _options: { pr
     [common, effective],
   );
   const keys = grouped ? (answer.data?.groups.map((group) => group.key) ?? null) : [ALL_GROUP];
-  const pages = useGroupedWorkItems(listArgs, keys, grouped ? enabled : 'all');
+  const pages = useGroupedWorkItems(listArgs, ask ? keys : null, grouped ? enabled : 'all');
 
   /* --------------------------------------------------------------------- catalogs */
 
@@ -114,7 +130,13 @@ export function useListData(state: ViewState, scope: Condition[], _options: { pr
   /* ------------------------------------------------------------------- the result */
 
   const all = pages[ALL_GROUP];
-  const served: GroupCount[] | undefined = grouped ? answer.data?.groups : all?.data ? [{ key: ALL_GROUP, count: all.data.total }] : undefined;
+  const served: GroupCount[] | undefined = matchesNothing
+    ? []
+    : grouped
+      ? answer.data?.groups
+      : all?.data
+        ? [{ key: ALL_GROUP, count: all.data.total }]
+        : undefined;
 
   const fresh = useMemo<Shown>(() => {
     if (served === undefined || effective === undefined || !catalogsReady) return EMPTY;
@@ -152,12 +174,12 @@ export function useListData(state: ViewState, scope: Condition[], _options: { pr
       groups,
       groupBy: effective,
       fellBack: chosen === 'state' && effective === 'category',
-      total: grouped ? answer.data!.total : all!.data!.total,
+      total: matchesNothing ? 0 : grouped ? answer.data!.total : all!.data!.total,
       status: 'success',
       error: null,
       items,
     };
-  }, [served, effective, catalogsReady, pages, display.sort, categories, grouped, enabled, names, enable, chosen, answer.data, all]);
+  }, [served, effective, catalogsReady, pages, display.sort, categories, grouped, enabled, names, enable, chosen, answer.data, all, matchesNothing]);
 
   // the answer of the current state is there: the groups, and the first page of each group that loads
   const settled = fresh.status === 'success' && fresh.groups.every((group) => group.status !== 'pending' || group.count === 0);
