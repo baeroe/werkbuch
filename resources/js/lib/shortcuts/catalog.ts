@@ -43,6 +43,8 @@ export const SHORTCUTS = {
   'item.relation': { keys: 'r', scope: 'detail', label: 'shortcuts.item.relation', group: 'shortcuts.group.item' },
   'item.title': { keys: 'e', scope: 'detail', label: 'shortcuts.item.title', group: 'shortcuts.group.item' },
   'item.remove': { keys: 'mod+backspace', scope: 'detail', label: 'shortcuts.item.remove', group: 'shortcuts.group.item' },
+  // registered only while the preview is open (shell/PeekHost): the first Escape in a field leaves the field
+  'peek.close': { keys: 'escape', scope: 'detail', label: 'shortcuts.peek.close', group: 'shortcuts.group.item' },
 } as const satisfies Record<string, CatalogEntry>;
 
 export type ShortcutId = keyof typeof SHORTCUTS;

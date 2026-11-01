@@ -6,8 +6,8 @@
  *
  * When the question closes, the focus goes back where it was when the command ran: the element that had it, or, when
  * the command ran from the palette, the element that had it before the palette opened (the palette is gone by then).
- * Without such an element (the focus was on the page itself, or the element went away) it goes to the screen's main
- * area (`#main`, whose first focusable element Base UI then takes), never to the body.
+ * Without such an element (the focus was on the page itself, or the element went away) it goes to the screen's focus
+ * origin (`[data-focus-origin]`, the heading of the item page), else to its main area (`#main`), never to the body.
  */
 
 import { lazy, Suspense, useSyncExternalStore, type RefObject } from 'react';
@@ -43,11 +43,14 @@ const remember = () => {
   origin = useUiStore.getState().paletteOpen ? beforePalette : document.activeElement;
 };
 
-/** Read when the question closes: the origin while it is still on the page and not the page itself, else the main area. */
+/**
+ * Read when the question closes: the origin while it is still on the page and not the page itself, else the screen's
+ * focus origin, else the main area.
+ */
 const returnFocus: RefObject<HTMLElement | null> = {
   get current() {
     const back = origin instanceof HTMLElement && origin.isConnected && origin !== document.body ? origin : null;
-    return back ?? document.getElementById('main');
+    return back ?? document.querySelector<HTMLElement>('[data-focus-origin]') ?? document.getElementById('main');
   },
 };
 const listeners = new Set<() => void>();

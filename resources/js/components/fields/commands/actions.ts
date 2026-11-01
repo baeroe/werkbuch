@@ -1,13 +1,14 @@
 /*
  * What the item commands do: one change with its confirmation (`apply`), and archiving or deleting with 5 s undo
  * (spec 5.1). Archiving and deleting take the item out of every cached list and out of the preview at once; the call
- * itself runs when the undo toast runs out. The item page's header (`useItemRemoval`) uses the same two functions, so
- * the logic exists once (K27).
+ * itself runs when the undo toast runs out. Deleting the item whose page is on screen leaves the page as well. The item
+ * page's header (`useItemRemoval`) uses the same two functions, so the logic exists once (K27).
  *
  * Phase 4 acts on one item (K17). The selection of the lists (Phase 5) adds the bulk edit (`bulkUpdateWorkItems`) with a
  * toast that names the refused items.
  */
 
+import { router } from '@inertiajs/react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type { Page } from '@/api/client';
 import { toast } from '@/components/ui/toast';
@@ -15,6 +16,7 @@ import { qk } from '@/hooks/keys';
 import { useArchiveWorkItem, useDeleteWorkItem } from '@/hooks/workItems';
 import { notifyError } from '@/lib/errors';
 import { t } from '@/lib/i18n';
+import { paths } from '@/lib/links';
 import { runWithUndo } from '@/lib/undo';
 import { useUiStore } from '@/store/ui';
 import type { WorkItem } from '@/types';
@@ -89,9 +91,32 @@ export function archiveWithUndo(deps: RemovalDeps, item: WorkItem): void {
   });
 }
 
-/** Deletes an item with 5 s undo. A failure brings it back on screen, and "Erneut versuchen" hides and deletes it again. */
-export function deleteWithUndo(deps: RemovalDeps, item: WorkItem): void {
+/**
+ * Deleting the item whose page is on screen leaves the page for My items (its project's page comes with Phase 5), in
+ * place of the page, so Back does not lead to an item that is gone. Answers the way back (undo, a failed delete), taken
+ * only while the person is still where the delete sent them.
+ */
+function leavePage(item: WorkItem): () => void {
+  if (window.location.pathname !== paths.item(item.key)) return () => {};
+  router.visit(paths.myItems(), { replace: true });
+  return () => {
+    if (window.location.pathname === paths.myItems()) router.visit(paths.item(item.key));
+  };
+}
+
+/** Takes the item off the screen: out of the lists and the preview, and off its page. Answers how to put it back. */
+function takeAway(deps: RemovalDeps, item: WorkItem): () => void {
   const restore = hideAtOnce(deps.queryClient, item);
+  const back = leavePage(item);
+  return () => {
+    restore();
+    back();
+  };
+}
+
+/** Deletes an item with 5 s undo. A failure brings it back on screen, and "Erneut versuchen" takes it away and deletes it again. */
+export function deleteWithUndo(deps: RemovalDeps, item: WorkItem): void {
+  const restore = takeAway(deps, item);
   runWithUndo({ label: t('items.commands.deleted', { key: item.key }), undo: restore, run: () => deleteNow(deps, item, restore) });
 }
 
@@ -100,6 +125,6 @@ async function deleteNow(deps: RemovalDeps, item: WorkItem, restore: () => void)
     await deps.remove.mutateAsync(item.id);
   } catch (error) {
     restore();
-    notifyError(t('items.commands.not_deleted', { key: item.key }), error, () => void deleteNow(deps, item, hideAtOnce(deps.queryClient, item)));
+    notifyError(t('items.commands.not_deleted', { key: item.key }), error, () => void deleteNow(deps, item, takeAway(deps, item)));
   }
 }
