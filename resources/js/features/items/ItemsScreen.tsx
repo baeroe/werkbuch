@@ -5,8 +5,12 @@
  *
  * - The header names the list (with the star of a project or view, the tabs of Meine Items) and switches the layout
  *   (1–4). Below it the toolbar sticks to the top: the filter bar (`filter/FilterBar.tsx`: "Filter", the title search,
- *   the conditions) with "Neues Item"; the display menu (Task 17) joins it there. While items are selected the bulk bar
+ *   the conditions) with "Anzeige" (`display/DisplayMenu.tsx`) and "Neues Item". While items are selected the bulk bar
  *   stands below them (`selection/BulkBar.tsx`).
+ * - Unsaved changes (spec 4.11): a view that differs from what is saved, a built-in list whose filter differs, shows
+ *   the bar below the toolbar (`save/UnsavedBar.tsx`): "Verwerfen" (with undo), "Als neue View speichern …" (with the
+ *   scope of a built-in list, P28) and, for a view, "Speichern" (its creator and org admins). A built-in list saves a
+ *   change of its display alone from the display menu (13c).
  * - The state (filter and display) is in the address (`useListState`), the groups and their pages come from the server
  *   (`useListData`); a new filter keeps the old rows until its answer is there.
  * - Below: a hint when the status grouping fell back to the categories, a banner on an archived project (read-only),
@@ -31,9 +35,12 @@ import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
 import { cx } from '@/components/ui/cx';
 import { ErrorState } from '@/components/ui/ErrorState';
+import { toast } from '@/components/ui/toast';
 import { sameFilter, scopeConditions, type ItemsPreset } from '@/domain/viewState';
+import { useSettle } from '@/hooks/mutation';
 import { useProject, useProjects } from '@/hooks/projects';
-import { useCurrentUser } from '@/hooks/users';
+import { useProperties } from '@/hooks/properties';
+import { useAllUsers, useCurrentUser } from '@/hooks/users';
 import { useView } from '@/hooks/views';
 import { useWorkflows } from '@/hooks/workflows';
 import { ListGoneError } from '@/hooks/workItems';
@@ -41,11 +48,13 @@ import { notifyError } from '@/lib/errors';
 import { t } from '@/lib/i18n';
 import { paths } from '@/lib/links';
 import { usePermissions } from '@/lib/permissions';
+import { undoLabel } from '@/lib/undo';
 import { SHORTCUTS } from '@/lib/shortcuts/catalog';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import { NotFound } from '@/shell/PageStates';
 import { useUiStore, type CreateDefaults } from '@/store/ui';
 import type { Display, ListedItem, Project, View } from '@/types';
+import { DisplayMenu } from './display/DisplayMenu';
 import { layouts, type LayoutProps } from './layouts';
 import { ListAnnouncer } from './ListAnnouncer';
 import { ListHeader } from './ListHeader';
@@ -53,6 +62,10 @@ import { FilterBar } from './filter/FilterBar';
 import { isComplete } from './filter/fieldOps';
 import { DelayedSkeleton, ListEmpty, ListError, ListSkeleton, ScreenSkeleton } from './ListStates';
 import { MY_TABS } from './MyTabs';
+import { SaveAsDialog } from './save/SaveAsDialog';
+import { UnsavedBar } from './save/UnsavedBar';
+import { useListSave } from './save/useListSave';
+import { VIEW_NAME_MAX } from './save/ViewFields';
 import { BulkBar } from './selection/BulkBar';
 import { useListData } from './useListData';
 import { useListState } from './useListState';
@@ -130,12 +143,18 @@ function StickyToolbar({ children }: { children: ReactNode }) {
   );
 }
 
+/** The name of a copy, „:name (Kopie)“, within the 60 characters of a name (K26). */
+function copyName(name: string): string {
+  const room = VIEW_NAME_MAX - [...t('items.save.copy_name', { name: '' })].length;
+  return t('items.save.copy_name', { name: [...name].slice(0, room).join('').trimEnd() });
+}
+
 /* ------------------------------------------------------------------------- the list */
 
 function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: Project; view?: View }) {
   const me = useCurrentUser();
   const { reason } = usePermissions();
-  const { base, state, setState } = useListState({ preset, project, view });
+  const { base, state, setState, clearChanges, unsaved } = useListState({ preset, project, view });
   const scope = useMemo(() => scopeConditions(preset, project?.id), [preset, project?.id]);
   const data = useListData(state, scope, { preset, project });
 
@@ -204,6 +223,45 @@ function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: P
   const createDefaults: CreateDefaults | undefined = project ? { project_id: project.id } : preset === 'my' && me ? { assignee_id: me.id } : undefined;
   const createReason = reason('item.create', project?.id);
   const create = () => useUiStore.getState().openCreate(createDefaults);
+
+  /* ------------------------------------------------------------------------- saving */
+
+  const settle = useSettle();
+  const properties = useProperties().data?.items ?? [];
+  const users = useAllUsers();
+  const saving = useListSave({ view, state, scope });
+  const [savingAs, setSavingAs] = useState(false);
+  const creatorName = users.data?.items.find((user) => user.id === view?.created_by)?.name ?? t('items.save.creator');
+  const saveReason =
+    view && view.created_by !== me?.id && reason('view.manage_any') !== null
+      ? `${t('problem.detail.view_creator_only', { name: creatorName, view: view.name })} ${t('items.save.copy_instead')}`
+      : null;
+  const saveAsReason = reason('view.create');
+  /** Back to what is saved: a view drops every change, a built-in list its filter (its display was no unsaved change). */
+  const discard = () => {
+    const before = state;
+    if (view) clearChanges();
+    else setState({ ...state, filter: base.filter });
+    toast({ title: t('items.save.discarded'), keep: true, action: { label: undoLabel(), onClick: () => setState(before) } });
+  };
+  const save = () =>
+    settle(saving.save(), {
+      // the view holds what is shown now (it has loaded again by now): the address needs no changes any more
+      onSuccess: (saved) => {
+        clearChanges();
+        toast({ title: t('items.save.saved', { name: saved.name }), tone: 'success' });
+      },
+      onError: (error) => notifyError(t('items.save.save_failed'), error, save),
+    });
+  const scopeText = project
+    ? t('items.save.scope.project', { name: project.name })
+    : preset === 'my'
+      ? t('items.save.scope.my')
+      : preset === 'created'
+        ? t('items.save.scope.created')
+        : preset === 'subscribed'
+          ? t('items.save.scope.subscribed')
+          : null;
 
   /* --------------------------------------------------------------------- the content */
 
@@ -275,9 +333,18 @@ function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: P
           onChange={(filter) => setState({ ...state, filter })}
           project={project}
           actions={
-            <Button variant="primary" size="sm" icon={SquarePen} shortcut={SHORTCUTS['item.create'].keys} disabledReason={createReason} onClick={create} className="max-sm:[&_kbd]:hidden">
-              <span className="max-sm:sr-only">{t('commands.create.label')}</span>
-            </Button>
+            <>
+              <DisplayMenu
+                display={state.display}
+                onChange={(display) => setState({ ...state, display })}
+                fellBack={data.fellBack}
+                properties={properties}
+                {...(!view && { onSaveAs: () => setSavingAs(true), saveAsReason })}
+              />
+              <Button variant="primary" size="sm" icon={SquarePen} shortcut={SHORTCUTS['item.create'].keys} disabledReason={createReason} onClick={create} className="max-sm:[&_kbd]:hidden">
+                <span className="max-sm:sr-only">{t('commands.create.label')}</span>
+              </Button>
+            </>
           }
         />
         {selected.length > 0 && (
@@ -286,6 +353,32 @@ function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: P
           </div>
         )}
       </StickyToolbar>
+
+      {/* polite and always there: a change of filter or display announces that the list now differs from what is saved */}
+      <div aria-live="polite">
+        {unsaved && (
+          <div className="mt-2">
+            <UnsavedBar
+              view={view}
+              saveReason={saveReason}
+              saveAsReason={saveAsReason}
+              saving={saving.saving}
+              onDiscard={discard}
+              onSave={save}
+              onSaveAs={() => setSavingAs(true)}
+            />
+          </div>
+        )}
+      </div>
+      <SaveAsDialog
+        open={savingAs}
+        onOpenChange={setSavingAs}
+        saveAs={saving.saveAs}
+        pending={saving.creating}
+        scopeText={scopeText}
+        defaultName={view ? copyName(view.name) : title}
+        defaultIcon={view?.icon ?? 'layers'}
+      />
 
       {project?.archived_at && (
         <Banner tone="info" icon={Archive} title={t('items.screen.archived.title')} className="mt-2">

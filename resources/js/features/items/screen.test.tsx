@@ -845,6 +845,22 @@ describe('a view', () => {
     expect(await screen.findByText('Logo austauschen')).toBeTruthy();
   });
 
+  it('sorts a view whose sort property is gone in the manual order (P2)', async () => {
+    views = [makeView({ ...dueWeek(), display: { ...dueWeek().display, sort: { field: 'property:gone', direction: 'desc' } } })];
+    inertia.go('/views/v_due_week');
+    renderScreen({ preset: 'view', viewId: 'v_due_week' });
+    expect(await screen.findByText('Logo austauschen')).toBeTruthy();
+    expect(screen.queryByText('Die Items konnten nicht geladen werden')).toBeNull();
+    // the server refuses an unknown sort: the list asks for the manual order
+    const bodies = [...queryBodies(), ...groupBodies()] as (Body & { sort?: unknown })[];
+    expect(bodies.length).toBeGreaterThan(0);
+    expect(bodies.every((body) => JSON.stringify(body.sort) === JSON.stringify({ field: 'rank', direction: 'asc' }))).toBe(true);
+
+    // a sort on a property that is there goes as it is, once the properties are known
+    act(() => inertia.go('/views/v_due_week?sort=property:effort:desc'));
+    await waitFor(() => expect((queryBodies().at(-1) as { sort?: unknown }).sort).toEqual({ field: 'property:effort', direction: 'desc' }));
+  });
+
   it('asks the server for a property that is there, once the properties are known', async () => {
     const customer: Condition = { field: 'property:customer', op: 'is', value: 'opt_moos' };
     inertia.go(`/projects/WEB?filter=${filterOf([customer])}&group=none`);

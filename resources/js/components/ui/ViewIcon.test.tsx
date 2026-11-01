@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { VIEW_ICONS, ViewIcon } from './ViewIcon';
+import { ICON_OPTIONS, VIEW_ICONS, ViewIcon } from './ViewIcon';
 
 describe('ViewIcon', () => {
   it('draws a Lucide icon by name, decorative', () => {
@@ -13,6 +13,12 @@ describe('ViewIcon', () => {
 
   it('knows the type icons and the extra view icons', () => {
     expect(Object.keys(VIEW_ICONS)).toEqual(expect.arrayContaining(['bug', 'layers', 'inbox', 'bot', 'timer']));
+  });
+
+  it('offers only icons it can draw, each once', () => {
+    const values = ICON_OPTIONS.map((option) => option.value);
+    expect(values.filter((value) => !VIEW_ICONS[value])).toEqual([]);
+    expect(new Set(values).size).toBe(values.length);
   });
 
   it('shows an emoji somebody chose as text', () => {

@@ -1,5 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 import { Bot, Building2, CalendarClock, CircleDot, Eye, Inbox, Layers, ListTodo, OctagonAlert, Route, Timer, UserRoundCheck } from 'lucide-react';
+import type { TranslationKey } from '@/lib/i18n';
 import { cx } from './cx';
 import { TYPE_ICONS } from './TypeTab';
 
@@ -18,6 +19,24 @@ export const VIEW_ICONS: Record<string, LucideIcon> = {
   timer: Timer,
   'user-round-check': UserRoundCheck,
 };
+
+/** The icons the view dialogs offer (names of `VIEW_ICONS`), with the name a person reads (K23). */
+export const ICON_OPTIONS: readonly { value: string; label: TranslationKey }[] = [
+  { value: 'layers', label: 'ui.view_icon.layers' },
+  { value: 'list-todo', label: 'ui.view_icon.list_todo' },
+  { value: 'square-check', label: 'ui.view_icon.square_check' },
+  { value: 'bug', label: 'ui.view_icon.bug' },
+  { value: 'zap', label: 'ui.view_icon.zap' },
+  { value: 'calendar-clock', label: 'ui.view_icon.calendar_clock' },
+  { value: 'route', label: 'ui.view_icon.route' },
+  { value: 'building-2', label: 'ui.view_icon.building' },
+  { value: 'user-round-check', label: 'ui.view_icon.person' },
+  { value: 'octagon-alert', label: 'ui.view_icon.warning' },
+  { value: 'eye', label: 'ui.view_icon.eye' },
+  { value: 'flag', label: 'ui.view_icon.flag' },
+  { value: 'rocket', label: 'ui.view_icon.rocket' },
+  { value: 'target', label: 'ui.view_icon.target' },
+];
 
 const EMOJI = /\p{Extended_Pictographic}/u;
 

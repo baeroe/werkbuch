@@ -4,11 +4,21 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import displaySchemaPhp from '/app/Domain/Views/DisplaySchema.php?raw';
+import sortSpecPhp from '/app/Domain/Views/SortSpec.php?raw';
 import { ALL_KEY, NONE_KEY } from '@/domain/grouping';
 import { initI18n } from '@/lib/i18n';
-import { agency, ida, labels, makeWorkItem, mara, project, standard, types } from '@/test/fixtures';
+import { agency, ida, labels, makeWorkItem, mara, project, properties, standard, types } from '@/test/fixtures';
+import type { Display } from '@/types';
 import en from '../../../../../lang/en.json';
 import { CATEGORY_LABEL_KEYS, GROUP_LABEL_KEYS, groupLabel, nestRows, type GroupCatalogs } from './groupLabels';
+import { DISPLAY_FIELDS, isSortable, listSort, MANUAL_SORT, savableDisplay, SORT_FIELDS } from './options';
+
+/** The strings of a PHP constant list: `public const NAME = ['a', 'b'];`. */
+function phpList(source: string, name: string): string[] {
+  const list = new RegExp(`const ${name} = \\[([^\\]]*)\\]`).exec(source)?.[1] ?? '';
+  return [...list.matchAll(/'([^']+)'/g)].map((match) => match[1]!);
+}
 
 const item = (id: string, parent_id: string | null = null) => makeWorkItem({ id, key: id.toUpperCase(), parent_id });
 
@@ -85,5 +95,38 @@ describe('group names', () => {
     initI18n({ locale: 'en', translations: en });
     expect(groupLabel('assignee', NONE_KEY, catalogs)).toBe('Unassigned');
     expect(groupLabel('project', 'p_hidden', catalogs)).toBe('Hidden project');
+  });
+});
+
+describe('what a display holds', () => {
+  it('knows the display fields of the server, the chips of a row and the title', () => {
+    expect([...DISPLAY_FIELDS].sort()).toEqual(phpList(displaySchemaPhp, 'FIELDS').sort());
+  });
+
+  it('sorts by the core fields of the server and by number, date, text and URL properties', () => {
+    expect(SORT_FIELDS.map((option) => option.value)).toEqual(phpList(sortSpecPhp, 'CORE'));
+    expect(isSortable('due_date', [])).toBe(true);
+    expect(isSortable('property:effort', properties)).toBe(true);
+    expect(isSortable('property:customer', properties)).toBe(false);
+    expect(isSortable('property:gone', properties)).toBe(false);
+    expect(isSortable('title', properties)).toBe(false);
+  });
+
+  it('reads a sort on something unknown as the manual order, and waits for the properties a sort needs', () => {
+    const effort = { field: 'property:effort', direction: 'desc' } as const;
+    expect(listSort(effort, properties, false)).toBe(effort);
+    expect(listSort({ field: 'property:gone', direction: 'desc' }, properties, false)).toBe(MANUAL_SORT);
+    expect(listSort({ field: 'nonsense', direction: 'desc' }, undefined, false)).toBe(MANUAL_SORT);
+    expect(listSort({ field: 'due_date', direction: 'desc' }, undefined, false)).toEqual({ field: 'due_date', direction: 'desc' });
+    // the properties are loading: wait; they failed: the server decides
+    expect(listSort(effort, undefined, false)).toBeNull();
+    expect(listSort(effort, undefined, true)).toBe(effort);
+  });
+
+  it('saves a display without what is gone', () => {
+    const display: Display = { layout: 'list', group_by: 'none', sort: { field: 'property:gone', direction: 'desc' }, fields: ['key', 'title', 'nonsense', 'property:effort', 'property:gone'], show_sub_items: true };
+    expect(savableDisplay(display, properties)).toEqual({ ...display, sort: MANUAL_SORT, fields: ['key', 'title', 'property:effort'] });
+    // without the properties, every property stays
+    expect(savableDisplay(display, undefined)).toEqual({ ...display, fields: ['key', 'title', 'property:effort', 'property:gone'] });
   });
 });

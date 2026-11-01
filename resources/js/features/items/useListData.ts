@@ -20,7 +20,8 @@
  * - A condition on a field that is gone (a deleted property in a saved view or a link) matches nothing (P2): the
  *   server refuses such a filter (422), so the list does not ask it and is empty. Whether a property is gone is known
  *   once the properties are loaded; until then a list with a property condition waits. If they fail to load, the
- *   conditions go to the server as they are.
+ *   conditions go to the server as they are. A sort on something unknown is the manual order (P2, as
+ *   `SortSpec::read`), for the same reason: the server refuses it.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -37,6 +38,7 @@ import { useWorkflows } from '@/hooks/workflows';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
 import type { Condition, GroupBy, GroupCount, ListedItem, Project, StateCategory } from '@/types';
 import { groupLabel, type GroupCatalogs } from './display/groupLabels';
+import { listSort, MANUAL_SORT } from './display/options';
 import { fieldDef, isComplete, PROPERTY_PREFIX } from './filter/fieldOps';
 import type { GroupData } from './layouts';
 
@@ -67,21 +69,24 @@ export function useListData(state: ViewState, scope: Condition[], _options: { pr
   const { display } = state;
   const chosen = display.group_by;
   const grouped = chosen !== 'none';
-  const common = useMemo(
-    // an unfinished condition of the filter bar (a chip still without its value) never goes to the server
-    () => ({ filter: { version: 1 as const, conditions: [...scope, ...state.filter.conditions.filter(isComplete)] }, sort: display.sort, show_sub_items: display.show_sub_items }),
-    [scope, state.filter.conditions, display.sort, display.show_sub_items],
-  );
-  const argsKey = JSON.stringify([common, chosen]);
-
   /* --------------------------------------------------------------- unknown fields */
 
   const properties = useProperties();
   const known = properties.data?.items;
+  // a sort on a property waits for the properties, one on something unknown is the manual order
+  const sort = listSort(display.sort, known, properties.isError);
+
+  const common = useMemo(
+    // an unfinished condition of the filter bar (a chip still without its value) never goes to the server
+    () => ({ filter: { version: 1 as const, conditions: [...scope, ...state.filter.conditions.filter(isComplete)] }, sort: sort ?? MANUAL_SORT, show_sub_items: display.show_sub_items }),
+    [scope, state.filter.conditions, sort, display.show_sub_items],
+  );
+  const argsKey = JSON.stringify([common, chosen]);
+
   const conditions = common.filter.conditions;
   const isProperty = (condition: Condition) => condition.field.startsWith(PROPERTY_PREFIX);
   // a property condition waits for the list of properties (unless it failed to load: then the server decides)
-  const waiting = known === undefined && !properties.isError && conditions.some(isProperty);
+  const waiting = sort === null || (known === undefined && !properties.isError && conditions.some(isProperty));
   const matchesNothing = conditions.some((condition) => (known !== undefined || !isProperty(condition)) && fieldDef(condition.field, known ?? []) === null);
   const ask = !waiting && !matchesNothing;
 
@@ -144,7 +149,7 @@ export function useListData(state: ViewState, scope: Condition[], _options: { pr
     const placement = placeItems(
       served.map((group) => ({ key: group.key, items: listOf(group.key)?.data?.items ?? [] })),
       effective,
-      display.sort,
+      common.sort,
       { stateCategory: (stateId) => categories.get(stateId) ?? 'backlog' },
     );
     const groups = served.map((group): GroupData => {
@@ -179,7 +184,7 @@ export function useListData(state: ViewState, scope: Condition[], _options: { pr
       error: null,
       items,
     };
-  }, [served, effective, catalogsReady, pages, display.sort, categories, grouped, enabled, names, enable, chosen, answer.data, all, matchesNothing]);
+  }, [served, effective, catalogsReady, pages, common.sort, categories, grouped, enabled, names, enable, chosen, answer.data, all, matchesNothing]);
 
   // the answer of the current state is there: the groups, and the first page of each group that loads
   const settled = fresh.status === 'success' && fresh.groups.every((group) => group.status !== 'pending' || group.count === 0);
