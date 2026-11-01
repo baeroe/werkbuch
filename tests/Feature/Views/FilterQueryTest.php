@@ -578,6 +578,11 @@ it('matches nothing for an operator or a value its field does not take', functio
     'created_at after a relative it cannot read' => [CoreField::CreatedAt, Op::After, ['relative' => 'soon']],
     'blocked is_not' => [CoreField::Blocked, Op::IsNot, true],
     'blocked is a word' => [CoreField::Blocked, Op::Is, 'yes'],
+    'project is a number' => [CoreField::Project, Op::Is, 1],
+    'project not_in a number' => [CoreField::Project, Op::NotIn, [1]],
+    'priority in a number' => [CoreField::Priority, Op::In, [0]],
+    'state_category is yes' => [CoreField::StateCategory, Op::Is, true],
+    'label in a number and an id' => [CoreField::Label, Op::In, [1, '01k0000000000000000000000a']],
     'title is' => [CoreField::Title, Op::Is, 'Kontaktformular sendet doppelt'],
     'title contains a number' => [CoreField::Title, Op::Contains, 47],
 ]);

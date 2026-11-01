@@ -74,6 +74,13 @@ final class FilterQuery
         $op = $condition->op;
         $one = fn (mixed $value): ?Operand => Operands::one($value, $field, $viewer->id, $calendar);
         $operands = Operands::of($condition->value, $field, $viewer->id, $calendar);
+        if (self::takesTexts($field->kind) && array_filter(self::scalars($operands), fn (mixed $value) => ! is_string($value)) !== []) {
+            // ids and words are texts; a number or yes or no would be compared numerically with a text column and
+            // meet nearly every row (`'01k…' = 1`), so it meets none (only conditions made by hand get here)
+            self::nothing($query);
+
+            return;
+        }
         $core = CoreField::tryFrom($field->name);
         if ($core === null) {
             self::property($query, $field, $op, $condition->value, $operands, $one, $calendar);
@@ -402,6 +409,12 @@ final class FilterQuery
     private static function epicTypes(): QueryBuilder
     {
         return DB::query()->select('id')->from('work_item_types')->where('is_epic', true);
+    }
+
+    /** Whether the values of the kind are ids or words, texts all of them. */
+    private static function takesTexts(FieldKind $kind): bool
+    {
+        return $kind === FieldKind::Id || $kind === FieldKind::Enum || $kind === FieldKind::List;
     }
 
     /**

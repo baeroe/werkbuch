@@ -340,6 +340,8 @@ describe('properties', function () use ($doc) {
     })->with([
         'dropdown before' => ['customer', Op::Before, 'x'],
         'person gt' => ['reviewer', Op::Gt, 3],
+        'dropdown in a number' => ['customer', Op::In, [0]],
+        'person is a number' => ['reviewer', Op::Is, 1],
         'yes or no is_not' => ['approved', Op::IsNot, true],
         'yes or no is a word' => ['approved', Op::Is, 'yes'],
         'number contains' => ['effort', Op::Contains, '3'],

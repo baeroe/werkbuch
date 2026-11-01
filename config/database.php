@@ -78,6 +78,9 @@ return [
             'prefix' => '',
             'prefix_indexes' => true,
             'strict' => true,
+            // the session in UTC: Laravel writes timestamps as UTC wall clock, a zone with summer time would read
+            // them as its own (and refuse the hour the clocks skip)
+            'timezone' => '+00:00',
             'engine' => null,
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 Mysql::ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
