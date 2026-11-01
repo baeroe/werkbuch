@@ -360,7 +360,7 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 - [x] Phase 1: Fundament (PR #5)
 - [x] Phase 2: Organisation, Konten, Rollen, Projekte (PR #11)
 - [x] Phase 3: Workflows, Typen, Properties, Kataloge (PR #12)
-- [ ] Phase 4: Work Items, Relationen, History
+- [x] Phase 4: Work Items, Relationen, History (PR #13)
 - [ ] Phase 5: Views, Filter-Engine, Listen-Layouts
 - [ ] Phase 6: Suche und Suchtreffer in der Befehlspalette
 - [ ] Phase 7: Editor, Kommentare, Anhänge
