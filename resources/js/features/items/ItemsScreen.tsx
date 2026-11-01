@@ -4,8 +4,8 @@
  * states and the announcer):
  *
  * - The header names the list (with the star of a project or view, the tabs of Meine Items) and switches the layout
- *   (1–4). Below it the toolbar sticks to the top with "Neues Item"; the filter bar (Task 16), the display menu (Task 17)
- *   and the bulk bar (Task 15) join it there.
+ *   (1–4). Below it the toolbar sticks to the top with "Neues Item"; the filter bar (Task 16) and the display menu
+ *   (Task 17) join it there. While items are selected the bulk bar stands below them (`selection/BulkBar.tsx`).
  * - The state (filter and display) is in the address (`useListState`), the groups and their pages come from the server
  *   (`useListData`); a new filter keeps the old rows until its answer is there.
  * - Below: a hint when the status grouping fell back to the categories, a banner on an archived project (read-only),
@@ -14,6 +14,8 @@
  * - Cursor and selection: the cursor is the item under the keyboard; the selection lives in the UI store and is
  *   emptied when the list goes, so no other screen acts on it. A click on a title and the space bar open the preview
  *   beside the list; an open preview follows the cursor. Enter opens the item's page.
+ * - The item commands of the list (`useItemCommands({ scope: 'list', current })`) act on the selection, else on the
+ *   item under the cursor; an item page or the preview with the focus outranks them.
  *
  * Every list mounts anew (another page, another project, another view): cursor, selection and the groups that loaded
  * never leak into the next one.
@@ -23,14 +25,16 @@ import { router, usePage } from '@inertiajs/react';
 import { Archive, Info, SquarePen } from 'lucide-react';
 import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { ApiError } from '@/api/client';
+import { archiveTargets, closedIn, useItemCommands, useRemovalDeps } from '@/components/fields/commands';
 import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
 import { cx } from '@/components/ui/cx';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { sameFilter, scopeConditions, type ItemsPreset } from '@/domain/viewState';
-import { useProject } from '@/hooks/projects';
+import { useProject, useProjects } from '@/hooks/projects';
 import { useCurrentUser } from '@/hooks/users';
 import { useView } from '@/hooks/views';
+import { useWorkflows } from '@/hooks/workflows';
 import { ListGoneError } from '@/hooks/workItems';
 import { notifyError } from '@/lib/errors';
 import { t } from '@/lib/i18n';
@@ -40,12 +44,13 @@ import { SHORTCUTS } from '@/lib/shortcuts/catalog';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import { NotFound } from '@/shell/PageStates';
 import { useUiStore, type CreateDefaults } from '@/store/ui';
-import type { Display, Project, View } from '@/types';
+import type { Display, ListedItem, Project, View } from '@/types';
 import { layouts, type LayoutProps } from './layouts';
 import { ListAnnouncer } from './ListAnnouncer';
 import { ListHeader } from './ListHeader';
 import { DelayedSkeleton, ListEmpty, ListError, ListSkeleton, ScreenSkeleton } from './ListStates';
 import { MY_TABS } from './MyTabs';
+import { BulkBar } from './selection/BulkBar';
 import { useListData } from './useListData';
 import { useListState } from './useListState';
 
@@ -139,6 +144,7 @@ function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: P
   const selection = useUiStore((ui) => ui.selection);
   const setSelection = useUiStore((ui) => ui.setSelection);
   const [cursorId, setCursorId] = useState<string | null>(null);
+  useItemCommands({ scope: 'list', current: () => cursorId });
   // no other screen may act on a selection that is no longer on screen
   useEffect(() => () => useUiStore.getState().setSelection([]), []);
   // what leaves the list leaves the selection
@@ -178,6 +184,18 @@ function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: P
   }, [loadAll]);
 
   /* --------------------------------------------------------------------- the actions */
+
+  const selected = useMemo(() => data.items.filter((item) => selection.includes(item.id)), [data.items, selection]);
+  const removal = useRemovalDeps();
+  const projects = useProjects({ include_archived: true }).data?.items ?? [];
+  const workflows = useWorkflows().data?.items ?? [];
+  // the closed ones leave the list at once, the open ones stay and the toast names them
+  const archive = (targets: ListedItem[]) =>
+    archiveTargets(
+      removal,
+      targets,
+      targets.filter((item) => closedIn(projects, workflows, item)),
+    );
 
   const setLayout = (layout: Display['layout']) => setState({ ...state, display: { ...state.display, layout } });
   const createDefaults: CreateDefaults | undefined = project ? { project_id: project.id } : preset === 'my' && me ? { assignee_id: me.id } : undefined;
@@ -252,6 +270,11 @@ function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: P
             <span className="max-sm:sr-only">{t('commands.create.label')}</span>
           </Button>
         </div>
+        {selected.length > 0 && (
+          <div className="mt-2">
+            <BulkBar items={selected} total={data.total} onSelectAll={() => void selectAll()} onClear={() => setSelection([])} onArchive={archive} />
+          </div>
+        )}
       </StickyToolbar>
 
       {project?.archived_at && (

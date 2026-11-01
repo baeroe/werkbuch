@@ -1,8 +1,9 @@
 /*
  * The sub-lists of the item commands in the palette: status, assignee, priority, labels, type, the two dates and the
- * parent. Each option changes the target with its own mutation (`apply`) and confirms it in a toast; a move into a
- * closed state asks for the resolution first, a type change that costs values or breaks the two levels opens the type
- * dialog (both through `ItemDialogsHost`).
+ * parent. Each option changes the target with its own mutation (`apply`) and confirms it in a toast, several targets
+ * with one bulk edit whose toast names what the server refused; a move into a closed state asks for the resolution
+ * first, a type change that costs values or breaks the two levels opens the type dialog (both through
+ * `ItemDialogsHost`). Type and parent are for one target only.
  */
 
 import { UserRoundCheck } from 'lucide-react';
@@ -13,6 +14,7 @@ import { toast } from '@/components/ui/toast';
 import { canHaveParent, typeChangeRefusal } from '@/domain/hierarchy';
 import { endOfMonth, weekdayOf } from '@/domain/tz';
 import { allowedTargets, isClosedCategory } from '@/domain/workflow';
+import { commonStates, subjectOf } from '@/features/items/selection/bulk';
 import type { CommandOption } from '@/lib/commands';
 import { notifyError } from '@/lib/errors';
 import { intlLocale, t } from '@/lib/i18n';
@@ -28,7 +30,7 @@ import { typeChangeOf, typeOption } from '../TypePicker';
 import { apply } from './actions';
 import { stateOf, workflowOf, type ItemCommandContext } from './context';
 
-/** The one target of Phase 4 (K17); the commands only offer their lists while there is one. */
+/** The first target; the one of type and parent, which act on one item alone. */
 const targetOf = (ctx: ItemCommandContext) => ctx.targets[0]!;
 
 const option = (picker: PickerOption, run: () => void): CommandOption => ({
@@ -43,28 +45,36 @@ const option = (picker: PickerOption, run: () => void): CommandOption => ({
 /* ------------------------------------------------------------------------------- status */
 
 export function stateOptions(ctx: ItemCommandContext): CommandOption[] {
+  const { targets } = ctx;
   const item = targetOf(ctx);
   const what = (state: State) => t('items.commands.what.state', { state: state.name });
-  const move = (state: State) => {
-    if (isClosedCategory(state.category)) {
-      const from = stateOf(ctx, item);
-      askResolution({
-        subject: item.key,
-        target: state,
-        from: from && { category: from.category, resolutionId: item.resolution_id },
-        onConfirm: (resolutionId) => apply(ctx, what(state), (target) => ctx.transition.mutateAsync({ id: target.id, to_state_id: state.id, resolution_id: resolutionId })),
-      });
-      return;
-    }
-    apply(ctx, what(state), (target) => ctx.transition.mutateAsync({ id: target.id, to_state_id: state.id }));
+  const move = (state: State, resolutionId?: string | null) =>
+    apply(
+      ctx,
+      what(state),
+      (target) => ctx.transition.mutateAsync({ id: target.id, to_state_id: state.id, ...(resolutionId !== undefined && { resolution_id: resolutionId }) }),
+      { state_id: state.id, ...(resolutionId !== undefined && { resolution_id: resolutionId }) },
+    );
+  const choose = (state: State) => {
+    if (!isClosedCategory(state.category)) return move(state);
+    const from = targets.length === 1 ? stateOf(ctx, item) : undefined;
+    askResolution({
+      subject: subjectOf(targets),
+      target: state,
+      from: from && { category: from.category, resolutionId: item.resolution_id },
+      onConfirm: (resolutionId) => move(state, resolutionId),
+    });
   };
+  // several items: the states every workflow of them has (A128); each item's own rules decide, the toast names refusals
+  if (targets.length > 1) return commonStates(targets, (target) => workflowOf(ctx, target)).map((state) => option(stateOption(state), () => choose(state)));
   const workflow = workflowOf(ctx, item);
-  return workflow ? allowedTargets(workflow, item.state_id).map((state) => option(stateOption(state), () => move(state))) : [];
+  return workflow ? allowedTargets(workflow, item.state_id).map((state) => option(stateOption(state), () => choose(state))) : [];
 }
 
-/** What the status list says when the workflow leads nowhere from here. */
+/** What the status list says when there is nothing to choose: no transition from here, or several workflows. */
 export function stateEmptyText(ctx: ItemCommandContext): string {
   const item = targetOf(ctx);
+  if (ctx.targets.length > 1) return t('items.commands.empty.workflows');
   return t('items.fields.state.no_transition', { state: stateOf(ctx, item)?.name ?? '', workflow: workflowOf(ctx, item)?.name ?? '' });
 }
 
@@ -72,10 +82,10 @@ export function stateEmptyText(ctx: ItemCommandContext): string {
 
 export function assign(ctx: ItemCommandContext, user: User | null): void {
   const what = user ? t('items.commands.what.assigned', { name: user.name }) : t('items.commands.what.unassigned');
-  apply(ctx, what, (item) => ctx.update.mutateAsync({ id: item.id, patch: { assignee_id: user?.id ?? null } }));
+  apply(ctx, what, (item) => ctx.update.mutateAsync({ id: item.id, patch: { assignee_id: user?.id ?? null } }), { assignee_id: user?.id ?? null });
 }
 
-/** Whether the signed-in person can take the target: one of the people of its project. */
+/** Whether the signed-in person can take the targets: one of the people of each of their projects. */
 export const canTakeIt = (ctx: ItemCommandContext): boolean => ctx.people!.some((user) => user.id === ctx.me?.id);
 
 export function assigneeOptions(ctx: ItemCommandContext): CommandOption[] {
@@ -101,23 +111,27 @@ export function priorityOptions(ctx: ItemCommandContext): CommandOption[] {
     id: priority,
     label: priorityName(priority),
     icon: createElement(PriorityIcon, { priority }),
-    run: () => apply(ctx, t('items.commands.what.priority', { priority: priorityName(priority) }), (item) => ctx.update.mutateAsync({ id: item.id, patch: { priority } })),
+    run: () =>
+      apply(ctx, t('items.commands.what.priority', { priority: priorityName(priority) }), (item) => ctx.update.mutateAsync({ id: item.id, patch: { priority } }), { priority }),
   }));
 }
 
 export function labelOptions(ctx: ItemCommandContext): CommandOption[] {
-  const item = targetOf(ctx);
   const collator = new Intl.Collator(intlLocale());
   return [...ctx.labels]
     .sort((a, b) => collator.compare(a.name, b.name))
     .map((label) => {
-      // a label the item has comes off, any other goes on
-      const set = item.label_ids.includes(label.id);
+      // a label every target has comes off, any other goes on
+      const set = ctx.targets.every((item) => item.label_ids.includes(label.id));
       const what = t(set ? 'items.commands.what.label_removed' : 'items.commands.what.label_added', { label: label.name });
       return {
         ...option(labelOption(label), () =>
-          apply(ctx, what, (target) =>
-            ctx.update.mutateAsync({ id: target.id, patch: { label_ids: set ? target.label_ids.filter((id) => id !== label.id) : [...target.label_ids, label.id] } }),
+          apply(
+            ctx,
+            what,
+            (target) =>
+              ctx.update.mutateAsync({ id: target.id, patch: { label_ids: set ? target.label_ids.filter((id) => id !== label.id) : [...target.label_ids, label.id] } }),
+            set ? { remove_label_ids: [label.id] } : { add_label_ids: [label.id] },
           ),
         ),
         hint: set ? t('items.commands.label_set') : undefined,
@@ -167,10 +181,12 @@ export function datePresets(today: string): { id: string; label: string; date: s
 
 export function dateOptions(ctx: ItemCommandContext, field: 'start_date' | 'due_date'): CommandOption[] {
   const item = targetOf(ctx);
+  const one = ctx.targets.length === 1;
   const name = t(field === 'due_date' ? 'items.fields.date.due' : 'items.fields.date.start');
   const set = (date: string | null) => {
-    // a start after the due date (or a due date before the start) is refused here, with the fix
-    const conflict = date !== null && (field === 'start_date' ? item.due_date !== null && date > item.due_date : item.start_date !== null && date < item.start_date);
+    // one item: a start after the due date (or a due date before the start) is refused here, with the fix (several:
+    // each item's rules decide, the toast names refusals)
+    const conflict = one && date !== null && (field === 'start_date' ? item.due_date !== null && date > item.due_date : item.start_date !== null && date < item.start_date);
     if (conflict) {
       toast({
         title: t('items.commands.date.not_set', { field: name }),
@@ -183,7 +199,7 @@ export function dateOptions(ctx: ItemCommandContext, field: 'start_date' | 'due_
       return;
     }
     const what = date ? t('items.commands.what.date_set', { field: name, day: formatDay(date) }) : t('items.commands.what.date_removed', { field: name });
-    apply(ctx, what, (target) => ctx.update.mutateAsync({ id: target.id, patch: { [field]: date } }));
+    apply(ctx, what, (target) => ctx.update.mutateAsync({ id: target.id, patch: { [field]: date } }), { [field]: date });
   };
   const presets = datePresets(ctx.today).map((preset) => ({
     id: preset.id,
@@ -192,10 +208,9 @@ export function dateOptions(ctx: ItemCommandContext, field: 'start_date' | 'due_
     keywords: [formatDay(preset.date)],
     run: () => set(preset.date),
   }));
-  const clear =
-    item[field] !== null
-      ? [{ id: 'none', label: t('items.commands.date.clear', { field: name }), keywords: [t('items.commands.date.clear_keywords')], run: () => set(null) }]
-      : [];
+  const clear = ctx.targets.some((target) => target[field] !== null)
+    ? [{ id: 'none', label: t('items.commands.date.clear', { field: name }), keywords: [t('items.commands.date.clear_keywords')], run: () => set(null) }]
+    : [];
   return [...presets, ...clear];
 }
 
@@ -216,8 +231,11 @@ export function parentOptions(ctx: ItemCommandContext): CommandOption[] {
   // the sub-list opens before the items of the project are there; it fills once they come
   if (ctx.projectItems === undefined) return [];
   const setParent = (parent: ListedItem | null) =>
-    apply(ctx, parent ? t('items.commands.what.parent', { parent: parent.key }) : t('items.commands.what.no_parent'), (target) =>
-      ctx.update.mutateAsync({ id: target.id, patch: { parent_id: parent?.id ?? null } }),
+    apply(
+      ctx,
+      parent ? t('items.commands.what.parent', { parent: parent.key }) : t('items.commands.what.no_parent'),
+      (target) => ctx.update.mutateAsync({ id: target.id, patch: { parent_id: parent?.id ?? null } }),
+      {},
     );
   const candidates = candidatesOf(ctx).map((candidate) => option(parentOption(candidate, typeIn(ctx)(candidate.type_id)), () => setParent(candidate)));
   return [...(item.parent_id ? [option(NO_PARENT_OPTION(), () => setParent(null))] : []), ...candidates];

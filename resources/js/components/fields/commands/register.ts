@@ -5,6 +5,8 @@
  * A shortcut of a command with a sub-list opens the palette right in it (`openPalette`); `i` and `mod+backspace` act at
  * once. Without the right a shortcut says why in a toast and the palette leaves the command out. While the catalogs a
  * command needs still load, its shortcut says so instead of acting, and the palette leaves it out.
+ * Several targets (a selection) change together; type and parent change for one item alone. `mod+backspace` archives
+ * when some of them are closed (the open ones stay and are named) and deletes otherwise.
  */
 
 import type { LucideIcon } from 'lucide-react';
@@ -16,9 +18,8 @@ import { t, type TranslationKey } from '@/lib/i18n';
 import { SHORTCUTS, type ShortcutId } from '@/lib/shortcuts/catalog';
 import { registerShortcut } from '@/lib/shortcuts/registry';
 import { useUiStore } from '@/store/ui';
-import type { ListedItem } from '@/types';
-import { archiveWithUndo, deleteWithUndo } from './actions';
-import { editReason, isClosed, type ItemCommandContext, type ItemCommandSource } from './context';
+import { archiveTargets, deleteManyWithUndo, deleteWithUndo } from './actions';
+import { archivesNow, editReason, isClosed, type ItemCommandContext, type ItemCommandSource } from './context';
 import {
   assign,
   assigneeOptions,
@@ -60,6 +61,8 @@ const people = (ctx: ItemCommandContext) => waitFor(ctx.people, ctx.peopleFailed
 const projectItems = (ctx: ItemCommandContext) => waitFor(ctx.projectItems, ctx.projectItemsFailed);
 const children = (ctx: ItemCommandContext) => waitFor(ctx.hasChildren, false);
 const edit = (ctx: ItemCommandContext) => editReason(ctx);
+/** Type and parent change for one item alone. */
+const single = (ctx: ItemCommandContext) => (ctx.targets.length > 1 ? t('items.commands.one_only') : editReason(ctx));
 
 const LOADING = () => t('items.commands.wait.description');
 const FAILED = () => t('items.commands.failed.description');
@@ -104,7 +107,7 @@ const COMMANDS: ItemCommand[] = [
     icon: Shapes,
     // whether the item has children: the two levels decide what it may become
     loading: children,
-    denied: edit,
+    denied: single,
     options: typeOptions,
     placeholder: 'items.commands.placeholder.type',
     emptyText: () => t('items.commands.empty.type'),
@@ -132,29 +135,42 @@ const COMMANDS: ItemCommand[] = [
     // the candidates are the epics of the project
     loading: projectItems,
     opensWhileLoading: true,
-    denied: (ctx) => edit(ctx) ?? parentReason(ctx),
+    denied: (ctx) => single(ctx) ?? parentReason(ctx),
     options: parentOptions,
     placeholder: 'items.fields.parent.placeholder',
     emptyText: parentEmptyText,
   },
 ];
 
-/** Whether `mod+backspace` archives: the target is closed and not archived yet (else it deletes). */
-const archivable = (ctx: ItemCommandContext) => ctx.targets.every((item) => item.archived_at === null && isClosed(ctx, item));
+/** Whether `mod+backspace` archives (see `archivesNow`), else it deletes. */
+const archivable = (ctx: ItemCommandContext) => archivesNow(ctx.projects, ctx.workflows, ctx.targets);
 
-/** Why the target cannot be deleted (project admins only; an archived item can). */
+/** Why the targets cannot be deleted (project admins only; an archived item can). */
 const deleteReason = (ctx: ItemCommandContext) => ctx.targets.map((item) => ctx.reason('item.delete', item.project_id)).find(Boolean) ?? null;
 
-/** What `mod+backspace` does now: archive a closed item, delete any other; or why it can do neither. */
+/** Archives the targets: one alone, several with the closed ones leaving the screen at once. */
+const archive = (ctx: ItemCommandContext) =>
+  archiveTargets(
+    ctx.removal,
+    ctx.targets,
+    ctx.targets.filter((target) => isClosed(ctx, target)),
+  );
+
+/** Deletes the targets: one alone (leaving its page), several item by item. */
+function remove(ctx: ItemCommandContext): void {
+  if (ctx.targets.length === 1) deleteWithUndo(ctx.removal, ctx.targets[0]!);
+  else deleteManyWithUndo(ctx.removal, ctx.targets);
+}
+
+/** What `mod+backspace` does now: archive closed items, delete others; or why it can do neither. */
 function removal(ctx: ItemCommandContext): { run: () => void } | { reason: Exclude<ReturnType<typeof blocker>, null> } {
   if (!ctx.ready) return { reason: ctx.failed ? 'failed' : 'loading' };
-  const [item] = ctx.targets as [ListedItem];
   if (archivable(ctx)) {
     const denied = editReason(ctx);
-    return denied ? { reason: { denied } } : { run: () => archiveWithUndo(ctx.removal, item) };
+    return denied ? { reason: { denied } } : { run: () => archive(ctx) };
   }
   const denied = deleteReason(ctx);
-  return denied ? { reason: { denied } } : { run: () => deleteWithUndo(ctx.removal, item) };
+  return denied ? { reason: { denied } } : { run: () => remove(ctx) };
 }
 
 /** Says why a shortcut does nothing now. */
@@ -167,8 +183,8 @@ function explain(reason: Exclude<ReturnType<typeof blocker>, null>, retry: () =>
 
 /** A shortcut of the catalog, bound to the item commands of one source. */
 function bind(id: ShortcutId, source: ItemCommandSource, run: () => void): () => void {
-  const { keys, scope, label, group } = SHORTCUTS[id];
-  return registerShortcut({ id, keys, scope, label, group, when: () => source.context().targets.length > 0, run });
+  const { keys, label, group } = SHORTCUTS[id];
+  return registerShortcut({ id, keys, scope: source.scope, label, group, when: () => source.context().targets.length > 0, run });
 }
 
 /** The palette commands and shortcuts of one source; answers the function that takes them out again. */
@@ -221,7 +237,7 @@ export function registerItemCommands(source: ItemCommandSource): () => void {
         const c = ctx();
         return c.ready && c.targets.length > 0 && archivable(c) && editReason(c) === null;
       },
-      run: () => archiveWithUndo(ctx().removal, ctx().targets[0]!),
+      run: () => archive(ctx()),
     }),
     registerCommand({
       id: 'item.delete',
@@ -234,7 +250,7 @@ export function registerItemCommands(source: ItemCommandSource): () => void {
         const c = ctx();
         return c.ready && c.targets.length > 0 && deleteReason(c) === null;
       },
-      run: () => deleteWithUndo(ctx().removal, ctx().targets[0]!),
+      run: () => remove(ctx()),
     }),
     bind('item.remove', source, () => {
       const c = ctx();

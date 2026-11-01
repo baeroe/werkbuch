@@ -8,7 +8,7 @@ import { useMemo } from 'react';
 import { canTakeWork } from '@/domain/people';
 import { cachedZone } from '@/domain/tz';
 import { useOrganization } from '@/hooks/organization';
-import { useMembers, useProjects } from '@/hooks/projects';
+import { useMembers, useMembersOf, useProjects } from '@/hooks/projects';
 import { useAllUsers } from '@/hooks/users';
 import { useWorkflows } from '@/hooks/workflows';
 import { intlLocale, t } from '@/lib/i18n';
@@ -83,5 +83,25 @@ export function useProjectPeople(projectId: string) {
     error: members.error ?? users.error,
     retry: () => void Promise.all([members.refetch(), users.refetch()]),
     retrying: members.isFetching || users.isFetching,
+  };
+}
+
+/**
+ * Who can take an item of every one of these projects (`projectPeople` of each, in the order of the first): the people a
+ * change of several items offers. Undefined until everything has loaded, and without projects.
+ */
+export function useCommonPeople(projectIds: readonly string[]) {
+  const members = useMembersOf(projectIds);
+  const users = useAllUsers();
+  const userList = users.data?.items;
+  const lists = members.map((query) => query.data?.items);
+  const loaded = userList !== undefined && projectIds.length > 0 && lists.every((entry) => entry !== undefined);
+  const each = loaded ? projectIds.map((projectId, index) => projectPeople(userList, lists[index]!, projectId)) : [];
+  const people = loaded ? each[0]!.filter((user) => each.every((others) => others.some((other) => other.id === user.id))) : undefined;
+  const failed = [...members, users].filter((query) => query.isError);
+  return {
+    people,
+    error: failed[0]?.error ?? null,
+    retry: () => failed.forEach((query) => void query.refetch()),
   };
 }

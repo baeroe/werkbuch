@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import {
   addMember,
   archiveProject,
@@ -49,6 +49,16 @@ export function useMembers(project: string | null | undefined) {
     queryKey: qk.members.list({ project }),
     queryFn: () => allPages((cursor) => listMembers(project!, { cursor })),
     enabled: !!project,
+  });
+}
+
+/** The members of several projects at once (the projects of a selection), each as `useMembers` loads it. */
+export function useMembersOf(projects: readonly string[]) {
+  return useQueries({
+    queries: projects.map((project) => ({
+      queryKey: qk.members.list({ project }),
+      queryFn: () => allPages((cursor) => listMembers(project, { cursor })),
+    })),
   });
 }
 

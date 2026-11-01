@@ -18,7 +18,7 @@ import { listShortcuts } from '@/lib/shortcuts/registry';
 import { useWorkItems } from '@/hooks/workItems';
 import { useUiStore } from '@/store/ui';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
-import { ida, labels, lene, list, makeWorkItem, mara, organization, project, properties, queryItems, resolutions, standard, types, web30, web47, web48 } from '@/test/fixtures';
+import { agency, ida, labels, lene, list, makeWorkItem, mara, organization, project, properties, queryItems, resolutions, standard, types, web30, web47, web48 } from '@/test/fixtures';
 import type { Project, ProjectMember, User, WorkItem } from '@/types';
 import { addDays, formatDay, formatWeekdayDay } from '../format';
 import { ItemDialogsHost } from '../ItemDialogs';
@@ -686,3 +686,462 @@ describe('the sub-lists of the item commands', () => {
   });
 });
 
+
+/* ----------------------------------------------------------------------------- lists */
+
+/** APP: a project with the agency workflow, and two of its items (APP-5 its epic). */
+const appProject = project('APP', 'member', { workflow_id: 'wf_agency' });
+const app5 = makeWorkItem({ id: 'wi_app_5', project_id: 'p_app', number: 5, key: 'APP-5', type_id: 't_epic', title: 'Kundenportal', state_id: 'app_progress', rank: 'b1' });
+const app11 = makeWorkItem({ id: 'wi_app_11', project_id: 'p_app', number: 11, key: 'APP-11', title: 'Login-Maske', state_id: 'app_todo', rank: 'b2' });
+const withApp = (role: Project['my_role'] = 'member'): Record<string, MockRoute> => ({
+  'GET /api/v1/projects': () => ({ body: list([project('WEB', role), appProject]) }),
+  'GET /api/v1/workflows': () => ({ body: list([standard, agency]) }),
+  'GET /api/v1/projects/p_app/members': () => ({ body: list([{ ...member('u_lene'), project_id: 'p_app' }, { ...member('u_mara', 'admin'), project_id: 'p_app' }]) }),
+  'POST /api/v1/work-items/query': (body) => ({ body: list(queryItems([...items, app5, app11], body)) }),
+});
+
+/** The cursor of the list, moved from the test as the list moves it (React state, nothing else renders). */
+let moveCursor: (id: string | null) => void = () => {};
+
+/** A list: its commands with the cursor as state, and a button inside it. */
+function ListScreen({ cursor = null }: { cursor?: string | null }) {
+  const [current, setCurrent] = useState<string | null>(cursor);
+  moveCursor = setCurrent;
+  useItemCommands({ scope: 'list', current: () => current });
+  return <button type="button">In der Liste</button>;
+}
+
+/** The items of APP in the cache, as a list on screen has them. */
+function AppList() {
+  const keys = useWorkItems({ project_id: 'p_app' }).data?.items.map((item) => item.key);
+  return <p aria-label="APP">{keys?.join(' ')}</p>;
+}
+
+const bulkCalls = () => sent('POST', '/api/v1/work-items/bulk');
+const select = (...ids: string[]) => act(() => useUiStore.getState().setSelection(ids));
+
+describe('the item commands of a list', () => {
+  it('acts on the selection before the cursor', async () => {
+    renderWith(
+      <>
+        <ListScreen cursor="wi_web_47" />
+        <WebList />
+      </>,
+      { routes: { 'POST /api/v1/work-items/bulk': () => ({ body: { updated: ['wi_web_48', 'wi_web_50'], rejected: [] } }) } },
+    );
+    await waitFor(() => expect(screen.getByLabelText('WEB').textContent).toBe('WEB-30 WEB-47 WEB-48 WEB-50'));
+    await ready('WEB-47', 'item.priority');
+
+    select('wi_web_48', 'wi_web_50');
+    await ready('2 Items', 'item.priority');
+    press('p');
+    expect(useUiStore.getState()).toMatchObject({ paletteOpen: true, paletteCommandId: 'item.priority' });
+    choose('item.priority', 'High');
+
+    await waitFor(() => expect(bulkCalls()).toEqual([{ ids: ['wi_web_48', 'wi_web_50'], patch: { priority: 'high' } }]));
+    await waitFor(() => expect(lastToast()).toMatchObject({ title: '2 Items: Priorität High', tone: 'success' }));
+    expect(sent('PATCH', '/api/v1/work-items/wi_web_47')).toEqual([]);
+  });
+
+  it('acts on the cursor without a selection, from the list without loading its detail', async () => {
+    renderWith(
+      <>
+        <ListScreen cursor="wi_web_47" />
+        <WebList />
+      </>,
+    );
+    await ready('WEB-47', 'item.labels');
+
+    press('l');
+    choose('item.labels', 'UX');
+    await waitFor(() => expect(sent('PATCH', '/api/v1/work-items/wi_web_47')).toEqual([{ label_ids: ['lb_forms', 'lb_production', 'lb_ux'] }]));
+    await waitFor(() => expect(lastToast()?.title).toBe('WEB-47: Label UX gesetzt'));
+    expect(api!.calls.filter((call) => call.method === 'GET' && call.url === '/api/v1/work-items/wi_web_47')).toEqual([]);
+
+    // the cursor leaves the list: nothing to act on
+    act(() => useUiStore.getState().setPaletteOpen(false));
+    act(() => moveCursor(null));
+    await waitFor(() => expect(command('item.state')?.group).toBe('Aktionen für das Item'));
+    expect(command('item.state')?.when?.()).toBe(false);
+  });
+
+  it('acts on no selection without a list on screen', async () => {
+    renderWith(
+      <>
+        <Preview />
+        <WebList />
+      </>,
+    );
+    act(() => useUiStore.getState().openPeek('wi_web_48'));
+    await ready('WEB-48');
+    // a selection left behind is no list's: the previewed item stays the target
+    select('wi_web_47', 'wi_web_50');
+    await ready('WEB-48');
+  });
+
+  it('ranks the item page above the list', async () => {
+    function Both() {
+      const [page, setPage] = useState(true);
+      return (
+        <>
+          {page && <ItemPage id="wi_web_50" />}
+          <ListScreen cursor="wi_web_47" />
+          <button type="button" onClick={() => setPage(false)}>
+            Seite verlassen
+          </button>
+        </>
+      );
+    }
+    renderWith(
+      <>
+        <Both />
+        <WebList />
+      </>,
+    );
+    // the list mounted last, the page still registers: detail before list
+    await ready('WEB-50');
+    expect(listShortcuts().find((shortcut) => shortcut.id === 'item.state')?.scope).toBe('detail');
+    select('wi_web_47', 'wi_web_48');
+    await ready('WEB-50');
+    expect(listCommands().filter((entry) => entry.id === 'item.state')).toHaveLength(1);
+
+    // the page goes: the list takes over with its selection, in its own scope
+    fireEvent.click(screen.getByRole('button', { name: 'Seite verlassen' }));
+    await ready('2 Items');
+    expect(listShortcuts().find((shortcut) => shortcut.id === 'item.state')?.scope).toBe('list');
+  });
+
+  it('changes the state of many items in one call and names the refused ones', async () => {
+    renderWith(
+      <>
+        <ListScreen />
+        <WebList />
+      </>,
+      {
+        routes: {
+          'POST /api/v1/work-items/bulk': () => ({ body: { updated: ['wi_web_47', 'wi_web_48'], rejected: [{ id: 'wi_web_50', reason: 'transition_not_allowed' }] } }),
+        },
+      },
+    );
+    await waitFor(() => expect(screen.getByLabelText('WEB').textContent).toContain('WEB-50'));
+    select('wi_web_47', 'wi_web_48', 'wi_web_50');
+    await ready('3 Items');
+
+    choose('item.state', 'Todo');
+    await waitFor(() => expect(bulkCalls()).toEqual([{ ids: ['wi_web_47', 'wi_web_48', 'wi_web_50'], patch: { state_id: 'std_todo' } }]));
+    await waitFor(() =>
+      expect(lastToast()).toMatchObject({ title: '2 von 3 Items geändert', description: 'WEB-50: Der Übergang ist im Workflow nicht erlaubt.', tone: 'neutral' }),
+    );
+
+    // a closed state asks for the resolution of all of them first
+    const user = userEvent.setup();
+    act(() => command('item.state')!.subpage!().options.find((option) => option.label === 'Done')!.run());
+    const dialog = await screen.findByRole('dialog', { name: '3 Items auf Done setzen' });
+    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(bulkCalls()[1]).toEqual({ ids: ['wi_web_47', 'wi_web_48', 'wi_web_50'], patch: { state_id: 'std_done', resolution_id: 'res_done' } }));
+  });
+
+  it('says when the server refuses every item, and leaves the failure to the mutation', async () => {
+    let failing = false;
+    renderWith(
+      <>
+        <ListScreen />
+        <WebList />
+      </>,
+      {
+        routes: {
+          'POST /api/v1/work-items/bulk': () =>
+            failing
+              ? problem(503, 'service_unavailable', 'Wartung.')
+              : { body: { updated: [], rejected: [{ id: 'wi_web_47', reason: 'forbidden' }, { id: 'wi_web_99', reason: 'not_found' }] } },
+        },
+      },
+    );
+    await waitFor(() => expect(screen.getByLabelText('WEB').textContent).toContain('WEB-50'));
+    select('wi_web_47', 'wi_web_48');
+    await ready('2 Items', 'item.due');
+
+    choose('item.due', 'Morgen');
+    await waitFor(() =>
+      expect(lastToast()).toMatchObject({
+        title: 'Keines der 2 Items geändert',
+        description: 'WEB-47: Dafür fehlt die Berechtigung. wi_web_99: Das Item gibt es nicht oder du darfst es nicht sehen.',
+        tone: 'error',
+      }),
+    );
+    expect(bulkCalls()[0]).toMatchObject({ patch: { due_date: expect.any(String) } });
+
+    failing = true;
+    await ready('2 Items', 'item.assignee');
+    choose('item.assignee', 'Nicht zugewiesen');
+    await waitFor(() => expect(lastToast()).toMatchObject({ title: 'Mehrfachbearbeitung nicht gespeichert', description: 'Wartung.' }));
+    expect(bulkCalls()[1]).toEqual({ ids: ['wi_web_47', 'wi_web_48'], patch: { assignee_id: null } });
+  });
+
+  it('sends more than 100 items in blocks of 100 and names the refused ones of all blocks in one toast', async () => {
+    const many = Array.from({ length: 150 }, (_, index) => makeWorkItem({ id: `wi_web_${100 + index}`, number: 100 + index, key: `WEB-${100 + index}`, rank: `c${index}` }));
+    renderWith(
+      <>
+        <ListScreen />
+        <WebList />
+      </>,
+      {
+        routes: {
+          'POST /api/v1/work-items/query': (body) => ({ body: list(queryItems([...items, ...many], body)) }),
+          'POST /api/v1/work-items/bulk': (body) => {
+            const { ids } = body as { ids: string[] };
+            return { body: { updated: ids.filter((id) => id !== 'wi_web_249'), rejected: ids.includes('wi_web_249') ? [{ id: 'wi_web_249', reason: 'archived' }] : [] } };
+          },
+        },
+      },
+    );
+    await waitFor(() => expect(screen.getByLabelText('WEB').textContent).toContain('WEB-249'));
+    select(...many.map((item) => item.id));
+    await ready('150 Items', 'item.priority');
+
+    choose('item.priority', 'Low');
+    await waitFor(() => expect(lastToast()).toMatchObject({ title: '149 von 150 Items geändert', description: 'WEB-249: Das Item ist archiviert und schreibgeschützt.' }));
+    expect(bulkCalls().map((call) => (call as { ids: string[] }).ids.length)).toEqual([100, 50]);
+  });
+
+  it('offers only the states every workflow of the targets has', async () => {
+    renderWith(
+      <>
+        <ListScreen />
+        <WebList />
+        <AppList />
+      </>,
+      { routes: withApp() },
+    );
+    await waitFor(() => expect(screen.getByLabelText('APP').textContent).toBe('APP-5 APP-11'));
+    // the same workflow: all its states, whatever each item's own transitions allow
+    select('wi_app_5', 'wi_app_11');
+    await ready('2 Items');
+    expect(optionsOf('item.state').map((option) => option.label)).toEqual(['Backlog', 'Todo', 'In Progress', 'Review', 'Kundenfreigabe', 'Done', 'Cancelled']);
+
+    // two workflows share no state (A128): the sub-list says why
+    select('wi_web_47', 'wi_app_11');
+    await waitFor(() => expect(command('item.state')?.when?.()).toBe(true));
+    expect(optionsOf('item.state')).toEqual([]);
+    expect(command('item.state')!.subpage!().emptyText).toBe('Die gewählten Items haben verschiedene Workflows.');
+    // the people every project of them has: Lene is in both, Mara as org admin anyway, Ida only in WEB
+    await waitFor(() => expect(command('item.assignee')?.when?.()).toBe(true));
+    expect(optionsOf('item.assignee').map((option) => option.label)).toEqual(['Mir zuweisen', 'Nicht zugewiesen', 'Lene Vogt', 'Mara Lindqvist']);
+  });
+
+  it('takes a label off that every item has, and puts one on that some lack', async () => {
+    renderWith(
+      <>
+        <ListScreen />
+        <WebList />
+      </>,
+      {
+        routes: {
+          'POST /api/v1/work-items/query': (body) => ({ body: list(queryItems([web30, web47, { ...web48, label_ids: ['lb_forms'] }, web50], body)) }),
+          'POST /api/v1/work-items/bulk': (body) => ({ body: { updated: (body as { ids: string[] }).ids, rejected: [] } }),
+        },
+      },
+    );
+    await waitFor(() => expect(screen.getByLabelText('WEB').textContent).toContain('WEB-48'));
+    select('wi_web_47', 'wi_web_48');
+    await ready('2 Items', 'item.assign_me');
+
+    expect(optionsOf('item.labels').map((option) => [option.label, option.hint])).toEqual([
+      ['Formulare', 'gesetzt'],
+      ['Performance', undefined],
+      ['Produktion', undefined],
+      ['UX', undefined],
+    ]);
+    choose('item.labels', 'Formulare');
+    await waitFor(() => expect(lastToast()?.title).toBe('2 Items: Label Formulare entfernt'));
+    choose('item.labels', 'Produktion');
+    await waitFor(() =>
+      expect(bulkCalls()).toEqual([
+        { ids: ['wi_web_47', 'wi_web_48'], patch: { remove_label_ids: ['lb_forms'] } },
+        { ids: ['wi_web_47', 'wi_web_48'], patch: { add_label_ids: ['lb_production'] } },
+      ]),
+    );
+    // a start after a due date is each item's own rule here: the server decides
+    choose('item.start', 'Start-Date entfernen');
+    await waitFor(() => expect(bulkCalls()[2]).toEqual({ ids: ['wi_web_47', 'wi_web_48'], patch: { start_date: null } }));
+    act(() => command('item.assign_me')!.run());
+    await waitFor(() => expect(bulkCalls()[3]).toEqual({ ids: ['wi_web_47', 'wi_web_48'], patch: { assignee_id: 'u_lene' } }));
+  });
+
+  it('archives many closed items with undo and names the open ones', async () => {
+    const web51 = makeWorkItem({ id: 'wi_web_51', number: 51, key: 'WEB-51', state_id: 'std_cancelled', rank: 'a7' });
+    renderWith(
+      <>
+        <ListScreen />
+        <WebList />
+      </>,
+      {
+        role: 'admin',
+        routes: {
+          'POST /api/v1/work-items/query': (body) => ({ body: list(queryItems([...items, web51], body)) }),
+          'POST /api/v1/work-items/bulk': () => ({ body: { updated: ['wi_web_50', 'wi_web_51'], rejected: [{ id: 'wi_web_47', reason: 'not_closed' }] } }),
+        },
+      },
+    );
+    const webList = screen.getByLabelText('WEB');
+    await waitFor(() => expect(webList.textContent).toBe('WEB-30 WEB-47 WEB-48 WEB-50 WEB-51'));
+    select('wi_web_47', 'wi_web_50', 'wi_web_51');
+    await ready('3 Items', 'item.archive');
+    // some are closed: the key archives, the open one stays
+    expect(command('item.archive')?.keys).toBe('mod+backspace');
+
+    press('Backspace', { ctrlKey: true });
+    expect(lastToast()).toMatchObject({ title: '2 Items archiviert', action: { label: 'Rückgängig' } });
+    await waitFor(() => expect(webList.textContent).toBe('WEB-30 WEB-47 WEB-48'));
+    // they leave the selection as well
+    expect(useUiStore.getState().selection).toEqual(['wi_web_47']);
+
+    // undo puts them back and calls nothing
+    act(() => runToastAction(lastToast()!.id));
+    await waitFor(() => expect(webList.textContent).toBe('WEB-30 WEB-47 WEB-48 WEB-50 WEB-51'));
+    expect(bulkCalls()).toEqual([]);
+
+    // from the palette: when the toast runs out, one bulk edit; the server names the open one
+    select('wi_web_47', 'wi_web_50', 'wi_web_51');
+    await ready('3 Items', 'item.archive');
+    act(() => command('item.archive')!.run());
+    act(() => dismissToast(currentToasts().find((toast) => toast.title === '2 Items archiviert')!.id));
+    await waitFor(() => expect(bulkCalls()).toEqual([{ ids: ['wi_web_47', 'wi_web_50', 'wi_web_51'], patch: { archived: true } }]));
+    await waitFor(() =>
+      expect(lastToast()).toMatchObject({ title: '2 von 3 Items archiviert', description: 'WEB-47: Nur geschlossene Items lassen sich archivieren.' }),
+    );
+  });
+
+  it('brings the archived items back when the bulk edit fails', async () => {
+    renderWith(
+      <>
+        <ListScreen />
+        <WebList />
+      </>,
+      { role: 'admin', routes: { 'POST /api/v1/work-items/bulk': () => problem(503, 'service_unavailable', 'Wartung.') } },
+    );
+    const webList = screen.getByLabelText('WEB');
+    await waitFor(() => expect(webList.textContent).toBe('WEB-30 WEB-47 WEB-48 WEB-50'));
+    select('wi_web_47', 'wi_web_50');
+    await ready('2 Items', 'item.archive');
+
+    press('Backspace', { ctrlKey: true });
+    await waitFor(() => expect(webList.textContent).toBe('WEB-30 WEB-47 WEB-48'));
+    act(() => dismissToast(currentToasts().find((toast) => toast.title === 'WEB-50 archiviert')!.id));
+    await waitFor(() => expect(webList.textContent).toBe('WEB-30 WEB-47 WEB-48 WEB-50'));
+    await waitFor(() => expect(lastToast()).toMatchObject({ title: 'Mehrfachbearbeitung nicht gespeichert' }));
+  });
+
+  it('deletes many items one by one after the undo time and brings back what failed with a retry for it', async () => {
+    let failing = true;
+    renderWith(
+      <>
+        <ListScreen />
+        <WebList />
+      </>,
+      {
+        role: 'admin',
+        routes: {
+          'DELETE /api/v1/work-items/wi_web_47': () => ({ status: 204 }),
+          'DELETE /api/v1/work-items/wi_web_48': () => (failing ? problem(503, 'service_unavailable', 'Wartung.') : { status: 204 }),
+        },
+      },
+    );
+    const webList = screen.getByLabelText('WEB');
+    await waitFor(() => expect(webList.textContent).toBe('WEB-30 WEB-47 WEB-48 WEB-50'));
+    select('wi_web_47', 'wi_web_48');
+    await ready('2 Items', 'item.delete');
+    // none of them is closed: the key deletes
+    expect(command('item.delete')?.keys).toBe('mod+backspace');
+
+    press('Backspace', { ctrlKey: true });
+    expect(lastToast()).toMatchObject({ title: '2 Items gelöscht', action: { label: 'Rückgängig' } });
+    await waitFor(() => expect(webList.textContent).toBe('WEB-30 WEB-50'));
+    expect(sent('DELETE', '/api/v1/work-items/wi_web_47')).toEqual([]);
+
+    act(() => dismissToast(lastToast()!.id));
+    await waitFor(() => expect(sent('DELETE', '/api/v1/work-items/wi_web_48')).toHaveLength(1));
+    expect(sent('DELETE', '/api/v1/work-items/wi_web_47')).toHaveLength(1);
+    // what failed comes back, with a retry for it alone
+    await waitFor(() => expect(webList.textContent).toContain('WEB-48'));
+    await waitFor(() => expect(lastToast()).toMatchObject({ title: 'WEB-48 nicht gelöscht', description: 'Wartung.', action: { label: 'Erneut versuchen' } }));
+
+    failing = false;
+    act(() => runToastAction(lastToast()!.id));
+    await waitFor(() => expect(sent('DELETE', '/api/v1/work-items/wi_web_48')).toHaveLength(2));
+    expect(sent('DELETE', '/api/v1/work-items/wi_web_47')).toHaveLength(1);
+
+    // the palette deletes a selection too (undo takes it back)
+    select('wi_web_30', 'wi_web_50');
+    await ready('2 Items', 'item.delete');
+    act(() => command('item.delete')!.run());
+    expect(lastToast()?.title).toBe('2 Items gelöscht');
+    act(() => runToastAction(lastToast()!.id));
+  });
+
+  it('refuses t and shift+p for more than one item with the reason', async () => {
+    renderWith(
+      <>
+        <ListScreen cursor="wi_web_48" />
+        <WebList />
+      </>,
+    );
+    await waitFor(() => expect(screen.getByLabelText('WEB').textContent).toContain('WEB-50'));
+    select('wi_web_47', 'wi_web_48');
+    await ready('2 Items');
+
+    press('t');
+    expect(lastToast()).toMatchObject({ title: 'Nicht möglich', description: 'Typ und Eltern-Item ändern sich nur für ein Item allein.' });
+    press('P', { shiftKey: true });
+    expect(currentToasts().filter((toast) => toast.title === 'Nicht möglich')).toHaveLength(1);
+    expect(useUiStore.getState().paletteOpen).toBe(false);
+    expect(command('item.type')?.when?.()).toBe(false);
+    expect(command('item.parent')?.when?.()).toBe(false);
+
+    // one item of a list: the type knows its children from the list (WEB-48 has none), without its detail
+    select();
+    await ready('WEB-48', 'item.type');
+  });
+
+  it('acts on the card under the cursor at once with shift+p after the cursor moved to another project', async () => {
+    renderWith(
+      <>
+        <ListScreen cursor="wi_web_47" />
+        <Preview />
+        <WebList />
+        <AppList />
+      </>,
+      { routes: withApp() },
+    );
+    await waitFor(() => expect(screen.getByLabelText('APP').textContent).toBe('APP-5 APP-11'));
+    // the preview registers (detail before list) and acts on the list's cursor
+    await ready('WEB-47', 'item.parent');
+
+    // the cursor moves to a card of APP; only the list renders, nothing else moves (no focus, no preview)
+    act(() => moveCursor('wi_app_11'));
+    await waitFor(() => expect(command('item.parent')?.group).toBe('Aktionen für APP-11'));
+    press('P', { shiftKey: true });
+    expect(useUiStore.getState()).toMatchObject({ paletteOpen: true, paletteCommandId: 'item.parent' });
+    // the epics of APP, not of WEB
+    await waitFor(() => expect(optionsOf('item.parent').map((option) => option.hint)).toEqual(['APP-5']));
+  });
+
+  it('lets the preview keep its keys only with the focus in the panel while a list has a cursor', async () => {
+    const panel = { current: document.createElement('aside') };
+    const inside = document.createElement('button');
+    panel.current.append(inside);
+    document.body.append(panel.current);
+    onTestFinished(() => panel.current.remove());
+
+    renderWith(<ListScreen />);
+    await waitFor(() => expect(command('item.state')).toBeDefined());
+    // no cursor: nothing outranks the previewed item
+    expect(previewKeysAct(panel)).toBe(true);
+    // a cursor in the list outranks it (rule 4), but not the focus inside the panel (rule 1)
+    act(() => moveCursor('wi_web_47'));
+    expect(previewKeysAct(panel)).toBe(false);
+    inside.focus();
+    expect(previewKeysAct(panel)).toBe(true);
+  });
+});

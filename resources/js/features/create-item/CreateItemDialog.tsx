@@ -48,6 +48,18 @@ export function CreateItemDialog({ open, defaults, onOpenChange }: CreateItemDia
   /** The call that creates an item, while it runs. */
   const inFlight = useRef<Promise<WorkItem> | null>(null);
   const wasOpen = useRef(open);
+  /**
+   * What had the focus when the dialog opened, taken while rendering the open: the focus goes back there on close. Base
+   * UI takes it in an effect, too late when the form is ready at once (its catalogs cached) and the title took the focus
+   * in the same commit; it would hand the focus to the page then.
+   */
+  const opener = useRef<HTMLElement | null>(null);
+  const shown = useRef(false);
+  if (open !== shown.current) {
+    shown.current = open;
+    const focus = document.activeElement;
+    if (open) opener.current = focus instanceof HTMLElement && focus !== document.body ? focus : null;
+  }
 
   // Closing with typed text parks it. On the close itself, not when the form unmounts: StrictMode unmounts and mounts
   // every new form once more, which would park (and toast) a draft that "Rückgängig" just brought back.
@@ -102,6 +114,7 @@ export function CreateItemDialog({ open, defaults, onOpenChange }: CreateItemDia
       size="lg"
       title={t('items.create.title')}
       initialFocus={title}
+      finalFocus={opener}
       footer={
         <>
           <Switch label={t('items.create.another')} checked={another} onCheckedChange={setAnother} className="mr-auto" />
