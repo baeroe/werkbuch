@@ -74,5 +74,7 @@ it('answers 503 as problem details', function () use ($world) {
             'reason' => 'search_unavailable',
         ])
         ->and($response->getContent())->not->toContain('down');
+    // once, the cause: the 503 itself is no second entry in the log
     Exceptions::assertReported(CommunicationException::class);
+    Exceptions::assertReportedCount(1);
 });

@@ -178,10 +178,12 @@ it('leaves web routes to Laravel', function () {
     expect((string) $response->headers->get('Content-Type'))->not->toContain('problem+json');
 });
 
-it('does not report refusals below 500', function () {
+it('does not report refusals below 500, nor the 503 of a search whose cause QuerySearch reported', function () {
     $handler = app(ExceptionHandler::class);
 
     expect($handler->shouldReport(Problem::forbidden()))->toBeFalse()
+        ->and($handler->shouldReport(Problem::unavailable('search_unavailable')))->toBeFalse()
+        ->and($handler->shouldReport(Problem::unavailable('service_unavailable')))->toBeTrue()
         ->and($handler->shouldReport(new Problem(500, 'server_error')))->toBeTrue();
 });
 
