@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Access\OrgRole;
 use App\Access\RoleAssignments;
+use App\Actions\Attachments\PruneUnownedAttachments;
 use App\Actions\Labels\DeleteLabel;
 use App\Actions\Projects\PurgeProject;
 use App\Actions\Properties\DeleteProperty;
@@ -34,8 +35,9 @@ use RuntimeException;
 
 /**
  * The demo data plus the accounts of the Playwright tests (e2e/), set back to their start state on every run, without
- * the open invitations, the projects, the views and the catalog entries earlier runs left behind. The organization
- * speaks English here (the specs read the English texts); the demo data alone keep German. Never for production.
+ * the open invitations, the projects (with their items, comments and files), the uploads nobody owns, the views and
+ * the catalog entries earlier runs left behind. The organization speaks English here (the specs read the English
+ * texts); the demo data alone keep German. Never for production.
  */
 class E2eSeeder extends Seeder
 {
@@ -84,6 +86,10 @@ class E2eSeeder extends Seeder
             $project->forceFill(['deleting_at' => $project->deleting_at ?? Carbon::now()])->save();
             PurgeProject::run(Actor::automation('e2e_reset'), $project);
         });
+
+        // the uploads of earlier runs nobody owns (a picture pasted into a text that was never saved), with their files;
+        // those of the E2E projects went with them
+        PruneUnownedAttachments::run(Actor::automation('e2e_reset'), Carbon::now());
 
         // the views earlier runs saved (all named "E2E …"), with the favorites that point to them
         View::query()->where('name', 'like', self::PROJECT_PREFIX.'%')->each(fn (View $view) => DeleteView::run(Actor::automation('e2e_reset'), $view));

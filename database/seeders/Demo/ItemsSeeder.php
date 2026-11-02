@@ -19,6 +19,7 @@ use App\Models\WorkItemRelation;
 use App\Models\WorkItemType;
 use App\RichText\Document;
 use App\Support\ItemValues;
+use App\Support\RichTextRules;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -35,8 +36,12 @@ use RuntimeException;
  * Safe to run again, and it never touches an item that exists (K13): it creates the (project, number) pairs that are
  * missing and nothing else, so a second run cannot put items back on the states of a workflow the project left.
  * Catalog entries are found by the stable keys of the CatalogSeeder: states, types, labels and resolutions by name,
- * options by label, people by handle. Mentions and references in the texts stay plain text until Phase 7. `tpl` (the
- * template of an automated item) and the comments and attachments of the clickdummy belong to later phases.
+ * options by label, people by handle. A description is read as Markdown with the lookup of its creator
+ * (RichTextRules::context()), as the API reads one: `@mara` becomes a mention and `WEB-42` a reference, if the creator
+ * may mention the person and sees the item (items come in the order of their numbers, so an item named in a text exists
+ * by then). An item seeded before Phase 7 keeps its plain text until the database is set up anew (K13). `tpl` (the
+ * template of an automated item) belongs to a later phase; the comments and files are the CommentsSeeder's and the
+ * AttachmentsSeeder's.
  */
 class ItemsSeeder extends Seeder
 {
@@ -201,7 +206,9 @@ class ItemsSeeder extends Seeder
         $stamps = array_filter([self::at($created), $startedAt, $closedAt]);
         $updatedAt = isset($row['updated']) ? self::at($row['updated']) : max($stamps);
 
-        $description = isset($row['desc']) ? $this->text($row['desc']) : null;
+        $by = $row['by'] ?? self::CREATORS[$project->identifier];
+        $creator = $this->people[$by] ?? throw new RuntimeException("No account @{$by}.");
+        $description = isset($row['desc']) ? $this->text($row['desc'], $project, $creator) : null;
         $category = $row['state'] === 'done' ? 'completed' : 'canceled';
 
         // read before anything is written: an unknown option throws before the item exists
@@ -224,7 +231,7 @@ class ItemsSeeder extends Seeder
             'due_date' => isset($row['due']) ? self::YEAR."-{$row['due']}" : null,
             'parent_id' => isset($row['parent']) ? self::find($row['parent'])?->id : null,
             'rank' => $rank,
-            'created_by' => $this->people[$row['by'] ?? self::CREATORS[$project->identifier]],
+            'created_by' => $creator,
             'started_at' => $startedAt,
             'closed_at' => $closedAt,
             'archived_at' => isset($row['archived']) ? self::at($row['archived']) : null,
@@ -273,13 +280,10 @@ class ItemsSeeder extends Seeder
         return ($named === null ? null : $this->resolutions[$named] ?? null) ?? Resolution::query()->where('default_for', $category)->value('id');
     }
 
-    /** A description: paragraphs of plain text, separated by blank lines. */
-    private function text(string $text): Document
+    /** A description, Markdown as its creator would send it (paragraphs separated by blank lines). */
+    private function text(string $text, Project $project, string $creator): Document
     {
-        return Document::fromJson([
-            'type' => 'doc',
-            'content' => array_map(fn (string $paragraph) => self::paragraph($paragraph), preg_split('/\n{2,}/', $text) ?: []),
-        ]);
+        return Document::fromMarkdown($text, RichTextRules::context($project, User::query()->findOrFail($creator), null));
     }
 
     /**

@@ -10,6 +10,7 @@ use App\Models\WorkflowState;
 use App\Models\WorkItem;
 use App\Models\WorkItemRelation;
 use App\Models\WorkItemSubscriber;
+use App\RichText\Document;
 use App\Support\Actor;
 use App\Support\RelationSnapshot;
 use App\Support\StateSnapshot;
@@ -24,7 +25,7 @@ use RuntimeException;
  * The history and the watchers of the demo items: the events of src/api/seed/activity.ts (the history of WEB-47 is the
  * one of the moodboard), the relation events of the seeded relations and who watches which item. Needs the ItemsSeeder
  * before it. Written directly (A86) as `events` rows with `dispatched_at` = `occurred_at`: nobody consumes them (P23).
- * Comments and attachments belong to Phase 7.
+ * The comments and files are the CommentsSeeder's and the AttachmentsSeeder's.
  *
  * Safe to run again (K14): an item gets its events only while it has none at all, so a second run, and an item that
  * somebody has changed since, keep their history. Watchers are found by (item, person) and never changed.
@@ -212,8 +213,9 @@ class ActivitySeeder extends Seeder
     }
 
     /**
-     * Who watches an item (spec 4.10): the person who created it and the one it is assigned to. Bots and deactivated
-     * accounts do not watch (they get no notifications). People mentioned in a text watch from Phase 7 on.
+     * Who watches an item (spec 4.10): the person who created it, the one it is assigned to and the people its
+     * description mentions; the CommentsSeeder adds who commented and whom a comment mentions. Bots and deactivated
+     * accounts do not watch (they get no notifications).
      *
      * @param  Collection<string, WorkItem>  $items
      * @param  Collection<string, User>  $people
@@ -229,6 +231,11 @@ class ActivitySeeder extends Seeder
             }
             if ($item->assignee_id !== $item->created_by && $watches($item->assignee_id)) {
                 WorkItemSubscriber::query()->firstOrCreate(['work_item_id' => $item->id, 'user_id' => $item->assignee_id], ['reason' => 'assigned']);
+            }
+            foreach ($item->description === null ? [] : Document::fromJson($item->description)->mentionedUserIds() as $mentioned) {
+                if ($watches($mentioned)) {
+                    WorkItemSubscriber::query()->firstOrCreate(['work_item_id' => $item->id, 'user_id' => $mentioned], ['reason' => 'mentioned']);
+                }
             }
         }
     }

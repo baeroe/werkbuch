@@ -4,8 +4,10 @@ namespace Database\Seeders;
 
 use App\Search\SearchIndexer;
 use Database\Seeders\Demo\ActivitySeeder;
+use Database\Seeders\Demo\AttachmentsSeeder;
 use Database\Seeders\Demo\BotsSeeder;
 use Database\Seeders\Demo\CatalogSeeder;
+use Database\Seeders\Demo\CommentsSeeder;
 use Database\Seeders\Demo\FavoritesSeeder;
 use Database\Seeders\Demo\ItemsSeeder;
 use Database\Seeders\Demo\OrganizationSeeder;
@@ -45,6 +47,8 @@ class DemoSeeder extends Seeder
             TokensSeeder::class,
             ItemsSeeder::class,
             ActivitySeeder::class,
+            CommentsSeeder::class,
+            AttachmentsSeeder::class,
         ]);
 
         app(SearchIndexer::class)->rebuild();
