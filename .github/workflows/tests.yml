@@ -215,9 +215,10 @@ jobs:
           curl -fsS --retry 30 --retry-delay 1 --retry-all-errors http://127.0.0.1:8000/up
 
       # QUEUE_CONNECTION=database as in production: the worker runs the queued jobs (the reset mail goes out on the
-      # queue `notifications`, the search consumer works in the queue `search`) like the `queue` daemon of DDEV
+      # queue `notifications`, the search consumer works in the queue `search`, previews of pictures are made in the
+      # queue `media`, a deleted project is purged in the queue `bulk`) like the `queue` daemon of DDEV
       - name: Queue worker
-        run: php artisan queue:work --queue=default,notifications,search --sleep=1 --tries=3 > queue.log 2>&1 &
+        run: php artisan queue:work --queue=default,notifications,search,media,bulk --sleep=1 --tries=3 > queue.log 2>&1 &
 
       - name: Playwright
         run: |

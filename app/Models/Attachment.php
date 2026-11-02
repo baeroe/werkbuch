@@ -11,14 +11,17 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Carbon;
+use Spatie\Image\Enums\Fit;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
+use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 /**
  * A file of a project (spec 4.16): a picture or file in a text (`inline`) or one of the file list of an item (`file`).
  * The file is the media collection `file`, of any type; `mime` was read from its content (A236), and only the picture
  * types of INLINE_TYPES are ever served as what they are. Who reads it follows its owner (AttachmentPolicy): an upload
- * nobody owns yet belongs to the person who uploaded it.
+ * nobody owns yet belongs to the person who uploaded it. A PNG, JPEG or WebP gets a preview of at most 1600 × 1600 pixels
+ * (`preview`, A237), made on the queue `media` after the commit, in the format of the stored file.
  *
  * @property string $id
  * @property string $project_id
@@ -47,6 +50,12 @@ final class Attachment extends Model implements HasMedia
     /** The picture types a browser shows without running anything; every other file is a download. */
     public const INLINE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif'];
 
+    /** The picture types that get a preview (A237): GD loses the animation of a GIF, and AVIF is slow to encode. */
+    public const PREVIEW_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
+
+    /** The longest side of a preview, in pixels. */
+    public const PREVIEW_SIZE = 1600;
+
     /** The largest file in bytes (`ATTACHMENTS_MAX_MB`). */
     public static function maxBytes(): int
     {
@@ -67,6 +76,26 @@ final class Attachment extends Model implements HasMedia
     public function registerMediaCollections(): void
     {
         $this->addMediaCollection('file')->singleFile();
+    }
+
+    /**
+     * The preview of a picture of PREVIEW_TYPES, never enlarged, on the queue of `media-library.queue_name`. medialibrary
+     * asks a fresh model, never the stored one: the type is the media's, read from the content by `finfo` like `mime`.
+     * The preview keeps the format of the stored file (medialibrary would make a JPEG of every preview, a transparent
+     * PNG would turn black, K14); which format that is, the file tells (AttachmentFileController).
+     */
+    public function registerMediaConversions(?Media $media = null): void
+    {
+        if (! in_array($media?->mime_type, self::PREVIEW_TYPES, true)) {
+            return;
+        }
+
+        $this->addMediaConversion('preview')
+            ->performOnCollections('file')
+            ->keepOriginalImageFormat()
+            ->nonOptimized()
+            ->queued()
+            ->fit(Fit::Max, self::PREVIEW_SIZE, self::PREVIEW_SIZE);
     }
 
     /** Whether the content is a picture a browser may show as such. */

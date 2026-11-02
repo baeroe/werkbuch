@@ -152,6 +152,7 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
     // multipart, the file under `file`; at most 60 uploads per minute and account
     Route::post('attachments', [AttachmentsController::class, 'store'])->middleware('throttle:attachments');
     Route::get('attachments/{attachment}', [AttachmentsController::class, 'show']);
+    Route::delete('attachments/{attachment}', [AttachmentsController::class, 'destroy']);
 
     Route::get('favorites', [FavoritesController::class, 'index']);
     Route::post('favorites/toggle', [FavoritesController::class, 'toggle']);

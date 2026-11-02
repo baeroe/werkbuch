@@ -6,6 +6,7 @@ use App\Access\Authorize;
 use App\Exceptions\Problem;
 use App\Models\WorkItem;
 use App\Support\Actor;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Validation\ValidationException;
 use Lorisleiva\Actions\Concerns\AsAction;
 
@@ -16,15 +17,16 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * a former key, the item says so (`resolved_by_former_identifier`); the caller redirects and decides nothing itself.
  *
  * `include` names what the resource embeds besides the item (`children` in manual order, `type`, `workflow`, and
- * `relations` as the account reads them: ListRelations::of() with the account as reader, hidden ends blanked); all of
- * it is loaded here, the resource asks nothing.
+ * `relations` as the account reads them: ListRelations::of() with the account as reader, hidden ends blanked, and
+ * `attachments`, the files of the file list oldest first, never the pictures and files of the texts); all of it is
+ * loaded here, the resource asks nothing.
  */
 final class GetWorkItem
 {
     use AsAction;
 
     /** What an item can embed, in the order the resource answers it. */
-    public const INCLUDES = ['children', 'type', 'workflow', 'relations'];
+    public const INCLUDES = ['children', 'type', 'workflow', 'relations', 'attachments'];
 
     /**
      * @param  array<array-key, mixed>  $include  names out of INCLUDES (blanks around them and empty ones are ignored)
@@ -55,6 +57,10 @@ final class GetWorkItem
         }
         if (in_array('relations', $include, true)) {
             $item->relation_entries = ListRelations::of($item, $actor->user);
+        }
+        if (in_array('attachments', $include, true)) {
+            // the file list only: the pictures and files of the texts are named by the texts themselves
+            $item->load(['attachments' => fn (MorphMany $files) => $files->where('kind', 'file')->with('media')]);
         }
 
         return $item;

@@ -7,6 +7,7 @@ use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -122,6 +123,8 @@ it('forces a download with ?download=1', function () use ($stored, $png) {
 });
 
 it('answers 404 for a preview that was never made and for a row without its file', function () use ($stored, $png) {
+    // the job that makes the preview never runs
+    Queue::fake();
     $project = Project::factory()->create();
     $mara = memberOf($project, ProjectRole::Member);
     $attachment = $stored($mara, $project, 'skizze.png', $png());

@@ -3,6 +3,7 @@
 use App\Access\ProjectRole;
 use App\Domain\Properties\FieldType;
 use App\Http\Resources\WorkItemResource;
+use App\Models\Attachment;
 use App\Models\Project;
 use App\Models\Property;
 use App\Models\RelationType;
@@ -14,6 +15,7 @@ use App\Models\WorkItemSubscriber;
 use App\Models\WorkItemType;
 use App\Views\Shorthand;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Tests\Support\RichTextFixtures as F;
 
 /** The shape of `WorkItem` in resources/js/types.ts plus what the server adds (Task 5). */
@@ -276,9 +278,46 @@ it('shows an item and embeds children, type and workflow on request', function (
         ->assertJsonPath('data.type.is_epic', true);
 
     $this->actingAs($mara)->getJson('/api/v1/work-items/WEB-1?include=children,comments')->assertUnprocessable()
-        ->assertJsonPath('errors.include.0', __('field.include.unknown', ['name' => 'comments', 'allowed' => 'children, type, workflow, relations']));
+        ->assertJsonPath('errors.include.0', __('field.include.unknown', ['name' => 'comments', 'allowed' => 'children, type, workflow, relations, attachments']));
     $this->actingAs($mara)->getJson('/api/v1/work-items/WEB-1?include[]=type')->assertOk()->assertJsonPath('data.type.id', $epic->type_id);
     $this->actingAs($mara)->getJson('/api/v1/work-items/WEB-9')->assertNotFound();
+});
+
+it('embeds the files of the item with include=attachments', function () use ($web) {
+    [$project, $mara] = $web();
+    Storage::fake('local');
+    $item = WorkItem::factory()->for($project)->create();
+    $other = WorkItem::factory()->for($project)->create();
+    $png = (string) base64_decode(explode(',', imageDataUrl())[1]);
+    // oldest first; the picture of the description, the file of another item and an unowned upload stay out
+    $later = Attachment::factory()->forItem($item, 'file')->stored('Später', 'text/plain', 'b.txt')->create(['created_at' => now()->addMinute()]);
+    $first = Attachment::factory()->forItem($item, 'file')->stored($png, 'image/png', 'skizze.png')->create();
+    Attachment::factory()->forItem($item)->stored($png, 'image/png', 'bild.png')->create();
+    Attachment::factory()->forItem($other, 'file')->stored('Fremd', 'text/plain', 'c.txt')->create();
+    Attachment::factory()->create(['project_id' => $project->id, 'uploaded_by' => $mara->id]);
+
+    $response = $this->actingAs($mara)->getJson('/api/v1/work-items/WEB-1?include=attachments')->assertOk();
+
+    expect(array_column($response->json('data.attachments'), 'id'))->toBe([$first->id, $later->id])
+        ->and($response->json('data.attachments.0'))->toBe([
+            'id' => $first->id,
+            'project_id' => $project->id,
+            'owner' => ['type' => 'work_item', 'id' => $item->id],
+            'kind' => 'file',
+            'filename' => 'skizze.png',
+            'mime' => 'image/png',
+            'size' => strlen($png),
+            'inline' => true,
+            'url' => "/attachments/{$first->id}",
+            // the test queue runs synchronously: the preview was made right after the upload
+            'preview_url' => "/attachments/{$first->id}/preview",
+            'uploaded_by' => $first->uploaded_by,
+            'created_at' => $first->created_at?->toJSON(),
+        ]);
+    $this->actingAs($mara)->getJson('/api/v1/work-items/WEB-2?include=attachments')->assertOk()->assertJsonCount(1, 'data.attachments');
+    $this->actingAs($mara)->getJson('/api/v1/work-items/WEB-1')->assertOk()->assertJsonMissingPath('data.attachments');
+    $empty = WorkItem::factory()->for($project)->create();
+    $this->actingAs($mara)->getJson("/api/v1/work-items/{$empty->id}?include=attachments")->assertOk()->assertJsonPath('data.attachments', []);
 });
 
 it('redirects a former key with 301', function () use ($web) {

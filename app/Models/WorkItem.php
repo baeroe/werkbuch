@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -81,7 +82,7 @@ final class WorkItem extends Model
 
     /**
      * Set by GetWorkItem, never stored: what WorkItemResource embeds besides the item (`children`, `type`, `workflow`,
-     * `relations`), loaded there already.
+     * `relations`, `attachments`), loaded there already (`attachments` only the files of the file list).
      *
      * @var list<string>
      */
@@ -360,6 +361,17 @@ final class WorkItem extends Model
     public function incoming(): HasMany
     {
         return $this->hasMany(WorkItemRelation::class, 'target_id');
+    }
+
+    /**
+     * The attachments the item owns: the files of its file list (`file`) and the pictures and files of its texts
+     * (`inline`), oldest first.
+     *
+     * @return MorphMany<Attachment, $this>
+     */
+    public function attachments(): MorphMany
+    {
+        return $this->morphMany(Attachment::class, 'attachable')->orderBy('created_at')->orderBy('id');
     }
 
     /**

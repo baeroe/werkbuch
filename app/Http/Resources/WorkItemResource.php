@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Models\Attachment;
 use App\Models\WorkItem;
 use App\RichText\Document;
 use App\Support\ItemValues;
@@ -17,7 +18,8 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * (`WorkItem::$lean`, P17) comes without `description`, `description_json` and `values_markdown`. What GetWorkItem loaded
  * through `include` (`WorkItem::$includes`) comes after the fields: `children` (items in manual order), `type`
  * (WorkItemTypeResource), `workflow` (the workflow of the project, WorkflowResource) and `relations` (RelationEntryResource,
- * as the reader sees them: a hidden end without id, key or title); without it the keys are absent.
+ * as the reader sees them: a hidden end without id, key or title) and `attachments` (AttachmentResource, the files of
+ * the file list); without it the keys are absent.
  *
  * @mixin WorkItem
  */
@@ -73,6 +75,8 @@ final class WorkItemResource extends JsonResource
                 fn (array $entry) => (new RelationEntryResource($entry))->resolve($request),
                 $item->relation_entries,
             )),
+            'attachments' => $this->when(in_array('attachments', $item->includes, true), fn () => $item->attachments
+                ->map(fn (Attachment $attachment) => (new AttachmentResource($attachment))->resolve($request))->values()->all()),
         ];
     }
 }

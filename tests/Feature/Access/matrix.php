@@ -7,6 +7,7 @@ use App\Actions\Account\DisableTwoFactor;
 use App\Actions\Account\EnableTwoFactor;
 use App\Actions\Account\GetTwoFactor;
 use App\Actions\Account\RegenerateRecoveryCodes;
+use App\Actions\Attachments\DeleteAttachment;
 use App\Actions\Attachments\GetAttachment;
 use App\Actions\Attachments\ShowAttachment;
 use App\Actions\Attachments\UploadAttachment;
@@ -164,6 +165,16 @@ return [
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => UploadAttachment::run($a, [
             'project_id' => $w->project($column)->id, 'kind' => 'file', 'work_item_id' => $w->item($column)->id,
         ], UploadedFile::fake()->createWithContent('matrix.txt', 'Matrix')),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::WorkItemUpdated,
+    ],
+    // a file of the file list (`item.edit`); an unowned upload (its uploader) and a picture of a text (409 for all) are
+    // DeleteAttachmentTest's
+    'DeleteAttachment' => [
+        'action' => DeleteAttachment::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => DeleteAttachment::run($a, Attachment::factory()->forItem($w->item($column), 'file')
+            ->stored('Matrix', 'text/plain', 'matrix.txt')->create()),
         'allowed' => $itemWriters,
         'hidden' => ['outsider_private'],
         'event' => EventType::WorkItemUpdated,

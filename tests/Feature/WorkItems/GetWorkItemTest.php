@@ -4,10 +4,12 @@ use App\Access\ProjectRole;
 use App\Actions\WorkItems\GetWorkItem;
 use App\Exceptions\Problem;
 use App\Http\Resources\WorkItemResource;
+use App\Models\Attachment;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
 /** WEB (public) with Mara as its member and the former identifier OLD, and the private OPS she is no member of. */
@@ -60,7 +62,7 @@ it('checks what to include only for an item the account sees', function () use (
             ->toThrow(fn (ValidationException $e) => expect(array_keys($e->errors()))->toBe(['include']));
     }
     expect(fn () => GetWorkItem::run(actor($mara), 'WEB-1', ['comments']))->toThrow(ValidationException::class, __('field.include.unknown', [
-        'name' => 'comments', 'allowed' => 'children, type, workflow, relations',
+        'name' => 'comments', 'allowed' => 'children, type, workflow, relations, attachments',
     ]));
 
     // blanks around a name and empty names do not matter, the order of INCLUDES does
@@ -74,8 +76,10 @@ it('loads what the resource needs', function () use ($world) {
     WorkItem::factory()->for($web)->childOf($epic)->closed()->create(['rank' => 'a8']);
     $first = WorkItem::factory()->for($web)->childOf($epic)->create(['rank' => 'a5']);
     $first->subscriptions()->create(['user_id' => $mara->id, 'reason' => 'manual']);
+    Storage::fake('local');
+    $file = Attachment::factory()->forItem($epic, 'file')->stored('Angebot', 'text/plain', 'angebot.txt')->create();
 
-    foreach ([[], ['children', 'type', 'workflow']] as $include) {
+    foreach ([[], ['children', 'type', 'workflow', 'attachments']] as $include) {
         $item = GetWorkItem::run(actor($mara), 'OLD-1', $include);
 
         DB::enableQueryLog();
@@ -93,5 +97,7 @@ it('loads what the resource needs', function () use ($world) {
         ->and($data['type']['id'])->toBe($epic->type_id)
         ->and($data['type']['is_epic'])->toBeTrue()
         ->and($data['workflow']['id'])->toBe($web->workflow_id)
-        ->and($data['workflow']['states'])->not->toBeEmpty();
+        ->and($data['workflow']['states'])->not->toBeEmpty()
+        ->and(array_column($data['attachments'], 'id'))->toBe([$file->id])
+        ->and($data['attachments'][0]['url'])->toBe("/attachments/{$file->id}");
 });
