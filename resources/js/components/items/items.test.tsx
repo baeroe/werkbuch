@@ -326,6 +326,11 @@ describe('rows and cards', () => {
     expect(tabRow.textContent).toContain('WEB-48');
   });
 
+  it('adds the parts the caller names to the name of the card, before the selection', () => {
+    renderItems(<ItemCard item={web30} selected nameParts={['ohne Datum', '1 von 2 erledigt']} onOpen={vi.fn()} />);
+    expect(screen.getByRole('article', { name: 'WEB-30 Relaunch Phase 1, ohne Datum, 1 von 2 erledigt, ausgewählt' })).toBeTruthy();
+  });
+
   it('an epic and an item without a parent name none', () => {
     // a parent that does not match parent_id (an outdated answer) is no epic either
     const stale = { ...web48, id: 'wi_web_49', key: 'WEB-49', parent_id: 'wi_web_31' };

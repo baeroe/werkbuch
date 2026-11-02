@@ -7,9 +7,13 @@
  *   week     40 px a day, unit: one day     axis: months over days
  *   month    12 px a day, unit: one week    axis: months over calendar weeks
  *   quarter   4 px a day, unit: one month   axis: quarters over months
+ *
+ * Weeks begin on the organisation's first weekday (`week_start`, Monday by default); a calendar week is named by the
+ * ISO number of the Monday in it.
  */
 
 import { intlLocale, t } from '@/lib/i18n';
+import type { Weekday } from '@/types';
 import { addDays, daysInMonth, diffDays, endOfMonth, formatDate, isoWeek, splitDate, startOfMonth, startOfWeek, weekdayOf } from './tz';
 
 export type Zoom = 'week' | 'month' | 'quarter';
@@ -84,15 +88,15 @@ function endOfQuarter(date: string): string {
   return formatDate(year, last, daysInMonth(year, last));
 }
 
-/** Where a unit of the axis begins: Monday, the first of the month, the first of the quarter. */
-export function startOfUnit(date: string, zoom: Zoom): string {
-  if (zoom === 'week') return startOfWeek(date, 1);
+/** Where a unit of the axis begins: the first day of the week, the first of the month, the first of the quarter. */
+export function startOfUnit(date: string, zoom: Zoom, weekStart: Weekday = 1): string {
+  if (zoom === 'week') return startOfWeek(date, weekStart);
   if (zoom === 'month') return startOfMonth(date);
   return startOfQuarter(date);
 }
 
-function endOfUnit(date: string, zoom: Zoom): string {
-  if (zoom === 'week') return addDays(startOfWeek(date, 1), 6);
+function endOfUnit(date: string, zoom: Zoom, weekStart: Weekday): string {
+  if (zoom === 'week') return addDays(startOfWeek(date, weekStart), 6);
   if (zoom === 'month') return endOfMonth(date);
   return endOfQuarter(date);
 }
@@ -104,13 +108,13 @@ const PADDING_DAYS: Record<Zoom, number> = { week: 7, month: 14, quarter: 30 };
  * The days the axis covers: from a unit boundary some room before the earliest of `dates` (and today) to the end of
  * the unit some room after the latest.
  */
-export function timelineRange(dates: readonly string[], today: string, zoom: Zoom): { start: string; end: string } {
+export function timelineRange(dates: readonly string[], today: string, zoom: Zoom, weekStart: Weekday = 1): { start: string; end: string } {
   const all = [...dates, today];
   const earliest = all.reduce((min, date) => (date < min ? date : min));
   const latest = all.reduce((max, date) => (date > max ? date : max));
   return {
-    start: startOfUnit(addDays(earliest, -PADDING_DAYS[zoom]), zoom),
-    end: endOfUnit(addDays(latest, PADDING_DAYS[zoom] * 2), zoom),
+    start: startOfUnit(addDays(earliest, -PADDING_DAYS[zoom]), zoom, weekStart),
+    end: endOfUnit(addDays(latest, PADDING_DAYS[zoom] * 2), zoom, weekStart),
   };
 }
 
@@ -119,7 +123,7 @@ export function timelineRange(dates: readonly string[], today: string, zoom: Zoo
 export interface Tick {
   date: string;
   label: string;
-  /** A day that begins a new week (week zoom): its line is drawn stronger. */
+  /** A day that begins a new week (week zoom, the organisation's first weekday): its line is drawn stronger. */
   strong: boolean;
 }
 
@@ -149,7 +153,7 @@ function unitStarts(start: string, end: string, first: string, step: (date: stri
  * The two rows of the axis. `major` names the larger unit (the first one at the start of the range, even when the
  * unit began earlier); `minor` marks the smaller one.
  */
-export function scaleTicks(range: { start: string; end: string }, zoom: Zoom): { major: Tick[]; minor: Tick[] } {
+export function scaleTicks(range: { start: string; end: string }, zoom: Zoom, weekStart: Weekday = 1): { major: Tick[]; minor: Tick[] } {
   const { start, end } = range;
   const format = formats();
   const months = unitStarts(start, end, startOfMonth(start), (date) => addMonths(date, 1));
@@ -167,13 +171,15 @@ export function scaleTicks(range: { start: string; end: string }, zoom: Zoom): {
   const major = majorDays.map((date) => ({ date, label: format.monthYear.format(utc(date)), strong: true }));
 
   if (zoom === 'month') {
-    const mondays = unitStarts(start, end, startOfWeek(start, 1), (date) => addDays(date, 7));
-    return { major, minor: mondays.map((date) => ({ date, label: t('items.timeline.week_number', { week: String(isoWeek(date)) }), strong: false })) };
+    const weeks = unitStarts(start, end, startOfWeek(start, weekStart), (date) => addDays(date, 7));
+    // a week from Sunday is named by its Monday
+    const monday = (date: string) => startOfWeek(addDays(date, 6), 1);
+    return { major, minor: weeks.map((date) => ({ date, label: t('items.timeline.week_number', { week: String(isoWeek(monday(date))) }), strong: false })) };
   }
 
   const days = unitStarts(start, end, start, (date) => addDays(date, 1));
   return {
     major,
-    minor: days.map((date) => ({ date, label: `${format.weekday.format(utc(date))} ${format.dayNumber.format(utc(date))}`, strong: weekdayOf(date) === 1 })),
+    minor: days.map((date) => ({ date, label: `${format.weekday.format(utc(date))} ${format.dayNumber.format(utc(date))}`, strong: weekdayOf(date) === weekStart })),
   };
 }

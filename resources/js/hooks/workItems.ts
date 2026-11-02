@@ -401,12 +401,14 @@ export const ALL_GROUP = 'all';
  * The pages of each group of a list (`group_by` with `group` = the key), one page sequence per key: `keys` are the keys
  * `useWorkItemGroups` answered (null while they are unknown: nothing loads), `enabled` the groups that may load (a
  * collapsed or scrolled-away group waits). Without grouping (`group_by` missing or `none`) the one key is `all` and the
- * pages carry no group. The pages ask for the grouping the server applied (`ItemGroups.group_by`, K17).
+ * pages carry no group. The pages ask for the grouping the server applied (`ItemGroups.group_by`, K17). With `all` each
+ * enabled group loads its pages one after the other until none is left (the timeline shows every epic).
  */
 export function useGroupedWorkItems(
   args: ListWorkItemsArgs,
   keys: readonly string[] | null,
   enabled: ReadonlySet<string> | 'all',
+  all = false,
 ): Record<string, InfiniteWorkItems> {
   const grouped = args.group_by !== undefined && args.group_by !== 'none';
   const lists = (keys ?? []).map((key) => ({
@@ -414,7 +416,7 @@ export function useGroupedWorkItems(
     args: grouped ? { ...args, group: key } : args,
     enabled: enabled === 'all' || enabled.has(key),
   }));
-  return usePagedLists(lists, false);
+  return usePagedLists(lists, all);
 }
 
 /** The groups of a list with their counts; waits without `args`. Under `qk.workItems`: every item change makes it stale. */

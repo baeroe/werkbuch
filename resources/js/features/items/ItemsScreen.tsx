@@ -14,7 +14,8 @@
  * - The state (filter and display) is in the address (`useListState`), the groups and their pages come from the server
  *   (`useListData`); a new filter keeps the old rows until its answer is there.
  * - Below: a hint when the status grouping fell back to the categories, a banner on an archived project (read-only),
- *   then the layout (layouts.ts) or the empty, loading or error state (ListStates.tsx).
+ *   then the layout (layouts.ts) or the empty, loading or error state (ListStates.tsx). An empty timeline is the
+ *   timeline's own: it says that only epics stand on it.
  * - One polite status region announces what changes without the focus moving (`ListAnnouncer`).
  * - Cursor and selection: the cursor is the item under the keyboard; the selection lives in the UI store and is
  *   emptied when the list goes, so no other screen acts on it. A click on a title and the space bar open the preview
@@ -283,7 +284,7 @@ function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: P
     content = <ListError error={data.error} onRetry={data.retry} retrying={false} />;
   } else if (data.status === 'pending') {
     content = <DelayedSkeleton layout={state.display.layout} />;
-  } else if (data.total === 0 && data.items.length === 0) {
+  } else if (data.total === 0 && data.items.length === 0 && state.display.layout !== 'timeline') {
     content = (
       <ListEmpty
         preset={preset}

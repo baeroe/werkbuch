@@ -79,16 +79,17 @@ export interface LayoutProps {
   onCursor(id: string | null): void;
 }
 
-/** The board and the table come as chunks of their own, with their first use (the screen shows them in a `Suspense`). */
+/** The board, the table and the timeline come as chunks of their own, with their first use (in a `Suspense`). */
 const BoardLayout = lazy(() => import('./board/BoardLayout').then((module) => ({ default: module.BoardLayout })));
 const TableLayout = lazy(() => import('./table/TableLayout').then((module) => ({ default: module.TableLayout })));
+const TimelineLayout = lazy(() => import('./timeline/TimelineLayout').then((module) => ({ default: module.TimelineLayout })));
 
-/** The layout of each `Display['layout']`; the timeline gets its own with its task. */
+/** The layout of each `Display['layout']`. */
 export const layouts: Record<Display['layout'], ComponentType<LayoutProps>> = {
   list: ListLayout,
   board: BoardLayout,
   table: TableLayout,
-  timeline: ListLayout,
+  timeline: TimelineLayout,
 };
 
 /** The layouts by name, with the shortcut of the catalog (1–4) for the switcher in the header of the list. */

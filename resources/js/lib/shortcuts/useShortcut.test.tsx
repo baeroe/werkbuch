@@ -91,6 +91,23 @@ describe('useShortcut', () => {
     hooks.forEach((hook) => hook.unmount());
   });
 
+  it('repeats a shared entry while held where the layout asks for it (K20)', () => {
+    const board = vi.fn();
+    const timeline = vi.fn();
+    const first = renderHook(() => useShortcut('list.move_right', board));
+    press('ArrowRight', { shiftKey: true });
+    press('ArrowRight', { shiftKey: true, repeat: true });
+    // the board takes one step per press
+    expect(board).toHaveBeenCalledTimes(1);
+    first.unmount();
+
+    const second = renderHook(() => useShortcut('list.move_right', timeline, { repeat: true }));
+    press('ArrowRight', { shiftKey: true });
+    press('ArrowRight', { shiftKey: true, repeat: true });
+    expect(timeline).toHaveBeenCalledTimes(2);
+    second.unmount();
+  });
+
   it('registers only while enabled, so a layout can leave a key to its own handler', () => {
     const run = vi.fn();
     const { rerender, unmount } = renderHook(({ enabled }) => useShortcut('list.next_arrow', run, { enabled }), { initialProps: { enabled: false } });

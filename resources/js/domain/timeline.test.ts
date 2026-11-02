@@ -100,6 +100,24 @@ describe('timeline scale', () => {
     expect(quarter.minor.map((tick) => tick.label)).toEqual(['Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']);
   });
 
+  it('begins the weeks on the first weekday of the organisation', () => {
+    // a week (7 days) before 2026-09-01 is Tuesday 2026-08-25; the week from Sunday begins 2026-08-23
+    expect(timelineRange(['2026-09-01'], '2026-10-28', 'week', 0).start).toBe('2026-08-23');
+    // 14 days after 2026-10-28 is Wednesday 2026-11-11; its week from Sunday ends on Saturday 2026-11-14
+    expect(timelineRange(['2026-09-01'], '2026-10-28', 'week', 0).end).toBe('2026-11-14');
+
+    const week = scaleTicks({ start: '2026-10-25', end: '2026-11-07' }, 'week', 0);
+    expect(week.minor.filter((tick) => tick.strong).map((tick) => tick.date)).toEqual(['2026-10-25', '2026-11-01']);
+    // a week from Sunday is named by the Monday in it
+    const month = scaleTicks({ start: '2026-10-01', end: '2026-10-31' }, 'month', 0);
+    expect(month.minor.map((tick) => [tick.date, tick.label])).toEqual([
+      ['2026-10-04', 'KW 41'],
+      ['2026-10-11', 'KW 42'],
+      ['2026-10-18', 'KW 43'],
+      ['2026-10-25', 'KW 44'],
+    ]);
+  });
+
   it('labels the axis in the language of the page', () => {
     initI18n({ locale: 'en', translations: en });
 

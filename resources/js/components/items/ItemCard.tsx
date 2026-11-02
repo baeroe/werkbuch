@@ -6,7 +6,7 @@
  *
  * With `showParent` a child item names its epic before the tab, as the path of the item page does („Relaunch Phase 1 ›
  * WEB-42“): muted, and it gives way first. Its key and title are in the tooltip, and the card says „Teil von …“ in its
- * own name (13c), so the caller adds nothing. It is no link of its own. The row of the tab is part of the card: a
+ * own name (13c), so the caller adds nothing; what else the name says comes as `nameParts`. It is no link of its own. The row of the tab is part of the card: a
  * click there opens it, as one on the title does.
  *
  * The title is a link over the whole card; a plain click on it opens the preview (`onPeek`), without it the page. A
@@ -53,6 +53,8 @@ type ItemCardProps = Omit<ComponentProps<'article'>, 'children' | 'aria-label'> 
   showParent?: boolean;
   /** The card belongs to a board with a keyboard cursor: true for its tab stop, false for the other cards. */
   cursor?: boolean;
+  /** More parts of the card's name after its key and title (the timeline: „ohne Datum“, the progress). */
+  nameParts?: readonly string[];
 };
 
 /** The epic a card names before its key: the parent of a child item, as the item names it; null without one. */
@@ -71,6 +73,7 @@ export function ItemCard({
   lifted = false,
   showParent = false,
   cursor,
+  nameParts = [],
   className,
   onClick,
   onKeyDown,
@@ -87,7 +90,7 @@ export function ItemCard({
   const itemLabels = fields.includes('labels') ? item.label_ids.flatMap((id) => labels?.find((label) => label.id === id) ?? []) : [];
   const navTarget = cursor !== undefined;
   const epic = showParent ? cardEpic(item) : null;
-  const name = listItemName(item, selected, ...(epic ? [t('items.card.part_of', { key: epic.key, title: epic.title })] : []));
+  const name = listItemName(item, selected, ...(epic ? [t('items.card.part_of', { key: epic.key, title: epic.title })] : []), ...nameParts);
 
   return (
     <IndexCard

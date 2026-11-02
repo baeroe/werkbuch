@@ -17,6 +17,9 @@
  *   first page of every group that was loading before (a group stays enabled by its key). No flash of the loading
  *   state. An error of a later page or of a refetch keeps what is loaded (13c); only a list without an answer at all
  *   shows the error.
+ * - The timeline (spec 4.11, P20) shows the epics only, by project, whatever the display says: the filter gets
+ *   `epic is true`, the grouping is `project`, each project loads at once and all its pages (the axis spans every epic),
+ *   in the order of the start date (empty last, then the rank, as `ItemOrder` sorts).
  * - A condition on a field that is gone (a deleted property in a saved view or a link) matches nothing (P2): the
  *   server refuses such a filter (422), so the list does not ask it and is empty. Whether a property is gone is known
  *   once the properties are loaded; until then a list with a property condition waits. If they fail to load, the
@@ -65,21 +68,31 @@ type Shown = Omit<ListData, 'retry' | 'loadAll' | 'current'>;
 
 const EMPTY: Shown = { groups: [], groupBy: 'none', fellBack: false, total: 0, status: 'pending', error: null, items: [] };
 
+/** What the timeline asks for besides the list's filter (P20): the epics. */
+const EPICS: Condition = { field: 'epic', op: 'is', value: true };
+/** The timeline reads in the order of time. */
+const BY_START = { field: 'start_date', direction: 'asc' } as const;
+
 export function useListData(state: ViewState, scope: Condition[], _options: { preset: ItemsPreset; project?: Project }): ListData {
   const { display } = state;
-  const chosen = display.group_by;
+  const timeline = display.layout === 'timeline';
+  const chosen: GroupBy = timeline ? 'project' : display.group_by;
   const grouped = chosen !== 'none';
   /* --------------------------------------------------------------- unknown fields */
 
   const properties = useProperties();
   const known = properties.data?.items;
   // a sort on a property waits for the properties, one on something unknown is the manual order
-  const sort = listSort(display.sort, known, properties.isError);
+  const sort = timeline ? BY_START : listSort(display.sort, known, properties.isError);
 
   const common = useMemo(
     // an unfinished condition of the filter bar (a chip still without its value) never goes to the server
-    () => ({ filter: { version: 1 as const, conditions: [...scope, ...state.filter.conditions.filter(isComplete)] }, sort: sort ?? MANUAL_SORT, show_sub_items: display.show_sub_items }),
-    [scope, state.filter.conditions, sort, display.show_sub_items],
+    () => ({
+      filter: { version: 1 as const, conditions: [...scope, ...state.filter.conditions.filter(isComplete), ...(timeline ? [EPICS] : [])] },
+      sort: sort ?? MANUAL_SORT,
+      show_sub_items: display.show_sub_items,
+    }),
+    [scope, state.filter.conditions, sort, display.show_sub_items, timeline],
   );
   const argsKey = JSON.stringify([common, chosen]);
 
@@ -104,7 +117,7 @@ export function useListData(state: ViewState, scope: Condition[], _options: { pr
     [common, effective],
   );
   const keys = grouped ? (answer.data?.groups.map((group) => group.key) ?? null) : [ALL_GROUP];
-  const pages = useGroupedWorkItems(listArgs, ask ? keys : null, grouped ? enabled : 'all');
+  const pages = useGroupedWorkItems(listArgs, ask ? keys : null, grouped && !timeline ? enabled : 'all', timeline);
 
   /* --------------------------------------------------------------------- catalogs */
 
@@ -154,7 +167,7 @@ export function useListData(state: ViewState, scope: Condition[], _options: { pr
     );
     const groups = served.map((group): GroupData => {
       const list = listOf(group.key);
-      const on = !grouped || enabled.has(group.key);
+      const on = !grouped || timeline || enabled.has(group.key);
       return {
         key: group.key,
         label: groupLabel(effective, group.key, names, group.item),
@@ -184,7 +197,7 @@ export function useListData(state: ViewState, scope: Condition[], _options: { pr
       error: null,
       items,
     };
-  }, [served, effective, catalogsReady, pages, common.sort, categories, grouped, enabled, names, enable, chosen, answer.data, all, matchesNothing]);
+  }, [served, effective, catalogsReady, pages, common.sort, categories, grouped, timeline, enabled, names, enable, chosen, answer.data, all, matchesNothing]);
 
   // the answer of the current state is there: the groups, and the first page of each group that loads
   const settled = fresh.status === 'success' && fresh.groups.every((group) => group.status !== 'pending' || group.count === 0);

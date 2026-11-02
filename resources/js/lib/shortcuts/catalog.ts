@@ -71,11 +71,14 @@ export const SHORTCUTS = {
   'board.column_prev': { keys: 'left', scope: 'list', label: 'shortcuts.board.column_prev', group: 'shortcuts.group.board', repeat: true },
   'board.column_next': { keys: 'right', scope: 'list', label: 'shortcuts.board.column_next', group: 'shortcuts.group.board', repeat: true },
   // moving the item under the cursor (K20): the board and the timeline share these keys, only one layout is mounted and
-  // binds them with its own `run` (board: the next allowed column, its place in a column sorted by rank)
+  // binds them with its own `run` (board: the next allowed column, its place in a column sorted by rank; timeline: the
+  // epic one unit of the zoom earlier or later, held keys repeat there). ⌥←/⌥→ only the timeline binds (`useTimelineKeys`)
   'list.move_left': { keys: 'shift+left', scope: 'list', label: 'shortcuts.list.move_left', group: 'shortcuts.group.list' },
   'list.move_right': { keys: 'shift+right', scope: 'list', label: 'shortcuts.list.move_right', group: 'shortcuts.group.list' },
   'list.move_up': { keys: 'alt+up', scope: 'list', label: 'shortcuts.list.move_up', group: 'shortcuts.group.list' },
   'list.move_down': { keys: 'alt+down', scope: 'list', label: 'shortcuts.list.move_down', group: 'shortcuts.group.list' },
+  'list.shorter': { keys: 'alt+left', scope: 'list', label: 'shortcuts.list.shorter', group: 'shortcuts.group.timeline', repeat: true },
+  'list.longer': { keys: 'alt+right', scope: 'list', label: 'shortcuts.list.longer', group: 'shortcuts.group.timeline', repeat: true },
   // registered only while the preview is open (shell/PeekHost): the first Escape in a field leaves the field
   'peek.close': { keys: 'escape', scope: 'detail', label: 'shortcuts.peek.close', group: 'shortcuts.group.item' },
 } as const satisfies Record<string, CatalogEntry>;
