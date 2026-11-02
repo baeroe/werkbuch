@@ -6,9 +6,9 @@ use App\Events\EventConsumer;
 use App\Models\Event;
 
 /**
- * A consumer for tests that works in the queue `search`.
+ * A consumer for tests that works in the queue `search` (App\Search\SearchConsumer is the real one).
  */
-final class SearchConsumer implements EventConsumer
+final class QueueSearchConsumer implements EventConsumer
 {
     public function key(): string
     {

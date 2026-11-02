@@ -17,8 +17,8 @@ use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Tests\Support\FailingOnceConsumer;
+use Tests\Support\QueueSearchConsumer;
 use Tests\Support\RecordingConsumer;
-use Tests\Support\SearchConsumer;
 
 beforeEach(function () {
     consumers(RecordingConsumer::class);
@@ -194,7 +194,7 @@ it('keeps consumers apart: each one gets the event once', function () {
 });
 
 it('puts each consumer in its own queue', function () {
-    consumers(RecordingConsumer::class, SearchConsumer::class);
+    consumers(RecordingConsumer::class, QueueSearchConsumer::class);
     Queue::fake();
     $event = recordedEvent();
 
@@ -202,7 +202,7 @@ it('puts each consumer in its own queue', function () {
 
     Queue::assertPushedOn('default', DispatchEvent::class);
     Queue::assertPushedOn('default', ConsumeEvent::class, fn (ConsumeEvent $job) => $job->consumer === RecordingConsumer::class);
-    Queue::assertPushedOn('search', ConsumeEvent::class, fn (ConsumeEvent $job) => $job->consumer === SearchConsumer::class
+    Queue::assertPushedOn('search', ConsumeEvent::class, fn (ConsumeEvent $job) => $job->consumer === QueueSearchConsumer::class
         && $job->eventId === $event->id);
 });
 
