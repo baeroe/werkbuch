@@ -170,6 +170,21 @@ describe('Search', () => {
     expect(useUiStore.getState().paletteOpen).toBe(true);
   });
 
+  it('closes the drawer before the palette opens over the page', async () => {
+    render(<Shell>Inhalt</Shell>);
+    const menu = screen.getByRole('button', { name: 'Navigation öffnen' });
+    await userEvent.click(menu);
+    const drawer = await screen.findByRole('dialog', { name: 'Navigation' });
+
+    await userEvent.click(within(drawer).getByRole('button', { name: 'Suchen …' }));
+
+    // one modal dialog at a time: the palette, never over the drawer
+    const palette = await screen.findByRole('dialog', { name: 'Befehlspalette' });
+    // (the palette hides the rest of the page from the tree: count the hidden too)
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Navigation', hidden: true })).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(within(palette).getByRole('combobox')));
+  });
+
   it('lists Alle Tastaturkürzel and the sidebar toggle in the palette', () => {
     render(<Shell>Inhalt</Shell>);
     const command = (id: string) => listCommands().find((entry) => entry.id === id)!;

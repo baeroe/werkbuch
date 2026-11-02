@@ -117,6 +117,26 @@ test('opens the navigation drawer on the phone', async ({ page }) => {
   await expect(drawer).toBeHidden();
 });
 
+test('closes the drawer when its search opens the palette on the phone', async ({ page }) => {
+  test.skip(!isPhone(page), 'the drawer is the navigation below md');
+
+  const open = page.getByRole('button', { name: tr('en', 'shell.mobile.open_navigation') });
+  await tabTo(page, open);
+  await page.keyboard.press('Enter');
+  const drawer = page.getByRole('dialog', { name: tr('en', 'shell.mobile.navigation') });
+  await expect(drawer).toBeVisible();
+  await tabTo(page, drawer.getByRole('button', { name: tr('en', 'shell.search'), exact: true }));
+  await page.keyboard.press('Enter');
+
+  // one modal dialog at a time: the palette holds the focus, the drawer is gone
+  const input = page.getByRole('dialog', { name: tr('en', 'palette.title') }).getByRole('combobox', { name: tr('en', 'palette.input') });
+  await expect(input).toBeFocused();
+  await expect(drawer).toBeHidden();
+  await page.keyboard.press('Escape');
+  await expect(input).toBeHidden();
+  await expect(open).toBeFocused();
+});
+
 test('collapses the sidebar to the rail and back', async ({ page }) => {
   test.skip(isPhone(page), 'the sidebar shows from md on');
 

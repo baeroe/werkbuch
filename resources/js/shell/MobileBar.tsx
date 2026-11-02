@@ -6,6 +6,7 @@ import { IconButton } from '@/components/ui/IconButton';
 import { t } from '@/lib/i18n';
 import { paths } from '@/lib/links';
 import { useDialogScope } from '@/lib/shortcuts/useShortcut';
+import { useUiStore } from '@/store/ui';
 import { openSearch } from './SearchButton';
 import { SidebarContent } from './Sidebar';
 
@@ -22,6 +23,12 @@ export function MobileBar() {
 
   // a chosen link closes the drawer
   useEffect(() => setOpen(false), [url]);
+  // so does the palette (its search button sits in the drawer, mod+k works in it): one modal dialog at a time, and a
+  // command that leads nowhere (theme, help) does not leave the drawer behind the closed palette
+  const paletteOpen = useUiStore((state) => state.paletteOpen);
+  useEffect(() => {
+    if (paletteOpen) setOpen(false);
+  }, [paletteOpen]);
 
   return (
     <header className="tracing sticky top-0 z-30 flex h-14 items-center gap-1 rounded-none border-x-0 border-t-0 px-2 [--glass-shadow:var(--elev-1)] md:hidden">
