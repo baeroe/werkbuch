@@ -1,7 +1,10 @@
 /*
  * The one static source of every keyboard shortcut: the help overlay lists it, `useShortcut` binds its entries at
  * runtime, and the shortcut reference of the docs is generated from it. A phase that adds a shortcut adds it here, under
- * the id the clickdummy used (`detail.title.${surface}` becomes `detail.title` with an `instance`).
+ * a dot path of the shortcut's area (`detail.title.${surface}` becomes `detail.title` with an `instance`).
+ *
+ * Ids are dot paths with underscores (`shell.go.my_items`, `list.select_all`): where the clickdummy wrote hyphens
+ * (`shell.go.my-items`), the app uses underscores like its translation keys.
  *
  * Keys follow the notation of `registry.ts`. Labels and groups are translation keys.
  */

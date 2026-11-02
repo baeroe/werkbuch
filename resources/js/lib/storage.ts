@@ -1,6 +1,6 @@
 /*
- * localStorage that never throws. A browser with blocked storage, a private window or a sandboxed frame (the review
- * build published as an artifact) refuses it; the demo then keeps its state in memory until the page reloads.
+ * localStorage that never throws: a private window, blocked site data or a sandboxed frame refuse it; the value then
+ * lasts until the page reloads.
  */
 
 import type { StateStorage } from 'zustand/middleware';
