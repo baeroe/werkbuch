@@ -21,7 +21,7 @@ import { agency, ida, labels, lene, list, makeWorkItem, mara, organization, proj
 import type { BulkResult, Condition, ListedItem, Project, WorkItem } from '@/types';
 import { ItemsScreen } from '../ItemsScreen';
 import { BulkBar, type BulkBarProps } from './BulkBar';
-import { bulkToast, commonStates, subjectOf } from './bulk';
+import { bulkToast, commonStates, removalVerdict, selectionVerdict, subjectOf, type SelectionRules } from './bulk';
 
 /* --------------------------------------------------------------------- fake Inertia */
 
@@ -183,6 +183,76 @@ describe('the rules of a bulk change', () => {
   });
 });
 
+describe('what an action does to a selection (A198)', () => {
+  const open = item(1, 'std_todo');
+  const done = item(4, 'std_done');
+  const cancelled = item(6, 'std_cancelled');
+  const archived = item(5, 'std_done', { archived_at: '2026-10-30T10:00:00.000Z' });
+  // APP: read-only, and deleting is for its admins
+  const foreignOpen = makeWorkItem({ id: 'wi_app_3', project_id: 'p_app', key: 'APP-3', state_id: 'app_todo' });
+  const foreignDone = makeWorkItem({ id: 'wi_app_4', project_id: 'p_app', key: 'APP-4', state_id: 'app_done' });
+  const rules: SelectionRules = {
+    reason: (permission, projectId) => (projectId !== 'p_app' ? null : permission === 'item.edit' ? 'Nur lesen.' : 'Nur Admins.'),
+    isClosed: (entry) => entry.state_id.endsWith('_done') || entry.state_id.endsWith('_cancelled'),
+  };
+  const isArchived = 'WEB-5 ist archiviert und schreibgeschützt. Stelle es zuerst wieder her.';
+  const onlyClosed = 'Nur geschlossene Items lassen sich archivieren. Setze sie zuerst auf einen Status wie Done.';
+
+  it('allows a change only when it is allowed for every item', () => {
+    expect(selectionVerdict([], 'edit', rules)).toBeNull();
+    expect(selectionVerdict([open, done], 'edit', rules)).toBeNull();
+    expect(selectionVerdict([open], 'edit', rules)).toBeNull();
+    // none of them: the reason, as for one item
+    expect(selectionVerdict([archived], 'edit', rules)).toEqual({ reason: isArchived, mixed: false });
+    expect(selectionVerdict([foreignOpen, foreignDone], 'edit', rules)).toEqual({ reason: 'Nur lesen.', mixed: false });
+    expect(selectionVerdict([archived, foreignOpen], 'edit', rules)).toEqual({ reason: isArchived, mixed: false });
+    // some of them: mixed, with the number and the first reason
+    expect(selectionVerdict([open, archived], 'edit', rules)).toEqual({ reason: `Nicht möglich für 1 der 2 ausgewählten Items: ${isArchived}`, mixed: true });
+    expect(selectionVerdict([open, foreignOpen, archived], 'edit', rules)).toEqual({ reason: 'Nicht möglich für 2 der 3 ausgewählten Items: Nur lesen.', mixed: true });
+  });
+
+  it('archives only when every item is closed, not archived and may be changed', () => {
+    expect(selectionVerdict([done, cancelled], 'archive', rules)).toBeNull();
+    expect(selectionVerdict([done], 'archive', rules)).toBeNull();
+    expect(selectionVerdict([open], 'archive', rules)).toEqual({ reason: onlyClosed, mixed: false });
+    expect(selectionVerdict([archived], 'archive', rules)).toEqual({ reason: isArchived, mixed: false });
+    expect(selectionVerdict([foreignDone], 'archive', rules)).toEqual({ reason: 'Nur lesen.', mixed: false });
+    expect(selectionVerdict([done, open], 'archive', rules)).toEqual({ reason: `Nicht möglich für 1 der 2 ausgewählten Items: ${onlyClosed}`, mixed: true });
+    expect(selectionVerdict([done, archived], 'archive', rules)).toEqual({ reason: `Nicht möglich für 1 der 2 ausgewählten Items: ${isArchived}`, mixed: true });
+    expect(selectionVerdict([done, foreignDone], 'archive', rules)).toEqual({ reason: 'Nicht möglich für 1 der 2 ausgewählten Items: Nur lesen.', mixed: true });
+  });
+
+  it('deletes only when every item may be deleted, archived ones too', () => {
+    expect(selectionVerdict([open, done, archived], 'delete', rules)).toBeNull();
+    expect(selectionVerdict([foreignOpen], 'delete', rules)).toEqual({ reason: 'Nur Admins.', mixed: false });
+    expect(selectionVerdict([open, foreignOpen], 'delete', rules)).toEqual({ reason: 'Nicht möglich für 1 der 2 ausgewählten Items: Nur Admins.', mixed: true });
+  });
+
+  it('removes with mod+backspace only what it removes the same way: archive the closed, delete the open or the archived', () => {
+    // one item: as ever, a closed one archives, any other deletes (an archived one too)
+    expect(removalVerdict([done], rules)).toEqual({ effect: 'archive' });
+    expect(removalVerdict([open], rules)).toEqual({ effect: 'delete' });
+    expect(removalVerdict([archived], rules)).toEqual({ effect: 'delete' });
+    expect(removalVerdict([foreignDone], rules)).toEqual({ reason: 'Nur lesen.' });
+    expect(removalVerdict([foreignOpen], rules)).toEqual({ reason: 'Nur Admins.' });
+    // several of one kind: the same for all
+    expect(removalVerdict([done, cancelled], rules)).toEqual({ effect: 'archive' });
+    expect(removalVerdict([open, item(2, 'std_todo')], rules)).toEqual({ effect: 'delete' });
+    expect(removalVerdict([archived, item(7, 'std_todo', { archived_at: '2026-10-30T10:00:00.000Z' })], rules)).toEqual({ effect: 'delete' });
+    // open and archived ones: both deleted, the same for all
+    expect(removalVerdict([open, archived], rules)).toEqual({ effect: 'delete' });
+    // archive some and delete others: neither (T15-M3: an archived item among closed ones deleted them all)
+    const mixed = (kinds: string) =>
+      `Archivieren und Löschen gemischt: ${kinds}. Geschlossene würden archiviert, offene und archivierte gelöscht. Wähle nur geschlossene oder nur andere Items aus.`;
+    expect(removalVerdict([done, archived], rules)).toEqual({ reason: mixed('1 geschlossenes Item und 1 archiviertes Item') });
+    expect(removalVerdict([done, open, cancelled], rules)).toEqual({ reason: mixed('1 offenes Item und 2 geschlossene Items') });
+    expect(removalVerdict([open, item(2, 'std_todo'), done, archived], rules)).toEqual({ reason: mixed('2 offene Items, 1 geschlossenes Item und 1 archiviertes Item') });
+    // one kind, not allowed for all
+    expect(removalVerdict([done, foreignDone], rules)).toEqual({ reason: 'Nicht möglich für 1 der 2 ausgewählten Items: Nur lesen.' });
+    expect(removalVerdict([open, foreignOpen], rules)).toEqual({ reason: 'Nicht möglich für 1 der 2 ausgewählten Items: Nur Admins.' });
+  });
+});
+
 /* ------------------------------------------------------------------------ the bar */
 
 describe('the bulk bar', () => {
@@ -303,13 +373,48 @@ describe('the bulk bar', () => {
     expect(second.onClear).toHaveBeenCalledTimes(1);
     second.unmount();
 
-    const third = renderBar({ items: [item(1, 'std_todo'), item(4, 'std_done')] });
+    const third = renderBar({ items: [item(4, 'std_done'), item(6, 'std_cancelled')] });
     await menuReady('Priorität');
-    // all of them selected: the box clears; some closed: archive hands them all over
+    // all of them selected: the box clears; all closed: archive hands them over
     await user.click(screen.getByRole('checkbox', { name: 'Alle 2 auswählen' }));
     expect(third.onClear).toHaveBeenCalledTimes(1);
     await user.click(screen.getByRole('button', { name: 'Archivieren' }));
-    expect(third.onArchive).toHaveBeenCalledWith([expect.objectContaining({ id: 'wi_web_1' }), expect.objectContaining({ id: 'wi_web_4' })]);
+    expect(third.onArchive).toHaveBeenCalledWith([expect.objectContaining({ id: 'wi_web_4' }), expect.objectContaining({ id: 'wi_web_6' })]);
+  });
+
+  it('leaves out what it would do to some of them and not to others (A198)', async () => {
+    const archived = item(4, 'std_done', { archived_at: '2026-10-30T10:00:00.000Z' });
+    const actions = ['Status', 'Assignee', 'Priorität', 'Labels', 'Archivieren'];
+    const shown = () => actions.filter((name) => screen.queryByRole('button', { name }) !== null);
+
+    // open and closed: every change, but no archive (the open one would stay)
+    const first = renderBar({ items: [item(1, 'std_todo'), item(2, 'std_done')] });
+    await menuReady('Priorität');
+    expect(shown()).toEqual(['Status', 'Assignee', 'Priorität', 'Labels']);
+    expect(screen.queryByText('Keine gemeinsame Aktion für diese Auswahl')).toBeNull();
+    first.unmount();
+
+    // an archived one among them: nothing that changes or archives
+    const second = renderBar({ items: [item(1, 'std_done'), archived] });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Auswahl aufheben' })).toBeTruthy());
+    await waitFor(() => expect(shown()).toEqual([]));
+    // the bar says so instead of standing empty
+    expect(screen.getByRole('group', { name: 'Auswahl' }).textContent).toContain('Keine gemeinsame Aktion für diese Auswahl');
+    second.unmount();
+
+    // a project the person only reads: the same
+    projects = [project('WEB', 'admin'), project('APP', 'viewer', { workflow_id: 'wf_agency' })];
+    const third = renderBar({ items: [item(1, 'std_todo'), app3] });
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Priorität' })).toBeNull());
+    // archiving is for neither (one open, one read-only): it stays and says why
+    expect(shown()).toEqual(['Archivieren']);
+    expect(screen.getByRole('button', { name: 'Archivieren' }).getAttribute('aria-disabled')).toBe('true');
+    third.unmount();
+
+    // all of them read-only: the actions stay and say why
+    renderBar({ items: [app3] });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Priorität' }).getAttribute('aria-disabled')).toBe('true'));
+    expect(shown()).toEqual(actions);
   });
 });
 
@@ -367,44 +472,56 @@ describe('the bulk bar on the items screen', () => {
     expect(useUiStore.getState().selection).toEqual(['wi_web_1', 'wi_web_2']);
   });
 
-  it('archives the closed items of the selection with undo, and the server names the open ones', async () => {
-    answer = () => ({ body: { updated: ['wi_web_4'], rejected: [{ id: 'wi_web_1', reason: 'not_closed' }] } });
+  it('archives a closed selection with undo, and names what the server still refuses', async () => {
+    items = [...items, item(6, 'std_cancelled')];
+    answer = () => ({ body: { updated: ['wi_web_4'], rejected: [{ id: 'wi_web_6', reason: 'not_closed' }] } });
     renderScreen();
-    await screen.findByText('Aufgabe 4');
-    act(() => useUiStore.getState().setSelection(['wi_web_1', 'wi_web_4']));
+    await screen.findByText('Aufgabe 6');
+    act(() => useUiStore.getState().setSelection(['wi_web_4', 'wi_web_6']));
     await menuReady('Priorität');
 
     fireEvent.click(screen.getByRole('button', { name: 'Archivieren' }));
-    expect(lastToast()).toMatchObject({ title: 'WEB-4 archiviert', action: { label: 'Rückgängig' } });
-    // the closed one leaves the list and the selection at once, the open one stays
+    expect(lastToast()).toMatchObject({ title: '2 Items archiviert', action: { label: 'Rückgängig' } });
+    // they leave the list and the selection at once
     await waitFor(() => expect(screen.queryByText('Aufgabe 4')).toBeNull());
-    expect(useUiStore.getState().selection).toEqual(['wi_web_1']);
+    expect(screen.queryByText('Aufgabe 6')).toBeNull();
+    expect(useUiStore.getState().selection).toEqual([]);
 
     act(() => runToastAction(lastToast()!.id));
     expect(await screen.findByText('Aufgabe 4')).toBeTruthy();
     expect(bulkCalls()).toEqual([]);
 
-    act(() => useUiStore.getState().setSelection(['wi_web_1', 'wi_web_4']));
+    act(() => useUiStore.getState().setSelection(['wi_web_4', 'wi_web_6']));
     fireEvent.click(await screen.findByRole('button', { name: 'Archivieren' }));
     act(() => dismissToast(lastToast()!.id));
-    await waitFor(() => expect(bulkCalls()).toEqual([{ ids: ['wi_web_1', 'wi_web_4'], patch: { archived: true } }]));
-    await waitFor(() => expect(lastToast()).toMatchObject({ title: '1 von 2 Items archiviert', description: 'WEB-1: Nur geschlossene Items lassen sich archivieren.' }));
+    await waitFor(() => expect(bulkCalls()).toEqual([{ ids: ['wi_web_4', 'wi_web_6'], patch: { archived: true } }]));
+    // reopened meanwhile: the server refuses it, and it comes back
+    await waitFor(() => expect(lastToast()).toMatchObject({ title: '1 von 2 Items archiviert', description: 'WEB-6: Nur geschlossene Items lassen sich archivieren.' }));
+    expect(await screen.findByText('Aufgabe 6')).toBeTruthy();
   });
 
-  it('leaves an archived item of the selection alone when it archives the others', async () => {
+  it('offers no archive while an archived item is selected with others, and mod+backspace removes nothing', async () => {
     // "Archivierte zeigen": WEB-3 is closed and archived already
     items = [item(2, 'std_done'), item(3, 'std_done', { archived_at: '2026-10-30T10:00:00.000Z' }), item(4, 'std_done')];
     renderScreen();
     await screen.findByText('Aufgabe 3');
     act(() => useUiStore.getState().setSelection(['wi_web_2', 'wi_web_3', 'wi_web_4']));
-    await menuReady('Priorität');
+    await screen.findByRole('button', { name: 'Auswahl aufheben' });
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Priorität' })).toBeNull());
+    expect(screen.queryByRole('button', { name: 'Archivieren' })).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Archivieren' }));
-    expect(lastToast()).toMatchObject({ title: '2 Items archiviert' });
-    // the archived one stays where it is, the others leave the list
-    await waitFor(() => expect(screen.queryByText('Aufgabe 4')).toBeNull());
-    expect(screen.getByText('Aufgabe 3')).toBeTruthy();
-    act(() => dismissToast(lastToast()!.id));
-    await waitFor(() => expect(bulkCalls()).toEqual([{ ids: ['wi_web_2', 'wi_web_4'], patch: { archived: true } }]));
+    // pressed again until the commands have their catalogs ("Einen Moment" before)
+    await waitFor(() => {
+      act(() => void document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', ctrlKey: true, bubbles: true, cancelable: true })));
+      expect(lastToast()).toMatchObject({
+        title: 'Nicht möglich',
+        description:
+          'Archivieren und Löschen gemischt: 2 geschlossene Items und 1 archiviertes Item. Geschlossene würden archiviert, offene und archivierte gelöscht. Wähle nur geschlossene oder nur andere Items aus.',
+      });
+    });
+    // nothing left the list or the selection, nothing goes to the server
+    expect(currentToasts().some((toast) => toast.action?.label === 'Rückgängig')).toBe(false);
+    expect(['Aufgabe 2', 'Aufgabe 3', 'Aufgabe 4'].map((title) => screen.queryByText(title) !== null)).toEqual([true, true, true]);
+    expect(useUiStore.getState().selection).toEqual(['wi_web_2', 'wi_web_3', 'wi_web_4']);
   });
 });

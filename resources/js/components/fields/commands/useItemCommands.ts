@@ -25,7 +25,7 @@ import { useWorkItemTypes } from '@/hooks/workItemTypes';
 import { t } from '@/lib/i18n';
 import { usePermissions } from '@/lib/permissions';
 import { useUiStore } from '@/store/ui';
-import { subjectOf } from '@/features/items/selection/bulk';
+import { commonRemoval, subjectOf } from '@/features/items/selection/bulk';
 import { useCommonPeople, useToday } from '../itemData';
 import { useProjectItems } from '../ParentPicker';
 import { useRemovalDeps } from './actions';
@@ -33,8 +33,8 @@ import {
   activeMount,
   addMount,
   announceTargets,
-  archivesNow,
   cachedItem,
+  closedIn,
   nextMountId,
   subscribeMounts,
   subscribeTargets,
@@ -149,12 +149,12 @@ export function useItemCommands(options: ItemCommandsOptions): void {
   });
 
   const group = shown.length > 0 ? t('items.commands.group', { key: subjectOf(shown) }) : t('items.commands.group_none');
-  const archives = archivesNow(projects ?? [], workflows ?? [], shown);
+  const removes = commonRemoval(shown, { isClosed: (item) => closedIn(projects ?? [], workflows ?? [], item) });
 
   // registered anew when the data a command waits for arrive (or fail), so an open palette shows it then
   const loaded = [ready, failedCatalogs.length, projectsKey, people !== undefined, peopleQuery.error !== null, projectItems !== undefined, projectItemsQuery.isError].join(':');
   useEffect(() => {
     if (!active) return;
-    return registerItemCommands({ scope, group, archives, context: () => latest.current() });
-  }, [active, scope, group, archives, loaded]);
+    return registerItemCommands({ scope, group, removes, context: () => latest.current() });
+  }, [active, scope, group, removes, loaded]);
 }
