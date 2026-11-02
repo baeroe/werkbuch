@@ -121,3 +121,17 @@ it('takes a view of the same name and creator instead of adding another, but not
     expect(View::query()->where('name', 'Blockiert')->count())->toBe(2)
         ->and(View::query()->where('name', 'Blockiert')->where('created_by', User::where('handle', 'jonas')->value('id'))->count())->toBe(1);
 });
+
+it('stars the oldest view when somebody has another one of the same name, however often it seeds', function () {
+    $this->seed(DemoSeeder::class);
+    $mara = User::where('handle', 'mara')->sole();
+    $first = View::query()->where('name', 'Für Kira')->where('created_by', $mara->id)->sole();
+    View::factory()->create(['name' => 'Für Kira', 'created_by' => $mara->id]);
+
+    $this->seed(DemoSeeder::class);
+    $this->seed(DemoSeeder::class);
+
+    expect(View::query()->where('name', 'Für Kira')->count())->toBe(2)
+        ->and(Favorite::query()->where('user_id', $mara->id)->where('favoritable_type', 'view')->pluck('favoritable_id')->all())
+        ->toContain($first->id)->toHaveCount(3);
+});

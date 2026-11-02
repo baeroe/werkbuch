@@ -50,7 +50,9 @@ class FavoritesSeeder extends Seeder
 
         foreach ($views as $handle => $positions) {
             foreach ($positions as $name => $position) {
-                $view = View::query()->where('name', $name)->where('created_by', $accounts[ViewsSeeder::CREATORS[$name]])->sole();
+                // the oldest of that name and creator is the seeded one: names are not unique (K27)
+                $view = View::query()->where('name', $name)->where('created_by', $accounts[ViewsSeeder::CREATORS[$name]])
+                    ->orderBy('id')->firstOrFail();
 
                 Favorite::updateOrCreate(
                     ['user_id' => $accounts[$handle], 'favoritable_type' => $viewType, 'favoritable_id' => $view->id],
