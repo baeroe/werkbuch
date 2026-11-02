@@ -39,6 +39,7 @@ use App\Actions\RelationTypes\SaveRelationType;
 use App\Actions\Resolutions\DeleteResolution;
 use App\Actions\Resolutions\ListResolutions;
 use App\Actions\Resolutions\SaveResolution;
+use App\Actions\Search\QuerySearch;
 use App\Actions\Tokens\CreateToken;
 use App\Actions\Tokens\ListTokens;
 use App\Actions\Tokens\RevokeToken;
@@ -517,6 +518,11 @@ return [
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => DeleteResolution::run($a, Resolution::factory()->create()),
         'allowed' => $catalogAdmins,
         'event' => EventType::ResolutionDeleted,
+    ],
+    'QuerySearch' => [
+        'action' => QuerySearch::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => QuerySearch::run($a, ['q' => 'Matrix']),
+        'allowed' => $everyone,
     ],
     'ListViews' => [
         'action' => ListViews::class,

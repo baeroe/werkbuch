@@ -33,6 +33,9 @@ final class ArraySearchEngine extends Engine implements RemovesWhere, UpdatesInd
 
     private int $writes = 0;
 
+    /** @var list<string> */
+    private array $searched = [];
+
     /**
      * The documents of an index (with its prefix: `testing_work_items`) by key.
      *
@@ -57,6 +60,16 @@ final class ArraySearchEngine extends Engine implements RemovesWhere, UpdatesInd
     public function writes(): int
     {
         return $this->writes;
+    }
+
+    /**
+     * The indexes searched so far, in order (one entry per search).
+     *
+     * @return list<string>
+     */
+    public function searched(): array
+    {
+        return $this->searched;
     }
 
     /** Lets every search and every write throw this error from now on (`null` lets them work again). */
@@ -239,11 +252,13 @@ final class ArraySearchEngine extends Engine implements RemovesWhere, UpdatesInd
     {
         $this->fail();
 
+        $index = $builder->index ?: $builder->model->searchableAs();
+        $this->searched[] = $index;
         $attributes = config('scout.meilisearch.index-settings')[$builder->model::class]['searchableAttributes'] ?? [];
         $words = preg_split('/\s+/u', mb_strtolower(trim((string) $builder->query)), -1, PREG_SPLIT_NO_EMPTY) ?: [];
         $ids = [];
 
-        foreach ($this->documents($builder->index ?: $builder->model->searchableAs()) as $key => $document) {
+        foreach ($this->documents($index) as $key => $document) {
             if ($this->filtered($builder, $document) && $this->holdsEvery($words, $attributes, $document)) {
                 $ids[] = (string) $key;
             }

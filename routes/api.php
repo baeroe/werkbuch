@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\PropertiesController;
 use App\Http\Controllers\Api\RelationsController;
 use App\Http\Controllers\Api\RelationTypesController;
 use App\Http\Controllers\Api\ResolutionsController;
+use App\Http\Controllers\Api\SearchController;
 use App\Http\Controllers\Api\StateUsageController;
 use App\Http\Controllers\Api\SubscribersController;
 use App\Http\Controllers\Api\TokensController;
@@ -140,6 +141,8 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
     Route::get('views/{view}', [ViewsController::class, 'show']);
     Route::put('views/{view}', [ViewsController::class, 'update']);
     Route::delete('views/{view}', [ViewsController::class, 'destroy']);
+
+    Route::get('search', SearchController::class)->name('api.search');
 
     Route::get('favorites', [FavoritesController::class, 'index']);
     Route::post('favorites/toggle', [FavoritesController::class, 'toggle']);
