@@ -808,7 +808,7 @@ describe('Relations', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Relation hinzufügen' });
     expect(dialog.textContent).toContain('Wie hängt WEB-47 mit einem anderen Item zusammen?');
     // the list opens with the dialog, and the search field takes the focus
-    const search = await screen.findByPlaceholderText('Key oder Titel suchen …');
+    const search = await screen.findByPlaceholderText('Key, Titel oder Text suchen …');
     await waitFor(() => expect(document.activeElement).toBe(search));
     await user.keyboard('web-48');
     await screen.findByRole('option', { name: /Startseite umbauen/ });
@@ -831,7 +831,7 @@ describe('Relations', () => {
     renderWith(<ItemPage itemKey="WEB-47" />);
     await screen.findByRole('region', { name: 'Relationen' });
     press('r');
-    const search = await screen.findByPlaceholderText('Key oder Titel suchen …');
+    const search = await screen.findByPlaceholderText('Key, Titel oder Text suchen …');
     await waitFor(() => expect(document.activeElement).toBe(search));
     await user.keyboard('kontakt');
     expect(await screen.findByRole('option', { name: /Kontaktformular prüfen/ })).toBeTruthy();
@@ -849,7 +849,7 @@ describe('Relations', () => {
     });
     await screen.findByRole('region', { name: 'Relationen' });
     press('r');
-    const search = await screen.findByPlaceholderText('Key oder Titel suchen …');
+    const search = await screen.findByPlaceholderText('Key, Titel oder Text suchen …');
     await waitFor(() => expect(document.activeElement).toBe(search));
     await user.keyboard('startsiete');
     await screen.findByRole('option', { name: /Startseite umbauen/ });
@@ -861,7 +861,7 @@ describe('Relations', () => {
     renderWith(<ItemPage itemKey="WEB-47" />);
     await screen.findByRole('region', { name: 'Relationen' });
     press('r');
-    const search = await screen.findByPlaceholderText('Key oder Titel suchen …');
+    const search = await screen.findByPlaceholderText('Key, Titel oder Text suchen …');
     await waitFor(() => expect(document.activeElement).toBe(search));
     expect(await screen.findByText('Key oder Titel eingeben')).toBeTruthy();
     expect(screen.queryByRole('option')).toBeNull();
@@ -895,7 +895,7 @@ describe('Relations', () => {
     await screen.findByRole('region', { name: 'Relationen' });
     press('r');
     const dialog = await screen.findByRole('dialog', { name: 'Relation hinzufügen' });
-    const search = await screen.findByPlaceholderText('Key oder Titel suchen …');
+    const search = await screen.findByPlaceholderText('Key, Titel oder Text suchen …');
     await waitFor(() => expect(document.activeElement).toBe(search));
     await user.keyboard('ALT-48');
     // the key match leads the list under its current key, and Enter takes it
@@ -913,7 +913,7 @@ describe('Relations', () => {
     renderWith(<ItemPage itemKey="WEB-47" />);
     await screen.findByRole('region', { name: 'Relationen' });
     press('r');
-    const search = await screen.findByPlaceholderText('Key oder Titel suchen …');
+    const search = await screen.findByPlaceholderText('Key, Titel oder Text suchen …');
     await waitFor(() => expect(document.activeElement).toBe(search));
     await user.keyboard('web-47');
     expect(await screen.findByText('Kein Item passt.')).toBeTruthy();
@@ -930,7 +930,7 @@ describe('Relations', () => {
     await user.click(await screen.findByRole('button', { name: 'Weitere Aktionen' }));
     await user.click(await screen.findByRole('menuitem', { name: /Relation hinzufügen/ }));
     const dialog = await screen.findByRole('dialog', { name: 'Relation hinzufügen' });
-    const search = await screen.findByPlaceholderText('Key oder Titel suchen …');
+    const search = await screen.findByPlaceholderText('Key, Titel oder Text suchen …');
     await waitFor(() => expect(document.activeElement).toBe(search));
     await user.keyboard('impressum');
     await user.click(await screen.findByRole('option', { name: /Impressum aktualisieren/ }));
@@ -953,7 +953,7 @@ describe('Relations', () => {
     await screen.findByRole('region', { name: 'Relationen' });
     press('r');
     const dialog = await screen.findByRole('dialog', { name: 'Relation hinzufügen' });
-    const search = await screen.findByPlaceholderText('Key oder Titel suchen …');
+    const search = await screen.findByPlaceholderText('Key, Titel oder Text suchen …');
     await waitFor(() => expect(document.activeElement).toBe(search));
     await user.keyboard('e');
     // outward (WEB-47 becomes the source): both can be chosen
@@ -964,7 +964,7 @@ describe('Relations', () => {
     await user.click(await screen.findByRole('option', { name: 'wird blockiert von' }));
     // inward: the chosen item becomes the source, so it has to be one the person may change
     await user.click(within(dialog).getByRole('combobox', { name: 'Item: keins gewählt' }));
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByPlaceholderText('Key oder Titel suchen …')));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByPlaceholderText('Key, Titel oder Text suchen …')));
     await user.keyboard('e');
     const readOnly = await screen.findByRole('option', { name: /Mail-Limits/ });
     expect(readOnly.getAttribute('aria-disabled')).toBe('true');
@@ -985,7 +985,7 @@ describe('Relations', () => {
     const submit = within(dialog).getByRole('button', { name: 'Hinzufügen' });
 
     // without an item the form says what is missing
-    const search = await screen.findByPlaceholderText('Key oder Titel suchen …');
+    const search = await screen.findByPlaceholderText('Key, Titel oder Text suchen …');
     await waitFor(() => expect(document.activeElement).toBe(search));
     await user.keyboard('{Escape}');
     await user.click(submit);
@@ -994,7 +994,7 @@ describe('Relations', () => {
     await waitFor(() => expect(document.activeElement).toBe(trigger));
 
     await user.click(trigger);
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByPlaceholderText('Key oder Titel suchen …')));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByPlaceholderText('Key, Titel oder Text suchen …')));
     await user.keyboard('startseite');
     await user.click(await screen.findByRole('option', { name: /Startseite umbauen/ }));
     expect(within(dialog).queryByText('Wähle das Item, mit dem es zusammenhängt.')).toBeNull();
@@ -1027,7 +1027,7 @@ describe('Relations', () => {
     await screen.findByRole('region', { name: 'Relationen' });
     press('r');
     const dialog = await screen.findByRole('dialog', { name: 'Relation hinzufügen' });
-    await screen.findByPlaceholderText('Key oder Titel suchen …');
+    await screen.findByPlaceholderText('Key, Titel oder Text suchen …');
     await user.keyboard('{Escape}');
     await user.click(within(dialog).getByRole('button', { name: 'Hinzufügen' }));
     expect(await within(dialog).findByText('Wähle, wie die Items zusammenhängen.')).toBeTruthy();
@@ -1045,7 +1045,7 @@ describe('Relations', () => {
     await screen.findByRole('region', { name: 'Relationen' });
     press('r');
     const dialog = await screen.findByRole('dialog', { name: 'Relation hinzufügen' });
-    const search = await screen.findByPlaceholderText('Key oder Titel suchen …');
+    const search = await screen.findByPlaceholderText('Key, Titel oder Text suchen …');
     await waitFor(() => expect(document.activeElement).toBe(search));
     expect(within(dialog).getByText('Key oder Titel tippen, Enter wählt.')).toBeTruthy();
     await user.keyboard('startseite');
