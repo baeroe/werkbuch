@@ -1,6 +1,7 @@
 <?php
 
 use App\Exceptions\Problem;
+use App\Http\Controllers\Api\AttachmentsController;
 use App\Http\Controllers\Api\BotsController;
 use App\Http\Controllers\Api\FavoritesController;
 use App\Http\Controllers\Api\HistoryController;
@@ -28,6 +29,7 @@ use App\Http\Middleware\EnsureAccountIsActive;
 use App\Http\Middleware\EnsureSession;
 use App\Http\Middleware\EnsureTokenAbility;
 use App\Http\Middleware\RedirectFormerItemKey;
+use App\Models\Attachment;
 use App\Models\Project;
 use App\Models\View;
 use App\Models\WorkItem;
@@ -45,6 +47,9 @@ Route::bind('relation', fn (string $ref) => (Str::isUlid($ref) ? WorkItemRelatio
 // a view by its ULID (any case; anything else is no view); web routes name their parameter `{viewId}`, this binding is
 // global
 Route::bind('view', fn (string $ref) => (Str::isUlid($ref) ? View::query()->find(strtolower($ref)) : null) ?? throw Problem::notFound());
+// an attachment by its ULID (any case; anything else is no attachment), also for the file route of routes/web.php;
+// whether the account may read it, the action decides
+Route::bind('attachment', fn (string $ref) => (Str::isUlid($ref) ? Attachment::query()->find(strtolower($ref)) : null) ?? throw Problem::notFound());
 
 // The REST API (prefix api/v1, see bootstrap/app.php): the session of the interface (with CSRF) or a bearer token whose
 // abilities fit the method. Every route has a row in tests/Feature/Api/routes.php.
@@ -143,6 +148,10 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
     Route::delete('views/{view}', [ViewsController::class, 'destroy']);
 
     Route::get('search', SearchController::class)->name('api.search');
+
+    // multipart, the file under `file`; at most 60 uploads per minute and account
+    Route::post('attachments', [AttachmentsController::class, 'store'])->middleware('throttle:attachments');
+    Route::get('attachments/{attachment}', [AttachmentsController::class, 'show']);
 
     Route::get('favorites', [FavoritesController::class, 'index']);
     Route::post('favorites/toggle', [FavoritesController::class, 'toggle']);

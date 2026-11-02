@@ -62,6 +62,8 @@ jobs:
           php-version: '8.4'
           extensions: intl, zip, bcmath, pdo_mysql, gd
           coverage: pcov
+          # uploads up to ATTACHMENTS_MAX_MB (25) pass PHP; above it UploadAttachment answers 413
+          ini-values: upload_max_filesize=30M, post_max_size=32M
 
       # version comes from "packageManager" in package.json
       - uses: pnpm/action-setup@v4
@@ -156,6 +158,8 @@ jobs:
           php-version: '8.4'
           extensions: intl, zip, bcmath, pdo_mysql, gd
           coverage: none
+          # uploads up to ATTACHMENTS_MAX_MB (25) pass PHP; above it UploadAttachment answers 413
+          ini-values: upload_max_filesize=30M, post_max_size=32M
 
       - uses: pnpm/action-setup@v4
 

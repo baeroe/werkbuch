@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Attachment;
 use App\Models\Event;
 use App\Models\Invitation;
 use App\Models\Label;
@@ -51,4 +52,9 @@ it('maps the work item to its short name', function () {
 it('maps the view to its short name', function () {
     expect(Relation::getMorphedModel('view'))->toBe(View::class)
         ->and((new View)->getMorphClass())->toBe('view');
+});
+
+it('maps the attachment to its short name', function () {
+    expect(Relation::getMorphedModel('attachment'))->toBe(Attachment::class)
+        ->and((new Attachment)->getMorphClass())->toBe('attachment');
 });

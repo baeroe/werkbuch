@@ -7,6 +7,9 @@ use App\Actions\Account\DisableTwoFactor;
 use App\Actions\Account\EnableTwoFactor;
 use App\Actions\Account\GetTwoFactor;
 use App\Actions\Account\RegenerateRecoveryCodes;
+use App\Actions\Attachments\GetAttachment;
+use App\Actions\Attachments\ShowAttachment;
+use App\Actions\Attachments\UploadAttachment;
 use App\Actions\Favorites\ListFavorites;
 use App\Actions\Favorites\ToggleFavorite;
 use App\Actions\Invitations\InviteUser;
@@ -81,6 +84,7 @@ use App\Actions\WorkItemTypes\DeleteWorkItemType;
 use App\Actions\WorkItemTypes\ListWorkItemTypes;
 use App\Actions\WorkItemTypes\SaveWorkItemType;
 use App\Events\EventType;
+use App\Models\Attachment;
 use App\Models\Label;
 use App\Models\Property;
 use App\Models\RelationType;
@@ -90,6 +94,7 @@ use App\Models\Workflow;
 use App\Models\WorkItemRelation;
 use App\Models\WorkItemType;
 use App\Support\Actor;
+use Illuminate\Http\UploadedFile;
 use Laravel\Fortify\Actions\EnableTwoFactorAuthentication;
 use PragmaRX\Google2FA\Google2FA;
 use Tests\Feature\Access\MatrixWorld;
@@ -151,6 +156,30 @@ return [
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => UpdateOrganization::run($a, ['name' => 'Neu']),
         'allowed' => ['org_admin', 'default_bot'],
         'event' => EventType::OrganizationUpdated,
+    ],
+    // a file of the file list (`item.edit`); an upload into a text (`item.comment`, viewers too, A234) is
+    // UploadAttachmentTest's: one row per action (K10)
+    'UploadAttachment' => [
+        'action' => UploadAttachment::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => UploadAttachment::run($a, [
+            'project_id' => $w->project($column)->id, 'kind' => 'file', 'work_item_id' => $w->item($column)->id,
+        ], UploadedFile::fake()->createWithContent('matrix.txt', 'Matrix')),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::WorkItemUpdated,
+    ],
+    'GetAttachment' => [
+        'action' => GetAttachment::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetAttachment::run($a, Attachment::factory()->forItem($w->item($column))->create()),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    'ShowAttachment' => [
+        'action' => ShowAttachment::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ShowAttachment::run($a, Attachment::factory()->forItem($w->item($column))
+            ->stored((string) base64_decode(explode(',', imageDataUrl())[1]), 'image/png', 'matrix.png')->create()),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
     ],
     'ShowMedia' => [
         'action' => ShowMedia::class,

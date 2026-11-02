@@ -3,8 +3,10 @@
 namespace App\Exceptions;
 
 use App\Http\Api\ProblemResponse;
+use App\Models\Attachment;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Http\Exceptions\PostTooLargeException;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -29,6 +31,12 @@ final class Rendering
             ? ProblemResponse::from(new Problem(429, 'too_many_requests', errors: [
                 'current_password' => [__('auth.throttle', ['seconds' => (int) ($e->getHeaders()['Retry-After'] ?? 60)])],
             ]), false)->withHeaders($e->getHeaders())
+            : null);
+
+        // a body above `post_max_size` (ValidatePostSize, before any route): the 413 of an upload above the limit, which
+        // names the limit
+        $exceptions->render(fn (PostTooLargeException $e, Request $request) => $request->is('api/*')
+            ? ProblemResponse::from(Attachment::tooLarge(), false)
             : null);
 
         // every /api route answers with Problem Details; a response an exception already carries stays as it is

@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Attachment;
 use App\Models\Label;
 use App\Models\Property;
 use App\Models\RelationType;
@@ -7,6 +8,7 @@ use App\Models\Resolution;
 use App\Models\Workflow;
 use App\Models\WorkItemRelation;
 use App\Models\WorkItemType;
+use Illuminate\Http\UploadedFile;
 use Tests\Feature\Access\MatrixWorld;
 
 /*
@@ -95,6 +97,8 @@ return [
         'target_id' => $w->item('project_admin')->id,
     ])->id]],
     'search items, projects, people and views' => ['GET', '/api/v1/search'],
+    'upload an attachment' => ['POST', '/api/v1/attachments', 'body' => ['project_id' => 'WEB', 'kind' => 'inline', 'file' => UploadedFile::fake()->createWithContent('matrix.txt', 'Matrix')]],
+    'show an attachment' => ['GET', '/api/v1/attachments/{attachment}', 'params' => fn (MatrixWorld $w) => ['attachment' => Attachment::factory()->forItem($w->item('project_admin'))->create()->id]],
     'list views' => ['GET', '/api/v1/views'],
     'create a view' => ['POST', '/api/v1/views', 'body' => [
         'name' => 'Matrix', 'icon' => 'layers', 'filter' => ['version' => 1, 'conditions' => []],
