@@ -5,6 +5,9 @@ use App\Actions\Projects\ArchiveProject;
 use App\Actions\WorkItems\CreateWorkItem;
 use App\Actions\WorkItems\DeleteWorkItem;
 use App\Events\EventType;
+use App\Models\Attachment;
+use App\Models\Comment;
+use App\Models\CommentReaction;
 use App\Models\Event;
 use App\Models\Label;
 use App\Models\Project;
@@ -19,6 +22,8 @@ use App\Support\Actor;
 use App\Support\RelationSnapshot;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 /** WEB (the default workflow) with Mara as its admin and lead. */
 $web = function (): array {
@@ -176,4 +181,43 @@ it('snapshots a relation from either end and refuses an item that is no end', fu
         ->and(RelationSnapshot::of($relation, $target))->toBe(['relation_type_id' => $relates->id, 'direction' => 'inward', 'label' => $relates->outward_label, 'item_id' => $source->id])
         ->and(RelationSnapshot::of($relation, $source)['direction'])->toBe('outward')
         ->and(fn () => RelationSnapshot::of($relation, WorkItem::factory()->for($project)->create()))->toThrow(InvalidArgumentException::class, 'is no end of relation');
+});
+
+it('removes the files of the item and of its comments after the commit', function () use ($web) {
+    Storage::fake('local');
+    [$project, $mara] = $web();
+    $item = WorkItem::factory()->for($project)->create();
+    $other = WorkItem::factory()->for($project)->create();
+    $comment = Comment::factory()->create(['work_item_id' => $item->id, 'author_id' => $mara->id]);
+    CommentReaction::query()->create(['comment_id' => $comment->id, 'user_id' => $mara->id, 'emoji' => '👍']);
+    $stored = fn (string $name) => Attachment::factory()->stored('Inhalt', 'text/plain', $name)->state(['uploaded_by' => $mara->id]);
+    $gone = [
+        $stored('bild.png')->forItem($item)->create(),
+        $stored('angebot.txt')->forItem($item, 'file')->create(),
+        $stored('skizze.png')->create(['project_id' => $project->id, 'attachable_type' => $comment->getMorphClass(), 'attachable_id' => $comment->id]),
+    ];
+    $kept = [
+        $stored('andere.png')->forItem($other)->create(),
+        // an upload nobody owns yet is not the item's, even in its project
+        $stored('entwurf.png')->create(['project_id' => $project->id]),
+    ];
+    $path = fn (Attachment $attachment) => (string) $attachment->getFirstMedia('file')?->getPathRelativeToRoot();
+    $paths = array_map($path, $gone);
+    // the deletion is the last write of the transaction: the files are still there then
+    $during = null;
+    Event::created(function (Event $event) use (&$during, $paths) {
+        if ($event->type === EventType::WorkItemDeleted) {
+            $during = array_map(fn (string $file) => Storage::disk('local')->exists($file), $paths);
+        }
+    });
+
+    DeleteWorkItem::run(actor($mara), $item);
+
+    expect($during)->toBe([true, true, true])
+        ->and(array_map(fn (string $file) => Storage::disk('local')->exists($file), $paths))->toBe([false, false, false])
+        ->and(Attachment::query()->orderBy('filename')->pluck('filename')->all())->toBe(['andere.png', 'entwurf.png'])
+        ->and(Media::query()->pluck('model_id')->sort()->values()->all())->toBe(collect($kept)->pluck('id')->sort()->values()->all())
+        ->and(array_map(fn (Attachment $attachment) => Storage::disk('local')->exists($path($attachment)), $kept))->toBe([true, true])
+        ->and(Comment::query()->count())->toBe(0)
+        ->and(CommentReaction::query()->count())->toBe(0);
 });

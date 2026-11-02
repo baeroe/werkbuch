@@ -3,9 +3,11 @@
 namespace App\Actions\Projects;
 
 use App\Access\Visibility;
+use App\Models\Attachment;
 use App\Models\Favorite;
 use App\Models\Project;
 use App\Support\Actor;
+use App\Support\AttachmentFiles;
 use Illuminate\Support\Facades\DB;
 use LogicException;
 use Lorisleiva\Actions\Concerns\AsAction;
@@ -15,9 +17,11 @@ use Spatie\MediaLibrary\MediaCollections\Models\Media;
 /**
  * Removes a project that DeleteProject marked (`deleting_at`), run by the job App\Jobs\PurgeProject: the roles in it
  * (spatie's rows of the team = project, which have no foreign key), favorites, memberships, former identifiers, its
- * media and the project itself. Its work items go with the project by cascade (`work_items.project_id`), and with them
- * their values, labels, subscriptions and relations, also those to items of other projects, without an event at the
- * other end (A26). Its events stay (P10). Later phases add their data here (pages, attachments).
+ * media, the files of its attachments (also uploads nobody owns yet; AttachmentFiles, after the commit) and the project
+ * itself. Its work items go with the project by cascade (`work_items.project_id`), and with them their values, labels,
+ * subscriptions, comments and relations, also those to items of other projects, without an event at the other end
+ * (A26); the attachment rows go by cascade too (`attachments.project_id`). Its events stay (P10). Later phases add
+ * their data here (pages).
  *
  * The one writing action without an event of its own: it only cleans up after `project.deleted` (P26).
  */
@@ -44,6 +48,9 @@ final class PurgeProject
             $media = $project->media()->get();
             $media->each(fn (Media $item) => $item->deleteQuietly());
             DB::afterCommit(fn () => $media->each(fn (Media $item) => app(Filesystem::class)->removeAllFiles($item)));
+
+            // the media rows of the attachments would stay without an owner after the cascade (K12)
+            AttachmentFiles::removeAfterCommit(Attachment::query()->where('project_id', $project->id)->select('id')->get());
 
             $project->deletePreservingMedia();
         });

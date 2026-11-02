@@ -10,6 +10,8 @@ use App\Actions\WorkItems\CreateWorkItem;
 use App\Events\EventType;
 use App\Exceptions\Problem;
 use App\Jobs\PurgeProject;
+use App\Models\Attachment;
+use App\Models\Comment;
 use App\Models\Event;
 use App\Models\Favorite;
 use App\Models\Label;
@@ -94,6 +96,31 @@ it('purges the project and everything that hangs on it, keeping its events', fun
         ->and($deleted->actor_id)->toBe($admin->id)
         ->and($deleted->meta)->toMatchArray(['identifier' => 'WEB', 'name' => 'Website'])
         ->and(Event::query()->where('project_id', $web->id)->count())->toBeGreaterThan(1);
+});
+
+it('purges the files of the project, also unowned uploads', function () {
+    [$web, $admin] = projectToDelete();
+    $other = CreateProject::run(actor($admin), ['name' => 'Andere', 'identifier' => 'APP']);
+    $item = WorkItem::factory()->for($web)->create();
+    $comment = Comment::factory()->create(['work_item_id' => $item->id, 'author_id' => $admin->id]);
+    $stored = fn (string $name) => Attachment::factory()->stored('Inhalt', 'text/plain', $name)->state(['uploaded_by' => $admin->id]);
+    $gone = [
+        $stored('bild.png')->forItem($item)->create(),
+        $stored('angebot.txt')->forItem($item, 'file')->create(),
+        $stored('skizze.png')->create(['project_id' => $web->id, 'attachable_type' => $comment->getMorphClass(), 'attachable_id' => $comment->id]),
+        $stored('entwurf.png')->create(['project_id' => $web->id]),
+    ];
+    $kept = $stored('andere.png')->create(['project_id' => $other->id]);
+    $path = fn (Attachment $attachment) => (string) $attachment->getFirstMedia('file')?->getPathRelativeToRoot();
+    $paths = array_map($path, $gone);
+
+    $this->actingAs($admin)->deleteJson('/api/v1/projects/WEB')->assertStatus(202);
+
+    expect(array_map(fn (string $file) => Storage::disk('local')->exists($file), $paths))->toBe([false, false, false, false])
+        ->and(Attachment::query()->sole()->id)->toBe($kept->id)
+        ->and(Media::query()->sole()->model_id)->toBe($kept->id)
+        ->and(Storage::disk('local')->exists($path($kept)))->toBeTrue()
+        ->and(Comment::query()->count())->toBe(0);
 });
 
 it('removes the items of the project with their values, labels, relations to other projects and subscriptions, and keeps the events', function () {

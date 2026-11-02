@@ -9,6 +9,8 @@ use App\Actions\Account\GetTwoFactor;
 use App\Actions\Account\RegenerateRecoveryCodes;
 use App\Actions\Attachments\DeleteAttachment;
 use App\Actions\Attachments\GetAttachment;
+use App\Actions\Attachments\PruneAttachments;
+use App\Actions\Attachments\PruneUnownedAttachments;
 use App\Actions\Attachments\ShowAttachment;
 use App\Actions\Attachments\UploadAttachment;
 use App\Actions\Comments\AddComment;
@@ -202,6 +204,26 @@ return [
             ->stored((string) base64_decode(explode(',', imageDataUrl())[1]), 'image/png', 'matrix.png')->create()),
         'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
         'hidden' => ['outsider_private'],
+    ],
+    // the work of the hourly job PruneUnownedAttachmentsJob: uploads nobody owns, older than a day, without an event (A239)
+    'PruneUnownedAttachments' => [
+        'action' => PruneUnownedAttachments::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            Attachment::factory()->create(['project_id' => $w->web->id, 'uploaded_by' => $w->account('project_member')->id, 'created_at' => now()->subDays(2)]);
+
+            return PruneUnownedAttachments::run($a, now()->subDay());
+        },
+        'system' => true,
+    ],
+    // the work of app:prune-attachments: pictures their text no longer names, without an event (A239)
+    'PruneAttachments' => [
+        'action' => PruneAttachments::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            Attachment::factory()->forItem($w->item('project_member'))->create(['uploaded_by' => $w->account('project_member')->id, 'created_at' => now()->subDays(2)]);
+
+            return PruneAttachments::run($a, 1, false);
+        },
+        'system' => true,
     ],
     'ShowMedia' => [
         'action' => ShowMedia::class,
