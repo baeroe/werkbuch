@@ -245,14 +245,16 @@ final class WorkItem extends Model
     }
 
     /**
-     * What toSearchableArray() reads, loaded with the query of a rebuild (makeAllSearchableQuery()).
+     * What toSearchableArray() reads, loaded with the query of a rebuild (makeAllSearchableQuery()). Items of a project
+     * being deleted stay out: a reindex after removeProject() would bring their documents back for good (K11).
      *
      * @param  Builder<self>  $query
      * @return Builder<self>
      */
     protected function makeAllSearchableUsing(Builder $query): Builder
     {
-        return $query->with(['project:id,identifier', 'labels:labels.id', 'state:id,category']);
+        return $query->with(['project:id,identifier', 'labels:labels.id', 'state:id,category'])
+            ->whereIn('work_items.project_id', Project::query()->whereNull('deleting_at')->select('id'));
     }
 
     /**

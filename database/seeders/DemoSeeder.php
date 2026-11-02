@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Search\SearchIndexer;
 use Database\Seeders\Demo\ActivitySeeder;
 use Database\Seeders\Demo\BotsSeeder;
 use Database\Seeders\Demo\CatalogSeeder;
@@ -18,7 +19,8 @@ use RuntimeException;
 
 /**
  * Fictional demo data of the Feldwerk team, taken from the clickdummy. Safe to run again: every seeder updates by a
- * stable key. Each phase appends its own seeder to the list in run().
+ * stable key. Each phase appends its own seeder to the list in run(). The search index is built anew at the end (the
+ * seeders write rows directly, no event reaches the search consumer).
  */
 class DemoSeeder extends Seeder
 {
@@ -44,5 +46,7 @@ class DemoSeeder extends Seeder
             ItemsSeeder::class,
             ActivitySeeder::class,
         ]);
+
+        app(SearchIndexer::class)->rebuild();
     }
 }
