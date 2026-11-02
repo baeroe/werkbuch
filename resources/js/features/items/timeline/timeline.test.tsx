@@ -176,6 +176,15 @@ const pointerUp = (init: PointerEventInit = {}) => act(() => void fireEvent.poin
 /** The rows of the timeline can be changed once the rights are known: the grips show. */
 const editable = (id: string) => waitFor(() => expect(barOf(id).querySelector('[data-edge="due"]')).toBeTruthy());
 
+/** The organisation of the test in another zone or with another first weekday, back to the fixture after it. */
+function inZone(changes: Partial<typeof organization>) {
+  const before = { ...organization };
+  Object.assign(organization, changes);
+  onTestFinished(() => {
+    Object.assign(organization, before);
+  });
+}
+
 /** Focuses an epic's row, the cursor goes with it. */
 async function focusRow(key: string) {
   const element = await findRow(key);
@@ -423,18 +432,22 @@ describe('the timeline', () => {
   });
 
   it('draws today in the zone of the organisation', async () => {
-    // 23:30 in UTC is already the next day in Berlin
-    vi.setSystemTime(new Date('2026-10-28T23:30:00Z'));
+    // neither Berlin nor UTC: 03:30 in UTC is still the day before in Los Angeles
+    inZone({ timezone: 'America/Los_Angeles' });
+    vi.setSystemTime(new Date('2026-10-29T03:30:00Z'));
     renderTimeline();
     await findRow('WEB-30');
-    expect(document.querySelector('[data-today]')!.textContent).toBe('Heute 29.10.');
+    expect(document.querySelector('[data-today]')!.textContent).toBe('Heute 28.10.');
   });
 
   it('begins the weeks on the first weekday of the organisation', async () => {
+    // not the Monday of the fixture: the axis begins on a Sunday
+    inZone({ week_start: 0 });
     renderTimeline('/my-items?layout=timeline&zoom=week');
     await findRow('WEB-30');
-    // a week from Monday: 2026-10-26 starts one
-    expect(screen.getByText('Mo 26')).toBeTruthy();
+    // a week before the earliest epic (Thursday 2026-09-24), from the Sunday of its week; from Monday it would be the 21st
+    const days = [...document.querySelectorAll('[data-timeline-axis] span.tabular-nums')].map((day) => day.textContent);
+    expect(days.slice(0, 2)).toEqual(['So 20', 'Mo 21']);
   });
 
   it('renders only the rows in view of 300 epics', async () => {

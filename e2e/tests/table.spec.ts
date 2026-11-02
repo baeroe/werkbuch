@@ -112,10 +112,13 @@ test('scrolls a long table freely while the cell of the cursor stays rendered', 
     await box.evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
     await expect(cell(page, items.at(-1)!.id, 0)).toBeInViewport();
     await settle();
-    const end = await view('[data-cell]');
-    expect(end.cell).toBe(true);
-    expect(end.top).toBeGreaterThan(0);
-    expect(Math.abs(end.top - end.end)).toBeLessThanOrEqual(1);
+    // measured until the rows have settled, not once
+    await expect
+      .poll(async () => {
+        const end = await view('[data-cell]');
+        return { cell: end.cell, scrolled: end.top > 0, atEnd: Math.abs(end.top - end.end) <= 1 };
+      })
+      .toEqual({ cell: true, scrolled: true, atEnd: true });
     await expect(cell(page, items.at(-1)!.id, 0)).toBeInViewport();
     // the cursor kept its cell and its focus
     await expect(cell(page, items[0]!.id, 0)).toBeFocused();
@@ -127,9 +130,12 @@ test('scrolls a long table freely while the cell of the cursor stays rendered', 
     });
     await expect(cell(page, items[29]!.id, 0)).toBeInViewport();
     await settle();
-    const halfway = await view('[data-cell]');
-    expect(halfway.cell).toBe(true);
-    expect(Math.abs(halfway.top - middle)).toBeLessThanOrEqual(2);
+    await expect
+      .poll(async () => {
+        const halfway = await view('[data-cell]');
+        return { cell: halfway.cell, stays: Math.abs(halfway.top - middle) <= 2 };
+      })
+      .toEqual({ cell: true, stays: true });
     await expect(cell(page, items[29]!.id, 0)).toBeInViewport();
     await expect(cell(page, items[0]!.id, 0)).toBeFocused();
   } finally {

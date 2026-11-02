@@ -118,6 +118,8 @@ test.beforeAll(async ({ browser }, workerInfo) => {
 });
 
 test.afterAll(async ({ browser }) => {
+  // nothing to remove when beforeAll failed before the project existed: that failure is the one to read
+  if (!shared) return;
   const page = await browser.newPage();
   await page.goto('/my-items');
   await removeE2eProject(page, shared.identifier);

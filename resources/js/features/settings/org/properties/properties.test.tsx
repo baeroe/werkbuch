@@ -9,7 +9,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { currentToasts, dismissToast, resetToasts } from '@/components/ui/toast';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import { lene, list, organization, properties, types } from '@/test/fixtures';
@@ -897,6 +897,9 @@ describe('Properties usage', () => {
       if (init?.method === 'DELETE') await deleting;
       return inner(input, init);
     };
+    onTestFinished(() => {
+      globalThis.fetch = inner;
+    });
 
     await within(await rowOf('Aufwand (h)')).findByText('2 Items');
     await user.click(within(await rowOf('Aufwand (h)')).getByRole('button', { name: 'Property „Aufwand (h)“ löschen' }));
@@ -912,7 +915,6 @@ describe('Properties usage', () => {
     expect(within(screen.getByRole('heading', { name: 'Kunde', hidden: true }).closest('li')!).getByText('2 Items')).toBeTruthy();
     await act(async () => release());
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
-    globalThis.fetch = inner;
   });
 
   it('does not name a number in the question while there is none', async () => {

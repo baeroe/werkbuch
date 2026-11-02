@@ -146,7 +146,7 @@ let views: View[];
 /** The server answers a status grouping with categories (the items span several workflows). */
 let fallBack: boolean;
 /** What answers 503 for now. */
-let failing: Set<'groups' | 'project' | 'view' | 'progress' | 'more'>;
+let failing: Set<'groups' | 'project' | 'view' | 'progress' | 'more' | 'properties'>;
 /** How many items a page of the fake holds. */
 let pageSize: number;
 let api: MockApi | undefined;
@@ -236,7 +236,7 @@ beforeEach(() => {
     'GET /api/v1/users': () => ({ body: list([mara, lene]) }),
     'GET /api/v1/labels': () => ({ body: list(labels) }),
     'GET /api/v1/work-item-types': () => ({ body: list(types) }),
-    'GET /api/v1/properties': () => ({ body: list(properties) }),
+    'GET /api/v1/properties': () => (failing.has('properties') ? UNAVAILABLE : { body: list(properties) }),
     'GET /api/v1/favorites': () => ({ body: list([]) }),
     'GET /api/v1/views/v_due_week': () => {
       if (failing.has('view')) return UNAVAILABLE;
@@ -734,6 +734,19 @@ describe('the item list screen', () => {
     expect(screen.getByText('Kontaktformular sendet doppelt')).toBeTruthy();
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(useUiStore.getState().selection).toEqual(['wi_web_1']);
+  });
+
+  it('sends a property condition as it is when the properties cannot be loaded, and lists what the server answers', async () => {
+    failing.add('properties');
+    const condition: Condition = { field: 'property:customer', op: 'is', value: 'opt_nordlicht' };
+    inertia.go(`/projects/WEB?filter=${filterOf([condition])}`);
+    renderScreen();
+
+    // the server decides: the condition goes out unchanged, and the rows it answers stand
+    expect(await screen.findByText('Kontaktformular sendet doppelt')).toBeTruthy();
+    expect(groupBodies().at(-1)?.filter?.conditions).toContainEqual(condition);
+    expect(queryBodies().at(-1)?.filter?.conditions).toContainEqual(condition);
+    expect(screen.queryByText('Die Items konnten nicht geladen werden')).toBeNull();
   });
 
   it('offers to try again when the list cannot be loaded', async () => {

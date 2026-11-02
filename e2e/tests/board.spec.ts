@@ -88,6 +88,10 @@ test('changes the place of a card in its column with alt+arrow and keeps the foc
     await page.keyboard.press('Alt+ArrowUp');
     await expect(order().first()).toHaveAccessibleName(new RegExp(`^${first} `));
     await expect(card(page, 'Todo', first)).toBeFocused();
+    // landed before the next move goes out
+    await expect(page.getByRole('status', { name: tr('en', 'items.board.announcements') })).toHaveText(
+      tr('en', 'items.board.moved.place', { key: first, place: 1, count: 2, column: 'Todo' }),
+    );
 
     // the server has the order
     await page.keyboard.press('Alt+ArrowDown');

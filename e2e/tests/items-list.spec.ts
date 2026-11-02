@@ -40,17 +40,21 @@ async function openList(page: Page, identifier: string) {
 }
 
 // one project for the tests that only read it: every item created is an event the queue worker of DDEV handles one
-// at a time, and a mail of another spec waits behind them
-let shared: { id: string; identifier: string };
+// at a time, and a mail of another spec waits behind them. Named per worker: a worker that starts again after a failed
+// test runs `beforeAll` once more, and the project of the first one would hold the identifier
+let shared: { id: string; identifier: string; name: string };
 
-test.beforeAll(async ({ browser }) => {
+test.beforeAll(async ({ browser }, workerInfo) => {
   const page = await browser.newPage();
   await page.goto('/my-items');
-  shared = await projectWithItems(page, 'shared');
+  const what = `shared ${workerInfo.workerIndex}`;
+  shared = { ...(await projectWithItems(page, what)), name: name(what) };
   await page.close();
 });
 
 test.afterAll(async ({ browser }) => {
+  // nothing to remove when beforeAll failed before the project existed
+  if (!shared) return;
   const page = await browser.newPage();
   await page.goto('/my-items');
   await removeE2eProject(page, shared.identifier);
@@ -60,7 +64,7 @@ test.afterAll(async ({ browser }) => {
 test('lists the items of a project grouped by status, with the counts of the server', async ({ page }) => {
   const { identifier } = shared;
   await page.goto(`/projects/${identifier}`);
-  await expect(page.getByRole('heading', { level: 1, name: name('shared') })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: shared.name })).toBeVisible();
   await expect(heading(page, 'Backlog', 20)).toBeVisible();
   await expect(heading(page, 'In Progress', 10)).toBeVisible();
   // the rows in their manual order
