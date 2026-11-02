@@ -139,6 +139,14 @@ jobs:
         ports:
           - 1025:1025
           - 8025:8025
+      # the search of the specs: the same image and key as in the job `tests`
+      meilisearch:
+        image: getmeili/meilisearch:v1.56.0@sha256:1f578fa865f8251894b3bf38d6668d6209a3f451f8f65ab953e129d4c1db5ef4
+        env:
+          MEILI_MASTER_KEY: ci-werkbuch-master-key
+          MEILI_NO_ANALYTICS: 'true'
+        ports:
+          - 7700:7700
 
     steps:
       - uses: actions/checkout@v4
@@ -177,8 +185,14 @@ jobs:
       - name: Environment
         run: cp e2e/ci.env .env && php artisan key:generate
 
+      - name: Meilisearch
+        run: curl -fsS --retry 30 --retry-delay 1 --retry-all-errors http://127.0.0.1:7700/health
+
       - name: Migrate
         run: php artisan migrate --force
+
+      - name: Search settings
+        run: php artisan app:search-sync
 
       - name: pnpm install
         run: pnpm install --frozen-lockfile
@@ -197,9 +211,9 @@ jobs:
           curl -fsS --retry 30 --retry-delay 1 --retry-all-errors http://127.0.0.1:8000/up
 
       # QUEUE_CONNECTION=database as in production: the worker runs the queued jobs (the reset mail goes out on the
-      # queue `notifications`) like the `queue` daemon of DDEV
+      # queue `notifications`, the search consumer works in the queue `search`) like the `queue` daemon of DDEV
       - name: Queue worker
-        run: php artisan queue:work --queue=default,notifications --sleep=1 --tries=3 > queue.log 2>&1 &
+        run: php artisan queue:work --queue=default,notifications,search --sleep=1 --tries=3 > queue.log 2>&1 &
 
       - name: Playwright
         run: |

@@ -505,3 +505,38 @@ export async function createProjectFromSidebar(page: Page, name: string): Promis
   await expect(page.getByRole('list', { name: tr('en', 'projects.list_label') }).getByRole('listitem').filter({ hasText: name })).toBeVisible();
   return identifier;
 }
+
+/**
+ * A word of eight lowercase letters that is the same for every item of this run and variant (the variants share one
+ * search index): derived from `sha1(runId:variant)`, digits mapped to letters so Meilisearch reads it as one word.
+ */
+export function searchToken(): string {
+  const hex = createHash('sha1').update(`${runId()}:${variant()}`).digest('hex').slice(0, 8);
+  return hex.replace(/[0-9]/g, (digit) => 'ghijklmnop'[Number(digit)]);
+}
+
+export type SearchData = {
+  items: { id: string; key: string; title: string }[];
+  projects: { id: string; identifier: string }[];
+  people: { id: string }[];
+  views: { id: string }[];
+  key_match: string | null;
+};
+
+/** Asks `GET /api/v1/search?q=` every 250 ms until `found` holds (the index follows the queue); fails with the last answer. */
+export async function waitForSearch(page: Page, q: string, found: (data: SearchData) => boolean, timeout = 20_000): Promise<SearchData> {
+  const until = Date.now() + timeout;
+  let last: SearchData | string = 'no answer';
+  for (;;) {
+    const response = await api(page, 'GET', `/api/v1/search?q=${encodeURIComponent(q)}`);
+    if (response.status() === 200) {
+      const body = (await response.json()) as { data: SearchData };
+      last = body.data;
+      if (found(last)) return last;
+    } else {
+      last = `${response.status()} ${await response.text()}`;
+    }
+    if (Date.now() > until) throw new Error(`waitForSearch "${q}" found nothing after ${timeout} ms: ${JSON.stringify(last)}`);
+    await page.waitForTimeout(250);
+  }
+}
