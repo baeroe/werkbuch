@@ -303,6 +303,7 @@ function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: P
       display: { ...state.display, group_by: data.groupBy },
       total: data.total,
       ...(project && { project }),
+      ...(createDefaults && { createDefaults }),
       selection,
       onSelect: setSelection,
       onSelectAll: () => void selectAll(),

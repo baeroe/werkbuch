@@ -89,6 +89,9 @@ export const test = base.extend<{ allowedErrors: RegExp[]; pageErrors: string[];
 
       await context.exposeBinding('__werkbuchCoverage', (_source, coverage: Coverage) => write(coverage));
       await context.addInitScript((key) => {
+        // only documents of the app have counters and a storage: `about:blank` (where a spec leaves the app) has neither,
+        // and reading its sessionStorage throws
+        if (!location.protocol.startsWith('http')) return;
         window.addEventListener('pagehide', () => {
           if (!window.__coverage__) return;
           // sessionStorage holds about 5 MB: a larger `__coverage__` (the editor's) must turn the test red, not lose its

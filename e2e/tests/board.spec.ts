@@ -1,10 +1,11 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
 import { allEntries, createE2eProject, createItem, removeE2eProject, runId, tabTo, tr, variant } from '../helpers';
 
 // The board of a project with the agency workflow (Agentur-Freigabe: Backlog → Todo → In Progress → Review →
-// Kundenfreigabe → Done), with the keyboard only, signed in as the e2e person (playwright.config.ts), in English. Each
-// test works in a project of its own (`E2E …`, removed after it) with one or two items over the API.
+// Kundenfreigabe → Done), signed in as the e2e person (playwright.config.ts), in English. Each test works in a project
+// of its own (`E2E …`, removed after it) with one or two items over the API. Moves and the quick add go with the
+// keyboard only; the drags with the mouse, on a screen wide enough for every column up to Done.
 
 const name = (what: string) => `E2E board ${what} ${variant()} ${runId()}`;
 
@@ -96,6 +97,103 @@ test('changes the place of a card in its column with alt+arrow and keeps the foc
     );
     await page.reload();
     await expect(order().first()).toHaveAccessibleName(new RegExp(`^${second} `));
+  } finally {
+    await removeE2eProject(page, identifier);
+  }
+});
+
+/** Drags a card with the mouse: pressed, past the 5 px that start a drag, then over the target in steps, let go. */
+async function dragCard(page: Page, from: Locator, to: Locator) {
+  const start = (await from.boundingBox())!;
+  const end = (await to.boundingBox())!;
+  await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(start.x + start.width / 2 + 12, start.y + start.height / 2 + 6, { steps: 4 });
+  await page.mouse.move(end.x + end.width / 2, end.y + 160, { steps: 20 });
+  await page.mouse.up();
+}
+
+test.describe('with the mouse on a wide screen', () => {
+  test.use({ viewport: { width: 1920, height: 1080 } });
+
+  test('drags a card from Todo to Done and gets it back with the reason', async ({ page }) => {
+    await page.goto('/my-items');
+    const { identifier, key } = await boardProject(page, 'drag refuse');
+    try {
+      await page.goto(`/projects/${identifier}?layout=board`);
+      await expect(card(page, 'Todo', key)).toBeVisible();
+      await expect(column(page, 'Done')).toBeInViewport();
+
+      // the agency workflow leads from Todo to In Progress only (Flow 2)
+      await dragCard(page, card(page, 'Todo', key), column(page, 'Done'));
+      const toast = page.getByRole('status').filter({ hasText: tr('en', 'items.board.not_moved', { key }) });
+      await expect(toast).toContainText(tr('en', 'items.board.reason.transition', { from: 'Todo', to: 'Done', workflow: 'Agentur-Freigabe' }));
+      await expect(card(page, 'Todo', key)).toBeVisible();
+      await expect(card(page, 'Done', key)).toHaveCount(0);
+      await expect(card(page, 'Todo', key)).toBeFocused();
+
+      await page.reload();
+      await expect(card(page, 'Todo', key)).toBeVisible();
+    } finally {
+      await removeE2eProject(page, identifier);
+    }
+  });
+
+  test('drags a card to In Progress and keeps it there after reload', async ({ page }) => {
+    await page.goto('/my-items');
+    const { identifier, key } = await boardProject(page, 'drag move');
+    try {
+      await page.goto(`/projects/${identifier}?layout=board`);
+      await expect(card(page, 'Todo', key)).toBeVisible();
+
+      await dragCard(page, card(page, 'Todo', key), column(page, 'In Progress'));
+      await expect(card(page, 'In Progress', key)).toBeVisible();
+      await expect(card(page, 'Todo', key)).toHaveCount(0);
+      // the card in its new column has the focus, the keys go on from there
+      await expect(card(page, 'In Progress', key)).toBeFocused();
+      await expect(page.getByRole('status', { name: tr('en', 'items.board.announcements') })).toHaveText(
+        tr('en', 'items.board.moved.state', { key, state: 'In Progress' }),
+      );
+
+      // the server has it
+      await page.reload();
+      await expect(card(page, 'In Progress', key)).toBeVisible();
+    } finally {
+      await removeE2eProject(page, identifier);
+    }
+  });
+});
+
+test('creates an item with the quick add of a column', async ({ page }) => {
+  await page.goto('/my-items');
+  const { identifier, key } = await boardProject(page, 'quick add');
+  const title = `Quick ${runId()}`;
+  try {
+    await page.goto(`/projects/${identifier}?layout=board`);
+    await expect(card(page, 'Todo', key)).toBeVisible();
+    const add = column(page, 'Todo').getByRole('button', { name: tr('en', 'items.board.quick_add.open', { column: 'Todo' }) });
+    await tabTo(page, add, { max: 80 });
+    await page.keyboard.press('Enter');
+
+    const field = page.getByRole('textbox', { name: tr('en', 'items.board.quick_add.label', { column: 'Todo' }) });
+    await expect(field).toBeFocused();
+    await page.keyboard.type(title);
+    await page.keyboard.press('Enter');
+    const made = column(page, 'Todo').getByRole('article', { name: new RegExp(`^${identifier}-2 ${title}`) });
+    await expect(made).toBeVisible();
+    await expect(page.getByRole('status', { name: tr('en', 'items.board.announcements') })).toHaveText(
+      tr('en', 'items.board.created', { key: `${identifier}-2`, column: 'Todo' }),
+    );
+    // ready for the next one; Escape closes it and gives the focus back to the "+"
+    await expect(field).toHaveValue('');
+    await expect(field).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(field).toHaveCount(0);
+    await expect(add).toBeFocused();
+
+    // the server has it, in Todo
+    await page.reload();
+    await expect(made).toBeVisible();
   } finally {
     await removeE2eProject(page, identifier);
   }

@@ -15,6 +15,8 @@ export interface BoardColumnData {
   key: string;
   label: string;
   count: number;
+  /** The parent of a parent column, as the server named it. */
+  item?: GroupData['item'];
   items: ListedItem[];
   /** The ids of the cards in their order. */
   ids: string[];
@@ -45,6 +47,7 @@ export function useBoardColumns({ groups }: Pick<LayoutProps, 'groups'>): BoardC
         key: group.key,
         label: group.label,
         count: group.count,
+        item: group.item,
         items: group.items,
         ids: group.items.map((item) => item.id),
         status: group.status,

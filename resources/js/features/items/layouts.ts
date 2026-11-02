@@ -12,7 +12,8 @@
  *   next page, `retry()` for the page that failed. Without grouping there is one group with the key `all`.
  * - `groupBy`: the grouping that holds (`ItemGroups.group_by`: `state` became `category` when the items span several
  *   workflows, P14). `display`: the display as applied (fields, sort, sub-items). `total`: every match of the list.
- *   `project`: the project of a project list.
+ *   `project`: the project of a project list. `createDefaults`: what a new item of the list gets (`openCreate`; Meine
+ *   Items: assigned to me), for the quick add of a board.
  * - `selection` / `onSelect(ids)`: the selected ids. `onSelectAll()` (⌘A) selects every item of the list, also those of
  *   pages not loaded yet; pass it on to `useSelection`.
  * - `cursorId` / `onCursor(id)`: the item under the keyboard cursor; the item commands of the list act on it. Report
@@ -31,6 +32,7 @@ import { lazy, type ComponentType } from 'react';
 import type { ApiError } from '@/api/client';
 import type { TranslationKey } from '@/lib/i18n';
 import type { ShortcutId } from '@/lib/shortcuts/catalog';
+import type { CreateDefaults } from '@/store/ui';
 import type { Display, GroupBy, GroupCount, ListedItem, Project } from '@/types';
 import { ListLayout } from './list/ListLayout';
 
@@ -66,6 +68,7 @@ export interface LayoutProps {
   display: Display;
   total: number;
   project?: Project;
+  createDefaults?: CreateDefaults;
   selection: string[];
   onSelect(ids: string[]): void;
   /** ⌘A: every item of the list, also those not loaded yet (the screen loads them first). */

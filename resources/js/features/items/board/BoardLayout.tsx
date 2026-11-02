@@ -15,30 +15,43 @@
  *   (`useBoardKeys`; the four moves are palette commands as well). The rest of the list keys (x, ⇧X, ⌘A, Esc, Enter,
  *   space) come from `useSelection`, the item commands (s, a, p …) from the screen. A refused move says why in a toast
  *   and moves nothing; a move gets no success toast, a polite status line says it. The moved card keeps the focus.
+ * - Pointer (`useBoardDrag`): a card dragged to another column moves like ⇧←/⇧→ (the same rules and the same
+ *   `applyMove`), dropped within its column sorted by rank it gets the rank between its neighbours like ⌥↑/⌥↓. A
+ *   refused drop springs back and a toast says why; Escape cancels the drag and keeps the selection.
+ * - Quick add (`QuickAdd`): the "+" of a column makes an item with the column's value (`quickAddFields`) in the project
+ *   of the list, else in one of the projects on the board (the most cards first). The new card lights up and comes into
+ *   view; one the filter leaves out says so in a toast.
  * - Exactly one card is the tab stop: the cursor's, else the first card of the first column with cards.
- *
- * Dragging and the quick add of a column come with task 19.
  */
 
+import { DndContext, DragOverlay } from '@dnd-kit/core';
+import { useQueryClient } from '@tanstack/react-query';
+import { Ban } from 'lucide-react';
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { archivedReason } from '@/components/fields/itemData';
+import { ItemCard } from '@/components/items/ItemCard';
 import { priorityName } from '@/components/ui/PriorityIcon';
 import { currentToasts, dismissToast, toast, type ToastOptions } from '@/components/ui/toast';
-import { assignBlocker, boardLockReason, checkMove, nearestAllowed, rankForSlot, type BoardReason, type BoardRules, type MoveCheck } from '@/domain/boardRules';
+import { assignBlocker, boardLockReason, checkMove, nearestAllowed, quickAddFields, rankForSlot, type BoardReason, type BoardRules, type MoveCheck } from '@/domain/boardRules';
+import { NONE_KEY } from '@/domain/grouping';
+import { qk } from '@/hooks/keys';
 import { useMembersOf, useProjects } from '@/hooks/projects';
 import { useAllUsers } from '@/hooks/users';
 import { useWorkflows } from '@/hooks/workflows';
 import { useTransitionWorkItem, useUpdateWorkItem } from '@/hooks/workItems';
+import { useWorkItemTypes } from '@/hooks/workItemTypes';
 import { t } from '@/lib/i18n';
 import { usePermissions } from '@/lib/permissions';
 import { useUiStore } from '@/store/ui';
-import type { ListedItem } from '@/types';
+import type { ListedItem, Project, WorkItem } from '@/types';
 import type { LayoutProps } from '../layouts';
 import { focusIsNeutral, revealBelowToolbar, useSelection } from '../selection/useSelection';
 import { BoardCard } from './BoardCard';
 import { BoardColumn } from './BoardColumn';
 import { applyMove, reasonText } from './moves';
+import { QuickAdd, type QuickAddOption } from './QuickAdd';
 import { useBoardColumns, type BoardColumnData } from './useBoardColumns';
+import { useBoardDrag } from './useBoardDrag';
 import { useBoardKeys } from './useBoardKeys';
 
 /** How long a moved card keeps getting the focus back while the move lands (optimistic change, rollback, dialog). */
@@ -47,6 +60,12 @@ const FOLLOW_MS = 1500;
 /** A live change gets a short ink-blue tint, the previewed card the pressed tone; both lie over the card's white. */
 const TINT = '[background-image:linear-gradient(var(--accent-soft),var(--accent-soft))]';
 const PRESSED = '[background-image:linear-gradient(var(--pressed),var(--pressed))]';
+/** While the overlay flies to its place the card straightens up again (DESIGN.md: "beim Ablegen federt sie zurück"). */
+const SETTLE = 'in-[.board-dropping]:translate-y-0 in-[.board-dropping]:scale-100 in-[.board-dropping]:rotate-0 in-[.board-dropping]:after:opacity-0';
+/** How long a new card of the quick add may take to show in its list before the board says it is not there. */
+const CREATED_WAIT_MS = 5000;
+/** How many frames the list must load nothing before the board looks for a new card. */
+const QUIET_FRAMES = 3;
 
 /** A hint once: a toast with the same text replaces the one shown, so key after key does not take one more place. */
 function toastOnce(options: ToastOptions): void {
@@ -63,11 +82,13 @@ function moved(ids: readonly string[], from: number, to: number): string[] {
   return next;
 }
 
-export function BoardLayout({ groups, groupBy, display, selection, onSelect, onSelectAll, onOpen, onPeek, cursorId, onCursor }: LayoutProps) {
-  const columns = useBoardColumns({ groups });
+export function BoardLayout({ groups, groupBy, display, project, createDefaults, selection, onSelect, onSelectAll, onOpen, onPeek, cursorId, onCursor }: LayoutProps) {
+  const served = useBoardColumns({ groups });
   const projects = useProjects({ include_archived: true }).data?.items;
   const workflows = useWorkflows().data?.items;
+  const types = useWorkItemTypes().data?.items;
   const users = useAllUsers().data?.items;
+  const queryClient = useQueryClient();
   const { reason } = usePermissions();
   const transition = useTransitionWorkItem();
   const update = useUpdateWorkItem();
@@ -80,8 +101,8 @@ export function BoardLayout({ groups, groupBy, display, selection, onSelect, onS
   const manual = display.sort.field === 'rank';
   const locked = boardLockReason(groupBy);
 
-  const itemById = useMemo(() => new Map(columns.flatMap((column) => column.items.map((item) => [item.id, item] as const))), [columns]);
-  const columnLabel = useCallback((key: string) => columns.find((column) => column.key === key)?.label ?? key, [columns]);
+  const itemById = useMemo(() => new Map(served.flatMap((column) => column.items.map((item) => [item.id, item] as const))), [served]);
+  const columnLabel = useCallback((key: string) => served.find((column) => column.key === key)?.label ?? key, [served]);
 
   /* --------------------------------------------------------------------------- rules */
 
@@ -108,6 +129,35 @@ export function BoardLayout({ groups, groupBy, display, selection, onSelect, onS
       return user && project && members ? assignBlocker(user, project, members) : null;
     },
   };
+
+  /* ------------------------------------------------------------------- dragging */
+
+  const categories = useMemo(() => new Map(workflows?.flatMap((workflow) => workflow.states.map((state) => [state.id, state.category] as const))), [workflows]);
+  // the callbacks run in the handlers of a drag, once everything below is defined
+  const dragging = useBoardDrag(served, rules, {
+    manual,
+    sort: display.sort,
+    stateCategory: (stateId) => categories.get(stateId) ?? 'backlog',
+    itemById,
+    onPickUp: (id, column) => {
+      setCursorColumn(column);
+      if (id !== cursorId) onCursor(id);
+    },
+    onPutBack: (id, column) => {
+      setCursorColumn(column);
+      follow(id, column, true);
+    },
+    move: (item, check, origin, target) => sendMove(item, check, origin, target, true),
+    reorder: (item, column, ids, index) => sendPlace(item, column, ids, index, true),
+    refuse: (item, why) => refuse(item, why),
+    sortedHint: () => sortedHint(),
+  });
+  /** The columns as they stand: during a drag with the card where it would go, after a drop with it in its new place. */
+  const columns = dragging.columns;
+  const latestColumns = useRef(columns);
+  useLayoutEffect(() => {
+    latestColumns.current = columns;
+  });
 
   /* ------------------------------------------------------------------ cursor and focus */
 
@@ -167,8 +217,9 @@ export function BoardLayout({ groups, groupBy, display, selection, onSelect, onS
    * put elsewhere stays there.
    */
   const following = useRef<object | null>(null);
+  /** `pointer`: a drag moved the card, it gets the focus as the pointer left it (without the keyboard's ring). */
   const follow = useCallback(
-    (id: string, column: string) => {
+    (id: string, column: string, pointer = false) => {
       const token = {};
       following.current = token;
       const started = performance.now();
@@ -177,7 +228,7 @@ export function BoardLayout({ groups, groupBy, display, selection, onSelect, onS
         const element = findCard(id, column);
         const active = document.activeElement;
         if (element && element !== active && (focusIsNeutral() || active?.getAttribute('data-card-id') === id)) {
-          element.focus({ preventScroll: true });
+          element.focus({ preventScroll: true, focusVisible: !pointer });
           reveal(element);
         }
         if (performance.now() - started < FOLLOW_MS) requestAnimationFrame(tick);
@@ -186,13 +237,16 @@ export function BoardLayout({ groups, groupBy, display, selection, onSelect, onS
     },
     [findCard, reveal],
   );
-  useEffect(
-    () => () => {
+  /** The board is on the page: what waits for a frame stops once it is gone. */
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
       following.current = null;
       pendingFocus.current = null;
-    },
-    [],
-  );
+    };
+  }, []);
 
   /** The step of j/k and ↓/↑: within the column, stopping at its ends; from no cursor the first card. */
   const step = (current: string | null, direction: 1 | -1): string | null => {
@@ -285,15 +339,15 @@ export function BoardLayout({ groups, groupBy, display, selection, onSelect, onS
     return movable.ok ? nearestAllowed(item, columns.map((column) => column.key), at.column, direction, rules) : movable;
   }
 
-  function moveByKey(direction: 1 | -1) {
-    const card = cursorCard();
-    if (!card) return;
-    const { item, at, column: origin } = card;
-    const result = nearest(item, at, direction);
-    if (!result.ok) return refuse(item, result.reason);
-    const target = columns[result.index]!;
+  const sortedHint = () => toastOnce({ title: t('items.board.sorted.title'), description: t('items.board.sorted.description') });
+
+  /**
+   * Sends a move to another column (a key or a drop): the card follows with the focus, the status line says what
+   * happened. Resolves whether the server took it.
+   */
+  function sendMove(item: ListedItem, check: Extract<MoveCheck, { ok: true }>, origin: BoardColumnData, target: BoardColumnData, pointer = false): Promise<boolean> {
     let sent = false;
-    void applyMove(item, result.check, {
+    return applyMove(item, check, {
       transition,
       update,
       from: stateOf(item),
@@ -301,17 +355,57 @@ export function BoardLayout({ groups, groupBy, display, selection, onSelect, onS
         sent = true;
         mark(item.id, true);
         setCursorColumn(target.key);
-        follow(item.id, target.key);
+        follow(item.id, target.key, pointer);
       },
     }).then((landed) => {
       if (sent) mark(item.id, false);
-      if (landed) setAnnouncement(said(item, result.check, target));
-      else if (sent) {
-        // the mutation put the card back and said why: the focus goes back with it
+      if (landed) setAnnouncement(said(item, check, target));
+      else {
+        // the mutation put the card back and said why, or the question of the resolution was cancelled (a dropped card
+        // goes back from the column it waited in): the focus goes back with it
+        if (!sent) setAnnouncement(t('items.board.cancelled', { key: item.key, column: origin.label }));
         setCursorColumn(origin.key);
-        follow(item.id, origin.key);
-      } else setAnnouncement(t('items.board.cancelled', { key: item.key, column: origin.label }));
+        follow(item.id, origin.key, pointer);
+      }
+      return landed;
     });
+  }
+
+  /**
+   * Sends a new place of a card in its column sorted by rank (`ids`: the column with the card at `index`): the rank
+   * between its new neighbours. Returns null, and moves nothing, where the rank would grow past what the server takes
+   * (P23).
+   */
+  function sendPlace(item: ListedItem, column: BoardColumnData, ids: readonly string[], index: number, pointer = false): Promise<unknown> | null {
+    const rankOf = (id: string | undefined) => (id === undefined ? null : (itemById.get(id)?.rank ?? null));
+    const rank = rankForSlot(rankOf(ids[index - 1]), rankOf(ids[index + 1]), display.sort.direction);
+    if (rank === null) {
+      refuse(item, { code: 'no_room', params: {} });
+      return null;
+    }
+    // the new rank moves the card's element within its column, and a focused element that moves loses the focus in
+    // the browser. React gives it back within the commit that moved it (seen in Chromium); the card is followed all the
+    // same, as a move to another column is, so the focus stays with it whatever renders next (the rollback of a
+    // refusal included)
+    mark(item.id, true);
+    follow(item.id, column.key, pointer);
+    return update
+      .mutateAsync({ id: item.id, patch: { rank } })
+      .then(
+        () => setAnnouncement(t('items.board.moved.place', { key: item.key, place: index + 1, count: ids.length, column: column.label })),
+        // the mutation put the card back and said why
+        () => {},
+      )
+      .finally(() => mark(item.id, false));
+  }
+
+  function moveByKey(direction: 1 | -1) {
+    const card = cursorCard();
+    if (!card) return;
+    const { item, at, column: origin } = card;
+    const result = nearest(item, at, direction);
+    if (!result.ok) return refuse(item, result.reason);
+    void sendMove(item, result.check, origin, columns[result.index]!);
   }
 
   function reorderByKey(direction: 1 | -1) {
@@ -320,30 +414,13 @@ export function BoardLayout({ groups, groupBy, display, selection, onSelect, onS
     const { item, at, column } = card;
     const check = checkMove(item, column.key, column.key, rules);
     if (!check.ok) return refuse(item, check.reason);
-    if (!manual) return toastOnce({ title: t('items.board.sorted.title'), description: t('items.board.sorted.description') });
+    if (!manual) return sortedHint();
     const index = at.index + direction;
     if (index < 0 || index >= column.ids.length) {
       setAnnouncement(t(direction < 0 ? 'items.board.at_top' : 'items.board.at_bottom', { key: item.key, column: column.label }));
       return;
     }
-    const ids = moved(column.ids, at.index, index);
-    const rankOf = (id: string | undefined) => (id === undefined ? null : (itemById.get(id)?.rank ?? null));
-    const rank = rankForSlot(rankOf(ids[index - 1]), rankOf(ids[index + 1]), display.sort.direction);
-    // the rank would grow past what the server takes (P23): the card stays where it is
-    if (rank === null) return refuse(item, { code: 'no_room', params: {} });
-    // the new rank moves the card's element within its column, and a focused element that moves loses the focus in
-    // the browser. React gives it back within the commit that moved it (seen in Chromium); the card is followed all the
-    // same, as a move to another column is, so the focus stays with it whatever renders next (the rollback of a
-    // refusal included)
-    mark(item.id, true);
-    follow(item.id, column.key);
-    void update
-      .mutateAsync({ id: item.id, patch: { rank } })
-      .then(
-        () => setAnnouncement(t('items.board.moved.place', { key: item.key, place: index + 1, count: ids.length, column: column.label })),
-        () => {},
-      )
-      .finally(() => mark(item.id, false));
+    void sendPlace(item, column, moved(column.ids, at.index, index), index);
   }
 
   const inBoard = () => focusIsNeutral() || Boolean(board.current?.contains(document.activeElement));
@@ -363,6 +440,79 @@ export function BoardLayout({ groups, groupBy, display, selection, onSelect, onS
       return index >= 0 && index < card.column.ids.length && checkMove(card.item, card.column.key, card.column.key, rules).ok;
     },
   });
+
+  /* ------------------------------------------------------------------------ quick add */
+
+  const [adding, setAdding] = useState<string | null>(null);
+  /** A new card to bring into view in its column. */
+  const [revealing, setRevealing] = useState<{ column: string; id: string } | null>(null);
+  /** The projects a quick add makes items in: the project of the list, else the board's projects, the most cards first. */
+  const quickProjects = useMemo((): Project[] => {
+    if (!projects) return [];
+    if (project) return projects.filter((entry) => entry.id === project.id);
+    const counts = new Map<string, number>();
+    for (const item of itemById.values()) counts.set(item.project_id, (counts.get(item.project_id) ?? 0) + 1);
+    return projects.filter((entry) => counts.has(entry.id)).sort((a, b) => counts.get(b.id)! - counts.get(a.id)!);
+  }, [projects, project, itemById]);
+
+  /** What a quick add in a column offers: the projects it can make the item in with its fields, or why there is none. */
+  function quickAddFor(column: BoardColumnData): { options: QuickAddOption[]; reason: string | null } {
+    if (!projects || !workflows || !types) return { options: [], reason: t('items.board.quick_add.loading') };
+    let candidates = quickProjects;
+    if (groupBy === 'project') candidates = projects.filter((entry) => entry.id === column.key);
+    if (groupBy === 'parent' && column.key !== NONE_KEY) {
+      // the parent's project, from its key (an empty column of an epic has no card to ask)
+      const key = column.item?.key ?? '';
+      candidates = projects.filter((entry) => entry.identifier === key.slice(0, key.lastIndexOf('-')));
+    }
+    const options: QuickAddOption[] = [];
+    let refusal: string | null = null;
+    for (const candidate of candidates) {
+      const denied = reason('item.create', candidate.id);
+      const workflow = workflows.find((entry) => entry.id === candidate.workflow_id);
+      if (denied || !workflow) {
+        refusal ??= denied ?? reasonText({ code: 'workflow_loading', params: {} });
+        continue;
+      }
+      const result = quickAddFields(column.key, { ...rules, project: candidate, workflow, types });
+      if (result.ok) options.push({ project: candidate, fields: result.fields });
+      else refusal ??= reasonText(result.reason);
+    }
+    return { options, reason: options.length > 0 ? null : (refusal ?? t('items.board.quick_add.unavailable')) };
+  }
+
+  /**
+   * A quick add made an item: the status line says it. Once the list has loaded again the new card lights up and comes
+   * into view; where the list leaves it out (its filter) a toast says so and opens it. A column with more pages to load
+   * may have it further down: it says nothing then.
+   */
+  function created(item: WorkItem, column: BoardColumnData) {
+    setAnnouncement(t('items.board.created', { key: item.key, column: column.label }));
+    const started = performance.now();
+    let quiet = 0;
+    const look = () => {
+      if (!alive.current) return;
+      // a column rebuilds its pages one after another (K15): the list has loaded again once nothing of it has been on
+      // its way for a few frames
+      quiet = queryClient.isFetching({ queryKey: qk.workItems.all }) > 0 ? 0 : quiet + 1;
+      if (quiet < QUIET_FRAMES && performance.now() - started < CREATED_WAIT_MS) {
+        requestAnimationFrame(look);
+        return;
+      }
+      const shown = latestColumns.current.find((entry) => entry.key === column.key);
+      if (shown?.ids.includes(item.id)) {
+        useUiStore.getState().flash(item.id);
+        setRevealing({ column: column.key, id: item.id });
+      } else if (!shown?.hasMore) {
+        toast({
+          title: t('items.create.created', { key: item.key }),
+          description: t('items.board.created_elsewhere'),
+          action: { label: t('items.create.open'), onClick: () => useUiStore.getState().openPeek(item.id) },
+        });
+      }
+    };
+    requestAnimationFrame(look);
+  }
 
   /* --------------------------------------------------------------------------- layout */
 
@@ -401,45 +551,96 @@ export function BoardLayout({ groups, groupBy, display, selection, onSelect, onS
         <div role="status" aria-label={t('items.board.announcements')} className="sr-only">
           {announcement}
         </div>
-        <div className="flex h-full w-max gap-3">
-          {columns.map((column) => (
-            <BoardColumn
-              key={column.key}
-              column={column}
-              groupBy={groupBy}
-              keepIndex={stop?.column === column.key ? column.ids.indexOf(stop.id) : -1}
-              renderCard={(item) => {
-                const selected = selection.includes(item.id);
-                return (
-                  <BoardCard
-                    item={item}
-                    fields={display.fields}
-                    showParent={showParent}
-                    selected={selected}
-                    cursor={stop?.id === item.id && stop.column === column.key}
-                    busy={busy.has(item.id)}
-                    onOpen={onOpen}
-                    onPeek={onPeek}
-                    data-card-id={item.id}
-                    onFocus={() => {
-                      if (cursorId !== item.id) onCursor(item.id);
-                      if (cursorColumn !== column.key) setCursorColumn(column.key);
-                    }}
-                    onClickCapture={(event: MouseEvent<HTMLElement>) => {
-                      // ⇧ and a click on the title selects the range instead of opening a window
-                      if (!event.shiftKey || !(event.target instanceof Element) || !event.target.closest('[data-item-link]')) return;
-                      event.preventDefault();
-                      event.stopPropagation();
-                      clickSelect(item.id, true);
-                    }}
-                    // a live change gets its own short ink-blue tint (the highlighter is for selection, focus and hits only)
-                    className={selected ? undefined : flashIds.includes(item.id) ? TINT : peekItemId === item.id ? PRESSED : undefined}
-                  />
-                );
-              }}
-            />
-          ))}
-        </div>
+        <DndContext {...dragging.context} accessibility={{ ...dragging.context.accessibility, screenReaderInstructions: { draggable: hint } }}>
+          <div className="flex h-full w-max gap-3">
+            {columns.map((column) => {
+              const quick = quickAddFor(column);
+              const refused = dragging.refusalOf(column.key);
+              return (
+                <BoardColumn
+                  key={column.key}
+                  column={column}
+                  groupBy={groupBy}
+                  keepIndex={stop?.column === column.key ? column.ids.indexOf(stop.id) : -1}
+                  sortable={dragging.sortable}
+                  drag={{
+                    active: dragging.drag !== null,
+                    refused: refused && reasonText(refused),
+                    over: dragging.drag?.over === column.key,
+                    sorts: manual && dragging.drag?.origin.column === column.key,
+                  }}
+                  revealId={revealing?.column === column.key ? revealing.id : null}
+                  addReason={quick.reason}
+                  adding={adding === column.key}
+                  onAddChange={(open) => setAdding(open ? column.key : null)}
+                  renderQuickAdd={(close) => (
+                    <QuickAdd
+                      columnLabel={column.label}
+                      options={quick.options}
+                      defaults={createDefaults?.assignee_id ? { assignee_id: createDefaults.assignee_id } : undefined}
+                      onCreated={(item) => created(item, column)}
+                      onClose={close}
+                    />
+                  )}
+                  renderCard={(item) => {
+                    const selected = selection.includes(item.id);
+                    return (
+                      <BoardCard
+                        item={item}
+                        fields={display.fields}
+                        showParent={showParent}
+                        selected={selected}
+                        cursor={stop?.id === item.id && stop.column === column.key}
+                        busy={busy.has(item.id)}
+                        sortable={dragging.sortable}
+                        draggable={dragging.sortable && rules.editReason?.(item) === null}
+                        onOpen={onOpen}
+                        onPeek={onPeek}
+                        data-card-id={item.id}
+                        onFocus={() => {
+                          if (cursorId !== item.id) onCursor(item.id);
+                          if (cursorColumn !== column.key) setCursorColumn(column.key);
+                        }}
+                        onClickCapture={(event: MouseEvent<HTMLElement>) => {
+                          // ⇧ and a click on the title selects the range instead of opening a window
+                          if (!event.shiftKey || !(event.target instanceof Element) || !event.target.closest('[data-item-link]')) return;
+                          event.preventDefault();
+                          event.stopPropagation();
+                          clickSelect(item.id, true);
+                        }}
+                        // a live change gets its own short ink-blue tint (the highlighter is for selection, focus and hits only)
+                        className={selected ? undefined : flashIds.includes(item.id) ? TINT : peekItemId === item.id ? PRESSED : undefined}
+                      />
+                    );
+                  }}
+                />
+              );
+            })}
+          </div>
+          <DragOverlay dropAnimation={dragging.dropAnimation} zIndex={40} className="cursor-grabbing">
+            {dragging.dragItem ? (
+              // flow-root keeps the card's margin (the room of its tab) inside, so the overlay measures like the card's place
+              <div className="relative flow-root">
+                <ItemCard
+                  item={dragging.dragItem}
+                  fields={display.fields}
+                  onOpen={() => {}}
+                  lifted={dragging.lifted}
+                  selected={selection.includes(dragging.dragItem.id)}
+                  showParent={showParent}
+                  className={SETTLE}
+                />
+                {/* over a column it may not enter, the card says why; out of the layout, so the overlay keeps its size */}
+                {dragging.refusedHere && (
+                  <p className="absolute inset-x-1 top-full mt-2.5 flex items-start gap-1.5 rounded-ctl bg-danger-soft px-2.5 py-2 text-sm font-medium text-pretty text-danger shadow-elev-2 in-[.board-dropping]:hidden">
+                    <Ban className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+                    {reasonText(dragging.refusedHere)}
+                  </p>
+                )}
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
       </div>
     </div>
   );
