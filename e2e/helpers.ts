@@ -420,7 +420,7 @@ export async function removeE2eProject(page: Page, identifier: string): Promise<
  */
 export async function createE2eView(
   page: Page,
-  input: { name: string; filter?: { version: 1; conditions: unknown[] }; display?: Record<string, unknown> },
+  input: { name: string; filter?: { version: 1; conditions: readonly unknown[] }; display?: Record<string, unknown> },
 ): Promise<{ id: string }> {
   await ensureCsrfCookie(page);
   const response = await api(page, 'POST', '/api/v1/views', {
