@@ -316,8 +316,9 @@ final class Document
     }
 
     /**
-     * Whether the children's types fit the node's content expression (Schema::CONTENT), read as a regular expression
-     * over the type names.
+     * Whether the children's types fit the node's content expression (Schema::CONTENT). Each term of an expression
+     * takes as many children as it can (no term needs to give one back: the expressions are a first child and a
+     * repetition), so a walk over the children decides it; a regular expression over 10,000 of them ran out of stack.
      *
      * @param  list<mixed>  $children
      */
@@ -326,17 +327,44 @@ final class Document
         if (! isset(Schema::CONTENT[$type])) {
             return true;
         }
-        preg_match_all('/(\([^)]*\)|\w+)([*+]?)/', Schema::CONTENT[$type], $terms, PREG_SET_ORDER);
-        $pattern = '';
-        foreach ($terms as [, $term, $repeat]) {
+        $at = 0;
+        $count = count($children);
+        foreach (self::terms(Schema::CONTENT[$type]) as [$names, $repeat]) {
+            $start = $at;
+            while ($at < $count && isset($names[$children[$at]]) && ($repeat !== '' || $at === $start)) {
+                $at++;
+            }
+            if ($at === $start && $repeat !== '*') {
+                return false;
+            }
+        }
+
+        return $at === $count;
+    }
+
+    /**
+     * The terms of a content expression: the node names it takes (`block` standing for Schema::BLOCKS) as keys, and
+     * its repetition (``, `*` or `+`).
+     *
+     * @return list<array{0: array<string, true>, 1: string}>
+     */
+    private static function terms(string $expression): array
+    {
+        static $read = [];
+        if (isset($read[$expression])) {
+            return $read[$expression];
+        }
+        preg_match_all('/(\([^)]*\)|\w+)([*+]?)/', $expression, $matches, PREG_SET_ORDER);
+        $terms = [];
+        foreach ($matches as [, $term, $repeat]) {
             $names = array_merge(...array_map(
                 fn (string $name) => $name === 'block' ? Schema::BLOCKS : [$name],
                 preg_split('/[\s()|]+/', $term, -1, PREG_SPLIT_NO_EMPTY) ?: [],
             ));
-            $pattern .= '(?:(?:'.implode('|', $names).') )'.$repeat;
+            $terms[] = [array_fill_keys($names, true), $repeat];
         }
 
-        return preg_match("/\\A{$pattern}\\z/", implode('', array_map(fn (mixed $child) => "{$child} ", $children))) === 1;
+        return $read[$expression] = $terms;
     }
 
     /**

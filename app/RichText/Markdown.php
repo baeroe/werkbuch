@@ -54,7 +54,7 @@ use SplStack;
  * - in a quote, the blanks of a line that has nothing else and a hard break that starts a paragraph (also inside a
  *   code block in the quote);
  * - a task item whose first paragraph is empty and followed by a block: GitHub's checkbox needs a paragraph, so the
- *   block becomes the text of the item's paragraph;
+ *   block becomes the text of the item's paragraph (a rule too: `- [ ] ---` is no rule);
  * - a fence's info string that is no language (Schema::LANGUAGE_PATTERN, A150): the code block keeps no language.
  */
 final class Markdown

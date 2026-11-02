@@ -233,6 +233,17 @@ it('checks the content expressions of the editor', function (array $node, bool $
     ];
 });
 
+it('checks the content of a long document without running out of stack', function () use ($reason) {
+    // 10,000 empty paragraphs are 210 KB, below MAX_BYTES: a regular expression over them ran out of its JIT stack (4,500
+    // list items are 234 KB)
+    $empty = array_fill(0, 10000, ['type' => 'paragraph']);
+
+    expect($reason(F::doc(...$empty)))->toBeNull()
+        ->and($reason(F::doc(['type' => 'bulletList', 'content' => array_fill(0, 4500, ['type' => 'listItem', 'content' => [['type' => 'paragraph']]])])))->toBeNull()
+        // and still refuses what does not fit: a list item that starts with a quote, then many paragraphs
+        ->and($reason(F::doc(['type' => 'bulletList', 'content' => [['type' => 'listItem', 'content' => [['type' => 'blockquote', 'content' => [F::p('a')]], ...array_slice($empty, 0, 9000)]]]])))->toBe('shape');
+});
+
 it('refuses a list item that starts with a list', function () use ($reason) {
     $item = ['type' => 'listItem', 'content' => [['type' => 'bulletList', 'content' => [['type' => 'listItem', 'content' => [F::p('a')]]]]]];
 
