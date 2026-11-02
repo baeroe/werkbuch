@@ -3,6 +3,7 @@
 use App\Exceptions\Problem;
 use App\Http\Controllers\Api\AttachmentsController;
 use App\Http\Controllers\Api\BotsController;
+use App\Http\Controllers\Api\CommentsController;
 use App\Http\Controllers\Api\FavoritesController;
 use App\Http\Controllers\Api\HistoryController;
 use App\Http\Controllers\Api\InvitationsController;
@@ -30,6 +31,7 @@ use App\Http\Middleware\EnsureSession;
 use App\Http\Middleware\EnsureTokenAbility;
 use App\Http\Middleware\RedirectFormerItemKey;
 use App\Models\Attachment;
+use App\Models\Comment;
 use App\Models\Project;
 use App\Models\View;
 use App\Models\WorkItem;
@@ -47,6 +49,8 @@ Route::bind('relation', fn (string $ref) => (Str::isUlid($ref) ? WorkItemRelatio
 // a view by its ULID (any case; anything else is no view); web routes name their parameter `{viewId}`, this binding is
 // global
 Route::bind('view', fn (string $ref) => (Str::isUlid($ref) ? View::query()->find(strtolower($ref)) : null) ?? throw Problem::notFound());
+// a comment by its ULID (any case; anything else is no comment); whether the account sees its item, the action decides
+Route::bind('comment', fn (string $ref) => (Str::isUlid($ref) ? Comment::query()->find(strtolower($ref)) : null) ?? throw Problem::notFound());
 // an attachment by its ULID (any case; anything else is no attachment), also for the file route of routes/web.php;
 // whether the account may read it, the action decides
 Route::bind('attachment', fn (string $ref) => (Str::isUlid($ref) ? Attachment::query()->find(strtolower($ref)) : null) ?? throw Problem::notFound());
@@ -138,7 +142,12 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
         Route::get('work-items/{item}/relations', [RelationsController::class, 'index']);
         Route::post('work-items/{item}/relations', [RelationsController::class, 'store']);
         Route::get('work-items/{item}/history', [HistoryController::class, 'index']);
+        Route::get('work-items/{item}/comments', [CommentsController::class, 'index']);
+        Route::post('work-items/{item}/comments', [CommentsController::class, 'store']);
     });
+    Route::get('comments/{comment}', [CommentsController::class, 'show']);
+    Route::patch('comments/{comment}', [CommentsController::class, 'update']);
+    Route::delete('comments/{comment}', [CommentsController::class, 'destroy']);
     Route::delete('relations/{relation}', [RelationsController::class, 'destroy']);
 
     Route::get('views', [ViewsController::class, 'index']);

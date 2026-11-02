@@ -5,6 +5,7 @@ namespace App\Policies;
 use App\Access\Permission;
 use App\Access\Visibility;
 use App\Models\Attachment;
+use App\Models\Comment;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
@@ -27,9 +28,9 @@ final class AttachmentPolicy
     }
 
     /**
-     * Reading an attachment: one of an item whoever sees the item; one nobody owns yet (`attachable_id` empty) only the
-     * person who uploaded it. An owner that is named but gone hides it from everybody, and so does a project being
-     * deleted.
+     * Reading an attachment: one of an item or of a comment whoever sees the item; one nobody owns yet (`attachable_id`
+     * empty) only the person who uploaded it. An owner that is named but gone hides it from everybody, and so does a
+     * project being deleted.
      */
     public function view(User $user, Attachment $attachment): Response
     {
@@ -44,12 +45,14 @@ final class AttachmentPolicy
         return $visible ? Response::allow() : Response::denyAsNotFound();
     }
 
-    /** Whether the owner exists and the account may see it (the comment of an item follows with comments). */
+    /** Whether the owner exists and the account may see it: an item, or the item of a comment. */
     private static function ownerVisible(User $user, Attachment $attachment): bool
     {
-        $item = $attachment->attachable_type === (new WorkItem)->getMorphClass()
-            ? WorkItem::query()->with('project')->find($attachment->attachable_id)
-            : null;
+        $item = match ($attachment->attachable_type) {
+            (new WorkItem)->getMorphClass() => WorkItem::query()->with('project')->find($attachment->attachable_id),
+            (new Comment)->getMorphClass() => Comment::query()->with('workItem.project')->find($attachment->attachable_id)?->workItem,
+            default => null,
+        };
 
         return $item !== null && Visibility::roleIn($user, $item->project) !== null;
     }

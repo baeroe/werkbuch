@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Attachment;
+use App\Models\Comment;
 use App\Models\Event;
 use App\Models\Invitation;
 use App\Models\Label;
@@ -57,4 +58,9 @@ it('maps the view to its short name', function () {
 it('maps the attachment to its short name', function () {
     expect(Relation::getMorphedModel('attachment'))->toBe(Attachment::class)
         ->and((new Attachment)->getMorphClass())->toBe('attachment');
+});
+
+it('maps the comment to its short name', function () {
+    expect(Relation::getMorphedModel('comment'))->toBe(Comment::class)
+        ->and((new Comment)->getMorphClass())->toBe('comment');
 });

@@ -7,9 +7,8 @@ use App\Domain\Properties\FieldType;
 use App\Domain\Workflow\StateCategory;
 use App\Domain\WorkItems\ItemKey;
 use App\Domain\WorkItems\Priority;
-use App\RichText\Document;
 use App\RichText\RichTextNames;
-use App\Support\RichTextLookups;
+use App\Support\ReaderNames;
 use Database\Factories\WorkItemFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
@@ -150,42 +149,25 @@ final class WorkItem extends Model
     }
 
     /**
-     * The names the texts of the items need for one reader: the handles of the mentioned accounts, the key and title of
-     * each referenced item the reader sees (Visibility); a reference to any other item is hidden.
+     * The names the texts of the items need for one reader (ReaderNames): their descriptions and rich text values.
      *
      * @param  EloquentCollection<int, self>  $items
      */
     private static function richNames(EloquentCollection $items, User $reader): RichTextNames
     {
-        $people = $refs = [];
+        $texts = [];
         foreach ($items as $item) {
-            $texts = $item->values->filter(fn (WorkItemValue $row) => $row->property->field_type === FieldType::RichText)
-                ->map(fn (WorkItemValue $row) => (array) $row->value_json)->values()->all();
-            foreach ($item->description === null ? $texts : [$item->description, ...$texts] as $json) {
-                $text = Document::fromJson($json);
-                array_push($people, ...$text->mentionedUserIds());
-                array_push($refs, ...$text->itemRefs());
+            if ($item->description !== null) {
+                $texts[] = $item->description;
             }
-        }
-        $handles = $names = $seen = [];
-        foreach (array_chunk(array_values(array_unique($people)), RichTextLookups::CHUNK) as $chunk) {
-            foreach (User::query()->whereKey($chunk)->get(['id', 'handle', 'name']) as $user) {
-                $handles[$user->id] = $user->handle;
-                $names[$user->id] = $user->name;
-            }
-        }
-        $refs = array_values(array_unique($refs));
-        $visible = $refs === [] ? [] : Visibility::projectIds($reader)->all();
-        foreach (array_chunk($refs, RichTextLookups::CHUNK) as $chunk) {
-            $rows = self::query()->join('projects', 'projects.id', '=', 'work_items.project_id')
-                ->whereIn('work_items.id', $chunk)->whereIn('work_items.project_id', $visible)
-                ->toBase()->get(['work_items.id', 'work_items.title', 'work_items.number', 'projects.identifier']);
-            foreach ($rows as $row) {
-                $seen[(string) $row->id] = ['key' => "{$row->identifier}-{$row->number}", 'title' => (string) $row->title];
+            foreach ($item->values as $row) {
+                if ($row->property->field_type === FieldType::RichText) {
+                    $texts[] = (array) $row->value_json;
+                }
             }
         }
 
-        return new RichTextNames($handles, $seen, $names);
+        return ReaderNames::of($texts, $reader);
     }
 
     /**

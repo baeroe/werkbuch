@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Access\RoleIndex;
 use App\Access\Visibility;
 use App\Models\Attachment;
+use App\Models\Comment;
 use App\Models\Event;
 use App\Models\Invitation;
 use App\Models\Label;
@@ -71,6 +72,7 @@ class AppServiceProvider extends ServiceProvider
             'work_item' => WorkItem::class,
             'view' => View::class,
             'attachment' => Attachment::class,
+            'comment' => Comment::class,
         ]);
 
         Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);

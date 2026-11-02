@@ -11,6 +11,11 @@ use App\Actions\Attachments\DeleteAttachment;
 use App\Actions\Attachments\GetAttachment;
 use App\Actions\Attachments\ShowAttachment;
 use App\Actions\Attachments\UploadAttachment;
+use App\Actions\Comments\AddComment;
+use App\Actions\Comments\DeleteComment;
+use App\Actions\Comments\EditComment;
+use App\Actions\Comments\GetComment;
+use App\Actions\Comments\ListComments;
 use App\Actions\Favorites\ListFavorites;
 use App\Actions\Favorites\ToggleFavorite;
 use App\Actions\Invitations\InviteUser;
@@ -86,6 +91,7 @@ use App\Actions\WorkItemTypes\ListWorkItemTypes;
 use App\Actions\WorkItemTypes\SaveWorkItemType;
 use App\Events\EventType;
 use App\Models\Attachment;
+use App\Models\Comment;
 use App\Models\Label;
 use App\Models\Property;
 use App\Models\RelationType;
@@ -399,6 +405,42 @@ return [
         'allowed' => ['org_admin', 'project_admin', 'project_member', 'project_viewer', 'outsider_public'],
         'hidden' => ['outsider_private'],
         'event' => EventType::WorkItemSubscribed,
+    ],
+    // comments: whoever reads the item (`item.comment`, viewers too)
+    'ListComments' => [
+        'action' => ListComments::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListComments::run($a, $w->item($column), []),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    'AddComment' => [
+        'action' => AddComment::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => AddComment::run($a, $w->item($column), ['body' => 'Matrix']),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+        'event' => EventType::CommentCreated,
+    ],
+    'GetComment' => [
+        'action' => GetComment::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetComment::run($a, Comment::factory()->for($w->item($column), 'workItem')->create(['author_id' => $w->target->id])),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    // the column's own comment: only its author edits it (an admin is refused another's, EditCommentTest)
+    'EditComment' => [
+        'action' => EditComment::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => EditComment::run($a, Comment::factory()->for($w->item($column), 'workItem')->create(['author_id' => $a->user->id]), ['body' => 'Matrix']),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+        'event' => EventType::CommentUpdated,
+    ],
+    // another's comment: the admins of the project, org admins included (A241); the own one is DeleteCommentTest's
+    'DeleteComment' => [
+        'action' => DeleteComment::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => DeleteComment::run($a, Comment::factory()->for($w->item($column), 'workItem')->create(['author_id' => $w->target->id])),
+        'allowed' => $projectAdmins,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::CommentDeleted,
     ],
     'ListRelations' => [
         'action' => ListRelations::class,

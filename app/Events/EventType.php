@@ -32,6 +32,8 @@ enum EventType: string
     case CommentCreated = 'comment.created';
     case CommentUpdated = 'comment.updated';
     case CommentDeleted = 'comment.deleted';
+    case CommentReactionAdded = 'comment.reaction_added';
+    case CommentReactionRemoved = 'comment.reaction_removed';
 
     case PageCreated = 'page.created';
     case PageUpdated = 'page.updated';

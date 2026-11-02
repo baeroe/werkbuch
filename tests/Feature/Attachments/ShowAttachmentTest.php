@@ -2,6 +2,7 @@
 
 use App\Access\ProjectRole;
 use App\Actions\Attachments\UploadAttachment;
+use App\Actions\Comments\AddComment;
 use App\Models\Attachment;
 use App\Models\Project;
 use App\Models\User;
@@ -103,13 +104,35 @@ it('hides an attachment whose owner is gone or of a kind it does not know', func
     $gone = Attachment::factory()->stored($png(), 'image/png', 'a.png')->create([
         'project_id' => $project->id, 'uploaded_by' => $admin->id, 'attachable_type' => 'work_item', 'attachable_id' => strtolower((string) Str::ulid()),
     ]);
-    $unknown = Attachment::factory()->stored($png(), 'image/png', 'b.png')->create([
+    $goneComment = Attachment::factory()->stored($png(), 'image/png', 'b.png')->create([
         'project_id' => $project->id, 'uploaded_by' => $admin->id, 'attachable_type' => 'comment', 'attachable_id' => strtolower((string) Str::ulid()),
+    ]);
+    $unknown = Attachment::factory()->stored($png(), 'image/png', 'c.png')->create([
+        'project_id' => $project->id, 'uploaded_by' => $admin->id, 'attachable_type' => 'project', 'attachable_id' => $project->id,
     ]);
 
     // the uploader as well: an owner that is named is never read as "nobody owns it"
     $this->actingAs($admin)->get("/attachments/{$gone->id}")->assertNotFound();
+    $this->actingAs($admin)->get("/attachments/{$goneComment->id}")->assertNotFound();
     $this->actingAs($admin)->get("/attachments/{$unknown->id}")->assertNotFound();
+});
+
+it('serves the image of a comment to readers of its item only', function () use ($stored, $png) {
+    $ops = Project::factory()->identifier('OPS')->private()->create();
+    $erik = memberOf($ops, ProjectRole::Viewer);
+    $ida = User::factory()->create(['name' => 'Ida']);
+    $item = WorkItem::factory()->state(['project_id' => $ops->id])->create();
+    $upload = $stored($erik, $ops, 'karte.png', $png());
+    $comment = AddComment::run(actor($erik), $item, ['body' => "![Karte](attachment:{$upload->id})"]);
+
+    $this->actingAs($erik)->get("/attachments/{$upload->id}")->assertOk()->assertHeader('Content-Type', 'image/png');
+    $this->actingAs($erik)->getJson("/api/v1/attachments/{$upload->id}")->assertOk()
+        ->assertJsonPath('data.owner', ['type' => 'comment', 'id' => $comment->id]);
+    $this->actingAs(User::factory()->admin()->create())->get("/attachments/{$upload->id}")->assertOk();
+
+    $this->actingAs($ida)->get("/attachments/{$upload->id}")->assertNotFound();
+    $this->actingAs($ida)->get("/attachments/{$upload->id}/preview")->assertNotFound();
+    $this->actingAs($ida)->getJson("/api/v1/attachments/{$upload->id}")->assertNotFound()->assertJsonMissingPath('detail');
 });
 
 it('forces a download with ?download=1', function () use ($stored, $png) {
