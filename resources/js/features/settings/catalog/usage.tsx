@@ -4,7 +4,7 @@
  * screen; a failed load shows "not loaded" only while there is no number, a failed refetch keeps the last one.
  */
 
-import { useQueries } from '@tanstack/react-query';
+import { keepPreviousData, useQueries } from '@tanstack/react-query';
 import { countWorkItems } from '@/api/workItems';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { qk } from '@/hooks/keys';
@@ -44,25 +44,28 @@ export function valueFilter(property: Property): Filter {
   return { version: 1, conditions: [condition] };
 }
 
-/** The items with a value per property key, asked in calls of at most 50 filters (named `p0`, `p1`, …). */
+/**
+ * The items with a value per property, asked in calls of at most 50 filters, each named by the key of its property (a
+ * key fits a filter name: `PropertyKey` allows 40 of `[a-z0-9_]`). While a new set of properties is asked (one was
+ * deleted, one came), the numbers of the last answer stay (`keepPreviousData`): they hang on keys, never on a position.
+ */
 export function usePropertyUsage(properties: readonly Property[] | undefined): Usage {
   const chunks: Property[][] = [];
   for (let at = 0; at < (properties?.length ?? 0); at += MAX_COUNT_FILTERS) chunks.push(properties!.slice(at, at + MAX_COUNT_FILTERS));
-  // named by position, not by key: a key may be longer than the 64 characters a filter name may have
-  const nameOf = (chunk: number, at: number) => `p${chunk * MAX_COUNT_FILTERS + at}`;
   const answers = useQueries({
-    queries: chunks.map((chunk, index) => {
-      const filters = Object.fromEntries(chunk.map((property, at) => [nameOf(index, at), valueFilter(property)]));
+    queries: chunks.map((chunk) => {
+      const filters = Object.fromEntries(chunk.map((property) => [property.key, valueFilter(property)]));
       return {
         queryKey: qk.workItems.counts({ filters, include_archived: true }),
         queryFn: () => countWorkItems(filters, { include_archived: true }),
+        placeholderData: keepPreviousData,
       };
     }),
   });
   const failed = answers.some((answer) => answer.isError && !answer.data);
   const pending = !failed && (properties === undefined || answers.some((answer) => answer.isPending));
-  const byName: Record<string, number> = pending || failed ? {} : Object.assign({}, ...answers.map((answer) => answer.data));
-  const counts = pending || failed ? undefined : Object.fromEntries(chunks.flatMap((chunk, index) => chunk.map((property, at) => [property.key, byName[nameOf(index, at)] ?? 0] as const)));
+  const byKey: Record<string, number> = pending || failed ? {} : Object.assign({}, ...answers.map((answer) => answer.data));
+  const counts = pending || failed ? undefined : Object.fromEntries((properties ?? []).map((property) => [property.key, byKey[property.key] ?? 0] as const));
   return { counts, pending, failed };
 }
 

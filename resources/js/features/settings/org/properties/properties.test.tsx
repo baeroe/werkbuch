@@ -842,7 +842,7 @@ describe('Properties usage', () => {
   const countCalls = () => api!.calls.filter((call) => call.method === 'POST' && call.url === '/api/v1/work-items/counts');
 
   it('names the number of items of each property, a yes/no property by its on value (K10)', async () => {
-    renderWith(<Properties readOnlyReason={null} />, routes([...all, flag], { 'POST /api/v1/work-items/counts': () => ({ body: { data: { p0: 3, p1: 1, p4: 2 } } }) }));
+    renderWith(<Properties readOnlyReason={null} />, routes([...all, flag], { 'POST /api/v1/work-items/counts': () => ({ body: { data: { customer: 3, effort: 1, billable: 2 } } }) }));
 
     expect(await within(await rowOf('Kunde')).findByText('3 Items')).toBeTruthy();
     expect(within(await rowOf('Aufwand (h)')).getByText('1 Item')).toBeTruthy();
@@ -851,8 +851,8 @@ describe('Properties usage', () => {
     expect(within(await rowOf('Umgebung')).getByText('0 Items')).toBeTruthy();
     expect(countCalls()).toHaveLength(1);
     const filters = (countCalls()[0]!.body as { filters: Record<string, unknown>; include_archived: boolean }).filters;
-    expect(filters.p4).toEqual({ version: 1, conditions: [{ field: 'property:billable', op: 'is', value: true }] });
-    expect(filters.p1).toEqual({ version: 1, conditions: [{ field: 'property:effort', op: 'is_not_empty' }] });
+    expect(filters.billable).toEqual({ version: 1, conditions: [{ field: 'property:billable', op: 'is', value: true }] });
+    expect(filters.effort).toEqual({ version: 1, conditions: [{ field: 'property:effort', op: 'is_not_empty' }] });
     expect((countCalls()[0]!.body as { include_archived: boolean }).include_archived).toBe(true);
   });
 
@@ -872,12 +872,47 @@ describe('Properties usage', () => {
 
   it('names the number in the question of deleting a property', async () => {
     const user = userEvent.setup();
-    renderWith(<Properties readOnlyReason={null} />, routes(all, { 'POST /api/v1/work-items/counts': () => ({ body: { data: { p1: 2 } } }) }));
+    renderWith(<Properties readOnlyReason={null} />, routes(all, { 'POST /api/v1/work-items/counts': () => ({ body: { data: { effort: 2 } } }) }));
 
     await within(await rowOf('Aufwand (h)')).findByText('2 Items');
     await user.click(within(await rowOf('Aufwand (h)')).getByRole('button', { name: 'Property „Aufwand (h)“ löschen' }));
     const question = await screen.findByRole('alertdialog');
     expect(within(question).getByText(/Die Werte bei 2 Items gehen verloren\./)).toBeTruthy();
+  });
+
+  it('takes the property out of the counts once its deletion is confirmed, and keeps the number in the question meanwhile', async () => {
+    const user = userEvent.setup();
+    renderWith(
+      <Properties readOnlyReason={null} />,
+      routes(all, {
+        'POST /api/v1/work-items/counts': (body) => ({ body: { data: Object.fromEntries(Object.keys((body as { filters: object }).filters).map((key) => [key, 2])) } }),
+        'DELETE /api/v1/properties/pr_effort': () => ({ body: { affected_items: 2 } }),
+      }),
+    );
+    // the deletion waits until the test lets it go
+    let release = () => {};
+    const deleting = new Promise<void>((resolve) => (release = resolve));
+    const inner = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      if (init?.method === 'DELETE') await deleting;
+      return inner(input, init);
+    };
+
+    await within(await rowOf('Aufwand (h)')).findByText('2 Items');
+    await user.click(within(await rowOf('Aufwand (h)')).getByRole('button', { name: 'Property „Aufwand (h)“ löschen' }));
+    const question = await screen.findByRole('alertdialog');
+    await user.click(within(question).getByRole('button', { name: 'Property löschen' }));
+
+    // the next count no longer names it: once it is gone the server would refuse a filter on it
+    await waitFor(() => expect(Object.keys((countCalls().at(-1)!.body as { filters: object }).filters)).not.toContain('effort'));
+    expect(Object.values((countCalls().at(-1)!.body as { filters: Record<string, { conditions: { field: string }[] }> }).filters).flatMap((filter) => filter.conditions.map((condition) => condition.field))).not.toContain('property:effort');
+    // while the deletion runs, the question keeps its number and the other rows theirs, no skeleton
+    expect(within(question).getByText(/Die Werte bei 2 Items gehen verloren\./)).toBeTruthy();
+    // (behind the modal question the page is hidden from the roles)
+    expect(within(screen.getByRole('heading', { name: 'Kunde', hidden: true }).closest('li')!).getByText('2 Items')).toBeTruthy();
+    await act(async () => release());
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    globalThis.fetch = inner;
   });
 
   it('does not name a number in the question while there is none', async () => {

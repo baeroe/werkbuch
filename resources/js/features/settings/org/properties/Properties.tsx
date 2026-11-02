@@ -38,8 +38,9 @@ export default function Properties({ readOnlyReason }: SectionProps) {
   const remove = useDeleteProperty();
   const dialog = useDialogRound<Property>();
   const create = useRef<HTMLButtonElement>(null);
-  // the property in question stays while the question fades out, so its title does not change on the way
-  const [question, setQuestion] = useState<{ property: Property; open: boolean } | null>(null);
+  // the property in question stays while the question fades out, so its title does not change on the way; its number of
+  // items is the one counted when it was asked (the counts move on once the property leaves them)
+  const [question, setQuestion] = useState<{ property: Property; open: boolean; count: number | undefined } | null>(null);
   // where the focus goes when the question closes: back to "Delete", or on to the next row once the property is gone
   const deleteButton = useRef<HTMLElement | null>(null);
   const afterDelete = useRef<HTMLElement | null>(null);
@@ -57,8 +58,11 @@ export default function Properties({ readOnlyReason }: SectionProps) {
   function askDelete(property: Property, button: HTMLElement) {
     deleteButton.current = button;
     afterDelete.current = null;
-    setQuestion({ property, open: true });
+    setQuestion({ property, open: true, count: usage.counts?.[property.key] });
   }
+
+  // counted when asked, else (still loading then) as soon as there is a number
+  const asked = question ? (question.count ?? usage.counts?.[question.property.key] ?? 0) : 0;
 
   const asking = useRef(false);
   asking.current = question?.open === true;
@@ -183,7 +187,7 @@ export default function Properties({ readOnlyReason }: SectionProps) {
           <>
             {t('settings.properties.delete_description')}
             {/* only a number that was counted: none while loading or after a failure, none at zero */}
-            {question && (usage.counts?.[question.property.key] ?? 0) > 0 && ` ${tn('settings.properties.delete_confirm_count', usage.counts![question.property.key]!)}`}
+            {asked > 0 && ` ${tn('settings.properties.delete_confirm_count', asked)}`}
           </>
         }
         confirmLabel={t('settings.properties.delete_confirm')}
