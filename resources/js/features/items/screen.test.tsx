@@ -657,6 +657,26 @@ describe('the item list screen', () => {
     expect(currentToasts()).toEqual([]);
   });
 
+  it('keeps the selection when mod+a comes while a new filter loads', async () => {
+    renderScreen();
+    await screen.findByText('Kontaktformular sendet doppelt');
+    act(() => useUiStore.getState().setSelection(['wi_web_1']));
+    await waitFor(() => expect(announcer().textContent).toBe('WEB-1 ausgewählt, 1 von 5'));
+    // the groups of the new filter wait: the old rows stand
+    const gate = hold((_body, path) => path === '/api/v1/work-items/groups');
+    act(() => inertia.go(`/projects/WEB?filter=${filterOf([{ field: 'title', op: 'contains', value: 'ormular' }])}`));
+    await waitFor(() => expect(gate.held()).toBe(true));
+
+    act(() => rowOf(1)!.focus());
+    press('a', { ctrlKey: true });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(useUiStore.getState().selection).toEqual(['wi_web_1']);
+    expect(announcer().textContent).toBe('WEB-1 ausgewählt, 1 von 5');
+    expect(currentToasts()).toEqual([]);
+    await act(async () => gate.release());
+    await waitFor(() => expect(groupBodies()).toHaveLength(2));
+  });
+
   it('offers to try again when the list cannot be loaded', async () => {
     failing.add('groups');
     renderScreen();
