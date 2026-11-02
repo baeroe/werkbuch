@@ -18,12 +18,16 @@ use App\Models\View;
 use App\Models\Workflow;
 use App\Models\WorkItem;
 use App\Models\WorkItemType;
+use App\Search\MeilisearchEngine;
 use App\Views\CatalogProperties;
+use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Events\TransactionRolledBack;
 use Illuminate\Support\Facades\Event as Events;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Sanctum\Sanctum;
+use Laravel\Scout\EngineManager;
+use Meilisearch\Client;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -68,5 +72,16 @@ class AppServiceProvider extends ServiceProvider
 
         // roles and visible projects read inside a transaction that rolls back would otherwise outlive it and grant access
         Events::listen(TransactionRolledBack::class, fn () => Visibility::forget());
+
+        // the index is written by the search consumer only, never when a model is saved (P1)
+        WorkItem::disableSearchSyncing();
+        Project::disableSearchSyncing();
+        User::disableSearchSyncing();
+
+        // Scout's engine, able to remove the documents of a project's items by filter (RemovesWhere)
+        resolve(EngineManager::class)->extend('meilisearch', fn (Application $app) => new MeilisearchEngine(
+            $app->make(Client::class),
+            (bool) config('scout.soft_delete'),
+        ));
     }
 }

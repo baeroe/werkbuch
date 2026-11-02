@@ -21,6 +21,7 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Laravel\Scout\Searchable;
 
 /**
  * A work item of a project (spec 4.4). Its key (`WEB-12`) is never stored: the current identifier of the project and
@@ -55,6 +56,7 @@ use Illuminate\Support\Str;
  * @property-read bool $is_blocking only with `withComputed()`
  * @property-read Project $project
  * @property-read WorkItemType $type
+ * @property-read WorkflowState $state
  */
 #[Fillable([
     'project_id', 'number', 'type_id', 'title', 'description', 'description_text', 'description_version', 'state_id',
@@ -64,7 +66,7 @@ use Illuminate\Support\Str;
 final class WorkItem extends Model
 {
     /** @use HasFactory<WorkItemFactory> */
-    use HasFactory, HasUlids;
+    use HasFactory, HasUlids, Searchable;
 
     /**
      * Set by findByReference(), never stored: the item was asked for by a former identifier of its project, so a caller
@@ -214,6 +216,43 @@ final class WorkItem extends Model
             ->whereColumn("blocks.{$self}", $outer->qualifyColumn('id'))
             ->whereIn('other_end.state_id', $open)
             ->whereIn($outer->qualifyColumn('state_id'), $open);
+    }
+
+    /**
+     * The search document (index `work_items`, settings in config/scout.php): the key, the title and the plain text of
+     * the description to search, the rest to filter by. Who may see the item is not in it: the search filters by the
+     * projects the reader sees when it asks (P2). Reads `project`, `labels` and `state` (loaded at once by
+     * makeAllSearchableUsing()).
+     *
+     * @return array{id: string, project_id: string, key: string, number: int, title: string, description: string, type_id: string, state_category: string, assignee_id: string|null, label_ids: list<string>, archived: bool, updated_at: int}
+     */
+    public function toSearchableArray(): array
+    {
+        return [
+            'id' => $this->id,
+            'project_id' => $this->project_id,
+            'key' => $this->key,
+            'number' => $this->number,
+            'title' => $this->title,
+            'description' => $this->description_text ?? '',
+            'type_id' => $this->type_id,
+            'state_category' => $this->state->category->value,
+            'assignee_id' => $this->assignee_id,
+            'label_ids' => array_values($this->labels->map(fn (Label $label) => $label->id)->all()),
+            'archived' => $this->archived_at !== null,
+            'updated_at' => (int) $this->updated_at?->getTimestamp(),
+        ];
+    }
+
+    /**
+     * What toSearchableArray() reads, loaded with the query of a rebuild (makeAllSearchableQuery()).
+     *
+     * @param  Builder<self>  $query
+     * @return Builder<self>
+     */
+    protected function makeAllSearchableUsing(Builder $query): Builder
+    {
+        return $query->with(['project:id,identifier', 'labels:labels.id', 'state:id,category']);
     }
 
     /**

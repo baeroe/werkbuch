@@ -19,6 +19,7 @@ use Illuminate\Support\Carbon;
 use Laravel\Fortify\Fortify;
 use Laravel\Fortify\TwoFactorAuthenticatable;
 use Laravel\Sanctum\HasApiTokens;
+use Laravel\Scout\Searchable;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
 use Spatie\Permission\Traits\HasRoles;
@@ -54,7 +55,7 @@ use Spatie\Permission\Traits\HasRoles;
 class User extends Authenticatable implements HasLocalePreference, HasMedia
 {
     /** @use HasFactory<UserFactory> */
-    use HasApiTokens, HasFactory, HasRoles, HasUlids, InteractsWithMedia, Notifiable, TwoFactorAuthenticatable;
+    use HasApiTokens, HasFactory, HasRoles, HasUlids, InteractsWithMedia, Notifiable, Searchable, TwoFactorAuthenticatable;
 
     /**
      * Get the attributes that should be cast.
@@ -70,6 +71,23 @@ class User extends Authenticatable implements HasLocalePreference, HasMedia
             'disabled_at' => 'datetime',
             'two_factor_confirmed_at' => 'datetime',
             'password' => 'hashed',
+        ];
+    }
+
+    /**
+     * The search document (index `users`): name and handle to search, type and whether the account is disabled to
+     * filter by.
+     *
+     * @return array{id: string, name: string, handle: string, type: string, disabled: bool}
+     */
+    public function toSearchableArray(): array
+    {
+        return [
+            'id' => $this->id,
+            'name' => $this->name,
+            'handle' => $this->handle,
+            'type' => $this->type->value,
+            'disabled' => $this->isDisabled(),
         ];
     }
 

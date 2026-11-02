@@ -34,6 +34,14 @@ jobs:
           --health-interval=5s
           --health-timeout=5s
           --health-retries=20
+      # tests/Integration searches real Meilisearch (the same image as DDEV)
+      meilisearch:
+        image: getmeili/meilisearch:v1.56.0@sha256:1f578fa865f8251894b3bf38d6668d6209a3f451f8f65ab953e129d4c1db5ef4
+        env:
+          MEILI_MASTER_KEY: ci-werkbuch-master-key
+          MEILI_NO_ANALYTICS: 'true'
+        ports:
+          - 7700:7700
 
     env:
       DB_CONNECTION: mariadb
@@ -42,6 +50,9 @@ jobs:
       DB_DATABASE: testing
       DB_USERNAME: db
       DB_PASSWORD: db
+      # real environment variables win over .env (copied from .env.example)
+      MEILISEARCH_HOST: http://127.0.0.1:7700
+      MEILISEARCH_KEY: ci-werkbuch-master-key
 
     steps:
       - uses: actions/checkout@v4
@@ -94,6 +105,9 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Meilisearch
+        run: curl -fsS --retry 30 --retry-delay 1 --retry-all-errors http://127.0.0.1:7700/health
 
       - name: Pest with coverage
         run: php artisan test --coverage --min=100

@@ -21,6 +21,9 @@ arch('filters, displays and the calendar are plain PHP')
     ->expect(['App\Domain\Filter', 'App\Domain\Views', 'App\Domain\Time'])->not->toUse(['Illuminate', 'Carbon']);
 arch('views translate into queries and write nothing')
     ->expect('App\Views')->classes()->toBeFinal()->not->toUse([EventRecorder::class, 'Illuminate\Support\Facades\Schema']);
+arch('search turns models into documents and writes nothing')
+    ->expect('App\Search')->classes()->toBeFinal()
+    ->not->toUse([EventRecorder::class, 'Illuminate\Support\Facades\DB', 'Illuminate\Support\Facades\Schema']);
 arch('domain classes are final')->expect('App\Domain')->classes()->toBeFinal();
 arch('rich text is final and leaves actions, http and the database alone')
     ->expect('App\RichText')->classes()->toBeFinal()->not->toUse(['App\Actions', 'App\Http', 'Illuminate\Support\Facades\DB']);
@@ -83,6 +86,17 @@ it('only reads in app/Views', function () {
         ->all();
 
     expect(appFiles('app/Views'))->not->toBe([])
+        ->and($hits)->toBe([]);
+});
+
+// the index is written through Scout's engine only (searchable(), unsearchable(), flush, settings, removeWhere): no model
+// write, no insert, as in app/Views (K5)
+it('keeps App\Search free of writes', function () {
+    $hits = collect(appFiles('app/Search'))
+        ->flatMap(fn (string $f) => [...modelWrites((string) file_get_contents(repo_path($f)), $f), ...inserts((string) file_get_contents(repo_path($f)), $f)])
+        ->all();
+
+    expect(appFiles('app/Search'))->not->toBe([])
         ->and($hits)->toBe([]);
 });
 
