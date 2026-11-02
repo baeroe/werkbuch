@@ -8,7 +8,7 @@ namespace App\Domain;
  * (two regional indicators), a keycap (`1️⃣`, also without the selector) or a subdivision flag (🏴 with tags). A text
  * symbol with the emoji property (`©`, `‼`, `™`, `❤`) counts only with its selector U+FE0F, a modifier base (☝) also
  * with a skin tone. A pictograph the Unicode data of PCRE does not know yet counts as one (a newer emoji).
- * `resources/js/components/ui/EmojiPicker.tsx` (`isEmoji`) follows the same rule.
+ * `resources/js/domain/emoji.ts` (`isEmoji`) follows the same rule.
  */
 final class Emoji
 {

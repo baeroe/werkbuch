@@ -12,10 +12,12 @@ use App\Actions\Attachments\GetAttachment;
 use App\Actions\Attachments\ShowAttachment;
 use App\Actions\Attachments\UploadAttachment;
 use App\Actions\Comments\AddComment;
+use App\Actions\Comments\AddReaction;
 use App\Actions\Comments\DeleteComment;
 use App\Actions\Comments\EditComment;
 use App\Actions\Comments\GetComment;
 use App\Actions\Comments\ListComments;
+use App\Actions\Comments\RemoveReaction;
 use App\Actions\Favorites\ListFavorites;
 use App\Actions\Favorites\ToggleFavorite;
 use App\Actions\Invitations\InviteUser;
@@ -92,6 +94,7 @@ use App\Actions\WorkItemTypes\SaveWorkItemType;
 use App\Events\EventType;
 use App\Models\Attachment;
 use App\Models\Comment;
+use App\Models\CommentReaction;
 use App\Models\Label;
 use App\Models\Property;
 use App\Models\RelationType;
@@ -441,6 +444,26 @@ return [
         'allowed' => $projectAdmins,
         'hidden' => ['outsider_private'],
         'event' => EventType::CommentDeleted,
+    ],
+    // reactions: whoever may comment (`item.comment`, viewers too); the column's own emoji
+    'AddReaction' => [
+        'action' => AddReaction::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => AddReaction::run($a, Comment::factory()->for($w->item($column), 'workItem')->create(['author_id' => $w->target->id]), ['emoji' => '👍']),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+        'event' => EventType::CommentReactionAdded,
+    ],
+    'RemoveReaction' => [
+        'action' => RemoveReaction::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $comment = Comment::factory()->for($w->item($column), 'workItem')->create(['author_id' => $w->target->id]);
+            CommentReaction::query()->create(['comment_id' => $comment->id, 'user_id' => $a->user->id, 'emoji' => '👍']);
+
+            return RemoveReaction::run($a, $comment, ['emoji' => '👍']);
+        },
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+        'event' => EventType::CommentReactionRemoved,
     ],
     'ListRelations' => [
         'action' => ListRelations::class,

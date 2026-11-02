@@ -148,6 +148,8 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
     Route::get('comments/{comment}', [CommentsController::class, 'show']);
     Route::patch('comments/{comment}', [CommentsController::class, 'update']);
     Route::delete('comments/{comment}', [CommentsController::class, 'destroy']);
+    Route::put('comments/{comment}/reactions', [CommentsController::class, 'react']);
+    Route::delete('comments/{comment}/reactions', [CommentsController::class, 'unreact']);
     Route::delete('relations/{relation}', [RelationsController::class, 'destroy']);
 
     Route::get('views', [ViewsController::class, 'index']);

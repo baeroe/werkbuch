@@ -119,6 +119,7 @@
     "field.email.bots": "Bots have no email address.",
     "field.email.invalid": "This is not a valid email address.",
     "field.email.taken": "This address is already taken.",
+    "field.emoji.invalid": "This is not a single emoji.",
     "field.enabled_type_ids.archived": "An archived type cannot be enabled again.",
     "field.enabled_type_ids.duplicate": "A type is enabled twice.",
     "field.enabled_type_ids.required": "At least one type must be enabled.",

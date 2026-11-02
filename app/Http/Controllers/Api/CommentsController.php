@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Api;
 
 use App\Actions\Comments\AddComment;
+use App\Actions\Comments\AddReaction;
 use App\Actions\Comments\DeleteComment;
 use App\Actions\Comments\EditComment;
 use App\Actions\Comments\GetComment;
 use App\Actions\Comments\ListComments;
+use App\Actions\Comments\RemoveReaction;
 use App\Http\Api\ApiList;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\CommentResource;
@@ -52,5 +54,17 @@ final class CommentsController extends Controller
         DeleteComment::run(Actor::fromRequest($request), $comment);
 
         return response()->noContent();
+    }
+
+    /** `emoji`: 200 `{data: Comment}` with its reactions; the same emoji twice changes nothing. */
+    public function react(Request $request, Comment $comment): CommentResource
+    {
+        return new CommentResource(AddReaction::run(Actor::fromRequest($request), $comment, $request->all()));
+    }
+
+    /** `emoji` in the body: takes back the own one, 200 `{data: Comment}`. */
+    public function unreact(Request $request, Comment $comment): CommentResource
+    {
+        return new CommentResource(RemoveReaction::run(Actor::fromRequest($request), $comment, $request->all()));
     }
 }

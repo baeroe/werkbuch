@@ -38,8 +38,8 @@ final class ListHistory
 {
     use AsAction;
 
-    /** The events of an item that are no history: watching is a setting of one person. */
-    private const LEFT_OUT = [EventType::WorkItemSubscribed, EventType::WorkItemUnsubscribed];
+    /** The events of an item that are no history: watching is a setting of one person, a reaction is no change of a comment. */
+    private const LEFT_OUT = [EventType::WorkItemSubscribed, EventType::WorkItemUnsubscribed, EventType::CommentReactionAdded, EventType::CommentReactionRemoved];
 
     /** The events of the comments of an item that are history, besides `work_item.*`. */
     private const COMMENTS = [EventType::CommentUpdated, EventType::CommentDeleted];

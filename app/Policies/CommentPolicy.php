@@ -32,6 +32,12 @@ final class CommentPolicy
         return Visibility::can($user, Permission::ItemComment, $item->project) ? Response::allow() : Response::deny(__('problem.detail.comment_readers_only'));
     }
 
+    /** Reacting to a comment: whoever may comment on its item (`item.comment`, viewers too). */
+    public function react(User $user, Comment $comment): Response
+    {
+        return $this->create($user, $comment->workItem);
+    }
+
     /** Editing a comment: its author only, as long as they may comment in the project; an admin is refused as well. */
     public function update(User $user, Comment $comment): Response
     {
