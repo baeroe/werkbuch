@@ -414,6 +414,7 @@
     "items.board.reason.first_column": "„:column“ ist die erste Spalte.",
     "items.board.reason.label_locked": "Nach Label gruppierte Boards sind nicht ziehbar: Ein Item steht in der Spalte jedes seiner Labels. Labels änderst du mit L.",
     "items.board.reason.last_column": "„:column“ ist die letzte Spalte.",
+    "items.board.reason.load_more": "Unter dieser Karte stehen in :column noch Karten, die nicht geladen sind. Lade die Spalte weiter, dann verschiebe die Karte.",
     "items.board.reason.no_child_type": "Im Projekt ist kein Typ aktiviert, der Kind-Item sein kann.",
     "items.board.reason.no_room": "Hier ist kein Platz mehr. Verschiebe die Karte an eine andere Stelle.",
     "items.board.reason.not_member": ":name ist nicht Mitglied im Projekt :project und kann das Item nicht übernehmen.",

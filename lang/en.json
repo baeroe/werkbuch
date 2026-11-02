@@ -414,6 +414,7 @@
     "items.board.reason.first_column": "“:column” is the first column.",
     "items.board.reason.label_locked": "Boards grouped by label cannot be dragged: an item stands in the column of each of its labels. Change labels with L.",
     "items.board.reason.last_column": "“:column” is the last column.",
+    "items.board.reason.load_more": "Below this card, :column holds cards that are not loaded yet. Load more of the column, then move the card.",
     "items.board.reason.no_child_type": "The project enables no type that can be a child item.",
     "items.board.reason.no_room": "There is no room left here. Move the card to another place.",
     "items.board.reason.not_member": ":name is not a member of project :project and cannot take the item.",

@@ -374,9 +374,15 @@ export function BoardLayout({ groups, groupBy, display, project, createDefaults,
   /**
    * Sends a new place of a card in its column sorted by rank (`ids`: the column with the card at `index`): the rank
    * between its new neighbours. Returns null, and moves nothing, where the rank would grow past what the server takes
-   * (P23).
+   * (P23) and at the last loaded place of a column that has more to load.
    */
   function sendPlace(item: ListedItem, column: BoardColumnData, ids: readonly string[], index: number, pointer = false): Promise<unknown> | null {
+    // below the last loaded card come cards not loaded yet: a rank after the last loaded one would put the card after
+    // all of them (T18-M1)
+    if (column.hasMore && index === ids.length - 1) {
+      refuse(item, { code: 'load_more', params: { column: column.label } });
+      return null;
+    }
     const rankOf = (id: string | undefined) => (id === undefined ? null : (itemById.get(id)?.rank ?? null));
     const rank = rankForSlot(rankOf(ids[index - 1]), rankOf(ids[index + 1]), display.sort.direction);
     if (rank === null) {

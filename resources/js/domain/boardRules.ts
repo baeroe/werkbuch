@@ -40,6 +40,7 @@ export interface BoardReason {
     | 'last_column'
     | 'workflow_loading'
     | 'no_room'
+    | 'load_more'
     | 'state_unknown'
     | 'start_transition'
     | 'start_category'

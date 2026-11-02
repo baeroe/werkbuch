@@ -285,6 +285,31 @@ describe('the board', () => {
     expect(sent('PATCH', '/api/v1/work-items/wi_web_44')).toEqual([]);
   });
 
+  it('does not move a card to the last loaded place of a column that has more cards to load', async () => {
+    board.pageSize = 2;
+    // the further pages of a column wait
+    const inner = globalThis.fetch;
+    globalThis.fetch = (input, init) =>
+      typeof init?.body === 'string' && (JSON.parse(init.body) as Body & { cursor?: string }).cursor !== undefined ? new Promise<Response>(() => {}) : inner(input, init);
+    try {
+      renderBoard('/projects/WEB?layout=board');
+      const card = await waitFor(() => cardIn('Todo', 'WEB-43'));
+      expect(within(column('Todo')).getAllByRole('article').map((entry) => entry.getAttribute('data-card-id'))).toEqual(['wi_web_43', 'wi_web_44']);
+      act(() => card.focus());
+
+      // below WEB-44 come cards that are not loaded yet: a rank after WEB-44 would put WEB-43 after all of them
+      press('ArrowDown', { altKey: true });
+      expect(lastToast()).toMatchObject({
+        tone: 'error',
+        title: 'WEB-43 nicht verschoben',
+        description: 'Unter dieser Karte stehen in Todo noch Karten, die nicht geladen sind. Lade die Spalte weiter, dann verschiebe die Karte.',
+      });
+      expect(sent('PATCH', '/api/v1/work-items/wi_web_43')).toEqual([]);
+    } finally {
+      globalThis.fetch = inner;
+    }
+  });
+
   it('keeps the cards of a viewer in place and says why', async () => {
     board.roles.WEB = 'viewer';
     renderBoard('/projects/WEB?layout=board');
