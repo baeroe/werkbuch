@@ -8,7 +8,7 @@
 
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import type { MouseEvent, ReactNode } from 'react';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { currentToasts, resetToasts } from '@/components/ui/toast';
 import { listCommands } from '@/lib/commands';
 import { listShortcuts } from '@/lib/shortcuts/registry';
@@ -263,6 +263,36 @@ describe('the timeline', () => {
     });
     expect(patches('wi_web_30')).toEqual([]);
     expect(row('WEB-30').getAttribute('aria-label')).toMatch(/01\.10\.2026 bis 15\.11\.2026/);
+  });
+
+  it('asks before the page goes while moved dates are not saved yet', async () => {
+    // the dates of WEB-30 wait on their way
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const inner = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      if (init?.method === 'PATCH' && String(input).endsWith('/wi_web_30')) await gate;
+      return inner(input, init);
+    };
+    onTestFinished(() => {
+      globalThis.fetch = inner;
+    });
+    const leave = () => {
+      const event = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    renderTimeline();
+    await focusRow('WEB-30');
+    expect(leave()).toBe(false);
+    press('ArrowRight', { shiftKey: true });
+    // the keys rest for a moment, then the dates are on their way
+    expect(leave()).toBe(true);
+    await waitFor(() => expect(row('WEB-30').getAttribute('aria-busy')).toBe('true'), { timeout: 2000 });
+    expect(leave()).toBe(true);
+    await act(async () => release());
+    await waitFor(() => expect(stored('wi_web_30').start_date).toBe('2026-10-08'));
+    await waitFor(() => expect(leave()).toBe(false));
   });
 
   it('saves what was moved when the layout goes before the keys rest', async () => {
@@ -528,6 +558,25 @@ describe('dragging', () => {
     expect(barOf('wi_web_30').className).toContain('cursor-grabbing');
     pointerUp({ clientX: 584 });
     await waitFor(() => expect(patches('wi_web_30')).toEqual([{ start_date: '2026-10-08', due_date: '2026-11-22' }]));
+  });
+
+  it('keeps the dates of a drag that follows a key before the keys rest', async () => {
+    renderTimeline();
+    await focusRow('WEB-30');
+    await editable('wi_web_30');
+    press('ArrowRight', { shiftKey: true });
+    expect(row('WEB-30').getAttribute('aria-label')).toMatch(/08\.10\.2026 bis 22\.11\.2026/);
+    // within the delay of the key, a drag by seven more days
+    pointerDown(barOf('wi_web_30'), { clientX: 500 });
+    pointerMove({ clientX: 584 });
+    pointerUp({ clientX: 584 });
+    await waitFor(() => expect(patches('wi_web_30')).toEqual([{ start_date: '2026-10-15', due_date: '2026-11-29' }]));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, SAVE_DELAY + 100));
+    });
+    // the key's timer does not save its older dates over the drag's
+    expect(patches('wi_web_30')).toEqual([{ start_date: '2026-10-15', due_date: '2026-11-29' }]);
+    expect(stored('wi_web_30')).toMatchObject({ start_date: '2026-10-15', due_date: '2026-11-29' });
   });
 
   it('changes the due date at its end and the start at its start, never past each other', async () => {

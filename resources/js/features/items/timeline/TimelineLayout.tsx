@@ -321,6 +321,15 @@ export function TimelineLayout({ groups, groupBy, project, createDefaults, selec
 
   /** Held keys: the bar moves at once, the dates are saved when the keys rest. */
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  // dates that are moved but not saved yet (keys that have not rested, a save on its way) would go with the page: the
+  // browser asks first (T21-M2); a draft lives until its save is done
+  const unsaved = drafts.size > 0;
+  useEffect(() => {
+    if (!unsaved) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [unsaved]);
   useEffect(
     () => () => {
       // a layout switch (1–4) right after a key: save what was moved
@@ -363,7 +372,8 @@ export function TimelineLayout({ groups, groupBy, project, createDefaults, selec
       item.id,
       setTimeout(() => {
         timers.current.delete(item.id);
-        void saveRef.current(item.id, next);
+        // only the dates of the last key: a drag since then saved its own (T21-M3)
+        if (latest.current.drafts.get(item.id) === next) void saveRef.current(item.id, next);
       }, SAVE_DELAY),
     );
     // the edge that moves stays in view: the start of a moved bar, the end of a longer or shorter one
