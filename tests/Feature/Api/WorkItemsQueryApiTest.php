@@ -351,3 +351,30 @@ it('shows the sub-items of a view without them when GET asks for them', function
     $this->actingAs($this->mara)->getJson('/api/v1/work-items?show_sub_items=yes')->assertUnprocessable()
         ->assertJsonPath('errors', ['show_sub_items' => [__('field.boolean')]]);
 });
+
+it('counts every group as many items as its pages hold', function (array $body) {
+    // a second label, an epic with a child, an archived item and a project on a workflow of its own
+    $this->items['Alpha']->labels()->attach($this->forms->id);
+    $epic = WorkItem::factory()->for($this->web)->epic()->create(['assignee_id' => $this->jonas->id]);
+    WorkItem::factory()->childOf($epic)->create(['assignee_id' => null]);
+    WorkItem::factory()->for($this->web)->archived()->create();
+    WorkItem::factory()->for(Project::factory()->public()->create(['workflow_id' => Workflow::factory()->create()->id]))->create();
+
+    foreach (['state', 'category', 'assignee', 'priority', 'type', 'label', 'project', 'parent', 'none'] as $by) {
+        $answer = $this->actingAs($this->mara)->postJson('/api/v1/work-items/groups', [...$body, 'group_by' => $by])->assertOk()->json('data');
+        // two workflows: the states fall back to their categories
+        expect($answer['group_by'])->toBe($by === 'state' ? 'category' : $by);
+        foreach ($answer['groups'] as $group) {
+            $total = $this->actingAs($this->mara)->postJson('/api/v1/work-items/query', [
+                ...$body, 'group_by' => $answer['group_by'], 'group' => $group['key'], 'per_page' => 1,
+            ])->assertOk()->json('meta.total');
+
+            expect([$by, $group['key'], $total])->toBe([$by, $group['key'], $group['count']]);
+        }
+    }
+})->with([
+    'everything' => [[]],
+    'without sub-items' => [['show_sub_items' => false]],
+    'with archived items' => [['include_archived' => true]],
+    'with a filter' => [['filter' => ['version' => 1, 'conditions' => [['field' => 'state_category', 'op' => 'in', 'value' => ['unstarted', 'started', 'backlog']]]]]],
+]);
