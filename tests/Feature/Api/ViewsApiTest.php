@@ -70,3 +70,14 @@ it('lets a token that only reads read the views, not create one', function () us
 
     expect(View::query()->count())->toBe(1);
 });
+
+it('keeps per_page in links.next of the list', function () {
+    $ida = User::factory()->create();
+    View::factory()->count(3)->create(['created_by' => $ida->id]);
+
+    $first = $this->actingAs($ida)->getJson('/api/v1/views?per_page=1')->assertOk();
+    $next = $first->json('links.next');
+
+    expect($next)->toContain('per_page=1')
+        ->and($this->actingAs($ida)->getJson($next)->assertOk()->json('data'))->toHaveCount(1);
+});

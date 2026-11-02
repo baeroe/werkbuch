@@ -353,7 +353,7 @@ Groups and counts only count what the account of the token sees. A filter on a p
 
 ### Pages and cursors
 
-A page holds up to 100 items (`per_page`, 100 by default); `meta.total` counts all of them, `meta.next_cursor` leads on. Send the same request again with `cursor` set to it; the sort decides the order, ties are broken by the manual order and the ULID, so every item comes exactly once. A cursor belongs to its sort and group: one from another list is a `422` at `cursor`, and an empty `cursor` starts at the first page.
+A page holds up to 100 items (`per_page`, 100 by default); `meta.total` counts all of them, `meta.next_cursor` leads on. With `GET`, follow `links.next`: it keeps the query (view, filter, sort, `per_page`). With `POST`, `links.next` is `null`: send the same request again with `cursor` set to `meta.next_cursor`; the sort decides the order, ties are broken by the manual order and the ULID, so every item comes exactly once. A cursor belongs to its sort and group: one from another list is a `422` at `cursor`, and an empty `cursor` starts at the first page.
 
 ### Manage views
 

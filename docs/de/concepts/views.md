@@ -353,7 +353,7 @@ Gruppen und Zahlen zählen nur, was das Konto des Tokens sieht. Ein Filter auf e
 
 ### Seiten und Cursor
 
-Eine Seite hat bis zu 100 Items (`per_page`, Standard 100); `meta.total` zählt alle, `meta.next_cursor` führt weiter. Schick dieselbe Anfrage noch einmal mit diesem `cursor`; die Sortierung bestimmt die Reihenfolge, Gleichstand entscheiden die manuelle Reihenfolge und die ULID, so kommt jedes Item genau einmal. Ein Cursor gehört zu seiner Sortierung und Gruppe: einer aus einer anderen Liste ist ein `422` an `cursor`, und ein leerer `cursor` beginnt auf der ersten Seite.
+Eine Seite hat bis zu 100 Items (`per_page`, Standard 100); `meta.total` zählt alle, `meta.next_cursor` führt weiter. Bei `GET` folgst du `links.next`: der Link behält die Query (View, Filter, Sortierung, `per_page`). Bei `POST` ist `links.next` `null`: schick dieselbe Anfrage noch einmal mit `meta.next_cursor` als `cursor`; die Sortierung bestimmt die Reihenfolge, Gleichstand entscheiden die manuelle Reihenfolge und die ULID, so kommt jedes Item genau einmal. Ein Cursor gehört zu seiner Sortierung und Gruppe: einer aus einer anderen Liste ist ein `422` an `cursor`, und ein leerer `cursor` beginnt auf der ersten Seite.
 
 ### Views verwalten
 

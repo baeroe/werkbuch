@@ -308,3 +308,32 @@ it('answers the groups and the counts over REST, also to a read-only token', fun
     forgetApiAuth();
     $this->withToken($write)->postJson('/api/v1/work-items/counts', ['filters' => ['a' => ['version' => 1, 'conditions' => []]]])->assertForbidden();
 });
+
+it('leads links.next of a GET list to the next page of the same list', function () use ($ids) {
+    WorkItem::factory()->for(Project::factory()->public()->create())->create(['due_date' => '2026-12-01']);
+    $first = $this->actingAs($this->mara)->getJson('/api/v1/work-items?filter[project]=WEB&sort=-due_date&per_page=2')->assertOk();
+    $next = $first->json('links.next');
+
+    expect($next)->toContain('per_page=2')->toContain('sort=-due_date')->toContain('filter%5Bproject%5D=WEB')
+        ->and([...$ids($first), ...$ids($this->actingAs($this->mara)->getJson($next))])->toBe(($this->ids)('Beta', 'Alpha', 'Delta', 'Gamma Release'));
+});
+
+it('gives a read POST no links to follow: the same request with the cursor leads on', function () {
+    $page = $this->actingAs($this->mara)->postJson('/api/v1/work-items/query', ['per_page' => 2])->assertOk();
+
+    expect($page->json('links.next'))->toBeNull()
+        ->and($page->json('links.prev'))->toBeNull()
+        ->and($page->json('meta.next_cursor'))->not->toBeNull();
+
+    $second = $this->actingAs($this->mara)->postJson('/api/v1/work-items/query', ['per_page' => 2, 'cursor' => $page->json('meta.next_cursor')])->assertOk();
+    expect($second->json('links.prev'))->toBeNull();
+});
+
+it('keeps the empty objects of a read POST objects', function () {
+    // Beta has no rich text
+    $raw = $this->actingAs($this->mara)->postJson('/api/v1/work-items/query', ['filter' => ['version' => 1, 'conditions' => [
+        ['field' => 'title', 'op' => 'contains', 'value' => 'Beta'],
+    ]]])->assertOk()->getContent();
+
+    expect($raw)->toContain('"values_markdown":{}');
+});
