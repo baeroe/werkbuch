@@ -1,6 +1,6 @@
 # Search
 
-One search finds work items, projects, people and bots, and views. In the interface it lives in the command palette (<kbd>⌘ / Ctrl</kbd>+<kbd>K</kbd>); over the API it is `GET /api/v1/search`. Both give the same hits. The browser never talks to the search engine itself: every search goes through werkbuch, which decides what you may see.
+One search finds work items, projects, people and bots, and views. In the interface it lives in the command palette (<kbd>⌘ / Ctrl</kbd>+<kbd>K</kbd>); over the API it is `GET /api/v1/search`. Both search the same way and leave out the same items, projects and accounts; the palette asks for fewer hits per kind (8) and shows people and bots only to org admins (see below), and it never searches the archive. The browser never talks to the search engine itself: every search goes through werkbuch, which decides what you may see.
 
 ## What is found
 
