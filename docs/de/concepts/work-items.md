@@ -63,11 +63,11 @@ Wer ein Item beobachtet, erfährt von Änderungen, sobald es Benachrichtigungen 
 
 **Löschen** entfernt ein Item endgültig, mit seinen Werten, Labels und Relationen; das dürfen nur Admins des Projekts. Die Oberfläche wartet vorher fünf Sekunden, und **Rückgängig** hält es auf. Kind-Items werden zu Items ohne Eltern, und sie wie auch die Items am anderen Ende seiner Relationen bekommen einen Eintrag in ihre History. Die History des gelöschten Items selbst bleibt im Event-Protokoll.
 
-`mod+backspace` an einem Item archiviert es, wenn es geschlossen ist, und löscht es sonst, beides mit Rückgängig.
+`mod+backspace` an einem Item archiviert es, wenn es geschlossen ist, und löscht es sonst, beides mit Rückgängig. Auf eine Auswahl wirkt es nur, wenn das für jedes Item dasselbe ist (alle geschlossen, alle offen oder alle archiviert).
 
 ## Mehrfachbearbeitung
 
-Mehrere Items können dieselbe Änderung auf einmal bekommen: Status, Resolution, Assignee, Priorität, Labels (setzen, hinzufügen oder entfernen), Daten, Archivieren und Wiederherstellen. Für jedes Item gelten seine eigenen Regeln: sein Workflow, sein Projekt, deine Rolle darin. Was bei einem Item abgelehnt wird, hält die anderen nicht auf; die Antwort nennt die abgelehnten mit ihrem Grund. In der Oberfläche wählst du Items in einer [Liste](/de/concepts/views) aus (`x`, `shift+x`, `mod+a`): Die Leiste über der Liste ändert alle, die Item-Kürzel wirken auf die Auswahl, und ein Toast nennt, was abgelehnt wurde.
+Mehrere Items können dieselbe Änderung auf einmal bekommen: Status, Resolution, Assignee, Priorität, Labels (setzen, hinzufügen oder entfernen), Daten, Archivieren und Wiederherstellen. Für jedes Item gelten seine eigenen Regeln: sein Workflow, sein Projekt, deine Rolle darin. Was bei einem Item abgelehnt wird, hält die anderen nicht auf; die Antwort nennt die abgelehnten mit ihrem Grund. In der Oberfläche wählst du Items in einer [Liste](/de/concepts/views) aus (`x`, `shift+x`, `mod+a`): Die Leiste über der Liste ändert alle, die Item-Kürzel wirken auf die Auswahl, und ein Toast nennt, was abgelehnt wurde. Die Oberfläche bietet eine Aktion für eine Auswahl nur an, wenn sie für jedes ausgewählte Item erlaubt ist; sie ändert also nie nur einen Teil, weil Rechte fehlen oder Items archiviert sind.
 
 ## Gleichzeitige Änderungen
 

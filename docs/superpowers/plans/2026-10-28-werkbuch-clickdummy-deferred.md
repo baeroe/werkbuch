@@ -109,7 +109,7 @@ Minors des Final-Reviews, die laut Triage warten (deferred → 13c); Phase-Carri
 - T14-M4: `ListError retrying={false}` fest: „Erneut versuchen“ zeigt nie, dass es läuft.
 - T14-M5/M7: `useListState` erfindet für `view` ohne View still eine Projektbasis (unerreichbar); `useListData(_, _, _options)` ungenutzt.
 - T15-M6: der Bereich der `item.*`-Kürzel kommt vom Mount (`list`), der Katalog nennt `detail` (heute ohne Kollision; in der Tastatur-Doku klären).
-- T15-M8: `archiveManyWithUndo` setzt optimistisch `archived_at` auch bei offenen sichtbaren Zielen, bis das Nachladen es zurücknimmt (nur die geschlossenen senden, die offenen gleich als `not_closed` nennen).
+- ~~T15-M8: `archiveManyWithUndo` setzt optimistisch `archived_at` auch bei offenen sichtbaren Zielen, bis das Nachladen es zurücknimmt (nur die geschlossenen senden, die offenen gleich als `not_closed` nennen).~~ Erledigt mit A198 (2026-11-02): Archivieren gilt für eine Auswahl nur, wenn alle Items geschlossen sind; `archiveManyWithUndo` bekommt keine offenen mehr.
 - T16-M2: Filter-Chips nennen ein deaktiviertes Konto oder einen Status eines gerade ungenutzten Workflows „Verborgen“, obwohl beide lesbar sind (P21 meint unbekannte IDs).
 - T16-M4: × an einem Chip mit getipptem Text ändert die Adresse zweimal (Blur übernimmt erst den Text), eine überflüssige Anfrage; der Endstand stimmt.
 - T16-M5: ein Ladefehler der Properties macht gültige Property-Chips zu „Unbekanntes Feld“ (besser: Chip mit Ladefehler und „Erneut versuchen“; die Liste schickt die Bedingung unverändert, getestet).

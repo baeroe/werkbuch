@@ -63,11 +63,11 @@ Watchers will hear about changes once notifications arrive (a later phase). The 
 
 **Delete** removes an item for good, with its values, labels and relations; only project admins may. The interface waits five seconds first, and **Undo** stops it. Child items become items without a parent, and both they and the items at the other end of its relations get an entry in their history. The history of the deleted item itself stays in the event log.
 
-`mod+backspace` on an item archives it if it is closed and deletes it otherwise, both with undo.
+`mod+backspace` on an item archives it if it is closed and deletes it otherwise, both with undo. On a selection it acts only when that is the same for every item (all closed, all open or all archived).
 
 ## Bulk changes
 
-Several items can get the same change at once: status, resolution, assignee, priority, labels (set, add or remove), dates, archive and restore. Each item follows its own rules: its workflow, its project, your role in it. What is refused for one item does not stop the others; the answer lists the refused ones with their reason. In the interface, select items in a [list](/en/concepts/views) (`x`, `shift+x`, `mod+a`): the bar above the list changes them all, the item shortcuts act on the selection, and one toast names whatever was refused.
+Several items can get the same change at once: status, resolution, assignee, priority, labels (set, add or remove), dates, archive and restore. Each item follows its own rules: its workflow, its project, your role in it. What is refused for one item does not stop the others; the answer lists the refused ones with their reason. In the interface, select items in a [list](/en/concepts/views) (`x`, `shift+x`, `mod+a`): the bar above the list changes them all, the item shortcuts act on the selection, and one toast names whatever was refused. The interface offers an action for a selection only when it is allowed for every selected item, so it never changes just a part of them because of rights or archived items.
 
 ## Changes at the same time
 
