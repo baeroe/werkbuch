@@ -188,6 +188,23 @@ describe('dragging a card', () => {
     expect(useUiStore.getState().selection).toEqual([]);
   });
 
+  it('shows the dragged card as a picture that assistive tech and the keyboard leave out', async () => {
+    renderBoard('/projects/WEB?layout=board');
+    await waitFor(() => cardIn('Todo', 'WEB-48'));
+
+    await pickUp('Todo', 'WEB-48');
+    const overlay = document.querySelector('[inert]');
+    expect(overlay?.getAttribute('aria-hidden')).toBe('true');
+    expect(overlay?.querySelector('[data-card-id="wi_web_48"], article')).toBeTruthy();
+    // one card of that name, the one in its column
+    expect(screen.getAllByRole('article', { name: /^WEB-48 / })).toHaveLength(1);
+    act(() => void fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' }));
+    await waitFor(() => expect(dndSaid()).toBe('Abgebrochen. WEB-48 liegt wieder an seinem Platz.'));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  });
+
   it('moves a card dropped on another column there, and the server has it', async () => {
     renderBoard('/projects/APP?layout=board');
     await waitFor(() => cardIn('Todo', 'APP-16'));
@@ -313,6 +330,12 @@ describe('dragging a card', () => {
     const cancelled = document.querySelector('[data-column-key="app_cancelled"]')!;
     expect([...cancelled.querySelectorAll('[data-card-id]')].map((card) => card.getAttribute('data-card-id'))).toEqual(['wi_app_16']);
     expect(sent('POST', '/api/v1/work-items/wi_app_16/transition')).toEqual([{ to_state_id: 'app_progress', resolution_id: null }]);
+
+    // the question is answered: the second move goes out
+    await userEvent.setup().keyboard('{Enter}');
+    await waitFor(() => expect(sent('POST', '/api/v1/work-items/wi_app_16/transition')).toHaveLength(2));
+    await waitFor(() => expect(stateOf('wi_app_16')).toBe('app_cancelled'));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
   it('drops a card between two others and sends the rank between them', async () => {

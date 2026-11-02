@@ -653,8 +653,10 @@ export function BoardLayout({ groups, groupBy, display, project, createDefaults,
           </div>
           <DragOverlay dropAnimation={dragging.dropAnimation} zIndex={40} className="cursor-grabbing">
             {dragging.dragItem ? (
-              // flow-root keeps the card's margin (the room of its tab) inside, so the overlay measures like the card's place
-              <div className="relative flow-root">
+              // flow-root keeps the card's margin (the room of its tab) inside, so the overlay measures like the card's place;
+              // a picture of the card only: assistive tech hears the drag from dnd-kit's live region, and neither its
+              // link nor a second article of the same name take part (T19-M8)
+              <div className="relative flow-root" aria-hidden="true" inert>
                 <ItemCard
                   item={dragging.dragItem}
                   fields={display.fields}

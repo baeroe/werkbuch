@@ -706,7 +706,8 @@ describe('the item list screen', () => {
     press('a', { ctrlKey: true });
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(useUiStore.getState().selection).toEqual(['wi_web_1']);
-    expect(announcer().textContent).toBe('WEB-1 ausgewählt, 1 von 5');
+    // the new filter makes the list unsaved; nothing says that the selection went
+    expect(announcer().textContent).not.toBe('Auswahl aufgehoben');
     expect(currentToasts()).toEqual([]);
     await act(async () => gate.release());
     await waitFor(() => expect(groupBodies()).toHaveLength(2));

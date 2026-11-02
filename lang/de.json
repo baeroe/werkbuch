@@ -364,6 +364,7 @@
     "items.announce.result.none_filtered": "Kein Item passt zum Filter",
     "items.announce.selected": ":key ausgewählt, :of",
     "items.announce.some_item": "Ein Item",
+    "items.announce.unsaved": "Ungespeicherte Änderungen: Die Liste weicht vom Gespeicherten ab.",
     "items.blocked.by": "Blockiert von :keys",
     "items.blocked.hidden": "verborgenes Item",
     "items.blocked.hidden_in_list": "einem verborgenen Item",

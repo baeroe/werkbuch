@@ -364,6 +364,7 @@
     "items.announce.result.none_filtered": "No item matches the filter",
     "items.announce.selected": ":key selected, :of",
     "items.announce.some_item": "An item",
+    "items.announce.unsaved": "Unsaved changes: the list differs from what is saved.",
     "items.blocked.by": "Blocked by :keys",
     "items.blocked.hidden": "hidden item",
     "items.blocked.hidden_in_list": "a hidden item",

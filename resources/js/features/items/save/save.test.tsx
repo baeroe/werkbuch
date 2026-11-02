@@ -158,6 +158,18 @@ const reasonOf = (button: HTMLElement) => document.getElementById(button.getAttr
 /* -------------------------------------------------------------------------- tests */
 
 describe('unsaved changes', () => {
+  it('says once in the status region of the list that it now differs from what is saved, and no other region reads the bar', async () => {
+    await openView(ownView());
+    await screen.findByRole('heading', { level: 1 });
+    const announcer = screen.getByRole('status', { name: 'Mitteilungen der Liste' });
+    expect(announcer.textContent).toBe('');
+
+    act(() => inertia.go('/views/v_due_week?group=priority'));
+    const bar = await screen.findByText('Ungespeicherte Änderungen');
+    await waitFor(() => expect(announcer.textContent).toBe('Ungespeicherte Änderungen: Die Liste weicht vom Gespeicherten ab.'));
+    expect(bar.closest('[aria-live]')).toBeNull();
+  });
+
   it('shows a changed view as unsaved, and "Verwerfen" brings the saved state back', async () => {
     await openView(ownView(), '?group=priority');
     expect(await screen.findByText('Ungespeicherte Änderungen')).toBeTruthy();

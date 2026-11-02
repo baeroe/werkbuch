@@ -328,6 +328,7 @@ function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: P
         resultKey={JSON.stringify([sent, state.display.show_sub_items])}
         ready={data.current && data.status === 'success'}
         filtered={filtered}
+        unsaved={unsaved}
       />
       <ListHeader preset={preset} project={project} view={view} layout={state.display.layout} onLayout={setLayout} />
 
@@ -358,22 +359,20 @@ function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: P
         )}
       </StickyToolbar>
 
-      {/* polite and always there: a change of filter or display announces that the list now differs from what is saved */}
-      <div aria-live="polite">
-        {unsaved && (
-          <div className="mt-2">
-            <UnsavedBar
-              view={view}
-              saveReason={saveReason}
-              saveAsReason={saveAsReason}
-              saving={saving.saving}
-              onDiscard={discard}
-              onSave={save}
-              onSaveAs={() => setSavingAs(true)}
-            />
-          </div>
-        )}
-      </div>
+      {/* the list's one status region says that it now differs from what is saved (ListAnnouncer) */}
+      {unsaved && (
+        <div className="mt-2">
+          <UnsavedBar
+            view={view}
+            saveReason={saveReason}
+            saveAsReason={saveAsReason}
+            saving={saving.saving}
+            onDiscard={discard}
+            onSave={save}
+            onSaveAs={() => setSavingAs(true)}
+          />
+        </div>
+      )}
       <SaveAsDialog
         open={savingAs}
         onOpenChange={setSavingAs}

@@ -109,6 +109,8 @@ export function TableLayout({ groups, groupBy, display, selection, onSelect, onS
   const activeColumn = Math.min(column, columns.length);
 
   const rows = useMemo(() => listRows(groups, grouped, collapsed), [groups, grouped, collapsed]);
+  // every row of the table, the header row included: unknown (-1) while an open group has rows still to load
+  const rowCount = groups.some((group) => !collapsed.has(group.key) && (group.hasMore || (group.count > 0 && group.status !== 'success'))) ? -1 : rows.length + 1;
   // an item with two labels has two rows: the cells are addressed by the row (`rowKey`), the cursor by the item
   const itemRows = useMemo(() => rows.filter((row): row is ItemRow => row.kind === 'item'), [rows]);
   const rowKeys = useMemo(() => itemRows.map(rowKey), [itemRows]);
@@ -491,7 +493,7 @@ export function TableLayout({ groups, groupBy, display, selection, onSelect, onS
       <table
         role="grid"
         aria-label={t('items.table.label')}
-        aria-rowcount={rows.length + 1}
+        aria-rowcount={rowCount}
         aria-colcount={span}
         aria-multiselectable="true"
         onKeyDown={gridKeys}

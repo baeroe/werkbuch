@@ -1,7 +1,8 @@
 /*
  * The one polite status region of an item list ("Mitteilungen der Liste", spec 5.1, WCAG 4.1.3): it says what changes
  * without the focus moving. A change of the selection ("WEB-47 ausgewählt, 3 von 21", "Auswahl aufgehoben") and the
- * result of a new filter, once its answer is there ("2 Items", "Kein Item passt zum Filter"); not the first load.
+ * result of a new filter, once its answer is there ("2 Items", "Kein Item passt zum Filter"); not the first load. And
+ * that the list now differs from what is saved ("Ungespeicherte Änderungen: …"), once it starts to.
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -45,10 +46,18 @@ interface ListAnnouncerProps {
   ready: boolean;
   /** The list has conditions of its own: an empty result says that the filter matches nothing. */
   filtered: boolean;
+  /** The list differs from what is saved: said once when it starts to (the bar below the toolbar has no region of its own). */
+  unsaved?: boolean;
 }
 
-export function ListAnnouncer({ selection, items, total, resultKey, ready, filtered }: ListAnnouncerProps) {
+export function ListAnnouncer({ selection, items, total, resultKey, ready, filtered, unsaved = false }: ListAnnouncerProps) {
   const [message, setMessage] = useState('');
+
+  const wasUnsaved = useRef(unsaved);
+  useEffect(() => {
+    if (unsaved && !wasUnsaved.current) setMessage(t('items.announce.unsaved'));
+    wasUnsaved.current = unsaved;
+  }, [unsaved]);
 
   const previousSelection = useRef(selection);
   useEffect(() => {

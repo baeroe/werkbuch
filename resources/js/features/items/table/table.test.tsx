@@ -687,6 +687,20 @@ describe('TableLayout', () => {
     expect(retry).toHaveBeenCalled();
   });
 
+  it('counts its rows only while every open group is loaded, else says the count is unknown', () => {
+    // a heading and two rows, the header row above them
+    const loaded = renderTable({ groups: [group('a', items('a', 2))], groupBy: 'state' });
+    expect(within(loaded.container).getByRole('grid').getAttribute('aria-rowcount')).toBe('4');
+    loaded.unmount();
+
+    const more = renderTable({ groups: [group('a', items('a', 2), { count: 6, hasMore: true })], groupBy: 'state' });
+    expect(within(more.container).getByRole('grid').getAttribute('aria-rowcount')).toBe('-1');
+    more.unmount();
+
+    const waiting = renderTable({ groups: [group('a', items('a', 1)), group('b', [], { status: 'pending', count: 2 })], groupBy: 'state' });
+    expect(within(waiting.container).getByRole('grid').getAttribute('aria-rowcount')).toBe('-1');
+  });
+
   it('tints the selected item, the one in the preview and a fresh one', () => {
     useUiStore.setState({ peekItemId: 'wi_2', flashIds: ['wi_3'] });
     renderTable({ groups: [group('all', [web1, web2, web3])], selection: ['wi_1'] });
