@@ -6,6 +6,8 @@ use App\Actions\Favorites\ToggleFavorite;
 use App\Actions\Invitations\InviteUser;
 use App\Actions\Labels\DeleteLabel;
 use App\Actions\Projects\AddMember;
+use App\Actions\Projects\ArchiveProject;
+use App\Actions\Projects\CreateProject;
 use App\Actions\Projects\DeleteProject;
 use App\Actions\Projects\UpdateProject;
 use App\Actions\Tokens\CreateToken;
@@ -88,6 +90,21 @@ it('removes a deleted item', function () use ($world, $create, $ids) {
     DeleteWorkItem::run(actor($mara), $gone);
 
     expect($ids($engine, 'testing_work_items'))->toBe([$kept->id]);
+});
+
+it('indexes a project when it is created, archived and restored', function () use ($world) {
+    $engine = searchEngine();
+    [, $mara] = $world();
+    $document = fn (Project $project): ?array => $engine->documents('testing_projects')[$project->id] ?? null;
+
+    $app = CreateProject::run(actor($mara), ['name' => 'Kundenportal', 'identifier' => 'APP']);
+    expect($document($app))->toMatchArray(['identifier' => 'APP', 'name' => 'Kundenportal', 'archived' => false]);
+
+    ArchiveProject::run(actor($mara), $app);
+    expect($document($app))->toMatchArray(['archived' => true]);
+
+    ArchiveProject::run(actor($mara), $app, false);
+    expect($document($app))->toMatchArray(['archived' => false]);
 });
 
 it('updates the keys of every item when the identifier of the project changes', function () use ($world, $create) {
@@ -230,7 +247,7 @@ it('retries with its own tries and backoff', function () {
     $consumer = app(SearchConsumer::class);
     $job = new ConsumeEvent('x', SearchConsumer::class);
 
-    // about 80 minutes before the job ends in failed_jobs (P12)
+    // 8 tries, 7 pauses (the last one repeats): about 3 h 20 min before the job ends in failed_jobs (P12)
     expect([$consumer->key(), $consumer->queue()])->toBe(['search', 'search'])
         ->and($job->tries())->toBe(8)
         ->and($job->backoff())->toBe([10, 60, 300, 900, 3600]);

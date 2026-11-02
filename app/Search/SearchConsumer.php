@@ -31,7 +31,10 @@ final class SearchConsumer implements EventConsumer, RetriesConsumption
         return 'search';
     }
 
-    /** About 80 minutes of tries before the job ends in failed_jobs and reports the event (P12). */
+    /**
+     * 8 tries with 7 pauses (the last pause repeats): about 3 h 20 min before the job ends in failed_jobs and reports
+     * the event (P12).
+     */
     public function tries(): int
     {
         return 8;
