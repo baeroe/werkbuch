@@ -189,6 +189,28 @@ export function useListData(state: ViewState, scope: Condition[], _options: { pr
         },
       };
     });
+    // an optimistic change put an item into a group the server did not name (assigned to a person without a group of
+    // their own): it gets that group, after the others, until the server answers again; it neither vanishes nor
+    // leaves the selection (T14-M2)
+    const named = new Set(served.map((group) => group.key));
+    for (const [key, moved] of placement.items) {
+      if (named.has(key) || moved.length === 0) continue;
+      const parent = effective === 'parent' ? moved[0]!.parent : null;
+      groups.push({
+        key,
+        label: groupLabel(effective, key, names, parent),
+        ...(parent && { item: parent }),
+        count: moved.length,
+        items: moved,
+        status: 'success',
+        hasMore: false,
+        loadingMore: false,
+        moreError: null,
+        enable: () => {},
+        loadMore: () => {},
+        retry: () => {},
+      });
+    }
     const seen = new Set<string>();
     const items = groups.flatMap((group) => group.items).filter((item) => !seen.has(item.id) && seen.add(item.id));
     return {

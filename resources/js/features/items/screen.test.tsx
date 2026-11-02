@@ -184,6 +184,7 @@ function keyOf(entry: WorkItem, by: GroupBy): string {
   if (by === 'category') return CATEGORY[entry.state_id]!;
   if (by === 'priority') return entry.priority;
   if (by === 'label') return entry.label_ids[0] ?? 'none';
+  if (by === 'assignee') return entry.assignee_id ?? 'none';
   return by === 'state' ? entry.state_id : 'all';
 }
 
@@ -200,7 +201,10 @@ function groupsOf(body: Body) {
         ? ['backlog', 'unstarted', 'started', 'completed', 'canceled']
         : by === 'label'
           ? LABEL_KEYS
-          : ['urgent', 'high', 'medium', 'low', 'none'];
+          : by === 'assignee'
+            ? // the people that occur, then none (as the server)
+              [...new Set(found.flatMap((entry) => (entry.assignee_id ? [entry.assignee_id] : [])))].sort().concat('none')
+            : ['urgent', 'high', 'medium', 'low', 'none'];
   return { data: { group_by: by, total: found.length, groups: order.map((key) => ({ key, count: found.filter((entry) => keyOf(entry, by) === key).length })) } };
 }
 
@@ -675,6 +679,29 @@ describe('the item list screen', () => {
     expect(currentToasts()).toEqual([]);
     await act(async () => gate.release());
     await waitFor(() => expect(groupBodies()).toHaveLength(2));
+  });
+
+  it('keeps an item that an optimistic change puts into a group the server did not name, and its selection', async () => {
+    items = WEB_ITEMS.map((entry) => ({ ...entry, assignee_id: null }));
+    inertia.go('/projects/WEB?group=assignee');
+    renderScreen();
+    await screen.findByText('Kontaktformular sendet doppelt');
+    expect(screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent)).toEqual([expect.stringContaining('Nicht zugewiesen')]);
+    act(() => useUiStore.getState().setSelection(['wi_web_1']));
+
+    // what useItemMutation does at once: Lene has no group of her own yet
+    act(() =>
+      client.setQueriesData({ queryKey: qk.workItems.all }, (data: unknown) =>
+        data && typeof data === 'object' && 'items' in data
+          ? { ...data, items: (data as { items: WorkItem[] }).items.map((entry) => (entry.id === 'wi_web_1' ? { ...entry, assignee_id: lene.id } : entry)) }
+          : data,
+      ),
+    );
+
+    await waitFor(() => expect(screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent)).toEqual([expect.stringContaining('Nicht zugewiesen'), expect.stringContaining(lene.name)]));
+    expect(screen.getByText('Kontaktformular sendet doppelt')).toBeTruthy();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(useUiStore.getState().selection).toEqual(['wi_web_1']);
   });
 
   it('offers to try again when the list cannot be loaded', async () => {
