@@ -134,3 +134,41 @@ test('names the item a bulk change refuses', async ({ page }) => {
     await removeE2eProject(page, identifier);
   }
 });
+
+test('leaves out what a mixed selection would take in part, and mod+backspace removes nothing (A198)', async ({ page }) => {
+  const { id, identifier } = await createE2eProject(page, name('mixed'), { types: ['Task'] });
+  try {
+    const todo = await createItem(page, { project_id: id, title: 'E2E Newsletter', state_id: await stateOf(page, 'Standard', 'Todo') });
+    const done = await createItem(page, { project_id: id, title: 'E2E Sitemap', state_id: await stateOf(page, 'Standard', 'Done') });
+    // Todo comes before Done in the list (grouped by status)
+    await openList(page, identifier, todo.key);
+
+    await page.keyboard.press('x');
+    await page.keyboard.press('j');
+    await expect(row(page, done.key)).toBeFocused();
+    await page.keyboard.press('x');
+    const bar = page.getByRole('group', { name: tr('en', 'items.bulk.label') });
+    await expect(bar).toContainText(tr('en', 'items.bulk.of_total', { total: 2 }));
+
+    // a change goes for both, archiving only for the closed one: the bar leaves it out
+    await expect(bar.getByRole('button', { name: tr('en', 'items.bulk.priority') })).toBeVisible();
+    await expect(bar.getByRole('button', { name: tr('en', 'items.commands.archive') })).toHaveCount(0);
+
+    // archive one and delete the other: neither, and a toast says why
+    await pressMod(page, 'Backspace');
+    const kinds = `${tr('en', 'items.selection.kind.open.one', { count: 1 })} and ${tr('en', 'items.selection.kind.closed.one', { count: 1 })}`;
+    await expect(page.getByText(tr('en', 'items.selection.mixed_removal', { kinds }))).toBeVisible();
+    await expect(row(page, todo.key)).toBeVisible();
+    await expect(row(page, done.key)).toBeVisible();
+    await expect(bar).toContainText(tr('en', 'items.bulk.of_total', { total: 2 }));
+
+    // both still there on the server, neither archived
+    for (const item of [todo, done]) {
+      const stored = await api(page, 'GET', `/api/v1/work-items/${item.id}`);
+      expect(stored.status()).toBe(200);
+      expect(((await stored.json()) as { data: { archived_at: string | null } }).data.archived_at).toBeNull();
+    }
+  } finally {
+    await removeE2eProject(page, identifier);
+  }
+});

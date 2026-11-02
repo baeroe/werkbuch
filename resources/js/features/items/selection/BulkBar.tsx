@@ -3,10 +3,12 @@
  * selected items in one go (`useBulkChange`, optimistic, in blocks of 100), or archives them with 5 s to take it
  * back.
  *
- * Every item follows its own rules on the server: what they refuse (a transition its workflow forbids, an open item to
- * archive, a project the person may only read) stays as it was, the rest changes, and the toast names each refused
- * item with the reason. A move to Completed or Canceled asks for the resolution first, as everywhere. The status menu
- * offers only the states every workflow of the selection has (A128).
+ * An action stands on the bar only when it does the same allowed thing to every selected item (A198, `selectionVerdict`):
+ * while the selection mixes items it may change with archived ones or ones of a project the person only reads, or
+ * closed items with open ones to archive, the action is left out, so it never changes a part of them; when it is
+ * allowed for none, it stays and says why. What the server still refuses (a transition a workflow forbids) stays as it
+ * was, and the toast names each refused item with the reason. A move to Completed or Canceled asks for the resolution
+ * first, as everywhere. The status menu offers only the states every workflow of the selection has (A128).
  *
  * It stands in the screen's sticky toolbar below the rest of it while something is selected, so the filter (`/`, `f`)
  * stays within reach; the toasts at the bottom would cover a bar down there right when they report on it.
@@ -16,8 +18,9 @@ import { Archive, CircleDashed, LoaderCircle, Signal, Tag, UserRound, UserRoundC
 import type { ReactNode } from 'react';
 import type { BulkPatch } from '@/api/workItems';
 import { personOption } from '@/components/fields/AssigneePicker';
+import { closedIn } from '@/components/fields/commands/context';
 import { askResolution } from '@/components/fields/ItemDialogs';
-import { archivedReason, useCommonPeople } from '@/components/fields/itemData';
+import { useCommonPeople } from '@/components/fields/itemData';
 import { labelOption } from '@/components/fields/LabelsPicker';
 import type { PickerOption } from '@/components/fields/Picker';
 import { PRIORITY_OPTIONS } from '@/components/fields/PriorityPicker';
@@ -37,7 +40,7 @@ import { intlLocale, t } from '@/lib/i18n';
 import { usePermissions } from '@/lib/permissions';
 import { SHORTCUTS } from '@/lib/shortcuts/catalog';
 import type { ListedItem, Priority, State, User } from '@/types';
-import { bulkChange, commonStates, subjectOf } from './bulk';
+import { bulkChange, commonStates, selectionVerdict, subjectOf, type SelectionVerdict } from './bulk';
 
 /** An entry of an action menu: its icon, its name and a muted hint. */
 function Choice({ option }: { option: PickerOption }) {
@@ -55,10 +58,13 @@ function Choice({ option }: { option: PickerOption }) {
 }
 
 /**
- * An action with a menu. A change on its way shows on the bar (`aria-busy` and a spinner), not by disabling the button:
- * the focus comes back to it when the menu closes, and a disabled button would drop it.
+ * An action with a menu: left out for a mixed selection, disabled with the reason when it is allowed for none. A change
+ * on its way shows on the bar (`aria-busy` and a spinner), not by disabling the button: the focus comes back to it when
+ * the menu closes, and a disabled button would drop it.
  */
-function ActionMenu({ label, icon, disabledReason, children }: { label: string; icon: typeof Archive; disabledReason: string | null; children: ReactNode }) {
+function ActionMenu({ label, icon, verdict, children }: { label: string; icon: typeof Archive; verdict: SelectionVerdict; children: ReactNode }) {
+  if (verdict?.mixed) return null;
+  const disabledReason = verdict?.reason;
   if (disabledReason) {
     return (
       <Button variant="secondary" size="sm" icon={icon} disabledReason={disabledReason}>
@@ -88,7 +94,7 @@ export type BulkBarProps = {
   /** Selects every item of the list, also those of pages not loaded yet. */
   onSelectAll: () => void;
   onClear: () => void;
-  /** Archives the items with undo; the closed ones leave the list meanwhile. */
+  /** Archives the items with undo, all of them closed; they leave the list meanwhile. */
   onArchive: (items: ListedItem[]) => void;
 };
 
@@ -106,16 +112,11 @@ export function BulkBar({ items, total, onSelectAll, onClear, onArchive }: BulkB
   const workflowOf = (item: ListedItem) => workflows.find((workflow) => workflow.id === projects.find((project) => project.id === item.project_id)?.workflow_id);
   const stateOf = (item: ListedItem) => workflowOf(item)?.states.find((state) => state.id === item.state_id);
 
-  // when none of them can be changed, say why up front; otherwise the server names the ones it refuses
-  const reasons = items.map((item) => (item.archived_at !== null ? archivedReason(item.key) : reason('item.edit', item.project_id)));
-  const editDenied = reasons.every(Boolean) ? reasons[0]! : null;
-  const closed = items.filter((item) => {
-    const state = stateOf(item);
-    return item.archived_at === null && state !== undefined && isClosedCategory(state.category);
-  });
-  const archiveDenied = editDenied ?? (closed.length === 0 ? t('items.bulk.archive_open') : null);
+  const rules = { reason, isClosed: (item: ListedItem) => closedIn(projects, workflows, item) };
+  const edit = selectionVerdict(items, 'edit', rules);
+  const archive = selectionVerdict(items, 'archive', rules);
   const states = commonStates(items, workflowOf);
-  const stateDenied = editDenied ?? (states.length === 0 ? t('items.commands.empty.workflows') : null);
+  const state = edit ?? (states.length === 0 ? { reason: t('items.commands.empty.workflows'), mixed: false } : null);
 
   const change = (what: string, patch: BulkPatch) => void bulkChange(bulk, items, patch, what);
 
@@ -162,14 +163,14 @@ export function BulkBar({ items, total, onSelectAll, onClear, onArchive }: BulkB
         {bulk.isPending && <LoaderCircle className="size-3.5 animate-spin text-muted" aria-hidden="true" />}
       </span>
       <span className="hidden h-5 w-px bg-line sm:block" aria-hidden="true" />
-      <ActionMenu label={t('items.bulk.state')} icon={CircleDashed} disabledReason={stateDenied}>
+      <ActionMenu label={t('items.bulk.state')} icon={CircleDashed} verdict={state}>
         {states.map((state) => (
           <MenuItem key={state.id} onClick={() => moveTo(state)}>
             <Choice option={stateOption(state)} />
           </MenuItem>
         ))}
       </ActionMenu>
-      <ActionMenu label={t('items.bulk.assignee')} icon={UserRound} disabledReason={editDenied}>
+      <ActionMenu label={t('items.bulk.assignee')} icon={UserRound} verdict={edit}>
         {me && people.some((user) => user.id === me.id) && (
           <MenuItem icon={UserRoundCheck} onClick={() => assign(me)}>
             {t('items.fields.assignee.me')}
@@ -185,14 +186,14 @@ export function BulkBar({ items, total, onSelectAll, onClear, onArchive }: BulkB
           </MenuItem>
         ))}
       </ActionMenu>
-      <ActionMenu label={t('items.bulk.priority')} icon={Signal} disabledReason={editDenied}>
+      <ActionMenu label={t('items.bulk.priority')} icon={Signal} verdict={edit}>
         {PRIORITY_OPTIONS().map((option) => (
           <MenuItem key={option.value} onClick={() => change(t('items.commands.what.priority', { priority: option.label }), { priority: option.value as Priority })}>
             <Choice option={option} />
           </MenuItem>
         ))}
       </ActionMenu>
-      <ActionMenu label={t('items.bulk.labels')} icon={Tag} disabledReason={editDenied}>
+      <ActionMenu label={t('items.bulk.labels')} icon={Tag} verdict={edit}>
         {[...labels]
           .sort((a, b) => collator.compare(a.name, b.name))
           .map((label) => {
@@ -213,9 +214,11 @@ export function BulkBar({ items, total, onSelectAll, onClear, onArchive }: BulkB
             );
           })}
       </ActionMenu>
-      <Button variant="secondary" size="sm" icon={Archive} disabledReason={archiveDenied} onClick={() => onArchive(items)}>
-        {t('items.commands.archive')}
-      </Button>
+      {!archive?.mixed && (
+        <Button variant="secondary" size="sm" icon={Archive} disabledReason={archive?.reason} onClick={() => onArchive(items)}>
+          {t('items.commands.archive')}
+        </Button>
+      )}
       <IconButton icon={X} label={t('items.bulk.clear')} shortcut={SHORTCUTS['list.clear'].keys} onClick={onClear} className="ml-auto" />
     </div>
   );

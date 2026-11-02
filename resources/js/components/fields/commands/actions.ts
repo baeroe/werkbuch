@@ -111,15 +111,15 @@ export function archiveWithUndo(deps: RemovalDeps, item: ListedItem): void {
 }
 
 /**
- * Archives several items with 5 s undo: the closed ones leave the screen at once, the open ones stay. When the time is
- * up, one bulk change archives them all (blocks of 100). What the server refuses (an open item: `not_closed`) and what
- * was not saved (a block failed) comes back on screen, never what it archived; one toast names it, and "Erneut
- * versuchen" archives what was not saved.
+ * Archives several closed items with 5 s undo: they leave the screen at once. When the time is up, one bulk change
+ * archives them all (blocks of 100). What the server still refuses (reopened meanwhile: `not_closed`) and what was not
+ * saved (a block failed) comes back on screen, never what it archived; one toast names it, and "Erneut versuchen"
+ * archives what was not saved.
  */
-export function archiveManyWithUndo(deps: RemovalDeps, targets: readonly ListedItem[], closed: readonly ListedItem[]): void {
-  const restore = hideAtOnce(deps.queryClient, closed);
+export function archiveManyWithUndo(deps: RemovalDeps, targets: readonly ListedItem[]): void {
+  const restore = hideAtOnce(deps.queryClient, targets);
   runWithUndo({
-    label: t('items.commands.archived', { key: subjectOf(closed) }),
+    label: t('items.commands.archived', { key: subjectOf(targets) }),
     undo: () => restore(),
     run: () => archiveEach(deps, targets, restore),
   });
@@ -138,14 +138,12 @@ async function archiveEach(deps: RemovalDeps, targets: readonly ListedItem[], re
 }
 
 /**
- * Archives the targets, the one place that picks them for the palette, the shortcut and the bulk bar (T15-M7): an
- * archived target is archived already, it neither leaves the screen nor goes to the server again. One alone goes as
- * one; of several the closed ones (`isClosed`) leave the screen at once, the open ones stay and the toast names them.
+ * Archives the targets, the one place for the palette, the shortcut and the bulk bar. Every one of them is closed and
+ * not archived: the callers ask `selectionVerdict` first (A198), so no part of them stays behind (T15-M3, T15-M8).
  */
-export function archiveTargets(deps: RemovalDeps, targets: readonly ListedItem[], isClosed: (item: ListedItem) => boolean): void {
-  const live = targets.filter((item) => item.archived_at === null);
-  if (live.length === 1) archiveWithUndo(deps, live[0]!);
-  else if (live.length > 1) archiveManyWithUndo(deps, live, live.filter(isClosed));
+export function archiveTargets(deps: RemovalDeps, targets: readonly ListedItem[]): void {
+  if (targets.length === 1) archiveWithUndo(deps, targets[0]!);
+  else if (targets.length > 1) archiveManyWithUndo(deps, targets);
 }
 
 /**

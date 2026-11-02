@@ -5,8 +5,10 @@
  * A shortcut of a command with a sub-list opens the palette right in it (`openPalette`); `i` and `mod+backspace` act at
  * once. Without the right a shortcut says why in a toast and the palette leaves the command out. While the catalogs a
  * command needs still load, its shortcut says so instead of acting, and the palette leaves it out.
- * Several targets (a selection) change together; type and parent change for one item alone. `mod+backspace` archives
- * when some of them are closed (the open ones stay and are named) and deletes otherwise.
+ * Several targets (a selection) change together, only when the change is allowed for every one of them (A198): of a
+ * mixed selection the palette leaves the command out and its key says why. Type and parent change for one item alone.
+ * `mod+backspace` archives a closed item and deletes any other; several only when it does the same to each of them
+ * (`removalVerdict`), never archiving some and deleting the others.
  */
 
 import type { LucideIcon } from 'lucide-react';
@@ -18,8 +20,9 @@ import { t, type TranslationKey } from '@/lib/i18n';
 import { SHORTCUTS, type ShortcutId } from '@/lib/shortcuts/catalog';
 import { registerShortcut } from '@/lib/shortcuts/registry';
 import { useUiStore } from '@/store/ui';
+import { removalVerdict, selectionVerdict } from '@/features/items/selection/bulk';
 import { archiveTargets, deleteManyWithUndo, deleteWithUndo } from './actions';
-import { archivesNow, editReason, isClosed, type ItemCommandContext, type ItemCommandSource } from './context';
+import { editReason, rulesOf, type ItemCommandContext, type ItemCommandSource } from './context';
 import {
   assign,
   assigneeOptions,
@@ -142,14 +145,12 @@ const COMMANDS: ItemCommand[] = [
   },
 ];
 
-/** Whether `mod+backspace` archives (see `archivesNow`), else it deletes. */
-const archivable = (ctx: ItemCommandContext) => archivesNow(ctx.projects, ctx.workflows, ctx.targets);
+/** Why the targets cannot be archived (all of them closed and changeable) or deleted (`item.delete` for all), or null. */
+const archiveReason = (ctx: ItemCommandContext) => selectionVerdict(ctx.targets, 'archive', rulesOf(ctx))?.reason ?? null;
+const deleteReason = (ctx: ItemCommandContext) => selectionVerdict(ctx.targets, 'delete', rulesOf(ctx))?.reason ?? null;
 
-/** Why the targets cannot be deleted (project admins only; an archived item can). */
-const deleteReason = (ctx: ItemCommandContext) => ctx.targets.map((item) => ctx.reason('item.delete', item.project_id)).find(Boolean) ?? null;
-
-/** Archives the targets: one alone, several with the closed ones leaving the screen at once. */
-const archive = (ctx: ItemCommandContext) => archiveTargets(ctx.removal, ctx.targets, (target) => isClosed(ctx, target));
+/** Archives the targets (every one of them closed): one alone, several with one bulk change. */
+const archive = (ctx: ItemCommandContext) => archiveTargets(ctx.removal, ctx.targets);
 
 /** Deletes the targets: one alone (leaving its page), several item by item. */
 function remove(ctx: ItemCommandContext): void {
@@ -157,15 +158,12 @@ function remove(ctx: ItemCommandContext): void {
   else deleteManyWithUndo(ctx.removal, ctx.targets);
 }
 
-/** What `mod+backspace` does now: archive closed items, delete others; or why it can do neither. */
+/** What `mod+backspace` does now: archive closed items, delete others, the same for all; or why it does neither. */
 function removal(ctx: ItemCommandContext): { run: () => void } | { reason: Exclude<ReturnType<typeof blocker>, null> } {
   if (!ctx.ready) return { reason: ctx.failed ? 'failed' : 'loading' };
-  if (archivable(ctx)) {
-    const denied = editReason(ctx);
-    return denied ? { reason: { denied } } : { run: () => archive(ctx) };
-  }
-  const denied = deleteReason(ctx);
-  return denied ? { reason: { denied } } : { run: () => remove(ctx) };
+  const verdict = removalVerdict(ctx.targets, rulesOf(ctx));
+  if ('reason' in verdict) return { reason: { denied: verdict.reason } };
+  return { run: verdict.effect === 'archive' ? () => archive(ctx) : () => remove(ctx) };
 }
 
 /** Says why a shortcut does nothing now. */
@@ -226,11 +224,11 @@ export function registerItemCommands(source: ItemCommandSource): () => void {
       id: 'item.archive',
       label: t('items.commands.archive'),
       group: source.group,
-      keys: source.archives ? SHORTCUTS['item.remove'].keys : undefined,
+      keys: source.removes === 'archive' ? SHORTCUTS['item.remove'].keys : undefined,
       icon: createElement(Archive),
       when: () => {
         const c = ctx();
-        return c.ready && c.targets.length > 0 && archivable(c) && editReason(c) === null;
+        return c.ready && c.targets.length > 0 && archiveReason(c) === null;
       },
       run: () => archive(ctx()),
     }),
@@ -238,7 +236,7 @@ export function registerItemCommands(source: ItemCommandSource): () => void {
       id: 'item.delete',
       label: t('items.commands.delete'),
       group: source.group,
-      keys: source.archives ? undefined : SHORTCUTS['item.remove'].keys,
+      keys: source.removes === 'delete' ? SHORTCUTS['item.remove'].keys : undefined,
       icon: createElement(Trash2),
       keywords: [t('items.commands.keywords.delete')],
       when: () => {

@@ -31,7 +31,7 @@ import { router, usePage } from '@inertiajs/react';
 import { Archive, Info, SquarePen } from 'lucide-react';
 import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { ApiError } from '@/api/client';
-import { archiveTargets, closedIn, useItemCommands, useRemovalDeps } from '@/components/fields/commands';
+import { archiveTargets, useItemCommands, useRemovalDeps } from '@/components/fields/commands';
 import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
 import { cx } from '@/components/ui/cx';
@@ -39,11 +39,10 @@ import { ErrorState } from '@/components/ui/ErrorState';
 import { toast } from '@/components/ui/toast';
 import { sameFilter, scopeConditions, type ItemsPreset } from '@/domain/viewState';
 import { useSettle } from '@/hooks/mutation';
-import { useProject, useProjects } from '@/hooks/projects';
+import { useProject } from '@/hooks/projects';
 import { useProperties } from '@/hooks/properties';
 import { useAllUsers, useCurrentUser } from '@/hooks/users';
 import { useView } from '@/hooks/views';
-import { useWorkflows } from '@/hooks/workflows';
 import { ListGoneError } from '@/hooks/workItems';
 import { notifyError } from '@/lib/errors';
 import { t } from '@/lib/i18n';
@@ -215,10 +214,8 @@ function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: P
 
   const selected = useMemo(() => data.items.filter((item) => selection.includes(item.id)), [data.items, selection]);
   const removal = useRemovalDeps();
-  const projects = useProjects({ include_archived: true }).data?.items ?? [];
-  const workflows = useWorkflows().data?.items ?? [];
-  // the closed ones leave the list at once, the open ones stay and the toast names them, the archived ones stay alone
-  const archive = (targets: ListedItem[]) => archiveTargets(removal, targets, (item) => closedIn(projects, workflows, item));
+  // the bar offers it only when every selected item is closed (A198): they all leave the list at once
+  const archive = (targets: ListedItem[]) => archiveTargets(removal, targets);
 
   const setLayout = (layout: Display['layout']) => setState({ ...state, display: { ...state.display, layout } });
   const createDefaults: CreateDefaults | undefined = project ? { project_id: project.id } : preset === 'my' && me ? { assignee_id: me.id } : undefined;

@@ -969,7 +969,7 @@ describe('the item commands of a list', () => {
     await waitFor(() => expect(bulkCalls()[3]).toEqual({ ids: ['wi_web_47', 'wi_web_48'], patch: { assignee_id: 'u_lene' } }));
   });
 
-  it('archives many closed items with undo and names the open ones', async () => {
+  it('archives many closed items with undo and names what the server refuses', async () => {
     const web51 = makeWorkItem({ id: 'wi_web_51', number: 51, key: 'WEB-51', state_id: 'std_cancelled', rank: 'a7' });
     renderWith(
       <>
@@ -980,57 +980,165 @@ describe('the item commands of a list', () => {
         role: 'admin',
         routes: {
           'POST /api/v1/work-items/query': (body) => ({ body: list(queryItems([...items, web51], body)) }),
-          'POST /api/v1/work-items/bulk': () => ({ body: { updated: ['wi_web_50', 'wi_web_51'], rejected: [{ id: 'wi_web_47', reason: 'not_closed' }] } }),
+          // reopened meanwhile: the server refuses it
+          'POST /api/v1/work-items/bulk': () => ({ body: { updated: ['wi_web_50'], rejected: [{ id: 'wi_web_51', reason: 'not_closed' }] } }),
         },
       },
     );
     const webList = screen.getByLabelText('WEB');
     await waitFor(() => expect(webList.textContent).toBe('WEB-30 WEB-47 WEB-48 WEB-50 WEB-51'));
-    select('wi_web_47', 'wi_web_50', 'wi_web_51');
-    await ready('3 Items', 'item.archive');
-    // some are closed: the key archives, the open one stays
+    select('wi_web_50', 'wi_web_51');
+    await ready('2 Items', 'item.archive');
+    // all are closed: the key archives
     expect(command('item.archive')?.keys).toBe('mod+backspace');
+    expect(command('item.delete')?.keys).toBeUndefined();
 
     press('Backspace', { ctrlKey: true });
     expect(lastToast()).toMatchObject({ title: '2 Items archiviert', action: { label: 'Rückgängig' } });
     await waitFor(() => expect(webList.textContent).toBe('WEB-30 WEB-47 WEB-48'));
     // they leave the selection as well
-    expect(useUiStore.getState().selection).toEqual(['wi_web_47']);
+    expect(useUiStore.getState().selection).toEqual([]);
 
     // undo puts them back and calls nothing
     act(() => runToastAction(lastToast()!.id));
     await waitFor(() => expect(webList.textContent).toBe('WEB-30 WEB-47 WEB-48 WEB-50 WEB-51'));
     expect(bulkCalls()).toEqual([]);
 
-    // from the palette: when the toast runs out, one bulk edit; the server names the open one
-    select('wi_web_47', 'wi_web_50', 'wi_web_51');
-    await ready('3 Items', 'item.archive');
+    // from the palette: when the toast runs out, one bulk edit; the server names what it refused
+    select('wi_web_50', 'wi_web_51');
+    await ready('2 Items', 'item.archive');
     act(() => command('item.archive')!.run());
     act(() => dismissToast(currentToasts().find((toast) => toast.title === '2 Items archiviert')!.id));
-    await waitFor(() => expect(bulkCalls()).toEqual([{ ids: ['wi_web_47', 'wi_web_50', 'wi_web_51'], patch: { archived: true } }]));
+    await waitFor(() => expect(bulkCalls()).toEqual([{ ids: ['wi_web_50', 'wi_web_51'], patch: { archived: true } }]));
     await waitFor(() =>
-      expect(lastToast()).toMatchObject({ title: '2 von 3 Items archiviert', description: 'WEB-47: Nur geschlossene Items lassen sich archivieren.' }),
+      expect(lastToast()).toMatchObject({ title: '1 von 2 Items archiviert', description: 'WEB-51: Nur geschlossene Items lassen sich archivieren.' }),
     );
   });
 
   it('brings the archived items back when the bulk edit fails', async () => {
+    const web51 = makeWorkItem({ id: 'wi_web_51', number: 51, key: 'WEB-51', state_id: 'std_cancelled', rank: 'a7' });
     renderWith(
       <>
         <ListScreen />
         <WebList />
       </>,
-      { role: 'admin', routes: { 'POST /api/v1/work-items/bulk': () => problem(503, 'service_unavailable', 'Wartung.') } },
+      {
+        role: 'admin',
+        routes: {
+          'POST /api/v1/work-items/query': (body) => ({ body: list(queryItems([...items, web51], body)) }),
+          'POST /api/v1/work-items/bulk': () => problem(503, 'service_unavailable', 'Wartung.'),
+        },
+      },
     );
     const webList = screen.getByLabelText('WEB');
-    await waitFor(() => expect(webList.textContent).toBe('WEB-30 WEB-47 WEB-48 WEB-50'));
-    select('wi_web_47', 'wi_web_50');
+    await waitFor(() => expect(webList.textContent).toBe('WEB-30 WEB-47 WEB-48 WEB-50 WEB-51'));
+    select('wi_web_50', 'wi_web_51');
     await ready('2 Items', 'item.archive');
 
     press('Backspace', { ctrlKey: true });
     await waitFor(() => expect(webList.textContent).toBe('WEB-30 WEB-47 WEB-48'));
-    act(() => dismissToast(currentToasts().find((toast) => toast.title === 'WEB-50 archiviert')!.id));
-    await waitFor(() => expect(webList.textContent).toBe('WEB-30 WEB-47 WEB-48 WEB-50'));
+    act(() => dismissToast(currentToasts().find((toast) => toast.title === '2 Items archiviert')!.id));
+    await waitFor(() => expect(webList.textContent).toBe('WEB-30 WEB-47 WEB-48 WEB-50 WEB-51'));
     await waitFor(() => expect(lastToast()).toMatchObject({ title: 'Archivieren nicht gespeichert', description: 'Wartung.', action: { label: 'Erneut versuchen' } }));
+  });
+
+  it('changes a mixed selection with no key and offers it in no palette (A198)', async () => {
+    const archived50 = { ...web50, archived_at: '2026-10-30T10:00:00.000Z' };
+    renderWith(
+      <>
+        <ListScreen />
+        <WebList />
+        <AppList />
+      </>,
+      {
+        routes: {
+          ...withApp('viewer'),
+          'POST /api/v1/work-items/query': (body) => ({ body: list(queryItems([web30, web47, web48, archived50, app5, app11], body)) }),
+        },
+      },
+    );
+    await waitFor(() => expect(screen.getByLabelText('APP').textContent).toBe('APP-5 APP-11'));
+    const changes = ['item.state', 'item.assignee', 'item.assign_me', 'item.priority', 'item.labels', 'item.due', 'item.start', 'item.archive'];
+
+    // APP-11 can change, WEB-47 only be read (WEB: viewer): neither the keys nor the palette change some of them
+    select('wi_app_11', 'wi_web_47');
+    await waitFor(() => expect(command('item.state')?.group).toBe('Aktionen für 2 Items'));
+    await waitFor(() => expect(command('item.delete')).toBeDefined());
+    const refusal = 'Nicht möglich für 1 der 2 ausgewählten Items: Im Projekt WEB darfst du nur lesen. Items ändern dürfen Member und Admins.';
+    await waitFor(() => {
+      press('p');
+      expect(lastToast()).toMatchObject({ title: 'Nicht möglich', description: refusal, tone: 'error' });
+    });
+    press('i');
+    expect(lastToast()?.description).toBe(refusal);
+    press('s');
+    expect(lastToast()?.description).toBe(refusal);
+    expect(useUiStore.getState().paletteOpen).toBe(false);
+    for (const id of changes) expect(command(id)?.when?.()).toBe(false);
+
+    // an archived item among open ones: the same
+    select('wi_app_11', 'wi_web_50');
+    await waitFor(() => {
+      press('l');
+      expect(lastToast()?.description).toBe('Nicht möglich für 1 der 2 ausgewählten Items: WEB-50 ist archiviert und schreibgeschützt. Stelle es zuerst wieder her.');
+    });
+    for (const id of changes) expect(command(id)?.when?.()).toBe(false);
+
+    // the same items alone: as ever
+    select('wi_app_11');
+    await ready('APP-11', 'item.priority');
+    expect(bulkCalls()).toEqual([]);
+    expect(api!.calls.filter((call) => call.method === 'PATCH')).toEqual([]);
+  });
+
+  it('neither archives nor deletes with mod+backspace a mix of open, closed and archived items (T15-M3)', async () => {
+    const archived51 = makeWorkItem({ id: 'wi_web_51', number: 51, key: 'WEB-51', state_id: 'std_done', rank: 'a7', archived_at: '2026-10-30T10:00:00.000Z' });
+    renderWith(
+      <>
+        <ListScreen />
+        <WebList />
+      </>,
+      { role: 'admin', routes: { 'POST /api/v1/work-items/query': (body) => ({ body: list(queryItems([...items, archived51], body)) }) } },
+    );
+    const webList = screen.getByLabelText('WEB');
+    await waitFor(() => expect(webList.textContent).toBe('WEB-30 WEB-47 WEB-48 WEB-50 WEB-51'));
+    const nothing = (kinds: string) =>
+      `Nicht für alle ausgewählten Items gleich: ${kinds}. Archivieren geht nur für geschlossene, Löschen für offene oder archivierte. Wähle nur eine Art aus.`;
+
+    // a closed item and one archived already: it once deleted both
+    select('wi_web_50', 'wi_web_51');
+    await ready('2 Items', 'item.delete');
+    press('Backspace', { ctrlKey: true });
+    expect(lastToast()).toMatchObject({ title: 'Nicht möglich', description: nothing('1 geschlossenes Item und 1 archiviertes Item'), tone: 'error' });
+    // no command shows the key, and archiving is not offered (deleting all of them still is, by its name)
+    expect(command('item.archive')?.when?.()).toBe(false);
+    expect([command('item.archive')?.keys, command('item.delete')?.keys]).toEqual([undefined, undefined]);
+
+    // open items and a closed one
+    select('wi_web_47', 'wi_web_48', 'wi_web_50');
+    await ready('3 Items', 'item.delete');
+    press('Backspace', { ctrlKey: true });
+    expect(lastToast()?.description).toBe(nothing('2 offene Items und 1 geschlossenes Item'));
+
+    // an open item and an archived one
+    select('wi_web_47', 'wi_web_51');
+    await ready('2 Items', 'item.delete');
+    press('Backspace', { ctrlKey: true });
+    expect(lastToast()?.description).toBe(nothing('1 offenes Item und 1 archiviertes Item'));
+
+    // nothing left the list or the selection, nothing went out
+    expect(currentToasts().some((toast) => toast.action?.label === 'Rückgängig')).toBe(false);
+    expect(webList.textContent).toBe('WEB-30 WEB-47 WEB-48 WEB-50 WEB-51');
+    expect(useUiStore.getState().selection).toEqual(['wi_web_47', 'wi_web_51']);
+    expect(api!.calls.filter((call) => call.method === 'DELETE' || call.url.endsWith('/archive') || call.url === '/api/v1/work-items/bulk')).toEqual([]);
+
+    // open items alone: deleted, as ever
+    select('wi_web_47', 'wi_web_48');
+    await ready('2 Items', 'item.delete');
+    expect(command('item.delete')?.keys).toBe('mod+backspace');
+    press('Backspace', { ctrlKey: true });
+    expect(lastToast()).toMatchObject({ title: '2 Items gelöscht', action: { label: 'Rückgängig' } });
+    act(() => runToastAction(lastToast()!.id));
   });
 
   it('tells in one toast what the blocks before a failed one changed and refused, and tries all the rest again', async () => {

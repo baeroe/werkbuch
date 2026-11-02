@@ -15,13 +15,13 @@ import type { QueryClient } from '@tanstack/react-query';
 import type { Page } from '@/api/client';
 import type { RefObject } from 'react';
 import { isClosedCategory } from '@/domain/workflow';
+import { selectionVerdict, type RemovalEffect, type SelectionRules } from '@/features/items/selection/bulk';
 import { qk } from '@/hooks/keys';
 import type { Settle } from '@/hooks/mutation';
 import type { useChangeWorkItemType, useTransitionWorkItem, useUpdateWorkItem } from '@/hooks/workItems';
 import type { Permission } from '@/lib/permissions';
 import { useUiStore } from '@/store/ui';
 import type { Label, ListedItem, Project, Property, User, Workflow, WorkItemDetail, WorkItemType } from '@/types';
-import { archivedReason } from '../itemData';
 import type { RemovalDeps } from './actions';
 
 /** The shortcut scope of the item commands: `detail` (item page, preview) beats `list`. */
@@ -82,8 +82,8 @@ export interface ItemCommandSource {
   scope: ItemCommandScope;
   /** Heading in the palette, e.g. "Aktionen für WEB-47". */
   group: string;
-  /** Whether `mod+backspace` archives (`archivesNow`) rather than deletes; it decides which command shows the key. */
-  archives: boolean;
+  /** What `mod+backspace` does to the targets now (`commonRemoval`), null for a mix; the command that does it shows the key. */
+  removes: RemovalEffect | null;
   context: () => ItemCommandContext;
 }
 
@@ -107,25 +107,14 @@ export function closedIn(projects: readonly Project[], workflows: readonly Workf
   return state !== undefined && isClosedCategory(state.category);
 }
 
-/**
- * Whether `mod+backspace` archives rather than deletes: one target that is closed and not archived; of several, none is
- * archived and some are closed (the open ones stay, and the toast names them).
- */
-export function archivesNow(projects: readonly Project[], workflows: readonly Workflow[], targets: readonly ListedItem[]): boolean {
-  if (targets.length === 0 || targets.some((item) => item.archived_at !== null)) return false;
-  const closed = targets.filter((item) => closedIn(projects, workflows, item));
-  return targets.length === 1 ? closed.length === 1 : closed.length > 0;
-}
+/** What the shared rules of a selection read (`selectionVerdict`, A198): the person's rights and whether an item is closed. */
+export const rulesOf = (ctx: ItemCommandContext): SelectionRules => ({ reason: ctx.reason, isClosed: (item) => isClosed(ctx, item) });
 
-/** Why the targets cannot be changed: one is archived, or a right is missing in its project. */
-export function editReason(ctx: ItemCommandContext, permission: Permission = 'item.edit'): string | null {
-  for (const item of ctx.targets) {
-    if (item.archived_at !== null) return archivedReason(item.key);
-    const denied = ctx.reason(permission, item.project_id);
-    if (denied) return denied;
-  }
-  return null;
-}
+/**
+ * Why the targets cannot be changed: one alone is archived or lacks a right; of several, any of them (the command changes
+ * all of them or none, A198; the reason says how many).
+ */
+export const editReason = (ctx: ItemCommandContext): string | null => selectionVerdict(ctx.targets, 'edit', rulesOf(ctx))?.reason ?? null;
 
 /* --------------------------------------------------------------------------- the mounts */
 
