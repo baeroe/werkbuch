@@ -1130,3 +1130,25 @@ describe('Types', () => {
     expect(await screen.findByRole('list', { name: 'Typen der Organisation' })).toBeTruthy();
   });
 });
+
+describe('Types usage', () => {
+  it('names the items of each type the project has on', async () => {
+    renderSettings('types', { 'POST /api/v1/work-items/groups': () => ({ body: { data: { group_by: 'type', total: 3, groups: [{ key: 't_task', count: 3 }] } } }) });
+
+    const rows = within(await screen.findByRole('list', { name: 'Typen der Organisation' })).getAllByRole('listitem');
+    expect(await within(rows[0]!).findByText('3 Items')).toBeTruthy();
+    expect(within(rows[1]!).getByText('0 Items')).toBeTruthy();
+    // a type that is off has no number to show
+    expect(within(rows[3]!).queryByText(/Items?$/)).toBeNull();
+    const call = api!.calls.filter((entry) => entry.url === '/api/v1/work-items/groups');
+    expect(call).toHaveLength(1);
+    expect(call[0]!.body).toEqual({ filter: { version: 1, conditions: [{ field: 'project', op: 'is', value: 'p_web' }] }, group_by: 'type', include_archived: true });
+  });
+
+  it('says when the numbers could not be loaded', async () => {
+    renderSettings('types', { 'POST /api/v1/work-items/groups': unavailable });
+
+    const rows = within(await screen.findByRole('list', { name: 'Typen der Organisation' })).getAllByRole('listitem');
+    await waitFor(() => expect(within(rows[0]!).getByText('Anzahl nicht geladen')).toBeTruthy());
+  });
+});

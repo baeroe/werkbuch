@@ -1,8 +1,7 @@
 /*
  * Labels (spec 4.7): the organisation's list of tags, each with a name and one of the six muted tones. Items carry any
  * number of them. Deleting a label takes it off all items; the five seconds of undo come first, and a toast after the
- * call says how many items lost it (`affected_items`). How many items carry a label before it goes comes with Phase 5
- * (A61). Members see the list, admins change it.
+ * call says how many items lost it (`affected_items`). Each row says how many items carry the label (A61). Members see the list, admins change it.
  */
 
 import { Pencil, Plus, Tags, Trash2 } from 'lucide-react';
@@ -25,6 +24,7 @@ import { fieldMessage, noticeOf } from '../../frame/form';
 import { FieldGroup, Loaded, Panel, Row, Rows, RowsSkeleton, SectionHeader } from '../../frame/parts';
 import { useDialogRound } from '../../frame/useDialogRound';
 import { useRemoval } from '../../frame/useRemoval';
+import { UsageCount, useGroupUsage } from '../../catalog/usage';
 import type { SectionProps } from '../sections';
 
 type LabelDialogProps = {
@@ -88,6 +88,7 @@ export default function Labels({ readOnlyReason }: SectionProps) {
   const dialog = useDialogRound<Label>();
   const { hidden, remove: removeWithUndo } = useRemoval();
   const create = useRef<HTMLButtonElement>(null);
+  const usage = useGroupUsage('label');
   const canEdit = readOnlyReason === null;
 
   return (
@@ -133,6 +134,9 @@ export default function Labels({ readOnlyReason }: SectionProps) {
                       <h3 className="min-w-0 truncate text-ui font-medium text-ink">{label.name}</h3>
                     </div>
                     <span className="w-24 text-sm text-muted">{t(TONE_LABELS[label.color])}</span>
+                    <span className="w-28 text-sm text-muted tabular-nums">
+                      <UsageCount usage={usage} id={label.id} />
+                    </span>
                     {canEdit && (
                       <div className="flex items-center">
                         <IconButton icon={Pencil} label={t('settings.labels.edit', { name: label.name })} onClick={() => dialog.show(label)} />

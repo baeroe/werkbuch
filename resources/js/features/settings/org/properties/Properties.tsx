@@ -3,12 +3,12 @@
  * eight field types. Its key (`snake_case`, the name in API and MCP) and its field type are fixed once it exists; only a
  * dropdown or a choice of people may change from single to multiple choice. Options have a label and a tone, can be put
  * in order; a stored option can be archived, and one left out is deleted, or archived when items carry it. Deleting a
- * property asks first (spec 4.7); the toast after it says how many items lost their value (`affected_items`), the
- * question names the number only with Phase 5 (A61). Members see the list, admins change it.
+ * property asks first (spec 4.7), naming how many items have a value (A61, counted by the engine, K10); the toast after
+ * it says how many items lost theirs (`affected_items`). Members see the list, admins change it.
  */
 
 import { Pencil, Plus, SlidersHorizontal, Trash2 } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { AlertDialog } from '@/components/ui/AlertDialog';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
@@ -25,6 +25,7 @@ import { FIELD_TYPE_LABELS } from '../../catalog/choices';
 import { ReadOnlyNotice } from '../../frame/access';
 import { Badge, Loaded, Panel, Row, Rows, RowsSkeleton, SectionHeader } from '../../frame/parts';
 import { useDialogRound } from '../../frame/useDialogRound';
+import { UsageCount, usePropertyUsage } from '../../catalog/usage';
 import type { SectionProps } from '../sections';
 import { PropertyDialog } from './PropertyDialog';
 
@@ -47,6 +48,10 @@ export default function Properties({ readOnlyReason }: SectionProps) {
       return afterDelete.current ?? deleteButton.current;
     },
   };
+  // a property on its way out leaves the counts at once: a count that still named it would be refused (422) as soon as it is gone
+  const [leaving, setLeaving] = useState<string | null>(null);
+  const counted = useMemo(() => properties.data?.items.filter((property) => property.id !== leaving), [properties.data, leaving]);
+  const usage = usePropertyUsage(counted);
   const canEdit = readOnlyReason === null;
 
   function askDelete(property: Property, button: HTMLElement) {
@@ -62,6 +67,7 @@ export default function Properties({ readOnlyReason }: SectionProps) {
   function confirmDelete(property: Property) {
     const row = deleteButton.current?.closest('li');
     const neighbour = row?.nextElementSibling ?? row?.previousElementSibling;
+    setLeaving(property.id);
     settle(remove.mutateAsync(property.id), {
       onSuccess: ({ affected_items }) => {
         // the next row, the one before, or "Create property" above the empty list
@@ -76,6 +82,7 @@ export default function Properties({ readOnlyReason }: SectionProps) {
         });
       },
       onError: (error) => {
+        setLeaving(null);
         close();
         notifyError(t('settings.properties.not_deleted', { label: property.label }), error, () => confirmDelete(property));
       },
@@ -144,6 +151,9 @@ export default function Properties({ readOnlyReason }: SectionProps) {
                         )}
                       </div>
                       <div className="min-w-0 flex-1 basis-60 text-sm text-muted">
+                        <p className="tabular-nums">
+                          <UsageCount usage={usage} id={property.key} />
+                        </p>
                         <p>{users.length === 0 ? t('settings.properties.in_no_type') : t('settings.properties.used_in', { types: users.map((type) => type.name).join(', ') })}</p>
                       </div>
                       {canEdit && (
@@ -169,7 +179,13 @@ export default function Properties({ readOnlyReason }: SectionProps) {
         open={question?.open === true}
         onOpenChange={(open) => !open && close()}
         title={t('settings.properties.delete_title', { label: question?.property.label ?? '' })}
-        description={t('settings.properties.delete_description')}
+        description={
+          <>
+            {t('settings.properties.delete_description')}
+            {/* only a number that was counted: none while loading or after a failure, none at zero */}
+            {question && (usage.counts?.[question.property.key] ?? 0) > 0 && ` ${tn('settings.properties.delete_confirm_count', usage.counts![question.property.key]!)}`}
+          </>
+        }
         confirmLabel={t('settings.properties.delete_confirm')}
         pending={remove.isPending}
         finalFocus={deleteFocus}

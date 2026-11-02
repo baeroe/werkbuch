@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { api, createProjectFromSidebar, isPhone, openNavigation, PEOPLE, pressMod, runId, signedInContext, tabTo, tr, variant } from '../helpers';
+import { api, createE2eProject, createItem, createProjectFromSidebar, isPhone, openNavigation, PEOPLE, pressMod, runId, removeE2eProject, signedInContext, tabTo, tr, variant } from '../helpers';
 
 // Signed in as the e2e person (Erik Ende, org admin; playwright.config.ts), in English. Every project a test creates is
 // named "E2E …" and carries the id of the run; the e2e seeder removes them before the next run.
@@ -188,4 +188,17 @@ test('says when the sidebar could not load the projects and loads them again', a
   await page.keyboard.press('Enter');
   await expect(navigation.getByText(tr('en', 'shell.nav.projects_failed'))).toBeHidden();
   await expect(navigation.getByRole('link', { name: tr('en', 'shell.nav.all_projects') })).toBeVisible();
+});
+
+test('shows the open items on the card of a project', async ({ page }) => {
+  const name = `E2E open ${variant()} ${runId()}`;
+  const { id, identifier } = await createE2eProject(page, name);
+  try {
+    await createItem(page, { project_id: id, title: 'E2E Offen eins' });
+    await createItem(page, { project_id: id, title: 'E2E Offen zwei' });
+    await page.goto('/projects');
+    await expect(card(page, name)).toContainText(tr('en', 'projects.open_count.other', { count: 2 }));
+  } finally {
+    await removeE2eProject(page, identifier);
+  }
 });

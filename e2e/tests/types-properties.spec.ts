@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { allEntries, api, arrowTo, pressMod, removeCatalogEntries, runId, tabTo, tr, variant } from '../helpers';
+import { allEntries, api, arrowTo, createE2eProject, createItem, pressMod, removeCatalogEntries, removeE2eProject, runId, tabTo, tr, variant } from '../helpers';
 
 // Signed in as the e2e person (Erik Ende, org admin), in English, with the keyboard only. Every type and property a test
 // creates is called `E2E <variant> <runId> …` and goes again over the API in `finally` (types first: they name the
@@ -221,6 +221,44 @@ test('deletes a property after confirming', async ({ page }) => {
     await expect(page.getByRole('list', { name: tr('en', 'settings.org.section.properties') }).locator(':focus')).toHaveCount(1);
     expect((await allEntries(page, 'properties')).map((entry) => entry.label)).not.toContain(label);
   } finally {
+    await cleanUp(page);
+  }
+});
+
+test('names the items with a value when a property is deleted', async ({ page }) => {
+  const label = `${prefix()} Counted`;
+  const typeName = `${prefix()} Counted type`;
+  let identifier: string | null = null;
+  try {
+    const property = await api(page, 'POST', '/api/v1/properties', { key: keyOf('counted'), label, field_type: 'text', help: '', default_value: null, settings: {}, options: [] });
+    expect(property.status(), await property.text()).toBe(201);
+    const { data } = (await property.json()) as { data: { id: string; key: string } };
+    const created = await api(page, 'POST', '/api/v1/work-item-types', {
+      name: typeName,
+      icon: 'flag',
+      tone: 'sand',
+      description: '',
+      is_epic: false,
+      properties: [{ property_id: data.id, required: false }],
+      archived_at: null,
+    });
+    expect(created.status(), await created.text()).toBe(201);
+    // Task stays the default type: a default type cannot go while the project is still being purged
+    const project = await createE2eProject(page, `E2E counted ${variant()} ${runId()}`, { types: ['Task', typeName] });
+    identifier = project.identifier;
+    const type = ((await created.json()) as { data: { id: string } }).data.id;
+    await createItem(page, { project_id: project.id, title: 'E2E Counted item', type_id: type, values: { [data.key]: 'x' } });
+
+    await page.goto('/settings/properties');
+    const row = propertyRow(page, label);
+    await expect(row).toContainText(tr('en', 'catalog.usage.one', { count: 1 }));
+    const remove = row.getByRole('button', { name: tr('en', 'settings.properties.delete', { label }) });
+    await tabTo(page, remove, { max: 100 });
+    await page.keyboard.press('Enter');
+    const question = page.getByRole('alertdialog', { name: tr('en', 'settings.properties.delete_title', { label }) });
+    await expect(question).toContainText(tr('en', 'settings.properties.delete_confirm_count.one', { count: 1 }));
+  } finally {
+    if (identifier) await removeE2eProject(page, identifier);
     await cleanUp(page);
   }
 });

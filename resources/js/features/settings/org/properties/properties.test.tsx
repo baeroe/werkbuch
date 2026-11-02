@@ -104,8 +104,6 @@ describe('Properties', () => {
     expect(within(people).getByText('Mehrfachauswahl')).toBeTruthy();
     expect(within(people).getByText('In keinem Typ')).toBeTruthy();
     expect(within(people).queryByRole('list')).toBeNull();
-    // no count of items yet: that comes with the items
-    expect(screen.queryByText(/einen Wert/)).toBeNull();
   });
 
   it('says when the properties could not be loaded, and loads them again', async () => {
@@ -834,5 +832,59 @@ describe('default value', () => {
     const value = within(dialog).getByRole('combobox', { name: /^Standardwert/ });
     await waitFor(() => expect(value.getAttribute('aria-invalid')).toBe('true'));
     expect(document.getElementById(value.getAttribute('aria-describedby')!)?.textContent).toBe('Diese Auswahl gibt es nicht.');
+  });
+});
+
+/* ---------------------------------------------------------------------- usage */
+
+describe('Properties usage', () => {
+  const flag: Property = { id: 'pr_flag', key: 'billable', label: 'Abrechenbar', field_type: 'boolean', help: '', default_value: null, settings: {}, options: [] };
+  const countCalls = () => api!.calls.filter((call) => call.method === 'POST' && call.url === '/api/v1/work-items/counts');
+
+  it('names the number of items of each property, a yes/no property by its on value (K10)', async () => {
+    renderWith(<Properties readOnlyReason={null} />, routes([...all, flag], { 'POST /api/v1/work-items/counts': () => ({ body: { data: { p0: 3, p1: 1, p4: 2 } } }) }));
+
+    expect(await within(await rowOf('Kunde')).findByText('3 Items')).toBeTruthy();
+    expect(within(await rowOf('Aufwand (h)')).getByText('1 Item')).toBeTruthy();
+    expect(within(await rowOf('Abrechenbar')).getByText('2 Items')).toBeTruthy();
+    // a property no item has a value for is not in the answer
+    expect(within(await rowOf('Umgebung')).getByText('0 Items')).toBeTruthy();
+    expect(countCalls()).toHaveLength(1);
+    const filters = (countCalls()[0]!.body as { filters: Record<string, unknown>; include_archived: boolean }).filters;
+    expect(filters.p4).toEqual({ version: 1, conditions: [{ field: 'property:billable', op: 'is', value: true }] });
+    expect(filters.p1).toEqual({ version: 1, conditions: [{ field: 'property:effort', op: 'is_not_empty' }] });
+    expect((countCalls()[0]!.body as { include_archived: boolean }).include_archived).toBe(true);
+  });
+
+  it('asks for at most 50 properties per call', async () => {
+    const many = Array.from({ length: 51 }, (_, index): Property => ({ ...reviewer, id: `pr_m${index}`, key: `m_${index}`, label: `Feld ${index}` }));
+    renderWith(<Properties readOnlyReason={null} />, routes(many, { 'POST /api/v1/work-items/counts': (body) => ({ body: { data: Object.fromEntries(Object.keys((body as { filters: object }).filters).map((key) => [key, 1])) } }) }));
+
+    expect(await within(await rowOf('Feld 50')).findByText('1 Item')).toBeTruthy();
+    expect(countCalls().map((call) => Object.keys((call.body as { filters: object }).filters).length).sort()).toEqual([1, 50]);
+  });
+
+  it('says when the numbers could not be loaded, and still lists the properties', async () => {
+    renderWith(<Properties readOnlyReason={null} />, routes(all, { 'POST /api/v1/work-items/counts': unavailable }));
+
+    expect(await within(await rowOf('Kunde')).findByText('Anzahl nicht geladen')).toBeTruthy();
+  });
+
+  it('names the number in the question of deleting a property', async () => {
+    const user = userEvent.setup();
+    renderWith(<Properties readOnlyReason={null} />, routes(all, { 'POST /api/v1/work-items/counts': () => ({ body: { data: { p1: 2 } } }) }));
+
+    await within(await rowOf('Aufwand (h)')).findByText('2 Items');
+    await user.click(within(await rowOf('Aufwand (h)')).getByRole('button', { name: 'Property „Aufwand (h)“ löschen' }));
+    const question = await screen.findByRole('alertdialog');
+    expect(within(question).getByText(/Die Werte bei 2 Items gehen verloren\./)).toBeTruthy();
+  });
+
+  it('does not name a number in the question while there is none', async () => {
+    const user = userEvent.setup();
+    renderWith(<Properties readOnlyReason={null} />, routes(all, { 'POST /api/v1/work-items/counts': unavailable }));
+
+    await user.click(within(await rowOf('Aufwand (h)')).getByRole('button', { name: 'Property „Aufwand (h)“ löschen' }));
+    expect(within(await screen.findByRole('alertdialog')).queryByText(/gehen? verloren/)).toBeNull();
   });
 });

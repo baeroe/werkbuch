@@ -4,7 +4,7 @@
  * carries, each required or not, in the order the form shows them. An active type can be deleted, after the five seconds
  * of undo; the default type of a project cannot (409 `default_type`, the toast names the projects). A type that items
  * carry is archived instead (`outcome: 'archived'`): a toast says so, and the row stays, marked archived. An archived
- * one can be restored. How many items use a type comes with Phase 5 (A61). Members see the list, admins change it.
+ * one can be restored. Each row says how many items carry the type (archived ones included, A61). Members see the list, admins change it.
  */
 
 import { ArchiveRestore, Pencil, Plus, Route, Shapes, Trash2 } from 'lucide-react';
@@ -25,6 +25,7 @@ import { ReadOnlyNotice } from '../../frame/access';
 import { Badge, Loaded, Panel, Row, Rows, RowsSkeleton, SectionHeader } from '../../frame/parts';
 import { useDialogRound } from '../../frame/useDialogRound';
 import { useRemoval } from '../../frame/useRemoval';
+import { UsageCount, useGroupUsage } from '../../catalog/usage';
 import type { SectionProps } from '../sections';
 import { TypeDialog } from './TypeDialog';
 
@@ -55,6 +56,7 @@ export default function Types({ readOnlyReason }: SectionProps) {
   const dialog = useDialogRound<WorkItemType>();
   const { hidden, remove: removeWithUndo } = useRemoval();
   const create = useRef<HTMLButtonElement>(null);
+  const usage = useGroupUsage('type');
   const canEdit = readOnlyReason === null;
   const byId = new Map((properties.data?.items ?? []).map((property) => [property.id, property]));
 
@@ -127,6 +129,9 @@ export default function Types({ readOnlyReason }: SectionProps) {
                         {type.archived_at !== null && <Badge tone="quiet">{t('settings.types.archived')}</Badge>}
                       </div>
                       {type.description && <p className="mt-1.5 max-w-[65ch] text-ui text-pretty text-muted">{type.description}</p>}
+                      <p className="mt-1.5 text-sm text-muted tabular-nums">
+                        <UsageCount usage={usage} id={type.id} />
+                      </p>
                       <PropertyChips type={type} byId={byId} />
                     </div>
                     {canEdit && (
