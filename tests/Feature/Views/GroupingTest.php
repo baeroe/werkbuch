@@ -254,6 +254,19 @@ it('names a parent group only through a visible parent', function () use ($world
         ->and($shape($jonas))->toBe([[$private->id, 1, $private->title], [$public->id, 1, $public->title], ['none', 2, null]]);
 });
 
+it('never names a parent the reader may not see, not even from a row built by hand', function () use ($world) {
+    ['ida' => $ida, 'web' => $web, 'ops' => $ops] = $world();
+    $private = WorkItem::factory()->for($ops)->epic()->create();
+    // a parent lives in the project of its child: only a row written by hand points elsewhere
+    $child = WorkItem::factory()->for($web)->create();
+    $child->forceFill(['parent_id' => $private->id])->saveQuietly();
+    WorkItem::factory()->for($web)->create();
+
+    $groups = GroupWorkItems::run(actor($ida), ['group_by' => 'parent'])->groups;
+
+    expect(array_map(fn (GroupCount $group) => [$group->key, $group->count, $group->item], $groups))->toBe([['none', 2, null]]);
+});
+
 it('reads the key of a group in its stored form, and nothing else', function () {
     $ulid = (string) Str::ulid();
 

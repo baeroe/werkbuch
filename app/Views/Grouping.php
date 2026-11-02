@@ -264,7 +264,10 @@ final class Grouping
     }
 
     /**
-     * The parents by key, each with its item, then `none`.
+     * The parents by key, each with its item, then `none`. Only a parent the reader sees names a group: a key without
+     * one (a parent the reader may not see) counts into `none`, so that no group answers with the ULID of an item the
+     * reader may not know. A parent lives in the project of its child (`field.parent_id.project`), so this only guards
+     * against rows built by hand.
      *
      * @param  array<string, int>  $counts
      * @return list<GroupCount>
@@ -276,6 +279,12 @@ final class Grouping
             ->orderBy('group_projects.identifier')->orderBy('work_items.number')
             ->select('work_items.*')->with('project')->get()->keyBy('id')->all();
 
-        return self::ordered([...array_map('strval', array_keys($parents)), self::NONE], $counts, $parents);
+        $known = [self::NONE => 0];
+        foreach ($counts as $key => $count) {
+            $group = array_key_exists($key, $parents) ? (string) $key : self::NONE;
+            $known[$group] = ($known[$group] ?? 0) + $count;
+        }
+
+        return self::ordered([...array_map('strval', array_keys($parents)), self::NONE], $known, $parents);
     }
 }
