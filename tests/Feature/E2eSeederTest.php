@@ -145,7 +145,8 @@ it('removes the views of earlier runs with their favorites and keeps the others'
 
     expect(View::query()->whereKey([$left->id, $mine->id])->exists())->toBeFalse()
         ->and(View::query()->whereKey($kept->id)->exists())->toBeTrue()
-        ->and(Favorite::query()->where('favoritable_type', 'view')->pluck('favoritable_id')->all())->toBe([$kept->id])
+        ->and(Favorite::query()->where('favoritable_type', 'view')->whereIn('favoritable_id', [$left->id, $kept->id])->pluck('favoritable_id')->all())->toBe([$kept->id])
+        ->and(Favorite::query()->where('favoritable_type', 'view')->count())->toBe(7)
         ->and(eventsOf(EventType::ViewDeleted))->toHaveCount(2)
         ->and(eventsOf(EventType::ViewDeleted)->first()->meta['reason'])->toBe('e2e_reset');
 });

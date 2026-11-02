@@ -11,6 +11,7 @@ use Database\Seeders\Demo\OrganizationSeeder;
 use Database\Seeders\Demo\PeopleSeeder;
 use Database\Seeders\Demo\ProjectsSeeder;
 use Database\Seeders\Demo\TokensSeeder;
+use Database\Seeders\Demo\ViewsSeeder;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use RuntimeException;
@@ -37,6 +38,7 @@ class DemoSeeder extends Seeder
             BotsSeeder::class,
             CatalogSeeder::class,
             ProjectsSeeder::class,
+            ViewsSeeder::class,
             FavoritesSeeder::class,
             TokensSeeder::class,
             ItemsSeeder::class,
