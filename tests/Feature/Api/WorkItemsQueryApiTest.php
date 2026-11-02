@@ -337,3 +337,17 @@ it('keeps the empty objects of a read POST objects', function () {
 
     expect($raw)->toContain('"values_markdown":{}');
 });
+
+it('shows the sub-items of a view without them when GET asks for them', function () use ($ids) {
+    $epic = WorkItem::factory()->for($this->web)->epic()->create();
+    $child = WorkItem::factory()->childOf($epic)->create();
+    $view = View::factory()->create(['display' => [
+        'layout' => 'list', 'group_by' => 'none', 'sort' => ['field' => 'rank', 'direction' => 'asc'], 'fields' => [], 'show_sub_items' => false,
+    ]]);
+
+    expect($ids($this->actingAs($this->mara)->getJson("/api/v1/work-items?view={$view->id}&filter[parent]={$epic->key}")))->toBe([])
+        ->and($ids($this->actingAs($this->mara)->getJson("/api/v1/work-items?view={$view->id}&filter[parent]={$epic->key}&show_sub_items=1")))->toBe([$child->id])
+        ->and($ids($this->actingAs($this->mara)->getJson('/api/v1/work-items?filter[project]=WEB&show_sub_items=0')))->not->toContain($child->id);
+    $this->actingAs($this->mara)->getJson('/api/v1/work-items?show_sub_items=yes')->assertUnprocessable()
+        ->assertJsonPath('errors', ['show_sub_items' => [__('field.boolean')]]);
+});

@@ -85,7 +85,7 @@ Reading needs a token with `read`, changing one with `write`. Items are addresse
 
 | Request | Answer |
 |---|---|
-| `GET /api/v1/work-items` | Items you see: `view`, a short form such as `filter[project]`, `filter[assignee]=me`, `filter[q]` (a key or part of the title), `sort`, `include_archived`, `lean`, `cursor`, `per_page`. Filters, groups and counts are described under [views](/en/concepts/views#rest). |
+| `GET /api/v1/work-items` | Items you see: `view`, a short form such as `filter[project]`, `filter[assignee]=me`, `filter[q]` (a key or part of the title), `sort`, `show_sub_items`, `include_archived`, `lean`, `cursor`, `per_page`. Filters, groups and counts are described under [views](/en/concepts/views#rest). |
 | `POST /api/v1/work-items` | `201` with the new item. |
 | `GET /api/v1/work-items/{item}` | The item; `?include=children,relations,type,workflow` embeds those. |
 | `PATCH /api/v1/work-items/{item}` | `200` with the item. |

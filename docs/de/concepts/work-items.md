@@ -85,7 +85,7 @@ Lesen braucht ein Token mit `read`, Ändern eines mit `write`. Items sprichst du
 
 | Anfrage | Antwort |
 |---|---|
-| `GET /api/v1/work-items` | Items, die du siehst: `view`, eine Kurzform wie `filter[project]`, `filter[assignee]=me`, `filter[q]` (ein Key oder ein Teil des Titels), `sort`, `include_archived`, `lean`, `cursor`, `per_page`. Filter, Gruppen und Zahlen stehen unter [Views](/de/concepts/views#rest). |
+| `GET /api/v1/work-items` | Items, die du siehst: `view`, eine Kurzform wie `filter[project]`, `filter[assignee]=me`, `filter[q]` (ein Key oder ein Teil des Titels), `sort`, `show_sub_items`, `include_archived`, `lean`, `cursor`, `per_page`. Filter, Gruppen und Zahlen stehen unter [Views](/de/concepts/views#rest). |
 | `POST /api/v1/work-items` | `201` mit dem neuen Item. |
 | `GET /api/v1/work-items/{item}` | Das Item; `?include=children,relations,type,workflow` bettet diese mit ein. |
 | `PATCH /api/v1/work-items/{item}` | `200` mit dem Item. |

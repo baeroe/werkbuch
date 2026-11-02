@@ -232,7 +232,7 @@ Reading needs a token with `read`. The three requests below that read with `POST
 
 | Request | Answer |
 |---|---|
-| `GET /api/v1/work-items` | A page of items: `view`, `filter[…]` (short form), `sort`, `include_archived`, `lean`, `cursor`, `per_page` |
+| `GET /api/v1/work-items` | A page of items: `view`, `filter[…]` (short form), `sort`, `show_sub_items` (`1` or `0`, by default as the view says, otherwise `1`), `include_archived`, `lean`, `cursor`, `per_page` |
 | `POST /api/v1/work-items/query` | A page of items for a filter in the body |
 | `POST /api/v1/work-items/groups` | The groups of a grouping with their numbers |
 | `POST /api/v1/work-items/counts` | Numbers for up to 50 named filters |

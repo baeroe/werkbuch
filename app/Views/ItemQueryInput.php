@@ -142,7 +142,7 @@ final readonly class ItemQueryInput
         $query = array_filter($query, fn (mixed $value) => $value !== null);
 
         $view = array_key_exists('view', $query) ? self::view($query['view'], $actor) : null;
-        $flags = self::flags($query, ['include_archived', 'lean'], $errors);
+        $flags = self::flags($query, ['show_sub_items', 'include_archived', 'lean'], $errors);
 
         $sort = null;
         if (array_key_exists('sort', $query)) {
@@ -170,7 +170,7 @@ final readonly class ItemQueryInput
             new Filter($short['conditions']),
             $sort,
             self::search($short['q']),
-            $view?->display()->showSubItems ?? true,
+            $flags['show_sub_items'] ?? $view?->display()->showSubItems ?? true,
             $flags['include_archived'] ?? false,
             $flags['lean'] ?? false,
             null,

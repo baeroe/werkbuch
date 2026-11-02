@@ -232,7 +232,7 @@ Lesen braucht ein Token mit `read`. Die drei Anfragen unten, die mit `POST` lese
 
 | Anfrage | Antwort |
 |---|---|
-| `GET /api/v1/work-items` | Eine Seite Items: `view`, `filter[…]` (Kurzform), `sort`, `include_archived`, `lean`, `cursor`, `per_page` |
+| `GET /api/v1/work-items` | Eine Seite Items: `view`, `filter[…]` (Kurzform), `sort`, `show_sub_items` (`1` oder `0`, standardmäßig wie die View, sonst `1`), `include_archived`, `lean`, `cursor`, `per_page` |
 | `POST /api/v1/work-items/query` | Eine Seite Items für einen Filter im Body |
 | `POST /api/v1/work-items/groups` | Die Gruppen einer Gruppierung mit ihren Zahlen |
 | `POST /api/v1/work-items/counts` | Zahlen für bis zu 50 benannte Filter |
