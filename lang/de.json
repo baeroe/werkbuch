@@ -2205,6 +2205,7 @@
     "shortcuts.widget.groups.collapse": "Gruppe zuklappen bzw. zum Kopf",
     "shortcuts.widget.groups.expand": "Gruppe aufklappen bzw. zur ersten Zeile",
     "shortcuts.widget.groups.header": "Voriger bzw. nächster Kopf",
+    "shortcuts.widget.groups.toggle": "Gruppe auf- oder zuklappen",
     "shortcuts.widget.palette.back": "Zurück zu allen Befehlen (im leeren Feld)",
     "shortcuts.widget.palette.close": "Schließen",
     "shortcuts.widget.palette.move": "Treffer wählen",

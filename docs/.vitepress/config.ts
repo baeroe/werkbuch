@@ -10,7 +10,7 @@ const description = 'Open, self-hosted project management: work items with your 
 
 // every page exists in docs/en and docs/de under the same path (tests/Unit/DocsTest.php); later phases add theirs
 const groups: { title: string; pages: string[] }[] = [
-    { title: 'guide', pages: ['development'] },
+    { title: 'guide', pages: ['development', 'keyboard'] },
     { title: 'concepts', pages: ['concepts/permissions', 'concepts/projects', 'concepts/workflows', 'concepts/types-and-properties', 'concepts/work-items', 'concepts/views', 'bots'] },
 ];
 
@@ -21,6 +21,7 @@ const en: Record<string, string> = {
     guide: 'Guide',
     concepts: 'Concepts',
     development: 'Development',
+    keyboard: 'Keyboard',
     'concepts/permissions': 'Roles and permissions',
     'concepts/projects': 'Projects',
     'concepts/workflows': 'Workflows',
@@ -34,6 +35,7 @@ const de: Record<string, string> = {
     guide: 'Anleitung',
     concepts: 'Konzepte',
     development: 'Entwicklung',
+    keyboard: 'Tastatur',
     'concepts/permissions': 'Rollen und Rechte',
     'concepts/projects': 'Projekte',
     'concepts/workflows': 'Workflows',

@@ -31,4 +31,9 @@ describe('keys of the widgets', () => {
     ]);
     for (const group of WIDGET_KEYS) expect(group.entries.length).toBeGreaterThan(0);
   });
+
+  it('folds a group header with enter and space, as its button does', () => {
+    const headers = WIDGET_KEYS.find((group) => group.group === 'shortcuts.widget.group.groups');
+    expect(headers?.entries.filter((entry) => entry.label === 'shortcuts.widget.groups.toggle').map((entry) => entry.keys)).toEqual(['enter', 'space']);
+  });
 });

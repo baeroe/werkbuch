@@ -51,6 +51,8 @@ export const WIDGET_KEYS: WidgetGroup[] = [
       { keys: 'right', label: 'shortcuts.widget.groups.expand' },
       { keys: 'up', label: 'shortcuts.widget.groups.header' },
       { keys: 'down', label: 'shortcuts.widget.groups.header' },
+      { keys: 'enter', label: 'shortcuts.widget.groups.toggle' },
+      { keys: 'space', label: 'shortcuts.widget.groups.toggle' },
     ],
   },
   {

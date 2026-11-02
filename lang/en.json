@@ -2205,6 +2205,7 @@
     "shortcuts.widget.groups.collapse": "Collapse the group, or go to its header",
     "shortcuts.widget.groups.expand": "Expand the group, or go to its first row",
     "shortcuts.widget.groups.header": "Previous or next header",
+    "shortcuts.widget.groups.toggle": "Fold or unfold the group",
     "shortcuts.widget.palette.back": "Back to all commands (in the empty field)",
     "shortcuts.widget.palette.close": "Close",
     "shortcuts.widget.palette.move": "Choose a hit",
