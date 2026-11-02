@@ -342,10 +342,31 @@ export function BoardLayout({ groups, groupBy, display, project, createDefaults,
   const sortedHint = () => toastOnce({ title: t('items.board.sorted.title'), description: t('items.board.sorted.description') });
 
   /**
+   * The moves of a card go out one after the other (T18-M2, T19-M4): a second ⇧→ or drop while the first is on its way
+   * waits for it and goes only where the first landed (two transitions at once could arrive in the other order, and the
+   * end of the first would take the spinner of the second). A move after one the server refused is dropped: the card
+   * went back, the second was meant from where it no longer is.
+   */
+  const turns = useRef(new Map<string, Promise<boolean>>());
+  function inTurn(id: string, run: () => Promise<boolean>): Promise<boolean> {
+    const before = turns.current.get(id);
+    const call = before ? before.then((landed) => (landed ? run() : false)) : run();
+    turns.current.set(id, call);
+    void call.finally(() => {
+      if (turns.current.get(id) === call) turns.current.delete(id);
+    });
+    return call;
+  }
+
+  /**
    * Sends a move to another column (a key or a drop): the card follows with the focus, the status line says what
    * happened. Resolves whether the server took it.
    */
   function sendMove(item: ListedItem, check: Extract<MoveCheck, { ok: true }>, origin: BoardColumnData, target: BoardColumnData, pointer = false): Promise<boolean> {
+    return inTurn(item.id, () => moveNow(item, check, origin, target, pointer));
+  }
+
+  function moveNow(item: ListedItem, check: Extract<MoveCheck, { ok: true }>, origin: BoardColumnData, target: BoardColumnData, pointer: boolean): Promise<boolean> {
     let sent = false;
     return applyMove(item, check, {
       transition,
@@ -376,7 +397,7 @@ export function BoardLayout({ groups, groupBy, display, project, createDefaults,
    * between its new neighbours. Returns null, and moves nothing, where the rank would grow past what the server takes
    * (P23) and at the last loaded place of a column that has more to load.
    */
-  function sendPlace(item: ListedItem, column: BoardColumnData, ids: readonly string[], index: number, pointer = false): Promise<unknown> | null {
+  function sendPlace(item: ListedItem, column: BoardColumnData, ids: readonly string[], index: number, pointer = false): Promise<boolean> | null {
     // below the last loaded card come cards not loaded yet: a rank after the last loaded one would put the card after
     // all of them (T18-M1)
     if (column.hasMore && index === ids.length - 1) {
@@ -393,16 +414,21 @@ export function BoardLayout({ groups, groupBy, display, project, createDefaults,
     // the browser. React gives it back within the commit that moved it (seen in Chromium); the card is followed all the
     // same, as a move to another column is, so the focus stays with it whatever renders next (the rollback of a
     // refusal included)
-    mark(item.id, true);
     follow(item.id, column.key, pointer);
-    return update
-      .mutateAsync({ id: item.id, patch: { rank } })
-      .then(
-        () => setAnnouncement(t('items.board.moved.place', { key: item.key, place: index + 1, count: ids.length, column: column.label })),
-        // the mutation put the card back and said why
-        () => {},
-      )
-      .finally(() => mark(item.id, false));
+    return inTurn(item.id, () => {
+      mark(item.id, true);
+      return update
+        .mutateAsync({ id: item.id, patch: { rank } })
+        .then(
+          () => {
+            setAnnouncement(t('items.board.moved.place', { key: item.key, place: index + 1, count: ids.length, column: column.label }));
+            return true;
+          },
+          // the mutation put the card back and said why
+          () => false,
+        )
+        .finally(() => mark(item.id, false));
+    });
   }
 
   function moveByKey(direction: 1 | -1) {

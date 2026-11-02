@@ -126,8 +126,11 @@ export function useBoardDrag(served: BoardColumnData[], rules: BoardRules, optio
 
   /* ------------------------------------------------------------------- columns */
 
-  /** Cards dropped by pointer keep their place until the move has landed (or the resolution is chosen). */
-  const [placements, setPlacements] = useState<ReadonlyMap<string, { column: string; index: number }>>(() => new Map());
+  /**
+   * Cards dropped by pointer keep their place until the move has landed (or the resolution is chosen). Each drop holds
+   * its own token: the end of an older move of the same card leaves the place of a newer one alone.
+   */
+  const [placements, setPlacements] = useState<ReadonlyMap<string, { column: string; index: number; token: symbol }>>(() => new Map());
   const placed = useMemo(() => {
     let next = served;
     for (const [id, spot] of placements) {
@@ -146,10 +149,11 @@ export function useBoardDrag(served: BoardColumnData[], rules: BoardRules, optio
 
   /** Keeps the card in its place until the call settles. */
   function hold(id: string, column: string, index: number, call: Promise<unknown>) {
-    setPlacements((current) => new Map(current).set(id, { column, index }));
+    const token = Symbol(id);
+    setPlacements((current) => new Map(current).set(id, { column, index, token }));
     void call.finally(() =>
       setPlacements((current) => {
-        if (!current.has(id)) return current;
+        if (current.get(id)?.token !== token) return current;
         const next = new Map(current);
         next.delete(id);
         return next;

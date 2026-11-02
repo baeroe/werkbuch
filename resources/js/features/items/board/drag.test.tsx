@@ -297,6 +297,24 @@ describe('dragging a card', () => {
     expect(sent('POST', '/api/v1/work-items/wi_app_15/transition')).toEqual([]);
   });
 
+  it('keeps a card dropped again while its first move is on its way where the second drop put it', async () => {
+    let release = () => {};
+    board.holdMoves = new Promise((resolve) => (release = resolve));
+    renderBoard('/projects/APP?layout=board');
+    await waitFor(() => cardIn('Todo', 'APP-16'));
+
+    await drag('Todo', 'APP-16', () => below('In Progress'));
+    await waitFor(() => expect(cardIn('In Progress', 'APP-16').getAttribute('aria-busy')).toBe('true'));
+    // the second drop waits for the first, then asks for the resolution
+    await drag('In Progress', 'APP-16', () => below('Cancelled'));
+    await act(async () => release());
+    await screen.findByRole('dialog', { name: 'APP-16 auf Cancelled setzen' });
+    // the end of the first move leaves the place of the second alone: the card waits in Cancelled
+    const cancelled = document.querySelector('[data-column-key="app_cancelled"]')!;
+    expect([...cancelled.querySelectorAll('[data-card-id]')].map((card) => card.getAttribute('data-card-id'))).toEqual(['wi_app_16']);
+    expect(sent('POST', '/api/v1/work-items/wi_app_16/transition')).toEqual([{ to_state_id: 'app_progress', resolution_id: null }]);
+  });
+
   it('drops a card between two others and sends the rank between them', async () => {
     renderBoard('/projects/WEB?layout=board');
     await waitFor(() => expect(keysIn('Todo')).toEqual(['WEB-43', 'WEB-44', 'WEB-48']));

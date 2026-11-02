@@ -364,6 +364,55 @@ describe('the board', () => {
     expect(countOf('In Progress')).toBe(', 2 Items');
   });
 
+  it('sends a second move of the same card only after the first has landed', async () => {
+    let release = () => {};
+    board.holdMoves = new Promise((resolve) => (release = resolve));
+    // the transitions that went out, as they leave the browser
+    const started: unknown[] = [];
+    const inner = globalThis.fetch;
+    globalThis.fetch = (input, init) => {
+      if (String(input).includes('/transition')) started.push(JSON.parse(String(init?.body)));
+      return inner(input, init);
+    };
+    try {
+      renderBoard('/projects/APP?layout=board');
+      const card = await waitFor(() => cardIn('Todo', 'APP-16'));
+      act(() => card.focus());
+
+      press('ArrowRight', { shiftKey: true });
+      await waitFor(() => expect(cardIn('In Progress', 'APP-16')).toBeTruthy());
+      press('ArrowRight', { shiftKey: true });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      // the second waits for the first: never two at once
+      expect(started).toEqual([expect.objectContaining({ to_state_id: 'app_progress' })]);
+
+      await act(async () => release());
+      await waitFor(() => expect(started).toHaveLength(2));
+      expect(started[1]).toMatchObject({ to_state_id: 'app_review' });
+      await waitFor(() => expect(stateOf('wi_app_16')).toBe('app_review'));
+      await waitFor(() => expect(cardIn('Review', 'APP-16').getAttribute('aria-busy')).toBeNull());
+    } finally {
+      globalThis.fetch = inner;
+    }
+  });
+
+  it('drops a second move of a card whose first move the server refused', async () => {
+    let release = () => {};
+    board.holdMoves = new Promise((resolve) => (release = resolve));
+    board.refuseMoves = true;
+    renderBoard('/projects/APP?layout=board');
+    const card = await waitFor(() => cardIn('Todo', 'APP-16'));
+    act(() => card.focus());
+
+    press('ArrowRight', { shiftKey: true });
+    await waitFor(() => expect(cardIn('In Progress', 'APP-16')).toBeTruthy());
+    press('ArrowRight', { shiftKey: true });
+    await act(async () => release());
+    await waitFor(() => expect(cardIn('Todo', 'APP-16')).toBeTruthy());
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(sent('POST', '/api/v1/work-items/wi_app_16/transition')).toHaveLength(1);
+  });
+
   it('keeps a card in place when its new rank would grow too long', async () => {
     // WEB-44 lies right after WEB-43, with a rank of 128 characters: between the two there is no room left
     board.items = board.items.map((entry) => (entry.id === 'wi_web_44' ? { ...entry, rank: `a1${'0'.repeat(125)}1` } : entry));
