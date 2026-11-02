@@ -187,8 +187,8 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 **Liefert:**
 - Scout mit Meilisearch für Items (Key, Titel, Klartext der Beschreibung; Kommentare ab Phase 7), Projekte, Personen und Bots; Wiki-Seiten folgen in Phase 9. Indexieren als Event-Konsument in der Queue `search`; `app:search-sync` für die Index-Einstellungen (Filterattribut `project_id`).
 - `GET /api/v1/search?q=…&types=…`: läuft immer mit dem Filter aus `Visibility`, der Browser spricht nie mit Meilisearch; ein Key wie `WEB-123` (auch eine alte Kennung) liefert das Item direkt.
-- UI-Port: Die Befehlspalette steht seit Phase 4 (⌘K, Register, Navigation, „Neues Item“, Theme, Item-Befehle am Item der Seite und der Vorschau; A114, an der Auswahl der Listen mit Phase 5); Phase 6 bringt ihre Suche: Treffer nach Art gruppiert, Sprung zu einem Key, `/` außerhalb von Listen (in Listen fokussiert `/` seit Phase 5 die Titelsuche, A181), „Vorlage anwenden …“ (aktiv ab Phase 10); `?`-Hilfe vollständig.
-- Tastatur-Doku: `scripts/shortcuts-doc.mjs` erzeugt `docs/{en,de}/keyboard.md` aus dem Katalog `resources/js/lib/shortcuts/catalog.ts`; ein Test prüft, dass die Seiten aktuell sind und kein Kürzel doppelt belegt ist (R38).
+- UI-Port: Die Befehlspalette steht seit Phase 4 (⌘K, Register, Navigation, „Neues Item“, Theme, Item-Befehle am Item der Seite und der Vorschau; A114, an der Auswahl der Listen mit Phase 5); Phase 6 bringt ihre Suche: Treffer nach Art gruppiert, Sprung zu einem Key, `/` außerhalb von Listen (in Listen fokussiert `/` seit Phase 5 die Titelsuche, A181); „Vorlage anwenden …“ kommt mit Phase 10 (A215); `?`-Hilfe vollständig.
+- Tastatur-Doku: `scripts/shortcuts-doc.mjs` erzeugt `docs/{en,de}/keyboard.md` aus dem Katalog `resources/js/lib/shortcuts/catalog.ts`; ein Test prüft, dass die Seiten aktuell sind; doppelt belegte Kürzel prüft `catalog.test.ts` (R38, A217).
 
 **Tests:** Suche über Projektgrenzen (privates Projekt, Nicht-Mitglied, deaktiviert), Index nach Änderung, Löschung und Archiv, Key-Sprung mit alter Kennung; Meilisearch in `Integration` echt, sonst Fake-Engine; e2e: Flow 1 komplett über ⌘K „kontakt“.
 

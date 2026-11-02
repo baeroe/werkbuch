@@ -27,6 +27,6 @@ it('keeps specs, plans and history out of the site', fn () => expect((string) fi
 it('documents the DDEV commands of the development page in both languages', function () {
     foreach (['en', 'de'] as $l) {
         expect((string) file_get_contents(repo_path("docs/{$l}/development.md")))
-            ->toContain('ddev start', 'ddev artisan test --coverage --min=100', 'ddev exec pnpm test:coverage', 'ddev exec pnpm build:coverage', 'pnpm --dir e2e test', 'app:ensure-admin', 'app:reset-password');
+            ->toContain('ddev start', 'ddev artisan test --coverage --min=100', 'ddev exec pnpm test:coverage', 'ddev exec pnpm build:coverage', 'pnpm --dir e2e test', 'app:ensure-admin', 'app:reset-password', 'app:search-sync', 'app:search-import');
     }
 });

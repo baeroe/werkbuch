@@ -19,8 +19,9 @@ ddev composer install
 ddev exec pnpm install
 ddev artisan key:generate
 ddev artisan migrate
+ddev artisan app:search-import                # builds the search indexes in Meilisearch
 ddev artisan app:ensure-admin                 # creates the account from ADMIN_EMAIL / ADMIN_PASSWORD in .env
-ddev artisan db:seed --class=DemoSeeder       # optional: the fictional team Feldwerk
+ddev artisan db:seed --class=DemoSeeder       # optional: the fictional team Feldwerk (builds the search indexes again at the end)
 ```
 
 Start the Vite dev server and keep it running:
@@ -44,7 +45,7 @@ Open <https://werkbuch.ddev.site/login> and sign in with `ADMIN_EMAIL` and `ADMI
 | Mail | `ddev mailpit` |
 | Database | `ddev mysql`, user, password and database `db` |
 
-The queue worker, the scheduler and Reverb run as DDEV daemons and start with `ddev start`.
+The queue worker, the scheduler and Reverb run as DDEV daemons and start with `ddev start`. The worker also listens on the queue `search`, which keeps the search indexes in step with every change. The Meilisearch dashboard asks for the key `MEILISEARCH_KEY` from `.env`.
 
 ## Tests and checks
 
@@ -60,7 +61,7 @@ ddev exec pnpm test:coverage                              # Vitest with threshol
 ddev exec pnpm --dir docs build                           # these docs
 ```
 
-Tests use their own database `testing`, which DDEV creates on start. `ddev exec` passes its arguments through a shell: wrap commands with glob patterns in single quotes.
+Tests use their own database `testing`, which DDEV creates on start. The tests in `tests/Integration` also need Meilisearch running (`ddev describe` lists the service `meilisearch`); they use the index prefix `testing_` and never touch the indexes of the app. All other tests search a fake engine in memory. `ddev exec` passes its arguments through a shell: wrap commands with glob patterns in single quotes.
 
 ### Browser tests and merged coverage
 
@@ -93,9 +94,13 @@ Lost the authenticator app and the recovery codes? `ddev artisan app:reset-two-f
 ```bash
 ddev artisan app:sync-roles            # compares the roles and rights in the database with the code
 ddev artisan app:redispatch-events     # hands events that got stuck to their consumers again
+ddev artisan app:search-sync           # sends the settings of the search indexes (config/scout.php) to Meilisearch
+ddev artisan app:search-import         # empties the search indexes and fills them again from the database
 ```
 
 `app:sync-roles` is what the migration of the roles runs; call it by hand only after a rights table in the code changed without a migration. `app:redispatch-events` runs every minute in the scheduler, so you only need it by hand to catch up after the scheduler was down.
+
+`app:search-sync` is needed after a change of the index settings in `config/scout.php`. `app:search-import` builds the indexes from scratch: on the first start, after `migrate:fresh`, and as the repair when the search missed changes (for example after Meilisearch was down for hours). During the import the search is briefly empty. More under [Search](/en/search#operation).
 
 ## Documentation
 

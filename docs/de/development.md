@@ -19,8 +19,9 @@ ddev composer install
 ddev exec pnpm install
 ddev artisan key:generate
 ddev artisan migrate
+ddev artisan app:search-import                # baut die Suchindizes in Meilisearch auf
 ddev artisan app:ensure-admin                 # legt das Konto aus ADMIN_EMAIL / ADMIN_PASSWORD in .env an
-ddev artisan db:seed --class=DemoSeeder       # optional: das fiktive Team Feldwerk
+ddev artisan db:seed --class=DemoSeeder       # optional: das fiktive Team Feldwerk (baut am Ende die Suchindizes neu)
 ```
 
 Starte den Vite-Dev-Server und lass ihn laufen:
@@ -44,7 +45,7 @@ ddev exec pnpm dev
 | Mail | `ddev mailpit` |
 | Datenbank | `ddev mysql`, Benutzer, Passwort und Datenbank `db` |
 
-Queue-Worker, Scheduler und Reverb laufen als DDEV-Daemons und starten mit `ddev start`.
+Queue-Worker, Scheduler und Reverb laufen als DDEV-Daemons und starten mit `ddev start`. Der Worker hört auch auf die Queue `search`, die die Suchindizes bei jeder Änderung nachzieht. Das Dashboard von Meilisearch fragt nach dem Schlüssel `MEILISEARCH_KEY` aus `.env`.
 
 ## Tests und Prüfungen
 
@@ -60,7 +61,7 @@ ddev exec pnpm test:coverage                              # Vitest mit Schwellen
 ddev exec pnpm --dir docs build                           # diese Doku
 ```
 
-Die Tests nutzen eine eigene Datenbank `testing`, die DDEV beim Start anlegt. `ddev exec` reicht seine Argumente an eine Shell weiter: Kommandos mit Glob-Mustern gehören in einfache Anführungszeichen.
+Die Tests nutzen eine eigene Datenbank `testing`, die DDEV beim Start anlegt. Die Tests in `tests/Integration` brauchen zusätzlich ein laufendes Meilisearch (`ddev describe` nennt den Dienst `meilisearch`); sie nutzen das Index-Präfix `testing_` und lassen die Indizes der App in Ruhe. Alle anderen Tests suchen in einer nachgebauten Suchmaschine im Speicher. `ddev exec` reicht seine Argumente an eine Shell weiter: Kommandos mit Glob-Mustern gehören in einfache Anführungszeichen.
 
 ### Browser-Tests und zusammengeführte Abdeckung
 
@@ -93,9 +94,13 @@ Authenticator-App und Recovery-Codes verloren? `ddev artisan app:reset-two-facto
 ```bash
 ddev artisan app:sync-roles            # gleicht Rollen und Rechte in der Datenbank mit dem Code ab
 ddev artisan app:redispatch-events     # reicht liegengebliebene Events erneut an ihre Konsumenten
+ddev artisan app:search-sync           # schickt die Einstellungen der Suchindizes (config/scout.php) an Meilisearch
+ddev artisan app:search-import         # leert die Suchindizes und füllt sie neu aus der Datenbank
 ```
 
 Die Migration der Rollen führt `app:sync-roles` aus; von Hand brauchst du es nur, wenn sich eine Rechtetabelle im Code ohne Migration geändert hat. `app:redispatch-events` läuft jede Minute im Scheduler, von Hand brauchst du es nur, um nach einem Ausfall des Schedulers aufzuholen.
+
+`app:search-sync` brauchst du nach einer Änderung der Index-Einstellungen in `config/scout.php`. `app:search-import` baut die Indizes von Grund auf: beim ersten Start, nach `migrate:fresh` und als Reparatur, wenn die Suche Änderungen verpasst hat (etwa nachdem Meilisearch stundenlang ausgefallen war). Während des Imports ist die Suche kurz leer. Mehr unter [Suche](/de/search#betrieb).
 
 ## Dokumentation
 
