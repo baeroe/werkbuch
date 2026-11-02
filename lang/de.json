@@ -219,6 +219,7 @@
     "field.required": "Dieses Feld fehlt.",
     "field.resolution_id.archived": "Diese Resolution ist archiviert. Wähle eine andere.",
     "field.resolution_id.unknown": "Diese Resolution gibt es nicht.",
+    "field.rich_text.attachment": "Der Text nennt ein Bild oder eine Datei, die er nicht verwenden darf: lade sie in diesem Projekt neu hoch.",
     "field.rich_text.both": "Schicke entweder Markdown oder JSON, nicht beides.",
     "field.rich_text.invalid": "Der Text hat eine Form, die werkbuch nicht kennt.",
     "field.rich_text.too_long": "Der Text ist zu lang.",

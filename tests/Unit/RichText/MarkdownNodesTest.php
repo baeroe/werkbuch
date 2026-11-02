@@ -266,3 +266,10 @@ it('reads a handle between the tags of HTML in Markdown like any text', function
     // HTML in Markdown is text (`html_input: escape`), shown as it was typed
     expect($read('<b>@mara</b>')->mentionedUserIds())->toBe([F::MARA]);
 });
+
+it('tells the lookup every handle, key and item link once, before it asks (T5-M4)', function () {
+    $lookup = new FakeRichTextLookup(['mara' => F::MARA]);
+    Document::fromMarkdown('@mara @mara web-47 WEB-47 `@kira` [x](item:'.strtoupper(F::OPS12).') [y](item:'.F::OPS12.')', new MarkdownContext(null, $lookup));
+
+    expect($lookup->prepared)->toBe([[['mara'], ['WEB-47'], [F::OPS12]]]);
+});

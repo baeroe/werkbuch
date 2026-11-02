@@ -3,9 +3,13 @@
 namespace App\Models;
 
 use App\Access\Visibility;
+use App\Domain\Properties\FieldType;
 use App\Domain\Workflow\StateCategory;
 use App\Domain\WorkItems\ItemKey;
 use App\Domain\WorkItems\Priority;
+use App\RichText\Document;
+use App\RichText\RichTextNames;
+use App\Support\RichTextLookups;
 use Database\Factories\WorkItemFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
@@ -103,10 +107,19 @@ final class WorkItem extends Model
     public bool $lean = false;
 
     /**
+     * Set by loadForResource() for an item that is not lean, never stored: what its reader may see of the mentions and
+     * references of its description and rich text values (current handles, key and title of each referenced item the
+     * reader sees), for the Markdown of WorkItemResource.
+     */
+    public ?RichTextNames $rich_names = null;
+
+    /**
      * Loads everything WorkItemResource reads, for one item or a list, with a fixed number of queries (none per item):
      * `project`, `parent.project`, `labels`, `values.property`, the computed columns of withComputed() (one query, set
      * on the models as they are, never written back) and `subscribed` for the reader (K5). The resource then asks the
-     * database nothing. `$lean` makes the resource leave out the descriptions (P17).
+     * database nothing. `$lean` makes the resource leave out the descriptions (P17); without it the texts of the items
+     * get `rich_names` for the reader, with one query for all mentioned accounts and one for all referenced items the
+     * reader sees (none without such nodes).
      *
      * @param  EloquentCollection<int, self>|self  $items
      */
@@ -129,6 +142,50 @@ final class WorkItem extends Model
             $item->subscribed = in_array($item->id, $watched, true);
             $item->lean = $lean;
         }
+
+        if (! $lean) {
+            $names = self::richNames($items, $reader);
+            $items->each(fn (self $item) => $item->rich_names = $names);
+        }
+    }
+
+    /**
+     * The names the texts of the items need for one reader: the handles of the mentioned accounts, the key and title of
+     * each referenced item the reader sees (Visibility); a reference to any other item is hidden.
+     *
+     * @param  EloquentCollection<int, self>  $items
+     */
+    private static function richNames(EloquentCollection $items, User $reader): RichTextNames
+    {
+        $people = $refs = [];
+        foreach ($items as $item) {
+            $texts = $item->values->filter(fn (WorkItemValue $row) => $row->property->field_type === FieldType::RichText)
+                ->map(fn (WorkItemValue $row) => (array) $row->value_json)->values()->all();
+            foreach ($item->description === null ? $texts : [$item->description, ...$texts] as $json) {
+                $text = Document::fromJson($json);
+                array_push($people, ...$text->mentionedUserIds());
+                array_push($refs, ...$text->itemRefs());
+            }
+        }
+        $handles = $names = $seen = [];
+        foreach (array_chunk(array_values(array_unique($people)), RichTextLookups::CHUNK) as $chunk) {
+            foreach (User::query()->whereKey($chunk)->get(['id', 'handle', 'name']) as $user) {
+                $handles[$user->id] = $user->handle;
+                $names[$user->id] = $user->name;
+            }
+        }
+        $refs = array_values(array_unique($refs));
+        $visible = $refs === [] ? [] : Visibility::projectIds($reader)->all();
+        foreach (array_chunk($refs, RichTextLookups::CHUNK) as $chunk) {
+            $rows = self::query()->join('projects', 'projects.id', '=', 'work_items.project_id')
+                ->whereIn('work_items.id', $chunk)->whereIn('work_items.project_id', $visible)
+                ->toBase()->get(['work_items.id', 'work_items.title', 'work_items.number', 'projects.identifier']);
+            foreach ($rows as $row) {
+                $seen[(string) $row->id] = ['key' => "{$row->identifier}-{$row->number}", 'title' => (string) $row->title];
+            }
+        }
+
+        return new RichTextNames($handles, $seen, $names);
     }
 
     /**

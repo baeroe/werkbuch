@@ -13,8 +13,9 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * A work item, the one form for REST and later MCP, webhooks and live payloads. It asks the database nothing and does
  * not know the reader: callers load the item with WorkItem::loadForResource($items, $reader) first (K5), which also
  * decides `subscribed`. The description comes as Markdown (`description`) and as Tiptap JSON (`description_json`),
- * rich text values as JSON in `values` and as Markdown in `values_markdown`. `template_id` stays `null` until
- * templates come (Phase 10, P22); `children_progress` is `null` for an item without children. A lean item
+ * rich text values as JSON in `values` and as Markdown in `values_markdown`; the Markdown is the reader's
+ * (`WorkItem::$rich_names`): a reference to an item the reader does not see is `[hidden](item:<ulid>)`.
+ * `template_id` stays `null` until templates come (Phase 10, P22); `children_progress` is `null` for an item without children. A lean item
  * (`WorkItem::$lean`, P17) comes without `description`, `description_json` and `values_markdown`. What GetWorkItem loaded
  * through `include` (`WorkItem::$includes`) comes after the fields: `children` (items in manual order), `type`
  * (WorkItemTypeResource), `workflow` (the workflow of the project, WorkflowResource) and `relations` (RelationEntryResource,
@@ -41,7 +42,7 @@ final class WorkItemResource extends JsonResource
             'key' => $item->key,
             'type_id' => $item->type_id,
             'title' => $item->title,
-            'description' => $this->unless($item->lean, fn () => $item->description === null ? null : Document::fromJson($item->description)->toMarkdown()),
+            'description' => $this->unless($item->lean, fn () => $item->description === null ? null : Document::fromJson($item->description)->toMarkdown($item->rich_names)),
             'description_json' => $this->unless($item->lean, fn () => $item->description),
             'description_version' => $item->description_version,
             'state_id' => $item->state_id,
@@ -55,7 +56,7 @@ final class WorkItemResource extends JsonResource
             'parent' => $parent === null ? null : ['id' => $parent->id, 'key' => $parent->key, 'title' => $parent->title, 'type_id' => $parent->type_id],
             'rank' => $item->rank,
             'values' => (object) ItemValues::of($item),
-            'values_markdown' => $this->unless($item->lean, fn () => (object) ItemValues::markdown($item)),
+            'values_markdown' => $this->unless($item->lean, fn () => (object) ItemValues::markdown($item, $item->rich_names)),
             'created_by' => $item->created_by,
             'created_at' => $item->created_at?->toJSON(),
             'updated_at' => $item->updated_at?->toJSON(),

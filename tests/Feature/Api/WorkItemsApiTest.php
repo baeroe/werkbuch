@@ -1,6 +1,7 @@
 <?php
 
 use App\Access\ProjectRole;
+use App\Access\Visibility;
 use App\Domain\Properties\FieldType;
 use App\Http\Resources\WorkItemResource;
 use App\Models\Attachment;
@@ -213,7 +214,12 @@ it('loads a list for the resource with a fixed number of queries, after which th
     WorkItemRelation::factory()->blocks()->create(['source_id' => $blocker->id, 'target_id' => $child->id]);
     WorkItemSubscriber::query()->create(['work_item_id' => $epic->id, 'user_id' => $lene->id, 'reason' => 'manual']);
     WorkItemSubscriber::query()->create(['work_item_id' => $child->id, 'user_id' => $lene->id, 'reason' => 'manual', 'unsubscribed_at' => now()]);
+    // mentions and references in the texts cost one query for the accounts and one for the items, never one per node
+    $epic->update(['description' => F::doc(F::p(F::mention($lene->id, 'alt'), ' ', F::reference($child->id), ' ', F::reference($blocker->id)))]);
+    $child->update(['description' => F::doc(F::p(F::mention($mara->id, 'mara'), ' ', F::reference($epic->id)))]);
     $items = WorkItem::query()->orderBy('number')->get();
+    // what Lene sees is known to a request by then (Authorize asked it)
+    Visibility::projectIds($lene);
 
     DB::enableQueryLog();
     WorkItem::loadForResource($items, $lene);
@@ -222,7 +228,9 @@ it('loads a list for the resource with a fixed number of queries, after which th
     $data = $items->map(fn (WorkItem $item) => (new WorkItemResource($item))->resolve(request()))->keyBy('key');
 
     expect(DB::getQueryLog())->toBe([])
-        ->and($loading)->toBeLessThanOrEqual(8)
+        ->and($loading)->toBeLessThanOrEqual(10)
+        ->and($data['WEB-1']['description'])->toBe("@{$lene->handle} WEB-3 WEB-4")
+        ->and($data['WEB-3']['description'])->toBe("@{$mara->handle} WEB-1")
         ->and($data['WEB-1']['children_progress'])->toBe(['done' => 1, 'total' => 2])
         ->and($data['WEB-1']['subscribed'])->toBeTrue()
         ->and($data['WEB-3']['parent'])->toBe(['id' => $epic->id, 'key' => 'WEB-1', 'title' => 'Relaunch', 'type_id' => $epic->type_id])

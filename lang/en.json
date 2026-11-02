@@ -219,6 +219,7 @@
     "field.required": "This field is missing.",
     "field.resolution_id.archived": "This resolution is archived. Pick another one.",
     "field.resolution_id.unknown": "This resolution does not exist.",
+    "field.rich_text.attachment": "The text names an image or file it may not use: upload it again in this project.",
     "field.rich_text.both": "Send either Markdown or JSON, not both.",
     "field.rich_text.invalid": "The text has a form werkbuch does not know.",
     "field.rich_text.too_long": "The text is too long.",

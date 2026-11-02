@@ -102,8 +102,10 @@ final class MentionsAndReferences implements ExtensionInterface, InlineParserInt
                 default => null,
             };
         }
-        foreach ($texts as $text) {
-            $this->text($text);
+        $words = $this->ctx->lookup === null ? [] : array_map(self::wordsOf(...), $texts);
+        $this->prepare($words, $links);
+        foreach ($texts as $index => $text) {
+            $this->text($text, $words[$index] ?? []);
         }
         foreach ($images as $image) {
             self::image($image);
@@ -113,17 +115,57 @@ final class MentionsAndReferences implements ExtensionInterface, InlineParserInt
         }
     }
 
-    private function text(Text $text): void
+    /**
+     * Tells the lookup every handle, key and `item:` link of the text at once (each once), so it asks the database
+     * a few times for the whole text, never once per word.
+     *
+     * @param  list<list<array{0: string, 1: int}>>  $words
+     * @param  list<Link>  $links
+     */
+    private function prepare(array $words, array $links): void
+    {
+        if ($this->ctx->lookup === null) {
+            return;
+        }
+        $handles = $keys = [];
+        foreach (array_merge([], ...$words) as [$word]) {
+            if (str_starts_with($word, '@')) {
+                $handles[substr($word, 1)] = true;
+            } elseif (($key = ItemKey::parse($word)) !== null) {
+                $keys["{$key['identifier']}-{$key['number']}"] = true;
+            }
+        }
+        $items = array_values(array_unique(array_filter(array_map(fn (Link $link) => self::target($link->getUrl(), 'item'), $links))));
+        $this->ctx->lookup->prepare(array_map(strval(...), array_keys($handles)), array_map(strval(...), array_keys($keys)), $items);
+    }
+
+    /**
+     * The handles after an `@` and the keys of a text with their offsets; none in code or the text of a link or an
+     * image.
+     *
+     * @return list<array{0: string, 1: int}>
+     */
+    private static function wordsOf(Text $text): array
+    {
+        if (self::sheltered($text)) {
+            return [];
+        }
+        preg_match_all(self::words(), $text->getLiteral(), $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE);
+
+        return array_map(fn (array $match) => $match[0], $matches);
+    }
+
+    /** @param list<array{0: string, 1: int}> $words */
+    private function text(Text $text, array $words): void
     {
         $lookup = $this->ctx->lookup;
-        if ($lookup === null || self::sheltered($text)) {
+        if ($words === [] || $lookup === null) {
             return;
         }
         $literal = $text->getLiteral();
-        preg_match_all(self::words(), $literal, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE);
         $nodes = [];
         $at = 0;
-        foreach ($matches as [[$word, $offset]]) {
+        foreach ($words as [$word, $offset]) {
             $atom = str_starts_with($word, '@') ? $this->mention($lookup, substr($word, 1)) : self::key($lookup, $word);
             if ($atom === null) {
                 continue;

@@ -15,7 +15,6 @@ use App\Models\User;
 use App\Models\WorkItem;
 use App\Models\WorkItemType;
 use App\RichText\Document;
-use App\RichText\MarkdownContext;
 use App\RichText\RichTextInput;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -35,34 +34,48 @@ final class ItemInput
 
     /**
      * The input with its rich text read, before any lock: `description` (or `description_json`) becomes a Document or
-     * `null` under `description`, the rich text values become Documents (ItemValues::documents()). What cannot be read
-     * comes back as field errors, for create() to report with all the others.
+     * `null` under `description`, the rich text values become Documents (ItemValues::documents()). Both went through
+     * the rules of saving (RichTextRules) for the writer against the text of `$item` as it is now (none for a new item),
+     * also read here. What cannot be read or is refused comes back as field errors, for create() to report with all the
+     * others. The third part names the texts that were sent by the key that sent them (`description` or
+     * `description_json`, `values.<key>`), for AttachmentLinks and the mentions under the lock.
      *
      * @param  array<array-key, mixed>  $input
-     * @return array{0: array<array-key, mixed>, 1: array<string, list<string>>}
+     * @return array{0: array<array-key, mixed>, 1: array<string, list<string>>, 2: array<string, Document>}
      */
-    public static function documents(array $input, Project $project): array
+    public static function documents(array $input, Project $project, Actor $actor, ?WorkItem $item = null): array
     {
-        $ctx = new MarkdownContext($project);
         $errors = [];
+        $texts = [];
 
         if (RichTextInput::given($input, 'description')) {
+            $before = $item?->description === null ? null : Document::fromJson($item->description);
+            $key = array_key_exists('description', $input) ? 'description' : 'description_json';
             try {
-                $description = RichTextInput::from($input, 'description', $ctx);
+                $description = RichTextInput::from($input, 'description', RichTextRules::context($project, $actor->user, $before));
             } catch (ValidationException $invalid) {
                 $description = null;
                 $errors = $invalid->errors();
             }
             unset($input['description_json']);
             $input['description'] = $description;
+            if ($description !== null) {
+                $texts[$key] = $description;
+            }
         }
 
         if (is_array($input['values'] ?? null)) {
-            [$input['values'], $refused] = ItemValues::documents($input['values'], $ctx);
+            $before = $item === null ? [] : ItemValues::documentsOf($item->loadMissing('values.property'));
+            [$input['values'], $refused] = ItemValues::documents($input['values'], $project, $actor->user, $before);
             $errors = [...$errors, ...$refused];
+            foreach ($input['values'] as $key => $value) {
+                if ($value instanceof Document) {
+                    $texts["values.{$key}"] = $value;
+                }
+            }
         }
 
-        return [$input, $errors];
+        return [$input, $errors, $texts];
     }
 
     /**

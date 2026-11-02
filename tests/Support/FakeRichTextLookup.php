@@ -21,6 +21,14 @@ final class FakeRichTextLookup implements RichTextLookup
         private readonly array $items = [],
     ) {}
 
+    /** @var list<array{0: list<string>, 1: list<string>, 2: list<string>}> what prepare() was told, in order */
+    public array $prepared = [];
+
+    public function prepare(array $handles, array $keys, array $items): void
+    {
+        $this->prepared[] = [$handles, $keys, $items];
+    }
+
     public function mentionable(string $handle): ?array
     {
         return isset($this->mentionable[$handle]) ? ['id' => $this->mentionable[$handle], 'handle' => $handle] : null;

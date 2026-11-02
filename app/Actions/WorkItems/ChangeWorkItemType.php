@@ -9,10 +9,13 @@ use App\Events\EventType;
 use App\Exceptions\Problem;
 use App\Models\TypeProperty;
 use App\Models\WorkItem;
+use App\RichText\Document;
 use App\Support\Actor;
+use App\Support\AttachmentLinks;
 use App\Support\ItemInput;
 use App\Support\ItemLock;
 use App\Support\ItemValues;
+use App\Support\Mentions;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -27,7 +30,9 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * `values.<key>`); a new property nobody fills takes its default. The rich text is read before any lock; then the
  * locks of P1 (ItemLock::take) and everything checked against the item as locked; its children are counted under the
  * lock of the item, which every new child waits for (ItemInput reads a parent under a shared lock). An archived project
- * and an archived item are read-only (409 `project_archived`, `archived`).
+ * and an archived item are read-only (409 `project_archived`, `archived`). Rich text values sent with the change go
+ * through the rules of saving before the locks; their uploads become the item's (AttachmentLinks) and whoever they
+ * mention anew watches it and is named in `meta.mentioned` (Mentions, A244), a bot gets `bot.mentioned`.
  *
  * The transaction runs up to three times (`DB::transaction(…, 3)`): the shared lock of a parent after the own locks can
  * meet a deletion that locks the parent first and its children after (a deadlock Laravel retries).
@@ -47,11 +52,11 @@ final class ChangeWorkItemType
         Authorize::check($actor, 'update', $item);
 
         // reading Markdown is the expensive step: never under a lock
-        [$read, $refused] = ItemInput::documents(['values' => $input['values'] ?? []], $item->project);
+        [$read, $refused, $texts] = ItemInput::documents(['values' => $input['values'] ?? []], $item->project, $actor, $item);
         $id = $input['type_id'] ?? null;
         $id = is_string($id) && Str::isUlid($id) ? strtolower($id) : $id;
 
-        $item = DB::transaction(function () use ($actor, $item, $id, $read, $refused): WorkItem {
+        $item = DB::transaction(function () use ($actor, $item, $id, $read, $refused, $texts): WorkItem {
             $locked = ItemLock::take($item);
 
             if ($locked->project->archived_at !== null) {
@@ -64,7 +69,7 @@ final class ChangeWorkItemType
                 return $locked;
             }
 
-            self::retype($actor, $locked, $id, $read['values'], $refused);
+            self::retype($actor, $locked, $id, $read['values'], $refused, $texts);
 
             return $locked;
         }, 3);
@@ -76,11 +81,12 @@ final class ChangeWorkItemType
 
     /**
      * @param  array<string, list<string>>  $refused  the field errors of ItemInput::documents()
+     * @param  array<string, Document>  $texts  the rich text values sent, by `values.<key>` (ItemInput::documents())
      *
      * @throws ValidationException
      * @throws Problem
      */
-    private static function retype(Actor $actor, WorkItem $locked, mixed $id, mixed $sent, array $refused): void
+    private static function retype(Actor $actor, WorkItem $locked, mixed $id, mixed $sent, array $refused, array $texts): void
     {
         $errors = $refused;
         $fail = function (string $field, string $message) use (&$errors): void {
@@ -127,12 +133,17 @@ final class ChangeWorkItemType
             }
         }
 
+        AttachmentLinks::link($locked, $locked->project, $actor->user, $texts);
+        $mentionedBefore = Mentions::ofItem($locked);
+
         $locked->type_id = $type->id;
         $locked->setRelation('type', $type);
         $locked->updated_at = $locked->freshTimestamp();
         $locked->save();
         ItemValues::store($locked, $after, $before);
+        $mentioned = Mentions::anew($locked, $mentionedBefore, $texts);
 
-        EventRecorder::record(EventType::WorkItemUpdated, $actor, $locked, $locked->project, $changes);
+        EventRecorder::record(EventType::WorkItemUpdated, $actor, $locked, $locked->project, $changes, Mentions::meta($mentioned));
+        UpdateWorkItem::announceBots($actor, $locked, $mentioned);
     }
 }
