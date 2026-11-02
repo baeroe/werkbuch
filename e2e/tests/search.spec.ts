@@ -182,8 +182,10 @@ test('finds a project and a view by name', async ({ page }) => {
 test('shows Ida no item of a private project she is not in', async ({ page, browser }) => {
   await page.goto('/my-items');
   const { id, identifier } = await createE2eProject(page, name('search private'), { types: ['Task'], visibility: 'private' });
-  const ida = await signedInContext(browser, PEOPLE.ida);
+  // signed in inside the try: a sign-in that fails still removes the project
+  let ida: Awaited<ReturnType<typeof signedInContext>> | undefined;
   try {
+    ida = await signedInContext(browser, PEOPLE.ida);
     const item = await createItem(page, { project_id: id, title: `E2E Geheimsache ${searchToken()}` });
     const query = `${searchToken()} geheimsache`;
     // the e2e person (org admin) finds it: it is in the index
@@ -207,7 +209,7 @@ test('shows Ida no item of a private project she is not in', async ({ page, brow
     await expect(ida.page.getByRole('heading', { level: 1, name: tr('de', 'errors.page.not_found.title') })).toBeVisible();
     await expect(ida.page.getByText('Geheimsache')).toHaveCount(0);
   } finally {
-    await ida.context.close();
+    await ida?.context.close();
     await removeE2eProject(page, identifier);
   }
 });
