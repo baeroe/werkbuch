@@ -224,6 +224,23 @@ describe('the timeline', () => {
     expect(document.activeElement).toBe(row('WEB-30'));
   });
 
+  it('keeps the focus on an epic that moves past another of its project', async () => {
+    const discovery = web(31, 'Discovery', 'std_progress', epic({ start_date: '2026-10-01', due_date: '2026-10-05' }));
+    const design = web(32, 'Design', 'std_progress', epic({ start_date: '2026-10-05', due_date: '2026-10-20' }));
+    board.items = [discovery, design];
+    renderTimeline();
+    const order = () => within(screen.getByRole('region', { name: 'Website-Relaunch' })).getAllByRole('group').map((element) => element.getAttribute('aria-label')!.split(' ')[0]);
+    await focusRow('WEB-31');
+    expect(order()).toEqual(['WEB-31', 'WEB-32']);
+
+    // a week later it starts after the second one: once saved, the group sorts anew (React moves the focused row's
+    // element), and the row keeps the focus
+    press('ArrowRight', { shiftKey: true });
+    await waitFor(() => expect(announced()).toBe('WEB-31 gespeichert: 08.10.2026 bis 12.10.2026.'), { timeout: 2000 });
+    await waitFor(() => expect(order()).toEqual(['WEB-32', 'WEB-31']));
+    expect(document.activeElement).toBe(row('WEB-31'));
+  });
+
   it('changes the duration of the selected epic with ⌥→ and ⌥←', async () => {
     renderTimeline();
     await focusRow('WEB-30');

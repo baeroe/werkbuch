@@ -60,6 +60,36 @@ test('moves an epic by a week with shift+right at month zoom', async ({ page }) 
   }
 });
 
+test('keeps the focus on an epic that moves past another of its project', async ({ page }) => {
+  await page.goto('/my-items');
+  const project = await createE2eProject(page, name('overtake'), { types: ['Task', 'Epic'] });
+  try {
+    const epicType = await typeId(page, 'Epic');
+    const first = await createItem(page, { project_id: project.id, type_id: epicType, title: 'Discovery', start_date: '2026-10-01', due_date: '2026-10-05' });
+    const second = await createItem(page, { project_id: project.id, type_id: epicType, title: 'Design', start_date: '2026-10-05', due_date: '2026-10-20' });
+    await page.goto(`/projects/${project.identifier}?layout=timeline`);
+    const rows = page.getByRole('region', { name: name('overtake'), exact: true }).getByRole('group');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.first()).toHaveAccessibleName(new RegExp(`^${first.key} `));
+    await tabTo(page, row(page, first.key), { max: 80 });
+
+    // a week later it starts after the second epic: once saved, the rows sort anew and the moved one keeps the focus
+    await page.keyboard.press('Shift+ArrowRight');
+    await expect(status(page)).toHaveText(tr('en', 'items.timeline.saved', { key: first.key, range: range('2026-10-08', '2026-10-12') }));
+    await expect(rows.first()).toHaveAccessibleName(new RegExp(`^${second.key} `));
+    await expect(rows.last()).toHaveAccessibleName(`${first.key} Discovery, ${range('2026-10-08', '2026-10-12')}`);
+    await expect(row(page, first.key)).toBeFocused();
+
+    // the keys go on from there
+    await page.keyboard.press('Shift+ArrowLeft');
+    await expect(status(page)).toHaveText(tr('en', 'items.timeline.saved', { key: first.key, range: range('2026-10-01', '2026-10-05') }));
+    await expect(rows.first()).toHaveAccessibleName(new RegExp(`^${first.key} `));
+    await expect(row(page, first.key)).toBeFocused();
+  } finally {
+    await removeE2eProject(page, project.identifier);
+  }
+});
+
 test('plans an epic without dates from the side list', async ({ page }) => {
   await page.goto('/my-items');
   const project = await createE2eProject(page, name('plan'), { types: ['Task', 'Epic'] });
