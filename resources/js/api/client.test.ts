@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { initI18n } from '@/lib/i18n';
-import { ApiError, MAX_PER_PAGE, reasonText } from './client';
+import { ApiError, isGone, MAX_PER_PAGE, reasonText } from './client';
 
 describe('ApiError', () => {
   it('carries status, reason, field errors and extensions, and takes its message from the detail', () => {
@@ -39,6 +39,16 @@ describe('ApiError', () => {
     const error = new ApiError({ status: 404, reason: 'not_found' });
 
     expect(error.message).toBe('Das Item gibt es nicht oder du darfst es nicht sehen.');
+  });
+});
+
+describe('isGone', () => {
+  it('reads a 404 or a 403 as gone for the reader, nothing else', () => {
+    expect(isGone(new ApiError({ status: 404, reason: 'not_found' }))).toBe(true);
+    expect(isGone(new ApiError({ status: 403, reason: 'forbidden' }))).toBe(true);
+    expect(isGone(new ApiError({ status: 500, reason: 'server_error' }))).toBe(false);
+    expect(isGone(new Error('offline'))).toBe(false);
+    expect(isGone(null)).toBe(false);
   });
 });
 

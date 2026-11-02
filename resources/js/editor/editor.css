@@ -1,7 +1,7 @@
 /*
- * Rich text, as the editor writes it and the viewer reads it (DESIGN.md): ink on calm paper, code in the UI face, the
- * highlighter only for a selection. Panel text is 14/20, pages 15/24; while editing on a phone the text is 16 px, so
- * iOS does not zoom. Phase 7 adds mentions, references, files, images, uploads and code highlighting.
+ * Rich text, as the editor writes it and the viewer reads it (DESIGN.md): ink on calm paper, mentions and references as
+ * ink-blue chips, code in the UI face, the highlighter only for a selection. Panel text is 14/20, pages 15/24; while
+ * editing on a phone the text is 16 px, so iOS does not zoom. Images, files and uploads come with Task 17.
  */
 
 .rt {
@@ -118,7 +118,7 @@
 .rt :is(strong, b) {
   font-weight: 600;
 }
-.rt a {
+.rt a:not(.rt-ref) {
   color: var(--accent-text);
   text-decoration: underline;
   text-decoration-color: var(--border-strong);
@@ -146,6 +146,31 @@
   background: none;
   padding: 0;
   font-size: inherit;
+}
+
+/*
+ * Syntax highlighting (codeBlocks.ts, lowlight's `hljs-*` classes) with the tokens of DESIGN.md only: words of the
+ * language in ink blue and semibold, values (strings, numbers) in ink blue, names in ink and semibold, comments and
+ * punctuation in pencil. On --bg-sunken each of them holds at least 5 : 1 in both themes.
+ */
+.rt pre :is(.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-type, .hljs-name, .hljs-section, .hljs-doctag, .hljs-template-tag, .hljs-meta .hljs-keyword) {
+  color: var(--accent-text);
+  font-weight: 600;
+}
+.rt pre :is(.hljs-string, .hljs-regexp, .hljs-symbol, .hljs-number, .hljs-char, .hljs-link, .hljs-addition, .hljs-selector-attr, .hljs-selector-pseudo, .hljs-meta .hljs-string) {
+  color: var(--accent-text);
+}
+.rt pre :is(.hljs-title, .hljs-attr, .hljs-attribute, .hljs-property, .hljs-selector-id, .hljs-selector-class, .hljs-built_in, .hljs-strong) {
+  font-weight: 600;
+}
+.rt pre :is(.hljs-comment, .hljs-quote, .hljs-meta, .hljs-punctuation, .hljs-deletion) {
+  color: var(--muted);
+}
+.rt pre :is(.hljs-comment, .hljs-quote, .hljs-emphasis) {
+  font-style: italic;
+}
+.rt pre .hljs-deletion {
+  text-decoration: line-through;
 }
 
 /* checklists */
@@ -223,6 +248,53 @@
   inset: 0;
   background: var(--select-wash);
   pointer-events: none;
+}
+
+/* mentions and references */
+.rt .rt-mention {
+  border-radius: var(--r-chip);
+  background: var(--accent-soft);
+  padding: 0 0.25rem;
+  font-weight: 500;
+  color: var(--accent-text);
+  white-space: nowrap;
+}
+.rt .rt-mention-off {
+  font-weight: 400;
+  color: var(--muted);
+}
+.rt .rt-ref {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  border-radius: var(--r-chip);
+  background: var(--bg-sunken);
+  padding: 0 0.25rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-text);
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 2px;
+  white-space: nowrap;
+}
+.rt .rt-ref svg {
+  width: 0.75rem;
+  height: 0.75rem;
+  align-self: center;
+}
+.rt .rt-ref-hidden {
+  color: var(--muted);
+  text-decoration: none;
+}
+.rt .ProseMirror-selectednode:is(.rt-ref-wrap, .rt-mention) {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+/* the typed query of a menu (@, #, /) */
+.rt .suggestion {
+  color: var(--accent-text);
 }
 
 /* an empty editor shows its placeholder */

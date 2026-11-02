@@ -133,3 +133,9 @@ werkbuch geht ohne Maus. Mit <kbd>?</kbd> zeigt jeder Bildschirm die Kürzel, di
 | --- | --- |
 | <kbd>⌘ / Strg</kbd>+<kbd>↵</kbd> | Speichern bzw. absenden |
 | <kbd>Esc</kbd> | Feld verlassen |
+| <kbd>/</kbd> | Block einfügen (am Zeilenanfang oder nach einem Leerzeichen) |
+| <kbd>@</kbd> | Person oder Bot erwähnen (mit Projekt) |
+| <kbd>#</kbd> | Auf ein Item verweisen (mit Projekt) |
+| <kbd>↑</kbd> / <kbd>↓</kbd> | Eintrag der Liste wählen |
+| <kbd>↵</kbd> / <kbd>Tab</kbd> | Eintrag übernehmen |
+| <kbd>Esc</kbd> | Liste schließen |

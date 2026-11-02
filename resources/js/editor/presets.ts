@@ -3,11 +3,10 @@
  * - `comment`: text, lists, quotes, code, links
  * - `description` (items, templates, rich text properties): adds headings, checklists and tables
  * - `page` (wiki): everything, also horizontal rules
- * All levels share the Markdown shortcuts while typing. The server stores the nodes of `page` for every level
- * (`App\RichText\Schema`); a level only narrows what its editor offers and shows.
- *
- * Phase 7 brings the `/` menu (it offers tables only on `page`: `slashTable`), mentions, references and uploads; until
- * then the placeholders name none of them (P15).
+ * All levels share the Markdown shortcuts while typing, the `/` menu, code highlighting, mentions, references, images
+ * and files. The server stores the nodes of `page` for every level (`App\RichText\Schema`); a level only narrows what
+ * its editor offers and shows. The `/` menu offers tables only on `page` (`slashTable`): a description keeps a table
+ * that comes in (pasted, from a template), it is just not offered in the narrow item panel's menu.
  */
 
 import type { TranslationKey } from '@/lib/i18n';
@@ -36,9 +35,16 @@ export const PRESET_LABEL: Record<EditorPreset, TranslationKey> = {
   page: 'editor.label.page',
 };
 
-/** What an empty editor shows. */
+/** What an empty editor of a project shows; it also says how to reach the menus (`/`, `@`, `#`). */
 export const PRESET_PLACEHOLDER: Record<EditorPreset, TranslationKey> = {
   comment: 'editor.placeholder.comment',
   description: 'editor.placeholder.description',
   page: 'editor.placeholder.page',
+};
+
+/** What an empty editor without a project shows: only `/` works there. */
+export const PRESET_PLACEHOLDER_PLAIN: Record<EditorPreset, TranslationKey> = {
+  comment: 'editor.placeholder.plain.comment',
+  description: 'editor.placeholder.plain.description',
+  page: 'editor.placeholder.plain.page',
 };

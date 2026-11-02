@@ -37,6 +37,7 @@ const NAMES = {
   escape: 'Esc',
   esc: 'Esc',
   backspace: '⌫',
+  tab: 'Tab',
   up: '↑',
   arrowup: '↑',
   down: '↓',

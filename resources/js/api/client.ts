@@ -1,6 +1,7 @@
 /*
  * What every call of the API layer has in common:
  * - `ApiError { status, reason, errors? }`, built from the Problem Details of the REST API (RFC 9457, spec 6.1)
+ * - `isGone(error)`: whether a failed read means the thing is gone for the reader (404, or 403 for lost access)
  * - `Page<T>`, the envelope of every list (cursor pagination)
  */
 
@@ -37,6 +38,15 @@ export class ApiError extends Error {
   get current(): unknown {
     return this.extensions.current;
   }
+}
+
+/**
+ * The thing is gone for this reader: deleted, or in a project they no longer see (404, or 403 for lost access). A
+ * detail then says so instead of keeping what it loaded before, a reference reads "hidden". Any other failure (a 5xx,
+ * no answer) keeps what is on screen: it is not lost, the server only failed to answer (13c).
+ */
+export function isGone(error: unknown): boolean {
+  return error instanceof ApiError && (error.status === 404 || error.status === 403);
 }
 
 /** A short text for a reason code, e.g. for the line of a toast that lists what a bulk edit refused. */

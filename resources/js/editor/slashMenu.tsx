@@ -1,0 +1,175 @@
+/*
+ * The `/` menu (spec 4.16): typed at the start of a line or after a space (not in code), it lists the blocks the
+ * editor's level knows (presets.ts); typing narrows the list, Enter turns the line into the block. Each entry shows its
+ * Markdown shortcut, which works while typing as well. Tables only on `page` (`slashTable`), the rule only on `page`;
+ * "Bild oder Datei" opens the file choice (Task 17) and is there only with a project and a way to upload.
+ */
+
+import { PluginKey } from '@tiptap/pm/state';
+import { Extension, type Editor, type Range } from '@tiptap/react';
+import Suggestion from '@tiptap/suggestion';
+import type { LucideIcon } from 'lucide-react';
+import { Heading1, Heading2, Heading3, ImagePlus, List, ListChecks, ListOrdered, Minus, SquareCode, Table2, TextQuote } from 'lucide-react';
+import { t } from '@/lib/i18n';
+import type { EditorEnv, EditorEnvRef } from './EditorEnv';
+import { PRESETS, type EditorPreset, type PresetFeatures } from './presets';
+import { popupRenderer, SuggestionMenu, type PopupProps, type SuggestionEntry } from './suggestions';
+
+export interface SlashItem {
+  id: string;
+  label: () => string;
+  /** The Markdown shortcut that does the same while typing. */
+  hint?: string;
+  icon: LucideIcon;
+  /** Further words that find the entry, in the language of the page. */
+  keywords: () => string;
+  /** Whether the level (and the editor's environment) has the block. */
+  offered: (features: PresetFeatures, env: EditorEnv) => boolean;
+  run: (editor: Editor, env: EditorEnv) => void;
+}
+
+const always = () => true;
+
+const heading = (level: 1 | 2 | 3, icon: LucideIcon): SlashItem => ({
+  id: `heading${level}`,
+  label: () => t('editor.slash.heading', { level }),
+  hint: '#'.repeat(level),
+  icon,
+  keywords: () => t('editor.slash.keywords.heading'),
+  offered: (features) => features.headings,
+  run: (editor) => editor.chain().focus().setNode('heading', { level }).run(),
+});
+
+export const SLASH_ITEMS: SlashItem[] = [
+  heading(1, Heading1),
+  heading(2, Heading2),
+  heading(3, Heading3),
+  {
+    id: 'list',
+    label: () => t('editor.slash.list'),
+    hint: '-',
+    icon: List,
+    keywords: () => t('editor.slash.keywords.list'),
+    offered: always,
+    run: (editor) => editor.chain().focus().toggleBulletList().run(),
+  },
+  {
+    id: 'ordered',
+    label: () => t('editor.slash.ordered'),
+    hint: '1.',
+    icon: ListOrdered,
+    keywords: () => t('editor.slash.keywords.ordered'),
+    offered: always,
+    run: (editor) => editor.chain().focus().toggleOrderedList().run(),
+  },
+  {
+    id: 'tasks',
+    label: () => t('editor.slash.tasks'),
+    hint: '[ ]',
+    icon: ListChecks,
+    keywords: () => t('editor.slash.keywords.tasks'),
+    offered: (features) => features.taskList,
+    run: (editor) => editor.chain().focus().toggleTaskList().run(),
+  },
+  {
+    id: 'code',
+    label: () => t('editor.slash.code'),
+    hint: '```',
+    icon: SquareCode,
+    keywords: () => t('editor.slash.keywords.code'),
+    offered: always,
+    run: (editor) => editor.chain().focus().toggleCodeBlock().run(),
+  },
+  {
+    id: 'quote',
+    label: () => t('editor.slash.quote'),
+    hint: '>',
+    icon: TextQuote,
+    keywords: () => t('editor.slash.keywords.quote'),
+    offered: always,
+    run: (editor) => editor.chain().focus().toggleBlockquote().run(),
+  },
+  {
+    id: 'table',
+    label: () => t('editor.slash.table'),
+    icon: Table2,
+    keywords: () => t('editor.slash.keywords.table'),
+    offered: (features) => features.slashTable,
+    run: (editor) => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(),
+  },
+  {
+    id: 'file',
+    label: () => t('editor.slash.file'),
+    icon: ImagePlus,
+    keywords: () => t('editor.slash.keywords.file'),
+    offered: (_features, env) => env.projectId !== null && env.chooseFiles !== undefined,
+    run: (editor, env) => env.chooseFiles?.(editor),
+  },
+  {
+    id: 'rule',
+    label: () => t('editor.slash.rule'),
+    hint: '---',
+    icon: Minus,
+    keywords: () => t('editor.slash.keywords.rule'),
+    offered: (features) => features.horizontalRule,
+    run: (editor) => editor.chain().focus().setHorizontalRule().run(),
+  },
+];
+
+/** The entries of a level that match what was typed after the slash (label or keywords, any case). */
+export function slashItemsFor(preset: EditorPreset, query: string, env: EditorEnv): SlashItem[] {
+  const needle = query.trim().toLocaleLowerCase();
+  return SLASH_ITEMS.filter((item) => item.offered(PRESETS[preset], env)).filter(
+    (item) => needle === '' || `${item.label()} ${item.keywords()}`.toLocaleLowerCase().includes(needle),
+  );
+}
+
+function SlashSuggestions({ suggestion, preset, env, ref }: PopupProps<{ preset: EditorPreset }>) {
+  const entries: SuggestionEntry[] = slashItemsFor(preset, suggestion.query, env.current).map((item) => {
+    const Icon = item.icon;
+    return {
+      key: item.id,
+      content: (
+        <>
+          <Icon className="size-4 shrink-0 text-muted" aria-hidden="true" />
+          <span className="min-w-0 flex-1 truncate">{item.label()}</span>
+          {item.hint && (
+            <span aria-hidden="true" translate="no" className="shrink-0 text-sm text-muted tabular-nums">
+              {item.hint}
+            </span>
+          )}
+        </>
+      ),
+      pick: () => suggestion.command(item),
+    };
+  });
+  return <SuggestionMenu ref={ref} editor={suggestion.editor} label={t('editor.slash.label')} sections={[{ entries }]} status={t('editor.slash.none', { query: suggestion.query })} />;
+}
+
+const slashKey = new PluginKey('slashMenu');
+
+/** The `/` menu of an editor level; the environment comes in by closure (EditorEnv.tsx). */
+export function slashMenu(preset: EditorPreset, env: EditorEnvRef) {
+  return Extension.create({
+    name: 'slashMenu',
+    // before the keymaps of lists and code: an open list takes Enter and Tab
+    priority: 200,
+    addProseMirrorPlugins() {
+      return [
+        Suggestion<SlashItem, SlashItem>({
+          editor: this.editor,
+          pluginKey: slashKey,
+          char: '/',
+          items: () => [],
+          // a slash in code is code (a path, a comment)
+          allow: ({ state, range }) => !state.doc.resolve(range.from).parent.type.spec.code,
+          command: ({ editor, range, props }: { editor: Editor; range: Range; props: SlashItem }) => {
+            editor.chain().focus().deleteRange(range).run();
+            props.run(editor, env.current);
+          },
+          render: popupRenderer(SlashSuggestions, env, { preset }),
+        }),
+      ];
+    },
+  });
+}

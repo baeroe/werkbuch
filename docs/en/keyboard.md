@@ -133,3 +133,9 @@ werkbuch works without a mouse. Press <kbd>?</kbd> on any screen to see the shor
 | --- | --- |
 | <kbd>⌘ / Ctrl</kbd>+<kbd>↵</kbd> | Save or send |
 | <kbd>Esc</kbd> | Leave the field |
+| <kbd>/</kbd> | Insert a block (at the start of a line or after a space) |
+| <kbd>@</kbd> | Mention a person or bot (with a project) |
+| <kbd>#</kbd> | Refer to an item (with a project) |
+| <kbd>↑</kbd> / <kbd>↓</kbd> | Choose an entry of the list |
+| <kbd>↵</kbd> / <kbd>Tab</kbd> | Take the entry |
+| <kbd>Esc</kbd> | Close the list |

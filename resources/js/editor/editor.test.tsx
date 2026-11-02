@@ -1,11 +1,15 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Editor } from '@tiptap/react';
-import { createRef, useState } from 'react';
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { createRef, useState, type ReactNode } from 'react';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import schemaPhp from '/app/RichText/Schema.php?raw';
+import { Dialog } from '@/components/ui/Dialog';
 import { textDoc } from '@/lib/richtext';
-import type { RichText } from '@/types';
+import { mockApi, type MockApi, type MockRoute } from '@/test/api';
+import { ida, list, mara, person, searchResults, types, web47 } from '@/test/fixtures';
+import type { RichText, User } from '@/types';
 import { PRESETS, type EditorPreset } from './presets';
 import { EMPTY_DOC, isEmptyDoc, preloadEditor, RichTextEditor } from './RichTextEditor';
 import { RichTextView } from './RichTextView';
@@ -62,6 +66,41 @@ async function expectStillCheckboxes(user: ReturnType<typeof userEvent.setup>, f
 
 const lastDoc = (onChange: ReturnType<typeof vi.fn>) => onChange.mock.lastCall?.[0] as RichText | null | undefined;
 
+/** Mentions, references and their lists read through the API: a query client and a fake server. */
+let api: MockApi | null = null;
+afterEach(() => {
+  api?.restore();
+  api = null;
+});
+
+function renderWithData(node: ReactNode, routes: Record<string, MockRoute> = {}) {
+  api = mockApi(routes);
+  // as the app's: no retries, fresh for a moment (a reference chosen in the # list is not asked for again)
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 10_000 } } });
+  return { ...render(<QueryClientProvider client={client}>{node}</QueryClientProvider>), client };
+}
+
+const kira: User = { ...person('u_kira', 'Kira', 'kira'), type: 'bot', email: null };
+
+const paragraph = (...content: RichText[]): RichText => ({ type: 'doc', content: [{ type: 'paragraph', content }] });
+const mention = (id: string, label: string): RichText => ({ type: 'mention', attrs: { id, label, mentionSuggestionChar: '@' } });
+const reference = (id: string): RichText => ({ type: 'reference', attrs: { id, label: null, mentionSuggestionChar: '#', kind: 'item' } });
+
+/** Escape on the editor, with the legacy keyCode ProseMirror reads. */
+const pressEscape = (editor: HTMLElement) => act(() => void fireEvent.keyDown(editor, { key: 'Escape', code: 'Escape', keyCode: 27 }));
+
+/** Holds every answer of the fake server back until `release()`, so a test sees what a list says while it waits. */
+function holdAnswers(): () => void {
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const answer = globalThis.fetch;
+  globalThis.fetch = async (...args) => {
+    await gate;
+    return answer(...args);
+  };
+  return release;
+}
+
 /** A list constant of `App\RichText\Schema`, read from the PHP file, so the mirror cannot go stale. */
 function serverList(name: string): string[] {
   const list = new RegExp(`public const ${name} = \\[([^\\]]*)\\];`).exec(schemaPhp)?.[1];
@@ -102,8 +141,12 @@ const everyFeature: RichText = {
         { type: 'text', text: 'durch', marks: [{ type: 'strike' }] },
         { type: 'text', text: 'code', marks: [{ type: 'code' }] },
         { type: 'text', text: 'Link', marks: [{ type: 'link', attrs: { href: 'https://example.com' } }] },
+        mention('u_mara', 'mara'),
+        reference('wi_web_47'),
+        { type: 'attachment', attrs: { attachmentId: '01jattachmentfile0000000000', filename: 'angebot.pdf' } },
       ],
     },
+    { type: 'image', attrs: { attachmentId: '01jattachmentimage000000000', alt: 'Formular' } },
     { type: 'bulletList', content: [{ type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Punkt' }] }] }] },
     { type: 'orderedList', attrs: { start: 1 }, content: [{ type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Erstens' }] }] }] },
     { type: 'taskList', content: [{ type: 'taskItem', attrs: { checked: false }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Offen' }] }] }] },
@@ -140,7 +183,7 @@ describe('RichTextEditor', () => {
     expect(lastDoc(onChange)).toBeNull();
     rerender(<RichTextEditor value={null} onChange={onChange} preset="description" />);
     expect(editor.querySelectorAll('p')).toHaveLength(1);
-    expect(editor.querySelector('p')?.getAttribute('data-placeholder')).toBe('Beschreibung schreiben …');
+    expect(editor.querySelector('p')?.getAttribute('data-placeholder')).toBe('Beschreibung schreiben … / fügt ein');
   });
 
   it('keeps every key of fast typing, also when the parent renders a document the editor has moved past', async () => {
@@ -278,7 +321,7 @@ describe('RichTextEditor', () => {
     const editor = screen.getByRole('textbox', { name: 'Inhalt der Seite' });
     expect(editor.getAttribute('aria-invalid')).toBeNull();
     expect(editor.getAttribute('aria-describedby')).toBeNull();
-    expect(editor.querySelector('p')?.getAttribute('data-placeholder')).toBe('Schreiben …');
+    expect(editor.querySelector('p')?.getAttribute('data-placeholder')).toBe('Schreiben … / für Blöcke');
 
     rerender(<RichTextEditor value={null} onChange={vi.fn()} preset="page" label="Rich Text: Abnahme" invalid describedBy="abnahme-error" placeholder="Was gilt als fertig?" />);
     expect(screen.getByRole('textbox', { name: 'Rich Text: Abnahme' })).toBe(editor);
@@ -289,7 +332,7 @@ describe('RichTextEditor', () => {
     rerender(<RichTextEditor value={null} onChange={vi.fn()} preset="comment" />);
     const comment = screen.getByRole('textbox', { name: 'Kommentar' });
     expect(comment.getAttribute('aria-invalid')).toBeNull();
-    expect(comment.querySelector('p')?.getAttribute('data-placeholder')).toBe('Kommentar schreiben …');
+    expect(comment.querySelector('p')?.getAttribute('data-placeholder')).toBe('Kommentar schreiben … / fügt ein');
   });
 
   it('keeps the checklists of a read-only text still, and lets them work again when it may be changed', async () => {
@@ -418,7 +461,11 @@ describe('the schema of the editor', () => {
 
   it('writes nothing but nodes and marks of the server from a document with every feature of a description', () => {
     const editorRef = createRef<Editor | null>();
-    render(<RichTextEditor value={everyFeature} onChange={vi.fn()} preset="description" editorRef={editorRef} />);
+    renderWithData(<RichTextEditor value={everyFeature} onChange={vi.fn()} preset="description" editorRef={editorRef} />, {
+      'GET /api/v1/users': () => ({ body: list([mara]) }),
+      'GET /api/v1/references': () => ({ body: { data: { items: [web47] } } }),
+      'GET /api/v1/work-item-types': () => ({ body: list(types) }),
+    });
     const written = typesOf(editorRef.current!.getJSON());
 
     // a description has everything but the horizontal rule
@@ -426,6 +473,12 @@ describe('the schema of the editor', () => {
     expect([...written.marks].sort()).toEqual([...marks].sort());
     // headings 1 to 3, as the server keeps them
     expect(nodesOf(editorRef.current!.getJSON(), 'heading').map((node) => node.attrs?.level)).toEqual([1, 2, 3]);
+    // the attributes the server stores, nothing more (no src, no label of a reference)
+    const json = editorRef.current!.getJSON();
+    expect(nodesOf(json, 'mention')[0].attrs).toEqual({ id: 'u_mara', label: 'mara', mentionSuggestionChar: '@' });
+    expect(nodesOf(json, 'reference')[0].attrs).toEqual({ id: 'wi_web_47', label: null, mentionSuggestionChar: '#', kind: 'item' });
+    expect(nodesOf(json, 'image')[0].attrs).toEqual({ attachmentId: '01jattachmentimage000000000', alt: 'Formular' });
+    expect(nodesOf(json, 'attachment')[0].attrs).toEqual({ attachmentId: '01jattachmentfile0000000000', filename: 'angebot.pdf' });
   });
 });
 
@@ -472,5 +525,382 @@ describe('RichTextView', () => {
 
     rerender(<RichTextView value={linked('javascript:alert(1)')} preset="comment" />);
     expect(document.querySelector('.rt-content a')?.getAttribute('href')).toBe('');
+  });
+});
+
+describe('the menus of the editor', () => {
+  it('opens the / menu and turns the line into a heading', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<RichTextEditor value={null} onChange={onChange} preset="description" />);
+    const editor = screen.getByRole('textbox', { name: 'Beschreibung' });
+    await user.click(editor);
+    await user.keyboard('/');
+
+    const menu = await screen.findByRole('listbox', { name: 'Blöcke' });
+    expect(within(menu).getAllByRole('option').map((option) => option.textContent)).toEqual([
+      'Überschrift 1#',
+      'Überschrift 2##',
+      'Überschrift 3###',
+      'Liste-',
+      'Nummerierte Liste1.',
+      'Checkliste[ ]',
+      'Code```',
+      'Zitat>',
+    ]);
+    // the editor names the list and its active entry; the focus stays in the text
+    expect(editor.getAttribute('aria-controls')).toBe(menu.id);
+    expect(document.activeElement).toBe(editor);
+
+    // typing narrows the list, the arrows move, Enter takes the entry and the slash with what followed it goes
+    await user.keyboard('über');
+    await waitFor(() => expect(within(menu).getAllByRole('option')).toHaveLength(3));
+    await user.keyboard('{ArrowDown}');
+    expect(editor.getAttribute('aria-activedescendant')).toBe(within(menu).getByRole('option', { name: /Überschrift 2/ }).id);
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
+    expect(editor.getAttribute('aria-controls')).toBeNull();
+    await user.keyboard('Ziel');
+    // the line is the heading, without the slash (Tiptap keeps an empty paragraph after it to write on)
+    expect(lastDoc(onChange)?.content?.[0]).toEqual({ type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Ziel' }] });
+  });
+
+  it('offers a table in / only on page', async () => {
+    const user = userEvent.setup();
+    const offered = async (preset: EditorPreset) => {
+      const { unmount } = render(<RichTextEditor value={null} onChange={vi.fn()} preset={preset} />);
+      await user.click(screen.getByRole('textbox'));
+      await user.keyboard('/');
+      const names = within(await screen.findByRole('listbox', { name: 'Blöcke' }))
+        .getAllByRole('option')
+        .map((option) => option.textContent);
+      unmount();
+      return names;
+    };
+
+    const page = await offered('page');
+    expect(page).toContain('Tabelle');
+    expect(page).toContain('Linie---');
+    expect(await offered('description')).not.toContain('Tabelle');
+    // a comment has neither headings nor checklists, so the menu offers none
+    expect(await offered('comment')).toEqual(['Liste-', 'Nummerierte Liste1.', 'Code```', 'Zitat>']);
+  });
+
+  it('inserts a table, a rule, a list, a numbered list, a checklist, code and a quote from /', async () => {
+    const user = userEvent.setup();
+    const take = async (name: string) => {
+      const onChange = vi.fn();
+      const { unmount } = render(<RichTextEditor value={null} onChange={onChange} preset="page" />);
+      await user.click(screen.getByRole('textbox'));
+      await user.keyboard('/');
+      await user.click(within(await screen.findByRole('listbox', { name: 'Blöcke' })).getByRole('option', { name: new RegExp(`^${name}`) }));
+      const doc = lastDoc(onChange);
+      unmount();
+      // the first block is the line the slash stood in
+      return doc?.content?.[0].type;
+    };
+
+    expect(await take('Tabelle')).toBe('table');
+    expect(await take('Linie')).toBe('horizontalRule');
+    expect(await take('Liste')).toBe('bulletList');
+    expect(await take('Nummerierte Liste')).toBe('orderedList');
+    expect(await take('Checkliste')).toBe('taskList');
+    expect(await take('Code')).toBe('codeBlock');
+    expect(await take('Zitat')).toBe('blockquote');
+  });
+
+  it('says when no block fits, and never opens in code', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const { unmount } = render(<RichTextEditor value={{ type: 'doc', content: [{ type: 'codeBlock', attrs: { language: null } }] }} onChange={onChange} preset="comment" />);
+    await user.click(screen.getByRole('textbox'));
+    await user.keyboard(' /pfad');
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(nodesOf(lastDoc(onChange), 'text')[0].text).toBe(' /pfad');
+    unmount();
+
+    render(<RichTextEditor value={null} onChange={vi.fn()} preset="comment" />);
+    const editor = screen.getByRole('textbox');
+    await user.click(editor);
+    await user.keyboard('/gibtsnicht');
+    expect((await screen.findByRole('status')).textContent).toBe('Kein Block heißt „gibtsnicht“.');
+    expect(editor.getAttribute('aria-activedescendant')).toBeNull();
+    // with nothing to take, Enter is the editor's again
+    await user.keyboard('{Enter}');
+    expect(editor.querySelectorAll('p')).toHaveLength(2);
+  });
+
+  it('highlights a code block in its language', async () => {
+    const code = (text: string, language: string | null): RichText => ({ type: 'doc', content: [{ type: 'codeBlock', attrs: { language }, content: [{ type: 'text', text }] }] });
+    const onChange = vi.fn();
+    const { unmount } = render(<RichTextEditor value={code('const answer = 42; // stimmt', 'javascript')} onChange={onChange} preset="comment" />);
+    const editor = screen.getByRole('textbox');
+
+    await waitFor(() => expect(editor.querySelector('pre .hljs-keyword')?.textContent).toBe('const'));
+    expect(editor.querySelector('pre .hljs-number')?.textContent).toBe('42');
+    expect(editor.querySelector('pre .hljs-comment')?.textContent).toBe('// stimmt');
+    // spelling and translation stay out of code
+    expect(editor.querySelector('pre')?.getAttribute('spellcheck')).toBe('false');
+    expect(editor.querySelector('pre')?.getAttribute('translate')).toBe('no');
+    unmount();
+
+    // the viewer too; a block without a language is read in the one that fits best
+    render(<RichTextView value={code('SELECT id, title FROM work_items WHERE archived_at IS NULL;', null)} preset="comment" />);
+    await waitFor(() =>
+      expect([...document.querySelectorAll('.rt-content pre .hljs-keyword')].map((node) => node.textContent)).toEqual(expect.arrayContaining(['SELECT', 'FROM', 'WHERE'])),
+    );
+    // the highlighting is decoration: the document stays plain text
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('mentions a member with @ and stores id and handle', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    renderWithData(<RichTextEditor value={null} onChange={onChange} preset="comment" projectId="p_web" />, {
+      'GET /api/v1/mentions': (_body, url) => ({ body: { data: [mara, kira].filter((user) => user.handle.startsWith(url.searchParams.get('q') ?? '')) } }),
+      'GET /api/v1/users': () => ({ body: list([mara, kira]) }),
+    });
+    const editor = screen.getByRole('textbox', { name: 'Kommentar' });
+    expect(editor.querySelector('p')?.getAttribute('data-placeholder')).toBe('Kommentar schreiben … @ erwähnt, # verweist, / fügt ein');
+    await user.click(editor);
+    await user.keyboard('Danke @');
+
+    // a person with the handle, a bot with its word
+    const people = await screen.findByRole('listbox', { name: 'Personen und Bots' });
+    await waitFor(() =>
+      expect(within(people).getAllByRole('option').map((option) => option.textContent)).toEqual([expect.stringMatching(/Mara Lindqvist@mara$/), expect.stringMatching(/KiraBot$/)]),
+    );
+    await user.keyboard('ma');
+    await waitFor(() => expect(within(people).getAllByRole('option')).toHaveLength(1));
+    expect(api!.calls.map((call) => call.url)).toContain('/api/v1/mentions?project=p_web&q=ma');
+    expect(editor.getAttribute('aria-activedescendant')).toBe(within(people).getByRole('option', { name: /Mara Lindqvist/ }).id);
+
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(nodesOf(lastDoc(onChange), 'mention').map((node) => node.attrs)).toEqual([{ id: 'u_mara', label: 'mara', mentionSuggestionChar: '@' }]));
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(editor.querySelector('.rt-mention')?.textContent).toBe('@mara');
+    expect(editor.textContent).toBe('Danke @mara ');
+  });
+
+  it('says why the @ list is empty', async () => {
+    const user = userEvent.setup();
+    let fail = false;
+    renderWithData(<RichTextEditor value={null} onChange={vi.fn()} preset="comment" projectId="p_web" />, {
+      'GET /api/v1/mentions': () => (fail ? { status: 500, body: { title: 'Server Error' } } : { body: { data: [] } }),
+    });
+    const editor = screen.getByRole('textbox', { name: 'Kommentar' });
+    const release = holdAnswers();
+    await user.click(editor);
+    await user.keyboard('@');
+    expect(await screen.findByText('Sucht …')).toBeTruthy();
+    release();
+    await user.keyboard('zz');
+    expect(await screen.findByText('Niemand im Projekt heißt „zz“.')).toBeTruthy();
+    fail = true;
+    await user.keyboard('x');
+    expect(await screen.findByText('Die Personen ließen sich nicht laden.')).toBeTruthy();
+  });
+
+  it('shows the current handle of a renamed account', async () => {
+    renderWithData(
+      <RichTextView value={paragraph(mention('u_mara', 'mara_alt'), { type: 'text', text: ' ' }, mention('u_ida', 'ida'), { type: 'text', text: ' ' }, mention('u_weg', 'weg'))} preset="comment" />,
+      { 'GET /api/v1/users': () => ({ body: list([{ ...mara, handle: 'mara' }, { ...ida, disabled_at: '2026-10-01T08:00:00Z' }]) }) },
+    );
+    // the stored handle until the accounts are there, then the current one
+    await waitFor(() => expect([...document.querySelectorAll('.rt-mention')].map((node) => node.textContent)).toEqual(['@mara_alt', '@ida', '@weg']));
+    await waitFor(() => expect([...document.querySelectorAll('.rt-mention')].map((node) => node.textContent)).toEqual(['@mara', '@ida (deaktiviert)', '@weg']));
+  });
+
+  it('refers to an item with # over the search and shows its key', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    renderWithData(<RichTextEditor value={null} onChange={onChange} preset="description" projectId="p_web" />, {
+      'GET /api/v1/search': (_body, url) => ({ body: { data: searchResults({ items: url.searchParams.get('q') === 'WEB' ? [web47] : [] }) } }),
+      'GET /api/v1/work-item-types': () => ({ body: list(types) }),
+    });
+    const editor = screen.getByRole('textbox', { name: 'Beschreibung' });
+    await user.click(editor);
+    await user.keyboard('Siehe #');
+
+    // nothing typed yet: a hint, no search
+    const items = await screen.findByRole('listbox', { name: 'Items' });
+    expect(screen.getByRole('status').textContent).toBe('Key oder Titel eingeben, zum Beispiel WEB-42.');
+    expect(api!.calls.filter((call) => call.url.startsWith('/api/v1/search'))).toEqual([]);
+
+    await user.keyboard('WEB');
+    const option = await within(items).findByRole('option', { name: /WEB-47/ });
+    expect(option.textContent).toBe('WEB-47Kontaktformular sendet doppelt');
+    expect(api!.calls.map((call) => call.url)).toContain('/api/v1/search?q=WEB&types=items&limit=6');
+
+    await user.keyboard('{Enter}');
+    // only the id and the kind: no key, no title in the stored text
+    await waitFor(() => expect(nodesOf(lastDoc(onChange), 'reference').map((node) => node.attrs)).toEqual([{ id: 'wi_web_47', label: null, mentionSuggestionChar: '#', kind: 'item' }]));
+    // the chosen item shows at once, without asking the server; while editing it is no link
+    await waitFor(() => expect(editor.querySelector('.rt-ref')?.textContent).toBe('WEB-47 Kontaktformular sendet doppelt'));
+    expect(editor.querySelector('.rt-ref svg')).not.toBeNull();
+    expect(editor.querySelector('a.rt-ref')).toBeNull();
+    expect(api!.calls.filter((call) => call.url.startsWith('/api/v1/references'))).toEqual([]);
+  });
+
+  it('says why the # list is empty', async () => {
+    const user = userEvent.setup();
+    let fail = false;
+    renderWithData(<RichTextEditor value={null} onChange={vi.fn()} preset="comment" projectId="p_web" />, {
+      'GET /api/v1/search': () => (fail ? { status: 503, body: { title: 'Unavailable' } } : { body: { data: searchResults() } }),
+      'GET /api/v1/work-item-types': () => ({ body: list(types) }),
+    });
+    const editor = screen.getByRole('textbox', { name: 'Kommentar' });
+    await user.click(editor);
+    await user.keyboard('#zz');
+    expect(await screen.findByText('Sucht …')).toBeTruthy();
+    expect(await screen.findByText('Kein Item zu „zz“.')).toBeTruthy();
+    fail = true;
+    await user.keyboard('x');
+    expect(await screen.findByText('Die Suche antwortet gerade nicht.')).toBeTruthy();
+  });
+
+  it('shows a hidden reference as hidden', async () => {
+    const { client } = renderWithData(<RichTextView value={paragraph(reference('wi_web_47'), { type: 'text', text: ' und ' }, reference('wi_hidden'))} preset="comment" />, {
+      'GET /api/v1/references': () => ({ body: { data: { items: [web47] } } }),
+      'GET /api/v1/work-item-types': () => ({ body: list(types) }),
+    });
+    // on its way
+    await waitFor(() => expect([...document.querySelectorAll('.rt-ref')].map((node) => node.textContent)).toEqual(['…', '…']));
+
+    // reading: a link with the key, the title for screen readers; what the reader does not see says "verborgen" only
+    const link = await screen.findByRole('link', { name: 'WEB-47 Kontaktformular sendet doppelt' });
+    expect(link.getAttribute('href')).toBe('/items/WEB-47');
+    await waitFor(() => expect(document.querySelector('.rt-ref-hidden')?.textContent).toBe('verborgen'));
+    expect(document.querySelector('.rt-ref-hidden svg')).not.toBeNull();
+    // one request for both (the node views mount in any order)
+    const asked = api!.calls.filter((call) => call.url.startsWith('/api/v1/references'));
+    expect(asked).toHaveLength(1);
+    expect(new URL(asked[0].url, 'https://werkbuch.test').searchParams.get('items')?.split(',').sort()).toEqual(['wi_hidden', 'wi_web_47']);
+    client.clear();
+  });
+
+  it('says a reference did not load when the server fails', async () => {
+    renderWithData(<RichTextView value={paragraph(reference('wi_web_47'))} preset="comment" />, {
+      'GET /api/v1/references': () => ({ status: 500, body: { title: 'Server Error' } }),
+      'GET /api/v1/work-item-types': () => ({ body: list(types) }),
+    });
+    await waitFor(() => expect(document.querySelector('.rt-ref')?.textContent).toBe('Verweis'));
+  });
+
+  it('offers neither @ nor # without a project', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    renderWithData(<RichTextEditor value={null} onChange={onChange} preset="comment" />);
+    const editor = screen.getByRole('textbox', { name: 'Kommentar' });
+    expect(editor.querySelector('p')?.getAttribute('data-placeholder')).toBe('Kommentar schreiben … / fügt ein');
+    await user.click(editor);
+    await user.keyboard('@mara #WEB');
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(lastDoc(onChange)).toEqual(textDoc('@mara #WEB'));
+    expect(api!.calls).toEqual([]);
+  });
+
+  it('closes a suggestion list with Escape without closing the dialog', async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    const onEscape = vi.fn();
+    renderWithData(
+      <Dialog open onOpenChange={onOpenChange} title="Item anlegen">
+        <RichTextEditor value={null} onChange={vi.fn()} preset="description" projectId="p_web" onEscape={onEscape} />
+      </Dialog>,
+      { 'GET /api/v1/mentions': () => ({ body: { data: [mara] } }) },
+    );
+    const editor = await screen.findByRole('textbox', { name: 'Beschreibung' });
+    await user.click(editor);
+    await user.keyboard('@ma');
+    const list = await screen.findByRole('listbox', { name: 'Personen und Bots' });
+    // inside the dialog, so a click on it is no click outside
+    expect(screen.getByRole('dialog', { name: 'Item anlegen' }).contains(list)).toBe(true);
+
+    pressEscape(editor);
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(onEscape).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog', { name: 'Item anlegen' })).toBeTruthy();
+
+    // the next Escape is the editor's again
+    pressEscape(editor);
+    expect(onEscape).toHaveBeenCalledTimes(1);
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
+  it('keeps pasted mentions, references and attachments of the server, and no image from the web', () => {
+    const editorRef = createRef<Editor | null>();
+    const onChange = vi.fn();
+    renderWithData(<RichTextEditor value={null} onChange={onChange} preset="description" editorRef={editorRef} />, {
+      'GET /api/v1/users': () => ({ body: list([mara]) }),
+      'GET /api/v1/references': () => ({ body: { data: { items: [web47] } } }),
+      'GET /api/v1/work-item-types': () => ({ body: list(types) }),
+    });
+    pasteHtml(
+      screen.getByRole('textbox'),
+      [
+        '<p>Hallo <span data-type="mention" data-id="u_mara" data-label="mara">@mara</span>',
+        ' <span data-type="reference" data-id="wi_web_47" data-kind="item"></span>',
+        ' <span data-type="attachment" data-attachment-id="01jattachmentfile0000000000">angebot.pdf</span></p>',
+        '<img data-attachment-id="01jattachmentimage000000000" alt="Formular">',
+        '<p><img src="https://example.com/tracker.png" alt="extern"></p>',
+      ].join(''),
+    );
+    const doc = lastDoc(onChange);
+    expect(nodesOf(doc, 'mention').map((node) => node.attrs)).toEqual([{ id: 'u_mara', label: 'mara', mentionSuggestionChar: '@' }]);
+    expect(nodesOf(doc, 'reference').map((node) => node.attrs)).toEqual([{ id: 'wi_web_47', label: null, mentionSuggestionChar: '#', kind: 'item' }]);
+    expect(nodesOf(doc, 'attachment').map((node) => node.attrs)).toEqual([{ attachmentId: '01jattachmentfile0000000000', filename: 'angebot.pdf' }]);
+    expect(nodesOf(doc, 'image').map((node) => node.attrs)).toEqual([{ attachmentId: '01jattachmentimage000000000', alt: 'Formular' }]);
+    // the text of the nodes, as Document::toText reads it
+    expect(editorRef.current!.getText()).toContain('Hallo @mara  angebot.pdf');
+  });
+
+  it('counts mentions, references, images and files as content', () => {
+    expect(isEmptyDoc(paragraph(mention('u_mara', 'mara')))).toBe(false);
+    expect(isEmptyDoc(paragraph(reference('wi_web_47')))).toBe(false);
+    expect(isEmptyDoc(paragraph({ type: 'attachment', attrs: { attachmentId: 'a', filename: 'f' } }))).toBe(false);
+    expect(isEmptyDoc({ type: 'doc', content: [{ type: 'image', attrs: { attachmentId: 'a', alt: null } }] })).toBe(false);
+  });
+
+  it('keeps mentions, references and files of a text in a level that lacks their block', async () => {
+    renderWithData(
+      <RichTextEditor value={{ type: 'doc', content: [{ type: 'table', content: [{ type: 'tableRow', content: [{ type: 'tableCell', content: [paragraph(mention('u_mara', 'mara')).content![0]] }] }] }] }} onChange={vi.fn()} preset="comment" />,
+      { 'GET /api/v1/users': () => ({ body: list([mara]) }) },
+    );
+    // the table goes, the mention stays in a paragraph
+    await waitFor(() => expect(screen.getByRole('textbox').querySelector('p .rt-mention')?.textContent).toBe('@mara'));
+  });
+});
+
+describe('a parent that holds the document', () => {
+  it('resets when the parent passes null later', async () => {
+    const user = userEvent.setup();
+    // a parent that renders what the editor reported only when the test says so, oldest first (a slow parent)
+    const reported: Array<RichText | null> = [];
+    let show: (doc: RichText | null) => void = () => {};
+    function Controlled() {
+      const [doc, setDoc] = useState<RichText | null>(null);
+      show = setDoc;
+      return <RichTextEditor value={doc} onChange={(next) => reported.push(next)} preset="comment" autoFocus />;
+    }
+    render(<Controlled />);
+    const editor = screen.getByRole('textbox', { name: 'Kommentar' });
+    await waitFor(() => expect(document.activeElement).toBe(editor));
+
+    // typed, emptied (the editor reports null) and typed again before the parent caught up
+    await user.keyboard('weg');
+    await user.keyboard('{Control>}a{/Control}{Backspace}');
+    await user.keyboard('neu');
+    expect(reported.slice(3, 4)).toEqual([null]);
+
+    // the parent renders the old reports late, the null among them: nothing typed is lost
+    for (const doc of reported.splice(0)) act(() => show(doc));
+    expect(editor.textContent).toBe('neu');
+
+    // after the parent took the newer text, a null is its own (sent, discarded) and empties the editor
+    act(() => show(null));
+    expect(editor.textContent).toBe('');
+    expect(editor.querySelectorAll('p')).toHaveLength(1);
   });
 });
