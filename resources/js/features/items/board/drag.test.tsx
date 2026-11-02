@@ -610,6 +610,31 @@ describe('the quick add of a column', () => {
     await waitFor(() => expect(sent('POST', '/api/v1/work-items')).toEqual([{ project_id: 'p_app', assignee_id: 'u_lene', type_id: 't_task', title: 'Onboarding' }]));
   });
 
+  it('lets the column say who takes the item on Meine Items grouped by assignee, also nobody', async () => {
+    renderBoard('/my-items?layout=board&group=assignee');
+    const add = await screen.findByRole('button', { name: 'Item in Nicht zugewiesen anlegen' });
+    // the board offers it once projects, workflows and types are there
+    await waitFor(() => expect(add.getAttribute('aria-disabled')).toBeNull());
+    fireEvent.click(add);
+    const input = screen.getByRole('textbox', { name: 'Neues Item in Nicht zugewiesen' });
+    fireEvent.change(input, { target: { value: 'Sitemap' } });
+    fireEvent.submit(input.closest('form')!);
+
+    // no assignee: the list's own "assigned to me" does not overrule the column
+    await waitFor(() => expect(sent('POST', '/api/v1/work-items')).toEqual([{ project_id: 'p_web', type_id: 't_task', title: 'Sitemap' }]));
+    await waitFor(() => expect(announced()).toBe('WEB-51 in Nicht zugewiesen angelegt.'));
+    await waitFor(() => expect(useUiStore.getState().flashIds).toContain('wi_web_51'));
+    expect(currentToasts()).toEqual([]);
+
+    // a column of a person gives the item to that person
+    fireEvent.keyDown(input, { key: 'Escape' });
+    fireEvent.click(screen.getByRole('button', { name: 'Item in Mara Lindqvist anlegen' }));
+    const mara = screen.getByRole('textbox', { name: 'Neues Item in Mara Lindqvist' });
+    fireEvent.change(mara, { target: { value: 'Impressum prüfen' } });
+    fireEvent.submit(mara.closest('form')!);
+    await waitFor(() => expect(sent('POST', '/api/v1/work-items').at(-1)).toEqual({ project_id: 'p_web', assignee_id: 'u_mara', type_id: 't_task', title: 'Impressum prüfen' }));
+  });
+
   it('makes an item in the project of its column on a board grouped by project', async () => {
     renderBoard('/my-items?layout=board&group=project');
     fireEvent.click(await screen.findByRole('button', { name: 'Item in Kunden-App anlegen' }));

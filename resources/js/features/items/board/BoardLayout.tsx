@@ -577,7 +577,9 @@ export function BoardLayout({ groups, groupBy, display, project, createDefaults,
                     <QuickAdd
                       columnLabel={column.label}
                       options={quick.options}
-                      defaults={createDefaults?.assignee_id ? { assignee_id: createDefaults.assignee_id } : undefined}
+                      // where the columns are the people, the column says who takes the item (none in "Nicht zugewiesen"),
+                      // not the list (Meine Items: me)
+                      defaults={groupBy !== 'assignee' && createDefaults?.assignee_id ? { assignee_id: createDefaults.assignee_id } : undefined}
                       onCreated={(item) => created(item, column)}
                       onClose={close}
                     />
