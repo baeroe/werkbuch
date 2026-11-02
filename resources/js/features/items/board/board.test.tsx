@@ -248,7 +248,7 @@ describe('the board', () => {
     expect(listCommands().find((entry) => entry.id === 'board.list.move_up')?.when?.()).toBe(false);
 
     act(() => useUiStore.getState().setPaletteOpen(true));
-    const input = await screen.findByRole('combobox', { name: 'Befehl eingeben' });
+    const input = await screen.findByRole('combobox', { name: 'Suchen oder Befehl eingeben' });
     fireEvent.change(input, { target: { value: 'Spalte nach unten' } });
     await screen.findByRole('option', { name: /Karte in der Spalte nach unten/ });
     fireEvent.keyDown(input, { key: 'Enter' });

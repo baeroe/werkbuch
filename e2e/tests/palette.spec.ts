@@ -1,8 +1,9 @@
 import { expect, test } from '../fixtures';
-import { pressMod, tabTo, tr } from '../helpers';
+import { createE2eProject, createItem, pressMod, removeE2eProject, runId, searchToken, tabTo, tr, variant, waitForSearch } from '../helpers';
 
-// The command palette with the keyboard only, signed in as the e2e person (playwright.config.ts), in English. It finds
-// commands only; search results come with Phase 6. The item commands need an item page (Task 21).
+// The command palette with the keyboard only, signed in as the e2e person (playwright.config.ts), in English: its
+// commands and the search. Items a spec searches carry the search token of its run and variant (all variants share one
+// index), in front of the word typed: the search matches only the last word as a prefix.
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/my-items');
@@ -85,12 +86,35 @@ test('changes the theme from its list', async ({ page }) => {
   await expect(html).not.toHaveAttribute('data-theme', /.+/);
 });
 
-test('says when no command matches', async ({ page }) => {
+test('says when nothing matches', async ({ page }) => {
   const palette = await openPalette(page);
   await page.keyboard.type('xyzzy');
 
-  await expect(palette.getByText(tr('en', 'palette.empty'), { exact: true })).toBeVisible();
+  await expect(palette.getByText(tr('en', 'palette.no_results', { query: 'xyzzy' }), { exact: true })).toBeVisible();
   await expect(palette.getByRole('option')).toHaveCount(0);
   await page.keyboard.press('Escape');
   await expect(palette).toBeHidden();
+});
+
+test('searches from the palette', async ({ page }) => {
+  const { id, identifier } = await createE2eProject(page, `E2E palette search ${variant()} ${runId()}`);
+  try {
+    const title = `E2E Leuchtturm ${searchToken()}`;
+    const item = await createItem(page, { project_id: id, title });
+    const query = `${searchToken()} leuchtturm`;
+    await waitForSearch(page, query, (data) => data.items.some((hit) => hit.id === item.id));
+
+    const palette = await openPalette(page);
+    await page.keyboard.type(query);
+    const items = palette.getByRole('group', { name: tr('en', 'palette.section.items') });
+    await expect(items.getByRole('option', { name: new RegExp(item.key) })).toBeVisible();
+    await expect(palette.getByRole('status')).toHaveText(tr('en', 'palette.hits.one'));
+    await page.keyboard.press('Enter');
+
+    await expect(page).toHaveURL(new RegExp(`/items/${item.key}$`));
+    await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible();
+    await expect(palette).toBeHidden();
+  } finally {
+    await removeE2eProject(page, identifier);
+  }
 });
