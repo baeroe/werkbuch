@@ -361,33 +361,55 @@ async function catalogId(page: Page, path: string, name: string): Promise<string
   return String(entry.id);
 }
 
+/** How many identifiers createE2eProject tries for one name before it gives up. */
+const MAX_IDENTIFIER_ATTEMPTS = 10;
+
+/**
+ * The identifier of the `attempt`-th try for a project name: `E<run><variant>` and three Base36 characters of a hash of
+ * the name (and the attempt from the second try on). Ten characters at most, a letter first.
+ */
+export function e2eIdentifier(name: string, attempt: number): string {
+  const hash = createHash('sha1').update(attempt === 0 ? name : `${name}#${attempt}`).digest('hex').slice(0, 8);
+  return `E${runId()}${VARIANT_CODE[variant()]}${parseInt(hash, 16).toString(36).toUpperCase().slice(-3).padStart(3, '0')}`;
+}
+
 /**
  * Creates a project for a spec over the API, as the signed-in person: named `name` (start it with `E2E `, the e2e seeder
- * removes those projects before the next run), with an identifier of its own `E<run><variant><name hash>` that no other
- * name, variant or run shares (nine or ten characters), the default workflow and every active type unless
- * `options.workflow` (the name of a workflow) and `options.types` (type names, the first is the default type) say
- * otherwise. Answers its id and identifier; clean up with `removeE2eProject()` in a `finally`.
+ * removes those projects before the next run), with an identifier of its own `E<run><variant><name hash>` (nine or ten
+ * characters); it tries the next identifier while the one before is taken: three characters of a hash collide now and
+ * then within a run and variant. The default workflow and every active type unless `options.workflow` (the name of a
+ * workflow) and `options.types` (type names, the first is the default type) say otherwise; `options.visibility` is sent
+ * only when set (the API creates public projects by default). Answers its id and identifier; clean up with
+ * `removeE2eProject()` in a `finally`.
  */
 export async function createE2eProject(
   page: Page,
   name: string,
-  options: { workflow?: string; types?: string[] } = {},
+  options: { workflow?: string; types?: string[]; visibility?: 'public' | 'private' } = {},
 ): Promise<{ id: string; identifier: string }> {
   // only `E2E …` projects are cleaned up after an aborted run (E2eSeeder); a name serves one project per run and variant
   if (!name.startsWith('E2E ')) throw new Error(`createE2eProject: "${name}" does not start with "E2E "`);
   await ensureCsrfCookie(page);
-  const hash = createHash('sha1').update(name).digest('hex').slice(0, 8);
-  const identifier = `E${runId()}${VARIANT_CODE[variant()]}${parseInt(hash, 16).toString(36).toUpperCase().slice(-3).padStart(3, '0')}`;
   const types = options.types && (await Promise.all(options.types.map((type) => catalogId(page, 'work-item-types', type))));
-  const response = await api(page, 'POST', '/api/v1/projects', {
-    name,
-    identifier,
-    ...(options.workflow && { workflow_id: await catalogId(page, 'workflows', options.workflow) }),
-    ...(types && { enabled_type_ids: types, default_type_id: types[0] }),
-  });
-  expect(response.status(), await response.text()).toBe(201);
-  const { data } = (await response.json()) as { data: { id: string; identifier: string } };
-  return { id: data.id, identifier: data.identifier };
+  const workflowId = options.workflow && (await catalogId(page, 'workflows', options.workflow));
+  for (let attempt = 0; attempt < MAX_IDENTIFIER_ATTEMPTS; attempt++) {
+    const response = await api(page, 'POST', '/api/v1/projects', {
+      name,
+      identifier: e2eIdentifier(name, attempt),
+      ...(workflowId && { workflow_id: workflowId }),
+      ...(types && { enabled_type_ids: types, default_type_id: types[0] }),
+      ...(options.visibility && { visibility: options.visibility }),
+    });
+    if (response.status() === 422) {
+      const body = (await response.json()) as { errors?: Record<string, unknown> };
+      if (body.errors?.identifier) continue;
+      expect(response.status(), JSON.stringify(body)).toBe(201);
+    }
+    expect(response.status(), await response.text()).toBe(201);
+    const { data } = (await response.json()) as { data: { id: string; identifier: string } };
+    return { id: data.id, identifier: data.identifier };
+  }
+  throw new Error(`createE2eProject: no free identifier for "${name}" after ${MAX_IDENTIFIER_ATTEMPTS} tries`);
 }
 
 /**
