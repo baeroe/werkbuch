@@ -261,8 +261,9 @@ describe('search', () => {
     await openPalette();
     await user.keyboard('kontakt');
     const row = await screen.findByRole('option', { name: /Kontaktformular sendet doppelt/ });
-    // one question for the last key, not one per key
+    // one question for the last key, not one per key, for no more hits than the palette shows
     expect(searched()).toEqual(['kontakt']);
+    expect(api!.calls.filter((call) => call.url.startsWith('/api/v1/search')).map((call) => new URL(call.url, 'http://x').searchParams.get('limit'))).toEqual(['8']);
     expect(outline()).toEqual([['Items', 'Kontaktformular sendet doppelt']]);
     expect(row.textContent).toContain('WEB-47');
     expect([...row.querySelectorAll('mark')].map((mark) => mark.textContent)).toEqual(['Kontakt']);
@@ -351,6 +352,24 @@ describe('search', () => {
     expect(labels()).toEqual(['Kontaktformular sendet doppelt']);
   });
 
+  it('names the new hit as the active one when it takes the place of the last', async () => {
+    const user = userEvent.setup();
+    searchRoute = answers({ kon: { items: [makeWorkItem({ id: 'wi_konf', key: 'WEB-9', title: 'Konferenz planen' })] }, kontakt: { items: [web47] } });
+    renderShell();
+    const activeRow = () => document.getElementById(input().getAttribute('aria-activedescendant')!)!.textContent;
+
+    await openPalette();
+    await user.keyboard('kon');
+    await screen.findByRole('option', { name: /Konferenz planen/ });
+    await waitFor(() => expect(activeRow()).toContain('Konferenz planen'));
+    const before = input().getAttribute('aria-activedescendant');
+
+    await user.keyboard('takt');
+    await screen.findByRole('option', { name: /Kontaktformular/ });
+    await waitFor(() => expect(activeRow()).toContain('Kontaktformular sendet doppelt'));
+    expect(input().getAttribute('aria-activedescendant')).not.toBe(before);
+  });
+
   it('says it is searching and then how many hits there are', async () => {
     const user = userEvent.setup();
     searchRoute = answers({ kontakt: { items: [web47, makeWorkItem({ id: 'wi_ops', key: 'OPS-3', title: 'Kontakt-Mails hängen' })] } });
@@ -379,7 +398,8 @@ describe('search', () => {
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toContain('Die Suche hat nicht geantwortet: Die Suche ist gerade nicht erreichbar.');
     expect(screen.queryByText(/Keine Treffer/)).toBeNull();
-    expect(live()).toBe('0 Treffer');
+    // the alert speaks: the live region names no count beside it
+    expect(live()).toBe('');
 
     await user.click(within(alert).getByRole('button', { name: 'Erneut versuchen' }));
     await waitFor(() => expect(searched()).toEqual(['kontakt', 'kontakt']));

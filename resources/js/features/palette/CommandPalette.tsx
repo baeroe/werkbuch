@@ -31,7 +31,7 @@ import { useDialogScope } from '@/lib/shortcuts/useShortcut';
 import { useUiStore } from '@/store/ui';
 import type { State } from '@/types';
 import { EntryRow, OptionRow, type RowLookups } from './EntryRow';
-import { matchingOptions, rootSections, searchTerms, type PaletteEntry } from './model';
+import { LIMITS, matchingOptions, rootSections, searchTerms, type PaletteEntry } from './model';
 
 /** The search waits this long after the last key. */
 export const SEARCH_DELAY_MS = 150;
@@ -95,7 +95,8 @@ function PaletteBody({ inputRef }: { inputRef: RefObject<HTMLInputElement | null
   // what the search gets: nothing in a sub-list, at most what it takes (whole characters, never half a pair)
   const wanted = subpage ? '' : Array.from(query.trim()).slice(0, SEARCH_MAX).join('');
   const searchQuery = useDebounced(wanted, SEARCH_DELAY_MS);
-  const search = useSearch(searchQuery, {}, { enabled: !subpage });
+  // no more hits than the palette shows (the items show the most)
+  const search = useSearch(searchQuery, { limit: LIMITS.items }, { enabled: !subpage });
   const types = useWorkItemTypes();
   const workflows = useWorkflows();
   const people = usePermissions().can('org.manage');
@@ -163,7 +164,8 @@ function PaletteBody({ inputRef }: { inputRef: RefObject<HTMLInputElement | null
       }));
   const rows = groups.flatMap((group) => group.rows);
   const active = rows.find((row) => row.id === activeId) ?? rows[0];
-  const optionId = (row: Row) => `${listId}-${rows.indexOf(row)}`;
+  // by what the row shows, not by its place: another hit in the active place is another active option
+  const optionId = (row: Row) => `${listId}-row-${row.id}`;
 
   // the search has not answered for what is typed yet
   const searching = !page && terms.length > 0 && (searchQuery !== wanted || search.isFetching);
@@ -194,9 +196,10 @@ function PaletteBody({ inputRef }: { inputRef: RefObject<HTMLInputElement | null
     }
   }
 
+  // a failed search has its alert: no count beside it
   let status = '';
   if (searching) status = t('palette.searching');
-  else if (terms.length > 0) status = tn('palette.hits', rows.length);
+  else if (terms.length > 0 && !searchFailed) status = tn('palette.hits', rows.length);
 
   return (
     <>
