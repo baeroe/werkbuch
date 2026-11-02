@@ -11,6 +11,7 @@ import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { currentToasts, dismissToast, resetToasts, runToastAction } from '@/components/ui/toast';
+import { listCommands } from '@/lib/commands';
 import { useUiStore } from '@/store/ui';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import { ida, lene, list, makeView, mara, organization, person, project, theo } from '@/test/fixtures';
@@ -497,6 +498,28 @@ describe('deleting', () => {
 });
 
 describe('a new view', () => {
+  const command = () => listCommands().find((entry) => entry.id === 'views.create');
+
+  it('offers Neue View in the palette with the right and opens the dialog', async () => {
+    renderViews();
+    await rightsLoaded();
+
+    expect(command()?.when!()).toBe(true);
+    expect([command()!.label, command()!.group]).toEqual(['Neue View', 'Views']);
+    act(() => command()!.run());
+
+    expect(await screen.findByRole('dialog', { name: 'Neue View' })).toBeTruthy();
+  });
+
+  it('leaves it out without the right', async () => {
+    // the rights come with the projects: while they load, nobody may create a view
+    hold('GET', '/api/v1/projects');
+    renderViews();
+    await loaded();
+
+    expect(command()?.when!()).toBe(false);
+  });
+
   it('opens a dialog from the button, creates the view and leads to it', async () => {
     const user = userEvent.setup();
     renderViews();

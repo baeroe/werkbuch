@@ -129,7 +129,7 @@ describe('CommandPalette', () => {
 
     expect(outline()).toEqual([
       ['Projekte', 'Neues Projekt'],
-      ['Aktionen', 'Neues Item', 'Theme wechseln …'],
+      ['Aktionen', 'Neues Item', 'Theme wechseln …', 'Seitenleiste einklappen', 'Alle Tastaturkürzel'],
       ['Navigation', 'Inbox öffnen', 'Meine Items öffnen', 'Alle Views öffnen', 'Alle Projekte öffnen'],
     ]);
     // with their shortcuts, and a chevron where a list opens

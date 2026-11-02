@@ -5,12 +5,15 @@
 
 import { Link } from '@inertiajs/react';
 import type { LucideIcon } from 'lucide-react';
-import { FileQuestionMark, RotateCw, ServerCrash, ShieldAlert, WifiOff } from 'lucide-react';
+import { FileQuestionMark, RotateCw, Search, ServerCrash, ShieldAlert, WifiOff } from 'lucide-react';
 import { Button, buttonClass } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { t, type TranslationKey } from '@/lib/i18n';
 import { paths } from '@/lib/links';
+import { useSharedProps } from '@/lib/page';
+import { SHORTCUTS } from '@/lib/shortcuts/catalog';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
+import { openSearch } from './SearchButton';
 
 type NotFoundProps = {
   /** e.g. "WEB-999 does not exist". */
@@ -18,9 +21,10 @@ type NotFoundProps = {
   description?: string;
 };
 
-/** 404: names what is missing and offers the way back. */
+/** 404: names what is missing and offers the way back, and to a signed-in person the search (a guest has no palette). */
 export function NotFound({ title = t('errors.page.not_found.title'), description = t('errors.page.not_found.description') }: NotFoundProps) {
   useDocumentTitle(t('errors.page.not_found.tab'));
+  const signedIn = useSharedProps().auth.user !== null;
   return (
     <EmptyState
       icon={FileQuestionMark}
@@ -28,9 +32,16 @@ export function NotFound({ title = t('errors.page.not_found.title'), description
       title={title}
       description={description}
       actions={
-        <Link href={paths.myItems()} className={buttonClass({ variant: 'primary' })}>
-          {t('errors.page.not_found.open_my_items')}
-        </Link>
+        <>
+          <Link href={paths.myItems()} className={buttonClass({ variant: 'primary' })}>
+            {t('errors.page.not_found.open_my_items')}
+          </Link>
+          {signedIn && (
+            <Button variant="secondary" icon={Search} shortcut={SHORTCUTS['shell.palette'].keys} onClick={openSearch}>
+              {t('errors.page.not_found.search')}
+            </Button>
+          )}
+        </>
       }
     />
   );

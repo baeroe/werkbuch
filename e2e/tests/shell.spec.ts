@@ -70,6 +70,30 @@ test('reaches the other main places with their g sequences', async ({ page, allo
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(tr('en', 'items.my.title'));
 });
 
+test('opens the palette with / and from the search button, also on the phone', async ({ page }) => {
+  // outside an item list: there / filters by title (list.search)
+  await page.goto('/projects');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(tr('en', 'projects.title'));
+  const palette = page.getByRole('dialog', { name: tr('en', 'palette.title') });
+  const input = palette.getByRole('combobox', { name: tr('en', 'palette.input') });
+
+  await page.keyboard.press('/');
+  await expect(input).toBeFocused();
+  await expect(input).toHaveValue('');
+  await page.keyboard.press('Escape');
+  await expect(palette).toBeHidden();
+
+  // on the phone the bar's icon is the one way in; from md on the field at the head of the sidebar
+  const button = isPhone(page)
+    ? page.getByRole('banner').getByRole('button', { name: tr('en', 'shell.search_icon'), exact: true })
+    : page.getByRole('navigation', { name: tr('en', 'shell.sidebar.label') }).getByRole('button', { name: tr('en', 'shell.search'), exact: true });
+  await tabTo(page, button);
+  await page.keyboard.press('Enter');
+  await expect(input).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(palette).toBeHidden();
+});
+
 test('opens the navigation drawer on the phone', async ({ page }) => {
   test.skip(!isPhone(page), 'the drawer is the navigation below md');
 

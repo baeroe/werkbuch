@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider, useQuery, type QueryKey } from '@tans
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useEditReason, useItemWorkflow } from '@/components/fields/itemData';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import { agency, emptySearch, ida, labels, list, mara, organization, project, properties, relationTypes, resolutions, searchResults, standard, types } from '@/test/fixtures';
 import type { ProjectMember, User } from '@/types';
@@ -73,6 +74,50 @@ const web = project('WEB', 'admin', { id: 'p1' });
 const token = { id: 'tok_1', user_id: 'u_mara', name: 'CI', abilities: ['read'], expires_at: null, last_used_at: null, created_at: '2026-10-28T09:00:00.000Z' };
 const member: ProjectMember = { project_id: 'p1', user_id: 'u_ida', role: 'member' };
 const codes = { recovery_codes: ['a1b2c-d3e4f'] };
+
+describe('a project the cached list lacks', () => {
+  // created or joined after the list loaded, which counts as fresh for 10 s: the item of a hit in the palette must not
+  // wait for its project until something else loads the list again
+  const fresh = project('NEW', 'member', { id: 'p_new' });
+  let projects = [web];
+  const projectCalls = () => api!.calls.filter((call) => call.url.startsWith('/api/v1/projects')).length;
+
+  async function cachedList() {
+    projects = [web];
+    api = mockApi({ 'GET /api/v1/projects': () => ({ body: list(projects) }), 'GET /api/v1/workflows': () => ({ body: list([standard]) }) });
+    const { result } = renderHook(() => useProjects({ include_archived: true }), { wrapper });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+  }
+
+  const item = (projectId: string) => ({ key: 'NEW-1', project_id: projectId, archived_at: null });
+
+  it('loads the projects again when an item names a project the list lacks', async () => {
+    await cachedList();
+    projects = [web, fresh];
+
+    const { result } = renderHook(() => ({ workflow: useItemWorkflow(item('p_new')), reason: useEditReason(item('p_new')) }), { wrapper });
+
+    await waitFor(() => expect(result.current.workflow.project?.id).toBe('p_new'));
+    expect(result.current.workflow.workflow?.id).toBe(standard.id);
+    expect(result.current.reason).toBeNull();
+    expect(projectCalls()).toBe(2);
+  });
+
+  it('loads them again only once for a project that stays missing', async () => {
+    await cachedList();
+
+    const first = renderHook(() => useItemWorkflow(item('p_gone')), { wrapper });
+    await waitFor(() => expect(projectCalls()).toBe(2));
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    // a second item of the same project, and the first one rendered again
+    renderHook(() => useEditReason(item('p_gone')), { wrapper });
+    first.rerender();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(projectCalls()).toBe(2);
+    expect(first.result.current.project).toBeUndefined();
+  });
+});
 
 describe('reading', () => {
   it('useCurrentUser reads the signed-in account from the shared props, and nobody on a guest page', () => {

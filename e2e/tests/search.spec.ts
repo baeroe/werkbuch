@@ -13,6 +13,7 @@ import {
   runId,
   searchToken,
   signedInContext,
+  tabTo,
   tr,
   variant,
   waitForSearch,
@@ -74,9 +75,8 @@ test('Flow 1: finds the item over the palette and closes it with the resolution 
     const item = await createItem(page, { project_id: id, title });
     // "doppelt" tells this item from the one of the first test; "kontakt" is the partial word of Flow 1
     const query = `${searchToken()} doppelt kontakt`;
+    // the page loaded before the project: its list of projects lacks it, and the item page loads that list again
     await waitForSearch(page, query, (data) => data.items.some((hit) => hit.id === item.id));
-    // a page loaded before the project holds a list of projects without it (fresh for 10 s): the item page would wait
-    await page.goto('/my-items');
 
     const palette = await openPalette(page);
     await page.keyboard.type(query);
@@ -210,4 +210,19 @@ test('shows Ida no item of a private project she is not in', async ({ page, brow
     await ida.context.close();
     await removeE2eProject(page, identifier);
   }
+});
+
+test('searches from the 404 page', async ({ page, allowedErrors }) => {
+  allowedErrors.push(/status of 404 .*\/items\/ZZZ-1\)$/);
+  await page.goto('/items/ZZZ-1');
+  const main = page.locator('main');
+  await expect(main.getByRole('heading', { level: 1 })).toHaveText(tr('en', 'errors.page.not_found.title'));
+
+  await tabTo(page, main.getByRole('button', { name: tr('en', 'errors.page.not_found.search'), exact: true }));
+  await page.keyboard.press('Enter');
+
+  const palette = page.getByRole('dialog', { name: tr('en', 'palette.title') });
+  await expect(palette.getByRole('combobox', { name: tr('en', 'palette.input') })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(palette).toBeHidden();
 });

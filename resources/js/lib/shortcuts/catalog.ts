@@ -21,6 +21,8 @@ export interface CatalogEntry {
 export const SHORTCUTS = {
   'shell.help': { keys: '?', scope: 'global', label: 'shortcuts.shell.help', group: 'shortcuts.group.general' },
   'shell.palette': { keys: 'mod+k', scope: 'global', label: 'shortcuts.shell.palette', group: 'shortcuts.group.general' },
+  // the palette, ready to search; in an item list `list.search` (the title search) wins, and the help names only that
+  'shell.search': { keys: '/', scope: 'global', label: 'shortcuts.shell.search', group: 'shortcuts.group.general' },
   'shell.undo': { keys: 'mod+z', scope: 'global', label: 'shortcuts.shell.undo', group: 'shortcuts.group.general' },
   'shell.go.inbox': { keys: 'g i', scope: 'global', label: 'shortcuts.shell.go.inbox', group: 'shortcuts.group.navigation' },
   'shell.go.my_items': { keys: 'g m', scope: 'global', label: 'shortcuts.shell.go.my_items', group: 'shortcuts.group.navigation' },

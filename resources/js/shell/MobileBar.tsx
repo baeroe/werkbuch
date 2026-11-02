@@ -1,11 +1,12 @@
 import { Dialog as BaseDialog } from '@base-ui/react/dialog';
 import { Link, usePage } from '@inertiajs/react';
-import { Inbox, Menu, X } from 'lucide-react';
+import { Inbox, Menu, Search, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { IconButton } from '@/components/ui/IconButton';
 import { t } from '@/lib/i18n';
 import { paths } from '@/lib/links';
 import { useDialogScope } from '@/lib/shortcuts/useShortcut';
+import { openSearch } from './SearchButton';
 import { SidebarContent } from './Sidebar';
 
 /** Mounted while the drawer is open: it is modal, so the page's shortcuts pause (all but mod+k, escape, mod+enter). */
@@ -14,7 +15,7 @@ function DrawerScope() {
   return null;
 }
 
-/** Below md: menu (drawer with the sidebar), wordmark and the inbox. */
+/** Below md: menu (drawer with the sidebar), wordmark, the search (the one way into the palette on a phone) and the inbox. */
 export function MobileBar() {
   const [open, setOpen] = useState(false);
   const { url } = usePage();
@@ -44,6 +45,7 @@ export function MobileBar() {
         werkbuch
       </span>
       <div className="ml-auto flex items-center">
+        <IconButton icon={Search} label={t('shell.search_icon')} tooltip={false} onClick={openSearch} />
         {/* the unread count joins the label with Phase 8 */}
         <Link
           href={paths.inbox()}
