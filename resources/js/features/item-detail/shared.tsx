@@ -1,7 +1,7 @@
 /*
  * What the building blocks of the item detail share, in the preview (`ItemPeek`) and on the page (`ItemPage`):
  * - `DetailContext`: where the detail is shown and the actions the detail's shortcuts reach (the title registers `e`,
- *   the relations `r`).
+ *   the comment composer `m`, the relations `r`).
  * - `Section`: a titled part of the detail with actions on the right and a short note beside the heading.
  * - `LinkedItem`: another item in one line (status, key, title), a link that opens it where the detail is.
  * - `useUnsavedGuard`: while text is not saved yet, leaving or reloading the page asks first.
@@ -32,6 +32,7 @@ export type DetailSurface = 'peek' | 'page';
 /** What the shortcuts of the detail start; each part registers its own while it is mounted. */
 export interface DetailActions {
   editTitle?: () => void;
+  writeComment?: () => void;
   addRelation?: () => void;
 }
 

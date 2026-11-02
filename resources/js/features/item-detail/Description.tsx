@@ -19,10 +19,15 @@
  * on while the last save of a view that is gone was on its way is saved at once, not after the pause, so the guard
  * stays up until it answers.
  *
+ * Typed text the server does not hold yet is a draft of the visit (`lib/drafts.ts`, `description:<id>`, A251): leaving
+ * the page asks while it is there, and a save of a view that is gone that fails (5xx, no answer) keeps it there. The
+ * next time the item opens, the description shows it as unsaved ("Nicht gespeichert"), based on the version it was
+ * typed on, and saves it like any typing (A154/N2); one the server holds by then (the toast's retry went through) is
+ * forgotten.
+ *
  * Archived meanwhile, or the edit right gone while text is typed (A154): the editor gives way to the stored text, and
  * the unsaved text stays above it, read-only, with "Kopieren" and "Verwerfen"; it is not sent again (the server would
- * refuse it), and leaving the page asks while it stands. What it does not cover: a save of a view that is gone that
- * fails (5xx) lives on only in the retry of the error toast (deferred, see the rulings).
+ * refuse it), and leaving the page asks while it stands.
  */
 
 import { RotateCw } from 'lucide-react';
@@ -34,14 +39,15 @@ import { useEditReason } from '@/components/fields/itemData';
 import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
 import { toast } from '@/components/ui/toast';
-import { isEmptyDoc, RichTextEditor } from '@/editor/RichTextEditor';
+import { EMPTY_DOC, isEmptyDoc, RichTextEditor } from '@/editor/RichTextEditor';
 import { RichTextView } from '@/editor/RichTextView';
 import { useUpdateWorkItem } from '@/hooks/workItems';
+import { descriptionDraft, drafts } from '@/lib/drafts';
 import { t } from '@/lib/i18n';
 import { docToText } from '@/lib/richtext';
 import { useUiStore } from '@/store/ui';
 import type { RichText, WorkItem, WorkItemDetail } from '@/types';
-import { focusWhenLost, Section, useUnsavedGuard } from './shared';
+import { focusWhenLost, Section } from './shared';
 
 /** How long typing pauses before the description saves. */
 export const DESCRIPTION_PAUSE_MS = 1200;
@@ -68,6 +74,9 @@ function conflictOf(error: unknown): Conflict | null {
  * server said. Set when a save meets a conflict, also one that ran as the view closed; gone once it is resolved.
  */
 const openConflicts = new Map<string, { mine: RichText | null; message: string }>();
+
+/** The version each unsaved draft (`drafts`, `description:<id>`) was typed on, by item id. */
+const draftBases = new Map<string, number>();
 
 /** Saves of a description on their way, also of views that are gone already. */
 let pendingSaves = 0;
@@ -111,29 +120,35 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
   const update = useUpdateWorkItem();
   const stored = item.description_json;
 
+  const draftKey = descriptionDraft(item.id);
+
   // a conflict left open comes back with this window's version, unless the server holds that text by now
   const [reopened] = useState(() => {
     const open = openConflicts.get(item.id);
     return open && !same(open.mine, stored) ? open : null;
   });
-  const [draft, setDraft] = useState<RichText | null>(reopened ? reopened.mine : stored);
+  // so does text an earlier view could not save (a failed save as it closed), unless the server holds it by now
+  const [kept] = useState(() => {
+    const text = drafts.get(draftKey);
+    return reopened || text === null || same(text, stored) ? null : text;
+  });
+  const [draft, setDraft] = useState<RichText | null>(reopened ? reopened.mine : (kept ?? stored));
   // against the stored item as it is now: "Neu laden" takes it, "Meine Fassung übernehmen" saves over its version
   const [conflict, setConflict] = useState<Conflict | null>(reopened && { message: reopened.message, current: item });
-  const [state, setState] = useState<SaveState>('idle');
+  const [state, setState] = useState<SaveState>(kept ? 'failed' : 'idle');
   /** A refusal of the text itself (422 at `description_json`, e.g. too long), shown under the editor. */
   const [error, setError] = useState<string | null>(null);
   const errorId = useId();
-  /** Typed text the server does not have yet: leaving or reloading the page asks first. */
-  const [unsaved, setUnsaved] = useState(reopened !== null);
-  useUnsavedGuard(unsaved || conflict !== null);
+  /** Typed text the server does not have yet (also kept in `drafts`: leaving or reloading the page asks first). */
+  const [unsaved, setUnsaved] = useState(reopened !== null || kept !== null);
   /** The draft as typed, for saves that run outside a render. */
   const latest = useRef(draft);
   /** The version the draft is based on. */
-  const base = useRef(item.description_version);
+  const base = useRef(kept ? (draftBases.get(item.id) ?? item.description_version) : item.description_version);
   /** What the server holds of this window's text (or what was taken over from it). */
   const held = useRef<RichText | null>(stored);
   /** Typed text the server does not have yet. Cleared only by a save that went through (or "Neu laden"). */
-  const dirty = useRef(reopened !== null);
+  const dirty = useRef(reopened !== null || kept !== null);
   const inFlight = useRef(false);
   const inConflict = useRef(reopened !== null);
   /** The answer of the last save this window made itself; any other answer of the mutation is a retry from its toast. */
@@ -152,10 +167,28 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
   });
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
+  /** Typed text the server does not have yet: kept as the item's draft with the version it is typed on. */
+  function keepDraft(doc: RichText | null) {
+    dirty.current = true;
+    draftBases.set(item.id, base.current);
+    // an emptied description is unsaved text as well
+    drafts.set(draftKey, doc ?? EMPTY_DOC);
+  }
+
+  /** Nothing typed is left unsaved (a save went through, "Neu laden", "Verwerfen"). */
+  function dropDraft() {
+    dirty.current = false;
+    draftBases.delete(item.id);
+    drafts.set(draftKey, null);
+    setUnsaved(false);
+  }
+
   // a conflict left open whose text the server took in the meantime: nothing left to offer
   useEffect(() => {
     if (!reopened) dropConflict(item.id);
-  }, [reopened, item.id]);
+    // a draft the server holds by now (or none): nothing to keep
+    if (!reopened && !kept) drafts.set(draftKey, null);
+  }, [reopened, kept, item.id, draftKey]);
 
   // a newer description from outside shows while nothing is typed here. While text is typed, nothing the cache shows
   // counts: a failed save rolls the item back, and the toast's retry shows its text before the server has it
@@ -175,8 +208,7 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
     const doc = latest.current;
     if (!force && (!dirty.current || same(doc, held.current))) {
       // nothing typed, or typed back to what the server holds
-      dirty.current = false;
-      setUnsaved(false);
+      dropDraft();
       return;
     }
     inFlight.current = true;
@@ -191,11 +223,9 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
       held.current = doc;
       dropConflict(item.id);
       setState('saved');
-      // typed on while it saved: that is still to save
-      if (same(latest.current, doc)) {
-        dirty.current = false;
-        setUnsaved(false);
-      }
+      // typed on while it saved: that is still to save (and based on the new version)
+      if (same(latest.current, doc)) dropDraft();
+      else draftBases.set(item.id, base.current);
     } catch (error) {
       ownError.current = error as Error;
       // anything else than a conflict: the item mutation names the cause (with "Erneut versuchen" where it helps); the
@@ -236,12 +266,12 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
     base.current = answer.description_version;
     held.current = sent;
     if (same(latest.current, sent)) {
-      dirty.current = false;
-      setUnsaved(false);
+      dropDraft();
       setState('saved');
       // "Meine Fassung übernehmen" that failed and went through on retry: no conflict left to ask about on unload
       dropConflict(item.id);
     } else {
+      draftBases.set(item.id, base.current);
       clearTimeout(timer.current);
       timer.current = setTimeout(() => void save.current(), DESCRIPTION_PAUSE_MS);
     }
@@ -276,14 +306,13 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
   function reload({ current }: Conflict) {
     dropConflict(item.id);
     inConflict.current = false;
-    dirty.current = false;
+    dropDraft();
     base.current = current.description_version;
     held.current = current.description_json;
     latest.current = current.description_json;
     setDraft(current.description_json);
     setConflict(null);
     setState('idle');
-    setUnsaved(false);
     focusEditor();
   }
 
@@ -291,18 +320,18 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
   function discardParked() {
     dropConflict(item.id);
     inConflict.current = false;
-    dirty.current = false;
+    dropDraft();
     latest.current = stored;
     held.current = stored;
     setDraft(stored);
     setConflict(null);
     setState('idle');
-    setUnsaved(false);
   }
 
   function keepMine({ current }: Conflict) {
     // save over the newer version: based on it now; the history keeps the other one
     base.current = current.description_version;
+    draftBases.set(item.id, base.current);
     inConflict.current = false;
     setConflict(null);
     focusEditor();
@@ -364,7 +393,7 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
               // below the banner: what is kept for the conflict is the text as it reads now
               const open = inConflict.current ? openConflicts.get(item.id) : undefined;
               if (open) open.mine = doc;
-              dirty.current = true;
+              keepDraft(doc);
               setUnsaved(true);
               setDraft(doc);
               setError(null);

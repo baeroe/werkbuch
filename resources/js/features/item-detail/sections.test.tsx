@@ -12,6 +12,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { currentToasts, dismissToast, resetToasts, runToastAction } from '@/components/ui/toast';
 import { preloadEditor } from '@/editor/RichTextEditor';
 import { plainText } from '@/lib/richtext';
+import { descriptionDraft, drafts } from '@/lib/drafts';
 import { useUiStore } from '@/store/ui';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import { ida, labels, lene, list, makeWorkItem, mara, organization, project, properties, relationTypes, resolutions, searchResults, standard, types, web30, web47, web48 } from '@/test/fixtures';
@@ -537,6 +538,61 @@ describe('Description', () => {
       expect(after.defaultPrevented).toBe(false);
     });
     expect(currentToasts()).toEqual([]);
+  });
+
+  it('brings back text a closed view could not save after a 500', async () => {
+    let down = true;
+    const routes: Record<string, MockRoute> = {
+      'PATCH /api/v1/work-items/wi_web_47': (body) => {
+        if (down) return problem(503, 'service_unavailable');
+        const { description_json } = body as { description_json: RichText };
+        const next = { ...items.find((entry) => entry.id === web47.id)!, description_json, description_version: 4 };
+        items = items.map((entry) => (entry.id === web47.id ? next : entry));
+        return { body: { data: next } };
+      },
+    };
+    const first = renderWith(<ItemPeek itemId="wi_web_47" />, { routes });
+    const { editor } = await descriptionEditor();
+    paste(editor, 'Kurz vor dem Schließen. ');
+    // the preview closes: the save runs and fails
+    first.unmount();
+    await waitFor(() => expect(descriptionSaves()).toHaveLength(1));
+    await waitFor(() => expect(lastToast()).toMatchObject({ title: 'Änderung nicht gespeichert', tone: 'error' }));
+    // the text is not lost: leaving the page still asks
+    const leaving = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(leaving);
+    expect(leaving.defaultPrevented).toBe(true);
+
+    // the item opens again: the text that could not be saved is the draft, said to be unsaved
+    const calls = api!.calls;
+    api?.restore();
+    down = false;
+    renderWith(<ItemPeek itemId="wi_web_47" />, { routes });
+    api!.calls.unshift(...calls);
+    const again = await descriptionEditor();
+    expect(again.editor.textContent).toBe('Kurz vor dem Schließen. Beim Absenden kommt die Mail zweimal an.');
+    expect(within(again.section).getByRole('status').textContent).toBe('Nicht gespeichert');
+
+    // ⌘↵ saves it, based on the version it was typed on
+    press('Enter', { ctrlKey: true }, again.editor);
+    await waitFor(() => expect(within(again.section).getByRole('status').textContent).toBe('Gespeichert'));
+    expect(descriptionSaves()).toEqual([
+      ['Kurz vor dem Schließen. Beim Absenden kommt die Mail zweimal an.', 3],
+      ['Kurz vor dem Schließen. Beim Absenden kommt die Mail zweimal an.', 3],
+    ]);
+    const after = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(after);
+    expect(after.defaultPrevented).toBe(false);
+  });
+
+  it('forgets text of a closed view the server holds by now', async () => {
+    // a failed save of a closed view whose retry went through meanwhile: nothing left to offer
+    drafts.set(descriptionDraft(web47.id), web47.description_json);
+    renderWith(<ItemPeek itemId="wi_web_47" />);
+    const { section, editor } = await descriptionEditor();
+    expect(editor.textContent).toBe('Beim Absenden kommt die Mail zweimal an.');
+    expect(within(section).getByRole('status').textContent).toBe('');
+    await waitFor(() => expect(drafts.pending()).toEqual([]));
   });
 
   it('announces a conflict met by the save that runs as the view goes away, and opens the item with the banner', async () => {

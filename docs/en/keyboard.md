@@ -48,6 +48,7 @@ werkbuch works without a mouse. Press <kbd>?</kbd> on any screen to see the shor
 | <kbd>D</kbd> | Set due date … |
 | <kbd>⇧</kbd>+<kbd>D</kbd> | Set start date … |
 | <kbd>⇧</kbd>+<kbd>P</kbd> | Set parent … |
+| <kbd>M</kbd> | Write a comment |
 | <kbd>R</kbd> | Add a relation |
 | <kbd>E</kbd> | Edit the title |
 | <kbd>⌘ / Ctrl</kbd>+<kbd>⌫</kbd> | Archive or delete (with undo) |

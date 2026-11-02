@@ -48,6 +48,7 @@ werkbuch geht ohne Maus. Mit <kbd>?</kbd> zeigt jeder Bildschirm die Kürzel, di
 | <kbd>D</kbd> | Due-Date setzen … |
 | <kbd>⇧</kbd>+<kbd>D</kbd> | Start-Date setzen … |
 | <kbd>⇧</kbd>+<kbd>P</kbd> | Eltern-Item setzen … |
+| <kbd>M</kbd> | Kommentar schreiben |
 | <kbd>R</kbd> | Relation hinzufügen |
 | <kbd>E</kbd> | Titel bearbeiten |
 | <kbd>⌘ / Strg</kbd>+<kbd>⌫</kbd> | Archivieren bzw. löschen (mit Rückgängig) |
