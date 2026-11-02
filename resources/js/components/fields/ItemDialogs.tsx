@@ -11,7 +11,7 @@
  */
 
 import { lazy, Suspense, useSyncExternalStore, type RefObject } from 'react';
-import { useUiStore } from '@/store/ui';
+import { focusBackTo, focusOriginNow } from '@/lib/focusOrigin';
 import type { ListedItem, State, StateCategory, WorkItemType } from '@/types';
 
 const ResolutionPrompt = lazy(() => import('./ResolutionPrompt').then((module) => ({ default: module.ResolutionPrompt })));
@@ -32,27 +32,17 @@ type TypeRequest = { kind: 'type'; item: ListedItem; target: WorkItemType; hasCh
 /** The question asked last, and whether it is shown (it stays while it fades out). */
 let state: { request: ResolutionRequest | TypeRequest | null; open: boolean } = { request: null, open: false };
 
-/** What had the focus when the palette opened; a command chosen there asks after the palette took the focus. */
-let beforePalette: Element | null = null;
-useUiStore.subscribe((ui, previous) => {
-  if (ui.paletteOpen && !previous.paletteOpen) beforePalette = document.activeElement;
-});
-
-/** Where the focus goes back to when the question closes (see the top of the file). */
+/** Where the focus goes back to when the question closes (see the top of the file, `lib/focusOrigin.ts`). */
 let origin: Element | null = null;
 
 const remember = () => {
-  origin = useUiStore.getState().paletteOpen ? beforePalette : document.activeElement;
+  origin = focusOriginNow();
 };
 
-/**
- * Read when the question closes: the origin while it is still on the page and not the page itself, else the screen's
- * focus origin, else the main area.
- */
+/** Read when the question closes. */
 const returnFocus: RefObject<HTMLElement | null> = {
   get current() {
-    const back = origin instanceof HTMLElement && origin.isConnected && origin !== document.body ? origin : null;
-    return back ?? document.querySelector<HTMLElement>('[data-focus-origin]') ?? document.getElementById('main');
+    return focusBackTo(origin);
   },
 };
 const listeners = new Set<() => void>();

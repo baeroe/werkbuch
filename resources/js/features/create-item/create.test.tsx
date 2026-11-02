@@ -770,6 +770,34 @@ describe('CreateHost', () => {
     act(() => useUiStore.getState().closeCreate());
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
+
+  it('gives the focus back to what had it before the palette that asked for the dialog', async () => {
+    const user = userEvent.setup();
+    renderWith(
+      <>
+        <button type="button">Liste</button>
+        <CreateHost />
+      </>,
+    );
+    const trigger = screen.getByRole('button', { name: 'Liste' });
+    act(() => trigger.focus());
+    // the palette takes the focus; "Neues Item" there opens the dialog, then the palette goes
+    act(() => useUiStore.getState().openPalette());
+    const field = document.createElement('input');
+    document.body.append(field);
+    act(() => field.focus());
+    act(() => {
+      useUiStore.getState().openCreate();
+      useUiStore.getState().setPaletteOpen(false);
+    });
+    field.remove();
+
+    const dialog = await screen.findByRole('dialog', { name: 'Neues Item' });
+    await waitFor(() => expect(document.activeElement).toBe(within(dialog).getByRole('textbox', { name: /^Titel/ })));
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(document.activeElement).toBe(trigger);
+  });
 });
 
 describe('MyItemsEmpty', () => {

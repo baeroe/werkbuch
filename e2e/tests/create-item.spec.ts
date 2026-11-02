@@ -235,3 +235,23 @@ test('opens the dialog from "New item" of my items', async ({ page }) => {
   await expect(dialog).toBeHidden();
   await expect(button).toBeFocused();
 });
+
+test('gives the focus back to what had it before the palette that opened the dialog', async ({ page }) => {
+  await page.goto('/my-items');
+  const button = page.locator('[data-items-toolbar]').getByRole('button', { name: new RegExp(`^${tr('en', 'commands.create.label')}`) });
+  await expect(button).not.toHaveAttribute('aria-disabled', 'true');
+  await tabTo(page, button, { max: 80 });
+
+  await pressMod(page, 'k');
+  const palette = page.getByRole('dialog', { name: tr('en', 'palette.title') });
+  await expect(palette.getByRole('combobox', { name: tr('en', 'palette.input') })).toBeFocused();
+  await page.keyboard.type(tr('en', 'commands.create.label'));
+  await expect(palette.getByRole('option', { name: new RegExp(`^${tr('en', 'commands.create.label')}`) })).toBeVisible();
+  await page.keyboard.press('Enter');
+
+  const dialog = page.getByRole('dialog', { name: tr('en', 'items.create.title') });
+  await expect(dialog.getByRole('textbox', { name: new RegExp(`^${tr('en', 'items.create.title_label')}`) })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await expect(button).toBeFocused();
+});
