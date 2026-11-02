@@ -79,14 +79,15 @@ export interface LayoutProps {
   onCursor(id: string | null): void;
 }
 
-/** The board comes as a chunk of its own, with its first use (the screen shows the layout in a `Suspense`). */
+/** The board and the table come as chunks of their own, with their first use (the screen shows them in a `Suspense`). */
 const BoardLayout = lazy(() => import('./board/BoardLayout').then((module) => ({ default: module.BoardLayout })));
+const TableLayout = lazy(() => import('./table/TableLayout').then((module) => ({ default: module.TableLayout })));
 
-/** The layout of each `Display['layout']`; table and timeline get their own with their tasks. */
+/** The layout of each `Display['layout']`; the timeline gets its own with its task. */
 export const layouts: Record<Display['layout'], ComponentType<LayoutProps>> = {
   list: ListLayout,
   board: BoardLayout,
-  table: ListLayout,
+  table: TableLayout,
   timeline: ListLayout,
 };
 

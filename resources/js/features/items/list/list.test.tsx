@@ -219,9 +219,11 @@ describe('rows of the list', () => {
   });
 
   it('offers the list for every layout until the others come, with the names and keys of the switcher', () => {
-    // the board is a chunk of its own (board.test.tsx)
+    // the board and the table are chunks of their own (board.test.tsx, table.test.tsx)
     expect(layouts.board).not.toBe(ListLayout);
-    expect([layouts.list, layouts.table, layouts.timeline]).toEqual([ListLayout, ListLayout, ListLayout]);
+    expect(layouts.table).not.toBe(ListLayout);
+    expect(layouts.table).not.toBe(layouts.board);
+    expect([layouts.list, layouts.timeline]).toEqual([ListLayout, ListLayout]);
     expect(LAYOUT_OPTIONS.map((option) => [option.value, SHORTCUTS[option.shortcut].keys])).toEqual([
       ['list', '1'],
       ['board', '2'],

@@ -6,7 +6,7 @@
  *
  * A layout mounts `useSelection` once (list, table, board) with the item ids in the order it shows them. The cursor and
  * the selection themselves belong to the items screen (`LayoutProps`), so the item commands of the list act on them,
- * whatever the layout. The table passes `arrows: false`: ↑/↓ belong to its grid of cells (K19).
+ * whatever the layout. The table passes `arrows: false`: ↑/↓ belong to its grid of cells (K19), which moves with `move`.
  *
  * When the keys act: j/k, x and the like whenever the list's shortcuts run (not while typing, not under a dialog).
  * The arrows only while the focus is in the layout or nowhere in particular, so they keep working in menus and
@@ -74,8 +74,11 @@ export interface SelectionOptions {
   step?: (current: string | null, step: 1 | -1) => string | null;
 }
 
-/** Registers the cursor and selection keys of a layout; answers what a click with or without ⇧ does. */
-export function useSelection(options: SelectionOptions): { clickSelect: (id: string, range: boolean) => void } {
+/**
+ * Registers the cursor and selection keys of a layout; answers what a click with or without ⇧ does (`clickSelect`), and
+ * moves the cursor as j/k and ⇧J/⇧K do (`move`), for a layout whose own keys step through the items (the table's ↑/↓).
+ */
+export function useSelection(options: SelectionOptions): { clickSelect: (id: string, range: boolean) => void; move: (step: 1 | -1, extend: boolean) => void } {
   const { order, cursorId, selection, arrows = true } = options;
   const latest = useRef(options);
   useLayoutEffect(() => {
@@ -197,5 +200,5 @@ export function useSelection(options: SelectionOptions): { clickSelect: (id: str
     if (selection.length === 0) anchor.current = null;
   }, [selection.length]);
 
-  return { clickSelect };
+  return { clickSelect, move };
 }

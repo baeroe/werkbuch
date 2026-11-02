@@ -98,11 +98,11 @@ beforeAll(() => {
     },
   });
   Object.defineProperty(window, 'scrollY', { configurable: true, get: () => scrollY });
-  // a column of the board is a box of its own, 600 px high
+  // a column of the board and the table are boxes of their own, 600 px high
   Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
     configurable: true,
     get(this: HTMLElement) {
-      return this.hasAttribute('data-board-list') ? 600 : 0;
+      return this.hasAttribute('data-board-list') || this.hasAttribute('data-table-scroller') ? 600 : 0;
     },
   });
   Element.prototype.getBoundingClientRect = function (this: Element) {
@@ -403,6 +403,8 @@ describe('the item list screen', () => {
 
     press('3');
     expect(inertia.url).toBe('/projects/WEB?layout=table');
+    // the table is a chunk of its own too: the focus waits for it (not the toolbar) and goes to the cell of the cursor
+    await waitFor(() => expect(document.activeElement?.getAttribute('data-cell')).toBe('wi_web_1:0'));
     press('4');
     expect(inertia.url).toBe('/projects/WEB?layout=timeline');
     // back to the base: nothing left in the address
