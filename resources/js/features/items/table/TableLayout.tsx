@@ -19,7 +19,7 @@
 
 import { defaultRangeExtractor, useVirtualizer, type Range } from '@tanstack/react-virtual';
 import { ArrowDownWideNarrow, ArrowUpNarrowWide } from 'lucide-react';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FocusEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FocusEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import { archivedReason } from '@/components/fields/itemData';
 import { TypeGlyph } from '@/components/fields/TypeGlyph';
 import { ItemKey } from '@/components/items/ItemKey';
@@ -70,6 +70,19 @@ const tint = '[background-image:linear-gradient(var(--accent-soft),var(--accent-
 const pressed = '[background-image:linear-gradient(var(--pressed),var(--pressed))]';
 const hoverWash = 'group-hover:[background-image:linear-gradient(var(--hover),var(--hover))]';
 
+type ItemRow = Extract<ListRow, { kind: 'item' }>;
+/** What places a rendered row: the virtualizer measures it, the grid counts it. */
+type RowPlace = { ref: (element: Element | null) => void; 'data-index': number; role: string; 'aria-rowindex': number };
+
+/** The height of the rows that are not rendered, in the flow of the table. */
+function Spacer({ span, height }: { span: number; height: number }) {
+  return (
+    <tr aria-hidden="true" data-spacer="">
+      <td colSpan={span} style={{ height }} className="p-0" />
+    </tr>
+  );
+}
+
 /** A row that is not an item: the sticky content of a cell over the whole width. */
 function WideCell({ span, children }: { span: number; children: ReactNode }) {
   return (
@@ -86,7 +99,8 @@ export function TableLayout({ groups, groupBy, display, selection, onSelect, onS
   const columns = useMemo(() => tableColumns(display.fields, properties ?? []), [display.fields, properties]);
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
   const [column, setColumn] = useState(0);
-  const [editing, setEditing] = useState<{ id: string; field: string } | null>(null);
+  /** The open editor: the row (`rowKey`, an item has a row in each of its label groups) and the field. */
+  const [editing, setEditing] = useState<{ row: string; field: string } | null>(null);
   const peekItemId = useUiStore((state) => state.peekItemId);
   const flashIds = useUiStore((state) => state.flashIds);
   const scroller = useRef<HTMLDivElement>(null);
@@ -95,8 +109,11 @@ export function TableLayout({ groups, groupBy, display, selection, onSelect, onS
   const activeColumn = Math.min(column, columns.length);
 
   const rows = useMemo(() => listRows(groups, grouped, collapsed), [groups, grouped, collapsed]);
-  // an item with two labels has two rows; the cursor takes the first
-  const order = useMemo(() => [...new Set(rows.flatMap((row) => (row.kind === 'item' ? [row.item.id] : [])))], [rows]);
+  // an item with two labels has two rows: the cells are addressed by the row (`rowKey`), the cursor by the item
+  const itemRows = useMemo(() => rows.filter((row): row is ItemRow => row.kind === 'item'), [rows]);
+  const rowKeys = useMemo(() => itemRows.map(rowKey), [itemRows]);
+  const rowsByKey = useMemo(() => new Map(itemRows.map((row) => [rowKey(row), row])), [itemRows]);
+  const order = useMemo(() => [...new Set(itemRows.map((row) => row.item.id))], [itemRows]);
   const all = useMemo(() => [...new Set(groups.flatMap((group) => group.items.map((item) => item.id)))], [groups]);
 
   // the box fills the window below the bars of the screen
@@ -111,8 +128,16 @@ export function TableLayout({ groups, groupBy, display, selection, onSelect, onS
     return () => window.removeEventListener('resize', measure);
   }, [measure]);
 
+  // the row of the cursor: the one the focus was in last, else the first row of the cursor item
+  const [cursorRow, setCursorRow] = useState<string | null>(null);
+  const firstRowKey = (id: string | null) => {
+    const first = itemRows.find((row) => row.item.id === id);
+    return first ? rowKey(first) : null;
+  };
+  const cursorKey = cursorRow !== null && rowsByKey.get(cursorRow)?.item.id === cursorId ? cursorRow : firstRowKey(cursorId);
+
   // the cursor row stays rendered while it scrolls away, so it keeps the focus (13c)
-  const cursorIndex = useMemo(() => rows.findIndex((row) => row.kind === 'item' && row.item.id === cursorId), [rows, cursorId]);
+  const cursorIndex = useMemo(() => rows.findIndex((row) => row.kind === 'item' && rowKey(row) === cursorKey), [rows, cursorKey]);
   const rangeExtractor = useCallback(
     (range: Range) => {
       const indexes = defaultRangeExtractor(range);
@@ -136,7 +161,9 @@ export function TableLayout({ groups, groupBy, display, selection, onSelect, onS
   // across the md line the rows change their height: measure them again
   useEffect(() => virtualizer.measure(), [wide, virtualizer]);
   const virtualRows = virtualizer.getVirtualItems();
-  const padTop = virtualRows[0]?.start ?? 0;
+  // the rows stand in the flow of the table: what is not rendered keeps its height in spacer rows, before the first
+  // rendered row, between two that do not follow each other (the cursor row kept while it scrolled away) and after the
+  // last, so the box keeps its height and its scroll position
   const padBottom = virtualizer.getTotalSize() - (virtualRows.at(-1)?.end ?? 0);
 
   /** Brings a row into view and gives an element of it the focus once it is rendered. */
@@ -161,9 +188,9 @@ export function TableLayout({ groups, groupBy, display, selection, onSelect, onS
     [virtualizer],
   );
   const focusCell = useCallback(
-    (id: string, col: number) => {
-      const index = rows.findIndex((row) => row.kind === 'item' && row.item.id === id);
-      if (index >= 0) focusAt(index, `[data-cell="${CSS.escape(`${id}:${col}`)}"]`);
+    (key: string, col: number) => {
+      const index = rows.findIndex((row) => row.kind === 'item' && rowKey(row) === key);
+      if (index >= 0) focusAt(index, `[data-cell="${CSS.escape(`${key}:${col}`)}"]`);
     },
     [rows, focusAt],
   );
@@ -174,6 +201,8 @@ export function TableLayout({ groups, groupBy, display, selection, onSelect, onS
     columnRef.current = activeColumn;
   });
 
+  /** The row j/k and ↑/↓ went to: `focus` takes it, so an item in two groups is left from the row it is in. */
+  const stepped = useRef<string | null>(null);
   const { clickSelect, move } = useSelection({
     order,
     all,
@@ -187,23 +216,38 @@ export function TableLayout({ groups, groupBy, display, selection, onSelect, onS
     onSelect,
     onOpen,
     onPeek,
-    focus: (id) => focusCell(id, columnRef.current),
+    focus: (id) => {
+      const key = stepped.current !== null && rowsByKey.get(stepped.current)?.item.id === id ? stepped.current : firstRowKey(id)!;
+      stepped.current = null;
+      setCursorRow(key);
+      focusCell(key, columnRef.current);
+    },
+    // row by row from the row of the cursor (an item with two labels is in two rows)
+    step: (_current, step) => {
+      if (rowKeys.length === 0) return null;
+      const index = cursorKey === null ? -1 : rowKeys.indexOf(cursorKey);
+      const next = index < 0 ? (step === 1 ? rowKeys[0]! : rowKeys.at(-1)!) : rowKeys[Math.min(rowKeys.length - 1, Math.max(0, index + step))]!;
+      stepped.current = next;
+      return rowsByKey.get(next)!.item.id;
+    },
     container: scroller,
     arrows: false,
   });
 
   /** The cursor goes to a cell. */
-  function go(id: string, col: number) {
+  function go(key: string, col: number) {
+    const { item } = rowsByKey.get(key)!;
     setColumn(col);
-    if (id !== cursorId) onCursor(id);
-    focusCell(id, col);
+    setCursorRow(key);
+    if (item.id !== cursorId) onCursor(item.id);
+    focusCell(key, col);
   }
 
   function refuse(description: string) {
     toast({ title: t('items.table.read_only.title'), description, tone: 'error' });
   }
 
-  function startEditing(item: ListedItem, target: Column) {
+  function startEditing(item: ListedItem, target: Column, key: string) {
     const readOnly = READ_ONLY_REASONS[target.field];
     if (readOnly) return refuse(t(readOnly));
     if (target.property && !typeHasProperty(types, item, target.property)) {
@@ -212,24 +256,22 @@ export function TableLayout({ groups, groupBy, display, selection, onSelect, onS
     }
     const denied = item.archived_at !== null ? archivedReason(item.key) : reason('item.edit', item.project_id);
     if (denied) return refuse(denied);
-    setEditing({ id: item.id, field: target.field });
+    setEditing({ row: key, field: target.field });
   }
 
-  const itemById = useMemo(() => new Map(rows.flatMap((row) => (row.kind === 'item' ? [[row.item.id, row.item] as const] : []))), [rows]);
   const gridKeys = useGridKeys({
-    order,
+    rows: rowKeys,
     lastColumn: columns.length,
     go,
     move,
-    enter: (id, col) => {
-      const item = itemById.get(id)!;
-      if (col === 0) onOpen(id);
-      else startEditing(item, columns[col - 1]!);
+    enter: (key, col) => {
+      const { item } = rowsByKey.get(key)!;
+      if (col === 0) onOpen(item.id);
+      else startEditing(item, columns[col - 1]!, key);
     },
-    leftEdge: (id) => {
-      const row = rows.find((entry) => entry.kind === 'item' && entry.item.id === id);
-      if (!grouped || !row) return false;
-      focusHeading(row.group.key);
+    leftEdge: (key) => {
+      if (!grouped) return false;
+      focusHeading(rowsByKey.get(key)!.group.key);
       return true;
     },
   });
@@ -264,8 +306,7 @@ export function TableLayout({ groups, groupBy, display, selection, onSelect, onS
     const row = rows[virtual.index];
     return row?.kind === 'item' ? [row] : [];
   });
-  const wanted = cursorId !== null && order.includes(cursorId) ? cursorId : order[0];
-  const stop = renderedItems.find((row) => row.item.id === wanted) ?? renderedItems[0];
+  const stop = renderedItems.find((row) => rowKey(row) === cursorKey) ?? renderedItems[0];
   const stopKey = stop ? rowKey(stop) : null;
   const headingStop = stop ? null : virtualRows.map((virtual) => rows[virtual.index]).find((row) => row?.kind === 'group')?.group.key;
   /** ⇧ at the click of a checkbox, read before the checkbox reports its change. */
@@ -297,7 +338,7 @@ export function TableLayout({ groups, groupBy, display, selection, onSelect, onS
     else if (event.key === 'ArrowRight') {
       const first = rows[index + 1];
       if (!open) toggleGroup(key, true);
-      else if (first?.kind === 'item') go(first.item.id, 0);
+      else if (first?.kind === 'item') go(rowKey(first), 0);
     } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       const headings = rows.flatMap((entry) => (entry.kind === 'group' ? [entry.group.key] : []));
       const target = headings[headings.indexOf(key) + (event.key === 'ArrowDown' ? 1 : -1)];
@@ -341,6 +382,101 @@ export function TableLayout({ groups, groupBy, display, selection, onSelect, onS
           <Skeleton className="h-3 w-48" />
         </SkeletonGroup>
       </WideCell>
+    );
+  }
+
+  function renderItem(row: ItemRow, place: RowPlace) {
+    const { item } = row;
+    const key = rowKey(row);
+    const selected = selection.includes(item.id);
+    const type = types?.find((entry) => entry.id === item.type_id);
+    const look = selected ? wash : flashIds.includes(item.id) ? tint : peekItemId === item.id ? pressed : hoverWash;
+    const isStop = key === stopKey;
+    const cellFocus = (col: number) => ({
+      'data-cell': `${key}:${col}`,
+      'data-item-id': item.id,
+      'data-column': col,
+      'data-nav-target': '',
+      tabIndex: isStop && col === activeColumn ? 0 : -1,
+      onPointerDown: () => {
+        pointer.current = true;
+        setTimeout(() => {
+          pointer.current = false;
+        }, 0);
+      },
+      onFocus: (event: FocusEvent<HTMLTableCellElement>) => {
+        // only what happens in the cell itself: an editor's popup or a question (the resolution) is portalled
+        if (!event.currentTarget.contains(event.target)) return;
+        // the picker gave the focus back to its trigger: the cell takes it, so the arrows go on from here
+        if (event.target !== event.currentTarget && !pointer.current && editing === null) event.currentTarget.focus();
+        if (cursorId !== item.id) onCursor(item.id);
+        setCursorRow(key);
+        if (activeColumn !== col) setColumn(col);
+      },
+    });
+
+    return (
+      <tr {...place} aria-selected={selected} className="group">
+        <td
+          role="gridcell"
+          {...cellFocus(0)}
+          onClickCapture={(event: MouseEvent<HTMLTableCellElement>) => {
+            // ⇧ and a click on the title selects the range instead of opening a window
+            if (!event.shiftKey || !(event.target instanceof Element) || !event.target.closest('[data-item-link]')) return;
+            event.preventDefault();
+            event.stopPropagation();
+            clickSelect(item.id, true);
+          }}
+          className={cx('sticky left-0 z-10 h-11 border-r border-b border-line bg-surface px-2 [--focus-offset:-2px] sm:h-10', look)}
+        >
+          <div className="flex min-w-0 items-center gap-2" style={{ paddingLeft: row.depth > 0 ? `${row.depth * 1.25}rem` : undefined }}>
+            <span className="relative z-10 inline-flex shrink-0">
+              <Checkbox
+                aria-label={t('items.list.select', { key: item.key })}
+                checked={selected}
+                tabIndex={-1}
+                onClickCapture={(event: MouseEvent) => {
+                  shiftClick.current = event.shiftKey;
+                }}
+                onCheckedChange={() => {
+                  clickSelect(item.id, shiftClick.current);
+                  shiftClick.current = false;
+                }}
+              />
+            </span>
+            {type && <TypeGlyph type={type} />}
+            <ItemLink item={item} onOpen={onPeek} tabIndex={-1} className="flex min-w-0 flex-1 items-center gap-2 text-ink">
+              {showKey ? <ItemKey value={item.key} className="shrink-0 text-sm text-muted" /> : <span className="sr-only">{item.key} </span>}
+              <span className={cx('min-w-0 truncate', type?.is_epic && 'font-medium', item.archived_at && 'text-muted')}>{item.title}</span>
+            </ItemLink>
+          </div>
+        </td>
+        {columns.map((entry, index) => {
+          const col = index + 1;
+          const cellEditing = editing !== null && editing.row === key && editing.field === entry.field;
+          return (
+            <td
+              key={entry.field}
+              role="gridcell"
+              {...cellFocus(col)}
+              className={cx('h-11 border-b border-line px-2 [--focus-offset:-2px] sm:h-10', entry.numeric && 'text-right', look === pressed ? hoverWash : look)}
+            >
+              {/* the pickers in the cells are 44 px tall on phones (touch targets, 13c) */}
+              <div className={cx('flex min-w-0 items-center max-sm:[&_button]:min-h-11', entry.numeric && 'justify-end')}>
+                <Cell
+                  item={item}
+                  column={entry}
+                  editing={cellEditing}
+                  onEditingChange={(open) => {
+                    if (open) startEditing(item, entry, key);
+                    else if (cellEditing) setEditing(null);
+                  }}
+                />
+              </div>
+            </td>
+          );
+        })}
+      </tr>
     );
   }
 
@@ -410,118 +546,28 @@ export function TableLayout({ groups, groupBy, display, selection, onSelect, onS
           </tr>
         </thead>
         <tbody>
-          {padTop > 0 && (
-            <tr aria-hidden="true">
-              <td colSpan={span} style={{ height: padTop }} className="p-0" />
-            </tr>
-          )}
-          {virtualRows.map((virtual) => {
+          {virtualRows.map((virtual, position) => {
             const row = rows[virtual.index]!;
+            const gap = virtual.start - (virtualRows[position - 1]?.end ?? 0);
             const place = { ref: virtualizer.measureElement, 'data-index': virtual.index, role: 'row', 'aria-rowindex': virtual.index + 2 };
-            if (row.kind !== 'item') {
-              return (
-                <tr key={virtual.key} {...place} className={row.kind === 'group' ? 'bg-sunken' : undefined}>
-                  {renderRow(row, virtual.index)}
-                </tr>
-              );
-            }
-
-            const { item } = row;
-            const selected = selection.includes(item.id);
-            const type = types?.find((entry) => entry.id === item.type_id);
-            const look = selected ? wash : flashIds.includes(item.id) ? tint : peekItemId === item.id ? pressed : hoverWash;
-            const isStop = rowKey(row) === stopKey;
-            const cellFocus = (col: number) => ({
-              'data-cell': `${item.id}:${col}`,
-              'data-nav-target': '',
-              tabIndex: isStop && col === activeColumn ? 0 : -1,
-              onPointerDown: () => {
-                pointer.current = true;
-                setTimeout(() => {
-                  pointer.current = false;
-                }, 0);
-              },
-              onFocus: (event: FocusEvent<HTMLTableCellElement>) => {
-                // only what happens in the cell itself: an editor's popup or a question (the resolution) is portalled
-                if (!event.currentTarget.contains(event.target)) return;
-                // the picker gave the focus back to its trigger: the cell takes it, so the arrows go on from here
-                if (event.target !== event.currentTarget && !pointer.current && editing === null) event.currentTarget.focus();
-                if (cursorId !== item.id) onCursor(item.id);
-                if (activeColumn !== col) setColumn(col);
-              },
-            });
-
             return (
-              <tr key={virtual.key} {...place} aria-selected={selected} className="group">
-                <td
-                  role="gridcell"
-                  {...cellFocus(0)}
-                  onClickCapture={(event: MouseEvent<HTMLTableCellElement>) => {
-                    // ⇧ and a click on the title selects the range instead of opening a window
-                    if (!event.shiftKey || !(event.target instanceof Element) || !event.target.closest('[data-item-link]')) return;
-                    event.preventDefault();
-                    event.stopPropagation();
-                    clickSelect(item.id, true);
-                  }}
-                  className={cx('sticky left-0 z-10 h-11 border-r border-b border-line bg-surface px-2 [--focus-offset:-2px] sm:h-10', look)}
-                >
-                  <div className="flex min-w-0 items-center gap-2" style={{ paddingLeft: row.depth > 0 ? `${row.depth * 1.25}rem` : undefined }}>
-                    <span className="relative z-10 inline-flex shrink-0">
-                      <Checkbox
-                        aria-label={t('items.list.select', { key: item.key })}
-                        checked={selected}
-                        tabIndex={-1}
-                        onClickCapture={(event: MouseEvent) => {
-                          shiftClick.current = event.shiftKey;
-                        }}
-                        onCheckedChange={() => {
-                          clickSelect(item.id, shiftClick.current);
-                          shiftClick.current = false;
-                        }}
-                      />
-                    </span>
-                    {type && <TypeGlyph type={type} />}
-                    <ItemLink item={item} onOpen={onPeek} tabIndex={-1} className="flex min-w-0 flex-1 items-center gap-2 text-ink">
-                      {showKey ? <ItemKey value={item.key} className="shrink-0 text-sm text-muted" /> : <span className="sr-only">{item.key} </span>}
-                      <span className={cx('min-w-0 truncate', type?.is_epic && 'font-medium', item.archived_at && 'text-muted')}>{item.title}</span>
-                    </ItemLink>
-                  </div>
-                </td>
-                {columns.map((entry, index) => {
-                  const col = index + 1;
-                  const cellEditing = editing !== null && editing.id === item.id && editing.field === entry.field;
-                  return (
-                    <td
-                      key={entry.field}
-                      role="gridcell"
-                      {...cellFocus(col)}
-                      className={cx('h-11 border-b border-line px-2 [--focus-offset:-2px] sm:h-10', entry.numeric && 'text-right', look === pressed ? hoverWash : look)}
-                    >
-                      {/* the pickers in the cells are 44 px tall on phones (touch targets, 13c) */}
-                      <div className={cx('flex min-w-0 items-center max-sm:[&_button]:min-h-11', entry.numeric && 'justify-end')}>
-                        <Cell
-                          item={item}
-                          column={entry}
-                          editing={cellEditing}
-                          onEditingChange={(open) => {
-                            if (open) startEditing(item, entry);
-                            else if (cellEditing) setEditing(null);
-                          }}
-                        />
-                      </div>
-                    </td>
-                  );
-                })}
-              </tr>
+              <Fragment key={virtual.key}>
+                {gap > 0 && <Spacer span={span} height={gap} />}
+                {row.kind === 'item' ? (
+                  renderItem(row, place)
+                ) : (
+                  <tr {...place} className={row.kind === 'group' ? 'bg-sunken' : undefined}>
+                    {renderRow(row, virtual.index)}
+                  </tr>
+                )}
+              </Fragment>
             );
           })}
-          {padBottom > 0 && (
-            <tr aria-hidden="true">
-              <td colSpan={span} style={{ height: padBottom }} className="p-0" />
-            </tr>
-          )}
+          {padBottom > 0 && <Spacer span={span} height={padBottom} />}
         </tbody>
       </table>
     </div>
   );
+
+
 }

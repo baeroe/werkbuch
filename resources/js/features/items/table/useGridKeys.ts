@@ -11,37 +11,40 @@
 
 import type { KeyboardEvent } from 'react';
 
-/** Where a cell stands: `data-cell="<item id>:<column>"`, column 0 being the key and title. */
-export function cellOf(element: EventTarget | null): { id: string; column: number } | null {
+/**
+ * Where a cell stands: `data-cell="<row>:<column>"`, column 0 being the key and title. The row is the key of the row
+ * (`rowKey`: group and item), not the item: grouped by label, an item with two labels has two rows.
+ */
+export function cellOf(element: EventTarget | null): { row: string; column: number } | null {
   if (!(element instanceof HTMLElement)) return null;
   const at = element.getAttribute('data-cell');
   const split = at?.lastIndexOf(':') ?? -1;
   if (!at || split < 0) return null;
-  return { id: at.slice(0, split), column: Number(at.slice(split + 1)) };
+  return { row: at.slice(0, split), column: Number(at.slice(split + 1)) };
 }
 
 export interface GridKeysOptions {
-  /** The item ids in the order of the rows (without the ones of folded groups). */
-  order: readonly string[];
+  /** The keys of the item rows in their order (without the ones of folded groups). */
+  rows: readonly string[];
   /** The last column: the number of field columns (column 0 is the key and title). */
   lastColumn: number;
   /** The cursor moves to a cell: the table reports the item and gives the cell the focus. */
-  go: (id: string, column: number) => void;
-  /** ↑/↓: the cursor moves to the next or previous item, staying in its column (`useSelection().move`). */
+  go: (row: string, column: number) => void;
+  /** ↑/↓: the cursor moves to the next or previous row, staying in its column (`useSelection().move`). */
   move: (step: 1 | -1, extend: boolean) => void;
   /** Enter on a cell. */
-  enter: (id: string, column: number) => void;
+  enter: (row: string, column: number) => void;
   /** ← on the first column; answers whether it went somewhere (the heading of the group). */
-  leftEdge?: (id: string) => boolean;
+  leftEdge?: (row: string) => boolean;
 }
 
 /** The keydown handler of the grid, for its table element. */
-export function useGridKeys({ order, lastColumn, go, move, enter, leftEdge }: GridKeysOptions) {
+export function useGridKeys({ rows, lastColumn, go, move, enter, leftEdge }: GridKeysOptions) {
   return (event: KeyboardEvent<HTMLElement>) => {
     const cell = cellOf(event.target);
     if (!cell || event.nativeEvent.isComposing || event.altKey) return;
     const mod = event.metaKey || event.ctrlKey;
-    const { id, column } = cell;
+    const { row, column } = cell;
     // ⌘/Strg only with Home and End (the first and last row), ⇧ only with ↑/↓ (it extends the selection)
     const jump = event.key === 'Home' || event.key === 'End';
     const vertical = event.key === 'ArrowUp' || event.key === 'ArrowDown';
@@ -52,20 +55,20 @@ export function useGridKeys({ order, lastColumn, go, move, enter, leftEdge }: Gr
         move(event.key === 'ArrowDown' ? 1 : -1, event.shiftKey);
         break;
       case 'ArrowLeft':
-        if (column > 0) go(id, column - 1);
-        else if (!leftEdge?.(id)) return;
+        if (column > 0) go(row, column - 1);
+        else if (!leftEdge?.(row)) return;
         break;
       case 'ArrowRight':
-        go(id, Math.min(lastColumn, column + 1));
+        go(row, Math.min(lastColumn, column + 1));
         break;
       case 'Home':
-        go(mod ? order[0]! : id, mod ? column : 0);
+        go(mod ? rows[0]! : row, mod ? column : 0);
         break;
       case 'End':
-        go(mod ? order.at(-1)! : id, mod ? column : lastColumn);
+        go(mod ? rows.at(-1)! : row, mod ? column : lastColumn);
         break;
       case 'Enter':
-        enter(id, column);
+        enter(row, column);
         break;
       default:
         return;

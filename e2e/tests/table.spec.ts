@@ -8,7 +8,7 @@ import { allEntries, createE2eProject, createItem, isPhone, removeE2eProject, ru
 const name = (what: string) => `E2E table ${what} ${variant()} ${runId()}`;
 
 /** A cell of the grid: its item and its column (0 is the key and title). */
-const cell = (page: Page, id: string, column: number) => page.locator(`[data-cell="${id}:${column}"]`);
+const cell = (page: Page, id: string, column: number) => page.locator(`[data-item-id="${id}"][data-column="${column}"]`);
 
 /** Opens the table of a project with the fields given and puts the focus on the cell of the first item, its tab stop. */
 async function openTable(page: Page, identifier: string, first: string, query: string) {
@@ -85,6 +85,53 @@ test('edits a property value in its cell', async ({ page }) => {
 
     await page.reload();
     await expect(cell(page, bug.id, 1)).toHaveText('2.5');
+  } finally {
+    await removeE2eProject(page, project.identifier);
+  }
+});
+
+test('scrolls a long table freely while the cell of the cursor stays rendered', async ({ page }) => {
+  await page.goto('/my-items');
+  const project = await createE2eProject(page, name('scroll'), { types: ['Task'] });
+  try {
+    const items: { id: string; key: string }[] = [];
+    for (let number = 1; number <= 60; number += 1) items.push(await createItem(page, { project_id: project.id, title: `Item ${number}` }));
+    // the first cell becomes the cursor; then the box scrolls far away from it
+    await openTable(page, project.identifier, items[0]!.id, 'fields=key,priority');
+    const box = page.locator('[data-table-scroller]');
+    const view = (selector: string) =>
+      box.evaluate((element, target) => {
+        const rect = element.getBoundingClientRect();
+        // what stands in the middle of the box: a cell of a row, not the empty height of rows left out
+        const middle = document.elementFromPoint(rect.left + 100, rect.top + rect.height / 2);
+        return { top: element.scrollTop, end: element.scrollHeight - element.clientHeight, cell: middle?.closest(target) !== null };
+      }, selector);
+    const settle = () => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+
+    // to the end: it stays there, with the last rows in view
+    await box.evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
+    await expect(cell(page, items.at(-1)!.id, 0)).toBeInViewport();
+    await settle();
+    const end = await view('[data-cell]');
+    expect(end.cell).toBe(true);
+    expect(end.top).toBeGreaterThan(0);
+    expect(Math.abs(end.top - end.end)).toBeLessThanOrEqual(1);
+    await expect(cell(page, items.at(-1)!.id, 0)).toBeInViewport();
+    // the cursor kept its cell and its focus
+    await expect(cell(page, items[0]!.id, 0)).toBeFocused();
+
+    // halfway: the box stays where it was put, and shows rows there
+    const middle = await box.evaluate((element) => {
+      element.scrollTop = Math.round(element.scrollHeight / 2 - element.clientHeight / 2);
+      return element.scrollTop;
+    });
+    await expect(cell(page, items[29]!.id, 0)).toBeInViewport();
+    await settle();
+    const halfway = await view('[data-cell]');
+    expect(halfway.cell).toBe(true);
+    expect(Math.abs(halfway.top - middle)).toBeLessThanOrEqual(2);
+    await expect(cell(page, items[29]!.id, 0)).toBeInViewport();
+    await expect(cell(page, items[0]!.id, 0)).toBeFocused();
   } finally {
     await removeE2eProject(page, project.identifier);
   }

@@ -404,7 +404,7 @@ describe('the item list screen', () => {
     press('3');
     expect(inertia.url).toBe('/projects/WEB?layout=table');
     // the table is a chunk of its own too: the focus waits for it (not the toolbar) and goes to the cell of the cursor
-    await waitFor(() => expect(document.activeElement?.getAttribute('data-cell')).toBe('wi_web_1:0'));
+    await waitFor(() => expect([document.activeElement?.getAttribute('data-item-id'), document.activeElement?.getAttribute('data-column')]).toEqual(['wi_web_1', '0']));
     press('4');
     expect(inertia.url).toBe('/projects/WEB?layout=timeline');
     // back to the base: nothing left in the address

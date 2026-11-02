@@ -234,7 +234,8 @@ function renderTable(props: Props) {
   );
 }
 
-const cell = (id: string, column: number) => document.querySelector<HTMLElement>(`[data-cell="${id}:${column}"]`);
+/** The cell of an item in a column (its first row, when it has two). */
+const cell = (id: string, column: number) => document.querySelector<HTMLElement>(`[data-item-id="${id}"][data-column="${column}"]`);
 const cursor = () => screen.getByTestId('cursor').textContent;
 const press = (key: string, init: KeyboardEventInit = {}) =>
   act(() => {
@@ -522,6 +523,52 @@ describe('TableLayout', () => {
     press('ArrowUp');
     press('ArrowUp');
     await waitFor(() => expect(document.activeElement).toBe(cell('wi_a1998', 0)));
+  });
+
+  it('keeps the height of the rows it does not render, also between the cursor row and the rows in view', async () => {
+    renderTable({ groups: [group('all', items('a', 2000))] });
+    await focusCell('wi_a1', 0);
+    scrollBox(1000 * ROW);
+    await waitFor(() => expect(cell('wi_a1000', 0)).toBeTruthy());
+    expect(cell('wi_a1', 0)).toBeTruthy();
+    // the rendered rows and the spacers between them make the whole height, so the box neither shrinks nor jumps
+    const spacers = [...document.querySelectorAll<HTMLElement>('[data-spacer] td')].map((td) => Number.parseFloat(td.style.height));
+    const rendered = document.querySelectorAll('tbody tr[data-index]').length;
+    expect(spacers.length).toBe(2);
+    expect(spacers.reduce((sum, height) => sum + height, 0) + rendered * ROW).toBe(2000 * ROW);
+    // the gap after the cursor row is the rows between it and the first one in view
+    const next = Number(cell('wi_a1', 0)!.closest('tr')!.nextElementSibling!.nextElementSibling!.getAttribute('data-index'));
+    expect(spacers[0]).toBe((next - 1) * ROW);
+  });
+
+  it('addresses the row, not the item: an item with two labels has one editor open and stays in its row', async () => {
+    const user = userEvent.setup();
+    const twice = makeWorkItem({ id: 'wi_x', key: 'WEB-7', number: 7, title: 'Zweimal', label_ids: ['lb_ux', 'lb_forms'] });
+    const other = makeWorkItem({ id: 'wi_y', key: 'WEB-8', number: 8, title: 'Einmal', label_ids: ['lb_ux'] });
+    renderTable({ groups: [group('lb_ux', [twice, other]), group('lb_forms', [twice])], groupBy: 'label', display: { fields: ['key', 'state', 'priority'] } });
+    await rightsLoaded();
+    const rowCell = (group: string, id: string, column: number) => document.querySelector<HTMLElement>(`[data-cell="${group}:${id}:${column}"]`);
+    expect(document.querySelectorAll('[data-item-id="wi_x"][data-column="0"]')).toHaveLength(2);
+
+    // ↓ goes row by row: from the second row of the first group to the item's row in the second group
+    act(() => rowCell('lb_ux', 'wi_y', 1)!.focus());
+    press('ArrowDown');
+    await waitFor(() => expect(document.activeElement).toBe(rowCell('lb_forms', 'wi_x', 1)));
+    expect(cursor()).toBe('wi_x');
+    // → stays in that row
+    press('ArrowRight');
+    await waitFor(() => expect(document.activeElement).toBe(rowCell('lb_forms', 'wi_x', 2)));
+    expect(rowCell('lb_forms', 'wi_x', 2)!.tabIndex).toBe(0);
+    expect(rowCell('lb_ux', 'wi_x', 2)!.tabIndex).toBe(-1);
+    // Enter opens the editor of this row only
+    press('Enter');
+    await searchField('Priorität suchen …');
+    expect(screen.getAllByPlaceholderText('Priorität suchen …')).toHaveLength(1);
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(document.activeElement).toBe(rowCell('lb_forms', 'wi_x', 2)));
+    // ↑ goes back row by row
+    press('ArrowUp');
+    await waitFor(() => expect(document.activeElement).toBe(rowCell('lb_ux', 'wi_y', 2)));
   });
 
   it('brings a heading out of view into view before it takes the focus', async () => {
