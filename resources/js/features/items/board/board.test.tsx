@@ -310,6 +310,29 @@ describe('the board', () => {
     }
   });
 
+  it('puts a card back in its place when the server refuses its new rank', async () => {
+    const inner = globalThis.fetch;
+    globalThis.fetch = (input, init) =>
+      init?.method === 'PATCH' && typeof init.body === 'string' && 'rank' in (JSON.parse(init.body) as object)
+        ? Promise.resolve(new Response(JSON.stringify({ reason: 'conflict', detail: 'Nicht erlaubt.' }), { status: 409, headers: { 'Content-Type': 'application/problem+json' } }))
+        : inner(input, init);
+    try {
+      renderBoard('/projects/WEB?layout=board');
+      const card = await waitFor(() => cardIn('Todo', 'WEB-48'));
+      const before = within(column('Todo')).getAllByRole('article').map((entry) => entry.getAttribute('data-card-id'));
+      act(() => card.focus());
+
+      press('ArrowUp', { altKey: true });
+      await waitFor(() => expect(lastToast()).toMatchObject({ tone: 'error' }));
+      await waitFor(() => expect(within(column('Todo')).getAllByRole('article').map((entry) => entry.getAttribute('data-card-id'))).toEqual(before));
+      expect(announced()).toBe('');
+      // the next move of the card goes out again
+      await waitFor(() => expect(cardIn('Todo', 'WEB-48').getAttribute('aria-busy')).toBeNull());
+    } finally {
+      globalThis.fetch = inner;
+    }
+  });
+
   it('keeps the cards of a viewer in place and says why', async () => {
     board.roles.WEB = 'viewer';
     renderBoard('/projects/WEB?layout=board');
