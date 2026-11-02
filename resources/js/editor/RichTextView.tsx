@@ -1,7 +1,8 @@
 /*
  * A document read-only, with the nodes of a level (presets.ts) and the look of the editor: the same schema, so what
  * the editor wrote reads the same here. Blocks the level does not know show their text in paragraphs. Mentions show
- * the current handle, references the item's key as a link (or "verborgen"), code is highlighted.
+ * the current handle, references the item's key as a link (or "verborgen"), code is highlighted, images open their
+ * original in a new tab and files are chips to download (nodes.tsx). Nothing is uploaded here.
  *
  *   <RichTextView value={item.description_json} preset="description" />
  */

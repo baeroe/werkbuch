@@ -139,3 +139,4 @@ werkbuch geht ohne Maus. Mit <kbd>?</kbd> zeigt jeder Bildschirm die Kürzel, di
 | <kbd>↑</kbd> / <kbd>↓</kbd> | Eintrag der Liste wählen |
 | <kbd>↵</kbd> / <kbd>Tab</kbd> | Eintrag übernehmen |
 | <kbd>Esc</kbd> | Liste schließen |
+| <kbd>↵</kbd> | Alternativtext des ausgewählten Bilds bearbeiten |

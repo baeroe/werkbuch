@@ -17,6 +17,8 @@ type ProgressEvent = { lengthComputable: boolean; loaded: number; total: number 
 export class FakeXhr {
   /** The request opened last: the one the call under test just sent. */
   static last: FakeXhr;
+  /** Every request since `installFakeXhr()`, in the order they were opened (several uploads at once). */
+  static all: FakeXhr[] = [];
 
   upload: { onprogress?: (event: ProgressEvent) => void } = {};
   onload?: () => void;
@@ -33,6 +35,7 @@ export class FakeXhr {
 
   constructor() {
     FakeXhr.last = this;
+    FakeXhr.all.push(this);
   }
 
   open(method: string, url: string) {
@@ -67,6 +70,7 @@ export class FakeXhr {
 
 /** Puts FakeXhr in place of XMLHttpRequest. */
 export function installFakeXhr(): void {
+  FakeXhr.all = [];
   vi.stubGlobal('XMLHttpRequest', FakeXhr);
 }
 

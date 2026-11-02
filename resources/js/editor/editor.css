@@ -1,7 +1,8 @@
 /*
  * Rich text, as the editor writes it and the viewer reads it (DESIGN.md): ink on calm paper, mentions and references as
  * ink-blue chips, code in the UI face, the highlighter only for a selection. Panel text is 14/20, pages 15/24; while
- * editing on a phone the text is 16 px, so iOS does not zoom. Images, files and uploads come with Task 17.
+ * editing on a phone the text is 16 px, so iOS does not zoom. Images keep their place while they load; files are chips;
+ * an upload stands as a box with a progress bar until its node takes its place.
  */
 
 .rt {
@@ -287,9 +288,132 @@
   color: var(--muted);
   text-decoration: none;
 }
-.rt .ProseMirror-selectednode:is(.rt-ref-wrap, .rt-mention) {
+.rt .ProseMirror-selectednode:is(.rt-ref-wrap, .rt-mention, .rt-file),
+.rt .rt-image.ProseMirror-selectednode img {
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
+}
+
+/* images: only from attachments; a missing one keeps its place and says so */
+.rt .rt-image {
+  display: block;
+  max-width: 100%;
+  margin: 0.5rem 0;
+}
+.rt .rt-image img {
+  display: block;
+  max-width: 100%;
+  max-height: 28rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r-ctl);
+}
+.rt .rt-image a {
+  display: inline-block;
+  border-radius: var(--r-ctl);
+}
+.rt .rt-image-missing {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-ctl);
+  background: var(--bg-sunken);
+  padding: 0.5rem 0.75rem;
+  color: var(--muted);
+}
+.rt .rt-image-missing svg {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+}
+/* the alternative text of an image being edited */
+.rt .rt-image-alt {
+  display: flex;
+  max-width: 28rem;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.375rem;
+}
+.rt .rt-image-alt label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-weight: 500;
+}
+.rt .rt-image-alt input {
+  min-height: 2.25rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-ctl);
+  background: var(--surface);
+  padding: 0 0.625rem;
+  font-weight: 400;
+  color: var(--text);
+}
+.rt .rt-image-alt input:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  box-shadow: var(--focus-halo);
+}
+.rt .rt-image-alt-hint {
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: var(--muted);
+}
+
+/* files: a chip with the name (a download) and the size */
+.rt .rt-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r-chip);
+  background: var(--surface);
+  padding: 0 0.375rem;
+  white-space: nowrap;
+}
+.rt .rt-file a {
+  color: var(--accent-text);
+  text-decoration: none;
+}
+.rt .rt-file a:hover {
+  text-decoration: underline;
+}
+.rt .rt-file svg {
+  width: 0.875rem;
+  height: 0.875rem;
+  color: var(--muted);
+}
+.rt .rt-file-size {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+/* an upload on its way: the name and a bar that fills as the file goes out */
+.rt .rt-upload {
+  display: inline-flex;
+  min-width: 12rem;
+  max-width: 100%;
+  flex-direction: column;
+  gap: 0.375rem;
+  vertical-align: middle;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-ctl);
+  background: var(--bg-sunken);
+  padding: 0.5rem 0.75rem;
+  color: var(--muted);
+}
+.rt-upload-bar {
+  display: block;
+  height: 0.25rem;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: var(--border);
+}
+.rt-upload-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width var(--dur-fast) var(--ease-out);
 }
 
 /* the typed query of a menu (@, #, /) */

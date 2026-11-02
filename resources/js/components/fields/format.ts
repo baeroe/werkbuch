@@ -78,6 +78,20 @@ export function formatNumber(value: number, decimals = 0, { grouping = true }: {
   return format.format(value);
 }
 
+const sizeFormats = new Map<string, Intl.NumberFormat>();
+
+/** The size of a file as people read it: 512 Byte, 120 kB, 25,3 MB (powers of 1000, like the file managers). */
+export function formatSize(bytes: number): string {
+  const [unit, value, decimals] = bytes < 1000 ? (['byte', bytes, 0] as const) : bytes < 1_000_000 ? (['kilobyte', bytes / 1000, 0] as const) : (['megabyte', bytes / 1_000_000, 1] as const);
+  const key = `${intlLocale()}:${unit}`;
+  let format = sizeFormats.get(key);
+  if (!format) {
+    format = new Intl.NumberFormat(intlLocale(), { style: 'unit', unit, unitDisplay: 'short', maximumFractionDigits: decimals });
+    sizeFormats.set(key, format);
+  }
+  return format.format(value);
+}
+
 const MAX_EXCERPT = 80;
 
 /** A property value as one line: option labels, names, yes/no, a day, the start of a text. Empty for no value. */

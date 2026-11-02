@@ -2,8 +2,10 @@
  * The one rich text editor of werkbuch (spec 4.16), Tiptap 3 with our own surface. Its level (`preset`) decides what
  * it knows (presets.ts); all levels have the Markdown shortcuts while typing (`## `, `- `, `1. `, `> `, ``` and, from
  * `description` on, `[ ] `), the `/` menu (slashMenu.tsx) and code blocks with highlighting (codeBlocks.ts). With a
- * project (`projectId`) `@` mentions its people and bots (mentions.tsx) and `#` refers to items (references.tsx);
- * without one neither list opens. Uploads come with Task 17.
+ * project (`projectId`) `@` mentions its people and bots (mentions.tsx), `#` refers to items (references.tsx), and
+ * pictures and files are pasted, dropped or chosen in the `/` menu and uploaded into the project (uploads.ts, shown by
+ * the nodes of nodes.tsx); without one there is no list and no upload. A form counts the running uploads of its editors
+ * (UploadContext.tsx) and hears of failed and left-over uploads (`EditorEnvContext`, EditorEnv.tsx).
  *
  *   <RichTextEditor value={doc} onChange={setDoc} preset="description" projectId={item.project_id} onSubmit={save} />
  *
@@ -32,6 +34,7 @@
  * `await preloadEditor()` first. `RichTextView` (RichTextView.tsx) shows a document read-only with the same nodes.
  */
 
+import { QueryClientContext } from '@tanstack/react-query';
 import { TaskItem, TaskList } from '@tiptap/extension-list';
 import { Placeholder } from '@tiptap/extensions';
 import type { Schema } from '@tiptap/pm/model';
@@ -41,16 +44,19 @@ import StarterKit from '@tiptap/starter-kit';
 import { Component, Suspense, use, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, type ReactNode, type RefObject } from 'react';
 import { Button } from '@/components/ui/Button';
 import { cx } from '@/components/ui/cx';
+import { qk } from '@/hooks/keys';
 import { t } from '@/lib/i18n';
 import { isMac } from '@/lib/platform';
 import type { RichText } from '@/types';
 import './editor.css';
 import { EditorEnvContext, type EditorEnv, type EditorEnvRef } from './EditorEnv';
 import { mentionExtension } from './mentions';
-import { AttachmentFile, AttachmentImage } from './nodes';
+import { AttachmentFile, AttachmentImage, ImageAltKey } from './nodes';
 import { PRESET_LABEL, PRESET_PLACEHOLDER, PRESET_PLACEHOLDER_PLAIN, PRESETS, type EditorPreset } from './presets';
 import { referenceExtension } from './references';
 import { slashMenu } from './slashMenu';
+import { UploadContext } from './UploadContext';
+import { pickFiles, uploadExtensions, uploadFiles, UploadSession } from './uploads';
 
 export type { EditorPreset } from './presets';
 
@@ -59,7 +65,7 @@ export interface RichTextEditorProps {
   /** The document after every change; null when the editor holds nothing at all. */
   onChange: (doc: RichText | null) => void;
   preset: EditorPreset;
-  /** The project of the text: `@` offers its people, `#` its items. Without it neither list opens. */
+  /** The project of the text: `@` offers its people, `#` its items, uploads go into it. Without it there is none of them. */
   projectId?: string;
   /** The accessible name; by default the level's. */
   label?: string;
@@ -190,8 +196,8 @@ const stillChecklists = Extension.create({
 });
 
 /**
- * The extensions of a level. `placeholder: null` builds a viewer: the same nodes, without the `/` menu and the
- * placeholder. The placeholder is read when the editor draws, so a new one needs no new editor.
+ * The extensions of a level. `placeholder: null` builds a viewer: the same nodes, without the `/` menu, the uploads
+ * and the placeholder. The placeholder is read when the editor draws, so a new one needs no new editor.
  */
 function buildExtensions(preset: EditorPreset, env: EditorEnvRef, placeholder: (() => string) | null, code: AnyExtension, tables: AnyExtension | null): AnyExtension[] {
   const features = PRESETS[preset];
@@ -222,7 +228,7 @@ function buildExtensions(preset: EditorPreset, env: EditorEnvRef, placeholder: (
     AttachmentFile,
     mentionExtension(env),
     referenceExtension(env),
-    ...(placeholder === null ? [] : [slashMenu(preset, env), Placeholder.configure({ placeholder })]),
+    ...(placeholder === null ? [] : [slashMenu(preset, env), ImageAltKey, ...uploadExtensions(env), Placeholder.configure({ placeholder })]),
   ];
 }
 
@@ -312,11 +318,28 @@ function EditorBody({ value, onChange, preset, projectId, label, placeholder, au
   const name = label ?? t(PRESET_LABEL[preset]);
   const hint = placeholder ?? t((projectId ? PRESET_PLACEHOLDER : PRESET_PLACEHOLDER_PLAIN)[preset]);
   const latest = useRef({ onChange, onSubmit, onEscape, name, hint, describedBy, invalid, readOnly });
-  const { onUploadError } = useContext(EditorEnvContext);
-  const env = useRef<EditorEnv>({ projectId: projectId ?? null, onUploadError });
+  const { onUploadError, onOrphanedUploads } = useContext(EditorEnvContext);
+  const counter = useContext(UploadContext);
+  const client = useContext(QueryClientContext);
+  // made on mount, closed when the editor goes away (below); a StrictMode remount gets a new one
+  const session = useRef<UploadSession | undefined>(undefined);
+  const envNow = (): EditorEnv => ({
+    projectId: projectId ?? null,
+    onUploadError,
+    onOrphanedUploads,
+    chooseFiles: projectId ? (current) => pickFiles(current, (files) => uploadFiles(current, files, current.state.selection.from, env.current)) : undefined,
+    uploads: session.current,
+  });
+  const env = useRef<EditorEnv>(envNow());
+  /** The session reports to the form's counter and the cache of now. */
+  const wire = (current: UploadSession) => {
+    current.track = (delta) => counter?.add(delta);
+    current.prime = (attachment) => client?.setQueryData(qk.attachments.detail(attachment.id), attachment);
+  };
   useLayoutEffect(() => {
     latest.current = { onChange, onSubmit, onEscape, name, hint, describedBy, invalid, readOnly };
-    env.current = { projectId: projectId ?? null, onUploadError };
+    env.current = envNow();
+    if (session.current) wire(session.current);
   });
 
   const framed = preset !== 'page';
@@ -392,6 +415,23 @@ function EditorBody({ value, onChange, preset, projectId, label, placeholder, au
     },
     [extensions],
   );
+
+  // the uploads of this editor: running ones stop when it goes away, stored ones whose node left the text are named
+  const editorNow = useRef(editor);
+  useLayoutEffect(() => {
+    editorNow.current = editor;
+  });
+  useEffect(() => {
+    const current = new UploadSession();
+    wire(current);
+    session.current = current;
+    env.current.uploads = current;
+    return () => {
+      const orphans = current.close(editorNow.current.state.doc);
+      if (orphans.length > 0) env.current.onOrphanedUploads?.(orphans);
+    };
+    // once per mount: the counter and the cache are wired anew on every render (above)
+  }, []);
 
   useEffect(() => {
     if (!editorRef) return;

@@ -139,3 +139,4 @@ werkbuch works without a mouse. Press <kbd>?</kbd> on any screen to see the shor
 | <kbd>↑</kbd> / <kbd>↓</kbd> | Choose an entry of the list |
 | <kbd>↵</kbd> / <kbd>Tab</kbd> | Take the entry |
 | <kbd>Esc</kbd> | Close the list |
+| <kbd>↵</kbd> | Edit the alternative text of the selected image |

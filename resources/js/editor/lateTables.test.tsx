@@ -91,8 +91,12 @@ it('waits for the tables without calling use() conditionally', async () => {
 it('shows a comment without waiting for the tables, which it does not have', async () => {
   await freshModules();
   let release: () => void = () => {};
+  // the chunk is asked for once the editor's module has loaded, which may come after the comment shows
+  let asked: () => void = () => {};
+  const requested = new Promise<void>((resolve) => (asked = resolve));
   vi.doMock('@tiptap/extension-table', async (importOriginal) => {
     const actual = await importOriginal<typeof import('@tiptap/extension-table')>();
+    asked();
     await new Promise<void>((resolve) => (release = resolve));
     return actual;
   });
@@ -110,6 +114,8 @@ it('shows a comment without waiting for the tables, which it does not have', asy
   expect(screen.queryByRole('textbox', { name: 'Beschreibung' })).toBeNull();
   expect(container.querySelectorAll('[aria-busy="true"]')).toHaveLength(1);
 
+  await requested;
+  expect(screen.queryByRole('textbox', { name: 'Beschreibung' })).toBeNull();
   release();
   await waitFor(() => expect(screen.getByRole('textbox', { name: 'Beschreibung' })).toBeTruthy(), { timeout: 3000 });
 });

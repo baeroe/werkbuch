@@ -32,7 +32,7 @@ import {
 } from '@/test/fixtures';
 import { installFakeXhr, FakeXhr, restoreFakeXhr } from '@/test/xhr';
 import type { Comment, ListedItem, ProjectMember, User } from '@/types';
-import { useAttachment, useDeleteAttachment, usePrimeAttachments, useUploadAttachment } from './attachments';
+import { ATTACHMENT_FRESH_MS, useAttachment, useDeleteAttachment, usePrimeAttachments, useUploadAttachment } from './attachments';
 import { useAddComment, useComments, useDeleteComment, useEditComment, useToggleReaction } from './comments';
 import { useDeleteLabel, useDeleteRelationType, useDeleteResolution, useLabels, useRelationTypes, useResolutions, useSaveLabel, useSaveRelationType, useSaveResolution } from './catalog';
 import { qk } from './keys';
@@ -813,6 +813,18 @@ describe('attachments', () => {
     expect(result.current.none.fetchStatus).toBe('idle');
     expect(api.calls).toHaveLength(1);
     expect(queryClient.getQueryCache().find({ queryKey: qk.attachments.detail('att_1') })?.isStale()).toBe(false);
+    // the preview and the owner come later: after a while the record is read again
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(Date.now() + ATTACHMENT_FRESH_MS - 1000);
+      rerender({ id: 'att_1' });
+      expect(result.current.one.isStale).toBe(false);
+      vi.setSystemTime(Date.now() + 2000);
+      rerender({ id: 'att_1' });
+      expect(result.current.one.isStale).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('uploads with progress and puts the answer into the cache, deletes and makes the item stale', async () => {
@@ -837,6 +849,8 @@ describe('attachments', () => {
 
       await act(() => result.current.remove.mutateAsync('att_1'));
       expect(queryClient.getQueryState(qk.workItems.detail('wi_web_47'))?.isInvalidated).toBe(true);
+      // a deleted attachment leaves the cache
+      expect(queryClient.getQueryData(qk.attachments.detail('att_1'))).toBeUndefined();
     } finally {
       restoreFakeXhr();
     }

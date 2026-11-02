@@ -374,6 +374,7 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
             }}
             onSubmit={() => void save.current()}
             preset="description"
+            projectId={item.project_id}
             editorRef={editor}
             invalid={error !== null}
             describedBy={error ? errorId : undefined}
