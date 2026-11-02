@@ -70,6 +70,40 @@ const dialog = () => screen.getByRole('dialog', { name: 'Tastaturkürzel' });
 beforeEach(() => useUiStore.setState(useUiStore.getInitialState()));
 
 describe('HelpOverlay', () => {
+  it('lists / as Suchen outside lists and as the title search in lists', () => {
+    function List() {
+      useShortcut('list.search', vi.fn());
+      return null;
+    }
+    function Search() {
+      useShortcut('shell.search', vi.fn());
+      return null;
+    }
+    const { rerender } = render(
+      <>
+        <Search />
+        <HelpOverlay />
+      </>,
+    );
+    act(() => useUiStore.getState().setHelpOpen(true));
+
+    const general = within(dialog()).getByRole('region', { name: 'Allgemein' });
+    expect(within(general).getByText('Suchen')).toBeTruthy();
+    expect(within(general).getByRole('img', { name: 'Schrägstrich' })).toBeTruthy();
+
+    // a list binds / for its title search: the help names only that
+    rerender(
+      <>
+        <Search />
+        <List />
+        <HelpOverlay />
+      </>,
+    );
+    expect(within(dialog()).queryByText('Suchen')).toBeNull();
+    const list = within(dialog()).getByRole('region', { name: 'Liste' });
+    expect(within(list).getByText('Nach Titel filtern')).toBeTruthy();
+  });
+
   it('renders nothing while the help is closed', () => {
     render(
       <>

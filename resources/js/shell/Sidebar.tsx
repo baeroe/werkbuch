@@ -2,8 +2,8 @@
  * The sidebar (spec 5.2, moodboard): Inbox, Meine Items, the starred views and projects (sidebar/ViewsSection,
  * sidebar/ProjectsSection; a project opens to Items, Wiki, Templates and Settings), at the bottom the profile and the
  * settings. Tracing paper floating over the dot paper; collapsed it shrinks to a rail of icons. Below md the same
- * content lives in the drawer of the top bar (MobileBar). The unread count and search join with the phases that bring
- * their screens.
+ * content lives in the drawer of the top bar (MobileBar). Below the wordmark the search opens the command palette
+ * (`SearchButton`). The unread count joins with the phase that brings the inbox.
  */
 
 import { Link } from '@inertiajs/react';
@@ -19,6 +19,7 @@ import { paths, useActivePath } from '@/lib/links';
 import { SHORTCUTS } from '@/lib/shortcuts/catalog';
 import { useUiStore } from '@/store/ui';
 import { ProfileMenu } from './ProfileMenu';
+import { SearchButton } from './SearchButton';
 import { ProjectsSection } from './sidebar/ProjectsSection';
 import { SideLink } from './sidebar/parts';
 import { ViewsSection } from './sidebar/ViewsSection';
@@ -57,6 +58,7 @@ export function SidebarContent({ headerAction }: { headerAction?: ReactNode }) {
         </span>
         {headerAction}
       </div>
+      <SearchButton variant="full" />
       <ul className="flex shrink-0 flex-col gap-0.5">
         <li>
           <SideLink href={paths.inbox()} end strong leading={<Inbox className="size-4" aria-hidden="true" />}>
@@ -112,6 +114,7 @@ function SidebarRail() {
   return (
     <nav aria-label={t('shell.sidebar.label')} className="tracing fixed top-2 bottom-2 left-2 z-20 hidden w-12 flex-col items-center gap-1 rounded-card py-2 [--glass-shadow:var(--elev-1)] md:flex">
       <IconButton icon={PanelLeftOpen} label={t('shell.sidebar.expand')} onClick={toggleSidebar} className="md:size-9" />
+      <SearchButton variant="rail" />
       <span className="my-1 h-px w-6 bg-edge" aria-hidden="true" />
       <RailLink href={paths.inbox()} end label="shell.nav.inbox" icon={Inbox} shortcut="shell.go.inbox" />
       <RailLink href={paths.myItems()} end also={[paths.created(), paths.subscribed()]} label="shell.nav.my_items" icon={UserRoundCheck} shortcut="shell.go.my_items" />

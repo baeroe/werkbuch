@@ -1,11 +1,13 @@
 import { Dialog as BaseDialog } from '@base-ui/react/dialog';
 import { Link, usePage } from '@inertiajs/react';
-import { Inbox, Menu, X } from 'lucide-react';
+import { Inbox, Menu, Search, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { IconButton } from '@/components/ui/IconButton';
 import { t } from '@/lib/i18n';
 import { paths } from '@/lib/links';
 import { useDialogScope } from '@/lib/shortcuts/useShortcut';
+import { useUiStore } from '@/store/ui';
+import { openSearch } from './SearchButton';
 import { SidebarContent } from './Sidebar';
 
 /** Mounted while the drawer is open: it is modal, so the page's shortcuts pause (all but mod+k, escape, mod+enter). */
@@ -14,13 +16,19 @@ function DrawerScope() {
   return null;
 }
 
-/** Below md: menu (drawer with the sidebar), wordmark and the inbox. */
+/** Below md: menu (drawer with the sidebar), wordmark, the search (the one way into the palette on a phone) and the inbox. */
 export function MobileBar() {
   const [open, setOpen] = useState(false);
   const { url } = usePage();
 
   // a chosen link closes the drawer
   useEffect(() => setOpen(false), [url]);
+  // so does the palette (its search button sits in the drawer, mod+k works in it): one modal dialog at a time, and a
+  // command that leads nowhere (theme, help) does not leave the drawer behind the closed palette
+  const paletteOpen = useUiStore((state) => state.paletteOpen);
+  useEffect(() => {
+    if (paletteOpen) setOpen(false);
+  }, [paletteOpen]);
 
   return (
     <header className="tracing sticky top-0 z-30 flex h-14 items-center gap-1 rounded-none border-x-0 border-t-0 px-2 [--glass-shadow:var(--elev-1)] md:hidden">
@@ -44,6 +52,7 @@ export function MobileBar() {
         werkbuch
       </span>
       <div className="ml-auto flex items-center">
+        <IconButton icon={Search} label={t('shell.search_icon')} tooltip={false} onClick={openSearch} />
         {/* the unread count joins the label with Phase 8 */}
         <Link
           href={paths.inbox()}

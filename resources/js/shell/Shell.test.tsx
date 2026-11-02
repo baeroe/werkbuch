@@ -4,7 +4,10 @@ import { act, fireEvent, render as renderDom, screen, waitFor, within } from '@t
 import userEvent from '@testing-library/user-event';
 import type { ReactElement, ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ariaKeyshortcuts } from '@/components/ui/Kbd';
 import { currentToasts, resetToasts } from '@/components/ui/toast';
+import { listCommands } from '@/lib/commands';
+import { useUiStore } from '@/store/ui';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import { list, makeView, project } from '@/test/fixtures';
 import { Shell } from './Shell';
@@ -46,6 +49,7 @@ beforeEach(() => {
     'GET /api/v1/views': () => ({ body: list([]) }),
   };
   vi.mocked(router.post).mockClear();
+  useUiStore.setState(useUiStore.getInitialState());
 });
 
 /** The shell with the data it reads (favorites, projects) from a fake API: `routes` as the test set them. */
@@ -56,6 +60,7 @@ function render(element: ReactElement) {
 }
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   act(() => resetToasts());
   flash = { status: null, error: null };
   url = '/my-items';
@@ -129,6 +134,75 @@ describe('Shell', () => {
     expect(screen.getByText('Inhalt')).toBeTruthy();
     expect(errors()).toEqual([]);
     expect(successes()).toEqual([]);
+  });
+});
+
+describe('Search', () => {
+  it('opens the palette with / outside lists', async () => {
+    render(<Shell>Inhalt</Shell>);
+
+    await userEvent.keyboard('/');
+
+    expect(useUiStore.getState().paletteOpen).toBe(true);
+    expect(await screen.findByRole('dialog', { name: 'Befehlspalette' })).toBeTruthy();
+  });
+
+  it('opens the palette from the search button of the sidebar, of the rail and of the phone bar', async () => {
+    render(<Shell>Inhalt</Shell>);
+    const close = () => act(() => useUiStore.getState().setPaletteOpen(false));
+
+    const full = within(sidebar()).getByRole('button', { name: 'Suchen …' });
+    expect(full.getAttribute('aria-keyshortcuts')).toBe(ariaKeyshortcuts('mod+k'));
+    await userEvent.click(full);
+    expect(useUiStore.getState().paletteOpen).toBe(true);
+    close();
+
+    // the phone bar: the one way into the palette there
+    const header = screen.getByRole('banner');
+    await userEvent.click(within(header).getByRole('button', { name: 'Suchen' }));
+    expect(useUiStore.getState().paletteOpen).toBe(true);
+    close();
+
+    act(() => useUiStore.getState().toggleSidebar());
+    const rail = within(sidebar()).getByRole('button', { name: 'Suchen' });
+    expect(rail.getAttribute('aria-keyshortcuts')).toBe(ariaKeyshortcuts('mod+k'));
+    await userEvent.click(rail);
+    expect(useUiStore.getState().paletteOpen).toBe(true);
+  });
+
+  it('closes the drawer before the palette opens over the page', async () => {
+    render(<Shell>Inhalt</Shell>);
+    const menu = screen.getByRole('button', { name: 'Navigation öffnen' });
+    await userEvent.click(menu);
+    const drawer = await screen.findByRole('dialog', { name: 'Navigation' });
+
+    await userEvent.click(within(drawer).getByRole('button', { name: 'Suchen …' }));
+
+    // one modal dialog at a time: the palette, never over the drawer
+    const palette = await screen.findByRole('dialog', { name: 'Befehlspalette' });
+    // (the palette hides the rest of the page from the tree: count the hidden too)
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Navigation', hidden: true })).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(within(palette).getByRole('combobox')));
+  });
+
+  it('lists Alle Tastaturkürzel and the sidebar toggle in the palette', () => {
+    render(<Shell>Inhalt</Shell>);
+    const command = (id: string) => listCommands().find((entry) => entry.id === id)!;
+
+    const help = command('shell.help');
+    expect([help.label, help.group, help.keys, help.keywords]).toEqual(['Alle Tastaturkürzel', 'Aktionen', '?', ['hilfe kürzel tastatur']]);
+    act(() => help.run());
+    expect(useUiStore.getState().helpOpen).toBe(true);
+
+    expect(command('shell.sidebar').label).toBe('Seitenleiste einklappen');
+    expect(command('shell.sidebar').when!()).toBe(true);
+    act(() => command('shell.sidebar').run());
+    expect(useUiStore.getState().sidebarCollapsed).toBe(true);
+    expect(command('shell.sidebar').label).toBe('Seitenleiste ausklappen');
+
+    // below md the sidebar is a drawer behind the menu button: no toggle in the palette
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: false, media: query, addEventListener: () => {}, removeEventListener: () => {} }));
+    expect(command('shell.sidebar').when!()).toBe(false);
   });
 });
 

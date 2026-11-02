@@ -5,9 +5,10 @@
  * P19), and it can't be removed here. Removing waits for its undo toast.
  *
  * `r`, "Relation" or "Relation hinzufügen …" in the item's menu open the dialog: the kind of relation in both
- * directions, then the item, found over the API by key or title in every project the reader sees (the search `q`: a key
- * names exactly that item). A refusal of the server stands at its field (`target_id`: duplicate, self, unknown;
- * `type_id`), any other one on top of the form.
+ * directions, then the item, found through the search (`GET /api/v1/search?types=items`, P16) by key, title or
+ * description in every project the reader sees; a typed key, also with a former identifier and of an archived item,
+ * leads the hits (`key_match`). Nothing is asked before something is typed. A refusal of the server stands at its field
+ * (`target_id`: duplicate, self, unknown; `type_id`), any other one on top of the form.
  */
 
 import { EyeOff, Plus, X } from 'lucide-react';
@@ -26,7 +27,7 @@ import { toast } from '@/components/ui/toast';
 import { useRelationTypes } from '@/hooks/catalog';
 import { useSettle } from '@/hooks/mutation';
 import { useAddRelation, useRemoveRelation } from '@/hooks/relations';
-import { useWorkItems } from '@/hooks/workItems';
+import { useSearch } from '@/hooks/search';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
 import { notifyError } from '@/lib/errors';
 import { t } from '@/lib/i18n';
@@ -39,7 +40,7 @@ import { focusWhenLost, LinkedItem, Section, useDetail } from './shared';
 /** How long typing in the item search pauses before the server is asked. */
 export const SEARCH_PAUSE_MS = 200;
 
-/** Items the search shows at once; typing narrows them. */
+/** Hits the search shows at once; typing narrows them. */
 const SEARCH_LIMIT = 20;
 
 /** What a relation says from the side of the item that shows it. */
@@ -82,11 +83,11 @@ function RelationDialog({ item, open, onOpenChange, finalFocus }: RelationDialog
   const [pickerOpen, setPickerOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [search, setSearch] = useState('');
-  // asked only while the dialog is open: a closed one would load again with every change of an item
   const { reason } = usePermissions();
-  const found = useWorkItems({ q: search === '' ? undefined : search, per_page: SEARCH_LIMIT, lean: true }, { enabled: open });
-  /** The answer to the last search, shown while the next one is on its way (the list does not blink). */
-  const [shown, setShown] = useState<ListedItem[] | null>(null);
+  // asked only while the dialog is open and something is typed; the hits of the last search stay while the next one is
+  // on its way (the list does not blink)
+  const found = useSearch(search, { types: ['items'], limit: SEARCH_LIMIT }, { enabled: open });
+  const typed = query.trim() !== '';
   const [errors, setErrorState] = useState<Errors>({});
   const [refused, setRefused] = useState(0);
   /** Errors of a submit: shown at their fields, and the focus goes to the first of them. */
@@ -107,24 +108,21 @@ function RelationDialog({ item, open, onOpenChange, finalFocus }: RelationDialog
   }, [query]);
 
   useEffect(() => {
-    if (found.data) setShown(found.data.items);
-  }, [found.data]);
-
-  useEffect(() => {
     if (refused > 0) requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-relation-form] [aria-invalid="true"]`)?.focus());
   }, [refused]);
 
-  const candidates = useMemo(() => (found.data?.items ?? shown ?? []).filter((entry) => entry.id !== item.id), [found.data, shown, item.id]);
+  // an emptied field forgets the hits: they belong to the last text, not to none
+  const candidates = useMemo(() => (typed ? (found.data?.items ?? []) : []).filter((entry) => entry.id !== item.id), [typed, found.data, item.id]);
   // an inward kind makes the chosen item the source: it has to be one the person may change
   const inward = chosenKind?.endsWith(':in') ?? false;
   const denied = (entry: ListedItem) => (inward ? reason('item.edit', entry.project_id) : null);
   const options: PickerOption[] = candidates.map((entry) => {
     const type = types?.find((candidate) => candidate.id === entry.type_id);
     const why = denied(entry);
-    return { value: entry.id, label: entry.title, hint: why ? `${entry.key} · ${why}` : entry.key, keywords: [entry.key], icon: type ? <TypeGlyph type={type} /> : undefined, disabled: why !== null };
+    return { value: entry.id, label: entry.title, hint: why ? `${entry.key} · ${why}` : entry.key, icon: type ? <TypeGlyph type={type} /> : undefined, disabled: why !== null };
   });
   const label = kinds.find((entry) => entry.value === chosenKind)?.label ?? '';
-  const hint = found.isError ? undefined : t('items.detail.relations.dialog.item_hint');
+  const hint = typed && found.isError ? undefined : t('items.detail.relations.dialog.item_hint');
 
   function submit() {
     if (!chosenKind) return setErrors({ kind: t('items.detail.relations.dialog.kind_required') });
@@ -194,8 +192,8 @@ function RelationDialog({ item, open, onOpenChange, finalFocus }: RelationDialog
               setErrors({});
             }}
             placeholder={t('items.detail.relations.dialog.search')}
-            emptyText={t('items.detail.relations.dialog.no_match')}
-            load={{ isLoading: found.isPending && shown === null, error: found.error, retry: () => void found.refetch(), retrying: found.isFetching }}
+            emptyText={t(typed ? 'items.detail.relations.dialog.no_match' : 'items.detail.relations.dialog.type_to_search')}
+            load={{ isLoading: typed && found.data === undefined && !found.isError, error: typed ? found.error : null, retry: () => void found.refetch(), retrying: found.isFetching }}
             describedBy={describedBy(itemFieldId, { hint, error: errors.target })}
             invalid={Boolean(errors.target)}
             open={pickerOpen}

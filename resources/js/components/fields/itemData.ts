@@ -8,7 +8,7 @@ import { useMemo } from 'react';
 import { canTakeWork } from '@/domain/people';
 import { cachedZone } from '@/domain/tz';
 import { useOrganization } from '@/hooks/organization';
-import { useMembers, useMembersOf, useProjects } from '@/hooks/projects';
+import { useMembers, useMembersOf, useProjectsWith } from '@/hooks/projects';
 import { useAllUsers } from '@/hooks/users';
 import { useWorkflows } from '@/hooks/workflows';
 import { intlLocale, t } from '@/lib/i18n';
@@ -23,13 +23,15 @@ export const archivedReason = (key: string) => t('items.fields.archived', { key 
  * `item.edit` (a viewer), an archived project, or rights that are still loading.
  */
 export function useEditReason(item: Pick<ListedItem, 'key' | 'project_id' | 'archived_at'>): string | null {
+  // a project the cached list lacks (just created or joined) loads the list again
+  useProjectsWith(item.project_id);
   const { reason } = usePermissions();
   return item.archived_at !== null ? archivedReason(item.key) : reason('item.edit', item.project_id);
 }
 
 /** The project of an item and its workflow, plus the loading state of both. */
 export function useItemWorkflow(item: Pick<ListedItem, 'project_id'>) {
-  const projects = useProjects({ include_archived: true });
+  const projects = useProjectsWith(item.project_id);
   const workflows = useWorkflows();
   const project = projects.data?.items.find((entry) => entry.id === item.project_id);
   const workflow = project ? workflows.data?.items.find((entry) => entry.id === project.workflow_id) : undefined;

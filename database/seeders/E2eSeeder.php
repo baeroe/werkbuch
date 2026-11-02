@@ -25,6 +25,7 @@ use App\Models\User;
 use App\Models\View;
 use App\Models\Workflow;
 use App\Models\WorkItemType;
+use App\Search\SearchIndexer;
 use App\Support\Actor;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -104,6 +105,9 @@ class E2eSeeder extends Seeder
                 'two_factor_confirmed_at' => Carbon::now(),
             ]);
         }
+
+        // after the clean-up: the index of the demo data still held the projects and items of earlier runs
+        app(SearchIndexer::class)->rebuild();
     }
 
     /**

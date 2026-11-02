@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
+use Laravel\Scout\Searchable;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
 
@@ -43,7 +44,7 @@ use Spatie\MediaLibrary\InteractsWithMedia;
 final class Project extends Model implements HasMedia
 {
     /** @use HasFactory<ProjectFactory> */
-    use HasFactory, HasUlids, InteractsWithMedia;
+    use HasFactory, HasUlids, InteractsWithMedia, Searchable;
 
     /**
      * Set by App\Actions\Projects\GetProject, never stored: the project was asked for by a former identifier, so a
@@ -75,6 +76,44 @@ final class Project extends Model implements HasMedia
     public function scopeVisibleTo(Builder $query, User $user): void
     {
         $query->whereIn($query->qualifyColumn('id'), Visibility::projectIds($user));
+    }
+
+    /**
+     * The search document (index `projects`): the identifier and the former ones (they keep resolving), name and
+     * description; who may see the project is filtered when searching (P2). Reads `identifiers` (loaded at once by
+     * makeAllSearchableUsing()).
+     *
+     * @return array{id: string, identifier: string, former_identifiers: list<string>, name: string, description: string, archived: bool}
+     */
+    public function toSearchableArray(): array
+    {
+        return [
+            'id' => $this->id,
+            'identifier' => $this->identifier,
+            'former_identifiers' => array_values($this->identifiers->map(fn (ProjectIdentifier $former) => $former->identifier)->sort()->all()),
+            'name' => $this->name,
+            'description' => $this->description,
+            'archived' => $this->archived_at !== null,
+        ];
+    }
+
+    /**
+     * A project being deleted is gone for everyone at once, from the index as well.
+     */
+    public function shouldBeSearchable(): bool
+    {
+        return $this->deleting_at === null;
+    }
+
+    /**
+     * What toSearchableArray() reads, loaded with the query of a rebuild (makeAllSearchableQuery()).
+     *
+     * @param  Builder<self>  $query
+     * @return Builder<self>
+     */
+    protected function makeAllSearchableUsing(Builder $query): Builder
+    {
+        return $query->with('identifiers:id,project_id,identifier');
     }
 
     public function registerMediaCollections(): void

@@ -13,8 +13,8 @@ import { currentToasts, dismissToast, resetToasts, runToastAction } from '@/comp
 import { preloadEditor } from '@/editor/RichTextEditor';
 import { plainText } from '@/lib/richtext';
 import { useUiStore } from '@/store/ui';
-import { mockApi, queried, type MockApi, type MockRoute } from '@/test/api';
-import { ida, labels, lene, list, makeWorkItem, mara, organization, project, properties, queryItems, relationTypes, resolutions, standard, types, web30, web47, web48 } from '@/test/fixtures';
+import { mockApi, type MockApi, type MockRoute } from '@/test/api';
+import { ida, labels, lene, list, makeWorkItem, mara, organization, project, properties, relationTypes, resolutions, searchResults, standard, types, web30, web47, web48 } from '@/test/fixtures';
 import type { Project, ProjectMember, RelationEntry, RichText, User, WorkItem } from '@/types';
 import { DESCRIPTION_PAUSE_MS } from './Description';
 import { ItemPage } from './ItemPage';
@@ -65,6 +65,8 @@ const relation = (id: string, type_id: string, direction: RelationEntry['directi
 });
 
 let items: WorkItem[] = [];
+/** Former keys the fake search knows, lowercase: `ALT-48` named WEB-48 before its project changed its identifier. */
+let formerKeys: Record<string, string> = {};
 let relations: Record<string, RelationEntry[]> = {};
 let projects: Project[] = [];
 
@@ -79,6 +81,16 @@ const detail = (item: WorkItem) => ({
     },
   },
 });
+/**
+ * What `GET /api/v1/search?types=items` answers from `pool` (`QuerySearch`): a key, also a former one, names its item in
+ * `key_match` and puts it first; otherwise every word is a part of the title.
+ */
+function searchItems(pool: WorkItem[], url: URL) {
+  const q = (url.searchParams.get('q') ?? '').toLowerCase();
+  const match = pool.find((item) => item.key.toLowerCase() === q || formerKeys[q] === item.id);
+  const hits = pool.filter((item) => item.id !== match?.id && q.split(/\s+/).every((word) => item.title.toLowerCase().includes(word)));
+  return { body: { data: searchResults({ items: match ? [match, ...hits] : hits, key_match: match?.id ?? null }) } };
+}
 const problem = (status: number, reason: string, extra: Record<string, unknown> = {}) => ({
   status,
   body: { type: 'about:blank', title: reason, status, reason, detail: 'Nein.', ...extra },
@@ -101,8 +113,7 @@ function renderWith(node: ReactNode, { routes = {}, role = 'member' }: { routes?
     'GET /api/v1/relation-types': () => ({ body: list(relationTypes) }),
     'GET /api/v1/work-item-types': () => ({ body: list(types) }),
     'GET /api/v1/properties': () => ({ body: list(properties) }),
-    // a key names exactly its item, any other text is a part of the title (`ListWorkItems`)
-    'POST /api/v1/work-items/query': (body) => ({ body: list(queryItems([...items, ops12], body)) }),
+    'GET /api/v1/search': (_body, url) => searchItems([...items, ops12], url),
     ...Object.fromEntries(items.flatMap((item) => [`GET /api/v1/work-items/${item.id}`, `GET /api/v1/work-items/${item.key}`].map((path) => [path, () => detail(current(item.id))]))),
     ...Object.fromEntries(
       items.map((item) => [
@@ -169,6 +180,7 @@ const descriptionSaves = () =>
 beforeEach(() => {
   useUiStore.setState(useUiStore.getInitialState());
   items = [web30, web47, web48, web50];
+  formerKeys = {};
   relations = {};
   projects = [];
 });
@@ -796,12 +808,9 @@ describe('Relations', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Relation hinzufügen' });
     expect(dialog.textContent).toContain('Wie hängt WEB-47 mit einem anderen Item zusammen?');
     // the list opens with the dialog, and the search field takes the focus
-    const search = await screen.findByPlaceholderText('Key oder Titel suchen …');
+    const search = await screen.findByPlaceholderText('Key, Titel oder Text suchen …');
     await waitFor(() => expect(document.activeElement).toBe(search));
     await user.keyboard('web-48');
-    const searched = () => api!.calls.find((call) => call.url === '/api/v1/work-items/query' && queried(call.body).q === 'web-48');
-    await waitFor(() => expect(searched()).toBeDefined(), { timeout: SEARCH_PAUSE_MS + 1000 });
-    expect(searched()!.body).toEqual({ shorthand: { q: 'web-48' }, per_page: 20, lean: true });
     await screen.findByRole('option', { name: /Startseite umbauen/ });
     await user.keyboard('{Enter}');
     expect(within(dialog).getByRole('combobox', { name: 'Item: WEB-48 Startseite umbauen' })).toBeTruthy();
@@ -816,6 +825,101 @@ describe('Relations', () => {
     await waitFor(() => expect(document.activeElement).toBe(within(section).getByRole('button', { name: /^Relation(?! „)/ })));
   });
 
+  it('searches the relation target through the search', async () => {
+    const user = userEvent.setup();
+    items = [...items, makeWorkItem({ id: 'wi_web_51', number: 51, key: 'WEB-51', title: 'Kontaktformular prüfen', rank: 'a7' })];
+    renderWith(<ItemPage itemKey="WEB-47" />);
+    await screen.findByRole('region', { name: 'Relationen' });
+    press('r');
+    const search = await screen.findByPlaceholderText('Key, Titel oder Text suchen …');
+    await waitFor(() => expect(document.activeElement).toBe(search));
+    await user.keyboard('kontakt');
+    expect(await screen.findByRole('option', { name: /Kontaktformular prüfen/ })).toBeTruthy();
+    const searches = () => api!.calls.filter((call) => call.url.startsWith('/api/v1/search')).map((call) => call.url);
+    // one request after the pause, with only the items and as many as the list shows
+    expect(searches()).toEqual(['/api/v1/search?q=kontakt&types=items&limit=20']);
+    expect(api!.calls.filter((call) => call.url.startsWith('/api/v1/work-items/query'))).toEqual([]);
+  });
+
+  it('shows the hits of the search as they come, also those the typed text does not spell', async () => {
+    const user = userEvent.setup();
+    // the search finds by the description too, and forgives a typo: the list does not narrow the hits again
+    renderWith(<ItemPage itemKey="WEB-47" />, {
+      routes: { 'GET /api/v1/search': () => ({ body: { data: searchResults({ items: [web48, web50] }) } }) },
+    });
+    await screen.findByRole('region', { name: 'Relationen' });
+    press('r');
+    const search = await screen.findByPlaceholderText('Key, Titel oder Text suchen …');
+    await waitFor(() => expect(document.activeElement).toBe(search));
+    await user.keyboard('startsiete');
+    await screen.findByRole('option', { name: /Startseite umbauen/ });
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual(['Startseite umbauenWEB-48', 'Impressum aktualisierenWEB-50']);
+  });
+
+  it('asks nothing until something is typed and says what to type', async () => {
+    const user = userEvent.setup();
+    renderWith(<ItemPage itemKey="WEB-47" />);
+    await screen.findByRole('region', { name: 'Relationen' });
+    press('r');
+    const search = await screen.findByPlaceholderText('Key, Titel oder Text suchen …');
+    await waitFor(() => expect(document.activeElement).toBe(search));
+    expect(await screen.findByText('Key oder Titel eingeben')).toBeTruthy();
+    expect(screen.queryByRole('option')).toBeNull();
+    await act(() => new Promise((resolve) => setTimeout(resolve, SEARCH_PAUSE_MS + 50)));
+    const searches = () => api!.calls.filter((call) => call.url.startsWith('/api/v1/search'));
+    expect(searches()).toEqual([]);
+
+    // emptied again, the field forgets the hits of the last search
+    await user.keyboard('impressum');
+    await screen.findByRole('option', { name: /Impressum aktualisieren/ });
+    await user.keyboard('{Backspace>9/}');
+    expect(await screen.findByText('Key oder Titel eingeben')).toBeTruthy();
+    expect(screen.queryByRole('option')).toBeNull();
+    await act(() => new Promise((resolve) => setTimeout(resolve, SEARCH_PAUSE_MS + 50)));
+    expect(screen.queryByRole('option')).toBeNull();
+    expect(searches()).toHaveLength(1);
+
+    // a search without hits says so
+    await user.keyboard('zzz');
+    expect(await screen.findByText('Kein Item passt.')).toBeTruthy();
+  });
+
+  it('offers the item of a typed former key first', async () => {
+    const user = userEvent.setup();
+    formerKeys = { 'alt-48': 'wi_web_48' };
+    renderWith(<ItemPage itemKey="WEB-47" />, {
+      routes: {
+        'POST /api/v1/work-items/wi_web_47/relations': () => ({ status: 201, body: { data: relation('rel_new', 'rt_relates', 'outward', web48) } }),
+      },
+    });
+    await screen.findByRole('region', { name: 'Relationen' });
+    press('r');
+    const dialog = await screen.findByRole('dialog', { name: 'Relation hinzufügen' });
+    const search = await screen.findByPlaceholderText('Key, Titel oder Text suchen …');
+    await waitFor(() => expect(document.activeElement).toBe(search));
+    await user.keyboard('ALT-48');
+    // the key match leads the list under its current key, and Enter takes it
+    const first = await screen.findByRole('option', { name: /Startseite umbauen/ });
+    expect(screen.getAllByRole('option')[0]).toBe(first);
+    expect(first.textContent).toContain('WEB-48');
+    await user.keyboard('{Enter}');
+    expect(within(dialog).getByRole('combobox', { name: 'Item: WEB-48 Startseite umbauen' })).toBeTruthy();
+    await user.keyboard('{Control>}{Enter}{/Control}');
+    await waitFor(() => expect(sent('POST', '/api/v1/work-items/wi_web_47/relations')).toEqual([{ type_id: 'rt_relates', target_id: 'wi_web_48' }]));
+  });
+
+  it('leaves the item itself out of the hits', async () => {
+    const user = userEvent.setup();
+    renderWith(<ItemPage itemKey="WEB-47" />);
+    await screen.findByRole('region', { name: 'Relationen' });
+    press('r');
+    const search = await screen.findByPlaceholderText('Key, Titel oder Text suchen …');
+    await waitFor(() => expect(document.activeElement).toBe(search));
+    await user.keyboard('web-47');
+    expect(await screen.findByText('Kein Item passt.')).toBeTruthy();
+    expect(api!.calls.some((call) => call.url === '/api/v1/search?q=web-47&types=items&limit=20')).toBe(true);
+  });
+
   it('relates the other way round, found by title from the menu', async () => {
     const user = userEvent.setup();
     renderWith(<ItemPage itemKey="WEB-47" />, {
@@ -826,7 +930,7 @@ describe('Relations', () => {
     await user.click(await screen.findByRole('button', { name: 'Weitere Aktionen' }));
     await user.click(await screen.findByRole('menuitem', { name: /Relation hinzufügen/ }));
     const dialog = await screen.findByRole('dialog', { name: 'Relation hinzufügen' });
-    const search = await screen.findByPlaceholderText('Key oder Titel suchen …');
+    const search = await screen.findByPlaceholderText('Key, Titel oder Text suchen …');
     await waitFor(() => expect(document.activeElement).toBe(search));
     await user.keyboard('impressum');
     await user.click(await screen.findByRole('option', { name: /Impressum aktualisieren/ }));
@@ -844,13 +948,14 @@ describe('Relations', () => {
     // OPS is a project the member only reads
     projects = [project('WEB', 'member'), project('OPS', 'viewer')];
     renderWith(<ItemPage itemKey="WEB-47" />, {
-      routes: { 'POST /api/v1/work-items/query': (body) => ({ body: list(queryItems([web48, ops12], body)) }) },
+      routes: { 'GET /api/v1/search': () => ({ body: { data: searchResults({ items: [web48, ops12] }) } }) },
     });
     await screen.findByRole('region', { name: 'Relationen' });
     press('r');
     const dialog = await screen.findByRole('dialog', { name: 'Relation hinzufügen' });
-    const search = await screen.findByPlaceholderText('Key oder Titel suchen …');
+    const search = await screen.findByPlaceholderText('Key, Titel oder Text suchen …');
     await waitFor(() => expect(document.activeElement).toBe(search));
+    await user.keyboard('e');
     // outward (WEB-47 becomes the source): both can be chosen
     expect((await screen.findByRole('option', { name: /Mail-Limits/ })).getAttribute('aria-disabled')).not.toBe('true');
 
@@ -859,6 +964,8 @@ describe('Relations', () => {
     await user.click(await screen.findByRole('option', { name: 'wird blockiert von' }));
     // inward: the chosen item becomes the source, so it has to be one the person may change
     await user.click(within(dialog).getByRole('combobox', { name: 'Item: keins gewählt' }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByPlaceholderText('Key, Titel oder Text suchen …')));
+    await user.keyboard('e');
     const readOnly = await screen.findByRole('option', { name: /Mail-Limits/ });
     expect(readOnly.getAttribute('aria-disabled')).toBe('true');
     expect(readOnly.textContent).toContain('Im Projekt OPS darfst du nur lesen');
@@ -878,7 +985,7 @@ describe('Relations', () => {
     const submit = within(dialog).getByRole('button', { name: 'Hinzufügen' });
 
     // without an item the form says what is missing
-    const search = await screen.findByPlaceholderText('Key oder Titel suchen …');
+    const search = await screen.findByPlaceholderText('Key, Titel oder Text suchen …');
     await waitFor(() => expect(document.activeElement).toBe(search));
     await user.keyboard('{Escape}');
     await user.click(submit);
@@ -887,6 +994,8 @@ describe('Relations', () => {
     await waitFor(() => expect(document.activeElement).toBe(trigger));
 
     await user.click(trigger);
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByPlaceholderText('Key, Titel oder Text suchen …')));
+    await user.keyboard('startseite');
     await user.click(await screen.findByRole('option', { name: /Startseite umbauen/ }));
     expect(within(dialog).queryByText('Wähle das Item, mit dem es zusammenhängt.')).toBeNull();
     await user.click(submit);
@@ -918,21 +1027,31 @@ describe('Relations', () => {
     await screen.findByRole('region', { name: 'Relationen' });
     press('r');
     const dialog = await screen.findByRole('dialog', { name: 'Relation hinzufügen' });
-    await screen.findByPlaceholderText('Key oder Titel suchen …');
+    await screen.findByPlaceholderText('Key, Titel oder Text suchen …');
     await user.keyboard('{Escape}');
     await user.click(within(dialog).getByRole('button', { name: 'Hinzufügen' }));
     expect(await within(dialog).findByText('Wähle, wie die Items zusammenhängen.')).toBeTruthy();
   });
 
-  it('says why the search failed and searches again', async () => {
+  it('shows a failed search with Try again', async () => {
     const user = userEvent.setup();
     let failing = true;
+    const unavailable = 'Die Suche ist gerade nicht erreichbar. Versuch es gleich noch einmal.';
     renderWith(<ItemPage itemKey="WEB-47" />, {
-      routes: { 'POST /api/v1/work-items/query': () => (failing ? problem(503, 'service_unavailable', { detail: 'Gerade nicht.' }) : { body: list([web48]) }) },
+      routes: {
+        'GET /api/v1/search': (_body, url) => (failing ? problem(503, 'search_unavailable', { detail: unavailable }) : searchItems(items, url)),
+      },
     });
     await screen.findByRole('region', { name: 'Relationen' });
     press('r');
-    expect(await screen.findByText('Die Auswahl konnte nicht geladen werden: Gerade nicht.')).toBeTruthy();
+    const dialog = await screen.findByRole('dialog', { name: 'Relation hinzufügen' });
+    const search = await screen.findByPlaceholderText('Key, Titel oder Text suchen …');
+    await waitFor(() => expect(document.activeElement).toBe(search));
+    expect(within(dialog).getByText('Key oder Titel tippen, Enter wählt.')).toBeTruthy();
+    await user.keyboard('startseite');
+    expect(await screen.findByText(`Die Auswahl konnte nicht geladen werden: ${unavailable}`)).toBeTruthy();
+    // the hint under the field gives way to the error in the list
+    expect(within(dialog).queryByText('Key oder Titel tippen, Enter wählt.')).toBeNull();
     failing = false;
     await user.click(screen.getByRole('button', { name: 'Erneut versuchen' }));
     expect(await screen.findByRole('option', { name: /Startseite umbauen/ })).toBeTruthy();

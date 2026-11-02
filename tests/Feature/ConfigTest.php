@@ -1,5 +1,9 @@
 <?php
 
+use App\Models\Project;
+use App\Models\User;
+use App\Models\WorkItem;
+use App\Search\SearchConsumer;
 use Illuminate\Support\Env;
 
 /**
@@ -33,6 +37,8 @@ it('has the documented defaults', function () {
         ->and(config('werkbuch.attachments_max_mb'))->toBe(25)
         ->and(config('werkbuch.notification_mail_delay'))->toBe(5)
         ->and(config('werkbuch.webhooks_allow_private'))->toBeFalse()
+        // the file's default: the tests switch the consumers off (Tests\TestCase)
+        ->and((require base_path('config/werkbuch.php'))['event_consumers'])->toBe([SearchConsumer::class])
         ->and(config('werkbuch.event_consumers'))->toBe([])
         ->and(config('werkbuch.rate_limits.api'))->toBe(600)
         ->and(config('werkbuch.rate_limits.mcp'))->toBe(300)
@@ -49,4 +55,30 @@ it('reads the environment', function () {
 
     expect(config('werkbuch.attachments_max_mb'))->toBe(50)
         ->and(config('werkbuch.webhooks_allow_private'))->toBeTrue();
+});
+
+it('keeps the search settings', function () {
+    $index = fn (string $class): array => config('scout.meilisearch.index-settings')[$class];
+
+    expect(config('scout.prefix'))->toBe('testing_')
+        ->and(config('scout.queue'))->toBeFalse()
+        ->and(config('scout.after_commit'))->toBeFalse()
+        ->and(config('scout.soft_delete'))->toBeFalse()
+        ->and(config('scout.identify'))->toBeFalse()
+        ->and(config('scout.chunk'))->toBe(['searchable' => 500, 'unsearchable' => 500])
+        ->and(array_keys(config('scout.meilisearch.index-settings')))->toBe([WorkItem::class, Project::class, User::class])
+        ->and($index(WorkItem::class)['searchableAttributes'])->toBe(['key', 'title', 'description'])
+        ->and($index(WorkItem::class)['filterableAttributes'])->toBe(['project_id', 'archived', 'type_id', 'state_category', 'assignee_id', 'label_ids'])
+        ->and($index(WorkItem::class)['rankingRules'])->toBe(['words', 'typo', 'proximity', 'attribute', 'sort', 'exactness', 'updated_at:desc'])
+        ->and($index(WorkItem::class)['typoTolerance'])->toBe(['disableOnAttributes' => ['key']])
+        ->and($index(Project::class))->toBe([
+            'searchableAttributes' => ['identifier', 'former_identifiers', 'name', 'description'],
+            'filterableAttributes' => ['id', 'archived'],
+            'typoTolerance' => ['disableOnAttributes' => ['identifier', 'former_identifiers']],
+        ])
+        ->and($index(User::class))->toBe([
+            'searchableAttributes' => ['name', 'handle'],
+            'filterableAttributes' => ['disabled', 'type'],
+            'typoTolerance' => ['disableOnAttributes' => ['handle']],
+        ]);
 });

@@ -1,4 +1,5 @@
-import { useQueries, useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import {
   addMember,
   archiveProject,
@@ -29,6 +30,30 @@ export function useProjects(args: Omit<ListProjectsArgs, 'cursor' | 'per_page'> 
     queryFn: () => allPages((cursor) => listProjects({ ...args, cursor })),
     enabled: options.enabled !== false,
   });
+}
+
+/** The ids of projects that already made the list load again once, per query client: never a loop. */
+const reloadedFor = new WeakMap<QueryClient, Set<string>>();
+
+/**
+ * The projects the rights and the workflows read (`include_archived`), loaded again once when an item names a project
+ * the cached list lacks: one created or joined after the list loaded, which counts as fresh for 10 s. Without it the
+ * item of a search hit would wait for its project (fields locked, "Status: loading") until something else loads the
+ * list. A project that stays missing (no longer visible) is asked for once only.
+ */
+export function useProjectsWith(projectId: string) {
+  const client = useQueryClient();
+  const projects = useProjects({ include_archived: true });
+  const missing = projects.data !== undefined && !projects.isFetching && !projects.data.items.some((project) => project.id === projectId);
+  useEffect(() => {
+    if (!missing) return;
+    const asked = reloadedFor.get(client) ?? new Set<string>();
+    reloadedFor.set(client, asked);
+    if (asked.has(projectId)) return;
+    asked.add(projectId);
+    void client.invalidateQueries({ queryKey: qk.projects.list({ include_archived: true }), exact: true });
+  }, [missing, projectId, client]);
+  return projects;
 }
 
 /** One project by identifier (a former identifier works; compare `identifier` of the answer to redirect). */

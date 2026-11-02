@@ -217,3 +217,18 @@ it('refuses production', function () {
     expect(fn () => app()->call([new E2eSeeder, 'run']))->toThrow(RuntimeException::class)
         ->and(User::where('type', 'person')->count())->toBe(0);
 });
+
+it('fills the search index after the projects of earlier runs are gone', function () {
+    $this->seed(E2eSeeder::class);
+    $erik = User::where('email', 'e2e@example.com')->sole();
+    $left = CreateProject::run(actor($erik), ['name' => 'E2E desktop-light ABCDE', 'identifier' => 'EABCDEA']);
+    WorkItem::factory()->for($left)->create();
+    $engine = searchEngine();
+
+    $this->seed(E2eSeeder::class);
+
+    expect(collect($engine->documents('testing_projects'))->pluck('identifier')->sort()->values()->all())->toBe(['APP', 'OPS', 'WEB'])
+        ->and($engine->documents('testing_work_items'))->toHaveCount(WorkItem::count())
+        ->and(collect($engine->documents('testing_work_items'))->pluck('project_id')->unique())->not->toContain($left->id)
+        ->and($engine->documents('testing_users'))->toHaveCount(User::count());
+});

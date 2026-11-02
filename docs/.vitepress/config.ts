@@ -10,8 +10,8 @@ const description = 'Open, self-hosted project management: work items with your 
 
 // every page exists in docs/en and docs/de under the same path (tests/Unit/DocsTest.php); later phases add theirs
 const groups: { title: string; pages: string[] }[] = [
-    { title: 'guide', pages: ['development'] },
-    { title: 'concepts', pages: ['concepts/permissions', 'concepts/projects', 'concepts/workflows', 'concepts/types-and-properties', 'concepts/work-items', 'concepts/views', 'bots'] },
+    { title: 'guide', pages: ['development', 'keyboard'] },
+    { title: 'concepts', pages: ['concepts/permissions', 'concepts/projects', 'concepts/workflows', 'concepts/types-and-properties', 'concepts/work-items', 'concepts/views', 'search', 'bots'] },
 ];
 
 const sidebar = (prefix: string, t: Record<string, string>): DefaultTheme.SidebarItem[] =>
@@ -21,12 +21,14 @@ const en: Record<string, string> = {
     guide: 'Guide',
     concepts: 'Concepts',
     development: 'Development',
+    keyboard: 'Keyboard',
     'concepts/permissions': 'Roles and permissions',
     'concepts/projects': 'Projects',
     'concepts/workflows': 'Workflows',
     'concepts/types-and-properties': 'Types and properties',
     'concepts/work-items': 'Work items',
     'concepts/views': 'Views',
+    search: 'Search',
     bots: 'Bots',
 };
 
@@ -34,12 +36,14 @@ const de: Record<string, string> = {
     guide: 'Anleitung',
     concepts: 'Konzepte',
     development: 'Entwicklung',
+    keyboard: 'Tastatur',
     'concepts/permissions': 'Rollen und Rechte',
     'concepts/projects': 'Projekte',
     'concepts/workflows': 'Workflows',
     'concepts/types-and-properties': 'Typen und Properties',
     'concepts/work-items': 'Work Items',
     'concepts/views': 'Views',
+    search: 'Suche',
     bots: 'Bots',
 };
 

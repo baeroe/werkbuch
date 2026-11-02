@@ -2,9 +2,15 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { mara } from '@/test/fixtures';
+import { useUiStore } from '@/store/ui';
+import type { User } from '@/types';
 import { ErrorPage, NotFound } from './PageStates';
 
+let signedIn: User | null = mara;
+
 vi.mock('@inertiajs/react', () => ({
+  usePage: () => ({ props: { auth: { user: signedIn, permissions: [] } } }),
   Link: ({ href, className, children }: { href: string; className?: string; children: ReactNode }) => (
     <a href={href} className={className}>
       {children}
@@ -13,6 +19,8 @@ vi.mock('@inertiajs/react', () => ({
 }));
 
 afterEach(() => {
+  signedIn = mara;
+  useUiStore.setState(useUiStore.getInitialState());
   document.title = '';
   vi.unstubAllGlobals();
 });
@@ -24,6 +32,19 @@ describe('NotFound', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Diese Seite gibt es nicht' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Meine Items öffnen' }).getAttribute('href')).toBe('/my-items');
     expect(document.title).toBe('Nicht gefunden – werkbuch');
+  });
+
+  it('offers the search on the 404 page when signed in, not as a guest', async () => {
+    const { unmount } = render(<NotFound />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Suchen' }));
+    expect(useUiStore.getState().paletteOpen).toBe(true);
+    unmount();
+
+    signedIn = null;
+    render(<NotFound />);
+    expect(screen.queryByRole('button', { name: 'Suchen' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Meine Items öffnen' })).toBeTruthy();
   });
 
   it('names what is missing when the screen knows more', () => {

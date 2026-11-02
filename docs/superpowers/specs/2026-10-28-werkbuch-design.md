@@ -1,6 +1,14 @@
 # werkbuch: Fachkonzept und App-Design
 
-Stand: 2026-11-02 · Status: freigegeben (die Änderungen vom 2026-10-31 und vom 2026-11-02 warten auf Rafaels Bestätigung, außer der bestätigten Status-Zuordnung aus Phase 4)
+Stand: 2026-11-02 · Status: freigegeben (die Änderungen vom 2026-10-31 und vom 2026-11-02 (Phasen 5 und 6) warten auf Rafaels Bestätigung, außer der bestätigten Status-Zuordnung aus Phase 4)
+
+> **Änderungen vom 2026-11-02 (Phase 6):** Beim Umsetzen von Phase 6 (Suche und Suchtreffer in der Befehlspalette) hat Claude als Controller Folgendes entschieden; es ändert oder präzisiert die Spec und **wartet auf Rafaels Bestätigung** (Begründung und „Falls falsch“ in `docs/superpowers/plans/2026-10-30-werkbuch-app-rulings.md`, A199 ff.):
+> - **Views in der Suche (4.17):** Die Suche findet auch Views über ihren Namen (jedes Wort, ohne Rücksicht auf Groß- und Kleinschreibung und Akzente). Views stehen nicht im Suchindex, sie kommen direkt aus der Datenbank; Wiki-Seiten bekommen mit Phase 9 einen Index (A204).
+> - **Personen-Treffer nur für Org-Admins (4.17):** Die Palette zeigt Personen und Bots nur Org-Admins, weil ein Treffer in die Einstellungen Personen bzw. Bots führt, die nur sie öffnen; über REST findet jedes Konto aktive Personen und Bots wie in der Liste der Konten (A205).
+> - **Archiv in der Suche wie in Listen (4.17):** Ohne `include_archived` findet die Suche weder archivierte Items noch Items und Projekte archivierter Projekte; die Palette sucht immer so (A201, wie A163).
+> - **Key-Sprung (4.17):** Ein Key springt auch über eine frühere Kennung des Projekts (`WEB-47` nach der Umbenennung in SITE) und auch zu einem archivierten Item; ein Key, dessen Item die Person nicht sieht, antwortet genau wie ein unbekannter (A202).
+> - **Relationen (4.9, 4.17):** Das Ziel einer neuen Relation sucht der Dialog über dieselbe Suche (Key, Titel, Beschreibung, Key-Sprung); bevor jemand tippt, schlägt er nichts vor (A214).
+> - **Suche ohne Meilisearch (4.17, 5.1):** Antwortet Meilisearch nicht, sagt die Suche das (503 `search_unavailable`, in der Palette mit „Erneut versuchen“) statt leere Treffer zu zeigen; ein getippter Key springt trotzdem (A210).
 
 > **Änderungen vom 2026-11-02 (Phase 5):** Beim Umsetzen von Phase 5 (Views, Filter-Engine, Listen-Layouts) hat Claude als Controller Folgendes entschieden; es ändert oder präzisiert die Spec und **wartet auf Rafaels Bestätigung** (Begründung und „Falls falsch“ in `docs/superpowers/plans/2026-10-30-werkbuch-app-rulings.md`, A159 ff.):
 > - **Zwei neue Filterfelder (4.11):** „Ist ein Epic“ (`epic`, Typ mit Häkchen „Epic“) und „Beobachtet“ (`subscribed`, der Leser beobachtet das Item). „Beobachtet“ ist damit eine normale Liste und lässt sich als View speichern (A164, A184).

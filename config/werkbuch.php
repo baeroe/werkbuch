@@ -1,5 +1,7 @@
 <?php
 
+use App\Search\SearchConsumer;
+
 return [
 
     'version' => '0.1.0-dev',
@@ -22,8 +24,9 @@ return [
     'webhooks_allow_private' => (bool) env('WEBHOOKS_ALLOW_PRIVATE', false),
 
     // classes implementing App\Events\EventConsumer: each receives every domain event once, after the commit, in its own
-    // queue (App\Events\Outbox); later phases add notifications, webhooks, search, live updates and automations
-    'event_consumers' => [],
+    // queue (App\Events\Outbox); later phases add notifications, webhooks, live updates and automations. Off in tests
+    // (Tests\TestCase), where consumers() switches them on.
+    'event_consumers' => [SearchConsumer::class],
 
     // requests per minute
     'rate_limits' => [

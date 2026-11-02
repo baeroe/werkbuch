@@ -373,3 +373,15 @@ it('refuses production', function () {
         ->and(fn () => app()->call([new E2eSeeder, 'run']))->toThrow(RuntimeException::class)
         ->and(User::where('type', AccountType::Person)->count())->toBe(0);
 });
+
+it('fills the search index after seeding', function () {
+    $engine = searchEngine();
+
+    $this->seed(DemoSeeder::class);
+
+    expect($engine->documents('testing_work_items'))->toHaveCount(71)
+        ->and(WorkItem::count())->toBe(71)
+        ->and(collect($engine->documents('testing_projects'))->pluck('identifier')->sort()->values()->all())->toBe(['APP', 'OPS', 'WEB'])
+        ->and($engine->documents('testing_users'))->toHaveCount(User::count())
+        ->and($engine->updatedSettings('testing_work_items'))->not->toBeNull();
+});

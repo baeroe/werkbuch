@@ -94,6 +94,7 @@ return [
         'source_id' => $w->item('project_admin')->id,
         'target_id' => $w->item('project_admin')->id,
     ])->id]],
+    'search items, projects, people and views' => ['GET', '/api/v1/search'],
     'list views' => ['GET', '/api/v1/views'],
     'create a view' => ['POST', '/api/v1/views', 'body' => [
         'name' => 'Matrix', 'icon' => 'layers', 'filter' => ['version' => 1, 'conditions' => []],

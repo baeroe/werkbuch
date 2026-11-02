@@ -12,10 +12,12 @@
         "laravel/framework": "^13.39",
         "laravel/reverb": "^1.12",
         "laravel/sanctum": "^4.3",
+        "laravel/scout": "^11.9",
         "laravel/tinker": "^3.0",
         "league/commonmark": "^2.10",
         "league/html-to-markdown": "^5.2",
         "lorisleiva/laravel-actions": "^2.13",
+        "meilisearch/meilisearch-php": "^1.17",
         "spatie/laravel-medialibrary": "^11.23",
         "spatie/laravel-permission": "^8.3",
         "ueberdosis/tiptap-php": "^2.2"

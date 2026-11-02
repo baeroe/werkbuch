@@ -1,19 +1,35 @@
 /*
- * The inside of one palette row: a command with its icon and shortcut (a chevron when it opens a sub-list), or an
- * option of a sub-list with its hint. The rows of search results come with the search (Phase 6).
+ * The inside of one palette row, per kind: a command with its icon and shortcut (a chevron when it opens a sub-list),
+ * the jump to a typed key, an item with its type, key and status, a project, a person or bot, a view; or an option of a
+ * sub-list with its hint (moodboard: grouped hits with kbd hints).
  */
 
-import { ChevronRight } from 'lucide-react';
+import { ArrowRight, ChevronRight } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { botWord } from '@/components/fields/format';
+import { Avatar } from '@/components/ui/Avatar';
+import { cx } from '@/components/ui/cx';
 import { Kbd } from '@/components/ui/Kbd';
+import { ProjectBadge } from '@/components/ui/ProjectBadge';
+import { StatusIcon } from '@/components/ui/StatusIcon';
+import { typeIcon } from '@/components/ui/TypeTab';
+import { ViewIcon } from '@/components/ui/ViewIcon';
 import type { CommandOption } from '@/lib/commands';
+import { t } from '@/lib/i18n';
+import type { State, WorkItemType } from '@/types';
 import { Highlight } from './Highlight';
 import type { PaletteEntry } from './model';
 
-/** 16 px slot at the start of a row, so all labels line up. */
-function Lead({ children }: { children?: ReactNode }) {
+/** What the rows of items look up: their type and their state. */
+export interface RowLookups {
+  typeOf: (id: string) => WorkItemType | undefined;
+  stateOf: (id: string) => State | undefined;
+}
+
+/** 16 px slot at the start of a row, so all labels line up; in the tone of an item's type. */
+function Lead({ children, tone }: { children?: ReactNode; tone?: string }) {
   return (
-    <span aria-hidden="true" className="inline-flex size-4 shrink-0 text-muted [&>svg]:size-4">
+    <span data-tone={tone} aria-hidden="true" className={cx('inline-flex size-4 shrink-0 [&>svg]:size-4', tone ? 'text-[var(--tab-ink)]' : 'text-muted')}>
       {children}
     </span>
   );
@@ -23,18 +39,109 @@ function Label({ children }: { children: ReactNode }) {
   return <span className="min-w-0 flex-1 truncate">{children}</span>;
 }
 
-export function EntryRow({ entry, terms }: { entry: PaletteEntry; terms: string[] }) {
-  const { command } = entry;
+function Meta({ children, className }: { children: ReactNode; className?: string }) {
+  return <span className={cx('ml-auto inline-flex shrink-0 items-center gap-1 pl-2 text-sm text-muted', className)}>{children}</span>;
+}
+
+/** "WEB-47 öffnen" with the key in bold, wherever the language puts it. */
+function Jump({ itemKey }: { itemKey: string }) {
+  const [before, after] = t('palette.jump').split(':key');
   return (
     <>
-      <Lead>{command.icon}</Lead>
-      <Label>
-        <Highlight text={command.label} terms={terms} />
-      </Label>
-      {command.keys && <Kbd keys={command.keys} />}
-      {command.subpage && <ChevronRight className="size-4 shrink-0 text-muted" aria-hidden="true" />}
+      {before}
+      <span translate="no" className="font-semibold tabular-nums">
+        {itemKey}
+      </span>
+      {after}
     </>
   );
+}
+
+export function EntryRow({ entry, terms, lookups }: { entry: PaletteEntry; terms: string[]; lookups: RowLookups }) {
+  switch (entry.kind) {
+    case 'command': {
+      const { command } = entry;
+      return (
+        <>
+          <Lead>{command.icon}</Lead>
+          <Label>
+            <Highlight text={command.label} terms={terms} />
+          </Label>
+          {command.keys && <Kbd keys={command.keys} />}
+          {command.subpage && <ChevronRight className="size-4 shrink-0 text-muted" aria-hidden="true" />}
+        </>
+      );
+    }
+    case 'jump':
+      return (
+        <>
+          <Lead>
+            <ArrowRight />
+          </Lead>
+          <Label>
+            <Jump itemKey={entry.key} />
+          </Label>
+        </>
+      );
+    case 'item': {
+      const { item } = entry;
+      const type = lookups.typeOf(item.type_id);
+      const state = lookups.stateOf(item.state_id);
+      const Icon = typeIcon(type?.icon ?? 'square-check');
+      return (
+        <>
+          <Lead tone={type?.tone ?? 'sky'}>
+            <Icon />
+          </Lead>
+          <span translate="no" className="min-w-12 shrink-0 text-sm font-semibold text-muted tabular-nums">
+            {item.key}
+          </span>
+          <Label>
+            <Highlight text={item.title} terms={terms} />
+          </Label>
+          {state && (
+            <Meta className="max-sm:hidden">
+              <StatusIcon icon={state.icon} category={state.category} label={state.name} className="size-3.5" aria-hidden="true" />
+              {state.name}
+            </Meta>
+          )}
+        </>
+      );
+    }
+    case 'project':
+      return (
+        <>
+          <ProjectBadge project={entry.project} className="-my-0.5" />
+          <Label>
+            <Highlight text={entry.project.name} terms={terms} />
+          </Label>
+          <Meta>
+            <span translate="no">{entry.project.identifier}</span>
+          </Meta>
+        </>
+      );
+    case 'person':
+      return (
+        <>
+          <Avatar user={entry.user} size="sm" decorative className="-my-0.5" />
+          <Label>
+            <Highlight text={entry.user.name} terms={terms} />
+          </Label>
+          <Meta>{botWord(entry.user) ?? <span translate="no">@{entry.user.handle}</span>}</Meta>
+        </>
+      );
+    case 'view':
+      return (
+        <>
+          <Lead>
+            <ViewIcon icon={entry.view.icon} />
+          </Lead>
+          <Label>
+            <Highlight text={entry.view.name} terms={terms} />
+          </Label>
+        </>
+      );
+  }
 }
 
 /**

@@ -20,6 +20,7 @@ import { useRemoval } from '@/features/settings/frame/useRemoval';
 import { useProjects } from '@/hooks/projects';
 import { useCurrentUser } from '@/hooks/users';
 import { useDeleteView, useSaveView, useViews } from '@/hooks/views';
+import { useCommand } from '@/lib/commands';
 import { notifyError } from '@/lib/errors';
 import { intlLocale, t } from '@/lib/i18n';
 import { paths } from '@/lib/links';
@@ -81,6 +82,19 @@ export function ViewsScreen({ create }: { create: boolean }) {
 
   const createReason = reason('view.create');
   const openCreate = () => setDialog({ open: true, view: null });
+  // registered anew when the right arrives, so an open palette shows it then
+  useCommand(
+    {
+      id: 'views.create',
+      label: t('commands.views.create'),
+      group: t('shell.nav.views'),
+      icon: <Plus />,
+      keywords: [t('commands.create.keywords')],
+      run: openCreate,
+      when: () => createReason === null,
+    },
+    [createReason],
+  );
 
   /**
    * A copy of any view, for every member; the copy is theirs. Every copy ends itself (`mutateAsync`): with several

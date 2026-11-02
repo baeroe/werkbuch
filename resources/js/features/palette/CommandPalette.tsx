@@ -1,26 +1,68 @@
 /*
- * The command palette (⌘K / Ctrl+K, spec 4.17): one input for the commands, on strong tracing paper above a light
- * scrim. It is a modal dialog: the focus stays inside and returns where it came from when it closes.
+ * The command palette (⌘K / Ctrl+K, spec 4.17): one input for search and commands, on strong tracing paper above a
+ * light scrim. It is a modal dialog: the focus stays inside and returns where it came from when it closes.
  *
  * The input is a combobox: the arrows move the active row, Enter runs it, Escape closes. A command with a sub-list
  * (e.g. the status choice) shows that list in place; Backspace in the empty input goes back. `openPalette(id)` opens
  * the palette right in a command's sub-list (the item shortcuts `s`, `a`, `p` … do that). The list itself comes from
- * `model.ts`. Search results come with the search (Phase 6, P14); until then the palette finds commands only.
+ * `model.ts`; the search runs on the server (`useSearch`, a moment after the last key, never in a sub-list). Enter
+ * runs what the list shows now, also while the search is still on its way: a typed key jumps at once.
  */
 
 import { Dialog as BaseDialog } from '@base-ui/react/dialog';
-import { ChevronLeft, Search, X } from 'lucide-react';
+import { router } from '@inertiajs/react';
+import { ChevronLeft, CircleAlert, RotateCw, Search, X } from 'lucide-react';
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
+import { Button } from '@/components/ui/Button';
 import { cx } from '@/components/ui/cx';
 import { IconButton } from '@/components/ui/IconButton';
 import { Kbd } from '@/components/ui/Kbd';
+import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
 import { optionClass } from '@/components/ui/styles';
+import { useSearch } from '@/hooks/search';
+import { useWorkflows } from '@/hooks/workflows';
+import { useWorkItemTypes } from '@/hooks/workItemTypes';
 import { listCommands, useCommands, type CommandDef } from '@/lib/commands';
+import { causeOf } from '@/lib/errors';
 import { t, tn } from '@/lib/i18n';
+import { paths } from '@/lib/links';
+import { usePermissions } from '@/lib/permissions';
 import { useDialogScope } from '@/lib/shortcuts/useShortcut';
 import { useUiStore } from '@/store/ui';
-import { EntryRow, OptionRow } from './EntryRow';
-import { matchingOptions, rootSections, searchTerms } from './model';
+import type { State } from '@/types';
+import { EntryRow, OptionRow, type RowLookups } from './EntryRow';
+import { LIMITS, matchingOptions, rootSections, searchTerms, type PaletteEntry } from './model';
+
+/** The search waits this long after the last key. */
+export const SEARCH_DELAY_MS = 150;
+
+/** The longest query the search takes (`QuerySearch::Q_MAX`, in characters); the palette sends no more. */
+const SEARCH_MAX = 255;
+
+function useDebounced<T>(value: T, ms: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), ms);
+    return () => clearTimeout(timer);
+  }, [value, ms]);
+  return debounced;
+}
+
+/** Where a hit leads; a command runs instead. */
+function targetOf(entry: Exclude<PaletteEntry, { kind: 'command' }>): string {
+  switch (entry.kind) {
+    case 'jump':
+      return paths.item(entry.key);
+    case 'item':
+      return paths.item(entry.item.key);
+    case 'project':
+      return paths.project(entry.project.identifier);
+    case 'person':
+      return paths.settings(entry.user.type === 'bot' ? 'bots' : 'people');
+    case 'view':
+      return paths.view(entry.view.id);
+  }
+}
 
 /** One row of the list, whatever it shows. */
 interface Row {
@@ -31,8 +73,13 @@ interface Row {
 
 const close = () => useUiStore.getState().setPaletteOpen(false);
 
-function Tip() {
-  return <p className="px-2.5 pt-2 pb-1.5 text-sm text-pretty text-muted">{t('palette.tip')}</p>;
+function Tips() {
+  return (
+    <ul className="flex flex-col gap-1 px-2.5 pt-2 pb-1.5 text-sm text-pretty text-muted">
+      <li>{t('palette.key_tip')}</li>
+      <li>{t('palette.tip')}</li>
+    </ul>
+  );
 }
 
 /** `inputRef` belongs to the dialog: it puts the focus there when it opens, also in a sub-list with its back chip first. */
@@ -45,12 +92,31 @@ function PaletteBody({ inputRef }: { inputRef: RefObject<HTMLInputElement | null
     return listCommands().find((command) => command.id === commandId && command.subpage) ?? null;
   });
   const [activeId, setActiveId] = useState<string | null>(null);
+  // what the search gets: nothing in a sub-list, at most what it takes (whole characters, never half a pair)
+  const wanted = subpage ? '' : Array.from(query.trim()).slice(0, SEARCH_MAX).join('');
+  const searchQuery = useDebounced(wanted, SEARCH_DELAY_MS);
+  // no more hits than the palette shows (the items show the most)
+  const search = useSearch(searchQuery, { limit: LIMITS.items }, { enabled: !subpage });
+  const types = useWorkItemTypes();
+  const workflows = useWorkflows();
+  const people = usePermissions().can('org.manage');
   const listId = useId();
   useDialogScope();
 
   const terms = searchTerms(query);
+  const states = new Map<string, State>((workflows.data?.items ?? []).flatMap((workflow) => workflow.states.map((state) => [state.id, state] as const)));
+  const lookups: RowLookups = {
+    typeOf: (id) => types.data?.items.find((type) => type.id === id),
+    stateOf: (id) => states.get(id),
+  };
 
-  function choose(command: CommandDef) {
+  function choose(entry: PaletteEntry) {
+    if (entry.kind !== 'command') {
+      router.visit(targetOf(entry));
+      close();
+      return;
+    }
+    const { command } = entry;
     command.run();
     if (command.subpage) {
       setSubpage(command);
@@ -68,8 +134,14 @@ function PaletteBody({ inputRef }: { inputRef: RefObject<HTMLInputElement | null
     inputRef.current?.focus();
   }
 
-  // what the list shows: the sub-list of a command, or the commands
+  // what the list shows: the sub-list of a command, or the commands and the hits (only those of what is typed now:
+  // emptied, the input shows the commands, not the last hits the search keeps)
   const page = subpage?.subpage?.();
+  const shown = searchQuery !== '' && wanted !== '' ? search.data : undefined;
+  // the key match of an answer to another query (the last hits stay while the next query is on its way) names an item
+  // of another key: the typed key jumps instead
+  const fresh = searchQuery === wanted && !search.isPlaceholderData;
+  const results = shown && !fresh ? { ...shown, key_match: null } : shown;
   const groups: { id: string; label: string; rows: Row[] }[] = page
     ? [
         {
@@ -85,14 +157,19 @@ function PaletteBody({ inputRef }: { inputRef: RefObject<HTMLInputElement | null
           })),
         },
       ].filter((group) => group.rows.length > 0)
-    : rootSections(query, commands).map((section) => ({
+    : rootSections(query, commands, results, { people }).map((section) => ({
         id: section.id,
         label: section.label,
-        rows: section.entries.map((entry) => ({ id: entry.id, run: () => choose(entry.command), content: <EntryRow entry={entry} terms={terms} /> })),
+        rows: section.entries.map((entry) => ({ id: entry.id, run: () => choose(entry), content: <EntryRow entry={entry} terms={terms} lookups={lookups} /> })),
       }));
   const rows = groups.flatMap((group) => group.rows);
   const active = rows.find((row) => row.id === activeId) ?? rows[0];
-  const optionId = (row: Row) => `${listId}-${rows.indexOf(row)}`;
+  // by what the row shows, not by its place: another hit in the active place is another active option
+  const optionId = (row: Row) => `${listId}-row-${row.id}`;
+
+  // the search has not answered for what is typed yet
+  const searching = !page && terms.length > 0 && (searchQuery !== wanted || search.isFetching);
+  const searchFailed = !page && searchQuery !== '' && wanted !== '' && search.isError;
 
   // keep the active row in view while the arrows move it, and when the list changes under it
   const activeDomId = active ? optionId(active) : null;
@@ -119,7 +196,10 @@ function PaletteBody({ inputRef }: { inputRef: RefObject<HTMLInputElement | null
     }
   }
 
-  const status = terms.length > 0 ? tn('palette.hits', rows.length) : '';
+  // a failed search has its alert: no count beside it
+  let status = '';
+  if (searching) status = t('palette.searching');
+  else if (terms.length > 0 && !searchFailed) status = tn('palette.hits', rows.length);
 
   return (
     <>
@@ -193,14 +273,30 @@ function PaletteBody({ inputRef }: { inputRef: RefObject<HTMLInputElement | null
           ))}
         </div>
 
-        {page && rows.length === 0 && <p className="px-2.5 py-6 text-center text-ui text-pretty text-muted">{page.emptyText ?? t('palette.no_match', { query })}</p>}
-        {!page && rows.length === 0 && (
-          <div className="px-2.5 pt-5 pb-2 text-center">
-            <p className="font-display text-md font-bold tracking-title text-balance text-ink">{t('palette.empty')}</p>
-            <Tip />
+        {searching && rows.length === 0 && (
+          <SkeletonGroup label={t('palette.searching')} className="flex flex-col gap-3.5 px-2.5 py-3">
+            <Skeleton className="h-3.5 w-2/3" />
+            <Skeleton className="h-3.5 w-1/2" />
+            <Skeleton className="h-3.5 w-3/5" />
+          </SkeletonGroup>
+        )}
+        {searchFailed && (
+          <div role="alert" className="mx-1 mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-2 rounded-ctl bg-danger-soft px-3 py-2 text-ui">
+            <CircleAlert className="size-4 shrink-0 text-danger" aria-hidden="true" />
+            <span className="min-w-0 flex-1 text-ink">{t('palette.search_failed', { cause: causeOf(search.error) })}</span>
+            <Button variant="secondary" size="sm" icon={RotateCw} pending={search.isFetching} onClick={() => void search.refetch()}>
+              {t('common.retry')}
+            </Button>
           </div>
         )}
-        {!page && rows.length > 0 && terms.length === 0 && <Tip />}
+        {page && rows.length === 0 && <p className="px-2.5 py-6 text-center text-ui text-pretty text-muted">{page.emptyText ?? t('palette.no_match', { query })}</p>}
+        {!page && terms.length > 0 && rows.length === 0 && !searching && !searchFailed && (
+          <div className="px-2.5 pt-5 pb-2 text-center">
+            <p className="font-display text-md font-bold tracking-title text-balance text-ink">{t('palette.no_results', { query: query.trim() })}</p>
+            <Tips />
+          </div>
+        )}
+        {!page && terms.length === 0 && <Tips />}
       </div>
 
       <p role="status" className="sr-only">

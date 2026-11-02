@@ -1,18 +1,19 @@
 /*
- * The shell's own shortcuts and palette commands (start set of spec 5.3): the shortcut help, undo, new item, the `g`
- * sequences to the main places and, in the palette, new item, the theme and the same places. Keys, labels and groups
- * of the shortcuts come from the catalog (`lib/shortcuts/catalog.ts`); the palette's own key lives with it
- * (`PaletteHost`). Screens register theirs while they are mounted.
+ * The shell's own shortcuts and palette commands (start set of spec 5.3): the search (`/`), the shortcut help, undo,
+ * new item, the `g` sequences to the main places and, in the palette, new item, the theme, the sidebar, the shortcut
+ * help and the same places. Keys, labels and groups of the shortcuts come from the catalog (`lib/shortcuts/catalog.ts`);
+ * the palette's own key lives with it (`PaletteHost`). Screens register theirs while they are mounted.
  */
 
 import { router } from '@inertiajs/react';
 import type { LucideIcon } from 'lucide-react';
-import { FolderKanban, Inbox, Layers, Monitor, Moon, SquarePen, Sun, SunMoon, UserRoundCheck } from 'lucide-react';
+import { FolderKanban, Inbox, Keyboard, Layers, Monitor, Moon, PanelLeft, SquarePen, Sun, SunMoon, UserRoundCheck } from 'lucide-react';
 import { useEffect } from 'react';
 import { toast } from '@/components/ui/toast';
 import { registerCommand, SHELL_COMMAND_GROUPS, useCommand } from '@/lib/commands';
 import { paths } from '@/lib/links';
 import { t, type TranslationKey } from '@/lib/i18n';
+import { isWide } from '@/lib/media';
 import { usePermissions } from '@/lib/permissions';
 import { SHORTCUTS, type ShortcutId } from '@/lib/shortcuts/catalog';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
@@ -40,6 +41,7 @@ const ui = () => useUiStore.getState();
 
 export function useShellBindings(): void {
   const { can, reason } = usePermissions();
+  const collapsed = useUiStore((state) => state.sidebarCollapsed);
 
   /** `c` and "Neues Item": the create dialog (`CreateHost`); on the page of a project or item it starts in that project. */
   function createItem() {
@@ -50,6 +52,8 @@ export function useShellBindings(): void {
     else ui().openCreate();
   }
 
+  // in an item list its title search (`list.search`, scope list) wins over this
+  useShortcut('shell.search', () => ui().setPaletteOpen(true));
   useShortcut('shell.help', () => ui().setHelpOpen(true));
   useShortcut('shell.undo', () => undoLatest(), { when: canUndo });
   useShortcut('item.create', createItem);
@@ -93,6 +97,25 @@ export function useShellBindings(): void {
         run: () => ui().setTheme(value),
       })),
     }),
+  });
+
+  useCommand({
+    id: 'shell.sidebar',
+    label: t(collapsed ? 'commands.sidebar.expand' : 'commands.sidebar.collapse'),
+    group: t(ACTIONS),
+    icon: <PanelLeft />,
+    run: () => ui().toggleSidebar(),
+    // below md the sidebar is a drawer behind the menu button
+    when: isWide,
+  });
+  useCommand({
+    id: 'shell.help',
+    label: t('commands.help.label'),
+    group: t(ACTIONS),
+    keys: SHORTCUTS['shell.help'].keys,
+    icon: <Keyboard />,
+    keywords: [t('commands.help.keywords')],
+    run: () => ui().setHelpOpen(true),
   });
 
   // the navigation commands, all at once

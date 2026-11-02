@@ -27,4 +27,33 @@ describe('shortcut catalog', () => {
     expect(SHORTCUTS['settings.save']).toMatchObject({ keys: 'mod+enter', scope: 'detail' });
     expect(SHORTCUTS['dialog.submit']).toMatchObject({ keys: 'mod+enter', scope: 'dialog' });
   });
+
+  it('starts no sequence with a key that is a shortcut of its own', () => {
+    // the registry begins a sequence before it looks at single keys, so a "g" of its own would never run
+    const singles = new Set(
+      Object.values(SHORTCUTS)
+        .filter((entry) => !entry.keys.includes(' '))
+        .map((entry) => canonicalKeys(entry.keys)),
+    );
+    for (const [id, entry] of Object.entries(SHORTCUTS)) {
+      if (!entry.keys.includes(' ')) continue;
+      const first = canonicalKeys(entry.keys.split(' ')[0]);
+      expect(singles.has(first), `${id} starts with ${first}, which is a shortcut of its own`).toBe(false);
+    }
+  });
+
+  it('binds every entry somewhere', () => {
+    // an entry nobody binds shows up in the help and the docs and does nothing
+    const sources = import.meta.glob(
+      ['/resources/js/**/*.{ts,tsx}', '!/resources/js/**/*.test.{ts,tsx}', '!/resources/js/lib/shortcuts/catalog.ts'],
+      { query: '?raw', import: 'default', eager: true },
+    ) as Record<string, string>;
+    const code = Object.values(sources);
+    for (const id of Object.keys(SHORTCUTS)) {
+      expect(
+        code.some((source) => source.includes(`'${id}'`)),
+        `${id} is bound nowhere`,
+      ).toBe(true);
+    }
+  });
 });

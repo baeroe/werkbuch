@@ -26,6 +26,7 @@ import { useJoinProject, useProjects } from '@/hooks/projects';
 import { useAllUsers, useCurrentUser } from '@/hooks/users';
 import { useWorkItemGroups } from '@/hooks/workItems';
 import { OPEN_CATEGORIES } from '@/domain/viewState';
+import { useCommand } from '@/lib/commands';
 import { notifyError } from '@/lib/errors';
 import { intlLocale, t, tn } from '@/lib/i18n';
 import { paths } from '@/lib/links';
@@ -242,6 +243,19 @@ export function ProjectsScreen({ create }: { create: boolean }) {
 
   const createReason = reason('project.create');
   const openCreate = () => setDialogOpen(true);
+  // registered anew when the right arrives, so an open palette shows it then
+  useCommand(
+    {
+      id: 'projects.create',
+      label: t('commands.projects.create'),
+      group: t('shell.nav.projects'),
+      icon: <Plus />,
+      keywords: [t('commands.create.keywords')],
+      run: openCreate,
+      when: () => createReason === null,
+    },
+    [createReason],
+  );
 
   function created(project: Project) {
     setDialogOpen(false);

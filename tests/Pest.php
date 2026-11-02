@@ -20,7 +20,9 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
+use Laravel\Scout\EngineManager;
 use Symfony\Component\Finder\Finder;
+use Tests\Support\ArraySearchEngine;
 use Tests\TestCase;
 
 pest()->extend(TestCase::class)->use(RefreshDatabase::class)->in('Feature');
@@ -255,6 +257,19 @@ function actor(User $user, string $via = Actor::VIA_UI): Actor
 function consumers(string ...$classes): void
 {
     config(['werkbuch.event_consumers' => $classes]);
+}
+
+/**
+ * Switches Scout to a new search engine in memory (P10) and returns it: what the tests index and search runs there.
+ */
+function searchEngine(): ArraySearchEngine
+{
+    $engine = new ArraySearchEngine;
+    app(EngineManager::class)->extend('array', fn () => $engine);
+    config(['scout.driver' => 'array']);
+    app(EngineManager::class)->forgetDrivers();
+
+    return $engine;
 }
 
 /**

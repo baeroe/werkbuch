@@ -1,7 +1,10 @@
 /*
  * The one static source of every keyboard shortcut: the help overlay lists it, `useShortcut` binds its entries at
  * runtime, and the shortcut reference of the docs is generated from it. A phase that adds a shortcut adds it here, under
- * the id the clickdummy used (`detail.title.${surface}` becomes `detail.title` with an `instance`).
+ * a dot path of the shortcut's area (`detail.title.${surface}` becomes `detail.title` with an `instance`).
+ *
+ * Ids are dot paths with underscores (`shell.go.my_items`, `list.select_all`): where the clickdummy wrote hyphens
+ * (`shell.go.my-items`), the app uses underscores like its translation keys.
  *
  * Keys follow the notation of `registry.ts`. Labels and groups are translation keys.
  */
@@ -21,6 +24,8 @@ export interface CatalogEntry {
 export const SHORTCUTS = {
   'shell.help': { keys: '?', scope: 'global', label: 'shortcuts.shell.help', group: 'shortcuts.group.general' },
   'shell.palette': { keys: 'mod+k', scope: 'global', label: 'shortcuts.shell.palette', group: 'shortcuts.group.general' },
+  // the palette, ready to search; in an item list `list.search` (the title search) wins, and the help names only that
+  'shell.search': { keys: '/', scope: 'global', label: 'shortcuts.shell.search', group: 'shortcuts.group.general' },
   'shell.undo': { keys: 'mod+z', scope: 'global', label: 'shortcuts.shell.undo', group: 'shortcuts.group.general' },
   'shell.go.inbox': { keys: 'g i', scope: 'global', label: 'shortcuts.shell.go.inbox', group: 'shortcuts.group.navigation' },
   'shell.go.my_items': { keys: 'g m', scope: 'global', label: 'shortcuts.shell.go.my_items', group: 'shortcuts.group.navigation' },

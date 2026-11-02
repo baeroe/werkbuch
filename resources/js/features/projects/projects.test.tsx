@@ -10,6 +10,7 @@ import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { currentToasts, resetToasts, runToastAction } from '@/components/ui/toast';
+import { listCommands } from '@/lib/commands';
 import { useUiStore } from '@/store/ui';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import { agency, ida, lene, list, mara, organization, project, standard, types } from '@/test/fixtures';
@@ -283,6 +284,25 @@ describe('CreateProjectDialog', () => {
     const options = inertia.replace.mock.calls[0]![0] as { url: string; props: (props: Record<string, unknown>) => Record<string, unknown> };
     expect(options.url).toBe('/');
     expect(options.props({ create: true, other: 1 })).toEqual({ create: false, other: 1 });
+  });
+
+  it('offers Neues Projekt in the palette with the right and opens the dialog', async () => {
+    renderScreen();
+    const command = () => listCommands().find((entry) => entry.id === 'projects.create');
+
+    await waitFor(() => expect(command()?.when!()).toBe(true));
+    expect([command()!.label, command()!.group]).toEqual(['Neues Projekt', 'Projekte']);
+    act(() => command()!.run());
+
+    expect(await screen.findByRole('dialog', { name: 'Neues Projekt' })).toBeTruthy();
+  });
+
+  it('leaves it out without the right', async () => {
+    // the rights come with the projects: while they could not be loaded, nobody may create one
+    renderScreen({ 'GET /api/v1/projects': unavailable });
+
+    expect(await screen.findByText('Die Projekte konnten nicht geladen werden')).toBeTruthy();
+    expect(listCommands().find((entry) => entry.id === 'projects.create')?.when!()).toBe(false);
   });
 
   it('suggests the identifier from the name, knows the taken ones, and creates the project', async () => {
