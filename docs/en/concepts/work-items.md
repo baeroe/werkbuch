@@ -67,7 +67,7 @@ Watchers will hear about changes once notifications arrive (a later phase). The 
 
 ## Bulk changes
 
-Several items can get the same change at once: status, resolution, assignee, priority, labels (set, add or remove), dates, archive and restore. Each item follows its own rules: its workflow, its project, your role in it. What is refused for one item does not stop the others; the answer lists the refused ones with their reason. The interface for it comes with the item lists (a later phase); the API has it already.
+Several items can get the same change at once: status, resolution, assignee, priority, labels (set, add or remove), dates, archive and restore. Each item follows its own rules: its workflow, its project, your role in it. What is refused for one item does not stop the others; the answer lists the refused ones with their reason. In the interface, select items in a [list](/en/concepts/views) (`x`, `shift+x`, `mod+a`): the bar above the list changes them all, the item shortcuts act on the selection, and one toast names whatever was refused.
 
 ## Changes at the same time
 
@@ -85,7 +85,7 @@ Reading needs a token with `read`, changing one with `write`. Items are addresse
 
 | Request | Answer |
 |---|---|
-| `GET /api/v1/work-items` | Items you see, in manual order: `filter[project]`, `filter[parent]`, `filter[q]` (a key or part of the title), `include_archived`, `cursor`, `per_page`. |
+| `GET /api/v1/work-items` | Items you see: `view`, a short form such as `filter[project]`, `filter[assignee]=me`, `filter[q]` (a key or part of the title), `sort`, `include_archived`, `lean`, `cursor`, `per_page`. Filters, groups and counts are described under [views](/en/concepts/views#rest). |
 | `POST /api/v1/work-items` | `201` with the new item. |
 | `GET /api/v1/work-items/{item}` | The item; `?include=children,relations,type,workflow` embeds those. |
 | `PATCH /api/v1/work-items/{item}` | `200` with the item. |

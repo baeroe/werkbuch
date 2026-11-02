@@ -83,6 +83,10 @@ Rohliste für 13b (Aufräumen) und 13c (Feinschliff) nach der Korrekturrunde, si
 - Correction round 1 part 2: minor (deferred → 13b): the gallery hard-codes the bot word instead of `botWord` (`routes/components-gallery.tsx:112-113`); dead `?? 'Bot'` fallback at `Bots.tsx:404`; code comment at `Bots.tsx:2` still says "an agent"
 - Correction round 1 part 2: minor (deferred → 13c): `ItemCard` hides the epic crumb from assistive tech and relies on the caller to add „Teil von …“ to the card's name (the board does, the gallery specimen does not); let `ItemCard` add it itself when `showParent` is on
 
+## Aus der App (Phase 5, 2026-11-02)
+
+- Phase 5, Task 22: minor (deferred → 13c): die Palette-Befehle `projects.create` („Neues Projekt“ auf `/projects`) und `views.create` („Neue View“ auf `/views`) des Klickdummys (`ProjectsScreen.tsx:229`, `ViewsScreen.tsx:157`) fehlen in der App; „Projekt anlegen“ und „View anlegen“ gehen über die Seitenleiste und die Knöpfe der Seiten. Beim Port: `useCommand` mit `when` = Recht da, `run` öffnet den Dialog wie `?create=1`.
+
 ## Triage im Gesamt-Review (2026-10-29)
 
 Aus dem Bericht des Gesamt-Reviews. „MUST FIX NOW“ war keiner der Punkte; die zwei neuen wichtigen Befunde des Reviews (`e` in der Inbox, „Vorlage anwenden“) sind behoben.
