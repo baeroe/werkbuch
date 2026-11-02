@@ -36,11 +36,12 @@ test('goes to projects with g p', async ({ page }) => {
 });
 
 test('shows the 404 page inside the shell', async ({ page, allowedErrors }) => {
-  allowedErrors.push(notFound('/views'));
+  // the inbox arrives with a later phase
+  allowedErrors.push(notFound('/inbox'));
   await page.keyboard.press('g');
-  await page.keyboard.press('v');
+  await page.keyboard.press('i');
 
-  await expect(page).toHaveURL(/\/views$/);
+  await expect(page).toHaveURL(/\/inbox$/);
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(tr('en', 'errors.page.not_found.title'));
   if (isPhone(page)) {
     await expect(page.getByRole('button', { name: tr('en', 'shell.mobile.open_navigation') })).toBeVisible();
@@ -55,7 +56,7 @@ test('shows the 404 page inside the shell', async ({ page, allowedErrors }) => {
 });
 
 test('reaches the other main places with their g sequences', async ({ page, allowedErrors }) => {
-  allowedErrors.push(notFound('/inbox'), notFound('/views'));
+  allowedErrors.push(notFound('/inbox'));
   for (const [key, path] of [
     ['i', '/inbox'],
     ['v', '/views'],
@@ -64,6 +65,7 @@ test('reaches the other main places with their g sequences', async ({ page, allo
     await page.keyboard.press('g');
     await page.keyboard.press(key);
     await expect(page).toHaveURL(new RegExp(`${path}$`));
+    if (path === '/views') await expect(page.getByRole('heading', { level: 1 })).toHaveText(tr('en', 'views.title'));
   }
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(tr('en', 'items.my.title'));
 });

@@ -6,7 +6,7 @@ import type { ReactElement, ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { currentToasts, resetToasts } from '@/components/ui/toast';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
-import { list, project } from '@/test/fixtures';
+import { list, makeView, project } from '@/test/fixtures';
 import { Shell } from './Shell';
 
 // What the server flashed shows as a toast once per visit: a status as a success, an error as an error. The browser suite cannot provoke a flashed
@@ -43,6 +43,7 @@ beforeEach(() => {
   routes = {
     'GET /api/v1/projects': () => ({ body: list([web, app]) }),
     'GET /api/v1/favorites': () => ({ body: list([]) }),
+    'GET /api/v1/views': () => ({ body: list([]) }),
   };
   vi.mocked(router.post).mockClear();
 });
@@ -187,11 +188,59 @@ describe('Sidebar projects', () => {
     routes['GET /api/v1/favorites'] = () => (fail ? { status: 503, body: { type: 'about:blank', title: 'down', status: 503, reason: 'service_unavailable' } } : { body: list([favorite('p_web', 0)]) });
     render(<Shell>Inhalt</Shell>);
 
-    const nav = sidebar();
+    // the favorites fail for the views as well: the retry of the projects is the one of their section
+    const nav = within(sidebar()).getByRole('region', { name: 'Projekte' });
     expect(await within(nav).findByText('Projekte nicht geladen.')).toBeTruthy();
     fail = false;
     await userEvent.click(within(nav).getByRole('button', { name: 'Erneut versuchen' }));
     expect(await within(nav).findByRole('button', { name: 'Website-Relaunch' })).toBeTruthy();
+  });
+});
+
+describe('Sidebar views', () => {
+  const roadmap = makeView({ id: 'v_roadmap', name: 'Roadmap', icon: 'route' });
+  const kira = makeView({ id: 'v_kira', name: 'Für Kira', icon: '🤖' });
+  const view = (id: string, position: number) => ({ user_id: '1', kind: 'view', id, position });
+
+  it('lists the starred views in the order of the sidebar', async () => {
+    url = '/views/v_roadmap';
+    routes['GET /api/v1/views'] = () => ({ body: list([kira, roadmap, makeView()]) });
+    // a view that is gone is not among the views any more (the server leaves its favorite out as well)
+    routes['GET /api/v1/favorites'] = () => ({ body: list([view('v_roadmap', 0), favorite('p_web', 1), view('v_gone', 2), view('v_kira', 3)]) });
+    render(<Shell>Inhalt</Shell>);
+
+    const nav = sidebar();
+    const section = within(nav).getByRole('region', { name: 'Views' });
+    const first = await within(section).findByRole('link', { name: 'Roadmap' });
+    expect(within(section).getAllByRole('link').map((link) => [link.getAttribute('aria-label') ?? link.textContent, link.getAttribute('href')])).toEqual([
+      ['View anlegen', '/views?create=1'],
+      ['Roadmap', '/views/v_roadmap'],
+      ['🤖Für Kira', '/views/v_kira'],
+      ['Alle Views', '/views'],
+    ]);
+    // the view of the page is marked; "Fällig diese Woche" has no star
+    expect(first.getAttribute('aria-current')).toBe('page');
+    expect(within(section).queryByText('Fällig diese Woche')).toBeNull();
+  });
+
+  it('says so while no view is starred', async () => {
+    render(<Shell>Inhalt</Shell>);
+
+    expect(within(sidebar()).getByText('Views werden geladen …')).toBeTruthy();
+    expect(await within(sidebar()).findByText('Views mit Stern stehen hier.')).toBeTruthy();
+  });
+
+  it('says when the views could not be loaded', async () => {
+    let fail = true;
+    routes['GET /api/v1/views'] = () => (fail ? { status: 503, body: { type: 'about:blank', title: 'down', status: 503, reason: 'service_unavailable' } } : { body: list([roadmap]) });
+    routes['GET /api/v1/favorites'] = () => ({ body: list([view('v_roadmap', 0)]) });
+    render(<Shell>Inhalt</Shell>);
+
+    const section = within(sidebar()).getByRole('region', { name: 'Views' });
+    expect(await within(section).findByText('Views nicht geladen.')).toBeTruthy();
+    fail = false;
+    await userEvent.click(within(section).getByRole('button', { name: 'Erneut versuchen' }));
+    expect(await within(section).findByRole('link', { name: 'Roadmap' })).toBeTruthy();
   });
 });
 

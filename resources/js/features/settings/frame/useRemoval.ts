@@ -22,6 +22,8 @@ interface Removal<T> {
   failureTitle?: string;
   /** The answer of the call, once it succeeded and the list is shown again. */
   onDone?: (result: T) => void;
+  /** Where the focus goes when the row was the last one ("New view"); the main area by default. */
+  fallback?: HTMLElement | null;
 }
 
 export function useRemoval(): { hidden: ReadonlySet<string>; remove: <T>(removal: Removal<T>) => void } {
@@ -39,9 +41,9 @@ export function useRemoval(): { hidden: ReadonlySet<string>; remove: <T>(removal
   );
 
   const remove = useCallback(
-    <T>({ id, label, run, failureTitle, onDone }: Removal<T>) => {
+    <T>({ id, label, run, failureTitle, onDone, fallback }: Removal<T>) => {
       // the button that was pressed goes with its row: the focus moves on to the next row instead of falling to the top
-      focusNeighbour(document.activeElement?.closest('li'));
+      focusNeighbour(document.activeElement?.closest('li'), fallback);
       hide(id);
       runWithUndo({
         label,

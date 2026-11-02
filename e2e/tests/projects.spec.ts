@@ -183,7 +183,8 @@ test('says when the sidebar could not load the projects and loads them again', a
   await expect(navigation.getByText(tr('en', 'shell.nav.projects_failed'))).toBeVisible();
 
   await page.unroute('**/api/v1/favorites');
-  await tabTo(page, navigation.getByRole('button', { name: tr('en', 'common.retry') }));
+  // the favorites fail for the views of the sidebar as well: the retry of the projects is the one of their section
+  await tabTo(page, navigation.getByRole('region', { name: tr('en', 'shell.nav.projects') }).getByRole('button', { name: tr('en', 'common.retry') }));
   await page.keyboard.press('Enter');
   await expect(navigation.getByText(tr('en', 'shell.nav.projects_failed'))).toBeHidden();
   await expect(navigation.getByRole('link', { name: tr('en', 'shell.nav.all_projects') })).toBeVisible();

@@ -38,6 +38,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/projects/{identifier}/settings/{section?}', ProjectSettingsPageController::class)->name('projects.settings');
     // the page of an item by its key; never `{item}`: the binding of routes/api.php would resolve it and hide a former key
     Route::get('/items/{key}', ItemPageController::class)->name('items.show');
+    // all team views; `?create=1` (the sidebar's "View anlegen") opens the dialog "Neue View" once
+    Route::get('/views', fn (Request $request) => Inertia::render('Views/Index', ['create' => $request->query('create') === '1']))
+        ->name('views');
     // the items of a saved view; never `{view}`: the binding of routes/api.php would answer an unknown id before the page
     Route::get('/views/{viewId}', ViewPageController::class)->name('views.show');
 });

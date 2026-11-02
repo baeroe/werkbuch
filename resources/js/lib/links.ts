@@ -20,6 +20,8 @@ export const paths = {
   inbox: () => '/inbox',
   views: () => '/views',
   view: (id: string) => `/views/${segment(id)}`,
+  /** The overview with the dialog "New view" open (the sidebar's "Create view"). */
+  newView: () => '/views?create=1',
   projects: () => '/projects',
   /** The overview with the dialog "New project" open (the sidebar's "Create project"). */
   newProject: () => '/projects?create=1',

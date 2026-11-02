@@ -43,6 +43,9 @@ export default defineConfig({
         'resources/js/features/settings/project/**': { lines: 100 },
         'resources/js/features/projects/**': { lines: 100 },
         'resources/js/features/favorites/**': { lines: 100 },
+        'resources/js/features/views/**': { lines: 100 },
+        // the sidebar's sections (K22: the rest of shell/ is not at 100 % in Vitest yet)
+        'resources/js/shell/sidebar/**': { lines: 100 },
       },
     },
   },
