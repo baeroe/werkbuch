@@ -31,7 +31,7 @@ import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
 import { toast } from '@/components/ui/toast';
 import { useProperties } from '@/hooks/properties';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
-import { t, type TranslationKey } from '@/lib/i18n';
+import { t } from '@/lib/i18n';
 import { useIsWide } from '@/lib/media';
 import { usePermissions } from '@/lib/permissions';
 import { useUiStore } from '@/store/ui';
@@ -50,13 +50,6 @@ const ROW_HEIGHT = { wide: 41, narrow: 45 };
 /** The sort field a column shows in its heading (`aria-sort`); the first column is the key. */
 const SORTED_BY: Record<string, string> = { state: 'state_category' };
 const sortFieldOf = (field: string) => SORTED_BY[field] ?? field;
-
-/** Why a read-only column does not open. */
-const READ_ONLY_REASONS: Record<string, TranslationKey> = {
-  project: 'items.table.read_only.project',
-  created_at: 'items.table.read_only.created_at',
-  updated_at: 'items.table.read_only.updated_at',
-};
 
 /** Plain arrow keys only. */
 const plain = (event: KeyboardEvent) => !event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey;
@@ -250,8 +243,7 @@ export function TableLayout({ groups, groupBy, display, selection, onSelect, onS
   }
 
   function startEditing(item: ListedItem, target: Column, key: string) {
-    const readOnly = READ_ONLY_REASONS[target.field];
-    if (readOnly) return refuse(t(readOnly));
+    if (target.readOnly) return refuse(t(target.readOnly));
     if (target.property && !typeHasProperty(types, item, target.property)) {
       const type = types?.find((entry) => entry.id === item.type_id)?.name ?? '';
       return refuse(t('items.table.not_applicable_detail', { property: target.property.label, type }));

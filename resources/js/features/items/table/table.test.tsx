@@ -270,10 +270,10 @@ async function searchField(placeholder: string) {
 describe('columns of the table', () => {
   it('makes a column of every field of the display but the key and the title, and none of a property that is gone', () => {
     const columns = tableColumns(['key', 'title', 'state', 'project', 'property:effort', 'property:gone', 'nothing'], properties);
-    expect(columns.map((entry) => [entry.field, entry.label, entry.width, entry.editable, entry.numeric])).toEqual([
-      ['state', 'Status', 10, true, false],
-      ['project', 'Projekt', 8, false, false],
-      ['property:effort', 'Aufwand (h)', 7.5, true, true],
+    expect(columns.map((entry) => [entry.field, entry.label, entry.width, entry.readOnly, entry.numeric])).toEqual([
+      ['state', 'Status', 10, null, false],
+      ['project', 'Projekt', 8, 'items.table.read_only.project', false],
+      ['property:effort', 'Aufwand (h)', 7.5, null, true],
     ]);
     expect(typeHasProperty(types, web1, effort)).toBe(true);
     expect(typeHasProperty(types, web2, effort)).toBe(false);
