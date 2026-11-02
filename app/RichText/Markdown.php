@@ -15,6 +15,7 @@ use League\HTMLToMarkdown\Configuration;
 use League\HTMLToMarkdown\ConfigurationAwareInterface;
 use League\HTMLToMarkdown\Converter\BlockquoteConverter;
 use League\HTMLToMarkdown\Converter\ConverterInterface;
+use League\HTMLToMarkdown\Converter\DefaultConverter;
 use League\HTMLToMarkdown\Converter\TableConverter;
 use League\HTMLToMarkdown\Converter\TextConverter;
 use League\HTMLToMarkdown\ElementInterface;
@@ -32,7 +33,8 @@ use SplStack;
  * Reading is CommonMark with GitHub's extensions, HTML in the text escaped (it stays text), unsafe links dropped; the
  * HTML is then shaped like the editor's: task lists as `ul[data-type=taskList] > li[data-type=taskItem][data-checked]`,
  * text outside of blocks in paragraphs, headings below Schema::HEADING_LEVELS as paragraphs, soft line breaks as
- * spaces, no closing line break in code.
+ * spaces, no closing line break in code. MentionsAndReferences finds mentions, references, images and files; an image
+ * is a block, so it splits the paragraph (and the marks) it stands in.
  *
  * Writing is one form for each node, so a document comes back the same from its Markdown:
  * - `#` headings, `-` before list items, `1.` counting from the list's start, `- [x] `/`- [ ] ` for task items; a
@@ -45,7 +47,10 @@ use SplStack;
  *   block on the marker's line (`- - a`, `- # Titel`), a rule there as `***` (`- ---` would be a rule of its own);
  * - `>` before each line of a quote, alone on a blank one;
  * - tables with the first row as the header and `| --- |` below it (Markdown has no table without a header row);
- * - `~` in text escaped, so it never becomes a strike.
+ * - `~` in text escaped, so it never becomes a strike;
+ * - mentions and references the reader sees as text (Document::toMarkdown), a hidden reference as
+ *   `[hidden](<kind>:<ulid>)`, a file as `[name](attachment:<ulid>)`, an image as `![alt](attachment:<ulid>)` on a
+ *   line of its own; names and alt texts on one line, escaped like text (label()).
  *
  * What Markdown cannot carry and loses on the way there and back (JSON keeps all of it):
  * - a hard break inside a heading (the heading ends there, the rest becomes a paragraph);
@@ -55,12 +60,15 @@ use SplStack;
  *   code block in the quote);
  * - a task item whose first paragraph is empty and followed by a block: GitHub's checkbox needs a paragraph, so the
  *   block becomes the text of the item's paragraph (a rule too: `- [ ] ---` is no rule);
- * - a fence's info string that is no language (Schema::LANGUAGE_PATTERN, A150): the code block keeps no language.
+ * - a fence's info string that is no language (Schema::LANGUAGE_PATTERN, A150): the code block keeps no language;
+ * - a link around a mention, a reference or a file (the text of a link is never read for them, and Markdown has no
+ *   link inside a link), and the marks inside the name of a file or the alt text of an image;
+ * - a reference to a page until Phase 9 (`page:` links stay text).
  */
 final class Markdown
 {
     /** Elements that are blocks of their own; anything else in a container is put into a paragraph. */
-    private const BLOCK_TAGS = ['p', 'h1', 'h2', 'h3', 'ul', 'ol', 'pre', 'blockquote', 'hr', 'table'];
+    private const BLOCK_TAGS = ['p', 'h1', 'h2', 'h3', 'ul', 'ol', 'pre', 'blockquote', 'hr', 'table', 'img'];
 
     /** The deepest Markdown: Schema::MAX_DEPTH blocks and as many marks inside of them. */
     private const MAX_MARKDOWN_DEPTH = 2 * Schema::MAX_DEPTH;
@@ -74,7 +82,7 @@ final class Markdown
     /** Elements holding blocks. */
     private const CONTAINERS = 'li, blockquote, td, th';
 
-    public static function toHtml(string $markdown): string
+    public static function toHtml(string $markdown, MarkdownContext $ctx): string
     {
         // deeper blocks stay text, so the nesting costs nothing (commonmark recurses without a limit and crashes)
         $converter = new GithubFlavoredMarkdownConverter([
@@ -83,6 +91,7 @@ final class Markdown
             'max_nesting_level' => Schema::MAX_DEPTH,
         ]);
         $converter->getEnvironment()->addEventListener(DocumentParsedEvent::class, self::refuseDeepInlines(...));
+        $converter->getEnvironment()->addExtension(new MentionsAndReferences($ctx));
         $html = $converter->convert($markdown);
         $dom = HTMLDocument::createFromString('<!DOCTYPE html><html><body>'.$html.'</body></html>', LIBXML_NOERROR);
         /** @var HTMLElement $body the string above makes one */
@@ -116,6 +125,9 @@ final class Markdown
             $data = $text->previousSibling instanceof Element && $text->previousSibling->localName === 'br' ? ltrim($text->data, "\n") : $text->data;
             $text->data = str_replace("\n", ' ', $data);
         }
+        foreach ($dom->querySelectorAll('img') as $image) {
+            self::hoist($image);
+        }
         self::paragraphs($dom, $body);
         foreach ($dom->querySelectorAll(self::CONTAINERS) as $container) {
             self::paragraphs($dom, $container);
@@ -147,6 +159,42 @@ final class Markdown
         }
     }
 
+    /**
+     * An image is a block (Schema::BLOCKS), but Markdown writes it inside a line: it splits the elements around it up
+     * to the nearest container (a list item, a quote, a cell, the body), so it stands between the two halves of its
+     * paragraph; empty halves go, and the halves lose the blanks next to the image.
+     */
+    private static function hoist(Element $image): void
+    {
+        while (($parent = $image->parentElement) !== null && ! $parent->matches(self::CONTAINERS.', body')) {
+            /** @var Element $after a shallow copy of an element is an element */
+            $after = $parent->cloneNode();
+            while ($image->nextSibling !== null) {
+                $after->append($image->nextSibling);
+            }
+            $parent->after($image, $after);
+            self::trimEdge($parent, false);
+            self::trimEdge($after, true);
+            foreach ([$parent, $after] as $half) {
+                if ($half->firstElementChild === null && trim((string) $half->textContent) === '') {
+                    $half->remove();
+                }
+            }
+        }
+    }
+
+    /** Takes the blanks off the first or the last text of an element. */
+    private static function trimEdge(Element $element, bool $first): void
+    {
+        $edge = $first ? $element->firstChild : $element->lastChild;
+        while ($edge instanceof Element) {
+            $edge = $first ? $edge->firstChild : $edge->lastChild;
+        }
+        if ($edge instanceof Text) {
+            $edge->data = $first ? ltrim($edge->data) : rtrim($edge->data);
+        }
+    }
+
     public static function fromHtml(string $html): string
     {
         $converter = new HtmlConverter([
@@ -164,6 +212,8 @@ final class Markdown
         $environment->addConverter(self::tables());
         $environment->addConverter(self::quotes());
         $environment->addConverter(self::text());
+        $environment->addConverter(self::images());
+        $environment->addConverter(self::spans());
 
         return $converter->convert($html);
     }
@@ -262,6 +312,72 @@ final class Markdown
         $paragraph = $dom->createElement('p');
         $container->insertBefore($paragraph, $before);
         $paragraph->append(...$run);
+    }
+
+    /** An image of an attachment: `![alt](attachment:<ulid>)`, a block of its own. */
+    private static function images(): ConverterInterface
+    {
+        return new class implements ConverterInterface
+        {
+            public function convert(ElementInterface $element): string
+            {
+                return '!['.Markdown::label($element->getAttribute('alt')).'](attachment:'.$element->getAttribute('data-attachment-id').")\n\n";
+            }
+
+            public function getSupportedTags(): array
+            {
+                return ['img'];
+            }
+        };
+    }
+
+    /**
+     * The empty elements of a hidden reference, `[hidden](<kind>:<ulid>)`, and of a file, `[name](attachment:<ulid>)`;
+     * any other span as league writes it. Visible references and mentions reach this as text (Document::toMarkdown).
+     */
+    private static function spans(): ConverterInterface
+    {
+        return new class implements ConfigurationAwareInterface, ConverterInterface
+        {
+            private DefaultConverter $other;
+
+            public function __construct()
+            {
+                $this->other = new DefaultConverter;
+            }
+
+            public function setConfig(Configuration $config): void
+            {
+                $this->other->setConfig($config);
+            }
+
+            public function convert(ElementInterface $element): string
+            {
+                return match ($element->getAttribute('data-type')) {
+                    'reference' => '[hidden]('.$element->getAttribute('data-kind').':'.$element->getAttribute('data-id').')',
+                    'attachment' => '['.Markdown::label($element->getAttribute('data-filename')).'](attachment:'.$element->getAttribute('data-attachment-id').')',
+                    default => $this->other->convert($element),
+                };
+            }
+
+            public function getSupportedTags(): array
+            {
+                return ['span'];
+            }
+        };
+    }
+
+    /**
+     * A file name or an alt text as the text of a link: on one line, with the characters escaped that would end the
+     * link, make marks or HTML of it (`&` only where it would start an entity), the way text() escapes text.
+     *
+     * @internal for the converters of this class
+     */
+    public static function label(string $text): string
+    {
+        $text = (string) preg_replace('/[\\\\`*_~\[\]|<>]/', '\\\\$0', (string) preg_replace('/\s+/u', ' ', $text));
+
+        return (string) preg_replace('/&(?=#?[A-Za-z0-9]+;)/', '\\\\&', $text);
     }
 
     private static function listItems(): ConverterInterface

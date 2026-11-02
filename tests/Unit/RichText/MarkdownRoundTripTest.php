@@ -101,6 +101,7 @@ it('comes back the same from its Markdown', function (array $json) use ($read) {
 })->with([
     'steps of WEB-47' => [F::web47Steps()],
     'every node' => [F::everyNode()],
+    'images and files' => [F::doc(F::p('Siehe ', F::file(F::FILE, 'protokoll.pdf'), ' und:'), F::image(F::IMAGE, 'Screenshot'), F::image(F::IMAGE, null))],
     'markdown characters in text' => [F::doc(F::p('a ~~b~~ *c* [d] # e <f> & g &amp; \\h'), F::p('- kein Punkt'), F::p('1. keine Zahl'))],
     'code in a list item and in a quote' => [F::doc(
         ['type' => 'bulletList', 'content' => [['type' => 'listItem', 'content' => [F::p('Ausführen:'), ['type' => 'codeBlock', 'attrs' => ['language' => 'bash'], 'content' => [F::text("ddev start\nddev artisan migrate")]]]]]],
@@ -177,11 +178,13 @@ it('writes the spaces at the edges of a strike outside of it', function () {
     expect($document->toMarkdown())->toBe("a ~~weg~~ b\n\nc d");
 });
 
-it('leaves images out until Phase 7 brings them', function () use ($read) {
+it('keeps an image from elsewhere as its alt text, never as a node', function () use ($read) {
+    // only an attachment is an image (MarkdownNodesTest); an address from anywhere else never reaches the document
     $document = $read('![Logo](https://example.com/logo.png)');
 
-    expect($document->isEmpty())->toBeTrue()
-        ->and($document->toMarkdown())->toBe('');
+    expect($document->toJson())->toBe(F::doc(F::p('Logo')))
+        ->and($document->toMarkdown())->toBe('Logo')
+        ->and($read('![](https://example.com/logo.png)')->isEmpty())->toBeTrue();
 });
 
 it('refuses Markdown that would take long or crash before it is parsed', function (string $markdown, string $reason) use ($read) {

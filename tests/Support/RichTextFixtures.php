@@ -18,6 +18,13 @@ final class RichTextFixtures
 
     public const FILE = '01jcf11e000000000000000000';
 
+    /** IDs for Markdown tests (MarkdownNodesTest): Kira and Lene, whom a text may not mention, and OPS-12, hidden. */
+    public const KIRA = '01jck1ra000000000000000000';
+
+    public const LENE = '01jc1e7e000000000000000000';
+
+    public const OPS12 = '01jc0p50000000000000000012';
+
     /** The steps of WEB-47 in the clickdummy (`seed/items.ts`): a paragraph and a numbered list of three. */
     public static function web47Steps(): array
     {

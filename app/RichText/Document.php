@@ -78,7 +78,7 @@ final class Document
         if (! mb_check_encoding($markdown, 'UTF-8')) {
             throw new InvalidDocument('shape');
         }
-        $html = Markdown::toHtml($markdown);
+        $html = Markdown::toHtml($markdown, $ctx);
         // tiptap-php cannot read an empty body
         $json = $html === '' ? ['type' => 'doc'] : self::editor()->setContent($html)->getDocument();
 
@@ -91,10 +91,19 @@ final class Document
         return $this->json;
     }
 
-    /** The document as Markdown; Markdown::fromHtml() lists how it is written. */
-    public function toMarkdown(): string
+    /**
+     * The document as Markdown for one reader; Markdown::fromHtml() lists how it is written. A mention is `@` and the
+     * current handle (`$names->handles`, else its label; nothing without either), a reference the reader sees
+     * (`$names->items`) its current key, any other `[hidden](item:<ulid>)` (no key, no title), an image
+     * `![alt](attachment:<ulid>)` and a file `[name](attachment:<ulid>)`. Read back with the same lookup and the kept
+     * IDs (MarkdownContext), it gives the same JSON.
+     */
+    public function toMarkdown(?RichTextNames $names = null): string
     {
-        return Markdown::fromHtml($this->toHtml());
+        $names ??= new RichTextNames;
+        $json = self::mapped($this->json, fn (array $node) => self::forMarkdown($node, $names));
+
+        return Markdown::fromHtml((new self(self::node($json, 'doc', 0)))->toHtml());
     }
 
     /** The text without any markup: one line per paragraph, heading or code block, a line break as a line break. */
@@ -531,6 +540,26 @@ final class Document
         $node['content'] = $content;
 
         return $node;
+    }
+
+    /**
+     * What Markdown shows of a node of OUTSIDE (see toMarkdown()): mentions and visible references as text, the others
+     * as the nodes Markdown::fromHtml() writes.
+     *
+     * @param  array<string, mixed>  $node
+     * @return array<string, mixed>|string|null
+     */
+    private static function forMarkdown(array $node, RichTextNames $names): array|string|null
+    {
+        /** @var array<string, mixed> $attrs */
+        $attrs = $node['attrs'];
+        if ($node['type'] === 'mention') {
+            $handle = $names->handles[$attrs['id']] ?? $attrs['label'];
+
+            return is_string($handle) ? '@'.$handle : null;
+        }
+
+        return $node['type'] === 'reference' ? $names->items[$attrs['id']]['key'] ?? $node : $node;
     }
 
     /**
