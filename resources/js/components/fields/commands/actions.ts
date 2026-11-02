@@ -137,10 +137,15 @@ async function archiveEach(deps: RemovalDeps, targets: readonly ListedItem[], re
   bulkToast(targets, outcome, t('items.bulk.done.archived'), 'archived', () => void archiveEach(deps, unsaved, hideAtOnce(deps.queryClient, unsaved)));
 }
 
-/** Archives the targets: one alone, several with the closed ones (`closed`) leaving the screen at once. */
-export function archiveTargets(deps: RemovalDeps, targets: readonly ListedItem[], closed: readonly ListedItem[]): void {
-  if (targets.length === 1) archiveWithUndo(deps, targets[0]!);
-  else archiveManyWithUndo(deps, targets, closed);
+/**
+ * Archives the targets, the one place that picks them for the palette, the shortcut and the bulk bar (T15-M7): an
+ * archived target is archived already, it neither leaves the screen nor goes to the server again. One alone goes as
+ * one; of several the closed ones (`isClosed`) leave the screen at once, the open ones stay and the toast names them.
+ */
+export function archiveTargets(deps: RemovalDeps, targets: readonly ListedItem[], isClosed: (item: ListedItem) => boolean): void {
+  const live = targets.filter((item) => item.archived_at === null);
+  if (live.length === 1) archiveWithUndo(deps, live[0]!);
+  else if (live.length > 1) archiveManyWithUndo(deps, live, live.filter(isClosed));
 }
 
 /**

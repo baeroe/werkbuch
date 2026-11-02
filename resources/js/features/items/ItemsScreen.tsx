@@ -217,13 +217,8 @@ function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: P
   const removal = useRemovalDeps();
   const projects = useProjects({ include_archived: true }).data?.items ?? [];
   const workflows = useWorkflows().data?.items ?? [];
-  // the closed ones leave the list at once, the open ones stay and the toast names them
-  const archive = (targets: ListedItem[]) =>
-    archiveTargets(
-      removal,
-      targets,
-      targets.filter((item) => closedIn(projects, workflows, item)),
-    );
+  // the closed ones leave the list at once, the open ones stay and the toast names them, the archived ones stay alone
+  const archive = (targets: ListedItem[]) => archiveTargets(removal, targets, (item) => closedIn(projects, workflows, item));
 
   const setLayout = (layout: Display['layout']) => setState({ ...state, display: { ...state.display, layout } });
   const createDefaults: CreateDefaults | undefined = project ? { project_id: project.id } : preset === 'my' && me ? { assignee_id: me.id } : undefined;

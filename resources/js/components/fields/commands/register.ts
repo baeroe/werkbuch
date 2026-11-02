@@ -149,12 +149,7 @@ const archivable = (ctx: ItemCommandContext) => archivesNow(ctx.projects, ctx.wo
 const deleteReason = (ctx: ItemCommandContext) => ctx.targets.map((item) => ctx.reason('item.delete', item.project_id)).find(Boolean) ?? null;
 
 /** Archives the targets: one alone, several with the closed ones leaving the screen at once. */
-const archive = (ctx: ItemCommandContext) =>
-  archiveTargets(
-    ctx.removal,
-    ctx.targets,
-    ctx.targets.filter((target) => isClosed(ctx, target)),
-  );
+const archive = (ctx: ItemCommandContext) => archiveTargets(ctx.removal, ctx.targets, (target) => isClosed(ctx, target));
 
 /** Deletes the targets: one alone (leaving its page), several item by item. */
 function remove(ctx: ItemCommandContext): void {

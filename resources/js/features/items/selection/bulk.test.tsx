@@ -390,4 +390,21 @@ describe('the bulk bar on the items screen', () => {
     await waitFor(() => expect(bulkCalls()).toEqual([{ ids: ['wi_web_1', 'wi_web_4'], patch: { archived: true } }]));
     await waitFor(() => expect(lastToast()).toMatchObject({ title: '1 von 2 Items archiviert', description: 'WEB-1: Nur geschlossene Items lassen sich archivieren.' }));
   });
+
+  it('leaves an archived item of the selection alone when it archives the others', async () => {
+    // "Archivierte zeigen": WEB-3 is closed and archived already
+    items = [item(2, 'std_done'), item(3, 'std_done', { archived_at: '2026-10-30T10:00:00.000Z' }), item(4, 'std_done')];
+    renderScreen();
+    await screen.findByText('Aufgabe 3');
+    act(() => useUiStore.getState().setSelection(['wi_web_2', 'wi_web_3', 'wi_web_4']));
+    await menuReady('Priorität');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Archivieren' }));
+    expect(lastToast()).toMatchObject({ title: '2 Items archiviert' });
+    // the archived one stays where it is, the others leave the list
+    await waitFor(() => expect(screen.queryByText('Aufgabe 4')).toBeNull());
+    expect(screen.getByText('Aufgabe 3')).toBeTruthy();
+    act(() => dismissToast(lastToast()!.id));
+    await waitFor(() => expect(bulkCalls()).toEqual([{ ids: ['wi_web_2', 'wi_web_4'], patch: { archived: true } }]));
+  });
 });
