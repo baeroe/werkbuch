@@ -665,6 +665,7 @@
     "items.empty.view.title": "„:name“ zeigt noch nichts",
     "items.failed.archive": "Archivieren nicht gespeichert",
     "items.failed.bulk": "Mehrfachbearbeitung nicht gespeichert",
+    "items.failed.reaction": "Reaktion nicht gespeichert",
     "items.failed.restore": "Wiederherstellen nicht gespeichert",
     "items.failed.subscribe": "Beobachten nicht geändert",
     "items.failed.transition": "Statuswechsel nicht gespeichert",

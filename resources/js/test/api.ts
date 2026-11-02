@@ -10,7 +10,8 @@
  *
  * A route is `<METHOD> <path>` without the query; it gets the parsed JSON body and the full URL. An answer without
  * `body` is empty (204 unless `status` says otherwise); a body is sent as JSON, as a problem document from 400 on. A call
- * no route knows rejects, so a test never waits on a request it did not expect.
+ * no route knows rejects, so a test never waits on a request it did not expect; only the search and the comments of an
+ * item answer empty without a route (`fallbackRoute`).
  */
 
 import { emptySearch } from './fixtures';
@@ -44,6 +45,16 @@ function answer({ status, body }: { status?: number; body?: unknown }): Response
 /** Answers the search with no hits until a test sets the route itself (the palette of any screen searches the root list). */
 const searchRoute: MockRoute = () => ({ body: { data: emptySearch } });
 
+/** Answers the comments of any item with none until a test sets the route itself (every activity reads them, A247). */
+const commentsRoute: MockRoute = () => ({ body: { data: [], links: {}, meta: { next_cursor: null, total: 0 } } });
+
+/** The route a test left out but every screen of its kind asks for. */
+function fallbackRoute(method: string, path: string): MockRoute | undefined {
+  if (method !== 'GET') return undefined;
+  if (path === '/api/v1/search') return searchRoute;
+  return /^\/api\/v1\/work-items\/[^/]+\/comments$/.test(path) ? commentsRoute : undefined;
+}
+
 export function mockApi(routes: Record<string, MockRoute>): MockApi {
   const original = globalThis.fetch;
   const calls: MockCall[] = [];
@@ -54,7 +65,7 @@ export function mockApi(routes: Record<string, MockRoute>): MockApi {
     const body: unknown = typeof init.body === 'string' ? JSON.parse(init.body) : undefined;
     calls.push({ method, url: `${url.pathname}${url.search}`, body });
 
-    const route = routes[`${method} ${url.pathname}`] ?? (method === 'GET' && url.pathname === '/api/v1/search' ? searchRoute : undefined);
+    const route = routes[`${method} ${url.pathname}`] ?? fallbackRoute(method, url.pathname);
     if (route === undefined) {
       return Promise.reject(new Error(`mockApi: no route for ${method} ${url.pathname}`));
     }

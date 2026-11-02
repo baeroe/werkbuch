@@ -7,6 +7,8 @@
 
 import { queried } from './api';
 import type {
+  Attachment,
+  Comment,
   Display,
   Filter,
   ItemEvent,
@@ -390,6 +392,8 @@ export function itemEvent(overrides: Partial<ItemEvent> = {}): ItemEvent {
     states: null,
     reason: null,
     via: 'ui',
+    comment_id: null,
+    comment_author_id: null,
     occurred_at: '2026-10-20T09:30:00.000Z',
     ...overrides,
   };
@@ -413,6 +417,65 @@ export const web47History: ItemEvent[] = [
     occurred_at: '2026-10-27T09:00:00.000Z',
   }),
 ];
+
+/** A comment on WEB-47 by Mara; override what the test is about. `body` is the Markdown of `body_json`. */
+export function makeComment(overrides: Partial<Comment> = {}): Comment {
+  return {
+    id: 'c_1',
+    work_item_id: 'wi_web_47',
+    author_id: 'u_mara',
+    body: 'Kann ich reproduzieren, nur unter iOS 18.',
+    body_json: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Kann ich reproduzieren, nur unter iOS 18.' }] }] },
+    created_at: '2026-10-27T13:42:00.000Z',
+    edited_at: null,
+    reactions: [],
+    ...overrides,
+  };
+}
+
+/** The comments of WEB-47 (the clickdummy's seed): Mara's with two thumbs up, then Ida mentioning Mara. */
+export const web47Comments: Comment[] = [
+  makeComment({ id: 'c_web47_1', reactions: [{ emoji: '👍', user_ids: ['u_ida', 'u_theo'] }] }),
+  makeComment({
+    id: 'c_web47_2',
+    author_id: 'u_ida',
+    body: 'Ich schaue mir den Submit-Handler an. @mara magst du gegenlesen?',
+    body_json: {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'Ich schaue mir den Submit-Handler an. ' },
+            { type: 'mention', attrs: { id: 'u_mara', label: 'mara', mentionSuggestionChar: '@' } },
+            { type: 'text', text: ' magst du gegenlesen?' },
+          ],
+        },
+      ],
+    },
+    created_at: '2026-10-28T07:50:00.000Z',
+  }),
+];
+
+/** A picture Mara uploaded into a text of WEB that nobody saved yet; override what the test is about. */
+export function makeAttachment(overrides: Partial<Attachment> = {}): Attachment {
+  const id = overrides.id ?? 'att_1';
+  return {
+    id,
+    project_id: 'p_web',
+    owner: null,
+    kind: 'inline',
+    filename: 'screenshot.png',
+    mime: 'image/png',
+    size: 48_213,
+    inline: true,
+    url: `/attachments/${id}`,
+    preview_url: null,
+    uploaded_by: 'u_mara',
+    created_at: '2026-10-28T09:00:00.000Z',
+    ...overrides,
+  };
+}
 
 /* ------------------------------------------------------------------- item lists */
 

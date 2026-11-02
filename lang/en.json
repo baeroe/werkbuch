@@ -665,6 +665,7 @@
     "items.empty.view.title": "“:name” shows nothing yet",
     "items.failed.archive": "Archiving not saved",
     "items.failed.bulk": "Bulk edit not saved",
+    "items.failed.reaction": "Reaction not saved",
     "items.failed.restore": "Restoring not saved",
     "items.failed.subscribe": "Watching not changed",
     "items.failed.transition": "Status change not saved",

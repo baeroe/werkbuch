@@ -32,7 +32,8 @@ import {
   type ListWorkItemsArgs,
   type WorkItemPatch,
 } from '@/api/workItems';
-import type { BulkResult, Filter, ListedItem, PropertyValue, WorkItem } from '@/types';
+import type { ActivityEntry, BulkResult, Filter, ListedItem, PropertyValue, WorkItem } from '@/types';
+import { useComments } from './comments';
 import { qk, type HookOptions } from './keys';
 import { allPages } from './pages';
 import { invalidateItems, useApiMutation, useItemMutation } from './mutation';
@@ -446,16 +447,59 @@ export function useWorkItem(keyOrId: string | null | undefined, options: HookOpt
   });
 }
 
+/** What `useActivity` answers: the entries once both sources answered, and how loading them goes. */
+export interface ActivityQuery {
+  data: ActivityEntry[] | undefined;
+  /** A source failed without data: there is nothing to show. A failed reload keeps what was shown. */
+  isError: boolean;
+  error: Error | null;
+  isSuccess: boolean;
+  isFetching: boolean;
+  fetchStatus: 'fetching' | 'idle';
+  /** Loads both sources again. */
+  refetch: () => Promise<unknown>;
+}
+
+const atOf = (entry: ActivityEntry) => Date.parse(entry.at);
+
 /**
- * The whole history of an item, oldest first: every page (`next_cursor` followed to the end). The server pages from the
- * oldest entry on, so a history that stopped at the first hundred would hide the newest changes.
+ * The whole activity of an item, oldest first: every page of its history and of its comments (the browser mixes the
+ * two, A247; the server pages both from the oldest entry on, so stopping at the first hundred would hide the newest).
+ * In order of time; a comment and an event of the same moment read event first (a comment answers what happened).
  */
-export function useActivity(itemId: string | null | undefined) {
-  return useQuery({
+export function useActivity(itemId: string | null | undefined): ActivityQuery {
+  const history = useQuery({
     queryKey: qk.activity.list({ item: itemId, pages: 'all' }),
     queryFn: () => allPages((cursor) => listActivity(itemId!, { cursor })),
     enabled: !!itemId,
   });
+  const comments = useComments(itemId);
+  const events = history.data?.items;
+  const said = comments.data?.items;
+
+  const data = useMemo(() => {
+    if (!events || !said) return undefined;
+    const entries: ActivityEntry[] = [...events, ...said.map((comment): ActivityEntry => ({ kind: 'comment', id: comment.id, at: comment.created_at, comment }))];
+    // a stable sort: both sources come oldest first
+    return entries.sort((a, b) => atOf(a) - atOf(b) || (a.kind === b.kind ? 0 : a.kind === 'event' ? -1 : 1));
+  }, [events, said]);
+
+  const failed = [history, comments].find((query) => query.isError && !query.data);
+  const { refetch: refetchHistory } = history;
+  const { refetch: refetchComments } = comments;
+  const refetch = useCallback(() => Promise.all([refetchHistory(), refetchComments()]), [refetchHistory, refetchComments]);
+
+  const isFetching = history.isFetching || comments.isFetching;
+
+  return {
+    data,
+    isError: failed !== undefined,
+    error: failed?.error ?? null,
+    isSuccess: data !== undefined,
+    isFetching,
+    fetchStatus: isFetching ? 'fetching' : 'idle',
+    refetch,
+  };
 }
 
 /** How many items stand in each state of a project (`project`) or of the projects of a workflow (`workflow`). */

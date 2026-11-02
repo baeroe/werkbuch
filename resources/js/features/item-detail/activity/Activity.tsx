@@ -81,7 +81,7 @@ export function Activity({ detail }: { detail: WorkItemDetail }) {
     propertyOf: (key) => properties?.find((property) => property.key === key),
   };
 
-  const lines = buildTimeline(activity.data?.items ?? [], filter);
+  const lines = buildTimeline(activity.data ?? [], filter);
   const earlier = Math.max(0, lines.length - shown);
   const showMore = () => {
     setShown((count) => count + SHOWN_LINES);
@@ -104,7 +104,7 @@ export function Activity({ detail }: { detail: WorkItemDetail }) {
     >
       {activity.isError && !activity.data ? (
         <div role="alert" className="mt-3 flex flex-wrap items-center gap-2 rounded-ctl bg-danger-soft px-3 py-2 text-ui text-ink">
-          <p className="min-w-0 flex-1 text-pretty">{t('items.activity.failed', { message: activity.error.message })}</p>
+          <p className="min-w-0 flex-1 text-pretty">{t('items.activity.failed', { message: activity.error?.message ?? '' })}</p>
           <Button variant="secondary" size="sm" icon={RotateCw} pending={activity.isFetching} onClick={() => void activity.refetch()}>
             {t('common.retry')}
           </Button>
