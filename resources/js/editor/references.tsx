@@ -15,24 +15,32 @@ import { EyeOff } from 'lucide-react';
 import { isGone } from '@/api/client';
 import { TypeGlyph } from '@/components/fields/TypeGlyph';
 import { primeItemRef, useItemRef } from '@/hooks/richText';
+import { qk } from '@/hooks/keys';
 import { useSearch } from '@/hooks/search';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
 import { t } from '@/lib/i18n';
 import { paths } from '@/lib/links';
 import type { EditorEnvRef } from './EditorEnv';
 import { fitsAt } from './mentions';
-import { popupRenderer, SuggestionMenu, useSettled, type PopupProps, type SuggestionEntry } from './suggestions';
+import { popupRenderer, SuggestionMenu, useAsked, type PopupProps, type SuggestionEntry } from './suggestions';
 
 /** As many hits as the list shows. */
 export const MAX_ITEMS = 6;
 
+/** What the list asks the search for. */
+const SEARCH = { types: ['items' as const], limit: MAX_ITEMS };
+
 function ReferenceSuggestions({ suggestion, ref }: PopupProps) {
   const typed = suggestion.query.trim();
-  const query = useSettled(typed);
-  const search = useSearch(query, { types: ['items'], limit: MAX_ITEMS });
+  const asked = useAsked(typed, (q) => qk.search.list({ q, ...SEARCH }));
+  const search = useSearch(asked, SEARCH);
   const types = useWorkItemTypes().data?.items;
   const client = useQueryClient();
-  const items = typed === '' ? [] : (search.data?.items ?? []);
+  // only an answer to what is typed now may be taken (T16-I1): a quick "#WEB-47" + Enter never refers to WEB-4
+  const fresh = asked === typed && search.isSuccess && !search.isPlaceholderData;
+  const failed = asked === typed && search.isError;
+  const stale = typed !== '' && !fresh && !failed;
+  const items = typed === '' || failed ? [] : (search.data?.items ?? []);
 
   const entries: SuggestionEntry[] = items.map((item) => {
     const type = types?.find((entry) => entry.id === item.type_id);
@@ -58,12 +66,12 @@ function ReferenceSuggestions({ suggestion, ref }: PopupProps) {
   const status =
     typed === ''
       ? t('editor.reference.hint')
-      : search.isError
+      : failed
         ? t('editor.reference.failed')
-        : typed !== query || search.isFetching
+        : stale
           ? t('editor.reference.searching')
           : t('editor.reference.none', { query: typed });
-  return <SuggestionMenu ref={ref} editor={suggestion.editor} label={t('editor.reference.label')} sections={[{ entries }]} status={status} />;
+  return <SuggestionMenu ref={ref} editor={suggestion.editor} label={t('editor.reference.label')} sections={[{ entries }]} status={status} stale={stale} />;
 }
 
 /** A reference as the reader sees it now: the item's type and key, or "verborgen". */

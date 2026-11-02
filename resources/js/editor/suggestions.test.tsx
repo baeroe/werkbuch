@@ -52,6 +52,46 @@ describe('SuggestionMenu', () => {
     expect(ref.current!.onKeyDown(key('Escape'))).toBe(false);
   });
 
+  it('leaves Enter and Tab with Shift, Alt or mod to the editor (Shift+Enter is its line break)', () => {
+    const ref = createRef<SuggestionHandle>();
+    const { picked, list } = entries('Mara');
+    render(<SuggestionMenu ref={ref} editor={fakeEditor()} label="Personen" sections={[{ entries: list }]} status="" />);
+    for (const modifier of ['shiftKey', 'altKey', 'metaKey', 'ctrlKey']) {
+      for (const name of ['Enter', 'Tab']) expect(ref.current!.onKeyDown(new KeyboardEvent('keydown', { key: name, [modifier]: true }))).toBe(false);
+    }
+    expect(picked).toEqual([]);
+  });
+
+  it('offers none of the entries of an earlier query and keeps Enter and Tab to itself (T16-I1)', () => {
+    const editor = fakeEditor();
+    const ref = createRef<SuggestionHandle>();
+    const { picked, list } = entries('WEB-4', 'WEB-40');
+    const { rerender } = render(<SuggestionMenu ref={ref} editor={editor} label="Items" sections={[{ entries: list }]} status="Sucht …" stale />);
+    const options = screen.getAllByRole('option');
+    expect(options.map((option) => [option.getAttribute('aria-disabled'), option.getAttribute('aria-selected')])).toEqual([
+      ['true', 'false'],
+      ['true', 'false'],
+    ]);
+    expect(editor.view.dom.hasAttribute('aria-activedescendant')).toBe(false);
+    expect(screen.getByRole('status').textContent).toBe('Sucht …');
+
+    // used up, nothing taken, no line break; the arrows and other keys stay the editor's
+    expect(ref.current!.onKeyDown(key('Enter'))).toBe(true);
+    expect(ref.current!.onKeyDown(key('Tab'))).toBe(true);
+    expect(ref.current!.onKeyDown(new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true }))).toBe(true);
+    expect(ref.current!.onKeyDown(key('ArrowDown'))).toBe(false);
+    fireEvent.mouseEnter(options[1]);
+    fireEvent.click(options[1]);
+    expect(options[1].hasAttribute('data-highlighted')).toBe(false);
+    expect(picked).toEqual([]);
+
+    // the answer came: the entries are there to take
+    rerender(<SuggestionMenu ref={ref} editor={editor} label="Items" sections={[{ entries: list }]} status="" />);
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(ref.current!.onKeyDown(key('Enter'))).toBe(true);
+    expect(picked).toEqual(['WEB-4']);
+  });
+
   it('follows the mouse without taking the focus from the editor', () => {
     const editor = fakeEditor();
     const { picked, list } = entries('Mara', 'Ida');

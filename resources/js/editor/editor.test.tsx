@@ -6,6 +6,7 @@ import { createRef, useState, type ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import schemaPhp from '/app/RichText/Schema.php?raw';
 import { Dialog } from '@/components/ui/Dialog';
+import { qk } from '@/hooks/keys';
 import { textDoc } from '@/lib/richtext';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import { ida, list, mara, person, searchResults, types, web47 } from '@/test/fixtures';
@@ -89,16 +90,22 @@ const reference = (id: string): RichText => ({ type: 'reference', attrs: { id, l
 /** Escape on the editor, with the legacy keyCode ProseMirror reads. */
 const pressEscape = (editor: HTMLElement) => act(() => void fireEvent.keyDown(editor, { key: 'Escape', code: 'Escape', keyCode: 27 }));
 
-/** Holds every answer of the fake server back until `release()`, so a test sees what a list says while it waits. */
-function holdAnswers(): () => void {
+/**
+ * Holds every answer of the fake server back until `release()`, so a test sees what a list says while it waits;
+ * `held` names the addresses asked for meanwhile.
+ */
+function holdAnswers(): { release: () => void; held: string[] } {
   let release: () => void = () => {};
   const gate = new Promise<void>((resolve) => (release = resolve));
+  const held: string[] = [];
   const answer = globalThis.fetch;
   globalThis.fetch = async (...args) => {
+    const url = new URL(String(args[0]), window.location.origin);
+    held.push(`${url.pathname}${url.search}`);
     await gate;
     return answer(...args);
   };
-  return release;
+  return { release, held };
 }
 
 /** A list constant of `App\RichText\Schema`, read from the PHP file, so the mirror cannot go stale. */
@@ -689,7 +696,7 @@ describe('the menus of the editor', () => {
       'GET /api/v1/mentions': () => (fail ? { status: 500, body: { title: 'Server Error' } } : { body: { data: [] } }),
     });
     const editor = screen.getByRole('textbox', { name: 'Kommentar' });
-    const release = holdAnswers();
+    const { release } = holdAnswers();
     await user.click(editor);
     await user.keyboard('@');
     expect(await screen.findByText('Sucht …')).toBeTruthy();
@@ -740,6 +747,91 @@ describe('the menus of the editor', () => {
     expect(editor.querySelector('.rt-ref svg')).not.toBeNull();
     expect(editor.querySelector('a.rt-ref')).toBeNull();
     expect(api!.calls.filter((call) => call.url.startsWith('/api/v1/references'))).toEqual([]);
+  });
+
+  it('takes no hit of an earlier query while the answer to what is typed is on its way (#)', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const web4 = { ...web47, id: 'wi_web_4', number: 4, key: 'WEB-4', title: 'Logo tauschen' };
+    renderWithData(<RichTextEditor value={null} onChange={onChange} preset="comment" projectId="p_web" />, {
+      'GET /api/v1/search': (_body, url) => ({ body: { data: searchResults({ items: url.searchParams.get('q') === 'WEB-47' ? [web47, web4] : [web4] }) } }),
+      'GET /api/v1/work-item-types': () => ({ body: list(types) }),
+    });
+    const editor = screen.getByRole('textbox', { name: 'Kommentar' });
+    await user.click(editor);
+    await user.keyboard('#WEB-4');
+    const items = await screen.findByRole('listbox', { name: 'Items' });
+    await waitFor(() => expect(within(items).getByRole('option', { name: /WEB-4/ }).getAttribute('aria-disabled')).toBeNull());
+
+    // one more key, the server holds its answer: the old hit stays in sight, but greyed and not to be taken
+    const { release, held } = holdAnswers();
+    await user.keyboard('7');
+    await waitFor(() => expect(held).toContain('/api/v1/search?q=WEB-47&types=items&limit=6'));
+    const old = within(items).getByRole('option', { name: /WEB-4/ });
+    expect(old.getAttribute('aria-disabled')).toBe('true');
+    expect(old.getAttribute('aria-selected')).toBe('false');
+    expect(editor.getAttribute('aria-activedescendant')).toBeNull();
+    expect(within(screen.getByRole('listbox', { name: 'Items' }).parentElement!).getByRole('status').textContent).toBe('Sucht …');
+    const before = lastDoc(onChange);
+    // Enter, Tab and a click take nothing and add no line break
+    await user.keyboard('{Enter}{Tab}');
+    await user.click(old);
+    expect(lastDoc(onChange)).toBe(before);
+    expect(nodesOf(lastDoc(onChange), 'reference')).toEqual([]);
+
+    release();
+    await waitFor(() => expect(within(items).getAllByRole('option')[0].textContent).toContain('WEB-47'));
+    expect(within(items).getAllByRole('option')[0].getAttribute('aria-disabled')).toBeNull();
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(nodesOf(lastDoc(onChange), 'reference').map((node) => node.attrs?.id)).toEqual(['wi_web_47']));
+  });
+
+  it('takes an answer from the cache at once', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const { client } = renderWithData(<RichTextEditor value={null} onChange={onChange} preset="comment" projectId="p_web" />, {
+      'GET /api/v1/work-item-types': () => ({ body: list(types) }),
+    });
+    client.setQueryData(qk.search.list({ q: 'WEB-47', types: ['items'], limit: 6 }), searchResults({ items: [web47] }));
+    const editor = screen.getByRole('textbox', { name: 'Kommentar' });
+    await user.click(editor);
+    // the server would answer nothing in time: the cached hit is the one for what is typed
+    holdAnswers();
+    await user.keyboard('#WEB-47');
+    const option = await screen.findByRole('option', { name: /WEB-47/ });
+    expect(option.getAttribute('aria-disabled')).toBeNull();
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(nodesOf(lastDoc(onChange), 'reference').map((node) => node.attrs?.id)).toEqual(['wi_web_47']));
+  });
+
+  it('takes no person of an earlier query while the answer to what is typed is on its way (@)', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const marek = person('u_marek', 'Marek Sommer', 'marek');
+    renderWithData(<RichTextEditor value={null} onChange={onChange} preset="comment" projectId="p_web" />, {
+      'GET /api/v1/mentions': (_body, url) => ({ body: { data: url.searchParams.get('q') === 'mare' ? [marek] : [mara, marek] } }),
+      'GET /api/v1/users': () => ({ body: list([mara, marek]) }),
+    });
+    const editor = screen.getByRole('textbox', { name: 'Kommentar' });
+    await user.click(editor);
+    await user.keyboard('@mar');
+    const people = await screen.findByRole('listbox', { name: 'Personen und Bots' });
+    await waitFor(() => expect(within(people).getAllByRole('option')).toHaveLength(2));
+    await waitFor(() => expect(within(people).getAllByRole('option')[0].getAttribute('aria-disabled')).toBeNull());
+
+    const { release, held } = holdAnswers();
+    await user.keyboard('e');
+    await waitFor(() => expect(held).toContain('/api/v1/mentions?project=p_web&q=mare'));
+    expect(within(people).getAllByRole('option')[0].getAttribute('aria-disabled')).toBe('true');
+    const before = lastDoc(onChange);
+    await user.keyboard('{Enter}');
+    expect(lastDoc(onChange)).toBe(before);
+    expect(nodesOf(lastDoc(onChange), 'mention')).toEqual([]);
+
+    release();
+    await waitFor(() => expect(within(people).getAllByRole('option').map((option) => option.getAttribute('aria-disabled'))).toEqual([null]));
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(nodesOf(lastDoc(onChange), 'mention').map((node) => node.attrs?.id)).toEqual(['u_marek']));
   });
 
   it('says why the # list is empty', async () => {
