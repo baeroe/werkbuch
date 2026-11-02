@@ -1,7 +1,8 @@
 /*
  * The picker every field editor is built from: a trigger that shows the value, and a list on strong tracing paper with
- * a search field on top (Base UI Combobox with the input inside the popup). Typing filters, the arrows move, Enter
- * chooses, Escape closes and gives the focus back to the trigger.
+ * a search field on top (Base UI Combobox with the input inside the popup). Typing filters (or, with `onQueryChange`,
+ * asks the server, which narrows the list itself), the arrows move, Enter chooses, Escape closes and gives the focus
+ * back to the trigger.
  *
  * Looks of the trigger:
  * - `field`: a value in the fields of the detail panel (moodboard), a ghost button
@@ -176,7 +177,11 @@ export type PickerProps = Choice & {
   tabIndex?: number;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  /** What is typed in the search field, for a list the server narrows (an item found by key or title); '' on closing. */
+  /**
+   * What is typed in the search field, for a list the server narrows (an item found by key or title); '' on closing.
+   * The list then shows the options as they come, without narrowing them by the typed text again: the server also
+   * finds what the text does not spell (a former key, a word of the description, a typo).
+   */
   onQueryChange?: (query: string) => void;
   defaultOpen?: boolean;
   /** false: the page stays usable while the list is open. */
@@ -257,7 +262,8 @@ export function Picker(props: PickerProps) {
 
   const chosen = props.multiple ? options.filter((option) => props.value.includes(option.value)) : options.filter((option) => option.value === props.value);
   // the matches of what is typed: the list shows the first LIMIT of them
-  const found = query.trim() === '' ? options.length : options.filter((option) => matches(option, query)).length;
+  const narrowed = onQueryChange !== undefined;
+  const found = query.trim() === '' || narrowed ? options.length : options.filter((option) => matches(option, query)).length;
   const body = load?.isLoading ? (
     <SkeletonGroup label={t('items.fields.picker.loading')} className="flex flex-col gap-3.5 px-3 py-3">
       <Skeleton className="h-3.5 w-2/3" />
@@ -305,7 +311,7 @@ export function Picker(props: PickerProps) {
       }}
       itemToStringLabel={(option: PickerOption) => option.label}
       isItemEqualToValue={(option: PickerOption, other: PickerOption) => option.value === other.value}
-      filter={(option: PickerOption, text: string) => matches(option, text)}
+      filter={narrowed ? null : (option: PickerOption, text: string) => matches(option, text)}
       limit={LIMIT}
       autoHighlight
       open={open}

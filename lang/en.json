@@ -596,6 +596,7 @@
     "items.detail.relations.dialog.search": "Search key or title …",
     "items.detail.relations.dialog.submit": "Add",
     "items.detail.relations.dialog.title": "Add relation",
+    "items.detail.relations.dialog.type_to_search": "Type a key or a title",
     "items.detail.relations.empty": "No relations. Press R to relate the item, for example “blocks” or “tests”.",
     "items.detail.relations.hidden": "hidden item",
     "items.detail.relations.menu": "Add relation …",

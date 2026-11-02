@@ -596,6 +596,7 @@
     "items.detail.relations.dialog.search": "Key oder Titel suchen …",
     "items.detail.relations.dialog.submit": "Hinzufügen",
     "items.detail.relations.dialog.title": "Relation hinzufügen",
+    "items.detail.relations.dialog.type_to_search": "Key oder Titel eingeben",
     "items.detail.relations.empty": "Keine Relationen. Mit R verknüpfst du das Item, zum Beispiel „blockiert“ oder „testet“.",
     "items.detail.relations.hidden": "verborgenes Item",
     "items.detail.relations.menu": "Relation hinzufügen …",

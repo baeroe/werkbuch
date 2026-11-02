@@ -1,9 +1,10 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { allEntries, api, createE2eProject, createItem, pressMod, removeE2eProject, runId, tabTo, tr, variant } from '../helpers';
+import { allEntries, api, createE2eProject, createItem, pressMod, removeE2eProject, runId, searchToken, tabTo, tr, variant, waitForSearch } from '../helpers';
 
 // The relations of an item on its page, with the keyboard only, signed in as the e2e person in English. Each test works
-// in a project of its own (`E2E …`, removed in `finally`); its items come over the API. Creating a child item from the
+// in a project of its own (`E2E …`, removed in `finally`); its items come over the API. The item to relate is found
+// through the search: by its key at once, by a word of its title once the index has it (`waitForSearch`). Creating a child item from the
 // children section needs the create dialog and is in create-item.spec.ts (K11).
 
 const name = (what: string) => `E2E ${what} ${variant()} ${runId()}`;
@@ -61,6 +62,42 @@ test('relates two items with r and removes the relation again', async ({ page })
     await expect.poll(() => relationsOf(page, first.id), { timeout: 15_000 }).toHaveLength(0);
     expect(await relationsOf(page, second.id)).toHaveLength(0);
     await expect(section.getByText(tr('en', 'items.detail.relations.empty'))).toBeVisible();
+  } finally {
+    await page.goto('/my-items');
+    await removeE2eProject(page, identifier);
+  }
+});
+
+test('finds the target by a word of its title', async ({ page }) => {
+  const { id, identifier } = await createE2eProject(page, name('relation search'), { types: ['Task'] });
+  try {
+    const first = await createItem(page, { project_id: id, title: 'E2E Funkmast aufstellen' });
+    const second = await createItem(page, { project_id: id, title: `E2E Wetterstation kalibrieren ${searchToken()}` });
+    // the token of this run and variant first: Meilisearch reads only the last word as a prefix
+    const query = `${searchToken()} wetterst`;
+    await waitForSearch(page, query, (data) => data.items.some((hit) => hit.id === second.id));
+
+    await page.goto(`/items/${first.key}`);
+    await expect(page.getByRole('heading', { level: 1, name: 'E2E Funkmast aufstellen' })).toBeVisible();
+    const section = page.getByRole('region', { name: tr('en', 'items.detail.relations.title') });
+    await expect(section.getByRole('button', { name: new RegExp(`^${tr('en', 'items.detail.relations.add')}`) })).toBeVisible();
+
+    await page.keyboard.press('r');
+    const dialog = page.getByRole('dialog', { name: tr('en', 'items.detail.relations.dialog.title') });
+    const search = page.getByPlaceholder(tr('en', 'items.detail.relations.dialog.search'));
+    await expect(search).toBeFocused();
+    // nothing is asked before something is typed
+    await expect(page.getByText(tr('en', 'items.detail.relations.dialog.type_to_search'))).toBeVisible();
+    await page.keyboard.type(query);
+    await expect(page.getByRole('option', { name: new RegExp(`E2E Wetterstation kalibrieren ${searchToken()}`) })).toBeVisible();
+    await expect(page.getByRole('option')).toHaveCount(1);
+    await page.keyboard.press('Enter');
+    await expect(dialog.getByRole('combobox', { name: new RegExp(second.key) })).toBeVisible();
+
+    await pressMod(page, 'Enter');
+    await expect(dialog).toBeHidden();
+    await expect(section.getByRole('link', { name: new RegExp(second.key) })).toBeVisible();
+    expect(await relationsOf(page, first.id)).toHaveLength(1);
   } finally {
     await page.goto('/my-items');
     await removeE2eProject(page, identifier);
