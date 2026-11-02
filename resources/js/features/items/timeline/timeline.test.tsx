@@ -351,7 +351,7 @@ describe('the timeline', () => {
     await waitFor(() => expect(stored('wi_web_50')).toMatchObject({ start_date: '2026-10-28', due_date: '2026-11-10' }));
     expect(PLANNED_DAYS).toBe(14);
     expect(await within(screen.getByRole('region', { name: 'Website-Relaunch' })).findByRole('group', { name: /^WEB-50 / })).toBeTruthy();
-    await waitFor(() => expect(within(aside()).getByText('Alle Epics dieser Liste haben ein Start- und ein Due-Date.')).toBeTruthy());
+    await waitFor(() => expect(within(aside()).getByText('Alle Epics dieser Liste stehen auf der Zeitachse.')).toBeTruthy());
   });
 
   it('plans the epic under the cursor with ⇧→ and takes the focus to its new row', async () => {
@@ -448,7 +448,7 @@ describe('the timeline', () => {
     const rendered = () => document.querySelectorAll('[role="group"][data-nav-target]');
     expect(rendered().length).toBeGreaterThan(5);
     expect(rendered().length).toBeLessThan(40);
-    expect(within(aside()).getByText('Alle Epics dieser Liste haben ein Start- und ein Due-Date.')).toBeTruthy();
+    expect(within(aside()).getByText('Alle Epics dieser Liste stehen auf der Zeitachse.')).toBeTruthy();
 
     // the row of the cursor stays while the box scrolls away from it
     await focusRow('WEB-1');

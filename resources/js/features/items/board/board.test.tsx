@@ -552,3 +552,13 @@ describe('the epic on the cards of child items', () => {
     expect(board.items.find((entry) => entry.id === 'wi_web_42')?.parent_id).toBe(web50.id);
   });
 });
+
+describe('the sentence of a refusal', () => {
+  it('names a status the rules do not know as an unknown status', () => {
+    expect(reasonText({ code: 'transition', params: { from: '', to: 'Done', workflow: 'Standard' } })).toBe('Von „Unbekannter Status“ nach „Done“ ist im Workflow „Standard“ nicht erlaubt.');
+    expect(reasonText({ code: 'start_transition', params: { initial: '', to: 'Done', workflow: 'Standard' } })).toBe(
+      'Neue Items starten in „Unbekannter Status“. Von dort nach „Done“ ist im Workflow „Standard“ nicht erlaubt.',
+    );
+    expect(reasonText({ code: 'transition', params: { from: 'Todo', to: 'Done', workflow: 'Standard' } })).toBe('Von „Todo“ nach „Done“ ist im Workflow „Standard“ nicht erlaubt.');
+  });
+});

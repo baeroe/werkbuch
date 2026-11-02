@@ -54,6 +54,13 @@ describe('dropping a card on a status column', () => {
     });
     expect(checkMove(appItem('app_todo'), 'app_todo', 'app_todo', viewer)).toMatchObject({ ok: false });
   });
+  it('refuses a status the workflow it knows lacks (an older cache) instead of failing, and leaves an unknown name empty', () => {
+    // the item stands in a status the cached workflow does not have yet, and goes to its column
+    expect(checkMove(webItem('std_new'), 'std_todo', 'std_new', rules('state'))).toEqual({
+      ok: false,
+      reason: { code: 'transition', params: { from: '', to: 'std_new', workflow: 'Standard' } },
+    });
+  });
 });
 
 describe('dropping a card on a category column (several workflows)', () => {

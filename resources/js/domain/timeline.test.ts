@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import de from '../../../lang/de.json';
 import { initI18n } from '@/lib/i18n';
 import en from '../../../lang/en.json';
 import { dateToX, moveRange, PX_PER_DAY, resizeRange, scaleTicks, shiftByUnit, timelineRange, xToDate, type TimelineScale, type Zoom } from './timeline';
@@ -98,6 +99,11 @@ describe('timeline scale', () => {
       ['2026-10-01', 'Q4 2026'],
     ]);
     expect(quarter.minor.map((tick) => tick.label)).toEqual(['Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']);
+  });
+
+  it('names a quarter with the words of the language', () => {
+    initI18n({ locale: 'de', translations: { ...de, 'items.timeline.quarter': ':quarter. Quartal :year' } });
+    expect(scaleTicks({ start: '2026-10-01', end: '2026-12-31' }, 'quarter').major.map((tick) => tick.label)).toEqual(['4. Quartal 2026']);
   });
 
   it('begins the weeks on the first weekday of the organisation', () => {

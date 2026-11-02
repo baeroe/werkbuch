@@ -14,8 +14,15 @@ import type { useTransitionWorkItem, useUpdateWorkItem } from '@/hooks/workItems
 import { t } from '@/lib/i18n';
 import type { ListedItem, State } from '@/types';
 
-/** The sentence of a refusal, for the toast and the status line. */
-export const reasonText = (reason: BoardReason): string => t(`items.board.reason.${reason.code}`, reason.params);
+/** The parameters that name a status: one the rules do not know (empty) reads as an unknown status. */
+const STATE_PARAMS = ['from', 'initial'];
+
+/** The sentence of a refusal, for the toast, the status line and the drag's announcement. */
+export function reasonText(reason: BoardReason): string {
+  const params = { ...reason.params };
+  for (const key of STATE_PARAMS) if (params[key] === '') params[key] = t('items.group.unknown.state');
+  return t(`items.board.reason.${reason.code}`, params);
+}
 
 export interface MoveDeps {
   transition: Pick<ReturnType<typeof useTransitionWorkItem>, 'mutateAsync'>;

@@ -48,6 +48,7 @@ import { boardLockReason, checkMove, type BoardReason, type BoardRules, type Mov
 import { sortItems } from '@/domain/sort';
 import { t } from '@/lib/i18n';
 import type { ListedItem, SortSpec, StateCategory } from '@/types';
+import { reasonText } from './moves';
 import type { BoardColumnData } from './useBoardColumns';
 
 /** The droppable id of a column; cards use their item id. */
@@ -313,7 +314,7 @@ export function useBoardDrag(served: BoardColumnData[], rules: BoardRules, optio
       if (!item || !state || !key) return t('items.board.drag.nowhere', { key: keyOf(active.id) });
       const check = checkMove(item, state.origin.column, key, rules);
       const where = t('items.board.drag.over', { key: item.key, column: rules.columnLabel(key) });
-      return check.ok ? where : `${where} ${t(`items.board.reason.${check.reason.code}`, check.reason.params)}`;
+      return check.ok ? where : `${where} ${reasonText(check.reason)}`;
     },
     onDragEnd: () => undefined,
     onDragCancel: ({ active }) => t('items.board.drag.cancelled', { key: keyOf(active.id) }),

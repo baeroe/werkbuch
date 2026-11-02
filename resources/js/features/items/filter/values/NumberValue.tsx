@@ -5,7 +5,7 @@
  */
 
 import { formatNumber } from '@/components/fields/format';
-import { ambiguousNumber, parseNumber } from '@/components/fields/property/parse';
+import { ambiguousNumber, beyondLimit, parseNumber } from '@/components/fields/property/parse';
 import { t } from '@/lib/i18n';
 import { operatorLabelKey } from '../fieldOps';
 import { InlineInput, type InlineParse } from './InlineInput';
@@ -21,6 +21,7 @@ export const numberParse: InlineParse = (text) => {
     const decimal = formatNumber(ambiguous.decimal, 3, { grouping: false });
     return { error: t('items.fields.property.number_ambiguous', { whole, decimal }) };
   }
+  if (beyondLimit(text, DECIMALS)) return { error: t('items.fields.property.number_range') };
   const value = parseNumber(text, DECIMALS);
   return value === null ? { error: t('items.fields.property.number', { example: formatNumber(3.5, 1) }) } : { value };
 };

@@ -551,6 +551,11 @@ describe('the filter bar', () => {
     expect(await screen.findByText('Mehrdeutig: 1500 oder 1,5? Schreib 1500 oder 1,5.')).toBeTruthy();
     expect(field.getAttribute('aria-invalid')).toBe('true');
     expect(last()).toBeUndefined();
+    // a number past what the server takes says so (A152)
+    await user.clear(field);
+    await user.type(field, '100000000000000000000{Enter}');
+    expect(await screen.findByText('Dem Betrag nach kleiner als 10²⁰')).toBeTruthy();
+    expect(last()).toBeUndefined();
     // Escape takes the typing back
     await user.keyboard('{Escape}');
     expect((field as HTMLInputElement).value).toBe('2,5');

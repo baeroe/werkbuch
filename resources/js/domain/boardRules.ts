@@ -25,7 +25,10 @@ import { canTransition, isClosedCategory } from './workflow';
 /** The longest rank the server takes (`ItemInput::RANK_MAX`). */
 export const RANK_MAX = 128;
 
-/** Why a card cannot go where it was dropped; the sentence is `items.board.reason.<code>` with the parameters. */
+/**
+ * Why a card cannot go where it was dropped; the sentence is `items.board.reason.<code>` with the parameters. A status
+ * name the rules do not know (`from`, `initial`) is empty: the sentence names it as an unknown status (`reasonText`).
+ */
 export interface BoardReason {
   code:
     | 'transition'
@@ -124,8 +127,9 @@ export function checkMove(item: ListedItem, from: string, to: string, rules: Boa
               : reason('category', { ...params, to: rules.columnLabel(to) }),
         };
       }
-      // `next` is a status of the workflow: dropTargetState only returns those
-      const nextState = stateIn(workflow, next)!;
+      // dropTargetState returns a status of the workflow; a workflow that changed since (an older cache) may lack it
+      const nextState = stateIn(workflow, next);
+      if (!nextState) return { ok: false, reason: reason('transition', { from: current?.name ?? '', workflow: workflow.name, to: rules.columnLabel(to) }) };
       if (current?.id === nextState.id) return { ok: true, patch: {}, closing: null };
       return { ok: true, patch: { state_id: nextState.id }, closing: isClosedCategory(nextState.category) ? nextState : null };
     }

@@ -59,6 +59,12 @@ export function parseNumber(text: string, decimals: number): number | null {
   return value !== null && Math.abs(value) >= NUMBER_LIMIT ? null : value;
 }
 
+/** Whether a text reads as a number at or beyond `NUMBER_LIMIT` in amount: it gets the sentence of the limit (A152). */
+export function beyondLimit(text: string, decimals: number): boolean {
+  const value = readNumber(text.trim(), decimals);
+  return value !== null && Math.abs(value) >= NUMBER_LIMIT;
+}
+
 /**
  * Numbers stay below this in amount, as the server takes them (`ItemValue::NUMBER_LIMIT`): the column holds 20 digits
  * before the decimal sign.

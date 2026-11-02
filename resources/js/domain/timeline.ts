@@ -162,7 +162,7 @@ export function scaleTicks(range: { start: string; end: string }, zoom: Zoom, we
     const quarters = unitStarts(start, end, startOfQuarter(start), (date) => addMonths(date, 3));
     const majorDays = quarters[0] === start ? quarters : [start, ...quarters];
     return {
-      major: majorDays.map((date) => ({ date, label: `Q${Math.floor((splitDate(date).month - 1) / 3) + 1} ${format.year.format(utc(date))}`, strong: true })),
+      major: majorDays.map((date) => ({ date, label: t('items.timeline.quarter', { quarter: Math.floor((splitDate(date).month - 1) / 3) + 1, year: format.year.format(utc(date)) }), strong: true })),
       minor: months.map((date) => ({ date, label: format.monthShort.format(utc(date)), strong: false })),
     };
   }
