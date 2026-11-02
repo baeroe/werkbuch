@@ -152,13 +152,19 @@ it('leaves archived items and the items of archived projects out unless include_
 });
 
 it('lists archived projects only with include_archived', function () use ($world, $rebuild, $search, $ids) {
-    searchEngine();
+    $engine = searchEngine();
     [$mara, $web] = $world();
     $arc = Project::factory()->identifier('ARC')->archived()->member($mara, ProjectRole::Member)->create(['name' => 'Website alt']);
     $rebuild();
 
     expect($ids($search($mara, ['q' => 'website'])->projects))->toBe([$web->id])
         ->and($ids($search($mara, ['q' => 'website', 'include_archived' => true])->projects))->toBe([$web->id, $arc->id]);
+
+    // restored after its document was written (archived: true): the scope from the database decides, not the document
+    DB::table('projects')->where('id', $arc->id)->update(['archived_at' => null]);
+
+    expect($engine->documents('testing_projects')[$arc->id]['archived'])->toBeTrue()
+        ->and($ids($search($mara, ['q' => 'website'])->projects))->toBe([$web->id, $arc->id]);
 });
 
 // the key jump (P4, review focus 2)
@@ -334,6 +340,36 @@ it('refuses an empty query, an unknown type, a limit outside 1–50 and a non-bo
 
     $none = QuerySearch::run(actor($mara), ['q' => str_repeat('ä', 255), 'limit' => '50', 'include_archived' => null, 'types' => null, 'other' => 'x']);
     expect($none->items)->toBeEmpty();
+});
+
+it('lets the engine leave out what the reader may not get before it cuts at the limit', function () use ($world, $item, $search, $ids) {
+    searchEngine();
+    [$mara, $web, $ops] = $world();
+    $arc = Project::factory()->identifier('ARC')->archived()->member($mara, ProjectRole::Member)->create(['name' => 'Kontakt Archiv']);
+    $web->update(['name' => 'Kontakt Website']);
+    $ops->update(['name' => 'Kontakt Betrieb']);
+    $hidden = $item($ops, 'Kontakt geheim');
+    $archived = WorkItem::factory()->for($web)->archived()->create(['title' => 'Kontakt archiviert']);
+    $open = $item($web, 'Kontakt offen');
+    $gone = User::factory()->disabled()->create(['name' => 'Kontakt Alt']);
+    $active = User::factory()->create(['name' => 'Kontakt Lenz']);
+    // what the reader may not get stands first in the index: only a filter in the engine leaves room for the rest
+    $indexer = app(SearchIndexer::class);
+    foreach ([$hidden, $archived, $open] as $indexed) {
+        $indexer->upsertItem($indexed->id);
+    }
+    foreach ([$ops, $arc, $web] as $indexed) {
+        $indexer->upsertProject($indexed->id);
+    }
+    foreach ([$gone, $active] as $indexed) {
+        $indexer->upsertUser($indexed->id);
+    }
+
+    $results = $search($mara, ['q' => 'kontakt', 'limit' => 1]);
+
+    expect($ids($results->items))->toBe([$open->id])
+        ->and($ids($results->projects))->toBe([$web->id])
+        ->and($ids($results->people))->toBe([$active->id]);
 });
 
 it('keeps the order of the index', function () use ($world, $item, $search, $ids) {

@@ -69,7 +69,7 @@ final class QuerySearch
 
         try {
             $items = in_array('items', $types, true) ? self::items($actor, $q, $scope, $limit, $includeArchived, $keyMatch) : (new WorkItem)->newCollection();
-            $projects = in_array('projects', $types, true) ? self::projects($user, $q, $scope, $limit, $includeArchived) : (new Project)->newCollection();
+            $projects = in_array('projects', $types, true) ? self::projects($user, $q, $scope, $limit) : (new Project)->newCollection();
             $people = in_array('people', $types, true) ? self::people($q, $limit) : (new User)->newCollection();
         } catch (ExceptionInterface|ClientExceptionInterface $e) {
             report($e);
@@ -198,26 +198,21 @@ final class QuerySearch
     }
 
     /**
+     * The projects of the scope, read again through `Project::visibleTo`. The scope alone decides about the archive: it
+     * is read from the database, so a project restored after its document was written shows at once.
+     *
      * @param  list<string>  $scope
      * @return EloquentCollection<int, Project>
      */
-    private static function projects(User $user, string $q, array $scope, int $limit, bool $includeArchived): EloquentCollection
+    private static function projects(User $user, string $q, array $scope, int $limit): EloquentCollection
     {
         if ($scope === []) {
             return (new Project)->newCollection();
         }
 
-        $search = Project::search($q)->options(['matchingStrategy' => 'all'])->whereIn('id', $scope);
-        if (! $includeArchived) {
-            $search->where('archived', false);
-        }
-        $ids = self::keys($search->take($limit));
+        $ids = self::keys(Project::search($q)->options(['matchingStrategy' => 'all'])->whereIn('id', $scope)->take($limit));
 
-        $found = Project::query()->visibleTo($user)->with(['media', 'types:work_item_types.id'])->whereKey($ids)
-            ->when(! $includeArchived, fn ($query) => $query->whereNull('archived_at'))
-            ->get();
-
-        return self::inOrder($ids, $found);
+        return self::inOrder($ids, Project::query()->visibleTo($user)->with(['media', 'types:work_item_types.id'])->whereKey($ids)->get());
     }
 
     /**
