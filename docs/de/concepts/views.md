@@ -76,15 +76,15 @@ Nach Status gruppieren geht nur, solange alle gefundenen Items einen Workflow te
 
 ## Sortierung
 
-| Sortierung | Reihenfolge (aufsteigend) |
-|---|---|
-| Manuell | Die Reihenfolge, die du Items durch Ziehen gibst (Rang) |
-| Priorität | Urgent zuerst |
-| Due-Date, Start-Date | Früheste zuerst |
-| Angelegt, geändert | Älteste zuerst |
-| Key | Kennung des Projekts, dann die Nummer (`WEB-9` vor `WEB-10`) |
-| Kategorie | Backlog zuerst |
-| Eine Property (Zahl, Datum, Text oder Adresse) | Kleinste, früheste oder alphabetisch zuerst |
+| Sortierung | Über die API (`sort.field`) | Reihenfolge (aufsteigend) |
+|---|---|---|
+| Manuell | `rank` | Die Reihenfolge, die du Items durch Ziehen gibst (Rang) |
+| Priorität | `priority` | Urgent zuerst |
+| Due-Date, Start-Date | `due_date`, `start_date` | Früheste zuerst |
+| Angelegt, geändert | `created_at`, `updated_at` | Älteste zuerst |
+| Key | `key` | Kennung des Projekts, dann die Nummer (`WEB-9` vor `WEB-10`) |
+| Kategorie | `state_category` | Backlog zuerst |
+| Eine Property (Zahl, Datum, Text oder Adresse) | `property:<key>` | Kleinste, früheste oder alphabetisch zuerst |
 
 Items ohne Wert stehen in beiden Richtungen am Ende; gleiche Werte behalten die manuelle Reihenfolge. Texte werden ohne Rücksicht auf Groß- und Kleinschreibung und Akzente verglichen.
 
@@ -157,6 +157,18 @@ Die dynamischen Werte gelten nur, wo das Feld sie nimmt: `"today"` in einer Tite
 
 ### Properties
 
+Die Operatoren einer Property folgen ihrem Feldtyp:
+
+| Feldtyp | Art | Operatoren |
+|---|---|---|
+| Dropdown, Person (ein Wert) | ID | `is`, `is_not`, `in`, `not_in`, `is_empty`, `is_not_empty` |
+| Dropdown, Person (mehrere Werte) | Liste | `is`, `is_not`, `in`, `not_in`, `contains`, `is_empty`, `is_not_empty` |
+| Datum | Tag | `is`, `before`, `after`, `between`, `is_empty`, `is_not_empty` |
+| Ja/Nein | Ja/Nein | `is` |
+| Zahl | Zahl | `is`, `gt`, `lt`, `between`, `is_empty`, `is_not_empty` |
+| Text, Adresse | Text | `contains`, `is`, `is_empty`, `is_not_empty` |
+| Rich Text | Rich Text | `contains`, `is_empty`, `is_not_empty` |
+
 Eine Bedingung auf eine Property (`property:<key>`) trifft nur Items, deren Typ die Property hat, auch mit `is_empty`, `is_not`, `not_in` und `is false`. Eine Ja/Nein-Property, die nie gesetzt wurde, liest sich als „nein“. Texte werden ohne Rücksicht auf Groß- und Kleinschreibung und Akzente verglichen („uber“ findet „Über“); Rich Text wird in seinem Klartext gesucht. Wird eine Property gelöscht, behält eine gespeicherte View ihre Bedingung; sie trifft dann nichts und zeigt sich als „Unbekanntes Feld“, bis du sie entfernst.
 
 ### Archivierte Items
@@ -215,16 +227,16 @@ Die Tabelle ist ein Grid mit einem Tab-Stopp:
 | `enter` | Editor der Zelle öffnen (in der ersten Spalte: das Item) |
 | `escape` | Editor schließen |
 
-`j`, `k`, `x` und `space` wirken wie in der Liste.
+`j`, `k`, `x` und `space` wirken wie in der Liste, ebenso die Tasten der Gruppenköpfe.
 
 ### Timeline
 
 | Tasten | Aktion |
 |---|---|
-| `shift+left`, `shift+right` | Epic um eine Einheit des Zooms (Tag, Woche, Monat) früher bzw. später; ein Epic ohne Datum einplanen |
+| `shift+left`, `shift+right` | Epic um eine Einheit des Zooms (Tag, Woche, Monat) früher bzw. später; `shift+right` plant ein Epic ohne Datum ab heute ein |
 | `alt+left`, `alt+right` | Epic kürzer bzw. länger machen (sein Due-Date) |
 
-Züge werden nach einer kurzen Pause gespeichert; `escape` beim Ziehen setzt den Balken zurück.
+Züge werden nach einer kurzen Pause gespeichert; `escape` beim Ziehen setzt den Balken zurück. Die Befehlspalette (`mod+k`) bietet dieselben Züge an, solange sie möglich sind.
 
 ## REST
 
@@ -242,7 +254,7 @@ Lesen braucht ein Token mit `read`. Die drei Anfragen unten, die mit `POST` lese
 
 ### Eine View lesen
 
-`?view=<id>` liefert die Items einer View: ihren Filter, ihre Sortierung und ob sie Kind-Items zeigt. `filter[…]` engt weiter ein (alle Bedingungen gelten), `sort` ersetzt ihre Sortierung.
+`?view=<id>` liefert die Items einer View: ihren Filter, ihre Sortierung und ob sie Kind-Items zeigt. `filter[…]` engt weiter ein (alle Bedingungen gelten), `sort` ersetzt ihre Sortierung: der API-Name aus [Sortierung](#sortierung), mit `-` davor absteigend (`sort=-due_date`).
 
 ```bash
 curl -g -H "Authorization: Bearer <Token>" \

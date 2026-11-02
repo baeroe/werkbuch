@@ -76,15 +76,15 @@ Grouping by status works only while all items found share one workflow; otherwis
 
 ## Sorting
 
-| Sort | Order (ascending) |
-|---|---|
-| Manual | The order you give items by dragging (rank) |
-| Priority | Urgent first |
-| Due date, start date | Earliest first |
-| Created, changed | Oldest first |
-| Key | Identifier of the project, then the number (`WEB-9` before `WEB-10`) |
-| Category | Backlog first |
-| A property (number, date, text or address) | Smallest, earliest or alphabetical first |
+| Sort | Over the API (`sort.field`) | Order (ascending) |
+|---|---|---|
+| Manual | `rank` | The order you give items by dragging (rank) |
+| Priority | `priority` | Urgent first |
+| Due date, start date | `due_date`, `start_date` | Earliest first |
+| Created, changed | `created_at`, `updated_at` | Oldest first |
+| Key | `key` | Identifier of the project, then the number (`WEB-9` before `WEB-10`) |
+| Category | `state_category` | Backlog first |
+| A property (number, date, text or address) | `property:<key>` | Smallest, earliest or alphabetical first |
 
 Items without a value come last in both directions; equal values keep the manual order. Texts are compared without regard to case and accents.
 
@@ -157,6 +157,18 @@ The dynamic values work only where the field takes them: `"today"` in a title se
 
 ### Properties
 
+The operators of a property follow its field type:
+
+| Field type | Kind | Operators |
+|---|---|---|
+| Dropdown, person (one value) | ID | `is`, `is_not`, `in`, `not_in`, `is_empty`, `is_not_empty` |
+| Dropdown, person (several values) | List | `is`, `is_not`, `in`, `not_in`, `contains`, `is_empty`, `is_not_empty` |
+| Date | Day | `is`, `before`, `after`, `between`, `is_empty`, `is_not_empty` |
+| Yes/no | Yes/no | `is` |
+| Number | Number | `is`, `gt`, `lt`, `between`, `is_empty`, `is_not_empty` |
+| Text, address | Text | `contains`, `is`, `is_empty`, `is_not_empty` |
+| Rich text | Rich text | `contains`, `is_empty`, `is_not_empty` |
+
 A condition on a property (`property:<key>`) only ever matches items whose type has the property, also with `is_empty`, `is_not`, `not_in` and `is false`. A yes/no property that was never set reads as "no". Texts are compared without regard to case and accents ("uber" finds "Über"); rich text is searched in its plain text. When a property is deleted, a saved view keeps its condition, which then matches nothing and shows as "Unknown field" until you remove it.
 
 ### Archived items
@@ -215,16 +227,16 @@ The table is a grid with one tab stop:
 | `enter` | Open the editor of the cell (on the first column: the item) |
 | `escape` | Close the editor |
 
-`j`, `k`, `x` and `space` work as in the list.
+`j`, `k`, `x` and `space` work as in the list, and so do the keys of the group headings.
 
 ### Timeline
 
 | Keys | Action |
 |---|---|
-| `shift+left`, `shift+right` | Move the epic one unit of the zoom (day, week, month) earlier or later; on an epic without dates, plan it |
+| `shift+left`, `shift+right` | Move the epic one unit of the zoom (day, week, month) earlier or later; `shift+right` plans an epic without dates from today |
 | `alt+left`, `alt+right` | Make the epic shorter or longer (its due date) |
 
-Moves are saved after a short pause; `escape` while dragging puts the bar back.
+Moves are saved after a short pause; `escape` while dragging puts the bar back. The command palette (`mod+k`) offers the same moves, as long as they are possible.
 
 ## REST
 
@@ -242,7 +254,7 @@ Reading needs a token with `read`. The three requests below that read with `POST
 
 ### Read a view
 
-`?view=<id>` returns the items of a view: its filter, its sort and whether it shows child items. `filter[…]` narrows it further (all conditions hold), `sort` replaces its sort.
+`?view=<id>` returns the items of a view: its filter, its sort and whether it shows child items. `filter[…]` narrows it further (all conditions hold), `sort` replaces its sort: the API name from [Sorting](#sorting), with `-` in front for descending (`sort=-due_date`).
 
 ```bash
 curl -g -H "Authorization: Bearer <Token>" \
