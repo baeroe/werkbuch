@@ -489,7 +489,7 @@ describe('the display menu', () => {
     expect(onChange).toHaveBeenLastCalledWith(display({ show_sub_items: false }));
   });
 
-  it('shows and hides fields, properties included, and switches the layout', () => {
+  it('shows and hides fields, properties included, and leaves the layout to the header', () => {
     const { menu, onChange } = renderMenu();
     expect(within(menu).getByText('Chips in der Liste, Spalten in der Tabelle. Karten im Board zeigen davon Labels, Priorität, Due-Date und Assignee.')).toBeTruthy();
     fireEvent.click(within(menu).getByRole('checkbox', { name: 'Assignee' }));
@@ -498,8 +498,9 @@ describe('the display menu', () => {
     expect(onChange).toHaveBeenLastCalledWith(display({ fields: ['key'] }));
     fireEvent.click(within(menu).getByRole('checkbox', { name: 'Aufwand (h)' }));
     expect(onChange).toHaveBeenLastCalledWith(display({ fields: ['key', 'state', 'property:effort'] }));
-    fireEvent.click(within(menu).getByRole('button', { name: /Board/ }));
-    expect(onChange).toHaveBeenLastCalledWith(display({ layout: 'board' }));
+    // the layout switches in the header of the list only, as in the clickdummy
+    expect(within(menu).queryByRole('group', { name: 'Layout' })).toBeNull();
+    expect(within(menu).queryByRole('button', { name: /Board/ })).toBeNull();
     // a view saves from its bar, not from the menu
     expect(within(menu).queryByRole('button', { name: 'Als neue View speichern …' })).toBeNull();
   });

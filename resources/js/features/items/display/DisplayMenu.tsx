@@ -1,9 +1,9 @@
 /*
- * "Anzeige" (spec 4.11): how a list shows its items, ported from the clickdummy. Layout, grouping, sorting with its
+ * "Anzeige" (spec 4.11): how a list shows its items, ported from the clickdummy. Grouping, sorting with its
  * direction, whether sub-items show, and the fields (the chips of a row, the columns of the table; a card on the board
  * shows labels, priority, due date and assignee of them), properties included. Every change is part of the view state:
  * for a view an unsaved change, for a built-in list just how one looks at it (P28), which "Als neue View speichern …" at
- * the end of the menu keeps.
+ * the end of the menu keeps. The layout switches in the header of the list only, as in the clickdummy.
  *
  * - The grouping by status falls back to the categories when the items span several workflows (P14): the menu then
  *   offers no status grouping, shows the categories as chosen and says why.
@@ -11,7 +11,7 @@
  *   order meanwhile (P2).
  */
 
-import { ArrowDownWideNarrow, ArrowUpNarrowWide, Bookmark, ChartGantt, List, SlidersHorizontal, SquareKanban, Table2 } from 'lucide-react';
+import { ArrowDownWideNarrow, ArrowUpNarrowWide, Bookmark, SlidersHorizontal } from 'lucide-react';
 import { useId, useState } from 'react';
 import { ROW_FIELDS } from '@/components/items/ItemRowBase';
 import { Button } from '@/components/ui/Button';
@@ -24,12 +24,9 @@ import { Switch } from '@/components/ui/Switch';
 import { GROUP_BYS } from '@/domain/viewState';
 import { t } from '@/lib/i18n';
 import type { Display, GroupBy, Property } from '@/types';
-import { LAYOUT_OPTIONS } from '../layouts';
 import { PROPERTY_PREFIX } from '../filter/fieldOps';
 import { GROUP_LABEL_KEYS } from './groupLabels';
 import { isSortable, SORT_FIELDS, SORTABLE_TYPES } from './options';
-
-const LAYOUT_ICONS = { list: List, board: SquareKanban, table: Table2, timeline: ChartGantt };
 
 /** The name of a display field: "Status", or the label of a property. */
 export function fieldLabel(field: string, properties: readonly Property[]): string {
@@ -85,14 +82,6 @@ export function DisplayMenu({ display, onChange, fellBack, properties, onSaveAs,
         className="max-h-[var(--available-height)] w-[min(22rem,calc(100vw-2rem))] overflow-y-auto overscroll-contain p-4"
       >
         <div className="mt-4 flex flex-col gap-4">
-          <SegmentedControl
-            label={t('items.screen.layout')}
-            size="sm"
-            value={display.layout}
-            onValueChange={(layout) => set({ layout })}
-            options={LAYOUT_OPTIONS.map((option) => ({ value: option.value, label: t(option.label), icon: LAYOUT_ICONS[option.value] }))}
-            className="self-start"
-          />
           <Select
             label={t('items.display.group_by')}
             hint={fellBack ? t('items.display.fell_back') : undefined}
