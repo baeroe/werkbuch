@@ -7,11 +7,6 @@ use App\Domain\Ulid;
 use App\Domain\WorkItems\ItemKey;
 use League\CommonMark\Environment\EnvironmentBuilderInterface;
 use League\CommonMark\Event\DocumentParsedEvent;
-use League\CommonMark\Extension\CommonMark\Node\Block\FencedCode;
-use League\CommonMark\Extension\CommonMark\Node\Block\HtmlBlock;
-use League\CommonMark\Extension\CommonMark\Node\Block\IndentedCode;
-use League\CommonMark\Extension\CommonMark\Node\Inline\Code;
-use League\CommonMark\Extension\CommonMark\Node\Inline\HtmlInline;
 use League\CommonMark\Extension\CommonMark\Node\Inline\Image;
 use League\CommonMark\Extension\CommonMark\Node\Inline\Link;
 use League\CommonMark\Extension\ExtensionInterface;
@@ -19,9 +14,13 @@ use League\CommonMark\Node\Inline\AbstractStringContainer;
 use League\CommonMark\Node\Inline\Newline;
 use League\CommonMark\Node\Inline\Text;
 use League\CommonMark\Node\Node;
+use League\CommonMark\Parser\Inline\InlineParserInterface;
+use League\CommonMark\Parser\Inline\InlineParserMatch;
+use League\CommonMark\Parser\InlineParserContext;
 use League\CommonMark\Renderer\ChildNodeRendererInterface;
 use League\CommonMark\Renderer\NodeRendererInterface;
 use League\CommonMark\Util\HtmlElement;
+use League\CommonMark\Util\Xml;
 
 /**
  * Finds the nodes of Phase 7 in Markdown (spec 4.16) once commonmark has parsed it, and renders them as the empty
@@ -37,12 +36,20 @@ use League\CommonMark\Util\HtmlElement;
  *   when the text is saved; an image from anywhere else is no node, its alt text stays as text (P5).
  *
  * Without a lookup, mentions and keys stay text and an `item:` link becomes a reference only when it was kept. Nothing
- * in code, HTML or the text of a link or an image (autolinks too) is read, and `page:` links stay text until Phase 9.
+ * in code or the text of a link or an image (autolinks too) is read, and `page:` links stay text until Phase 9. HTML
+ * in Markdown is text (`html_input: escape`): a `@handle` between two tags is read like any other text.
+ *
+ * `\@` and `\-` are text that is never part of a mention or a key (EscapedCharacter): `\@mara`, `WEB\-47`. Markdown
+ * writes text that would read as a mention or a key that way (Markdown::shield()), so text stays text and only the
+ * nodes come back as nodes.
  */
-final class MentionsAndReferences implements ExtensionInterface, NodeRendererInterface
+final class MentionsAndReferences implements ExtensionInterface, InlineParserInterface, NodeRendererInterface
 {
-    /** Where a `@handle` or a key is no mention and no reference. */
-    private const SHELTERS = [Link::class, Image::class, Code::class, FencedCode::class, IndentedCode::class, HtmlInline::class, HtmlBlock::class];
+    /**
+     * Where a `@handle` or a key is no mention and no reference. Code and HTML hold their text as a literal of their
+     * own, never as Text, so they need no entry.
+     */
+    private const SHELTERS = [Link::class, Image::class];
 
     public function __construct(private readonly MarkdownContext $ctx) {}
 
@@ -50,11 +57,30 @@ final class MentionsAndReferences implements ExtensionInterface, NodeRendererInt
     {
         // after the parsers, autolinks included, and after the listeners registered before it
         $environment->addEventListener(DocumentParsedEvent::class, $this->resolve(...), 0);
+        // before commonmark's backslash escapes (80), which would join the character with the text around it
+        $environment->addInlineParser($this, 90);
         $environment->addRenderer(MarkdownAtom::class, $this);
+        $environment->addRenderer(EscapedCharacter::class, $this);
     }
 
-    public function render(Node $node, ChildNodeRendererInterface $childRenderer): HtmlElement
+    public function getMatchDefinition(): InlineParserMatch
     {
+        return InlineParserMatch::oneOf('\\@', '\\-');
+    }
+
+    public function parse(InlineParserContext $inlineContext): bool
+    {
+        $inlineContext->getContainer()->appendChild(new EscapedCharacter(substr($inlineContext->getFullMatch(), 1)));
+        $inlineContext->getCursor()->advanceBy(2);
+
+        return true;
+    }
+
+    public function render(Node $node, ChildNodeRendererInterface $childRenderer): HtmlElement|string
+    {
+        if ($node instanceof EscapedCharacter) {
+            return Xml::escape($node->getLiteral());
+        }
         MarkdownAtom::assertInstanceOf($node);
         /** @var MarkdownAtom $node checked above; commonmark only hands it the nodes it was registered for */
 
@@ -207,7 +233,7 @@ final class MentionsAndReferences implements ExtensionInterface, NodeRendererInt
     }
 
     /** A handle after an `@` or a key, each as a word of its own: Handle::PATTERN and ItemKey::PATTERN without anchors. */
-    private static function words(): string
+    public static function words(): string
     {
         $bare = fn (string $pattern) => substr($pattern, strlen('/^'), -strlen('\z/'));
 

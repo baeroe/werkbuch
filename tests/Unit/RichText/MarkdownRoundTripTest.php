@@ -37,6 +37,7 @@ it('writes Markdown it reads as it was', function (string $markdown) use ($read)
     'code in a list item' => ["- a\n\n  ```php\n  x\n  ```"],
     'code in a quote' => ["> ```js\n> x\n> ```"],
     'code after text in a quote' => ["> a\n>\n> ```\n> x\n> ```"],
+    'text that looks like a mention or a key' => ['\\@mara siehe WEB\\-47'],
     'nothing' => [''],
 ]);
 

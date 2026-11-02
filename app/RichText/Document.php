@@ -32,6 +32,9 @@ final class Document
     /** The nodes that stand for something outside the text; withNodes() maps them. */
     private const OUTSIDE = ['image', ...Schema::INLINE_ATOMS];
 
+    /** Marks that the nodes of OUTSIDE lose in Markdown (toMarkdown()). */
+    private const MARKDOWN_UNMARKED = ['code', 'link'];
+
     /** Nodes whose text makes one line of `toText()`. */
     private const TEXT_BLOCKS = ['paragraph', 'heading', 'codeBlock'];
 
@@ -93,17 +96,18 @@ final class Document
 
     /**
      * The document as Markdown for one reader; Markdown::fromHtml() lists how it is written. A mention is `@` and the
-     * current handle (`$names->handles`, else its label; nothing without either), a reference the reader sees
-     * (`$names->items`) its current key, any other `[hidden](item:<ulid>)` (no key, no title), an image
-     * `![alt](attachment:<ulid>)` and a file `[name](attachment:<ulid>)`. Read back with the same lookup and the kept
-     * IDs (MarkdownContext), it gives the same JSON.
+     * current handle (`$names->handles`, else its label if that is a handle; nothing without either), a reference the
+     * reader sees (`$names->items`) its current key, any other `[hidden](item:<ulid>)` (no key, no title), an image
+     * `![alt](attachment:<ulid>)` and a file `[name](attachment:<ulid>)`; text that would read as a mention or a key
+     * gets a backslash (`\@mara`, `WEB\-47`). Read back with the same lookup and the kept IDs (MarkdownContext), it
+     * gives the same JSON, but for the code and link marks of mentions, references and files: Markdown reads nothing
+     * in code and nests no link in a link, so they are left out for the nodes to stay.
      */
     public function toMarkdown(?RichTextNames $names = null): string
     {
-        $names ??= new RichTextNames;
-        $json = self::mapped($this->json, fn (array $node) => self::forMarkdown($node, $names));
+        $json = self::mapped($this->json, fn (array $node) => self::withoutMarks($node, self::MARKDOWN_UNMARKED));
 
-        return Markdown::fromHtml((new self(self::node($json, 'doc', 0)))->toHtml());
+        return Markdown::fromHtml((new self(self::node($json, 'doc', 0)))->toHtml(), $names ?? new RichTextNames);
     }
 
     /** The text without any markup: one line per paragraph, heading or code block, a line break as a line break. */
@@ -543,23 +547,21 @@ final class Document
     }
 
     /**
-     * What Markdown shows of a node of OUTSIDE (see toMarkdown()): mentions and visible references as text, the others
-     * as the nodes Markdown::fromHtml() writes.
+     * The node without the marks of these types.
      *
      * @param  array<string, mixed>  $node
-     * @return array<string, mixed>|string|null
+     * @param  list<string>  $types
+     * @return array<string, mixed>
      */
-    private static function forMarkdown(array $node, RichTextNames $names): array|string|null
+    private static function withoutMarks(array $node, array $types): array
     {
-        /** @var array<string, mixed> $attrs */
-        $attrs = $node['attrs'];
-        if ($node['type'] === 'mention') {
-            $handle = $names->handles[$attrs['id']] ?? $attrs['label'];
-
-            return is_string($handle) ? '@'.$handle : null;
+        if (isset($node['marks'])) {
+            /** @var list<array<string, mixed>> $marks */
+            $marks = $node['marks'];
+            $node['marks'] = array_values(array_filter($marks, fn (array $mark) => ! in_array($mark['type'], $types, true)));
         }
 
-        return $node['type'] === 'reference' ? $names->items[$attrs['id']]['key'] ?? $node : $node;
+        return $node;
     }
 
     /**

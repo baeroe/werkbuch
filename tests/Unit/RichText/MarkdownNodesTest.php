@@ -199,5 +199,70 @@ it('writes a file name or an alt text over several lines on one line', function 
 });
 
 it('writes any other span as its text', function () {
-    expect(Markdown::fromHtml('<p><span>a</span> <span data-type="mention" data-id="x">b</span></p>'))->toBe('a b');
+    expect(Markdown::fromHtml('<p><span>a</span> <span data-type="emoji">b</span></p>'))->toBe('a b');
+});
+
+it('reads plain text that looks like a mention or a key back as text', function () use ($read, $names) {
+    // typed without choosing from the list, or stored before Phase 7: an agent passing it through mentions nobody
+    $json = F::doc(
+        F::p('Hallo @mara, siehe WEB-47 und web-47 (@kira).'),
+        F::p(F::text('@mara', 'bold'), ' ', F::text('WEB-47', 'italic')),
+        ['type' => 'heading', 'attrs' => ['level' => 2], 'content' => [F::text('@mara zu WEB-47')]],
+    );
+    $markdown = Document::fromJson($json)->toMarkdown($names);
+
+    expect($markdown)->toBe("Hallo \\@mara, siehe WEB\\-47 und web\\-47 (\\@kira).\n\n**\\@mara** *WEB\\-47*\n\n## \\@mara zu WEB\\-47")
+        ->and($read($markdown)->toJson())->toBe($json)
+        ->and($read($markdown)->mentionedUserIds())->toBe([]);
+});
+
+it('keeps mentions and references as nodes next to text that looks like them', function () use ($read, $names) {
+    $json = F::doc(F::p(F::mention(F::MARA, 'mara'), ' und @mara, ', F::reference(F::ITEM), ' und WEB-47'));
+    $markdown = Document::fromJson($json)->toMarkdown($names);
+
+    expect($markdown)->toBe('@mara und \\@mara, WEB-47 und WEB\\-47')
+        ->and($read($markdown)->toJson())->toBe($json);
+});
+
+it('reads a backslash before @ or - as text that is never a mention or a key', function () use ($read) {
+    expect($read('\\@mara WEB\\-47 \\@lene @mara\\-x', [F::LENE])->toJson())->toBe(F::doc(F::p('@mara WEB-47 @lene ', F::mention(F::MARA, 'mara'), '-x')))
+        ->and($read('[a\\-b \\@mara.pdf](attachment:'.F::FILE.')')->toJson())->toBe(F::doc(F::p(F::file(F::FILE, 'a-b @mara.pdf'))))
+        ->and($read('\\- kein Punkt \\@ \\-')->toJson())->toBe(F::doc(F::p('- kein Punkt @ -')));
+});
+
+it('shields nothing in code or in the text of a link', function () use ($read) {
+    $link = ['type' => 'text', 'marks' => [['type' => 'link', 'attrs' => F::link('https://example.com')]], 'text' => '@mara WEB-47'];
+    $json = F::doc(F::p(F::text('@mara WEB-47', 'code')), F::p($link), ['type' => 'codeBlock', 'attrs' => ['language' => null], 'content' => [F::text('@mara WEB-47')]]);
+    $markdown = Document::fromJson($json)->toMarkdown();
+
+    expect($markdown)->toBe("`@mara WEB-47`\n\n[@mara WEB-47](https://example.com)\n\n```\n@mara WEB-47\n```")
+        ->and($read($markdown)->toJson())->toBe($json);
+});
+
+it('leaves out the code and link marks of a mention, a reference and a file, so they stay nodes', function () use ($read, $names) {
+    $marked = fn (array $node, array ...$marks) => ['type' => $node['type'], 'attrs' => $node['attrs'], 'marks' => $marks];
+    $link = ['type' => 'link', 'attrs' => F::link('https://example.com')];
+    $document = Document::fromJson(F::doc(F::p(
+        $marked(F::mention(F::MARA, 'mara'), ['type' => 'code']),
+        ' ',
+        $marked(F::reference(F::ITEM), $link),
+        ' ',
+        $marked(F::file(F::FILE, 'a.pdf'), $link, ['type' => 'bold']),
+    )));
+
+    expect($document->toMarkdown($names))->toBe('@mara WEB-47 **[a.pdf](attachment:'.F::FILE.')**')
+        ->and($read($document->toMarkdown($names))->toJson())->toBe(F::doc(F::p(
+            F::mention(F::MARA, 'mara'), ' ', F::reference(F::ITEM), ' ', $marked(F::file(F::FILE, 'a.pdf'), ['type' => 'bold']),
+        )));
+});
+
+it('writes a mention the reader has no handle for by its label only if that is a handle', function () {
+    $document = Document::fromJson(F::doc(F::p(F::mention(F::KIRA, 'WEB-47 Kira'), F::text('|'), F::mention(F::KIRA, 'kira'))));
+
+    expect($document->toMarkdown())->toBe('\\|@kira');
+});
+
+it('reads a handle between the tags of HTML in Markdown like any text', function () use ($read) {
+    // HTML in Markdown is text (`html_input: escape`), shown as it was typed
+    expect($read('<b>@mara</b>')->mentionedUserIds())->toBe([F::MARA]);
 });

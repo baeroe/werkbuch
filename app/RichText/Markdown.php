@@ -2,6 +2,7 @@
 
 namespace App\RichText;
 
+use App\Domain\Accounts\Handle;
 use Dom\Element;
 use Dom\HTMLDocument;
 use Dom\HTMLElement;
@@ -48,9 +49,12 @@ use SplStack;
  * - `>` before each line of a quote, alone on a blank one;
  * - tables with the first row as the header and `| --- |` below it (Markdown has no table without a header row);
  * - `~` in text escaped, so it never becomes a strike;
- * - mentions and references the reader sees as text (Document::toMarkdown), a hidden reference as
+ * - a mention as `@` and the reader's handle, a reference the reader sees as its key (spans()), any other as
  *   `[hidden](<kind>:<ulid>)`, a file as `[name](attachment:<ulid>)`, an image as `![alt](attachment:<ulid>)` on a
- *   line of its own; names and alt texts on one line, escaped like text (label()).
+ *   line of its own; names and alt texts on one line, escaped like text (label());
+ * - text that would read as a mention or a key with a backslash before its `@` or `-` (`\@mara`, `WEB\-47`,
+ *   shield()), so only mentions and references come back as nodes; not in code and the text of links, which are never
+ *   read for them.
  *
  * What Markdown cannot carry and loses on the way there and back (JSON keeps all of it):
  * - a hard break inside a heading (the heading ends there, the rest becomes a paragraph);
@@ -61,8 +65,11 @@ use SplStack;
  * - a task item whose first paragraph is empty and followed by a block: GitHub's checkbox needs a paragraph, so the
  *   block becomes the text of the item's paragraph (a rule too: `- [ ] ---` is no rule);
  * - a fence's info string that is no language (Schema::LANGUAGE_PATTERN, A150): the code block keeps no language;
- * - a link around a mention, a reference or a file (the text of a link is never read for them, and Markdown has no
- *   link inside a link), and the marks inside the name of a file or the alt text of an image;
+ * - the code or link mark of a mention, a reference or a file (Document leaves it out: code and the text of a link are
+ *   never read for them, and Markdown has no link inside a link), and the marks inside the name of a file or the alt
+ *   text of an image;
+ * - a mention or a key next to a letter, a digit, `_` or `-` (`x@mara`, `@maras`, `WEB-47x`): it reads back as text,
+ *   as a word of its own would not;
  * - a reference to a page until Phase 9 (`page:` links stay text).
  */
 final class Markdown
@@ -195,7 +202,11 @@ final class Markdown
         }
     }
 
-    public static function fromHtml(string $html): string
+    /**
+     * Markdown of the HTML Document renders, for a reader: mentions with the handles and references with the keys of
+     * `$names` (Document::toMarkdown()).
+     */
+    public static function fromHtml(string $html, RichTextNames $names = new RichTextNames): string
     {
         $converter = new HtmlConverter([
             'header_style' => 'atx',
@@ -213,7 +224,7 @@ final class Markdown
         $environment->addConverter(self::quotes());
         $environment->addConverter(self::text());
         $environment->addConverter(self::images());
-        $environment->addConverter(self::spans());
+        $environment->addConverter(self::spans($names));
 
         return $converter->convert($html);
     }
@@ -332,16 +343,18 @@ final class Markdown
     }
 
     /**
-     * The empty elements of a hidden reference, `[hidden](<kind>:<ulid>)`, and of a file, `[name](attachment:<ulid>)`;
-     * any other span as league writes it. Visible references and mentions reach this as text (Document::toMarkdown).
+     * The empty elements of the inline nodes: a mention as `@` and the reader's handle for it (else its label, if that
+     * is a handle; else nothing), a reference the reader sees as its key, any other as `[hidden](<kind>:<ulid>)`, a
+     * file as `[name](attachment:<ulid>)`; any other span as league writes it. Mentions and keys go out as they are,
+     * so they read back as nodes, while text that looks like them is shielded (text()).
      */
-    private static function spans(): ConverterInterface
+    private static function spans(RichTextNames $names): ConverterInterface
     {
-        return new class implements ConfigurationAwareInterface, ConverterInterface
+        return new class($names) implements ConfigurationAwareInterface, ConverterInterface
         {
             private DefaultConverter $other;
 
-            public function __construct()
+            public function __construct(private readonly RichTextNames $names)
             {
                 $this->other = new DefaultConverter;
             }
@@ -353,8 +366,13 @@ final class Markdown
 
             public function convert(ElementInterface $element): string
             {
+                $id = $element->getAttribute('data-id');
+                $label = $element->getAttribute('data-label');
+                $handle = $this->names->handles[$id] ?? (Handle::isValid($label) ? $label : null);
+
                 return match ($element->getAttribute('data-type')) {
-                    'reference' => '[hidden]('.$element->getAttribute('data-kind').':'.$element->getAttribute('data-id').')',
+                    'mention' => $handle === null ? '' : '@'.$handle,
+                    'reference' => $this->names->items[$id]['key'] ?? '[hidden]('.$element->getAttribute('data-kind').':'.$element->getAttribute('data-id').')',
                     'attachment' => '['.Markdown::label($element->getAttribute('data-filename')).'](attachment:'.$element->getAttribute('data-attachment-id').')',
                     default => $this->other->convert($element),
                 };
@@ -378,6 +396,22 @@ final class Markdown
         $text = (string) preg_replace('/[\\\\`*_~\[\]|<>]/', '\\\\$0', (string) preg_replace('/\s+/u', ' ', $text));
 
         return (string) preg_replace('/&(?=#?[A-Za-z0-9]+;)/', '\\\\&', $text);
+    }
+
+    /**
+     * Text that MentionsAndReferences would read as a mention or a key, with a backslash before the `@` or the `-`
+     * (`\@mara`, `WEB\-47`), so it reads back as the text it is. The same pattern as reading, on each text alone: a
+     * text never reads as a larger piece than it is written in.
+     *
+     * @internal for the converters of this class
+     */
+    public static function shield(string $text): string
+    {
+        return (string) preg_replace_callback(
+            MentionsAndReferences::words(),
+            fn (array $word) => str_starts_with($word[0], '@') ? '\\'.$word[0] : str_replace('-', '\\-', $word[0]),
+            $text,
+        );
     }
 
     private static function listItems(): ConverterInterface
@@ -499,7 +533,8 @@ final class Markdown
 
     /**
      * league's text, with `~` escaped (it would make a strike of the text) and `<`, `>` escaped with a backslash instead
-     * of as entities; `&` only where it would start an entity.
+     * of as entities; `&` only where it would start an entity; outside of links, what would read as a mention or a key
+     * shielded (shield()).
      */
     private static function text(): ConverterInterface
     {
@@ -508,8 +543,10 @@ final class Markdown
             public function convert(ElementInterface $element): string
             {
                 $text = str_replace(['~', '&lt;', '&gt;'], ['\\~', '\\<', '\\>'], (new TextConverter)->convert($element));
+                $text = (string) preg_replace_callback('/&amp;(#?[A-Za-z0-9]+;)?/', fn (array $amp) => isset($amp[1]) ? '\\&'.$amp[1] : '&', $text);
 
-                return (string) preg_replace_callback('/&amp;(#?[A-Za-z0-9]+;)?/', fn (array $amp) => isset($amp[1]) ? '\\&'.$amp[1] : '&', $text);
+                // the text of a link is never read for mentions and keys (code never reaches this)
+                return $element->isDescendantOf('a') ? $text : Markdown::shield($text);
             }
 
             public function getSupportedTags(): array
