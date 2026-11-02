@@ -4,7 +4,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
-import { agency, ida, labels, list, mara, organization, project, properties, relationTypes, resolutions, standard, types } from '@/test/fixtures';
+import { agency, emptySearch, ida, labels, list, mara, organization, project, properties, relationTypes, resolutions, searchResults, standard, types } from '@/test/fixtures';
 import type { ProjectMember, User } from '@/types';
 import { useDeleteLabel, useDeleteRelationType, useDeleteResolution, useLabels, useRelationTypes, useResolutions, useSaveLabel, useSaveRelationType, useSaveResolution } from './catalog';
 import { qk } from './keys';
@@ -23,6 +23,7 @@ import {
   useUpdateMemberRole,
   useUpdateProject,
 } from './projects';
+import { useSearch } from './search';
 import { useDeleteProperty, useProperties, useSaveProperty } from './properties';
 import { useChangePassword, useConfirmTwoFactor, useDisableTwoFactor, useEnableTwoFactor, useRegenerateRecoveryCodes, useTwoFactor } from './security';
 import { useCreateToken, useRevokeToken, useTokens } from './tokens';
@@ -478,5 +479,53 @@ describe('useSettle', () => {
 
     expect(onSuccess).not.toHaveBeenCalled();
     expect(onError).not.toHaveBeenCalled();
+  });
+});
+
+describe('search', () => {
+  const hit = searchResults({ projects: [web] });
+
+  it('does not search for an empty query or spaces', async () => {
+    api = mockApi({ 'GET /api/v1/search': () => ({ body: { data: hit } }) });
+    const { result, rerender } = renderHook(({ q }) => useSearch(q), { wrapper, initialProps: { q: '' } });
+
+    rerender({ q: '   ' });
+    await act(async () => {});
+
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(api.calls).toHaveLength(0);
+  });
+
+  it('keeps the last hits while the next query is on its way', async () => {
+    let release: () => void = () => {};
+    const second = new Promise<void>((resolve) => (release = resolve));
+    const real = globalThis.fetch;
+    api = mockApi({ 'GET /api/v1/search': (_body, url) => ({ body: { data: url.searchParams.get('q') === 'a' ? hit : emptySearch } }) });
+    const mocked = globalThis.fetch;
+    globalThis.fetch = (input, init) => (String(input).includes('q=ab') ? second.then(() => mocked(input, init)) : mocked(input, init));
+
+    const { result, rerender } = renderHook(({ q }) => useSearch(q), { wrapper, initialProps: { q: 'a' } });
+    await waitFor(() => expect(result.current.data).toEqual(hit));
+
+    rerender({ q: 'ab' });
+    expect(result.current.data).toEqual(hit);
+    expect(result.current.isPlaceholderData).toBe(true);
+
+    release();
+    await waitFor(() => expect(result.current.data).toEqual(emptySearch));
+    globalThis.fetch = real;
+  });
+
+  it('asks again when the palette opens again', async () => {
+    api = mockApi({ 'GET /api/v1/search': () => ({ body: { data: hit } }) });
+
+    const first = renderHook(() => useSearch(' kontakt '), { wrapper });
+    await waitFor(() => expect(first.result.current.data).toEqual(hit));
+    first.unmount();
+    const again = renderHook(() => useSearch('kontakt'), { wrapper });
+    await waitFor(() => expect(api!.calls).toHaveLength(2));
+
+    expect(again.result.current.data).toEqual(hit);
+    expect(api.calls[0]?.url).toBe('/api/v1/search?q=kontakt');
   });
 });

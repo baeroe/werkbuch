@@ -18,6 +18,7 @@ import type {
   Property,
   RelationEntry,
   RelationType,
+  SearchResults,
   Resolution,
   User,
   View,
@@ -477,3 +478,10 @@ export const webStateGroups: ItemGroups = {
     { key: 'std_cancelled', count: 0 },
   ],
 };
+
+/** No hits, as `GET /api/v1/search` answers a query that finds nothing. */
+export const emptySearch: SearchResults = { items: [], projects: [], people: [], views: [], key_match: null };
+
+export function searchResults(partial: Partial<SearchResults> = {}): SearchResults {
+  return { ...emptySearch, ...partial };
+}

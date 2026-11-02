@@ -758,12 +758,17 @@ export interface Invitation {
   expires_at: string;
 }
 
+/** What `GET /api/v1/search` can look through. */
+export type SearchType = 'items' | 'projects' | 'people' | 'views';
+
+/** Hits per kind (wiki pages come with phase 9). */
 export interface SearchResults {
-  items: WorkItem[];
-  pages: Page[];
+  items: ListedItem[];
   projects: Project[];
   people: User[];
   views: View[];
+  /** The id of the item a typed key names, also over a former identifier (`OLD-12`). */
+  key_match: string | null;
 }
 
 /** A wiki page in the tree of a project: no content, but its children. */
