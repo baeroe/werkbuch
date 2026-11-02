@@ -181,9 +181,10 @@ test('opens the new item in the preview from the toast', async ({ page }) => {
     await pressMod(page, 'Enter');
     await expect(dialog).toBeHidden();
 
-    // the toasts come last on the page: backwards from the page, the toast's "Open" comes first
+    // `c` came from nowhere: the closed dialog gives the focus to the main area (never the body); the toasts come last
+    // on the page, so on from there the toast's "Open" comes after the settings
     const toast = page.getByRole('status').filter({ has: created(page, `${identifier}-1`) });
-    await tabTo(page, toast.getByRole('button', { name: tr('en', 'items.create.open'), exact: true }), { backwards: true, max: 6 });
+    await tabTo(page, toast.getByRole('button', { name: tr('en', 'items.create.open'), exact: true }), { max: 80 });
     await page.keyboard.press('Enter');
     const preview = page.getByRole('complementary', { name: tr('en', 'items.peek.label') });
     await expect(preview.getByRole('heading', { name: 'E2E Footer anpassen' })).toBeVisible();
