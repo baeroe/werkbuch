@@ -207,9 +207,11 @@ it('puts each consumer in its own queue', function () {
 });
 
 it('retries both jobs with a growing pause', function () {
-    foreach ([new DispatchEvent('x'), new ConsumeEvent('x', RecordingConsumer::class)] as $job) {
-        expect($job->tries)->toBe(5)->and($job->backoff)->toBe([10, 60, 300]);
-    }
+    $dispatch = new DispatchEvent('x');
+    $consume = new ConsumeEvent('x', RecordingConsumer::class);
+
+    expect($dispatch->tries)->toBe(5)->and($dispatch->backoff)->toBe([10, 60, 300])
+        ->and($consume->tries())->toBe(5)->and($consume->backoff())->toBe([10, 60, 300]);
 });
 
 it('schedules the redispatcher every minute', function () {

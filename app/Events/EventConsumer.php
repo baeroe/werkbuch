@@ -12,7 +12,8 @@ use App\Models\Event;
  * claim back and the job runs again, so a mail or a webhook call made here could go out twice: non-idempotent effects
  * (mail, webhook HTTP) go into jobs of their own, with their own dedupe row, dispatched `->afterCommit()`. A consumer that
  * uses up its tries ends in `failed_jobs`; `queue:retry` runs it again, app:redispatch-events does not (the event counts
- * as dispatched).
+ * as dispatched). It may implement `RetriesConsumption` to pick its tries and pause; after the last try the job's
+ * `failed()` reports a `ConsumerGaveUp` naming the event and the consumer.
  */
 interface EventConsumer
 {
