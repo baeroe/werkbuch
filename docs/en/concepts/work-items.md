@@ -63,7 +63,7 @@ Watchers will hear about changes once notifications arrive (a later phase). The 
 
 **Delete** removes an item for good, with its values, labels and relations; only project admins may. The interface waits five seconds first, and **Undo** stops it. Child items become items without a parent, and both they and the items at the other end of its relations get an entry in their history. The history of the deleted item itself stays in the event log.
 
-`mod+backspace` on an item archives it if it is closed and deletes it otherwise, both with undo. On a selection it acts only when that is the same for every item (all closed, all open or all archived).
+`mod+backspace` on an item archives it if it is closed and deletes it otherwise, both with undo. On a selection it acts only when that is the same for every item (all closed to archive, or none closed to delete).
 
 ## Bulk changes
 

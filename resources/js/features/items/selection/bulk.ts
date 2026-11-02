@@ -68,20 +68,20 @@ export type RemovalEffect = 'archive' | 'delete';
 const REMOVAL_KINDS = { open: 'delete', closed: 'archive', archived: 'delete' } as const satisfies Record<string, RemovalEffect>;
 type RemovalKind = keyof typeof REMOVAL_KINDS;
 
-const kindOf = (item: ListedItem, rules: SelectionRules): RemovalKind => (item.archived_at !== null ? 'archived' : rules.isClosed(item) ? 'closed' : 'open');
+const kindOf = (item: ListedItem, rules: Pick<SelectionRules, 'isClosed'>): RemovalKind => (item.archived_at !== null ? 'archived' : rules.isClosed(item) ? 'closed' : 'open');
 
 /**
- * The one thing `mod+backspace` does to all the items: only when they are all of one kind (all open, all closed or all
- * archived); null for a mix, or for none. Deleting an archived item and an open one at once is a mix too (A198).
+ * The one thing `mod+backspace` does to all the items: archive when they are all closed, delete when none is (open or
+ * archived ones alike); null when it would archive some and delete others, or for none (A198).
  */
-export function commonRemoval(items: readonly ListedItem[], rules: SelectionRules): RemovalEffect | null {
-  const kinds = new Set(items.map((item) => kindOf(item, rules)));
-  return kinds.size === 1 ? REMOVAL_KINDS[[...kinds][0]!] : null;
+export function commonRemoval(items: readonly ListedItem[], rules: Pick<SelectionRules, 'isClosed'>): RemovalEffect | null {
+  const effects = new Set(items.map((item) => REMOVAL_KINDS[kindOf(item, rules)]));
+  return effects.size === 1 ? [...effects][0]! : null;
 }
 
 /**
- * What `mod+backspace` does to the items: what it does to each of them alone, when they are all of one kind and it is
- * allowed for all (`selectionVerdict`); otherwise why it does nothing (T15-M3: an archived item among closed ones made
+ * What `mod+backspace` does to the items: what it does to each of them alone, when that is the same for all and allowed
+ * for all (`selectionVerdict`); otherwise why it does nothing (T15-M3: an archived item among closed ones made
  * it delete them all). One item is as it ever was.
  */
 export function removalVerdict(items: readonly ListedItem[], rules: SelectionRules): { effect: RemovalEffect } | { reason: string } {

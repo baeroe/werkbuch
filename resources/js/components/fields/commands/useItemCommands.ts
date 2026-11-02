@@ -149,7 +149,7 @@ export function useItemCommands(options: ItemCommandsOptions): void {
   });
 
   const group = shown.length > 0 ? t('items.commands.group', { key: subjectOf(shown) }) : t('items.commands.group_none');
-  const removes = commonRemoval(shown, { reason, isClosed: (item) => closedIn(projects ?? [], workflows ?? [], item) });
+  const removes = commonRemoval(shown, { isClosed: (item) => closedIn(projects ?? [], workflows ?? [], item) });
 
   // registered anew when the data a command waits for arrive (or fail), so an open palette shows it then
   const loaded = [ready, failedCatalogs.length, projectsKey, people !== undefined, peopleQuery.error !== null, projectItems !== undefined, projectItemsQuery.isError].join(':');

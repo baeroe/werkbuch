@@ -228,7 +228,7 @@ describe('what an action does to a selection (A198)', () => {
     expect(selectionVerdict([open, foreignOpen], 'delete', rules)).toEqual({ reason: 'Nicht möglich für 1 der 2 ausgewählten Items: Nur Admins.', mixed: true });
   });
 
-  it('removes with mod+backspace only items of one kind: archive the closed, delete the open or the archived', () => {
+  it('removes with mod+backspace only what it removes the same way: archive the closed, delete the open or the archived', () => {
     // one item: as ever, a closed one archives, any other deletes (an archived one too)
     expect(removalVerdict([done], rules)).toEqual({ effect: 'archive' });
     expect(removalVerdict([open], rules)).toEqual({ effect: 'delete' });
@@ -239,11 +239,12 @@ describe('what an action does to a selection (A198)', () => {
     expect(removalVerdict([done, cancelled], rules)).toEqual({ effect: 'archive' });
     expect(removalVerdict([open, item(2, 'std_todo')], rules)).toEqual({ effect: 'delete' });
     expect(removalVerdict([archived, item(7, 'std_todo', { archived_at: '2026-10-30T10:00:00.000Z' })], rules)).toEqual({ effect: 'delete' });
-    // a mix: neither (T15-M3: an archived item among closed ones deleted them all)
+    // open and archived ones: both deleted, the same for all
+    expect(removalVerdict([open, archived], rules)).toEqual({ effect: 'delete' });
+    // archive some and delete others: neither (T15-M3: an archived item among closed ones deleted them all)
     const mixed = (kinds: string) =>
-      `Nicht für alle ausgewählten Items gleich: ${kinds}. Archivieren geht nur für geschlossene, Löschen für offene oder archivierte. Wähle nur eine Art aus.`;
+      `Archivieren und Löschen gemischt: ${kinds}. Geschlossene würden archiviert, offene und archivierte gelöscht. Wähle nur geschlossene oder nur andere Items aus.`;
     expect(removalVerdict([done, archived], rules)).toEqual({ reason: mixed('1 geschlossenes Item und 1 archiviertes Item') });
-    expect(removalVerdict([open, archived], rules)).toEqual({ reason: mixed('1 offenes Item und 1 archiviertes Item') });
     expect(removalVerdict([done, open, cancelled], rules)).toEqual({ reason: mixed('1 offenes Item und 2 geschlossene Items') });
     expect(removalVerdict([open, item(2, 'std_todo'), done, archived], rules)).toEqual({ reason: mixed('2 offene Items, 1 geschlossenes Item und 1 archiviertes Item') });
     // one kind, not allowed for all
@@ -390,12 +391,15 @@ describe('the bulk bar', () => {
     const first = renderBar({ items: [item(1, 'std_todo'), item(2, 'std_done')] });
     await menuReady('Priorität');
     expect(shown()).toEqual(['Status', 'Assignee', 'Priorität', 'Labels']);
+    expect(screen.queryByText('Keine gemeinsame Aktion für diese Auswahl')).toBeNull();
     first.unmount();
 
     // an archived one among them: nothing that changes or archives
     const second = renderBar({ items: [item(1, 'std_done'), archived] });
     await waitFor(() => expect(screen.getByRole('button', { name: 'Auswahl aufheben' })).toBeTruthy());
     await waitFor(() => expect(shown()).toEqual([]));
+    // the bar says so instead of standing empty
+    expect(screen.getByRole('group', { name: 'Auswahl' }).textContent).toContain('Keine gemeinsame Aktion für diese Auswahl');
     second.unmount();
 
     // a project the person only reads: the same
@@ -512,7 +516,7 @@ describe('the bulk bar on the items screen', () => {
       expect(lastToast()).toMatchObject({
         title: 'Nicht möglich',
         description:
-          'Nicht für alle ausgewählten Items gleich: 2 geschlossene Items und 1 archiviertes Item. Archivieren geht nur für geschlossene, Löschen für offene oder archivierte. Wähle nur eine Art aus.',
+          'Archivieren und Löschen gemischt: 2 geschlossene Items und 1 archiviertes Item. Geschlossene würden archiviert, offene und archivierte gelöscht. Wähle nur geschlossene oder nur andere Items aus.',
       });
     });
     // nothing left the list or the selection, nothing goes to the server

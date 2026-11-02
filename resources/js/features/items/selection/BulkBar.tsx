@@ -6,7 +6,7 @@
  * An action stands on the bar only when it does the same allowed thing to every selected item (A198, `selectionVerdict`):
  * while the selection mixes items it may change with archived ones or ones of a project the person only reads, or
  * closed items with open ones to archive, the action is left out, so it never changes a part of them; when it is
- * allowed for none, it stays and says why. What the server still refuses (a transition a workflow forbids) stays as it
+ * allowed for none, it stays and says why; when none is left, the bar says so. What the server still refuses (a transition a workflow forbids) stays as it
  * was, and the toast names each refused item with the reason. A move to Completed or Canceled asks for the resolution
  * first, as everywhere. The status menu offers only the states every workflow of the selection has (A128).
  *
@@ -214,6 +214,8 @@ export function BulkBar({ items, total, onSelectAll, onClear, onArchive }: BulkB
             );
           })}
       </ActionMenu>
+      {/* every action would change only a part: say so rather than leave the bar empty */}
+      {edit?.mixed && archive?.mixed && <span className="text-sm text-muted">{t('items.bulk.no_common')}</span>}
       {!archive?.mixed && (
         <Button variant="secondary" size="sm" icon={Archive} disabledReason={archive?.reason} onClick={() => onArchive(items)}>
           {t('items.commands.archive')}

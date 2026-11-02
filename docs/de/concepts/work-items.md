@@ -63,7 +63,7 @@ Wer ein Item beobachtet, erfährt von Änderungen, sobald es Benachrichtigungen 
 
 **Löschen** entfernt ein Item endgültig, mit seinen Werten, Labels und Relationen; das dürfen nur Admins des Projekts. Die Oberfläche wartet vorher fünf Sekunden, und **Rückgängig** hält es auf. Kind-Items werden zu Items ohne Eltern, und sie wie auch die Items am anderen Ende seiner Relationen bekommen einen Eintrag in ihre History. Die History des gelöschten Items selbst bleibt im Event-Protokoll.
 
-`mod+backspace` an einem Item archiviert es, wenn es geschlossen ist, und löscht es sonst, beides mit Rückgängig. Auf eine Auswahl wirkt es nur, wenn das für jedes Item dasselbe ist (alle geschlossen, alle offen oder alle archiviert).
+`mod+backspace` an einem Item archiviert es, wenn es geschlossen ist, und löscht es sonst, beides mit Rückgängig. Auf eine Auswahl wirkt es nur, wenn das für jedes Item dasselbe ist (alle geschlossen zum Archivieren oder keins geschlossen zum Löschen).
 
 ## Mehrfachbearbeitung
 

@@ -1091,7 +1091,7 @@ describe('the item commands of a list', () => {
     expect(api!.calls.filter((call) => call.method === 'PATCH')).toEqual([]);
   });
 
-  it('neither archives nor deletes with mod+backspace a mix of open, closed and archived items (T15-M3)', async () => {
+  it('neither archives nor deletes with mod+backspace what it would archive in part (T15-M3)', async () => {
     const archived51 = makeWorkItem({ id: 'wi_web_51', number: 51, key: 'WEB-51', state_id: 'std_done', rank: 'a7', archived_at: '2026-10-30T10:00:00.000Z' });
     renderWith(
       <>
@@ -1103,7 +1103,7 @@ describe('the item commands of a list', () => {
     const webList = screen.getByLabelText('WEB');
     await waitFor(() => expect(webList.textContent).toBe('WEB-30 WEB-47 WEB-48 WEB-50 WEB-51'));
     const nothing = (kinds: string) =>
-      `Nicht für alle ausgewählten Items gleich: ${kinds}. Archivieren geht nur für geschlossene, Löschen für offene oder archivierte. Wähle nur eine Art aus.`;
+      `Archivieren und Löschen gemischt: ${kinds}. Geschlossene würden archiviert, offene und archivierte gelöscht. Wähle nur geschlossene oder nur andere Items aus.`;
 
     // a closed item and one archived already: it once deleted both
     select('wi_web_50', 'wi_web_51');
@@ -1120,20 +1120,14 @@ describe('the item commands of a list', () => {
     press('Backspace', { ctrlKey: true });
     expect(lastToast()?.description).toBe(nothing('2 offene Items und 1 geschlossenes Item'));
 
-    // an open item and an archived one
-    select('wi_web_47', 'wi_web_51');
-    await ready('2 Items', 'item.delete');
-    press('Backspace', { ctrlKey: true });
-    expect(lastToast()?.description).toBe(nothing('1 offenes Item und 1 archiviertes Item'));
-
     // nothing left the list or the selection, nothing went out
     expect(currentToasts().some((toast) => toast.action?.label === 'Rückgängig')).toBe(false);
     expect(webList.textContent).toBe('WEB-30 WEB-47 WEB-48 WEB-50 WEB-51');
-    expect(useUiStore.getState().selection).toEqual(['wi_web_47', 'wi_web_51']);
+    expect(useUiStore.getState().selection).toEqual(['wi_web_47', 'wi_web_48', 'wi_web_50']);
     expect(api!.calls.filter((call) => call.method === 'DELETE' || call.url.endsWith('/archive') || call.url === '/api/v1/work-items/bulk')).toEqual([]);
 
-    // open items alone: deleted, as ever
-    select('wi_web_47', 'wi_web_48');
+    // an open item and an archived one: deleting is what it does to both
+    select('wi_web_47', 'wi_web_51');
     await ready('2 Items', 'item.delete');
     expect(command('item.delete')?.keys).toBe('mod+backspace');
     press('Backspace', { ctrlKey: true });
