@@ -87,6 +87,56 @@ Rohliste für 13b (Aufräumen) und 13c (Feinschliff) nach der Korrekturrunde, si
 
 - Phase 5, Task 22: minor (deferred → 13c): die Palette-Befehle `projects.create` („Neues Projekt“ auf `/projects`) und `views.create` („Neue View“ auf `/views`) des Klickdummys (`ProjectsScreen.tsx:229`, `ViewsScreen.tsx:157`) fehlen in der App; „Projekt anlegen“ und „View anlegen“ gehen über die Seitenleiste und die Knöpfe der Seiten. Beim Port: `useCommand` mit `when` = Recht da, `run` öffnet den Dialog wie `?create=1`.
 
+### Finale Fix-Welle der Phase 5 (2026-11-02)
+
+Minors des Final-Reviews, die laut Triage warten (deferred → 13c); Phase-Carries stehen in den Rulings unter „Für spätere Phasen vorgemerkt“.
+
+- T2-M1: `DisplaySchema::read` fällt bei einem gespeicherten `fields`, das keine Liste ist, auf `[]` (nackte Zeilen); die Standardfelder des Klickdummys (`DEFAULT_FIELDS`) wären der bessere Rückfall (nur kaputte gespeicherte Daten).
+- T2-M2: `FilterSchema` prüft „leerer Text“ nur mit ASCII-`trim`: ein Wert aus NBSP oder ideografischen Leerzeichen gilt als Text (`preg_match('/^[\s\p{Z}]*\z/u', …)`).
+- T3-M2: die `scoped` `CatalogProperties` werden in einem Request bzw. Pest-Test nach `SaveProperty`/`DeleteProperty` nicht vergessen; heute speichert und liest kein Pfad im selben Request (bei Bedarf als Fallstrick oder `forgetInstance`).
+- T5-M3: Items einer Seite von `ItemOrder::page` tragen die Attribute `sort_0`, `sort_1`, `_sig`; ein `save()` auf ihnen scheiterte an unbekannten Spalten (die Resource zählt ihre Felder einzeln auf, es leckt nichts).
+- T5-M4: der Docblock von `ItemOrder::placeholder()` überzeichnet den Grund des Casts (er ist rein defensiv).
+- T5-M5: `ItemOrder::ALIASES` begrenzt still auf zwei Wertschlüssel; eine Sortierung mit dreien liefe auf „undefined array key“ (Kommentar oder `sort_{$index}`).
+- T7-M1/M3/M4/M7: Hygiene und Lesbarkeit der Tests von `ItemQueryInput`/`QueryWorkItems` (Mutationstabelle nachträglich, `sort_*`/`_sig` nur über `save()` eine Falle, wie T5-M3).
+- T8-M7: Eltern-Gruppen ordnen nach `identifier`, dann `number`; der Klickdummy vergleicht Keys mit `Intl.Collator({numeric: true})` (`A2-1` vor `A10-1`), Randfall.
+- T10-M1/M5/M6: Namen und Kommentare in `domain/` (`sortItems`-Testname umbenannt; `placeItems` sagt „zuletzt gecacht“, gewinnt tut der spätere Eintrag in `served`).
+- T10-M4: `assignBlocker` verpackt `edit`/`assign` doppelt (fertiger Satz als `:reason`), funktioniert.
+- T11-M6: `DateField` verliert beim Tausch `ReadOnlyTrigger` ↔ `DatePopover` (Rechte kommen nach) kurz den Fokus (`swap` des Pickers wiederverwenden).
+- T11-M7/M8: Testzweige: „Ziel gewählt (outward), dann Art auf `:in`“ in `Relations` und der Rückweg Picker → nur lesen mit fokussiertem Picker (`fields.test.tsx`).
+- T12-M5/M6: `items.test.tsx` prüft die Datums-Chips über einen losen Regex; `ItemRowBase.onOpen` ist Pflicht, wird aber nur mit `cursor` benutzt.
+- T13-M4: `ListLayout` `rangeExtractor` hält nur die erste Zeile des Cursor-Items gerendert: ein per Pfeil fokussierter Gruppenkopf bzw. die zweite Zeile eines Items mit zwei Labels verliert beim Rad-Scrollen den Fokus.
+- T14-M3: `useListState` `onSuccess` löscht `pending` nicht, wenn der Server eine Adresse mit anderen Zustandsparametern liefert (kaum erreichbar).
+- T14-M4: `ListError retrying={false}` fest: „Erneut versuchen“ zeigt nie, dass es läuft.
+- T14-M5/M7: `useListState` erfindet für `view` ohne View still eine Projektbasis (unerreichbar); `useListData(_, _, _options)` ungenutzt.
+- T15-M6: der Bereich der `item.*`-Kürzel kommt vom Mount (`list`), der Katalog nennt `detail` (heute ohne Kollision; in der Tastatur-Doku klären).
+- T15-M8: `archiveManyWithUndo` setzt optimistisch `archived_at` auch bei offenen sichtbaren Zielen, bis das Nachladen es zurücknimmt (nur die geschlossenen senden, die offenen gleich als `not_closed` nennen).
+- T16-M2: Filter-Chips nennen ein deaktiviertes Konto oder einen Status eines gerade ungenutzten Workflows „Verborgen“, obwohl beide lesbar sind (P21 meint unbekannte IDs).
+- T16-M4: × an einem Chip mit getipptem Text ändert die Adresse zweimal (Blur übernimmt erst den Text), eine überflüssige Anfrage; der Endstand stimmt.
+- T16-M5: ein Ladefehler der Properties macht gültige Property-Chips zu „Unbekanntes Feld“ (besser: Chip mit Ladefehler und „Erneut versuchen“; die Liste schickt die Bedingung unverändert, getestet).
+- T16-M6: kein Test geht den Datums-Popover des Filters mit der Tastatur (Schnellauswahl, Abstand, Kalender).
+- T17-M3/M7: kurze falsche Sätze beim Laden: eine gültige Property-Sortierung heißt „Unbekanntes Feld“, solange die Properties laden; ein Org-Admin sieht kurz den Ersteller-Satz, solange die Rechte laden.
+- T17-M4: `copyName` (K26) liegt im Bildschirm, T22 braucht dieselbe Regel; neben `VIEW_NAME_MAX` exportieren.
+- T17-M5: ein echter Satz statt eines Musters im Test der gesperrten Speicherung.
+- T17-M8/R1: `savableDisplay` mit `properties === undefined` behält eine Sortierung auf eine gelöschte Property (422 beim Speichern, Randfall); Kosmetik aus der Nachprüfung.
+- T18-M3: `useFocusRescue` wartet bis zu 300 Frames auf jedes `[data-skeleton]` des Bildschirms, nicht nur auf das Skelett des Layouts.
+- T18-M5: das lazy Board hat keine Fehlergrenze (gleiches Muster wie die lazy Dialoge): ein gescheiterter Chunk wirft bis zur nächsten Error-Boundary.
+- T19-M3: die Schnellanlage in einer Spalte mit weiteren Seiten gibt Sehenden keine sichtbare Rückmeldung, wo das neue Item steht.
+- T19-M5/M7: `drag.test.tsx` prüft beim Ablegen zwischen gleichen Rängen nur `'a2' < rank`, nicht die Stelle danach; `SortableContext` in `BoardColumn` nicht eingerückt.
+- T20-M2: `startEditing` wiederholt `useEditReason` von Hand, `PropertyCell` `typeHasProperty` (kleine Helfer ohne Hook teilen).
+- T20-M3: `focusAt` fokussiert immer erst im nächsten Frame: gehaltene Pfeile bzw. zwei Drücke im selben Frame verlieren Schritte.
+- T20-M5: die Ablehnung einer Property-Zelle lebt im Zustand der Zelle und geht beim Wegscrollen verloren.
+- T20-M6: Texte der Tabelle: `items.table.read_only.project` „… in der Tabelle nicht ändern“ suggeriert einen anderen Weg; `items.table.edit_hint*` „Esc bricht ab“ (das erste Esc nimmt nur das Getippte zurück) und ⌘↵ fest im Text.
+- T20-M7: `table.test.tsx` prüft den Grund eines Viewers mit `/nur lesen|lesen/` statt mit dem ganzen Satz.
+- T20-M9: mit dem Zeiger auf einem Steuerelement einer Zelle tun ↑/↓/←/→ nichts (j/k gehen).
+- T20-M10: schließt das Popover einer getippten Zelle per Klick daneben mit unlesbarem Text, ist der Text still weg.
+- T21-M5: eine leere Timeline wegen eines Filters bietet kein „Filter zurücksetzen“.
+- T21-M6: kein Test für die Ablehnung eines Datums durch den Server auf der Timeline (Rollback des Balkens).
+- T23-M6: Kleinkram in den Tests der Zählungen (`rowOf2` doppelt, die Projektkarte prüft „dann die Zahl“ nicht, kein Fall für 0 in der Bestätigung).
+- T23-M7: `useSaveWorkItemType` macht `qk.workItems` nicht ungültig, die Property-Zählung hängt an den Typen (auf demselben Bildschirm unkritisch).
+- T23-M8: jede Zeile hat beim Laden ihre eigene `role="status"`-Region (viele Ansagen); ein Status je Liste.
+- T24-M3/M4: `ViewsSeederTest` vergleicht von der Darstellung nur `layout` (nicht Bedingungswerte, `group_by`, `sort`, `fields`, `created_at`); `FavoritesSeeder` liest den Ersteller über `ViewsSeeder::CREATORS`.
+- T25-M1/M2/M4/M5/M6: `views-acceptance.spec.ts` kopiert `typeId`, `stateId`, `shown`, `range` aus `timeline.spec.ts`, überschattet `shown` lokal und wählt Text per `selectText()` statt per Tastatur; im `ViewsAcceptanceTest` fragt der `$item`-Closure den Typ doppelt, und die Timeline-Verknüpfung View-Filter ∧ Epic belegt nur e2e.
+
 ## Triage im Gesamt-Review (2026-10-29)
 
 Aus dem Bericht des Gesamt-Reviews. „MUST FIX NOW“ war keiner der Punkte; die zwei neuen wichtigen Befunde des Reviews (`e` in der Inbox, „Vorlage anwenden“) sind behoben.
