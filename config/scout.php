@@ -156,7 +156,7 @@ return [
         // id), never stored in the index
         'index-settings' => [
             WorkItem::class => [
-                'searchableAttributes' => ['key', 'title', 'description'],
+                'searchableAttributes' => ['key', 'title', 'description', 'comments'],
                 'filterableAttributes' => ['project_id', 'archived', 'type_id', 'state_category', 'assignee_id', 'label_ids'],
                 'rankingRules' => ['words', 'typo', 'proximity', 'attribute', 'sort', 'exactness', 'updated_at:desc'],
                 'typoTolerance' => ['disableOnAttributes' => ['key']],

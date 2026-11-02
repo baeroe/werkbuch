@@ -15,7 +15,7 @@ it('syncs the settings of the three indexes into Meilisearch', function () {
     $projects = $client->index('testing_projects')->getSettings();
     $users = $client->index('testing_users')->getSettings();
 
-    expect($items['searchableAttributes'])->toBe(['key', 'title', 'description'])
+    expect($items['searchableAttributes'])->toBe(['key', 'title', 'description', 'comments'])
         ->and($items['rankingRules'][array_key_last($items['rankingRules'])])->toBe('updated_at:desc')
         ->and($items['typoTolerance']['disableOnAttributes'])->toBe(['key'])
         ->and($items['filterableAttributes'])->toContain('project_id', 'label_ids')

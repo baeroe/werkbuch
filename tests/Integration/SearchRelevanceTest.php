@@ -1,6 +1,7 @@
 <?php
 
 use App\Actions\Search\QuerySearch;
+use App\Models\Comment;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
@@ -53,6 +54,23 @@ it('ranks a hit in the title before a hit in the description', function () use (
     $index();
 
     expect($ids($search('kontaktformular', ['types' => 'items'])->items))->toBe([$inTitle->id, $inDescription->id]);
+});
+
+it('finds an item by a word of a comment, after title and description matches', function () use ($item, $index, $search, $ids) {
+    $web = Project::factory()->identifier('WEB')->create(['name' => 'Website']);
+    // the newer hits are indexed later and none begins with the word: only the weight of `comments` after
+    // `description` (searchableAttributes, rule attribute) puts the comment last
+    $inTitle = $item($web, 'Pflichtfelder im Kontaktformular prüfen', ['updated_at' => now()->subDays(3)]);
+    $inDescription = $item($web, 'Pflichtfelder der Website', [
+        'description_text' => 'Das Kontaktformular verliert die Eingaben.',
+        'updated_at' => now()->subDays(2),
+    ]);
+    $inComment = $item($web, 'Pflichtfelder im Checkout', ['updated_at' => now()]);
+    Comment::factory()->for($inComment, 'workItem')->create(['body_text' => 'Das Kontaktformular sendet doppelt.']);
+    $index();
+
+    expect($ids($search('kontaktformular', ['types' => 'items'])->items))->toBe([$inTitle->id, $inDescription->id, $inComment->id])
+        ->and($ids($search('doppelt', ['types' => 'items'])->items))->toBe([$inComment->id]);
 });
 
 it('puts the newer of two equal hits first', function () use ($item, $index, $search, $ids) {

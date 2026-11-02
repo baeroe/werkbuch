@@ -6,12 +6,14 @@ Eine Suche findet Work Items, Projekte, Personen und Bots sowie Views. In der Ob
 
 | Art | Gefunden über | Ein Treffer in der Palette öffnet |
 |---|---|---|
-| Work Items | Key, Titel, Text der Beschreibung | Die Item-Seite |
+| Work Items | Key, Titel, Text der Beschreibung und der Kommentare | Die Item-Seite |
 | Projekte | Kennung, frühere Kennungen, Name, Beschreibung | Die Item-Liste des Projekts |
 | Personen und Bots | Name, Handle | Die Einstellungen Personen bzw. Bots (nur für Org-Admins, siehe unten) |
 | Views | Name | Die View |
 
-Jedes getippte Wort muss vorkommen; das letzte darf der Anfang eines Worts sein, `kontakt` findet also „Kontaktformular sendet doppelt“. Ab fünf Buchstaben verzeiht die Suche einen kleinen Tippfehler in Titel oder Beschreibung (`kontaktfromular`), nie in Keys, Kennungen und Handles. Ein Treffer im Key zählt mehr als einer im Titel, einer im Titel mehr als einer in der Beschreibung; bei gleichen Treffern steht das zuletzt geänderte Item vorn.
+Jedes getippte Wort muss vorkommen; das letzte darf der Anfang eines Worts sein, `kontakt` findet also „Kontaktformular sendet doppelt“. Ab fünf Buchstaben verzeiht die Suche einen kleinen Tippfehler in Titel, Beschreibung oder Kommentar (`kontaktfromular`), nie in Keys, Kennungen und Handles. Ein Treffer im Key zählt mehr als einer im Titel, einer im Titel mehr als einer in der Beschreibung und einer in der Beschreibung mehr als einer in einem Kommentar; bei gleichen Treffern steht das zuletzt geänderte Item vorn.
+
+Ein Wort eines Kommentars findet das Item, zu dem der Kommentar gehört; die Suche liest die Kommentare eines Items in der Reihenfolge, in der sie geschrieben wurden, bis zu 64 KB Text je Item. Ein bearbeiteter oder gelöschter Kommentar ändert die Suche einen Moment später, wie jede andere Änderung; Reaktionen ändern nichts.
 
 Personen und Bots werden nur gefunden, solange ihr Konto aktiv ist. Views sucht werkbuch über jedes Wort ihres Namens, ohne Rücksicht auf Groß- und Kleinschreibung und Akzente, direkt in der Datenbank: Eine neue View wird sofort gefunden.
 
@@ -133,6 +135,8 @@ php artisan app:search-import    # leert die drei Indizes und füllt sie neu aus
 ```
 
 `app:search-import` ist der erste Start und die Reparatur: Es schickt die Einstellungen, leert die Indizes und liest alles neu ein; währenddessen ist die Suche kurz leer. In DDEV stellst du beiden `ddev artisan` voran.
+
+**Nach einem Update**, das ändert, was der Index enthält, führst du einmal `app:search-sync` aus: Ohne das durchsucht Meilisearch die neuen Felder nicht. Das Update, mit dem Kommentare durchsuchbar wurden, ist so eins; führe danach auch `app:search-import` aus, damit die Kommentare von vor dem Update in den Index kommen.
 
 **Fällt Meilisearch aus,** antwortet die Suche mit `503`, und die Palette sagt „Die Suche hat nicht geantwortet“ mit **Erneut versuchen**; der Sprung zu einem getippten Key funktioniert weiter. Unterwegs geht nichts verloren: Der Konsument versucht jedes Event bis zu 8-mal, mit Pausen von 10 Sekunden, 1, 5 und 15 Minuten und dann je einer Stunde, insgesamt rund 3 Stunden 20 Minuten. Danach landet der Job in `failed_jobs`, und werkbuch meldet, bei welchem Event die Suche aufgegeben hat. Läuft Meilisearch wieder, ruf `app:search-import` auf, und der Index ist wieder vollständig.
 

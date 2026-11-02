@@ -78,7 +78,7 @@ it('keeps the search settings', function () {
         ->and(config('scout.identify'))->toBeFalse()
         ->and(config('scout.chunk'))->toBe(['searchable' => 500, 'unsearchable' => 500])
         ->and(array_keys(config('scout.meilisearch.index-settings')))->toBe([WorkItem::class, Project::class, User::class])
-        ->and($index(WorkItem::class)['searchableAttributes'])->toBe(['key', 'title', 'description'])
+        ->and($index(WorkItem::class)['searchableAttributes'])->toBe(['key', 'title', 'description', 'comments'])
         ->and($index(WorkItem::class)['filterableAttributes'])->toBe(['project_id', 'archived', 'type_id', 'state_category', 'assignee_id', 'label_ids'])
         ->and($index(WorkItem::class)['rankingRules'])->toBe(['words', 'typo', 'proximity', 'attribute', 'sort', 'exactness', 'updated_at:desc'])
         ->and($index(WorkItem::class)['typoTolerance'])->toBe(['disableOnAttributes' => ['key']])

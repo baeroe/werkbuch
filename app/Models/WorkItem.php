@@ -8,6 +8,7 @@ use App\Domain\Workflow\StateCategory;
 use App\Domain\WorkItems\ItemKey;
 use App\Domain\WorkItems\Priority;
 use App\RichText\RichTextNames;
+use App\Search\SearchIndexer;
 use App\Support\ReaderNames;
 use Database\Factories\WorkItemFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -259,12 +260,12 @@ final class WorkItem extends Model
     }
 
     /**
-     * The search document (index `work_items`, settings in config/scout.php): the key, the title and the plain text of
-     * the description to search, the rest to filter by. Who may see the item is not in it: the search filters by the
-     * projects the reader sees when it asks (P2). Reads `project`, `labels` and `state` (loaded at once by
-     * makeAllSearchableUsing()).
+     * The search document (index `work_items`, settings in config/scout.php): the key, the title, the plain text of
+     * the description and of the comments (A245) to search, the rest to filter by. Who may see the item is not in it:
+     * the search filters by the projects the reader sees when it asks (P2). Reads `project`, `labels`, `state` and
+     * `comments` (loaded at once by makeAllSearchableUsing()).
      *
-     * @return array{id: string, project_id: string, key: string, number: int, title: string, description: string, type_id: string, state_category: string, assignee_id: string|null, label_ids: list<string>, archived: bool, updated_at: int}
+     * @return array{id: string, project_id: string, key: string, number: int, title: string, description: string, comments: string, type_id: string, state_category: string, assignee_id: string|null, label_ids: list<string>, archived: bool, updated_at: int}
      */
     public function toSearchableArray(): array
     {
@@ -275,6 +276,7 @@ final class WorkItem extends Model
             'number' => $this->number,
             'title' => $this->title,
             'description' => $this->description_text ?? '',
+            'comments' => SearchIndexer::commentsText(array_values($this->comments->map(fn (Comment $comment) => $comment->body_text)->all())),
             'type_id' => $this->type_id,
             'state_category' => $this->state->category->value,
             'assignee_id' => $this->assignee_id,
@@ -293,7 +295,7 @@ final class WorkItem extends Model
      */
     protected function makeAllSearchableUsing(Builder $query): Builder
     {
-        return $query->with(['project:id,identifier', 'labels:labels.id', 'state:id,category'])
+        return $query->with(['project:id,identifier', 'labels:labels.id', 'state:id,category', 'comments:id,work_item_id,body_text'])
             ->whereIn('work_items.project_id', Project::query()->whereNull('deleting_at')->select('id'));
     }
 
@@ -411,6 +413,16 @@ final class WorkItem extends Model
     public function attachments(): MorphMany
     {
         return $this->morphMany(Attachment::class, 'attachable')->orderBy('created_at')->orderBy('id');
+    }
+
+    /**
+     * The comments in the order they were written.
+     *
+     * @return HasMany<Comment, $this>
+     */
+    public function comments(): HasMany
+    {
+        return $this->hasMany(Comment::class)->orderBy('created_at')->orderBy('id');
     }
 
     /**
