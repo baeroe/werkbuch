@@ -7,6 +7,17 @@ namespace Tests\Support;
  */
 final class RichTextFixtures
 {
+    /** IDs of the nodes in customNodes(): a person, an item, a page and two attachments. */
+    public const MARA = '01jcmara000000000000000000';
+
+    public const ITEM = '01jcweb0000000000000000047';
+
+    public const PAGE = '01jcpage000000000000000000';
+
+    public const IMAGE = '01jcbefe0000000000000000ab';
+
+    public const FILE = '01jcf11e000000000000000000';
+
     /** The steps of WEB-47 in the clickdummy (`seed/items.ts`): a paragraph and a numbered list of three. */
     public static function web47Steps(): array
     {
@@ -60,6 +71,38 @@ final class RichTextFixtures
                 ['type' => 'tableRow', 'content' => [self::cell('tableCell', 'Safari'), self::cell('tableCell', '2')]],
             ]],
         );
+    }
+
+    /**
+     * The nodes of Phase 7 once each, as Document stores them: a mention, a reference to an item and one to a page, a
+     * file in the text and an image as a block. everyNode() gets them with their Markdown (Task 5).
+     */
+    public static function customNodes(): array
+    {
+        return self::doc(
+            self::p('Bitte ', self::mention(self::MARA, 'mara'), ' ansehen, siehe ', self::reference(self::ITEM), ' und ', self::reference(self::PAGE, 'page'), ': ', self::file(self::FILE, 'protokoll.pdf'), '.'),
+            self::image(self::IMAGE, 'Screenshot des Formulars'),
+        );
+    }
+
+    public static function mention(string $id, ?string $label): array
+    {
+        return ['type' => 'mention', 'attrs' => ['id' => $id, 'label' => $label, 'mentionSuggestionChar' => '@']];
+    }
+
+    public static function reference(string $id, string $kind = 'item'): array
+    {
+        return ['type' => 'reference', 'attrs' => ['id' => $id, 'label' => null, 'mentionSuggestionChar' => '#', 'kind' => $kind]];
+    }
+
+    public static function image(string $id, ?string $alt): array
+    {
+        return ['type' => 'image', 'attrs' => ['attachmentId' => $id, 'alt' => $alt]];
+    }
+
+    public static function file(string $id, ?string $filename): array
+    {
+        return ['type' => 'attachment', 'attrs' => ['attachmentId' => $id, 'filename' => $filename]];
     }
 
     /** The attributes of a link mark as the editor sends them. */

@@ -1270,6 +1270,8 @@
     "reset_password.submit": "Set password",
     "reset_password.tab": "Password",
     "reset_password.title": "New password",
+    "richtext.hidden": "hidden",
+    "richtext.image": "Image: :name",
     "roles.org.admin": "Admin",
     "roles.org.member": "Member",
     "roles.project.admin": "Admin",

@@ -40,7 +40,9 @@ it('has every node and mark of the schema in the fixture', function () {
             $walk($child);
         }
     };
+    // the nodes of Phase 7 join everyNode() with their Markdown (Task 5)
     $walk(F::everyNode());
+    $walk(F::customNodes());
 
     expect(array_values(array_diff(Schema::NODES, $found['nodes'])))->toBe([])
         ->and(array_values(array_diff(Schema::MARKS, $found['marks'])))->toBe([]);
@@ -61,9 +63,8 @@ it('reads attributes as the editor does: defaults for missing ones, unknown ones
 });
 
 it('refuses an unknown node', function () use ($reason) {
-    // Phase 7 takes mentions in
-    expect($reason(F::doc(F::p(['type' => 'mention', 'attrs' => ['id' => 'x']]))))->toBe('node')
-        ->and($reason(F::doc(['type' => 'image'])))->toBe('node');
+    expect($reason(F::doc(F::p(['type' => 'emoji', 'attrs' => ['name' => 'rocket']]))))->toBe('node')
+        ->and($reason(F::doc(['type' => 'video'])))->toBe('node');
 });
 
 it('refuses an unknown mark', function () use ($reason) {
