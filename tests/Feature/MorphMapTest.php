@@ -8,6 +8,7 @@ use App\Models\Property;
 use App\Models\RelationType;
 use App\Models\Resolution;
 use App\Models\User;
+use App\Models\View;
 use App\Models\Workflow;
 use App\Models\WorkItem;
 use App\Models\WorkItemType;
@@ -45,4 +46,9 @@ it('maps the models of the catalogs to their short names', function (string $ali
 it('maps the work item to its short name', function () {
     expect(Relation::getMorphedModel('work_item'))->toBe(WorkItem::class)
         ->and((new WorkItem)->getMorphClass())->toBe('work_item');
+});
+
+it('maps the view to its short name', function () {
+    expect(Relation::getMorphedModel('view'))->toBe(View::class)
+        ->and((new View)->getMorphClass())->toBe('view');
 });

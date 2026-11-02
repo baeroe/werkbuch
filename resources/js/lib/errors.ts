@@ -18,7 +18,7 @@ export function isTransient(error: unknown): boolean {
 }
 
 /** The cause in the language of the page: the API's own sentence, or what not getting an answer means (the browser's text is English). */
-function causeOf(error: unknown): string {
+export function causeOf(error: unknown): string {
   return error instanceof ApiError ? error.message : t('errors.no_answer');
 }
 

@@ -94,14 +94,20 @@ final class WorkItem extends Model
     public array $relation_entries = [];
 
     /**
+     * Set by loadForResource(), never stored: whether WorkItemResource leaves out the description and the Markdown of
+     * the rich text values (`lean`, P17: lists ask lean, the detail in full).
+     */
+    public bool $lean = false;
+
+    /**
      * Loads everything WorkItemResource reads, for one item or a list, with a fixed number of queries (none per item):
      * `project`, `parent.project`, `labels`, `values.property`, the computed columns of withComputed() (one query, set
      * on the models as they are, never written back) and `subscribed` for the reader (K5). The resource then asks the
-     * database nothing.
+     * database nothing. `$lean` makes the resource leave out the descriptions (P17).
      *
      * @param  EloquentCollection<int, self>|self  $items
      */
-    public static function loadForResource(EloquentCollection|self $items, User $reader): void
+    public static function loadForResource(EloquentCollection|self $items, User $reader, bool $lean = false): void
     {
         $items = $items instanceof self ? $items->newCollection([$items]) : $items;
         $items->load(['project', 'parent.project', 'labels:labels.id', 'values.property']);
@@ -118,6 +124,7 @@ final class WorkItem extends Model
                 $item->syncOriginalAttribute($column);
             }
             $item->subscribed = in_array($item->id, $watched, true);
+            $item->lean = $lean;
         }
     }
 
@@ -182,9 +189,31 @@ final class WorkItem extends Model
             'children_done' => $children()
                 ->join('workflow_states as child_states', 'child_states.id', '=', 'children.state_id')
                 ->whereIn('child_states.category', self::closedCategories()),
-            'is_blocked' => self::blocks($query, 'target_id', 'source_id'),
-            'is_blocking' => self::blocks($query, 'source_id', 'target_id'),
+            'is_blocked' => self::blocks($query, false),
+            'is_blocking' => self::blocks($query, true),
         ]);
+    }
+
+    /**
+     * Whether the open item of the outer query blocks an open item (`$blocking`) or is blocked by one, through the
+     * built-in relation type `blocks`: a scalar subquery (`count(*) > 0`), the select of withComputed() and the
+     * condition of the filter (`App\Views\FilterQuery`) alike (K3).
+     *
+     * @param  Builder<self>  $outer
+     */
+    public static function blocks(Builder $outer, bool $blocking): QueryBuilder
+    {
+        [$self, $other] = $blocking ? ['source_id', 'target_id'] : ['target_id', 'source_id'];
+        $open = fn (QueryBuilder $states) => $states->select('id')->from('workflow_states')->whereNotIn('category', self::closedCategories());
+
+        return DB::query()->from('work_item_relations as blocks')
+            ->selectRaw('count(*) > 0')
+            ->join('relation_types as block_types', 'block_types.id', '=', 'blocks.type_id')
+            ->join('work_items as other_end', 'other_end.id', '=', "blocks.{$other}")
+            ->where('block_types.built_in', 'blocks')
+            ->whereColumn("blocks.{$self}", $outer->qualifyColumn('id'))
+            ->whereIn('other_end.state_id', $open)
+            ->whereIn($outer->qualifyColumn('state_id'), $open);
     }
 
     /**
@@ -333,25 +362,6 @@ final class WorkItem extends Model
             'is_blocked' => 'bool',
             'is_blocking' => 'bool',
         ];
-    }
-
-    /**
-     * Whether an open item at `$self` of a `blocks` relation (this item, open as well) has an open item at the other end.
-     *
-     * @param  Builder<self>  $outer
-     */
-    private static function blocks(Builder $outer, string $self, string $other): QueryBuilder
-    {
-        $open = fn (QueryBuilder $states) => $states->select('id')->from('workflow_states')->whereNotIn('category', self::closedCategories());
-
-        return DB::query()->from('work_item_relations as blocks')
-            ->selectRaw('count(*) > 0')
-            ->join('relation_types as block_types', 'block_types.id', '=', 'blocks.type_id')
-            ->join('work_items as other_end', 'other_end.id', '=', "blocks.{$other}")
-            ->where('block_types.built_in', 'blocks')
-            ->whereColumn("blocks.{$self}", $outer->qualifyColumn('id'))
-            ->whereIn('other_end.state_id', $open)
-            ->whereIn($outer->qualifyColumn('state_id'), $open);
     }
 
     /**

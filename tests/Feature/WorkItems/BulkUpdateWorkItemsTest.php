@@ -7,6 +7,7 @@ use App\Events\EventType;
 use App\Models\Event;
 use App\Models\Label;
 use App\Models\Project;
+use App\Models\Resolution;
 use App\Models\User;
 use App\Models\Workflow;
 use App\Models\WorkItem;
@@ -140,8 +141,8 @@ it('adds and removes labels', function () use ($web, $bulk, $labelsOf) {
     $result = $bulk($mara, [$tagged->id, $other->id], ['add_label_ids' => [strtoupper($c->id)], 'remove_label_ids' => [strtoupper($a->id)]]);
     $base = $bulk($mara, [$replaced->id], ['label_ids' => [$a->id, $c->id], 'add_label_ids' => [$b->id], 'remove_label_ids' => [$a->id]]);
     $cleared = $bulk($mara, [$replaced->id], ['label_ids' => null, 'add_label_ids' => null, 'remove_label_ids' => null]);
-    // a base that is no list is the field error of `label_ids`, per item
-    $broken = $bulk($mara, [$tagged->id], ['label_ids' => 'x', 'add_label_ids' => [$a->id]]);
+    // a base that is no list is the field error of `patch.label_ids`, before any item
+    $broken = invalidOf(fn () => $bulk($mara, [$tagged->id], ['label_ids' => 'x', 'add_label_ids' => [$a->id]]));
 
     expect($result)->toBe(['updated' => [$tagged->id, $other->id], 'rejected' => []])
         ->and($labelsOf($tagged))->toBe([$b->id, $c->id])
@@ -152,7 +153,7 @@ it('adds and removes labels', function () use ($web, $bulk, $labelsOf) {
         ->and(eventsOf(EventType::WorkItemUpdated, $tagged)->sole()->changes)->toBe(['label_ids' => ['old' => [$a->id, $b->id], 'new' => [$b->id, $c->id]]])
         ->and($base)->toBe(['updated' => [$replaced->id], 'rejected' => []])
         ->and($cleared)->toBe(['updated' => [$replaced->id], 'rejected' => []])
-        ->and($broken)->toBe(['updated' => [], 'rejected' => [['id' => $tagged->id, 'reason' => 'validation_failed']]])
+        ->and($broken)->toBe(['patch.label_ids' => [__('field.label_ids.unknown')]])
         ->and(eventsOf(EventType::WorkItemUpdated, $replaced)->pluck('changes')->all())->toBe([
             ['label_ids' => ['old' => [], 'new' => [$b->id, $c->id]]],
             ['label_ids' => ['old' => [$b->id, $c->id], 'new' => []]],
@@ -278,4 +279,84 @@ it('records an event per changed item and none for refused ones', function () us
         ->and(Event::query()->where('subject_id', $archived->id)->count())->toBe(0)
         ->and($moved)->toBe(['updated' => [$first->id], 'rejected' => []])
         ->and(eventsOf(EventType::WorkItemStateChanged, $first))->toHaveCount(1);
+});
+
+it('refuses a malformed priority, day or id before touching any item', function () use ($web) {
+    [$project, $mara] = $web();
+    $item = WorkItem::factory()->for($project)->create(['updated_at' => now()->subDay()]);
+    $ulid = strtoupper((string) Str::ulid());
+    $refuse = fn (array $patch) => invalidOf(fn () => BulkUpdateWorkItems::run(actor($mara), ['ids' => [$item->id], 'patch' => $patch]));
+
+    expect($refuse(['priority' => 'asap', 'due_date' => '2026-02-30', 'assignee_id' => 'mara']))->toBe([
+        'patch.priority' => [__('field.priority.invalid')],
+        'patch.due_date' => [__('field.date.invalid')],
+        'patch.assignee_id' => [__('field.assignee_id.invalid')],
+    ])
+        // `null` is no priority name; a day ends with the text, not with a line
+        ->and($refuse(['priority' => null, 'start_date' => "2026-11-01\n", 'due_date' => 20261101]))->toBe([
+            'patch.priority' => [__('field.priority.invalid')],
+            'patch.start_date' => [__('field.date.invalid')],
+            'patch.due_date' => [__('field.date.invalid')],
+        ])
+        ->and($refuse(['state_id' => 'done', 'resolution_id' => ['x'], 'assignee_id' => 42, 'label_ids' => [$ulid, 'bug']]))->toBe([
+            'patch.state_id' => [__('field.state_id.unknown')],
+            'patch.resolution_id' => [__('field.resolution_id.unknown')],
+            'patch.assignee_id' => [__('field.assignee_id.invalid')],
+            'patch.label_ids' => [__('field.label_ids.unknown')],
+        ])
+        ->and($refuse(['label_ids' => 'x']))->toBe(['patch.label_ids' => [__('field.label_ids.unknown')]])
+        ->and($refuse(['label_ids' => ['a' => $ulid]]))->toBe(['patch.label_ids' => [__('field.label_ids.unknown')]])
+        // the form only: an id in any case and `null` pass, the item answers for what they name
+        ->and(BulkUpdateWorkItems::run(actor($mara), ['ids' => [$item->id], 'patch' => [
+            'state_id' => $ulid, 'resolution_id' => null, 'assignee_id' => $ulid, 'label_ids' => [$ulid], 'start_date' => null, 'due_date' => '2026-11-01',
+        ]]))->toBe(['updated' => [], 'rejected' => [['id' => $item->id, 'reason' => 'validation_failed']]])
+        ->and($item->fresh()?->updated_at?->isYesterday())->toBeTrue()
+        ->and(Event::query()->where('subject_id', $item->id)->count())->toBe(0);
+});
+
+it('sets a resolution for many items', function () use ($web, $bulk) {
+    [$project, $mara] = $web();
+    [$first, $second] = WorkItem::factory()->for($project)->closed()->count(2)->create();
+    $before = $first->resolution_id;
+    $duplicate = (string) Resolution::query()->where('label', 'Duplicate')->value('id');
+
+    $result = $bulk($mara, [$first->key, $second->key], ['resolution_id' => strtoupper($duplicate)]);
+
+    expect($result)->toBe(['updated' => [$first->id, $second->id], 'rejected' => []])
+        ->and($first->fresh()?->resolution_id)->toBe($duplicate)
+        ->and($second->fresh()?->resolution_id)->toBe($duplicate)
+        ->and(eventsOf(EventType::WorkItemUpdated, $first)->sole()->changes)->toBe(['resolution_id' => ['old' => $before, 'new' => $duplicate]])
+        ->and(eventsOf(EventType::WorkItemUpdated, $second)->sole()->changes)->toBe(['resolution_id' => ['old' => $before, 'new' => $duplicate]])
+        ->and(eventsOf(EventType::WorkItemStateChanged))->toBeEmpty();
+});
+
+it('assigns many items and refuses the one whose project the assignee is no member of', function () use ($web, $bulk) {
+    [$web, $mara] = $web();
+    $lene = memberOf($web, ProjectRole::Member, ['name' => 'Lene']);
+    $ops = Project::factory()->identifier('OPS')->member($mara, ProjectRole::Admin)->create(['lead_id' => $mara->id]);
+    [$first, $second] = WorkItem::factory()->for($web)->count(2)->create();
+    $elsewhere = WorkItem::factory()->for($ops)->create(['updated_at' => now()->subDay()]);
+
+    $result = $bulk($mara, [$first->key, $elsewhere->key, $second->key], ['assignee_id' => strtoupper($lene->id)]);
+
+    expect($result)->toBe(['updated' => [$first->id, $second->id], 'rejected' => [['id' => 'OPS-1', 'reason' => 'validation_failed']]])
+        ->and($first->fresh()?->assignee_id)->toBe($lene->id)
+        ->and($second->fresh()?->assignee_id)->toBe($lene->id)
+        ->and($elsewhere->fresh()?->assignee_id)->toBeNull()
+        ->and($elsewhere->fresh()?->updated_at?->isYesterday())->toBeTrue()
+        ->and(eventsOf(EventType::WorkItemAssigned)->pluck('subject_id')->all())->toBe([$first->id, $second->id]);
+});
+
+it('sets the start date of many items and refuses one whose due date lies before it', function () use ($web, $bulk) {
+    [$project, $mara] = $web();
+    $free = WorkItem::factory()->for($project)->create(['due_date' => '2026-12-31']);
+    $early = WorkItem::factory()->for($project)->create(['due_date' => '2026-11-15']);
+
+    $result = $bulk($mara, [$free->key, $early->key], ['start_date' => '2026-11-20']);
+
+    expect($result)->toBe(['updated' => [$free->id], 'rejected' => [['id' => 'WEB-2', 'reason' => 'validation_failed']]])
+        ->and($free->fresh()?->start_date?->format('Y-m-d'))->toBe('2026-11-20')
+        ->and($early->fresh()?->start_date)->toBeNull()
+        ->and(eventsOf(EventType::WorkItemUpdated, $free)->sole()->changes)->toBe(['start_date' => ['old' => null, 'new' => '2026-11-20']])
+        ->and(eventsOf(EventType::WorkItemUpdated, $early))->toBeEmpty();
 });

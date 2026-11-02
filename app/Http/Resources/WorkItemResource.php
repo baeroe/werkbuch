@@ -13,7 +13,8 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * not know the reader: callers load the item with WorkItem::loadForResource($items, $reader) first (K5), which also
  * decides `subscribed`. The description comes as Markdown (`description`) and as Tiptap JSON (`description_json`),
  * rich text values as JSON in `values` and as Markdown in `values_markdown`. `template_id` stays `null` until
- * templates come (Phase 10, P22); `children_progress` is `null` for an item without children. What GetWorkItem loaded
+ * templates come (Phase 10, P22); `children_progress` is `null` for an item without children. A lean item
+ * (`WorkItem::$lean`, P17) comes without `description`, `description_json` and `values_markdown`. What GetWorkItem loaded
  * through `include` (`WorkItem::$includes`) comes after the fields: `children` (items in manual order), `type`
  * (WorkItemTypeResource), `workflow` (the workflow of the project, WorkflowResource) and `relations` (RelationEntryResource,
  * as the reader sees them: a hidden end without id, key or title); without it the keys are absent.
@@ -38,8 +39,8 @@ final class WorkItemResource extends JsonResource
             'key' => $item->key,
             'type_id' => $item->type_id,
             'title' => $item->title,
-            'description' => $item->description === null ? null : Document::fromJson($item->description)->toMarkdown(),
-            'description_json' => $item->description,
+            'description' => $this->unless($item->lean, fn () => $item->description === null ? null : Document::fromJson($item->description)->toMarkdown()),
+            'description_json' => $this->unless($item->lean, fn () => $item->description),
             'description_version' => $item->description_version,
             'state_id' => $item->state_id,
             'resolution_id' => $item->resolution_id,
@@ -52,7 +53,7 @@ final class WorkItemResource extends JsonResource
             'parent' => $parent === null ? null : ['id' => $parent->id, 'key' => $parent->key, 'title' => $parent->title, 'type_id' => $parent->type_id],
             'rank' => $item->rank,
             'values' => (object) ItemValues::of($item),
-            'values_markdown' => (object) ItemValues::markdown($item),
+            'values_markdown' => $this->unless($item->lean, fn () => (object) ItemValues::markdown($item)),
             'created_by' => $item->created_by,
             'created_at' => $item->created_at?->toJSON(),
             'updated_at' => $item->updated_at?->toJSON(),

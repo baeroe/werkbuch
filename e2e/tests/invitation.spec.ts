@@ -20,8 +20,12 @@ async function invite(page: Page, tag: string): Promise<{ email: string; link: s
   return { email, link };
 }
 
-/** Ends the session of the context: from here on the page is that of the invited person. */
+/**
+ * Ends the session of the context: from here on the page is that of the invited person. The page leaves the app first:
+ * a call of My items still on its way would set the session cookie again with its answer (Sanctum, stateful).
+ */
 async function signOutQuietly(page: Page): Promise<void> {
+  await page.goto('about:blank');
   await page.context().clearCookies();
 }
 

@@ -384,7 +384,8 @@ it('remaps the items of every project of the workflow', function () use ($withou
 
     expect(array_map(fn (WorkItem $item) => $item->fresh()?->state_id, $items))->toBe([$todo, $todo, $todo])
         ->and($elsewhere->fresh()?->state_id)->toBe($agency->initial_state_id)
-        ->and(eventsOf(EventType::WorkItemStateChanged))->toHaveCount(3);
+        // the project in deletion records nothing: the purge takes its items
+        ->and(eventsOf(EventType::WorkItemStateChanged)->pluck('subject_id')->sort()->values()->all())->toBe(collect([$items[0]->id, $items[1]->id])->sort()->values()->all());
 });
 
 it('still refuses a mapping of a state that stays', function () use ($withoutPending) {

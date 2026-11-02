@@ -2,6 +2,7 @@
 
 namespace App\Domain\Properties;
 
+use App\Domain\Ulid;
 use App\Domain\WorkItems\DateRange;
 
 /**
@@ -27,9 +28,6 @@ final class ItemValue
      * the point; a larger value would fail the insert with an error of the database (a 500).
      */
     public const NUMBER_LIMIT = 1e20;
-
-    /** A ULID as the `ulid` rule takes it: 26 characters of Crockford's alphabet, the first one 0-7. */
-    private const ULID = '/^[0-7][0-9a-hjkmnp-tv-z]{25}\z/i';
 
     /**
      * @param  mixed  $current  the value the item has: an archived option it already has stays valid
@@ -158,7 +156,7 @@ final class ItemValue
         }
 
         foreach ($ids as $id) {
-            if (! is_string($id) || preg_match(self::ULID, $id) !== 1) {
+            if (! is_string($id) || ! Ulid::is($id)) {
                 return new NormalizedValue(null, 'member');
             }
         }

@@ -14,9 +14,11 @@ use App\Models\Property;
 use App\Models\RelationType;
 use App\Models\Resolution;
 use App\Models\User;
+use App\Models\View;
 use App\Models\Workflow;
 use App\Models\WorkItem;
 use App\Models\WorkItemType;
+use App\Views\CatalogProperties;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Events\TransactionRolledBack;
 use Illuminate\Support\Facades\Event as Events;
@@ -34,6 +36,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->scoped(Organization::class, fn () => Organization::query()->sole());
         // the role assignments (and the visible projects), read once per request and job
         $this->app->scoped(RoleIndex::class);
+        // the properties as filters, sorts and displays look them up, read once per request and job
+        $this->app->scoped(CatalogProperties::class, fn () => CatalogProperties::load());
     }
 
     /**
@@ -57,6 +61,7 @@ class AppServiceProvider extends ServiceProvider
             'relation_type' => RelationType::class,
             'resolution' => Resolution::class,
             'work_item' => WorkItem::class,
+            'view' => View::class,
         ]);
 
         Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);

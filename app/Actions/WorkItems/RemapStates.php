@@ -23,7 +23,9 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * stay archived, even in an open state); the workflow is not asked, the state the item was in goes. The resolution and
  * the stamps follow like a move (ResolutionRule without a choice, MoveStamps), and each item records a
  * `work_item.state_changed` with the reason in `meta.reason` and both states in `meta.states` (StateSnapshot: the
- * state that goes keeps its name in the history).
+ * state that goes keeps its name in the history). Items of a project being deleted (`deleting_at`, SaveWorkflow names
+ * them: their foreign key holds the state) are moved as well, but record no event: the purge takes them, and the history
+ * of an item nobody can open again is noise.
  *
  * No right and no lock of its own: the callers have checked theirs and hold the organization `for update` (P1, P2), so
  * every change of an item waits until the items are moved. Runs synchronously in the transaction of the caller (P2),
@@ -77,7 +79,11 @@ final class RemapStates
                         $item->updated_at = $now;
                         $item->save();
 
-                        EventRecorder::record(EventType::WorkItemStateChanged, $actor, $item, $projects[$item->project_id], $changes, ['states' => StateSnapshot::of($from, $to)]);
+                        // a project being deleted goes with its items (PurgeProject): an event would outlive them
+                        $project = $projects[$item->project_id];
+                        if ($project->deleting_at === null) {
+                            EventRecorder::record(EventType::WorkItemStateChanged, $actor, $item, $project, $changes, ['states' => StateSnapshot::of($from, $to)]);
+                        }
                         $moved++;
                     }
                 });

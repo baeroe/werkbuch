@@ -102,7 +102,8 @@ jobs:
   # the Vitest coverage (100 % lines of the frontend). Not a required check.
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Phase 5 brought the suite to 500+ tests on one worker (about 45 minutes in CI).
+    timeout-minutes: 75
 
     services:
       mariadb:

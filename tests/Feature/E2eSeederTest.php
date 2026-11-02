@@ -2,9 +2,11 @@
 
 use App\Access\OrgRole;
 use App\Access\Visibility;
+use App\Actions\Favorites\ToggleFavorite;
 use App\Actions\Projects\CreateProject;
 use App\Actions\Projects\UpdateProject;
 use App\Events\EventType;
+use App\Models\Favorite;
 use App\Models\Invitation;
 use App\Models\Label;
 use App\Models\Organization;
@@ -13,6 +15,7 @@ use App\Models\Property;
 use App\Models\RelationType;
 use App\Models\Resolution;
 use App\Models\User;
+use App\Models\View;
 use App\Models\Workflow;
 use App\Models\WorkItem;
 use App\Models\WorkItemType;
@@ -125,6 +128,27 @@ it('removes the catalog entries of earlier runs and keeps the demo ones', functi
         ->and($keep->types()->pluck('work_item_types.id')->all())->not->toContain($type->id)
         ->and(eventsOf(EventType::WorkItemTypeDeleted))->toHaveCount(1)
         ->and(eventsOf(EventType::LabelDeleted))->toHaveCount(1);
+});
+
+it('removes the views of earlier runs with their favorites and keeps the others', function () {
+    $this->seed(E2eSeeder::class);
+    $erik = User::where('email', 'e2e@example.com')->sole();
+    $mara = User::factory()->create();
+    // whoever created them: the default bot may delete every view
+    $left = View::factory()->create(['name' => 'E2E desktop-light ABCDE Bugs', 'created_by' => $mara->id]);
+    $mine = View::factory()->create(['name' => 'E2E phone-dark ABCDE', 'created_by' => $erik->id]);
+    $kept = View::factory()->create(['name' => 'Not E2E', 'created_by' => $erik->id]);
+    ToggleFavorite::run(actor($erik), ['kind' => 'view', 'id' => $left->id]);
+    ToggleFavorite::run(actor($erik), ['kind' => 'view', 'id' => $kept->id]);
+
+    $this->seed(E2eSeeder::class);
+
+    expect(View::query()->whereKey([$left->id, $mine->id])->exists())->toBeFalse()
+        ->and(View::query()->whereKey($kept->id)->exists())->toBeTrue()
+        ->and(Favorite::query()->where('favoritable_type', 'view')->whereIn('favoritable_id', [$left->id, $kept->id])->pluck('favoritable_id')->all())->toBe([$kept->id])
+        ->and(Favorite::query()->where('favoritable_type', 'view')->count())->toBe(7)
+        ->and(eventsOf(EventType::ViewDeleted))->toHaveCount(2)
+        ->and(eventsOf(EventType::ViewDeleted)->first()->meta['reason'])->toBe('e2e_reset');
 });
 
 it('seeds the accounts of every Playwright project', function () {

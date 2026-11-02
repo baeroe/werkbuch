@@ -3,11 +3,14 @@
 namespace App\Actions\WorkItems;
 
 use App\Access\Authorize;
+use App\Domain\WorkItems\DateRange;
 use App\Domain\WorkItems\ItemKey;
+use App\Domain\WorkItems\Priority;
 use App\Exceptions\Problem;
 use App\Models\Label;
 use App\Models\WorkItem;
 use App\Support\Actor;
+use App\Support\Ids;
 use App\Support\ItemLock;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -17,13 +20,14 @@ use Lorisleiva\Actions\Concerns\AsAction;
 /**
  * Applies one change to many work items (P10): each item follows its own rules, what they allow is changed, what they
  * refuse is named with its reason (`transition_not_allowed`, `not_closed`, `forbidden`, …) and the rest goes on. The
- * references and the form of the patch are checked once before anything (422 at `ids`, `patch`, `patch.<field>`);
- * then every item runs in a transaction of its own (`DB::transaction(…, 3)`, as every change that locks items): found
- * by ULID or key (unknown or invisible → `not_found`), the right `update` (`forbidden`), the locks of P1
- * (ItemLock::take), an archived project (`project_archived`). An archived item is read-only (`archived`) unless the
- * patch restores it (`archived: false`, RestoreWorkItem::apply; an item that is not archived → `not_archived`); the
- * fields and a move go through UpdateWorkItem::apply; `archived: true` archives after the patch
- * (ArchiveWorkItem::apply: the state after the patch must be closed, `not_closed`). A Problem or a ValidationException
+ * references and the form of the patch and of its values (a priority, a day, an id) are checked once before anything,
+ * all errors in one 422 at `ids`, `patch`, `patch.<field>` and no item touched; then every item runs in a transaction
+ * of its own (`DB::transaction(…, 3)`, as every change that locks items): found by ULID or key (unknown or invisible →
+ * `not_found`), the right `update` (`forbidden`), the locks of P1 (ItemLock::take), an archived project
+ * (`project_archived`). An archived item is read-only (`archived`) unless the patch restores it (`archived: false`,
+ * RestoreWorkItem::apply; an item that is not archived → `not_archived`); the fields and a move go through
+ * UpdateWorkItem::apply; `archived: true` archives after the patch (ArchiveWorkItem::apply: the state after the patch
+ * must be closed, `not_closed`). A Problem or a ValidationException
  * rolls back only that item, the restore included (a refused patch leaves the item archived), and becomes
  * `{id: <the reference sent>, reason}` (`validation_failed` for field errors); anything else ends the request.
  *
@@ -141,8 +145,8 @@ final class BulkUpdateWorkItems
 
     /**
      * The form of the patch, checked once: an object of PATCH_KEYS (at least one), `archived` true or false, the labels
-     * to add (existing) and to remove as lists of ULIDs. The fields go to UpdateWorkItem::apply as they came; it checks
-     * them per item.
+     * to add (existing) and to remove as lists of ULIDs, the form of the fields (fieldForms). The fields go on to
+     * UpdateWorkItem::apply, which checks them per item.
      *
      * @param  callable(string, string): void  $fail
      * @return array{0: array<string, mixed>, 1: ?bool, 2: ?list<string>, 3: ?list<string>}
@@ -166,9 +170,54 @@ final class BulkUpdateWorkItems
         $remove = array_key_exists('remove_label_ids', $patch) ? self::labelList($patch['remove_label_ids'], 'patch.remove_label_ids', false, $fail) : null;
 
         /** @var array<string, mixed> $fields */
-        $fields = array_diff_key($patch, array_flip(['archived', 'add_label_ids', 'remove_label_ids']));
+        $fields = self::fieldForms(array_diff_key($patch, array_flip(['archived', 'add_label_ids', 'remove_label_ids'])), $fail);
 
         return [$fields, is_bool($archived) ? $archived : null, $add, $remove];
+    }
+
+    /**
+     * The form of the values, once for all items (a malformed one would be the same refusal for every item): a priority
+     * of Priority, a day (`YYYY-MM-DD`) or `null` for the dates, a ULID in any case or `null` for the state, the
+     * resolution and the assignee, a list of ULIDs (or `null`) for the labels. Whether they fit an item (a state of its
+     * workflow, a member of its project, existing labels, the start before the due date) its patch answers. The ids go
+     * on in lower case (Ids::normalize).
+     *
+     * @param  array<array-key, mixed>  $fields
+     * @param  callable(string, string): void  $fail
+     * @return array<string, mixed>
+     */
+    private static function fieldForms(array $fields, callable $fail): array
+    {
+        foreach (['state_id', 'resolution_id', 'assignee_id', 'label_ids'] as $field) {
+            if (array_key_exists($field, $fields)) {
+                $fields[$field] = Ids::normalize($fields[$field]);
+            }
+        }
+        $sent = fn (string $field): bool => array_key_exists($field, $fields);
+        $id = fn (mixed $value): bool => $value === null || (is_string($value) && Str::isUlid($value));
+
+        if ($sent('priority') && (! is_string($fields['priority']) || Priority::tryFrom($fields['priority']) === null)) {
+            $fail('patch.priority', __('field.priority.invalid'));
+        }
+        foreach (['start_date', 'due_date'] as $field) {
+            if ($sent($field) && $fields[$field] !== null && (! is_string($fields[$field]) || ! DateRange::isDay($fields[$field]))) {
+                $fail("patch.{$field}", __('field.date.invalid'));
+            }
+        }
+        foreach (['state_id' => 'field.state_id.unknown', 'resolution_id' => 'field.resolution_id.unknown', 'assignee_id' => 'field.assignee_id.invalid'] as $field => $message) {
+            if ($sent($field) && ! $id($fields[$field])) {
+                $fail("patch.{$field}", __($message));
+            }
+        }
+        if ($sent('label_ids') && $fields['label_ids'] !== null) {
+            $labels = $fields['label_ids'];
+            if (! is_array($labels) || ! array_is_list($labels) || array_filter($labels, fn (mixed $label) => ! is_string($label) || ! $id($label)) !== []) {
+                $fail('patch.label_ids', __('field.label_ids.unknown'));
+            }
+        }
+
+        /** @var array<string, mixed> $fields */
+        return $fields;
     }
 
     /**
@@ -197,22 +246,19 @@ final class BulkUpdateWorkItems
     }
 
     /**
-     * The labels of the item after the patch: the base (`label_ids` of the patch, else the item's own), the ones to add,
-     * without the ones to remove. A base that is no list goes on as it came, for UpdateWorkItem::apply to refuse.
+     * The labels of the item after the patch: the base (`label_ids` of the patch, already a list of ULIDs in lower case,
+     * else the item's own), the ones to add, without the ones to remove.
      *
      * @param  array<string, mixed>  $fields
      * @param  list<string>  $add
      * @param  list<string>  $remove
+     * @return list<string>
      */
-    private static function labels(WorkItem $locked, array $fields, array $add, array $remove): mixed
+    private static function labels(WorkItem $locked, array $fields, array $add, array $remove): array
     {
+        /** @var list<string> $base */
         $base = array_key_exists('label_ids', $fields) ? ($fields['label_ids'] ?? []) : $locked->labels()->pluck('labels.id')->all();
-        if (! is_array($base) || ! array_is_list($base)) {
-            return $base;
-        }
 
-        $base = array_map(fn (mixed $id) => is_string($id) && Str::isUlid($id) ? strtolower($id) : $id, $base);
-
-        return array_values(array_filter([...$base, ...$add], fn (mixed $id) => ! in_array($id, $remove, true)));
+        return array_values(array_filter([...$base, ...$add], fn (string $id) => ! in_array($id, $remove, true)));
     }
 }

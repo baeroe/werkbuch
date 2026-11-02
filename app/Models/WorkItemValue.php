@@ -11,7 +11,8 @@ use Illuminate\Support\Carbon;
 /**
  * One value of a property on a work item (P9): text and URL in `value_string`, a number in `value_number`, a day in
  * `value_date`, a switch in `value_bool`, a person in `value_user_id`, an option in `value_option_id`, rich text in
- * `value_json`. A multiple choice is several rows with `position` 0, 1, …
+ * `value_json` and its plain text (`Document::toText()`, for the filter) in `value_text`. A multiple choice is several
+ * rows with `position` 0, 1, …
  *
  * @property string $id
  * @property string $work_item_id
@@ -24,13 +25,14 @@ use Illuminate\Support\Carbon;
  * @property string|null $value_user_id
  * @property string|null $value_option_id
  * @property array<string, mixed>|null $value_json
+ * @property string|null $value_text
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Property $property
  */
 #[Fillable([
     'work_item_id', 'property_id', 'position', 'value_string', 'value_number', 'value_date', 'value_bool',
-    'value_user_id', 'value_option_id', 'value_json',
+    'value_user_id', 'value_option_id', 'value_json', 'value_text',
 ])]
 final class WorkItemValue extends Model
 {

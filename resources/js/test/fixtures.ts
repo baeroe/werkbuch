@@ -5,8 +5,12 @@
  * the work items, relations and history a few of its items (WEB-47, WEB-30, WEB-48, OPS-12).
  */
 
+import { queried } from './api';
 import type {
+  Display,
+  Filter,
   ItemEvent,
+  ItemGroups,
   Label,
   Organization,
   Project,
@@ -16,6 +20,7 @@ import type {
   RelationType,
   Resolution,
   User,
+  View,
   Workflow,
   WorkItem,
   WorkItemType,
@@ -407,3 +412,68 @@ export const web47History: ItemEvent[] = [
     occurred_at: '2026-10-27T09:00:00.000Z',
   }),
 ];
+
+/* ------------------------------------------------------------------- item lists */
+
+/**
+ * The items a fake `POST /api/v1/work-items/query` answers out of `items`: those of the named project (ULID or
+ * identifier), the children of the named parent, only epics (`t_epic`) when a condition asks, and for `q` the item of
+ * that key or the items whose title holds it, as the server reads them.
+ */
+export function queryItems(items: readonly WorkItem[], body: unknown): WorkItem[] {
+  const { project, parent, q, epic } = queried(body);
+  const exact = q === undefined ? undefined : items.find((item) => item.key === q.toUpperCase());
+  return items.filter(
+    (item) =>
+      (project === undefined || item.project_id === project || item.key.startsWith(`${project}-`)) &&
+      (parent === undefined || item.parent_id === parent || item.parent?.key === parent) &&
+      (!epic || item.type_id === 't_epic') &&
+      (q === undefined || (exact ? item === exact : item.title.toLowerCase().includes(q.toLowerCase()))),
+  );
+}
+
+/* ------------------------------------------------------------------------ views */
+
+const conditions = (...entries: Filter['conditions']): Filter => ({ version: 1, conditions: entries });
+
+const FIELDS = ['key', 'title', 'state', 'assignee', 'priority', 'due_date'];
+
+/** A view as the API answers it, after the clickdummy's "Fällig diese Woche"; override what the test is about. */
+export function makeView(overrides: Partial<View> = {}): View {
+  const display: Display = { layout: 'list', group_by: 'project', sort: { field: 'due_date', direction: 'asc' }, fields: [...FIELDS], show_sub_items: false };
+  return {
+    id: 'v_due_week',
+    name: 'Fällig diese Woche',
+    icon: 'calendar-clock',
+    filter: conditions({ field: 'state_category', op: 'in', value: ['backlog', 'unstarted', 'started'] }, { field: 'due_date', op: 'is', value: 'this_week' }),
+    display,
+    created_by: 'u_mara',
+    created_at: '2026-09-14T08:00:00.000Z',
+    updated_at: '2026-09-14T08:00:00.000Z',
+    ...overrides,
+  };
+}
+
+/** "Produktions-Bugs" of the clickdummy: the bugs of OPS as a board by state. */
+export const prodBugs: View = makeView({
+  id: 'v_prod_bugs',
+  name: 'Produktions-Bugs',
+  icon: 'bug',
+  filter: conditions({ field: 'project', op: 'is', value: 'p_ops' }, { field: 'type', op: 'is', value: 't_bug' }),
+  display: { layout: 'board', group_by: 'state', sort: { field: 'priority', direction: 'asc' }, fields: [...FIELDS], show_sub_items: true },
+  created_by: 'u_ida',
+});
+
+/** The groups of WEB by state as `POST /work-items/groups` answers them: every state of the standard workflow. */
+export const webStateGroups: ItemGroups = {
+  group_by: 'state',
+  total: 3,
+  groups: [
+    { key: 'std_backlog', count: 0 },
+    { key: 'std_todo', count: 1 },
+    { key: 'std_progress', count: 2 },
+    { key: 'std_pending', count: 0 },
+    { key: 'std_done', count: 0 },
+    { key: 'std_cancelled', count: 0 },
+  ],
+};

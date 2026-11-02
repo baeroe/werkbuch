@@ -5,12 +5,13 @@ namespace Database\Seeders\Demo;
 use App\Models\Favorite;
 use App\Models\Project;
 use App\Models\User;
+use App\Models\View;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 /**
- * The project favorites of the clickdummy (src/api/seed/workspace.ts) with their positions; the views between them
- * follow with the views in Phase 5, which is why Mara's projects start at position 3.
+ * The favorites of the clickdummy (src/api/seed/workspace.ts) with their positions: projects and views share one
+ * order, which is why Mara's projects start at position 3 behind her three views (ViewsSeeder).
  */
 class FavoritesSeeder extends Seeder
 {
@@ -34,6 +35,27 @@ class FavoritesSeeder extends Seeder
             foreach ($positions as $identifier => $position) {
                 Favorite::updateOrCreate(
                     ['user_id' => $accounts[$handle], 'favoritable_type' => $projectType, 'favoritable_id' => $projects[$identifier]],
+                    ['position' => $position],
+                );
+            }
+        }
+
+        $views = [
+            'mara' => ['Fällig diese Woche' => 0, 'Bugs in Produktion' => 1, 'Für Kira' => 2],
+            'jonas' => ['Blockiert' => 0],
+            'ida' => ['Bugs in Produktion' => 0],
+            'theo' => ['Studio Nordlicht' => 0],
+        ];
+        $viewType = (new View)->getMorphClass();
+
+        foreach ($views as $handle => $positions) {
+            foreach ($positions as $name => $position) {
+                // the oldest of that name and creator is the seeded one: names are not unique (K27)
+                $view = View::query()->where('name', $name)->where('created_by', $accounts[ViewsSeeder::CREATORS[$name]])
+                    ->orderBy('id')->firstOrFail();
+
+                Favorite::updateOrCreate(
+                    ['user_id' => $accounts[$handle], 'favoritable_type' => $viewType, 'favoritable_id' => $view->id],
                     ['position' => $position],
                 );
             }

@@ -1,6 +1,19 @@
 # werkbuch: Fachkonzept und App-Design
 
-Stand: 2026-11-01 · Status: freigegeben (die Änderungen vom 2026-10-31 warten auf Rafaels Bestätigung, außer der bestätigten Status-Zuordnung aus Phase 4)
+Stand: 2026-11-02 · Status: freigegeben (die Änderungen vom 2026-10-31 und vom 2026-11-02 warten auf Rafaels Bestätigung, außer der bestätigten Status-Zuordnung aus Phase 4)
+
+> **Änderungen vom 2026-11-02 (Phase 5):** Beim Umsetzen von Phase 5 (Views, Filter-Engine, Listen-Layouts) hat Claude als Controller Folgendes entschieden; es ändert oder präzisiert die Spec und **wartet auf Rafaels Bestätigung** (Begründung und „Falls falsch“ in `docs/superpowers/plans/2026-10-30-werkbuch-app-rulings.md`, A159 ff.):
+> - **Zwei neue Filterfelder (4.11):** „Ist ein Epic“ (`epic`, Typ mit Häkchen „Epic“) und „Beobachtet“ (`subscribed`, der Leser beobachtet das Item). „Beobachtet“ ist damit eine normale Liste und lässt sich als View speichern (A164, A184).
+> - **Texte ohne Akzente (4.11):** „enthält“ und „ist“ bei Titel, Text- und Adress-Properties ignorieren Groß- und Kleinschreibung **und** Akzente („uber“ findet „Über“); der Klickdummy ignorierte nur die Schreibung (A167).
+> - **Gelöschte Property in einer View (4.7, 4.11):** Eine gespeicherte View, deren Bedingung eine inzwischen gelöschte Property nennt, lädt weiter; die Bedingung trifft nichts und zeigt sich als „Unbekanntes Feld“, bis jemand sie entfernt (A160).
+> - **Archivierte Projekte im Filter (4.4, 4.11):** Items archivierter Projekte bleiben aus Views draußen, außer eine Bedingung „Projekt ist …“ nennt das Projekt: Die Liste eines archivierten Projekts zeigt seine offenen Items, schreibgeschützt (A163). Projektkarten zählen archivierte Items in offenem Status nicht als offen; die Frage aus Phase 4 („Archivierte Items bei der Status-Zuordnung“) bleibt offen.
+> - **Gruppen einzeln (4.11 Leistung):** Listen und Tabellen laden die Items einer Gruppe erst, wenn ihr Kopf zu sehen und sie aufgeklappt ist; Board-Spalten sofort. Die Zahl je Gruppe kommt vom Server (A170).
+> - **Lese-POSTs (6.1):** Abfragen mit einem Filter im Body (`POST /api/v1/work-items/query`, `…/groups`, `…/counts`) sind Lesezugriffe; ein Token mit nur `read` darf sie (A172).
+> - **Zahlen „bei N Items“ (4.7):** zählen nur Items, die der Leser sieht; Org-Admins, die Kataloge verwalten, sehen alle (A175).
+> - **Rang im Board (4.11):** Ist zwischen zwei Karten kein Platz mehr (der Rang würde länger als 128 Zeichen), bleibt die Karte, wo sie war, und ein Hinweis sagt es; werkbuch verteilt die Ränge noch nicht neu (A180, Phase 15). Die Reihenfolge in einer Spalte folgt der Sortierung der View; eine eigene Reihenfolge per Ziehen geht nur mit der Sortierung „Manuell“.
+> - **Views ohne Konfliktwarnung (4.11):** Speichern zwei Personen dieselbe View gleichzeitig, gewinnt die zweite ganz; anders als bei Beschreibungen gibt es keine Warnung (A185).
+> - **Timeline (4.11):** sortiert immer nach Start-Date, egal welche Sortierung die View hat; Gruppierung und Sortierung der View gelten in den anderen Layouts weiter (A177).
+> - **Sortierung nach Properties (4.11):** auch nach Adress-Properties (URL), wie nach Text (A168).
 
 > **Änderungen vom 2026-10-31 (Phase 4):** Beim Umsetzen von Phase 4 (Work Items, Relationen, History) hat Claude als Controller Folgendes entschieden; es ändert oder präzisiert die Spec. Begründung und „Falls falsch“ stehen in `docs/superpowers/plans/2026-10-30-werkbuch-app-rulings.md`, A101 ff.
 > - **Status-Zuordnung synchron (4.5), bestätigt von Rafael am 2026-10-31:** Das Umschreiben der Items beim Entfernen eines Status oder beim Wechsel des Workflows läuft sofort in derselben Transaktion wie die Änderung, nicht als Job; 4.5 ist angepasst. Ein Job ließe ein Fenster, in dem Items Status des alten Workflows tragen.

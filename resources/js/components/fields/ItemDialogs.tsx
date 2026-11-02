@@ -11,8 +11,8 @@
  */
 
 import { lazy, Suspense, useSyncExternalStore, type RefObject } from 'react';
-import { useUiStore } from '@/store/ui';
-import type { State, StateCategory, WorkItem, WorkItemType } from '@/types';
+import { focusBackTo, focusOriginNow } from '@/lib/focusOrigin';
+import type { ListedItem, State, StateCategory, WorkItemType } from '@/types';
 
 const ResolutionPrompt = lazy(() => import('./ResolutionPrompt').then((module) => ({ default: module.ResolutionPrompt })));
 const TypeChangeDialog = lazy(() => import('./TypePicker').then((module) => ({ default: module.TypeChangeDialog })));
@@ -24,33 +24,25 @@ type ResolutionRequest = {
   target: State;
   from?: { category: StateCategory; resolutionId: string | null };
   onConfirm: (resolutionId: string | null) => void;
+  /** The question closed without a choice (Cancel, Escape). */
+  onCancel?: () => void;
 };
-type TypeRequest = { kind: 'type'; item: WorkItem; target: WorkItemType; hasChildren?: boolean };
+type TypeRequest = { kind: 'type'; item: ListedItem; target: WorkItemType; hasChildren?: boolean };
 
 /** The question asked last, and whether it is shown (it stays while it fades out). */
 let state: { request: ResolutionRequest | TypeRequest | null; open: boolean } = { request: null, open: false };
 
-/** What had the focus when the palette opened; a command chosen there asks after the palette took the focus. */
-let beforePalette: Element | null = null;
-useUiStore.subscribe((ui, previous) => {
-  if (ui.paletteOpen && !previous.paletteOpen) beforePalette = document.activeElement;
-});
-
-/** Where the focus goes back to when the question closes (see the top of the file). */
+/** Where the focus goes back to when the question closes (see the top of the file, `lib/focusOrigin.ts`). */
 let origin: Element | null = null;
 
 const remember = () => {
-  origin = useUiStore.getState().paletteOpen ? beforePalette : document.activeElement;
+  origin = focusOriginNow();
 };
 
-/**
- * Read when the question closes: the origin while it is still on the page and not the page itself, else the screen's
- * focus origin, else the main area.
- */
+/** Read when the question closes. */
 const returnFocus: RefObject<HTMLElement | null> = {
   get current() {
-    const back = origin instanceof HTMLElement && origin.isConnected && origin !== document.body ? origin : null;
-    return back ?? document.querySelector<HTMLElement>('[data-focus-origin]') ?? document.getElementById('main');
+    return focusBackTo(origin);
   },
 };
 const listeners = new Set<() => void>();
@@ -60,10 +52,26 @@ function set(next: typeof state) {
   listeners.forEach((listener) => listener());
 }
 
-/** Asks for the resolution of a move into `target`; `onConfirm` gets the choice, nothing happens on Cancel. */
+/** Asks for the resolution of a move into `target`; `onConfirm` gets the choice, `onCancel` hears a close without one. */
 export function askResolution(request: Omit<ResolutionRequest, 'kind'>): void {
   remember();
-  set({ request: { kind: 'resolution', ...request }, open: true });
+  let answered = false;
+  set({
+    request: {
+      kind: 'resolution',
+      ...request,
+      onConfirm: (resolutionId) => {
+        answered = true;
+        request.onConfirm(resolutionId);
+      },
+      onCancel: () => {
+        if (answered) return;
+        answered = true;
+        request.onCancel?.();
+      },
+    },
+    open: true,
+  });
 }
 
 /**
@@ -71,7 +79,7 @@ export function askResolution(request: Omit<ResolutionRequest, 'kind'>): void {
  * refuse it. `hasChildren`: what the command knows about the item's children, so the dialog can refuse before the item
  * loads.
  */
-export function askTypeChange(item: WorkItem, target: WorkItemType, hasChildren?: boolean): void {
+export function askTypeChange(item: ListedItem, target: WorkItemType, hasChildren?: boolean): void {
   remember();
   set({ request: { kind: 'type', item, target, hasChildren }, open: true });
 }
@@ -87,7 +95,9 @@ const snapshot = () => state;
 export function ItemDialogsHost() {
   const { request, open } = useSyncExternalStore(subscribe, snapshot, snapshot);
   const close = (next: boolean) => {
-    if (!next) set({ ...state, open: false });
+    if (next) return;
+    set({ ...state, open: false });
+    if (request?.kind === 'resolution') request.onCancel?.();
   };
   if (!request) return null;
   return (

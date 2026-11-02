@@ -9,6 +9,10 @@
  * after closing still lands here; `defaults` are what `openCreate(defaults)` was given (the project, parent and type of
  * "Kind-Item"). `onOpenChange(false)` closes it.
  *
+ * When it closes, the focus goes back to what had it when the dialog was asked for (`lib/focusOrigin.ts`): the element
+ * before the palette when "Neues Item" came from there, the screen's focus origin or main area when that element went
+ * away (a menu entry), never the body.
+ *
  * Closing with content asks nothing: the draft is parked with a toast that brings it back (`draft.ts`). A dialog closed
  * while its item is on the way parks nothing once the item is created (its toast says so), and parks the draft when
  * the server refuses it.
@@ -22,6 +26,7 @@ import { toast } from '@/components/ui/toast';
 import type { CreateWorkItemInput } from '@/api/workItems';
 import { useCreateWorkItem } from '@/hooks/workItems';
 import { notifyError } from '@/lib/errors';
+import { createReturnFocus } from '@/lib/focusOrigin';
 import { t } from '@/lib/i18n';
 import { SHORTCUTS } from '@/lib/shortcuts/catalog';
 import type { CreateDefaults } from '@/store/ui';
@@ -102,6 +107,9 @@ export function CreateItemDialog({ open, defaults, onOpenChange }: CreateItemDia
       size="lg"
       title={t('items.create.title')}
       initialFocus={title}
+      // what had the focus when the dialog was asked for (`openCreate`), before the palette when it came from there;
+      // taken in the store, not by Base UI in an effect, which is too late when the title takes the focus at once
+      finalFocus={createReturnFocus}
       footer={
         <>
           <Switch label={t('items.create.another')} checked={another} onCheckedChange={setAnother} className="mr-auto" />

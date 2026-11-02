@@ -15,7 +15,7 @@
 
 import { Combobox } from '@base-ui/react/combobox';
 import { Check, ChevronDown, LoaderCircle, RotateCw, Search } from 'lucide-react';
-import { useId, useRef, useState, type ReactElement, type ReactNode, type Ref } from 'react';
+import { useId, useLayoutEffect, useRef, useState, type ReactElement, type ReactNode, type Ref } from 'react';
 import { Button } from '@/components/ui/Button';
 import { cx } from '@/components/ui/cx';
 import { ariaKeyshortcuts } from '@/components/ui/Kbd';
@@ -100,10 +100,14 @@ type ReadOnlyTriggerProps = {
   children: ReactNode;
   tabIndex?: number;
   id?: string;
+  /** Props that follow the focus across a swap between this trigger and the picker's own. */
+  swap?: SwapProps;
 };
 
+type SwapProps = { 'data-picker-trigger': string; onFocus: () => void; onBlur: () => void };
+
 /** The value as a trigger that does nothing but say why (tooltip and description). */
-export function ReadOnlyTrigger({ look, className, name, reason, children, tabIndex, id }: ReadOnlyTriggerProps) {
+export function ReadOnlyTrigger({ look, className, name, reason, children, tabIndex, id, swap }: ReadOnlyTriggerProps) {
   const reasonId = useId();
   return withTooltip(
     <button
@@ -112,6 +116,7 @@ export function ReadOnlyTrigger({ look, className, name, reason, children, tabIn
       aria-label={name}
       aria-disabled="true"
       aria-describedby={reasonId}
+      {...swap}
       tabIndex={tabIndex}
       className={triggerClass(look, { readOnly: true, className })}
     >
@@ -229,9 +234,22 @@ export function Picker(props: PickerProps) {
     </>
   );
 
+  // the rights may arrive after the first render: the read-only trigger gives way to the picker (or back) and the focus
+  // stays on the trigger
+  const swapId = useId();
+  const hadFocus = useRef(false);
+  const readOnly = Boolean(disabledReason);
+  const swap: SwapProps = { 'data-picker-trigger': swapId, onFocus: () => (hadFocus.current = true), onBlur: () => (hadFocus.current = false) };
+  const wasReadOnly = useRef(readOnly);
+  useLayoutEffect(() => {
+    if (wasReadOnly.current === readOnly) return;
+    wasReadOnly.current = readOnly;
+    if (hadFocus.current) document.querySelector<HTMLElement>(`[data-picker-trigger="${swapId}"]`)?.focus();
+  }, [readOnly, swapId]);
+
   if (disabledReason) {
     return (
-      <ReadOnlyTrigger look={look} className={className} name={name} reason={disabledReason} tabIndex={tabIndex} id={id}>
+      <ReadOnlyTrigger look={look} className={className} name={name} reason={disabledReason} tabIndex={tabIndex} id={id} swap={swap}>
         {content}
       </ReadOnlyTrigger>
     );
@@ -315,6 +333,7 @@ export function Picker(props: PickerProps) {
           aria-invalid={invalid || undefined}
           aria-keyshortcuts={shortcut ? ariaKeyshortcuts(shortcut) : undefined}
           tabIndex={tabIndex}
+          {...swap}
           className={cx('group', triggerClass(look, { invalid, className }))}
         >
           {content}

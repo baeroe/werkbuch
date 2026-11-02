@@ -63,8 +63,6 @@ describe('Labels', () => {
     const forms = (await screen.findByRole('heading', { name: 'Formulare' })).closest('li')!;
     expect(within(forms).getByText('Ocker')).toBeTruthy();
     expect(within(screen.getByRole('list', { name: 'Labels' })).getAllByRole('listitem')).toHaveLength(4);
-    // no count of items yet: that comes with the items
-    expect(screen.queryByText(/^Bei /)).toBeNull();
   });
 
   it('says when the labels could not be loaded, and loads them again', async () => {
@@ -546,3 +544,29 @@ describe('Resolutions', () => {
     expect(await screen.findByText('Die Resolutions konnten nicht geladen werden')).toBeTruthy();
   });
 });
+
+describe('Labels usage', () => {
+  it('names the number of items of each label', async () => {
+    renderWith(
+      <Labels readOnlyReason={null} />,
+      {
+        'GET /api/v1/labels': () => ({ body: list(labels) }),
+        'POST /api/v1/work-items/groups': () => ({ body: { data: { group_by: 'label', total: 3, groups: [{ key: 'lb_forms', count: 2 }, { key: 'lb_ux', count: 1 }, { key: 'none', count: 5 }] } } }),
+      },
+    );
+
+    await screen.findByRole('heading', { name: 'Formulare' });
+    expect(await within(rowOf2('Formulare')).findByText('2 Items')).toBeTruthy();
+    expect(within(rowOf2('UX')).getByText('1 Item')).toBeTruthy();
+    expect(within(rowOf2('Produktion')).getByText('0 Items')).toBeTruthy();
+    expect(api!.calls.filter((entry) => entry.url === '/api/v1/work-items/groups')[0]!.body).toEqual({ group_by: 'label', include_archived: true });
+  });
+
+  it('says when the numbers could not be loaded', async () => {
+    renderWith(<Labels readOnlyReason={null} />, { 'GET /api/v1/labels': () => ({ body: list(labels) }), 'POST /api/v1/work-items/groups': unavailable });
+
+    await screen.findByRole('heading', { name: 'UX' });
+    await waitFor(() => expect(within(rowOf2('UX')).getByText('Anzahl nicht geladen')).toBeTruthy());
+  });
+});
+const rowOf2 = (name: string) => screen.getByRole('heading', { name }).closest('li')!;

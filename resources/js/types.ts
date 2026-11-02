@@ -254,6 +254,12 @@ export interface WorkItem extends WorkItemRecord {
   subscribed: boolean;
 }
 
+/**
+ * A work item as a list reads it: everything but the description and the Markdown of rich text values, which a lean
+ * answer (`lean: true`) leaves out. Every `WorkItem` is one; rows, cards and the field editors take this.
+ */
+export type ListedItem = Omit<WorkItem, 'description' | 'description_json' | 'values_markdown'>;
+
 export interface Relation {
   id: string;
   type_id: string;
@@ -364,7 +370,11 @@ export interface View {
   display: Display;
   created_by: string;
   created_at: string;
+  updated_at: string;
 }
+
+/** What `saveView` sends: a view without what the server sets; with `id` it replaces that view as a whole. */
+export type ViewInput = Omit<View, 'id' | 'created_by' | 'created_at' | 'updated_at'> & { id?: string };
 
 /** Everything the filter engine needs to know besides the item itself. */
 export interface FilterContext {
@@ -392,7 +402,25 @@ export interface FilterContext {
 export interface Group {
   key: string;
   label: string;
-  items: WorkItem[];
+  items: ListedItem[];
+}
+
+/**
+ * One group as the server counts it (`POST /work-items/groups`): its key (a state, account, label … ULID, a category or
+ * priority, `none`, or `all` without grouping) and how many items it holds. A parent group names its item.
+ */
+export interface GroupCount {
+  key: string;
+  count: number;
+  /** Only when grouped by parent: the parent item, `null` for the group `none`. */
+  item?: ItemRef | null;
+}
+
+/** The groups of a list in their order, with the grouping the server applied (`state` falls back to `category`, P14). */
+export interface ItemGroups {
+  group_by: GroupBy;
+  total: number;
+  groups: GroupCount[];
 }
 
 /* ------------------------------------------------------------------- templates */

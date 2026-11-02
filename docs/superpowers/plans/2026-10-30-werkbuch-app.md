@@ -171,7 +171,7 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 - `app/Domain/Filter` (Port von `src/domain/filter.ts`: Schema `version: 1`, Felder, Operatoren, dynamische Werte, Property-Bedingungen treffen Items ohne die Property nie, „blockiert andere“ eigenes Feld, Org-Zeitzone) und die Übersetzung in Eloquent-Queries (`App\Views\FilterQuery::apply(Builder $q, Filter $f, User $viewer): Builder`); Gruppierung (Port von `src/domain/grouping.ts`) mit Anzahl je Gruppe vom Server, Sortierung inklusive Properties, Cursor-Pagination.
 - Views (Name, Icon, Filter, Darstellung, Ersteller-Rechte, „als neue View speichern“), eingebaute Listen „Meine Items“, „Von mir erstellt“, „Beobachtet“ und die Projekt-Liste als ungespeicherte View, Favoriten für Views.
 - REST: `views`, `GET /api/v1/work-items?view=<id>`, `POST /api/v1/work-items/query` (Filter, Sortierung, Gruppierung, Cursor), Kurzform `filter[project]=…&filter[assignee]=me` in dieselbe Engine.
-- Board-Regeln (Port von `src/domain/board.ts`: Ziehen ändert Status mit Prüfung, Priorität oder Assignee; Kategorie-Spalten behalten den eigenen Status, sonst erster erlaubter; Label-Boards nicht ziehbar), Timeline (Epics, Fortschritt, Daten ändern).
+- Board-Regeln als Port im Browser (`src/domain/board.ts` und `rules.ts` nach `resources/js/domain/`: Ziehen ändert Status mit Prüfung, Priorität oder Assignee; Kategorie-Spalten behalten den eigenen Status, sonst erster erlaubter; Label-Boards nicht ziehbar); der Server prüft jeden Zug als Übergang bzw. Änderung (`TransitionWorkItem`, `UpdateWorkItem`), REST und MCP kennen keine Spalten (P22 des Phasenplans, A179). Timeline (Epics, Fortschritt, Daten ändern).
 - UI-Port: Items-Bildschirm mit Filterleiste (ungespeichert, speichern, verwerfen, Zustand in der URL), Anzeigeoptionen, Liste, Board, Tabelle (Inline-Bearbeitung), Timeline, Mehrfachauswahl und -bearbeitung, Views-Übersicht, „Meine Items“, Seitenleiste mit Views. Board und Timeline werden virtualisiert (R34). Dateien geteilt (Items-Bildschirm, Board, Timeline; 13b). Aus 13c: Fokus beim Scrollen, Tab-Stopps der Gruppenschalter, Filterentwurf über das Operator-Menü, Skelett je Layout, Nachladefehler ersetzt keine volle Liste, gleiche Ränge über Projekte hinweg, Esc bricht Timeline-Ziehen ab, Auswahlfelder der Tabelle am Handy 44 px.
 
 **Tests:** alle Fälle aus `filter.test.ts`, `grouping.test.ts`, `board.test.ts`; Gleichheit der Treffer zwischen Filter-Engine und REST `?view=` für jede Feldart; Datenleck: View über private Projekte; e2e: Flow 2 (Board-Zug abgelehnt mit Toast), Board und Timeline per Tastatur, Filter per `f`.
@@ -187,7 +187,7 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 **Liefert:**
 - Scout mit Meilisearch für Items (Key, Titel, Klartext der Beschreibung; Kommentare ab Phase 7), Projekte, Personen und Bots; Wiki-Seiten folgen in Phase 9. Indexieren als Event-Konsument in der Queue `search`; `app:search-sync` für die Index-Einstellungen (Filterattribut `project_id`).
 - `GET /api/v1/search?q=…&types=…`: läuft immer mit dem Filter aus `Visibility`, der Browser spricht nie mit Meilisearch; ein Key wie `WEB-123` (auch eine alte Kennung) liefert das Item direkt.
-- UI-Port: Die Befehlspalette steht seit Phase 4 (⌘K, Register, Navigation, „Neues Item“, Theme, Item-Befehle am Item der Seite und der Vorschau; A114, an der Auswahl der Listen mit Phase 5); Phase 6 bringt ihre Suche: Treffer nach Art gruppiert, Sprung zu einem Key, `/`, „Vorlage anwenden …“ (aktiv ab Phase 10); `?`-Hilfe vollständig.
+- UI-Port: Die Befehlspalette steht seit Phase 4 (⌘K, Register, Navigation, „Neues Item“, Theme, Item-Befehle am Item der Seite und der Vorschau; A114, an der Auswahl der Listen mit Phase 5); Phase 6 bringt ihre Suche: Treffer nach Art gruppiert, Sprung zu einem Key, `/` außerhalb von Listen (in Listen fokussiert `/` seit Phase 5 die Titelsuche, A181), „Vorlage anwenden …“ (aktiv ab Phase 10); `?`-Hilfe vollständig.
 - Tastatur-Doku: `scripts/shortcuts-doc.mjs` erzeugt `docs/{en,de}/keyboard.md` aus dem Katalog `resources/js/lib/shortcuts/catalog.ts`; ein Test prüft, dass die Seiten aktuell sind und kein Kürzel doppelt belegt ist (R38).
 
 **Tests:** Suche über Projektgrenzen (privates Projekt, Nicht-Mitglied, deaktiviert), Index nach Änderung, Löschung und Archiv, Key-Sprung mit alter Kennung; Meilisearch in `Integration` echt, sonst Fake-Engine; e2e: Flow 1 komplett über ⌘K „kontakt“.
@@ -361,7 +361,7 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 - [x] Phase 2: Organisation, Konten, Rollen, Projekte (PR #11)
 - [x] Phase 3: Workflows, Typen, Properties, Kataloge (PR #12)
 - [x] Phase 4: Work Items, Relationen, History (PR #13)
-- [ ] Phase 5: Views, Filter-Engine, Listen-Layouts
+- [x] Phase 5: Views, Filter-Engine, Listen-Layouts (PR #15)
 - [ ] Phase 6: Suche und Suchtreffer in der Befehlspalette
 - [ ] Phase 7: Editor, Kommentare, Anhänge
 - [ ] Phase 8: Benachrichtigungen, Mail, Live-Updates

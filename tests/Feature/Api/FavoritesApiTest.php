@@ -8,6 +8,7 @@ use App\Models\Event;
 use App\Models\Favorite;
 use App\Models\Project;
 use App\Models\User;
+use App\Models\View;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
@@ -68,14 +69,14 @@ it('takes a project id in upper case for the project it names', function () {
         ->assertOk()->assertJsonPath('id', $web->id)->assertJsonPath('favorite', true);
 });
 
-it('refuses a kind that is no project yet', function (mixed $kind) {
+it('refuses another kind', function (mixed $kind) {
     $web = Project::factory()->public()->create();
 
     $this->actingAs(User::factory()->create())->postJson('/api/v1/favorites/toggle', ['kind' => $kind, 'id' => $web->id])
         ->assertUnprocessable()->assertJsonPath('errors.kind.0', __('field.kind.unknown'));
 
     expect(Favorite::query()->count())->toBe(0);
-})->with(['view' => 'view', 'unknown' => 'page', 'not named' => null, 'not a text' => [['project']]]);
+})->with(['unknown' => 'page', 'a type' => 'work_item', 'not named' => null, 'not a text' => [['project']]]);
 
 it('refuses an id that is not named or no text', function (mixed $id) {
     $this->actingAs(User::factory()->create())->postJson('/api/v1/favorites/toggle', ['kind' => 'project', 'id' => $id])
@@ -148,3 +149,67 @@ it('refuses a favorite for a project whose deletion began or ended after it was 
     'being deleted' => [fn (Builder $row) => $row->update(['deleting_at' => now()])],
     'purged' => [fn (Builder $row) => $row->delete()],
 ]);
+
+it('puts a view into the sidebar and takes it out again', function () {
+    $lene = User::factory()->create();
+    $view = View::factory()->create();
+
+    $this->actingAs($lene)->postJson('/api/v1/favorites/toggle', ['kind' => 'view', 'id' => strtoupper($view->id)])
+        ->assertOk()->assertExactJson(['kind' => 'view', 'id' => $view->id, 'favorite' => true]);
+    $this->getJson('/api/v1/favorites')->assertOk()->assertJsonPath('meta.total', 1)
+        ->assertJsonPath('data.0.kind', 'view')->assertJsonPath('data.0.id', $view->id)->assertJsonPath('data.0.position', 0);
+
+    $this->postJson('/api/v1/favorites/toggle', ['kind' => 'view', 'id' => $view->id])
+        ->assertOk()->assertExactJson(['kind' => 'view', 'id' => $view->id, 'favorite' => false]);
+    $this->getJson('/api/v1/favorites')->assertJsonPath('meta.total', 0);
+
+    $events = Event::query()->whereIn('type', [EventType::FavoriteAdded, EventType::FavoriteRemoved])->orderBy('occurred_at')->get();
+    expect($events->pluck('type')->all())->toBe([EventType::FavoriteAdded, EventType::FavoriteRemoved])
+        ->and($events->pluck('subject_type')->unique()->all())->toBe(['view'])
+        ->and($events->pluck('subject_id')->unique()->all())->toBe([$view->id])
+        ->and($events->pluck('project_id')->unique()->all())->toBe([null]);
+});
+
+it('answers 404 for an unknown view', function () {
+    $web = Project::factory()->public()->create();
+    $this->actingAs(User::factory()->create());
+
+    $this->postJson('/api/v1/favorites/toggle', ['kind' => 'view', 'id' => '01jzzzzzzzzzzzzzzzzzzzzzzz'])->assertNotFound()->assertJsonMissingPath('detail');
+    $this->postJson('/api/v1/favorites/toggle', ['kind' => 'view', 'id' => 'v_due_week'])->assertNotFound();
+    // a project is no view
+    $this->postJson('/api/v1/favorites/toggle', ['kind' => 'view', 'id' => $web->id])->assertNotFound();
+
+    expect(Favorite::query()->count())->toBe(0);
+});
+
+it('lists views and projects in the order of the sidebar', function () {
+    $lene = User::factory()->create();
+    [$a, $b] = Project::factory()->count(2)->public()->create()->all();
+    [$x, $y] = View::factory()->count(2)->create()->all();
+    $toggle = fn (string $kind, string $id) => $this->actingAs($lene)->postJson('/api/v1/favorites/toggle', ['kind' => $kind, 'id' => $id])->assertOk();
+
+    $toggle('view', $x->id);
+    $toggle('project', $a->id);
+    $toggle('view', $y->id);
+    $toggle('project', $b->id);
+
+    $this->getJson('/api/v1/favorites')->assertOk()->assertJsonPath('meta.total', 4)
+        ->assertJsonPath('data.*.kind', ['view', 'project', 'view', 'project'])
+        ->assertJsonPath('data.*.id', [$x->id, $a->id, $y->id, $b->id])
+        ->assertJsonPath('data.*.position', [0, 1, 2, 3]);
+
+    // a favorite whose view went without DeleteView (a row left behind) does not show
+    View::query()->whereKey($y->id)->delete();
+    $this->getJson('/api/v1/favorites')->assertJsonPath('data.*.id', [$x->id, $a->id, $b->id]);
+});
+
+it('refuses a favorite for a view deleted after it was found', function () {
+    $lene = User::factory()->create();
+    $view = View::factory()->create();
+    View::retrieved(fn (View $found) => DB::table('views')->where('id', $found->id)->delete());
+
+    expect(fn () => ToggleFavorite::run(actor($lene), ['kind' => 'view', 'id' => $view->id]))
+        ->toThrow(fn (Problem $problem) => expect($problem->status)->toBe(404))
+        ->and(Favorite::query()->count())->toBe(0)
+        ->and(Event::query()->where('type', EventType::FavoriteAdded)->count())->toBe(0);
+});

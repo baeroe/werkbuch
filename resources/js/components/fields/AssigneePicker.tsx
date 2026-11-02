@@ -10,7 +10,7 @@ import { useCurrentUser } from '@/hooks/users';
 import { useUpdateWorkItem } from '@/hooks/workItems';
 import { t } from '@/lib/i18n';
 import { SHORTCUTS } from '@/lib/shortcuts/catalog';
-import type { User, WorkItem } from '@/types';
+import type { ListedItem, User } from '@/types';
 import { botWord } from './format';
 import { useEditReason, useProjectPeople, useUserMap } from './itemData';
 import { Picker, type PickerExtras, type PickerOption } from './Picker';
@@ -28,7 +28,7 @@ export const personOption = (user: User): PickerOption => ({
   icon: <Avatar user={user} size="sm" decorative />,
 });
 
-type AssigneePickerProps = PickerExtras & { item: WorkItem };
+type AssigneePickerProps = PickerExtras & { item: ListedItem };
 
 export function AssigneePicker({ item, look = 'field', shortcut, ...extras }: AssigneePickerProps) {
   const me = useCurrentUser();

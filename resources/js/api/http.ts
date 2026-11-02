@@ -197,6 +197,13 @@ export async function getPage<T>(path: string, query: Query = {}, options: Reque
   return { items: data, next_cursor: meta.next_cursor ?? null, total: meta.total ?? data.length };
 }
 
+/** A list the API answers to a read `POST` (a query body instead of a query string), as a `Page`. */
+export async function postPage<T>(path: string, body: unknown, options: RequestOptions = {}): Promise<Page<T>> {
+  const { data, meta } = await post<ListAnswer<T>>(path, body, options);
+
+  return { items: data, next_cursor: meta.next_cursor ?? null, total: meta.total ?? data.length };
+}
+
 export function post<T>(path: string, body?: unknown, options: RequestOptions = {}): Promise<T> {
   return request<T>('POST', path, body, options);
 }

@@ -19,7 +19,7 @@ import { CommandPalette } from '@/features/palette/CommandPalette';
 import { listCommands } from '@/lib/commands';
 import { useUiStore } from '@/store/ui';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
-import { ida, labels, lene, list, makeWorkItem, mara, organization, project, properties, relationTypes, resolutions, standard, types, web30, web47, web47Relations, web48 } from '@/test/fixtures';
+import { ida, labels, lene, list, makeWorkItem, mara, organization, project, properties, queryItems, relationTypes, resolutions, standard, types, web30, web47, web47Relations, web48 } from '@/test/fixtures';
 import type { Organization, Project, ProjectMember, Property, RichText, User, WorkItem, WorkItemType } from '@/types';
 import { closePeekOnNavigation, PeekHost } from '@/shell/PeekHost';
 import { SAVE_PAUSE_MS } from './FieldsPanel';
@@ -112,7 +112,7 @@ function renderWith(node: ReactNode, { routes = {}, role = 'member' }: { routes?
     'GET /api/v1/relation-types': () => ({ body: list(relationTypes) }),
     'GET /api/v1/work-item-types': () => ({ body: list(typeList) }),
     'GET /api/v1/properties': () => ({ body: list(propertyList) }),
-    'GET /api/v1/work-items': () => ({ body: list(items) }),
+    'POST /api/v1/work-items/query': (body) => ({ body: list(queryItems(items, body)) }),
     ...Object.fromEntries(items.flatMap((item) => [`GET /api/v1/work-items/${item.id}`, `GET /api/v1/work-items/${item.key}`].map((path) => [path, () => detail(current(item.id))]))),
     ...Object.fromEntries(
       items.map((item) => [

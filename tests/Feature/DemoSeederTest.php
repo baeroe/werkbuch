@@ -309,7 +309,7 @@ it('seeds the work items of the three projects, on the states of their workflows
 it('seeds the project favorites with the positions of the clickdummy', function () {
     $this->seed(DemoSeeder::class);
     $projects = Project::pluck('identifier', 'id');
-    $of = fn (string $handle) => Favorite::where('user_id', User::where('handle', $handle)->sole()->id)->orderBy('position')->get()
+    $of = fn (string $handle) => Favorite::where('user_id', User::where('handle', $handle)->sole()->id)->where('favoritable_type', 'project')->orderBy('position')->get()
         ->mapWithKeys(fn (Favorite $favorite) => [$projects[$favorite->favoritable_id] => $favorite->position])->all();
 
     expect($of('mara'))->toBe(['WEB' => 3, 'APP' => 4, 'OPS' => 5])
@@ -347,7 +347,7 @@ it('runs again without changing anything and resets the demo password', function
 
     $this->seed(DemoSeeder::class);
 
-    expect($counts())->toBe($before)->and($before)->toBe([8, 3, 13, 9, 3, 71, 53])
+    expect($counts())->toBe($before)->and($before)->toBe([8, 3, 13, 15, 3, 71, 53])
         ->and(PersonalAccessToken::orderBy('name')->pluck('token', 'name')->all())->toBe($secrets)
         ->and(Hash::check(DemoSeeder::PASSWORD, User::where('handle', 'lene')->sole()->password))->toBeTrue()
         ->and(Visibility::roleIn(User::where('handle', 'theo')->sole(), Project::where('identifier', 'WEB')->sole())?->value)->toBe('viewer');

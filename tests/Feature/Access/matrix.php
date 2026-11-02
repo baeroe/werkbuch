@@ -48,6 +48,10 @@ use App\Actions\Users\ListUsers;
 use App\Actions\Users\ReactivateUser;
 use App\Actions\Users\UpdateUser;
 use App\Actions\Users\UpdateUserRole;
+use App\Actions\Views\DeleteView;
+use App\Actions\Views\GetView;
+use App\Actions\Views\ListViews;
+use App\Actions\Views\SaveView;
 use App\Actions\Workflows\DeleteWorkflow;
 use App\Actions\Workflows\ListStateUsage;
 use App\Actions\Workflows\ListWorkflows;
@@ -56,13 +60,16 @@ use App\Actions\WorkItems\AddRelation;
 use App\Actions\WorkItems\ArchiveWorkItem;
 use App\Actions\WorkItems\BulkUpdateWorkItems;
 use App\Actions\WorkItems\ChangeWorkItemType;
+use App\Actions\WorkItems\CountWorkItems;
 use App\Actions\WorkItems\CreateWorkItem;
 use App\Actions\WorkItems\DeleteWorkItem;
 use App\Actions\WorkItems\GetWorkItem;
+use App\Actions\WorkItems\GroupWorkItems;
 use App\Actions\WorkItems\ListHistory;
 use App\Actions\WorkItems\ListRelations;
 use App\Actions\WorkItems\ListSubscribers;
 use App\Actions\WorkItems\ListWorkItems;
+use App\Actions\WorkItems\QueryWorkItems;
 use App\Actions\WorkItems\RemapStates;
 use App\Actions\WorkItems\RemoveRelation;
 use App\Actions\WorkItems\RestoreWorkItem;
@@ -250,6 +257,28 @@ return [
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListWorkItems::run($a, ['filter' => ['project' => $w->project($column)->id]]),
         'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
         'hidden' => ['outsider_private'],
+    ],
+    'QueryWorkItems' => [
+        'action' => QueryWorkItems::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => QueryWorkItems::run($a, ['shorthand' => ['project' => $w->project($column)->id]]),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    // a filter on a project the account does not see counts nothing: never 404 (K8)
+    'GroupWorkItems' => [
+        'action' => GroupWorkItems::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GroupWorkItems::run($a, [
+            'filter' => ['version' => 1, 'conditions' => [['field' => 'project', 'op' => 'is', 'value' => $w->project($column)->id]]],
+            'group_by' => 'state',
+        ]),
+        'allowed' => $everyone,
+    ],
+    'CountWorkItems' => [
+        'action' => CountWorkItems::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => CountWorkItems::run($a, [
+            'filters' => ['open' => ['version' => 1, 'conditions' => [['field' => 'project', 'op' => 'is', 'value' => $w->project($column)->id]]]],
+        ]),
+        'allowed' => $everyone,
     ],
     'GetWorkItem' => [
         'action' => GetWorkItem::class,
@@ -488,6 +517,33 @@ return [
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => DeleteResolution::run($a, Resolution::factory()->create()),
         'allowed' => $catalogAdmins,
         'event' => EventType::ResolutionDeleted,
+    ],
+    'ListViews' => [
+        'action' => ListViews::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListViews::run($a, []),
+        'allowed' => $everyone,
+    ],
+    'GetView' => [
+        'action' => GetView::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetView::run($a, $w->view()),
+        'allowed' => $everyone,
+    ],
+    // views belong to the team: everybody creates them, only the creator and org admins (`view.manage_any`) change one
+    'SaveView' => [
+        'action' => SaveView::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $view = $w->view();
+
+            return SaveView::run($a, [...$view->only(['icon', 'filter', 'display']), 'name' => 'Matrix'], $view);
+        },
+        'allowed' => ['org_admin', 'default_bot'],
+        'event' => EventType::ViewUpdated,
+    ],
+    'DeleteView' => [
+        'action' => DeleteView::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => DeleteView::run($a, $w->view()),
+        'allowed' => ['org_admin', 'default_bot'],
+        'event' => EventType::ViewDeleted,
     ],
     'ListFavorites' => [
         'action' => ListFavorites::class,

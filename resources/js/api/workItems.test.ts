@@ -1,14 +1,16 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { mockApi, type MockApi } from '@/test/api';
-import { standard, types, web30, web47, web47History, web47Relations, web48 } from '@/test/fixtures';
-import type { BulkResult } from '@/types';
+import { standard, types, web30, web47, web47History, web47Relations, web48, webStateGroups } from '@/test/fixtures';
+import type { BulkResult, Filter, WorkItem } from '@/types';
 import {
   archiveWorkItem,
   bulkUpdateWorkItems,
   changeWorkItemType,
+  countWorkItems,
   createWorkItem,
   deleteWorkItem,
   getWorkItem,
+  groupWorkItems,
   listActivity,
   listStateUsage,
   listWorkItems,
@@ -26,17 +28,64 @@ afterEach(() => api.restore());
 const sent = (index = 0) => `${api.calls[index]!.method} ${decodeURIComponent(api.calls[index]!.url)}`;
 
 describe('reading work items', () => {
-  it('lists items as a page and narrows them by project, parent and text as filters', async () => {
-    api = mockApi({ 'GET /api/v1/work-items': () => ({ body: { data: [web47], links: {}, meta: { next_cursor: 'c2', total: 3 } } }) });
+  it('lists items as a page through the query and sends the project, parent and text as the short form', async () => {
+    api = mockApi({ 'POST /api/v1/work-items/query': () => ({ body: { data: [web47], links: {}, meta: { next_cursor: 'c2', total: 3 } } }) });
 
     expect(await listWorkItems({ project_id: 'WEB', q: 'kontakt' })).toEqual({ items: [web47], next_cursor: 'c2', total: 3 });
-    expect(sent()).toBe('GET /api/v1/work-items?filter[project]=WEB&filter[q]=kontakt');
+    expect(api.calls[0]).toEqual({ method: 'POST', url: '/api/v1/work-items/query', body: { shorthand: { project: 'WEB', q: 'kontakt' } } });
 
     await listWorkItems({ parent_id: 'WEB-30', include_archived: true, cursor: 'c2', per_page: 50 });
-    expect(sent(1)).toBe('GET /api/v1/work-items?include_archived=1&cursor=c2&per_page=50&filter[parent]=WEB-30');
+    expect(api.calls[1]!.body).toEqual({ shorthand: { parent: 'WEB-30' }, include_archived: true, cursor: 'c2', per_page: 50 });
 
-    await listWorkItems();
-    expect(sent(2)).toBe('GET /api/v1/work-items');
+    // the first page has no cursor: nothing at all is sent
+    await listWorkItems({ cursor: null });
+    expect(api.calls[2]!.body).toEqual({});
+  });
+
+  it('sends a view, filter, sort, group and lean under their own names, and no empty filter', async () => {
+    const lean = { ...web47 } as Partial<WorkItem>;
+    delete lean.description;
+    delete lean.description_json;
+    delete lean.values_markdown;
+    api = mockApi({ 'POST /api/v1/work-items/query': () => ({ body: { data: [lean], links: {}, meta: { next_cursor: null, total: 1 } } }) });
+    const filter: Filter = { version: 1, conditions: [{ field: 'priority', op: 'in', value: ['urgent', 'high'] }] };
+
+    const page = await listWorkItems({ view_id: 'v_bugs', filter, sort: { field: 'due_date', direction: 'desc' }, show_sub_items: false, group_by: 'state', group: 'std_todo', lean: true });
+    expect(page.items).toEqual([lean]);
+    expect(api.calls[0]!.body).toEqual({
+      view_id: 'v_bugs',
+      filter,
+      sort: { field: 'due_date', direction: 'desc' },
+      show_sub_items: false,
+      group_by: 'state',
+      group: 'std_todo',
+      lean: true,
+    });
+
+    await listWorkItems({ filter: { version: 1, conditions: [] } });
+    expect(api.calls[1]!.body).toEqual({});
+  });
+
+  it('reads the groups of a list with their counts, the search as it is and no short form', async () => {
+    api = mockApi({ 'POST /api/v1/work-items/groups': () => ({ body: { data: webStateGroups } }) });
+    const filter: Filter = { version: 1, conditions: [{ field: 'project', op: 'is', value: 'p_web' }] };
+
+    expect(await groupWorkItems({ filter, group_by: 'state', q: 'kontakt', include_archived: false })).toEqual(webStateGroups);
+    expect(api.calls[0]).toEqual({ method: 'POST', url: '/api/v1/work-items/groups', body: { filter, group_by: 'state', q: 'kontakt', include_archived: false } });
+
+    await groupWorkItems({ view_id: 'v_bugs', group_by: 'parent' });
+    expect(api.calls[1]!.body).toEqual({ view_id: 'v_bugs', group_by: 'parent' });
+  });
+
+  it('counts named filters on the server', async () => {
+    api = mockApi({ 'POST /api/v1/work-items/counts': () => ({ body: { data: { open: 4, '0': 1 } } }) });
+    const open: Filter = { version: 1, conditions: [{ field: 'state_category', op: 'in', value: ['backlog', 'unstarted', 'started'] }] };
+
+    expect(await countWorkItems({ open, '0': open })).toEqual({ open: 4, '0': 1 });
+    expect(api.calls[0]).toEqual({ method: 'POST', url: '/api/v1/work-items/counts', body: { filters: { open, '0': open } } });
+
+    await countWorkItems({ open }, { include_archived: true });
+    expect(api.calls[1]!.body).toEqual({ filters: { open }, include_archived: true });
   });
 
   it('reads one item with everything the detail shows in one call and takes its state from the workflow', async () => {

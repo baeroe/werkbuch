@@ -17,33 +17,40 @@ interface ShortcutOptions {
   when?: () => boolean;
   /** Tells apart the same catalog entry bound twice at once (the page and its peek): registers as `id:instance`. */
   instance?: string;
+  /** Registers only while true: neither runs nor shows in the help (a layout that leaves the key to its own handler). */
+  enabled?: boolean;
+  /** Runs again while the key is held, over the catalog's `repeat`: an entry two layouts share (K20, the timeline). */
+  repeat?: boolean;
   deps?: DependencyList;
 }
 
 /** Binds a shortcut of the catalog while the component is mounted. */
 export function useShortcut(id: ShortcutId, run: (event: KeyboardEvent) => void, options: ShortcutOptions = {}): void {
-  const { when, instance, deps = [] } = options;
+  const { when, instance, enabled = true, deps = [] } = options;
   const latest = useRef({ run, when });
   useLayoutEffect(() => {
     latest.current = { run, when };
   });
   const entry: CatalogEntry = SHORTCUTS[id];
+  const repeat = options.repeat ?? entry.repeat;
   const key = instance === undefined ? id : `${id}:${instance}`;
   const conditional = when !== undefined;
   useEffect(
     () =>
-      registerShortcut({
-        id: key,
-        keys: entry.keys,
-        scope: entry.scope,
-        label: entry.label,
-        group: entry.group,
-        repeat: entry.repeat,
-        run: (event) => latest.current.run(event),
-        when: conditional ? () => latest.current.when?.() ?? true : undefined,
-      }),
+      enabled
+        ? registerShortcut({
+            id: key,
+            keys: entry.keys,
+            scope: entry.scope,
+            label: entry.label,
+            group: entry.group,
+            repeat,
+            run: (event) => latest.current.run(event),
+            when: conditional ? () => latest.current.when?.() ?? true : undefined,
+          })
+        : undefined,
     // the latest callbacks come through the ref, so they need not be dependencies
-    [key, entry, conditional, ...deps],
+    [key, entry, conditional, enabled, repeat, ...deps],
   );
 }
 

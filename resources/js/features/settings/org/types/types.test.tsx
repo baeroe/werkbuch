@@ -79,8 +79,6 @@ describe('Types', () => {
     expect(within(await rowOf('Task')).queryByText('In der Timeline')).toBeNull();
     expect(within(await rowOf('Altlast')).getByText('Archiviert')).toBeTruthy();
     expect(within(await rowOf('Task')).queryByText('Archiviert')).toBeNull();
-    // no count of items yet: that comes with the items
-    expect(screen.queryByText(/^Bei /)).toBeNull();
     // an active type can be deleted, an archived one restored
     expect(within(bug).getByRole('button', { name: 'Typ „Bug“ löschen' })).toBeTruthy();
     expect(within(await rowOf('Altlast')).getByRole('button', { name: 'Typ „Altlast“ wiederherstellen' })).toBeTruthy();
@@ -443,5 +441,24 @@ describe('Types', () => {
     fail = false;
     await user.click(screen.getByRole('button', { name: 'Erneut versuchen' }));
     expect(await rowOf('Bug')).toBeTruthy();
+  });
+});
+
+describe('Types usage', () => {
+  it('names the number of items of each type', async () => {
+    renderWith(<Types readOnlyReason={null} />, routes(types, { 'POST /api/v1/work-items/groups': () => ({ body: { data: { group_by: 'type', total: 4, groups: [{ key: 't_task', count: 3 }, { key: 't_bug', count: 1 }] } } }) }));
+
+    expect(await within(await rowOf('Task')).findByText('3 Items')).toBeTruthy();
+    expect(within(await rowOf('Bug')).getByText('1 Item')).toBeTruthy();
+    expect(within(await rowOf('Epic')).getByText('0 Items')).toBeTruthy();
+    const call = api!.calls.filter((entry) => entry.url === '/api/v1/work-items/groups');
+    expect(call).toHaveLength(1);
+    expect(call[0]!.body).toEqual({ group_by: 'type', include_archived: true });
+  });
+
+  it('says when the numbers could not be loaded', async () => {
+    renderWith(<Types readOnlyReason={null} />, routes(types, { 'POST /api/v1/work-items/groups': unavailable }));
+
+    expect((await within(await rowOf('Task')).findAllByText('Anzahl nicht geladen')).length).toBe(1);
   });
 });

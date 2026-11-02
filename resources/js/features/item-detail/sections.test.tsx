@@ -13,8 +13,8 @@ import { currentToasts, dismissToast, resetToasts, runToastAction } from '@/comp
 import { preloadEditor } from '@/editor/RichTextEditor';
 import { plainText } from '@/lib/richtext';
 import { useUiStore } from '@/store/ui';
-import { mockApi, type MockApi, type MockRoute } from '@/test/api';
-import { ida, labels, lene, list, makeWorkItem, mara, organization, project, properties, relationTypes, resolutions, standard, types, web30, web47, web48 } from '@/test/fixtures';
+import { mockApi, queried, type MockApi, type MockRoute } from '@/test/api';
+import { ida, labels, lene, list, makeWorkItem, mara, organization, project, properties, queryItems, relationTypes, resolutions, standard, types, web30, web47, web48 } from '@/test/fixtures';
 import type { Project, ProjectMember, RelationEntry, RichText, User, WorkItem } from '@/types';
 import { DESCRIPTION_PAUSE_MS } from './Description';
 import { ItemPage } from './ItemPage';
@@ -102,12 +102,7 @@ function renderWith(node: ReactNode, { routes = {}, role = 'member' }: { routes?
     'GET /api/v1/work-item-types': () => ({ body: list(types) }),
     'GET /api/v1/properties': () => ({ body: list(properties) }),
     // a key names exactly its item, any other text is a part of the title (`ListWorkItems`)
-    'GET /api/v1/work-items': (_body, url) => {
-      const q = url.searchParams.get('filter[q]');
-      const all = [...items, ops12];
-      const exact = all.find((entry) => entry.key === q?.toUpperCase());
-      return { body: list(q === null ? all : exact ? [exact] : all.filter((entry) => entry.title.toLowerCase().includes(q.toLowerCase()))) };
-    },
+    'POST /api/v1/work-items/query': (body) => ({ body: list(queryItems([...items, ops12], body)) }),
     ...Object.fromEntries(items.flatMap((item) => [`GET /api/v1/work-items/${item.id}`, `GET /api/v1/work-items/${item.key}`].map((path) => [path, () => detail(current(item.id))]))),
     ...Object.fromEntries(
       items.map((item) => [
@@ -804,8 +799,9 @@ describe('Relations', () => {
     const search = await screen.findByPlaceholderText('Key oder Titel suchen …');
     await waitFor(() => expect(document.activeElement).toBe(search));
     await user.keyboard('web-48');
-    await waitFor(() => expect(api!.calls.some((call) => call.url.includes('filter%5Bq%5D=web-48'))).toBe(true), { timeout: SEARCH_PAUSE_MS + 1000 });
-    expect(api!.calls.find((call) => call.url.includes('filter%5Bq%5D=web-48'))!.url).toContain('per_page=20');
+    const searched = () => api!.calls.find((call) => call.url === '/api/v1/work-items/query' && queried(call.body).q === 'web-48');
+    await waitFor(() => expect(searched()).toBeDefined(), { timeout: SEARCH_PAUSE_MS + 1000 });
+    expect(searched()!.body).toEqual({ shorthand: { q: 'web-48' }, per_page: 20, lean: true });
     await screen.findByRole('option', { name: /Startseite umbauen/ });
     await user.keyboard('{Enter}');
     expect(within(dialog).getByRole('combobox', { name: 'Item: WEB-48 Startseite umbauen' })).toBeTruthy();
@@ -841,6 +837,32 @@ describe('Relations', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Hinzufügen' }));
     // WEB-50 blocks WEB-47: the relation runs from it
     await waitFor(() => expect(sent('POST', '/api/v1/work-items/wi_web_50/relations')).toEqual([{ type_id: 'rt_blocks', target_id: 'wi_web_47' }]));
+  });
+
+  it('offers a candidate the person may not change only as disabled for an inward relation', async () => {
+    const user = userEvent.setup();
+    // OPS is a project the member only reads
+    projects = [project('WEB', 'member'), project('OPS', 'viewer')];
+    renderWith(<ItemPage itemKey="WEB-47" />, {
+      routes: { 'POST /api/v1/work-items/query': (body) => ({ body: list(queryItems([web48, ops12], body)) }) },
+    });
+    await screen.findByRole('region', { name: 'Relationen' });
+    press('r');
+    const dialog = await screen.findByRole('dialog', { name: 'Relation hinzufügen' });
+    const search = await screen.findByPlaceholderText('Key oder Titel suchen …');
+    await waitFor(() => expect(document.activeElement).toBe(search));
+    // outward (WEB-47 becomes the source): both can be chosen
+    expect((await screen.findByRole('option', { name: /Mail-Limits/ })).getAttribute('aria-disabled')).not.toBe('true');
+
+    await user.keyboard('{Escape}');
+    await user.click(within(dialog).getByRole('combobox', { name: /^Art der Relation/ }));
+    await user.click(await screen.findByRole('option', { name: 'wird blockiert von' }));
+    // inward: the chosen item becomes the source, so it has to be one the person may change
+    await user.click(within(dialog).getByRole('combobox', { name: 'Item: keins gewählt' }));
+    const readOnly = await screen.findByRole('option', { name: /Mail-Limits/ });
+    expect(readOnly.getAttribute('aria-disabled')).toBe('true');
+    expect(readOnly.textContent).toContain('Im Projekt OPS darfst du nur lesen');
+    expect(screen.getByRole('option', { name: /Startseite umbauen/ }).getAttribute('aria-disabled')).not.toBe('true');
   });
 
   it('shows a duplicate at the field', async () => {
@@ -906,7 +928,7 @@ describe('Relations', () => {
     const user = userEvent.setup();
     let failing = true;
     renderWith(<ItemPage itemKey="WEB-47" />, {
-      routes: { 'GET /api/v1/work-items': () => (failing ? problem(503, 'service_unavailable', { detail: 'Gerade nicht.' }) : { body: list([web48]) }) },
+      routes: { 'POST /api/v1/work-items/query': () => (failing ? problem(503, 'service_unavailable', { detail: 'Gerade nicht.' }) : { body: list([web48]) }) },
     });
     await screen.findByRole('region', { name: 'Relationen' });
     press('r');

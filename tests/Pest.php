@@ -94,6 +94,17 @@ function modelWrites(string $code, string $file = 'code'): array
 }
 
 /**
+ * Locations (file:line) of inserts through any builder (`->insert(`, `->insertOrIgnore(`, `->upsert(` …), which
+ * modelWrites() leaves to rawWrites() for DB::table chains.
+ *
+ * @return list<string>
+ */
+function inserts(string $code, string $file = 'code'): array
+{
+    return codeMatches($code, $file, ['/->(?:insert\w*|upsert)\(/']);
+}
+
+/**
  * @param  list<string>  $patterns
  * @return list<string>
  */

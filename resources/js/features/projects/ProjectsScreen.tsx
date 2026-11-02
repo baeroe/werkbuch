@@ -3,7 +3,8 @@
  * name and identifier, lead and visibility, and what the person is there: their role, or "Join" for a public project
  * they are not in (a viewer until then, spec 4.3). The star puts a project into the sidebar. The sidebar's "Create
  * project" leads here with `?create=1` (the page's prop `create`), which opens the dialog "New project". The count of
- * open items joins with Phase 4.
+ * open items comes from one call for the whole screen (`group_by: project`, K11): archived items in an open status do
+ * not count, items of archived projects do.
  */
 
 import { Link, router, usePage } from '@inertiajs/react';
@@ -23,8 +24,10 @@ import { toast } from '@/components/ui/toast';
 import { FavoriteToggle } from '@/features/favorites/FavoriteToggle';
 import { useJoinProject, useProjects } from '@/hooks/projects';
 import { useAllUsers, useCurrentUser } from '@/hooks/users';
+import { useWorkItemGroups } from '@/hooks/workItems';
+import { OPEN_CATEGORIES } from '@/domain/viewState';
 import { notifyError } from '@/lib/errors';
-import { intlLocale, t } from '@/lib/i18n';
+import { intlLocale, t, tn } from '@/lib/i18n';
 import { paths } from '@/lib/links';
 import { usePermissions } from '@/lib/permissions';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
@@ -80,7 +83,22 @@ function Membership({ project, me }: { project: Project; me: User | undefined })
   );
 }
 
-function ProjectCard({ project, lead, me }: { project: Project; lead: User | undefined; me: User | undefined }) {
+/** What a card says about its open items: a skeleton while the count loads, a note when it failed, else the number. */
+type OpenCounts = { pending: boolean; failed: boolean; counts: Map<string, number> };
+
+function OpenCount({ id, open }: { id: string; open: OpenCounts }) {
+  if (open.pending)
+    return (
+      <span role="status" className="inline-block w-12">
+        <span className="sr-only">{t('common.loading')}</span>
+        <Skeleton className="h-3.5 w-full" />
+      </span>
+    );
+  if (open.failed) return <span className="text-muted">{t('projects.open_count_failed')}</span>;
+  return <>{tn('projects.open_count', open.counts.get(id) ?? 0)}</>;
+}
+
+function ProjectCard({ project, lead, me, open }: { project: Project; lead: User | undefined; me: User | undefined; open: OpenCounts }) {
   const flashing = useUiStore((state) => state.flashIds.includes(project.id));
   const visibility = project.visibility === 'public' ? { label: t('projects.public'), icon: Globe } : { label: t('projects.private'), icon: Lock };
 
@@ -127,6 +145,10 @@ function ProjectCard({ project, lead, me }: { project: Project; lead: User | und
         <dd className="flex items-center gap-1.5 text-ink">
           <visibility.icon className="size-3.5 text-muted" aria-hidden="true" />
           {visibility.label}
+        </dd>
+        <dt className="text-muted">{t('projects.open_items')}</dt>
+        <dd className="text-ink tabular-nums">
+          <OpenCount id={project.id} open={open} />
         </dd>
       </dl>
 
@@ -175,6 +197,27 @@ export function ProjectsScreen({ create }: { create: boolean }) {
   const { url } = usePage();
   const projects = useProjects({ include_archived: true });
   const users = useAllUsers();
+  // one call for every card; the numbers name what the reader sees (K11: archived items do not count as open)
+  const openGroups = useWorkItemGroups({
+    filter: {
+      version: 1,
+      conditions: [
+        { field: 'state_category', op: 'in', value: [...OPEN_CATEGORIES] },
+        { field: 'archived', op: 'is', value: false },
+      ],
+    },
+    group_by: 'project',
+    include_archived: true,
+  });
+  const open = useMemo<OpenCounts>(
+    () => ({
+      pending: openGroups.isPending,
+      // only without data: a failed refetch keeps the numbers
+      failed: openGroups.isError && !openGroups.data,
+      counts: new Map((openGroups.data?.groups ?? []).map((group) => [group.key, group.count])),
+    }),
+    [openGroups.isPending, openGroups.isError, openGroups.data],
+  );
   const me = useCurrentUser();
   const { reason } = usePermissions();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -248,7 +291,7 @@ export function ProjectsScreen({ create }: { create: boolean }) {
     content = (
       <ul aria-label={t('projects.list_label')} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {shown.map((project) => (
-          <ProjectCard key={project.id} project={project} lead={people.get(project.lead_id)} me={me} />
+          <ProjectCard key={project.id} project={project} lead={people.get(project.lead_id)} me={me} open={open} />
         ))}
       </ul>
     );

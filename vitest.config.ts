@@ -31,6 +31,7 @@ export default defineConfig({
         'resources/js/features/palette/**': { lines: 100 },
         'resources/js/features/item-detail/**': { lines: 100 },
         'resources/js/features/create-item/**': { lines: 100 },
+        'resources/js/features/items/**': { lines: 100 },
         // from the task whose screens use the frame on (P30)
         'resources/js/features/settings/frame/**': { lines: 100 },
         'resources/js/features/settings/catalog/**': { lines: 100 },
@@ -42,6 +43,9 @@ export default defineConfig({
         'resources/js/features/settings/project/**': { lines: 100 },
         'resources/js/features/projects/**': { lines: 100 },
         'resources/js/features/favorites/**': { lines: 100 },
+        'resources/js/features/views/**': { lines: 100 },
+        // the sidebar's sections (K22: the rest of shell/ is not at 100 % in Vitest yet)
+        'resources/js/shell/sidebar/**': { lines: 100 },
       },
     },
   },

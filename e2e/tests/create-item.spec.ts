@@ -181,9 +181,10 @@ test('opens the new item in the preview from the toast', async ({ page }) => {
     await pressMod(page, 'Enter');
     await expect(dialog).toBeHidden();
 
-    // the toasts come last on the page: backwards from the page, the toast's "Open" comes first
+    // `c` came from nowhere: the closed dialog gives the focus to the main area (never the body); the toasts come last
+    // on the page, so on from there the toast's "Open" comes after the settings
     const toast = page.getByRole('status').filter({ has: created(page, `${identifier}-1`) });
-    await tabTo(page, toast.getByRole('button', { name: tr('en', 'items.create.open'), exact: true }), { backwards: true, max: 6 });
+    await tabTo(page, toast.getByRole('button', { name: tr('en', 'items.create.open'), exact: true }), { max: 80 });
     await page.keyboard.press('Enter');
     const preview = page.getByRole('complementary', { name: tr('en', 'items.peek.label') });
     await expect(preview.getByRole('heading', { name: 'E2E Footer anpassen' })).toBeVisible();
@@ -222,10 +223,31 @@ test('creates a child item of an epic from its children section', async ({ page 
 
 test('opens the dialog from "New item" of my items', async ({ page }) => {
   await page.goto('/my-items');
-  const button = page.getByRole('button', { name: new RegExp(`^${tr('en', 'commands.create.label')}`) });
+  // the one in the toolbar: the empty list has one as well, but only while nothing is assigned to the e2e person
+  const button = page.locator('[data-items-toolbar]').getByRole('button', { name: new RegExp(`^${tr('en', 'commands.create.label')}`) });
   await expect(button).toBeVisible();
   await expect(button).not.toHaveAttribute('aria-disabled', 'true');
   await tabTo(page, button, { max: 80 });
+  await page.keyboard.press('Enter');
+
+  const dialog = page.getByRole('dialog', { name: tr('en', 'items.create.title') });
+  await expect(dialog.getByRole('textbox', { name: new RegExp(`^${tr('en', 'items.create.title_label')}`) })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await expect(button).toBeFocused();
+});
+
+test('gives the focus back to what had it before the palette that opened the dialog', async ({ page }) => {
+  await page.goto('/my-items');
+  const button = page.locator('[data-items-toolbar]').getByRole('button', { name: new RegExp(`^${tr('en', 'commands.create.label')}`) });
+  await expect(button).not.toHaveAttribute('aria-disabled', 'true');
+  await tabTo(page, button, { max: 80 });
+
+  await pressMod(page, 'k');
+  const palette = page.getByRole('dialog', { name: tr('en', 'palette.title') });
+  await expect(palette.getByRole('combobox', { name: tr('en', 'palette.input') })).toBeFocused();
+  await page.keyboard.type(tr('en', 'commands.create.label'));
+  await expect(palette.getByRole('option', { name: new RegExp(`^${tr('en', 'commands.create.label')}`) })).toBeVisible();
   await page.keyboard.press('Enter');
 
   const dialog = page.getByRole('dialog', { name: tr('en', 'items.create.title') });

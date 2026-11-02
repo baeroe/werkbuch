@@ -67,7 +67,7 @@ Wer ein Item beobachtet, erfährt von Änderungen, sobald es Benachrichtigungen 
 
 ## Mehrfachbearbeitung
 
-Mehrere Items können dieselbe Änderung auf einmal bekommen: Status, Resolution, Assignee, Priorität, Labels (setzen, hinzufügen oder entfernen), Daten, Archivieren und Wiederherstellen. Für jedes Item gelten seine eigenen Regeln: sein Workflow, sein Projekt, deine Rolle darin. Was bei einem Item abgelehnt wird, hält die anderen nicht auf; die Antwort nennt die abgelehnten mit ihrem Grund. Die Oberfläche dafür kommt mit den Item-Listen (eine spätere Phase); die API hat sie schon.
+Mehrere Items können dieselbe Änderung auf einmal bekommen: Status, Resolution, Assignee, Priorität, Labels (setzen, hinzufügen oder entfernen), Daten, Archivieren und Wiederherstellen. Für jedes Item gelten seine eigenen Regeln: sein Workflow, sein Projekt, deine Rolle darin. Was bei einem Item abgelehnt wird, hält die anderen nicht auf; die Antwort nennt die abgelehnten mit ihrem Grund. In der Oberfläche wählst du Items in einer [Liste](/de/concepts/views) aus (`x`, `shift+x`, `mod+a`): Die Leiste über der Liste ändert alle, die Item-Kürzel wirken auf die Auswahl, und ein Toast nennt, was abgelehnt wurde.
 
 ## Gleichzeitige Änderungen
 
@@ -85,7 +85,7 @@ Lesen braucht ein Token mit `read`, Ändern eines mit `write`. Items sprichst du
 
 | Anfrage | Antwort |
 |---|---|
-| `GET /api/v1/work-items` | Die Items, die du siehst, in manueller Reihenfolge: `filter[project]`, `filter[parent]`, `filter[q]` (ein Key oder ein Teil des Titels), `include_archived`, `cursor`, `per_page`. |
+| `GET /api/v1/work-items` | Items, die du siehst: `view`, eine Kurzform wie `filter[project]`, `filter[assignee]=me`, `filter[q]` (ein Key oder ein Teil des Titels), `sort`, `show_sub_items`, `include_archived`, `lean`, `cursor`, `per_page`. Filter, Gruppen und Zahlen stehen unter [Views](/de/concepts/views#rest). |
 | `POST /api/v1/work-items` | `201` mit dem neuen Item. |
 | `GET /api/v1/work-items/{item}` | Das Item; `?include=children,relations,type,workflow` bettet diese mit ein. |
 | `PATCH /api/v1/work-items/{item}` | `200` mit dem Item. |

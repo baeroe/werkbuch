@@ -21,11 +21,11 @@ import { useWorkflows } from '@/hooks/workflows';
 import { useWorkItem } from '@/hooks/workItems';
 import { t, tn } from '@/lib/i18n';
 import { paths } from '@/lib/links';
-import type { State, WorkItem } from '@/types';
+import type { ListedItem, State } from '@/types';
 import { ItemKey } from './ItemKey';
 import { isPlainClick } from './ItemLink';
 
-type Blocker = { item: WorkItem; state: State | undefined } | { item: null; state: undefined };
+type Blocker = { item: ListedItem; state: State | undefined } | { item: null; state: undefined };
 
 /** The open items that block this one, from its detail; undefined until the detail has loaded. */
 function useBlockers(itemId: string, enabled: boolean): Blocker[] | undefined {
@@ -48,7 +48,7 @@ function useBlockers(itemId: string, enabled: boolean): Blocker[] | undefined {
 const keysOf = (blockers: Blocker[]) => blockers.map((blocker) => blocker.item?.key ?? t('items.blocked.hidden_in_list')).join(', ');
 
 type BlockedHintProps = {
-  item: Pick<WorkItem, 'id' | 'blocked'>;
+  item: Pick<ListedItem, 'id' | 'blocked'>;
   variant?: 'chip' | 'card' | 'banner';
   /** Banner: opens a blocker another way (the preview); without it the links lead to the item's page. */
   onOpen?: (itemId: string) => void;

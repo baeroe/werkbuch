@@ -6,6 +6,10 @@
  *   qk.workItems.list(args)     ['work-items', 'list', args]
  *   qk.workItems.detail('WEB-47')
  *
+ * The pages of a long list are lists of their own (`qk.workItems.list({...args, cursor})`, also the pages of every
+ * group), so the optimistic item changes reach them; the groups and counts of item lists (`qk.workItems.groups`,
+ * `qk.workItems.counts`) lie under `qk.workItems.all` too, so every item change makes them stale.
+ *
  * Hooks follow the names of the API (`@/api`): `listX` -> `useXs(args)`, `getX` -> `useX(id)`, and a mutation per
  * function (`useCreateX`, `useUpdateX`, `useSaveX`, `useDeleteX` …). The variables of a mutation are the parameter
  * of the API function when it has exactly one, otherwise an object with the parameters by name:
@@ -42,7 +46,12 @@ export const qk = {
   labels: resource('labels'),
   relationTypes: resource('relation-types'),
   resolutions: resource('resolutions'),
-  workItems: resource('work-items'),
+  workItems: {
+    ...resource('work-items'),
+    /** The groups of a list (`useWorkItemGroups`) and the counts of named filters (`useWorkItemCounts`). */
+    groups: (args: unknown) => ['work-items', 'groups', args] as const,
+    counts: (args: unknown) => ['work-items', 'counts', args] as const,
+  },
   stateUsage: resource('state-usage'),
   attachments: resource('attachments'),
   activity: resource('activity'),

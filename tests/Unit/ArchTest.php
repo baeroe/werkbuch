@@ -17,6 +17,10 @@ arch('actions are final, use AsAction and run through handle()')
     ->expect('App\Actions')->classes()->toBeFinal()->toUseTrait(AsAction::class)->toHaveMethod('handle');
 arch('the domain is plain PHP')
     ->expect('App\Domain')->not->toUse(['Illuminate', 'Carbon', 'App\Models', 'App\Actions', 'App\Http', 'App\Support', 'App\Exceptions']);
+arch('filters, displays and the calendar are plain PHP')
+    ->expect(['App\Domain\Filter', 'App\Domain\Views', 'App\Domain\Time'])->not->toUse(['Illuminate', 'Carbon']);
+arch('views translate into queries and write nothing')
+    ->expect('App\Views')->classes()->toBeFinal()->not->toUse([EventRecorder::class, 'Illuminate\Support\Facades\Schema']);
 arch('domain classes are final')->expect('App\Domain')->classes()->toBeFinal();
 arch('rich text is final and leaves actions, http and the database alone')
     ->expect('App\RichText')->classes()->toBeFinal()->not->toUse(['App\Actions', 'App\Http', 'Illuminate\Support\Facades\DB']);
@@ -67,6 +71,19 @@ it('never writes models in controllers, middleware, commands, jobs or auth adapt
     $hits = collect(['app/Http', 'app/Console', 'app/Jobs', 'app/Auth'])->flatMap(fn ($d) => appFiles($d))
         ->flatMap(fn (string $f) => modelWrites((string) file_get_contents(repo_path($f)), $f))->all();
     expect($hits)->toBe([]);
+});
+
+it('detects inserts', function () {
+    expect(inserts("<?php\n\$query->insert([]);\n\$query->get();\n\$query->insertOrIgnore([]);\n\$query->upsert([], []);"))->toBe(['code:2', 'code:4', 'code:5']);
+});
+
+it('only reads in app/Views', function () {
+    $hits = collect(appFiles('app/Views'))
+        ->flatMap(fn (string $f) => [...modelWrites((string) file_get_contents(repo_path($f)), $f), ...inserts((string) file_get_contents(repo_path($f)), $f)])
+        ->all();
+
+    expect(appFiles('app/Views'))->not->toBe([])
+        ->and($hits)->toBe([]);
 });
 
 it('detects a handle() without an Actor first', function () {

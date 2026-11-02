@@ -13,7 +13,7 @@
 
 import { usePage } from '@inertiajs/react';
 import { FileQuestionMark, RotateCw } from 'lucide-react';
-import { useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import type { CreateWorkItemInput } from '@/api/workItems';
 import { TypeGlyph } from '@/components/fields/TypeGlyph';
 import { Banner } from '@/components/ui/Banner';
@@ -161,6 +161,7 @@ function FormBody({
 }: FormBodyProps) {
   const form = useRef<HTMLFormElement>(null);
   const descriptionError = useId();
+  const projectSelectId = `${formId}-project`;
   const fieldId = (key: string) => `${formId}-value-${key}`;
 
   const typesOf = (projectId: string) => {
@@ -186,7 +187,7 @@ function FormBody({
     return Object.fromEntries(Object.entries(values).filter(([key]) => keys.has(key)));
   };
 
-  const [draft, setDraft] = useState<Draft>(() => {
+  const [stored, setDraft] = useState<Draft>(() => {
     // "Rückgängig" on the toast of a closed dialog brings its draft back
     const restored = parkedToRestore(projects);
     if (restored) return restored;
@@ -207,6 +208,30 @@ function FormBody({
       values: {},
     };
   });
+  // names of every project and type seen, so the notice can still name one that left the lists
+  const seen = useRef(new Map<string, string>());
+  for (const entry of [...projects, ...types]) seen.current.set(entry.id, entry.name);
+  // project or type of the draft fell out of the lists while the dialog is open (archived, switched off, right lost):
+  // the draft takes the first project that takes items, or the default type, and says so
+  const projectGone = !projects.some((entry) => entry.id === stored.projectId);
+  const typeGone = !projectGone && !typesOf(stored.projectId).some((entry) => entry.id === stored.typeId);
+  const draft = useMemo<Draft>(() => {
+    if (!projectGone && !typeGone) return stored;
+    const projectId = projectGone ? projects[0].id : stored.projectId;
+    const typeId = projectGone && typesOf(projectId).some((entry) => entry.id === stored.typeId) ? stored.typeId : defaultType(projectId);
+    return projectGone
+      ? { ...stored, projectId, typeId, stateId: null, assigneeId: null, parentId: null, values: keptValues(stored.values, typeId) }
+      : { ...stored, typeId, values: keptValues(stored.values, typeId) };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the lists are what changes it
+  }, [stored, projects, types, workflows, properties]);
+  const [goneName, setGoneName] = useState<string | null>(null);
+  const [focusProject, setFocusProject] = useState(0);
+  useEffect(() => {
+    if (!projectGone && !typeGone) return;
+    setGoneName(seen.current.get(projectGone ? stored.projectId : stored.typeId) ?? '');
+    setDraft(draft);
+    setFocusProject((count) => count + 1);
+  }, [projectGone, typeGone, stored, draft]);
   const [errors, setErrors] = useState<Errors>({});
   /** Typed values that cannot be read (a number, an address), by key: the form does not send while there is one. */
   const [unreadable, setUnreadable] = useState<Record<string, string>>({});
@@ -257,6 +282,11 @@ function FormBody({
 
   const type = types.find((entry) => entry.id === draft.typeId)!;
   const workflow = workflows.find((entry) => entry.id === projects.find((project) => project.id === draft.projectId)!.workflow_id);
+  // after a draft went stale the focus goes to the project, where the person checks what is left
+  useEffect(() => {
+    if (focusProject > 0) form.current?.querySelector<HTMLElement>(`[id="${projectSelectId}"]`)?.focus();
+  }, [focusProject, projectSelectId]);
+
   const fields = fieldsOf(draft.typeId);
 
   const update = (patch: Partial<Draft>) => setDraft((current) => ({ ...current, ...patch }));
@@ -297,6 +327,9 @@ function FormBody({
       }}
       className="flex flex-col gap-4"
     >
+      {goneName !== null && (
+        <Banner tone="info" role="status" title={t('items.create.draft_gone', { name: goneName })} />
+      )}
       {(blocked || formError) && (
         <Banner tone="danger" role="alert" title={blocked ? t('items.create.blocked_title') : t('items.create.refused')}>
           {blocked ?? formError}
@@ -308,6 +341,7 @@ function FormBody({
           options={projects.map((entry) => ({ value: entry.id, label: entry.name, icon: <ProjectBadge project={entry} /> }))}
           value={draft.projectId}
           onValueChange={(next) => next && changeProject(next)}
+          id={projectSelectId}
           hint={passedOver}
           error={errors.project_id}
         />

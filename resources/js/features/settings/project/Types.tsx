@@ -2,7 +2,7 @@
  * Settings → Types (spec 4.4, 4.6): the types live in the organisation, a project switches on a selection of them
  * (at least one) and picks one as the default for new items. An archived type the project has switched on may stay on,
  * but it cannot come back once switched off, and it cannot be the default (P11). Without items there are no counts per
- * type yet (P6).
+ * type is the number of items the project has of it (A61).
  */
 
 import { CircleAlert } from 'lucide-react';
@@ -20,6 +20,7 @@ import type { WorkItemType } from '@/types';
 import { fieldErrors, useDraft, useFieldErrors, useSaveShortcut } from '../frame/form';
 import { LeaveGuard } from '../frame/LeaveGuard';
 import { FormActions, RuledList, RuledRow, SettingsCard, SettingsError, SettingsSkeleton } from '../frame/parts';
+import { UsageCount, useGroupUsage, type Usage } from '../catalog/usage';
 import type { ProjectSectionProps } from './sectionProps';
 
 type RowProps = {
@@ -33,9 +34,11 @@ type RowProps = {
   last: boolean;
   canManage: boolean;
   onToggle: (on: boolean) => void;
+  /** The items of the project per type; shown only while the project has the type on. */
+  usage: Usage | null;
 };
 
-function TypeRow({ type, on, group, isDefault, onDefault, last, canManage, onToggle }: RowProps) {
+function TypeRow({ type, on, group, isDefault, onDefault, last, canManage, onToggle, usage }: RowProps) {
   const reasonId = useId();
   const archived = type.archived_at !== null;
   // an archived type that is on stays on, but it cannot be the default: the radio says why
@@ -48,6 +51,11 @@ function TypeRow({ type, on, group, isDefault, onDefault, last, canManage, onTog
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <TypeTab tone={type.tone} icon={type.icon} label={type.name} />
           {archived && <Chip>{t('settings.project.types.archived')}</Chip>}
+          {usage && (
+            <span className="text-sm text-muted tabular-nums">
+              <UsageCount usage={usage} id={type.id} />
+            </span>
+          )}
         </div>
         {type.description && <p className="mt-1.5 max-w-[65ch] text-ui text-pretty text-muted">{type.description}</p>}
         {/* visible, not only a tooltip: the blocked radio cannot take the focus, so the keyboard would never reach it */}
@@ -80,6 +88,7 @@ export function Types({ project, canManage }: ProjectSectionProps) {
   const group = useId();
   const types = useWorkItemTypes();
   const update = useUpdateProject();
+  const usage = useGroupUsage('type', [{ field: 'project', op: 'is', value: project.id }]);
   const draft = useDraft(useMemo(() => ({ enabled_type_ids: project.enabled_type_ids, default_type_id: project.default_type_id }), [project]));
   const problems = useFieldErrors(form);
   useSaveShortcut(form, canManage);
@@ -178,6 +187,7 @@ export function Types({ project, canManage }: ProjectSectionProps) {
                   last={on && activeOn.length === 1 && active.has(type.id)}
                   canManage={canManage}
                   onToggle={(next) => toggle(type.id, next)}
+                  usage={project.enabled_type_ids.includes(type.id) ? usage : null}
                 />
               );
             })}

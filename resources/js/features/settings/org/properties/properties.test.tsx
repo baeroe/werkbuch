@@ -9,7 +9,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { currentToasts, dismissToast, resetToasts } from '@/components/ui/toast';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import { lene, list, organization, properties, types } from '@/test/fixtures';
@@ -104,8 +104,6 @@ describe('Properties', () => {
     expect(within(people).getByText('Mehrfachauswahl')).toBeTruthy();
     expect(within(people).getByText('In keinem Typ')).toBeTruthy();
     expect(within(people).queryByRole('list')).toBeNull();
-    // no count of items yet: that comes with the items
-    expect(screen.queryByText(/einen Wert/)).toBeNull();
   });
 
   it('says when the properties could not be loaded, and loads them again', async () => {
@@ -501,7 +499,11 @@ describe('Properties', () => {
     expect(value.getAttribute('aria-label')).toBe('Standardwert: Gärtnerei Moos');
     await user.click(value);
     await waitFor(() => expect(screen.getByRole('option', { name: 'Gärtnerei Moos' }).getAttribute('aria-selected')).toBe('true'));
+    // Base UI focuses the search field of the list a frame after it opens: an Escape before that reaches the dialog,
+    // which closes instead of the list
+    await waitFor(() => expect(document.activeElement?.getAttribute('name')).toBe('picker-query'));
     await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('option', { name: 'Gärtnerei Moos' })).toBeNull());
     await user.click(within(dialog).getByRole('button', { name: 'Abbrechen' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 
@@ -830,5 +832,96 @@ describe('default value', () => {
     const value = within(dialog).getByRole('combobox', { name: /^Standardwert/ });
     await waitFor(() => expect(value.getAttribute('aria-invalid')).toBe('true'));
     expect(document.getElementById(value.getAttribute('aria-describedby')!)?.textContent).toBe('Diese Auswahl gibt es nicht.');
+  });
+});
+
+/* ---------------------------------------------------------------------- usage */
+
+describe('Properties usage', () => {
+  const flag: Property = { id: 'pr_flag', key: 'billable', label: 'Abrechenbar', field_type: 'boolean', help: '', default_value: null, settings: {}, options: [] };
+  const countCalls = () => api!.calls.filter((call) => call.method === 'POST' && call.url === '/api/v1/work-items/counts');
+
+  it('names the number of items of each property, a yes/no property by its on value (K10)', async () => {
+    renderWith(<Properties readOnlyReason={null} />, routes([...all, flag], { 'POST /api/v1/work-items/counts': () => ({ body: { data: { customer: 3, effort: 1, billable: 2 } } }) }));
+
+    expect(await within(await rowOf('Kunde')).findByText('3 Items')).toBeTruthy();
+    expect(within(await rowOf('Aufwand (h)')).getByText('1 Item')).toBeTruthy();
+    expect(within(await rowOf('Abrechenbar')).getByText('2 Items')).toBeTruthy();
+    // a property no item has a value for is not in the answer
+    expect(within(await rowOf('Umgebung')).getByText('0 Items')).toBeTruthy();
+    expect(countCalls()).toHaveLength(1);
+    const filters = (countCalls()[0]!.body as { filters: Record<string, unknown>; include_archived: boolean }).filters;
+    expect(filters.billable).toEqual({ version: 1, conditions: [{ field: 'property:billable', op: 'is', value: true }] });
+    expect(filters.effort).toEqual({ version: 1, conditions: [{ field: 'property:effort', op: 'is_not_empty' }] });
+    expect((countCalls()[0]!.body as { include_archived: boolean }).include_archived).toBe(true);
+  });
+
+  it('asks for at most 50 properties per call', async () => {
+    const many = Array.from({ length: 51 }, (_, index): Property => ({ ...reviewer, id: `pr_m${index}`, key: `m_${index}`, label: `Feld ${index}` }));
+    renderWith(<Properties readOnlyReason={null} />, routes(many, { 'POST /api/v1/work-items/counts': (body) => ({ body: { data: Object.fromEntries(Object.keys((body as { filters: object }).filters).map((key) => [key, 1])) } }) }));
+
+    expect(await within(await rowOf('Feld 50')).findByText('1 Item')).toBeTruthy();
+    expect(countCalls().map((call) => Object.keys((call.body as { filters: object }).filters).length).sort()).toEqual([1, 50]);
+  });
+
+  it('says when the numbers could not be loaded, and still lists the properties', async () => {
+    renderWith(<Properties readOnlyReason={null} />, routes(all, { 'POST /api/v1/work-items/counts': unavailable }));
+
+    expect(await within(await rowOf('Kunde')).findByText('Anzahl nicht geladen')).toBeTruthy();
+  });
+
+  it('names the number in the question of deleting a property', async () => {
+    const user = userEvent.setup();
+    renderWith(<Properties readOnlyReason={null} />, routes(all, { 'POST /api/v1/work-items/counts': () => ({ body: { data: { effort: 2 } } }) }));
+
+    await within(await rowOf('Aufwand (h)')).findByText('2 Items');
+    await user.click(within(await rowOf('Aufwand (h)')).getByRole('button', { name: 'Property „Aufwand (h)“ löschen' }));
+    const question = await screen.findByRole('alertdialog');
+    expect(within(question).getByText(/Die Werte bei 2 Items gehen verloren\./)).toBeTruthy();
+  });
+
+  it('takes the property out of the counts once its deletion is confirmed, and keeps the number in the question meanwhile', async () => {
+    const user = userEvent.setup();
+    renderWith(
+      <Properties readOnlyReason={null} />,
+      routes(all, {
+        'POST /api/v1/work-items/counts': (body) => ({ body: { data: Object.fromEntries(Object.keys((body as { filters: object }).filters).map((key) => [key, 2])) } }),
+        'DELETE /api/v1/properties/pr_effort': () => ({ body: { affected_items: 2 } }),
+      }),
+    );
+    // the deletion waits until the test lets it go
+    let release = () => {};
+    const deleting = new Promise<void>((resolve) => (release = resolve));
+    const inner = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      if (init?.method === 'DELETE') await deleting;
+      return inner(input, init);
+    };
+    onTestFinished(() => {
+      globalThis.fetch = inner;
+    });
+
+    await within(await rowOf('Aufwand (h)')).findByText('2 Items');
+    await user.click(within(await rowOf('Aufwand (h)')).getByRole('button', { name: 'Property „Aufwand (h)“ löschen' }));
+    const question = await screen.findByRole('alertdialog');
+    await user.click(within(question).getByRole('button', { name: 'Property löschen' }));
+
+    // the next count no longer names it: once it is gone the server would refuse a filter on it
+    await waitFor(() => expect(Object.keys((countCalls().at(-1)!.body as { filters: object }).filters)).not.toContain('effort'));
+    expect(Object.values((countCalls().at(-1)!.body as { filters: Record<string, { conditions: { field: string }[] }> }).filters).flatMap((filter) => filter.conditions.map((condition) => condition.field))).not.toContain('property:effort');
+    // while the deletion runs, the question keeps its number and the other rows theirs, no skeleton
+    expect(within(question).getByText(/Die Werte bei 2 Items gehen verloren\./)).toBeTruthy();
+    // (behind the modal question the page is hidden from the roles)
+    expect(within(screen.getByRole('heading', { name: 'Kunde', hidden: true }).closest('li')!).getByText('2 Items')).toBeTruthy();
+    await act(async () => release());
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+  });
+
+  it('does not name a number in the question while there is none', async () => {
+    const user = userEvent.setup();
+    renderWith(<Properties readOnlyReason={null} />, routes(all, { 'POST /api/v1/work-items/counts': unavailable }));
+
+    await user.click(within(await rowOf('Aufwand (h)')).getByRole('button', { name: 'Property „Aufwand (h)“ löschen' }));
+    expect(within(await screen.findByRole('alertdialog')).queryByText(/gehen? verloren/)).toBeNull();
   });
 });

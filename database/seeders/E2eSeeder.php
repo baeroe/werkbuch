@@ -9,6 +9,7 @@ use App\Actions\Projects\PurgeProject;
 use App\Actions\Properties\DeleteProperty;
 use App\Actions\RelationTypes\DeleteRelationType;
 use App\Actions\Resolutions\DeleteResolution;
+use App\Actions\Views\DeleteView;
 use App\Actions\Workflows\DeleteWorkflow;
 use App\Actions\WorkItemTypes\DeleteWorkItemType;
 use App\Enums\AccountType;
@@ -21,6 +22,7 @@ use App\Models\Property;
 use App\Models\RelationType;
 use App\Models\Resolution;
 use App\Models\User;
+use App\Models\View;
 use App\Models\Workflow;
 use App\Models\WorkItemType;
 use App\Support\Actor;
@@ -31,8 +33,8 @@ use RuntimeException;
 
 /**
  * The demo data plus the accounts of the Playwright tests (e2e/), set back to their start state on every run, without
- * the open invitations, the projects and the catalog entries earlier runs left behind. The organization speaks English
- * here (the specs read the English texts); the demo data alone keep German. Never for production.
+ * the open invitations, the projects, the views and the catalog entries earlier runs left behind. The organization
+ * speaks English here (the specs read the English texts); the demo data alone keep German. Never for production.
  */
 class E2eSeeder extends Seeder
 {
@@ -45,7 +47,7 @@ class E2eSeeder extends Seeder
 
     public const VARIANTS = ['desktop-light', 'desktop-dark', 'phone-light', 'phone-dark'];
 
-    /** How the names of the projects and of the catalog entries the specs create begin; every run starts without them. */
+    /** How the names of the projects, views and catalog entries the specs create begin; every run starts without them. */
     public const PROJECT_PREFIX = 'E2E ';
 
     /**
@@ -81,6 +83,9 @@ class E2eSeeder extends Seeder
             $project->forceFill(['deleting_at' => $project->deleting_at ?? Carbon::now()])->save();
             PurgeProject::run(Actor::automation('e2e_reset'), $project);
         });
+
+        // the views earlier runs saved (all named "E2E …"), with the favorites that point to them
+        View::query()->where('name', 'like', self::PROJECT_PREFIX.'%')->each(fn (View $view) => DeleteView::run(Actor::automation('e2e_reset'), $view));
 
         $this->removeCatalogEntries();
 

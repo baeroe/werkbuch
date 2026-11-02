@@ -522,8 +522,50 @@ describe('CreateProjectDialog', () => {
     });
 
     await waitFor(() => expect(toastTitles()).toContain('Projekt nicht angelegt'));
-    expect(api!.calls.filter((call) => call.method === 'POST')).toHaveLength(1);
+    expect(api!.calls.filter((call) => call.method === 'POST' && call.url === '/api/v1/projects')).toHaveLength(1);
     act(() => runToastAction(toastNamed('Projekt nicht angelegt').id));
-    await waitFor(() => expect(api!.calls.filter((call) => call.method === 'POST')).toHaveLength(2));
+    await waitFor(() => expect(api!.calls.filter((call) => call.method === 'POST' && call.url === '/api/v1/projects')).toHaveLength(2));
+  });
+});
+
+/* ------------------------------------------------------------------- open items */
+
+describe('open items on the cards', () => {
+  const openGroups = { group_by: 'project', total: 5, groups: [{ key: 'p_web', count: 4 }, { key: 'p_old', count: 1 }] };
+  const groupCalls = () => api!.calls.filter((call) => call.method === 'POST' && call.url === '/api/v1/work-items/groups');
+
+  it('counts the open items of every card with one call', async () => {
+    renderScreen({ 'POST /api/v1/work-items/groups': () => ({ body: { data: openGroups } }) });
+
+    expect(await within(await screen.findByRole('list', { name: 'Alle Projekte' })).findByText('4 offen')).toBeTruthy();
+    // a project without an open item still has its count
+    expect(within(card('Kunden-App')).getByText('0 offen')).toBeTruthy();
+    expect(groupCalls()).toHaveLength(1);
+    expect(groupCalls()[0]!.body).toEqual({
+      filter: {
+        version: 1,
+        conditions: [
+          { field: 'state_category', op: 'in', value: ['backlog', 'unstarted', 'started'] },
+          { field: 'archived', op: 'is', value: false },
+        ],
+      },
+      group_by: 'project',
+      include_archived: true,
+    });
+  });
+
+  it('shows a skeleton while the count loads', async () => {
+    renderScreen({ 'POST /api/v1/work-items/groups': () => ({ body: { data: openGroups } }) }, { hold: 'work-items/groups' });
+
+    await screen.findByRole('list', { name: 'Alle Projekte' });
+    expect(within(card('Website-Relaunch')).getByRole('status')).toBeTruthy();
+    expect(within(card('Website-Relaunch')).queryByText(/offen$/)).toBeNull();
+  });
+
+  it('says when the count could not be loaded', async () => {
+    renderScreen({ 'POST /api/v1/work-items/groups': unavailable });
+
+    await screen.findByRole('list', { name: 'Alle Projekte' });
+    await waitFor(() => expect(within(card('Website-Relaunch')).getByText('Anzahl nicht geladen')).toBeTruthy());
   });
 });

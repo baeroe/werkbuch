@@ -7,7 +7,7 @@ import { PRIORITIES, PriorityIcon, priorityName } from '@/components/ui/Priority
 import { useUpdateWorkItem } from '@/hooks/workItems';
 import { t } from '@/lib/i18n';
 import { SHORTCUTS } from '@/lib/shortcuts/catalog';
-import type { Priority, WorkItem } from '@/types';
+import type { ListedItem, Priority } from '@/types';
 import { useEditReason } from './itemData';
 import { Picker, type PickerExtras, type PickerOption } from './Picker';
 
@@ -15,7 +15,7 @@ import { Picker, type PickerExtras, type PickerOption } from './Picker';
 export const PRIORITY_OPTIONS = (): PickerOption[] =>
   PRIORITIES.map((priority) => ({ value: priority, label: priorityName(priority), icon: <PriorityIcon priority={priority} /> }));
 
-type PriorityPickerProps = PickerExtras & { item: WorkItem };
+type PriorityPickerProps = PickerExtras & { item: ListedItem };
 
 export function PriorityPicker({ item, look = 'field', shortcut, ...extras }: PriorityPickerProps) {
   const update = useUpdateWorkItem();

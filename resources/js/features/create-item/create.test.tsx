@@ -18,7 +18,7 @@ import { canUndo, undoLatest } from '@/lib/undo';
 import { CreateHost } from '@/shell/CreateHost';
 import { useUiStore, type CreateDefaults } from '@/store/ui';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
-import { agency, ida, labels, lene, list, makeWorkItem, mara, organization, project, properties, standard, types, web30, web47, web48 } from '@/test/fixtures';
+import { agency, ida, labels, lene, list, makeWorkItem, mara, organization, project, properties, queryItems, standard, types, web30, web47, web48 } from '@/test/fixtures';
 import type { Project, Property, User, WorkItem } from '@/types';
 import { CreateItemDialog } from './CreateItemDialog';
 
@@ -94,7 +94,8 @@ let api: MockApi | undefined;
 let client: QueryClient;
 
 function renderWith(node: ReactNode, routes: Record<string, MockRoute> = {}) {
-  const fails = (path: string, body: () => { body: unknown }) => () => (failing.has(path) ? problem(503, 'service_unavailable', 'Der Server ist gerade nicht erreichbar.') : body());
+  const fails = (path: string, answer: (body: unknown) => { body: unknown }) => (body: unknown) =>
+    failing.has(path) ? problem(503, 'service_unavailable', 'Der Server ist gerade nicht erreichbar.') : answer(body);
   api = mockApi({
     'GET /api/v1/organization': () => ({ body: { data: organization } }),
     'GET /api/v1/projects': fails('projects', () => ({ body: list(projects) })),
@@ -105,7 +106,7 @@ function renderWith(node: ReactNode, routes: Record<string, MockRoute> = {}) {
     'GET /api/v1/users': () => ({ body: list([mara, ida, lene]) }),
     'GET /api/v1/projects/p_web/members': () => ({ body: list([{ project_id: 'p_web', user_id: 'u_ida', role: 'admin' }, { project_id: 'p_web', user_id: 'u_lene', role: 'member' }]) }),
     'GET /api/v1/projects/p_app/members': () => ({ body: list([{ project_id: 'p_app', user_id: 'u_lene', role: 'member' }]) }),
-    'GET /api/v1/work-items': fails('items', () => ({ body: list([web30, web47, web48]) })),
+    'POST /api/v1/work-items/query': fails('items', (body) => ({ body: list(queryItems([web30, web47, web48], body)) })),
     'GET /api/v1/work-items/wi_web_30': () => ({ body: { data: { ...web30, children: [], relations: [], type: wishTypes.find((type) => type.id === web30.type_id), workflow: standard } } }),
     'POST /api/v1/work-items': (body, url) => answerCreate(body, url),
     ...routes,
@@ -182,6 +183,45 @@ afterEach(() => {
 /* ------------------------------------------------------------------------- tests */
 
 describe('CreateItemDialog', () => {
+  it('keeps the dialog when the project of the draft disappears and says so', async () => {
+    const user = userEvent.setup();
+    const { dialog, title } = await openDialog({ project_id: 'p_app', type_id: 't_wish' });
+    await user.type(title, 'Export als CSV');
+
+    // the project is archived while the dialog is open
+    projects = [web, { ...app, archived_at: '2026-10-01T00:00:00Z' }, ops];
+    await act(() => client.invalidateQueries());
+    const project = await within(dialog).findByRole('combobox', { name: /^Projekt/ });
+    await waitFor(() => expect(project.textContent).toContain('Website-Relaunch'));
+    expect(within(dialog).getByText('„Kunden-App“ steht nicht mehr zur Wahl. Prüfe Projekt und Typ.')).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(project));
+    // the title stays, the type falls back to the default of the project
+    expect((title as HTMLInputElement).value).toBe('Export als CSV');
+    expect(within(dialog).getByRole('combobox', { name: /^Typ/ }).textContent).toContain('Task');
+  });
+
+  it('keeps the dialog when the type of the draft is switched off', async () => {
+    const user = userEvent.setup();
+    const { dialog, title } = await openDialog({ project_id: 'p_app', type_id: 't_wish' });
+    await user.type(title, 'Export als CSV');
+
+    projects = [web, { ...app, enabled_type_ids: ['t_task', 't_bug', 't_epic'] }, ops];
+    await act(() => client.invalidateQueries());
+    await waitFor(() => expect(within(dialog).getByRole('combobox', { name: /^Typ/ }).textContent).toContain('Task'));
+    expect(within(dialog).getByText(/steht nicht mehr zur Wahl/).textContent).toContain('Kundenwunsch');
+    expect(within(dialog).getByRole('combobox', { name: /^Projekt/ }).textContent).toContain('Kunden-App');
+  });
+
+  it('says so and sends nothing when no project takes items any more', async () => {
+    const { dialog, title } = await openDialog({ project_id: 'p_web' });
+    await waitFor(() => expect(document.activeElement).toBe(title));
+    projects = [ops];
+    await act(() => client.invalidateQueries());
+    expect(await within(dialog).findByText('Hier kannst du kein Item anlegen')).toBeTruthy();
+    await modEnter();
+    expect(posts()).toEqual([]);
+  });
+
   it('starts in the title', async () => {
     const { dialog, title } = await openDialog(null);
     await waitFor(() => expect(document.activeElement).toBe(title));
@@ -626,7 +666,7 @@ describe('CreateItemDialog', () => {
     const { dialog, title } = await openDialog({ project_id: 'p_web', type_id: 't_task', parent_id: 'wi_web_30' });
     const parent = await within(dialog).findByRole('combobox', { name: 'Eltern-Item: WEB-30 Relaunch Phase 1' });
     // the parent it was opened with is its detail; the items of the project load only when the list opens (A153)
-    const projectLists = () => api!.calls.filter((call) => call.method === 'GET' && call.url.startsWith('/api/v1/work-items?'));
+    const projectLists = () => api!.calls.filter((call) => call.method === 'POST' && call.url === '/api/v1/work-items/query');
     expect(projectLists()).toEqual([]);
     await user.click(parent);
     await waitFor(() => expect(projectLists()).toHaveLength(1));
@@ -715,7 +755,7 @@ describe('CreateItemDialog', () => {
     renderWith(<CreateItemDialog open defaults={null} onOpenChange={vi.fn()} />);
     const dialog = await screen.findByRole('dialog', { name: 'Neues Item' });
     expect(await within(dialog).findByText('Hier kannst du kein Item anlegen')).toBeTruthy();
-    expect(within(dialog).getByText('In keinem Projekt hast du die Rolle Member oder Admin. Bitte eine Admin des Projekts, dich aufzunehmen.')).toBeTruthy();
+    expect(within(dialog).getByText('Du kannst gerade in keinem Projekt Items anlegen.')).toBeTruthy();
     expect(within(dialog).getByRole('button', { name: /^Anlegen/ }).getAttribute('aria-disabled')).toBe('true');
   });
 });
@@ -729,6 +769,34 @@ describe('CreateHost', () => {
     expect((await within(dialog).findByRole('combobox', { name: /^Projekt/ })).textContent).toContain('Kunden-App');
     act(() => useUiStore.getState().closeCreate());
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('gives the focus back to what had it before the palette that asked for the dialog', async () => {
+    const user = userEvent.setup();
+    renderWith(
+      <>
+        <button type="button">Liste</button>
+        <CreateHost />
+      </>,
+    );
+    const trigger = screen.getByRole('button', { name: 'Liste' });
+    act(() => trigger.focus());
+    // the palette takes the focus; "Neues Item" there opens the dialog, then the palette goes
+    act(() => useUiStore.getState().openPalette());
+    const field = document.createElement('input');
+    document.body.append(field);
+    act(() => field.focus());
+    act(() => {
+      useUiStore.getState().openCreate();
+      useUiStore.getState().setPaletteOpen(false);
+    });
+    field.remove();
+
+    const dialog = await screen.findByRole('dialog', { name: 'Neues Item' });
+    await waitFor(() => expect(document.activeElement).toBe(within(dialog).getByRole('textbox', { name: /^Titel/ })));
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(document.activeElement).toBe(trigger);
   });
 });
 
