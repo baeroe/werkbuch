@@ -50,6 +50,8 @@ use App\Actions\RelationTypes\SaveRelationType;
 use App\Actions\Resolutions\DeleteResolution;
 use App\Actions\Resolutions\ListResolutions;
 use App\Actions\Resolutions\SaveResolution;
+use App\Actions\RichText\ListMentionables;
+use App\Actions\RichText\ResolveReferences;
 use App\Actions\Search\QuerySearch;
 use App\Actions\Tokens\CreateToken;
 use App\Actions\Tokens\ListTokens;
@@ -627,6 +629,18 @@ return [
     'QuerySearch' => [
         'action' => QuerySearch::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => QuerySearch::run($a, ['q' => 'Matrix']),
+        'allowed' => $everyone,
+    ],
+    'ListMentionables' => [
+        'action' => ListMentionables::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListMentionables::run($a, ['project' => $w->project($column)->identifier]),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    // an item the account does not see is left out, never a 404 (A230)
+    'ResolveReferences' => [
+        'action' => ResolveReferences::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ResolveReferences::run($a, ['items' => [$w->item($column)->id]]),
         'allowed' => $everyone,
     ],
     'ListViews' => [

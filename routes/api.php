@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\PropertiesController;
 use App\Http\Controllers\Api\RelationsController;
 use App\Http\Controllers\Api\RelationTypesController;
 use App\Http\Controllers\Api\ResolutionsController;
+use App\Http\Controllers\Api\RichTextController;
 use App\Http\Controllers\Api\SearchController;
 use App\Http\Controllers\Api\StateUsageController;
 use App\Http\Controllers\Api\SubscribersController;
@@ -159,6 +160,10 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
     Route::delete('views/{view}', [ViewsController::class, 'destroy']);
 
     Route::get('search', SearchController::class)->name('api.search');
+
+    // what the editor of rich text reads: who can be mentioned, the items behind references
+    Route::get('mentions', [RichTextController::class, 'mentions']);
+    Route::get('references', [RichTextController::class, 'references']);
 
     // multipart, the file under `file`; at most 60 uploads per minute and account
     Route::post('attachments', [AttachmentsController::class, 'store'])->middleware('throttle:attachments');

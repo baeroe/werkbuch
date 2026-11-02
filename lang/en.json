@@ -162,6 +162,7 @@
     "field.is_default.required": "One of the workflows must be the default workflow.",
     "field.is_epic.has_children": "Items of this type have child items. Only epics can have child items.",
     "field.is_epic.has_parent": "Items of this type have a parent item. Epics have no parent item.",
+    "field.items.invalid": "From 1 to :max item IDs (ULIDs), separated by commas.",
     "field.key.core": "The key belongs to a core field.",
     "field.key.format": "The key consists of lowercase letters, digits and _ and starts with a letter.",
     "field.key.immutable": "The key can no longer be changed.",
