@@ -6,10 +6,9 @@ use App\Access\Authorize;
 use App\Events\EventRecorder;
 use App\Events\EventType;
 use App\Exceptions\Problem;
-use App\Models\Attachment;
 use App\Models\Comment;
 use App\Support\Actor;
-use App\Support\AttachmentFiles;
+use App\Support\AttachmentTexts;
 use App\Support\ItemLock;
 use Illuminate\Support\Facades\DB;
 use Lorisleiva\Actions\Concerns\AsAction;
@@ -18,7 +17,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * Deletes a comment (`DELETE /api/v1/comments/{comment}`, spec 4.10): its author, the admins of the project and org
  * admins (A241), not in an archived project or item (A240). Under the item's lock the comment is read afresh: one
  * deleted meanwhile is a 404 without a second event. Its reactions go with it (cascade), its pictures and files as well,
- * their files only after the commit (AttachmentFiles, K12). `comment.deleted` keeps no text (A228), only which comment
+ * their files only after the commit (AttachmentFiles, K12); a picture another saved text of the project still names
+ * (copied, A233) becomes that text's instead (AttachmentTexts::handOverOrRemove, Ruling T13-I1). `comment.deleted` keeps no text (A228), only which comment
  * and whose it was.
  */
 final class DeleteComment
@@ -37,10 +37,7 @@ final class DeleteComment
             $fresh = Comment::query()->lockForUpdate()->find($comment->id) ?? throw Problem::notFound();
             AddComment::refuseArchived($locked);
 
-            $attachments = $fresh->attachments()->lockForUpdate()->get();
-            AttachmentFiles::removeAfterCommit($attachments);
-            // the query builder, never $attachment->delete(): medialibrary would remove the files before the commit (K12)
-            Attachment::query()->whereKey($attachments->modelKeys())->delete();
+            AttachmentTexts::handOverOrRemove($fresh->attachments()->orderBy('id')->lockForUpdate()->get(), $locked->project_id, [], [$fresh->id]);
             $fresh->delete();
 
             EventRecorder::record(EventType::CommentDeleted, $actor, $locked, $locked->project, null, [

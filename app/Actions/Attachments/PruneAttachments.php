@@ -2,16 +2,11 @@
 
 namespace App\Actions\Attachments;
 
-use App\Domain\Properties\FieldType;
 use App\Models\Attachment;
-use App\Models\Comment;
 use App\Models\Project;
-use App\Models\Property;
-use App\Models\WorkItem;
-use App\Models\WorkItemValue;
-use App\RichText\Document;
 use App\Support\Actor;
 use App\Support\AttachmentFiles;
+use App\Support\AttachmentTexts;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
@@ -39,9 +34,6 @@ use Spatie\MediaLibrary\MediaCollections\Models\Media;
 final class PruneAttachments
 {
     use AsAction;
-
-    /** The texts read at a time while collecting the attachments they name. */
-    private const READ_BLOCK = 500;
 
     /**
      * @return list<array{id: string, project: string, filename: string, size: int}> what went (would go in a dry run),
@@ -103,7 +95,7 @@ final class PruneAttachments
     {
         $rows = self::candidates($before)->where('project_id', $projectId)->orderBy('id')
             ->when(! $dryRun, fn (Builder $query) => $query->lockForUpdate())->get();
-        $named = self::named($projectId);
+        $named = AttachmentTexts::namers($projectId);
         $unnamed = $rows->reject(fn (Attachment $attachment) => isset($named[$attachment->id]))->values();
 
         if (! $dryRun && $unnamed->isNotEmpty()) {
@@ -116,32 +108,6 @@ final class PruneAttachments
         return array_values($unnamed->map(fn (Attachment $attachment) => [
             'id' => $attachment->id, 'project' => $project, 'filename' => $attachment->filename, 'size' => $attachment->size,
         ])->all());
-    }
-
-    /**
-     * The attachments the current texts of the project name, as a set: item descriptions, rich text values, comments.
-     *
-     * @return array<string, true>
-     */
-    private static function named(string $projectId): array
-    {
-        $named = [];
-        $collect = function (?array $json) use (&$named): void {
-            foreach ($json === null ? [] : Document::fromJson($json)->attachmentIds() as $id) {
-                $named[$id] = true;
-            }
-        };
-        $items = WorkItem::query()->where('project_id', $projectId)->select('id');
-
-        WorkItem::query()->where('project_id', $projectId)->whereNotNull('description')->select(['id', 'description'])
-            ->lazyById(self::READ_BLOCK)->each(fn (WorkItem $item) => $collect($item->description));
-        WorkItemValue::query()->whereIn('work_item_id', $items)
-            ->whereIn('property_id', Property::query()->where('field_type', FieldType::RichText)->select('id'))
-            ->select(['id', 'value_json'])->lazyById(self::READ_BLOCK)->each(fn (WorkItemValue $value) => $collect($value->value_json));
-        Comment::query()->whereIn('work_item_id', $items)->select(['id', 'body'])
-            ->lazyById(self::READ_BLOCK)->each(fn (Comment $comment) => $collect($comment->body));
-
-        return $named;
     }
 
     /**

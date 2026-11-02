@@ -3,6 +3,7 @@
 use App\Access\ProjectRole;
 use App\Actions\Comments\AddComment;
 use App\Actions\Comments\DeleteComment;
+use App\Actions\WorkItems\UpdateWorkItem;
 use App\Events\EventType;
 use App\Models\Attachment;
 use App\Models\Comment;
@@ -82,6 +83,26 @@ it('removes the comment\'s attachments after the commit', function () use ($worl
         ->and(Storage::disk('local')->exists($stored))->toBeFalse()
         ->and(Attachment::query()->pluck('id')->all())->toBe([$other->id])
         ->and(Media::query()->count())->toBe(1);
+});
+
+it('hands a picture the description or another comment still shows over to that text', function () use ($world, $delete) {
+    $w = $world();
+    $png = (string) base64_decode(explode(',', imageDataUrl())[1]);
+    $upload = fn (string $name) => Attachment::factory()->stored($png, 'image/png', $name)->create(['project_id' => $w['web']->id, 'uploaded_by' => $w['lene']->id]);
+    [$described, $answered] = [$upload('beschrieben.png'), $upload('beantwortet.png')];
+    $comment = AddComment::run(actor($w['lene']), $w['item'], ['body' => "![a](attachment:{$described->id})\n\n![b](attachment:{$answered->id})"]);
+    UpdateWorkItem::run(actor($w['mara']), $w['item'], ['description' => "![a](attachment:{$described->id})"]);
+    $answer = AddComment::run(actor($w['jonas']), $w['item'], ['body' => "![b](attachment:{$answered->id})"]);
+    $files = array_map(fn (Attachment $attachment) => (string) $attachment->getFirstMedia('file')?->getPathRelativeToRoot(), [$described, $answered]);
+
+    $delete($w['lene'], $comment);
+
+    expect(Attachment::query()->orderBy('filename')->get(['filename', 'attachable_type', 'attachable_id'])->toArray())->toBe([
+        ['filename' => 'beantwortet.png', 'attachable_type' => 'comment', 'attachable_id' => $answer->id],
+        ['filename' => 'beschrieben.png', 'attachable_type' => 'work_item', 'attachable_id' => $w['item']->id],
+    ])
+        ->and(array_map(fn (string $file) => Storage::disk('local')->exists($file), $files))->toBe([true, true])
+        ->and(Media::query()->count())->toBe(2);
 });
 
 it('keeps comment and files when the transaction rolls back', function () use ($world, $delete) {

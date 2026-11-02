@@ -11,7 +11,7 @@ use App\Models\Comment;
 use App\Models\WorkItem;
 use App\Models\WorkItemRelation;
 use App\Support\Actor;
-use App\Support\AttachmentFiles;
+use App\Support\AttachmentTexts;
 use App\Support\ItemLock;
 use App\Support\RelationSnapshot;
 use Illuminate\Database\Eloquent\Collection;
@@ -25,7 +25,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * 4.14) and a `work_item.relation_removed` (`changes.relation.old` as RelationSnapshot reads it from that end, also in
  * another project). Values, labels, relations, subscriptions, comments and their reactions go with the item (cascade);
  * the attachments of the item and of its comments (pictures of their texts, files of the file list) go with their
- * files after the commit (AttachmentFiles, K12). Its own events stay, with a last `work_item.deleted` naming its key
+ * files after the commit (AttachmentFiles, K12), except those another saved text of the project still names (copied,
+ * A233): they become that text's (AttachmentTexts::handOverOrRemove, Ruling T13-I1). Its own events stay, with a last `work_item.deleted` naming its key
  * and title.
  *
  * The locks of P1 (ItemLock::take), then the children `for update` and the relations of the item `for update` (each
@@ -89,22 +90,21 @@ final class DeleteWorkItem
     /**
      * The attachments the item or one of its comments owns, `for update`, each owner kind through the index of the owner
      * (two queries instead of `or`, so the lock covers only these rows; no comment comes meanwhile, AddComment waits for
-     * the item): their rows go now, through the query builder (the owner is polymorphic, no cascade takes them), their
-     * files after the commit.
+     * the item): those another text still names go over to it, the rest go now, their rows through the query builder
+     * (the owner is polymorphic, no cascade takes them), their files after the commit. The comments of the item go with
+     * it, so their texts do not count.
      */
     private static function removeAttachments(WorkItem $locked): void
     {
         $lock = fn (string $type, array $ids) => $ids === [] ? new Collection
             : Attachment::query()->where('attachable_type', $type)->whereIn('attachable_id', $ids)->orderBy('id')->lockForUpdate()->get();
+        /** @var list<string> $comments */
         $comments = Comment::query()->where('work_item_id', $locked->id)->orderBy('id')->pluck('id')->all();
         $attachments = $lock($locked->getMorphClass(), [$locked->id])->merge($lock((new Comment)->getMorphClass(), $comments));
 
-        if ($attachments->isEmpty()) {
-            return;
+        if ($attachments->isNotEmpty()) {
+            AttachmentTexts::handOverOrRemove($attachments, $locked->project_id, [$locked->id], $comments);
         }
-
-        AttachmentFiles::removeAfterCommit($attachments);
-        Attachment::query()->whereKey($attachments->modelKeys())->delete();
     }
 
     /**
