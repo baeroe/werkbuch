@@ -260,9 +260,16 @@ export function useListData(state: ViewState, scope: Condition[], _options: { pr
     if (!current || served === undefined) throw new ListGoneError();
     const asked = argsKey;
     const lists = served.filter((group) => group.count > 0).flatMap((group) => (pages[group.key] ? [pages[group.key]!] : []));
-    const loaded = await Promise.all(lists.map((list) => list.loadAll()));
-    // the list changed or went away meanwhile: its items are of no use
-    if (!mounted.current || latestKey.current !== asked) throw new ListGoneError();
+    // the list changed or went away meanwhile: its items are of no use, and its failure is no one's business (no toast on
+    // the next screen, T14-R1)
+    const gone = () => !mounted.current || latestKey.current !== asked;
+    let loaded: ListedItem[][];
+    try {
+      loaded = await Promise.all(lists.map((list) => list.loadAll()));
+    } catch (error) {
+      throw gone() ? new ListGoneError() : error;
+    }
+    if (gone()) throw new ListGoneError();
     const seen = new Set<string>();
     return loaded.flat().filter((item) => !seen.has(item.id) && seen.add(item.id));
   }, [argsKey, served, pages, current]);

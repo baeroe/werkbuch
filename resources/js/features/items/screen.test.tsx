@@ -645,6 +645,37 @@ describe('the item list screen', () => {
     expect(currentToasts()).toEqual([]);
   });
 
+  it('says nothing on the next screen when a page of ⌘A fails after the list went away', async () => {
+    pageSize = 1;
+    const { unmount } = renderScreen();
+    await screen.findByText('Kontaktformular sendet doppelt');
+    // the further pages wait, then fail
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let held = false;
+    const inner = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      if (typeof init?.body === 'string' && (JSON.parse(init.body) as Body).cursor !== undefined) {
+        held = true;
+        await gate;
+        return new Response(JSON.stringify({ reason: 'unavailable' }), { status: 503, headers: { 'Content-Type': 'application/problem+json' } });
+      }
+      return inner(input, init);
+    };
+    try {
+      act(() => rowOf(1)!.focus());
+      press('a', { ctrlKey: true });
+      await waitFor(() => expect(held).toBe(true));
+
+      unmount();
+      await act(async () => release());
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(currentToasts()).toEqual([]);
+    } finally {
+      globalThis.fetch = inner;
+    }
+  });
+
   it('drops ⌘A of a list whose filter changed meanwhile', async () => {
     renderScreen();
     await screen.findByText('Kontaktformular sendet doppelt');
