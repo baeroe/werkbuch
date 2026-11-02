@@ -29,8 +29,10 @@ final class Document
     /**
      * Reads a document the way the editor's schema does: missing attributes take their default, unknown attributes
      * are dropped, a link to anything but Schema::LINK_PROTOCOLS loses its mark and keeps its text, an odd value of a
-     * lenient attribute (Schema::LENIENT: list start, cell spans and widths, code language) takes its default.
-     * Everything else that does not fit is refused.
+     * lenient attribute (Schema::LENIENT: list start, cell spans and widths, code language) takes its default. Like
+     * ProseMirror it orders the marks of a text (Schema::MARK_ORDER), keeps the first of a repeated mark and joins
+     * neighbouring texts with the same marks, so the stored JSON is what `editor.getJSON()` gives for it. Everything
+     * else that does not fit is refused, also children against the editor's content expressions (Schema::CONTENT).
      *
      * @param  array<mixed>  $json
      *
@@ -123,7 +125,10 @@ final class Document
         }
         $content = self::list($node['content'] ?? []);
         if ($content !== []) {
-            $read['content'] = array_map(fn (mixed $child) => self::child($child, $type, $depth + 1), $content);
+            $read['content'] = self::joined(array_map(fn (mixed $child) => self::child($child, $type, $depth + 1), $content));
+        }
+        if (! self::fitsContent($type, array_column($read['content'] ?? [], 'type'))) {
+            throw new InvalidDocument('shape');
         }
         if ($type !== 'text') {
             return $read;
@@ -188,8 +193,59 @@ final class Document
                 $read[] = ['type' => $type, 'attrs' => $attrs];
             }
         }
+        // the first of a repeated mark, in the editor's order
+        $first = [];
+        foreach ($read as $mark) {
+            $first[$mark['type']] ??= $mark;
+        }
 
-        return $read;
+        return array_values(array_filter(array_map(fn (string $type) => $first[$type] ?? null, Schema::MARK_ORDER)));
+    }
+
+    /**
+     * Neighbouring texts with the same marks as one text, as ProseMirror's `Fragment.fromArray` joins them.
+     *
+     * @param  list<array<string, mixed>>  $children
+     * @return list<array<string, mixed>>
+     */
+    private static function joined(array $children): array
+    {
+        $joined = [];
+        foreach ($children as $child) {
+            $last = array_key_last($joined);
+            if ($last !== null && $child['type'] === 'text' && $joined[$last]['type'] === 'text' && ($child['marks'] ?? []) === ($joined[$last]['marks'] ?? [])) {
+                $joined[$last]['text'] .= $child['text'];
+
+                continue;
+            }
+            $joined[] = $child;
+        }
+
+        return $joined;
+    }
+
+    /**
+     * Whether the children's types fit the node's content expression (Schema::CONTENT), read as a regular expression
+     * over the type names.
+     *
+     * @param  list<mixed>  $children
+     */
+    private static function fitsContent(string $type, array $children): bool
+    {
+        if (! isset(Schema::CONTENT[$type])) {
+            return true;
+        }
+        preg_match_all('/(\([^)]*\)|\w+)([*+]?)/', Schema::CONTENT[$type], $terms, PREG_SET_ORDER);
+        $pattern = '';
+        foreach ($terms as [, $term, $repeat]) {
+            $names = array_merge(...array_map(
+                fn (string $name) => $name === 'block' ? Schema::BLOCKS : [$name],
+                preg_split('/[\s()|]+/', $term, -1, PREG_SPLIT_NO_EMPTY) ?: [],
+            ));
+            $pattern .= '(?:(?:'.implode('|', $names).') )'.$repeat;
+        }
+
+        return preg_match("/\\A{$pattern}\\z/", implode('', array_map(fn (mixed $child) => "{$child} ", $children))) === 1;
     }
 
     /**

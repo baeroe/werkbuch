@@ -41,6 +41,8 @@ use SplStack;
  *   (a tight list), a blank line between the blocks of an item;
  * - `**bold**`, `*italic*`, `~~strike~~`, `` `code` ``, `[text](href)` (`<href>` when the text is the address);
  * - code blocks fenced with backticks and the language; a hard break as two spaces at the end of the line;
+ * - an item that starts with another block than a paragraph (after the empty one Schema::CONTENT puts first) has the
+ *   block on the marker's line (`- - a`, `- # Titel`), a rule there as `***` (`- ---` would be a rule of its own);
  * - `>` before each line of a quote, alone on a blank one;
  * - tables with the first row as the header and `| --- |` below it (Markdown has no table without a header row);
  * - `~` in text escaped, so it never becomes a strike.
@@ -51,6 +53,8 @@ use SplStack;
  * - empty paragraphs (Enter twice in the editor);
  * - in a quote, the blanks of a line that has nothing else and a hard break that starts a paragraph (also inside a
  *   code block in the quote);
+ * - a task item whose first paragraph is empty and followed by a block: GitHub's checkbox needs a paragraph, so the
+ *   block becomes the text of the item's paragraph;
  * - a fence's info string that is no language (Schema::LANGUAGE_PATTERN, A150): the code block keeps no language.
  */
 final class Markdown
@@ -211,7 +215,11 @@ final class Markdown
         return $first instanceof Element && $first->localName === 'input' && $first->getAttribute('type') === 'checkbox' ? $first : null;
     }
 
-    /** Puts the text and inline elements between the blocks of a container into paragraphs; an empty item or cell gets one. */
+    /**
+     * Puts the text and inline elements between the blocks of a container into paragraphs; an empty quote or cell gets
+     * one, and an item that starts with another block an empty one first (Schema::CONTENT: `paragraph block*`), as
+     * ProseMirror's DOMParser fills it in.
+     */
     private static function paragraphs(HTMLDocument $dom, Element $container): void
     {
         $run = [];
@@ -224,8 +232,9 @@ final class Markdown
             }
         }
         self::paragraph($dom, $container, $run, null);
-        if ($container->localName !== 'body' && $container->firstElementChild === null) {
-            $container->append($dom->createElement('p'));
+        $first = $container->firstElementChild;
+        if ($container->localName === 'li' ? $first?->localName !== 'p' : $container->localName !== 'body' && $first === null) {
+            $container->insertBefore($dom->createElement('p'), $first);
         }
     }
 
@@ -280,6 +289,10 @@ final class Markdown
                 // a nested list right below the line of its item; the item's other lines as far in as its marker
                 $value = (string) preg_replace('/\n{2,}(?=(?:[-*]|\d+[.)]) )/', "\n", trim($element->getValue()));
                 $value = (string) preg_replace('/\n(?!\n)/', "\n".str_repeat(' ', strlen($marker)), $value);
+                // a rule that starts the item (after its empty paragraph): `- ---` would be a rule of its own
+                if ($marker.$task === '- ' && preg_match('/\A---(?:\n|\z)/', $value) === 1) {
+                    $value = '***'.substr($value, 3);
+                }
                 $first = $element->getListItemLevel() > 0 && $element->getSiblingPosition() === 1;
 
                 return ($first ? "\n" : '').rtrim($marker.$task.$value, ' ')."\n";

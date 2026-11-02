@@ -409,6 +409,13 @@ describe('the schema of the editor', () => {
     expect(Object.keys(schema.marks).filter((name) => !marks.includes(name))).toEqual([]);
   });
 
+  it('orders marks as App\\RichText\\Schema::MARK_ORDER does, so the server stores what the editor writes', () => {
+    const editorRef = createRef<Editor | null>();
+    render(<RichTextEditor value={null} onChange={vi.fn()} preset="page" editorRef={editorRef} />);
+
+    expect(Object.keys(editorRef.current!.schema.marks)).toEqual(serverList('MARK_ORDER'));
+  });
+
   it('writes nothing but nodes and marks of the server from a document with every feature of a description', () => {
     const editorRef = createRef<Editor | null>();
     render(<RichTextEditor value={everyFeature} onChange={vi.fn()} preset="description" editorRef={editorRef} />);

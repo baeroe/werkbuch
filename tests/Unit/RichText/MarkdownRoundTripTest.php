@@ -115,6 +115,59 @@ it('comes back the same from its Markdown', function (array $json) use ($read) {
     )],
 ]);
 
+it('reads its own Markdown back to the same JSON', function () use ($read) {
+    // marks as the editor orders them, and one text node for each run of the same marks
+    $marked = fn (string $text, array ...$marks) => ['type' => 'text', 'marks' => $marks, 'text' => $text];
+    $link = ['type' => 'link', 'attrs' => F::link('https://example.com')];
+    $json = F::everyNode();
+    $json['content'][] = F::p($marked('fetter Link', $link, ['type' => 'bold']), F::text(' und '), $marked('beides', ['type' => 'bold'], ['type' => 'italic']));
+
+    expect($read(Document::fromJson($json)->toMarkdown())->toJson())->toBe($json)
+        ->and($read('***[fetter Link](https://example.com)*** a & b')->toJson())
+        ->toBe(F::doc(F::p($marked('fetter Link', $link, ['type' => 'bold'], ['type' => 'italic']), F::text(' a & b'))));
+});
+
+it('reads a list item that starts with a list, a heading or a code block', function (string $markdown, array $first) use ($read) {
+    // the editor's list item starts with a paragraph (`paragraph block*`), so an empty one goes first
+    $document = $read($markdown);
+    $item = $document->toJson()['content'][0]['content'][0];
+
+    expect($item['content'][0])->toBe(['type' => 'paragraph'])
+        ->and($item['content'][1])->toBe($first)
+        ->and($read($document->toMarkdown())->toJson())->toBe($document->toJson())
+        ->and($read($read($document->toMarkdown())->toMarkdown())->toMarkdown())->toBe($document->toMarkdown());
+})->with([
+    'a list' => ['- - a', ['type' => 'bulletList', 'content' => [['type' => 'listItem', 'content' => [F::p('a')]]]]],
+    'a numbered list in a numbered list' => ['1. 1. a', ['type' => 'orderedList', 'attrs' => ['start' => 1, 'type' => null], 'content' => [['type' => 'listItem', 'content' => [F::p('a')]]]]],
+    'a heading' => ['- # Titel', ['type' => 'heading', 'attrs' => ['level' => 1], 'content' => [F::text('Titel')]]],
+    'a code block' => ['- ```php
+  x
+  ```', ['type' => 'codeBlock', 'attrs' => ['language' => 'php'], 'content' => [F::text('x')]]],
+    'a rule' => ['- ***', ['type' => 'horizontalRule']],
+    'a quote' => ['- > Zitat', ['type' => 'blockquote', 'content' => [F::p('Zitat')]]],
+]);
+
+it('writes a rule that starts an item so that it stays in the item', function () use ($read) {
+    $item = fn (array ...$blocks) => ['type' => 'bulletList', 'content' => [['type' => 'listItem', 'content' => $blocks]]];
+    $rule = [['type' => 'paragraph'], ['type' => 'horizontalRule']];
+    $json = F::doc($item(...$rule), $item(F::p('a')), $item(...$rule));
+
+    // `- ---` would be a rule of its own, `* ***` too
+    expect(Document::fromJson($json)->toMarkdown())->toBe("- ***\n\n* a\n\n- ***")
+        ->and($read(Document::fromJson($json)->toMarkdown())->toJson())->toBe($json)
+        ->and(Document::fromJson(F::doc($item(F::p('a')), $item(...$rule)))->toMarkdown())->toBe("- a\n\n* ---");
+});
+
+it('loses the block of a task item whose first paragraph is empty to its text', function () use ($read) {
+    // GitHub's checkbox needs a paragraph to stand in
+    $json = F::doc(['type' => 'taskList', 'content' => [['type' => 'taskItem', 'attrs' => ['checked' => false], 'content' => [
+        F::p(), ['type' => 'bulletList', 'content' => [['type' => 'listItem', 'content' => [F::p('a')]]]],
+    ]]]]);
+
+    expect($read(Document::fromJson($json)->toMarkdown())->toJson())
+        ->toBe(F::doc(['type' => 'taskList', 'content' => [['type' => 'taskItem', 'attrs' => ['checked' => false], 'content' => [F::p('- a')]]]]));
+});
+
 it('writes the spaces at the edges of a strike outside of it', function () {
     $document = Document::fromJson(F::doc(
         F::p(F::text('a'), F::text(' weg ', 'strike'), F::text('b')),

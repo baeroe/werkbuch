@@ -17,6 +17,12 @@ final class Schema
 
     public const MARKS = ['bold', 'italic', 'strike', 'code', 'link'];
 
+    /**
+     * The marks of a text node in the order the editor writes them (`Mark.setFrom` sorts by rank in the schema): the
+     * link first (priority 1000), then StarterKit's order. Document sorts by it, so a text reads the same in both.
+     */
+    public const MARK_ORDER = ['link', 'bold', 'code', 'italic', 'strike'];
+
     public const HEADING_LEVELS = [1, 2, 3];
 
     /** The largest document, as compact JSON in UTF-8. */
@@ -44,6 +50,25 @@ final class Schema
         'tableRow' => ['tableCell', 'tableHeader'],
         'tableCell' => self::BLOCKS,
         'tableHeader' => self::BLOCKS,
+    ];
+
+    /**
+     * The order and number of a node's children: Tiptap 3.32's content expressions, `block` standing for BLOCKS. A
+     * node missing here takes its CHILDREN in any order and number (`inline*`, `text*`). The doc is Tiptap's `block+`
+     * written as `block*`: ProseMirror fills an empty doc with a paragraph, werkbuch stores it empty (`isEmpty`).
+     */
+    public const CONTENT = [
+        'doc' => 'block*',
+        'bulletList' => 'listItem+',
+        'orderedList' => 'listItem+',
+        'taskList' => 'taskItem+',
+        'listItem' => 'paragraph block*',
+        'taskItem' => 'paragraph block*',
+        'blockquote' => 'block+',
+        'table' => 'tableRow+',
+        'tableRow' => '(tableCell | tableHeader)*',
+        'tableCell' => 'block+',
+        'tableHeader' => 'block+',
     ];
 
     /** Nodes whose text carries no marks. */
