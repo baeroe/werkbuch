@@ -11,6 +11,7 @@ import { drafts } from '@/lib/drafts';
 import { useUiStore } from '@/store/ui';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import { list, makeView, project } from '@/test/fixtures';
+import { ProfileMenu } from './ProfileMenu';
 import { Shell } from './Shell';
 
 // What the server flashed shows as a toast once per visit: a status as a success, an error as an error. The browser suite cannot provoke a flashed
@@ -362,5 +363,28 @@ describe('ProfileMenu', () => {
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Abmelden' }));
     await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Trotzdem abmelden' }));
     expect(router.post).toHaveBeenCalledWith('/logout', {}, expect.any(Object));
+  });
+
+  it('asks with the keyboard in the compact menu and gives the focus back to its button (T18-M7)', async () => {
+    drafts.set('comment:wi_web_47', { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Halb fertig' }] }] });
+    const user = userEvent.setup();
+    render(<ProfileMenu compact />);
+    const button = screen.getByRole('button', { name: 'Profil von Mara Lindqvist' });
+    act(() => button.focus());
+    await user.keyboard('{Enter}');
+    const signOut = await screen.findByRole('menuitem', { name: 'Abmelden' });
+    // Base UI moves the focus into the menu a frame later
+    await waitFor(() => expect(document.activeElement).not.toBe(button));
+    act(() => signOut.focus());
+    await user.keyboard('{Enter}');
+    const dialog = await screen.findByRole('alertdialog', { name: 'Ungesendeten Text verwerfen?' });
+    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
+
+    // Escape keeps the text and the focus goes back to the button that opened the menu
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(button));
+    expect(router.post).not.toHaveBeenCalled();
+    expect(drafts.pending()).toEqual(['comment:wi_web_47']);
   });
 });
