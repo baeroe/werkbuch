@@ -168,7 +168,8 @@ class User extends Authenticatable implements HasLocalePreference, HasMedia
 
     /**
      * The reset link goes only to active people, in the language of the account; for everyone else nothing goes out,
-     * while the form answers the same (App\Http\Controllers\Auth\PasswordResetLinkController).
+     * while the form answers the same (App\Http\Controllers\Auth\PasswordResetLinkController). It only hands the
+     * notification on: the mail queues itself with its own retries (ResetPasswordNotification).
      *
      * @param  string  $token
      */
