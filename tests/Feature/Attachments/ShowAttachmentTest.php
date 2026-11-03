@@ -194,6 +194,14 @@ it('sends guests to the sign-in and answers an unknown attachment with 404', fun
     $this->actingAs($mara)->get('/attachments/'.Str::upper($attachment->id))->assertOk();
 });
 
+it('never serves the file of an attachment over /media, not even to its uploader (T6-M4)', function () use ($stored, $png) {
+    $project = Project::factory()->create();
+    $mara = memberOf($project, ProjectRole::Member);
+    $attachment = $stored($mara, $project, 'skizze.png', $png(), WorkItem::factory()->state(['project_id' => $project->id])->create());
+
+    $this->actingAs($mara)->get("/media/{$attachment->getFirstMedia('file')?->uuid}")->assertNotFound();
+});
+
 it('relates an attachment to its project, its uploader and its owner', function () {
     $item = WorkItem::factory()->create();
     $owned = Attachment::factory()->forItem($item, 'file')->create();

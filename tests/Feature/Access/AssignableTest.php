@@ -41,3 +41,32 @@ it('never lets a disabled account take work', function () {
     expect(Assignable::check($member, $this->project))->toBeFalse()
         ->and(Assignable::check($admin, $this->project))->toBeFalse();
 });
+
+it('answers the same for every account through check, among and query (T11-M5)', function () {
+    $owner = User::factory()->create();
+    $accounts = [
+        memberOf($this->project, ProjectRole::Viewer),
+        memberOf($this->project, ProjectRole::Admin, ['disabled_at' => now()]),
+        User::factory()->admin()->create(),
+        User::factory()->admin()->disabled()->create(),
+        User::factory()->create(),
+        User::factory()->bot($owner)->create(),
+        User::factory()->bot($owner)->admin()->create(),
+        User::defaultBot(),
+    ];
+    $memberBot = User::factory()->bot($owner)->create();
+    app(RoleAssignments::class)->setProjectRole($memberBot, $this->project, ProjectRole::Member);
+    $accounts[] = $memberBot;
+    $all = User::query()->get();
+
+    $checked = array_values(array_map(fn (User $user) => $user->id, array_filter($all->all(), fn (User $user) => Assignable::check($user, $this->project))));
+    sort($checked);
+    $among = Assignable::among($all, $this->project);
+    sort($among);
+    $queried = Assignable::query($this->project)->pluck('id')->sort()->values()->all();
+
+    expect($among)->toBe($checked)
+        ->and($queried)->toBe($checked)
+        // the world holds every case: some take work, some do not
+        ->and(count($checked))->toBeGreaterThan(1)->toBeLessThan(count($accounts));
+});

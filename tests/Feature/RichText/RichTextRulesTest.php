@@ -4,6 +4,7 @@ use App\Access\ProjectRole;
 use App\Access\RoleAssignments;
 use App\Models\Attachment;
 use App\Models\Project;
+use App\Models\ProjectIdentifier;
 use App\Models\User;
 use App\Models\WorkItem;
 use App\RichText\Document;
@@ -164,4 +165,27 @@ it('asks nothing again for the mentions and keys of Markdown that reading it ans
         ->and($saved?->itemRefs())->toBe([$w['own']->id])
         ->and(collect($queries)->filter(fn (string $sql) => str_contains($sql, 'from `users` where `users`.`id` in'))->all())->toBe([])
         ->and(collect($queries)->filter(fn (string $sql) => str_contains($sql, 'from `work_items` where `work_items`.`id` in'))->all())->toBe([]);
+});
+
+it('finds a key over a former identifier, and the current identifier wins over a former one (T8-M3)', function () use ($world, $save) {
+    $w = $world();
+    $app = Project::factory()->identifier('APP')->public()->create();
+    $inApp = WorkItem::factory()->for($app)->create();
+    // WEB was once called ALT, and once APP as well: APP is somebody else's now
+    $former = fn (string $identifier) => (new ProjectIdentifier)->forceFill(['project_id' => $w['web']->id, 'identifier' => $identifier])->save();
+    $former('ALT');
+    $former('APP');
+
+    expect($save($w, "ALT-{$w['own']->number} und APP-{$inApp->number}")?->toJson())
+        ->toBe(F::doc(F::p(F::reference($w['own']->id), ' und ', F::reference($inApp->id))));
+});
+
+it('lets an org admin be mentioned who is no member, and turns a text of only a page reference into its label (T8-M3)', function () use ($world, $save, $reference) {
+    $w = $world();
+    $erik = User::factory()->admin()->create(['handle' => 'erik']);
+
+    expect($save($w, '@erik, bitte')?->mentionedUserIds())->toBe([$erik->id])
+        ->and($save($w, F::doc(F::p($reference(F::PAGE, 'Handbuch', 'page'))))?->toJson())
+        ->toBe(F::doc(F::p('Handbuch')))
+        ->and($save($w, F::doc(F::p(F::reference(F::PAGE, 'page')))))->toBeNull();
 });

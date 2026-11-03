@@ -1,6 +1,7 @@
 <?php
 
 use App\Access\ProjectRole;
+use App\Actions\Attachments\UploadAttachment;
 use App\Actions\WorkItems\AddRelation;
 use App\Actions\WorkItems\BulkUpdateWorkItems;
 use App\Actions\WorkItems\ChangeWorkItemType;
@@ -10,6 +11,7 @@ use App\Actions\WorkItems\RemoveRelation;
 use App\Actions\WorkItems\TransitionWorkItem;
 use App\Actions\WorkItems\UpdateWorkItem;
 use App\Events\EventType;
+use App\Models\Attachment;
 use App\Models\Event;
 use App\Models\Project;
 use App\Models\RelationType;
@@ -19,7 +21,10 @@ use App\Models\WorkItemRelation;
 use App\Models\WorkItemType;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Database\QueryException;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 /*
  * Changes of items that lock several item rows (a parent under a shared lock after the own item, a deletion with its
@@ -80,3 +85,19 @@ it('retries the transaction after a deadlock', function (Closure $run, EventType
         'target_id' => WorkItem::factory()->for($web)->create()->id,
     ])), EventType::WorkItemRelationRemoved, 2],
 ]);
+
+it('retries an upload after a deadlock: one row, one file, nothing left of the first attempt (T6-M1)', function () use ($deadlockOnce) {
+    Storage::fake('local');
+    $mara = User::factory()->create(['name' => 'Mara']);
+    $web = Project::factory()->identifier('WEB')->member($mara, ProjectRole::Admin)->create(['lead_id' => $mara->id]);
+    $item = WorkItem::factory()->for($web)->create(['created_by' => $mara->id]);
+    $thrown = $deadlockOnce();
+
+    $attachment = UploadAttachment::run(actor($mara), ['project_id' => $web->id, 'kind' => 'file', 'work_item_id' => $item->id], UploadedFile::fake()->createWithContent('angebot.txt', 'Angebot'));
+
+    expect($thrown())->toBe(1)
+        ->and(Attachment::query()->pluck('id')->all())->toBe([$attachment->id])
+        ->and(Media::query()->count())->toBe(1)
+        ->and(Storage::disk('local')->allFiles())->toBe([(string) $attachment->getFirstMedia('file')?->getPathRelativeToRoot()])
+        ->and(Event::query()->where('type', EventType::WorkItemUpdated)->count())->toBe(1);
+});
