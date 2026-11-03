@@ -148,3 +148,20 @@ it('asks the database a fixed number of times for any number of nodes', function
         ->and($save($w, $json(12))?->mentionedUserIds())->toHaveCount(12)
         ->and($save($w, $markdown(12))?->itemRefs())->toHaveCount(12);
 });
+
+it('asks nothing again for the mentions and keys of Markdown that reading it answered (T8-M4)', function () use ($world, $save) {
+    $w = $world();
+    $save($w, F::doc(F::p('warm')));
+    $queries = [];
+    DB::listen(function ($query) use (&$queries): void {
+        $queries[] = $query->sql;
+    });
+
+    $saved = $save($w, "@lene, WEB-{$w['own']->number} und @mara");
+
+    // reading found the accounts by handle and the item by key; the rules ask neither by ID once more
+    expect($saved?->mentionedUserIds())->toBe([$w['lene']->id, $w['mara']->id])
+        ->and($saved?->itemRefs())->toBe([$w['own']->id])
+        ->and(collect($queries)->filter(fn (string $sql) => str_contains($sql, 'from `users` where `users`.`id` in'))->all())->toBe([])
+        ->and(collect($queries)->filter(fn (string $sql) => str_contains($sql, 'from `work_items` where `work_items`.`id` in'))->all())->toBe([]);
+});

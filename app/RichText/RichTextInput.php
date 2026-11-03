@@ -2,6 +2,7 @@
 
 namespace App\RichText;
 
+use App\Support\RichTextLookups;
 use App\Support\RichTextRules;
 use Illuminate\Validation\ValidationException;
 
@@ -78,7 +79,7 @@ final class RichTextInput
     {
         return $ctx->project === null || $ctx->writer === null
             ? $document
-            : RichTextRules::apply($document, $ctx->project, $ctx->writer, $ctx->before, $key, $labels);
+            : RichTextRules::apply($document, $ctx->project, $ctx->writer, $ctx->before, $key, $labels, $ctx->lookup instanceof RichTextLookups ? $ctx->lookup : null);
     }
 
     /**

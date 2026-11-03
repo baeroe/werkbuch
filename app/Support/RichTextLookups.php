@@ -10,6 +10,7 @@ use App\Models\ProjectIdentifier;
 use App\Models\User;
 use App\Models\WorkItem;
 use App\RichText\RichTextLookup;
+use Illuminate\Database\Eloquent\Collection;
 
 /**
  * What a writer's Markdown names, answered from the database (RichTextLookup): who may be mentioned in the project
@@ -25,6 +26,9 @@ final class RichTextLookups implements RichTextLookup
 
     /** @var array<string, User|null> handle → account, null for none */
     private array $accounts = [];
+
+    /** @var array<string, User> ID → account, of every account loaded (by handle or by ID) */
+    private array $byId = [];
 
     /** @var array<string, true> IDs of the accounts the text may mention */
     private array $mentionable = [];
@@ -73,6 +77,30 @@ final class RichTextLookups implements RichTextLookup
         return $this->items[$id];
     }
 
+    /**
+     * The current handles of the mentioned accounts that stay mentions (RichTextRules): those `$kept` names (the text
+     * mentioned them before) and those who may be mentioned in the project. Accounts the text's Markdown named by handle
+     * are known already; only the rest is asked for, with a fixed number of queries.
+     *
+     * @param  list<string>  $ids
+     * @param  list<string>  $kept
+     * @return array<string, string> ID → handle
+     */
+    public function handles(array $ids, array $kept): array
+    {
+        $this->loadUsers(array_values(array_filter($ids, fn (string $id) => ! isset($this->byId[$id]))));
+
+        $handles = [];
+        foreach ($ids as $id) {
+            $user = $this->byId[$id] ?? null;
+            if ($user !== null && (in_array($id, $kept, true) || isset($this->mentionable[$id]))) {
+                $handles[$id] = $user->handle;
+            }
+        }
+
+        return $handles;
+    }
+
     /** @param list<string> $handles */
     private function loadAccounts(array $handles): void
     {
@@ -82,9 +110,26 @@ final class RichTextLookups implements RichTextLookup
             foreach ($chunk as $handle) {
                 $this->accounts[$handle] = $byHandle->get($handle);
             }
-            foreach (Assignable::among($users, $this->project) as $id) {
-                $this->mentionable[$id] = true;
-            }
+            $this->remember($users);
+        }
+    }
+
+    /** @param list<string> $ids */
+    private function loadUsers(array $ids): void
+    {
+        foreach (array_chunk($ids, self::CHUNK) as $chunk) {
+            $this->remember(User::query()->whereKey($chunk)->get());
+        }
+    }
+
+    /** @param Collection<int, User> $users */
+    private function remember(Collection $users): void
+    {
+        foreach ($users as $user) {
+            $this->byId[$user->id] = $user;
+        }
+        foreach (Assignable::among($users, $this->project) as $id) {
+            $this->mentionable[$id] = true;
         }
     }
 
@@ -115,6 +160,10 @@ final class RichTextLookups implements RichTextLookup
             foreach ($chunk as $index => $key) {
                 $project = $projects[$parsed[$index]['identifier']] ?? null;
                 $this->keys[$key] = $project === null ? null : $found["{$project}:{$parsed[$index]['number']}"] ?? null;
+            }
+            // an item found by key is one the writer sees: asking for it by ID again needs no query
+            foreach ($found as $id) {
+                $this->items[$id] = true;
             }
         }
     }

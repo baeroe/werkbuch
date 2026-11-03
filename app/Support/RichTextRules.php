@@ -2,7 +2,6 @@
 
 namespace App\Support;
 
-use App\Access\Assignable;
 use App\Models\Attachment;
 use App\Models\Project;
 use App\Models\User;
@@ -47,7 +46,7 @@ final class RichTextRules
      * @throws ValidationException at `$field`
      * @throws InvalidDocument when the labels make the text too long
      */
-    public static function apply(Document $doc, Project $project, User $writer, ?Document $before, string $field, array $labels = []): Document
+    public static function apply(Document $doc, Project $project, User $writer, ?Document $before, string $field, array $labels = [], ?RichTextLookups $lookups = null): Document
     {
         $mentioned = $doc->mentionedUserIds();
         $referred = [...$doc->itemRefs(), ...$doc->pageRefs()];
@@ -56,8 +55,10 @@ final class RichTextRules
             return $doc;
         }
 
-        $handles = self::handles($mentioned, $project, $before?->mentionedUserIds() ?? []);
-        $items = self::items($doc->itemRefs(), $project, $writer, $before?->itemRefs() ?? []);
+        // the lookups that read the Markdown know its accounts and items already (T8-M4)
+        $lookups ??= new RichTextLookups($project, $writer);
+        $handles = $lookups->handles($mentioned, $before?->mentionedUserIds() ?? []);
+        $items = self::items($doc->itemRefs(), $lookups, $before?->itemRefs() ?? []);
         $files = self::attachments($attached, $project, $writer, $field, $before?->attachmentIds() ?? []);
 
         return $doc->withNodes(function (array $node) use ($handles, $items, $files, $labels): array|string|null {
@@ -102,40 +103,15 @@ final class RichTextRules
     }
 
     /**
-     * The current handles of the mentioned accounts that stay mentions: those the text mentioned before and those who
-     * may be mentioned in the project.
-     *
-     * @param  list<string>  $ids
-     * @param  list<string>  $kept
-     * @return array<string, string> ID → handle
-     */
-    private static function handles(array $ids, Project $project, array $kept): array
-    {
-        $handles = [];
-        foreach (array_chunk($ids, RichTextLookups::CHUNK) as $chunk) {
-            $users = User::query()->whereKey($chunk)->get();
-            $allowed = Assignable::among($users->reject(fn (User $user) => in_array($user->id, $kept, true)), $project);
-            foreach ($users as $user) {
-                if (in_array($user->id, $kept, true) || in_array($user->id, $allowed, true)) {
-                    $handles[$user->id] = $user->handle;
-                }
-            }
-        }
-
-        return $handles;
-    }
-
-    /**
      * The referred items that stay references: those the text referred to before and those the writer sees.
      *
      * @param  list<string>  $ids
      * @param  list<string>  $kept
      * @return array<string, true>
      */
-    private static function items(array $ids, Project $project, User $writer, array $kept): array
+    private static function items(array $ids, RichTextLookups $lookups, array $kept): array
     {
         $new = array_values(array_diff($ids, $kept));
-        $lookups = new RichTextLookups($project, $writer);
         $lookups->prepare([], [], $new);
 
         return array_fill_keys([...array_intersect($ids, $kept), ...array_filter($new, $lookups->visibleItem(...))], true);
