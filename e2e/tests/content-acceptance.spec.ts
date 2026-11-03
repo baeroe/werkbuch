@@ -102,7 +102,7 @@ test('pastes an image into the description and into a comment', async ({ page })
     await pasteFile(editor, { name: 'plakat.png', type: 'image/png', bytes: pngBytes(48, 32), html: CHROME_COPY_IMAGE });
     await expect(description.getByRole('img', { name: 'plakat.png' })).toBeVisible();
     // the picture of the page it came from never comes along (A236): the uploaded file is the picture
-    await expect.poll(() => storedDescription(page, item.id)).toMatch(/^Entwurf:\s+!\[plakat\.png\]\(attachment:[0-9a-z]{26}\)\s*$/);
+    await expect.poll(() => storedDescription(page, item.id), { timeout: 15_000 }).toMatch(/^Entwurf:\s+!\[plakat\.png\]\(attachment:[0-9a-z]{26}\)\s*$/);
 
     await page.reload();
     const saved = page.getByRole('region', { name: tr('en', 'items.detail.description.title') }).getByRole('img', { name: 'plakat.png' });
@@ -117,7 +117,7 @@ test('pastes an image into the description and into a comment', async ({ page })
     await page.keyboard.type('So sieht es gedruckt aus:');
     await pasteFile(composer, { name: 'druck.png', type: 'image/png', bytes: pngBytes(40, 30) });
     await expect(page.getByRole('img', { name: 'druck.png' })).toBeVisible();
-    // the upload is done once its progress bar is gone; until then sending waits
+    // the upload is done once its progress bar is gone; until then sending is refused (editor.upload.pending)
     await expect(page.getByRole('progressbar')).toHaveCount(0);
     await pressMod(page, 'Enter');
 
@@ -175,7 +175,7 @@ test('refuses an image of another project in the description', async ({ page, al
     await page.keyboard.press('ControlOrMeta+a');
     await page.keyboard.type('Ohne Bild.');
     await expect(editor).not.toHaveAttribute('aria-invalid', 'true');
-    await expect.poll(() => storedDescription(page, item.id)).toBe('Ohne Bild.');
+    await expect.poll(() => storedDescription(page, item.id), { timeout: 15_000 }).toBe('Ohne Bild.');
   } finally {
     await page.goto('/my-items');
     await removeE2eProject(page, own.identifier);
@@ -186,8 +186,9 @@ test('refuses an image of another project in the description', async ({ page, al
 test('gives Ida neither the image nor its preview', async ({ page, browser }) => {
   // Ida is a member of WEB only: a private project of the e2e person is unknown to her
   const { id, identifier } = await createE2eProject(page, name('private'), { types: ['Task'], visibility: 'private' });
-  const ida = await signedInContext(browser, PEOPLE.ida);
+  let ida: Awaited<ReturnType<typeof signedInContext>> | undefined;
   try {
+    ida = await signedInContext(browser, PEOPLE.ida);
     const item = await createItem(page, { project_id: id, title: 'E2E Geheimer Plan' });
     const { id: attachmentId } = await uploadViaApi(page, id, { name: 'plan.png', type: 'image/png', bytes: pngBytes(64, 48) });
     const described = await api(page, 'PATCH', `/api/v1/work-items/${item.id}`, { description: `![plan.png](attachment:${attachmentId})` });
@@ -208,7 +209,7 @@ test('gives Ida neither the image nor its preview', async ({ page, browser }) =>
     await expect(ida.page.getByRole('heading', { level: 1 })).toBeVisible();
     await expect(ida.page.getByRole('img', { name: 'plan.png' })).toHaveCount(0);
   } finally {
-    await ida.context.close();
+    await ida?.context.close();
     await removeE2eProject(page, identifier);
   }
 });

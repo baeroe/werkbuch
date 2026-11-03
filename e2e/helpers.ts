@@ -311,13 +311,18 @@ export async function signOut(page: Page, locale: Locale, name: string): Promise
  * coming from the app (stateful) because of the `Referer`.
  */
 export async function api(page: Page, method: string, path: string, body?: unknown): Promise<APIResponse> {
+  const { url, headers } = await sessionRequest(page, path);
+  return page.request.fetch(url, { method, data: body, headers });
+}
+
+/** The address and the headers of a request in the page's session: JSON, the CSRF token of its cookie, a `Referer` (Sanctum). */
+async function sessionRequest(page: Page, path: string): Promise<{ url: string; headers: Record<string, string> }> {
   const baseURL = test.info().project.use.baseURL!;
   const token = (await page.context().cookies(baseURL)).find((cookie) => cookie.name === 'XSRF-TOKEN');
-  return page.request.fetch(new URL(path, baseURL).toString(), {
-    method,
-    data: body,
+  return {
+    url: new URL(path, baseURL).toString(),
     headers: { Accept: 'application/json', Referer: `${baseURL}/`, ...(token && { 'X-XSRF-TOKEN': decodeURIComponent(token.value) }) },
-  });
+  };
 }
 
 /** Every entry of a catalog (`labels`, `properties` …), following the cursor to the last page, so "not in the list" never passes on a first page. */
@@ -593,9 +598,8 @@ export async function pasteFile(target: Locator, file: TestFile & { html?: strin
  */
 export async function uploadViaApi(page: Page, projectId: string, file: TestFile, kind: 'inline' | 'file' = 'inline', itemId?: string): Promise<{ id: string }> {
   await ensureCsrfCookie(page);
-  const baseURL = test.info().project.use.baseURL!;
-  const token = (await page.context().cookies(baseURL)).find((cookie) => cookie.name === 'XSRF-TOKEN');
-  const response = await page.request.fetch(new URL('/api/v1/attachments', baseURL).toString(), {
+  const { url, headers } = await sessionRequest(page, '/api/v1/attachments');
+  const response = await page.request.fetch(url, {
     method: 'POST',
     multipart: {
       project_id: projectId,
@@ -603,7 +607,7 @@ export async function uploadViaApi(page: Page, projectId: string, file: TestFile
       ...(itemId && { work_item_id: itemId }),
       file: { name: file.name, mimeType: file.type, buffer: file.bytes },
     },
-    headers: { Accept: 'application/json', Referer: `${baseURL}/`, ...(token && { 'X-XSRF-TOKEN': decodeURIComponent(token.value) }) },
+    headers,
   });
   expect(response.status(), await response.text()).toBe(201);
   const { data } = (await response.json()) as { data: { id: string } };
