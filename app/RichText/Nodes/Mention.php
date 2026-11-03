@@ -25,11 +25,11 @@ final class Mention extends Node
     {
         return [
             'id' => [
-                'parseHTML' => fn (\DOMElement $element) => $element->getAttribute('data-id') ?: null,
+                'parseHTML' => fn (\DOMElement $element) => Attribute::of($element, 'data-id'),
                 'renderHTML' => fn (object $attributes) => ['data-id' => $attributes->id ?? null],
             ],
             'label' => [
-                'parseHTML' => fn (\DOMElement $element) => $element->getAttribute('data-label') ?: null,
+                'parseHTML' => fn (\DOMElement $element) => Attribute::of($element, 'data-label'),
                 'renderHTML' => fn (object $attributes) => ['data-label' => $attributes->label ?? null],
             ],
         ];

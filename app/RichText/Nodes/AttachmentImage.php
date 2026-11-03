@@ -25,11 +25,11 @@ final class AttachmentImage extends Node
     {
         return [
             'attachmentId' => [
-                'parseHTML' => fn (\DOMElement $element) => $element->getAttribute('data-attachment-id') ?: null,
+                'parseHTML' => fn (\DOMElement $element) => Attribute::of($element, 'data-attachment-id'),
                 'renderHTML' => fn (object $attributes) => ['data-attachment-id' => $attributes->attachmentId ?? null],
             ],
             'alt' => [
-                'parseHTML' => fn (\DOMElement $element) => $element->getAttribute('alt') ?: null,
+                'parseHTML' => fn (\DOMElement $element) => Attribute::of($element, 'alt'),
                 'renderHTML' => fn (object $attributes) => ['alt' => $attributes->alt ?? null],
             ],
         ];

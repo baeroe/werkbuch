@@ -85,6 +85,11 @@ it('reads ![alt](attachment:<ulid>) as an image and [a.pdf](attachment:<ulid>) a
         ->and($read('[a.pdf](attachment:../a.pdf)')->toJson())->toBe(F::doc(F::p('a.pdf')));
 });
 
+it('keeps an alt text or a file name of "0" (T5-M5)', function () use ($read) {
+    expect($read('![0](attachment:'.F::IMAGE.') [0](attachment:'.F::FILE.')')->toJson())
+        ->toBe(F::doc(F::image(F::IMAGE, '0'), F::p(F::file(F::FILE, '0'))));
+});
+
 it('keeps ![x](https://…) out of the document as a node', function () use ($read) {
     // the alt text stays as text, with its marks
     expect($read('Logo: ![Das *Logo*](https://example.com/logo.png) ![Pfad](attachment:../a.png)')->toJson())

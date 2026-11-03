@@ -24,11 +24,11 @@ final class Reference extends Node
     {
         return [
             'id' => [
-                'parseHTML' => fn (\DOMElement $element) => $element->getAttribute('data-id') ?: null,
+                'parseHTML' => fn (\DOMElement $element) => Attribute::of($element, 'data-id'),
                 'renderHTML' => fn (object $attributes) => ['data-id' => $attributes->id ?? null],
             ],
             'kind' => [
-                'parseHTML' => fn (\DOMElement $element) => $element->getAttribute('data-kind') ?: null,
+                'parseHTML' => fn (\DOMElement $element) => Attribute::of($element, 'data-kind'),
                 'renderHTML' => fn (object $attributes) => ['data-kind' => $attributes->kind ?? null],
             ],
         ];

@@ -24,11 +24,11 @@ final class AttachmentFile extends Node
     {
         return [
             'attachmentId' => [
-                'parseHTML' => fn (\DOMElement $element) => $element->getAttribute('data-attachment-id') ?: null,
+                'parseHTML' => fn (\DOMElement $element) => Attribute::of($element, 'data-attachment-id'),
                 'renderHTML' => fn (object $attributes) => ['data-attachment-id' => $attributes->attachmentId ?? null],
             ],
             'filename' => [
-                'parseHTML' => fn (\DOMElement $element) => $element->getAttribute('data-filename') ?: null,
+                'parseHTML' => fn (\DOMElement $element) => Attribute::of($element, 'data-filename'),
                 'renderHTML' => fn (object $attributes) => ['data-filename' => $attributes->filename ?? null],
             ],
         ];
