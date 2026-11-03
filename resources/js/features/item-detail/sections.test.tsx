@@ -12,6 +12,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { currentToasts, dismissToast, resetToasts, runToastAction } from '@/components/ui/toast';
 import { preloadEditor } from '@/editor/RichTextEditor';
 import { plainText } from '@/lib/richtext';
+import { resetForUser } from '@/hooks/queryClient';
 import { descriptionDraft, drafts } from '@/lib/drafts';
 import { useUiStore } from '@/store/ui';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
@@ -101,7 +102,12 @@ const problem = (status: number, reason: string, extra: Record<string, unknown> 
 
 let api: MockApi | undefined;
 
-function renderWith(node: ReactNode, { routes = {}, role = 'member' }: { routes?: Record<string, MockRoute>; role?: Project['my_role'] } = {}) {
+const newClient = () => new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+
+function renderWith(
+  node: ReactNode,
+  { routes = {}, role = 'member', client }: { routes?: Record<string, MockRoute>; role?: Project['my_role']; client?: QueryClient } = {},
+) {
   const current = (id: string) => items.find((entry) => entry.id === id)!;
   if (projects.length === 0) projects = [project('WEB', role, { name: 'Website-Relaunch' })];
   api = mockApi({
@@ -136,8 +142,8 @@ function renderWith(node: ReactNode, { routes = {}, role = 'member' }: { routes?
     ...Object.fromEntries(items.flatMap((item) => [item.id, item.key].map((ref) => [`GET /api/v1/work-items/${ref}/history`, () => ({ body: list([]) })]))),
     ...routes,
   });
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  return render(<QueryClientProvider client={client}>{node}</QueryClientProvider>);
+  const queries = client ?? newClient();
+  return render(<QueryClientProvider client={queries}>{node}</QueryClientProvider>);
 }
 
 const sent = (method: string, path: string) => api!.calls.filter((call) => call.method === method && call.url.split('?')[0] === path).map((call) => call.body);
@@ -583,6 +589,76 @@ describe('Description', () => {
     const after = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(after);
     expect(after.defaultPrevented).toBe(false);
+  });
+
+  it('keeps the text of a closed view whose save fails after the item opened again', async () => {
+    // one cache for the app, as in the browser: the save of the closed view runs against it
+    const client = newClient();
+    const first = renderWith(<ItemPeek itemId="wi_web_47" />, { client, routes: { 'PATCH /api/v1/work-items/wi_web_47': () => problem(500, 'server_error') } });
+    const { editor } = await descriptionEditor();
+    const gate = holdNextPatch();
+    paste(editor, 'Kurz vor dem Schließen. ');
+    // the preview closes, its save is on its way; the item opens again meanwhile (the cache shows the text already)
+    first.unmount();
+    await waitFor(() => expect(gate.held()).toBe(true));
+    renderWith(<ItemPeek itemId="wi_web_47" />, { client, routes: { 'PATCH /api/v1/work-items/wi_web_47': () => problem(500, 'server_error') } });
+    const again = await descriptionEditor();
+    // while that save runs, the draft stays (the view shows what the server answers meanwhile)
+    expect(drafts.pending()).toEqual(['description:wi_web_47']);
+
+    // the save fails: the text stays the draft, the open view says it is not saved, leaving asks
+    gate.release();
+    await waitFor(() => expect(within(again.section).getByRole('status').textContent).toBe('Nicht gespeichert'));
+    expect(again.editor.textContent).toBe('Kurz vor dem Schließen. Beim Absenden kommt die Mail zweimal an.');
+    expect(drafts.pending()).toEqual(['description:wi_web_47']);
+    const leaving = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(leaving);
+    expect(leaving.defaultPrevented).toBe(true);
+  });
+
+  it('keeps the text of a closed view whose save fails after the item opened and closed again', async () => {
+    // one cache for the app, as in the browser: the save of the closed view runs against it
+    const client = newClient();
+    const first = renderWith(<ItemPeek itemId="wi_web_47" />, { client, routes: { 'PATCH /api/v1/work-items/wi_web_47': () => problem(500, 'server_error') } });
+    const { editor } = await descriptionEditor();
+    const gate = holdNextPatch();
+    paste(editor, 'Kurz vor dem Schließen. ');
+    first.unmount();
+    await waitFor(() => expect(gate.held()).toBe(true));
+    // opened and closed again without typing: that view has nothing of its own to save
+    const second = renderWith(<ItemPeek itemId="wi_web_47" />, { client, routes: { 'PATCH /api/v1/work-items/wi_web_47': () => problem(500, 'server_error') } });
+    await descriptionEditor();
+    second.unmount();
+
+    gate.release();
+    await waitFor(() => expect(lastToast()).toMatchObject({ title: 'Änderung nicht gespeichert' }));
+    expect(plainText(drafts.get(descriptionDraft(web47.id)))).toBe('Kurz vor dem Schließen. Beim Absenden kommt die Mail zweimal an.');
+  });
+
+  it('forgets an open conflict and unsent text when another person signs in', async () => {
+    const theirs = { ...web47, description_json: doc('Ida hat das schon geklärt.'), description_version: 4 };
+    const routes: Record<string, MockRoute> = {
+      'PATCH /api/v1/work-items/wi_web_47': () =>
+        problem(409, 'description_conflict', { detail: 'Ida Brenner hat die Beschreibung inzwischen geändert.', current: theirs }),
+    };
+    const view = renderWith(<ItemPeek itemId="wi_web_47" />, { routes });
+    const { editor } = await descriptionEditor();
+    paste(editor, 'Meine Fassung. ');
+    press('Enter', { ctrlKey: true }, editor);
+    await screen.findByRole('alert');
+    view.unmount();
+
+    resetForUser('u_lene', 'u_ida');
+    const leaving = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(leaving);
+    expect(leaving.defaultPrevented).toBe(false);
+
+    // the next person sees the stored description, without the banner
+    api!.restore();
+    renderWith(<ItemPeek itemId="wi_web_47" />, { routes });
+    const again = await descriptionEditor();
+    expect(again.editor.textContent).toBe('Beim Absenden kommt die Mail zweimal an.');
+    expect(within(again.section).queryByRole('alert')).toBeNull();
   });
 
   it('forgets text of a closed view the server holds by now', async () => {

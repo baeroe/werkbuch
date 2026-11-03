@@ -10,6 +10,14 @@
  *   useDraft(commentDraft(item.id));              // the text, rendered anew when it changes
  *
  * Keys: `comment:<itemId>`, `comment-edit:<commentId>`, `description:<itemId>`.
+ *
+ * Beside the text, the store knows whether a send or save of a key is on its way (`startSending`, `useDraftSending`):
+ * a view opened again while the call of an earlier one runs follows it (its button stays busy, and the answer that
+ * changes the text reaches it), so nothing is sent twice.
+ *
+ * Who is signed in owns the drafts: when the person changes (`resetForUser`), `clear()` forgets every text and every
+ * call on its way (`epoch()` tells a call that ends afterwards to leave the store alone), and the modules that keep
+ * more beside a draft forget it too (`onClear`).
  */
 
 import { useCallback, useSyncExternalStore } from 'react';
@@ -23,6 +31,11 @@ export const descriptionDraft = (itemId: string): DraftKey => `description:${ite
 
 const texts = new Map<DraftKey, RichText>();
 const listeners = new Map<DraftKey, Set<() => void>>();
+/** Calls on their way, by key (two views of an item may each have one). */
+const sendingCounts = new Map<DraftKey, number>();
+const clearHooks = new Set<() => void>();
+/** Counts the clears: a call that began before the last one leaves the store alone. */
+let epoch = 0;
 
 const warnOnUnload = (event: BeforeUnloadEvent) => {
   if (texts.size > 0) event.preventDefault();
@@ -63,10 +76,46 @@ export const drafts = {
     return [...texts.keys()];
   },
 
-  /** Forgets every text (tests). */
+  /** Whether a send or save of `key` is on its way. */
+  sending(key: DraftKey): boolean {
+    return (sendingCounts.get(key) ?? 0) > 0;
+  },
+
+  /** A send or save of `key` begins; the function returned ends it (once). */
+  startSending(key: DraftKey): () => void {
+    const began = epoch;
+    sendingCounts.set(key, (sendingCounts.get(key) ?? 0) + 1);
+    notify(key);
+    let ended = false;
+    return () => {
+      // cleared meanwhile: the count it added is gone already
+      if (ended || began !== epoch) return;
+      ended = true;
+      const left = sendingCounts.get(key)! - 1;
+      if (left > 0) sendingCounts.set(key, left);
+      else sendingCounts.delete(key);
+      notify(key);
+    };
+  },
+
+  /** Changes with every `clear()`: a call that ends in another epoch than it began in writes nothing. */
+  epoch(): number {
+    return epoch;
+  },
+
+  /** Runs `hook` on every `clear()`; returns the unsubscribe. */
+  onClear(hook: () => void): () => void {
+    clearHooks.add(hook);
+    return () => clearHooks.delete(hook);
+  },
+
+  /** Forgets every text and every call on its way (another person signs in; tests). */
   clear(): void {
-    const keys = [...texts.keys()];
+    const keys = new Set([...texts.keys(), ...sendingCounts.keys()]);
+    epoch += 1;
     texts.clear();
+    sendingCounts.clear();
+    clearHooks.forEach((hook) => hook());
     keys.forEach(notify);
   },
 };
@@ -75,4 +124,10 @@ export const drafts = {
 export function useDraft(key: DraftKey): RichText | null {
   const subscribe = useCallback((listener: () => void) => drafts.subscribe(key, listener), [key]);
   return useSyncExternalStore(subscribe, () => drafts.get(key));
+}
+
+/** Whether a send or save of `key` is on its way, rendered anew when that changes. */
+export function useDraftSending(key: DraftKey): boolean {
+  const subscribe = useCallback((listener: () => void) => drafts.subscribe(key, listener), [key]);
+  return useSyncExternalStore(subscribe, () => drafts.sending(key));
 }

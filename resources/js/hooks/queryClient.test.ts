@@ -1,5 +1,6 @@
 import { QueryObserver } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { drafts } from '@/lib/drafts';
 import { queryClient, resetForUser } from './queryClient';
 
 const cached = () => queryClient.getQueryCache().getAll().length;
@@ -26,12 +27,21 @@ describe('resetForUser', () => {
     ['another account', 'a', 'b'],
     ['sign-out', 'a', null],
     ['sign-in', null, 'b'],
-  ])('clears the cache on %s', (_name, previous, next) => {
+  ])('clears the cache and the drafts on %s', (_name, previous, next) => {
     queryClient.setQueryData(['x'], 1);
+    drafts.set('comment:wi_1', { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Von Mara' }] }] });
 
     resetForUser(previous, next);
 
     expect(cached()).toBe(0);
+    // unsent text belongs to whoever wrote it
+    expect(drafts.pending()).toEqual([]);
+  });
+
+  it('keeps the drafts while the same person is signed in', () => {
+    drafts.set('comment:wi_1', { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Von Mara' }] }] });
+    resetForUser('a', 'a');
+    expect(drafts.pending()).toEqual(['comment:wi_1']);
   });
 
   it('drops the queries of the old account instead of loading them again, even one that is still observed', async () => {

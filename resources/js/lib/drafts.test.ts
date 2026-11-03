@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { RichText } from '@/types';
-import { commentDraft, commentEditDraft, descriptionDraft, drafts, useDraft } from './drafts';
+import { commentDraft, commentEditDraft, descriptionDraft, drafts, useDraft, useDraftSending } from './drafts';
 
 const doc = (text: string): RichText => ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] });
 
@@ -69,5 +69,48 @@ describe('drafts', () => {
     expect(result.current).toBe(text);
     rerender({ key: commentDraft('wi_2') });
     expect(result.current).toBeNull();
+  });
+
+  it('counts the calls on their way per key and ends each once', () => {
+    const { result } = renderHook(() => useDraftSending(commentDraft('wi_1')));
+    expect(result.current).toBe(false);
+    let first = () => {};
+    act(() => {
+      first = drafts.startSending('comment:wi_1');
+    });
+    const second = drafts.startSending('comment:wi_1');
+    expect(result.current).toBe(true);
+    act(() => first());
+    act(() => first());
+    expect(drafts.sending('comment:wi_1')).toBe(true);
+    act(() => second());
+    expect(result.current).toBe(false);
+  });
+
+  it('forgets texts and calls on their way when cleared, and tells who keeps more', () => {
+    const hook = vi.fn();
+    const stop = drafts.onClear(hook);
+    const listener = vi.fn();
+    drafts.subscribe('comment:wi_1', listener);
+    const before = drafts.epoch();
+    drafts.set('description:wi_1', doc('Beschreibung'));
+    const end = drafts.startSending('comment:wi_1');
+    listener.mockClear();
+
+    drafts.clear();
+    expect(drafts.epoch()).toBe(before + 1);
+    expect(drafts.pending()).toEqual([]);
+    expect(drafts.sending('comment:wi_1')).toBe(false);
+    expect(hook).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    // a call that began before the clear ends without touching the new count
+    const now = drafts.startSending('comment:wi_1');
+    end();
+    expect(drafts.sending('comment:wi_1')).toBe(true);
+    now();
+    stop();
+    drafts.clear();
+    expect(hook).toHaveBeenCalledTimes(1);
   });
 });

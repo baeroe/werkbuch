@@ -7,7 +7,9 @@
  * Nothing written is lost (A251):
  * - The text is the item's draft of this visit (`lib/drafts.ts`, `comment:<itemId>`): "Später weiterschreiben" folds
  *   the editor up and keeps it, and so does closing the preview or opening another item; the opener then reads
- *   "Entwurf weiterschreiben …". While it is there, leaving or reloading the page asks first.
+ *   "Entwurf weiterschreiben …". While it is there, leaving or reloading the page asks first. Every view of the item
+ *   follows the draft and a send on its way (the store's, not its own): one opened again while a comment of an earlier
+ *   one is on its way shows the button busy and takes the answer, so nothing goes twice.
  * - The sent text stays in sight until the answer. What is typed meanwhile is not sent: once the comment is there, only
  *   the sent part goes (`unsentRest`), the rest stays as the draft. The editor stays open, its focus too, and a status
  *   region says "Kommentar gesendet".
@@ -30,15 +32,12 @@ import { isEmptyDoc, RichTextEditor } from '@/editor/RichTextEditor';
 import { UploadContext, useUploadCounter, useUploadsPending } from '@/editor/UploadContext';
 import { useAddComment } from '@/hooks/comments';
 import { useProjectsWith } from '@/hooks/projects';
-import { commentDraft, drafts } from '@/lib/drafts';
+import { commentDraft, drafts, useDraft, useDraftSending } from '@/lib/drafts';
 import { notifyError } from '@/lib/errors';
 import { t } from '@/lib/i18n';
 import { usePermissions } from '@/lib/permissions';
 import type { RichText, WorkItem } from '@/types';
 import { useDetail } from '../shared';
-
-/** Items with a comment on its way: one send at a time, also across views of the item. */
-const sending = new Set<string>();
 
 const same = (a: RichText | undefined, b: RichText | undefined) => JSON.stringify(a) === JSON.stringify(b);
 
@@ -94,9 +93,13 @@ export function CommentComposer({ item }: { item: WorkItem }) {
   const add = useAddComment();
   const key = commentDraft(item.id);
   const [open, setOpen] = useState(false);
+  /** The draft of the item; a send of any view changes it. */
+  const stored = useDraft(key);
+  const busy = useDraftSending(key);
   /** The editor's text as it reported it (a list without text yet stays one); the draft keeps only real text. */
-  const [text, setText] = useState<RichText | null>(() => drafts.get(key));
-  const [busy, setBusy] = useState(() => sending.has(item.id));
+  const [text, setText] = useState<RichText | null>(stored);
+  /** The draft as this view wrote or took it last: anything else in the store came from elsewhere (a send's answer). */
+  const written = useRef(stored);
   /** A refusal of the text, or why it cannot go yet; under the editor. */
   const [problem, setProblem] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState('');
@@ -120,6 +123,13 @@ export function CommentComposer({ item }: { item: WorkItem }) {
       mounted.current = false;
     };
   }, []);
+
+  // the draft changed elsewhere (a send of this or another view went through): the editor shows it
+  useEffect(() => {
+    if (stored === written.current) return;
+    written.current = stored;
+    setText(stored);
+  }, [stored]);
 
   const focusEditor = () => {
     const current = editor.current;
@@ -156,7 +166,7 @@ export function CommentComposer({ item }: { item: WorkItem }) {
   }
 
   function send() {
-    if (sending.has(item.id)) return;
+    if (drafts.sending(key)) return;
     if (latestUploading.current > 0) return void setProblem(t('editor.upload.pending'));
     // the text as it reads now: "Erneut versuchen" of an earlier attempt sends what was written since, too
     const body = drafts.get(key);
@@ -165,8 +175,8 @@ export function CommentComposer({ item }: { item: WorkItem }) {
       focusEditor();
       return;
     }
-    sending.add(item.id);
-    setBusy(true);
+    const done = drafts.startSending(key);
+    const epoch = drafts.epoch();
     setProblem(null);
     setAnnouncement('');
     // a promise, not callbacks of mutate: those are skipped once the preview has closed, and the draft would stay
@@ -174,26 +184,23 @@ export function CommentComposer({ item }: { item: WorkItem }) {
       .mutateAsync({ work_item_id: item.id, body })
       .then(
         () => {
-          // only what went out leaves the draft; what was typed meanwhile stays
-          const rest = unsentRest(body, drafts.get(key));
-          drafts.set(key, rest);
+          // another person signed in meanwhile: their drafts are not this one's
+          if (drafts.epoch() !== epoch) return;
+          // only what went out leaves the draft; what was typed meanwhile stays (every open view shows the rest)
+          drafts.set(key, unsentRest(body, drafts.get(key)));
           if (!mounted.current) return;
-          const inside = box.current?.contains(document.activeElement) ?? false;
-          setText(rest);
           setAnnouncement(t('items.comments.sent'));
-          if (inside) requestAnimationFrame(focusEditor);
+          if (box.current?.contains(document.activeElement)) requestAnimationFrame(focusEditor);
         },
         (error: unknown) => {
+          if (drafts.epoch() !== epoch) return;
           // a refusal of the text stands at the editor; with the view gone, the toast says it
           if (error instanceof ApiError && error.status === 422 && mounted.current) return void setProblem(error.errors?.body_json?.[0] ?? error.message);
           // the text stays; "Erneut versuchen" where it can help (an outage)
           notifyError(t('items.comments.failed'), error, send);
         },
       )
-      .finally(() => {
-        sending.delete(item.id);
-        if (mounted.current) setBusy(false);
-      });
+      .finally(done);
   }
 
   if (denied && !open) {
@@ -234,7 +241,8 @@ export function CommentComposer({ item }: { item: WorkItem }) {
           value={text}
           onChange={(doc) => {
             setText(doc);
-            drafts.set(key, isEmptyDoc(doc) ? null : doc);
+            written.current = isEmptyDoc(doc) ? null : doc;
+            drafts.set(key, written.current);
             setProblem(null);
             setAnnouncement('');
           }}

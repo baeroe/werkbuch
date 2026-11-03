@@ -229,6 +229,37 @@ describe('CommentComposer', () => {
     expect(plainText(drafts.get(commentDraft('wi_web_47')))).toBe('Zweitens.');
   });
 
+  it('follows a send of a closed view when the item opens again, and sends nothing twice', async () => {
+    const user = userEvent.setup();
+    let posts = 0;
+    const routes = { 'POST /api/v1/work-items/wi_web_47/comments': (body: unknown) => ((posts += 1), created(body)) };
+    const first = renderComposer({ surface: 'peek', routes });
+    await opener('Kommentar schreiben');
+    press('m');
+    const gate = holdNextSend();
+    paste(await commentEditor(), 'Erstens.');
+    send(await commentEditor());
+    await waitFor(() => expect(gate.held()).toBe(true));
+    // the preview closes and opens again while the comment is on its way
+    first.unmount();
+    renderComposer({ surface: 'peek', routes });
+    await user.click(await opener('Entwurf weiterschreiben'));
+    const editor = await commentEditor();
+    expect(editor.textContent).toBe('Erstens.');
+    const button = screen.getByRole('button', { name: /Kommentieren/ });
+    expect(button.getAttribute('aria-busy')).toBe('true');
+    send(editor);
+
+    // the answer reaches the new view: the text is gone, the button free, and mod+enter sends nothing more
+    await gate.release();
+    await waitFor(() => expect(editor.textContent).toBe(''));
+    expect(button.getAttribute('aria-busy')).toBeNull();
+    send(editor);
+    expect(screen.getByText('Der Kommentar ist noch leer. Schreib zuerst etwas.', { selector: 'p' })).toBeTruthy();
+    expect(posts).toBe(1);
+    expect(drafts.pending()).toEqual([]);
+  });
+
   it('keeps a draft when the preview closes and brings it back', async () => {
     const user = userEvent.setup();
     const first = renderComposer({ surface: 'peek' });

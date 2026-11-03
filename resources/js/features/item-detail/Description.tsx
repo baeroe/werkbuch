@@ -23,7 +23,9 @@
  * the page asks while it is there, and a save of a view that is gone that fails (5xx, no answer) keeps it there. The
  * next time the item opens, the description shows it as unsaved ("Nicht gespeichert"), based on the version it was
  * typed on, and saves it like any typing (A154/N2); one the server holds by then (the toast's retry went through) is
- * forgotten.
+ * forgotten. While a save of a view that is gone runs (`drafts.startSending`), a view opened meanwhile leaves the draft
+ * alone; should that save fail, the open view takes the draft over, and a view with nothing typed never lets go of it.
+ * Another person signing in forgets drafts, versions and conflicts (`drafts.onClear`).
  *
  * Archived meanwhile, or the edit right gone while text is typed (A154): the editor gives way to the stored text, and
  * the unsaved text stays above it, read-only, with "Kopieren" and "Verwerfen"; it is not sent again (the server would
@@ -42,7 +44,7 @@ import { toast } from '@/components/ui/toast';
 import { EMPTY_DOC, isEmptyDoc, RichTextEditor } from '@/editor/RichTextEditor';
 import { RichTextView } from '@/editor/RichTextView';
 import { useUpdateWorkItem } from '@/hooks/workItems';
-import { descriptionDraft, drafts } from '@/lib/drafts';
+import { descriptionDraft, drafts, useDraft, useDraftSending } from '@/lib/drafts';
 import { t } from '@/lib/i18n';
 import { docToText } from '@/lib/richtext';
 import { useUiStore } from '@/store/ui';
@@ -60,8 +62,12 @@ interface Conflict {
   current: WorkItem;
 }
 
+/** Object keys in one order: the editor writes `text` before `marks`, a document that went through the cache may not. */
+const sortedKeys = (_key: string, value: unknown) =>
+  value && typeof value === 'object' && !Array.isArray(value) ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : 1))) : value;
+
 /** A description as a save sends it (an empty document as null), for comparing. */
-const asSent = (doc: RichText | null | undefined): string => JSON.stringify(doc === undefined || isEmptyDoc(doc) ? null : doc);
+const asSent = (doc: RichText | null | undefined): string => JSON.stringify(doc === undefined || isEmptyDoc(doc) ? null : doc, sortedKeys);
 const same = (a: RichText | null | undefined, b: RichText | null | undefined) => asSent(a) === asSent(b);
 
 function conflictOf(error: unknown): Conflict | null {
@@ -103,6 +109,13 @@ function dropConflict(id: string): void {
   syncLeaveGuard();
 }
 
+// another person signs in (`drafts.clear()`): the conflicts and versions of the one before go with their texts
+drafts.onClear(() => {
+  openConflicts.clear();
+  draftBases.clear();
+  syncLeaveGuard();
+});
+
 /** A conflict whose view is gone: the toast names the item, and "Öffnen" brings it back with the banner. */
 function announceLeftConflict(item: Pick<WorkItem, 'id' | 'key'>, message: string): void {
   toast({
@@ -127,6 +140,9 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
     const open = openConflicts.get(item.id);
     return open && !same(open.mine, stored) ? open : null;
   });
+  /** The item's draft and whether a save of it runs, also one of a view that is gone. */
+  const shared = useDraft(draftKey);
+  const saving = useDraftSending(draftKey);
   // so does text an earlier view could not save (a failed save as it closed), unless the server holds it by now
   const [kept] = useState(() => {
     const text = drafts.get(draftKey);
@@ -186,8 +202,9 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
   // a conflict left open whose text the server took in the meantime: nothing left to offer
   useEffect(() => {
     if (!reopened) dropConflict(item.id);
-    // a draft the server holds by now (or none): nothing to keep
-    if (!reopened && !kept) drafts.set(draftKey, null);
+    // a draft the server holds by now (or none): nothing to keep. Not while a save of a view that is gone runs: the
+    // cache shows its text already, and should the save fail, that text is all there is
+    if (!reopened && !kept && !drafts.sending(draftKey)) drafts.set(draftKey, null);
   }, [reopened, kept, item.id, draftKey]);
 
   // a newer description from outside shows while nothing is typed here. While text is typed, nothing the cache shows
@@ -200,6 +217,17 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
     setDraft(stored);
   }, [stored, item.description_version]);
 
+  // the save of a view that is gone failed while this one is open (the cache rolled back): its text is the draft here
+  useEffect(() => {
+    if (saving || shared === null || inConflict.current || inFlight.current || dirty.current || same(shared, stored)) return;
+    base.current = draftBases.get(item.id) ?? item.description_version;
+    latest.current = shared;
+    dirty.current = true;
+    setDraft(shared);
+    setUnsaved(true);
+    setState('failed');
+  }, [saving, shared, stored]);
+
   const save = useRef(async (_options?: { force?: boolean }) => {});
   save.current = async ({ force = false } = {}) => {
     clearTimeout(timer.current);
@@ -207,13 +235,15 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
     if (inConflict.current || inFlight.current || !editable.current) return;
     const doc = latest.current;
     if (!force && (!dirty.current || same(doc, held.current))) {
-      // nothing typed, or typed back to what the server holds
-      dropDraft();
+      // typed back to what the server holds; with nothing typed here, the draft (of a view that is gone) is not ours
+      if (dirty.current) dropDraft();
       return;
     }
     inFlight.current = true;
     pendingSaves += 1;
     syncLeaveGuard();
+    const epoch = drafts.epoch();
+    const done = drafts.startSending(draftKey);
     setState('saving');
     let conflicted: Conflict | null = null;
     try {
@@ -232,11 +262,14 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
       // text stays, still to save
       conflicted = conflictOf(error);
       setState(conflicted ? 'idle' : 'failed');
+      // the text is still to save: a view that opened meanwhile may have let go of the draft (A154/N2)
+      if (drafts.epoch() === epoch && drafts.get(draftKey) === null) keepDraft(latest.current);
       if (error instanceof ApiError && error.errors?.description_json) setError(error.errors.description_json[0]!);
     } finally {
       inFlight.current = false;
       pendingSaves -= 1;
       syncLeaveGuard();
+      done();
     }
     if (conflicted) {
       openConflict(conflicted);
