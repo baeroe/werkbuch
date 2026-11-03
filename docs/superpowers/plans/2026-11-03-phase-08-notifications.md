@@ -197,7 +197,7 @@ Nicht in Phase 8: Erzeuger von `template_run_failed` (Phase 10) und `webhook_dis
 
 **Interfaces:**
 - Produces:
-  - Vormerkung Phase 8 „eine fehlgeschlagene Reset-Mail wird nicht erneut gesendet“: `SendPasswordResetLink` (Job, Queue `notifications`) ruft den Broker genau einmal (Token geschrieben, `tries = 1`, weil ein zweiter Lauf ein neues Token schriebe); die `ResetPasswordNotification` geht selbst über die Queue `notifications` mit `tries = 5`, `backoff = [60, 300, 900, 3600]`: ein SMTP-Fehler wiederholt nur die Mail mit demselben Link.
+  - Vormerkung Phase 8 „eine fehlgeschlagene Reset-Mail wird nicht erneut gesendet“: `SendPasswordResetLink` (Job, Queue `notifications`) ruft den Broker genau einmal (Token geschrieben, `tries = 1`, weil ein zweiter Lauf ein neues Token schriebe); die `ResetPasswordNotification` geht selbst über die Queue `notifications` mit `tries = 5`, `backoff = [60, 300, 900, 3600]`: ein SMTP-Fehler wiederholt nur die Mail mit demselben Link. Fixrunde T1 (Review I1): `retryUntil()` = Ende des Tokens (Einreihen + `auth.passwords.users.expire` Minuten), weil 60+300+900+3600 s die 60 Minuten des Tokens überdauern und der letzte Versuch einen toten Link schickte; die Pausen bleiben, mit `retryUntil` zählt der Worker `tries` nicht (vier Versuche in 60 Minuten). `shouldSend()` prüft bei jedem Versuch, dass das Konto eine aktive Person ist.
   - `Rendering::register`: der `respond()`-Callback gibt die Antwort unverändert zurück, wenn `$request->expectsJson()` gilt (Vormerkung: `/broadcasting/auth` antwortet einem `fetch` mit `Accept: application/json` 403 als JSON, nie als Inertia-Seite).
 - Consumes: nichts Neues.
 
