@@ -5,7 +5,7 @@
  * project (`projectId`) `@` mentions its people and bots (mentions.tsx), `#` refers to items (references.tsx), and
  * pictures and files are pasted, dropped or chosen in the `/` menu and uploaded into the project (uploads.ts, shown by
  * the nodes of nodes.tsx); without one there is no list and no upload. A form counts the running uploads of its editors
- * (UploadContext.tsx) and hears of failed and left-over uploads (`EditorEnvContext`, EditorEnv.tsx).
+ * (UploadContext.tsx) and hears of failed uploads (`EditorEnvContext`, EditorEnv.tsx).
  *
  *   <RichTextEditor value={doc} onChange={setDoc} preset="description" projectId={item.project_id} onSubmit={save} />
  *
@@ -318,7 +318,7 @@ function EditorBody({ value, onChange, preset, projectId, label, placeholder, au
   const name = label ?? t(PRESET_LABEL[preset]);
   const hint = placeholder ?? t((projectId ? PRESET_PLACEHOLDER : PRESET_PLACEHOLDER_PLAIN)[preset]);
   const latest = useRef({ onChange, onSubmit, onEscape, name, hint, describedBy, invalid, readOnly });
-  const { onUploadError, onOrphanedUploads } = useContext(EditorEnvContext);
+  const { onUploadError } = useContext(EditorEnvContext);
   const counter = useContext(UploadContext);
   const client = useContext(QueryClientContext);
   // made on mount, closed when the editor goes away (below); a StrictMode remount gets a new one
@@ -326,7 +326,6 @@ function EditorBody({ value, onChange, preset, projectId, label, placeholder, au
   const envNow = (): EditorEnv => ({
     projectId: projectId ?? null,
     onUploadError,
-    onOrphanedUploads,
     chooseFiles: projectId ? (current) => pickFiles(current, (files) => uploadFiles(current, files, current.state.selection.from, env.current)) : undefined,
     uploads: session.current,
   });
@@ -416,20 +415,13 @@ function EditorBody({ value, onChange, preset, projectId, label, placeholder, au
     [extensions],
   );
 
-  // the uploads of this editor: running ones stop when it goes away, stored ones whose node left the text are named
-  const editorNow = useRef(editor);
-  useLayoutEffect(() => {
-    editorNow.current = editor;
-  });
+  // the uploads of this editor: running ones stop when it goes away
   useEffect(() => {
     const current = new UploadSession();
     wire(current);
     session.current = current;
     env.current.uploads = current;
-    return () => {
-      const orphans = current.close(editorNow.current.state.doc);
-      if (orphans.length > 0) env.current.onOrphanedUploads?.(orphans);
-    };
+    return () => current.close();
     // once per mount: the counter and the cache are wired anew on every render (above)
   }, []);
 

@@ -17,7 +17,7 @@ import { NodeSelection } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
 import { Extension, mergeAttributes, Node, NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from '@tiptap/react';
 import { ImageIcon, ImageOff, Paperclip } from 'lucide-react';
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { attachmentUrl } from '@/api/attachments';
 import { formatSize } from '@/components/fields/format';
 import { useAttachment } from '@/hooks/attachments';
@@ -96,6 +96,13 @@ function ImageView({ node, editor, getPos, updateAttributes }: ReactNodeViewProp
 function AltField({ initial, onDone }: { initial: string; onDone: (next: string | undefined, refocus: boolean) => void }) {
   const [value, setValue] = useState(initial);
   const hint = useId();
+  // Enter and Escape decide; the blur that moving the focus back to the editor causes then changes nothing
+  const settled = useRef(false);
+  const done = (next: string | undefined, refocus: boolean) => {
+    if (settled.current) return;
+    settled.current = true;
+    onDone(next, refocus);
+  };
   return (
     <span className="rt-image-alt">
       <label>
@@ -111,9 +118,9 @@ function AltField({ initial, onDone }: { initial: string; onDone: (next: string 
             event.preventDefault();
             // nothing around the editor (a dialog) may see it
             event.stopPropagation();
-            onDone(event.key === 'Enter' ? value : undefined, true);
+            done(event.key === 'Enter' ? value : undefined, true);
           }}
-          onBlur={() => onDone(value, false)}
+          onBlur={() => done(value, false)}
         />
       </label>
       <span id={hint} className="rt-image-alt-hint">

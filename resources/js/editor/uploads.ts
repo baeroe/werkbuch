@@ -7,15 +7,19 @@
  * to `onUploadError` (by default a toast with the server's sentence; "Erneut versuchen" puts it at the same place).
  *
  * - Only with a project: without one, files are neither pasted nor dropped.
- * - A paste that brings HTML along (a web page, an office document) is pasted as HTML, its files are not uploaded: an
- *   `<img src>` never becomes an image (A236), the server would refuse it as well.
+ * - Pasted files replace the selection, like any paste. A browser's "Copy image" brings the picture along with HTML
+ *   that holds nothing but the `<img>` (and a `<meta>`): that is a picture, uploaded like a screenshot (`onlyImages`).
+ *   HTML with anything else (text of a web page, an office document, which adds a picture of the whole selection) is
+ *   pasted as HTML, its files are not uploaded. An `<img src>` never becomes an image either way (A236): the picture
+ *   comes from the uploaded file, whose kind the server reads from its content.
+ * - A finished upload leaves the cursor where it is: whoever typed on meanwhile goes on at the same place.
  * - The editor's `UploadSession` counts the running uploads for the form (UploadContext.tsx), puts each answer into the
- *   cache (the new image shows without asking the server), stops running uploads when the editor goes away and names
- *   the uploads whose node is no longer in the text then (`onOrphanedUploads`).
+ *   cache (the new image shows without asking the server) and stops running uploads when the editor goes away.
+ *   Uploads whose node left the text again are not deleted: they belong to nobody until a text names them, and the
+ *   hourly job removes them after 24 hours (A239, ruling T17-I4); one that was saved meanwhile belongs to its text.
  */
 
 import FileHandler from '@tiptap/extension-file-handler';
-import type { Node as PMNode } from '@tiptap/pm/model';
 import { Plugin, PluginKey, type EditorState } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { Extension, type AnyExtension, type Editor } from '@tiptap/react';
@@ -33,7 +37,6 @@ const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'imag
 /** The uploads of one editor, from its first render until it goes away. */
 export class UploadSession {
   private readonly controller = new AbortController();
-  private readonly done = new Set<string>();
   /** The form's counter of running uploads: an upload started (1) or ended (-1). */
   track: (delta: number) => void = () => {};
   /** Puts a stored attachment into the cache, so its node shows at once. */
@@ -47,17 +50,9 @@ export class UploadSession {
     return this.controller.signal.aborted;
   }
 
-  /** An upload of this editor became a node. */
-  inserted(id: string): void {
-    this.done.add(id);
-  }
-
-  /** Stops the running uploads; returns the uploads of this editor whose node is not in `doc`. */
-  close(doc: PMNode): string[] {
+  /** Stops the running uploads (the editor went away). */
+  close(): void {
     this.controller.abort();
-    const present = new Set<unknown>();
-    doc.descendants((node) => void present.add(node.attrs.attachmentId));
-    return [...this.done].filter((id) => !present.has(id));
   }
 }
 
@@ -153,9 +148,9 @@ export function uploadFiles(editor: Editor, files: readonly File[], pos: number,
               tr.setMeta(uploadKey, { remove: id } satisfies PlaceholderMeta);
               return true;
             })
-            .insertContentAt(at, nodeFor(attachment))
+            // the cursor stays where the person went on typing meanwhile
+            .insertContentAt(at, nodeFor(attachment), { updateSelection: false })
             .run();
-          session.inserted(attachment.id);
         },
         (error: unknown) => {
           // the editor went away and stopped it: nothing to say
@@ -189,16 +184,45 @@ export function pickFiles(editor: Editor, onPick: (files: File[]) => void): void
   input.click();
 }
 
+/** Whether pasted HTML is nothing but pictures: images, no text, no other element (what "Copy image" puts there). */
+export function onlyImages(html: string): boolean {
+  const body = new DOMParser().parseFromString(html, 'text/html').body;
+  const elements = [...body.querySelectorAll('*')];
+  return elements.length > 0 && elements.every((element) => element.tagName === 'IMG') && body.textContent!.trim() === '';
+}
+
+/** Pasting files: they replace the selection and upload (see above); mixed HTML goes on to ProseMirror. */
+function pasteFiles(editor: Editor, env: EditorEnvRef): Plugin {
+  return new Plugin({
+    key: new PluginKey('pasteFiles'),
+    props: {
+      handlePaste(view, event) {
+        const files = [...(event.clipboardData?.files ?? [])];
+        const html = event.clipboardData?.getData('text/html') ?? '';
+        if (files.length === 0 || (html !== '' && !onlyImages(html))) return false;
+        event.preventDefault();
+        // without a project nothing is uploaded; the paste is used up, so the browser does not paste the file itself
+        if (env.current.projectId === null) return true;
+        view.dispatch(view.state.tr.deleteSelection());
+        uploadFiles(editor, files, view.state.selection.from, env.current);
+        return true;
+      },
+    },
+  });
+}
+
 /** Pasting and dropping files, and the placeholders while they upload. */
 export function uploadExtensions(env: EditorEnvRef): AnyExtension[] {
   return [
-    FileHandler.configure({
-      onPaste: (editor, files, html) => {
-        // HTML is pasted as HTML (see above); the files that came along stay where they were
-        if (!html) uploadFiles(editor, files, editor.state.selection.from, env.current);
+    // before the paste rules of links and lists, which would read the HTML
+    Extension.create({
+      name: 'pasteFiles',
+      priority: 200,
+      addProseMirrorPlugins() {
+        return [pasteFiles(this.editor, env)];
       },
-      onDrop: (editor, files, pos) => uploadFiles(editor, files, pos, env.current),
     }),
+    FileHandler.configure({ onDrop: (editor, files, pos) => uploadFiles(editor, files, pos, env.current) }),
     Extension.create({ name: 'uploadPlaceholders', addProseMirrorPlugins: () => [uploadPlaceholders()] }),
   ];
 }

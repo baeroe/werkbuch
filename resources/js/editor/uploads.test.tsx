@@ -15,6 +15,7 @@ import { EditorEnvContext, type EditorEnv } from './EditorEnv';
 import { preloadEditor, RichTextEditor } from './RichTextEditor';
 import { RichTextView } from './RichTextView';
 import { UploadContext, useUploadCounter, useUploadsPending } from './UploadContext';
+import { onlyImages } from './uploads';
 
 // jsdom has no layout: ProseMirror measures the selection to scroll it into view
 beforeAll(async () => {
@@ -57,7 +58,7 @@ function Pending() {
 interface Setup {
   value?: RichText | null;
   projectId?: string;
-  context?: Partial<Pick<EditorEnv, 'onUploadError' | 'onOrphanedUploads'>>;
+  context?: Partial<Pick<EditorEnv, 'onUploadError'>>;
   routes?: Record<string, MockRoute>;
 }
 
@@ -205,8 +206,7 @@ describe('uploads in the editor', () => {
 
   it('aborts running uploads when the editor goes away', async () => {
     const onUploadError = vi.fn();
-    const onOrphanedUploads = vi.fn();
-    const { editor, hide } = renderEditor({ context: { onUploadError, onOrphanedUploads } });
+    const { editor, hide } = renderEditor({ context: { onUploadError } });
     pasteFiles(editor, [png()]);
     const xhr = FakeXhr.last;
     expect(pending().textContent).toBe('1');
@@ -216,27 +216,57 @@ describe('uploads in the editor', () => {
     await waitFor(() => expect(pending().textContent).toBe('0'));
     // stopped on purpose: nothing to report
     expect(onUploadError).not.toHaveBeenCalled();
-    expect(onOrphanedUploads).not.toHaveBeenCalled();
   });
 
-  it('reports uploads whose nodes left the text', async () => {
-    const onOrphanedUploads = vi.fn();
-    const { editor, editorRef, hide } = renderEditor({ context: { onOrphanedUploads } });
+  it('deletes no upload whose node left the text (ruling T17-I4)', async () => {
+    const { editor, editorRef, hide } = renderEditor();
     pasteFiles(editor, [png()]);
     await answer(FakeXhr.last, picture);
-    pasteFiles(editor, [pdf()]);
-    await answer(FakeXhr.last, offer);
-    await screen.findByRole('link', { name: 'angebot.pdf' });
+    await screen.findByRole('img', { name: 'screenshot.png' });
 
-    // the image goes again, the file stays
-    act(() => {
-      editorRef.current!.commands.setContent({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'attachment', attrs: { attachmentId: 'att_2', filename: 'angebot.pdf' } }] }] });
-    });
+    // the image goes again: it may be saved already; the hourly job removes it if nobody owns it (A239)
+    act(() => void editorRef.current!.commands.setContent({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Ohne Bild' }] }] }));
     hide();
-    expect(onOrphanedUploads).toHaveBeenCalledExactlyOnceWith(['att_1']);
+    expect(api?.calls).toEqual([]);
   });
 
-  it('ignores pasted images from the web', () => {
+  it('keeps typing where it was when an upload lands', async () => {
+    const { editor, editorRef, lastDoc } = renderEditor({ value: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'AB' }] }] } });
+    const tiptap = editorRef.current!;
+    // the picture goes between A and B, then the person types on at the end
+    act(() => void tiptap.commands.setTextSelection(2));
+    pasteFiles(editor, [png()]);
+    act(() => void tiptap.chain().setTextSelection(tiptap.state.doc.content.size - 1).insertContent('CD').run());
+
+    await answer(FakeXhr.last, picture);
+    act(() => void tiptap.commands.insertContent('Z'));
+    expect(lastDoc()?.content?.map((node) => (node.type === 'image' ? 'image' : node.content?.[0].text))).toEqual(['A', 'image', 'BCDZ']);
+  });
+
+  it('uploads a picture copied in a browser in place of the selection', async () => {
+    const { editor, editorRef, lastDoc } = renderEditor({ value: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Hallo Welt' }] }] } });
+    act(() => void editorRef.current!.commands.setTextSelection({ from: 1, to: 6 }));
+    // what Chrome puts on the clipboard for "Copy image": the picture and HTML with nothing but the <img>
+    pasteFiles(editor, [png('logo.png')], '<meta charset="utf-8"><img src="https://example.com/logo.png" alt="Logo">');
+
+    expect(FakeXhr.all).toHaveLength(1);
+    expect(screen.getByRole('progressbar', { name: 'Bild „logo.png“ wird hochgeladen …' }).isConnected).toBe(true);
+    // the selection went, as with any paste
+    expect(lastDoc()).toEqual({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: ' Welt' }] }] });
+    await answer(FakeXhr.last, { ...picture, filename: 'logo.png' });
+    // the image is the uploaded file, never the web address
+    expect(nodesOf(lastDoc(), 'image').map((node) => node.attrs)).toEqual([{ attachmentId: 'att_1', alt: 'logo.png' }]);
+  });
+
+  it('reads only HTML of nothing but pictures as pictures', () => {
+    expect(onlyImages('<meta charset="utf-8"><img src="https://example.com/a.png">')).toBe(true);
+    expect(onlyImages('<html><body><!--StartFragment--><img src="a.png">\n<img src="b.png"><!--EndFragment--></body></html>')).toBe(true);
+    expect(onlyImages('<p><img src="a.png"></p>')).toBe(false);
+    expect(onlyImages('<img src="a.png"> Bildunterschrift')).toBe(false);
+    expect(onlyImages('<meta charset="utf-8">')).toBe(false);
+  });
+
+  it('pastes mixed HTML as HTML and uploads none of its files', () => {
     const { editor, lastDoc } = renderEditor();
     // a browser copying from a page hands over its HTML and the picture: the HTML is pasted, the picture not uploaded
     pasteFiles(editor, [png('logo.png')], '<p>Von der Seite <img src="https://example.com/logo.png" alt="Logo"></p>');
@@ -323,9 +353,12 @@ describe('images and files in a text', () => {
     // a double click opens it as well; Escape leaves the text as it was
     await user.dblClick(screen.getByRole('img', { name: 'Formular der Anmeldung' }));
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Alternativtext' })));
+    // Escape after typing keeps the old text
+    await user.keyboard(' (alt)');
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('textbox', { name: 'Alternativtext' })).toBeNull();
     expect(nodesOf(lastDoc(), 'image')[0].attrs?.alt).toBe('Formular der Anmeldung');
+    await waitFor(() => expect(document.activeElement).toBe(editor));
 
     // emptied it is no alternative text at all; leaving the field keeps what was typed
     await user.dblClick(screen.getByRole('img'));
