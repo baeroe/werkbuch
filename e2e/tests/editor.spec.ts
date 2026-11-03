@@ -120,8 +120,9 @@ test('mentions over @ and refers over #', async ({ page }) => {
     await expect(page.getByRole('option', { name: /Mara Lindqvist/ })).toBeVisible();
     await page.keyboard.press('Enter');
     await page.keyboard.type('prüfen, siehe #');
-    // without a word the list asks for one
-    await expect(page.getByText(tr('en', 'editor.reference.hint'))).toBeVisible();
+    // without a word the list asks for one (under the list; the editor's live region says it too)
+    await expect(page.locator('p', { hasText: tr('en', 'editor.reference.hint') })).toBeVisible();
+    await expect(section.locator('[data-editor-announcer]')).toHaveText(tr('en', 'editor.reference.hint'));
     await page.keyboard.type(searchToken());
     await expect(page.getByRole('option')).toHaveCount(1);
     await expect(page.getByRole('option', { name: new RegExp(target.key) })).toBeVisible();

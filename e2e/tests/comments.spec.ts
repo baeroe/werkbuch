@@ -110,7 +110,9 @@ test('edits and deletes a comment with undo (mod+z)', async ({ page }) => {
     await pressMod(page, 'Enter');
     await expect(editor).toBeHidden();
     await expect(card).toContainText('First version. Updated.');
-    await expect(card.getByText(tr('en', 'items.comments.edited'), { exact: true })).toBeVisible();
+    await expect(card.getByText(tr('en', 'items.comments.edited'))).toBeVisible();
+    // the moment of the edit for screen readers too (F26)
+    await expect(card.locator('time.sr-only')).toHaveCount(1);
     await expect(actions).toBeFocused();
     expect(await storedComments(page, item.id)).toEqual(['First version. Updated.']);
 
@@ -129,6 +131,8 @@ test('edits and deletes a comment with undo (mod+z)', async ({ page }) => {
     await actions.click();
     await page.getByRole('menuitem', { name: tr('en', 'items.comments.delete') }).click();
     await expect(card).toBeHidden();
+    // on the phone the pointer rests where the toasts come up, and a hovered toast waits: away with it
+    await page.mouse.move(0, 0);
     await expect.poll(() => storedComments(page, item.id), { timeout: 15_000 }).toEqual([]);
     await expect(card).toBeHidden();
   } finally {

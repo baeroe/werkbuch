@@ -55,7 +55,9 @@ test('uploads a file to the list and downloads it', async ({ page }) => {
     const link = section.getByRole('link', { name: /angebot\.txt/ });
     await expect(link).toBeVisible();
     await expect(link).toContainText(/42 ?bytes?$/);
-    await expect(section.getByRole('link', { name: /skizze\.png/ })).toBeVisible();
+    // a picture opens as itself in a new tab, its download stands beside it (F28)
+    await expect(section.getByRole('link', { name: /^skizze\.png/ })).toHaveAttribute('target', '_blank');
+    await expect(section.getByRole('link', { name: tr('en', 'items.attachments.download', { name: 'skizze.png' }) })).toHaveAttribute('download', 'skizze.png');
     await expect(section.locator('img')).toHaveCount(1);
     await expect(section.locator('img')).toHaveJSProperty('complete', true);
     expect(await section.locator('img').evaluate((image: HTMLImageElement) => image.naturalWidth)).toBe(1);

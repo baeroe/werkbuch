@@ -225,7 +225,8 @@ test('downloads an SVG instead of showing it', async ({ page }) => {
     expect(response.status()).toBe(200);
     const headers = response.headers();
     expect(headers['content-type']).toBe('application/octet-stream');
-    expect(headers['content-disposition']).toMatch(/^attachment; filename\*=UTF-8''logo\.svg$/);
+    // an ASCII name stands as filename alone (HeaderUtils::makeDisposition, T6-M7)
+    expect(headers['content-disposition']).toBe('attachment; filename=logo.svg');
     expect(headers['x-content-type-options']).toBe('nosniff');
     expect(headers['content-security-policy']).toContain('sandbox');
     // no preview of what is no picture
