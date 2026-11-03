@@ -46,6 +46,10 @@ final class ItemValues
         $errors = [];
 
         foreach ($properties as $property) {
+            // the collation finds `notes` for `NOTES`; only the exact key is the property's, check() refuses the other
+            if (! in_array($property->key, $keys, true)) {
+                continue;
+            }
             $ctx = RichTextRules::context($project, $writer, $before[$property->key] ?? null);
             $document = self::document($property, $values[$property->key], $ctx);
             if (is_string($document)) {

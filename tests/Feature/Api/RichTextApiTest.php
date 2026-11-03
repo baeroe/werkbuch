@@ -111,3 +111,20 @@ it('keeps a kept mention of a former member through Markdown', function () use (
     $this->actingAs($w['mara'])->patchJson("/api/v1/work-items/{$w['item']->key}", ['description' => "{$markdown}!"])->assertOk()
         ->assertJsonPath('data.description_json', F::doc(F::p('Frag ', F::mention($w['lene']->id, 'lene'), '!')));
 });
+
+it('refuses a rich text value under another spelling of its key with 422, never 500 (T8-M5)', function () use ($world) {
+    $w = $world();
+    $property = Property::factory()->create(['key' => 'notes', 'label' => 'Notizen', 'field_type' => FieldType::RichText]);
+    WorkItemType::query()->where('name', 'Task')->firstOrFail()->typeProperties()->create(['property_id' => $property->id, 'required' => false, 'position' => 9]);
+    $unknown = fn (string $key) => [__('field.values.unknown', ['key' => $key, 'type' => 'Task'])];
+
+    $this->actingAs($w['mara'])->patchJson("/api/v1/work-items/{$w['item']->key}", ['values' => ['NOTES' => 'Wichtig']])
+        ->assertUnprocessable()->assertJsonPath('errors', ['values.NOTES' => $unknown('NOTES')]);
+    $this->actingAs($w['mara'])->postJson('/api/v1/work-items', ['project_id' => 'WEB', 'title' => 'Neu', 'values' => ['Notes' => F::doc(F::p('Wichtig'))]])
+        ->assertUnprocessable()->assertJsonPath('errors', ['values.Notes' => $unknown('Notes')]);
+    // the exact key is read, only the other spelling is refused
+    $this->actingAs($w['mara'])->patchJson("/api/v1/work-items/{$w['item']->key}", ['values' => ['notes' => 'Wichtig', 'NOTES' => 'Auch']])
+        ->assertUnprocessable()->assertJsonPath('errors', ['values.NOTES' => $unknown('NOTES')]);
+
+    expect($w['item']->fresh()?->values()->count())->toBe(0);
+});
