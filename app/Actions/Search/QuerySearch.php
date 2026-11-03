@@ -38,6 +38,12 @@ use Psr\Http\Client\ClientExceptionInterface;
  */
 final class QuerySearch
 {
+    /**
+     * What Meilisearch is asked with: every word has to hit (P13), and only the id comes back (the hits are read afresh;
+     * the documents with their texts would only cost bandwidth, T12-M2).
+     */
+    private const OPTIONS = ['matchingStrategy' => 'all', 'attributesToRetrieve' => ['id']];
+
     use AsAction;
 
     /** @var list<string> */
@@ -176,7 +182,7 @@ final class QuerySearch
     {
         $ids = [];
         if ($scope !== []) {
-            $search = WorkItem::search($q)->options(['matchingStrategy' => 'all'])->whereIn('project_id', $scope);
+            $search = WorkItem::search($q)->options(self::OPTIONS)->whereIn('project_id', $scope);
             if (! $includeArchived) {
                 $search->where('archived', false);
             }
@@ -210,7 +216,7 @@ final class QuerySearch
             return (new Project)->newCollection();
         }
 
-        $ids = self::keys(Project::search($q)->options(['matchingStrategy' => 'all'])->whereIn('id', $scope)->take($limit));
+        $ids = self::keys(Project::search($q)->options(self::OPTIONS)->whereIn('id', $scope)->take($limit));
 
         return self::inOrder($ids, Project::query()->visibleTo($user)->with(['media', 'types:work_item_types.id'])->whereKey($ids)->get());
     }
@@ -222,7 +228,7 @@ final class QuerySearch
      */
     private static function people(string $q, int $limit): EloquentCollection
     {
-        $ids = self::keys(User::search($q)->options(['matchingStrategy' => 'all'])->where('disabled', false)->take($limit));
+        $ids = self::keys(User::search($q)->options(self::OPTIONS)->where('disabled', false)->take($limit));
 
         return self::inOrder($ids, User::query()->with('media')->whereKey($ids)->whereNull('disabled_at')->get());
     }

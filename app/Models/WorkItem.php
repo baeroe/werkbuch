@@ -295,7 +295,12 @@ final class WorkItem extends Model
      */
     protected function makeAllSearchableUsing(Builder $query): Builder
     {
-        return $query->with(['project:id,identifier', 'labels:labels.id', 'state:id,category', 'comments:id,work_item_id,body_text'])
+        return $query->with([
+            'project:id,identifier', 'labels:labels.id', 'state:id,category',
+            // no comment gives the document more than it can take: the database cuts it (T12-M1)
+            'comments' => fn (HasMany $comments) => $comments->select(['id', 'work_item_id'])
+                ->selectRaw('left(body_text, ?) as body_text', [SearchIndexer::COMMENTS_MAX]),
+        ])
             ->whereIn('work_items.project_id', Project::query()->whereNull('deleting_at')->select('id'));
     }
 

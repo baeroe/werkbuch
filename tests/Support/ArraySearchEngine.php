@@ -36,6 +36,9 @@ final class ArraySearchEngine extends Engine implements RemovesWhere, UpdatesInd
     /** @var list<string> */
     private array $searched = [];
 
+    /** @var list<array<string, mixed>> */
+    private array $options = [];
+
     /**
      * The documents of an index (with its prefix: `testing_work_items`) by key.
      *
@@ -70,6 +73,16 @@ final class ArraySearchEngine extends Engine implements RemovesWhere, UpdatesInd
     public function searched(): array
     {
         return $this->searched;
+    }
+
+    /**
+     * The options of each search so far (what Meilisearch would be asked with), in order.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function options(): array
+    {
+        return $this->options;
     }
 
     /** Lets every search and every write throw this error from now on (`null` lets them work again). */
@@ -254,6 +267,7 @@ final class ArraySearchEngine extends Engine implements RemovesWhere, UpdatesInd
 
         $index = $builder->index ?: $builder->model->searchableAs();
         $this->searched[] = $index;
+        $this->options[] = $builder->options;
         $attributes = config('scout.meilisearch.index-settings')[$builder->model::class]['searchableAttributes'] ?? [];
         $words = preg_split('/\s+/u', mb_strtolower(trim((string) $builder->query)), -1, PREG_SPLIT_NO_EMPTY) ?: [];
         $ids = [];

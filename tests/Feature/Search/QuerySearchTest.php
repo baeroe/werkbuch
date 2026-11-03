@@ -313,7 +313,9 @@ it('searches only the types asked for', function () use ($world, $item, $rebuild
         ->and($some->views)->toHaveCount(1)
         ->and($engine->searched())->toBe(['testing_projects', 'testing_work_items'])
         ->and($ids($search($mara, ['q' => 'web', 'types' => 'projects,people', 'limit' => 1])->projects))->toBe([$web->id])
-        ->and($search($mara, ['q' => 'web'])->people)->toHaveCount(1);
+        ->and($search($mara, ['q' => 'web'])->people)->toHaveCount(1)
+        // only the ids come back from Meilisearch, never the documents with their texts (T12-M2)
+        ->and(collect($engine->options())->pluck('attributesToRetrieve')->unique()->values()->all())->toBe([['id']]);
 });
 
 // the input

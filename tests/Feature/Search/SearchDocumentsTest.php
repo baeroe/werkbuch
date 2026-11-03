@@ -135,6 +135,16 @@ it('loads what the documents read with the query of a rebuild', function () use 
         ->and(array_column($documents, 'former_identifiers'))->toBe([['WEB']]);
 });
 
+it('loads no more of a comment than the document can take (T12-M1)', function () use ($web) {
+    [$web, $mara] = $web();
+    $item = WorkItem::factory()->for($web)->create();
+    Comment::factory()->for($item, 'workItem')->create(['author_id' => $mara->id, 'body_text' => str_repeat('a', SearchIndexer::COMMENTS_MAX + 10)]);
+
+    $loaded = WorkItem::makeAllSearchableQuery()->get()->sole()->comments->sole();
+
+    expect(strlen((string) $loaded->body_text))->toBe(SearchIndexer::COMMENTS_MAX);
+});
+
 it('never writes the index when a model is saved', function () use ($web) {
     $engine = searchEngine();
     consumers();
