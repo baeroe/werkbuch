@@ -31,7 +31,7 @@ import {
   web47History,
 } from '@/test/fixtures';
 import { installFakeXhr, FakeXhr, restoreFakeXhr } from '@/test/xhr';
-import type { Comment, ListedItem, ProjectMember, User } from '@/types';
+import type { Comment, ListedItem, ProjectMember, User, WorkItemDetail } from '@/types';
 import { ATTACHMENT_FRESH_MS, useAttachment, useDeleteAttachment, usePrimeAttachments, useUploadAttachment } from './attachments';
 import { useAddComment, useComments, useDeleteComment, useEditComment, useToggleReaction } from './comments';
 import { useDeleteLabel, useDeleteRelationType, useDeleteResolution, useLabels, useRelationTypes, useResolutions, useSaveLabel, useSaveRelationType, useSaveResolution } from './catalog';
@@ -846,7 +846,10 @@ describe('attachments', () => {
       const picture = makeAttachment();
       api = mockApi({ 'DELETE /api/v1/attachments/att_1': () => ({ status: 204 }) });
       const onProgress = vi.fn();
-      queryClient.setQueryData(qk.workItems.detail('wi_web_47'), { item: web47 });
+      const listed = makeAttachment({ id: 'att_1', kind: 'file', owner: { type: 'work_item', id: 'wi_web_47' } });
+      const other = makeAttachment({ id: 'att_3', kind: 'file', owner: { type: 'work_item', id: 'wi_web_47' } });
+      queryClient.setQueryData(qk.workItems.detail('wi_web_47'), { item: web47, attachments: [listed, other] });
+      queryClient.setQueryData(qk.workItems.detail('WEB-47'), { item: web47, attachments: [listed] });
       const { result } = renderHook(() => ({ upload: useUploadAttachment(), remove: useDeleteAttachment() }), { wrapper });
 
       let call!: Promise<unknown>;
@@ -862,6 +865,9 @@ describe('attachments', () => {
 
       await act(() => result.current.remove.mutateAsync('att_1'));
       expect(queryClient.getQueryState(qk.workItems.detail('wi_web_47'))?.isInvalidated).toBe(true);
+      // the file leaves every cached detail at once, also one cached under the key
+      expect(queryClient.getQueryData<WorkItemDetail>(qk.workItems.detail('wi_web_47'))?.attachments).toEqual([other]);
+      expect(queryClient.getQueryData<WorkItemDetail>(qk.workItems.detail('WEB-47'))?.attachments).toEqual([]);
       // a deleted attachment leaves the cache
       expect(queryClient.getQueryData(qk.attachments.detail('att_1'))).toBeUndefined();
     } finally {

@@ -107,7 +107,7 @@ function renderWith(node: ReactNode, routes: Record<string, MockRoute> = {}) {
     'GET /api/v1/projects/p_web/members': () => ({ body: list([{ project_id: 'p_web', user_id: 'u_ida', role: 'admin' }, { project_id: 'p_web', user_id: 'u_lene', role: 'member' }]) }),
     'GET /api/v1/projects/p_app/members': () => ({ body: list([{ project_id: 'p_app', user_id: 'u_lene', role: 'member' }]) }),
     'POST /api/v1/work-items/query': fails('items', (body) => ({ body: list(queryItems([web30, web47, web48], body)) })),
-    'GET /api/v1/work-items/wi_web_30': () => ({ body: { data: { ...web30, children: [], relations: [], type: wishTypes.find((type) => type.id === web30.type_id), workflow: standard } } }),
+    'GET /api/v1/work-items/wi_web_30': () => ({ body: { data: { ...web30, children: [], relations: [], type: wishTypes.find((type) => type.id === web30.type_id), workflow: standard, attachments: [] } } }),
     'POST /api/v1/work-items': (body, url) => answerCreate(body, url),
     ...routes,
   });

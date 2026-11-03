@@ -43,7 +43,7 @@ const members = [member('u_ida', 'admin'), member('u_lene')];
 const items = [web30, web47, web48, web50];
 
 const detail = (item: WorkItem) => ({
-  body: { data: { ...item, children: items.filter((entry) => entry.parent_id === item.id), relations: [], type: types.find((type) => type.id === item.type_id), workflow: standard } },
+  body: { data: { ...item, children: items.filter((entry) => entry.parent_id === item.id), relations: [], type: types.find((type) => type.id === item.type_id), workflow: standard, attachments: [] } },
 });
 const problem = (status: number, reason: string, detail: string) => ({ status, body: { type: 'about:blank', title: reason, status, reason, detail } });
 
@@ -599,7 +599,7 @@ describe('the sub-lists of the item commands', () => {
     const epic = { ...web30, id: 'wi_web_60', key: 'WEB-60' };
     renderWith(<ItemPage id="wi_web_60" />, {
       routes: {
-        'GET /api/v1/work-items/wi_web_60': () => ({ body: { data: { ...epic, children: [{ ...archived, parent_id: epic.id }], relations: [], type: types.find((type) => type.id === epic.type_id), workflow: standard } } }),
+        'GET /api/v1/work-items/wi_web_60': () => ({ body: { data: { ...epic, children: [{ ...archived, parent_id: epic.id }], relations: [], type: types.find((type) => type.id === epic.type_id), workflow: standard, attachments: [] } } }),
       },
     });
     await ready('WEB-60', 'item.type');

@@ -90,6 +90,7 @@ const detail = (item: WorkItem) => ({
       relations: item.id === web47.id ? web47Relations : [],
       type: typeList.find((type) => type.id === item.type_id),
       workflow: standard,
+      attachments: [],
     },
   },
 });

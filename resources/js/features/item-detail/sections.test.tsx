@@ -80,6 +80,7 @@ const detail = (item: WorkItem) => ({
       relations: relations[item.id] ?? [],
       type: types.find((type) => type.id === item.type_id),
       workflow: standard,
+      attachments: [],
     },
   },
 });

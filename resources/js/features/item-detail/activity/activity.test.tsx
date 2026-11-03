@@ -84,7 +84,7 @@ function renderActivity(history: MockRoute, { surface = 'peek', routes = {} }: {
     'GET /api/v1/work-item-types': () => ({ body: list(types) }),
     'GET /api/v1/properties': () => ({ body: list([...properties, brief, reviewers]) }),
     'GET /api/v1/work-items/wi_web_48/history': history,
-    'GET /api/v1/work-items/wi_web_31': () => ({ body: { data: { ...web31, children: [], relations: [], type: types[2], workflow: standard } } }),
+    'GET /api/v1/work-items/wi_web_31': () => ({ body: { data: { ...web31, children: [], relations: [], type: types[2], workflow: standard, attachments: [] } } }),
     'GET /api/v1/work-items/wi_web_29': () => ({ status: 404, body: { type: 'about:blank', title: 'not_found', status: 404, reason: 'not_found' } }),
     ...routes,
   });

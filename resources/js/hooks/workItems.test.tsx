@@ -83,7 +83,7 @@ describe('reading', () => {
   it('lists items, reads one with its detail, its history and the count per state', async () => {
     api = mockApi({
       'POST /api/v1/work-items/query': () => ({ body: list([web47]) }),
-      'GET /api/v1/work-items/WEB-47': () => ({ body: { data: { ...web47, children: [], relations: web47Relations, type: types[1], workflow: standard } } }),
+      'GET /api/v1/work-items/WEB-47': () => ({ body: { data: { ...web47, children: [], relations: web47Relations, type: types[1], workflow: standard, attachments: [] } } }),
       'GET /api/v1/work-items/WEB-47/history': () => ({ body: list(web47History) }),
       'GET /api/v1/state-usage': () => ({ body: { data: [{ state_id: 'std_progress', items: 2 }] } }),
     });

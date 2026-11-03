@@ -701,7 +701,7 @@ describe('TypePicker and the type change', () => {
     ],
   };
   const typed = (item: WorkItem): MockRoute => () => ({
-    body: { data: { ...item, children: item.id === web30.id ? [web48] : [], relations: [], type: types.find((type) => type.id === item.type_id), workflow: standard } },
+    body: { data: { ...item, children: item.id === web30.id ? [web48] : [], relations: [], type: types.find((type) => type.id === item.type_id), workflow: standard, attachments: [] } },
   });
   const retyped = (item: WorkItem): MockRoute => (body) => ({ body: { data: { ...item, type_id: (body as { type_id: string }).type_id } } });
   const routes = (item: WorkItem, extra: Record<string, MockRoute> = {}): Record<string, MockRoute> => ({

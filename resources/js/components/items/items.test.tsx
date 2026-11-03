@@ -133,7 +133,7 @@ describe('BlockedHint', () => {
 
   function renderHint(node: ReactNode, itemRelations: RelationEntry[] = relations) {
     api = mockApi({
-      'GET /api/v1/work-items/wi_web_47': () => ({ body: { data: { ...web47, children: [], relations: itemRelations, type: types[1], workflow: standard } } }),
+      'GET /api/v1/work-items/wi_web_47': () => ({ body: { data: { ...web47, children: [], relations: itemRelations, type: types[1], workflow: standard, attachments: [] } } }),
       'GET /api/v1/relation-types': () => ({ body: list(relationTypes) }),
       'GET /api/v1/workflows': () => ({ body: list([standard, agency]) }),
     });
@@ -238,7 +238,7 @@ describe('rows and cards', () => {
       'GET /api/v1/work-item-types': () => ({ body: list(types) }),
       'GET /api/v1/properties': () => ({ body: list(catalog) }),
       'GET /api/v1/relation-types': () => ({ body: list(relationTypes) }),
-      'GET /api/v1/work-items/wi_web_47': () => ({ body: { data: { ...web47, children: [], relations: web47Relations, type: types[1], workflow: standard } } }),
+      'GET /api/v1/work-items/wi_web_47': () => ({ body: { data: { ...web47, children: [], relations: web47Relations, type: types[1], workflow: standard, attachments: [] } } }),
     });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     return render(<QueryClientProvider client={client}>{node}</QueryClientProvider>);
