@@ -5,6 +5,7 @@ use App\Access\ProjectRole;
 use App\Access\RoleAssignments;
 use App\Models\Project;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 
 beforeEach(function () {
     $this->project = Project::factory()->create();
@@ -69,4 +70,13 @@ it('answers the same for every account through check, among and query (T11-M5)',
         ->and($queried)->toBe($checked)
         // the world holds every case: some take work, some do not
         ->and(count($checked))->toBeGreaterThan(1)->toBeLessThan(count($accounts));
+});
+
+it('finds nobody among no accounts or only disabled ones, without asking the database', function () {
+    $disabled = memberOf($this->project, ProjectRole::Member, ['disabled_at' => now()]);
+    DB::enableQueryLog();
+
+    expect(Assignable::among([], $this->project))->toBe([])
+        ->and(Assignable::among([$disabled], $this->project))->toBe([])
+        ->and(DB::getQueryLog())->toBe([]);
 });
