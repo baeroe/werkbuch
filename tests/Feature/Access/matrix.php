@@ -35,7 +35,9 @@ use App\Actions\Notifications\ListNotifications;
 use App\Actions\Notifications\MarkNotificationsRead;
 use App\Actions\Notifications\MarkNotificationsUnread;
 use App\Actions\Notifications\NotifyRecipients;
+use App\Actions\Notifications\PruneNotifications;
 use App\Actions\Notifications\SaveNotificationPreferences;
+use App\Actions\Notifications\SendDueReminders;
 use App\Actions\Notifications\SendNotificationMail;
 use App\Actions\Organization\GetOrganization;
 use App\Actions\Organization\UpdateOrganization;
@@ -853,6 +855,18 @@ return [
     'DispatchDueMails' => [
         'action' => DispatchDueMails::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => DispatchDueMails::run($a),
+        'system' => true,
+    ],
+    // the hourly reminders of what is due (SendDueRemindersJob, A275), without an event of their own
+    'SendDueReminders' => [
+        'action' => SendDueReminders::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => SendDueReminders::run($a, now()->utc()->startOfHour()->toImmutable()),
+        'system' => true,
+    ],
+    // the hourly tidying up of notifications and collections (PruneNotificationsJob, A276), without an event
+    'PruneNotifications' => [
+        'action' => PruneNotifications::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => PruneNotifications::run($a),
         'system' => true,
     ],
     'GetTwoFactor' => [

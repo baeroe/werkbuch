@@ -56,6 +56,7 @@ final class SendNotificationMail
                     $person,
                     array_values($lines->map(fn (Notification $line) => ['notification' => $line, 'text' => isset($texts[$line->id]) ? Document::fromJson($texts[$line->id]) : null])->all()),
                     ReaderNames::of(array_values($texts), $person),
+                    reminders: str_starts_with($mail->scope, 'due:'),
                 );
                 Mail::to($person)->locale($person->preferredLocale())->send($digest);
             }

@@ -94,7 +94,7 @@ final class NotifyRecipients
             }
         }
 
-        $mails = $this->collect($this->unwritten($event, $mailing), "item:{$facts->itemId}");
+        $mails = self::collect($this->unwritten($event, $mailing), "item:{$facts->itemId}");
         $rows = array_map(fn (array $row) => [...$row, 'mail_id' => $mails[$row['user_id']] ?? null], $rows);
 
         return Notification::query()->insertOrIgnore($rows);
@@ -124,12 +124,12 @@ final class NotifyRecipients
      * should a collection close between the insert and the read all the same, the read does not find it and a second
      * round opens a new one: no line ever joins a mail that went out. A collection that is due but not sent yet stays
      * open, a line joins it and goes out with it. A new collection gets its job, after its delay and only after the
-     * commit.
+     * commit. Shared with SendDueReminders (scope `due:<day>`); runs inside the caller's transaction.
      *
      * @param  list<string>  $ids
      * @return array<string, string> the collection by person
      */
-    private function collect(array $ids, string $scope): array
+    public static function collect(array $ids, string $scope): array
     {
         $due = now()->addMinutes((int) config('werkbuch.notification_mail_delay'));
         $open = [];

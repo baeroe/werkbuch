@@ -135,6 +135,30 @@ it('answers rights of a project through the role in it', function () {
         ->and(Visibility::can($admin, Permission::ProjectRead))->toBeFalse();
 });
 
+it('reads the members of many projects with one query, then answers seeing() of each without one', function () {
+    $outsider = $this->accounts['outsider'];
+    $other = Project::factory()->private()->member($outsider, ProjectRole::Viewer)->create();
+    $empty = Project::factory()->private()->create();
+    $projects = [$this->projects['private'], $other, $empty];
+    $accounts = array_values($this->accounts);
+    Visibility::forget();
+    Visibility::orgRole($outsider);
+
+    DB::enableQueryLog();
+    Visibility::loadMembers($projects);
+    $load = count(DB::getQueryLog());
+    DB::flushQueryLog();
+    $seeing = array_map(fn (Project $project) => array_map(fn (User $user) => $user->id, Visibility::seeing($project, $accounts)), $projects);
+    $after = count(DB::getQueryLog());
+    DB::disableQueryLog();
+
+    $expected = array_map(fn (Project $project) => array_values(array_map(fn (User $user) => $user->id,
+        array_filter($accounts, fn (User $user) => Visibility::roleIn($user, $project) !== null))), $projects);
+    expect($load)->toBe(1)->and($after)->toBe(0)->and($seeing)->toBe($expected)
+        ->and(app(RoleIndex::class)->members($other))->toBe([$outsider->id => ProjectRole::Viewer])
+        ->and(app(RoleIndex::class)->members($empty))->toBe([]);
+});
+
 it('reads the project roles of an account with one query per request', function () {
     $member = $this->accounts['member'];
     Visibility::forget();

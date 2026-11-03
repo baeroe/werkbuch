@@ -60,6 +60,23 @@ final class RoleIndex
     }
 
     /**
+     * Reads the members of all these projects with one query and keeps them like members() does: a caller that then
+     * asks members() (or Visibility::seeing()) of each of them asks nothing more, however many projects there are.
+     * Projects already read keep what they had.
+     *
+     * @param  list<string>  $projectIds
+     */
+    public function loadMembers(array $projectIds): void
+    {
+        $missing = array_values(array_diff($projectIds, array_keys($this->members)));
+        $byProject = $this->highestIn(ProjectRole::cases(), 'team_id', $missing, 'model_id');
+
+        foreach ($missing as $id) {
+            $this->members[$id] = $byProject[$id] ?? [];
+        }
+    }
+
+    /**
      * The visible projects of an account, computed once per request (Visibility::projectIds).
      *
      * @param  Closure(): Collection<int, string>  $compute
@@ -97,6 +114,20 @@ final class RoleIndex
      */
     private function highest(array $roles, string $column, string $value, string $key): array
     {
+        return $this->highestIn($roles, $column, [$value], $key)[$value] ?? [];
+    }
+
+    /**
+     * highest() for several values of `$column` in one query, by value.
+     *
+     * @template TRole of OrgRole|ProjectRole
+     *
+     * @param  list<TRole>  $roles
+     * @param  list<string>  $values
+     * @return array<string, array<string, TRole>>
+     */
+    private function highestIn(array $roles, string $column, array $values, string $key): array
+    {
         $byName = [];
 
         foreach ($roles as $role) {
@@ -107,17 +138,17 @@ final class RoleIndex
             ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
             ->where('model_has_roles.model_type', Relation::getMorphAlias(User::class))
             ->whereIn('roles.name', array_keys($byName))
-            ->where("model_has_roles.{$column}", $value)
-            ->get(['roles.name as role', "model_has_roles.{$key} as holder"]);
+            ->whereIn("model_has_roles.{$column}", $values)
+            ->get(['roles.name as role', "model_has_roles.{$column} as owner", "model_has_roles.{$key} as holder"]);
 
         $highest = [];
 
         foreach ($rows as $row) {
             $role = $byName[(string) $row->role];
-            $held = $highest[(string) $row->holder] ?? null;
+            $held = $highest[(string) $row->owner][(string) $row->holder] ?? null;
 
             if ($held === null || $role->rank() > $held->rank()) {
-                $highest[(string) $row->holder] = $role;
+                $highest[(string) $row->owner][(string) $row->holder] = $role;
             }
         }
 

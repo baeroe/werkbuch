@@ -87,6 +87,22 @@ final class Visibility
     }
 
     /**
+     * Reads the members of all these projects with one query, so that seeing() asks nothing more of them than the org
+     * roles: for a caller that checks many projects at once (the reminders of a time zone).
+     *
+     * @param  iterable<Project>  $projects
+     */
+    public static function loadMembers(iterable $projects): void
+    {
+        $ids = [];
+        foreach ($projects as $project) {
+            $ids[] = $project->id;
+        }
+
+        self::index()->loadMembers($ids);
+    }
+
+    /**
      * The role in the organization; an account without an assignment is a member.
      */
     public static function orgRole(User $user): OrgRole
