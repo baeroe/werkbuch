@@ -29,12 +29,14 @@ use App\Actions\Labels\ListLabels;
 use App\Actions\Labels\SaveLabel;
 use App\Actions\Media\ShowMedia;
 use App\Actions\Notifications\DeleteNotification;
+use App\Actions\Notifications\DispatchDueMails;
 use App\Actions\Notifications\GetNotificationPreferences;
 use App\Actions\Notifications\ListNotifications;
 use App\Actions\Notifications\MarkNotificationsRead;
 use App\Actions\Notifications\MarkNotificationsUnread;
 use App\Actions\Notifications\NotifyRecipients;
 use App\Actions\Notifications\SaveNotificationPreferences;
+use App\Actions\Notifications\SendNotificationMail;
 use App\Actions\Organization\GetOrganization;
 use App\Actions\Organization\UpdateOrganization;
 use App\Actions\Projects\AddMember;
@@ -109,6 +111,7 @@ use App\Models\CommentReaction;
 use App\Models\Event;
 use App\Models\Label;
 use App\Models\Notification;
+use App\Models\NotificationMail;
 use App\Models\Property;
 use App\Models\RelationType;
 use App\Models\Resolution;
@@ -837,6 +840,19 @@ return [
     'NotifyRecipients' => [
         'action' => NotifyRecipients::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => NotifyRecipients::run($a, Event::query()->where('type', EventType::BotCreated)->firstOrFail()),
+        'system' => true,
+    ],
+    // the work of SendNotificationMailJob for a collection that is due (here one without lines: it is skipped), without
+    // an event of its own
+    'SendNotificationMail' => [
+        'action' => SendNotificationMail::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => SendNotificationMail::run($a, NotificationMail::factory()->create(['user_id' => $w->target->id])->id),
+        'system' => true,
+    ],
+    // the sweeper of the mail collections (`app:send-notification-mails`), without an event of its own
+    'DispatchDueMails' => [
+        'action' => DispatchDueMails::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => DispatchDueMails::run($a),
         'system' => true,
     ],
     'GetTwoFactor' => [

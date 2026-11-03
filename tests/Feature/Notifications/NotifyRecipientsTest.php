@@ -4,6 +4,7 @@ use App\Access\ProjectRole;
 use App\Access\RoleAssignments;
 use App\Actions\Comments\AddComment;
 use App\Actions\Comments\EditComment;
+use App\Actions\Notifications\NotifyRecipients;
 use App\Actions\Projects\AddMember;
 use App\Actions\Projects\RemoveMember;
 use App\Actions\Users\DeactivateUser;
@@ -18,7 +19,9 @@ use App\Domain\Properties\FieldType;
 use App\Domain\Ranking\Rank;
 use App\Events\EventType;
 use App\Events\Outbox;
+use App\Jobs\SendNotificationMailJob;
 use App\Models\Notification;
+use App\Models\NotificationMail;
 use App\Models\NotificationPreference;
 use App\Models\Project;
 use App\Models\Property;
@@ -28,11 +31,14 @@ use App\Models\WorkItem;
 use App\Models\WorkItemType;
 use App\Notifications\NotificationConsumer;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Queue;
 
 /*
  * Who hears of what (Task 5): the consumer `notifications` turns the events of the real actions into rows of
  * `notifications`. WEB (public) with Tom as its admin and lead, Mara, Ida and Jonas as members and the bot Kira; OPS is
- * private with Tom as its lead and Ida and Ole as members. Mail is off (no mail server, K9) unless a test sets SMTP.
+ * private with Tom as its lead and Ida and Ole as members. Mail is off (no mail server, K9) unless a test sets one
+ * up ($mailServer).
  */
 
 beforeEach(fn () => consumers(NotificationConsumer::class));
@@ -67,6 +73,19 @@ $choose = function (User $user, array ...$choices): void {
 };
 
 $watch = fn (User $user, WorkItem $item) => SetSubscription::run(actor($user), $item, true);
+
+/**
+ * A mail server (K2): mail counts as on, nothing leaves (Mail::fake), and the mail jobs wait instead of running at once
+ * (the sync queue knows no delay).
+ */
+$mailServer = function (): void {
+    config(['mail.default' => 'smtp']);
+    Mail::fake();
+    Queue::fake([SendNotificationMailJob::class]);
+};
+
+/** The collections of the account, by scope. */
+$mails = fn (User $user) => NotificationMail::query()->where('user_id', $user->id)->get()->keyBy('scope');
 
 it('notifies Mara when Ida comments on an item Mara watches', function () use ($world, $of, $watch) {
     $w = $world();
@@ -190,8 +209,8 @@ it('names the assignee a new item had when it was created, even if it changed ha
         ->and($kinds($w['jonas']))->toBe(['assigned', 'item_changed']);
 });
 
-it('leaves out a person whose inbox and mail are off for the kind, and falls back to the next kind that is on', function () use ($world, $of, $watch, $choose) {
-    config(['mail.default' => 'smtp']);
+it('leaves out a person whose inbox and mail are off for the kind, and falls back to the next kind that is on', function () use ($world, $of, $watch, $choose, $mailServer) {
+    $mailServer();
     $w = $world();
     $watch($w['jonas'], $w['item']);
     $watch($w['mara'], $w['item']);
@@ -217,15 +236,129 @@ it('falls back to the inbox kind when no mail server is set', function () use ($
         ->and($of($w['jonas'])->sole()->inbox)->toBeTrue();
 });
 
-it('stores a mail-only notification hidden from the inbox', function () use ($world, $of, $choose) {
-    config(['mail.default' => 'smtp']);
+it('stores a mail-only notification hidden from the inbox', function () use ($world, $of, $choose, $mailServer, $mails) {
+    $mailServer();
     $w = $world();
     $choose($w['jonas'], ['mentioned', 'inbox', false]);
 
     AddComment::run(actor($w['ida']), $w['item'], ['body' => '@jonas, bitte ansehen.']);
 
     expect($of($w['jonas'])->sole()->kind)->toBe(NotificationKind::Mentioned)
-        ->and($of($w['jonas'])->sole()->inbox)->toBeFalse();
+        ->and($of($w['jonas'])->sole()->inbox)->toBeFalse()
+        ->and($of($w['jonas'])->sole()->mail_id)->toBe($mails($w['jonas'])->sole()->id);
+});
+
+it('opens one mail per person and item and joins later ones', function () use ($world, $of, $watch, $mailServer, $mails) {
+    $mailServer();
+    $this->freezeTime();
+    $w = $world();
+    $other = WorkItem::factory()->for($w['web'])->create(['created_by' => $w['tom']->id]);
+    $watch($w['mara'], $w['item']);
+    $watch($w['mara'], $other);
+    $watch($w['jonas'], $w['item']);
+    // Jonas reads changes in the inbox only: no mail for him
+    UpdateWorkItem::run(actor($w['ida']), $w['item'], ['title' => 'Kontaktformular v2']);
+
+    AddComment::run(actor($w['ida']), $w['item'], ['body' => 'Erster Hinweis.']);
+    AddComment::run(actor($w['ida']), $w['item'], ['body' => 'Zweiter Hinweis.']);
+    AddComment::run(actor($w['ida']), $other, ['body' => 'Anderes Item.']);
+
+    $mara = $mails($w['mara']);
+    $first = $mara["item:{$w['item']->id}"];
+    expect($mara)->toHaveCount(2)
+        ->and($first->open_key)->toBe("{$w['mara']->id}:item:{$w['item']->id}")
+        ->and($first->due_at->toDateTimeString())->toBe(now()->addMinutes(5)->toDateTimeString())
+        ->and($first->dispatched_at?->toDateTimeString())->toBe(now()->toDateTimeString())
+        ->and($first->sent_at)->toBeNull()
+        ->and(Notification::query()->where('mail_id', $first->id)->count())->toBe(2)
+        ->and(Notification::query()->where('mail_id', $mara["item:{$other->id}"]->id)->count())->toBe(1)
+        // the change of the title went to the inbox only
+        ->and($of($w['mara'])->first()->kind)->toBe(NotificationKind::ItemChanged)
+        ->and($of($w['mara'])->first()->mail_id)->toBeNull()
+        // Tom, the lead, has his own; nobody shares one
+        ->and($mails($w['tom']))->toHaveCount(2)
+        ->and($mails($w['jonas']))->toHaveCount(1);
+    // one job per collection, when it is due
+    Queue::assertPushed(SendNotificationMailJob::class, 5);
+    Queue::assertPushed(SendNotificationMailJob::class, fn (SendNotificationMailJob $job) => $job->mailId === $first->id
+        && $job->queue === 'notifications' && $job->delay instanceof DateTimeInterface && $job->delay->getTimestamp() === now()->addMinutes(5)->getTimestamp());
+});
+
+it('dispatches the mail job once, after the commit', function () use ($world, $watch) {
+    // a real queue (K2): the fake knows no afterCommit; the events wait on it and the test hands them to the consumer
+    config(['mail.default' => 'smtp', 'queue.default' => 'database']);
+    $this->freezeTime();
+    $w = $world();
+    $watch($w['mara'], $w['item']);
+    AddComment::run(actor($w['ida']), $w['item'], ['body' => 'Erster Hinweis.']);
+    AddComment::run(actor($w['ida']), $w['item'], ['body' => 'Zweiter Hinweis.']);
+    [$first, $second] = eventsOf(EventType::CommentCreated, $w['item'])->all();
+    $jobs = fn () => DB::table('jobs')->where('queue', 'notifications')->get();
+    $consume = fn (string $id) => app(Outbox::class)->consume($id, NotificationConsumer::class);
+
+    // a claim that rolls back opens nothing and leaves no job behind
+    try {
+        DB::transaction(function () use ($consume, $first) {
+            $consume($first->id);
+            throw new RuntimeException('rolled back');
+        });
+    } catch (RuntimeException) {
+    }
+    expect($jobs())->toHaveCount(0)
+        ->and(NotificationMail::query()->count())->toBe(0);
+
+    $consume($first->id);
+    $consume($second->id);
+
+    // Mara and Tom one each, waiting until the collection is due
+    expect($jobs())->toHaveCount(2)
+        ->and($jobs()->pluck('available_at')->unique()->all())->toBe([now()->addMinutes(5)->getTimestamp()])
+        ->and(Notification::query()->where('user_id', $w['mara']->id)->whereNotNull('mail_id')->count())->toBe(2);
+});
+
+it('opens no mail without a mail server', function () use ($world, $of, $watch) {
+    Queue::fake([SendNotificationMailJob::class]);
+    $w = $world();
+    $watch($w['mara'], $w['item']);
+
+    AddComment::run(actor($w['ida']), $w['item'], ['body' => 'Das Formular ist live.']);
+
+    expect($of($w['mara'])->sole()->mail_id)->toBeNull()
+        ->and(NotificationMail::query()->count())->toBe(0);
+    Queue::assertNothingPushed();
+});
+
+it('joins a collection that is due but not sent yet', function () use ($world, $of, $watch, $mailServer, $mails) {
+    $mailServer();
+    $w = $world();
+    $watch($w['mara'], $w['item']);
+    AddComment::run(actor($w['ida']), $w['item'], ['body' => 'Erster Hinweis.']);
+    // the job is late: the collection is due for five minutes, still open
+    $this->travel(10)->minutes();
+
+    AddComment::run(actor($w['ida']), $w['item'], ['body' => 'Zweiter Hinweis.']);
+
+    $mail = $mails($w['mara'])->sole();
+    expect($of($w['mara'])->pluck('mail_id')->all())->toBe([$mail->id, $mail->id]);
+    Queue::assertPushed(SendNotificationMailJob::class, fn (SendNotificationMailJob $job) => $job->mailId === $mail->id);
+    // Mara's and Tom's, once each
+    Queue::assertPushed(SendNotificationMailJob::class, 2);
+});
+
+it('opens no second mail when an event arrives again after its mail went', function () use ($world, $of, $watch, $mailServer, $mails) {
+    $mailServer();
+    $w = $world();
+    $watch($w['mara'], $w['item']);
+    AddComment::run(actor($w['ida']), $w['item'], ['body' => 'Das Formular ist live.']);
+    $mail = $mails($w['mara'])->sole();
+    $mail->update(['open_key' => null, 'sent_at' => now(), 'outcome' => NotificationMail::SENT]);
+
+    // past the claim of the outbox, as a retry after a failure behind it would: the mail went, none opens anew
+    NotifyRecipients::run(actor(User::defaultBot()), eventsOf(EventType::CommentCreated, $w['item'])->sole());
+
+    expect($mails($w['mara']))->toHaveCount(1)
+        ->and($of($w['mara'])->sole()->mail_id)->toBe($mail->id);
+    Queue::assertPushed(SendNotificationMailJob::class, 2);
 });
 
 it('takes the state names of meta.states', function () use ($world, $of) {

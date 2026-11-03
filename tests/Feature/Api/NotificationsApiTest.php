@@ -28,13 +28,15 @@ it('lists the inbox in the shape of the clickdummy, with a lean item', function 
     $w = $world();
     $comment = Comment::factory()->for($w['item'], 'workItem')->create(['author_id' => $w['tom']->id, 'body' => F::doc(F::p('Siehe ', F::mention($w['mara']->id, 'mara')))]);
     $event = Event::query()->firstOrFail();
-    $mail = NotificationMail::factory()->create(['user_id' => $w['mara']->id, 'sent_at' => Carbon::parse('2026-11-03 10:05:00', 'UTC')]);
+    $mail = NotificationMail::factory()->sent(Carbon::parse('2026-11-03 10:05:00', 'UTC'))->create(['user_id' => $w['mara']->id]);
+    // a skipped collection has a `sent_at` as well, but no mail went out (K8)
+    $skipped = NotificationMail::factory()->skipped()->create(['user_id' => $w['mara']->id]);
     $notification = Notification::factory()->forItem($w['item'])->kind(NotificationKind::Comment, ['comment_id' => $comment->id])->create([
         'user_id' => $w['mara']->id, 'event_id' => $event->id, 'actor_id' => $w['tom']->id, 'mail_id' => $mail->id,
         'created_at' => Carbon::parse('2026-11-03 10:00:00.123456', 'UTC'),
     ]);
     $empty = Notification::factory()->forItem($w['item'])->kind(NotificationKind::ItemCreated)->read()
-        ->create(['user_id' => $w['mara']->id, 'created_at' => Carbon::parse('2026-11-03 09:00:00', 'UTC')]);
+        ->create(['user_id' => $w['mara']->id, 'mail_id' => $skipped->id, 'created_at' => Carbon::parse('2026-11-03 09:00:00', 'UTC')]);
 
     $response = $this->actingAs($w['mara'])->getJson('/api/v1/notifications?per_page=1');
     $response->assertOk()

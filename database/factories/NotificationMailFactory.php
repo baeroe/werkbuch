@@ -4,6 +4,7 @@ namespace Database\Factories;
 
 use App\Models\NotificationMail;
 use App\Models\User;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 
@@ -25,5 +26,17 @@ class NotificationMailFactory extends Factory
             'open_key' => fn (array $attributes) => "{$attributes['user_id']}:{$attributes['scope']}",
             'due_at' => fn () => now()->addMinutes((int) config('werkbuch.notification_mail_delay')),
         ];
+    }
+
+    /** Sent at the moment, closed for new lines. */
+    public function sent(?CarbonInterface $at = null): static
+    {
+        return $this->state(fn (array $attributes) => ['open_key' => null, 'sent_at' => $at ?? now(), 'outcome' => NotificationMail::SENT]);
+    }
+
+    /** Closed without a mail: nothing was left to tell (K8). */
+    public function skipped(): static
+    {
+        return $this->state(fn (array $attributes) => ['open_key' => null, 'sent_at' => now(), 'outcome' => NotificationMail::SKIPPED]);
     }
 }

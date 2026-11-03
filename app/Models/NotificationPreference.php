@@ -27,6 +27,23 @@ final class NotificationPreference extends Model
     use HasUlids;
 
     /**
+     * The stored choices of the accounts, `"<kind>:<channel>" => enabled` per account (the form Preferences::enabled
+     * reads), in one query.
+     *
+     * @param  list<string>  $userIds
+     * @return array<string, array<string, bool>>
+     */
+    public static function storedFor(array $userIds): array
+    {
+        $stored = [];
+        foreach (self::query()->whereIn('user_id', $userIds)->get() as $preference) {
+            $stored[$preference->user_id]["{$preference->kind->value}:{$preference->channel->value}"] = $preference->enabled;
+        }
+
+        return $stored;
+    }
+
+    /**
      * @return array<string, string>
      */
     protected function casts(): array

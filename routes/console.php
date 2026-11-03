@@ -15,3 +15,7 @@ Schedule::command('app:redispatch-events')->everyMinute()->withoutOverlapping(5)
 
 // uploads nobody owns, older than 24 hours (A239); the scheduler only puts the job on the queue, which takes a moment
 Schedule::job(new PruneUnownedAttachmentsJob)->hourly()->withoutOverlapping(60);
+
+// mail collections left behind (a lost dispatch, a job that gave up) get their job again (A288); as above, the lock
+// expires after 5 minutes
+Schedule::command('app:send-notification-mails')->everyMinute()->withoutOverlapping(5);

@@ -14,24 +14,32 @@ use Illuminate\Support\Carbon;
 /**
  * A collection of notification lines that goes out as one mail (spec 4.14): per person and item (`scope`
  * `item:<ulid>`) or per person and day of reminders (`due:<Y-m-d>`). `open_key` (`<user_id>:<scope>`) is set while
- * new lines may join; once sent (or skipped), `sent_at` and `outcome` (`sent`, `skipped`) say so.
+ * new lines may join; once sent (or skipped), `sent_at` and `outcome` (`sent`, `skipped`) say so. `dispatched_at` is
+ * when a job was last put on the queue for it (the sweeper waits before it tries again, K8).
  *
  * @property string $id
  * @property string $user_id
  * @property string $scope
  * @property string|null $open_key
  * @property Carbon $due_at
+ * @property Carbon|null $dispatched_at
  * @property Carbon|null $sent_at
  * @property string|null $outcome
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read User $user
  */
-#[Fillable(['user_id', 'scope', 'open_key', 'due_at', 'sent_at', 'outcome'])]
+#[Fillable(['user_id', 'scope', 'open_key', 'due_at', 'dispatched_at', 'sent_at', 'outcome'])]
 final class NotificationMail extends Model
 {
     /** @use HasFactory<NotificationMailFactory> */
     use HasFactory, HasUlids;
+
+    /** The mail went out. */
+    public const SENT = 'sent';
+
+    /** Nothing was left to tell when it was due (every line read, out of reach or switched off): no mail went out. */
+    public const SKIPPED = 'skipped';
 
     /**
      * @return BelongsTo<User, $this>
@@ -56,6 +64,6 @@ final class NotificationMail extends Model
      */
     protected function casts(): array
     {
-        return ['due_at' => 'datetime', 'sent_at' => 'datetime'];
+        return ['due_at' => 'datetime', 'dispatched_at' => 'datetime', 'sent_at' => 'datetime'];
     }
 }

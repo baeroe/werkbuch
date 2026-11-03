@@ -42,6 +42,12 @@ jobs:
           MEILI_NO_ANALYTICS: 'true'
         ports:
           - 7700:7700
+      # tests/Integration sends the notification digest over SMTP (the same image as in the job `e2e`)
+      mailpit:
+        image: axllent/mailpit:v1.32.0@sha256:0790692be935ea4420d085694f7985b1f692ca6a8771ab0e0bd8ba75ac180498
+        ports:
+          - 1025:1025
+          - 8025:8025
 
     env:
       DB_CONNECTION: mariadb
@@ -53,6 +59,7 @@ jobs:
       # real environment variables win over .env (copied from .env.example)
       MEILISEARCH_HOST: http://127.0.0.1:7700
       MEILISEARCH_KEY: ci-werkbuch-master-key
+      MAILPIT_URL: http://127.0.0.1:8025
 
     steps:
       - uses: actions/checkout@v4

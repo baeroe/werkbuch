@@ -6,7 +6,8 @@ use Illuminate\Support\Facades\Schema;
 
 // Notifications (spec 4.14, phase plan 8 "Datenmodell"). `notification_mails` collects the mail lines of a person per
 // item (`scope` `item:<ulid>`) or per day of reminders (`due:<Y-m-d>`); `open_key` (`<user_id>:<scope>`) is set while
-// the collection is open and decides which of two consumers opens it (unique; null once it is sent). `notifications`
+// the collection is open and decides which of two consumers opens it (unique; null once it is sent); `dispatched_at`
+// is when a job was last put on the queue for it, the sweeper waits 15 minutes before it tries again (K8). `notifications`
 // holds one row per person and event or reminder (`dedupe_key` `event:<id>` or `due:<item>:<day>`, unique per person:
 // a second delivery of the same event writes nothing); `inbox` says whether the row shows in the inbox (A271), a row
 // only for mail has it off. `project_id` is null only for organization notifications (`webhook_disabled`, K5); rows go
@@ -22,6 +23,7 @@ return new class extends Migration
             $table->string('scope', 80);
             $table->string('open_key', 120)->nullable()->unique();
             $table->timestamp('due_at');
+            $table->timestamp('dispatched_at')->nullable();
             $table->timestamp('sent_at')->nullable();
             $table->string('outcome', 16)->nullable();
             $table->timestamps();
