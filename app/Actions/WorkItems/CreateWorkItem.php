@@ -131,7 +131,7 @@ final class CreateWorkItem
             if ($fields['assignee_id'] !== null && $fields['assignee_id'] !== $actor->user->id) {
                 self::watch($item, User::query()->findOrFail($fields['assignee_id']), 'assigned');
             }
-            $mentioned = Mentions::anew($item, [], $texts);
+            $mentioned = Mentions::anew($item, [], $texts, $actor->user);
 
             EventRecorder::record(EventType::WorkItemCreated, $actor, $item, $project, ['title' => ['old' => null, 'new' => $item->title]], Mentions::meta($mentioned));
             UpdateWorkItem::announceBots($actor, $item, $mentioned);

@@ -64,7 +64,7 @@ final class AddComment
                 // an existing row stays as it is: an opt-out above all (A246)
                 WorkItemSubscriber::query()->firstOrCreate(['work_item_id' => $locked->id, 'user_id' => $actor->user->id], ['reason' => 'commented']);
             }
-            $mentioned = ['comment' => Mentions::after($locked, [], $body->mentionedUserIds())];
+            $mentioned = ['comment' => Mentions::after($locked, [], $body->mentionedUserIds(), $actor->user)];
 
             EventRecorder::record(EventType::CommentCreated, $actor, $locked, $locked->project, null, ['comment_id' => $comment->id] + Mentions::meta($mentioned));
             UpdateWorkItem::announceBots($actor, $locked, $mentioned, $comment->id);

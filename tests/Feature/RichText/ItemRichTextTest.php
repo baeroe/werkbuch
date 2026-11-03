@@ -80,16 +80,40 @@ it('subscribes a newly mentioned person and lifts their opt-out', function () us
 
 it('names only newly mentioned people in meta.mentioned', function () use ($world, $create, $update) {
     $w = $world();
-    $item = $create($w['mara'], $w['web'], ['description' => 'Hallo @mara']);
+    $item = $create($w['lene'], $w['web'], ['description' => 'Hallo @mara']);
 
-    $update($w['mara'], $item, ['description' => 'Hallo @mara und @lene']);
+    $update($w['lene'], $item, ['description' => 'Hallo @mara und @lene']);
+    $update($w['mara'], $item, ['description' => 'Hallo @mara, @lene und @kira']);
     $update($w['mara'], $item, ['title' => 'Formular freigeben']);
     [$created] = eventsOf(EventType::WorkItemCreated, $item)->all();
-    [$mentioning, $renamed] = eventsOf(EventType::WorkItemUpdated, $item)->all();
+    [$selfMention, $mentioning, $renamed] = eventsOf(EventType::WorkItemUpdated, $item)->all();
 
     expect($created->meta['mentioned'])->toBe([$w['mara']->id])
-        ->and($mentioning->meta['mentioned'])->toBe([$w['lene']->id])
+        // Lene mentions herself: that is nobody (A259)
+        ->and($selfMention->meta)->not->toHaveKey('mentioned')
+        // Lene is named already: only Kira is new
+        ->and($mentioning->meta['mentioned'])->toBe([$w['kira']->id])
         ->and($renamed->meta)->not->toHaveKey('mentioned');
+});
+
+it('does not count a writer who mentions themselves in the description or a value (A259)', function () use ($world, $notes, $create, $update) {
+    $w = $world();
+    $notes();
+    $item = $create($w['mara'], $w['web'], []);
+    WorkItemSubscriber::query()->create(['work_item_id' => $item->id, 'user_id' => $w['lene']->id, 'reason' => 'manual', 'unsubscribed_at' => now()]);
+
+    $update($w['lene'], $item, ['description' => 'Merke ich mir, @lene.']);
+    $update($w['lene'], $item, ['values' => ['notes' => 'Auch hier @lene und @mara']]);
+    $events = eventsOf(EventType::WorkItemUpdated, $item)->all();
+
+    expect(WorkItemSubscriber::query()->where('work_item_id', $item->id)->where('user_id', $w['lene']->id)->value('unsubscribed_at'))->not->toBeNull()
+        ->and($events[0]->meta)->not->toHaveKey('mentioned')
+        ->and($events[1]->meta['mentioned'])->toBe([$w['mara']->id]);
+
+    // a bot that mentions itself in a description gets no bot.mentioned
+    $other = $create($w['kira'], $w['web'], ['description' => 'Von @kira angelegt.']);
+    expect(eventsOf(EventType::BotMentioned, $other))->toBeEmpty()
+        ->and(eventsOf(EventType::WorkItemCreated, $other)->sole()->meta)->not->toHaveKey('mentioned');
 });
 
 it('records bot.mentioned for a mentioned bot member, nothing for the default bot unless it is a member', function () use ($world, $create, $update) {
@@ -114,7 +138,7 @@ it('counts mentions in rich text values', function () use ($world, $notes, $crea
     $notes();
     $item = $create($w['mara'], $w['web'], ['description' => 'Für @lene', 'values' => ['notes' => 'Auch für @lene und @kira']]);
 
-    $update($w['mara'], $item, ['values' => ['notes' => 'Für @lene, @kira und @mara']]);
+    $update($w['lene'], $item, ['values' => ['notes' => 'Für @lene, @kira und @mara']]);
     $events = eventsOf(EventType::WorkItemUpdated, $item)->all();
 
     // Lene is in the description already: the value names her not anew (A244)

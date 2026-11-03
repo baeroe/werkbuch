@@ -87,6 +87,23 @@ it('lifts the opt-out of a person the comment mentions', function () use ($world
         ->and($watch($w['item'], $w['jonas'])?->reason)->toBe('mentioned');
 });
 
+it('does not count a writer who mentions themselves (A259)', function () use ($world, $add, $watch) {
+    $w = $world();
+    SetSubscription::run(actor($w['lene']), $w['item'], false);
+
+    $add($w['lene'], $w['item'], ['body' => 'Notiz für @lene und @jonas.']);
+    $add($w['kira'], $w['item'], ['body' => '@kira merkt sich das.']);
+
+    [$lene, $kira] = eventsOf(EventType::CommentCreated, $w['item'])->all();
+    // Lene stays unsubscribed and is named nowhere; Jonas, the other one she mentions, counts
+    expect($watch($w['item'], $w['lene'])?->unsubscribed_at)->not->toBeNull()
+        ->and($lene->meta['mentioned'])->toBe([$w['jonas']->id])
+        ->and($watch($w['item'], $w['jonas'])?->reason)->toBe('mentioned')
+        // a bot that mentions itself hears nothing of it
+        ->and($kira->meta)->not->toHaveKey('mentioned')
+        ->and(eventsOf(EventType::BotMentioned, $w['item']))->toBeEmpty();
+});
+
 it('records comment.created on the item with the comment id and the newly mentioned', function () use ($world, $add) {
     $w = $world();
 

@@ -55,7 +55,7 @@ final class EditComment
 
             $fresh->update(['body' => $body->toJson(), 'body_text' => $body->toText(), 'edited_at' => now()]);
             AttachmentLinks::link($fresh, $locked->project, $actor->user, [$key => $body]);
-            $mentioned = ['comment' => Mentions::after($locked, Document::fromJson($old)->mentionedUserIds(), $body->mentionedUserIds())];
+            $mentioned = ['comment' => Mentions::after($locked, Document::fromJson($old)->mentionedUserIds(), $body->mentionedUserIds(), $actor->user)];
 
             EventRecorder::record(EventType::CommentUpdated, $actor, $locked, $locked->project, ['body' => ['old' => $old, 'new' => $fresh->body]], [
                 'comment_id' => $fresh->id,

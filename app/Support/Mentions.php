@@ -11,7 +11,8 @@ use App\RichText\Document;
  * Who a change of a text mentions anew (spec 4.10, 4.14): whoever the text mentions now and did not before. A newly
  * mentioned person watches the item from now on (reason `mentioned`); an unsubscription is lifted, since only a new
  * mention or assignment brings a person back (A113); who watches already keeps their reason. Bots watch nothing; the
- * caller records `bot.mentioned` for them (only actions record events).
+ * caller records `bot.mentioned` for them (only actions record events). Whoever writes the text is never mentioned by
+ * it (A259): mentioning yourself lifts no opt-out, names you in no `meta.mentioned` and tells your own bot nothing.
  */
 final class Mentions
 {
@@ -32,16 +33,16 @@ final class Mentions
     }
 
     /**
-     * The accounts `$after` names that `$before` does not, in the order of `$after`; the people among them watch the
-     * item.
+     * The accounts `$after` names that `$before` does not, in the order of `$after`, without the writer (A259); the
+     * people among them watch the item.
      *
      * @param  list<string>  $before  IDs mentioned before
      * @param  list<string>  $after  IDs mentioned now
      * @return list<User>
      */
-    public static function after(WorkItem $item, array $before, array $after): array
+    public static function after(WorkItem $item, array $before, array $after, User $writer): array
     {
-        $new = array_values(array_diff(array_unique($after), $before));
+        $new = array_values(array_diff(array_unique($after), $before, [$writer->id]));
         if ($new === []) {
             return [];
         }
@@ -69,7 +70,7 @@ final class Mentions
      * @param  array<string, Document>  $texts  as ItemInput::documents() names them (`description`, `values.<key>`)
      * @return array{description: list<User>, values: list<User>}
      */
-    public static function anew(WorkItem $item, array $before, array $texts): array
+    public static function anew(WorkItem $item, array $before, array $texts, User $writer): array
     {
         $description = $values = [];
         foreach ($texts as $field => $text) {
@@ -79,9 +80,9 @@ final class Mentions
                 array_push($description, ...$text->mentionedUserIds());
             }
         }
-        $byDescription = self::after($item, $before, $description);
+        $byDescription = self::after($item, $before, $description, $writer);
 
-        return ['description' => $byDescription, 'values' => self::after($item, [...$before, ...$description], $values)];
+        return ['description' => $byDescription, 'values' => self::after($item, [...$before, ...$description], $values, $writer)];
     }
 
     /**

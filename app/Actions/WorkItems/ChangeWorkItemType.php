@@ -141,7 +141,7 @@ final class ChangeWorkItemType
         $locked->updated_at = $locked->freshTimestamp();
         $locked->save();
         ItemValues::store($locked, $after, $before);
-        $mentioned = Mentions::anew($locked, $mentionedBefore, $texts);
+        $mentioned = Mentions::anew($locked, $mentionedBefore, $texts, $actor->user);
 
         EventRecorder::record(EventType::WorkItemUpdated, $actor, $locked, $locked->project, $changes, Mentions::meta($mentioned));
         UpdateWorkItem::announceBots($actor, $locked, $mentioned);

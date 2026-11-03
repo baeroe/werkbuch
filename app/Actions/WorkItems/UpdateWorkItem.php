@@ -196,7 +196,7 @@ final class UpdateWorkItem
             $locked->save();
         }
 
-        $mentioned = Mentions::anew($locked, $mentionedBefore, $texts);
+        $mentioned = Mentions::anew($locked, $mentionedBefore, $texts, $actor->user);
         if ($changes !== []) {
             EventRecorder::record(EventType::WorkItemUpdated, $actor, $locked, $locked->project, $changes, Mentions::meta($mentioned));
         }
