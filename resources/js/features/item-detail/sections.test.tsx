@@ -11,7 +11,7 @@ import type { ReactNode } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { currentToasts, dismissToast, resetToasts, runToastAction } from '@/components/ui/toast';
 import { preloadEditor } from '@/editor/RichTextEditor';
-import { plainText } from '@/lib/richtext';
+import { plainText, textDoc } from '@/lib/richtext';
 import { resetForUser } from '@/hooks/queryClient';
 import { descriptionDraft, drafts } from '@/lib/drafts';
 import { useUiStore } from '@/store/ui';
@@ -104,6 +104,18 @@ const problem = (status: number, reason: string, extra: Record<string, unknown> 
 let api: MockApi | undefined;
 
 const newClient = () => new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+
+/** Holds the answers to `GET /api/v1/projects` (the rights) back until `release()`. */
+function holdRights() {
+  const original = globalThis.fetch;
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  globalThis.fetch = async (input, init) => {
+    if ((init?.method ?? 'GET') === 'GET' && new URL(String(input), 'https://werkbuch.test').pathname === '/api/v1/projects') await gate;
+    return original(input, init);
+  };
+  return { release: () => act(async () => release()), restore: () => (globalThis.fetch = original) };
+}
 
 function renderWith(
   node: ReactNode,
@@ -455,6 +467,25 @@ describe('Description', () => {
       window.dispatchEvent(after);
       expect(after.defaultPrevented).toBe(false);
     });
+  });
+
+  it('shows no banner for a kept text while the rights load (T18-M2)', async () => {
+    drafts.set(descriptionDraft('wi_web_47'), textDoc('Behalten.'));
+    const rights = holdRights();
+    renderWith(<ItemPage itemKey="WEB-47" />);
+    try {
+      const section = await screen.findByRole('region', { name: 'Beschreibung' });
+      // nothing to discard by accident while the rights are on their way
+      expect(within(section).queryByRole('alert')).toBeNull();
+      await rights.release();
+
+      // the rights are there: the kept text is in the editor, still unsaved
+      const editor = await within(section).findByRole('textbox', { name: 'Beschreibung' });
+      expect(editor.textContent).toBe('Behalten.');
+      expect(within(section).queryByRole('alert')).toBeNull();
+    } finally {
+      rights.restore();
+    }
   });
 
   it('keeps the typed text to copy when the item is archived meanwhile, and sends it no more', async () => {

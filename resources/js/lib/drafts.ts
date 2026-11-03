@@ -15,6 +15,9 @@
  * a view opened again while the call of an earlier one runs follows it (its button stays busy, and the answer that
  * changes the text reaches it), so nothing is sent twice.
  *
+ * A refusal of a sent text (a 422 of the server) stays with its key until the text changes (`setProblem`, `useDraftProblem`):
+ * a view opened again after the refusal shows it under the editor, as the view that sent showed it (T18-M6).
+ *
  * Work on its way that is no text, an upload of the file list, holds the same question (`hold()`), also after its view
  * went away; a sign-in of another person does not end it (the call runs on until it answers).
  *
@@ -36,6 +39,8 @@ const texts = new Map<DraftKey, RichText>();
 const listeners = new Map<DraftKey, Set<() => void>>();
 /** Calls on their way, by key (two views of an item may each have one). */
 const sendingCounts = new Map<DraftKey, number>();
+/** The server's refusal of the text under a key, until the text changes. */
+const problems = new Map<DraftKey, string>();
 const clearHooks = new Set<() => void>();
 /** Counts the clears: a call that began before the last one leaves the store alone. */
 let epoch = 0;
@@ -62,6 +67,21 @@ export const drafts = {
     if ((texts.get(key) ?? null) === doc) return;
     if (doc === null) texts.delete(key);
     else texts.set(key, doc);
+    // a new text is not the one the server refused
+    problems.delete(key);
+    notify(key);
+  },
+
+  /** The server's refusal of the text under `key` (a 422), or null. */
+  problem(key: DraftKey): string | null {
+    return problems.get(key) ?? null;
+  },
+
+  /** Keeps the server's refusal of the text under `key` until the text changes; null: none any more. */
+  setProblem(key: DraftKey, message: string | null): void {
+    if ((problems.get(key) ?? null) === message) return;
+    if (message === null) problems.delete(key);
+    else problems.set(key, message);
     notify(key);
   },
 
@@ -131,6 +151,7 @@ export const drafts = {
     epoch += 1;
     texts.clear();
     sendingCounts.clear();
+    problems.clear();
     clearHooks.forEach((hook) => hook());
     keys.forEach(notify);
   },
@@ -140,6 +161,12 @@ export const drafts = {
 export function useDraft(key: DraftKey): RichText | null {
   const subscribe = useCallback((listener: () => void) => drafts.subscribe(key, listener), [key]);
   return useSyncExternalStore(subscribe, () => drafts.get(key));
+}
+
+/** The server's refusal of the text under `key`, rendered anew when it changes. */
+export function useDraftProblem(key: DraftKey): string | null {
+  const subscribe = useCallback((listener: () => void) => drafts.subscribe(key, listener), [key]);
+  return useSyncExternalStore(subscribe, () => drafts.problem(key));
 }
 
 /** Whether a send or save of `key` is on its way, rendered anew when that changes. */

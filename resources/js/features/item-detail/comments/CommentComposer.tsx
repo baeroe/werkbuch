@@ -20,22 +20,26 @@
  *   belong to nobody, and the server prunes them after 24 hours (A239).
  */
 
-import { MessageSquare } from 'lucide-react';
 import type { Editor } from '@tiptap/react';
+import { MessageSquare } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { ApiError } from '@/api/client';
 import { archivedReason } from '@/components/fields/itemData';
+import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
 import { Kbd } from '@/components/ui/Kbd';
 import { toast } from '@/components/ui/toast';
 import { isEmptyDoc, RichTextEditor } from '@/editor/RichTextEditor';
+import { RichTextView } from '@/editor/RichTextView';
 import { UploadContext, useUploadCounter, useUploadsPending } from '@/editor/UploadContext';
+import { CopyButton } from '@/features/settings/tokens/CopyButton';
 import { useAddComment } from '@/hooks/comments';
 import { useProjectsWith } from '@/hooks/projects';
-import { commentDraft, drafts, useDraft, useDraftSending } from '@/lib/drafts';
+import { commentDraft, drafts, useDraft, useDraftProblem, useDraftSending } from '@/lib/drafts';
 import { notifyError } from '@/lib/errors';
 import { t } from '@/lib/i18n';
 import { usePermissions } from '@/lib/permissions';
+import { docToText } from '@/lib/richtext';
 import type { RichText, WorkItem } from '@/types';
 import { useDetail } from '../shared';
 
@@ -61,25 +65,35 @@ function inlineRest(sent: RichText[], now: RichText[]): RichText[] | undefined {
   return trimmed ? [{ ...first, text: trimmed }, ...others] : others;
 }
 
+/** Blocks that hold blocks (a list, its items, a quote): what was typed on in them is read block by block. */
+const CONTAINERS = new Set(['bulletList', 'orderedList', 'taskList', 'listItem', 'taskItem', 'blockquote']);
+
 /**
- * What of `now` was not sent, when the comment `sent` went out: the blocks after the sent ones, and what a paragraph
- * that was typed on further holds after the sent part. Null when nothing is left; all of `now` when the sent text was
- * changed while it was on its way (nothing is lost, the person sees what is there).
+ * The blocks of `now` after the blocks of `sent`, when `sent` is how `now` begins: the last sent block may have grown,
+ * a paragraph by text after the sent part, a list or a quote by blocks after the sent ones (T18-M5). Undefined when
+ * `sent` is not how it begins.
+ */
+function blockRest(sent: RichText[], now: RichText[]): RichText[] | undefined {
+  const last = sent.length - 1;
+  if (last < 0 || now.length < sent.length || !sent.slice(0, last).every((block, index) => same(block, now[index]))) return undefined;
+  const [tail, grown] = [sent[last]!, now[last]!];
+  const after = now.slice(sent.length);
+  if (same(tail, grown)) return after;
+  if (tail.type !== grown.type || !same(tail.attrs, grown.attrs)) return undefined;
+  const inner = CONTAINERS.has(tail.type ?? '') ? blockRest(tail.content ?? [], grown.content ?? []) : inlineRest(tail.content ?? [], grown.content ?? []);
+  if (!inner) return undefined;
+  return [...(inner.length > 0 ? [{ ...grown, content: inner }] : []), ...after];
+}
+
+/**
+ * What of `now` was not sent, when the comment `sent` went out: the blocks after the sent ones, and what a block that
+ * was typed on further holds after the sent part (a paragraph its text, a list or a quote its new blocks). Null when
+ * nothing is left; all of `now` when the sent text was changed while it was on its way (nothing is lost, the person
+ * sees what is there).
  */
 export function unsentRest(sent: RichText, now: RichText | null): RichText | null {
   if (!now) return null;
-  const blocks = sent.content ?? [];
-  const current = now.content ?? [];
-  const last = blocks.length - 1;
-  let rest: RichText[] | undefined;
-  if (last >= 0 && blocks.slice(0, last).every((block, index) => same(block, current[index])) && current.length >= blocks.length) {
-    const [tail, grown] = [blocks[last]!, current[last]!];
-    if (same(tail, grown)) rest = current.slice(blocks.length);
-    else if (tail.type === grown.type && same(tail.attrs, grown.attrs)) {
-      const inline = inlineRest(tail.content ?? [], grown.content ?? []);
-      if (inline) rest = [...(inline.length > 0 ? [{ ...grown, content: inline }] : []), ...current.slice(blocks.length)];
-    }
-  }
+  const rest = blockRest(sent.content ?? [], now.content ?? []);
   if (!rest) return now;
   const left: RichText = { ...now, content: rest };
   return isEmptyDoc(left) ? null : left;
@@ -89,7 +103,7 @@ export function CommentComposer({ item }: { item: WorkItem }) {
   const { actions } = useDetail();
   // a project the cached list lacks (just created or joined) loads the list again
   useProjectsWith(item.project_id);
-  const { reason } = usePermissions();
+  const { reason, loading } = usePermissions();
   const add = useAddComment();
   const key = commentDraft(item.id);
   const [open, setOpen] = useState(false);
@@ -100,8 +114,12 @@ export function CommentComposer({ item }: { item: WorkItem }) {
   const [text, setText] = useState<RichText | null>(stored);
   /** The draft as this view wrote or took it last: anything else in the store came from elsewhere (a send's answer). */
   const written = useRef(stored);
-  /** A refusal of the text, or why it cannot go yet; under the editor. */
-  const [problem, setProblem] = useState<string | null>(null);
+  /** Why the text cannot go yet (empty, uploads), under the editor; the server's refusal is the draft's (below). */
+  const [notice, setProblem] = useState<string | null>(null);
+  /** The server refused the text: kept with the draft, so a view opened again shows it too (T18-M6). */
+  const refused = useDraftProblem(key);
+  const problem = notice ?? refused;
+  const parked = useRef<HTMLDivElement>(null);
   const [announcement, setAnnouncement] = useState('');
   const problemId = useId();
   const uploads = useUploadCounter();
@@ -134,6 +152,18 @@ export function CommentComposer({ item }: { item: WorkItem }) {
   const focusEditor = () => {
     const current = editor.current;
     if (current && !current.isDestroyed) current.commands.focus('end');
+  };
+
+  /** How far the caret stands from the end of the text: the sent part goes from the front, the caret keeps its place. */
+  const caretFromEnd = (): number | null => {
+    const current = editor.current;
+    return current && !current.isDestroyed && current.isFocused ? current.state.doc.content.size - current.state.selection.from : null;
+  };
+  const restoreCaret = (fromEnd: number) => {
+    const current = editor.current;
+    if (!current || current.isDestroyed) return;
+    const size = current.state.doc.content.size;
+    current.commands.focus(Math.max(1, Math.min(size - fromEnd, size - 1)));
   };
 
   useEffect(() => {
@@ -186,16 +216,22 @@ export function CommentComposer({ item }: { item: WorkItem }) {
         () => {
           // another person signed in meanwhile: their drafts are not this one's
           if (drafts.epoch() !== epoch) return;
+          const fromEnd = mounted.current ? caretFromEnd() : null;
           // only what went out leaves the draft; what was typed meanwhile stays (every open view shows the rest)
           drafts.set(key, unsentRest(body, drafts.get(key)));
           if (!mounted.current) return;
           setAnnouncement(t('items.comments.sent'));
-          if (box.current?.contains(document.activeElement)) requestAnimationFrame(focusEditor);
+          // the caret stays where the person typed on, not at the end (T18-M3)
+          if (fromEnd !== null) requestAnimationFrame(() => restoreCaret(fromEnd));
+          else if (box.current?.contains(document.activeElement)) requestAnimationFrame(focusEditor);
         },
         (error: unknown) => {
           if (drafts.epoch() !== epoch) return;
-          // a refusal of the text stands at the editor; with the view gone, the toast says it
-          if (error instanceof ApiError && error.status === 422 && mounted.current) return void setProblem(error.errors?.body_json?.[0] ?? error.message);
+          // a refusal of the text stays with the draft (every view shows it at the editor); with no view, a toast says it
+          if (error instanceof ApiError && error.status === 422) {
+            drafts.setProblem(key, error.errors?.body_json?.[0] ?? error.message);
+            if (mounted.current) return;
+          }
           // the text stays; "Erneut versuchen" where it can help (an outage)
           notifyError(t('items.comments.failed'), error, send);
         },
@@ -203,8 +239,26 @@ export function CommentComposer({ item }: { item: WorkItem }) {
       .finally(done);
   }
 
-  if (denied && !open) {
-    return <p className="mt-3 text-sm text-pretty text-muted">{denied}</p>;
+  if (denied) {
+    return (
+      <>
+        <p className="mt-3 text-sm text-pretty text-muted">{denied}</p>
+        {/* a draft that can no longer go (archived, the right gone; A154): readable, copyable, discardable; never while the rights load */}
+        {stored && !loading && (
+          <Banner tone="danger" role="alert" title={t('items.comments.parked')} className="mt-2">
+            <div ref={parked} className="mt-2 rounded-md border border-line bg-surface p-2">
+              <RichTextView value={stored} preset="comment" />
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <CopyButton text={docToText(stored)} target={() => parked.current} size="sm" />
+              <Button variant="secondary" size="sm" onClick={() => drafts.set(key, null)}>
+                {t('items.comments.discard')}
+              </Button>
+            </div>
+          </Banner>
+        )}
+      </>
+    );
   }
 
   const status = (

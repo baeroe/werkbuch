@@ -8,6 +8,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { Editor } from '@tiptap/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { currentToasts, dismissToast, resetToasts, runToastAction } from '@/components/ui/toast';
@@ -123,6 +124,18 @@ function holdNextSend() {
     return original(input, init);
   };
   return { release: () => act(async () => release()), held: () => held };
+}
+
+/** Holds the answers to `GET /api/v1/projects` (the rights) back until `release()`. */
+function holdRights() {
+  const original = globalThis.fetch;
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  globalThis.fetch = async (input, init) => {
+    if ((init?.method ?? 'GET') === 'GET' && new URL(String(input), 'https://werkbuch.test').pathname === '/api/v1/projects') await gate;
+    return original(input, init);
+  };
+  return { release: () => act(async () => release()), restore: () => (globalThis.fetch = original) };
 }
 
 describe('CommentComposer', () => {
@@ -326,6 +339,70 @@ describe('CommentComposer', () => {
     expect(screen.queryByRole('textbox')).toBeNull();
   });
 
+  it('keeps a refusal with the draft, so a view opened again shows it (T18-M6)', async () => {
+    const { unmount } = renderComposer({ routes: { 'POST /api/v1/work-items/wi_web_47/comments': () => problem(422, 'validation_failed', { errors: { body_json: ['Der Kommentar ist zu lang.'] } }) } });
+    await opener('Kommentar schreiben');
+    press('m');
+    const editor = await commentEditor();
+    paste(editor, 'Sehr lang.');
+    send(editor);
+    await screen.findByText('Der Kommentar ist zu lang.');
+    unmount();
+
+    renderComposer();
+    await opener('Entwurf weiterschreiben');
+    press('m');
+    const again = await commentEditor();
+    expect(screen.getByText('Der Kommentar ist zu lang.')).toBeTruthy();
+    expect(again.getAttribute('aria-invalid')).toBe('true');
+    // a new text is not the one refused
+    paste(again, ' Kürzer.');
+    await waitFor(() => expect(screen.queryByText('Der Kommentar ist zu lang.')).toBeNull());
+  });
+
+  it('leaves the caret where the person typed on when the sent part goes (T18-M3)', async () => {
+    renderComposer();
+    await opener('Kommentar schreiben');
+    press('m');
+    const editor = await commentEditor();
+    const tiptap = (editor as unknown as { editor: Editor }).editor;
+    const gate = holdNextSend();
+    paste(editor, 'Erstens.');
+    send(editor);
+    await waitFor(() => expect(gate.held()).toBe(true));
+    paste(editor, ' Zweitens.');
+    // the caret goes back into the new word, after „Zwei“
+    act(() => void tiptap.commands.setTextSelection(tiptap.state.doc.content.size - 1 - 'tens.'.length));
+
+    await gate.release();
+    await waitFor(() => expect(editor.textContent).toBe('Zweitens.'));
+    await waitFor(() => expect(tiptap.state.selection.from).toBe(1 + 'Zwei'.length));
+  });
+
+  it('shows a draft that can no longer go, to copy or discard, but not while the rights load (A154, T18-M1)', async () => {
+    drafts.set(commentDraft('wi_web_47'), doc('Mein Entwurf.'));
+    // a person who lost the right to comment (no longer sees the project): the reason waits for the rights
+    const rights = holdRights();
+    renderComposer({ routes: { 'GET /api/v1/projects': () => ({ body: list([]) }) } });
+    try {
+      await screen.findByText('Die Rechte werden noch geladen.');
+      // the rights load: no banner yet
+      expect(screen.queryByRole('alert')).toBeNull();
+      await rights.release();
+    } finally {
+      rights.restore();
+    }
+
+    const banner = await screen.findByRole('alert');
+    expect(within(banner).getByText('Dein Kommentar ist nicht gesendet')).toBeTruthy();
+    expect(within(banner).getByText('Mein Entwurf.')).toBeTruthy();
+    expect(within(banner).getByRole('button', { name: /Kopieren/ })).toBeTruthy();
+    fireEvent.click(within(banner).getByRole('button', { name: 'Verwerfen' }));
+    expect(drafts.get(commentDraft('wi_web_47'))).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(leaving()).toBe(false);
+  });
+
   it('lets a viewer comment', async () => {
     renderComposer({ role: 'viewer' });
     await opener('Kommentar schreiben');
@@ -355,6 +432,19 @@ describe('unsentRest', () => {
     // the paragraph went on after a node of its own (a mention)
     const mention: RichText = { type: 'mention', attrs: { id: 'u_mara', label: 'mara' } };
     expect(unsentRest({ type: 'doc', content: [para(text('Hallo '), mention)] }, { type: 'doc', content: [para(text('Hallo '), mention, text(' bitte'))] })).toEqual(doc('bitte'));
+  });
+
+  it('reads a list and a quote block by block (T18-M5)', () => {
+    const item = (value: string): RichText => ({ type: 'listItem', content: [para(text(value))] });
+    const bullets = (...values: string[]): RichText => ({ type: 'doc', content: [{ type: 'bulletList', content: values.map(item) }] });
+    const quote = (...values: string[]): RichText => ({ type: 'doc', content: [{ type: 'blockquote', content: values.map((value) => para(text(value))) }] });
+
+    expect(unsentRest(bullets('Eins'), bullets('Eins', 'Zwei'))).toEqual(bullets('Zwei'));
+    expect(unsentRest(bullets('Eins'), bullets('Eins und mehr'))).toEqual(bullets('und mehr'));
+    expect(unsentRest(bullets('Eins'), bullets('Eins'))).toBeNull();
+    expect(unsentRest(quote('Eins'), quote('Eins', 'Zwei'))).toEqual(quote('Zwei'));
+    // changed inside: all of it stays
+    expect(unsentRest(bullets('Eins', 'Zwei'), bullets('Ein', 'Zwei', 'Drei'))).toEqual(bullets('Ein', 'Zwei', 'Drei'));
   });
 
   it('keeps everything when the sent text was changed while sending', () => {

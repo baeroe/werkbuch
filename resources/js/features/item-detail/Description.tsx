@@ -46,6 +46,7 @@ import { RichTextView } from '@/editor/RichTextView';
 import { useUpdateWorkItem } from '@/hooks/workItems';
 import { descriptionDraft, drafts, useDraft, useDraftSending } from '@/lib/drafts';
 import { t } from '@/lib/i18n';
+import { usePermissions } from '@/lib/permissions';
 import { docToText } from '@/lib/richtext';
 import { useUiStore } from '@/store/ui';
 import type { RichText, WorkItem, WorkItemDetail } from '@/types';
@@ -129,6 +130,8 @@ function announceLeftConflict(item: Pick<WorkItem, 'id' | 'key'>, message: strin
 export function Description({ detail }: { detail: WorkItemDetail }) {
   const { item } = detail;
   const reason = useEditReason(item);
+  // while the rights load, `reason` says so: no banner then, whose "Verwerfen" would throw a kept text away (T18-M2)
+  const { loading } = usePermissions();
   const editable = useRef(reason === null);
   const update = useUpdateWorkItem();
   const stored = item.description_json;
@@ -397,7 +400,7 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
           </div>
         </Banner>
       )}
-      {reason && (unsaved || conflict) && (
+      {reason && !loading && (unsaved || conflict) && (
         <Banner tone="danger" role="alert" title={t('items.detail.description.parked')} className="mt-2">
           <p>{reason}</p>
           <div ref={parked} className="mt-2 rounded-md border border-line bg-surface p-2">
