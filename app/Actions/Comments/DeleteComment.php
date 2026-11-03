@@ -35,7 +35,7 @@ final class DeleteComment
         DB::transaction(function () use ($actor, $comment): void {
             $locked = ItemLock::take($comment->workItem);
             $fresh = Comment::query()->lockForUpdate()->find($comment->id) ?? throw Problem::notFound();
-            AddComment::refuseArchived($locked);
+            ItemLock::refuseArchived($locked);
 
             AttachmentTexts::handOverOrRemove($fresh->attachments()->orderBy('id')->lockForUpdate()->get(), $locked->project_id, [], [$fresh->id]);
             $fresh->delete();

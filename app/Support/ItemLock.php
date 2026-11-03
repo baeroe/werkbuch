@@ -86,4 +86,28 @@ final class ItemLock
 
         return $ids;
     }
+
+    /**
+     * An archived project or item is read-only (A240): for changes of the item, its comments, reactions and files.
+     * `$locked` carries its project (take()).
+     *
+     * @throws Problem 409 `project_archived` or `archived`
+     */
+    public static function refuseArchived(WorkItem $locked): void
+    {
+        self::refuseArchivedProject($locked->project);
+        if ($locked->archived_at !== null) {
+            throw Problem::conflict('archived', [], __('problem.detail.item_archived', ['key' => $locked->key]));
+        }
+    }
+
+    /**
+     * @throws Problem 409 `project_archived`
+     */
+    public static function refuseArchivedProject(Project $project): void
+    {
+        if ($project->archived_at !== null) {
+            throw Problem::conflict('project_archived', [], __('problem.detail.project_archived'));
+        }
+    }
 }

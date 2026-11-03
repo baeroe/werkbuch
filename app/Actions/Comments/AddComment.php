@@ -50,7 +50,7 @@ final class AddComment
 
         $comment = DB::transaction(function () use ($actor, $item, $body, $key): Comment {
             $locked = ItemLock::take($item);
-            self::refuseArchived($locked);
+            ItemLock::refuseArchived($locked);
 
             $comment = Comment::query()->create([
                 'work_item_id' => $locked->id,
@@ -75,20 +75,5 @@ final class AddComment
         Comment::loadForResource($comment, $actor->user);
 
         return $comment;
-    }
-
-    /**
-     * An archived project or item is read-only, for its comments as well (A240).
-     *
-     * @throws Problem
-     */
-    public static function refuseArchived(WorkItem $locked): void
-    {
-        if ($locked->project->archived_at !== null) {
-            throw Problem::conflict('project_archived', [], __('problem.detail.project_archived'));
-        }
-        if ($locked->archived_at !== null) {
-            throw Problem::conflict('archived', [], __('problem.detail.item_archived', ['key' => $locked->key]));
-        }
     }
 }

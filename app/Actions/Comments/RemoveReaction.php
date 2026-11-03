@@ -37,7 +37,7 @@ final class RemoveReaction
         $fresh = DB::transaction(function () use ($actor, $comment, $emoji): Comment {
             $locked = ItemLock::take($comment->workItem, false);
             $fresh = Comment::query()->lockForUpdate()->find($comment->id) ?? throw Problem::notFound();
-            AddComment::refuseArchived($locked);
+            ItemLock::refuseArchived($locked);
 
             $removed = CommentReaction::query()->where(['comment_id' => $fresh->id, 'user_id' => $actor->user->id, 'emoji' => $emoji])->delete();
             if ($removed > 0) {

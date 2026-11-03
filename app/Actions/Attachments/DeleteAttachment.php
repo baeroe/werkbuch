@@ -55,12 +55,7 @@ final class DeleteAttachment
             $item = ItemLock::take($item);
             $project = $item->project;
 
-            if ($project->archived_at !== null) {
-                throw Problem::conflict('project_archived', [], __('problem.detail.project_archived'));
-            }
-            if ($item->archived_at !== null) {
-                throw Problem::conflict('archived', [], __('problem.detail.item_archived', ['key' => $item->key]));
-            }
+            ItemLock::refuseArchived($item);
 
             $attachment = self::fresh($attachment);
             // a text of the project may name the file (A233): it stays as that text's, only the rest goes (A261)

@@ -8,8 +8,8 @@ use App\Support\Actor;
 use App\Support\AttachmentFiles;
 use App\Support\AttachmentTexts;
 use App\Support\UnreadableText;
-use Closure;
 use Carbon\CarbonInterface;
+use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -40,11 +40,10 @@ final class PruneAttachments
     use AsAction;
 
     /**
-     * @return list<array{id: string, project: string, filename: string, size: int}> what went (would go in a dry run),
-     *                                                                               by project, then id
-     *
      * @param  (Closure(string, UnreadableText): void)|null  $skipped  told of each project skipped for a text that cannot be
      *                                                                 read (its identifier); the error is reported too
+     * @return list<array{id: string, project: string, filename: string, size: int}> what went (would go in a dry run),
+     *                                                                               by project, then id
      *
      * @throws InvalidArgumentException for a minimum age below one day
      */

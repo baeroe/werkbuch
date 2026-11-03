@@ -46,7 +46,7 @@ final class EditComment
         $comment = DB::transaction(function () use ($actor, $comment, $body, $key): Comment {
             $locked = ItemLock::take($comment->workItem);
             $fresh = Comment::query()->lockForUpdate()->find($comment->id) ?? throw Problem::notFound();
-            AddComment::refuseArchived($locked);
+            ItemLock::refuseArchived($locked);
 
             $old = $fresh->body;
             if ($body->toJson() === $old) {

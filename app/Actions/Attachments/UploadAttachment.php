@@ -73,12 +73,7 @@ final class UploadAttachment
                 $project = Project::query()->sharedLock()->whereNull('deleting_at')->find($project->id) ?? throw Problem::notFound();
             }
 
-            if ($project->archived_at !== null) {
-                throw Problem::conflict('project_archived', [], __('problem.detail.project_archived'));
-            }
-            if ($item?->archived_at !== null) {
-                throw Problem::conflict('archived', [], __('problem.detail.item_archived', ['key' => $item->key]));
-            }
+            $item === null ? ItemLock::refuseArchivedProject($project) : ItemLock::refuseArchived($item);
 
             $attachment = Attachment::query()->create([
                 'project_id' => $project->id,
