@@ -9,7 +9,7 @@ use Lorisleiva\Actions\Concerns\AsAction;
 /**
  * Marks notifications of the own inbox unread again (spec 4.14): the read ones named in `ids` (1–100 ULIDs) among the
  * account's own inbox notifications it still sees (MarkNotificationsRead::inbox(), K5, A273); any other ID is passed
- * over without a word. No event (A277).
+ * over without a word. No event (A277); the other tabs of the person hear of a change.
  */
 final class MarkNotificationsUnread
 {
@@ -23,7 +23,7 @@ final class MarkNotificationsUnread
      */
     public function handle(Actor $actor, array $input): int
     {
-        return MarkNotificationsRead::inbox($actor->user)->whereNotNull('read_at')
-            ->whereKey(MarkNotificationsRead::ids($input))->update(['read_at' => null]);
+        return MarkNotificationsRead::told($actor, MarkNotificationsRead::inbox($actor->user)->whereNotNull('read_at')
+            ->whereKey(MarkNotificationsRead::ids($input))->update(['read_at' => null]));
     }
 }

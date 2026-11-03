@@ -3,6 +3,7 @@
 namespace App\Actions\Notifications;
 
 use App\Domain\Notifications\NotificationKind;
+use App\Live\NotificationsChanged;
 use App\Models\Notification;
 use App\Models\User;
 use App\Support\Actor;
@@ -17,7 +18,7 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * with `mentions_only` every unread mention (A291: what the filter of the inbox shows, never what it hides). Only the
  * account's own inbox notifications it still sees count (inbox(), K5, A273); any other ID, foreign, hidden, only for
  * mail or unknown, is passed over without a word, so the answer tells nothing about it. An already read one keeps its
- * moment. No event: reading is a setting of one person (A277).
+ * moment. No event: reading is a setting of one person (A277); the other tabs of the person hear of a change.
  */
 final class MarkNotificationsRead
 {
@@ -52,7 +53,22 @@ final class MarkNotificationsRead
             $unread->whereKey(self::ids($input));
         }
 
-        return $unread->update(['read_at' => (new Notification)->fromDateTime(now())]);
+        return self::told($actor, $unread->update(['read_at' => (new Notification)->fromDateTime(now())]));
+    }
+
+    /**
+     * Tells the other tabs of the person that their inbox changed, when it did (the own tab is left out by its socket,
+     * A282); shared by the inbox actions.
+     *
+     * @return int the number it was given
+     */
+    public static function told(Actor $actor, int $changed): int
+    {
+        if ($changed > 0) {
+            NotificationsChanged::dispatchFor([$actor->user->id], $actor->socket);
+        }
+
+        return $changed;
     }
 
     /**

@@ -24,6 +24,7 @@ use Inertia\Inertia;
 use Laravel\Scout\EngineManager;
 use Symfony\Component\Finder\Finder;
 use Tests\Support\ArraySearchEngine;
+use Tests\Support\RecordingBroadcaster;
 use Tests\TestCase;
 
 pest()->extend(TestCase::class)->use(RefreshDatabase::class)->in('Feature');
@@ -294,6 +295,22 @@ function liveChannels(): void
     app(BroadcastManager::class)->forgetDrivers();
 
     require repo_path('routes/channels.php');
+}
+
+/**
+ * Switches broadcasting to a new RecordingBroadcaster and returns it (K3, K4): what the app sends to Reverb and whom it
+ * disconnects is kept there; the channels of routes/channels.php register on it as well.
+ */
+function broadcasts(): RecordingBroadcaster
+{
+    $recorder = new RecordingBroadcaster;
+    app(BroadcastManager::class)->extend('recording', fn () => $recorder);
+    config(['broadcasting.default' => 'recording', 'broadcasting.connections.recording' => ['driver' => 'recording']]);
+    app(BroadcastManager::class)->forgetDrivers();
+
+    require repo_path('routes/channels.php');
+
+    return $recorder;
 }
 
 /**

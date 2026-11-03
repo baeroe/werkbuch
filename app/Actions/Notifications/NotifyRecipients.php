@@ -9,6 +9,7 @@ use App\Domain\Notifications\Preferences;
 use App\Domain\Notifications\Recipients;
 use App\Enums\AccountType;
 use App\Jobs\SendNotificationMailJob;
+use App\Live\NotificationsChanged;
 use App\Models\Event;
 use App\Models\Notification;
 use App\Models\NotificationMail;
@@ -29,7 +30,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * row is unique per person and event (`dedupe_key` `event:<id>`): an event that arrives twice writes once, besides the
  * claim of the outbox. A row with mail on joins the open mail collection of its person and item (phase plan 8 "Mail",
  * A273), which the first one opens; SendNotificationMail sends it once it is due. Runs in the claim transaction of
- * NotificationConsumer; work of a job without an event of its own, like PurgeProject.
+ * NotificationConsumer; work of a job without an event of its own, like PurgeProject. After the commit, every person
+ * with a new row in the inbox hears `notifications.changed` on their live channel (NotificationsChanged).
  */
 final class NotifyRecipients
 {
@@ -94,15 +96,19 @@ final class NotifyRecipients
             }
         }
 
-        $mails = self::collect($this->unwritten($event, $mailing), "item:{$facts->itemId}");
+        $fresh = $this->unwritten($event, array_column($rows, 'user_id'));
+        $mails = self::collect(array_values(array_intersect($mailing, $fresh)), "item:{$facts->itemId}");
         $rows = array_map(fn (array $row) => [...$row, 'mail_id' => $mails[$row['user_id']] ?? null], $rows);
+        $inboxes = array_column(array_filter($rows, fn (array $row) => $row['inbox']), 'user_id');
+        NotificationsChanged::dispatchFor(array_values(array_intersect($inboxes, $fresh)), null);
 
         return Notification::query()->insertOrIgnore($rows);
     }
 
     /**
-     * The people among the IDs who have no notification of the event yet: only they join a mail (a second delivery of
-     * the event writes nothing, its rows joined their mails the first time). No query without anybody to mail.
+     * The people among the IDs who have no notification of the event yet: only they join a mail and hear that their
+     * inbox grew (a second delivery of the event writes nothing, its rows joined their mails the first time). No query
+     * without anybody.
      *
      * @param  list<string>  $ids
      * @return list<string>

@@ -30,6 +30,11 @@ arch('search turns models into documents and writes nothing')
 arch('the consumer of notifications hands every event to its action and computes nothing')
     ->expect('App\Notifications\NotificationConsumer')->toBeFinal()
     ->not->toUse([EventRecorder::class, 'Illuminate\Support\Facades\DB', 'App\Domain', 'App\Models\Notification']);
+arch('live tells the channels, records nothing and computes nothing')
+    ->expect('App\Live')->classes()->toBeFinal()->not->toUse([EventRecorder::class, 'Illuminate\Support\Facades\Schema', 'App\Domain']);
+arch('in App\Live only NotificationsChanged speaks to the database, to wait for the commit')
+    ->expect(['App\Live\LiveConsumer', 'App\Live\LiveMessage', 'App\Live\Disconnect', 'App\Live\Broadcasts'])
+    ->not->toUse('Illuminate\Support\Facades\DB');
 arch('the live channels decide only through the policies and Visibility')
     ->expect('App\Broadcasting')->classes()->toBeFinal()->toHaveMethod('join')
     ->toOnlyUse([Authorize::class, Visibility::class, Actor::class, 'App\Models\User', 'App\Models\Project', 'App\Models\WorkItem', Ulid::class]);
@@ -108,6 +113,16 @@ it('keeps App\Search free of writes', function () {
         ->all();
 
     expect(appFiles('app/Search'))->not->toBe([])
+        ->and($hits)->toBe([]);
+});
+
+// App\Live only reads (who lost access) and broadcasts: no model write, no insert (phase plan 8, Global Constraints)
+it('keeps App\Live free of writes', function () {
+    $hits = collect(appFiles('app/Live'))
+        ->flatMap(fn (string $f) => [...modelWrites((string) file_get_contents(repo_path($f)), $f), ...inserts((string) file_get_contents(repo_path($f)), $f)])
+        ->all();
+
+    expect(appFiles('app/Live'))->not->toBe([])
         ->and($hits)->toBe([]);
 });
 

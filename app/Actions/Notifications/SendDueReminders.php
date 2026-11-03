@@ -9,6 +9,7 @@ use App\Domain\Notifications\Preferences;
 use App\Domain\Notifications\Reminders;
 use App\Domain\Workflow\StateCategory;
 use App\Enums\AccountType;
+use App\Live\NotificationsChanged;
 use App\Models\Notification;
 use App\Models\NotificationPreference;
 use App\Models\Organization;
@@ -36,7 +37,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * as off without a mail server (K9). The lines with mail on join the collection `due:<day>` of their person: one mail
  * per person and day with all of them. A run that comes again (the job twice in the hour) writes nothing and opens no
  * mail: only people who got a new line join one. A fixed number of queries per zone, however many people and items.
- * Work of a job without an event of its own.
+ * Work of a job without an event of its own. After the commit, every person with a new reminder in the inbox hears
+ * `notifications.changed` on their live channel (NotificationsChanged, K10).
  */
 final class SendDueReminders
 {
@@ -71,7 +73,7 @@ final class SendDueReminders
         $mail = MailSetup::configured();
         $now = now()->format('Y-m-d H:i:s.u');
 
-        $rows = $mailing = [];
+        $rows = $mailing = $inboxing = [];
         foreach ($items as $item) {
             $theirs = $stored[$item->assignee_id] ?? [];
             $inbox = Preferences::enabled(NotificationKind::Due, Channel::Inbox, $theirs);
@@ -98,6 +100,9 @@ final class SendDueReminders
             if ($mailOn) {
                 $mailing["{$item->assignee_id}:due:{$item->id}:{$day}"] = (string) $item->assignee_id;
             }
+            if ($inbox) {
+                $inboxing["{$item->assignee_id}:due:{$item->id}:{$day}"] = (string) $item->assignee_id;
+            }
         }
 
         // a reminder the person already has stays as it is, and only a new one joins (or opens) a mail
@@ -105,9 +110,11 @@ final class SendDueReminders
             ->get(['user_id', 'dedupe_key'])->map(fn (Notification $n) => "{$n->user_id}:{$n->dedupe_key}")->all();
         $rows = array_diff_key($rows, array_flip($written));
         $mailing = array_values(array_unique(array_intersect_key($mailing, $rows)));
+        $inboxing = array_values(array_unique(array_intersect_key($inboxing, $rows)));
 
-        return DB::transaction(function () use ($rows, $mailing, $day): int {
+        return DB::transaction(function () use ($rows, $mailing, $inboxing, $day): int {
             $mails = NotifyRecipients::collect($mailing, "due:{$day}");
+            NotificationsChanged::dispatchFor($inboxing, null);
 
             return Notification::query()->insertOrIgnore(array_values(array_map(
                 fn (array $row) => [...$row, 'mail_id' => $mails[$row['user_id']] ?? null],

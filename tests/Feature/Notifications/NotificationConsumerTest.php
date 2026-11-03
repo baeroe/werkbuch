@@ -9,6 +9,7 @@ use App\Events\EventType;
 use App\Events\Outbox;
 use App\Jobs\ConsumeEvent;
 use App\Jobs\PurgeProject;
+use App\Live\LiveConsumer;
 use App\Models\Event;
 use App\Models\EventConsumption;
 use App\Models\Notification;
@@ -48,7 +49,7 @@ it('is a consumer of every event, in the queue notifications, with the tries of 
     $consumer = new NotificationConsumer;
 
     expect(config('werkbuch.event_consumers'))->toBe([])        // off in tests until a test switches it on (K2)
-        ->and(require repo_path('config/werkbuch.php'))->toHaveKey('event_consumers', [SearchConsumer::class, NotificationConsumer::class])
+        ->and(require repo_path('config/werkbuch.php'))->toHaveKey('event_consumers', [SearchConsumer::class, NotificationConsumer::class, LiveConsumer::class])
         ->and($consumer->key())->toBe('notifications')
         ->and($consumer->queue())->toBe('notifications')
         ->and($consumer->tries())->toBe(8)
