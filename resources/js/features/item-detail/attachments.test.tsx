@@ -15,6 +15,7 @@ import { useWorkItem } from '@/hooks/workItems';
 import { qk } from '@/hooks/keys';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import { lene, list, makeAttachment, organization, project, standard, types, web47 } from '@/test/fixtures';
+import { useUiStore } from '@/store/ui';
 import { FakeXhr, installFakeXhr, restoreFakeXhr } from '@/test/xhr';
 import type { Attachment, Project, WorkItem } from '@/types';
 import { Attachments } from './Attachments';
@@ -48,6 +49,11 @@ const fileOf = (id: string, filename: string, overrides: Partial<Attachment> = {
   makeAttachment({ id, filename, owner, kind: 'file', mime: 'application/pdf', inline: false, size: 120_400, ...overrides });
 const pdf = (name: string) => new File([new Uint8Array([37, 80, 68, 70])], name, { type: 'application/pdf' });
 const lastToast = () => currentToasts().at(-1);
+const leaving = () => {
+  const event = new Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(event);
+  return event.defaultPrevented;
+};
 
 /** The section as the detail shows it: the item comes from the fake server, so an upload or a delete shows on reload. */
 function Harness() {
@@ -141,6 +147,8 @@ describe('Attachments', () => {
     expect(contractBar.getAttribute('aria-valuenow')).toBe('25');
     // the input is empty again: the same file can be chosen once more
     expect(input.value).toBe('');
+    // while files go out, leaving the page asks first
+    expect(leaving()).toBe(true);
 
     // the second is stored first: its line gives way to the file once the item is read again, the first keeps its bar
     const contract = fileOf('att_contract', 'vertrag.pdf');
@@ -157,6 +165,50 @@ describe('Attachments', () => {
     expect(lastToast()).toMatchObject({ title: '„angebot.pdf“ nicht hochgeladen', description: 'Die Datei ist zu groß.' });
     expect(lastToast()!.action).toBeUndefined();
     expect(within(section).getAllByRole('link')).toHaveLength(1);
+    expect(leaving()).toBe(false);
+  });
+
+  it('reports the result of an upload whose view went away, also of its retry, and holds the page meanwhile', async () => {
+    files = [];
+    const view = renderFiles();
+    const section = await screen.findByRole('region', { name: 'Dateien' });
+    await within(section).findByRole('button', { name: 'Datei hochladen' });
+    const input = view.container.querySelector<HTMLInputElement>('input[type="file"]')!;
+
+    // the preview moves on while the file goes out: the page still asks before it is left
+    await userEvent.upload(input, [pdf('angebot.pdf')]);
+    await waitFor(() => expect(FakeXhr.all).toHaveLength(1));
+    view.unmount();
+    expect(leaving()).toBe(true);
+
+    // refused: a toast says so and names the item, without a retry for a refusal
+    act(() => FakeXhr.last.answer(413, { reason: 'payload_too_large', detail: 'Die Datei ist zu groß.' }));
+    await waitFor(() => expect(lastToast()).toMatchObject({ title: '„angebot.pdf“ nicht an WEB-47 angehängt', description: 'Die Datei ist zu groß.' }));
+    expect(lastToast()!.action).toBeUndefined();
+    expect(leaving()).toBe(false);
+
+    // no answer at all: "Erneut versuchen" sends it again, and its result is reported as well
+    api!.restore();
+    const again = renderFiles();
+    await within(await screen.findByRole('region', { name: 'Dateien' })).findByRole('button', { name: 'Datei hochladen' });
+    await userEvent.upload(again.container.querySelector<HTMLInputElement>('input[type="file"]')!, [pdf('vertrag.pdf')]);
+    await waitFor(() => expect(FakeXhr.all).toHaveLength(2));
+    again.unmount();
+    act(() => FakeXhr.last.onerror?.());
+    await waitFor(() => expect(lastToast()).toMatchObject({ title: '„vertrag.pdf“ nicht an WEB-47 angehängt', action: { label: 'Erneut versuchen' } }));
+    expect(leaving()).toBe(false);
+    act(() => runToastAction(lastToast()!.id));
+    await waitFor(() => expect(FakeXhr.all).toHaveLength(3));
+    expect((FakeXhr.last.sent!.get('file') as File).name).toBe('vertrag.pdf');
+    expect(leaving()).toBe(true);
+    files = [fileOf('att_contract', 'vertrag.pdf')];
+    act(() => FakeXhr.last.answer(201, { data: files[0] }));
+    await waitFor(() => expect(lastToast()).toMatchObject({ title: '„vertrag.pdf“ an WEB-47 angehängt', tone: 'success', action: { label: 'Öffnen' } }));
+    expect(leaving()).toBe(false);
+    // "Öffnen" shows the item in the preview
+    act(() => runToastAction(lastToast()!.id));
+    expect(useUiStore.getState().peekItemId).toBe('wi_web_47');
+    act(() => useUiStore.getState().openPeek(null));
   });
 
   it('takes files dropped on the section and retries a failed upload from its toast', async () => {
@@ -192,6 +244,10 @@ describe('Attachments', () => {
     await waitFor(() => expect(FakeXhr.all).toHaveLength(2));
     expect((FakeXhr.last.sent!.get('file') as File).name).toBe('angebot.pdf');
     expect(within(section).getByRole('progressbar', { name: '„angebot.pdf“ wird hochgeladen …' })).toBeTruthy();
+    files = [fileOf('att_offer', 'angebot.pdf')];
+    act(() => FakeXhr.last.answer(201, { data: files[0] }));
+    await waitFor(() => expect(within(section).queryByRole('progressbar')).toBeNull());
+    expect(leaving()).toBe(false);
   });
 
   it('removes a file with undo', async () => {

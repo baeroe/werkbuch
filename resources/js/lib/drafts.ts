@@ -15,6 +15,9 @@
  * a view opened again while the call of an earlier one runs follows it (its button stays busy, and the answer that
  * changes the text reaches it), so nothing is sent twice.
  *
+ * Work on its way that is no text, an upload of the file list, holds the same question (`hold()`), also after its view
+ * went away; a sign-in of another person does not end it (the call runs on until it answers).
+ *
  * Who is signed in owns the drafts: when the person changes (`resetForUser`), `clear()` forgets every text and every
  * call on its way (`epoch()` tells a call that ends afterwards to leave the store alone), and the modules that keep
  * more beside a draft forget it too (`onClear`).
@@ -36,9 +39,11 @@ const sendingCounts = new Map<DraftKey, number>();
 const clearHooks = new Set<() => void>();
 /** Counts the clears: a call that began before the last one leaves the store alone. */
 let epoch = 0;
+/** Work on its way that leaving the page would lose (`hold()`). */
+let holds = 0;
 
 const warnOnUnload = (event: BeforeUnloadEvent) => {
-  if (texts.size > 0) event.preventDefault();
+  if (texts.size > 0 || holds > 0) event.preventDefault();
 };
 window.addEventListener('beforeunload', warnOnUnload);
 
@@ -95,6 +100,17 @@ export const drafts = {
       if (left > 0) sendingCounts.set(key, left);
       else sendingCounts.delete(key);
       notify(key);
+    };
+  },
+
+  /** Leaving or reloading the page asks first until the function returned is called (once): an upload on its way. */
+  hold(): () => void {
+    holds += 1;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      holds -= 1;
     };
   },
 

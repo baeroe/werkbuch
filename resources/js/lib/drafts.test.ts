@@ -61,6 +61,21 @@ describe('drafts', () => {
     expect(leaving()).toBe(false);
   });
 
+  it('asks before leaving the page while work on its way holds it, also through a clear', () => {
+    const first = drafts.hold();
+    const second = drafts.hold();
+    expect(leaving()).toBe(true);
+    // another person signs in: the uploads on their way still run
+    drafts.clear();
+    expect(leaving()).toBe(true);
+    first();
+    // released once only: a second call changes nothing
+    first();
+    expect(leaving()).toBe(true);
+    second();
+    expect(leaving()).toBe(false);
+  });
+
   it('renders the text anew when it changes', () => {
     const { result, rerender } = renderHook(({ key }) => useDraft(key), { initialProps: { key: commentDraft('wi_1') } });
     expect(result.current).toBeNull();

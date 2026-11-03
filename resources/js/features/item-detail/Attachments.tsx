@@ -2,8 +2,12 @@
  * The files of an item (spec 4.16, kind `file`): name, size and a download (`?download=1`, also for pictures); pictures
  * with a small preview (`preview_url` once the queue made one, otherwise the file). Files come in by "Datei hochladen"
  * or by dropping them on the section; each file is a call of its own with its own line, whose bar follows the bytes
- * that went out, and its own result (`useSettle`: of two uploads at once, neither line hangs; a toast per failure,
- * "Erneut versuchen" for a failure worth repeating). Removing waits for its undo toast; a failure brings the file back.
+ * that went out, and its own result (`useSettle`: of two uploads at once, neither line hangs). The result is a toast
+ * whether the view is still there or not (the preview moved on with j/k, another page): a failure with the server's
+ * sentence and "Erneut versuchen" for a failure worth repeating, which reports its own result the same way; once the
+ * view is gone the toast names the item, and a stored file offers "Öffnen" (the preview of the item). Only the lines
+ * belong to the view. While an upload is on its way, leaving or reloading the page asks first (`drafts.hold()`, at
+ * module level, so it outlives the view). Removing waits for its undo toast; a failure brings the file back.
  * Images and files inside texts (kind `inline`) live in their texts, not here.
  *
  * Only with `item.edit` on an item that is not archived (`useEditReason`): otherwise the list is read only, "Datei
@@ -11,7 +15,7 @@
  */
 
 import { File as FileGlyph, FileText, Paperclip, Upload, X } from 'lucide-react';
-import { useRef, useState, type DragEvent } from 'react';
+import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { attachmentUrl } from '@/api/attachments';
 import { formatSize } from '@/components/fields/format';
 import { useEditReason } from '@/components/fields/itemData';
@@ -21,9 +25,11 @@ import { IconButton } from '@/components/ui/IconButton';
 import { toast } from '@/components/ui/toast';
 import { useDeleteAttachment, usePrimeAttachments, useUploadAttachment } from '@/hooks/attachments';
 import { useSettle } from '@/hooks/mutation';
+import { drafts } from '@/lib/drafts';
 import { notifyError } from '@/lib/errors';
 import { intlLocale, t } from '@/lib/i18n';
 import { runWithUndo } from '@/lib/undo';
+import { useUiStore } from '@/store/ui';
 import type { Attachment, WorkItemDetail } from '@/types';
 import '@/editor/editor.css';
 import { focusWhenLost, Section } from './shared';
@@ -61,24 +67,50 @@ export function Attachments({ detail }: { detail: WorkItemDetail }) {
   /** Removed, while their undo toast stands. */
   const [gone, setGone] = useState<string[]>([]);
   const [over, setOver] = useState(false);
+  /** Whether the view is still there when an upload answers: its toast says so. */
+  const shown = useRef(true);
+  useEffect(() => {
+    shown.current = true;
+    return () => {
+      shown.current = false;
+    };
+  }, []);
   // the files come with the detail: a text that shows one of them does not ask for it again
   usePrimeAttachments(detail.attachments);
 
   const files = detail.attachments.filter((attachment) => !gone.includes(attachment.id));
   if (files.length === 0 && pending.length === 0 && editReason) return null;
 
-  /** Every file is a call of its own, with its own line and result (calls that overlap keep their own answer). */
+  /**
+   * Every file is a call of its own, with its own line and result (calls that overlap keep their own answer). The line
+   * goes with the view; the toast of the result and the guard against leaving the page do not.
+   */
   function send(list: readonly File[]) {
     for (const file of list) {
       pendingCounter += 1;
       const id = pendingCounter;
       setPending((current) => [...current, { id, name: file.name, progress: 0 }]);
       const onProgress = (progress: number) => setPending((current) => current.map((entry) => (entry.id === id ? { ...entry, progress } : entry)));
-      settle(upload.mutateAsync({ project_id: item.project_id, file, owner: { type: 'work_item', id: item.id }, kind: 'file', onProgress }), {
-        onSuccess: () => toast({ title: t('items.attachments.uploaded', { name: file.name }), tone: 'success' }),
-        onError: (error) => notifyError(t('items.attachments.upload_failed', { name: file.name }), error, () => send([file])),
-        onSettled: () => setPending((current) => current.filter((entry) => entry.id !== id)),
-      });
+      const release = drafts.hold();
+      const call = upload.mutateAsync({ project_id: item.project_id, file, owner: { type: 'work_item', id: item.id }, kind: 'file', onProgress });
+      settle(call, { onSettled: () => setPending((current) => current.filter((entry) => entry.id !== id)) });
+      call.then(
+        () => {
+          release();
+          if (shown.current) toast({ title: t('items.attachments.uploaded', { name: file.name }), tone: 'success' });
+          else
+            toast({
+              title: t('items.attachments.uploaded_to', { name: file.name, key: item.key }),
+              tone: 'success',
+              action: { label: t('items.attachments.open'), onClick: () => useUiStore.getState().openPeek(item.id) },
+            });
+        },
+        (error: unknown) => {
+          release();
+          const title = shown.current ? t('items.attachments.upload_failed', { name: file.name }) : t('items.attachments.upload_failed_to', { name: file.name, key: item.key });
+          notifyError(title, error, () => send([file]));
+        },
+      );
     }
   }
 
