@@ -185,3 +185,40 @@ it('removes the media rows at once and the files of all of them after the commit
         // the rows of the attachments are the caller's
         ->and(Attachment::query()->count())->toBe(3);
 });
+
+it('hands a file of the list that another text names over to that text instead of deleting it (I1)', function () use ($file, $path) {
+    $project = Project::factory()->identifier('WEB')->create();
+    $mara = memberOf($project, ProjectRole::Member);
+    $item = WorkItem::factory()->state(['project_id' => $project->id])->create();
+    $other = WorkItem::factory()->state(['project_id' => $project->id])->create(['created_by' => $mara->id]);
+    $attachment = $file($mara, $item);
+    $stored = $path($attachment);
+    $this->actingAs($mara)->patchJson("/api/v1/work-items/{$other->key}", ['description' => "[Angebot](attachment:{$attachment->id})"])->assertOk();
+
+    $this->actingAs($mara)->deleteJson("/api/v1/attachments/{$attachment->id}")->assertNoContent();
+
+    // the file leaves the list (the event says so) and stays as a file of the text that names it
+    expect($attachment->fresh()?->only(['attachable_type', 'attachable_id', 'kind']))->toBe(['attachable_type' => 'work_item', 'attachable_id' => $other->id, 'kind' => 'inline'])
+        ->and(Storage::disk('local')->exists($stored))->toBeTrue()
+        ->and(eventsOf(EventType::WorkItemUpdated, $item)->last()?->changes)->toBe(['attachments' => ['old' => ['id' => $attachment->id, 'filename' => 'angebot.txt'], 'new' => null]]);
+    $this->actingAs($mara)->get("/attachments/{$attachment->id}")->assertOk();
+    $description = $other->fresh()?->description;
+    $this->actingAs($mara)->patchJson("/api/v1/work-items/{$other->key}", ['description_json' => $description, 'title' => 'Neu'])->assertOk();
+});
+
+it('takes no dead picture or file the text had before as a reason to refuse saving it', function () {
+    $project = Project::factory()->identifier('WEB')->create();
+    $mara = memberOf($project, ProjectRole::Member);
+    $item = WorkItem::factory()->state(['project_id' => $project->id])->create(['created_by' => $mara->id]);
+    $picture = Attachment::factory()->forItem($item)->create(['uploaded_by' => $mara->id]);
+    $document = Attachment::factory()->forItem($item)->create(['uploaded_by' => $mara->id, 'filename' => 'plan.pdf']);
+    $this->actingAs($mara)->patchJson("/api/v1/work-items/{$item->key}", ['description' => "Plan ![](attachment:{$picture->id}) [plan.pdf](attachment:{$document->id})"])->assertOk();
+    // gone without the text knowing (an older version deleted it, a row removed by hand)
+    Attachment::query()->whereKey([$picture->id, $document->id])->delete();
+
+    $this->actingAs($mara)->patchJson("/api/v1/work-items/{$item->key}", ['description_json' => $item->fresh()?->description, 'title' => 'Neu'])
+        ->assertOk()->assertJsonPath('data.description', 'Plan');
+    // a dead attachment the text did not have before stays a 422
+    $this->actingAs($mara)->patchJson("/api/v1/work-items/{$item->key}", ['description' => "![](attachment:{$picture->id})"])
+        ->assertUnprocessable()->assertJsonPath('errors.description', [__('field.rich_text.attachment')]);
+});

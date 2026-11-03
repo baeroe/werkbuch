@@ -203,7 +203,7 @@ A text that names an image of another project, or an upload of someone else:
 }
 ```
 
-Deleting an image or file that belongs to a text is a `409` with `reason: attachment_inline`: it goes with its text. Only files of the file list are deleted one by one, and only by someone who may change the item. Comments and reactions on an archived item, or in an archived project, are refused with `409` (`archived`, `project_archived`).
+Deleting an image or file that belongs to a text is a `409` with `reason: attachment_inline`: it goes with its text. Only files of the file list are deleted one by one, and only by someone who may change the item; a file of the list that a text of the project names leaves the list but stays as a file of that text. A text that still names an image or file that is gone meanwhile can be saved: the dead image or file leaves it. Comments and reactions on an archived item, or in an archived project, are refused with `409` (`archived`, `project_archived`).
 
 ## Clean up
 

@@ -10,14 +10,17 @@ use App\Models\Attachment;
 use App\Models\WorkItem;
 use App\Support\Actor;
 use App\Support\AttachmentFiles;
+use App\Support\AttachmentTexts;
 use App\Support\ItemLock;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Lorisleiva\Actions\Concerns\AsAction;
 
 /**
  * Deletes an attachment (`DELETE /api/v1/attachments/{attachment}`, A238). A file of the file list of an item: whoever
  * may change the item (`item.edit`), not in an archived project or item; `work_item.updated` names it and the item gets a
- * new `updated_at`. An upload nobody owns yet: only the person who uploaded it, without an event. A picture or file of
+ * new `updated_at`; a file another text of the project names leaves the list but stays as a file of that text (A261,
+ * AttachmentTexts::handOverOrRemove), only one nobody names goes. An upload nobody owns yet: only the person who uploaded it, without an event. A picture or file of
  * a text (`inline` with an owner) never: it goes with its text, or with app:prune-attachments (409 `attachment_inline`).
  * What the account must not read is the 404 of an unknown attachment. The row is read afresh under the lock: one that
  * another request deleted meanwhile is a 404 without a second event, an upload a text linked meanwhile is a picture of
@@ -60,7 +63,8 @@ final class DeleteAttachment
             }
 
             $attachment = self::fresh($attachment);
-            self::remove($attachment);
+            // a text of the project may name the file (A233): it stays as that text's, only the rest goes (A261)
+            AttachmentTexts::handOverOrRemove(new Collection([$attachment]), $project->id);
 
             $item->touch();
             EventRecorder::record(EventType::WorkItemUpdated, $actor, $item, $project, [

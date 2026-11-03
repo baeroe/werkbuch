@@ -203,7 +203,7 @@ Ein Text, der ein Bild eines anderen Projekts oder den Upload einer anderen Pers
 }
 ```
 
-Ein Bild oder eine Datei zu löschen, die zu einem Text gehört, ist ein `409` mit `reason: attachment_inline`: Es geht mit seinem Text. Einzeln gelöscht werden nur Dateien der Dateiliste, und nur von jemandem, der das Item ändern darf. Kommentare und Reaktionen an einem archivierten Item oder in einem archivierten Projekt lehnt werkbuch mit `409` ab (`archived`, `project_archived`).
+Ein Bild oder eine Datei zu löschen, die zu einem Text gehört, ist ein `409` mit `reason: attachment_inline`: Es geht mit seinem Text. Einzeln gelöscht werden nur Dateien der Dateiliste, und nur von jemandem, der das Item ändern darf; eine Datei der Liste, die ein Text des Projekts nennt, verlässt die Liste und bleibt als Datei dieses Texts. Ein Text, der noch ein inzwischen verschwundenes Bild oder eine verschwundene Datei nennt, lässt sich speichern: Das tote Bild bzw. die tote Datei verschwindet dabei aus ihm. Kommentare und Reaktionen an einem archivierten Item oder in einem archivierten Projekt lehnt werkbuch mit `409` ab (`archived`, `project_archived`).
 
 ## Aufräumen
 

@@ -21,7 +21,7 @@ use Illuminate\Validation\ValidationException;
  *   writer's own client named it, so it tells nothing), nothing without one;
  * - an image or a file must name an attachment of the text's project that has an owner or was uploaded by the writer
  *   (A233); a file takes its file name from the row. Anything else is a 422 `field.rich_text.attachment` at the key
- *   that sent the text (13c).
+ *   that sent the text (13c), except one the text had before and that is gone: it leaves the text (I1).
  *
  * Accounts, items and attachments each come with one query for the whole text (in blocks of RichTextLookups::CHUNK),
  * never one per node.
@@ -58,7 +58,7 @@ final class RichTextRules
 
         $handles = self::handles($mentioned, $project, $before?->mentionedUserIds() ?? []);
         $items = self::items($doc->itemRefs(), $project, $writer, $before?->itemRefs() ?? []);
-        $files = self::attachments($attached, $project, $writer, $field);
+        $files = self::attachments($attached, $project, $writer, $field, $before?->attachmentIds() ?? []);
 
         return $doc->withNodes(function (array $node) use ($handles, $items, $files, $labels): array|string|null {
             /** @var array<string, mixed> $attrs */
@@ -67,7 +67,9 @@ final class RichTextRules
             return match ($node['type']) {
                 'mention' => self::mention($node, $attrs, $handles),
                 'reference' => $attrs['kind'] === 'item' && isset($items[$attrs['id']]) ? $node : $labels[$attrs['id']] ?? null,
-                'attachment' => ['type' => 'attachment', 'attrs' => ['filename' => $files[$attrs['attachmentId']]] + $attrs] + $node,
+                // a picture or file the text had before and that is gone meanwhile goes from the text
+                'image' => isset($files[$attrs['attachmentId']]) ? $node : null,
+                'attachment' => isset($files[$attrs['attachmentId']]) ? ['type' => 'attachment', 'attrs' => ['filename' => $files[$attrs['attachmentId']]] + $attrs] + $node : null,
                 default => $node,
             };
         });
@@ -140,20 +142,25 @@ final class RichTextRules
     }
 
     /**
-     * The file names of the attachments, each checked (usable()).
+     * The file names of the attachments, each checked (usable()). One the text had before (`$kept`) and that is gone
+     * meanwhile is left out without an error, so a dead node never blocks saving its text; the caller drops it.
      *
      * @param  list<string>  $ids
+     * @param  list<string>  $kept
      * @return array<string, string> ID → file name
      *
      * @throws ValidationException
      */
-    private static function attachments(array $ids, Project $project, User $writer, string $field): array
+    private static function attachments(array $ids, Project $project, User $writer, string $field, array $kept): array
     {
         $names = [];
         foreach (array_chunk($ids, RichTextLookups::CHUNK) as $chunk) {
             $rows = Attachment::query()->whereKey($chunk)->get(['id', 'project_id', 'attachable_id', 'uploaded_by', 'filename'])->keyBy('id');
             foreach ($chunk as $id) {
                 $row = $rows->get($id);
+                if ($row === null && in_array($id, $kept, true)) {
+                    continue;
+                }
                 if ($row === null || ! self::usable($row, $project, $writer)) {
                     throw ValidationException::withMessages([$field => __('field.rich_text.attachment')]);
                 }
