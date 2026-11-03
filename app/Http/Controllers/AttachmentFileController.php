@@ -3,10 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Actions\Attachments\ShowAttachment;
+use App\Actions\Attachments\UploadAttachment;
 use App\Models\Attachment;
 use App\Support\Actor;
 use finfo;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\HeaderUtils;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
@@ -36,15 +39,25 @@ final class AttachmentFileController extends Controller
         // a preview has the format of the stored name: the content's for pictures, files stored earlier may differ
         $type = $preview ? (new finfo(FILEINFO_MIME_TYPE))->file($path) : $attachment->mime;
         $inline = $attachment->isInlineImage() && ! $request->boolean('download');
-        $name = "filename*=UTF-8''".rawurlencode($attachment->filename);
 
         // a file response is public unless told otherwise; attachments are for their readers only
         return response()->file($path, [
             'Content-Type' => $attachment->isInlineImage() && in_array($type, Attachment::INLINE_TYPES, true) ? $type : 'application/octet-stream',
-            'Content-Disposition' => ($inline ? 'inline; ' : 'attachment; ').$name,
+            'Content-Disposition' => HeaderUtils::makeDisposition($inline ? 'inline' : 'attachment', $attachment->filename, self::asciiName($attachment->filename)),
             'X-Content-Type-Options' => 'nosniff',
             'Content-Security-Policy' => "default-src 'none'; sandbox",
             'Cache-Control' => 'private, max-age=3600',
         ])->setPrivate();
+    }
+
+    /**
+     * The name for clients that cannot read `filename*` (T6-M7): transliterated to ASCII, every character that is no
+     * printable ASCII or that `filename=` cannot carry (`%`, `/`, `\`, `"`) an underscore, `datei` when nothing is left.
+     */
+    private static function asciiName(string $name): string
+    {
+        $ascii = trim((string) preg_replace('~[^\x20-\x7e]|[%/\\\\"]~', '_', Str::ascii($name)));
+
+        return $ascii === '' ? UploadAttachment::FALLBACK_NAME : $ascii;
     }
 }

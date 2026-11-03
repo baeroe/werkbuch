@@ -60,7 +60,7 @@ it('makes a preview of a large PNG on the queue media', function () use ($pictur
         ->assertJsonPath('data.preview_url', "/attachments/{$attachment->id}/preview");
     $response = $this->actingAs($mara)->get("/attachments/{$attachment->id}/preview")->assertOk()
         ->assertHeader('Content-Type', 'image/png')
-        ->assertHeader('Content-Disposition', "inline; filename*=UTF-8''plan.png")
+        ->assertHeader('Content-Disposition', 'inline; filename=plan.png')
         ->assertHeader('X-Content-Type-Options', 'nosniff');
 
     $preview = (string) file_get_contents($response->baseResponse->getFile()->getPathname());

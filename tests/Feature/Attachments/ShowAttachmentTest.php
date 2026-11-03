@@ -32,7 +32,7 @@ it('serves a PNG inline with nosniff and the sandbox', function () use ($stored,
 
     $response = $this->actingAs($mara)->get("/attachments/{$attachment->id}")->assertOk()
         ->assertHeader('Content-Type', 'image/png')
-        ->assertHeader('Content-Disposition', "inline; filename*=UTF-8''skizze.png")
+        ->assertHeader('Content-Disposition', 'inline; filename=skizze.png')
         ->assertHeader('X-Content-Type-Options', 'nosniff')
         ->assertHeader('Content-Security-Policy', "default-src 'none'; sandbox");
 
@@ -40,7 +40,7 @@ it('serves a PNG inline with nosniff and the sandbox', function () use ($stored,
         ->and($response->baseResponse->getFile()->getPathname())->toBe($attachment->getFirstMedia('file')?->getPath());
 });
 
-it('serves an SVG and an HTML file as download, never inline', function (string $name, string $content) use ($stored) {
+it('serves an SVG and an HTML file as download, never inline', function (string $name, string $content, string $disposition) use ($stored) {
     $project = Project::factory()->create();
     $mara = memberOf($project, ProjectRole::Member);
     $item = WorkItem::factory()->state(['project_id' => $project->id])->create();
@@ -48,12 +48,26 @@ it('serves an SVG and an HTML file as download, never inline', function (string 
 
     $this->actingAs($mara)->get("/attachments/{$attachment->id}")->assertOk()
         ->assertHeader('Content-Type', 'application/octet-stream')
-        ->assertHeader('Content-Disposition', "attachment; filename*=UTF-8''".rawurlencode($name))
+        ->assertHeader('Content-Disposition', $disposition)
         ->assertHeader('X-Content-Type-Options', 'nosniff')
         ->assertHeader('Content-Security-Policy', "default-src 'none'; sandbox");
 })->with([
-    'an SVG, sent as PNG' => ['plan.png', '<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'],
-    'an HTML page' => ['Übersicht (neu).html', '<!DOCTYPE html><html><body><script>alert(1)</script></body></html>'],
+    'an SVG, sent as PNG' => ['plan.png', '<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>', 'attachment; filename=plan.png'],
+    // an ASCII name for clients that cannot read filename* (T6-M7)
+    'an HTML page' => ['Übersicht (neu).html', '<!DOCTYPE html><html><body><script>alert(1)</script></body></html>', "attachment; filename=\"Ubersicht (neu).html\"; filename*=utf-8''%C3%9Cbersicht%20%28neu%29.html"],
+]);
+
+it('names a file with an ASCII fallback and the full name (T6-M7)', function (string $name, string $disposition) use ($stored) {
+    $project = Project::factory()->create();
+    $mara = memberOf($project, ProjectRole::Member);
+    $item = WorkItem::factory()->state(['project_id' => $project->id])->create();
+    $attachment = $stored($mara, $project, $name, 'Inhalt', $item);
+
+    $this->actingAs($mara)->get("/attachments/{$attachment->id}")->assertOk()->assertHeader('Content-Disposition', $disposition);
+})->with([
+    'umlauts and an emoji' => ['Größe 🚀.txt', "attachment; filename=\"Grosse .txt\"; filename*=utf-8''Gr%C3%B6%C3%9Fe%20%F0%9F%9A%80.txt"],
+    'a percent sign and quotes' => ['50% "neu".txt', "attachment; filename=\"50_ _neu_.txt\"; filename*=utf-8''50%25%20%22neu%22.txt"],
+    'only an emoji' => ['🚀', "attachment; filename=datei; filename*=utf-8''%F0%9F%9A%80"],
 ]);
 
 it('serves the uploader an unowned upload and nobody else', function () use ($stored, $png) {
@@ -142,7 +156,7 @@ it('forces a download with ?download=1', function () use ($stored, $png) {
 
     $this->actingAs($mara)->get("/attachments/{$attachment->id}?download=1")->assertOk()
         ->assertHeader('Content-Type', 'image/png')
-        ->assertHeader('Content-Disposition', "attachment; filename*=UTF-8''skizze.png");
+        ->assertHeader('Content-Disposition', 'attachment; filename=skizze.png');
 });
 
 it('answers 404 for a preview that was never made and for a row without its file', function () use ($stored, $png) {
