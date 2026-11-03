@@ -155,9 +155,11 @@ test('reacts with an emoji from the picker', async ({ page }) => {
     await expect(party).toHaveAttribute('aria-pressed', 'true');
     await expect.poll(async () => (await commentsOf(page, item.id))[0]?.reactions.map((reaction) => reaction.emoji)).toEqual(['🎉']);
 
-    // pressed again: taken back
-    await party.click();
+    // pressed again with the space bar: taken back, the focus goes on to "Add reaction"
+    await party.focus();
+    await page.keyboard.press(' ');
     await expect(party).toBeHidden();
+    await expect(card.getByRole('button', { name: tr('en', 'items.comments.react') })).toBeFocused();
     await expect.poll(async () => (await commentsOf(page, item.id))[0]?.reactions).toEqual([]);
   } finally {
     await removeE2eProject(page, identifier);

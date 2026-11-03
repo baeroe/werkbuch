@@ -38,6 +38,12 @@ final class Comment extends Model
     use HasFactory, HasUlids;
 
     /**
+     * With microseconds (`created_at`, `updated_at`, `edited_at` are timestamp(6)): the activity mixes comments and
+     * events by their moment, an event has its microseconds too.
+     */
+    protected $dateFormat = 'Y-m-d H:i:s.u';
+
+    /**
      * Set by loadForResource(), never stored: what its reader may see of the mentions and references of the text
      * (current handles, key and title of each referenced item the reader sees), for the Markdown of CommentResource.
      */

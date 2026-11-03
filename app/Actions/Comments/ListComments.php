@@ -15,7 +15,7 @@ use Lorisleiva\Actions\Concerns\AsAction;
 
 /**
  * The comments of a work item (`GET /api/v1/work-items/{item}/comments`, P3) for everybody who sees it: oldest first
- * (`created_at`, then id), a page at a time with a cursor; each loaded for CommentResource (Comment::loadForResource).
+ * (`created_at` to the microsecond, then id), a page at a time with a cursor; each loaded for CommentResource (Comment::loadForResource).
  * The item comes as a model or as a reference (ULID or key, also with a former identifier).
  */
 final class ListComments
@@ -35,7 +35,13 @@ final class ListComments
         Authorize::check($actor, 'view', $item);
         $args = PageArgs::from($query);
 
-        $result = ListResult::of(Comment::query()->where('work_item_id', $item->id)->orderBy('created_at')->orderBy('id'), $args);
+        $comments = Comment::query()
+            // the stamp as the database has it for the cursor: the cast would lose the microseconds (Carbon as text)
+            ->select('comments.*')->addSelect('comments.created_at as created_cursor')
+            ->where('work_item_id', $item->id)
+            ->orderBy('created_cursor')->orderBy('id');
+
+        $result = ListResult::of($comments, $args);
         Comment::loadForResource(new Collection($result->page->items()), $actor->user);
 
         return $result;

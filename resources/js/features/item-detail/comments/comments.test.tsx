@@ -711,6 +711,64 @@ describe('CommentCard', () => {
     await waitFor(() => expect(api!.calls.filter((call) => call.method === 'PUT').map((call) => call.body)).toEqual([{ emoji: '👍' }, { emoji: '🎉' }]));
   });
 
+  it('hands the focus on when a reaction goes with the keyboard, also a refused one', async () => {
+    comments = [
+      makeComment({
+        id: 'c_web47_1',
+        reactions: [
+          { emoji: '👍', user_ids: ['u_ida'] },
+          { emoji: '🎉', user_ids: ['u_lene'] },
+          { emoji: '🚀', user_ids: ['u_lene'] },
+        ],
+      }),
+      makeComment({ id: 'c_ida', author_id: 'u_ida', reactions: [{ emoji: '👀', user_ids: ['u_lene'] }] }),
+    ];
+    const user = userEvent.setup();
+    let refuse = false;
+    const take = (emoji: string) => change('c_web47_1', (comment) => ({ ...comment, reactions: comment.reactions.filter((reaction) => reaction.emoji !== emoji) }));
+    renderCards({
+      routes: {
+        'DELETE /api/v1/comments/c_web47_1/reactions': (_body, request) => take(request.searchParams.get('emoji')!),
+        'DELETE /api/v1/comments/c_ida/reactions': () => change('c_ida', (comment) => ({ ...comment, reactions: [] })),
+        'PUT /api/v1/comments/c_web47_1/reactions': () => (refuse ? problem(409, 'archived') : answer(comments[0])),
+      },
+    });
+    const article = await card('Mara Lindqvist');
+    const chip = (emoji: string) => within(article).findByRole('button', { name: new RegExp(`^${emoji}, `) });
+
+    // the own, only reaction of 🎉 taken back with the space bar: the chip in its place takes the focus
+    (await chip('🎉')).focus();
+    await user.keyboard(' ');
+    await waitFor(() => expect(document.activeElement).toBe(within(article).getByRole('button', { name: /^🚀, / })));
+    // the last one: the chip before it
+    await user.keyboard(' ');
+    await waitFor(() => expect(document.activeElement).toBe(within(article).getByRole('button', { name: /^👍, / })));
+    expect(within(article).queryByRole('button', { name: /^🚀, / })).toBeNull();
+
+    // a new reaction refused while its chip has the focus: back to the chip before it
+    refuse = true;
+    const gate = { release: () => {} };
+    const original = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      if (init?.method === 'PUT') await new Promise<void>((resolve) => (gate.release = resolve));
+      return original(input, init);
+    };
+    await user.click(within(article).getByRole('button', { name: 'Reaktion hinzufügen' }));
+    await user.click(await screen.findByRole('button', { name: 'Rakete' }));
+    (await chip('🚀')).focus();
+    await act(async () => gate.release());
+    await waitFor(() => expect(within(article).queryByRole('button', { name: /^🚀, / })).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(within(article).getByRole('button', { name: /^👍, / })));
+
+    globalThis.fetch = original;
+
+    // the only chip of a comment goes: "Reaktion hinzufügen" takes the focus
+    const lone = await card('Ida Brenner');
+    within(lone).getByRole('button', { name: /^👀, / }).focus();
+    await user.keyboard(' ');
+    await waitFor(() => expect(document.activeElement).toBe(within(lone).getByRole('button', { name: 'Reaktion hinzufügen' })));
+  });
+
   it("keeps each failed reaction's toast", async () => {
     comments = [makeComment({ id: 'c_web47_1', reactions: [{ emoji: '👍', user_ids: ['u_ida'] }] })];
     const user = userEvent.setup();

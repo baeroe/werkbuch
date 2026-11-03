@@ -5,6 +5,7 @@ use App\Models\Comment;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
+use Illuminate\Support\Carbon;
 use Tests\Support\RichTextFixtures as F;
 
 /*
@@ -47,6 +48,25 @@ it('lists the comments of an item as a page', function () use ($world) {
         ->assertJsonPath('meta.total', 2)
         ->assertJsonPath('meta.per_page', 1)
         ->assertJsonPath('data.0.work_item_id', $item->id);
+});
+
+it('tells a comment and a change of the same second apart by their microseconds', function () use ($world) {
+    [, $mara] = $world();
+    Carbon::setTestNow(Carbon::parse('2026-11-02 10:00:00.200000'));
+    $this->actingAs($mara)->postJson('/api/v1/work-items/WEB-1/comments', ['body' => 'Erst der Kommentar.'])->assertCreated()
+        ->assertJsonPath('data.created_at', '2026-11-02T10:00:00.200000Z');
+    Carbon::setTestNow(Carbon::parse('2026-11-02 10:00:00.700000'));
+    $this->actingAs($mara)->patchJson('/api/v1/work-items/WEB-1', ['title' => 'Dann die Änderung'])->assertOk();
+    Carbon::setTestNow(Carbon::parse('2026-11-02 10:00:00.900000'));
+    $this->actingAs($mara)->postJson('/api/v1/work-items/WEB-1/comments', ['body' => 'Dann noch einer.'])->assertCreated();
+
+    $comments = $this->actingAs($mara)->getJson('/api/v1/work-items/WEB-1/comments')->assertOk()->json('data');
+    $changed = collect($this->actingAs($mara)->getJson('/api/v1/work-items/WEB-1/history')->assertOk()->json('data'))->firstWhere('type', 'work_item.updated');
+
+    // as the browser mixes them: by the moment, the comment before the change, the change before the next comment
+    expect(array_column($comments, 'created_at'))->toBe(['2026-11-02T10:00:00.200000Z', '2026-11-02T10:00:00.900000Z'])
+        ->and($changed['occurred_at'])->toBe('2026-11-02T10:00:00.700000Z')
+        ->and($comments[0]['created_at'] < $changed['occurred_at'] && $changed['occurred_at'] < $comments[1]['created_at'])->toBeTrue();
 });
 
 it('shows, edits and deletes a comment by its ULID in any case', function () use ($world) {

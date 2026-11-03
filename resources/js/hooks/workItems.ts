@@ -460,13 +460,13 @@ export interface ActivityQuery {
   refetch: () => Promise<unknown>;
 }
 
-/** The second of an entry: a comment's time has whole seconds, an event's its fraction, so both compare by the second. */
-const atOf = (entry: ActivityEntry) => Math.floor(Date.parse(entry.at) / 1000);
+/** The moment of an entry; comments and events both carry microseconds, of which a `Date` keeps the milliseconds. */
+const atOf = (entry: ActivityEntry) => Date.parse(entry.at);
 
 /**
  * The whole activity of an item, oldest first: every page of its history and of its comments (the browser mixes the
  * two, A247; the server pages both from the oldest entry on, so stopping at the first hundred would hide the newest).
- * In order of time; a comment and an event of the same second read event first (a comment answers what happened).
+ * In order of time; a comment and an event of the very same moment read event first (a comment answers what happened).
  */
 export function useActivity(itemId: string | null | undefined): ActivityQuery {
   const history = useQuery({

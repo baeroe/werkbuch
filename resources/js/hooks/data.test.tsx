@@ -630,17 +630,18 @@ describe('activity', () => {
     expect(result.current.isError).toBe(false);
   });
 
-  it('reads a comment after an event of the same second (a comment keeps whole seconds, an event its fraction)', async () => {
-    const changed = itemEvent({ id: 'ev_fraction', occurred_at: '2026-10-28T09:00:05.734512Z' });
-    const said = makeComment({ id: 'c_second', created_at: '2026-10-28T09:00:05.000000Z' });
+  it('mixes a comment and an event of the same second by their moment', async () => {
+    const at = (time: string) => `2026-10-28T10:00:00.${time}Z`;
     api = mockApi({
-      'GET /api/v1/work-items/WEB-47/history': () => ({ body: list([changed]) }),
-      'GET /api/v1/work-items/WEB-47/comments': () => ({ body: list([said]) }),
+      'GET /api/v1/work-items/WEB-47/history': () =>
+        ({ body: list([itemEvent({ id: 'ev_early', occurred_at: at('100000') }), itemEvent({ id: 'ev_late', occurred_at: at('700000') })]) }),
+      'GET /api/v1/work-items/WEB-47/comments': () => ({ body: list([makeComment({ id: 'c_between', created_at: at('200000') }), makeComment({ id: 'c_last', created_at: at('900000') })]) }),
     });
     const { result } = renderHook(() => useActivity('WEB-47'), { wrapper });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data?.map((entry) => `${entry.kind} ${entry.id}`)).toEqual(['event ev_fraction', 'comment c_second']);
+    // the comment at .200 before the change at .700, and after the one at .100
+    expect(result.current.data?.map((entry) => `${entry.kind} ${entry.id}`)).toEqual(['event ev_early', 'comment c_between', 'event ev_late', 'comment c_last']);
   });
 
   it('fails only when a source fails without data, and fetches both again', async () => {

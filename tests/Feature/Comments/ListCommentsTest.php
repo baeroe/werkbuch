@@ -47,6 +47,28 @@ it('lists the comments oldest first and pages with a cursor', function () use ($
         ->and(array_map(fn (Comment $comment) => $comment->id, $second->page->items()))->toBe([$ids[3]]);
 });
 
+it('orders comments of one second by their microseconds and pages them without repeating one', function () use ($world) {
+    $w = $world();
+    // written later in the same second, but earlier in time: the time decides, not the id
+    $ids = [];
+    foreach (['09:00:05.900000', '09:00:05.100000', '09:00:05.500000', '09:00:05.500000'] as $time) {
+        Carbon::setTestNow(Carbon::parse("2026-11-02 {$time}"));
+        $ids[] = AddComment::run(actor($w['mara']), $w['item'], ['body' => $time])->id;
+    }
+
+    $seen = [];
+    $cursor = null;
+    do {
+        $page = ListComments::run(actor($w['lene']), $w['item'], ['per_page' => 1, ...($cursor ? ['cursor' => $cursor] : [])]);
+        $seen = [...$seen, ...array_map(fn (Comment $comment) => $comment->id, $page->page->items())];
+        $cursor = $page->page->nextCursor()?->encode();
+    } while ($cursor !== null && count($seen) < 10);
+
+    // each once, by the microsecond, the same microsecond by id
+    expect($seen)->toBe([$ids[1], $ids[2], $ids[3], $ids[0]])
+        ->and(Comment::query()->findOrFail($ids[1])->created_at->format('H:i:s.u'))->toBe('09:00:05.100000');
+});
+
 it('takes the item by its key as well', function () use ($world) {
     $w = $world();
     $comment = AddComment::run(actor($w['mara']), $w['item'], ['body' => 'Text.']);
