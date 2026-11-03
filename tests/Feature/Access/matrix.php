@@ -28,6 +28,8 @@ use App\Actions\Labels\DeleteLabel;
 use App\Actions\Labels\ListLabels;
 use App\Actions\Labels\SaveLabel;
 use App\Actions\Media\ShowMedia;
+use App\Actions\Notifications\GetNotificationPreferences;
+use App\Actions\Notifications\SaveNotificationPreferences;
 use App\Actions\Organization\GetOrganization;
 use App\Actions\Organization\UpdateOrganization;
 use App\Actions\Projects\AddMember;
@@ -782,6 +784,19 @@ return [
         ]),
         'allowed' => $people,
         'event' => EventType::UserPasswordChanged,
+    ],
+    // a bot gets no notifications: it reads an empty matrix and may not change one (K6)
+    'GetNotificationPreferences' => [
+        'action' => GetNotificationPreferences::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetNotificationPreferences::run($a),
+        'allowed' => $everyone,
+    ],
+    'SaveNotificationPreferences' => [
+        'action' => SaveNotificationPreferences::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => SaveNotificationPreferences::run($a, [
+            'preferences' => [['event' => 'comment', 'channel' => 'mail', 'enabled' => false]],
+        ]),
+        'allowed' => $people,
     ],
     'GetTwoFactor' => [
         'action' => GetTwoFactor::class,

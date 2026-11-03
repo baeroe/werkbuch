@@ -121,6 +121,8 @@ return [
     'delete a view' => ['DELETE', '/api/v1/views/{view}', 'params' => fn (MatrixWorld $w) => ['view' => $w->view()->id]],
     'list the own favorites' => ['GET', '/api/v1/favorites'],
     'toggle a favorite' => ['POST', '/api/v1/favorites/toggle'],
+    'show the own notification preferences' => ['GET', '/api/v1/notification-preferences'],
+    'change the own notification preferences' => ['PUT', '/api/v1/notification-preferences', 'body' => ['preferences' => [['event' => 'comment', 'channel' => 'mail', 'enabled' => false]]]],
     'list tokens' => ['GET', '/api/v1/tokens'],
     'create a token' => ['POST', '/api/v1/tokens', 'session' => true],
     'revoke a token' => ['DELETE', '/api/v1/tokens/{token}', 'params' => fn (MatrixWorld $w) => ['token' => $w->bot->createToken('Matrix', ['read'])->accessToken->id]],

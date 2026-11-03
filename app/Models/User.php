@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
@@ -112,6 +113,16 @@ class User extends Authenticatable implements HasLocalePreference, HasMedia
     public function owner(): BelongsTo
     {
         return $this->belongsTo(self::class, 'owner_id');
+    }
+
+    /**
+     * The stored notification choices of the account (spec 4.14); a missing one is the default.
+     *
+     * @return HasMany<NotificationPreference, $this>
+     */
+    public function notificationPreferences(): HasMany
+    {
+        return $this->hasMany(NotificationPreference::class);
     }
 
     /**

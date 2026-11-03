@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\HistoryController;
 use App\Http\Controllers\Api\InvitationsController;
 use App\Http\Controllers\Api\LabelsController;
 use App\Http\Controllers\Api\MembersController;
+use App\Http\Controllers\Api\NotificationPreferencesController;
 use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\PasswordController;
 use App\Http\Controllers\Api\ProjectsController;
@@ -172,6 +173,9 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
 
     Route::get('favorites', [FavoritesController::class, 'index']);
     Route::post('favorites/toggle', [FavoritesController::class, 'toggle']);
+
+    Route::get('notification-preferences', [NotificationPreferencesController::class, 'show']);
+    Route::put('notification-preferences', [NotificationPreferencesController::class, 'update']);
 
     Route::get('tokens', [TokensController::class, 'index']);
     Route::delete('tokens/{token}', [TokensController::class, 'destroy']);
