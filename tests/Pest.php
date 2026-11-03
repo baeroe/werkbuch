@@ -12,6 +12,7 @@ use App\Models\Organization;
 use App\Models\Project;
 use App\Models\User;
 use App\Support\Actor;
+use Illuminate\Broadcasting\BroadcastManager;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -270,6 +271,29 @@ function searchEngine(): ArraySearchEngine
     app(EngineManager::class)->forgetDrivers();
 
     return $engine;
+}
+
+/**
+ * Broadcasting through Reverb with fixed keys and the channels of routes/channels.php on that broadcaster (K3): the
+ * channels register on the broadcaster that was the default while the app booted (`null` in tests), so they are
+ * registered again here. Signing an answer of /broadcasting/auth calls nothing outside.
+ */
+function liveChannels(): void
+{
+    config([
+        'broadcasting.default' => 'reverb',
+        'broadcasting.connections.reverb' => [
+            'driver' => 'reverb',
+            'key' => 'live-key',
+            'secret' => 'live-secret',
+            'app_id' => 'live',
+            'options' => ['host' => '127.0.0.1', 'port' => 6001, 'scheme' => 'http', 'useTLS' => false],
+            'client_options' => ['connect_timeout' => 2, 'timeout' => 3],
+        ],
+    ]);
+    app(BroadcastManager::class)->forgetDrivers();
+
+    require repo_path('routes/channels.php');
 }
 
 /**

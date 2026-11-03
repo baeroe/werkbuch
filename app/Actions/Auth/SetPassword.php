@@ -37,7 +37,7 @@ final class SetPassword
             $user->forceFill(['password' => $password, 'remember_token' => Str::random(60)])->save();
             EndSessions::run($user, $keepSession ? session()->getId() : null);
             // the event names why in `meta.reason`, also when an account acts
-            $actor = $actor === null ? Actor::system($user, $reason) : new Actor($actor->user, $actor->via, $reason, $actor->token);
+            $actor = $actor === null ? Actor::system($user, $reason) : $actor->withReason($reason);
             EventRecorder::record(EventType::UserPasswordChanged, $actor, $user, null);
         });
     }

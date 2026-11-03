@@ -25,16 +25,21 @@ final readonly class Actor
 
     public const VIA_SYSTEM = 'system';
 
+    /** The form of a socket ID of Pusher and Reverb: `<number>.<number>` (A282). */
+    public const SOCKET_PATTERN = '/^\d+\.\d+\z/';
+
     public function __construct(
         public User $user,
         public string $via,
         public ?string $reason = null,
         public ?PersonalAccessToken $token = null,
+        /** The live connection of the tab that acts (header `X-Socket-ID`, only from the interface): it does not hear its own change (A282). */
+        public ?string $socket = null,
     ) {}
 
     /**
      * The signed-in account: through the API with its bearer token, otherwise from the interface (the session, which
-     * Sanctum hands a transient token).
+     * Sanctum hands a transient token) with the socket of its live connection, when the header has the form of one.
      *
      * @throws AuthenticationException without an account
      */
@@ -48,9 +53,21 @@ final readonly class Actor
 
         $token = $user->currentAccessToken();
 
-        return $token instanceof PersonalAccessToken
-            ? new self($user, self::VIA_API, token: $token)
-            : new self($user, self::VIA_UI);
+        if ($token instanceof PersonalAccessToken) {
+            return new self($user, self::VIA_API, token: $token);
+        }
+
+        $socket = $r->header('X-Socket-ID');
+
+        return new self($user, self::VIA_UI, socket: is_string($socket) && preg_match(self::SOCKET_PATTERN, $socket) === 1 ? $socket : null);
+    }
+
+    /**
+     * The same actor with another reason (work an action does on the side, such as the children of a deleted item).
+     */
+    public function withReason(string $reason): self
+    {
+        return new self($this->user, $this->via, $reason, $this->token, $this->socket);
     }
 
     /**
@@ -70,9 +87,10 @@ final readonly class Actor
     }
 
     /**
-     * What an event notes about the actor besides the account.
+     * What an event notes about the actor besides the account. The socket is for the live consumer alone: neither the
+     * history nor any resource shows it (and webhooks never send it, phase 11).
      *
-     * @return array{via: string, reason: string|null, token_id?: string}
+     * @return array{via: string, reason: string|null, token_id?: string, socket?: string}
      */
     public function meta(): array
     {
@@ -80,6 +98,10 @@ final readonly class Actor
 
         if ($this->token !== null) {
             $meta['token_id'] = $this->token->id;
+        }
+
+        if ($this->socket !== null) {
+            $meta['socket'] = $this->socket;
         }
 
         return $meta;

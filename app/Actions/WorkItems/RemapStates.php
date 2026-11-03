@@ -49,7 +49,7 @@ final class RemapStates
      */
     public function handle(Actor $actor, array $projectIds, array $mapping, string $reason): int
     {
-        $actor = new Actor($actor->user, $actor->via, $reason, $actor->token);
+        $actor = $actor->withReason($reason);
 
         return DB::transaction(function () use ($actor, $projectIds, $mapping): int {
             $states = WorkflowState::query()->whereKey([...array_keys($mapping), ...array_values($mapping)])->get()->keyBy('id')->all();

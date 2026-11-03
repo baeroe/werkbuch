@@ -1,6 +1,9 @@
 <?php
 
+use App\Access\Authorize;
 use App\Access\RoleAssignments;
+use App\Access\Visibility;
+use App\Domain\Ulid;
 use App\Events\EventRecorder;
 use App\Exceptions\Problem;
 use App\Support\Actor;
@@ -27,6 +30,9 @@ arch('search turns models into documents and writes nothing')
 arch('the consumer of notifications hands every event to its action and computes nothing')
     ->expect('App\Notifications\NotificationConsumer')->toBeFinal()
     ->not->toUse([EventRecorder::class, 'Illuminate\Support\Facades\DB', 'App\Domain', 'App\Models\Notification']);
+arch('the live channels decide only through the policies and Visibility')
+    ->expect('App\Broadcasting')->classes()->toBeFinal()->toHaveMethod('join')
+    ->toOnlyUse([Authorize::class, Visibility::class, Actor::class, 'App\Models\User', 'App\Models\Project', 'App\Models\WorkItem', Ulid::class]);
 arch('domain classes are final')->expect('App\Domain')->classes()->toBeFinal();
 arch('rich text is final and leaves actions, http and the database alone')
     ->expect('App\RichText')->classes()->toBeFinal()->not->toUse(['App\Actions', 'App\Http', 'Illuminate\Support\Facades\DB']);
