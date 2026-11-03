@@ -10,7 +10,8 @@ use Illuminate\Auth\Access\Response;
 
 /**
  * Who may change the organization (spec 4.1): org admins (`org.manage`). Every account sees it. The catalogs change with
- * `org.manage_catalog`, again org admins, and each refusal names its own catalog.
+ * `org.manage_catalog`, again org admins, and each refusal names its own catalog. The system page (A287) is for org
+ * admins who are people: the default bot is an org admin too, but it has no inbox for a test mail (K6).
  */
 final class OrganizationPolicy
 {
@@ -26,5 +27,12 @@ final class OrganizationPolicy
         return Visibility::can($user, Permission::OrgManageCatalog)
             ? Response::allow()
             : Response::deny($catalog->deniedDetail());
+    }
+
+    public function viewSystem(User $user): Response
+    {
+        return $user->isPerson() && Visibility::can($user, Permission::OrgManage)
+            ? Response::allow()
+            : Response::deny(__('problem.detail.system_admins_only'));
     }
 }

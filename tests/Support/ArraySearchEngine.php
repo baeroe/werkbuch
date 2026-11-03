@@ -3,6 +3,7 @@
 namespace Tests\Support;
 
 use App\Search\RemovesWhere;
+use App\Search\ReportsStatus;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
@@ -18,10 +19,10 @@ use Throwable;
  * them, and searches them roughly as the index settings of config/scout.php ask: a hit holds every word of the query
  * (lower case, also as part of a word) in one of the `searchableAttributes` of its index. `wheres` compare equal (a bool
  * as stored), `whereIns` with in_array(…, true); hits come in the order the documents came in, `take()` cuts them.
- * `$builder->callback` and `$builder->options` speak to Meilisearch and are passed over. Real Meilisearch runs in
- * tests/Integration (Tests\Support\Meili).
+ * `$builder->callback` and `$builder->options` speak to Meilisearch and are passed over. Its status (ReportsStatus) is
+ * `ok` without tasks, `down` after failWith(). Real Meilisearch runs in tests/Integration (Tests\Support\Meili).
  */
-final class ArraySearchEngine extends Engine implements RemovesWhere, UpdatesIndexSettings
+final class ArraySearchEngine extends Engine implements RemovesWhere, ReportsStatus, UpdatesIndexSettings
 {
     /** @var array<string, array<string, array<string, mixed>>> the documents of each index by key, in the order they came in */
     private array $indexes = [];
@@ -89,6 +90,13 @@ final class ArraySearchEngine extends Engine implements RemovesWhere, UpdatesInd
     public function failWith(?Throwable $error): void
     {
         $this->error = $error;
+    }
+
+    public function status(): array
+    {
+        return $this->error === null
+            ? ['search' => 'ok', 'search_tasks' => ['enqueued' => 0, 'processing' => 0, 'failed_last_day' => 0]]
+            : ['search' => 'down', 'search_tasks' => null];
     }
 
     /**

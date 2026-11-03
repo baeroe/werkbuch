@@ -96,6 +96,9 @@ enum EventType: string
     case FavoriteAdded = 'favorite.added';
     case FavoriteRemoved = 'favorite.removed';
 
+    // the system page put failed jobs back into their queues (A287)
+    case SystemFailedJobsRetried = 'system.failed_jobs_retried';
+
     /**
      * Whether webhooks can subscribe to this event.
      */

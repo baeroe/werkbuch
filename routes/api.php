@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\RichTextController;
 use App\Http\Controllers\Api\SearchController;
 use App\Http\Controllers\Api\StateUsageController;
 use App\Http\Controllers\Api\SubscribersController;
+use App\Http\Controllers\Api\SystemController;
 use App\Http\Controllers\Api\TokensController;
 use App\Http\Controllers\Api\TwoFactorController;
 use App\Http\Controllers\Api\UsersController;
@@ -187,6 +188,11 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
 
     Route::get('notification-preferences', [NotificationPreferencesController::class, 'show']);
     Route::put('notification-preferences', [NotificationPreferencesController::class, 'update']);
+
+    // the system page (A287, org admins); the status reads, the rest writes
+    Route::get('system', [SystemController::class, 'show']);
+    Route::post('system/failed-jobs/retry', [SystemController::class, 'retry']);
+    Route::post('system/test-mail', [SystemController::class, 'testMail']);
 
     Route::get('tokens', [TokensController::class, 'index']);
     Route::delete('tokens/{token}', [TokensController::class, 'destroy']);

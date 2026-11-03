@@ -23,6 +23,7 @@ use App\Models\WorkItem;
 use App\Models\WorkItemType;
 use App\Search\MeilisearchEngine;
 use App\Views\CatalogProperties;
+use GuzzleHttp\Client as GuzzleClient;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -90,10 +91,16 @@ class AppServiceProvider extends ServiceProvider
         Project::disableSearchSyncing();
         User::disableSearchSyncing();
 
-        // Scout's engine, able to remove the documents of a project's items by filter (RemovesWhere)
+        // Scout's engine, able to remove the documents of a project's items by filter (RemovesWhere) and to say how
+        // Meilisearch is (ReportsStatus) over a client of its own that gives up after 2 s (K15)
         resolve(EngineManager::class)->extend('meilisearch', fn (Application $app) => new MeilisearchEngine(
             $app->make(Client::class),
             (bool) config('scout.soft_delete'),
+            new Client(
+                (string) config('scout.meilisearch.host'),
+                config('scout.meilisearch.key'),
+                new GuzzleClient(['connect_timeout' => 2, 'timeout' => 2]),
+            ),
         ));
     }
 }

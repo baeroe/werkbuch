@@ -66,6 +66,9 @@ use App\Actions\Resolutions\SaveResolution;
 use App\Actions\RichText\ListMentionables;
 use App\Actions\RichText\ResolveReferences;
 use App\Actions\Search\QuerySearch;
+use App\Actions\System\GetSystemStatus;
+use App\Actions\System\RetryFailedJobs;
+use App\Actions\System\SendTestMail;
 use App\Actions\Tokens\CreateToken;
 use App\Actions\Tokens\ListTokens;
 use App\Actions\Tokens\RevokeToken;
@@ -123,6 +126,9 @@ use App\Models\WorkItemRelation;
 use App\Models\WorkItemType;
 use App\Support\Actor;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 use Laravel\Fortify\Actions\EnableTwoFactorAuthentication;
 use PragmaRX\Google2FA\Google2FA;
 use Tests\Feature\Access\MatrixWorld;
@@ -836,6 +842,34 @@ return [
             'preferences' => [['event' => 'comment', 'channel' => 'mail', 'enabled' => false]],
         ]),
         'allowed' => $people,
+    ],
+    // the system page (A287): org admins who are people; the default bot is an org admin, but no person (K6)
+    'GetSystemStatus' => [
+        'action' => GetSystemStatus::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetSystemStatus::run($a),
+        'allowed' => ['org_admin'],
+    ],
+    'RetryFailedJobs' => [
+        'action' => RetryFailedJobs::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            DB::table('failed_jobs')->insert(['uuid' => (string) Str::uuid(), 'connection' => 'database', 'queue' => 'default',
+                'payload' => '{"attempts":1}', 'exception' => 'RuntimeException: matrix', 'failed_at' => now()->utc()]);
+
+            return RetryFailedJobs::run($a, []);
+        },
+        'allowed' => ['org_admin'],
+        'event' => EventType::SystemFailedJobsRetried,
+    ],
+    // sends at once, nothing is written; a mail server is set and keeps what it gets (Mail::fake)
+    'SendTestMail' => [
+        'action' => SendTestMail::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            Mail::fake();
+            config(['mail.default' => 'smtp']);
+
+            return SendTestMail::run($a);
+        },
+        'allowed' => ['org_admin'],
     ],
     // the work of the consumer `notifications` for an event of the outbox (here one of the migrations, which tells
     // nobody), without an event of its own
