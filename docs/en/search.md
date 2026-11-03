@@ -11,7 +11,7 @@ One search finds work items, projects, people and bots, and views. In the interf
 | People and bots | Name, handle | The settings People or Bots (org admins only, see below) |
 | Views | Name | The view |
 
-Every word you type has to occur; the last word may be the start of a word, so `kontakt` finds "Kontaktformular sendet doppelt". From five letters on, a small typo in a title, a description or a comment is forgiven (`kontaktfromular`), never in keys, identifiers and handles. A hit in the key counts more than one in the title, one in the title more than one in the description, and one in the description more than one in a comment; among equal hits, the item changed last comes first.
+Every word you type has to occur; the last word may be the start of a word, so `kontakt` finds "Kontaktformular sendet doppelt". From five letters on, a small typo in a title, a description or a comment is forgiven (`kontaktfromular`), never in keys, identifiers and handles. A hit in the key counts more than one in the title, one in the title more than one in the description, and one in the description more than one in a comment; among equal hits, the item changed last comes first (a new comment does not count as a change of the item, so it does not move the item up).
 
 A word of a comment finds the item the comment belongs to; the search reads the comments of an item in the order they were written, up to 64 KB of text per item. A comment that is edited or deleted changes the search a moment later, like any other change; reactions change nothing.
 

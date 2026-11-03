@@ -578,9 +578,10 @@ final class Document
         $attrs = $node['attrs'];
         $id = (string) ($attrs['id'] ?? $attrs['attachmentId']);
         $item = $names->items[$id] ?? null;
-        $file = $node['type'] === 'image' ? $attrs['alt'] : $attrs['filename'] ?? null;
-        $file = is_string($file) && $file !== '' ? $file : $names->names[$id] ?? $id;
-        $mention = $names->names[$id] ?? $names->handles[$id] ?? $attrs['label'] ?? null;
+        // an image is named by its alt text, a file by its file name; without one by its name, else by its ID
+        $own = $node['type'] === 'image' ? ($attrs['alt'] ?? null) : ($attrs['filename'] ?? null);
+        $file = is_string($own) && $own !== '' ? $own : ($names->names[$id] ?? $id);
+        $mention = $names->names[$id] ?? ($names->handles[$id] ?? ($attrs['label'] ?? null));
 
         return match (true) {
             $node['type'] === 'mention' && is_string($mention) => self::mailText('@'.$mention, $node),

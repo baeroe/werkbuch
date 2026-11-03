@@ -11,7 +11,7 @@ Eine Suche findet Work Items, Projekte, Personen und Bots sowie Views. In der Ob
 | Personen und Bots | Name, Handle | Die Einstellungen Personen bzw. Bots (nur für Org-Admins, siehe unten) |
 | Views | Name | Die View |
 
-Jedes getippte Wort muss vorkommen; das letzte darf der Anfang eines Worts sein, `kontakt` findet also „Kontaktformular sendet doppelt“. Ab fünf Buchstaben verzeiht die Suche einen kleinen Tippfehler in Titel, Beschreibung oder Kommentar (`kontaktfromular`), nie in Keys, Kennungen und Handles. Ein Treffer im Key zählt mehr als einer im Titel, einer im Titel mehr als einer in der Beschreibung und einer in der Beschreibung mehr als einer in einem Kommentar; bei gleichen Treffern steht das zuletzt geänderte Item vorn.
+Jedes getippte Wort muss vorkommen; das letzte darf der Anfang eines Worts sein, `kontakt` findet also „Kontaktformular sendet doppelt“. Ab fünf Buchstaben verzeiht die Suche einen kleinen Tippfehler in Titel, Beschreibung oder Kommentar (`kontaktfromular`), nie in Keys, Kennungen und Handles. Ein Treffer im Key zählt mehr als einer im Titel, einer im Titel mehr als einer in der Beschreibung und einer in der Beschreibung mehr als einer in einem Kommentar; bei gleichen Treffern steht das zuletzt geänderte Item vorn (ein neuer Kommentar zählt nicht als Änderung des Items und rückt es nicht nach vorn).
 
 Ein Wort eines Kommentars findet das Item, zu dem der Kommentar gehört; die Suche liest die Kommentare eines Items in der Reihenfolge, in der sie geschrieben wurden, bis zu 64 KB Text je Item. Ein bearbeiteter oder gelöschter Kommentar ändert die Suche einen Moment später, wie jede andere Änderung; Reaktionen ändern nichts.
 

@@ -1,6 +1,7 @@
 /*
- * The keys that belong to a widget, not to the catalog: the command palette, the grid of the table, the group headers and
- * the editor (with its `/`, `@` and `#` lists) handle them themselves while they have focus. The shortcut reference lists them next to the catalog.
+ * The keys that belong to a widget, not to the catalog: the command palette, the grid of the table, the group headers
+ * and the editor (with its `/`, `@` and `#` lists) handle them themselves while they have focus. The shortcut reference
+ * lists them next to the catalog.
  * Type imports only, so `scripts/shortcuts-doc.mjs` can load this file with Node.
  */
 

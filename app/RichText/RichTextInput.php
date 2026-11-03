@@ -84,7 +84,8 @@ final class RichTextInput
 
     /**
      * The labels the editor sent with its references, ID (in lower case) → label, read from the JSON as it came: the
-     * stored reference never keeps its label (A229), but one the writer may not make becomes this text.
+     * stored reference never keeps its label (A229), but one the writer may not make becomes this text. The same ID with
+     * two labels takes the first one for every place it stands (T8-M6).
      *
      * @param  array<mixed>  $json
      * @return array<string, string>

@@ -11,10 +11,10 @@ import { useLayoutEffect } from 'react';
 import { deleteAttachment, getAttachment, uploadAttachment, type UploadOptions } from '@/api/attachments';
 import type { Attachment, WorkItemDetail } from '@/types';
 import { qk, type HookOptions } from './keys';
+import { useApiMutation } from './mutation';
 
 /** How long a loaded attachment counts as fresh: long enough for a page full of pictures, short enough for the preview. */
 export const ATTACHMENT_FRESH_MS = 30_000;
-import { useApiMutation } from './mutation';
 
 /** One attachment by its id, as the editors and viewers show it. */
 export function useAttachment(id: string | null | undefined, options: HookOptions = {}) {
