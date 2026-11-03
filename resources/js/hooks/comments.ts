@@ -52,7 +52,7 @@ export interface ReactionVars {
   on: boolean;
 }
 
-const REACTION_KEY = ['reaction'] as const;
+const REACTION_KEY = qk.comments.reaction;
 
 /** The reactions with the own one added (at the end of its emoji, a new emoji at the end) or taken back. */
 function reacted(reactions: Comment['reactions'], emoji: string, me: string, on: boolean): Comment['reactions'] {
@@ -107,10 +107,16 @@ export function useToggleReaction() {
   const mutation = useMutation<Comment, Error, ReactionVars, { changed: boolean }>({
     mutationKey: REACTION_KEY,
     mutationFn: ({ comment_id, emoji, on }) => toggleReaction(comment_id, emoji, on),
-    onMutate: ({ comment_id, emoji, on }) => ({ changed: changeComment(queryClient, comment_id, (comment) => withReaction(comment, emoji, me, on)) }),
+    onMutate: ({ comment_id, emoji, on }) => {
+      // a reload of the comments already on its way would put the reaction back as it was (T15-M2); the cancel takes
+      // effect at once, so the reaction still shows in the same tick
+      void queryClient.cancelQueries({ queryKey: qk.comments.all });
+      return { changed: changeComment(queryClient, comment_id, (comment) => withReaction(comment, emoji, me, on)) };
+    },
     onSuccess: (answer) => {
-      // this call still counts as on its way here
-      if (queryClient.isMutating({ mutationKey: REACTION_KEY }) <= 1) changeComment(queryClient, answer.id, () => answer);
+      // this call still counts as on its way here; reactions to other comments do not hold the answer back (T15-M2)
+      const ofThisComment = queryClient.isMutating({ mutationKey: REACTION_KEY, predicate: (entry) => (entry.state.variables as ReactionVars | undefined)?.comment_id === answer.id });
+      if (ofThisComment <= 1) changeComment(queryClient, answer.id, () => answer);
     },
     // only what this call changed goes back: a reaction that was there already stays
     onError: (_error, { comment_id, emoji, on }, context) => {
@@ -121,7 +127,10 @@ export function useToggleReaction() {
 
   const toggle = useCallback(
     (vars: ReactionVars) => {
-      settle(mutateAsync(vars), { onError: (error) => notifyError(t('items.failed.reaction', { emoji: vars.emoji }), error, () => toggle(vars)) });
+      settle(mutateAsync(vars), {
+        // one toast per comment and emoji: the same failure on two comments keeps both retries (F26)
+        onError: (error) => notifyError(t('items.failed.reaction', { emoji: vars.emoji }), error, () => toggle(vars), `reaction:${vars.comment_id}:${vars.emoji}`),
+      });
     },
     [settle, mutateAsync],
   );

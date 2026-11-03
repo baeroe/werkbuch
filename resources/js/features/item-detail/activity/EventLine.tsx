@@ -73,7 +73,8 @@ function EarlierVersion({ body }: { body: RichText }) {
   );
 }
 
-export function EventLine({ line, ctx }: { line: EventsLine; ctx: PhraseContext }) {
+/** `hidden`: comments a deletion took off the screen (useHiddenComments); their earlier versions show no more (F26). */
+export function EventLine({ line, ctx, hidden = new Set() }: { line: EventsLine; ctx: PhraseContext; hidden?: ReadonlySet<string> }) {
   const actor = ctx.users.get(line.actorId);
   const phrases = linePhrases(line.events, ctx);
   return (
@@ -89,7 +90,9 @@ export function EventLine({ line, ctx }: { line: EventsLine; ctx: PhraseContext 
             {reasonText(line.reason)}
           </p>
         )}
-        {earlierVersions(line.events).map((version) => (
+        {earlierVersions(line.events)
+          .filter((version) => !hidden.has(version.commentId))
+          .map((version) => (
           <EarlierVersion key={version.commentId} body={version.body} />
         ))}
       </div>

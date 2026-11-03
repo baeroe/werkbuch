@@ -145,7 +145,7 @@ export function Activity({ detail }: { detail: WorkItemDetail }) {
           >
             {lines
               .slice(earlier)
-              .map((line) => (line.kind === 'comment' ? <CommentCard key={line.key} comment={line.comment} item={item} /> : <EventLine key={line.key} line={line} ctx={ctx} />))}
+              .map((line) => (line.kind === 'comment' ? <CommentCard key={line.key} comment={line.comment} item={item} /> : <EventLine key={line.key} line={line} ctx={ctx} hidden={hidden} />))}
           </ol>
         </>
       )}

@@ -5,6 +5,8 @@ export type ToastAction = { label: string; onClick: () => void };
 type ToastBase = {
   title: string;
   description?: string;
+  /** What the toast is about (`reaction:<comment>:<emoji>`): only an error with the same subject refreshes this one. */
+  subject?: string;
   action?: ToastAction;
   /** Milliseconds until the toast closes on its own. */
   duration?: number;
@@ -109,7 +111,7 @@ const takesPlace = (item: Toast) => item.tone !== 'error';
  * action (see `ErrorOptions`), so nothing runs or gets lost. Answers the id of the refreshed toast, or null.
  */
 function refreshSameError(item: Toast): number | null {
-  const same = toasts.find((entry) => entry.tone === 'error' && entry.title === item.title && entry.description === item.description);
+  const same = toasts.find((entry) => entry.tone === 'error' && entry.title === item.title && entry.description === item.description && entry.subject === item.subject);
   if (!same) return null;
   toasts = toasts.map((entry) => (entry === same ? { ...same, action: item.action, duration: item.duration, round: same.round + 1 } : entry));
   const timer = timers.get(same.id);

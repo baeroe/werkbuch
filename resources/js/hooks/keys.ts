@@ -57,8 +57,8 @@ export const qk = {
   stateUsage: resource('state-usage'),
   attachments: resource('attachments'),
   activity: resource('activity'),
-  /** The comments of an item: `qk.comments.list({ item, pages: 'all' })`. */
-  comments: resource('comments'),
+  /** The comments of an item: `qk.comments.list({ item, pages: 'all' })`; `reaction` is the mutation key of the reactions. */
+  comments: { ...resource('comments'), reaction: ['comments', 'reaction'] as const },
   /** Who can be mentioned with `@`: `qk.mentions.list({ project, q })`. */
   mentions: resource('mentions'),
   /** The item behind a stored reference, one entry per id (`useItemRef`); a hidden one is an error 404. */

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useEditReason, useItemWorkflow } from '@/components/fields/itemData';
 import { ApiError, type Page } from '@/api/client';
 import { currentToasts, resetToasts } from '@/components/ui/toast';
+import { uploadAttachment } from '@/api/attachments';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import {
   agency,
@@ -788,6 +789,40 @@ describe('comments', () => {
       ]);
     });
 
+    it('takes the answer of a comment while a reaction to another one is on its way, and keeps two failures apart (F26, T15-M2)', async () => {
+      const answered = makeComment({ id: 'c_web47_1', reactions: [{ emoji: '👍', user_ids: ['u_ida', 'u_theo', 'u_mara', 'u_lene'] }] });
+      api = mockApi({
+        'PUT /api/v1/comments/c_web47_1/reactions': () => ({ body: { data: answered } }),
+        'PUT /api/v1/comments/c_web47_2/reactions': () => ({ status: 503, body: { reason: 'server_error', detail: 'Wartung' } }),
+      });
+      seed(web47Comments);
+      // the reaction to the second comment hangs
+      const held = globalThis.fetch;
+      let release!: () => void;
+      globalThis.fetch = (input, init) =>
+        String(input).includes('c_web47_2') ? new Promise((resolve) => (release = () => resolve(held(input, init)))) : held(input, init);
+      const { result } = renderHook(() => useToggleReaction(), { wrapper });
+
+      act(() => {
+        result.current.toggle({ comment_id: 'c_web47_2', emoji: '👍', on: true });
+        result.current.toggle({ comment_id: 'c_web47_1', emoji: '👍', on: true });
+      });
+      // the answer for the first comment comes in, though the second one's call still runs (Lene reacted meanwhile)
+      await waitFor(() => expect(cached()[0]).toEqual(answered));
+
+      act(() => release());
+      await waitFor(() => expect(currentToasts()).toHaveLength(1));
+      // the same failure on another comment: a toast of its own, each with its own retry
+      api.restore();
+      api = mockApi({ 'DELETE /api/v1/comments/c_web47_1/reactions': () => ({ status: 503, body: { reason: 'server_error', detail: 'Wartung' } }) });
+      act(() => result.current.toggle({ comment_id: 'c_web47_1', emoji: '👍', on: false }));
+      await waitFor(() => expect(currentToasts()).toHaveLength(2));
+      expect(currentToasts().map((toast) => [toast.subject, toast.title, toast.action?.label])).toEqual([
+        ['reaction:c_web47_2:👍', 'Reaktion 👍 nicht gespeichert', 'Erneut versuchen'],
+        ['reaction:c_web47_1:👍', 'Reaktion 👍 nicht gespeichert', 'Erneut versuchen'],
+      ]);
+    });
+
     it('offers to try again after an outage, with the same reaction', async () => {
       let status = 503;
       const restored = makeComment({ id: 'c_web47_1', reactions: [{ emoji: '👍', user_ids: ['u_ida', 'u_theo'] }] });
@@ -874,6 +909,53 @@ describe('attachments', () => {
     } finally {
       restoreFakeXhr();
     }
+  });
+});
+
+describe('uploads into the file list', () => {
+  it('makes the item stale after a file of the list, not after a picture of a text (T15-M4)', async () => {
+    installFakeXhr();
+    try {
+      queryClient.setQueryData(qk.workItems.detail('wi_web_47'), { item: web47, attachments: [] });
+      const { result } = renderHook(() => useUploadAttachment(), { wrapper });
+      const upload = async (kind: 'inline' | 'file', answer: ReturnType<typeof makeAttachment>) => {
+        let call!: Promise<unknown>;
+        act(() => {
+          call = result.current.mutateAsync({ project_id: 'p_web', file: new File(['x'], 'x.png'), owner: kind === 'file' ? { type: 'work_item', id: 'wi_web_47' } : null, kind });
+        });
+        await waitFor(() => expect(FakeXhr.last?.sent).not.toBeNull());
+        FakeXhr.last.answer(201, { data: answer });
+        await act(() => call);
+      };
+
+      await upload('inline', makeAttachment());
+      expect(queryClient.getQueryState(qk.workItems.detail('wi_web_47'))?.isInvalidated).toBe(false);
+      await upload('file', makeAttachment({ id: 'att_2', kind: 'file', owner: { type: 'work_item', id: 'wi_web_47' } }));
+      expect(queryClient.getQueryState(qk.workItems.detail('wi_web_47'))?.isInvalidated).toBe(true);
+    } finally {
+      restoreFakeXhr();
+    }
+  });
+
+  it('refuses a file of the list without its item at once (T15-M6)', async () => {
+    installFakeXhr();
+    try {
+      await expect(uploadAttachment('p_web', new File(['x'], 'x.pdf'), null, 'file')).rejects.toThrow(TypeError);
+      expect(FakeXhr.all).toEqual([]);
+    } finally {
+      restoreFakeXhr();
+    }
+  });
+
+  it('puts back only the XMLHttpRequest, never what other tests stubbed (T15-M5)', () => {
+    vi.stubGlobal('Notification', 'stubbed');
+    const real = globalThis.XMLHttpRequest;
+    installFakeXhr();
+    expect(globalThis.XMLHttpRequest).toBe(FakeXhr);
+    restoreFakeXhr();
+    expect(globalThis.XMLHttpRequest).toBe(real);
+    expect((globalThis as { Notification?: unknown }).Notification).toBe('stubbed');
+    vi.unstubAllGlobals();
   });
 });
 

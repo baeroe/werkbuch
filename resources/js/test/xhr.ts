@@ -7,7 +7,7 @@
  *   FakeXhr.last.progress(50, 100);
  *   FakeXhr.last.answer(201, { data: attachment });
  *
- * `vi.unstubAllGlobals()` (or `restoreFakeXhr()`) brings the real one back.
+ * `restoreFakeXhr()` brings the real one back (and only that one).
  */
 
 import { vi } from 'vitest';
@@ -68,12 +68,18 @@ export class FakeXhr {
   }
 }
 
+/** The XMLHttpRequest that was there before installFakeXhr(). */
+let original: typeof XMLHttpRequest | undefined;
+
 /** Puts FakeXhr in place of XMLHttpRequest. */
 export function installFakeXhr(): void {
   FakeXhr.all = [];
-  vi.stubGlobal('XMLHttpRequest', FakeXhr);
+  original ??= globalThis.XMLHttpRequest;
+  globalThis.XMLHttpRequest = FakeXhr as unknown as typeof XMLHttpRequest;
 }
 
+/** Puts the real XMLHttpRequest back, and only it: globals other tests stubbed stay (T15-M5). */
 export function restoreFakeXhr(): void {
-  vi.unstubAllGlobals();
+  if (original !== undefined) globalThis.XMLHttpRequest = original;
+  original = undefined;
 }

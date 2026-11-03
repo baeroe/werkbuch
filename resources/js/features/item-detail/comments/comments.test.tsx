@@ -16,13 +16,14 @@ import { preloadEditor } from '@/editor/RichTextEditor';
 import { commentDraft, commentEditDraft, drafts } from '@/lib/drafts';
 import { plainText } from '@/lib/richtext';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
-import { ida, labels, lene, list, makeAttachment, makeComment, mara, organization, project, properties, resolutions, standard, theo, types, web47 } from '@/test/fixtures';
+import { ida, itemEvent, labels, lene, list, makeAttachment, makeComment, mara, organization, project, properties, resolutions, standard, theo, types, web47 } from '@/test/fixtures';
 import { FakeXhr, installFakeXhr, restoreFakeXhr } from '@/test/xhr';
 import type { Comment, Project, RichText, WorkItem, WorkItemDetail } from '@/types';
 import { Activity } from '../activity/Activity';
 import { ItemDetailProvider } from '../ItemBody';
 import type { DetailSurface } from '../shared';
 import { CommentComposer, unsentRest } from './CommentComposer';
+import { Reactions } from './Reactions';
 
 vi.mock('@inertiajs/react', () => ({
   usePage: () => ({ props: { auth: { user: lene, permissions: [] }, organization }, url: '/items/WEB-47' }),
@@ -468,6 +469,31 @@ describe('unsentRest', () => {
   });
 });
 
+describe('Reactions', () => {
+  it('moves the focus on only for a chip that goes while it has it, not after the focus left (T19-M7)', async () => {
+    api?.restore();
+    api = mockApi({ 'GET /api/v1/users': () => ({ body: list([mara, ida, theo, lene]) }) });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const comment = makeComment({ reactions: [{ emoji: '👍', user_ids: ['u_ida'] }, { emoji: '🎉', user_ids: ['u_theo'] }] });
+    const shown = (current: Comment) => (
+      <QueryClientProvider client={client}>
+        <Reactions comment={current} canReact />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(shown(comment));
+    const thumbs = screen.getByRole('button', { name: /^👍/ });
+    act(() => thumbs.focus());
+    // the focus leaves to nowhere (a click on the page): the chip is still there
+    act(() => thumbs.blur());
+    await act(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+
+    // Ida takes her reaction back meanwhile: the chip goes, but nobody had the focus on it any more
+    rerender(shown({ ...comment, reactions: [{ emoji: '🎉', user_ids: ['u_theo'] }] }));
+    await act(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+    expect(document.activeElement).toBe(document.body);
+  });
+});
+
 /* ------------------------------------------------------------------------ cards */
 
 describe('CommentCard', () => {
@@ -762,6 +788,42 @@ describe('CommentCard', () => {
     act(() => runToastAction(failed.id));
     await waitFor(() => expect(within(timeline).getAllByRole('article')).toHaveLength(1));
     expect(api!.calls.filter((call) => call.method === 'DELETE').map((call) => call.url)).toEqual(['/api/v1/comments/c_second', '/api/v1/comments/c_second']);
+  });
+
+  it('hides the earlier version of a comment while its deletion waits, and takes a 404 as deleted (F26)', async () => {
+    comments = [own('c_gone', 'Zweite Fassung.')];
+    const edit = itemEvent({ id: 'ev_edit', type: 'comment.updated', actor_id: 'u_lene', comment_id: 'c_gone', comment_author_id: 'u_lene', changes: { body: { old: doc('Erste Fassung.'), new: doc('Zweite Fassung.') } } });
+    renderCards({
+      routes: {
+        'GET /api/v1/work-items/wi_web_47/history': () => ({ body: list([edit]) }),
+        // deleted elsewhere meanwhile
+        'DELETE /api/v1/comments/c_gone': () => problem(404, 'not_found'),
+      },
+    });
+    const timeline = await screen.findByRole('list', { name: 'Verlauf' });
+    await within(timeline).findByRole('button', { name: 'Frühere Fassung anzeigen' });
+
+    await userEvent.setup().click(await actionsOf('Lene Vogt'));
+    await choose('Löschen');
+    await waitFor(() => expect(within(timeline).queryByRole('article')).toBeNull());
+    // the earlier text of a comment that is off the screen does not show either
+    expect(within(timeline).queryByRole('button', { name: 'Frühere Fassung anzeigen' })).toBeNull();
+
+    act(() => dismissToast(currentToasts().find((toast) => toast.title === 'Kommentar gelöscht')!.id));
+    await waitFor(() => expect(api!.calls.filter((call) => call.method === 'DELETE')).toHaveLength(1));
+    // a 404: gone either way, no card back, no error
+    await waitFor(() => expect(currentToasts().filter((toast) => toast.tone === 'error')).toEqual([]));
+    expect(within(timeline).queryByRole('article')).toBeNull();
+  });
+
+  it('names the moment of an edit for the keyboard and screen readers (F26)', async () => {
+    // an id of its own: a deleted card stays hidden for the module's life
+    comments = [{ ...own('c_edited', 'Geändert.'), edited_at: '2026-10-28T09:12:00Z' }];
+    renderCards();
+    const article = await card('Lene Vogt');
+    const moment = article.querySelector('time.sr-only');
+    expect(moment?.getAttribute('dateTime')).toBe('2026-10-28T09:12:00Z');
+    expect(moment?.parentElement?.textContent).toMatch(/^bearbeitet \S/);
   });
 
   it('reacts and takes the reaction back', async () => {

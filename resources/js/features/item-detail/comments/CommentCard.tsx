@@ -11,6 +11,7 @@
 
 import { Ellipsis, Pencil, Trash2 } from 'lucide-react';
 import { useCallback, useRef, useState, useSyncExternalStore } from 'react';
+import { ApiError } from '@/api/client';
 import { archivedReason, useUserMap } from '@/components/fields/itemData';
 import { Avatar } from '@/components/ui/Avatar';
 import { IconButton } from '@/components/ui/IconButton';
@@ -96,12 +97,15 @@ export function CommentCard({ comment, item }: { comment: Comment; item: WorkIte
       run: async () => {
         try {
           await remove.mutateAsync(comment.id);
-          setHidden(comment.id, true);
-          drafts.set(commentEditDraft(comment.id), null);
         } catch (error) {
-          back();
-          throw error;
+          // deleted elsewhere meanwhile: gone either way (F26)
+          if (!(error instanceof ApiError && error.status === 404)) {
+            back();
+            throw error;
+          }
         }
+        setHidden(comment.id, true);
+        drafts.set(commentEditDraft(comment.id), null);
       },
     });
   }
@@ -123,7 +127,14 @@ export function CommentCard({ comment, item }: { comment: Comment; item: WorkIte
           <When iso={comment.created_at} />
           {comment.edited_at && (
             <Tooltip content={formatMoment(comment.edited_at, timeZone)}>
-              <span className="text-sm text-muted">{t('items.comments.edited')}</span>
+              <span className="text-sm text-muted">
+                {t('items.comments.edited')}
+                {/* the moment for the keyboard and screen readers too, not only in the tooltip (F26) */}
+                <time dateTime={comment.edited_at} className="sr-only">
+                  {' '}
+                  {formatMoment(comment.edited_at, timeZone)}
+                </time>
+              </span>
             </Tooltip>
           )}
           {(canEdit || canDelete) && !editing && (

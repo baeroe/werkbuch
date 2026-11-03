@@ -24,7 +24,8 @@ export function getAttachment(id: string): Promise<Attachment> {
 
 /**
  * Uploads a file into a project. `kind: inline` is a picture or file in a text: it belongs to nobody until the text is
- * saved, whatever `owner` says (A232). `kind: file` goes into the file list of the item named by `owner`. A file
+ * saved, whatever `owner` says (A232). `kind: file` goes into the file list of the item named by `owner` (without one
+ * it fails at once, nothing goes out). A file
  * larger than the instance allows is a 413 `payload_too_large`.
  */
 export function uploadAttachment(
@@ -34,6 +35,8 @@ export function uploadAttachment(
   kind: Attachment['kind'],
   { onProgress, signal }: UploadOptions = {},
 ): Promise<Attachment> {
+  // a file of the file list without its item would only come back as a 422: a mistake of the caller (T15-M6)
+  if (kind === 'file' && owner === null) return Promise.reject(new TypeError('A file of the file list needs its item (owner).'));
   const form = new FormData();
   form.append('project_id', project_id);
   form.append('kind', kind);

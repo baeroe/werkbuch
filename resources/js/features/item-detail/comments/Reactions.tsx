@@ -79,8 +79,11 @@ export function Reactions({ comment, canReact }: { comment: Comment; canReact: b
               data-reaction=""
               onFocus={() => (focused.current = reaction.emoji)}
               onBlur={(event) => {
-                // the focus moved on by itself; a chip that goes takes it nowhere
+                // the focus moved on (also to nowhere: a click on the page); a chip that goes takes it nowhere and is
+                // not in the page any more a frame later, then the focus moves on to its neighbour (above)
+                const chip = event.currentTarget;
                 if (event.relatedTarget) focused.current = null;
+                else requestAnimationFrame(() => chip.isConnected && focused.current === reaction.emoji && (focused.current = null));
               }}
               onClick={() => toggle({ comment_id: comment.id, emoji: reaction.emoji, on: !mine })}
               className={`${CHIP} cursor-pointer hover:border-line-strong aria-pressed:border-accent aria-pressed:bg-accent-soft aria-pressed:text-accent-text`}
