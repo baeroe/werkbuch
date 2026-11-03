@@ -6,6 +6,8 @@ use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Storage;
 
 beforeEach(function () {
@@ -81,3 +83,18 @@ it('refuses a minimum age that is not a whole number of days, at least one', fun
 
     expect(Attachment::query()->count())->toBe(2);
 })->with(['0', '-3', '1.5', 'abc', '', '9999999']);
+
+it('names a project it skips for a text it cannot read and goes on', function () use ($unnamed) {
+    [$old] = $unnamed();
+    $item = $old->attachable;
+    DB::table('work_items')->where('id', $item->id)
+        ->update(['description' => json_encode(['type' => 'doc', 'content' => [['type' => 'wolke']]])]);
+    Exceptions::fake();
+
+    $this->artisan('app:prune-attachments')
+        ->expectsOutput("skipped WEB: unreadable text of work_item {$item->id}")
+        ->expectsOutput('Pruned 0 attachments (0.0 MB).')
+        ->assertSuccessful();
+
+    expect(Attachment::query()->count())->toBe(2);
+});

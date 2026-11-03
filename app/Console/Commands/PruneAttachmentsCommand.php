@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Actions\Attachments\PruneAttachments;
 use App\Models\User;
 use App\Support\Actor;
+use App\Support\UnreadableText;
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
 
@@ -31,7 +32,9 @@ class PruneAttachmentsCommand extends Command
         }
         $dryRun = (bool) $this->option('dry-run');
 
-        $attachments = $prune->handle(Actor::system(User::defaultBot(), 'prune_attachments'), (int) $age, $dryRun);
+        $attachments = $prune->handle(Actor::system(User::defaultBot(), 'prune_attachments'), (int) $age, $dryRun, function (string $project, UnreadableText $error): void {
+            $this->warn("skipped {$project}: unreadable text of {$error->ownerType} {$error->ownerId}");
+        });
         foreach ($attachments as $attachment) {
             $this->line("{$attachment['project']}  {$attachment['id']}  {$attachment['filename']}  ".self::megabytes($attachment['size']));
         }

@@ -7,6 +7,8 @@ use App\Models\Project;
 use App\Support\Actor;
 use App\Support\AttachmentFiles;
 use App\Support\AttachmentTexts;
+use App\Support\UnreadableText;
+use Closure;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
@@ -23,7 +25,9 @@ use Spatie\MediaLibrary\MediaCollections\Models\Media;
  * this removed (the operator's choice, the docs say so). Files of the file list (`file`) go only by hand, uploads
  * nobody owns with the hourly job (PruneUnownedAttachments). No event (A239).
  *
- * Project by project, each in a transaction of its own: the candidates `for update` first, then the texts. A text saved
+ * Project by project, each in a transaction of its own: the candidates `for update` first, then the texts (the lock
+ * covers the scanned range of the project's attachments while its texts are read: uploads and links in the project
+ * wait that long, T13-M6). A project with a text that cannot be read is skipped and reported (UnreadableText). A text saved
  * meanwhile that names a candidate either committed before (the texts are read after the locks: it keeps the picture)
  * or waits in AttachmentLinks for the lock and finds the picture gone (422 as for any unknown attachment). The files
  * go after the commit (K12). A dry run locks and removes nothing.
@@ -39,16 +43,27 @@ final class PruneAttachments
      * @return list<array{id: string, project: string, filename: string, size: int}> what went (would go in a dry run),
      *                                                                               by project, then id
      *
+     * @param  (Closure(string, UnreadableText): void)|null  $skipped  told of each project skipped for a text that cannot be
+     *                                                                 read (its identifier); the error is reported too
+     *
      * @throws InvalidArgumentException for a minimum age below one day
      */
-    public function handle(Actor $actor, int $minAgeDays, bool $dryRun): array
+    public function handle(Actor $actor, int $minAgeDays, bool $dryRun, ?Closure $skipped = null): array
     {
         $before = self::cutoff($minAgeDays);
         $pruned = [];
 
         foreach (self::candidates($before)->distinct()->orderBy('project_id')->pluck('project_id') as $projectId) {
             $prune = fn (): array => self::pruneIn((string) $projectId, $before, $dryRun);
-            array_push($pruned, ...($dryRun ? $prune() : DB::transaction($prune, 3)));
+            try {
+                array_push($pruned, ...($dryRun ? $prune() : DB::transaction($prune, 3)));
+            } catch (UnreadableText $error) {
+                // which texts name what is unknown in this project: nothing of it goes, the others still get their turn
+                report($error);
+                if ($skipped !== null) {
+                    $skipped((string) Project::query()->whereKey($projectId)->value('identifier'), $error);
+                }
+            }
         }
 
         return $pruned;
@@ -74,8 +89,12 @@ final class PruneAttachments
 
         $orphans = [];
         foreach ($folders as $folder) {
+            // only the folders without a media row are listed: the others may hold many files (T13-M5)
+            if ($known->has(basename($folder))) {
+                continue;
+            }
             $files = collect($disk->allFiles($folder));
-            if ($known->has(basename($folder)) || $files->contains(fn (string $file) => $disk->lastModified($file) >= $before)) {
+            if ($files->contains(fn (string $file) => $disk->lastModified($file) >= $before)) {
                 continue;
             }
 
@@ -111,13 +130,14 @@ final class PruneAttachments
     }
 
     /**
-     * Pictures and files of texts, older than `$before`.
+     * Pictures and files of the texts AttachmentTexts reads (OWNERS), older than `$before`.
      *
      * @return Builder<Attachment>
      */
     private static function candidates(CarbonInterface $before): Builder
     {
-        return Attachment::query()->where('kind', 'inline')->whereNotNull('attachable_id')->where('created_at', '<', $before);
+        return Attachment::query()->where('kind', 'inline')->whereIn('attachable_type', AttachmentTexts::OWNERS)
+            ->whereNotNull('attachable_id')->where('created_at', '<', $before);
     }
 
     /**

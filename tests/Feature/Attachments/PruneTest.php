@@ -13,9 +13,14 @@ use App\Models\Property;
 use App\Models\User;
 use App\Models\WorkItem;
 use App\Models\WorkItemValue;
+use App\Actions\WorkItems\DeleteWorkItem;
 use App\Support\Actor;
+use App\Support\UnreadableText;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Carbon;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
@@ -200,4 +205,68 @@ it('removes folders of files whose media row is gone, older than the minimum age
         ->and($disk->exists('notizen/liste.txt'))->toBeTrue()
         ->and($disk->exists($path($kept)))->toBeTrue()
         ->and(fn () => PruneAttachments::make()->folders(0, true))->toThrow(InvalidArgumentException::class);
+});
+
+it('finds unowned uploads over the morph index and keeps the job from running twice at once (T13-M4, T13-M7)', function () use ($web, $upload, $system) {
+    [$project, $mara] = $web();
+    $upload($mara, 'alt.png', '25 hours')->create(['project_id' => $project->id]);
+    $queries = [];
+    DB::listen(function ($query) use (&$queries): void {
+        $queries[] = $query->sql;
+    });
+
+    PruneUnownedAttachments::run($system(), now()->subDay());
+
+    expect(collect($queries)->first(fn (string $sql) => str_starts_with($sql, 'select') && str_contains($sql, 'from `attachments`')))
+        ->toContain('`attachable_type` is null and `attachable_id` is null')
+        ->and(collect((new PruneUnownedAttachmentsJob)->middleware())->sole())->toBeInstanceOf(WithoutOverlapping::class);
+});
+
+it('leaves pictures of owners whose texts it does not read alone (T13-M2)', function () use ($web, $upload, $system) {
+    [$project, $mara] = $web();
+    // an owner a later phase brings (a wiki page, a template): its texts are not read here, so nothing of it goes
+    $foreign = $upload($mara, 'seite.png', '40 days')->create(['project_id' => $project->id, 'attachable_type' => 'project', 'attachable_id' => $project->id]);
+
+    expect(PruneAttachments::run($system(), 30, false))->toBe([])
+        ->and($foreign->fresh())->not->toBeNull();
+});
+
+/** Makes the description of the item one that Document::fromJson refuses (a node it does not know), naming `$id`. */
+$unreadable = fn (WorkItem $item, string $id = '') => DB::table('work_items')->where('id', $item->id)
+    ->update(['description' => json_encode(['type' => 'doc', 'content' => [['type' => 'wolke', 'attrs' => ['attachmentId' => $id]]]])]);
+
+it('skips a project with an unreadable text, reports it and goes on with the next (T13-M3)', function () use ($upload, $system, $unreadable) {
+    Exceptions::fake();
+    $mara = User::factory()->create();
+    $ops = Project::factory()->identifier('OPS')->member($mara, ProjectRole::Admin)->create(['lead_id' => $mara->id]);
+    $web = Project::factory()->identifier('WEB')->member($mara, ProjectRole::Admin)->create(['lead_id' => $mara->id]);
+    $broken = WorkItem::factory()->for($ops)->create();
+    $unreadable($broken);
+    $kept = $upload($mara, 'ops.png', '40 days')->forItem($broken)->create();
+    $gone = $upload($mara, 'web.png', '40 days')->forItem(WorkItem::factory()->for($web)->create())->create();
+    $skipped = [];
+
+    $pruned = PruneAttachments::run($system(), 30, false, function (string $project, UnreadableText $error) use (&$skipped): void {
+        $skipped[] = [$project, $error->ownerId];
+    });
+
+    expect(collect($pruned)->pluck('id')->all())->toBe([$gone->id])
+        ->and($kept->fresh())->not->toBeNull()
+        ->and($skipped)->toBe([['OPS', $broken->id]]);
+    Exceptions::assertReported(fn (UnreadableText $error) => $error->ownerId === $broken->id);
+});
+
+it('deletes an item although another text of the project cannot be read, and reports that text (M1)', function () use ($web, $upload, $unreadable) {
+    Exceptions::fake();
+    [$project, $mara] = $web();
+    $item = WorkItem::factory()->for($project)->create();
+    $broken = WorkItem::factory()->for($project)->create();
+    $picture = $upload($mara, 'bild.png', '1 day')->forItem($item)->create();
+    $unreadable($broken, $picture->id);
+
+    DeleteWorkItem::run(actor($mara), $item);
+
+    expect(WorkItem::query()->find($item->id))->toBeNull()
+        ->and($picture->fresh())->toBeNull();
+    Exceptions::assertReported(fn (UnreadableText $error) => $error->ownerId === $broken->id && $error->ownerType === 'work_item');
 });

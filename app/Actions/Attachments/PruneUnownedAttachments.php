@@ -51,6 +51,7 @@ final class PruneUnownedAttachments
      */
     private static function unowned(CarbonInterface $before): Builder
     {
-        return Attachment::query()->whereNull('attachable_id')->where('created_at', '<', $before);
+        // both are empty for an upload nobody owns (AttachmentLinks sets both): the morph index carries the scan
+        return Attachment::query()->whereNull('attachable_type')->whereNull('attachable_id')->where('created_at', '<', $before);
     }
 }

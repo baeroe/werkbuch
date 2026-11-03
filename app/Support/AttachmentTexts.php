@@ -9,6 +9,7 @@ use App\Models\Property;
 use App\Models\WorkItem;
 use App\Models\WorkItemValue;
 use App\RichText\Document;
+use App\RichText\InvalidDocument;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 
@@ -20,6 +21,13 @@ use Illuminate\Database\Eloquent\Collection;
  */
 final class AttachmentTexts
 {
+    /**
+     * The owners whose texts this reads (morph names): items (descriptions, rich text values) and comments. Pictures of
+     * any other owner are none of its business (T13-M2): a later phase that gives attachments to pages or templates
+     * adds its owner here together with its texts.
+     */
+    public const OWNERS = ['work_item', 'comment'];
+
     /** The texts read at a time. */
     private const READ_BLOCK = 500;
 
@@ -27,22 +35,33 @@ final class AttachmentTexts
      * Attachment id → the text that names it: the owner of that text (the item of a description or value, or the
      * comment), the first by id when several do. Only the attachments of `$only` (all with `null`; their ids narrow the
      * rows read first by `like` and are then checked against the document), never the texts of `$exceptItems` (their
-     * descriptions, values and comments) or of `$exceptComments`.
+     * descriptions, values and comments) or of `$exceptComments`. A text that cannot be read is an UnreadableText; with
+     * `$lenient` it is reported and names nothing (deleting an item or a comment must not depend on another text).
      *
      * @param  list<string>|null  $only
      * @param  list<string>  $exceptItems
      * @param  list<string>  $exceptComments
      * @return array<string, array{type: string, id: string}>
+     *
+     * @throws UnreadableText without `$lenient`
      */
-    public static function namers(string $projectId, ?array $only = null, array $exceptItems = [], array $exceptComments = []): array
+    public static function namers(string $projectId, ?array $only = null, array $exceptItems = [], array $exceptComments = [], bool $lenient = false): array
     {
         if ($only === []) {
             return [];
         }
 
         $namers = [];
-        $note = function (?array $json, string $type, string $owner) use (&$namers, $only): void {
-            foreach ($json === null ? [] : Document::fromJson($json)->attachmentIds() as $id) {
+        $note = function (?array $json, string $type, string $owner) use (&$namers, $only, $lenient): void {
+            try {
+                $ids = $json === null ? [] : Document::fromJson($json)->attachmentIds();
+            } catch (InvalidDocument $error) {
+                $unreadable = new UnreadableText($type, $owner, $error);
+                $lenient ? report($unreadable) : throw $unreadable;
+
+                return;
+            }
+            foreach ($ids as $id) {
                 if (($only === null || in_array($id, $only, true)) && (! isset($namers[$id]) || strcmp($owner, $namers[$id]['id']) < 0)) {
                     $namers[$id] = ['type' => $type, 'id' => $owner];
                 }
@@ -85,7 +104,7 @@ final class AttachmentTexts
      * For attachments whose owner is about to go (read `for update` by the caller, inside its transaction): those another
      * text of the project still names become that text's (a picture or file of a text, `inline`), the rest go, their
      * rows through the query builder and their files after the commit (AttachmentFiles, K12). `$exceptItems` and
-     * `$exceptComments` are the texts that go with the owner.
+     * `$exceptComments` are the texts that go with the owner. A text that cannot be read names nothing here (reported).
      *
      * @param  Collection<int, Attachment>  $attachments
      * @param  list<string>  $exceptItems
@@ -93,7 +112,7 @@ final class AttachmentTexts
      */
     public static function handOverOrRemove(Collection $attachments, string $projectId, array $exceptItems = [], array $exceptComments = []): void
     {
-        $namers = self::namers($projectId, array_values(array_map(strval(...), $attachments->modelKeys())), $exceptItems, $exceptComments);
+        $namers = self::namers($projectId, array_values(array_map(strval(...), $attachments->modelKeys())), $exceptItems, $exceptComments, lenient: true);
         foreach ($namers as $id => $owner) {
             Attachment::query()->whereKey($id)->update(['attachable_type' => $owner['type'], 'attachable_id' => $owner['id'], 'kind' => 'inline']);
         }
