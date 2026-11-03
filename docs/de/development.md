@@ -45,7 +45,9 @@ ddev exec pnpm dev
 | Mail | `ddev mailpit` |
 | Datenbank | `ddev mysql`, Benutzer, Passwort und Datenbank `db` |
 
-Queue-Worker, Scheduler und Reverb laufen als DDEV-Daemons und starten mit `ddev start`. Der Worker hört auch auf die Queue `search`, die die Suchindizes bei jeder Änderung nachzieht. Das Dashboard von Meilisearch fragt nach dem Schlüssel `MEILISEARCH_KEY` aus `.env`.
+Queue-Worker, Scheduler und Reverb laufen als DDEV-Daemons und starten mit `ddev start`. Der Worker hört auch auf die Queue `search`, die die Suchindizes bei jeder Änderung nachzieht, und auf `media`, die die Vorschauen hochgeladener Bilder rechnet (`MEDIA_QUEUE` in `.env`). Das Dashboard von Meilisearch fragt nach dem Schlüssel `MEILISEARCH_KEY` aus `.env`.
+
+Hochgeladene Dateien liegen auf der privaten Disk `local` (`storage/app/private`), nie in `public/`. Eine Datei darf höchstens `ATTACHMENTS_MAX_MB` groß sein (standardmäßig 25 MB). Davor hat PHP eigene Grenzen, `upload_max_filesize` und `post_max_size`; sie müssen über `ATTACHMENTS_MAX_MB` liegen, sonst verwirft PHP eine große Datei, bevor werkbuch die Grenze nennen kann. DDEV erlaubt 100 MB, die CI setzt 30 MB und 32 MB. Eine Datei über einer der Grenzen ist ein `413` mit `reason: payload_too_large`. Mehr unter [Rich Text](/de/concepts/rich-text#bilder-und-dateien).
 
 ## Tests und Prüfungen
 

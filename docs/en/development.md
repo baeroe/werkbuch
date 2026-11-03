@@ -45,7 +45,9 @@ Open <https://werkbuch.ddev.site/login> and sign in with `ADMIN_EMAIL` and `ADMI
 | Mail | `ddev mailpit` |
 | Database | `ddev mysql`, user, password and database `db` |
 
-The queue worker, the scheduler and Reverb run as DDEV daemons and start with `ddev start`. The worker also listens on the queue `search`, which keeps the search indexes in step with every change. The Meilisearch dashboard asks for the key `MEILISEARCH_KEY` from `.env`.
+The queue worker, the scheduler and Reverb run as DDEV daemons and start with `ddev start`. The worker also listens on the queue `search`, which keeps the search indexes in step with every change, and on `media`, which computes the previews of uploaded images (`MEDIA_QUEUE` in `.env`). The Meilisearch dashboard asks for the key `MEILISEARCH_KEY` from `.env`.
+
+Uploaded files land on the private disk `local` (`storage/app/private`), never in `public/`. One file may be at most `ATTACHMENTS_MAX_MB` (25 MB by default). PHP has its own limits in front of that, `upload_max_filesize` and `post_max_size`; they must be above `ATTACHMENTS_MAX_MB`, otherwise PHP drops a large file before werkbuch can name the limit. DDEV allows 100 MB, the CI sets 30 MB and 32 MB. A file over either limit is a `413` with `reason: payload_too_large`. More under [rich text](/en/concepts/rich-text#images-and-files).
 
 ## Tests and checks
 

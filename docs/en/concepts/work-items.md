@@ -11,7 +11,7 @@ Anyone who sees a project reads its items. Members and admins of the project cre
 | Key | `WEB-47`: the identifier of the project and a number. See below. |
 | Type | One of the types switched on in the project; the default type unless you choose another. |
 | Title | Required, up to 255 characters. |
-| Description | Rich text: headings, lists, checklists, tables, code and links. |
+| Description | [Rich text](/en/concepts/rich-text): headings, lists, checklists, tables, code, links, mentions, references to items, images and files. |
 | Status | A state of the workflow of the project. New items start in its start status. |
 | Resolution | Set when the item closes, emptied when it opens again. |
 | Assignee | Nobody or one person or bot: an active member of the project, or a person who is an org admin. The default bot only when it is a member. |
@@ -53,15 +53,31 @@ An item at the other end that you may not see appears as **hidden item**, withou
 
 Only "blocks" has a consequence: as long as an open item blocks another open one, the blocked item shows a hint. werkbuch does not stop anyone from starting it. The hint also counts a blocker you may not see, without naming it. All other relation types are labels only.
 
+## Comments
+
+Anyone who can read an item can comment on it, viewers included; bots too, over the API. A comment is [rich text](/en/concepts/rich-text) at the comment level: text, lists, quotes, code, links, mentions, references, images and files. In the interface, `m` opens the comment field at the end of the activity, and `mod+enter` sends. A comment that fails to send stays in the field, and text you have not sent stays for this visit even if you close the item.
+
+You can edit and delete your own comments. An edited comment says **edited**, and the history keeps the earlier version; once the comment is deleted, the history only says that it was edited and deleted, without its text. Project admins and org admins can delete the comments of others, never edit them. Deleting waits five seconds with **Undo**.
+
+Anyone who may comment can react with any emoji, once per emoji and person; pressing your reaction again takes it back. A skin tone is an emoji of its own.
+
+An archived item, or an item in an archived project, takes no new comments and reactions, and its comments can be neither edited nor deleted. A comment does not change the item's "updated" time; sorting by it means its fields.
+
+## Files
+
+The **Files** section of an item lists the files attached to it: images with a small preview, other files with an icon, each with name and size. **Upload file** or dragging files onto the section adds them, each with its own progress; **Remove** takes one away, with undo. Both take the right to change the item, and both are part of the history. Files stay inside the project: only someone who sees the item can download them.
+
+Images and files inside a text (the description, a comment) are not part of this list; they belong to their text. How they are uploaded, which formats are shown inline, and how the size is limited is described under [rich text](/en/concepts/rich-text#images-and-files).
+
 ## Watching
 
-Watchers will hear about changes once notifications arrive (a later phase). The person who creates an item and the person it is assigned to watch it automatically. Anyone who can read an item can start or stop watching it, viewers included, also in an archived project. Whoever stops watching stays away until the item is assigned to them again. Bots do not watch items.
+Watchers will hear about changes once notifications arrive (a later phase). The person who creates an item, the person it is assigned to, whoever comments on it and whoever is mentioned in it watch it automatically. Anyone who can read an item can start or stop watching it, viewers included, also in an archived project. Whoever stops watching stays away until the item is assigned to them again or they are mentioned in it anew; commenting does not bring them back. Bots do not watch items.
 
 ## Archive and delete
 
 **Archive** is for closed items: it hides them from lists, and they become read-only until someone restores them. Only items in a Completed or Canceled state can be archived (`409`, `reason: not_closed`); a change to an archived item is refused (`409`, `reason: archived`). **Restore** makes it writable again in the status it had.
 
-**Delete** removes an item for good, with its values, labels and relations; only project admins may. The interface waits five seconds first, and **Undo** stops it. Child items become items without a parent, and both they and the items at the other end of its relations get an entry in their history. The history of the deleted item itself stays in the event log.
+**Delete** removes an item for good, with its values, labels, relations, comments and files; only project admins may. The interface waits five seconds first, and **Undo** stops it. Child items become items without a parent, and both they and the items at the other end of its relations get an entry in their history. The history of the deleted item itself stays in the event log.
 
 `mod+backspace` on an item archives it if it is closed and deletes it otherwise, both with undo. On a selection it acts only when that is the same for every item (all closed to archive, or none closed to delete).
 
@@ -77,7 +93,7 @@ The description is guarded: the interface sends the version of the description i
 
 ## History
 
-Every change is an entry in the history of the item, with who made it, when, and how (in the interface, over the API, by an automation). A change of a field shows the old and the new value; a move names both states as they were called then, even if a state was renamed or removed later. The interface groups the changes one person makes within five minutes. Watching and the manual order of items are not part of the history.
+Every change is an entry in the history of the item, with who made it, when, and how (in the interface, over the API, by an automation). A change of a field shows the old and the new value; a move names both states as they were called then, even if a state was renamed or removed later. The interface groups the changes one person makes within five minutes and shows the comments in the same timeline; the filter switches between everything, comments and changes. Editing and deleting a comment, and adding and removing a file of the file list, are entries too. Watching, reactions and the manual order of items are not part of the history.
 
 ## REST
 
@@ -87,7 +103,7 @@ Reading needs a token with `read`, changing one with `write`. Items are addresse
 |---|---|
 | `GET /api/v1/work-items` | Items you see: `view`, a short form such as `filter[project]`, `filter[assignee]=me`, `filter[q]` (a key or part of the title), `sort`, `show_sub_items`, `include_archived`, `lean`, `cursor`, `per_page`. Filters, groups and counts are described under [views](/en/concepts/views#rest). |
 | `POST /api/v1/work-items` | `201` with the new item. |
-| `GET /api/v1/work-items/{item}` | The item; `?include=children,relations,type,workflow` embeds those. |
+| `GET /api/v1/work-items/{item}` | The item; `?include=children,relations,type,workflow,attachments` embeds those. |
 | `PATCH /api/v1/work-items/{item}` | `200` with the item. |
 | `POST /api/v1/work-items/{item}/transition` | `200`; `to_state_id`, `resolution_id`. |
 | `PUT /api/v1/work-items/{item}/type` | `200`; `type_id`, `values`. |
@@ -99,6 +115,7 @@ Reading needs a token with `read`, changing one with `write`. Items are addresse
 | `GET /api/v1/work-items/{item}/subscribers` | Who watches the item. |
 | `PUT`, `DELETE /api/v1/work-items/{item}/subscription` | Start or stop watching; `200` with the item. |
 | `GET /api/v1/work-items/{item}/history` | The history, oldest first. |
+| `GET`, `POST /api/v1/work-items/{item}/comments` | The comments, oldest first; `201` with the new one. Comments, reactions and files are described under [rich text](/en/concepts/rich-text#rest). |
 
 An item the account of the token does not see is a `404`, like one that does not exist. An unknown filter or `include` is a `422`, never silently ignored. Messages (`detail`, field errors) come in the language of the account, else in the organization's default language.
 
@@ -266,7 +283,7 @@ WEB-47 is open and cannot be archived, so it keeps its priority too. The reasons
 }
 ```
 
-The types are `work_item.created`, `updated`, `state_changed`, `assigned`, `archived`, `restored`, `relation_added`, `relation_removed` and `deleted`. A property shows up as `values.<key>`, a description as Tiptap JSON. A relation names the other item with its current key when you see it, and only `{"label": "…", "hidden": true}` when you do not.
+The types are `work_item.created`, `updated`, `state_changed`, `assigned`, `archived`, `restored`, `relation_added`, `relation_removed` and `deleted`, and `comment.updated` (with the old and new text in `changes.body`) and `comment.deleted` (without text). A file of the file list shows up as `attachments` with `{id, filename}`. A property shows up as `values.<key>`, a description as Tiptap JSON. A relation names the other item with its current key when you see it, and only `{"label": "…", "hidden": true}` when you do not.
 
 ### Former keys
 

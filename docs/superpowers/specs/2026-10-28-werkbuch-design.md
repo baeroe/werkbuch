@@ -1,6 +1,18 @@
 # werkbuch: Fachkonzept und App-Design
 
-Stand: 2026-11-02 · Status: freigegeben (die Änderungen vom 2026-10-31 und vom 2026-11-02 (Phasen 5 und 6) warten auf Rafaels Bestätigung, außer der bestätigten Status-Zuordnung aus Phase 4)
+Stand: 2026-11-03 · Status: freigegeben (die Änderungen vom 2026-10-31, vom 2026-11-02 (Phasen 5 und 6) und vom 2026-11-03 (Phase 7) warten auf Rafaels Bestätigung, außer der bestätigten Status-Zuordnung aus Phase 4)
+
+> **Änderungen vom 2026-11-03 (Phase 7):** Beim Umsetzen von Phase 7 (Editor, Kommentare, Anhänge) hat Claude als Controller Folgendes entschieden; es ändert oder präzisiert die Spec und **wartet auf Rafaels Bestätigung** (Begründung und „Falls falsch“ in `docs/superpowers/plans/2026-10-30-werkbuch-app-rulings.md`, A227 ff.):
+> - **Archivierte Items (4.8, 4.10):** An archivierten Items und in archivierten Projekten lassen sich keine Kommentare schreiben, bearbeiten oder löschen und keine Reaktionen setzen (409); Beobachten bleibt erlaubt (A240).
+> - **Fremde Kommentare (4.3, 4.10):** löschen Projekt-Admins und Org-Admins; bearbeiten darf einen Kommentar nur, wer ihn geschrieben hat (A241).
+> - **Bilder im Text (4.3, 4.16):** Bilder und Dateien in Texte hochladen darf, wer kommentieren darf, also auch Viewer und Außenstehende öffentlicher Projekte; die Dateiliste eines Items braucht das Recht, das Item zu ändern (A234).
+> - **Uploads im Text (4.16):** Ein Bild oder eine Datei im Text gehört bis zum Speichern des Texts niemandem, auch in einem Text, den es schon gibt; beim Speichern übernimmt der Text nur eigene Uploads desselben Projekts. Bilder und Dateien im Text löscht niemand einzeln (409), sie gehen mit ihrem Text oder über das Aufräumen (A232, A238). Ein Text darf das Bild eines anderen Texts desselben Projekts zeigen (kopiert); wird dessen Text gelöscht, geht das Bild an den Text über, der es noch zeigt (A233, A261). Der Browser löscht keine Uploads verworfener Entwürfe, das macht der Job nach 24 Stunden (A264).
+> - **Verborgene Verweise in Markdown (4.16):** Ein Verweis auf ein Item, das der Leser nicht sieht, steht in Markdown als `[hidden](item:<ulid>)`, ohne Key und Titel; zurückgeschrieben bleibt er ein Verweis, wenn er schon im Text stand. Gespeichert wird von einem Verweis nur die ID (A229).
+> - **Gelöschte Kommentare (4.10):** `comment.deleted` trägt keinen Text. Die History zeigt den Text eines gelöschten Kommentars auch nicht über frühere Bearbeitungen; im Event-Protokoll bleibt er (A228).
+> - **`bot.mentioned` (4.2, 6.3):** entsteht schon in Phase 7 als Event, wenn ein Bot in Beschreibung, Rich-Text-Property oder Kommentar neu erwähnt wird; zugestellt wird es mit den Webhooks in Phase 11 (A243). Wer sich selbst erwähnt, gilt nicht als erwähnt (A259).
+> - **Vorschaubilder (4.16):** nur für PNG, JPEG und WebP; GIF behält seine Animation, AVIF erscheint ohne Vorschau (A237).
+> - **Reaktionen (4.10, 6.1):** `PUT …/reactions` setzt die eigene Reaktion, `DELETE …/reactions` nimmt sie zurück, beides wiederholbar; ein Emoji mit Hautton ist ein eigenes Emoji (A242).
+> - **Erwähnungen in Properties (4.14):** Auch eine Erwähnung in einer Rich-Text-Property lässt beobachten und zählt als neue Erwähnung (A244).
 
 > **Änderungen vom 2026-11-02 (Phase 6):** Beim Umsetzen von Phase 6 (Suche und Suchtreffer in der Befehlspalette) hat Claude als Controller Folgendes entschieden; es ändert oder präzisiert die Spec und **wartet auf Rafaels Bestätigung** (Begründung und „Falls falsch“ in `docs/superpowers/plans/2026-10-30-werkbuch-app-rulings.md`, A199 ff.):
 > - **Views in der Suche (4.17):** Die Suche findet auch Views über ihren Namen (jedes Wort, ohne Rücksicht auf Groß- und Kleinschreibung und Akzente). Views stehen nicht im Suchindex, sie kommen direkt aus der Datenbank; Wiki-Seiten bekommen mit Phase 9 einen Index (A204).

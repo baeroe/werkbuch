@@ -11,7 +11,7 @@ Wer ein Projekt sieht, liest seine Items. Member und Admins des Projekts legen s
 | Key | `WEB-47`: die Kennung des Projekts und eine Nummer. Siehe unten. |
 | Typ | Einer der Typen, die das Projekt eingeschaltet hat; ohne Wahl der Standardtyp. |
 | Titel | Pflicht, bis 255 Zeichen. |
-| Beschreibung | Rich Text: Überschriften, Listen, Checklisten, Tabellen, Code und Links. |
+| Beschreibung | [Rich Text](/de/concepts/rich-text): Überschriften, Listen, Checklisten, Tabellen, Code, Links, Erwähnungen, Verweise auf Items, Bilder und Dateien. |
 | Status | Ein Status des Workflows des Projekts. Neue Items starten in dessen Startstatus. |
 | Resolution | Wird beim Schließen gesetzt und beim Wiederöffnen geleert. |
 | Assignee | Niemand oder eine Person oder ein Bot: ein aktives Mitglied des Projekts oder eine Person, die Org-Admin ist. Der Standard-Bot nur, wenn er Mitglied ist. |
@@ -53,15 +53,31 @@ Ein Item am anderen Ende, das du nicht sehen darfst, erscheint als **verborgenes
 
 Nur „blockiert“ hat eine Folge: Solange ein offenes Item ein anderes offenes blockiert, zeigt das blockierte einen Hinweis. werkbuch hindert niemanden daran, es zu beginnen. Der Hinweis zählt auch einen Blocker, den du nicht sehen darfst, ohne ihn zu nennen. Alle anderen Relationstypen sind reine Beschriftung.
 
+## Kommentare
+
+Wer ein Item lesen kann, kann es kommentieren, auch als Viewer; Bots ebenso, über die API. Ein Kommentar ist [Rich Text](/de/concepts/rich-text) der Stufe Kommentar: Text, Listen, Zitate, Code, Links, Erwähnungen, Verweise, Bilder und Dateien. In der Oberfläche öffnet `m` das Kommentarfeld am Ende der Aktivität, und `mod+enter` sendet. Ein Kommentar, der beim Senden scheitert, bleibt im Feld, und nicht gesendeter Text bleibt für diesen Besuch erhalten, auch wenn du das Item schließt.
+
+Eigene Kommentare kannst du bearbeiten und löschen. Ein bearbeiteter Kommentar trägt **bearbeitet**, und die History behält die frühere Fassung; ist der Kommentar gelöscht, sagt die History nur noch, dass er bearbeitet und gelöscht wurde, ohne seinen Text. Projekt-Admins und Org-Admins können fremde Kommentare löschen, nie bearbeiten. Löschen wartet fünf Sekunden mit **Rückgängig**.
+
+Wer kommentieren darf, kann mit jedem Emoji reagieren, je Person einmal pro Emoji; ein zweiter Druck auf die eigene Reaktion nimmt sie zurück. Ein Hautton ist ein eigenes Emoji.
+
+Ein archiviertes Item oder ein Item in einem archivierten Projekt nimmt keine neuen Kommentare und Reaktionen, und seine Kommentare lassen sich weder bearbeiten noch löschen. Ein Kommentar ändert die Zeit „geändert“ des Items nicht; die Sortierung danach meint seine Felder.
+
+## Dateien
+
+Der Abschnitt **Dateien** eines Items listet die angehängten Dateien: Bilder mit einer kleinen Vorschau, andere Dateien mit einem Icon, je mit Name und Größe. **Datei hochladen** oder das Ziehen von Dateien auf den Abschnitt hängt sie an, jede mit eigenem Fortschritt; **Entfernen** nimmt eine weg, mit Rückgängig. Beides braucht das Recht, das Item zu ändern, und beides steht in der History. Dateien bleiben im Projekt: Herunterladen kann sie nur, wer das Item sieht.
+
+Bilder und Dateien in einem Text (der Beschreibung, einem Kommentar) gehören nicht zu dieser Liste, sondern zu ihrem Text. Wie sie hochgeladen werden, welche Formate im Text erscheinen und wie die Größe begrenzt ist, steht unter [Rich Text](/de/concepts/rich-text#bilder-und-dateien).
+
 ## Beobachten
 
-Wer ein Item beobachtet, erfährt von Änderungen, sobald es Benachrichtigungen gibt (eine spätere Phase). Wer ein Item anlegt und wem es zugewiesen wird, beobachtet es automatisch. Wer ein Item lesen kann, kann es beobachten oder nicht mehr beobachten, auch als Viewer und auch in einem archivierten Projekt. Wer sich abmeldet, bleibt abgemeldet, bis das Item ihm erneut zugewiesen wird. Bots beobachten keine Items.
+Wer ein Item beobachtet, erfährt von Änderungen, sobald es Benachrichtigungen gibt (eine spätere Phase). Wer ein Item anlegt, wem es zugewiesen wird, wer es kommentiert und wer darin erwähnt wird, beobachtet es automatisch. Wer ein Item lesen kann, kann es beobachten oder nicht mehr beobachten, auch als Viewer und auch in einem archivierten Projekt. Wer sich abmeldet, bleibt abgemeldet, bis das Item ihm erneut zugewiesen wird oder er darin neu erwähnt wird; Kommentieren meldet ihn nicht wieder an. Bots beobachten keine Items.
 
 ## Archivieren und Löschen
 
 **Archivieren** ist für geschlossene Items: Es blendet sie aus Listen aus, und sie sind schreibgeschützt, bis jemand sie wiederherstellt. Archivieren lassen sich nur Items in einem Status der Kategorie Completed oder Canceled (`409`, `reason: not_closed`); eine Änderung an einem archivierten Item wird abgelehnt (`409`, `reason: archived`). **Wiederherstellen** macht es wieder änderbar, im Status, den es hatte.
 
-**Löschen** entfernt ein Item endgültig, mit seinen Werten, Labels und Relationen; das dürfen nur Admins des Projekts. Die Oberfläche wartet vorher fünf Sekunden, und **Rückgängig** hält es auf. Kind-Items werden zu Items ohne Eltern, und sie wie auch die Items am anderen Ende seiner Relationen bekommen einen Eintrag in ihre History. Die History des gelöschten Items selbst bleibt im Event-Protokoll.
+**Löschen** entfernt ein Item endgültig, mit seinen Werten, Labels, Relationen, Kommentaren und Dateien; das dürfen nur Admins des Projekts. Die Oberfläche wartet vorher fünf Sekunden, und **Rückgängig** hält es auf. Kind-Items werden zu Items ohne Eltern, und sie wie auch die Items am anderen Ende seiner Relationen bekommen einen Eintrag in ihre History. Die History des gelöschten Items selbst bleibt im Event-Protokoll.
 
 `mod+backspace` an einem Item archiviert es, wenn es geschlossen ist, und löscht es sonst, beides mit Rückgängig. Auf eine Auswahl wirkt es nur, wenn das für jedes Item dasselbe ist (alle geschlossen zum Archivieren oder keins geschlossen zum Löschen).
 
@@ -77,7 +93,7 @@ Die Beschreibung ist geschützt: Die Oberfläche schickt die Version der Beschre
 
 ## History
 
-Jede Änderung ist ein Eintrag in der History des Items, mit wer, wann und wie (in der Oberfläche, über die API, durch eine Automatisierung). Eine Feldänderung zeigt den alten und den neuen Wert; ein Statuswechsel nennt beide Status so, wie sie damals hießen, auch wenn ein Status später umbenannt oder entfernt wurde. Die Oberfläche fasst die Änderungen einer Person innerhalb von fünf Minuten zusammen. Beobachten und die manuelle Reihenfolge der Items gehören nicht zur History.
+Jede Änderung ist ein Eintrag in der History des Items, mit wer, wann und wie (in der Oberfläche, über die API, durch eine Automatisierung). Eine Feldänderung zeigt den alten und den neuen Wert; ein Statuswechsel nennt beide Status so, wie sie damals hießen, auch wenn ein Status später umbenannt oder entfernt wurde. Die Oberfläche fasst die Änderungen einer Person innerhalb von fünf Minuten zusammen und zeigt die Kommentare in derselben Zeitleiste; der Filter wechselt zwischen allem, Kommentaren und Änderungen. Auch das Bearbeiten und Löschen eines Kommentars und das Anhängen und Entfernen einer Datei der Dateiliste sind Einträge. Beobachten, Reaktionen und die manuelle Reihenfolge der Items gehören nicht zur History.
 
 ## REST
 
@@ -87,7 +103,7 @@ Lesen braucht ein Token mit `read`, Ändern eines mit `write`. Items sprichst du
 |---|---|
 | `GET /api/v1/work-items` | Items, die du siehst: `view`, eine Kurzform wie `filter[project]`, `filter[assignee]=me`, `filter[q]` (ein Key oder ein Teil des Titels), `sort`, `show_sub_items`, `include_archived`, `lean`, `cursor`, `per_page`. Filter, Gruppen und Zahlen stehen unter [Views](/de/concepts/views#rest). |
 | `POST /api/v1/work-items` | `201` mit dem neuen Item. |
-| `GET /api/v1/work-items/{item}` | Das Item; `?include=children,relations,type,workflow` bettet diese mit ein. |
+| `GET /api/v1/work-items/{item}` | Das Item; `?include=children,relations,type,workflow,attachments` bettet diese mit ein. |
 | `PATCH /api/v1/work-items/{item}` | `200` mit dem Item. |
 | `POST /api/v1/work-items/{item}/transition` | `200`; `to_state_id`, `resolution_id`. |
 | `PUT /api/v1/work-items/{item}/type` | `200`; `type_id`, `values`. |
@@ -99,6 +115,7 @@ Lesen braucht ein Token mit `read`, Ändern eines mit `write`. Items sprichst du
 | `GET /api/v1/work-items/{item}/subscribers` | Wer das Item beobachtet. |
 | `PUT`, `DELETE /api/v1/work-items/{item}/subscription` | Beobachten an oder aus; `200` mit dem Item. |
 | `GET /api/v1/work-items/{item}/history` | Die History, älteste zuerst. |
+| `GET`, `POST /api/v1/work-items/{item}/comments` | Die Kommentare, älteste zuerst; `201` mit dem neuen. Kommentare, Reaktionen und Dateien stehen unter [Rich Text](/de/concepts/rich-text#rest). |
 
 Ein Item, das das Konto des Tokens nicht sieht, ist ein `404`, wie eines, das es nicht gibt. Ein unbekannter Filter oder ein unbekanntes `include` ist ein `422`, nie still übergangen. Meldungen (`detail`, Feldfehler) kommen in der Sprache des Kontos, sonst in der Standardsprache der Organisation.
 
@@ -266,7 +283,7 @@ WEB-47 ist offen und lässt sich nicht archivieren, also behält es auch seine P
 }
 ```
 
-Die Typen sind `work_item.created`, `updated`, `state_changed`, `assigned`, `archived`, `restored`, `relation_added`, `relation_removed` und `deleted`. Eine Property erscheint als `values.<key>`, eine Beschreibung als Tiptap-JSON. Eine Relation nennt das andere Item mit seinem aktuellen Key, wenn du es siehst, und sonst nur `{"label": "…", "hidden": true}`.
+Die Typen sind `work_item.created`, `updated`, `state_changed`, `assigned`, `archived`, `restored`, `relation_added`, `relation_removed` und `deleted`, dazu `comment.updated` (mit altem und neuem Text in `changes.body`) und `comment.deleted` (ohne Text). Eine Datei der Dateiliste erscheint als `attachments` mit `{id, filename}`. Eine Property erscheint als `values.<key>`, eine Beschreibung als Tiptap-JSON. Eine Relation nennt das andere Item mit seinem aktuellen Key, wenn du es siehst, und sonst nur `{"label": "…", "hidden": true}`.
 
 ### Frühere Keys
 
