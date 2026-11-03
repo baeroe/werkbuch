@@ -397,7 +397,14 @@ describe('CommentComposer', () => {
     const banner = await screen.findByRole('alert');
     expect(within(banner).getByText('Dein Kommentar ist nicht gesendet')).toBeTruthy();
     expect(within(banner).getByText('Mein Entwurf.')).toBeTruthy();
-    expect(within(banner).getByRole('button', { name: /Kopieren/ })).toBeTruthy();
+    // without a clipboard (jsdom) "Kopieren" selects the text of the draft
+    vi.stubGlobal('navigator', { ...navigator, clipboard: undefined });
+    try {
+      await userEvent.click(within(banner).getByRole('button', { name: /Kopieren/ }));
+      await waitFor(() => expect(document.getSelection()?.toString()).toContain('Mein Entwurf.'));
+    } finally {
+      vi.unstubAllGlobals();
+    }
     fireEvent.click(within(banner).getByRole('button', { name: 'Verwerfen' }));
     expect(drafts.get(commentDraft('wi_web_47'))).toBeNull();
     expect(screen.queryByRole('alert')).toBeNull();
