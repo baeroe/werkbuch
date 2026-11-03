@@ -6,7 +6,11 @@
  * (`inline`), `attachment` (a chip to download) for anything else. A failed upload takes its placeholder away and goes
  * to `onUploadError` (by default a toast with the server's sentence; "Erneut versuchen" puts it at the same place).
  *
- * - Only with a project: without one, files are neither pasted nor dropped.
+ * - Only with a project: without one, files are neither pasted nor dropped, and a toast says why (F20).
+ * - Leaving or reloading the page asks first while an upload runs (`drafts.hold()`); an upload that the editor going
+ *   away stops is named in a toast (F18). The editor's live region says when an upload starts, ends or fails (F21).
+ * - A finished upload whose placeholder is gone (its block was deleted) or whose editor was replaced meanwhile goes into
+ *   no text (F19): it belongs to nobody, and the hourly job removes it.
  * - Pasted files replace the selection, like any paste. A browser's "Copy image" brings the picture along with HTML
  *   that holds nothing but the `<img>` (and a `<meta>`): that is a picture, uploaded like a screenshot (`onlyImages`).
  *   HTML with anything else (text of a web page, an office document, which adds a picture of the whole selection) is
@@ -24,9 +28,12 @@ import { Plugin, PluginKey, type EditorState } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { Extension, type AnyExtension, type Editor } from '@tiptap/react';
 import { uploadAttachment } from '@/api/attachments';
+import { toast } from '@/components/ui/toast';
+import { drafts } from '@/lib/drafts';
 import { notifyError } from '@/lib/errors';
 import { t } from '@/lib/i18n';
 import type { Attachment, RichText } from '@/types';
+import { announce } from './announcer';
 import type { EditorEnv, EditorEnvRef } from './EditorEnv';
 
 /** What a browser may show as a picture (`Attachment::inline` on the server, by content); the placeholder guesses by type. */
@@ -37,6 +44,8 @@ const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'imag
 /** The uploads of one editor, from its first render until it goes away. */
 export class UploadSession {
   private readonly controller = new AbortController();
+  /** The names of the files on their way, by upload. */
+  readonly running = new Map<string, string>();
   /** The form's counter of running uploads: an upload started (1) or ended (-1). */
   track: (delta: number) => void = () => {};
   /** Puts a stored attachment into the cache, so its node shows at once. */
@@ -50,9 +59,11 @@ export class UploadSession {
     return this.controller.signal.aborted;
   }
 
-  /** Stops the running uploads (the editor went away). */
+  /** Stops the running uploads (the editor went away) and says which ones stopped. */
   close(): void {
+    const stopped = [...this.running.values()];
     this.controller.abort();
+    if (stopped.length > 0) toast({ title: t('editor.upload.stopped', { names: stopped.join(', ') }) });
   }
 }
 
@@ -129,19 +140,30 @@ let uploadCounter = 0;
 /** Uploads files into the editor's project and puts each at `pos` once it is stored (see above). */
 export function uploadFiles(editor: Editor, files: readonly File[], pos: number, env: EditorEnv): void {
   const { projectId, uploads: session } = env;
-  if (projectId === null || session === undefined || session.closed) return;
+  if (editor.isDestroyed || session === undefined || session.closed) return;
+  if (projectId === null) {
+    noProject(editor);
+    return;
+  }
 
   for (const file of files) {
     const id = `upload-${(uploadCounter += 1)}`;
-    const element = placeholderElement(file.name, IMAGE_TYPES.includes(file.type));
+    const image = IMAGE_TYPES.includes(file.type);
+    const element = placeholderElement(file.name, image);
     editor.view.dispatch(editor.state.tr.setMeta(uploadKey, { add: { id, pos, element } } satisfies PlaceholderMeta));
     session.track(1);
+    session.running.set(id, file.name);
+    const release = drafts.hold();
+    announce(editor.view.dom, t(image ? 'editor.upload.image' : 'editor.upload.file', { name: file.name }));
 
     uploadAttachment(projectId, file, null, 'inline', { onProgress: (fraction) => setProgress(element, fraction), signal: session.signal })
       .then(
         (attachment) => {
           session.prime(attachment);
-          const at = placeholderPos(editor.state, id) ?? editor.state.selection.to;
+          // the editor was replaced, or the block around the placeholder went: the file goes into no text
+          const at = editor.isDestroyed ? undefined : placeholderPos(editor.state, id);
+          if (at === undefined) return;
+          announce(editor.view.dom, t('editor.upload.done', { name: file.name }));
           editor
             .chain()
             .command(({ tr }) => {
@@ -153,16 +175,28 @@ export function uploadFiles(editor: Editor, files: readonly File[], pos: number,
             .run();
         },
         (error: unknown) => {
-          // the editor went away and stopped it: nothing to say
-          if (session.closed) return;
+          // the editor went away and stopped it: its toast said so
+          if (session.closed || editor.isDestroyed) return;
           const at = placeholderPos(editor.state, id) ?? pos;
           editor.view.dispatch(editor.state.tr.setMeta(uploadKey, { remove: id } satisfies PlaceholderMeta));
+          announce(editor.view.dom, t('editor.upload.failed', { name: file.name }));
           if (env.onUploadError) env.onUploadError(file, error);
           else notifyError(t('editor.upload.failed', { name: file.name }), error, () => uploadFiles(editor, [file], Math.min(at, editor.state.doc.content.size), env));
         },
       )
-      .finally(() => session.track(-1));
+      .finally(() => {
+        session.running.delete(id);
+        session.track(-1);
+        release();
+      });
   }
+}
+
+/** Files pasted or dropped where they cannot go: the text belongs to no project (F20). */
+function noProject(editor: Editor): void {
+  const text = t('editor.upload.no_project');
+  toast({ title: text });
+  announce(editor.view.dom, text);
 }
 
 /** Opens the browser's file choice (several files at once) and hands over what was chosen. */
@@ -202,7 +236,10 @@ function pasteFiles(editor: Editor, env: EditorEnvRef): Plugin {
         if (files.length === 0 || (html !== '' && !onlyImages(html))) return false;
         event.preventDefault();
         // without a project nothing is uploaded; the paste is used up, so the browser does not paste the file itself
-        if (env.current.projectId === null) return true;
+        if (env.current.projectId === null) {
+          noProject(editor);
+          return true;
+        }
         view.dispatch(view.state.tr.deleteSelection());
         uploadFiles(editor, files, view.state.selection.from, env.current);
         return true;

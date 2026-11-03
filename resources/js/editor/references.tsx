@@ -10,7 +10,7 @@
 import { Link } from '@inertiajs/react';
 import { useQueryClient } from '@tanstack/react-query';
 import Mention from '@tiptap/extension-mention';
-import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from '@tiptap/react';
+import { NodeViewWrapper, ReactNodeViewRenderer, useEditorState, type ReactNodeViewProps } from '@tiptap/react';
 import { EyeOff } from 'lucide-react';
 import { isGone } from '@/api/client';
 import { TypeGlyph } from '@/components/fields/TypeGlyph';
@@ -77,6 +77,8 @@ function ReferenceSuggestions({ suggestion, ref }: PopupProps) {
 /** A reference as the reader sees it now: the item's type and key, or "verborgen". */
 function ReferenceView({ node, editor }: ReactNodeViewProps) {
   const reference = useItemRef(String(node.attrs.id ?? ''));
+  // follows a change of `readOnly` at once (the editor marks it with a transaction), not only on the next render
+  const editable = useEditorState({ editor, selector: ({ editor: current }) => current.isEditable });
   const types = useWorkItemTypes().data?.items;
   const item = reference.data;
 
@@ -99,7 +101,7 @@ function ReferenceView({ node, editor }: ReactNodeViewProps) {
         <span className="sr-only">{item.title}</span>
       </>
     );
-    content = editor.isEditable ? (
+    content = editable ? (
       <span className="rt-ref">{inner}</span>
     ) : (
       <Link href={paths.item(item.key)} className="rt-ref">

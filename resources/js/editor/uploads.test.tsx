@@ -109,6 +109,16 @@ const answer = (xhr: FakeXhr, attachment: Attachment) =>
 
 const pending = () => screen.getByRole('status', { name: 'Uploads' });
 
+/** What the editor's live region says now (announcer.ts). */
+const said = () => document.querySelector('[data-editor-announcer]')!.textContent;
+
+/** Whether leaving the page asks first (the drafts' `beforeunload`). */
+const leavingAsks = () => {
+  const event = new Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(event);
+  return event.defaultPrevented;
+};
+
 describe('uploads in the editor', () => {
   it('pastes an image and shows its progress, then the image', async () => {
     const { editor, lastDoc } = renderEditor();
@@ -204,18 +214,57 @@ describe('uploads in the editor', () => {
     await waitFor(() => expect(nodesOf(lastDoc(), 'image')).toHaveLength(1));
   });
 
-  it('aborts running uploads when the editor goes away', async () => {
+  it('aborts running uploads when the editor goes away and names them in a toast (F18)', async () => {
     const onUploadError = vi.fn();
     const { editor, hide } = renderEditor({ context: { onUploadError } });
-    pasteFiles(editor, [png()]);
+    pasteFiles(editor, [png(), pdf()]);
     const xhr = FakeXhr.last;
-    expect(pending().textContent).toBe('1');
+    expect(pending().textContent).toBe('2');
 
     hide();
     expect(xhr.abort).toHaveBeenCalled();
     await waitFor(() => expect(pending().textContent).toBe('0'));
-    // stopped on purpose: nothing to report
+    // stopped on purpose: no failure, but nobody loses a picture without being told
     expect(onUploadError).not.toHaveBeenCalled();
+    expect(currentToasts().map((toast) => toast.title)).toEqual(['Upload abgebrochen: screenshot.png, angebot.pdf']);
+    expect(leavingAsks()).toBe(false);
+  });
+
+  it('asks before leaving the page while an upload runs, and says start and end in the live region (F18, F21)', async () => {
+    const { editor } = renderEditor();
+    // the region is there, empty, before anything happens
+    expect(said()).toBe('');
+    pasteFiles(editor, [png()]);
+    expect(leavingAsks()).toBe(true);
+    expect(said()).toBe('Bild „screenshot.png“ wird hochgeladen …');
+
+    await answer(FakeXhr.last, picture);
+    expect(leavingAsks()).toBe(false);
+    expect(said()).toBe('„screenshot.png“ hochgeladen.');
+
+    pasteFiles(editor, [pdf()]);
+    act(() => FakeXhr.last.answer(413, { status: 413, reason: 'payload_too_large', detail: 'Zu groß.' }));
+    await waitFor(() => expect(said()).toBe('„angebot.pdf“ nicht hochgeladen'));
+    expect(leavingAsks()).toBe(false);
+  });
+
+  it('puts an upload into no text when its placeholder is gone or its editor was replaced (F19)', async () => {
+    const { editor, editorRef, lastDoc, onChange } = renderEditor({ value: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Weg' }] }] } });
+    const tiptap = editorRef.current!;
+    act(() => void tiptap.commands.setTextSelection(2));
+    pasteFiles(editor, [png()]);
+    // the paragraph with the placeholder goes
+    act(() => void tiptap.commands.setContent({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Neu' }] }] }));
+
+    await answer(FakeXhr.last, picture);
+    expect(nodesOf(lastDoc(), 'image')).toEqual([]);
+    expect(lastDoc()).toEqual({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Neu' }] }] });
+
+    pasteFiles(editor, [png()]);
+    const calls = onChange.mock.calls.length;
+    act(() => tiptap.destroy());
+    await answer(FakeXhr.last, picture);
+    expect(onChange.mock.calls.length).toBe(calls);
   });
 
   it('deletes no upload whose node left the text (ruling T17-I4)', async () => {
@@ -284,10 +333,17 @@ describe('uploads in the editor', () => {
       </QueryClientProvider>,
     );
     const editor = screen.getByRole('textbox', { name: 'Kommentar' });
+    // jsdom has no layout: the drop lands at the start (Tiptap hangs itself on its element)
+    (editor as unknown as { editor: Editor }).editor.view.posAtCoords = () => ({ pos: 1, inside: -1 });
     pasteFiles(editor, [png()]);
     fireEvent.drop(editor, { clientX: 1, clientY: 1, dataTransfer: { types: ['Files'], files: [png()], getData: () => '' } });
     expect(FakeXhr.all).toEqual([]);
     expect(screen.queryByRole('progressbar')).toBeNull();
+    // and says why (F20), for the paste and for the drop
+    expect(currentToasts().map((toast) => toast.title)).toEqual([
+      'Hier lassen sich keine Dateien hochladen: Der Text gehört zu keinem Projekt.',
+      'Hier lassen sich keine Dateien hochladen: Der Text gehört zu keinem Projekt.',
+    ]);
   });
 
   it('chooses files over the / menu', async () => {
@@ -313,8 +369,8 @@ describe('uploads in the editor', () => {
     await answer(FakeXhr.last, offer);
     expect(nodesOf(lastDoc(), 'attachment')).toHaveLength(1);
 
-    // closing the choice without a file leaves nothing behind
-    await user.keyboard('/bild{Enter}');
+    // closing the choice without a file leaves nothing behind (after a blank: right after the chip / is text, F22)
+    await user.keyboard(' /bild{Enter}');
     expect(chosen[1].isConnected).toBe(true);
     fireEvent(chosen[1], new Event('cancel'));
     expect(chosen[1].isConnected).toBe(false);

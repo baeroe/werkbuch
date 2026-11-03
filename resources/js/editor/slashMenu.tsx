@@ -1,10 +1,12 @@
 /*
- * The `/` menu (spec 4.16): typed at the start of a line or after a space (not in code), it lists the blocks the
+ * The `/` menu (spec 4.16): typed at the start of a line or after a space (not in code, not right after a mark or an
+ * atom, `slashAllowed`), it lists the blocks the
  * editor's level knows (presets.ts); typing narrows the list, Enter turns the line into the block. Each entry shows its
  * Markdown shortcut, which works while typing as well. Tables only on `page` (`slashTable`), the rule only on `page`;
  * "Bild oder Datei" opens the file choice (Task 17) and is there only with a project and a way to upload.
  */
 
+import type { ResolvedPos } from '@tiptap/pm/model';
 import { PluginKey } from '@tiptap/pm/state';
 import { Extension, type Editor, type Range } from '@tiptap/react';
 import Suggestion from '@tiptap/suggestion';
@@ -148,6 +150,18 @@ function SlashSuggestions({ suggestion, preset, env, ref }: PopupProps<{ preset:
 
 const slashKey = new PluginKey('slashMenu');
 
+/**
+ * Whether a `/` at this place opens the menu: at the start of a line (also after a line break) or after a blank, never
+ * in code (a path, a comment) and never right after the text of a mark or an atom (a bold „und“ before „/oder“,
+ * `@mara/`), where Tiptap would see the start of a text node (F22).
+ */
+export function slashAllowed($at: ResolvedPos): boolean {
+  if ($at.parent.type.spec.code) return false;
+  const before = $at.nodeBefore;
+  if (before === null || before.type.name === 'hardBreak') return true;
+  return before.isText && /\s$/.test(before.text ?? '');
+}
+
 /** The `/` menu of an editor level; the environment comes in by closure (EditorEnv.tsx). */
 export function slashMenu(preset: EditorPreset, env: EditorEnvRef) {
   return Extension.create({
@@ -161,8 +175,7 @@ export function slashMenu(preset: EditorPreset, env: EditorEnvRef) {
           pluginKey: slashKey,
           char: '/',
           items: () => [],
-          // a slash in code is code (a path, a comment)
-          allow: ({ state, range }) => !state.doc.resolve(range.from).parent.type.spec.code,
+          allow: ({ state, range }) => slashAllowed(state.doc.resolve(range.from)),
           command: ({ editor, range, props }: { editor: Editor; range: Range; props: SlashItem }) => {
             editor.chain().focus().deleteRange(range).run();
             props.run(editor, env.current);

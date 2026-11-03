@@ -5,10 +5,19 @@ import { describe, expect, it, vi } from 'vitest';
 import { slashItemsFor } from './slashMenu';
 import { SuggestionMenu, type SuggestionHandle, type SuggestionSection } from './suggestions';
 
-/** What the list touches of the editor: its element, which names the list and the active entry. */
+/** What the list touches of the editor: its element, which names the list and the active entry, and its live region. */
 function fakeEditor() {
-  return { view: { dom: document.createElement('div') } } as unknown as Pick<Editor, 'view'>;
+  const frame = document.createElement('div');
+  frame.className = 'rt-editor';
+  const dom = document.createElement('div');
+  const region = document.createElement('div');
+  region.setAttribute('data-editor-announcer', '');
+  frame.append(dom, region);
+  return { view: { dom } } as unknown as Pick<Editor, 'view'>;
 }
+
+/** What the editor's live region says now. */
+const said = (editor: Pick<Editor, 'view'>) => editor.view.dom.parentElement!.querySelector('[data-editor-announcer]')!.textContent;
 
 const key = (name: string) => new KeyboardEvent('keydown', { key: name });
 
@@ -32,10 +41,12 @@ describe('SuggestionMenu', () => {
     expect(dom.getAttribute('aria-autocomplete')).toBe('list');
     expect(active()).toBe('Mara');
     expect(dom.getAttribute('aria-activedescendant')).toBe(screen.getByRole('option', { name: 'Mara' }).id);
-    expect(screen.queryByRole('status')).toBeNull();
+    // the editor keeps its role: the live region says how many entries there are and which is active (F21)
+    expect(said(editor)).toBe('3 Einträge, Mara');
 
     act(() => void expect(ref.current!.onKeyDown(key('ArrowDown'))).toBe(true));
     expect(active()).toBe('Ida');
+    expect(said(editor)).toBe('Ida');
     expect(dom.getAttribute('aria-activedescendant')).toBe(screen.getByRole('option', { name: 'Ida' }).id);
     act(() => void ref.current!.onKeyDown(key('ArrowUp')));
     act(() => void ref.current!.onKeyDown(key('ArrowUp')));
@@ -73,7 +84,8 @@ describe('SuggestionMenu', () => {
       ['true', 'false'],
     ]);
     expect(editor.view.dom.hasAttribute('aria-activedescendant')).toBe(false);
-    expect(screen.getByRole('status').textContent).toBe('Sucht …');
+    expect(screen.getByText('Sucht …')).toBeTruthy();
+    expect(said(editor)).toBe('Sucht …');
 
     // used up, nothing taken, no line break; the arrows and other keys stay the editor's
     expect(ref.current!.onKeyDown(key('Enter'))).toBe(true);
@@ -87,7 +99,8 @@ describe('SuggestionMenu', () => {
 
     // the answer came: the entries are there to take
     rerender(<SuggestionMenu ref={ref} editor={editor} label="Items" sections={[{ entries: list }]} status="" />);
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByText('Sucht …')).toBeNull();
+    expect(said(editor)).toBe('2 Einträge, WEB-4');
     expect(ref.current!.onKeyDown(key('Enter'))).toBe(true);
     expect(picked).toEqual(['WEB-4']);
   });
@@ -132,7 +145,8 @@ describe('SuggestionMenu', () => {
     const editor = fakeEditor();
     const ref = createRef<SuggestionHandle>();
     const { unmount } = render(<SuggestionMenu ref={ref} editor={editor} label="Personen" sections={[{ entries: [] }]} status="Niemand heißt „zz“." />);
-    expect(screen.getByRole('status').textContent).toBe('Niemand heißt „zz“.');
+    expect(screen.getByText('Niemand heißt „zz“.')).toBeTruthy();
+    expect(said(editor)).toBe('Niemand heißt „zz“.');
     expect(editor.view.dom.hasAttribute('aria-activedescendant')).toBe(false);
     for (const name of ['ArrowDown', 'Enter', 'Tab']) expect(ref.current!.onKeyDown(key(name))).toBe(false);
 

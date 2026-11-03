@@ -30,8 +30,8 @@
  *
  * Tables and code highlighting come as chunks of their own (`preloadEditor`); an editor that renders before they
  * arrived waits once (a comment never waits for the tables, it has none). A chunk that failed to load is asked for
- * again the next time an editor renders: the editor says it did not load and offers to try again. Tests call
- * `await preloadEditor()` first. `RichTextView` (RichTextView.tsx) shows a document read-only with the same nodes.
+ * again the next time an editor renders: the editor says it did not load and offers to try again; any other error of
+ * the editor goes on to the page's error boundary. Tests call `await preloadEditor()` first. `RichTextView` (RichTextView.tsx) shows a document read-only with the same nodes.
  */
 
 import { QueryClientContext } from '@tanstack/react-query';
@@ -136,6 +136,14 @@ const holdsNothing = (doc: RichText) => doc.content?.length === 1 && doc.content
 
 /* ----------------------------------------------------------------------- extensions */
 
+/** A chunk of the editor that did not load: the one error LateBoundary takes on (F23). */
+export class LateChunkError extends Error {
+  constructor(cause: unknown) {
+    super('A chunk of the editor did not load.', { cause });
+    this.name = 'LateChunkError';
+  }
+}
+
 /**
  * A chunk asked for once and kept. One that failed is not kept: the next call asks for it again (an editor rendered
  * after "Erneut versuchen"), instead of every editor failing with the same rejected promise until the page reloads.
@@ -152,7 +160,7 @@ function lateChunk<T>(load: () => Promise<T>): () => Promise<T> {
         },
         (reason: unknown) => {
           loading = null;
-          throw reason;
+          throw new LateChunkError(reason);
         },
       );
       loading = current;
@@ -247,22 +255,30 @@ export function useLevel(preset: EditorPreset, env: EditorEnvRef, placeholder: (
 }
 
 /**
- * Stands in for an editor or a view whose chunks failed to load: says so and tries again on request. Trying again
- * renders the editor anew, which asks for the chunk again (`lateChunk`).
+ * Stands in for an editor or a view whose chunks failed to load: says so, reports it and tries again on request. Trying
+ * again renders the editor anew, which asks for the chunk again (`lateChunk`). Any other error (a node view that
+ * breaks) is none of its business: it goes on to the error boundary of the page (F23).
  */
-export class LateBoundary extends Component<{ frame: (failed: ReactNode) => ReactNode; children: ReactNode }, { failed: boolean }> {
-  state = { failed: false };
+export class LateBoundary extends Component<{ frame: (failed: ReactNode) => ReactNode; children: ReactNode }, { error: unknown }> {
+  state: { error: unknown } = { error: null };
 
-  static getDerivedStateFromError() {
-    return { failed: true };
+  static getDerivedStateFromError(error: unknown) {
+    return { error };
+  }
+
+  componentDidCatch(error: unknown) {
+    if (error instanceof LateChunkError) console.error(error);
   }
 
   render() {
-    if (!this.state.failed) return this.props.children;
+    const { error } = this.state;
+    if (error === null) return this.props.children;
+    // thrown again from here, it reaches the next boundary up
+    if (!(error instanceof LateChunkError)) throw error;
     return this.props.frame(
       <div role="alert" className="flex flex-wrap items-center gap-2 px-3 py-2 text-ui text-muted">
         {t('editor.failed')}
-        <Button variant="secondary" size="sm" onClick={() => this.setState({ failed: false })}>
+        <Button variant="secondary" size="sm" onClick={() => this.setState({ error: null })}>
           {t('common.retry')}
         </Button>
       </div>,
@@ -437,8 +453,11 @@ function EditorBody({ value, onChange, preset, projectId, label, placeholder, au
   useEffect(() => {
     // an editor behind a Suspense boundary that hid and showed again was replaced; the next render brings the new one
     if (editor.isDestroyed) return;
+    const changed = editor.isEditable === readOnly;
     // sets the props again, so the attributes above are read anew
     editor.setEditable(!readOnly, false);
+    // a node view that reads the editable flag (a reference: a link while reading) hears of it through a transaction
+    if (changed) editor.view.dispatch(editor.state.tr.setMeta('editable', !readOnly));
   }, [editor, name, hint, describedBy, invalid, readOnly]);
 
   // a document from outside (reload, reset) replaces what the editor shows; its own output changes nothing
@@ -450,6 +469,8 @@ function EditorBody({ value, onChange, preset, projectId, label, placeholder, au
   return (
     <div className={cx('rt rt-editor', framed && 'rt-frame')} data-preset={preset} data-invalid={invalid || undefined}>
       <EditorContent editor={editor} />
+      {/* the editor's live region, empty when it mounts: uploads and the lists write into it (announcer.ts) */}
+      <div aria-live="polite" aria-atomic="true" className="sr-only" data-editor-announcer="" />
     </div>
   );
 }

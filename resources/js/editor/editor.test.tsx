@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Editor } from '@tiptap/react';
-import { createRef, useState, type ReactNode } from 'react';
+import { Component, createRef, useState, type ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import schemaPhp from '/app/RichText/Schema.php?raw';
 import { Dialog } from '@/components/ui/Dialog';
@@ -12,7 +12,7 @@ import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import { ida, list, mara, person, searchResults, types, web47 } from '@/test/fixtures';
 import type { RichText, User } from '@/types';
 import { PRESETS, type EditorPreset } from './presets';
-import { EMPTY_DOC, isEmptyDoc, preloadEditor, RichTextEditor } from './RichTextEditor';
+import { EMPTY_DOC, isEmptyDoc, LateBoundary, LateChunkError, preloadEditor, RichTextEditor } from './RichTextEditor';
 import { RichTextView } from './RichTextView';
 
 // jsdom has no layout: ProseMirror measures the selection to scroll it into view
@@ -630,7 +630,9 @@ describe('the menus of the editor', () => {
     const editor = screen.getByRole('textbox');
     await user.click(editor);
     await user.keyboard('/gibtsnicht');
-    expect((await screen.findByRole('status')).textContent).toBe('Kein Block heißt „gibtsnicht“.');
+    expect(await screen.findByText('Kein Block heißt „gibtsnicht“.', { selector: 'p' })).toBeTruthy();
+    // said through the editor's live region, which was there before the list opened (F21)
+    expect(document.querySelector('[data-editor-announcer]')!.textContent).toBe('Kein Block heißt „gibtsnicht“.');
     expect(editor.getAttribute('aria-activedescendant')).toBeNull();
     // with nothing to take, Enter is the editor's again
     await user.keyboard('{Enter}');
@@ -699,13 +701,13 @@ describe('the menus of the editor', () => {
     const { release } = holdAnswers();
     await user.click(editor);
     await user.keyboard('@');
-    expect(await screen.findByText('Sucht …')).toBeTruthy();
+    expect(await screen.findByText('Sucht …', { selector: 'p' })).toBeTruthy();
     release();
     await user.keyboard('zz');
-    expect(await screen.findByText('Niemand im Projekt heißt „zz“.')).toBeTruthy();
+    expect(await screen.findByText('Niemand im Projekt heißt „zz“.', { selector: 'p' })).toBeTruthy();
     fail = true;
     await user.keyboard('x');
-    expect(await screen.findByText('Die Personen ließen sich nicht laden.')).toBeTruthy();
+    expect(await screen.findByText('Die Personen ließen sich nicht laden.', { selector: 'p' })).toBeTruthy();
   });
 
   it('shows the current handle of a renamed account', async () => {
@@ -731,7 +733,7 @@ describe('the menus of the editor', () => {
 
     // nothing typed yet: a hint, no search
     const items = await screen.findByRole('listbox', { name: 'Items' });
-    expect(screen.getByRole('status').textContent).toBe('Key oder Titel eingeben, zum Beispiel WEB-42.');
+    expect(screen.getByText('Key oder Titel eingeben, zum Beispiel WEB-42.', { selector: 'p' })).toBeTruthy();
     expect(api!.calls.filter((call) => call.url.startsWith('/api/v1/search'))).toEqual([]);
 
     await user.keyboard('WEB');
@@ -771,7 +773,7 @@ describe('the menus of the editor', () => {
     expect(old.getAttribute('aria-disabled')).toBe('true');
     expect(old.getAttribute('aria-selected')).toBe('false');
     expect(editor.getAttribute('aria-activedescendant')).toBeNull();
-    expect(within(screen.getByRole('listbox', { name: 'Items' }).parentElement!).getByRole('status').textContent).toBe('Sucht …');
+    expect(within(screen.getByRole('listbox', { name: 'Items' }).parentElement!).getByText('Sucht …')).toBeTruthy();
     const before = lastDoc(onChange);
     // Enter, Tab and a click take nothing and add no line break
     await user.keyboard('{Enter}{Tab}');
@@ -844,11 +846,11 @@ describe('the menus of the editor', () => {
     const editor = screen.getByRole('textbox', { name: 'Kommentar' });
     await user.click(editor);
     await user.keyboard('#zz');
-    expect(await screen.findByText('Sucht …')).toBeTruthy();
-    expect(await screen.findByText('Kein Item zu „zz“.')).toBeTruthy();
+    expect(await screen.findByText('Sucht …', { selector: 'p' })).toBeTruthy();
+    expect(await screen.findByText('Kein Item zu „zz“.', { selector: 'p' })).toBeTruthy();
     fail = true;
     await user.keyboard('x');
-    expect(await screen.findByText('Die Suche antwortet gerade nicht.')).toBeTruthy();
+    expect(await screen.findByText('Die Suche antwortet gerade nicht.', { selector: 'p' })).toBeTruthy();
   });
 
   it('shows a hidden reference as hidden', async () => {
@@ -869,6 +871,48 @@ describe('the menus of the editor', () => {
     expect(asked).toHaveLength(1);
     expect(new URL(asked[0].url, 'https://werkbuch.test').searchParams.get('items')?.split(',').sort()).toEqual(['wi_hidden', 'wi_web_47']);
     client.clear();
+  });
+
+  it('turns a reference into a link as soon as the editor becomes read-only (F22)', async () => {
+    const value = paragraph(reference('wi_web_47'));
+    const routes = {
+      'GET /api/v1/references': () => ({ body: { data: { items: [web47] } } }),
+      'GET /api/v1/work-item-types': () => ({ body: list(types) }),
+    };
+    const { rerender, client } = renderWithData(<RichTextEditor value={value} onChange={vi.fn()} preset="comment" projectId="p_web" />, routes);
+    await waitFor(() => expect(document.querySelector('span.rt-ref')?.textContent).toBe('WEB-47 Kontaktformular sendet doppelt'));
+    expect(screen.queryByRole('link')).toBeNull();
+
+    rerender(
+      <QueryClientProvider client={client}>
+        <RichTextEditor value={value} onChange={vi.fn()} preset="comment" projectId="p_web" readOnly />
+      </QueryClientProvider>,
+    );
+    expect((await screen.findByRole('link', { name: 'WEB-47 Kontaktformular sendet doppelt' })).getAttribute('href')).toBe('/items/WEB-47');
+  });
+
+  it('opens the / menu only at the start of a line or after a blank, never right after a mark or a mention (F22)', async () => {
+    const user = userEvent.setup();
+    const editorRef = createRef<Editor | null>();
+    renderWithData(<RichTextEditor value={null} onChange={vi.fn()} preset="comment" projectId="p_web" editorRef={editorRef} />, {
+      'GET /api/v1/mentions': () => ({ body: { data: [] } }),
+    });
+    const tiptap = editorRef.current!;
+    await user.click(screen.getByRole('textbox'));
+    /** Types a plain / after the content, the way a person does once the bold is switched off. */
+    const typeSlashAfter = async (content: RichText[]) => {
+      act(() => void tiptap.chain().setContent({ type: 'doc', content: [{ type: 'paragraph', content }] }).focus('end').unsetMark('bold').run());
+      await user.keyboard('/');
+      const open = screen.queryByRole('listbox', { name: 'Blöcke' }) !== null;
+      await user.keyboard('{Escape}');
+      return open;
+    };
+
+    expect(await typeSlashAfter([{ type: 'text', marks: [{ type: 'bold' }], text: 'und' }])).toBe(false);
+    expect(await typeSlashAfter([mention('u_mara', 'mara')])).toBe(false);
+    expect(await typeSlashAfter([{ type: 'text', marks: [{ type: 'bold' }], text: 'und ' }])).toBe(true);
+    expect(await typeSlashAfter([{ type: 'text', text: 'Zeile' }, { type: 'hardBreak' }])).toBe(true);
+    expect(await typeSlashAfter([])).toBe(true);
   });
 
   it('says a reference did not load when the server fails', async () => {
@@ -962,6 +1006,48 @@ describe('the menus of the editor', () => {
     );
     // the table goes, the mention stays in a paragraph
     await waitFor(() => expect(screen.getByRole('textbox').querySelector('p .rt-mention')?.textContent).toBe('@mara'));
+  });
+});
+
+describe('LateBoundary', () => {
+  /** An outer boundary like the page's: shows what it caught. */
+  class Outer extends Component<{ children: ReactNode }, { caught: string | null }> {
+    state = { caught: null as string | null };
+    static getDerivedStateFromError(error: Error) {
+      return { caught: error.message };
+    }
+    render() {
+      return this.state.caught === null ? this.props.children : <p>Seite: {this.state.caught}</p>;
+    }
+  }
+  const Throwing = ({ error }: { error: Error }): ReactNode => {
+    throw error;
+  };
+
+  it('takes on a chunk that did not load and leaves every other error to the page (F23)', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const frame = (inside: ReactNode) => <div>{inside}</div>;
+    const { unmount } = render(
+      <Outer>
+        <LateBoundary frame={frame}>
+          <Throwing error={new Error('Knotenansicht kaputt')} />
+        </LateBoundary>
+      </Outer>,
+    );
+    expect(screen.getByText('Seite: Knotenansicht kaputt')).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
+    unmount();
+
+    render(
+      <Outer>
+        <LateBoundary frame={frame}>
+          <Throwing error={new LateChunkError(new Error('offline'))} />
+        </LateBoundary>
+      </Outer>,
+    );
+    expect(screen.getByRole('alert').textContent).toBe('Der Editor ließ sich nicht laden.Erneut versuchen');
+    // reported, not swallowed
+    expect(console.error).toHaveBeenCalledWith(expect.any(LateChunkError));
   });
 });
 

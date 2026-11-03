@@ -8,6 +8,10 @@
  * closing anything else: the suggestion plugin uses up the key, and the editor stops it there, so no dialog, popup or
  * preview around the editor sees it (RichTextEditor, `handleDOMEvents`).
  *
+ * The text field keeps its role (a combobox role would make a many-line editor a single-line field): what the list
+ * offers goes to the editor's live region instead (announcer.ts): how many entries and the active one when the list
+ * opens or changes, the active one on every arrow, and what the list says without entries (F21).
+ *
  * A list whose entries do not belong to what is typed now (`stale`: the answer to the new query is still on its way)
  * shows them greyed out, offers none of them and keeps Enter and Tab to itself: a quick "#WEB-47" + Enter never takes
  * the hit of "WEB-4" (T16-I1).
@@ -19,6 +23,8 @@ import { useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { ReactRenderer, type Editor } from '@tiptap/react';
 import type { SuggestionKeyDownProps, SuggestionProps } from '@tiptap/suggestion';
 import { useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState, type ComponentType, type ReactNode, type Ref } from 'react';
+import { tn } from '@/lib/i18n';
+import { announce } from './announcer';
 import type { EditorEnvRef } from './EditorEnv';
 
 export interface SuggestionEntry {
@@ -102,6 +108,20 @@ export function SuggestionMenu({ editor, label, sections, status, stale = false,
     listRef.current?.querySelector(`[data-index="${index}"]`)?.scrollIntoView?.({ block: 'nearest' });
   }, [index]);
 
+  // what a screen reader hears of the list: new entries with their number, then each active one, or the list's status
+  const said = useRef<string | null>(null);
+  useEffect(() => {
+    const dom = editor.view.dom;
+    if (entries.length === 0 || stale) {
+      said.current = null;
+      announce(dom, status);
+      return;
+    }
+    const active = listRef.current?.querySelector(`[data-index="${index}"]`)?.textContent ?? '';
+    announce(dom, said.current === signature ? active : tn('editor.suggest.count', entries.length, { active }));
+    said.current = signature;
+  }, [editor, entries.length, index, signature, stale, status]);
+
   let position = 0;
   const option = (entry: SuggestionEntry) => {
     const at = position++;
@@ -145,7 +165,8 @@ export function SuggestionMenu({ editor, label, sections, status, stale = false,
         )}
       </div>
       {(entries.length === 0 || stale) && (
-        <p role="status" className="px-3 pb-2.5 text-ui text-pretty text-muted">
+        // said through the editor's live region (above): a status mounted with its text is often not read
+        <p className="px-3 pb-2.5 text-ui text-pretty text-muted">
           {status}
         </p>
       )}
