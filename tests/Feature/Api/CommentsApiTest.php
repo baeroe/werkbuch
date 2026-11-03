@@ -118,3 +118,23 @@ it('redirects the comments of a former key with 301 and writes through it withou
         ->assertHeader('Location', url('/api/v1/work-items/NEW-1/comments').'?per_page=5');
     $this->actingAs($lene)->postJson('/api/v1/work-items/WEB-1/comments', ['body' => 'Alt'])->assertCreated();
 });
+
+it('adds and takes back a reaction over REST, each repeatable, with emoji in the body or the query (T10-M2)', function () use ($world) {
+    [, $mara, $lene, $item] = $world();
+    $comment = $this->actingAs($mara)->postJson("/api/v1/work-items/{$item->key}/comments", ['body' => 'Text.'])->json('data.id');
+
+    foreach ([1, 2] as $time) {
+        $this->actingAs($lene)->putJson("/api/v1/comments/{$comment}/reactions", ['emoji' => '👍'])->assertOk()
+            ->assertJsonPath('data.id', $comment)
+            ->assertJsonPath('data.reactions', [['emoji' => '👍', 'user_ids' => [$lene->id]]]);
+    }
+    // the body, as documented
+    $this->actingAs($lene)->deleteJson("/api/v1/comments/{$comment}/reactions", ['emoji' => '👍'])->assertOk()
+        ->assertJsonPath('data.reactions', []);
+    $this->actingAs($lene)->deleteJson("/api/v1/comments/{$comment}/reactions", ['emoji' => '👍'])->assertOk()
+        ->assertJsonPath('data.reactions', []);
+    // the query, as the browser sends it
+    $this->actingAs($lene)->putJson("/api/v1/comments/{$comment}/reactions", ['emoji' => '🎉'])->assertOk();
+    $this->actingAs($lene)->deleteJson("/api/v1/comments/{$comment}/reactions?emoji=".rawurlencode('🎉'))->assertOk()
+        ->assertJsonPath('data.reactions', []);
+});

@@ -62,7 +62,7 @@ final class CommentsController extends Controller
         return new CommentResource(AddReaction::run(Actor::fromRequest($request), $comment, $request->all()));
     }
 
-    /** `emoji` in the body: takes back the own one, 200 `{data: Comment}`. */
+    /** `emoji` in the body or the query (the browser): takes back the own one, 200 `{data: Comment}`. */
     public function unreact(Request $request, Comment $comment): CommentResource
     {
         return new CommentResource(RemoveReaction::run(Actor::fromRequest($request), $comment, $request->all()));

@@ -98,7 +98,7 @@ Lesen braucht ein Token mit `read`, Schreiben eins mit `write`. Ein Kommentar od
 | `GET /api/v1/work-items/{item}/comments` | Die Kommentare des Items, älteste zuerst, mit `cursor` und `per_page`. |
 | `POST /api/v1/work-items/{item}/comments` | `201` mit dem Kommentar; `body` (Markdown) oder `body_json`. |
 | `GET`, `PATCH`, `DELETE /api/v1/comments/{id}` | Der Kommentar; den eigenen ändern; den eigenen löschen (Projekt-Admins und Org-Admins löschen jeden, `204`). |
-| `PUT`, `DELETE /api/v1/comments/{id}/reactions` | Eigene Reaktion hinzufügen oder zurücknehmen, `{"emoji": "👍"}`; beides lässt sich wiederholen und antwortet mit dem Kommentar. |
+| `PUT`, `DELETE /api/v1/comments/{id}/reactions` | Eigene Reaktion hinzufügen oder zurücknehmen, `{"emoji": "👍"}` (bei `DELETE` im Body oder als `?emoji=`); beides lässt sich wiederholen und antwortet mit dem Kommentar. |
 | `POST /api/v1/attachments` | Hochladen (Multipart): `project_id`, `kind` (`inline` für Texte, `file` für die Dateiliste mit `work_item_id`), `file`. `201`. |
 | `GET`, `DELETE /api/v1/attachments/{id}` | Die Daten eines Anhangs; ihn löschen (`204`). |
 | `GET /attachments/{id}` | Die Datei selbst; `?download=1` immer als Download, `/attachments/{id}/preview` die Vorschau. |

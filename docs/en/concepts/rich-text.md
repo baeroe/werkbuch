@@ -98,7 +98,7 @@ Reading needs a token with `read`, writing one with `write`. A comment or attach
 | `GET /api/v1/work-items/{item}/comments` | The comments of the item, oldest first, with `cursor` and `per_page`. |
 | `POST /api/v1/work-items/{item}/comments` | `201` with the comment; `body` (Markdown) or `body_json`. |
 | `GET`, `PATCH`, `DELETE /api/v1/comments/{id}` | The comment; change your own; delete your own (project admins and org admins delete any, `204`). |
-| `PUT`, `DELETE /api/v1/comments/{id}/reactions` | Add or take back your reaction, `{"emoji": "👍"}`; both can be repeated and answer with the comment. |
+| `PUT`, `DELETE /api/v1/comments/{id}/reactions` | Add or take back your reaction, `{"emoji": "👍"}` (for `DELETE` in the body or as `?emoji=`); both can be repeated and answer with the comment. |
 | `POST /api/v1/attachments` | Upload (multipart): `project_id`, `kind` (`inline` for texts, `file` for the file list with `work_item_id`), `file`. `201`. |
 | `GET`, `DELETE /api/v1/attachments/{id}` | The data of an attachment; delete it (`204`). |
 | `GET /attachments/{id}` | The file itself; `?download=1` always as a download, `/attachments/{id}/preview` the preview. |

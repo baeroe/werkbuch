@@ -123,10 +123,12 @@ it('refuses an archived item and an archived project with 409', function () use 
     $w['item']->forceFill(['archived_at' => null])->save();
     $w['web']->update(['archived_at' => now()]);
     $project = problemOf(fn () => $add($w['lene'], $w['comment'], '👍'));
+    $projectRemove = problemOf(fn () => $remove($w['jonas'], $w['comment'], '👍'));
 
     expect($item->getStatusCode())->toBe(409)->and($item->reason)->toBe('archived')
-        ->and($itemRemove->getStatusCode())->toBe(409)
+        ->and($itemRemove->getStatusCode())->toBe(409)->and($itemRemove->reason)->toBe('archived')
         ->and($project->getStatusCode())->toBe(409)->and($project->reason)->toBe('project_archived')
+        ->and($projectRemove->getStatusCode())->toBe(409)->and($projectRemove->reason)->toBe('project_archived')
         ->and(CommentReaction::query()->count())->toBe(1);
 });
 
