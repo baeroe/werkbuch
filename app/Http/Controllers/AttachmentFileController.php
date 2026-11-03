@@ -33,7 +33,7 @@ final class AttachmentFileController extends Controller
     {
         $media = ShowAttachment::run(Actor::fromRequest($request), $attachment, $preview);
         $path = $media->getPath($preview ? 'preview' : '');
-        // a preview has the format of the stored name, which need not be the type of the original (a PNG named `.jpg`)
+        // a preview has the format of the stored name: the content's for pictures, files stored earlier may differ
         $type = $preview ? (new finfo(FILEINFO_MIME_TYPE))->file($path) : $attachment->mime;
         $inline = $attachment->isInlineImage() && ! $request->boolean('download');
         $name = "filename*=UTF-8''".rawurlencode($attachment->filename);

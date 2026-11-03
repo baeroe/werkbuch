@@ -95,7 +95,7 @@ final class UploadAttachment
                 ->preservingOriginal()
                 // the name the client sent is the row's business (cleaned); medialibrary keeps the id
                 ->usingName($attachment->id)
-                ->usingFileName($attachment->id.'.'.self::extension($filename))
+                ->usingFileName($attachment->id.'.'.self::storedExtension($filename, $mime))
                 ->toMediaCollection('file');
             // the file is there before the commit: a rollback takes it away with its rows
             DB::afterRollBack(fn () => app(Filesystem::class)->removeAllFiles($media));
@@ -180,12 +180,20 @@ final class UploadAttachment
         return $name === '' ? self::FALLBACK_NAME : $name;
     }
 
+    /** The extension of a stored picture of INLINE_TYPES, from its content. */
+    private const PICTURE_EXTENSIONS = ['image/png' => 'png', 'image/jpeg' => 'jpg', 'image/gif' => 'gif', 'image/webp' => 'webp', 'image/avif' => 'avif'];
+
     /**
-     * The extension of the stored file: the name's, when it is short, plain and none medialibrary refuses (a `.php`
-     * stays a `.php` for the reader, on the disk it is a `.bin`); the disk is private, nothing there runs.
+     * The extension of the stored file. A picture of INLINE_TYPES takes the one of its content (`$mime`, read from the
+     * bytes): medialibrary writes the preview in the format of the stored name, so a PNG named `scan.jpg` keeps its
+     * transparency (T7-M1). Any other file takes the name's, when it is short, plain and none medialibrary refuses (a
+     * `.php` stays a `.php` for the reader, on the disk it is a `.bin`); the disk is private, nothing there runs.
      */
-    private static function extension(string $filename): string
+    public static function storedExtension(string $filename, string $mime): string
     {
+        if (isset(self::PICTURE_EXTENSIONS[$mime])) {
+            return self::PICTURE_EXTENSIONS[$mime];
+        }
         $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
         $refused = (array) config('media-library.disallowed_extensions');
 

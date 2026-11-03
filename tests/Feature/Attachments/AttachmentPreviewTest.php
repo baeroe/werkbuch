@@ -99,20 +99,22 @@ it('makes a preview of a JPEG and a WebP, never larger than 1600 pixels and neve
     'a small JPEG' => ['jpeg', 'klein.jpeg', 640, 480, [0 => 640, 1 => 480]],
 ]);
 
-it('serves a preview as the type it was made in, not as the type of the original', function () use ($picture, $upload) {
+it('makes the preview in the format of the content, whatever the name says (T7-M1)', function () use ($picture, $upload) {
     $project = Project::factory()->create();
     $mara = memberOf($project, ProjectRole::Member);
-    // a PNG named like a JPEG: medialibrary writes the preview in the format of the stored name
+    // a PNG named like a JPEG, and one without an extension: both keep their transparency in the preview
     $named = $upload($mara, $project, 'scan.jpg', $picture('png', 1700, 100));
-    // a PNG without a name medialibrary knows (stored as .bin): the preview becomes a JPEG
     $plain = $upload($mara, $project, 'scan', $picture('png', 1700, 100));
+    // a JPEG named like a PNG
+    $jpeg = $upload($mara, $project, 'foto.png', $picture('jpeg', 1700, 100));
 
-    foreach ([$named, $plain] as $attachment) {
-        $response = $this->actingAs($mara)->get("/attachments/{$attachment->id}/preview")->assertOk()->assertHeader('Content-Type', 'image/jpeg');
-        expect((new finfo(FILEINFO_MIME_TYPE))->file($response->baseResponse->getFile()->getPathname()))->toBe('image/jpeg');
-        // the original is still a PNG and served as one
-        $this->actingAs($mara)->get("/attachments/{$attachment->id}")->assertOk()->assertHeader('Content-Type', 'image/png');
+    foreach ([[$named, 'image/png'], [$plain, 'image/png'], [$jpeg, 'image/jpeg']] as [$attachment, $type]) {
+        $response = $this->actingAs($mara)->get("/attachments/{$attachment->id}/preview")->assertOk()->assertHeader('Content-Type', $type);
+        expect((new finfo(FILEINFO_MIME_TYPE))->file($response->baseResponse->getFile()->getPathname()))->toBe($type);
+        $this->actingAs($mara)->get("/attachments/{$attachment->id}")->assertOk()->assertHeader('Content-Type', $type);
     }
+    // the name the client sent stays the attachment's
+    expect($named->filename)->toBe('scan.jpg');
 });
 
 it('makes no preview of a GIF, an AVIF or a file that is no picture', function (string $name, string $format) use ($picture, $upload) {
