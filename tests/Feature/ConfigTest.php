@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Attachment;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
@@ -92,4 +93,16 @@ it('keeps the search settings', function () {
             'filterableAttributes' => ['disabled', 'type'],
             'typoTolerance' => ['disableOnAttributes' => ['handle']],
         ]);
+});
+
+it('takes the one default of the attachment limit in both configs (T6-M6)', function () {
+    setEnv('ATTACHMENTS_MAX_MB', null);
+
+    expect((require base_path('config/werkbuch.php'))['attachments_max_mb'])->toBe(Attachment::DEFAULT_MAX_MB)
+        ->and((require base_path('config/media-library.php'))['max_file_size'])->toBe(Attachment::DEFAULT_MAX_MB * 1024 * 1024);
+
+    setEnv('ATTACHMENTS_MAX_MB', '40');
+
+    expect((require base_path('config/werkbuch.php'))['attachments_max_mb'])->toBe(40)
+        ->and((require base_path('config/media-library.php'))['max_file_size'])->toBe(40 * 1024 * 1024);
 });

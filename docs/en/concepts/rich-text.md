@@ -185,7 +185,7 @@ A file over the limit, also when PHP has dropped it before werkbuch sees it:
   "type": "urn:werkbuch:problem:payload_too_large",
   "title": "Payload too large",
   "status": 413,
-  "detail": "Files can be at most 25 MB.",
+  "detail": "Uploads can be at most 25 MB.",
   "reason": "payload_too_large"
 }
 ```

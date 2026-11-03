@@ -1239,7 +1239,7 @@
     "problem.detail.not_archived": ":key ist nicht archiviert.",
     "problem.detail.not_closed": "Nur geschlossene Items (Completed oder Canceled) lassen sich archivieren.",
     "problem.detail.organization_admins_only": "Die Organisation ändern nur Org-Admins.",
-    "problem.detail.payload_too_large": "Dateien dürfen höchstens :max MB groß sein.",
+    "problem.detail.payload_too_large": "Uploads können höchstens :max MB groß sein.",
     "problem.detail.people_only": "Das gibt es nur für Personen; Bots melden sich nicht an.",
     "problem.detail.project_archive_admins": "Archivieren dürfen nur Admins des Projekts.",
     "problem.detail.project_archived": "Das Projekt ist archiviert und schreibgeschützt.",

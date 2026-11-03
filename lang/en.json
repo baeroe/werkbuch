@@ -1239,7 +1239,7 @@
     "problem.detail.not_archived": ":key is not archived.",
     "problem.detail.not_closed": "Only closed items (Completed or Canceled) can be archived.",
     "problem.detail.organization_admins_only": "Only org admins change the organization.",
-    "problem.detail.payload_too_large": "Files can be at most :max MB.",
+    "problem.detail.payload_too_large": "Uploads can be at most :max MB.",
     "problem.detail.people_only": "This is only for people; bots do not sign in.",
     "problem.detail.project_archive_admins": "Only admins of the project archive it.",
     "problem.detail.project_archived": "The project is archived and read-only.",

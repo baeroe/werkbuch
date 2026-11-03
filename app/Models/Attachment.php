@@ -56,6 +56,9 @@ final class Attachment extends Model implements HasMedia
     /** The longest side of a preview, in pixels. */
     public const PREVIEW_SIZE = 1600;
 
+    /** The limit of a file in MB without `ATTACHMENTS_MAX_MB` (both config/werkbuch.php and config/media-library.php). */
+    public const DEFAULT_MAX_MB = 25;
+
     /** The largest file in bytes (`ATTACHMENTS_MAX_MB`). */
     public static function maxBytes(): int
     {

@@ -185,7 +185,7 @@ Eine Datei über der Grenze, auch wenn PHP sie schon verworfen hat, bevor werkbu
   "type": "urn:werkbuch:problem:payload_too_large",
   "title": "Anfrage zu groß",
   "status": 413,
-  "detail": "Dateien dürfen höchstens 25 MB groß sein.",
+  "detail": "Uploads können höchstens 25 MB groß sein.",
   "reason": "payload_too_large"
 }
 ```
