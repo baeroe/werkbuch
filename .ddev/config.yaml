@@ -23,7 +23,7 @@ web_extra_exposed_ports:
 # each daemon waits until composer install and .env exist, so a fresh clone starts cleanly
 web_extra_daemons:
   - name: queue
-    command: bash -c 'until [ -f vendor/autoload.php ] && [ -f .env ]; do sleep 5; done; exec php artisan queue:listen --queue=default,notifications,webhooks,search,media,bulk --sleep=1 --tries=3'
+    command: bash -c 'until [ -f vendor/autoload.php ] && [ -f .env ]; do sleep 5; done; exec php artisan queue:listen --queue=default,live,notifications,webhooks,search,media,bulk --sleep=1 --tries=3'
     directory: /var/www/html
   - name: scheduler
     command: bash -c 'until [ -f vendor/autoload.php ] && [ -f .env ]; do sleep 5; done; exec php artisan schedule:work'

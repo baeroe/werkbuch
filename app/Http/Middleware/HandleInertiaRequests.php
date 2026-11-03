@@ -43,8 +43,13 @@ class HandleInertiaRequests extends Middleware
             'organization' => (new OrganizationResource(Organization::current()))->resolve($request),
             'features' => [
                 'mail' => MailSetup::configured(),
-                // the live connection (Reverb) is wired up in Phase 8
-                'live' => null,
+                // what the browser needs to open the WebSocket; null without Reverb (A285)
+                'live' => config('broadcasting.default') === 'reverb' ? [
+                    'key' => config('broadcasting.connections.reverb.key'),
+                    'host' => config('broadcasting.connections.reverb.options.host'),
+                    'port' => (int) config('broadcasting.connections.reverb.options.port'),
+                    'scheme' => config('broadcasting.connections.reverb.options.scheme'),
+                ] : null,
                 // the browser refuses a larger file before it sends it (F29)
                 'attachments_max_mb' => Attachment::maxMegabytes(),
             ],

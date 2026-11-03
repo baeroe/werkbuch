@@ -41,8 +41,10 @@ return [
                 'scheme' => env('REVERB_SCHEME', 'https'),
                 'useTLS' => env('REVERB_SCHEME', 'https') === 'https',
             ],
+            // a broadcast is a synchronous HTTP call: short timeouts, so a dead Reverb never holds a request or a job (K1)
             'client_options' => [
-                // Guzzle client options: https://docs.guzzlephp.org/en/stable/request-options.html
+                'connect_timeout' => 2,
+                'timeout' => 3,
             ],
         ],
 

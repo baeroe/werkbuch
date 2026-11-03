@@ -30,6 +30,9 @@ return [
     // (Tests\TestCase), where consumers() switches them on.
     'event_consumers' => [SearchConsumer::class],
 
+    // the queues in the order a worker takes them (`--queue=…` of the DDEV daemon, the CI and the Docker image; A278)
+    'queues' => ['default', 'live', 'notifications', 'webhooks', 'search', 'media', 'bulk'],
+
     // requests per minute
     'rate_limits' => [
         'api' => 600,

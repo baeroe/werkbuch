@@ -23,7 +23,7 @@ interface EventConsumer
     public function key(): string;
 
     /**
-     * The queue its jobs run in (`default`, `notifications`, `webhooks`, `search`, `media`, `bulk`).
+     * The queue its jobs run in (`default`, `live`, `notifications`, `webhooks`, `search`, `media`, `bulk`).
      */
     public function queue(): string;
 

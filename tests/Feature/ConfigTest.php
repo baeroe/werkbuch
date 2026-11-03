@@ -69,6 +69,21 @@ it('reads the environment', function () {
         ->and(config('werkbuch.webhooks_allow_private'))->toBeTrue();
 });
 
+it('lists the queues in the worker\'s order', function () {
+    expect(config('werkbuch.queues'))->toBe(['default', 'live', 'notifications', 'webhooks', 'search', 'media', 'bulk']);
+});
+
+it('lets Reverb take client events from nobody and only the host of APP_URL', function () {
+    $app = (require base_path('config/reverb.php'))['apps']['apps'][0];
+
+    expect($app['accept_client_events_from'])->toBe('none')
+        ->and($app['allowed_origins'])->toBe([parse_url((string) env('APP_URL'), PHP_URL_HOST) ?: 'localhost']);
+});
+
+it('gives the Reverb connection short timeouts, so a broadcast never hangs a request (K1)', function () {
+    expect(config('broadcasting.connections.reverb.client_options'))->toBe(['connect_timeout' => 2, 'timeout' => 3]);
+});
+
 it('keeps the search settings', function () {
     $index = fn (string $class): array => config('scout.meilisearch.index-settings')[$class];
 

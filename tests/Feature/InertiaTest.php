@@ -20,6 +20,23 @@ it('shares the page context with guests', function () {
         ->where('flash', ['status' => null, 'error' => null]));
 });
 
+it('shares the live settings when Reverb is the broadcaster', function () {
+    config([
+        'broadcasting.default' => 'reverb',
+        'broadcasting.connections.reverb.key' => 'live-key',
+        'broadcasting.connections.reverb.options' => ['host' => 'live.example.com', 'port' => '6001', 'scheme' => 'https'],
+    ]);
+
+    $this->get(inertiaProbe())->assertInertia(fn (Assert $page) => $page
+        ->where('features.live', ['key' => 'live-key', 'host' => 'live.example.com', 'port' => 6001, 'scheme' => 'https']));
+});
+
+it('shares no live settings for the log broadcaster', function () {
+    config(['broadcasting.default' => 'log']);
+
+    $this->get(inertiaProbe())->assertInertia(fn (Assert $page) => $page->where('features.live', null));
+});
+
 it('shares exactly the fields of the signed-in account', function () {
     $user = User::factory()->locale(Locale::De)->create();
     $this->actingAs($user)->get(inertiaProbe())->assertInertia(fn (Assert $page) => $page

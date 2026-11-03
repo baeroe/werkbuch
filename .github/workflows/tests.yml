@@ -214,11 +214,17 @@ jobs:
           PHP_CLI_SERVER_WORKERS=4 php artisan serve --host=127.0.0.1 --port=8000 > serve.log 2>&1 &
           curl -fsS --retry 30 --retry-delay 1 --retry-all-errors http://127.0.0.1:8000/up
 
+      # the WebSocket server of the live updates (the app broadcasts to it, the browser listens on it)
+      - name: Reverb
+        run: |
+          php artisan reverb:start --host=127.0.0.1 --port=8080 > reverb.log 2>&1 &
+          curl -fsS --retry 30 --retry-delay 1 --retry-all-errors http://127.0.0.1:8080/up
+
       # QUEUE_CONNECTION=database as in production: the worker runs the queued jobs (the reset mail goes out on the
       # queue `notifications`, the search consumer works in the queue `search`, previews of pictures are made in the
       # queue `media`, a deleted project is purged in the queue `bulk`) like the `queue` daemon of DDEV
       - name: Queue worker
-        run: php artisan queue:work --queue=default,notifications,search,media,bulk --sleep=1 --tries=3 > queue.log 2>&1 &
+        run: php artisan queue:work --queue=default,live,notifications,search,media,bulk --sleep=1 --tries=3 > queue.log 2>&1 &
 
       - name: Playwright
         run: |
@@ -249,6 +255,7 @@ jobs:
           path: |
             serve.log
             queue.log
+            reverb.log
             storage/logs
             e2e/test-results
           if-no-files-found: ignore

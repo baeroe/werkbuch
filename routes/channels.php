@@ -1,3 +1,3 @@
 <?php
 
-// Broadcast channels arrive in phase 8 (spec 7.2).
+// Broadcast channels arrive in Task 9 (spec 7.2).

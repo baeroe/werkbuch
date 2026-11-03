@@ -8,7 +8,7 @@ export interface SharedProps {
   organization: Organization;
   locale: Locale;
   translations: Record<string, string>;
-  features: { mail: boolean; live: null; attachments_max_mb: number };
+  features: { mail: boolean; live: { key: string; host: string; port: number; scheme: 'http' | 'https' } | null; attachments_max_mb: number };
   flash: { status: string | null; error: string | null };
   errors: Record<string, string>;
 }
