@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { allEntries, api, arrowTo, createE2eProject, createItem, pressMod, removeCatalogEntries, removeE2eProject, runId, tabTo, tr, variant } from '../helpers';
+import { allEntries, api, arrowTo, createE2eProject, createItem, PEOPLE, pressMod, removeCatalogEntries, removeE2eProject, runId, signedInContext, tabTo, tr, variant } from '../helpers';
 
 // The create dialog with the keyboard only, signed in as the e2e person (org admin) in English. Each test works in a
 // project of its own (`E2E …`, removed in `finally`); the dialog opens with `c` on a page of that project, which it
@@ -303,4 +303,41 @@ test('gives the focus back to what had it before the palette that opened the dia
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
   await expect(button).toBeFocused();
+});
+
+test('keeps the typed title when the project is archived in another tab', async ({ page, browser }) => {
+  const project = await createE2eProject(page, name('archived'), { types: ['Task'] });
+  // the inbox account of the variant (A289) administers the project too and archives it in a browser of its own
+  const inbox = PEOPLE.inbox[variant()]!;
+  const user = (await allEntries(page, 'users')).find((entry) => entry.email === inbox.email) as { id: string };
+  const added = await api(page, 'POST', `/api/v1/projects/${project.id}/members`, { user_id: user.id, role: 'admin' });
+  expect(added.status(), await added.text()).toBe(201);
+  const other = await signedInContext(browser, inbox);
+  try {
+    // the page holds the live channel of the project before the change comes
+    const held = page.waitForResponse(
+      (response) => response.url().endsWith('/broadcasting/auth') && (response.request().postData() ?? '').includes(`"private-project.${project.id}"`) && response.ok(),
+    );
+    await openProject(page, project.identifier);
+    await held;
+    const { dialog, title } = await openDialog(page);
+    const projectField = dialog.getByRole('combobox', { name: new RegExp(`^${tr('en', 'items.create.project')}`) });
+    await expect(projectField).toContainText(name('archived'));
+    await page.keyboard.type('E2E Archiv Kontaktformular');
+
+    const archived = await api(other.page, 'POST', `/api/v1/projects/${project.id}/archive`);
+    expect(archived.status(), await archived.text()).toBe(200);
+
+    // live: the project leaves the list, the draft falls back to another project and keeps its title
+    await expect(dialog.getByText(tr('en', 'items.create.draft_gone', { name: name('archived') }))).toBeVisible({ timeout: 20_000 });
+    await expect(projectField).not.toContainText(name('archived'));
+    await expect(projectField).toBeFocused();
+    await expect(title).toHaveValue('E2E Archiv Kontaktformular');
+
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+  } finally {
+    await other.context.close();
+    await removeE2eProject(page, project.identifier);
+  }
 });

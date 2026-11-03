@@ -609,6 +609,49 @@ describe('pages of a list', () => {
     await waitFor(() => expect(titles(result.current.data)).toEqual(['f', 'e', 'a', 'b']));
   });
 
+  it('continues a rebuild after the list unmounts and mounts again mid-way', async () => {
+    let items = ranked('abcdef');
+    api = mockApi({ 'POST /api/v1/work-items/query': keysetServer(() => items) });
+    // the second page of the rebuild waits until the test lets it go
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let held = 0;
+    const inner = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      if (typeof init?.body === 'string' && (JSON.parse(init.body) as { cursor?: string }).cursor === 'a1') {
+        held += 1;
+        await gate;
+      }
+      return inner(input, init);
+    };
+    const first = renderHook(() => useInfiniteWorkItems({ q: 'weiter' }), { wrapper });
+    await waitFor(() => expect(titles(first.result.current.data)).toHaveLength(2));
+    act(() => first.result.current.loadMore());
+    await waitFor(() => expect(titles(first.result.current.data)).toHaveLength(4));
+    act(() => first.result.current.loadMore());
+    await waitFor(() => expect(titles(first.result.current.data)).toHaveLength(6));
+
+    items = items.map((item) => (item.id === 'wi_e' ? { ...item, rank: 'a0' } : item));
+    await act(() => queryClient.invalidateQueries({ queryKey: qk.workItems.all }));
+    await waitFor(() => expect(held).toBe(1));
+    const before = bodies().length;
+    // the screen goes and comes back while the rebuild waits for its second page
+    first.unmount();
+    const again = renderHook(() => useInfiniteWorkItems({ q: 'weiter' }), { wrapper });
+
+    // the list keeps its place (the new first page over the old pages), then takes the chain the rebuild follows
+    expect(titles(again.result.current.data)).toEqual(['e', 'a', 'c', 'd', 'f']);
+    release();
+    await waitFor(() => expect(titles(again.result.current.data)).toEqual(['e', 'a', 'b', 'c', 'd', 'f']));
+    expect(again.result.current.hasMore).toBe(false);
+    // one chain: its second page once, then on from there; no old cursor (a2, a4) is sent again
+    expect(held).toBe(1);
+    expect(bodies().slice(before)).toEqual([
+      { shorthand: { q: 'weiter' }, cursor: 'a1' },
+      { shorthand: { q: 'weiter' }, cursor: 'a3' },
+    ]);
+  });
+
   it('loads every page for ⌘A during a rebuild along the new cursors, never the old ones', async () => {
     let items = ranked('abcdef');
     api = mockApi({ 'POST /api/v1/work-items/query': keysetServer(() => items) });

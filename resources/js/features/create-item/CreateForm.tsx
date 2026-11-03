@@ -4,7 +4,11 @@
  * editor, the item's fields (`ItemFields`) and the properties of the type (`PropertyInputs`).
  *
  * - Without a project that takes new items it says so; a project the screen named but the person only reads is passed
- *   over with the reason beside the project.
+ *   over with the reason beside the project. When the last one goes while the form is shown (archived, the right lost,
+ *   a live update), the typed draft is parked as on closing (`park`, "Rückgängig") and the notice stands instead.
+ * - A project or type of the draft that leaves the lists makes the draft fall back to another one, with a notice
+ *   (`items.create.draft_gone`) until the person changes project or type herself or starts the next item; refusals and
+ *   the notice of a press about the old draft go, as after an own change.
  * - A catalog that fails to reload keeps the form and its draft: only one that never arrived stops it (13c).
  * - Sending is `useCreateSubmit`: once per press, never again after the item was created (the form fades out with
  *   the dialog). Field errors of the server (422) show at their field; an error disappears as soon as its field
@@ -45,7 +49,7 @@ import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import type { CreateDefaults } from '@/store/ui';
 import type { Project, Property, PropertyValue, WorkItem, WorkItemType, Workflow } from '@/types';
 import { useUnsavedGuard } from '@/features/item-detail/shared';
-import { hasContent, parkedTaken, parkedToRestore, type Draft } from './draft';
+import { hasContent, park, parkedTaken, parkedToRestore, type Draft } from './draft';
 import { ItemFields, type Errors } from './ItemFields';
 import { PropertyInputs, type PropertyEntry } from './PropertyInputs';
 import { useCreateSubmit } from './useCreateSubmit';
@@ -90,6 +94,16 @@ export function CreateForm(props: CreateFormProps) {
   const all = projects.data?.items ?? [];
   const choosable = all.filter((project) => project.archived_at === null && can('item.create', project.id));
 
+  // the draft of a form that just unmounted (`FormBody`): parked when the last project that takes items went
+  const left = useRef<Draft | null>(null);
+  const noneLeft = ready && choosable.length === 0;
+  useEffect(() => {
+    if (!noneLeft) return;
+    const draft = left.current;
+    left.current = null;
+    if (draft && hasContent(draft)) park(draft);
+  }, [noneLeft]);
+
   const unavailable = failed
     ? t('items.create.load_failed', { message: failed.error!.message })
     : !ready
@@ -132,6 +146,7 @@ export function CreateForm(props: CreateFormProps) {
   return (
     <FormBody
       {...props}
+      left={left}
       projects={choosable}
       initialProjectId={(preferred ?? choosable[0]).id}
       passedOver={named && !preferred ? reason('item.create', named.id) : null}
@@ -143,6 +158,8 @@ export function CreateForm(props: CreateFormProps) {
 }
 
 type FormBodyProps = CreateFormProps & {
+  /** Takes the draft when the form unmounts: the last project that takes items may have gone. */
+  left: RefObject<Draft | null>;
   projects: Project[];
   initialProjectId: string;
   /** Why the project the screen named is not the one chosen (the person only reads it). */
@@ -165,6 +182,7 @@ function FormBody({
   pending,
   onHold,
   onClose,
+  left,
   projects,
   initialProjectId,
   passedOver,
@@ -198,6 +216,12 @@ function FormBody({
   const keptValues = (values: Record<string, PropertyValue>, typeId: string) => {
     const keys = new Set(fieldsOf(typeId).map(({ property }) => property.key));
     return Object.fromEntries(Object.entries(values).filter(([key]) => keys.has(key)));
+  };
+  /** The refusals that stay with another type: those of the type, the parent and the properties it lacks go with the old one. */
+  const errorsForType = (current: Errors, typeId: string): Errors => {
+    const kept = new Set(fieldsOf(typeId).map(({ property }) => `values.${property.key}`));
+    const stays = ([path]: [string, string]) => path !== 'type_id' && path !== 'parent_id' && (!path.startsWith('values.') || kept.has(path));
+    return Object.entries(current).every(stays) ? current : Object.fromEntries(Object.entries(current).filter(stays));
   };
 
   const [stored, setDraft] = useState<Draft>(() => {
@@ -239,17 +263,21 @@ function FormBody({
   }, [stored, projects, types, workflows, properties]);
   const [goneName, setGoneName] = useState<string | null>(null);
   const [focusProject, setFocusProject] = useState(0);
-  useEffect(() => {
-    if (!projectGone && !typeGone) return;
-    setGoneName(seen.current.get(projectGone ? stored.projectId : stored.typeId) ?? '');
-    setDraft(draft);
-    setFocusProject((count) => count + 1);
-  }, [projectGone, typeGone, stored, draft]);
   const [errors, setErrors] = useState<Errors>({});
   /** Typed values that cannot be read (a number, an address), by key: the form does not send while there is one. */
   const [unreadable, setUnreadable] = useState<Record<string, string>>({});
   const [attempted, setAttempted] = useState(false);
   const [blocked, setBlocked] = useState<string | null>(null);
+  useEffect(() => {
+    if (!projectGone && !typeGone) return;
+    setGoneName(seen.current.get(projectGone ? stored.projectId : stored.typeId) ?? '');
+    // what the server refused and the notice of a press were about the old draft, as after an own change
+    setErrors((current) => (projectGone ? {} : errorsForType(current, draft.typeId)));
+    setBlocked(null);
+    setDraft(draft);
+    setFocusProject((count) => count + 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `errorsForType` reads the catalogs `draft` follows
+  }, [projectGone, typeGone, stored, draft]);
   const [focusError, setFocusError] = useState(0);
 
   // the uploads of the description: "Anlegen" waits for them, and for pictures of another project to go
@@ -292,13 +320,15 @@ function FormBody({
     setErrors,
     setAttempted,
     setBlocked,
+    onNext: () => setGoneName(null),
     focusFirstError: () => setFocusError((count) => count + 1),
   });
   useLayoutEffect(
     () => () => {
+      left.current = unsaved.current;
       unsaved.current = null;
     },
-    [unsaved],
+    [unsaved, left],
   );
   useEffect(parkedTaken, []);
 
@@ -335,14 +365,15 @@ function FormBody({
     const typeId = typesOf(projectId).some((entry) => entry.id === draft.typeId) ? draft.typeId : defaultType(projectId);
     setErrors({});
     setBlocked(null);
+    setGoneName(null);
     // status, assignee and parent belong to the project
     update({ projectId, typeId, stateId: null, assigneeId: null, parentId: null, values: keptValues(draft.values, typeId) });
   }
 
   function changeType(typeId: string) {
     // a refusal of a property the new type does not have is about the old one: it goes with it
-    const kept = new Set(fieldsOf(typeId).map(({ property }) => `values.${property.key}`));
-    clearError('type_id', 'parent_id', ...Object.keys(errors).filter((path) => path.startsWith('values.') && !kept.has(path)));
+    setErrors((current) => errorsForType(current, typeId));
+    setGoneName(null);
     update({ typeId, values: keptValues(draft.values, typeId) });
   }
 

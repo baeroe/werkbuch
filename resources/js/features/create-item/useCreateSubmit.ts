@@ -81,6 +81,8 @@ export interface CreateSubmitOptions {
   setErrors: Dispatch<SetStateAction<Errors>>;
   setAttempted: Dispatch<SetStateAction<boolean>>;
   setBlocked: Dispatch<SetStateAction<string | null>>;
+  /** "Weitere anlegen" started the next draft: what the form said about the one before goes. */
+  onNext: () => void;
   /** Puts the focus on the first field that names a problem. */
   focusFirstError: () => void;
 }
@@ -119,7 +121,7 @@ export function useCreateSubmit(options: CreateSubmitOptions): () => void {
   function createNow() {
     // a press scheduled before the item was created
     if (done.current) return;
-    const { uploading, foreign, focusDescription, catalogs, fieldsOf, fieldId, another, send, titleRef, onClose, setDraft, setErrors, setAttempted, setBlocked, focusFirstError } =
+    const { uploading, foreign, focusDescription, catalogs, fieldsOf, fieldId, another, send, titleRef, onClose, setDraft, setErrors, setAttempted, setBlocked, onNext, focusFirstError } =
       current.current;
     // an upload on its way: the notice says so until it is stored
     if (uploading) {
@@ -166,6 +168,7 @@ export function useCreateSubmit(options: CreateSubmitOptions): () => void {
         latest.current = { draft: next, unreadable: {} };
         setDraft(next);
         setAttempted(false);
+        onNext();
         titleRef.current?.focus();
       },
       onError: (error) => {
