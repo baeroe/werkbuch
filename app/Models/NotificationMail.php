@@ -14,7 +14,7 @@ use Illuminate\Support\Carbon;
 /**
  * A collection of notification lines that goes out as one mail (spec 4.14): per person and item (`scope`
  * `item:<ulid>`) or per person and day of reminders (`due:<Y-m-d>`). `open_key` (`<user_id>:<scope>`) is set while
- * new lines may join; once sent (or skipped), `sent_at` and `outcome` (`sent`, `skipped`) say so. `dispatched_at` is
+ * new lines may join; once sent (or skipped), `sent_at` and `outcome` (`sent`, `skipped`, `failed`) say so. `dispatched_at` is
  * when a job was last put on the queue for it (the sweeper waits before it tries again, K8).
  *
  * @property string $id
@@ -40,6 +40,9 @@ final class NotificationMail extends Model
 
     /** Nothing was left to tell when it was due (every line read, out of reach or switched off): no mail went out. */
     public const SKIPPED = 'skipped';
+
+    /** It still failed a day after it was due and gave up (ruling T7-I2): no mail went out. */
+    public const FAILED = 'failed';
 
     /**
      * @return BelongsTo<User, $this>

@@ -4,6 +4,7 @@ use App\Access\OrgRole;
 use App\Access\ProjectRole;
 use App\Access\RoleAssignments;
 use App\Actions\Comments\AddComment;
+use App\Actions\Notifications\DispatchDueMails;
 use App\Actions\Notifications\MarkNotificationsRead;
 use App\Actions\Notifications\SaveNotificationPreferences;
 use App\Actions\Notifications\SendNotificationMail;
@@ -16,6 +17,7 @@ use App\Actions\WorkItems\TransitionWorkItem;
 use App\Actions\WorkItems\UpdateWorkItem;
 use App\Domain\Notifications\NotificationKind;
 use App\Enums\Locale;
+use App\Http\Resources\NotificationResource;
 use App\Jobs\SendNotificationMailJob;
 use App\Mail\NotificationDigest;
 use App\Models\Attachment;
@@ -28,15 +30,14 @@ use App\Models\User;
 use App\Models\WorkItem;
 use App\Notifications\NotificationConsumer;
 use App\Support\Actor;
-use Illuminate\Mail\MailManager;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Symfony\Component\Mailer\Exception\TransportException;
-use Symfony\Component\Mailer\SentMessage;
-use Symfony\Component\Mailer\Transport\AbstractTransport;
 use Tests\Support\RichTextFixtures as F;
+use Tests\Support\ScriptedTransport;
 
 /*
  * The digest mail of a person and an item (Task 7): the consumer `notifications` collects the lines, SendNotificationMail
@@ -214,30 +215,12 @@ it('keeps the collection open when SMTP fails, and sends it on the next try', fu
     $watch($w['mara'], $w['item']);
     AddComment::run(actor($w['ida']), $w['item'], ['body' => 'Das Formular ist live.']);
     $mail = $collection($w['mara'], $w['item']);
-    // a mail server that refuses the first mail and keeps every attempt
-    $attempts = new ArrayObject;
-    Mail::swap($manager = new MailManager(app()));
-    $manager->extend('refusing', fn () => new class($attempts) extends AbstractTransport
-    {
-        public function __construct(private readonly ArrayObject $attempts)
-        {
-            parent::__construct();
-        }
-
-        protected function doSend(SentMessage $message): void
-        {
-            $this->attempts->append($message);
-            if ($this->attempts->count() === 1) {
-                throw new TransportException('Connection could not be established.');
-            }
-        }
-
-        public function __toString(): string
-        {
-            return 'refusing://';
+    // a mail server that refuses the first mail
+    $server = ScriptedTransport::use(function (int $attempt): void {
+        if ($attempt === 1) {
+            throw new TransportException('Connection could not be established.');
         }
     });
-    config(['mail.mailers.refusing' => ['transport' => 'refusing'], 'mail.default' => 'refusing']);
 
     expect(fn () => $send($mail))->toThrow(TransportException::class);
     $mail->refresh();
@@ -246,7 +229,44 @@ it('keeps the collection open when SMTP fails, and sends it on the next try', fu
         ->and($mail->open_key)->toBe("{$w['mara']->id}:item:{$w['item']->id}");
 
     expect($send($mail))->toBe(NotificationMail::SENT)
-        ->and($attempts)->toHaveCount(2);
+        ->and($server->count())->toBe(2);
+});
+
+it('gives a collection up when it still fails a day after it was due', function () use ($world, $watch, $collection, $send) {
+    Exceptions::fake();
+    $w = $world();
+    $watch($w['mara'], $w['item']);
+    AddComment::run(actor($w['ida']), $w['item'], ['body' => 'Das Formular ist live.']);
+    $mail = $collection($w['mara'], $w['item']);
+    // the address is refused for good (550)
+    $server = ScriptedTransport::use(fn () => throw new TransportException('550 Mailbox unavailable'));
+
+    // within the day it fails and stays open for the next try
+    $this->travelTo($mail->due_at->copy()->addHours(23));
+    expect(fn () => $send($mail))->toThrow(TransportException::class)
+        ->and($mail->refresh()->sent_at)->toBeNull();
+    Exceptions::assertNothingReported();
+
+    // after it, the collection gives up, once: closed without a mail, never dispatched again
+    $this->travelTo($mail->due_at->copy()->addHours(24)->addSecond());
+    expect($send($mail))->toBe(NotificationMail::FAILED)
+        ->and($send($mail))->toBe(SendNotificationMail::ALREADY)
+        ->and($server->count())->toBe(2);
+    $mail->refresh();
+    expect($mail->outcome)->toBe(NotificationMail::FAILED)
+        ->and($mail->sent_at)->not->toBeNull()
+        ->and($mail->open_key)->toBeNull();
+    // the sweeper takes Tom's collection (the lead), not this one: its only job stays the delayed one of collecting
+    DispatchDueMails::run(Actor::system(User::defaultBot(), 'notification_mail'));
+    Queue::assertPushed(SendNotificationMailJob::class, fn (SendNotificationMailJob $job) => $job->mailId === $collection($w['tom'], $w['item'])->id);
+    Queue::assertNotPushed(SendNotificationMailJob::class, fn (SendNotificationMailJob $job) => $job->mailId === $mail->id && $job->delay === null);
+    Exceptions::assertReportedCount(1);
+    Exceptions::assertReported(fn (TransportException $e) => $e->getMessage() === '550 Mailbox unavailable');
+
+    // the inbox says no mail went out
+    $line = Notification::query()->where('mail_id', $mail->id)->get();
+    Notification::loadForResource($line, $w['mara']);
+    expect((new NotificationResource($line->sole()))->resolve()['mailed_at'])->toBeNull();
 });
 
 it('writes the mail in the person\'s language and time zone with the link to the item and to the settings', function () use ($world, $watch, $collection, $send) {

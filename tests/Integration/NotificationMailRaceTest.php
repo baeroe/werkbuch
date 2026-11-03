@@ -18,6 +18,7 @@ use App\Support\Actor;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
 use Tests\Support\RaceConnections;
+use Tests\Support\ScriptedTransport;
 
 /*
  * Two at work on one mail collection (Task 7, Review Focus 1, K7): `mariadb` holds a job that has just sent the
@@ -92,4 +93,30 @@ it('puts a notification that arrives while the collection is being sent into a n
         ->and(Notification::query()->where('mail_id', $w['mail']->id)->count())->toBe(1)
         ->and(Notification::query()->where('mail_id', $new?->id)->count())->toBe(1);
     Queue::assertPushed(SendNotificationMailJob::class, fn (SendNotificationMailJob $job) => $job->mailId === $new?->id);
+});
+
+it('mails once when a line arrives while the mail is on its way', function () use ($world) {
+    $w = $world();
+    AddComment::run(actor($w['ida']), $w['item'], ['body' => 'Zweiter Hinweis.']);
+    $second = eventsOf(EventType::CommentCreated, $w['item'])->last();
+    $consume = fn () => app(Outbox::class)->consume((string) $second?->id, NotificationConsumer::class);
+    // while the mail server takes the mail, the consumer collects the new line for the same person and item: the job
+    // closed the collection before it sent, so the consumer waits to open a new one (no deadlock, I1)
+    $midway = null;
+    $server = ScriptedTransport::use(function () use (&$midway, $consume): void {
+        $midway ??= RaceConnections::second($consume);
+    });
+
+    expect(SendNotificationMail::run(Actor::system(User::defaultBot(), 'notification_mail'), $w['mail']->id))->toBe(NotificationMail::SENT);
+    RaceConnections::expectLockWait($midway, 'notification_mails', 'insert ignore into `notification_mails`', ')');
+
+    // once the mail went, the line opens a new collection
+    RaceConnections::second($consume);
+
+    $new = NotificationMail::query()->whereKeyNot($w['mail']->id)->sole();
+    expect($server->count())->toBe(1)
+        ->and($w['mail']->refresh()->outcome)->toBe(NotificationMail::SENT)
+        ->and($new->sent_at)->toBeNull()
+        ->and(Notification::query()->where('mail_id', $w['mail']->id)->count())->toBe(1)
+        ->and(Notification::query()->where('mail_id', $new->id)->count())->toBe(1);
 });
