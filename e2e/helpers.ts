@@ -112,6 +112,10 @@ export const PEOPLE = {
   twoFactor: Object.fromEntries(
     VARIANTS.map((project) => [project, { email: `twofactor-${project}@example.com`, password: E2E_PASSWORD, secret: TOTP_SECRET, recoveryCodes: recoveryCodes(project) }]),
   ) as Record<string, { email: string; password: string; secret: string; recoveryCodes: string[] }>,
+  /** One inbox per variant for the inbox and live specs (A289): the seeder empties it on every run. */
+  inbox: Object.fromEntries(
+    VARIANTS.map((project) => [project, { email: `inbox-${project}@example.com`, password: E2E_PASSWORD, name: `Inge Inbox ${project}`, locale: 'en' as const }]),
+  ) as Record<string, { email: string; password: string; name: string; locale: 'en' }>,
 };
 
 /**

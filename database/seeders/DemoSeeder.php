@@ -10,6 +10,7 @@ use Database\Seeders\Demo\CatalogSeeder;
 use Database\Seeders\Demo\CommentsSeeder;
 use Database\Seeders\Demo\FavoritesSeeder;
 use Database\Seeders\Demo\ItemsSeeder;
+use Database\Seeders\Demo\NotificationsSeeder;
 use Database\Seeders\Demo\OrganizationSeeder;
 use Database\Seeders\Demo\PeopleSeeder;
 use Database\Seeders\Demo\ProjectsSeeder;
@@ -49,6 +50,7 @@ class DemoSeeder extends Seeder
             ActivitySeeder::class,
             CommentsSeeder::class,
             AttachmentsSeeder::class,
+            NotificationsSeeder::class,
         ]);
 
         app(SearchIndexer::class)->rebuild();
