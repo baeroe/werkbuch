@@ -235,7 +235,7 @@ export function CommentComposer({ item }: { item: WorkItem }) {
   const blocked = uploading > 0 ? t('editor.upload.pending') : empty ? t('items.comments.empty') : null;
 
   return (
-    <div ref={box} className="mt-3">
+    <div ref={box} data-comment-composer="" className="mt-3">
       <UploadContext value={uploads}>
         <RichTextEditor
           value={text}

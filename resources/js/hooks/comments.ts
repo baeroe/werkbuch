@@ -121,7 +121,7 @@ export function useToggleReaction() {
 
   const toggle = useCallback(
     (vars: ReactionVars) => {
-      settle(mutateAsync(vars), { onError: (error) => notifyError(t('items.failed.reaction'), error, () => toggle(vars)) });
+      settle(mutateAsync(vars), { onError: (error) => notifyError(t('items.failed.reaction', { emoji: vars.emoji }), error, () => toggle(vars)) });
     },
     [settle, mutateAsync],
   );

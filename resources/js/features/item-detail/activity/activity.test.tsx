@@ -9,16 +9,17 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { preloadEditor } from '@/editor/RichTextEditor';
 import { initI18n } from '@/lib/i18n';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
-import { ida, itemEvent, labels, lene, list, makeWorkItem, mara, organization, person, properties, resolutions, standard, types, web48 } from '@/test/fixtures';
-import type { ActivityEntry, ItemEvent, Organization, Property, User, WorkItem, WorkItemDetail } from '@/types';
+import { ida, itemEvent, labels, lene, list, makeComment, makeWorkItem, mara, organization, person, project, properties, resolutions, standard, types, web48 } from '@/test/fixtures';
+import type { ActivityEntry, Comment, ItemEvent, Organization, Property, RichText, User, WorkItem, WorkItemDetail } from '@/types';
 import en from '../../../../../lang/en.json';
 import { ItemDetailProvider } from '../ItemBody';
 import type { DetailSurface } from '../shared';
 import { Activity, SHOWN_LINES } from './Activity';
-import { buildTimeline, GROUP_WINDOW_MS } from './timeline';
+import { buildTimeline, GROUP_WINDOW_MS, type ActivityFilter } from './timeline';
 import { formatWhen } from './when';
 
 let url = '/items/WEB-48';
@@ -43,6 +44,7 @@ const brief: Property = { ...properties[0]!, id: 'pr_brief', key: 'brief', label
 /** A person property, whose values read as names. */
 const reviewers: Property = { ...properties[0]!, id: 'pr_reviewers', key: 'reviewers', label: 'Review', field_type: 'member', options: [], settings: { multiple: true } };
 
+const doc = (text: string): RichText => ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] });
 const at = (minutes: number) => new Date(Date.parse('2026-10-31T00:00:00.000Z') + minutes * 60_000).toISOString();
 const entry = (event: ItemEvent): ActivityEntry => ({ kind: 'event', id: event.id, at: event.occurred_at, event });
 const comment = (id: string, minutes: number): ActivityEntry =>
@@ -75,6 +77,7 @@ const historyPage = (events: ItemEvent[], next: string | null = null) => ({ body
 function renderActivity(history: MockRoute, { surface = 'peek', routes = {} }: { surface?: DetailSurface; routes?: Record<string, MockRoute> } = {}) {
   api = mockApi({
     'GET /api/v1/organization': () => ({ body: { data: org } }),
+    'GET /api/v1/projects': () => ({ body: list([project('WEB', 'member', { name: 'Website-Relaunch' })]) }),
     'GET /api/v1/users': () => ({ body: list([mara, ida, lene, automation]) }),
     'GET /api/v1/labels': () => ({ body: list(labels) }),
     'GET /api/v1/resolutions': () => ({ body: list(resolutions) }),
@@ -105,6 +108,15 @@ async function linesOf(): Promise<string[]> {
   return within(timeline).getAllByRole('listitem').map(textOf);
 }
 
+beforeAll(async () => {
+  // jsdom has no layout; the editor (the cards' text, an earlier version) measures the selection
+  const empty = () => ({ x: 0, y: 0, top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0, toJSON: () => ({}) }) as DOMRect;
+  Range.prototype.getBoundingClientRect = empty;
+  Range.prototype.getClientRects = () => ({ length: 0, item: () => null, [Symbol.iterator]: [][Symbol.iterator] }) as unknown as DOMRectList;
+  document.elementFromPoint = () => null;
+  await preloadEditor();
+});
+
 beforeEach(() => {
   // 21:00 in Berlin, 16:00 in New York; minute 0 of `at` is 01:00 in Berlin, the same day
   vi.setSystemTime(new Date('2026-10-31T20:00:00.000Z'));
@@ -122,7 +134,8 @@ afterEach(() => {
 /* ---------------------------------------------------------------------- timeline */
 
 describe('buildTimeline', () => {
-  const lineEvents = (entries: ActivityEntry[], filter: 'all' | 'changes' = 'all') => buildTimeline(entries, filter).map((line) => line.events.map((item) => item.id));
+  const lineEvents = (entries: ActivityEntry[], filter: ActivityFilter = 'all') =>
+    buildTimeline(entries, filter).map((line) => (line.kind === 'comment' ? `comment ${line.comment.id}` : line.events.map((item) => item.id)));
 
   it('puts changes of one account within five minutes into one line', () => {
     expect(GROUP_WINDOW_MS).toBe(5 * 60_000);
@@ -140,8 +153,10 @@ describe('buildTimeline', () => {
 
   it('lets a comment end the line where comments show, not under the changes', () => {
     const entries = [entry(event('a', 0)), comment('c1', 1), entry(event('b', 2))];
-    expect(lineEvents(entries, 'all')).toEqual([['a'], ['b']]);
+    expect(lineEvents(entries, 'all')).toEqual([['a'], 'comment c1', ['b']]);
     expect(lineEvents(entries, 'changes')).toEqual([['a', 'b']]);
+    // the comments alone: no change at all
+    expect(lineEvents(entries, 'comments')).toEqual(['comment c1']);
   });
 
   it('takes another window', () => {
@@ -339,6 +354,58 @@ describe('phrases', () => {
     await waitFor(() => expect(within(timeline).getAllByRole('listitem').map(textOf)).toEqual(['Mara Lindqvist hat das Eltern-Item ein Item gesetzt. heute 01:00']));
   });
 
+  it('reads an edit with its earlier version and a deletion', async () => {
+    const user = userEvent.setup();
+    const comment = { comment_id: 'c_1', comment_author_id: 'u_lene' };
+    renderActivity(() =>
+      historyPage([
+        event('ev_1', 0, { ...comment, type: 'comment.updated', actor_id: 'u_lene', changes: { body: { old: doc('Erste Fassung.'), new: doc('Zweite Fassung.') } } }),
+        // a comment deleted since: its versions are gone from the history (K15), only the edit stays
+        event('ev_2', 10, { type: 'comment.updated', actor_id: 'u_lene', comment_id: 'c_2', comment_author_id: 'u_lene', changes: null }),
+        event('ev_3', 20, { type: 'comment.deleted', comment_id: 'c_2', comment_author_id: 'u_lene', changes: null }),
+        event('ev_4', 30, { type: 'comment.deleted', actor_id: 'u_ida', comment_id: 'c_3', comment_author_id: 'u_ida', changes: null }),
+        event('ev_5', 40, { type: 'comment.deleted', comment_id: 'c_4', comment_author_id: 'u_gone', changes: null }),
+      ]),
+    );
+
+    const lines = await linesOf();
+    expect(lines).toEqual([
+      'Lene Vogt hat einen Kommentar bearbeitet. heute 01:00',
+      'Lene Vogt hat einen Kommentar bearbeitet. heute 01:10',
+      'Mara Lindqvist hat einen Kommentar von Lene Vogt gelöscht. heute 01:20',
+      'Ida Brenner hat einen eigenen Kommentar gelöscht. heute 01:30',
+      'Mara Lindqvist hat einen Kommentar von Unbekannt gelöscht. heute 01:40',
+    ]);
+    // only the edit whose comment is still there shows its earlier version, on demand
+    const timeline = screen.getByRole('list', { name: 'Verlauf' });
+    const earlier = within(timeline).getAllByRole('button', { name: 'Frühere Fassung anzeigen' });
+    expect(earlier).toHaveLength(1);
+    expect(earlier[0]!.getAttribute('aria-expanded')).toBe('false');
+    expect(timeline.textContent).not.toContain('Erste Fassung.');
+    await user.click(earlier[0]!);
+    expect(earlier[0]!.getAttribute('aria-expanded')).toBe('true');
+    await within(timeline).findByText('Erste Fassung.');
+    await user.click(earlier[0]!);
+    expect(timeline.textContent).not.toContain('Erste Fassung.');
+  });
+
+  it('reads an added and a removed file', async () => {
+    renderActivity(() =>
+      historyPage([
+        event('ev_1', 0, { changes: { attachments: { old: null, new: { id: 'att_1', filename: 'screenshot.png' } } } }),
+        event('ev_2', 10, { changes: { attachments: { old: { id: 'att_1', filename: 'screenshot.png' }, new: null } } }),
+        // a file added beside another change reads after it
+        event('ev_3', 20, { changes: { attachments: { old: null, new: { id: 'att_2', filename: 'angebot.pdf' } }, description: { old: null, new: doc('Text') } } }),
+      ]),
+    );
+
+    expect(await linesOf()).toEqual([
+      'Mara Lindqvist hat die Datei „screenshot.png“ angehängt. heute 01:00',
+      'Mara Lindqvist hat die Datei „screenshot.png“ entfernt. heute 01:10',
+      'Mara Lindqvist hat die Beschreibung geändert und die Datei „angebot.pdf“ angehängt. heute 01:20',
+    ]);
+  });
+
   it('reads in English', async () => {
     initI18n({ locale: 'en', translations: en });
     renderActivity(() =>
@@ -420,6 +487,60 @@ describe('Activity', () => {
     await waitFor(() => expect(document.activeElement).toBe(timeline));
   });
 
+  it('shows comments and changes in order and filters them', async () => {
+    const user = userEvent.setup();
+    const comments: Comment[] = [
+      makeComment({ id: 'c_1', work_item_id: 'wi_web_48', author_id: 'u_ida', body_json: doc('Sieht gut aus.'), created_at: at(1) }),
+      makeComment({ id: 'c_2', work_item_id: 'wi_web_48', author_id: 'u_lene', body_json: doc('Ist live.'), created_at: at(20) }),
+    ];
+    renderActivity(
+      () =>
+        historyPage([
+          event('ev_1', 0, { changes: { title: { old: 'A', new: 'B' } } }),
+          event('ev_2', 2, { changes: { priority: { old: 'none', new: 'high' } } }),
+        ]),
+      { routes: { 'GET /api/v1/work-items/wi_web_48/comments': () => ({ body: list(comments) }) } },
+    );
+    /** A line as text; a comment card as "Kommentar von <Name>: <Text>". */
+    const shown = async () => {
+      const timeline = await screen.findByRole('list', { name: 'Verlauf' });
+      await waitFor(() => expect(timeline.textContent).not.toContain('Unbekannt'));
+      return within(timeline)
+        .getAllByRole('listitem')
+        .map((line) => {
+          const card = within(line).queryByRole('article');
+          return card ? `${card.getAttribute('aria-label')}: ${card.querySelector('.rt')?.textContent}` : textOf(line);
+        });
+    };
+
+    // a comment between two changes of one person ends their line
+    await waitFor(async () =>
+      expect(await shown()).toEqual([
+        'Mara Lindqvist hat den Titel von „A“ in „B“ geändert. heute 01:00',
+        'Kommentar von Ida Brenner: Sieht gut aus.',
+        'Mara Lindqvist hat die Priorität von None auf High geändert. heute 01:02',
+        'Kommentar von Lene Vogt: Ist live.',
+      ]),
+    );
+    // the composer stands at the end of the activity
+    const section = screen.getByRole('region', { name: 'Aktivität' });
+    expect(within(section).getByRole('button', { name: /Kommentar schreiben/ })).toBeTruthy();
+
+    const filter = screen.getByRole('group', { name: 'Aktivität filtern' });
+    await user.click(within(filter).getByRole('button', { name: 'Kommentare' }));
+    expect(await shown()).toEqual(['Kommentar von Ida Brenner: Sieht gut aus.', 'Kommentar von Lene Vogt: Ist live.']);
+    await user.click(within(filter).getByRole('button', { name: 'Änderungen' }));
+    expect(await shown()).toEqual(['Mara Lindqvist hat den Titel von „A“ in „B“ geändert und die Priorität von None auf High geändert. heute 01:00']);
+  });
+
+  it('says when there are no comments yet', async () => {
+    const user = userEvent.setup();
+    renderActivity(() => historyPage([event('ev_1', 0)]));
+    await linesOf();
+    await user.click(within(screen.getByRole('group', { name: 'Aktivität filtern' })).getByRole('button', { name: 'Kommentare' }));
+    await screen.findByText('Noch keine Kommentare.');
+  });
+
   it('counts one earlier line', async () => {
     renderActivity(() => historyPage(Array.from({ length: SHOWN_LINES + 1 }, (_, index) => event(`ev_${index}`, index * 10))));
 
@@ -460,7 +581,7 @@ describe('Activity', () => {
   });
 
   it('chooses the changes in the address and reads an unknown filter as everything', async () => {
-    url = '/items/WEB-48?activity=comments';
+    url = '/items/WEB-48?activity=other';
     renderActivity(() => historyPage([]), { surface: 'page' });
     const user = userEvent.setup();
 

@@ -630,6 +630,19 @@ describe('activity', () => {
     expect(result.current.isError).toBe(false);
   });
 
+  it('reads a comment after an event of the same second (a comment keeps whole seconds, an event its fraction)', async () => {
+    const changed = itemEvent({ id: 'ev_fraction', occurred_at: '2026-10-28T09:00:05.734512Z' });
+    const said = makeComment({ id: 'c_second', created_at: '2026-10-28T09:00:05.000000Z' });
+    api = mockApi({
+      'GET /api/v1/work-items/WEB-47/history': () => ({ body: list([changed]) }),
+      'GET /api/v1/work-items/WEB-47/comments': () => ({ body: list([said]) }),
+    });
+    const { result } = renderHook(() => useActivity('WEB-47'), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.map((entry) => `${entry.kind} ${entry.id}`)).toEqual(['event ev_fraction', 'comment c_second']);
+  });
+
   it('fails only when a source fails without data, and fetches both again', async () => {
     let comments: { status: number; body: unknown } = { status: 500, body: { reason: 'server_error', detail: 'Kommentare kaputt' } };
     api = mockApi({
@@ -768,9 +781,9 @@ describe('comments', () => {
       await waitFor(() => expect(currentToasts()).toHaveLength(3));
       expect(cached()).toEqual([web47Comments[0], mine]);
       expect(currentToasts().map((toast) => [toast.title, toast.description, toast.action?.label])).toEqual([
-        ['Reaktion nicht gespeichert', 'WEB-47 ist archiviert.', undefined],
-        ['Reaktion nicht gespeichert', 'Wartung', 'Erneut versuchen'],
-        ['Reaktion nicht gespeichert', 'Schon da.', undefined],
+        ['Reaktion 🎉 nicht gespeichert', 'WEB-47 ist archiviert.', undefined],
+        ['Reaktion 👍 nicht gespeichert', 'Wartung', 'Erneut versuchen'],
+        ['Reaktion 🚀 nicht gespeichert', 'Schon da.', undefined],
       ]);
     });
 

@@ -1,22 +1,24 @@
 /*
- * The comment composer against a fake REST API (`mockApi`): m opens it and mod+enter sends; what fails stays in the
- * editor, what is typed while sending stays as the draft, a draft outlives the view, uploads hold the send back, and an
- * archived item says why there is no composer.
+ * Comments against a fake REST API (`mockApi`).
+ * - The composer: m opens it and mod+enter sends; what fails stays in the editor, what is typed while sending stays as
+ *   the draft, a draft outlives the view, uploads hold the send back, and an archived item says why there is none.
+ * - The cards in the activity: editing an own comment, the menu by the rights, deleting with undo, and reactions.
  */
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { currentToasts, resetToasts, runToastAction } from '@/components/ui/toast';
+import { currentToasts, dismissToast, resetToasts, runToastAction } from '@/components/ui/toast';
 import { preloadEditor } from '@/editor/RichTextEditor';
-import { commentDraft, drafts } from '@/lib/drafts';
+import { commentDraft, commentEditDraft, drafts } from '@/lib/drafts';
 import { plainText } from '@/lib/richtext';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
-import { lene, list, makeAttachment, makeComment, organization, project, web47 } from '@/test/fixtures';
+import { ida, labels, lene, list, makeAttachment, makeComment, mara, organization, project, properties, resolutions, standard, theo, types, web47 } from '@/test/fixtures';
 import { FakeXhr, installFakeXhr, restoreFakeXhr } from '@/test/xhr';
-import type { Project, RichText, WorkItem } from '@/types';
+import type { Comment, Project, RichText, WorkItem, WorkItemDetail } from '@/types';
+import { Activity } from '../activity/Activity';
 import { ItemDetailProvider } from '../ItemBody';
 import type { DetailSurface } from '../shared';
 import { CommentComposer, unsentRest } from './CommentComposer';
@@ -373,5 +375,358 @@ describe('unsentRest', () => {
       type: 'doc',
       content: [{ type: 'heading', attrs: { level: 1 }, content: [text('Erstens. mehr')] }],
     });
+  });
+});
+
+/* ------------------------------------------------------------------------ cards */
+
+describe('CommentCard', () => {
+  /** The comments of WEB-47 as the fake server holds them; each test sets its own. */
+  let comments: Comment[] = [];
+  const own = (id: string, text: string) => makeComment({ id, author_id: 'u_lene', body: text, body_json: doc(text) });
+  const answer = (comment: Comment | undefined) => (comment ? { body: { data: comment } } : problem(404, 'not_found'));
+  const change = (id: string, next: (comment: Comment) => Comment) => {
+    comments = comments.map((comment) => (comment.id === id ? next(comment) : comment));
+    return answer(comments.find((comment) => comment.id === id));
+  };
+  const detailOf = (item: WorkItem): WorkItemDetail => ({
+    item,
+    type: types[0]!,
+    state: standard.states.find((state) => state.id === item.state_id)!,
+    workflow: standard,
+    children: [],
+    relations: [],
+    attachments: [],
+    subscribed: false,
+  });
+
+  function renderCards({ item = web47, role = 'member', routes = {} }: Setup = {}) {
+    api?.restore();
+    api = mockApi({
+      'GET /api/v1/organization': () => ({ body: { data: organization } }),
+      'GET /api/v1/projects': () => ({ body: list([project('WEB', role, { name: 'Website-Relaunch' })]) }),
+      'GET /api/v1/users': () => ({ body: list([mara, ida, theo, lene]) }),
+      'GET /api/v1/labels': () => ({ body: list(labels) }),
+      'GET /api/v1/resolutions': () => ({ body: list(resolutions) }),
+      'GET /api/v1/work-item-types': () => ({ body: list(types) }),
+      'GET /api/v1/properties': () => ({ body: list(properties) }),
+      'GET /api/v1/work-items/wi_web_47/history': () => ({ body: list([]) }),
+      'GET /api/v1/work-items/wi_web_47/comments': () => ({ body: list(comments) }),
+      ...routes,
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    return render(
+      <QueryClientProvider client={client}>
+        <ItemDetailProvider surface="page">
+          <Activity detail={detailOf(item)} />
+        </ItemDetailProvider>
+      </QueryClientProvider>,
+    );
+  }
+
+  const card = (name: string) => screen.findByRole('article', { name: `Kommentar von ${name}` });
+  const actionsOf = (name: string) => screen.findByRole('button', { name: `Aktionen für den Kommentar von ${name}` });
+  /** The entries of the actions menu of the comment by `name`. */
+  async function menuOf(name: string): Promise<string[]> {
+    const user = userEvent.setup();
+    await user.click(await actionsOf(name));
+    const menu = await screen.findByRole('menu');
+    return within(menu)
+      .getAllByRole('menuitem')
+      .map((entry) => entry.textContent ?? '');
+  }
+  const choose = async (entry: string) => userEvent.setup().click(await screen.findByRole('menuitem', { name: entry }));
+
+  it('edits an own comment and marks it edited', async () => {
+    comments = [own('c_own', 'Erste Fassung.')];
+    renderCards({ routes: { 'PATCH /api/v1/comments/c_own': (body) => change('c_own', (comment) => ({ ...comment, body_json: (body as { body_json: RichText }).body_json, edited_at: '2026-10-31T09:00:00.000Z' })) } });
+    const article = await card('Lene Vogt');
+    expect(within(article).queryByText('bearbeitet')).toBeNull();
+    await menuOf('Lene Vogt');
+    await choose('Bearbeiten');
+
+    const editor = await screen.findByRole('textbox', { name: 'Kommentar bearbeiten' });
+    await waitFor(() => expect(document.activeElement).toBe(editor));
+    expect(editor.textContent).toBe('Erste Fassung.');
+    paste(editor, ' Ergänzt.');
+    // the edit is a draft of its own: leaving asks first
+    expect(plainText(drafts.get(commentEditDraft('c_own')))).toBe('Erste Fassung. Ergänzt.');
+    expect(leaving()).toBe(true);
+    send(editor);
+
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Kommentar bearbeiten' })).toBeNull());
+    const saved = api!.calls.find((call) => call.method === 'PATCH')!;
+    expect(plainText((saved.body as { body_json: RichText }).body_json)).toBe('Erste Fassung. Ergänzt.');
+    const edited = await card('Lene Vogt');
+    await within(edited).findByText('bearbeitet');
+    await within(edited).findByText('Erste Fassung. Ergänzt.');
+    // the focus goes back to the comment's actions
+    await waitFor(() => expect(document.activeElement).toBe(within(edited).getByRole('button', { name: 'Aktionen für den Kommentar von Lene Vogt' })));
+    expect(drafts.pending()).toEqual([]);
+
+    // Escape takes an edit back; nothing goes out
+    await menuOf('Lene Vogt');
+    await choose('Bearbeiten');
+    const again = await screen.findByRole('textbox', { name: 'Kommentar bearbeiten' });
+    await waitFor(() => expect(document.activeElement).toBe(again));
+    paste(again, ' Verworfen.');
+    press('Escape', {}, again);
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Kommentar bearbeiten' })).toBeNull());
+    expect(api!.calls.filter((call) => call.method === 'PATCH')).toHaveLength(1);
+    expect(drafts.pending()).toEqual([]);
+    expect((await card('Lene Vogt')).textContent).not.toContain('Verworfen.');
+  });
+
+  it('keeps a failed edit in the editor, and an edit over closing the view', async () => {
+    comments = [own('c_own', 'Erste Fassung.')];
+    let status = 503;
+    const routes = {
+      'PATCH /api/v1/comments/c_own': (body: unknown) =>
+        status === 422
+          ? problem(422, 'validation_failed', { errors: { body_json: ['Der Kommentar ist zu lang.'] } })
+          : status === 503
+            ? problem(503, 'service_unavailable')
+            : change('c_own', (comment) => ({ ...comment, body_json: (body as { body_json: RichText }).body_json, edited_at: '2026-10-31T09:00:00.000Z' })),
+    };
+    const first = renderCards({ routes });
+    await card('Lene Vogt');
+    await menuOf('Lene Vogt');
+    await choose('Bearbeiten');
+    const editor = await screen.findByRole('textbox', { name: 'Kommentar bearbeiten' });
+    await waitFor(() => expect(document.activeElement).toBe(editor));
+    paste(editor, ' Neu.');
+    send(editor);
+    const failed = await waitFor(() => {
+      const toast = currentToasts().at(-1);
+      expect(toast).toMatchObject({ title: 'Kommentar nicht geändert', tone: 'error', action: { label: 'Erneut versuchen' } });
+      return toast!;
+    });
+    expect(editor.textContent).toBe('Erste Fassung. Neu.');
+
+    // a refusal of the text stands under the editor
+    status = 422;
+    act(() => runToastAction(failed.id));
+    await screen.findByText('Der Kommentar ist zu lang.');
+    expect(editor.getAttribute('aria-invalid')).toBe('true');
+
+    // an empty text is no edit
+    press('a', { ctrlKey: true }, editor);
+    press('Backspace', {}, editor);
+    send(editor);
+    expect(screen.getByText('Der Kommentar ist leer. Schreib etwas oder lösch den Kommentar.', { selector: 'p' })).toBeTruthy();
+    paste(editor, 'Kürzer.');
+
+    // the view goes and comes back: the edit is still open with its text
+    first.unmount();
+    status = 200;
+    renderCards({ routes });
+    const back = await screen.findByRole('textbox', { name: 'Kommentar bearbeiten' });
+    expect(back.textContent).toBe('Kürzer.');
+    send(back);
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Kommentar bearbeiten' })).toBeNull());
+    await within(await card('Lene Vogt')).findByText('Kürzer.');
+  });
+
+  /** Lets the next PATCH of a comment wait until `release()`. */
+  function holdNextSave() {
+    const original = globalThis.fetch;
+    let release = () => {};
+    let held = false;
+    globalThis.fetch = async (input, init) => {
+      if (init?.method === 'PATCH' && !held) {
+        held = true;
+        await new Promise<void>((resolve) => (release = resolve));
+      }
+      return original(input, init);
+    };
+    return { release: () => act(async () => release()), held: () => held };
+  }
+  const saving = (body: unknown) => change('c_own', (comment) => ({ ...comment, body_json: (body as { body_json: RichText }).body_json, edited_at: '2026-10-31T09:00:00.000Z' }));
+  const editors = () => screen.queryAllByRole('textbox', { name: 'Kommentar bearbeiten' });
+
+  it('saves nothing for the same text, and keeps what was written while saving', async () => {
+    comments = [own('c_own', 'Erste.')];
+    renderCards({ routes: { 'PATCH /api/v1/comments/c_own': saving } });
+    await card('Lene Vogt');
+    await menuOf('Lene Vogt');
+    await choose('Bearbeiten');
+    let editor = await screen.findByRole('textbox', { name: 'Kommentar bearbeiten' });
+    await waitFor(() => expect(document.activeElement).toBe(editor));
+    send(editor);
+    await waitFor(() => expect(editors()).toEqual([]));
+    expect(api!.calls.filter((call) => call.method === 'PATCH')).toEqual([]);
+
+    await menuOf('Lene Vogt');
+    await choose('Bearbeiten');
+    editor = await screen.findByRole('textbox', { name: 'Kommentar bearbeiten' });
+    await waitFor(() => expect(document.activeElement).toBe(editor));
+    paste(editor, ' Neu.');
+    const gate = holdNextSave();
+    send(editor);
+    await waitFor(() => expect(gate.held()).toBe(true));
+    expect(screen.getByRole('button', { name: /Speichern/ }).getAttribute('aria-busy')).toBe('true');
+    paste(editor, ' Mehr.');
+    await gate.release();
+    // the newer text stays open as the edit
+    await waitFor(() => expect(api!.calls.filter((call) => call.method === 'PATCH')).toHaveLength(1));
+    await waitFor(() => expect(screen.getByRole('button', { name: /Speichern/ }).getAttribute('aria-busy')).toBeNull());
+    expect(editor.textContent).toBe('Erste. Neu. Mehr.');
+    send(editor);
+    await waitFor(() => expect(editors()).toEqual([]));
+    await within(await card('Lene Vogt')).findByText('Erste. Neu. Mehr.');
+  });
+
+  it('follows an edit in another view, and a save of a closed one', async () => {
+    comments = [own('c_own', 'Erste.')];
+    const routes = { 'PATCH /api/v1/comments/c_own': saving };
+    const first = renderCards({ routes });
+    await card('Lene Vogt');
+    await menuOf('Lene Vogt');
+    await choose('Bearbeiten');
+    const editor = await screen.findByRole('textbox', { name: 'Kommentar bearbeiten' });
+    await waitFor(() => expect(document.activeElement).toBe(editor));
+    paste(editor, ' Neu.');
+
+    // a second view of the item (page and preview) opens the edit with its text and shares it
+    renderCards({ routes });
+    await waitFor(() => expect(editors()).toHaveLength(2));
+    const other = editors().find((box) => box !== editor)!;
+    expect(other.textContent).toBe('Erste. Neu.');
+    paste(other, ' Mehr.');
+    await waitFor(() => expect(editor.textContent).toBe('Erste. Neu. Mehr.'));
+
+    // the first saves and closes before the answer: the second follows and closes with it
+    const gate = holdNextSave();
+    send(editor);
+    await waitFor(() => expect(gate.held()).toBe(true));
+    first.unmount();
+    await gate.release();
+    await waitFor(() => expect(editors()).toEqual([]));
+    expect(api!.calls.filter((call) => call.method === 'PATCH')).toHaveLength(1);
+    expect(drafts.pending()).toEqual([]);
+  });
+
+  it('offers no edit on a foreign comment, delete only to admins', async () => {
+    comments = [makeComment({ id: 'c_mara', author_id: 'u_mara' }), own('c_own', 'Von mir.')];
+    const first = renderCards();
+    // a member: nothing on Mara's comment, both on the own one
+    expect(await menuOf('Lene Vogt')).toEqual(['Bearbeiten', 'Löschen']);
+    await card('Mara Lindqvist');
+    expect(screen.queryByRole('button', { name: 'Aktionen für den Kommentar von Mara Lindqvist' })).toBeNull();
+    first.unmount();
+
+    // a project admin deletes any comment, but edits only the own
+    renderCards({ role: 'admin' });
+    expect(await menuOf('Mara Lindqvist')).toEqual(['Löschen']);
+  });
+
+  it('shows reactions without buttons and offers no actions on an archived item', async () => {
+    comments = [own('c_own', 'Von mir.'), makeComment({ id: 'c_web47_1', reactions: [{ emoji: '👍', user_ids: ['u_ida', 'u_lene'] }] })];
+    renderCards({ item: { ...web47, state_id: 'std_done', archived_at: '2026-11-01T09:00:00Z' } });
+    const article = await card('Mara Lindqvist');
+    await within(article).findByRole('img', { name: '👍, 2 Reaktionen: Ida Brenner, Lene Vogt' });
+    expect(within(article).queryByRole('button')).toBeNull();
+    expect(within(await card('Lene Vogt')).queryByRole('button')).toBeNull();
+  });
+
+  it('deletes with undo and brings the card back on failure', async () => {
+    comments = [own('c_first', 'Erstens.'), own('c_second', 'Zweitens.')];
+    let down = true;
+    const routes = {
+      'DELETE /api/v1/comments/c_first': () => {
+        comments = comments.filter((comment) => comment.id !== 'c_first');
+        return { status: 204 };
+      },
+      'DELETE /api/v1/comments/c_second': () => (down ? problem(503, 'service_unavailable') : ((comments = comments.filter((comment) => comment.id !== 'c_second')), { status: 204 })),
+    };
+    renderCards({ routes });
+    const timeline = await screen.findByRole('list', { name: 'Verlauf' });
+    await waitFor(() => expect(within(timeline).getAllByRole('article')).toHaveLength(2));
+
+    // the card goes at once; the focus moves on to the next one
+    await userEvent.setup().click(within(timeline).getAllByRole('button', { name: 'Aktionen für den Kommentar von Lene Vogt' })[0]!);
+    await choose('Löschen');
+    await waitFor(() => expect(within(timeline).getAllByRole('article')).toHaveLength(1));
+    const next = within(timeline).getByRole('article');
+    await waitFor(() => expect(document.activeElement).toBe(next));
+    const undo = currentToasts().at(-1)!;
+    expect(undo).toMatchObject({ title: 'Kommentar gelöscht', action: { label: 'Rückgängig' } });
+    // undo brings it back, nothing went out
+    act(() => runToastAction(undo.id));
+    await waitFor(() => expect(within(timeline).getAllByRole('article')).toHaveLength(2));
+    expect(api!.calls.filter((call) => call.method === 'DELETE')).toEqual([]);
+
+    // the last card: the focus goes to the composer
+    await userEvent.setup().click(within(timeline).getAllByRole('button', { name: 'Aktionen für den Kommentar von Lene Vogt' })[1]!);
+    await choose('Löschen');
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: /Kommentar schreiben/ })));
+    // the time runs out: the server refuses, the card comes back with the reason and a retry
+    act(() => dismissToast(currentToasts().find((toast) => toast.title === 'Kommentar gelöscht')!.id));
+    await waitFor(() => expect(within(timeline).getAllByRole('article')).toHaveLength(2));
+    const failed = await waitFor(() => {
+      const toast = currentToasts().find((entry) => entry.tone === 'error');
+      expect(toast).toMatchObject({ title: 'Kommentar nicht gelöscht', action: { label: 'Erneut versuchen' } });
+      return toast!;
+    });
+    down = false;
+    act(() => runToastAction(failed.id));
+    await waitFor(() => expect(within(timeline).getAllByRole('article')).toHaveLength(1));
+    expect(api!.calls.filter((call) => call.method === 'DELETE').map((call) => call.url)).toEqual(['/api/v1/comments/c_second', '/api/v1/comments/c_second']);
+  });
+
+  it('reacts and takes the reaction back', async () => {
+    comments = [makeComment({ id: 'c_web47_1', reactions: [{ emoji: '👍', user_ids: ['u_ida', 'u_theo'] }] })];
+    const user = userEvent.setup();
+    const react = (emoji: string, on: boolean) =>
+      change('c_web47_1', (comment) => {
+        const others = comment.reactions.map((reaction) => (reaction.emoji === emoji ? { ...reaction, user_ids: reaction.user_ids.filter((id) => id !== 'u_lene') } : reaction));
+        const group = others.find((reaction) => reaction.emoji === emoji);
+        const reactions = on ? (group ? others.map((reaction) => (reaction === group ? { ...group, user_ids: [...group.user_ids, 'u_lene'] } : reaction)) : [...others, { emoji, user_ids: ['u_lene'] }]) : others;
+        return { ...comment, reactions: reactions.filter((reaction) => reaction.user_ids.length > 0) };
+      });
+    renderCards({
+      routes: {
+        'PUT /api/v1/comments/c_web47_1/reactions': (body) => react((body as { emoji: string }).emoji, true),
+        'DELETE /api/v1/comments/c_web47_1/reactions': (_body, request) => react(request.searchParams.get('emoji')!, false),
+      },
+    });
+    const article = await card('Mara Lindqvist');
+    const thumbs = await within(article).findByRole('button', { name: '👍, 2 Reaktionen: Ida Brenner, Theo Okafor' });
+    expect(thumbs.getAttribute('aria-pressed')).toBe('false');
+
+    await user.click(thumbs);
+    // at once, before the answer
+    expect(thumbs.getAttribute('aria-label')).toBe('👍, 3 Reaktionen: Ida Brenner, Theo Okafor, Lene Vogt');
+    expect(thumbs.getAttribute('aria-pressed')).toBe('true');
+    await waitFor(() => expect(api!.calls.filter((call) => call.method === 'PUT')).toHaveLength(1));
+    await user.click(thumbs);
+    await waitFor(() => expect(thumbs.getAttribute('aria-label')).toBe('👍, 2 Reaktionen: Ida Brenner, Theo Okafor'));
+    expect(api!.calls.at(-1)!.url).toBe(`/api/v1/comments/c_web47_1/reactions?emoji=${encodeURIComponent('👍')}`);
+
+    // any other emoji from the picker
+    await user.click(within(article).getByRole('button', { name: 'Reaktion hinzufügen' }));
+    await user.click(await screen.findByRole('button', { name: 'Party' }));
+    const party = await within(article).findByRole('button', { name: '🎉, 1 Reaktion: Lene Vogt' });
+    expect(party.getAttribute('aria-pressed')).toBe('true');
+    await waitFor(() => expect(api!.calls.filter((call) => call.method === 'PUT').map((call) => call.body)).toEqual([{ emoji: '👍' }, { emoji: '🎉' }]));
+  });
+
+  it("keeps each failed reaction's toast", async () => {
+    comments = [makeComment({ id: 'c_web47_1', reactions: [{ emoji: '👍', user_ids: ['u_ida'] }] })];
+    const user = userEvent.setup();
+    renderCards({ routes: { 'PUT /api/v1/comments/c_web47_1/reactions': () => problem(503, 'service_unavailable') } });
+    const article = await card('Mara Lindqvist');
+    await user.click(await within(article).findByRole('button', { name: '👍, 1 Reaktion: Ida Brenner' }));
+    await user.click(within(article).getByRole('button', { name: 'Reaktion hinzufügen' }));
+    await user.click(await screen.findByRole('button', { name: 'Party' }));
+
+    // both reactions go back, and each says so with its own retry
+    await waitFor(() => expect(currentToasts().filter((toast) => toast.tone === 'error')).toHaveLength(2));
+    expect(currentToasts().map((toast) => [toast.title, toast.action?.label])).toEqual([
+      ['Reaktion 👍 nicht gespeichert', 'Erneut versuchen'],
+      ['Reaktion 🎉 nicht gespeichert', 'Erneut versuchen'],
+    ]);
+    await within(article).findByRole('button', { name: '👍, 1 Reaktion: Ida Brenner' });
+    expect(within(article).queryByRole('button', { name: /🎉/ })).toBeNull();
   });
 });

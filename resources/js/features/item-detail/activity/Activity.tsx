@@ -1,9 +1,12 @@
 /*
- * The activity of an item (spec 4.10): its history as a timeline, oldest first, filtered to everything ("Alles") or
- * the changes ("Änderungen"); comments and the filter "Kommentare" come with Phase 7.
- * - The whole history loads (every page, `useActivity`): the server pages from the oldest entry on, and the newest
- *   changes must never be missing. The timeline shows the newest `SHOWN_LINES` lines; "Mehr laden" above them shows
- *   the earlier ones, `SHOWN_LINES` at a time.
+ * The activity of an item (spec 4.10): its comments and its history in one timeline, oldest first, filtered to
+ * everything ("Alles"), the comments ("Kommentare") or the changes ("Änderungen"); the comment composer stands at its
+ * end.
+ * - The whole history and every comment load (every page, `useActivity`): the server pages from the oldest entry on,
+ *   and the newest must never be missing. The timeline shows the newest `SHOWN_LINES` lines (a comment is a line);
+ *   "Mehr laden" above them shows the earlier ones, `SHOWN_LINES` at a time.
+ * - A comment is a card (`CommentCard`) with its actions and reactions; one deleted while its undo toast stands is left
+ *   out (`useHiddenComments`).
  * - Changes by the same account, made the same way for the same reason within five minutes, read as one line
  *   (`buildTimeline`); every field change reads as old → new (`phrasesOf`), a reason stands under its line.
  * - On the page the filter is part of the address (`?activity=changes`), so it can be linked; the preview keeps it.
@@ -26,6 +29,8 @@ import { useActivity } from '@/hooks/workItems';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
 import { t, tn } from '@/lib/i18n';
 import type { WorkItemDetail } from '@/types';
+import { CommentCard, useHiddenComments } from '../comments/CommentCard';
+import { CommentComposer } from '../comments/CommentComposer';
 import { focusWhenLost, Section, useDetail } from '../shared';
 import { EventLine } from './EventLine';
 import type { PhraseContext } from './phrases';
@@ -34,7 +39,7 @@ import { buildTimeline, type ActivityFilter } from './timeline';
 /** Lines the timeline shows at first and adds with every "Mehr laden". */
 export const SHOWN_LINES = 50;
 
-const FILTERS: ActivityFilter[] = ['all', 'changes'];
+const FILTERS: ActivityFilter[] = ['all', 'comments', 'changes'];
 
 const filterOf = (value: string | null): ActivityFilter => (FILTERS.includes(value as ActivityFilter) ? (value as ActivityFilter) : 'all');
 
@@ -81,7 +86,9 @@ export function Activity({ detail }: { detail: WorkItemDetail }) {
     propertyOf: (key) => properties?.find((property) => property.key === key),
   };
 
-  const lines = buildTimeline(activity.data ?? [], filter);
+  const hidden = useHiddenComments();
+  const entries = (activity.data ?? []).filter((entry) => !(entry.kind === 'comment' && hidden.has(entry.id)));
+  const lines = buildTimeline(entries, filter);
   const earlier = Math.max(0, lines.length - shown);
   const showMore = () => {
     setShown((count) => count + SHOWN_LINES);
@@ -136,12 +143,13 @@ export function Activity({ detail }: { detail: WorkItemDetail }) {
             aria-label={t('items.activity.list')}
             className="relative mt-3 flex flex-col gap-3 outline-none before:absolute before:top-3 before:bottom-3 before:left-2.5 before:border-l before:border-dashed before:border-line-strong"
           >
-            {lines.slice(earlier).map((line) => (
-              <EventLine key={line.key} line={line} ctx={ctx} />
-            ))}
+            {lines
+              .slice(earlier)
+              .map((line) => (line.kind === 'comment' ? <CommentCard key={line.key} comment={line.comment} item={item} /> : <EventLine key={line.key} line={line} ctx={ctx} />))}
           </ol>
         </>
       )}
+      <CommentComposer item={item} />
     </Section>
   );
 }
