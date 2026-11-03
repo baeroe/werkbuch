@@ -9,8 +9,8 @@ use App\Support\Actor;
 use finfo;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
-use Symfony\Component\HttpFoundation\HeaderUtils;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\HeaderUtils;
 
 /**
  * The file of an attachment, for signed-in accounts and tokens that may read it (A235). Only the picture types of

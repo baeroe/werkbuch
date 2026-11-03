@@ -86,7 +86,7 @@ class AttachmentsSeeder extends Seeder
     private static function withModelEvents(Closure $write): Media
     {
         // WithoutModelEvents puts a null dispatcher in place, never none
-        $silenced = Model::getEventDispatcher();
+        $silenced = Model::getEventDispatcher() ?? app(Dispatcher::class);
         Model::setEventDispatcher(app(Dispatcher::class));
 
         try {
