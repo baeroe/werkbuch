@@ -5,9 +5,13 @@ import { allEntries, api, arrowTo, createE2eProject, createItem, pressMod, remov
 // The create dialog with the keyboard only, signed in as the e2e person (org admin) in English. Each test works in a
 // project of its own (`E2E …`, removed in `finally`); the dialog opens with `c` on a page of that project, which it
 // then starts in, from "Child item" of an epic, or from "New item" of "My items". Flow 3 of the spec: a required
-// property of the type is asked for at its field before the item is created.
+// property of the type is asked for at its field before the item is created. The description takes mentions and
+// pasted pictures, which the new item owns once it is created.
 
 const name = (what: string) => `E2E create ${what} ${variant()} ${runId()}`;
+
+/** A PNG of one pixel. */
+const PIXEL = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 
 /** The id of the entry of a catalog (`workflows`, `work-item-types`) named `entry`. */
 async function idOf(page: Page, path: string, entry: string): Promise<{ id: string; states?: { id: string; name: string }[] }> {
@@ -167,6 +171,50 @@ test('creates several items in a row with another one', async ({ page }) => {
     await expect(page.getByText(tr('en', 'items.create.parked'), { exact: true })).toHaveCount(0);
     expect((await readItem(page, `${identifier}-1`)).title).toBe('E2E Impressum prüfen');
     expect((await readItem(page, `${identifier}-2`)).title).toBe('E2E Datenschutz prüfen');
+  } finally {
+    await removeE2eProject(page, identifier);
+  }
+});
+
+test('creates an item with a pasted image and a mention', async ({ page }) => {
+  const { identifier } = await createE2eProject(page, name('image'), { types: ['Task'] });
+  try {
+    await openProject(page, identifier);
+    const { dialog } = await openDialog(page);
+    await page.keyboard.type('E2E Plakat abnehmen');
+
+    // the description is written in the project of the dialog: `@` offers its people, pictures go into it
+    const description = dialog.getByRole('textbox', { name: tr('en', 'editor.label.description') });
+    await tabTo(page, description, { max: 4 });
+    await page.keyboard.type('Bitte @mara');
+    await expect(page.getByRole('option')).toHaveCount(1);
+    await expect(page.getByRole('option', { name: /Mara Lindqvist/ })).toBeVisible();
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('prüfen:');
+    await expect(dialog.locator('.rt-mention')).toHaveText('@mara');
+
+    // what a browser hands over when a screenshot is pasted: a file, no HTML
+    await description.evaluate((element, base64) => {
+      const data = new DataTransfer();
+      data.items.add(new File([Uint8Array.from(atob(base64), (char) => char.charCodeAt(0))], 'plakat.png', { type: 'image/png' }));
+      element.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+    }, PIXEL);
+    await expect(dialog.getByRole('img', { name: 'plakat.png' })).toBeVisible();
+
+    await pressMod(page, 'Enter');
+    await expect(created(page, `${identifier}-1`)).toBeVisible();
+    await expect(dialog).toBeHidden();
+
+    // the item holds the mention and the picture, which now belongs to it
+    const response = await api(page, 'GET', `/api/v1/work-items/${identifier}-1`);
+    expect(response.status(), await response.text()).toBe(200);
+    const markdown = ((await response.json()) as { data: { description: string } }).data.description;
+    expect(markdown).toMatch(/^Bitte @mara prüfen:/);
+    const attachment = /!\[plakat\.png\]\(attachment:([0-9a-z]{26})\)/.exec(markdown)?.[1];
+    expect(attachment).toBeTruthy();
+    const record = await api(page, 'GET', `/api/v1/attachments/${attachment}`);
+    expect(record.status(), await record.text()).toBe(200);
+    expect(((await record.json()) as { data: { owner: { type: string } | null } }).data.owner?.type).toBe('work_item');
   } finally {
     await removeE2eProject(page, identifier);
   }

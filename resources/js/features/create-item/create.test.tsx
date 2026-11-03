@@ -3,7 +3,9 @@
  * focus, a required property the server asks for shows at its field, mod+enter creates once, "Weitere anlegen" keeps
  * project, type and fields, the status offers the start state and its moves, a closed draft comes back with undo, a
  * failed reload keeps the draft, a stale refusal disappears with a change, an item created while the dialog closed
- * parks nothing, and a viewer is told why. Also the host (`c`, lazy) and "Neues Item" of "Meine Items".
+ * parks nothing, and a viewer is told why. Pictures pasted into the description go out with the item, "Anlegen" waits
+ * for running uploads and for pictures of another project to go. Also the host (`c`, lazy) and "Neues Item" of
+ * "Meine Items".
  */
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -11,15 +13,17 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { StrictMode, type ReactNode } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { currentToasts, resetToasts, runToastAction } from '@/components/ui/toast';
+import { currentToasts, dismissToast, resetToasts, runToastAction } from '@/components/ui/toast';
 import { preloadEditor } from '@/editor/RichTextEditor';
+import { qk } from '@/hooks/keys';
 import { MyItemsEmpty } from '@/features/items/MyItemsEmpty';
 import { canUndo, undoLatest } from '@/lib/undo';
 import { CreateHost } from '@/shell/CreateHost';
 import { useUiStore, type CreateDefaults } from '@/store/ui';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
-import { agency, ida, labels, lene, list, makeWorkItem, mara, organization, project, properties, queryItems, standard, types, web30, web47, web48 } from '@/test/fixtures';
-import type { Project, Property, User, WorkItem } from '@/types';
+import { agency, ida, labels, lene, list, makeAttachment, makeWorkItem, mara, organization, project, properties, queryItems, standard, types, web30, web47, web48 } from '@/test/fixtures';
+import { FakeXhr, installFakeXhr, restoreFakeXhr } from '@/test/xhr';
+import type { Attachment, Project, Property, RichText, User, WorkItem } from '@/types';
 import { CreateItemDialog } from './CreateItemDialog';
 
 const inertia = vi.hoisted(() => ({ url: '/my-items' }));
@@ -757,6 +761,133 @@ describe('CreateItemDialog', () => {
     expect(await within(dialog).findByText('Hier kannst du kein Item anlegen')).toBeTruthy();
     expect(within(dialog).getByText('Du kannst gerade in keinem Projekt Items anlegen.')).toBeTruthy();
     expect(within(dialog).getByRole('button', { name: /^Anlegen/ }).getAttribute('aria-disabled')).toBe('true');
+  });
+});
+
+describe('pictures and files in the description', () => {
+  /** What a browser hands over when a screenshot is pasted (jsdom knows no ClipboardEvent). */
+  const pasteImage = (target: HTMLElement, name = 'screenshot.png') =>
+    fireEvent.paste(target, {
+      clipboardData: { types: ['Files'], files: [new File([new Uint8Array([137, 80, 78, 71])], name, { type: 'image/png' })], getData: () => '' },
+    });
+  /** The server stored the upload: the image goes into the text. */
+  const stored = (attachment: Attachment) =>
+    act(async () => {
+      FakeXhr.last.answer(201, { data: attachment });
+    });
+  const imagesOf = (doc: unknown): unknown[] => {
+    const node = doc as RichText | null;
+    if (!node) return [];
+    return [...(node.type === 'image' ? [node.attrs] : []), ...(node.content ?? []).flatMap((child) => imagesOf(child))];
+  };
+  const deletes = () => api!.calls.filter((call) => call.method === 'DELETE');
+
+  beforeEach(() => installFakeXhr());
+  afterEach(() => restoreFakeXhr());
+
+  it('sends a pasted image with the item', async () => {
+    const user = userEvent.setup();
+    const { dialog, title } = await openDialog();
+    await user.type(title, 'Plakat drucken');
+    const description = within(dialog).getByRole('textbox', { name: 'Beschreibung' });
+    pasteImage(description, 'plakat.png');
+    // into the project of the dialog, without an owner: creating the item links it (A232)
+    expect(FakeXhr.last.sent?.get('project_id')).toBe('p_web');
+    expect(FakeXhr.last.sent?.get('kind')).toBe('inline');
+    await stored(makeAttachment({ id: 'att_plakat', filename: 'plakat.png' }));
+    expect(await within(dialog).findByRole('img', { name: 'plakat.png' })).toBeTruthy();
+
+    await modEnter();
+    await waitFor(() => expect(posts()).toHaveLength(1));
+    expect(imagesOf(posts()[0].description_json)).toEqual([{ attachmentId: 'att_plakat', alt: 'plakat.png' }]);
+  });
+
+  it('waits for a running upload before creating', async () => {
+    const user = userEvent.setup();
+    const { dialog, title } = await openDialog();
+    await user.type(title, 'Plakat drucken');
+    pasteImage(within(dialog).getByRole('textbox', { name: 'Beschreibung' }));
+
+    // an upload on its way is no node in the text yet: "Anlegen" says why it waits
+    const submit = within(dialog).getByRole('button', { name: /^Anlegen/ });
+    await waitFor(() => expect(submit.getAttribute('aria-disabled')).toBe('true'));
+    expect(document.getElementById(submit.getAttribute('aria-describedby')!)?.textContent).toBe('Warte, bis die Uploads fertig sind.');
+    await user.click(submit);
+    await modEnter();
+    const notice = await within(dialog).findByRole('alert');
+    expect(notice.textContent).toBe('Noch nicht angelegtWarte, bis die Uploads fertig sind.');
+    expect(posts()).toEqual([]);
+
+    // stored: the notice goes and the item goes out with the image
+    await stored(makeAttachment());
+    await waitFor(() => expect(within(dialog).queryByRole('alert')).toBeNull());
+    expect(submit.hasAttribute('aria-disabled')).toBe(false);
+    await user.click(submit);
+    await waitFor(() => expect(posts()).toHaveLength(1));
+    expect(imagesOf(posts()[0].description_json)).toEqual([{ attachmentId: 'att_1', alt: 'screenshot.png' }]);
+  });
+
+  it('warns about images after a project change', async () => {
+    const user = userEvent.setup();
+    const { dialog, title } = await openDialog();
+    await user.type(title, 'Plakat drucken');
+    const description = within(dialog).getByRole('textbox', { name: 'Beschreibung' });
+    pasteImage(description);
+    await stored(makeAttachment());
+    await within(dialog).findByRole('img', { name: 'screenshot.png' });
+    expect(within(dialog).queryByText(/Bilder aus dem alten Projekt/)).toBeNull();
+
+    // the image belongs to WEB: in APP the server refuses the description (A233)
+    await choose(user, within(dialog).getByRole('combobox', { name: /^Projekt/ }), /Kunden-App/);
+    const warning = await within(dialog).findByText('Bilder aus dem alten Projekt passen nicht: entferne sie oder wechsle zurück.', { selector: 'p' });
+    expect(description.getAttribute('aria-invalid')).toBe('true');
+    expect(description.getAttribute('aria-describedby')?.split(' ')).toContain(warning.closest('[id]')!.id);
+    const submit = within(dialog).getByRole('button', { name: /^Anlegen/ });
+    expect(submit.getAttribute('aria-disabled')).toBe('true');
+    // mod+enter sends nothing and goes to the description, where the images are
+    await modEnter();
+    await waitFor(() => expect(document.activeElement).toBe(description));
+    expect(posts()).toEqual([]);
+
+    // back in WEB the images fit again
+    await choose(user, within(dialog).getByRole('combobox', { name: /^Projekt/ }), /Website-Relaunch/);
+    await waitFor(() => expect(within(dialog).queryByText(/Bilder aus dem alten Projekt/)).toBeNull());
+    expect(description.getAttribute('aria-invalid')).not.toBe('true');
+    await modEnter();
+    await waitFor(() => expect(posts()).toHaveLength(1));
+    expect(posts()[0].project_id).toBe('p_web');
+  });
+
+  it('keeps the uploads of a parked draft and deletes none whose undo ran out (A239)', async () => {
+    const user = userEvent.setup();
+    renderWith(<Host />, { 'GET /api/v1/attachments/att_1': () => ({ body: { data: makeAttachment() } }) });
+    act(() => useUiStore.getState().openCreate({ project_id: 'p_web' }));
+    let dialog = await screen.findByRole('dialog', { name: 'Neues Item' });
+    await user.type(await within(dialog).findByRole('textbox', { name: /^Titel/ }), 'Plakat drucken');
+    pasteImage(within(dialog).getByRole('textbox', { name: 'Beschreibung' }));
+    await stored(makeAttachment());
+    await within(dialog).findByRole('img', { name: 'screenshot.png' });
+    await user.click(within(dialog).getByRole('button', { name: 'Abbrechen' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    // undo brings the draft back with its image: an upload belongs to nobody until the item is created; the cache
+    // forgot the upload meanwhile, so the dialog reads it again, and in another project it still does not fit
+    act(() => client.removeQueries({ queryKey: qk.attachments.all }));
+    act(() => void undoLatest());
+    dialog = await screen.findByRole('dialog', { name: 'Neues Item' });
+    expect(await within(dialog).findByRole('img', { name: 'screenshot.png' })).toBeTruthy();
+    expect(api!.calls.some((call) => call.method === 'GET' && call.url === '/api/v1/attachments/att_1')).toBe(true);
+    await choose(user, within(dialog).getByRole('combobox', { name: /^Projekt/ }), /Kunden-App/);
+    expect(await within(dialog).findByText('Bilder aus dem alten Projekt passen nicht: entferne sie oder wechsle zurück.', { selector: 'p' })).toBeTruthy();
+    await user.click(within(dialog).getByRole('button', { name: 'Abbrechen' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    // the undo runs out: the upload stays, the hourly job removes what nobody owns after 24 hours (ruling T17-I4)
+    const parked = parkedToasts();
+    expect(parked).toHaveLength(1);
+    act(() => dismissToast(parked[0].id));
+    expect(parkedToasts()).toEqual([]);
+    expect(deletes()).toEqual([]);
   });
 });
 

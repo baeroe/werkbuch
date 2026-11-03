@@ -621,6 +621,7 @@
     "items.create.created": ":key angelegt",
     "items.create.draft_gone": "„:name“ steht nicht mehr zur Wahl. Prüfe Projekt und Typ.",
     "items.create.failed": "Item nicht angelegt",
+    "items.create.images_other_project": "Bilder aus dem alten Projekt passen nicht: entferne sie oder wechsle zurück.",
     "items.create.load_failed": "Das Formular ließ sich nicht laden: :message",
     "items.create.loading": "Formular wird geladen …",
     "items.create.none.description": "Du kannst gerade in keinem Projekt Items anlegen.",

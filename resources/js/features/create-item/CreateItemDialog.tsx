@@ -46,6 +46,8 @@ export function CreateItemDialog({ open, defaults, onOpenChange }: CreateItemDia
   const [another, setAnother] = useState(false);
   // why "Anlegen" cannot send yet: the form is loading, failed, or no project takes new items
   const [unavailable, setUnavailable] = useState<string | null>(null);
+  // why the draft cannot go out yet: an upload runs, or pictures of another project are in the description
+  const [held, setHeld] = useState<string | null>(null);
   const create = useCreateWorkItem();
   const title = useRef<HTMLInputElement>(null);
   /** What the form holds while it is shown and its item not yet created. */
@@ -114,7 +116,7 @@ export function CreateItemDialog({ open, defaults, onOpenChange }: CreateItemDia
         <>
           <Switch label={t('items.create.another')} checked={another} onCheckedChange={setAnother} className="mr-auto" />
           <DialogClose render={<Button variant="ghost">{t('common.cancel')}</Button>} />
-          <Button variant="primary" type="submit" form={formId} shortcut={SHORTCUTS['dialog.submit'].keys} pending={create.isPending} disabledReason={unavailable}>
+          <Button variant="primary" type="submit" form={formId} shortcut={SHORTCUTS['dialog.submit'].keys} pending={create.isPending} disabledReason={unavailable ?? held}>
             {t('items.create.submit')}
           </Button>
         </>
@@ -129,6 +131,7 @@ export function CreateItemDialog({ open, defaults, onOpenChange }: CreateItemDia
         send={send}
         pending={create.isPending}
         onUnavailable={setUnavailable}
+        onHold={setHeld}
         onClose={() => onOpenChange(false)}
       />
     </Dialog>

@@ -1,9 +1,9 @@
 /*
  * How the create form sends: mod+enter, Enter in the title and "Anlegen" all ask `requestCreate`, which waits a tick
- * for fields that keep their value on Enter, then checks what only the form knows (a property that still shows a text
- * it cannot read, the title) and sends once. A press while the call runs does nothing, and so does every press after
- * the item was created: the form stays mounted while the dialog animates out, with its mod+enter registered and the
- * title it sent still in the draft.
+ * for fields that keep their value on Enter, then checks what only the form knows (an upload of the description still
+ * on its way, pictures of another project in it, a property that still shows a text it cannot read, the title) and
+ * sends once. A press while the call runs does nothing, and so does every press after the item was created: the form
+ * stays mounted while the dialog animates out, with its mod+enter registered and the title it sent still in the draft.
  *
  * Field errors of the server (422) go to their fields with the focus on the first, any other refusal on top, a failure
  * without an answer into a toast with a retry. "Weitere anlegen" starts the next draft (`nextDraft`).
@@ -59,6 +59,12 @@ export interface CreateSubmitOptions {
   draft: Draft;
   /** Typed values that cannot be read, by key. */
   unreadable: Record<string, string>;
+  /** An upload of the description runs: it is no node in the text yet. */
+  uploading: boolean;
+  /** The description holds pictures or files of another project, which the server refuses (A233). */
+  foreign: boolean;
+  /** Puts the focus into the description. */
+  focusDescription: () => void;
   catalogs: Catalogs;
   /** The properties a type asks for, in its order. */
   fieldsOf: (typeId: string) => PropertyEntry[];
@@ -113,7 +119,18 @@ export function useCreateSubmit(options: CreateSubmitOptions): () => void {
   function createNow() {
     // a press scheduled before the item was created
     if (done.current) return;
-    const { catalogs, fieldsOf, fieldId, another, send, titleRef, onClose, setDraft, setErrors, setAttempted, setBlocked, focusFirstError } = current.current;
+    const { uploading, foreign, focusDescription, catalogs, fieldsOf, fieldId, another, send, titleRef, onClose, setDraft, setErrors, setAttempted, setBlocked, focusFirstError } =
+      current.current;
+    // an upload on its way: the notice says so until it is stored
+    if (uploading) {
+      setBlocked(t('editor.upload.pending'));
+      return;
+    }
+    // pictures of another project: the notice at the description says what to do, the focus goes there
+    if (foreign) {
+      focusDescription();
+      return;
+    }
     const { draft: sent, unreadable: stuckValues } = latest.current;
     const own = fieldsOf(sent.typeId);
     setAttempted(true);

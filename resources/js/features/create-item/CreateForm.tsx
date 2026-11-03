@@ -9,11 +9,19 @@
  * - Sending is `useCreateSubmit`: once per press, never again after the item was created (the form fades out with
  *   the dialog). Field errors of the server (422) show at their field; an error disappears as soon as its field
  *   changes (13c). Any other refusal shows on top.
+ * - The description is written in the chosen project: `/`, `@` its people, `#` items, and pictures and files pasted,
+ *   dropped or chosen are uploaded into it. "Anlegen" waits for running uploads (`onHold`, the reason at the button);
+ *   an upload belongs to nobody until the item is created (A232). After a change of project, pictures and files of
+ *   another project do not fit (the server refuses the description, A233): a notice says so and marks the
+ *   description, and "Anlegen" waits until they are removed or the project is changed back.
  */
 
 import { usePage } from '@inertiajs/react';
+import { useQueries } from '@tanstack/react-query';
+import type { Editor } from '@tiptap/react';
 import { FileQuestionMark, RotateCw } from 'lucide-react';
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { getAttachment } from '@/api/attachments';
 import type { CreateWorkItemInput } from '@/api/workItems';
 import { TypeGlyph } from '@/components/fields/TypeGlyph';
 import { Banner } from '@/components/ui/Banner';
@@ -25,12 +33,16 @@ import { Select } from '@/components/ui/Select';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
 import { labelClass } from '@/components/ui/styles';
 import { RichTextEditor } from '@/editor/RichTextEditor';
+import { UploadContext, useUploadCounter, useUploadsPending } from '@/editor/UploadContext';
+import { ATTACHMENT_FRESH_MS } from '@/hooks/attachments';
+import { qk } from '@/hooks/keys';
 import { useProjects } from '@/hooks/projects';
 import { useProperties } from '@/hooks/properties';
 import { useWorkflows } from '@/hooks/workflows';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
 import { t } from '@/lib/i18n';
 import { usePermissions } from '@/lib/permissions';
+import { attachmentIds } from '@/lib/richtext';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import type { CreateDefaults } from '@/store/ui';
 import type { Project, Property, PropertyValue, WorkItem, WorkItemType, Workflow } from '@/types';
@@ -53,6 +65,8 @@ export type CreateFormProps = {
   pending: boolean;
   /** Why the form cannot create (loading, failed, no project), or null once it can. */
   onUnavailable: (reason: string | null) => void;
+  /** Why the draft cannot go out yet (an upload runs, pictures of another project), or null. */
+  onHold: (reason: string | null) => void;
   onClose: () => void;
 };
 
@@ -151,6 +165,7 @@ function FormBody({
   unsaved,
   send,
   pending,
+  onHold,
   onClose,
   projects,
   initialProjectId,
@@ -238,9 +253,36 @@ function FormBody({
   const [attempted, setAttempted] = useState(false);
   const [blocked, setBlocked] = useState<string | null>(null);
   const [focusError, setFocusError] = useState(0);
+
+  // the uploads of the description: "Anlegen" waits for them, and for pictures of another project to go
+  const uploads = useUploadCounter();
+  const uploading = useUploadsPending(uploads);
+  const editor = useRef<Editor | null>(null);
+  const foreignId = useId();
+  const attached = useQueries({
+    queries: attachmentIds(draft.description).map((id) => ({
+      queryKey: qk.attachments.detail(id),
+      queryFn: () => getAttachment(id),
+      staleTime: ATTACHMENT_FRESH_MS,
+    })),
+  });
+  // the project of an upload never changes; one that is still loading or not found is the server's to judge
+  const foreign = attached.some((query) => query.data !== undefined && query.data.project_id !== draft.projectId);
+  const uploadWait = t('editor.upload.pending');
+  const hold = uploading > 0 ? uploadWait : foreign ? t('items.create.images_other_project') : null;
+  useEffect(() => onHold(hold), [hold, onHold]);
+  useEffect(() => () => onHold(null), [onHold]);
+  // the uploads are stored: the notice of a press that waited for them goes
+  useEffect(() => {
+    if (uploading === 0) setBlocked((current) => (current === uploadWait ? null : current));
+  }, [uploading, uploadWait]);
+
   const requestCreate = useCreateSubmit({
     draft,
     unreadable,
+    uploading: uploading > 0,
+    foreign,
+    focusDescription: () => editor.current?.commands.focus(),
     catalogs: { projects, types, workflows },
     fieldsOf,
     fieldId,
@@ -314,6 +356,8 @@ function FormBody({
   const lostValues = Object.entries(errors).filter(([path]) => path.startsWith('values.') && !shownValues.has(path));
   const formError = [errors.form, ...[...otherErrors, ...lostValues].map(([, message]) => message)].filter(Boolean).join(' ') || null;
 
+  const describedBy = [errors.description_json && descriptionError, foreign && foreignId].filter(Boolean).join(' ') || undefined;
+
   return (
     <form
       ref={form}
@@ -377,16 +421,21 @@ function FormBody({
         <p className={`${labelClass} mb-1.5`} aria-hidden="true">
           {t('editor.label.description')}
         </p>
-        <RichTextEditor
-          value={draft.description}
-          onChange={(description) => {
-            update({ description });
-            clearError('description_json');
-          }}
-          preset="description"
-          invalid={Boolean(errors.description_json)}
-          describedBy={errors.description_json ? descriptionError : undefined}
-        />
+        {foreign && <Banner id={foreignId} tone="danger" role="status" title={t('items.create.images_other_project')} className="mb-2" />}
+        <UploadContext value={uploads}>
+          <RichTextEditor
+            value={draft.description}
+            onChange={(description) => {
+              update({ description });
+              clearError('description_json');
+            }}
+            preset="description"
+            projectId={draft.projectId}
+            editorRef={editor}
+            invalid={Boolean(errors.description_json) || foreign}
+            describedBy={describedBy}
+          />
+        </UploadContext>
         <div aria-live="polite">
           {errors.description_json && (
             <p id={descriptionError} className="mt-1.5 text-sm font-medium text-danger">

@@ -19,6 +19,7 @@ import { CommandPalette } from '@/features/palette/CommandPalette';
 import { listCommands } from '@/lib/commands';
 import { useUiStore } from '@/store/ui';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
+import { FakeXhr, installFakeXhr, restoreFakeXhr } from '@/test/xhr';
 import { ida, labels, lene, list, makeWorkItem, mara, organization, project, properties, queryItems, relationTypes, resolutions, standard, types, web30, web47, web47Relations, web48 } from '@/test/fixtures';
 import type { Organization, Project, ProjectMember, Property, RichText, User, WorkItem, WorkItemType } from '@/types';
 import { closePeekOnNavigation, PeekHost } from '@/shell/PeekHost';
@@ -626,6 +627,23 @@ describe('properties in the detail', () => {
     fireEvent.blur(editor.closest('dd')!, { relatedTarget: document.body });
     await waitFor(() => expect(stepsSent()).toHaveLength(3));
     expect(JSON.stringify(stepsSent()[2])).toContain('!');
+  });
+
+  it('uploads a picture pasted into a rich text property into the project of the item', async () => {
+    withSteps(false);
+    installFakeXhr();
+    try {
+      renderWith(<ItemPeek itemId="wi_web_47" />);
+      const editor = await screen.findByRole('textbox', { name: 'Schritte' });
+      await waitFor(() => expect(editor.textContent).toBe('Formular öffnen'));
+      fireEvent.paste(editor, {
+        clipboardData: { types: ['Files'], files: [new File([new Uint8Array([137, 80, 78, 71])], 'fehler.png', { type: 'image/png' })], getData: () => '' },
+      });
+      expect(FakeXhr.last.sent?.get('project_id')).toBe(web47.project_id);
+      expect(FakeXhr.last.sent?.get('kind')).toBe('inline');
+    } finally {
+      restoreFakeXhr();
+    }
   });
 
   it('shows the refusal of the server at a rich text property', async () => {
