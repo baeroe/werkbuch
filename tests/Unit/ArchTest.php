@@ -24,6 +24,9 @@ arch('views translate into queries and write nothing')
 arch('search turns models into documents and writes nothing')
     ->expect('App\Search')->classes()->toBeFinal()
     ->not->toUse([EventRecorder::class, 'Illuminate\Support\Facades\DB', 'Illuminate\Support\Facades\Schema']);
+arch('the consumer of notifications hands every event to its action and computes nothing')
+    ->expect('App\Notifications\NotificationConsumer')->toBeFinal()
+    ->not->toUse([EventRecorder::class, 'Illuminate\Support\Facades\DB', 'App\Domain', 'App\Models\Notification']);
 arch('domain classes are final')->expect('App\Domain')->classes()->toBeFinal();
 arch('rich text is final and leaves actions, http and the database alone')
     ->expect('App\RichText')->classes()->toBeFinal()->not->toUse(['App\Actions', 'App\Http', 'Illuminate\Support\Facades\DB']);
@@ -100,6 +103,13 @@ it('keeps App\Search free of writes', function () {
 
     expect(appFiles('app/Search'))->not->toBe([])
         ->and($hits)->toBe([]);
+});
+
+it('keeps the consumer of notifications free of writes', function () {
+    $file = 'app/Notifications/NotificationConsumer.php';
+    $code = (string) file_get_contents(repo_path($file));
+
+    expect([...modelWrites($code, $file), ...inserts($code, $file)])->toBe([]);
 });
 
 it('detects a handle() without an Actor first', function () {

@@ -29,6 +29,7 @@ use App\Actions\Labels\ListLabels;
 use App\Actions\Labels\SaveLabel;
 use App\Actions\Media\ShowMedia;
 use App\Actions\Notifications\GetNotificationPreferences;
+use App\Actions\Notifications\NotifyRecipients;
 use App\Actions\Notifications\SaveNotificationPreferences;
 use App\Actions\Organization\GetOrganization;
 use App\Actions\Organization\UpdateOrganization;
@@ -101,6 +102,7 @@ use App\Events\EventType;
 use App\Models\Attachment;
 use App\Models\Comment;
 use App\Models\CommentReaction;
+use App\Models\Event;
 use App\Models\Label;
 use App\Models\Property;
 use App\Models\RelationType;
@@ -797,6 +799,13 @@ return [
             'preferences' => [['event' => 'comment', 'channel' => 'mail', 'enabled' => false]],
         ]),
         'allowed' => $people,
+    ],
+    // the work of the consumer `notifications` for an event of the outbox (here one of the migrations, which tells
+    // nobody), without an event of its own
+    'NotifyRecipients' => [
+        'action' => NotifyRecipients::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => NotifyRecipients::run($a, Event::query()->where('type', EventType::BotCreated)->firstOrFail()),
+        'system' => true,
     ],
     'GetTwoFactor' => [
         'action' => GetTwoFactor::class,

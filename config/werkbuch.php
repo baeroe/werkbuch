@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Attachment;
+use App\Notifications\NotificationConsumer;
 use App\Search\SearchConsumer;
 
 return [
@@ -26,9 +27,9 @@ return [
     'webhooks_allow_private' => (bool) env('WEBHOOKS_ALLOW_PRIVATE', false),
 
     // classes implementing App\Events\EventConsumer: each receives every domain event once, after the commit, in its own
-    // queue (App\Events\Outbox); later phases add notifications, webhooks, live updates and automations. Off in tests
-    // (Tests\TestCase), where consumers() switches them on.
-    'event_consumers' => [SearchConsumer::class],
+    // queue (App\Events\Outbox): the search index and the notifications; later phases add webhooks, live updates and
+    // automations. Off in tests (Tests\TestCase), where consumers() switches them on.
+    'event_consumers' => [SearchConsumer::class, NotificationConsumer::class],
 
     // the queues in the order a worker takes them (`--queue=…` of the DDEV daemon, the CI and the Docker image; A278)
     'queues' => ['default', 'live', 'notifications', 'webhooks', 'search', 'media', 'bulk'],
