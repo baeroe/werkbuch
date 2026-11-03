@@ -13,6 +13,7 @@ use App\Models\WorkItemRelation;
 use App\Support\Actor;
 use App\Support\AttachmentTexts;
 use App\Support\ItemLock;
+use App\Support\ReadCommitted;
 use App\Support\RelationSnapshot;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
@@ -48,7 +49,8 @@ final class DeleteWorkItem
     {
         Authorize::check($actor, 'delete', $item);
 
-        DB::transaction(function () use ($actor, $item): void {
+        // the texts are read as they are now, after the lock on the attachments (N1, T13-M8)
+        ReadCommitted::run(fn () => DB::transaction(function () use ($actor, $item): void {
             $locked = ItemLock::take($item);
 
             if ($locked->project->archived_at !== null) {
@@ -84,7 +86,7 @@ final class DeleteWorkItem
             $locked->delete();
 
             EventRecorder::record(EventType::WorkItemDeleted, $actor, $locked, $locked->project, null, ['key' => $key, 'title' => $locked->title]);
-        }, 3);
+        }, 3));
     }
 
     /**

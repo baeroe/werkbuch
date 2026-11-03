@@ -37,8 +37,10 @@ final class AttachmentTexts
      * rows read first by `like` and are then checked against the document), never the texts of `$exceptItems` (their
      * descriptions, values and comments) or of `$exceptComments`. A text that cannot be read is an UnreadableText; with
      * `$lenient` it is reported and names nothing (deleting an item or a comment must not depend on another text).
-     * With `$locking` the texts are read under a shared lock: a locking read sees what committed last, also when the
-     * caller's transaction read other rows before (its snapshot is older then), and a text saved meanwhile waits (T13-M8).
+     *
+     * Nothing is locked here (N1): the items of the project come in blocks over the index (`project_id`, `number`),
+     * their descriptions by key, their values and comments over the index of `work_item_id`; no read scans another
+     * project. Who needs the texts as they are now reads them in READ COMMITTED (ReadCommitted, handOverOrRemove).
      *
      * @param  list<string>|null  $only
      * @param  list<string>  $exceptItems
@@ -47,7 +49,7 @@ final class AttachmentTexts
      *
      * @throws UnreadableText without `$lenient`
      */
-    public static function namers(string $projectId, ?array $only = null, array $exceptItems = [], array $exceptComments = [], bool $lenient = false, bool $locking = false): array
+    public static function namers(string $projectId, ?array $only = null, array $exceptItems = [], array $exceptComments = [], bool $lenient = false): array
     {
         if ($only === []) {
             return [];
@@ -70,10 +72,7 @@ final class AttachmentTexts
             }
         };
         // the ids narrow the rows the database hands over, the documents decide
-        $naming = function (Builder $query, string $column) use ($only, $locking): void {
-            if ($locking) {
-                $query->sharedLock();
-            }
+        $naming = function (Builder $query, string $column) use ($only): void {
             if ($only !== null) {
                 $query->where(function (Builder $any) use ($column, $only): void {
                     foreach ($only as $id) {
@@ -82,25 +81,26 @@ final class AttachmentTexts
                 });
             }
         };
-        $items = WorkItem::query()->where('project_id', $projectId)->whereNotIn('id', $exceptItems)->select('id');
         $item = (new WorkItem)->getMorphClass();
         $comment = (new Comment)->getMorphClass();
+        $richText = Property::query()->where('field_type', FieldType::RichText)->pluck('id')->all();
 
-        $descriptions = WorkItem::query()->where('project_id', $projectId)->whereNotIn('id', $exceptItems)->whereNotNull('description');
-        $naming($descriptions, 'description');
-        $descriptions->select(['id', 'description'])->lazyById(self::READ_BLOCK)
-            ->each(fn (WorkItem $row) => $note($row->description, $item, $row->id));
+        WorkItem::query()->where('project_id', $projectId)->whereNotIn('id', $exceptItems)->select(['id', 'number'])
+            ->chunkById(self::READ_BLOCK, function (Collection $block) use ($naming, $note, $item, $comment, $richText, $exceptComments): void {
+                $ids = $block->modelKeys();
 
-        $values = WorkItemValue::query()->whereIn('work_item_id', $items)
-            ->whereIn('property_id', Property::query()->where('field_type', FieldType::RichText)->select('id'));
-        $naming($values, 'value_json');
-        $values->select(['id', 'work_item_id', 'value_json'])->lazyById(self::READ_BLOCK)
-            ->each(fn (WorkItemValue $row) => $note($row->value_json, $item, $row->work_item_id));
+                $descriptions = WorkItem::query()->whereKey($ids)->whereNotNull('description');
+                $naming($descriptions, 'description');
+                $descriptions->get(['id', 'description'])->each(fn (WorkItem $row) => $note($row->description, $item, $row->id));
 
-        $comments = Comment::query()->whereIn('work_item_id', $items)->whereNotIn('id', $exceptComments);
-        $naming($comments, 'body');
-        $comments->select(['id', 'body'])->lazyById(self::READ_BLOCK)
-            ->each(fn (Comment $row) => $note($row->body, $comment, $row->id));
+                $values = WorkItemValue::query()->whereIn('work_item_id', $ids)->whereIn('property_id', $richText);
+                $naming($values, 'value_json');
+                $values->get(['work_item_id', 'value_json'])->each(fn (WorkItemValue $row) => $note($row->value_json, $item, $row->work_item_id));
+
+                $comments = Comment::query()->whereIn('work_item_id', $ids)->whereNotIn('id', $exceptComments);
+                $naming($comments, 'body');
+                $comments->get(['id', 'body'])->each(fn (Comment $row) => $note($row->body, $comment, $row->id));
+            }, 'number');
 
         return $namers;
     }
@@ -110,8 +110,9 @@ final class AttachmentTexts
      * text of the project still names become that text's (a picture or file of a text, `inline`), the rest go, their
      * rows through the query builder and their files after the commit (AttachmentFiles, K12). `$exceptItems` and
      * `$exceptComments` are the texts that go with the owner. A text that cannot be read names nothing here (reported).
-     * The texts are read under a shared lock (namers()): a text that named an attachment and committed while the caller
-     * waited for the attachment's row counts, though the caller's snapshot is older (T13-M8).
+     * The caller runs in READ COMMITTED (ReadCommitted::run): after the lock on the attachments, a text that named one
+     * and committed while the caller waited counts, though the caller read other rows before (T13-M8); a text saved
+     * later waits for the attachment's row in AttachmentLinks and finds it gone or handed over.
      *
      * @param  Collection<int, Attachment>  $attachments
      * @param  list<string>  $exceptItems
@@ -119,7 +120,7 @@ final class AttachmentTexts
      */
     public static function handOverOrRemove(Collection $attachments, string $projectId, array $exceptItems = [], array $exceptComments = []): void
     {
-        $namers = self::namers($projectId, array_values(array_map(strval(...), $attachments->modelKeys())), $exceptItems, $exceptComments, lenient: true, locking: true);
+        $namers = self::namers($projectId, array_values(array_map(strval(...), $attachments->modelKeys())), $exceptItems, $exceptComments, lenient: true);
         foreach ($namers as $id => $owner) {
             Attachment::query()->whereKey($id)->update(['attachable_type' => $owner['type'], 'attachable_id' => $owner['id'], 'kind' => 'inline']);
         }

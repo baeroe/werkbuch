@@ -12,6 +12,7 @@ use App\Support\Actor;
 use App\Support\AttachmentFiles;
 use App\Support\AttachmentTexts;
 use App\Support\ItemLock;
+use App\Support\ReadCommitted;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Lorisleiva\Actions\Concerns\AsAction;
@@ -51,7 +52,8 @@ final class DeleteAttachment
         $item = $attachment->attachable instanceof WorkItem ? $attachment->attachable : throw Problem::notFound();
         Authorize::check($actor, 'update', $item);
 
-        DB::transaction(function () use ($actor, $attachment, $item): void {
+        // the texts are read as they are now, after the lock on the attachments (N1, T13-M8)
+        ReadCommitted::run(fn () => DB::transaction(function () use ($actor, $attachment, $item): void {
             $item = ItemLock::take($item);
             $project = $item->project;
 
@@ -65,7 +67,7 @@ final class DeleteAttachment
             EventRecorder::record(EventType::WorkItemUpdated, $actor, $item, $project, [
                 'attachments' => ['old' => ['id' => $attachment->id, 'filename' => $attachment->filename], 'new' => null],
             ]);
-        }, 3);
+        }, 3));
     }
 
     /**

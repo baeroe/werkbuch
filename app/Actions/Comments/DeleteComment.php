@@ -10,6 +10,7 @@ use App\Models\Comment;
 use App\Support\Actor;
 use App\Support\AttachmentTexts;
 use App\Support\ItemLock;
+use App\Support\ReadCommitted;
 use Illuminate\Support\Facades\DB;
 use Lorisleiva\Actions\Concerns\AsAction;
 
@@ -32,7 +33,8 @@ final class DeleteComment
     {
         Authorize::check($actor, 'delete', $comment);
 
-        DB::transaction(function () use ($actor, $comment): void {
+        // the texts are read as they are now, after the lock on the attachments (N1, T13-M8)
+        ReadCommitted::run(fn () => DB::transaction(function () use ($actor, $comment): void {
             $locked = ItemLock::take($comment->workItem);
             $fresh = Comment::query()->lockForUpdate()->find($comment->id) ?? throw Problem::notFound();
             ItemLock::refuseArchived($locked);
@@ -44,6 +46,6 @@ final class DeleteComment
                 'comment_id' => $fresh->id,
                 'author_id' => $fresh->author_id,
             ]);
-        }, 3);
+        }, 3));
     }
 }

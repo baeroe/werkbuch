@@ -405,9 +405,13 @@ describe('CommentComposer', () => {
     } finally {
       vi.unstubAllGlobals();
     }
-    fireEvent.click(within(banner).getByRole('button', { name: 'Verwerfen' }));
+    const discard = within(banner).getByRole('button', { name: 'Verwerfen' });
+    act(() => discard.focus());
+    fireEvent.click(discard);
     expect(drafts.get(commentDraft('wi_web_47'))).toBeNull();
     expect(screen.queryByRole('alert')).toBeNull();
+    // the focus goes to why there is no composer, not to the page (N2)
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByText('Dieses Projekt siehst du nicht.')));
     expect(leaving()).toBe(false);
   });
 

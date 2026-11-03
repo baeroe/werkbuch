@@ -41,7 +41,7 @@ import { t } from '@/lib/i18n';
 import { usePermissions } from '@/lib/permissions';
 import { docToText } from '@/lib/richtext';
 import type { RichText, WorkItem } from '@/types';
-import { useDetail } from '../shared';
+import { focusWhenLost, useDetail } from '../shared';
 
 const same = (a: RichText | undefined, b: RichText | undefined) => JSON.stringify(a) === JSON.stringify(b);
 
@@ -120,6 +120,8 @@ export function CommentComposer({ item }: { item: WorkItem }) {
   const refused = useDraftProblem(key);
   const problem = notice ?? refused;
   const parked = useRef<HTMLDivElement>(null);
+  /** Why there is no composer: the focus lands here once a parked draft is discarded (N2). */
+  const deniedNote = useRef<HTMLParagraphElement>(null);
   const [announcement, setAnnouncement] = useState('');
   const problemId = useId();
   const uploads = useUploadCounter();
@@ -242,7 +244,9 @@ export function CommentComposer({ item }: { item: WorkItem }) {
   if (denied) {
     return (
       <>
-        <p className="mt-3 text-sm text-pretty text-muted">{denied}</p>
+        <p ref={deniedNote} tabIndex={-1} className="mt-3 text-sm text-pretty text-muted">
+          {denied}
+        </p>
         {/* a draft that can no longer go (archived, the right gone; A154): readable, copyable, discardable; never while the rights load */}
         {stored && !loading && (
           <Banner tone="danger" role="alert" title={t('items.comments.parked')} className="mt-2">
@@ -251,7 +255,15 @@ export function CommentComposer({ item }: { item: WorkItem }) {
             </div>
             <div className="mt-2 flex flex-wrap gap-2">
               <CopyButton text={docToText(stored)} target={() => parked.current} size="sm" />
-              <Button variant="secondary" size="sm" onClick={() => drafts.set(key, null)}>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  drafts.set(key, null);
+                  // the banner and its button go: the focus moves to why there is no composer, never to the page
+                  focusWhenLost(() => deniedNote.current);
+                }}
+              >
                 {t('items.comments.discard')}
               </Button>
             </div>

@@ -9,6 +9,7 @@ use App\Models\Attachment;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Tests\Support\RaceConnections;
 use Tests\Support\RichTextFixtures as F;
@@ -85,4 +86,44 @@ it('hands a picture over to a text that names it anew while its item is deleted 
     expect($outcome)->toBeNull()
         ->and(WorkItem::query()->find($first->id))->toBeNull()
         ->and($picture->fresh()?->only(['attachable_id', 'kind']))->toBe(['attachable_id' => $second->id, 'kind' => 'inline']);
+});
+
+it('lets a save in another project go on while a deletion hands attachments over (N1)', function () {
+    $mara = User::factory()->create();
+    $web = Project::factory()->member($mara, ProjectRole::Admin)->create(['lead_id' => $mara->id]);
+    $ops = Project::factory()->member($mara, ProjectRole::Admin)->create(['lead_id' => $mara->id]);
+    $first = WorkItem::factory()->for($web)->create(['created_by' => $mara->id]);
+    WorkItem::factory()->for($web)->create(['created_by' => $mara->id, 'description' => F::doc(F::p('Nennt nichts'))]);
+    Attachment::factory()->forItem($first)->create(['uploaded_by' => $mara->id]);
+    $elsewhere = WorkItem::factory()->for($ops)->create(['created_by' => $mara->id]);
+
+    // the deletion has read the texts and stays open, like a request in progress
+    RaceConnections::hold(fn () => DeleteWorkItem::run(actor($mara), $first));
+
+    $saved = RaceConnections::second(fn () => UpdateWorkItem::run(actor($mara), WorkItem::query()->findOrFail($elsewhere->id), ['title' => 'Anderswo gespeichert']));
+
+    // read on the second connection: the first one still holds its open deletion
+    expect($saved)->toBeInstanceOf(WorkItem::class)
+        ->and(DB::connection('mariadb_second')->table('work_items')->where('id', $elsewhere->id)->value('title'))->toBe('Anderswo gespeichert');
+});
+
+it('lets two deletions with attachments in one project both go through (N1)', function () {
+    $mara = User::factory()->create();
+    $web = Project::factory()->member($mara, ProjectRole::Admin)->create(['lead_id' => $mara->id]);
+    $first = WorkItem::factory()->for($web)->create(['created_by' => $mara->id]);
+    $second = WorkItem::factory()->for($web)->create(['created_by' => $mara->id]);
+    WorkItem::factory()->for($web)->create(['created_by' => $mara->id, 'description' => F::doc(F::p('Nennt nichts'))]);
+    Attachment::factory()->forItem($first)->create(['uploaded_by' => $mara->id]);
+    Attachment::factory()->forItem($second)->create(['uploaded_by' => $mara->id]);
+
+    RaceConnections::hold(fn () => DeleteWorkItem::run(actor($mara), $first));
+    // the second deletion needs no lock the first one holds
+    $outcome = RaceConnections::second(fn () => DeleteWorkItem::run(actor($mara), WorkItem::query()->findOrFail($second->id)));
+    RaceConnections::release();
+
+    expect($outcome)->toBeNull()
+        // READ COMMITTED was the deletion's only: the session is back on its level
+        ->and(DB::connection('mariadb_second')->scalar('select @@session.transaction_isolation'))->toBe('REPEATABLE-READ')
+        ->and(WorkItem::query()->whereKey([$first->id, $second->id])->count())->toBe(0)
+        ->and(Attachment::query()->count())->toBe(0);
 });
