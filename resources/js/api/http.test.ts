@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from './client';
-import { FakeXhr, installFakeXhr } from '@/test/xhr';
-import { API_BASE, del, get, getPage, one, patch, post, put, setSignedIn, toQueryString, upload, UPLOAD_TIMEOUT_MS } from './http';
+import { FakeXhr, installFakeXhr, restoreFakeXhr } from '@/test/xhr';
+import { API_BASE, del, get, getPage, one, patch, post, put, setSignedIn, setSocketId, toQueryString, upload, UPLOAD_TIMEOUT_MS, webPost } from './http';
 
 const fetchMock = vi.fn();
 const reload = vi.fn();
@@ -430,5 +430,66 @@ describe('upload', () => {
     controller.abort();
 
     expect(FakeXhr.last.abort).not.toHaveBeenCalled();
+  });
+});
+
+describe('the socket of this tab', () => {
+  afterEach(() => {
+    setSocketId(null);
+    restoreFakeXhr();
+  });
+
+  it('sends the socket id while one is set', async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(json(200, { data: [] })));
+
+    setSocketId('1234.5678');
+    await get('/projects');
+    await post('/work-items', { title: 'A' });
+    setSocketId(null);
+    await get('/projects');
+
+    const sent = fetchMock.mock.calls.map(([, init]) => (init as RequestInit & { headers: Record<string, string> }).headers['X-Socket-ID']);
+    expect(sent).toEqual(['1234.5678', '1234.5678', undefined]);
+  });
+
+  it('sends it with an upload too', async () => {
+    installFakeXhr();
+    setSocketId('1234.5678');
+    const call = upload('/attachments', new FormData());
+
+    expect(FakeXhr.last.headers['X-Socket-ID']).toBe('1234.5678');
+    FakeXhr.last.answer(201, { id: 'att_1' });
+    await expect(call).resolves.toEqual({ id: 'att_1' });
+  });
+});
+
+describe('webPost', () => {
+  it('posts to a web path with CSRF', async () => {
+    document.cookie = 'XSRF-TOKEN=abc%3D';
+    fetchMock.mockResolvedValue(json(200, { auth: 'key:signature' }));
+
+    await expect(webPost('/broadcasting/auth', { socket_id: '1.2', channel_name: 'private-project.p_web' })).resolves.toEqual({ auth: 'key:signature' });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/broadcasting/auth',
+      expect.objectContaining({
+        method: 'POST',
+        credentials: 'same-origin',
+        body: '{"socket_id":"1.2","channel_name":"private-project.p_web"}',
+        headers: expect.objectContaining({ 'Content-Type': 'application/json', 'X-XSRF-TOKEN': 'abc=', 'X-Requested-With': 'XMLHttpRequest' }),
+      }),
+    );
+  });
+
+  it('fetches a new token cookie on 419 and posts once more, and turns a refusal into an ApiError', async () => {
+    fetchMock
+      .mockResolvedValueOnce(problem(419, { reason: 'csrf_token_mismatch' }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(json(403, { message: 'This action is unauthorized.' }));
+
+    const error = await failure(webPost('/broadcasting/auth', {}));
+
+    expect(error.status).toBe(403);
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/broadcasting/auth', '/sanctum/csrf-cookie', '/broadcasting/auth']);
   });
 });

@@ -568,38 +568,51 @@ export type NotificationEvent =
 
 export type NotificationChannel = 'inbox' | 'mail';
 
-/** Details for rendering a notification; which ones are set depends on its event. */
+/**
+ * What a notification stores besides its links (table "Benachrichtigungsarten" of phase plan 8); which members are set
+ * depends on its event. Texts are never stored: the excerpt of a comment or description comes with the notification,
+ * read for its reader when the inbox is read (A272).
+ */
 export interface NotificationData {
-  /** `mentioned`, `comment`: the text around the mention or the comment. */
-  excerpt?: string;
-  comment_id?: string;
-  /** `state_changed`. */
-  from_state_id?: string;
-  to_state_id?: string;
-  /** `item_changed`: the fields that changed. */
+  /** `mentioned`: where the mention stands. */
+  source?: 'description' | 'values' | 'comment';
+  /** `mentioned` in a comment, `comment`. */
+  comment_id?: string | null;
+  /** `state_changed`: both states as they were at the move (like `meta.states` of the history). */
+  from?: StateSnapshot | null;
+  to?: StateSnapshot | null;
+  /** `item_changed`: the fields that changed (`title`, `priority`, `values.<key>`, `relation`, `attachment`, …). */
   fields?: string[];
-  /** `due`. */
+  /** `due`: the due date and whether it was already past on the day of the reminder. */
   due_date?: string;
-  /** `template_run_failed`. */
+  overdue?: boolean;
+  /** `template_run_failed` (phase 10). */
   template_id?: string;
   error?: string;
-  /** `webhook_disabled`. */
+  /** `webhook_disabled` (phase 11). */
   webhook_id?: string;
 }
 
+/** A notification of the own inbox, as `GET /api/v1/notifications` answers it (`NotificationResource`). */
 export interface Notification {
   id: string;
   user_id: string;
   /** The event that caused it; null for reminders that no event stands behind. */
   event_id: string | null;
   event: NotificationEvent;
+  /** Null: a notification of the organisation (a switched-off webhook). */
   project_id: string | null;
   work_item_id: string | null;
   actor_id: string | null;
   data: NotificationData;
+  /** The current text of the comment or description for the reader (hidden references stay hidden); null without one. */
+  excerpt: string | null;
   read_at: string | null;
+  /** When its mail went out; null while none did. */
   mailed_at: string | null;
   created_at: string;
+  /** The item, lean (P17); null without one. */
+  item: ListedItem | null;
 }
 
 /** Whether a person wants a kind of event on a channel. */
@@ -669,20 +682,34 @@ export interface Token {
 }
 
 export interface FailedJob {
+  /** The UUID of the job, which "Erneut versuchen" names. */
   id: string;
   queue: string;
+  /** The class of the job. */
   job: string;
+  /** The first line of the error, at most 300 characters. */
   error: string;
   failed_at: string;
 }
 
+/** The system page (org admins), as `GET /api/v1/system` answers it. */
 export interface SystemStatus {
   version: string;
+  /** Jobs waiting in a queue, without the delayed ones. */
   queued_jobs: number;
+  delayed_jobs: number;
+  /** Every queue of the app with the jobs that are due and not worked yet, and since when the oldest is (null: none). */
+  queues: { queue: string; pending: number; oldest_at: string | null }[];
+  /** The newest 50. */
   failed_jobs: FailedJob[];
+  failed_jobs_total: number;
   /** Meilisearch. */
   search: 'ok' | 'down';
+  /** The tasks of Meilisearch; null while it is down. */
+  search_tasks: { enqueued: number; processing: number; failed_last_day: number } | null;
   mail_configured: boolean;
+  /** Reverb: `off` when live updates are not set up. */
+  live: 'ok' | 'down' | 'off';
 }
 
 /* --------------------------------------------------------------------- API shapes */
