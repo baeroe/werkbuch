@@ -28,7 +28,11 @@ use App\Actions\Labels\DeleteLabel;
 use App\Actions\Labels\ListLabels;
 use App\Actions\Labels\SaveLabel;
 use App\Actions\Media\ShowMedia;
+use App\Actions\Notifications\DeleteNotification;
 use App\Actions\Notifications\GetNotificationPreferences;
+use App\Actions\Notifications\ListNotifications;
+use App\Actions\Notifications\MarkNotificationsRead;
+use App\Actions\Notifications\MarkNotificationsUnread;
 use App\Actions\Notifications\NotifyRecipients;
 use App\Actions\Notifications\SaveNotificationPreferences;
 use App\Actions\Organization\GetOrganization;
@@ -104,6 +108,7 @@ use App\Models\Comment;
 use App\Models\CommentReaction;
 use App\Models\Event;
 use App\Models\Label;
+use App\Models\Notification;
 use App\Models\Property;
 use App\Models\RelationType;
 use App\Models\Resolution;
@@ -786,6 +791,33 @@ return [
         ]),
         'allowed' => $people,
         'event' => EventType::UserPasswordChanged,
+    ],
+    // the inbox is the own one: everybody lists, marks and deletes their own notifications (a bot has none); a
+    // notification of a project the account does not see is passed over when marking and a 404 when deleting (K19)
+    'ListNotifications' => [
+        'action' => ListNotifications::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListNotifications::run($a, []),
+        'allowed' => $everyone,
+    ],
+    'MarkNotificationsRead' => [
+        'action' => MarkNotificationsRead::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => MarkNotificationsRead::run($a, ['ids' => [
+            Notification::factory()->forItem($w->item($column))->create(['user_id' => $a->user->id])->id,
+        ]]),
+        'allowed' => $everyone,
+    ],
+    'MarkNotificationsUnread' => [
+        'action' => MarkNotificationsUnread::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => MarkNotificationsUnread::run($a, ['ids' => [
+            Notification::factory()->forItem($w->item($column))->read()->create(['user_id' => $a->user->id])->id,
+        ]]),
+        'allowed' => $everyone,
+    ],
+    'DeleteNotification' => [
+        'action' => DeleteNotification::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => DeleteNotification::run($a, Notification::factory()->forItem($w->item($column))->create(['user_id' => $a->user->id])),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
     ],
     // a bot gets no notifications: it reads an empty matrix and may not change one (K6)
     'GetNotificationPreferences' => [

@@ -5,9 +5,12 @@ namespace App\Models;
 use App\Access\OrgRole;
 use App\Access\Visibility;
 use App\Domain\Notifications\NotificationKind;
+use App\RichText\Document;
+use App\Support\ReaderNames;
 use Database\Factories\NotificationFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -47,8 +50,59 @@ final class Notification extends Model
     /** @use HasFactory<NotificationFactory> */
     use HasFactory, HasUlids;
 
+    /** The length of an excerpt in characters (A272). */
+    public const EXCERPT_LENGTH = 160;
+
     /** With microseconds (`read_at`, `created_at`, `updated_at` are timestamp(6)): the inbox pages by the moment. */
     protected $dateFormat = 'Y-m-d H:i:s.u';
+
+    /**
+     * Set by loadForResource(), never stored: the first 160 characters of the current text the notification is about,
+     * as its reader sees it (A272, K13), or `null`.
+     */
+    public ?string $excerpt = null;
+
+    /**
+     * Loads everything NotificationResource reads, for a list of one reader, with a fixed number of queries (none per
+     * notification): the mail collection (`mailed_at`), the items, lean (WorkItem::loadForResource), and the excerpts.
+     * An excerpt comes from the text as it is now, never from the time of the event (A272, K13): the comment of a
+     * `comment` or of a `mentioned` with `comment_id` (none once it is deleted, A228), the description of a `mentioned`
+     * in it (`source: description`), none for anything else. It is written for the reader (ReaderNames): a reference to
+     * an item they do not see reads as hidden, without key or title (A229). One query for the comments, at most two for
+     * the names of all texts.
+     *
+     * @param  EloquentCollection<int, self>  $notifications
+     */
+    public static function loadForResource(EloquentCollection $notifications, User $reader): void
+    {
+        $notifications->load(['mail:id,sent_at', 'workItem']);
+        $items = (new WorkItem)->newCollection($notifications->pluck('workItem')->filter()->unique('id')->values()->all());
+        if ($items->isNotEmpty()) {
+            WorkItem::loadForResource($items, $reader, lean: true);
+        }
+
+        $commentIds = $notifications->map(fn (self $n) => self::commentIdOf($n))->filter()->unique()->values()->all();
+        $comments = $commentIds === [] ? collect() : Comment::query()->whereKey($commentIds)->get(['id', 'body'])->keyBy('id');
+
+        $texts = [];
+        foreach ($notifications as $notification) {
+            $commentId = self::commentIdOf($notification);
+            $text = match (true) {
+                $commentId !== null => $comments->get($commentId)?->body,
+                $notification->kind === NotificationKind::Mentioned && ($notification->data['source'] ?? null) === 'description' => $notification->workItem?->description,
+                default => null,
+            };
+            if ($text !== null) {
+                $texts[$notification->id] = $text;
+            }
+        }
+        $names = ReaderNames::of(array_values($texts), $reader);
+
+        foreach ($notifications as $notification) {
+            $text = $texts[$notification->id] ?? null;
+            $notification->excerpt = $text === null ? null : mb_substr(Document::fromJson($text)->toText($names), 0, self::EXCERPT_LENGTH);
+        }
+    }
 
     /**
      * Only what the person may still see (K5, the one place of this rule): a notification of a project the person sees
@@ -117,6 +171,14 @@ final class Notification extends Model
     public function event(): BelongsTo
     {
         return $this->belongsTo(Event::class);
+    }
+
+    /** The comment whose text the excerpt shows: of a `comment`, or of a `mentioned` in a comment. */
+    private static function commentIdOf(self $notification): ?string
+    {
+        $id = $notification->data['comment_id'] ?? null;
+
+        return in_array($notification->kind, [NotificationKind::Comment, NotificationKind::Mentioned], true) && is_string($id) ? $id : null;
     }
 
     /**

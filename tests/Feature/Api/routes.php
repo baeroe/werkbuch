@@ -3,6 +3,7 @@
 use App\Models\Attachment;
 use App\Models\Comment;
 use App\Models\Label;
+use App\Models\Notification;
 use App\Models\Property;
 use App\Models\RelationType;
 use App\Models\Resolution;
@@ -121,6 +122,10 @@ return [
     'delete a view' => ['DELETE', '/api/v1/views/{view}', 'params' => fn (MatrixWorld $w) => ['view' => $w->view()->id]],
     'list the own favorites' => ['GET', '/api/v1/favorites'],
     'toggle a favorite' => ['POST', '/api/v1/favorites/toggle'],
+    'list the own notifications' => ['GET', '/api/v1/notifications'],
+    'mark notifications read' => ['POST', '/api/v1/notifications/read', 'body' => ['all' => true]],
+    'mark notifications unread' => ['POST', '/api/v1/notifications/unread', 'body' => ['ids' => ['01jc0000000000000000000000']]],
+    'delete a notification' => ['DELETE', '/api/v1/notifications/{notification}', 'params' => fn (MatrixWorld $w) => ['notification' => Notification::factory()->forItem($w->item('project_admin'))->create(['user_id' => $w->account('org_admin')->id])->id]],
     'show the own notification preferences' => ['GET', '/api/v1/notification-preferences'],
     'change the own notification preferences' => ['PUT', '/api/v1/notification-preferences', 'body' => ['preferences' => [['event' => 'comment', 'channel' => 'mail', 'enabled' => false]]]],
     'list tokens' => ['GET', '/api/v1/tokens'],

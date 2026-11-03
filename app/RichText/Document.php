@@ -110,11 +110,16 @@ final class Document
         return Markdown::fromHtml((new self(self::node($json, 'doc', 0)))->toHtml(), $names ?? new RichTextNames);
     }
 
-    /** The text without any markup: one line per paragraph, heading or code block, a line break as a line break. */
-    public function toText(): string
+    /**
+     * The text without any markup: one line per paragraph, heading or code block, a line break as a line break. Without
+     * names (the stored `description_text`, `body_text`, `value_text`) a mention is `@` and its label and a reference
+     * nothing; for one reader (`$names`, ReaderNames; excerpts of the inbox, K13) a mention is `@` and the current name,
+     * a reference the reader sees its key and title, any other `richtext.hidden` (no key, no title), as in a mail.
+     */
+    public function toText(?RichTextNames $names = null): string
     {
         $lines = [];
-        self::lines($this->json, $lines);
+        self::lines($this->json, $lines, $names);
 
         return implode("\n", array_filter($lines, fn (string $line) => trim($line) !== ''));
     }
@@ -438,13 +443,13 @@ final class Document
      * @param  array<string, mixed>  $node
      * @param  list<string>  $lines
      */
-    private static function lines(array $node, array &$lines): void
+    private static function lines(array $node, array &$lines, ?RichTextNames $names): void
     {
         /** @var list<array<string, mixed>> $content */
         $content = $node['content'] ?? [];
         if (in_array($node['type'], self::TEXT_BLOCKS, true)) {
             // a node without text between two spaces leaves one of them (T14-M7): `mit WEB-1 zusammen` → `mit zusammen`
-            $line = implode('', array_map(fn (array $inline) => self::inlineText($inline) ?? "\0", $content));
+            $line = implode('', array_map(fn (array $inline) => self::inlineText($inline, $names) ?? "\0", $content));
             $lines[] = (string) preg_replace_callback('/( ?)\x00+( ?)/', fn (array $m) => $m[1] !== '' && $m[2] !== '' ? ' ' : $m[1].$m[2], $line);
 
             return;
@@ -455,19 +460,31 @@ final class Document
             return;
         }
         foreach ($content as $child) {
-            self::lines($child, $lines);
+            self::lines($child, $lines, $names);
         }
     }
 
     /**
      * The text of a node in a line: a mention as `@` and its label, a file as its name; `null` for a node without text
-     * (a mention without a label, a reference: its key belongs to the reader who sees it).
+     * (a mention without a label, a reference: its key belongs to the reader who sees it). For one reader, mentions and
+     * references read as in a mail (forMail()).
      *
      * @param  array<string, mixed>  $inline
      */
-    private static function inlineText(array $inline): ?string
+    private static function inlineText(array $inline, ?RichTextNames $names): ?string
     {
         $label = $inline['attrs']['label'] ?? null;
+        if ($names !== null && in_array($inline['type'], ['mention', 'reference'], true)) {
+            $id = (string) $inline['attrs']['id'];
+            $item = $names->items[$id] ?? null;
+            $mention = $names->names[$id] ?? ($names->handles[$id] ?? $label);
+
+            return match (true) {
+                $inline['type'] === 'mention' && is_string($mention) => '@'.$mention,
+                $item !== null => "{$item['key']} {$item['title']}",
+                default => __('richtext.hidden'),
+            };
+        }
 
         return match ($inline['type']) {
             'hardBreak' => "\n",

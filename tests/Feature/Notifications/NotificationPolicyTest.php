@@ -28,6 +28,15 @@ it('lets a person read, mark and delete only their own visible notifications, el
         ->and(refusal($ida, $ability, $own)->detail)->toBeNull();
 })->with(['view', 'update', 'delete']);
 
+it('treats an own notification only for mail as none: 404 (A273)', function (string $ability) {
+    $ida = User::factory()->create();
+    $web = Project::factory()->public()->create();
+    $mailOnly = Notification::factory()->forItem(WorkItem::factory()->for($web)->create())->mailOnly()->create(['user_id' => $ida->id]);
+
+    expect(refusal($ida, $ability, $mailOnly)->status)->toBe(404)
+        ->and(refusal($ida, $ability, $mailOnly)->detail)->toBeNull();
+})->with(['view', 'update', 'delete']);
+
 it('lets only people manage notification preferences', function () {
     expect(Authorize::allows(actor(User::factory()->create()), 'managePreferences', Notification::class))->toBeTrue()
         ->and(refusal(User::defaultBot(), 'managePreferences', Notification::class)->status)->toBe(403)

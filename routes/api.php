@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\InvitationsController;
 use App\Http\Controllers\Api\LabelsController;
 use App\Http\Controllers\Api\MembersController;
 use App\Http\Controllers\Api\NotificationPreferencesController;
+use App\Http\Controllers\Api\NotificationsController;
 use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\PasswordController;
 use App\Http\Controllers\Api\ProjectsController;
@@ -34,6 +35,7 @@ use App\Http\Middleware\EnsureTokenAbility;
 use App\Http\Middleware\RedirectFormerItemKey;
 use App\Models\Attachment;
 use App\Models\Comment;
+use App\Models\Notification;
 use App\Models\Project;
 use App\Models\View;
 use App\Models\WorkItem;
@@ -56,6 +58,9 @@ Route::bind('comment', fn (string $ref) => (Str::isUlid($ref) ? Comment::query()
 // an attachment by its ULID (any case; anything else is no attachment), also for the file route of routes/web.php;
 // whether the account may read it, the action decides
 Route::bind('attachment', fn (string $ref) => (Str::isUlid($ref) ? Attachment::query()->find(strtolower($ref)) : null) ?? throw Problem::notFound());
+// a notification by its ULID (any case; anything else is no notification); whether it is the account's and still
+// visible to it, the action decides
+Route::bind('notification', fn (string $ref) => (Str::isUlid($ref) ? Notification::query()->find(strtolower($ref)) : null) ?? throw Problem::notFound());
 
 // The REST API (prefix api/v1, see bootstrap/app.php): the session of the interface (with CSRF) or a bearer token whose
 // abilities fit the method. Every route has a row in tests/Feature/Api/routes.php.
@@ -173,6 +178,12 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
 
     Route::get('favorites', [FavoritesController::class, 'index']);
     Route::post('favorites/toggle', [FavoritesController::class, 'toggle']);
+
+    // the own inbox; marking reads nothing but writes, so it wants `write`
+    Route::get('notifications', [NotificationsController::class, 'index']);
+    Route::post('notifications/read', [NotificationsController::class, 'read']);
+    Route::post('notifications/unread', [NotificationsController::class, 'unread']);
+    Route::delete('notifications/{notification}', [NotificationsController::class, 'destroy']);
 
     Route::get('notification-preferences', [NotificationPreferencesController::class, 'show']);
     Route::put('notification-preferences', [NotificationPreferencesController::class, 'update']);
