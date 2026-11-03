@@ -132,7 +132,10 @@ it('writes the text of the nodes', function () {
         ...[F::p('Ohne Label: ', F::mention(F::MARA, null), F::reference(F::ITEM), ' ', F::file(F::FILE, null)), F::image(F::IMAGE, null)],
     ));
 
-    expect($doc->toText())->toBe("Bitte @mara ansehen, siehe  und : protokoll.pdf.\nScreenshot des Formulars\nOhne Label:  ");
+    // a node without text leaves no double space between the words around it (T14-M7)
+    expect($doc->toText())->toBe("Bitte @mara ansehen, siehe und : protokoll.pdf.\nScreenshot des Formulars\nOhne Label: ")
+        ->and(Document::fromJson(F::doc(F::p('mit ', F::reference(F::ITEM), ' zusammenhängt, ', F::reference(F::ITEM), '.')))->toText())
+        ->toBe('mit zusammenhängt, .');
 });
 
 it('maps nodes with withNodes into nodes, text or nothing', function () {

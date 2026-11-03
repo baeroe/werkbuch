@@ -143,15 +143,28 @@ it('adds nothing on a second run', function () {
     expect($snapshot())->toEqual($before);
 });
 
-it('leaves the comments of an item that has comments of its own, and keeps a person who unsubscribed', function () {
+it('leaves the comments of an item that has comments of its own', function () {
     $this->seed(DemoSeeder::class);
     $web45 = ItemsSeeder::find('WEB-45');
     Comment::query()->where('work_item_id', $web45?->id)->oldest()->first()?->delete();
+
+    $this->seed(CommentsSeeder::class);
+
+    expect(Comment::query()->where('work_item_id', $web45?->id)->count())->toBe(1);
+});
+
+it('keeps a person who unsubscribed when it writes the comments of an item again (T14-M6)', function () {
+    $this->seed(DemoSeeder::class);
+    $web45 = ItemsSeeder::find('WEB-45');
+    $seeded = Comment::query()->where('work_item_id', $web45?->id)->count();
+    // without its comments the item is written again, with Mara among the people who comment or are mentioned
+    Comment::query()->where('work_item_id', $web45?->id)->delete();
     $row = WorkItemSubscriber::query()->where('work_item_id', $web45?->id)->whereHas('user', fn ($query) => $query->where('handle', 'mara'))->sole();
     $row->update(['unsubscribed_at' => now()]);
 
     $this->seed(CommentsSeeder::class);
 
-    expect(Comment::query()->where('work_item_id', $web45?->id)->count())->toBe(1)
+    expect(Comment::query()->where('work_item_id', $web45?->id)->count())->toBe($seeded)
+        ->and($seeded)->toBeGreaterThan(1)
         ->and($row->fresh()?->unsubscribed_at)->not->toBeNull();
 });

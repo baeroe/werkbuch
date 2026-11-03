@@ -129,7 +129,7 @@ it('seeds WEB-47 like the moodboard', function () use ($item) {
         ->and($values['steps']->value_json['content'][1]['type'])->toBe('orderedList')
         ->and($values['steps']->value_json['content'][1]['content'])->toHaveCount(3)
         // @mara a mention and WEB-42 a reference (CommentsSeederTest names their IDs); the plain text has no keys
-        ->and($web47->description_text)->toBe('Beim Absenden über Safari kommen zwei Mails an. @mara kannst du prüfen, ob das mit  zusammenhängt?')
+        ->and($web47->description_text)->toBe('Beim Absenden über Safari kommen zwei Mails an. @mara kannst du prüfen, ob das mit zusammenhängt?')
         ->and(array_column($web47->description['content'][0]['content'], 'type'))->toBe(['text', 'mention', 'text', 'reference', 'text'])
         ->and($web47->description_version)->toBe(1);
 });

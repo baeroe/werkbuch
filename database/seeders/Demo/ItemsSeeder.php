@@ -91,6 +91,9 @@ class ItemsSeeder extends Seeder
     /** Who creates the items of a project unless a row says otherwise: its lead. */
     private const CREATORS = ['WEB' => 'ida', 'APP' => 'theo', 'OPS' => 'jonas'];
 
+    /** @var array<string, User> the creators of descriptions by ID, read once */
+    private array $writers = [];
+
     /** @var Collection<string, string> handle → id */
     private Collection $people;
 
@@ -283,7 +286,10 @@ class ItemsSeeder extends Seeder
     /** A description, Markdown as its creator would send it (paragraphs separated by blank lines). */
     private function text(string $text, Project $project, string $creator): Document
     {
-        return Document::fromMarkdown($text, RichTextRules::context($project, User::query()->findOrFail($creator), null));
+        // each creator read once (T14-M5)
+        $this->writers[$creator] ??= User::query()->findOrFail($creator);
+
+        return Document::fromMarkdown($text, RichTextRules::context($project, $this->writers[$creator], null));
     }
 
     /**

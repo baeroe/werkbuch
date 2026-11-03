@@ -328,7 +328,9 @@ it('attaches the three files of the clickdummy to their items, with their conten
         expect($media)->not->toBeNull()
             ->and(file_get_contents((string) $media?->getPath()))->toBe(file_get_contents(database_path("seeders/Demo/files/{$file->filename}")))
             ->and($file->project_id)->toBe(ItemsSeeder::find($owner($file))?->project_id)
-            ->and($file->created_at?->equalTo(ItemsSeeder::find($owner($file))?->created_at))->toBeTrue();
+            ->and($file->created_at?->equalTo(ItemsSeeder::find($owner($file))?->created_at))->toBeTrue()
+            // the person who created the item uploads it (T14-M2)
+            ->and($file->uploaded_by)->toBe(ItemsSeeder::find($owner($file))?->created_by);
     }
     // the sources stay where they are
     expect(database_path('seeders/Demo/files/hero-entwurf.png'))->toBeFile()

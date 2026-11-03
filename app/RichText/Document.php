@@ -443,7 +443,9 @@ final class Document
         /** @var list<array<string, mixed>> $content */
         $content = $node['content'] ?? [];
         if (in_array($node['type'], self::TEXT_BLOCKS, true)) {
-            $lines[] = implode('', array_map(self::inlineText(...), $content));
+            // a node without text between two spaces leaves one of them (T14-M7): `mit WEB-1 zusammen` → `mit zusammen`
+            $line = implode('', array_map(fn (array $inline) => self::inlineText($inline) ?? "\0", $content));
+            $lines[] = (string) preg_replace_callback('/( ?)\x00+( ?)/', fn (array $m) => $m[1] !== '' && $m[2] !== '' ? ' ' : $m[1].$m[2], $line);
 
             return;
         }
@@ -458,19 +460,19 @@ final class Document
     }
 
     /**
-     * The text of a node in a line: a mention as `@` and its label (nothing without one), a file as its name, a
-     * reference as nothing (its key belongs to the reader who sees it).
+     * The text of a node in a line: a mention as `@` and its label, a file as its name; `null` for a node without text
+     * (a mention without a label, a reference: its key belongs to the reader who sees it).
      *
      * @param  array<string, mixed>  $inline
      */
-    private static function inlineText(array $inline): string
+    private static function inlineText(array $inline): ?string
     {
         $label = $inline['attrs']['label'] ?? null;
 
         return match ($inline['type']) {
             'hardBreak' => "\n",
-            'mention' => $label === null ? '' : '@'.$label,
-            'reference' => '',
+            'mention' => $label === null ? null : '@'.$label,
+            'reference' => null,
             'attachment' => (string) $inline['attrs']['filename'],
             default => $inline['text'],
         };
