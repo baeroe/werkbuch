@@ -65,7 +65,7 @@ An archived item, or an item in an archived project, takes no new comments and r
 
 ## Files
 
-The **Files** section of an item lists the files attached to it: images with a small preview, other files with an icon, each with name and size. **Upload file** or dragging files onto the section adds them, each with its own progress; **Remove** takes one away, with undo. Both take the right to change the item, and both are part of the history. Files stay inside the project: only someone who sees the item can download them.
+The **Files** section of an item lists the files attached to it: images with a small preview, other files with an icon, each with name and size. An image opens in a new tab, with its download beside it; any other file downloads. **Upload file** or dragging files onto the section adds them, each with its own progress; **Remove** takes one away, with undo. Both take the right to change the item, and both are part of the history. Files stay inside the project: only someone who sees the item can download them.
 
 Images and files inside a text (the description, a comment) are not part of this list; they belong to their text. How they are uploaded, which formats are shown inline, and how the size is limited is described under [rich text](/en/concepts/rich-text#images-and-files).
 

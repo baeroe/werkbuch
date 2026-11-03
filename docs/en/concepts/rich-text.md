@@ -16,7 +16,7 @@ A text that holds blocks its level does not know (a table pasted into a comment)
 
 ## Blocks and shortcuts
 
-Type `/` at the start of a line or after a space to open the block menu. Typing narrows the list (also by words like "todo" for a checklist), the arrow keys choose, `enter` or `tab` turns the line into the block, `esc` closes the menu. Each entry names its Markdown shortcut, which works while typing as well:
+Type `/` at the start of a line or after a space to open the block menu (right after bold text, a mention or a file it stays a slash). Typing narrows the list (also by words like "todo" for a checklist), the arrow keys choose, `enter` or `tab` turns the line into the block, `esc` closes the menu. Each entry names its Markdown shortcut, which works while typing as well:
 
 | Block | Shortcut while typing |
 |---|---|
@@ -49,7 +49,7 @@ werkbuch stores only the ULID of the item, never its key or title. Whoever reads
 Paste a screenshot or an image copied in the browser, drag files into the editor, or choose them with **Image or file** in the `/` menu. Each file shows its progress while it uploads, and you can keep typing. Images are shown in the text; a selected image takes its alternative text with `enter` or a double click. Every other file is a chip with its name and size, and clicking it downloads the file.
 
 - **Formats:** werkbuch tells the type of a file from its content, never from its name or what the browser says. Only PNG, JPEG, GIF, WebP and AVIF are shown inline; everything else, SVG and PDF included, comes as a download (`Content-Security-Policy: sandbox`, `nosniff`). HTML or Markdown with the address of an image (`<img src>`, `![](https://…)`) never becomes an image; its alternative text stays as text.
-- **Size:** at most `ATTACHMENTS_MAX_MB` per file, 25 MB by default. A larger file is refused with `413`.
+- **Size:** at most `ATTACHMENTS_MAX_MB` per file, 25 MB by default. The browser refuses a larger file before it uploads it; over the API it is a `413`. While an upload runs, leaving the page asks first; closing the text stops the upload and says so.
 - **Previews:** for PNG, JPEG and WebP werkbuch computes a preview of at most 1600 × 1600 pixels in the background (queue `media`); until it is there, the original is shown. GIF keeps its animation, AVIF is shown without a preview.
 - **Who:** anyone who may comment may put images and files into a text, viewers included. The file list of an item takes the right to change the item (see [work items](/en/concepts/work-items#files)).
 - **Who sees them:** a file is delivered only to someone who sees the item (or the item of the comment) it belongs to; to everyone else it is a `404`, as if it did not exist.

@@ -65,7 +65,7 @@ Ein archiviertes Item oder ein Item in einem archivierten Projekt nimmt keine ne
 
 ## Dateien
 
-Der Abschnitt **Dateien** eines Items listet die angehängten Dateien: Bilder mit einer kleinen Vorschau, andere Dateien mit einem Icon, je mit Name und Größe. **Datei hochladen** oder das Ziehen von Dateien auf den Abschnitt hängt sie an, jede mit eigenem Fortschritt; **Entfernen** nimmt eine weg, mit Rückgängig. Beides braucht das Recht, das Item zu ändern, und beides steht in der History. Dateien bleiben im Projekt: Herunterladen kann sie nur, wer das Item sieht.
+Der Abschnitt **Dateien** eines Items listet die angehängten Dateien: Bilder mit einer kleinen Vorschau, andere Dateien mit einem Icon, je mit Name und Größe. Ein Bild öffnet sich in einem neuen Tab, daneben steht sein Download; jede andere Datei wird heruntergeladen. **Datei hochladen** oder das Ziehen von Dateien auf den Abschnitt hängt sie an, jede mit eigenem Fortschritt; **Entfernen** nimmt eine weg, mit Rückgängig. Beides braucht das Recht, das Item zu ändern, und beides steht in der History. Dateien bleiben im Projekt: Herunterladen kann sie nur, wer das Item sieht.
 
 Bilder und Dateien in einem Text (der Beschreibung, einem Kommentar) gehören nicht zu dieser Liste, sondern zu ihrem Text. Wie sie hochgeladen werden, welche Formate im Text erscheinen und wie die Größe begrenzt ist, steht unter [Rich Text](/de/concepts/rich-text#bilder-und-dateien).
 

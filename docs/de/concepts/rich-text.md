@@ -16,7 +16,7 @@ Ein Text mit Blöcken, die seine Stufe nicht kennt (eine Tabelle in einem Kommen
 
 ## Blöcke und Kürzel
 
-Ein `/` am Zeilenanfang oder nach einem Leerzeichen öffnet das Blockmenü. Tippen grenzt die Liste ein (auch über Wörter wie „todo“ für eine Checkliste), die Pfeiltasten wählen, `enter` oder `tab` macht aus der Zeile den Block, `esc` schließt das Menü. Jeder Eintrag nennt sein Markdown-Kürzel, das auch beim Tippen wirkt:
+Ein `/` am Zeilenanfang oder nach einem Leerzeichen öffnet das Blockmenü (direkt nach fettem Text, einer Erwähnung oder einer Datei bleibt es ein Schrägstrich). Tippen grenzt die Liste ein (auch über Wörter wie „todo“ für eine Checkliste), die Pfeiltasten wählen, `enter` oder `tab` macht aus der Zeile den Block, `esc` schließt das Menü. Jeder Eintrag nennt sein Markdown-Kürzel, das auch beim Tippen wirkt:
 
 | Block | Kürzel beim Tippen |
 |---|---|
@@ -49,7 +49,7 @@ werkbuch speichert nur die ULID des Items, nie Key oder Titel. Wer den Text lies
 Füge einen Screenshot oder ein im Browser kopiertes Bild ein, ziehe Dateien in den Editor oder wähle sie mit **Bild oder Datei** im `/`-Menü. Jede Datei zeigt beim Hochladen ihren Fortschritt, und du kannst weitertippen. Bilder stehen im Text; ein ausgewähltes Bild bekommt mit `enter` oder einem Doppelklick seinen Alternativtext. Jede andere Datei ist ein Chip mit Name und Größe; ein Klick lädt sie herunter.
 
 - **Formate:** werkbuch erkennt den Typ einer Datei an ihrem Inhalt, nie an ihrem Namen oder an der Angabe des Browsers. Nur PNG, JPEG, GIF, WebP und AVIF erscheinen im Text; alles andere, auch SVG und PDF, kommt als Download (`Content-Security-Policy: sandbox`, `nosniff`). HTML oder Markdown mit der Adresse eines Bilds (`<img src>`, `![](https://…)`) wird nie ein Bild; sein Alternativtext bleibt als Text.
-- **Größe:** höchstens `ATTACHMENTS_MAX_MB` je Datei, standardmäßig 25 MB. Eine größere Datei lehnt werkbuch mit `413` ab.
+- **Größe:** höchstens `ATTACHMENTS_MAX_MB` je Datei, standardmäßig 25 MB. Eine größere Datei lehnt der Browser ab, bevor er sie hochlädt; über die API ist sie ein `413`. Solange ein Upload läuft, fragt das Verlassen der Seite nach; wer den Text schließt, bricht den Upload ab und bekommt das gesagt.
 - **Vorschauen:** Für PNG, JPEG und WebP rechnet werkbuch im Hintergrund (Queue `media`) eine Vorschau von höchstens 1600 × 1600 Pixeln; bis sie da ist, zeigt es das Original. GIF behält seine Animation, AVIF erscheint ohne Vorschau.
 - **Wer:** Bilder und Dateien in einen Text einfügen darf, wer kommentieren darf, auch Viewer. Die Dateiliste eines Items braucht das Recht, das Item zu ändern (siehe [Work Items](/de/concepts/work-items#dateien)).
 - **Wer sie sieht:** Eine Datei bekommt nur, wer das Item (oder das Item des Kommentars) sieht, zu dem sie gehört; für alle anderen ist sie ein `404`, als gäbe es sie nicht.
