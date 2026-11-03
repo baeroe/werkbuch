@@ -218,6 +218,12 @@ it('takes no dead picture or file the text had before as a reason to refuse savi
 
     $this->actingAs($mara)->patchJson("/api/v1/work-items/{$item->key}", ['description_json' => $item->fresh()?->description, 'title' => 'Neu'])
         ->assertOk()->assertJsonPath('data.description', 'Plan');
+    // alone in a quote, a dead picture leaves an empty paragraph: no refused shape, the text is empty then (T4-M5)
+    $quoted = Attachment::factory()->forItem($item)->create(['uploaded_by' => $mara->id]);
+    $this->actingAs($mara)->patchJson("/api/v1/work-items/{$item->key}", ['description' => "> ![](attachment:{$quoted->id})"])->assertOk();
+    Attachment::query()->whereKey($quoted->id)->delete();
+    $this->actingAs($mara)->patchJson("/api/v1/work-items/{$item->key}", ['description_json' => $item->fresh()?->description, 'title' => 'Zitat'])
+        ->assertOk()->assertJsonPath('data.title', 'Zitat')->assertJsonPath('data.description_json', null);
     // a dead attachment the text did not have before stays a 422
     $this->actingAs($mara)->patchJson("/api/v1/work-items/{$item->key}", ['description' => "![](attachment:{$picture->id})"])
         ->assertUnprocessable()->assertJsonPath('errors.description', [__('field.rich_text.attachment')]);

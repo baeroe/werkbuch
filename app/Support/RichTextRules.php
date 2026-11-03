@@ -68,8 +68,9 @@ final class RichTextRules
             return match ($node['type']) {
                 'mention' => self::mention($node, $attrs, $handles),
                 'reference' => $attrs['kind'] === 'item' && isset($items[$attrs['id']]) ? $node : $labels[$attrs['id']] ?? null,
-                // a picture or file the text had before and that is gone meanwhile goes from the text
-                'image' => isset($files[$attrs['attachmentId']]) ? $node : null,
+                // a picture or file the text had before and that is gone meanwhile goes from the text; a picture leaves an
+                // empty paragraph, so a quote or a cell it stood in alone stays a document (T4-M5)
+                'image' => isset($files[$attrs['attachmentId']]) ? $node : ['type' => 'paragraph'],
                 'attachment' => isset($files[$attrs['attachmentId']]) ? ['type' => 'attachment', 'attrs' => ['filename' => $files[$attrs['attachmentId']]] + $attrs] + $node : null,
                 default => $node,
             };

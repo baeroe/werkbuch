@@ -176,6 +176,19 @@ it('maps nodes with withNodes into nodes, text or nothing', function () {
         ->and($doc->toJson()['content'][2])->toBe(F::image(F::FILE, null));
 });
 
+it('refuses a quote or a cell that withNodes empties by taking its only image away (T4-M5)', function () {
+    $quote = Document::fromJson(F::doc(['type' => 'blockquote', 'content' => [F::image(F::IMAGE, null)]]));
+    $cell = Document::fromJson(F::doc(['type' => 'table', 'content' => [['type' => 'tableRow', 'content' => [
+        ['type' => 'tableCell', 'content' => [F::image(F::IMAGE, null)]],
+    ]]]]));
+
+    foreach ([$quote, $cell] as $doc) {
+        expect(fn () => $doc->withNodes(fn () => null))->toThrow(fn (InvalidDocument $invalid) => expect($invalid->reason)->toBe('shape'))
+            // an empty paragraph in its place is a document
+            ->and($doc->withNodes(fn () => ['type' => 'paragraph'])->toText())->toBe('');
+    }
+});
+
 it('reads what withNodes builds like any document', function () {
     $doc = Document::fromJson(F::doc(F::p(F::mention(F::MARA, 'mara'))));
 

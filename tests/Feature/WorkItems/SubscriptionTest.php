@@ -109,10 +109,11 @@ it('stores an opt-out for a person who never watched', function () use ($web, $r
     $viewer = memberOf($project, ProjectRole::Viewer);
     $item = WorkItem::factory()->for($project)->create();
 
-    SetSubscription::run(actor($viewer), $item, false);
+    // over REST, as the brief says (T1-M2)
+    $this->actingAs($viewer)->deleteJson("/api/v1/work-items/{$item->key}/subscription")->assertOk()->assertJsonPath('data.subscribed', false);
     $stamp = $row($item, $viewer)?->unsubscribed_at?->toJSON();
     $this->travel(5)->minutes();
-    SetSubscription::run(actor($viewer), $item, false);
+    $this->actingAs($viewer)->deleteJson("/api/v1/work-items/{$item->key}/subscription")->assertOk();
 
     expect($row($item, $viewer)?->reason)->toBe('manual')
         ->and($stamp)->not->toBeNull()
