@@ -10,6 +10,8 @@ vi.mock('@/hooks/live', () => ({ useLiveConnected: () => connected }));
 afterEach(() => {
   connected = true;
   vi.restoreAllMocks();
+  // the reload test stubs `location`; a failing assertion must not leave the stub to the next test
+  vi.unstubAllGlobals();
 });
 
 describe('LiveIndicator', () => {
@@ -26,8 +28,6 @@ describe('LiveIndicator', () => {
 
     await user.click(within(region).getByRole('button', { name: 'Neu laden' }));
     expect(reload).toHaveBeenCalledTimes(1);
-
-    vi.unstubAllGlobals();
   });
 
   it('leaves the region empty while the connection is up, so a screen reader announces the banner when it comes', () => {

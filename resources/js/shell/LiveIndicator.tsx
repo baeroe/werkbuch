@@ -1,6 +1,7 @@
 /*
- * Live updates (spec 7.2, risk in spec 14): while the live connection is down, a banner above the screen says so, as
- * the app will warn when a proxy blocks the websocket.
+ * Live updates (spec 7.2, risk in spec 14): while the live connection is down, a banner above the screen says so, e.g.
+ * when a proxy blocks the websocket. Down means three seconds without a connection to Reverb, or channels that could not
+ * be authorized (`api/live.ts`); without Reverb (`features.live` null) there is never a banner.
  */
 
 import { RotateCw, WifiOff } from 'lucide-react';

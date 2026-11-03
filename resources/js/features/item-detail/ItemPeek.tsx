@@ -43,7 +43,7 @@ export function ItemPeek({ itemId, panel }: { itemId: string; panel?: RefObject<
   if (data && !missing) {
     return (
       // a new detail for each item: drafts and edits never carry over to the next one
-      <ItemDetailProvider key={data.item.id} surface="peek" panel={panel}>
+      <ItemDetailProvider key={data.item.id} surface="peek" panel={panel} itemId={data.item.id}>
         <span className="absolute bottom-full left-4 hidden md:block">
           <TypeTab tone={data.type.tone} icon={data.type.icon} label={data.item.key} />
         </span>
