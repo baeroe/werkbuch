@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RichText } from '@/types';
-import { docToText, isBlankDoc, isPlainDoc, plainDocText, plainText, textDoc } from './richtext';
+import { attachmentIds, docToText, isBlankDoc, isPlainDoc, mentionedIds, plainDocText, plainText, referenceIds, textDoc } from './richtext';
 
 const text = (value: string, marks?: RichText['marks']): RichText => (marks ? { type: 'text', text: value, marks } : { type: 'text', text: value });
 const paragraph = (...content: RichText[]): RichText => (content.length > 0 ? { type: 'paragraph', content } : { type: 'paragraph' });
@@ -9,6 +9,11 @@ const list = (type: 'bulletList' | 'orderedList' | 'taskList', ...items: string[
   type,
   content: items.map((item) => ({ type: type === 'taskList' ? 'taskItem' : 'listItem', content: [paragraph(text(item))] })),
 });
+
+const mention = (id: string, label: string | null): RichText => ({ type: 'mention', attrs: { id, label, mentionSuggestionChar: '@' } });
+const reference = (id: string, kind = 'item'): RichText => ({ type: 'reference', attrs: { id, kind, label: null, mentionSuggestionChar: '#' } });
+const image = (attachmentId: string, alt: string | null = null): RichText => ({ type: 'image', attrs: { attachmentId, alt } });
+const file = (attachmentId: string, filename: string): RichText => ({ type: 'attachment', attrs: { attachmentId, filename } });
 
 describe('plainText', () => {
   it('joins the text of the blocks with a space and keeps the words of an inline run together', () => {
@@ -33,6 +38,18 @@ describe('plainText', () => {
 });
 
 describe('docToText', () => {
+  it('reads the nodes of Phase 7 as the server does: a mention as @ and its label, a file by its name, an image by its alt text, a reference as nothing', () => {
+    const document = doc(
+      paragraph(text('Frag '), mention('u_ida', 'ida'), text(' zu '), reference('wi_ops_12'), text(', siehe '), file('att_1', 'log.txt')),
+      image('att_2', 'Screenshot'),
+      image('att_3'),
+      paragraph(mention('u_x', null)),
+    );
+
+    expect(docToText(document)).toBe('Frag @ida zu , siehe log.txt\n\nScreenshot');
+    expect(plainText(document)).toBe('Frag @ida zu , siehe log.txt Screenshot');
+  });
+
   it('separates blocks by a blank line and puts list items on lines of their own', () => {
     const document = doc(paragraph(text('Schritte:')), list('orderedList', 'öffnen', 'senden'), list('bulletList', 'Mail'), list('taskList', 'prüfen'), paragraph());
 
@@ -88,5 +105,41 @@ describe('isBlankDoc', () => {
     expect(isBlankDoc(doc(paragraph()))).toBe(true);
     expect(isBlankDoc(doc(paragraph(text('   '))))).toBe(true);
     expect(isBlankDoc(doc(paragraph(text('x'))))).toBe(false);
+  });
+
+  it('counts a mention, a reference, an image and a file as content, as ItemValue::isBlankDoc does', () => {
+    expect(isBlankDoc(doc(paragraph(mention('u_x', null))))).toBe(false);
+    expect(isBlankDoc(doc(paragraph(text(' '), reference('wi_ops_12'))))).toBe(false);
+    expect(isBlankDoc(doc(image('att_1')))).toBe(false);
+    expect(isBlankDoc(doc(paragraph(file('att_1', ''))))).toBe(false);
+    expect(isBlankDoc(doc(paragraph(text('\u00a0\ufeff')), { type: 'horizontalRule' }))).toBe(true);
+  });
+});
+
+describe('the nodes a text names', () => {
+  const document = doc(
+    paragraph(mention('u_ida', 'ida'), text(' und '), mention('u_mara', 'mara'), reference('wi_ops_12'), file('att_2', 'a.pdf')),
+    image('att_1'),
+    { type: 'bulletList', content: [{ type: 'listItem', content: [paragraph(mention('u_ida', 'ida'), reference('wi_web_47'), reference('pg_1', 'page'), reference('wi_ops_12'))] }] },
+    image('att_2'),
+  );
+
+  it('lists the mentioned people in the order of the text, each once', () => {
+    expect(mentionedIds(document)).toEqual(['u_ida', 'u_mara']);
+  });
+
+  it('lists the images and files, each once', () => {
+    expect(attachmentIds(document)).toEqual(['att_2', 'att_1']);
+  });
+
+  it('lists the referenced items, each once and without pages', () => {
+    expect(referenceIds(document)).toEqual(['wi_ops_12', 'wi_web_47']);
+  });
+
+  it('finds nothing in no document and skips nodes without an id', () => {
+    for (const read of [mentionedIds, attachmentIds, referenceIds]) expect(read(null)).toEqual([]);
+    expect(mentionedIds(doc(paragraph({ type: 'mention', attrs: {} })))).toEqual([]);
+    expect(attachmentIds(doc({ type: 'image' }))).toEqual([]);
+    expect(referenceIds(doc(paragraph({ type: 'reference', attrs: { kind: 'item' } })))).toEqual([]);
   });
 });

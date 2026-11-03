@@ -62,6 +62,8 @@ it('detects raw writes through a connection, over several lines and past closure
 
 it('writes the database raw only inside app/Actions', function () {
     $hits = collect(appFiles('app'))->reject(fn (string $f) => str_starts_with($f, 'app/Actions/'))
+        // sets the isolation level of the session for a transaction, writes no data (N1)
+        ->reject(fn (string $f) => $f === 'app/Support/ReadCommitted.php')
         ->flatMap(fn (string $f) => rawWrites((string) file_get_contents(repo_path($f)), $f))->all();
     expect($hits)->toBe([]);
 });

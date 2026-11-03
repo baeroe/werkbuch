@@ -44,7 +44,8 @@ export const SHORTCUTS = {
   'item.due': { keys: 'd', scope: 'detail', label: 'shortcuts.item.due', group: 'shortcuts.group.item' },
   'item.start': { keys: 'shift+d', scope: 'detail', label: 'shortcuts.item.start', group: 'shortcuts.group.item' },
   'item.parent': { keys: 'shift+p', scope: 'detail', label: 'shortcuts.item.parent', group: 'shortcuts.group.item' },
-  // the item page binds these two (title, relations)
+  // the item detail binds these three (comment, relations, title)
+  'item.comment': { keys: 'm', scope: 'detail', label: 'shortcuts.item.comment', group: 'shortcuts.group.item' },
   'item.relation': { keys: 'r', scope: 'detail', label: 'shortcuts.item.relation', group: 'shortcuts.group.item' },
   'item.title': { keys: 'e', scope: 'detail', label: 'shortcuts.item.title', group: 'shortcuts.group.item' },
   'item.remove': { keys: 'mod+backspace', scope: 'detail', label: 'shortcuts.item.remove', group: 'shortcuts.group.item' },

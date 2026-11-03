@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Domain\Catalog\TypeIcon;
+use App\Domain\Emoji;
 use App\Domain\Filter\Filter;
 use App\Domain\Filter\FilterSchema;
 use App\Domain\Filter\InvalidInput;
@@ -28,9 +29,6 @@ final class ViewInput
         'bot', 'building-2', 'calendar-clock', 'circle-dot', 'eye', 'inbox', 'list-todo', 'octagon-alert', 'route', 'timer',
         'user-round-check',
     ];
-
-    /** Exactly one emoji: a pictograph, perhaps with its presentation selector or joined to more (👩‍💻). */
-    public const EMOJI = '/^\p{Extended_Pictographic}(?:\x{FE0F}|\x{200D}\p{Extended_Pictographic})*\z/u';
 
     /** The column `views.icon`. */
     public const ICON_MAX_BYTES = 32;
@@ -98,10 +96,10 @@ final class ViewInput
         return ['name' => $name, 'icon' => $icon, 'filter' => $filter, 'display' => $display];
     }
 
-    /** One of `ICONS`, or exactly one emoji that fits the column. */
+    /** One of `ICONS`, or exactly one emoji (`Emoji::is`) that fits the column. */
     public static function isIcon(mixed $icon): bool
     {
         return is_string($icon)
-            && (in_array($icon, self::ICONS, true) || (strlen($icon) <= self::ICON_MAX_BYTES && preg_match(self::EMOJI, $icon) === 1));
+            && (in_array($icon, self::ICONS, true) || (strlen($icon) <= self::ICON_MAX_BYTES && Emoji::is($icon)));
     }
 }

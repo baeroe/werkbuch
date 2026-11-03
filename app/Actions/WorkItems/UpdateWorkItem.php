@@ -11,10 +11,13 @@ use App\Models\Event;
 use App\Models\User;
 use App\Models\WorkItem;
 use App\Models\WorkItemSubscriber;
+use App\RichText\Document;
 use App\Support\Actor;
+use App\Support\AttachmentLinks;
 use App\Support\ItemInput;
 use App\Support\ItemLock;
 use App\Support\ItemValues;
+use App\Support\Mentions;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Lorisleiva\Actions\Concerns\AsAction;
@@ -50,9 +53,9 @@ final class UpdateWorkItem
         Authorize::check($actor, 'update', $item);
 
         // reading Markdown is the expensive step: never under a lock
-        [$input, $refused] = ItemInput::documents($input, $item->project);
+        [$input, $refused, $texts] = ItemInput::documents($input, $item->project, $actor, $item);
 
-        $item = DB::transaction(function () use ($actor, $item, $input, $refused): WorkItem {
+        $item = DB::transaction(function () use ($actor, $item, $input, $refused, $texts): WorkItem {
             $locked = ItemLock::take($item);
 
             if ($locked->project->archived_at !== null) {
@@ -62,7 +65,7 @@ final class UpdateWorkItem
                 throw Problem::conflict('archived', [], __('problem.detail.item_archived', ['key' => $locked->key]));
             }
 
-            self::apply($actor, $locked, $input, refused: $refused);
+            self::apply($actor, $locked, $input, refused: $refused, texts: $texts);
 
             return $locked;
         }, 3);
@@ -81,16 +84,19 @@ final class UpdateWorkItem
      * (`changes.assignee_id`) and watches the item from now on (reason `assigned`), even after unsubscribing before
      * (spec 4.10). A `state_id` or `resolution_id` is a move (TransitionWorkItem::move()): checked with the rest, made
      * after the fields (its own `work_item.state_changed`). `updated_at` moves only when something changed. `$reason`
-     * notes why in the events (an automation).
+     * notes why in the events (an automation). The texts sent (`$texts`) get their uploads (AttachmentLinks); whoever
+     * they mention anew watches the item (Mentions) and is named in `meta.mentioned` of `work_item.updated`, a bot gets
+     * its `bot.mentioned` after it.
      *
      * @param  array<array-key, mixed>  $input  as ItemInput::documents() answers it (read before the locks)
      * @param  array<string, list<string>>  $refused  the field errors of ItemInput::documents()
+     * @param  array<string, Document>  $texts  the texts ItemInput::documents() read, by the key that sent them
      * @return bool whether anything changed
      *
      * @throws ValidationException
      * @throws Problem
      */
-    public static function apply(Actor $actor, WorkItem $locked, array $input, ?string $reason = null, array $refused = []): bool
+    public static function apply(Actor $actor, WorkItem $locked, array $input, ?string $reason = null, array $refused = [], array $texts = []): bool
     {
         $locked->loadMissing(['type', 'labels:labels.id', 'values.property']);
         $fields = ItemInput::patch($input, $locked, $actor->user, $refused);
@@ -116,6 +122,8 @@ final class UpdateWorkItem
         if ($moving) {
             TransitionWorkItem::check($locked, $state, $resolution);
         }
+        AttachmentLinks::link($locked, $locked->project, $actor->user, $texts);
+        $mentionedBefore = $texts === [] ? [] : Mentions::ofItem($locked);
 
         $actor = $reason === null ? $actor : new Actor($actor->user, $actor->via, $reason, $actor->token);
         $changes = [];
@@ -188,9 +196,11 @@ final class UpdateWorkItem
             $locked->save();
         }
 
+        $mentioned = Mentions::anew($locked, $mentionedBefore, $texts, $actor->user);
         if ($changes !== []) {
-            EventRecorder::record(EventType::WorkItemUpdated, $actor, $locked, $locked->project, $changes);
+            EventRecorder::record(EventType::WorkItemUpdated, $actor, $locked, $locked->project, $changes, Mentions::meta($mentioned));
         }
+        self::announceBots($actor, $locked, $mentioned);
         if ($assignee) {
             self::watch($locked, $locked->assignee_id);
             EventRecorder::record(EventType::WorkItemAssigned, $actor, $locked, $locked->project, ['assignee_id' => ['old' => $previous, 'new' => $locked->assignee_id]]);
@@ -201,6 +211,23 @@ final class UpdateWorkItem
         }
 
         return $changed;
+    }
+
+    /**
+     * `bot.mentioned` for each bot a text of the item mentions anew (Mentions), with where (`source`: `description`,
+     * `values`, `comment`) and, for a comment, which one; after the event of the change itself.
+     *
+     * @param  array<string, list<User>>  $mentioned  source → accounts mentioned anew
+     */
+    public static function announceBots(Actor $actor, WorkItem $item, array $mentioned, ?string $commentId = null): void
+    {
+        foreach ($mentioned as $source => $accounts) {
+            foreach ($accounts as $account) {
+                if ($account->isBot()) {
+                    EventRecorder::record(EventType::BotMentioned, $actor, $item, $item->project, null, ['bot_id' => $account->id, 'source' => $source] + ($commentId === null ? [] : ['comment_id' => $commentId]));
+                }
+            }
+        }
     }
 
     /**

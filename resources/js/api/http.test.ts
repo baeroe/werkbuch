@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from './client';
-import { API_BASE, del, get, getPage, one, patch, post, put, setSignedIn, toQueryString, upload } from './http';
+import { FakeXhr, installFakeXhr } from '@/test/xhr';
+import { API_BASE, del, get, getPage, one, patch, post, put, setSignedIn, toQueryString, upload, UPLOAD_TIMEOUT_MS } from './http';
 
 const fetchMock = vi.fn();
 const reload = vi.fn();
@@ -291,51 +292,6 @@ describe('CSRF', () => {
   });
 });
 
-/** Just enough of XMLHttpRequest for `upload`: the test drives the events. */
-class FakeXhr {
-  static last: FakeXhr;
-
-  upload: { onprogress?: (event: { lengthComputable: boolean; loaded: number; total: number }) => void } = {};
-  onload?: () => void;
-  onerror?: () => void;
-  onabort?: () => void;
-  withCredentials = false;
-  status = 0;
-  responseText = '';
-  contentType: string | null = 'application/json';
-  headers: Record<string, string> = {};
-  opened: [string, string] | null = null;
-  sent: FormData | null = null;
-  abort = vi.fn(() => this.onabort?.());
-
-  constructor() {
-    FakeXhr.last = this;
-  }
-
-  open(method: string, url: string) {
-    this.opened = [method, url];
-  }
-
-  setRequestHeader(name: string, value: string) {
-    this.headers[name] = value;
-  }
-
-  getResponseHeader() {
-    return this.contentType;
-  }
-
-  send(form: FormData) {
-    this.sent = form;
-  }
-
-  answer(status: number, text: string, contentType: string | null = 'application/json') {
-    this.status = status;
-    this.responseText = text;
-    this.contentType = contentType;
-    this.onload?.();
-  }
-}
-
 describe('upload', () => {
   const form = () => {
     const data = new FormData();
@@ -345,7 +301,7 @@ describe('upload', () => {
   };
 
   beforeEach(() => {
-    vi.stubGlobal('XMLHttpRequest', FakeXhr);
+    installFakeXhr();
   });
 
   it('posts the form with cookie and token, reports the progress and resolves with the JSON', async () => {
@@ -355,8 +311,8 @@ describe('upload', () => {
 
     const result = upload<{ id: string }>('/attachments', data, onProgress);
     const xhr = FakeXhr.last;
-    xhr.upload.onprogress!({ lengthComputable: true, loaded: 50, total: 100 });
-    xhr.upload.onprogress!({ lengthComputable: false, loaded: 0, total: 0 });
+    xhr.progress(50, 100);
+    xhr.progress(0, 0);
     xhr.answer(201, '{"id":"a1"}');
 
     await expect(result).resolves.toEqual({ id: 'a1' });
@@ -371,7 +327,7 @@ describe('upload', () => {
 
   it('needs no progress callback', async () => {
     const result = upload('/attachments', form());
-    FakeXhr.last.upload.onprogress!({ lengthComputable: true, loaded: 1, total: 2 });
+    FakeXhr.last.progress(1, 2);
     FakeXhr.last.answer(204, '');
 
     await expect(result).resolves.toBeUndefined();
@@ -386,6 +342,24 @@ describe('upload', () => {
     expect(error.status).toBe(413);
     expect(error.reason).toBe('payload_too_large');
     expect(error.message).toBe('Die Datei ist zu groß.');
+  });
+
+  it('reads a 413 of a web server without a problem document as payload_too_large (F29)', async () => {
+    const result = upload('/attachments', form());
+    FakeXhr.last.answer(413, '<html><body>413 Request Entity Too Large</body></html>', 'text/html');
+
+    const error = await failure(result);
+
+    expect(error.status).toBe(413);
+    expect(error.reason).toBe('payload_too_large');
+  });
+
+  it('gives an upload a time limit and fails it when it runs out, like no answer (F29)', async () => {
+    const result = upload('/attachments', form());
+    expect(FakeXhr.last.timeout).toBe(UPLOAD_TIMEOUT_MS);
+    FakeXhr.last.timeOut();
+
+    await expect(result).rejects.toThrow(TypeError);
   });
 
   it('knows an answer without a content type as http_error', async () => {

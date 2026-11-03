@@ -8,6 +8,7 @@
 
 import type {
   ActivityEntry,
+  Attachment,
   BulkResult,
   Filter,
   GroupBy,
@@ -95,6 +96,7 @@ export function countWorkItems(filters: Record<string, Filter>, options: { inclu
 
 /** The answer of `GET /work-items/{id}` with everything `include` embeds. */
 interface IncludedItem extends WorkItem {
+  attachments: Attachment[];
   children: WorkItem[];
   relations: RelationEntry[];
   type: WorkItemType;
@@ -103,7 +105,9 @@ interface IncludedItem extends WorkItem {
 
 /** One item with everything the detail view shows besides the activity, in one call; a former key answers the item. */
 export async function getWorkItem(keyOrId: string): Promise<WorkItemDetail> {
-  const { children, relations, type, workflow, ...item } = await one(get<{ data: IncludedItem }>(itemPath(keyOrId), { include: 'children,relations,type,workflow' }));
+  const { attachments, children, relations, type, workflow, ...item } = await one(
+    get<{ data: IncludedItem }>(itemPath(keyOrId), { include: 'children,relations,type,workflow,attachments' }),
+  );
 
   return {
     item,
@@ -113,14 +117,14 @@ export async function getWorkItem(keyOrId: string): Promise<WorkItemDetail> {
     workflow,
     children,
     relations,
-    attachments: [],
+    attachments,
     subscribed: item.subscribed,
   };
 }
 
 /**
  * The history of an item, oldest first. Relation events name the other item only when the reader may see it
- * (`RelationChange`); comments come with Phase 7.
+ * (`RelationChange`). The comments are a list of their own (`listComments`); `useActivity` mixes both (A247).
  */
 export async function listActivity(itemRef: string, args: PageArgs = {}): Promise<Page<ActivityEntry>> {
   const page = await getPage<ItemEvent>(`${itemPath(itemRef)}/history`, { ...args });

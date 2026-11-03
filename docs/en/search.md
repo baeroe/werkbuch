@@ -6,12 +6,14 @@ One search finds work items, projects, people and bots, and views. In the interf
 
 | Kind | Found by | A hit in the palette opens |
 |---|---|---|
-| Work items | Key, title, the text of the description | The item page |
+| Work items | Key, title, the text of the description and of the comments | The item page |
 | Projects | Identifier, former identifiers, name, description | The item list of the project |
 | People and bots | Name, handle | The settings People or Bots (org admins only, see below) |
 | Views | Name | The view |
 
-Every word you type has to occur; the last word may be the start of a word, so `kontakt` finds "Kontaktformular sendet doppelt". From five letters on, a small typo in a title or a description is forgiven (`kontaktfromular`), never in keys, identifiers and handles. A hit in the key counts more than one in the title, and one in the title more than one in the description; among equal hits, the item changed last comes first.
+Every word you type has to occur; the last word may be the start of a word, so `kontakt` finds "Kontaktformular sendet doppelt". From five letters on, a small typo in a title, a description or a comment is forgiven (`kontaktfromular`), never in keys, identifiers and handles. A hit in the key counts more than one in the title, one in the title more than one in the description, and one in the description more than one in a comment; among equal hits, the item changed last comes first (a new comment does not count as a change of the item, so it does not move the item up).
+
+A word of a comment finds the item the comment belongs to; the search reads the comments of an item in the order they were written, up to 64 KB of text per item. A comment that is edited or deleted changes the search a moment later, like any other change; reactions change nothing.
 
 People and bots are found only while their account is active. Views are searched by every word of their name, case and accents aside, straight in the database: a new view is found at once.
 
@@ -133,6 +135,8 @@ php artisan app:search-import    # empties the three indexes and fills them agai
 ```
 
 `app:search-import` is the first start and the repair: it sends the settings, empties the indexes and reads everything again; during that, the search is briefly empty. In DDEV, prefix both with `ddev artisan`.
+
+**After an update** that changes what the index holds, run `app:search-sync` once: without it, Meilisearch does not search the new fields. The update that made comments searchable is one of them; run `app:search-import` after it as well, so that the comments written before the update get into the index.
 
 **When Meilisearch is down,** the search answers `503` and the palette says "The search did not answer" with **Try again**; jumping to a typed key keeps working. Nothing is lost on the way: the consumer tries every event up to 8 times, with pauses of 10 seconds, 1, 5 and 15 minutes and then one hour, about 3 hours 20 minutes in all. After that, the job lands in `failed_jobs` and werkbuch reports which event the search gave up on. Run `app:search-import` once Meilisearch is back, and the index is complete again.
 

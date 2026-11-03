@@ -29,6 +29,9 @@ final class ItemValue
      */
     public const NUMBER_LIMIT = 1e20;
 
+    /** The nodes of a document that are content without any text (Phase 7: they stand for a person, an item, a file). */
+    public const CONTENT_NODES = ['mention', 'reference', 'image', 'attachment'];
+
     /**
      * @param  mixed  $current  the value the item has: an archived option it already has stays valid
      */
@@ -64,8 +67,9 @@ final class ItemValue
     }
 
     /**
-     * Whether a document has no text and no mention (an editor that was emptied still holds an empty paragraph). Text
-     * counts as blank when it has only blanks as JavaScript's `\s` knows them.
+     * Whether a document has no text and none of the nodes that stand for something (a mention, a reference, an image,
+     * a file; an editor that was emptied still holds an empty paragraph). Text counts as blank when it has only blanks
+     * as JavaScript's `\s` knows them.
      *
      * @param  array<mixed>  $doc
      */
@@ -74,7 +78,7 @@ final class ItemValue
         if (is_string($doc['text'] ?? null)) {
             return preg_match('/^[\s\x{FEFF}]*\z/u', $doc['text']) === 1;
         }
-        if (($doc['type'] ?? null) === 'mention') {
+        if (in_array($doc['type'] ?? null, self::CONTENT_NODES, true)) {
             return false;
         }
 

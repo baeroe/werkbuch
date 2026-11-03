@@ -1,0 +1,38 @@
+{
+  "_comment": "The cases of the one emoji rule, read by tests/Unit/Domain/EmojiTest.php and resources/js/domain/emoji.test.ts (T2-M4).",
+  "takes": {
+    "a pictograph": "\ud83d\udc4d",
+    "one with a skin tone": "\ud83d\udc4d\ud83c\udffd",
+    "a text pictograph with a skin tone": "\u261d\ud83c\udffd",
+    "a sequence of zero-width joins": "\ud83d\udc69\u200d\ud83d\udcbb",
+    "a join of a text pictograph with its selector": "\ud83c\udfc3\u200d\u2640\ufe0f",
+    "a join that starts with a selector": "\ud83d\udc41\ufe0f\u200d\ud83d\udde8\ufe0f",
+    "a flag": "\ud83c\udde9\ud83c\uddea",
+    "a subdivision flag": "\ud83c\udff4\udb40\udc67\udb40\udc62\udb40\udc73\udb40\udc63\udb40\udc74\udb40\udc7f",
+    "a keycap": "1\ufe0f\u20e3",
+    "a keycap without its selector": "1\u20e3",
+    "a number sign keycap": "#\ufe0f\u20e3",
+    "a text pictograph with its selector": "\u2764\ufe0f",
+    "a copyright sign with its selector": "\u00a9\ufe0f",
+    "a pictograph of Unicode 14": "\ud83e\udee0",
+    "one of 64 bytes": "\u2764\ufe0f\u200d\u2764\ufe0f\u200d\ud83d\ude80\u200d\ud83d\ude80\u200d\ud83d\ude80\u200d\ud83d\ude80\u200d\ud83d\ude80\u200d\ud83d\ude80\u200d\ud83d\ude80"
+  },
+  "refuses": {
+    "nothing": "",
+    "a letter": "a",
+    "a copyright sign": "\u00a9",
+    "a double exclamation mark": "\u203c",
+    "a trade mark sign": "\u2122",
+    "a heart without its selector": "\u2764",
+    "a copyright sign with a skin tone": "\u00a9\ud83c\udffd",
+    "two emoji": "\ud83d\udc4d\ud83d\udc4d",
+    "an emoji and a space": "\ud83d\udc4d ",
+    "an emoji and a line break": "\ud83d\udc4d\n",
+    "half a flag": "\ud83c\udde9",
+    "a skin tone alone": "\ud83c\udffd",
+    "a keycap on a letter": "x\u20e3",
+    "a plain digit": "1",
+    "a subdivision flag without its end": "\ud83c\udff4\udb40\udc67\udb40\udc62",
+    "more than 64 bytes": "\u2764\ufe0f\u200d\u2764\ufe0f\u200d\ud83d\ude80\u200d\ud83d\ude80\u200d\ud83d\ude80\u200d\ud83d\ude80\u200d\ud83d\ude80\u200d\ud83d\ude80\u200d\ud83d\ude80\u200d\ud83d\ude80"
+  }
+}

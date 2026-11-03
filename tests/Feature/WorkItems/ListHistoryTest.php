@@ -1,7 +1,11 @@
 <?php
 
 use App\Access\ProjectRole;
+use App\Access\RoleAssignments;
 use App\Access\Visibility;
+use App\Actions\Comments\AddComment;
+use App\Actions\Comments\DeleteComment;
+use App\Actions\Comments\EditComment;
 use App\Actions\Projects\UpdateProject;
 use App\Actions\Workflows\SaveWorkflow;
 use App\Actions\WorkItems\AddRelation;
@@ -15,6 +19,7 @@ use App\Actions\WorkItems\SetSubscription;
 use App\Actions\WorkItems\TransitionWorkItem;
 use App\Actions\WorkItems\UpdateWorkItem;
 use App\Domain\Ranking\Rank;
+use App\Events\EventRecorder;
 use App\Events\EventType;
 use App\Http\Resources\HistoryEntryResource;
 use App\Models\Event;
@@ -29,6 +34,7 @@ use App\Models\WorkItem;
 use App\Models\WorkItemType;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Tests\Support\RichTextFixtures as F;
 use Tests\Support\WorkflowFixtures;
 
 /**
@@ -125,6 +131,9 @@ it('names who did it, how and why', function () use ($world, $history) {
         'states' => null,
         'reason' => null,
         'via' => 'api',
+        // no comment: an item's own change
+        'comment_id' => null,
+        'comment_author_id' => null,
         'occurred_at' => Event::query()->findOrFail($patched['id'])->occurred_at->toJSON(),
     ])
         ->and([$orphaned['type'], $orphaned['via'], $orphaned['reason']])->toBe(['work_item.updated', 'ui', DeleteWorkItem::PARENT_DELETED])
@@ -251,6 +260,55 @@ it('leaves out watching and pure reordering', function () use ($world, $history)
 
     expect(array_column($entries, 'type'))->toBe(['work_item.updated'])
         ->and(array_keys($entries[0]['changes']))->toEqualCanonicalizing(['rank', 'title']);
+});
+
+it('shows comment edits and deletions, not the creation and not reactions', function () use ($world, $history) {
+    [$web, , $mara, $ida] = $world();
+    $item = WorkItem::factory()->for($web)->create();
+    $kira = User::factory()->bot($mara)->create(['handle' => 'kira']);
+    app(RoleAssignments::class)->setProjectRole($kira, $web, ProjectRole::Member);
+
+    $comment = AddComment::run(actor($ida), $item, ['body' => 'Erster Endwurf, @kira']);
+    DB::transaction(function () use ($ida, $item, $web, $comment): void {
+        EventRecorder::record(EventType::CommentReactionAdded, actor($ida), $item, $web, null, ['comment_id' => $comment->id, 'emoji' => '👍']);
+        EventRecorder::record(EventType::CommentReactionRemoved, actor($ida), $item, $web, null, ['comment_id' => $comment->id, 'emoji' => '👍']);
+    });
+    EditComment::run(actor($ida), $comment, ['body' => 'Erster Entwurf, @kira']);
+    $kept = AddComment::run(actor($mara), $item, ['body' => 'Bleibt.']);
+    DeleteComment::run(actor($mara), $kept);
+
+    $entries = $history($ida, $item);
+
+    expect(array_column($entries, 'type'))->toBe(['comment.updated', 'comment.deleted'])
+        ->and($entries[0]['changes'])->toBe(['body' => [
+            'old' => F::doc(F::p('Erster Endwurf, ', F::mention($kira->id, 'kira'))),
+            'new' => F::doc(F::p('Erster Entwurf, ', F::mention($kira->id, 'kira'))),
+        ]])
+        ->and($entries[0]['comment_id'])->toBe($comment->id)
+        ->and($entries[0]['comment_author_id'])->toBe($ida->id)
+        ->and($entries[0]['actor_id'])->toBe($ida->id)
+        ->and($entries[1]['changes'])->toBeNull()
+        ->and($entries[1]['comment_id'])->toBe($kept->id)
+        ->and($entries[1]['comment_author_id'])->toBe($mara->id)
+        ->and($entries[1]['actor_id'])->toBe($mara->id);
+});
+
+it('hides the versions of a comment that was deleted later', function () use ($world, $history) {
+    [$web, , $mara] = $world();
+    $item = WorkItem::factory()->for($web)->create();
+    $gone = AddComment::run(actor($mara), $item, ['body' => 'Passwort: hunter2']);
+    EditComment::run(actor($mara), $gone, ['body' => 'Passwort geändert']);
+    $kept = AddComment::run(actor($mara), $item, ['body' => 'eins']);
+    EditComment::run(actor($mara), $kept, ['body' => 'zwei']);
+    DeleteComment::run(actor($mara), $gone);
+
+    $entries = $history($mara, $item);
+
+    expect(array_column($entries, 'type'))->toBe(['comment.updated', 'comment.updated', 'comment.deleted'])
+        ->and($entries[0]['comment_id'])->toBe($gone->id)
+        ->and($entries[0]['changes'])->toBeNull()
+        ->and($entries[1]['changes'])->toBe(['body' => ['old' => F::doc(F::p('eins')), 'new' => F::doc(F::p('zwei'))]])
+        ->and(json_encode($entries))->not->toContain('hunter2');
 });
 
 it('pages with a cursor, by time to the microsecond and then by id', function () use ($world) {

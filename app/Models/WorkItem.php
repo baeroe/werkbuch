@@ -3,9 +3,13 @@
 namespace App\Models;
 
 use App\Access\Visibility;
+use App\Domain\Properties\FieldType;
 use App\Domain\Workflow\StateCategory;
 use App\Domain\WorkItems\ItemKey;
 use App\Domain\WorkItems\Priority;
+use App\RichText\RichTextNames;
+use App\Search\SearchIndexer;
+use App\Support\ReaderNames;
 use Database\Factories\WorkItemFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
@@ -17,6 +21,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -81,7 +86,7 @@ final class WorkItem extends Model
 
     /**
      * Set by GetWorkItem, never stored: what WorkItemResource embeds besides the item (`children`, `type`, `workflow`,
-     * `relations`), loaded there already.
+     * `relations`, `attachments`), loaded there already (`attachments` only the files of the file list).
      *
      * @var list<string>
      */
@@ -102,10 +107,19 @@ final class WorkItem extends Model
     public bool $lean = false;
 
     /**
+     * Set by loadForResource() for an item that is not lean, never stored: what its reader may see of the mentions and
+     * references of its description and rich text values (current handles, key and title of each referenced item the
+     * reader sees), for the Markdown of WorkItemResource.
+     */
+    public ?RichTextNames $rich_names = null;
+
+    /**
      * Loads everything WorkItemResource reads, for one item or a list, with a fixed number of queries (none per item):
      * `project`, `parent.project`, `labels`, `values.property`, the computed columns of withComputed() (one query, set
      * on the models as they are, never written back) and `subscribed` for the reader (K5). The resource then asks the
-     * database nothing. `$lean` makes the resource leave out the descriptions (P17).
+     * database nothing. `$lean` makes the resource leave out the descriptions (P17); without it the texts of the items
+     * get `rich_names` for the reader, with one query for all mentioned accounts and one for all referenced items the
+     * reader sees (none without such nodes).
      *
      * @param  EloquentCollection<int, self>|self  $items
      */
@@ -128,6 +142,33 @@ final class WorkItem extends Model
             $item->subscribed = in_array($item->id, $watched, true);
             $item->lean = $lean;
         }
+
+        if (! $lean) {
+            $names = self::richNames($items, $reader);
+            $items->each(fn (self $item) => $item->rich_names = $names);
+        }
+    }
+
+    /**
+     * The names the texts of the items need for one reader (ReaderNames): their descriptions and rich text values.
+     *
+     * @param  EloquentCollection<int, self>  $items
+     */
+    private static function richNames(EloquentCollection $items, User $reader): RichTextNames
+    {
+        $texts = [];
+        foreach ($items as $item) {
+            if ($item->description !== null) {
+                $texts[] = $item->description;
+            }
+            foreach ($item->values as $row) {
+                if ($row->property->field_type === FieldType::RichText) {
+                    $texts[] = (array) $row->value_json;
+                }
+            }
+        }
+
+        return ReaderNames::of($texts, $reader);
     }
 
     /**
@@ -219,12 +260,12 @@ final class WorkItem extends Model
     }
 
     /**
-     * The search document (index `work_items`, settings in config/scout.php): the key, the title and the plain text of
-     * the description to search, the rest to filter by. Who may see the item is not in it: the search filters by the
-     * projects the reader sees when it asks (P2). Reads `project`, `labels` and `state` (loaded at once by
-     * makeAllSearchableUsing()).
+     * The search document (index `work_items`, settings in config/scout.php): the key, the title, the plain text of
+     * the description and of the comments (A245) to search, the rest to filter by. Who may see the item is not in it:
+     * the search filters by the projects the reader sees when it asks (P2). Reads `project`, `labels`, `state` and
+     * `comments` (loaded at once by makeAllSearchableUsing()).
      *
-     * @return array{id: string, project_id: string, key: string, number: int, title: string, description: string, type_id: string, state_category: string, assignee_id: string|null, label_ids: list<string>, archived: bool, updated_at: int}
+     * @return array{id: string, project_id: string, key: string, number: int, title: string, description: string, comments: string, type_id: string, state_category: string, assignee_id: string|null, label_ids: list<string>, archived: bool, updated_at: int}
      */
     public function toSearchableArray(): array
     {
@@ -235,6 +276,7 @@ final class WorkItem extends Model
             'number' => $this->number,
             'title' => $this->title,
             'description' => $this->description_text ?? '',
+            'comments' => SearchIndexer::commentsText(array_values($this->comments->map(fn (Comment $comment) => $comment->body_text)->all())),
             'type_id' => $this->type_id,
             'state_category' => $this->state->category->value,
             'assignee_id' => $this->assignee_id,
@@ -253,7 +295,12 @@ final class WorkItem extends Model
      */
     protected function makeAllSearchableUsing(Builder $query): Builder
     {
-        return $query->with(['project:id,identifier', 'labels:labels.id', 'state:id,category'])
+        return $query->with([
+            'project:id,identifier', 'labels:labels.id', 'state:id,category',
+            // no comment gives the document more than it can take: the database cuts it (T12-M1)
+            'comments' => fn (HasMany $comments) => $comments->select(['id', 'work_item_id'])
+                ->selectRaw('left(body_text, ?) as body_text', [SearchIndexer::COMMENTS_MAX]),
+        ])
             ->whereIn('work_items.project_id', Project::query()->whereNull('deleting_at')->select('id'));
     }
 
@@ -360,6 +407,27 @@ final class WorkItem extends Model
     public function incoming(): HasMany
     {
         return $this->hasMany(WorkItemRelation::class, 'target_id');
+    }
+
+    /**
+     * The attachments the item owns: the files of its file list (`file`) and the pictures and files of its texts
+     * (`inline`), oldest first.
+     *
+     * @return MorphMany<Attachment, $this>
+     */
+    public function attachments(): MorphMany
+    {
+        return $this->morphMany(Attachment::class, 'attachable')->orderBy('created_at')->orderBy('id');
+    }
+
+    /**
+     * The comments in the order they were written.
+     *
+     * @return HasMany<Comment, $this>
+     */
+    public function comments(): HasMany
+    {
+        return $this->hasMany(Comment::class)->orderBy('created_at')->orderBy('id');
     }
 
     /**

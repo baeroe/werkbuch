@@ -28,6 +28,10 @@ type ViewFieldsProps = {
   nameRef?: Ref<HTMLInputElement>;
 };
 
+
+/** The longest emoji a view icon takes, in bytes (`App\\Support\\ViewInput::ICON_MAX_BYTES`). */
+export const VIEW_ICON_MAX_BYTES = 32;
+
 export function ViewFields({ name, onName, icon, onIcon, errors = {}, nameRef }: ViewFieldsProps) {
   const [picking, setPicking] = useState(false);
   const options = [
@@ -60,6 +64,7 @@ export function ViewFields({ name, onName, icon, onIcon, errors = {}, nameRef }:
           <PopoverContent title={t('views.fields.emoji')} className="w-auto p-3">
             <EmojiPicker
               className="mt-2"
+              maxBytes={VIEW_ICON_MAX_BYTES}
               onPick={(emoji) => {
                 onIcon(emoji);
                 setPicking(false);

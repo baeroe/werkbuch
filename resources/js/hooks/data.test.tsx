@@ -4,9 +4,37 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useEditReason, useItemWorkflow } from '@/components/fields/itemData';
+import { ApiError, type Page } from '@/api/client';
+import { currentToasts, resetToasts } from '@/components/ui/toast';
+import { uploadAttachment } from '@/api/attachments';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
-import { agency, emptySearch, ida, labels, list, mara, organization, project, properties, relationTypes, resolutions, searchResults, standard, types } from '@/test/fixtures';
-import type { ProjectMember, User } from '@/types';
+import {
+  agency,
+  emptySearch,
+  ida,
+  itemEvent,
+  labels,
+  list,
+  makeAttachment,
+  makeComment,
+  mara,
+  ops12,
+  organization,
+  project,
+  properties,
+  relationTypes,
+  resolutions,
+  searchResults,
+  standard,
+  types,
+  web47,
+  web47Comments,
+  web47History,
+} from '@/test/fixtures';
+import { installFakeXhr, FakeXhr, restoreFakeXhr } from '@/test/xhr';
+import type { Comment, ListedItem, ProjectMember, User, WorkItemDetail } from '@/types';
+import { ATTACHMENT_FRESH_MS, useAttachment, useDeleteAttachment, usePrimeAttachments, useUploadAttachment } from './attachments';
+import { useAddComment, useComments, useDeleteComment, useEditComment, useToggleReaction } from './comments';
 import { useDeleteLabel, useDeleteRelationType, useDeleteResolution, useLabels, useRelationTypes, useResolutions, useSaveLabel, useSaveRelationType, useSaveResolution } from './catalog';
 import { qk } from './keys';
 import { useApiMutation, useSettle } from './mutation';
@@ -40,7 +68,9 @@ import {
   useUpdateUserRole,
   useUsers,
 } from './users';
+import { primeItemRef, useItemRef, useMentionables } from './richText';
 import { useFavorites, useToggleFavorite } from './views';
+import { useActivity } from './workItems';
 import { useDeleteWorkItemType, useSaveWorkItemType, useWorkItemTypes } from './workItemTypes';
 import { useAssignWorkflow, useDeleteWorkflow, useSaveWorkflow, useWorkflows } from './workflows';
 
@@ -68,6 +98,7 @@ beforeEach(() => {
 afterEach(() => {
   api?.restore();
   api = undefined;
+  resetToasts();
 });
 
 const web = project('WEB', 'admin', { id: 'p1' });
@@ -572,5 +603,414 @@ describe('search', () => {
 
     expect(again.result.current.data).toEqual(hit);
     expect(api.calls[0]?.url).toBe('/api/v1/search?q=kontakt');
+  });
+});
+
+describe('activity', () => {
+  it('merges comments and history in order: by time, a comment after an event of the same moment', async () => {
+    const atTheMove = makeComment({ id: 'c_tie', created_at: web47History[1]!.occurred_at });
+    api = mockApi({
+      'GET /api/v1/work-items/WEB-47/history': () => ({ body: list(web47History) }),
+      'GET /api/v1/work-items/WEB-47/comments': (_body, url) =>
+        url.searchParams.get('cursor') === 'next'
+          ? { body: list([web47Comments[1]!]) }
+          : { body: { data: [atTheMove, web47Comments[0]!], links: {}, meta: { next_cursor: 'next', total: 3 } } },
+    });
+    const { result } = renderHook(() => useActivity('WEB-47'), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.map((entry) => `${entry.kind} ${entry.id}`)).toEqual([
+      'event ev_1',
+      'event ev_2',
+      'comment c_tie',
+      'event ev_3',
+      'comment c_web47_1',
+      'comment c_web47_2',
+    ]);
+    expect(result.current.data?.find((entry) => entry.id === 'c_web47_2')).toEqual({ kind: 'comment', id: 'c_web47_2', at: web47Comments[1]!.created_at, comment: web47Comments[1] });
+    expect(result.current.isError).toBe(false);
+  });
+
+  it('mixes a comment and an event of the same second by their moment', async () => {
+    const at = (time: string) => `2026-10-28T10:00:00.${time}Z`;
+    api = mockApi({
+      'GET /api/v1/work-items/WEB-47/history': () =>
+        ({ body: list([itemEvent({ id: 'ev_early', occurred_at: at('100000') }), itemEvent({ id: 'ev_late', occurred_at: at('700000') })]) }),
+      'GET /api/v1/work-items/WEB-47/comments': () => ({ body: list([makeComment({ id: 'c_between', created_at: at('200000') }), makeComment({ id: 'c_last', created_at: at('900000') })]) }),
+    });
+    const { result } = renderHook(() => useActivity('WEB-47'), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    // the comment at .200 before the change at .700, and after the one at .100
+    expect(result.current.data?.map((entry) => `${entry.kind} ${entry.id}`)).toEqual(['event ev_early', 'comment c_between', 'event ev_late', 'comment c_last']);
+  });
+
+  it('fails only when a source fails without data, and fetches both again', async () => {
+    let comments: { status: number; body: unknown } = { status: 500, body: { reason: 'server_error', detail: 'Kommentare kaputt' } };
+    api = mockApi({
+      'GET /api/v1/work-items/WEB-47/history': () => ({ body: list([itemEvent()]) }),
+      'GET /api/v1/work-items/WEB-47/comments': () => comments,
+    });
+    const { result } = renderHook(() => useActivity('WEB-47'), { wrapper });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.data).toBeUndefined();
+    expect(result.current.error?.message).toBe('Kommentare kaputt');
+
+    comments = { status: 200, body: list(web47Comments) };
+    await act(() => result.current.refetch());
+    await waitFor(() => expect(result.current.data).toHaveLength(3));
+    expect(result.current.isError).toBe(false);
+
+    // a reload that fails keeps what the activity showed
+    comments = { status: 500, body: { reason: 'server_error' } };
+    await act(() => result.current.refetch());
+    expect(result.current.isError).toBe(false);
+    expect(result.current.data).toHaveLength(3);
+  });
+});
+
+describe('comments', () => {
+  const COMMENTS = qk.comments.list({ item: 'wi_web_47', pages: 'all' });
+
+  it('reads every page of the comments of an item, and waits without an item', async () => {
+    api = mockApi({
+      'GET /api/v1/work-items/wi_web_47/comments': (_body, url) =>
+        url.searchParams.get('cursor') === 'next' ? { body: list(web47Comments.slice(1)) } : { body: { data: web47Comments.slice(0, 1), links: {}, meta: { next_cursor: 'next', total: 2 } } },
+    });
+    const { result } = renderHook(() => ({ comments: useComments('wi_web_47'), none: useComments(null) }), { wrapper });
+
+    await waitFor(() => expect(result.current.comments.isSuccess).toBe(true));
+    expect(result.current.comments.data?.items).toEqual(web47Comments);
+    expect(result.current.none.fetchStatus).toBe('idle');
+  });
+
+  it('adds, edits and deletes comments and makes the comments, the activity and the items stale', async () => {
+    const added = makeComment({ id: 'c_new' });
+    api = mockApi({
+      'POST /api/v1/work-items/wi_web_47/comments': () => ({ status: 201, body: { data: added } }),
+      'PATCH /api/v1/comments/c_new': () => ({ body: { data: { ...added, edited_at: '2026-10-28T10:00:00.000Z' } } }),
+      'DELETE /api/v1/comments/c_new': () => ({ status: 204 }),
+    });
+    const stale = [COMMENTS, qk.activity.list({ item: 'wi_web_47', pages: 'all' }), qk.workItems.detail('wi_web_47')];
+    const seed = () => stale.forEach((key) => queryClient.setQueryData(key, { items: [] }));
+    const isStale = () => stale.map((key) => queryClient.getQueryState(key)?.isInvalidated);
+    const { result } = renderHook(() => ({ add: useAddComment(), edit: useEditComment(), remove: useDeleteComment() }), { wrapper });
+
+    seed();
+    expect(await act(() => result.current.add.mutateAsync({ work_item_id: 'wi_web_47', body: added.body_json }))).toEqual(added);
+    expect(isStale()).toEqual([true, true, true]);
+    seed();
+    await act(() => result.current.edit.mutateAsync({ id: 'c_new', body: added.body_json }));
+    expect(isStale()).toEqual([true, true, true]);
+    seed();
+    await act(() => result.current.remove.mutateAsync('c_new'));
+    expect(isStale()).toEqual([true, true, true]);
+    expect(api.calls.map(({ method, url }) => `${method} ${url}`)).toEqual([
+      'POST /api/v1/work-items/wi_web_47/comments',
+      'PATCH /api/v1/comments/c_new',
+      'DELETE /api/v1/comments/c_new',
+    ]);
+  });
+
+  describe('reactions', () => {
+    const seed = (comments: Comment[]) => queryClient.setQueryData<Page<Comment>>(COMMENTS, { items: comments, next_cursor: null, total: comments.length });
+    const cached = () => queryClient.getQueryData<Page<Comment>>(COMMENTS)!.items;
+
+    it('shows the own reaction at once and takes the comment of the answer', async () => {
+      const answered = makeComment({ id: 'c_web47_1', reactions: [{ emoji: '👍', user_ids: ['u_ida', 'u_theo', 'u_mara'] }] });
+      let release!: () => void;
+      api = mockApi({ 'PUT /api/v1/comments/c_web47_1/reactions': () => ({ body: { data: answered } }) });
+      const held = globalThis.fetch;
+      globalThis.fetch = (...args) => new Promise((resolve) => (release = () => resolve(held(...args))));
+      seed(web47Comments);
+      const { result } = renderHook(() => useToggleReaction(), { wrapper });
+
+      act(() => result.current.toggle({ comment_id: 'c_web47_1', emoji: '👍', on: true }));
+      await waitFor(() => expect(cached()[0]!.reactions).toEqual([{ emoji: '👍', user_ids: ['u_ida', 'u_theo', 'u_mara'] }]));
+      expect(result.current.isPending('c_web47_1', '👍')).toBe(true);
+      expect(result.current.isPending('c_web47_1', '🎉')).toBe(false);
+
+      act(() => release());
+      await waitFor(() => expect(result.current.isPending('c_web47_1', '👍')).toBe(false));
+      expect(cached()[0]).toEqual(answered);
+      expect(cached()[1]).toEqual(web47Comments[1]);
+    });
+
+    it('takes back the own reaction at once and drops an emoji nobody uses any more', async () => {
+      api = mockApi({ 'DELETE /api/v1/comments/c_1/reactions': () => ({ body: { data: makeComment() } }) });
+      seed([makeComment({ reactions: [{ emoji: '🎉', user_ids: ['u_mara'] }, { emoji: '👍', user_ids: ['u_mara', 'u_ida'] }] })]);
+      // the comments of another item stay as they are
+      const elsewhere = { items: [makeComment({ id: 'c_9', work_item_id: 'wi_ops_12' })], next_cursor: null, total: 1 };
+      queryClient.setQueryData(qk.comments.list({ item: 'wi_ops_12', pages: 'all' }), elsewhere);
+      const { result } = renderHook(() => useToggleReaction(), { wrapper });
+
+      act(() => result.current.toggle({ comment_id: 'c_1', emoji: '🎉', on: false }));
+      expect(cached()[0]!.reactions).toEqual([{ emoji: '👍', user_ids: ['u_mara', 'u_ida'] }]);
+      act(() => result.current.toggle({ comment_id: 'c_1', emoji: '👍', on: false }));
+      expect(cached()[0]!.reactions).toEqual([{ emoji: '👍', user_ids: ['u_ida'] }]);
+      // a reaction that is there already stays as it is
+      act(() => result.current.toggle({ comment_id: 'c_1', emoji: '👍', on: false }));
+      expect(cached()[0]!.reactions).toEqual([{ emoji: '👍', user_ids: ['u_ida'] }]);
+      await waitFor(() => expect(api!.calls).toHaveLength(3));
+      expect(queryClient.getQueryData(qk.comments.list({ item: 'wi_ops_12', pages: 'all' }))).toBe(elsewhere);
+    });
+
+    it('rolls back a reaction the server refuses and reports each failure', async () => {
+      api = mockApi({
+        'PUT /api/v1/comments/c_web47_1/reactions': (body) =>
+          (body as { emoji: string }).emoji === '🎉'
+            ? { status: 409, body: { reason: 'archived', detail: 'WEB-47 ist archiviert.' } }
+            : { status: 503, body: { reason: 'server_error', detail: 'Wartung' } },
+        // a reaction that was there already stays when the call fails
+        'PUT /api/v1/comments/c_web47_2/reactions': () => ({ status: 409, body: { reason: 'archived', detail: 'Schon da.' } }),
+      });
+      const mine = { ...web47Comments[1]!, reactions: [{ emoji: '🚀', user_ids: ['u_mara'] }] };
+      seed([web47Comments[0]!, mine]);
+      const { result } = renderHook(() => useToggleReaction(), { wrapper });
+
+      act(() => {
+        result.current.toggle({ comment_id: 'c_web47_1', emoji: '🎉', on: true });
+        result.current.toggle({ comment_id: 'c_web47_1', emoji: '👍', on: true });
+      });
+      expect(cached()[0]!.reactions).toEqual([
+        { emoji: '👍', user_ids: ['u_ida', 'u_theo', 'u_mara'] },
+        { emoji: '🎉', user_ids: ['u_mara'] },
+      ]);
+
+      act(() => result.current.toggle({ comment_id: 'c_web47_2', emoji: '🚀', on: true }));
+
+      await waitFor(() => expect(currentToasts()).toHaveLength(3));
+      expect(cached()).toEqual([web47Comments[0], mine]);
+      expect(currentToasts().map((toast) => [toast.title, toast.description, toast.action?.label])).toEqual([
+        ['Reaktion 🎉 nicht gespeichert', 'WEB-47 ist archiviert.', undefined],
+        ['Reaktion 👍 nicht gespeichert', 'Wartung', 'Erneut versuchen'],
+        ['Reaktion 🚀 nicht gespeichert', 'Schon da.', undefined],
+      ]);
+    });
+
+    it('takes the answer of a comment while a reaction to another one is on its way, and keeps two failures apart (F26, T15-M2)', async () => {
+      const answered = makeComment({ id: 'c_web47_1', reactions: [{ emoji: '👍', user_ids: ['u_ida', 'u_theo', 'u_mara', 'u_lene'] }] });
+      api = mockApi({
+        'PUT /api/v1/comments/c_web47_1/reactions': () => ({ body: { data: answered } }),
+        'PUT /api/v1/comments/c_web47_2/reactions': () => ({ status: 503, body: { reason: 'server_error', detail: 'Wartung' } }),
+      });
+      seed(web47Comments);
+      // the reaction to the second comment hangs
+      const held = globalThis.fetch;
+      let release!: () => void;
+      globalThis.fetch = (input, init) =>
+        String(input).includes('c_web47_2') ? new Promise((resolve) => (release = () => resolve(held(input, init)))) : held(input, init);
+      const { result } = renderHook(() => useToggleReaction(), { wrapper });
+
+      act(() => {
+        result.current.toggle({ comment_id: 'c_web47_2', emoji: '👍', on: true });
+        result.current.toggle({ comment_id: 'c_web47_1', emoji: '👍', on: true });
+      });
+      // the answer for the first comment comes in, though the second one's call still runs (Lene reacted meanwhile)
+      await waitFor(() => expect(cached()[0]).toEqual(answered));
+
+      act(() => release());
+      await waitFor(() => expect(currentToasts()).toHaveLength(1));
+      // the same failure on another comment: a toast of its own, each with its own retry
+      api.restore();
+      api = mockApi({ 'DELETE /api/v1/comments/c_web47_1/reactions': () => ({ status: 503, body: { reason: 'server_error', detail: 'Wartung' } }) });
+      act(() => result.current.toggle({ comment_id: 'c_web47_1', emoji: '👍', on: false }));
+      await waitFor(() => expect(currentToasts()).toHaveLength(2));
+      expect(currentToasts().map((toast) => [toast.subject, toast.title, toast.action?.label])).toEqual([
+        ['reaction:c_web47_2:👍', 'Reaktion 👍 nicht gespeichert', 'Erneut versuchen'],
+        ['reaction:c_web47_1:👍', 'Reaktion 👍 nicht gespeichert', 'Erneut versuchen'],
+      ]);
+    });
+
+    it('offers to try again after an outage, with the same reaction', async () => {
+      let status = 503;
+      const restored = makeComment({ id: 'c_web47_1', reactions: [{ emoji: '👍', user_ids: ['u_ida', 'u_theo'] }] });
+      api = mockApi({
+        'DELETE /api/v1/comments/c_web47_1/reactions': () => (status === 503 ? { status, body: { reason: 'server_error' } } : { body: { data: { ...restored, reactions: [] } } }),
+      });
+      seed(web47Comments);
+      const { result } = renderHook(() => useToggleReaction(), { wrapper });
+
+      act(() => result.current.toggle({ comment_id: 'c_web47_1', emoji: '👍', on: false }));
+      await waitFor(() => expect(currentToasts()).toHaveLength(1));
+      expect(cached()).toEqual(web47Comments);
+
+      status = 200;
+      act(() => currentToasts()[0]!.action!.onClick());
+      await waitFor(() => expect(cached()[0]!.reactions).toEqual([]));
+      expect(api.calls.at(-1)!.url).toBe(`/api/v1/comments/c_web47_1/reactions?emoji=${encodeURIComponent('👍')}`);
+    });
+  });
+});
+
+describe('attachments', () => {
+  it('reads an attachment once and keeps it fresh, and puts those that came with something else into the cache', async () => {
+    const picture = makeAttachment();
+    const file = makeAttachment({ id: 'att_2', kind: 'file' });
+    api = mockApi({ 'GET /api/v1/attachments/att_1': () => ({ body: { data: picture } }) });
+    const listOf = [file];
+    const { result, rerender } = renderHook(({ id }) => ({ one: useAttachment(id), none: useAttachment(null), prime: usePrimeAttachments(listOf) }), {
+      wrapper,
+      initialProps: { id: 'att_1' },
+    });
+
+    await waitFor(() => expect(result.current.one.data).toEqual(picture));
+    rerender({ id: 'att_2' });
+    expect(result.current.one.data).toEqual(file);
+    rerender({ id: 'att_1' });
+    expect(result.current.none.fetchStatus).toBe('idle');
+    expect(api.calls).toHaveLength(1);
+    expect(queryClient.getQueryCache().find({ queryKey: qk.attachments.detail('att_1') })?.isStale()).toBe(false);
+    // the preview and the owner come later: after a while the record is read again
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(Date.now() + ATTACHMENT_FRESH_MS - 1000);
+      rerender({ id: 'att_1' });
+      expect(result.current.one.isStale).toBe(false);
+      vi.setSystemTime(Date.now() + 2000);
+      rerender({ id: 'att_1' });
+      expect(result.current.one.isStale).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('uploads with progress and puts the answer into the cache, deletes and makes the item stale', async () => {
+    installFakeXhr();
+    try {
+      const picture = makeAttachment();
+      api = mockApi({ 'DELETE /api/v1/attachments/att_1': () => ({ status: 204 }) });
+      const onProgress = vi.fn();
+      const listed = makeAttachment({ id: 'att_1', kind: 'file', owner: { type: 'work_item', id: 'wi_web_47' } });
+      const other = makeAttachment({ id: 'att_3', kind: 'file', owner: { type: 'work_item', id: 'wi_web_47' } });
+      queryClient.setQueryData(qk.workItems.detail('wi_web_47'), { item: web47, attachments: [listed, other] });
+      queryClient.setQueryData(qk.workItems.detail('WEB-47'), { item: web47, attachments: [listed] });
+      const { result } = renderHook(() => ({ upload: useUploadAttachment(), remove: useDeleteAttachment() }), { wrapper });
+
+      let call!: Promise<unknown>;
+      act(() => {
+        call = result.current.upload.mutateAsync({ project_id: 'p_web', file: new File(['x'], 'x.png'), owner: null, kind: 'inline', onProgress });
+      });
+      await waitFor(() => expect(FakeXhr.last?.sent).not.toBeNull());
+      FakeXhr.last.progress(1, 4);
+      FakeXhr.last.answer(201, { data: picture });
+      expect(await call).toEqual(picture);
+      expect(onProgress).toHaveBeenCalledWith(0.25);
+      expect(queryClient.getQueryData(qk.attachments.detail('att_1'))).toEqual(picture);
+
+      await act(() => result.current.remove.mutateAsync('att_1'));
+      expect(queryClient.getQueryState(qk.workItems.detail('wi_web_47'))?.isInvalidated).toBe(true);
+      // the file leaves every cached detail at once, also one cached under the key
+      expect(queryClient.getQueryData<WorkItemDetail>(qk.workItems.detail('wi_web_47'))?.attachments).toEqual([other]);
+      expect(queryClient.getQueryData<WorkItemDetail>(qk.workItems.detail('WEB-47'))?.attachments).toEqual([]);
+      // a deleted attachment leaves the cache
+      expect(queryClient.getQueryData(qk.attachments.detail('att_1'))).toBeUndefined();
+    } finally {
+      restoreFakeXhr();
+    }
+  });
+});
+
+describe('uploads into the file list', () => {
+  it('makes the item stale after a file of the list, not after a picture of a text (T15-M4)', async () => {
+    installFakeXhr();
+    try {
+      queryClient.setQueryData(qk.workItems.detail('wi_web_47'), { item: web47, attachments: [] });
+      const { result } = renderHook(() => useUploadAttachment(), { wrapper });
+      const upload = async (kind: 'inline' | 'file', answer: ReturnType<typeof makeAttachment>) => {
+        let call!: Promise<unknown>;
+        act(() => {
+          call = result.current.mutateAsync({ project_id: 'p_web', file: new File(['x'], 'x.png'), owner: kind === 'file' ? { type: 'work_item', id: 'wi_web_47' } : null, kind });
+        });
+        await waitFor(() => expect(FakeXhr.last?.sent).not.toBeNull());
+        FakeXhr.last.answer(201, { data: answer });
+        await act(() => call);
+      };
+
+      await upload('inline', makeAttachment());
+      expect(queryClient.getQueryState(qk.workItems.detail('wi_web_47'))?.isInvalidated).toBe(false);
+      await upload('file', makeAttachment({ id: 'att_2', kind: 'file', owner: { type: 'work_item', id: 'wi_web_47' } }));
+      expect(queryClient.getQueryState(qk.workItems.detail('wi_web_47'))?.isInvalidated).toBe(true);
+    } finally {
+      restoreFakeXhr();
+    }
+  });
+
+  it('refuses a file of the list without its item at once (T15-M6)', async () => {
+    installFakeXhr();
+    try {
+      await expect(uploadAttachment('p_web', new File(['x'], 'x.pdf'), null, 'file')).rejects.toThrow(TypeError);
+      expect(FakeXhr.all).toEqual([]);
+    } finally {
+      restoreFakeXhr();
+    }
+  });
+
+  it('puts back only the XMLHttpRequest, never what other tests stubbed (T15-M5)', () => {
+    vi.stubGlobal('Notification', 'stubbed');
+    const real = globalThis.XMLHttpRequest;
+    installFakeXhr();
+    expect(globalThis.XMLHttpRequest).toBe(FakeXhr);
+    restoreFakeXhr();
+    expect(globalThis.XMLHttpRequest).toBe(real);
+    expect((globalThis as { Notification?: unknown }).Notification).toBe('stubbed');
+    vi.unstubAllGlobals();
+  });
+});
+
+describe('mentions and references', () => {
+  it('lists who can be mentioned, keeping the last list while the next one loads', async () => {
+    let answer: User[] = [ida, mara];
+    api = mockApi({ 'GET /api/v1/mentions': () => ({ body: { data: answer } }) });
+    const { result, rerender } = renderHook(({ q, enabled }) => useMentionables('p_web', q, enabled), { wrapper, initialProps: { q: '', enabled: false } });
+
+    expect(result.current.fetchStatus).toBe('idle');
+    rerender({ q: '', enabled: true });
+    await waitFor(() => expect(result.current.data).toEqual([ida, mara]));
+    answer = [ida];
+    rerender({ q: 'i', enabled: true });
+    expect(result.current.data).toEqual([ida, mara]);
+    await waitFor(() => expect(result.current.data).toEqual([ida]));
+    expect(api.calls.map((call) => call.url)).toEqual(['/api/v1/mentions?project=p_web&q=', '/api/v1/mentions?project=p_web&q=i']);
+  });
+
+  it('batches the references of one tick into one request', async () => {
+    const other = { ...web47, id: 'wi_web_42', key: 'WEB-42' };
+    api = mockApi({ 'GET /api/v1/references': () => ({ body: { data: { items: [web47, ops12, other] } } }) });
+    const { result } = renderHook(() => [useItemRef('wi_web_47'), useItemRef('wi_ops_12'), useItemRef('wi_web_42'), useItemRef('wi_web_47'), useItemRef(null)], { wrapper });
+
+    await waitFor(() => expect(result.current.slice(0, 4).every((ref) => ref.isSuccess)).toBe(true));
+    expect(result.current.map((ref) => ref.data?.key)).toEqual(['WEB-47', 'OPS-12', 'WEB-42', 'WEB-47', undefined]);
+    expect(api.calls.map((call) => decodeURIComponent(call.url))).toEqual(['/api/v1/references?items=wi_web_47,wi_ops_12,wi_web_42']);
+    expect(queryClient.getQueryData(qk.references.item('wi_ops_12'))).toEqual(ops12);
+  });
+
+  it('marks a reference the server leaves out as hidden', async () => {
+    api = mockApi({ 'GET /api/v1/references': () => ({ body: { data: { items: [web47] } } }) });
+    const { result } = renderHook(() => [useItemRef('wi_web_47'), useItemRef('wi_hidden')], { wrapper });
+
+    await waitFor(() => expect(result.current[1]!.isError).toBe(true));
+    expect(result.current[1]!.error).toBeInstanceOf(ApiError);
+    expect(result.current[1]!.error).toMatchObject({ status: 404, reason: 'not_found' });
+    expect(result.current[0]!.data).toEqual(web47);
+  });
+
+  it('fails every reference of a request that fails, splits large requests and skips what was primed', async () => {
+    const ids = Array.from({ length: 101 }, (_, index) => `wi_${String(index).padStart(3, '0')}`);
+    api = mockApi({
+      'GET /api/v1/references': (_body, url) => {
+        const asked = url.searchParams.get('items')!.split(',');
+        return asked.length === 1 ? { status: 500, body: { reason: 'server_error' } } : { body: { data: { items: asked.map((id) => ({ ...web47, id })) } } };
+      },
+    });
+    primeItemRef({ ...ops12 } as ListedItem, queryClient);
+    const { result } = renderHook(() => [...ids.map((id) => useItemRef(id)), useItemRef('wi_ops_12')], { wrapper });
+
+    await waitFor(() => expect(result.current.every((ref) => ref.isSuccess || ref.isError)).toBe(true));
+    expect(api.calls.map((call) => call.url.split('items=')[1]!.split('%2C').length)).toEqual([100, 1]);
+    expect(result.current[0]!.data?.id).toBe('wi_000');
+    expect(result.current[100]!.error).toMatchObject({ status: 500 });
+    expect(result.current[101]!.data).toEqual(ops12);
   });
 });

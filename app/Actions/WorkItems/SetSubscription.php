@@ -16,11 +16,11 @@ use Lorisleiva\Actions\Concerns\AsAction;
 /**
  * Starts or stops watching a work item for the acting person (spec 4.10): every person who sees the item, viewers
  * included, also in an archived project and on an archived item (P21); bots watch nothing (403 `bots_dont_watch`).
- * Watching keeps a row with reason `manual`; stopping keeps the row with `unsubscribed_at` as an opt-out that only a
- * new assignment lifts (UpdateWorkItem). Only a real change writes and records `work_item.subscribed` or
- * `work_item.unsubscribed` (neither with a webhook nor in the history, P13). The item is locked without the
- * organization (ItemLock::take with `$catalog` off): a subscription changes nothing a change of the catalogs could
- * take away.
+ * Watching keeps a row with reason `manual`; stopping keeps the row (or creates one with reason `manual`) with
+ * `unsubscribed_at` as an opt-out that only a new assignment lifts (UpdateWorkItem). Only a real change writes and
+ * records `work_item.subscribed` or `work_item.unsubscribed` (neither with a webhook nor in the history, P13). The
+ * item is locked without the organization (ItemLock::take with `$catalog` off): a subscription changes nothing a
+ * change of the catalogs could take away.
  */
 final class SetSubscription
 {
@@ -41,17 +41,11 @@ final class SetSubscription
                 return $locked;
             }
 
-            if ($on) {
-                WorkItemSubscriber::query()->updateOrCreate(
-                    ['work_item_id' => $locked->id, 'user_id' => $actor->user->id],
-                    ['reason' => 'manual', 'unsubscribed_at' => null],
-                );
-            } elseif ($row !== null) {
-                $row->update(['unsubscribed_at' => now()]);
-            } else {
-                // nobody stops watching what they never watched
-                return $locked;
-            }
+            // stopping without a row stores an opt-out too (A250): a later automatic subscription respects it
+            WorkItemSubscriber::query()->updateOrCreate(
+                ['work_item_id' => $locked->id, 'user_id' => $actor->user->id],
+                $on ? ['reason' => 'manual', 'unsubscribed_at' => null] : ['unsubscribed_at' => now()] + ($row === null ? ['reason' => 'manual'] : []),
+            );
 
             EventRecorder::record($on ? EventType::WorkItemSubscribed : EventType::WorkItemUnsubscribed, $actor, $locked, $locked->project);
 

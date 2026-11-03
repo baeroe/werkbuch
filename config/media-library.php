@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Attachment;
 use Spatie\ImageOptimizer\Optimizers\Avifenc;
 use Spatie\ImageOptimizer\Optimizers\Cwebp;
 use Spatie\ImageOptimizer\Optimizers\Gifsicle;
@@ -49,8 +50,11 @@ return [
     /*
      * The maximum file size of an item in bytes.
      * Adding a larger file will result in an exception.
+     *
+     * werkbuch: the limit of attachments (ATTACHMENTS_MAX_MB with the default Attachment::DEFAULT_MAX_MB, as config/werkbuch.php reads it), at least the 2 MB of the
+     * pictures (App\Rules\ImageDataUrl). UploadAttachment refuses a larger file with 413 before medialibrary sees it.
      */
-    'max_file_size' => 2 * 1024 * 1024,
+    'max_file_size' => max(2, (int) env('ATTACHMENTS_MAX_MB', Attachment::DEFAULT_MAX_MB)) * 1024 * 1024,
 
     /*
      * Uploads whose file name contains any of these extensions will be rejected.
@@ -83,8 +87,10 @@ return [
     /*
      * This queue will be used to generate derived and responsive images.
      * Leave empty to use the default queue.
+     *
+     * werkbuch: the queue `media` (spec 7.2), which the DDEV worker serves.
      */
-    'queue_name' => env('MEDIA_QUEUE', ''),
+    'queue_name' => env('MEDIA_QUEUE', 'media'),
 
     /*
      * By default all conversions will be performed on a queue.

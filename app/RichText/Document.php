@@ -2,6 +2,11 @@
 
 namespace App\RichText;
 
+use App\Domain\Ulid;
+use App\RichText\Nodes\AttachmentFile;
+use App\RichText\Nodes\AttachmentImage;
+use App\RichText\Nodes\Mention;
+use App\RichText\Nodes\Reference;
 use Tiptap\Core\Mark;
 use Tiptap\Core\Node;
 use Tiptap\Editor;
@@ -9,16 +14,26 @@ use Tiptap\Marks;
 use Tiptap\Nodes;
 
 /**
- * A rich text as werkbuch stores it: Tiptap JSON of the standard nodes (Schema), the form the editor sends. It reads
- * and writes Markdown (REST, MCP), plain text (search, `description_text`) and HTML (Phase 7 builds mails from it).
- * Nothing a user typed as HTML is ever output as HTML: Markdown reads HTML as text, and the HTML comes from the nodes.
+ * A rich text as werkbuch stores it: Tiptap JSON of the nodes of Schema, the form the editor sends. It reads and writes
+ * Markdown (REST, MCP), plain text (search, `description_text`), HTML and the HTML of mails. Nothing a user typed as
+ * HTML is ever output as HTML: Markdown reads HTML as text, and the HTML comes from the nodes.
+ *
+ * It reads mentions, references, images and files only as structure and names their IDs (`mentionedUserIds()`,
+ * `attachmentIds()`, `itemRefs()`, `pageRefs()`); what they mean for a writer or a reader (may this person be
+ * mentioned, does the reader see this item) is decided outside of it, `withNodes()` applies the outcome.
  */
 final class Document
 {
     private const JSON_FLAGS = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE;
 
     /** Nodes that are content on their own, without any text (`isEmptyDoc` in the editor). */
-    private const CONTENT_ATOMS = ['horizontalRule', 'table'];
+    private const CONTENT_ATOMS = ['horizontalRule', 'table', 'image', ...Schema::INLINE_ATOMS];
+
+    /** The nodes that stand for something outside the text; withNodes() maps them. */
+    private const OUTSIDE = ['image', ...Schema::INLINE_ATOMS];
+
+    /** Marks that the nodes of OUTSIDE lose in Markdown (toMarkdown()). */
+    private const MARKDOWN_UNMARKED = ['code', 'link'];
 
     /** Nodes whose text makes one line of `toText()`. */
     private const TEXT_BLOCKS = ['paragraph', 'heading', 'codeBlock'];
@@ -29,8 +44,10 @@ final class Document
     /**
      * Reads a document the way the editor's schema does: missing attributes take their default, unknown attributes
      * are dropped, a link to anything but Schema::LINK_PROTOCOLS loses its mark and keeps its text, an odd value of a
-     * lenient attribute (Schema::LENIENT: list start, cell spans and widths, code language) takes its default.
-     * Everything else that does not fit is refused.
+     * lenient attribute (Schema::LENIENT: list start, cell spans and widths, code language) takes its default. Like
+     * ProseMirror it orders the marks of a text (Schema::MARK_ORDER), keeps the first of a repeated mark and joins
+     * neighbouring texts with the same marks, so the stored JSON is what `editor.getJSON()` gives for it. Everything
+     * else that does not fit is refused, also children against the editor's content expressions (Schema::CONTENT).
      *
      * @param  array<mixed>  $json
      *
@@ -64,7 +81,7 @@ final class Document
         if (! mb_check_encoding($markdown, 'UTF-8')) {
             throw new InvalidDocument('shape');
         }
-        $html = Markdown::toHtml($markdown);
+        $html = Markdown::toHtml($markdown, $ctx);
         // tiptap-php cannot read an empty body
         $json = $html === '' ? ['type' => 'doc'] : self::editor()->setContent($html)->getDocument();
 
@@ -77,10 +94,20 @@ final class Document
         return $this->json;
     }
 
-    /** The document as Markdown; Markdown::fromHtml() lists how it is written. */
-    public function toMarkdown(): string
+    /**
+     * The document as Markdown for one reader; Markdown::fromHtml() lists how it is written. A mention is `@` and the
+     * current handle (`$names->handles`, else its label if that is a handle; nothing without either), a reference the
+     * reader sees (`$names->items`) its current key, any other `[hidden](item:<ulid>)` (no key, no title), an image
+     * `![alt](attachment:<ulid>)` and a file `[name](attachment:<ulid>)`; text that would read as a mention or a key
+     * gets a backslash (`\@mara`, `WEB\-47`). Read back with the same lookup and the kept IDs (MarkdownContext), it
+     * gives the same JSON, but for the code and link marks of mentions, references and files: Markdown reads nothing
+     * in code and nests no link in a link, so they are left out for the nodes to stay.
+     */
+    public function toMarkdown(?RichTextNames $names = null): string
     {
-        return Markdown::fromHtml($this->toHtml());
+        $json = self::mapped($this->json, fn (array $node) => self::withoutMarks($node, self::MARKDOWN_UNMARKED));
+
+        return Markdown::fromHtml((new self(self::node($json, 'doc', 0)))->toHtml(), $names ?? new RichTextNames);
     }
 
     /** The text without any markup: one line per paragraph, heading or code block, a line break as a line break. */
@@ -98,10 +125,84 @@ final class Document
         return isset($this->json['content']) ? self::editor()->setContent($this->json)->getHTML() : '';
     }
 
-    /** Whether the document holds nothing: no text but blanks, no rule and no table (an emptied editor). */
+    /**
+     * Whether the document holds nothing: no text but blanks, no rule, no table, no mention, reference, image or file
+     * (an emptied editor).
+     */
     public function isEmpty(): bool
     {
         return ! self::hasContent($this->json);
+    }
+
+    /**
+     * The HTML of a mail to one reader (spec 4.14): a mention as `@` and the name, a reference the reader sees as a
+     * link to the item with its key and title, any other as `richtext.hidden` (no key, no ID), an image as a link
+     * `richtext.image` to the file (never embedded), a file as a link with its name. Images and files take their alt
+     * text or file name, else the name the caller gives for the attachment's ID, else the ID. Everything is text of
+     * the standard nodes, so tiptap-php escapes it. The caller sets the reader's language.
+     */
+    public function toMailHtml(RichTextNames $names, string $appUrl): string
+    {
+        $base = rtrim($appUrl, '/');
+        $mail = self::mapped($this->json, fn (array $node) => self::forMail($node, $names, $base));
+
+        // no size check: the mail is never stored, and keys and titles make it longer than the text
+        return (new self(self::node($mail, 'doc', 0)))->toHtml();
+    }
+
+    /**
+     * The people the text mentions, without repeats, in the order of the text.
+     *
+     * @return list<string>
+     */
+    public function mentionedUserIds(): array
+    {
+        return self::ids(self::nodesOf($this->json, ['mention']), 'id');
+    }
+
+    /**
+     * The attachments of the images and files of the text, without repeats, in the order of the text.
+     *
+     * @return list<string>
+     */
+    public function attachmentIds(): array
+    {
+        return self::ids(self::nodesOf($this->json, ['image', 'attachment']), 'attachmentId');
+    }
+
+    /**
+     * The items the text refers to, without repeats, in the order of the text.
+     *
+     * @return list<string>
+     */
+    public function itemRefs(): array
+    {
+        return self::refs($this->json, 'item');
+    }
+
+    /**
+     * The pages the text refers to (Phase 9), without repeats, in the order of the text.
+     *
+     * @return list<string>
+     */
+    public function pageRefs(): array
+    {
+        return self::refs($this->json, 'page');
+    }
+
+    /**
+     * A new document in which `$map` replaces each mention, reference, image and file: with the node it returns, with
+     * a text (it takes the node's marks; an image's text becomes a paragraph, an image being a block), or with nothing
+     * for `null` or an empty text. The result is read like any document (fromJson): neighbouring texts are joined, and
+     * what does not fit is refused.
+     *
+     * @param  callable(array<string, mixed>): (array<string, mixed>|string|null)  $map
+     *
+     * @throws InvalidDocument
+     */
+    public function withNodes(callable $map): self
+    {
+        return self::fromJson(self::mapped($this->json, $map));
     }
 
     /**
@@ -113,7 +214,12 @@ final class Document
         if ($depth > Schema::MAX_DEPTH) {
             throw new InvalidDocument('depth');
         }
-        $allowed = $type === 'text' ? ['type', 'marks', 'text'] : ['type', 'attrs', 'content'];
+        $allowed = match (true) {
+            $type === 'text' => ['type', 'marks', 'text'],
+            in_array($type, Schema::INLINE_ATOMS, true) => ['type', 'attrs', 'marks'],
+            $type === 'image' => ['type', 'attrs'],
+            default => ['type', 'attrs', 'content'],
+        };
         if (array_diff(array_keys($node), $allowed) !== []) {
             throw new InvalidDocument('shape');
         }
@@ -123,14 +229,17 @@ final class Document
         }
         $content = self::list($node['content'] ?? []);
         if ($content !== []) {
-            $read['content'] = array_map(fn (mixed $child) => self::child($child, $type, $depth + 1), $content);
+            $read['content'] = self::joined(array_map(fn (mixed $child) => self::child($child, $type, $depth + 1), $content));
         }
-        if ($type !== 'text') {
-            return $read;
+        if (! self::fitsContent($type, array_column($read['content'] ?? [], 'type'))) {
+            throw new InvalidDocument('shape');
         }
         $marks = self::marks(self::list($node['marks'] ?? []));
         if ($marks !== []) {
             $read['marks'] = $marks;
+        }
+        if ($type !== 'text') {
+            return $read;
         }
         // a text that is no UTF-8 (form-encoded input can carry it) would break Markdown and the JSON column later
         if (! is_string($node['text'] ?? null) || $node['text'] === '' || ! mb_check_encoding($node['text'], 'UTF-8')) {
@@ -188,8 +297,87 @@ final class Document
                 $read[] = ['type' => $type, 'attrs' => $attrs];
             }
         }
+        // the first of a repeated mark, in the editor's order
+        $first = [];
+        foreach ($read as $mark) {
+            $first[$mark['type']] ??= $mark;
+        }
 
-        return $read;
+        return array_values(array_filter(array_map(fn (string $type) => $first[$type] ?? null, Schema::MARK_ORDER)));
+    }
+
+    /**
+     * Neighbouring texts with the same marks as one text, as ProseMirror's `Fragment.fromArray` joins them.
+     *
+     * @param  list<array<string, mixed>>  $children
+     * @return list<array<string, mixed>>
+     */
+    private static function joined(array $children): array
+    {
+        $joined = [];
+        foreach ($children as $child) {
+            $last = array_key_last($joined);
+            if ($last !== null && $child['type'] === 'text' && $joined[$last]['type'] === 'text' && ($child['marks'] ?? []) === ($joined[$last]['marks'] ?? [])) {
+                $joined[$last]['text'] .= $child['text'];
+
+                continue;
+            }
+            $joined[] = $child;
+        }
+
+        return $joined;
+    }
+
+    /**
+     * Whether the children's types fit the node's content expression (Schema::CONTENT). Each term of an expression
+     * takes as many children as it can (no term needs to give one back: the expressions are a first child and a
+     * repetition), so a walk over the children decides it; a regular expression over 10,000 of them ran out of stack.
+     *
+     * @param  list<mixed>  $children
+     */
+    private static function fitsContent(string $type, array $children): bool
+    {
+        if (! isset(Schema::CONTENT[$type])) {
+            return true;
+        }
+        $at = 0;
+        $count = count($children);
+        foreach (self::terms(Schema::CONTENT[$type]) as [$names, $repeat]) {
+            $start = $at;
+            while ($at < $count && isset($names[$children[$at]]) && ($repeat !== '' || $at === $start)) {
+                $at++;
+            }
+            if ($at === $start && $repeat !== '*') {
+                return false;
+            }
+        }
+
+        return $at === $count;
+    }
+
+    /**
+     * The terms of a content expression: the node names it takes (`block` standing for Schema::BLOCKS) as keys, and
+     * its repetition (``, `*` or `+`).
+     *
+     * @return list<array{0: array<string, true>, 1: string}>
+     */
+    private static function terms(string $expression): array
+    {
+        static $read = [];
+        if (isset($read[$expression])) {
+            return $read[$expression];
+        }
+        preg_match_all('/(\([^)]*\)|\w+)([*+]?)/', $expression, $matches, PREG_SET_ORDER);
+        $terms = [];
+        foreach ($matches as [, $term, $repeat]) {
+            $names = array_merge(...array_map(
+                fn (string $name) => $name === 'block' ? Schema::BLOCKS : [$name],
+                preg_split('/[\s()|]+/', $term, -1, PREG_SPLIT_NO_EMPTY) ?: [],
+            ));
+            $terms[] = [array_fill_keys($names, true), $repeat];
+        }
+
+        return $read[$expression] = $terms;
     }
 
     /**
@@ -207,7 +395,7 @@ final class Document
             if (! self::fits($kind, $value)) {
                 $value = in_array($kind, Schema::LENIENT, true) ? $default : throw new InvalidDocument('shape');
             }
-            $attrs[$name] = $value;
+            $attrs[$name] = $kind === 'ulid' ? strtolower((string) $value) : $value;
         }
 
         return $attrs;
@@ -223,6 +411,8 @@ final class Document
             'language' => $value === null || (is_string($value) && preg_match(Schema::LANGUAGE_PATTERN, $value) === 1),
             'widths' => $value === null || (is_array($value) && array_is_list($value) && array_filter($value, fn (mixed $width) => is_int($width) && $width > 0) === $value),
             'align' => in_array($value, [null, 'left', 'center', 'right'], true),
+            'ulid' => is_string($value) && Ulid::is($value),
+            'kind' => in_array($value, Schema::REFERENCE_KINDS, true),
             default => $value === null || is_string($value),
         };
     }
@@ -253,13 +443,170 @@ final class Document
         /** @var list<array<string, mixed>> $content */
         $content = $node['content'] ?? [];
         if (in_array($node['type'], self::TEXT_BLOCKS, true)) {
-            $lines[] = implode('', array_map(fn (array $inline) => $inline['type'] === 'hardBreak' ? "\n" : $inline['text'], $content));
+            // a node without text between two spaces leaves one of them (T14-M7): `mit WEB-1 zusammen` → `mit zusammen`
+            $line = implode('', array_map(fn (array $inline) => self::inlineText($inline) ?? "\0", $content));
+            $lines[] = (string) preg_replace_callback('/( ?)\x00+( ?)/', fn (array $m) => $m[1] !== '' && $m[2] !== '' ? ' ' : $m[1].$m[2], $line);
+
+            return;
+        }
+        if ($node['type'] === 'image') {
+            $lines[] = (string) $node['attrs']['alt'];
 
             return;
         }
         foreach ($content as $child) {
             self::lines($child, $lines);
         }
+    }
+
+    /**
+     * The text of a node in a line: a mention as `@` and its label, a file as its name; `null` for a node without text
+     * (a mention without a label, a reference: its key belongs to the reader who sees it).
+     *
+     * @param  array<string, mixed>  $inline
+     */
+    private static function inlineText(array $inline): ?string
+    {
+        $label = $inline['attrs']['label'] ?? null;
+
+        return match ($inline['type']) {
+            'hardBreak' => "\n",
+            'mention' => $label === null ? null : '@'.$label,
+            'reference' => null,
+            'attachment' => (string) $inline['attrs']['filename'],
+            default => $inline['text'],
+        };
+    }
+
+    /**
+     * The nodes of these types, in the order of the text.
+     *
+     * @param  array<string, mixed>  $node
+     * @param  list<string>  $types
+     * @return list<array<string, mixed>>
+     */
+    private static function nodesOf(array $node, array $types): array
+    {
+        $found = in_array($node['type'], $types, true) ? [$node] : [];
+        /** @var list<array<string, mixed>> $content */
+        $content = $node['content'] ?? [];
+        foreach ($content as $child) {
+            array_push($found, ...self::nodesOf($child, $types));
+        }
+
+        return $found;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $nodes
+     * @return list<string>
+     */
+    private static function ids(array $nodes, string $attribute): array
+    {
+        return array_values(array_unique(array_map(fn (array $node) => $node['attrs'][$attribute], $nodes)));
+    }
+
+    /**
+     * @param  array<string, mixed>  $json
+     * @return list<string>
+     */
+    private static function refs(array $json, string $kind): array
+    {
+        return self::ids(array_values(array_filter(self::nodesOf($json, ['reference']), fn (array $node) => $node['attrs']['kind'] === $kind)), 'id');
+    }
+
+    /**
+     * The node with `$map` applied to each node of OUTSIDE below it (see withNodes()).
+     *
+     * @param  array<string, mixed>  $node
+     * @param  callable(array<string, mixed>): (array<string, mixed>|string|null)  $map
+     * @return array<string, mixed>
+     */
+    private static function mapped(array $node, callable $map): array
+    {
+        if (! isset($node['content'])) {
+            return $node;
+        }
+        $content = [];
+        /** @var array<string, mixed> $child */
+        foreach ($node['content'] as $child) {
+            if (! in_array($child['type'], self::OUTSIDE, true)) {
+                $content[] = self::mapped($child, $map);
+
+                continue;
+            }
+            $replaced = $map($child);
+            if (is_array($replaced)) {
+                $content[] = $replaced;
+            } elseif ($replaced !== null && $replaced !== '') {
+                $text = ['type' => 'text', 'marks' => $child['marks'] ?? [], 'text' => $replaced];
+                $content[] = $child['type'] === 'image' ? ['type' => 'paragraph', 'content' => [$text]] : $text;
+            }
+        }
+        $node['content'] = $content;
+
+        return $node;
+    }
+
+    /**
+     * The node without the marks of these types.
+     *
+     * @param  array<string, mixed>  $node
+     * @param  list<string>  $types
+     * @return array<string, mixed>
+     */
+    private static function withoutMarks(array $node, array $types): array
+    {
+        if (isset($node['marks'])) {
+            /** @var list<array<string, mixed>> $marks */
+            $marks = $node['marks'];
+            $node['marks'] = array_values(array_filter($marks, fn (array $mark) => ! in_array($mark['type'], $types, true)));
+        }
+
+        return $node;
+    }
+
+    /**
+     * What a mail shows of a node of OUTSIDE (see toMailHtml()).
+     *
+     * @param  array<string, mixed>  $node
+     * @return array<string, mixed>
+     */
+    private static function forMail(array $node, RichTextNames $names, string $base): array
+    {
+        /** @var array<string, mixed> $attrs */
+        $attrs = $node['attrs'];
+        $id = (string) ($attrs['id'] ?? $attrs['attachmentId']);
+        $item = $names->items[$id] ?? null;
+        // an image is named by its alt text, a file by its file name; without one by its name, else by its ID
+        $own = $node['type'] === 'image' ? ($attrs['alt'] ?? null) : ($attrs['filename'] ?? null);
+        $file = is_string($own) && $own !== '' ? $own : ($names->names[$id] ?? $id);
+        $mention = $names->names[$id] ?? ($names->handles[$id] ?? ($attrs['label'] ?? null));
+
+        return match (true) {
+            $node['type'] === 'mention' && is_string($mention) => self::mailText('@'.$mention, $node),
+            $node['type'] === 'reference' && $item !== null => self::mailText("{$item['key']} {$item['title']}", $node, "{$base}/items/".rawurlencode($item['key'])),
+            $node['type'] === 'image' => ['type' => 'paragraph', 'content' => [self::mailText(__('richtext.image', ['name' => $file]), [], "{$base}/attachments/{$id}")]],
+            $node['type'] === 'attachment' => self::mailText($file, $node, "{$base}/attachments/{$id}"),
+            default => self::mailText(__('richtext.hidden'), $node),
+        };
+    }
+
+    /**
+     * A text with the marks of the node it stands for, as a link to `$href` if there is one.
+     *
+     * @param  array<string, mixed>  $node
+     * @return array<string, mixed>
+     */
+    private static function mailText(string $text, array $node, ?string $href = null): array
+    {
+        /** @var list<array<string, mixed>> $marks */
+        $marks = $node['marks'] ?? [];
+        if ($href !== null) {
+            $marks = [['type' => 'link', 'attrs' => ['href' => $href]], ...array_filter($marks, fn (array $mark) => $mark['type'] !== 'link')];
+        }
+
+        return ['type' => 'text', 'marks' => $marks, 'text' => $text];
     }
 
     /** @param array<string, mixed> $node */
@@ -296,6 +643,10 @@ final class Document
             new Nodes\TableRow,
             new Nodes\TableHeader,
             new Nodes\TableCell,
+            new Mention,
+            new Reference,
+            new AttachmentImage,
+            new AttachmentFile,
             new Marks\Bold,
             new Marks\Italic,
             new Marks\Strike,

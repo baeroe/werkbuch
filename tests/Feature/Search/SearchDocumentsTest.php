@@ -5,10 +5,12 @@ use App\Actions\Projects\UpdateProject;
 use App\Actions\WorkItems\CreateWorkItem;
 use App\Actions\WorkItems\DeleteWorkItem;
 use App\Actions\WorkItems\UpdateWorkItem;
+use App\Models\Comment;
 use App\Models\Label;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
+use App\Search\SearchIndexer;
 use Illuminate\Support\Facades\DB;
 
 /** WEB with Mara as its admin. */
@@ -46,6 +48,7 @@ it('builds the document of an item', function () use ($web) {
         'number' => 1,
         'title' => 'Kontaktformular prüfen',
         'description' => "Das Formular sendet\nan den Vertrieb",
+        'comments' => '',
         'type_id' => $web->default_type_id,
         'state_category' => 'backlog',
         'assignee_id' => $mara->id,
@@ -54,7 +57,30 @@ it('builds the document of an item', function () use ($web) {
         'updated_at' => $item->updated_at?->getTimestamp(),
     ])
         ->and(WorkItem::query()->findOrFail($archived->id)->toSearchableArray())
-        ->toMatchArray(['key' => 'WEB-2', 'description' => '', 'assignee_id' => null, 'label_ids' => [], 'archived' => true, 'state_category' => 'completed']);
+        ->toMatchArray(['key' => 'WEB-2', 'description' => '', 'comments' => '', 'assignee_id' => null, 'label_ids' => [], 'archived' => true, 'state_category' => 'completed']);
+});
+
+it('puts the text of the comments into the item\'s document, cut at 64 KB', function () use ($web) {
+    [$web, $mara] = $web();
+    $item = WorkItem::factory()->for($web)->create();
+    $comment = fn (WorkItem $on, string $text, string $at) => Comment::factory()->for($on, 'workItem')
+        ->create(['author_id' => $mara->id, 'body_text' => $text, 'created_at' => $at]);
+    // written in another order than they were made: the document follows the time of the comments
+    $comment($item, "Bitte auch\ndas Impressum", '2026-10-28 10:00:00');
+    $comment($item, 'Zuerst die Pflichtfelder', '2026-10-27 09:00:00');
+    $comment($item, 'Erledigt', '2026-10-29 08:00:00');
+
+    // the cut falls into the two bytes of the ä: the document ends before it, never with half a character
+    $long = WorkItem::factory()->for($web)->create();
+    $comment($long, str_repeat('a', SearchIndexer::COMMENTS_MAX - 6), '2026-10-27 09:00:00');
+    $comment($long, 'bbbbä und mehr', '2026-10-28 09:00:00');
+
+    $document = fn (WorkItem $of): string => WorkItem::query()->findOrFail($of->id)->toSearchableArray()['comments'];
+
+    expect(SearchIndexer::COMMENTS_MAX)->toBe(65536)
+        ->and($document($item))->toBe("Zuerst die Pflichtfelder\nBitte auch\ndas Impressum\nErledigt")
+        ->and($document($long))->toBe(str_repeat('a', SearchIndexer::COMMENTS_MAX - 6)."\nbbbb")
+        ->and(strlen($document($long)))->toBe(SearchIndexer::COMMENTS_MAX - 1);
 });
 
 it('builds the document of a project with its former identifiers', function () use ($web) {
@@ -93,7 +119,10 @@ it('loads what the documents read with the query of a rebuild', function () use 
     [$web, $mara] = $web();
     UpdateProject::run(actor($mara), $web, ['identifier' => 'WWW']);
     $label = Label::factory()->create();
-    WorkItem::factory()->count(3)->for($web)->create()->each(fn (WorkItem $item) => $item->labels()->attach($label->id));
+    WorkItem::factory()->count(3)->for($web)->create()->each(function (WorkItem $item) use ($label, $mara): void {
+        $item->labels()->attach($label->id);
+        Comment::factory()->for($item, 'workItem')->create(['author_id' => $mara->id, 'body_text' => "Notiz zu {$item->number}"]);
+    });
 
     $items = WorkItem::makeAllSearchableQuery()->get();
     $projects = Project::makeAllSearchableQuery()->get();
@@ -102,7 +131,18 @@ it('loads what the documents read with the query of a rebuild', function () use 
 
     expect(DB::getQueryLog())->toBe([])
         ->and(array_column($documents, 'key'))->toBe(['WWW-1', 'WWW-2', 'WWW-3'])
+        ->and(array_column($documents, 'comments'))->toBe(['Notiz zu 1', 'Notiz zu 2', 'Notiz zu 3'])
         ->and(array_column($documents, 'former_identifiers'))->toBe([['WEB']]);
+});
+
+it('loads no more of a comment than the document can take (T12-M1)', function () use ($web) {
+    [$web, $mara] = $web();
+    $item = WorkItem::factory()->for($web)->create();
+    Comment::factory()->for($item, 'workItem')->create(['author_id' => $mara->id, 'body_text' => str_repeat('a', SearchIndexer::COMMENTS_MAX + 10)]);
+
+    $loaded = WorkItem::makeAllSearchableQuery()->get()->sole()->comments->sole();
+
+    expect(strlen((string) $loaded->body_text))->toBe(SearchIndexer::COMMENTS_MAX);
 });
 
 it('never writes the index when a model is saved', function () use ($web) {

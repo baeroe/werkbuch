@@ -7,6 +7,10 @@ use App\Models\User;
 use App\Models\View;
 use App\Models\WorkItemType;
 use Database\Seeders\DemoSeeder;
+use Illuminate\Support\Facades\Storage;
+
+// the demo files of the AttachmentsSeeder land on the disk `local`
+beforeEach(fn () => Storage::fake('local'));
 
 /**
  * The views and view favorites of the clickdummy (src/api/seed/workspace.ts), parsed from the file: a view that was

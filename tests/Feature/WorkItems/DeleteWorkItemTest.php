@@ -1,10 +1,15 @@
 <?php
 
 use App\Access\ProjectRole;
+use App\Actions\Comments\AddComment;
 use App\Actions\Projects\ArchiveProject;
 use App\Actions\WorkItems\CreateWorkItem;
 use App\Actions\WorkItems\DeleteWorkItem;
+use App\Actions\WorkItems\UpdateWorkItem;
 use App\Events\EventType;
+use App\Models\Attachment;
+use App\Models\Comment;
+use App\Models\CommentReaction;
 use App\Models\Event;
 use App\Models\Label;
 use App\Models\Project;
@@ -19,6 +24,8 @@ use App\Support\Actor;
 use App\Support\RelationSnapshot;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 /** WEB (the default workflow) with Mara as its admin and lead. */
 $web = function (): array {
@@ -176,4 +183,79 @@ it('snapshots a relation from either end and refuses an item that is no end', fu
         ->and(RelationSnapshot::of($relation, $target))->toBe(['relation_type_id' => $relates->id, 'direction' => 'inward', 'label' => $relates->outward_label, 'item_id' => $source->id])
         ->and(RelationSnapshot::of($relation, $source)['direction'])->toBe('outward')
         ->and(fn () => RelationSnapshot::of($relation, WorkItem::factory()->for($project)->create()))->toThrow(InvalidArgumentException::class, 'is no end of relation');
+});
+
+it('removes the files of the item and of its comments after the commit', function () use ($web) {
+    Storage::fake('local');
+    [$project, $mara] = $web();
+    $item = WorkItem::factory()->for($project)->create();
+    $other = WorkItem::factory()->for($project)->create();
+    $comment = Comment::factory()->create(['work_item_id' => $item->id, 'author_id' => $mara->id]);
+    CommentReaction::query()->create(['comment_id' => $comment->id, 'user_id' => $mara->id, 'emoji' => '👍']);
+    $stored = fn (string $name) => Attachment::factory()->stored('Inhalt', 'text/plain', $name)->state(['uploaded_by' => $mara->id]);
+    $gone = [
+        $stored('bild.png')->forItem($item)->create(),
+        $stored('angebot.txt')->forItem($item, 'file')->create(),
+        $stored('skizze.png')->create(['project_id' => $project->id, 'attachable_type' => $comment->getMorphClass(), 'attachable_id' => $comment->id]),
+    ];
+    $kept = [
+        $stored('andere.png')->forItem($other)->create(),
+        // an upload nobody owns yet is not the item's, even in its project
+        $stored('entwurf.png')->create(['project_id' => $project->id]),
+    ];
+    $path = fn (Attachment $attachment) => (string) $attachment->getFirstMedia('file')?->getPathRelativeToRoot();
+    $paths = array_map($path, $gone);
+    // the deletion is the last write of the transaction: the files are still there then
+    $during = null;
+    Event::created(function (Event $event) use (&$during, $paths) {
+        if ($event->type === EventType::WorkItemDeleted) {
+            $during = array_map(fn (string $file) => Storage::disk('local')->exists($file), $paths);
+        }
+    });
+
+    DeleteWorkItem::run(actor($mara), $item);
+
+    expect($during)->toBe([true, true, true])
+        ->and(array_map(fn (string $file) => Storage::disk('local')->exists($file), $paths))->toBe([false, false, false])
+        ->and(Attachment::query()->orderBy('filename')->pluck('filename')->all())->toBe(['andere.png', 'entwurf.png'])
+        ->and(Media::query()->pluck('model_id')->sort()->values()->all())->toBe(collect($kept)->pluck('id')->sort()->values()->all())
+        ->and(array_map(fn (Attachment $attachment) => Storage::disk('local')->exists($path($attachment)), $kept))->toBe([true, true])
+        ->and(Comment::query()->count())->toBe(0)
+        ->and(CommentReaction::query()->count())->toBe(0);
+});
+
+it('hands a picture another text of the project still shows over to that text instead of removing it', function () use ($web) {
+    Storage::fake('local');
+    [$project, $mara] = $web();
+    $lene = memberOf($project, ProjectRole::Viewer);
+    [$a, $b, $c] = WorkItem::factory()->for($project)->count(3)->create()->all();
+    $png = (string) base64_decode(explode(',', imageDataUrl())[1]);
+    $upload = fn (string $name) => Attachment::factory()->stored($png, 'image/png', $name)->create(['project_id' => $project->id, 'uploaded_by' => $mara->id]);
+    [$copied, $own, $twice] = [$upload('kopiert.png'), $upload('eigen.png'), $upload('zweimal.png')];
+    $list = Attachment::factory()->forItem($a, 'file')->stored('Angebot', 'text/plain', 'angebot.txt')->create(['uploaded_by' => $mara->id]);
+    $path = fn (Attachment $attachment) => (string) $attachment->getFirstMedia('file')?->getPathRelativeToRoot();
+    $files = array_map($path, [$copied, $own, $twice, $list]);
+    $image = fn (Attachment $attachment) => "![{$attachment->filename}](attachment:{$attachment->id})";
+    UpdateWorkItem::run(actor($mara), $a, ['description' => $image($copied)."\n\n".$image($own)."\n\n".$image($twice)]);
+    // a comment of A goes with A: it keeps nothing
+    AddComment::run(actor($mara), $a, ['body' => $image($own)]);
+    // copied into a comment of B, into C's description and another comment of B, and the file of A's list into B's text
+    $ofB = AddComment::run(actor($mara), $b, ['body' => $image($copied)]);
+    UpdateWorkItem::run(actor($mara), $c, ['description' => $image($twice)]);
+    $alsoOfB = AddComment::run(actor($mara), $b, ['body' => $image($twice)]);
+    UpdateWorkItem::run(actor($mara), $b, ['description' => "[angebot.txt](attachment:{$list->id})"]);
+    $owner = fn (Attachment $attachment) => Attachment::query()->whereKey($attachment->id)->first(['attachable_type', 'attachable_id', 'kind'])?->only(['attachable_type', 'attachable_id', 'kind']);
+    $first = strcmp($c->id, $alsoOfB->id) < 0 ? ['work_item', $c->id] : ['comment', $alsoOfB->id];
+
+    DeleteWorkItem::run(actor($mara), $a);
+
+    expect($owner($copied))->toBe(['attachable_type' => 'comment', 'attachable_id' => $ofB->id, 'kind' => 'inline'])
+        ->and($owner($own))->toBeNull()
+        ->and($owner($twice))->toBe(['attachable_type' => $first[0], 'attachable_id' => $first[1], 'kind' => 'inline'])
+        // the file of the list becomes a file of B's text
+        ->and($owner($list))->toBe(['attachable_type' => 'work_item', 'attachable_id' => $b->id, 'kind' => 'inline'])
+        ->and(array_map(fn (string $file) => Storage::disk('local')->exists($file), $files))->toBe([true, false, true, true])
+        ->and(Media::query()->count())->toBe(3);
+    $this->actingAs($lene)->getJson("/api/v1/attachments/{$copied->id}")->assertOk()->assertJsonPath('data.owner', ['type' => 'comment', 'id' => $ofB->id]);
+    $this->get("/attachments/{$copied->id}")->assertOk();
 });

@@ -5,7 +5,9 @@
  *   Escape takes the typing back.
  * - yes/no, date, dropdown and people are chosen and kept at once.
  * Rich text is a text area only for plain documents (paragraphs and line breaks, R17): a blank line is a new paragraph, a
- * single line break a `hardBreak`. A richer document is shown read-only, so the text area never flattens it.
+ * single line break a `hardBreak`. It knows no `/`, `@`, `#` and no uploads; those are the editor's (the item detail).
+ * A richer document (also one with a mention, a reference, a picture or a file) is shown read-only, so the text area
+ * never flattens it.
  */
 
 import { ExternalLink } from 'lucide-react';

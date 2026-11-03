@@ -4,6 +4,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { createHash, createHmac } from 'node:crypto';
+import { crc32, deflateSync } from 'node:zlib';
 import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { expect, request, test, type APIResponse, type Browser, type BrowserContext, type Locator, type Page } from '@playwright/test';
@@ -310,13 +311,18 @@ export async function signOut(page: Page, locale: Locale, name: string): Promise
  * coming from the app (stateful) because of the `Referer`.
  */
 export async function api(page: Page, method: string, path: string, body?: unknown): Promise<APIResponse> {
+  const { url, headers } = await sessionRequest(page, path);
+  return page.request.fetch(url, { method, data: body, headers });
+}
+
+/** The address and the headers of a request in the page's session: JSON, the CSRF token of its cookie, a `Referer` (Sanctum). */
+async function sessionRequest(page: Page, path: string): Promise<{ url: string; headers: Record<string, string> }> {
   const baseURL = test.info().project.use.baseURL!;
   const token = (await page.context().cookies(baseURL)).find((cookie) => cookie.name === 'XSRF-TOKEN');
-  return page.request.fetch(new URL(path, baseURL).toString(), {
-    method,
-    data: body,
+  return {
+    url: new URL(path, baseURL).toString(),
     headers: { Accept: 'application/json', Referer: `${baseURL}/`, ...(token && { 'X-XSRF-TOKEN': decodeURIComponent(token.value) }) },
-  });
+  };
 }
 
 /** Every entry of a catalog (`labels`, `properties` …), following the cursor to the last page, so "not in the list" never passes on a first page. */
@@ -539,4 +545,71 @@ export async function waitForSearch(page: Page, q: string, found: (data: SearchD
     if (Date.now() > until) throw new Error(`waitForSearch "${q}" found nothing after ${timeout} ms: ${JSON.stringify(last)}`);
     await page.waitForTimeout(250);
   }
+}
+
+/** A file a spec hands to the page or the API: its name, type and content. */
+export type TestFile = { name: string; type: string; bytes: Buffer };
+
+/** A PNG of `width` × `height` pixels in memory (RGB, a colour that changes along the rows), e.g. for `pasteFile()`. */
+export function pngBytes(width: number, height: number): Buffer {
+  const chunk = (type: string, data: Buffer) => {
+    const length = Buffer.alloc(4);
+    length.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(body));
+    return Buffer.concat([length, body, crc]);
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  // eight bits per channel, colour type 2 (RGB), no interlace
+  header.set([8, 2, 0, 0, 0], 8);
+  // every row starts with filter byte 0
+  const rows = Buffer.alloc(height * (width * 3 + 1));
+  for (let y = 0; y < height; y += 1) {
+    const start = y * (width * 3 + 1);
+    for (let x = 0; x < width; x += 1) rows.set([40, (y * 255) / Math.max(height - 1, 1), 160], start + 1 + x * 3);
+  }
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', header), chunk('IDAT', deflateSync(rows)), chunk('IEND', Buffer.alloc(0))]);
+}
+
+/**
+ * Pastes `file` into `target` (an editor) as a browser does: a `paste` event whose clipboard holds the file and, with
+ * `html`, that HTML as well (Chrome's "Copy image" brings `<img src>` along with the picture). jsdom knows no
+ * ClipboardEvent, so pasting is only checked in Playwright.
+ */
+export async function pasteFile(target: Locator, file: TestFile & { html?: string }): Promise<void> {
+  await target.evaluate(
+    (element, { name, type, base64, html }) => {
+      const data = new DataTransfer();
+      data.items.add(new File([Uint8Array.from(atob(base64), (char) => char.charCodeAt(0))], name, { type }));
+      if (html !== undefined) data.setData('text/html', html);
+      element.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+    },
+    { name: file.name, type: file.type, base64: file.bytes.toString('base64'), html: file.html },
+  );
+}
+
+/**
+ * Uploads `file` into a project over the API (`POST /api/v1/attachments`, multipart) with the session of the page:
+ * `inline` for a text (it belongs to nobody until a text names it), `file` for the file list of `itemId`. Answers the
+ * attachment's id.
+ */
+export async function uploadViaApi(page: Page, projectId: string, file: TestFile, kind: 'inline' | 'file' = 'inline', itemId?: string): Promise<{ id: string }> {
+  await ensureCsrfCookie(page);
+  const { url, headers } = await sessionRequest(page, '/api/v1/attachments');
+  const response = await page.request.fetch(url, {
+    method: 'POST',
+    multipart: {
+      project_id: projectId,
+      kind,
+      ...(itemId && { work_item_id: itemId }),
+      file: { name: file.name, mimeType: file.type, buffer: file.bytes },
+    },
+    headers,
+  });
+  expect(response.status(), await response.text()).toBe(201);
+  const { data } = (await response.json()) as { data: { id: string } };
+  return { id: data.id };
 }

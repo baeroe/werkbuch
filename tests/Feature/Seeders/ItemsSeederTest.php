@@ -17,6 +17,10 @@ use Database\Seeders\Demo\ActivitySeeder;
 use Database\Seeders\Demo\ItemsSeeder;
 use Database\Seeders\DemoSeeder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+
+// the demo files of the AttachmentsSeeder land on the disk `local`
+beforeEach(fn () => Storage::fake('local'));
 
 /**
  * The seed of the clickdummy (src/api/seed/{items,activity}.ts) as the seeders have to reproduce it: parsed from the
@@ -124,10 +128,9 @@ it('seeds WEB-47 like the moodboard', function () use ($item) {
         ->and($values['browser']->value_string)->toBe('Safari 18 (iOS)')
         ->and($values['steps']->value_json['content'][1]['type'])->toBe('orderedList')
         ->and($values['steps']->value_json['content'][1]['content'])->toHaveCount(3)
-        // text only: the mention and the reference come with Phase 7
-        ->and($web47->description_text)->toBe('Beim Absenden über Safari kommen zwei Mails an. @mara kannst du prüfen, ob das mit WEB-42 zusammenhängt?')
-        ->and($web47->description['content'][0]['content'])->toHaveCount(1)
-        ->and($web47->description['content'][0]['content'][0]['type'])->toBe('text')
+        // @mara a mention and WEB-42 a reference (CommentsSeederTest names their IDs); the plain text has no keys
+        ->and($web47->description_text)->toBe('Beim Absenden über Safari kommen zwei Mails an. @mara kannst du prüfen, ob das mit zusammenhängt?')
+        ->and(array_column($web47->description['content'][0]['content'], 'type'))->toBe(['text', 'mention', 'text', 'reference', 'text'])
         ->and($web47->description_version)->toBe(1);
 });
 
@@ -271,12 +274,12 @@ it('counts on from the highest number, gaps included', function () {
     expect(Project::query()->orderBy('identifier')->pluck('next_number', 'identifier')->all())->toBe(['APP' => 24, 'OPS' => 15, 'WEB' => 56]);
 });
 
-it('lets the creator and the assignee watch, but no bot and nobody deactivated', function () use ($item) {
+it('lets the creator, the assignee and the people the description mentions watch, but no bot and nobody deactivated', function () use ($item) {
     $this->seed(DemoSeeder::class);
     $watchers = fn (string $key) => WorkItemSubscriber::query()->where('work_item_id', $item($key)->id)->with('user')->get()
         ->mapWithKeys(fn ($row) => [$row->user->handle => $row->reason])->all();
 
-    expect($watchers('WEB-47'))->toEqual(['ida' => 'created', 'jonas' => 'assigned'])
+    expect($watchers('WEB-47'))->toEqual(['ida' => 'created', 'jonas' => 'assigned', 'mara' => 'mentioned'])
         ->and($watchers('APP-24'))->toEqual(['theo' => 'created', 'mara' => 'assigned'])
         // created by the bot: only the assignee; assigned to Sven (deactivated): only the creator
         ->and($watchers('WEB-34'))->toBe(['jonas' => 'assigned'])

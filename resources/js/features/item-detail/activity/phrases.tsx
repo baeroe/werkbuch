@@ -7,6 +7,9 @@
  * - A property names itself by its label, a deleted one by its key.
  * - A related item the reader may not see is "verborgenes Item", without key (the server sends nothing of it, P19).
  * - The reason of a change (`meta.reason`) reads as `items.activity.reason.<code>`; a code without text as itself.
+ * - A comment's edit reads "einen Kommentar bearbeitet" (its earlier version shows under the line, `earlierVersions`),
+ *   its deletion names whose comment it was; several edits of one comment in one line read once. A file of the item's
+ *   file list reads by its name: "die Datei „angebot.pdf“ angehängt".
  */
 
 import { Fragment, type ReactNode } from 'react';
@@ -15,7 +18,7 @@ import { ItemKey } from '@/components/items/ItemKey';
 import { PRIORITIES, priorityName } from '@/components/ui/PriorityIcon';
 import { useWorkItem } from '@/hooks/workItems';
 import { hasTranslation, intlLocale, t, tn, type TranslationKey } from '@/lib/i18n';
-import type { ItemEvent, Priority, Property, PropertyValue, RelationChange, User, WorkItemDetail } from '@/types';
+import type { ItemEvent, Priority, Property, PropertyValue, RelationChange, RichText, User, WorkItemDetail } from '@/types';
 import { isGone } from '../shared';
 
 /** What the phrases read their names from. */
@@ -175,6 +178,10 @@ export function fieldPhrase(field: string, change: { old: unknown; new: unknown 
       return tx('items.activity.field.type', { old: <V>{ctx.typeName(String(change.old))}</V>, new: <V>{ctx.typeName(String(change.new))}</V> });
     case 'description':
       return t('items.activity.field.description');
+    case 'attachments': {
+      const file = (change.new ?? change.old) as { filename?: string } | null;
+      return tx(change.new ? 'items.activity.field.attachment.added' : 'items.activity.field.attachment.removed', { name: <V>{file?.filename ?? ''}</V> });
+    }
     case 'archived_at':
       return t(change.new ? 'items.activity.archived' : 'items.activity.restored');
     default:
@@ -183,7 +190,21 @@ export function fieldPhrase(field: string, change: { old: unknown; new: unknown 
 }
 
 /** The order of the phrases within an event; property values follow in the order of their keys. */
-export const FIELD_ORDER = ['state_id', 'resolution_id', 'assignee_id', 'title', 'priority', 'label_ids', 'start_date', 'due_date', 'parent_id', 'type_id', 'description', 'archived_at'];
+export const FIELD_ORDER = [
+  'state_id',
+  'resolution_id',
+  'assignee_id',
+  'title',
+  'priority',
+  'label_ids',
+  'start_date',
+  'due_date',
+  'parent_id',
+  'type_id',
+  'description',
+  'attachments',
+  'archived_at',
+];
 
 const fieldRank = (field: string) => {
   const index = FIELD_ORDER.indexOf(field);
@@ -208,6 +229,14 @@ export function phrasesOf(event: ItemEvent, ctx: PhraseContext): ReactNode[] {
       const label = <V>{change?.label ?? t('items.detail.relations.related')}</V>;
       return [tx(added ? 'items.activity.relation.added' : 'items.activity.relation.removed', { label, item: other })];
     }
+    case 'comment.updated':
+      return [t('items.activity.field.comment_updated')];
+    case 'comment.deleted':
+      return [
+        event.comment_author_id === event.actor_id
+          ? t('items.activity.field.comment_deleted_own')
+          : tx('items.activity.field.comment_deleted', { author: <V>{userName(ctx, event.comment_author_id)}</V> }),
+      ];
     default: {
       const own: PhraseContext = { ...ctx, states: event.states };
       const parts = Object.entries(event.changes ?? {})
@@ -219,4 +248,26 @@ export function phrasesOf(event: ItemEvent, ctx: PhraseContext): ReactNode[] {
       return parts.length > 0 ? parts : [t('items.activity.changed')];
     }
   }
+}
+
+/** The edits of one comment in one line read once: the second edit of a comment says nothing new. */
+function isRepeatedEdit(event: ItemEvent, index: number, events: readonly ItemEvent[]): boolean {
+  return event.type === 'comment.updated' && events.slice(0, index).some((earlier) => earlier.type === 'comment.updated' && earlier.comment_id === event.comment_id);
+}
+
+/** What the events of one line read as, after "<Name> hat". */
+export function linePhrases(events: readonly ItemEvent[], ctx: PhraseContext): ReactNode[] {
+  return events.flatMap((event, index) => (isRepeatedEdit(event, index, events) ? [] : phrasesOf(event, ctx)));
+}
+
+/**
+ * The texts the comments edited in a line had before it, one per comment: the old text of its first edit there. An
+ * edit of a comment that was deleted since carries no text (K15), so it has none.
+ */
+export function earlierVersions(events: readonly ItemEvent[]): { commentId: string; body: RichText }[] {
+  return events.flatMap((event, index) => {
+    const old = event.changes?.body?.old as RichText | null | undefined;
+    if (event.type !== 'comment.updated' || !old || isRepeatedEdit(event, index, events)) return [];
+    return [{ commentId: event.comment_id ?? event.id, body: old }];
+  });
 }

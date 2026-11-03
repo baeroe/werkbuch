@@ -34,6 +34,8 @@
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
+        <env name="ATTACHMENTS_MAX_MB" value="25" force="true"/>
+        <env name="WEBHOOKS_ALLOW_PRIVATE" value="false" force="true"/>
         <env name="SCOUT_DRIVER" value="null"/>
         <env name="SCOUT_PREFIX" value="testing_" force="true"/>
         <env name="PULSE_ENABLED" value="false"/>

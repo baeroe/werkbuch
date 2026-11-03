@@ -5,6 +5,7 @@ use App\Access\RoleIndex;
 use App\Access\Visibility;
 use App\Actions\Projects\AssignWorkflow;
 use App\Enums\AccountType;
+use App\Models\Attachment;
 use App\Models\Event;
 use App\Models\Favorite;
 use App\Models\Label;
@@ -19,12 +20,17 @@ use App\Models\Workflow;
 use App\Models\WorkItem;
 use App\Models\WorkItemType;
 use Database\Seeders\DatabaseSeeder;
+use Database\Seeders\Demo\ItemsSeeder;
 use Database\Seeders\DemoSeeder;
 use Database\Seeders\E2eSeeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 
 // the default bot of the migration is always there: the tests read it by its flag
+
+// the demo files of the AttachmentsSeeder land on the disk `local`
+beforeEach(fn () => Storage::fake('local'));
 
 /** The clickdummy's seed (prototypes/clickdummy/src/api/seed/people.ts), as the Demo seeders have to reproduce it. */
 function clickdummySeed(): array
@@ -304,6 +310,42 @@ it('seeds the work items of the three projects, on the states of their workflows
         expect(WorkItem::query()->where('project_id', $project->id)->whereNotIn('state_id', DB::table('workflow_states')->where('workflow_id', $project->workflow_id)->select('id'))->exists())->toBeFalse()
             ->and(WorkItem::query()->where('project_id', $project->id)->whereNotIn('type_id', $project->types()->select('work_item_types.id'))->exists())->toBeFalse();
     }
+});
+
+it('attaches the three files of the clickdummy to their items, with their contents', function () {
+    $this->seed(DemoSeeder::class);
+    $files = Attachment::query()->with(['media', 'uploader'])->orderBy('filename')->get();
+    $owner = fn (Attachment $file) => WorkItem::query()->with('project')->findOrFail($file->attachable_id)->key;
+
+    expect($files->map(fn (Attachment $file) => [$owner($file), $file->kind, $file->filename, $file->mime, $file->size, $file->uploader->handle])->all())->toBe([
+        ['WEB-42', 'file', 'hero-entwurf.png', 'image/png', 454, 'ida'],
+        ['WEB-45', 'file', 'leistungsseiten-gliederung.pdf', 'application/pdf', 756, 'ida'],
+        ['OPS-12', 'file', 'postfix-main.cf.txt', 'text/plain', 135, 'mara'],
+    ]);
+
+    foreach ($files as $file) {
+        $media = $file->getFirstMedia('file');
+        expect($media)->not->toBeNull()
+            ->and(file_get_contents((string) $media?->getPath()))->toBe(file_get_contents(database_path("seeders/Demo/files/{$file->filename}")))
+            ->and($file->project_id)->toBe(ItemsSeeder::find($owner($file))?->project_id)
+            ->and($file->created_at?->equalTo(ItemsSeeder::find($owner($file))?->created_at))->toBeTrue()
+            // the person who created the item uploads it (T14-M2)
+            ->and($file->uploaded_by)->toBe(ItemsSeeder::find($owner($file))?->created_by);
+    }
+    // the sources stay where they are
+    expect(database_path('seeders/Demo/files/hero-entwurf.png'))->toBeFile()
+        // an image gets its preview as any upload does
+        ->and($files->firstWhere('filename', 'hero-entwurf.png')?->getFirstMedia('file')?->hasGeneratedConversion('preview'))->toBeTrue();
+});
+
+it('attaches the files only once, and again to an item that lost its file', function () {
+    $this->seed(DemoSeeder::class);
+    Attachment::query()->where('filename', 'postfix-main.cf.txt')->sole()->delete();
+
+    $this->seed(DemoSeeder::class);
+
+    expect(Attachment::query()->orderBy('filename')->pluck('filename')->all())->toBe(['hero-entwurf.png', 'leistungsseiten-gliederung.pdf', 'postfix-main.cf.txt'])
+        ->and(DB::table('media')->where('collection_name', 'file')->count())->toBe(3);
 });
 
 it('seeds the project favorites with the positions of the clickdummy', function () {

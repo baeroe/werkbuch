@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { mockApi, type MockApi } from '@/test/api';
-import { standard, types, web30, web47, web47History, web47Relations, web48, webStateGroups } from '@/test/fixtures';
+import { makeAttachment, standard, types, web30, web47, web47History, web47Relations, web48, webStateGroups } from '@/test/fixtures';
 import type { BulkResult, Filter, WorkItem } from '@/types';
 import {
   archiveWorkItem,
@@ -89,8 +89,9 @@ describe('reading work items', () => {
   });
 
   it('reads one item with everything the detail shows in one call and takes its state from the workflow', async () => {
+    const file = makeAttachment({ kind: 'file', filename: 'log.txt', owner: { type: 'work_item', id: 'wi_web_47' } });
     api = mockApi({
-      'GET /api/v1/work-items/WEB-47': () => ({ body: { data: { ...web47, children: [], relations: web47Relations, type: types[1], workflow: standard } } }),
+      'GET /api/v1/work-items/WEB-47': () => ({ body: { data: { ...web47, children: [], relations: web47Relations, type: types[1], workflow: standard, attachments: [file] } } }),
     });
 
     expect(await getWorkItem('WEB-47')).toEqual({
@@ -100,15 +101,15 @@ describe('reading work items', () => {
       workflow: standard,
       children: [],
       relations: web47Relations,
-      attachments: [],
+      attachments: [file],
       subscribed: true,
     });
-    expect(sent()).toBe('GET /api/v1/work-items/WEB-47?include=children,relations,type,workflow');
+    expect(sent()).toBe('GET /api/v1/work-items/WEB-47?include=children,relations,type,workflow,attachments');
   });
 
   it('keeps the children of an epic in their order and escapes a reference from an address', async () => {
     api = mockApi({
-      'GET /api/v1/work-items/WEB-30': () => ({ body: { data: { ...web30, children: [web48], relations: [], type: types[2], workflow: standard } } }),
+      'GET /api/v1/work-items/WEB-30': () => ({ body: { data: { ...web30, children: [web48], relations: [], type: types[2], workflow: standard, attachments: [] } } }),
       'GET /api/v1/work-items/a%2Fb': () => ({ status: 404, body: { reason: 'not_found' } }),
     });
 
@@ -117,6 +118,7 @@ describe('reading work items', () => {
     expect(detail.children).toEqual([web48]);
     expect(detail.subscribed).toBe(false);
     expect(Object.keys(detail.item)).not.toContain('children');
+    expect(Object.keys(detail.item)).not.toContain('attachments');
     await expect(getWorkItem('a/b')).rejects.toMatchObject({ status: 404 });
   });
 

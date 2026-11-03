@@ -17,6 +17,8 @@ use App\Models\WorkItemValue;
 use App\RichText\Document;
 use App\RichText\InvalidDocument;
 use App\RichText\MarkdownContext;
+use App\RichText\RichTextInput;
+use App\RichText\RichTextNames;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
 
@@ -29,19 +31,26 @@ final class ItemValues
 {
     /**
      * The rich text values of a `values` map read into documents, before the caller takes any lock (reading Markdown
-     * is the expensive, size-limited step). Only the keys of rich text properties change: a document, or `null` for an
-     * empty one or one that is refused at `values.<key>`.
+     * is the expensive, size-limited step), each with the rules of saving (RichTextRules) against the value it had
+     * before (`$before`, K9). Only the keys of rich text properties change: a document, or `null` for an empty one or
+     * one that is refused at `values.<key>`.
      *
      * @param  array<array-key, mixed>  $values
+     * @param  array<string, Document>  $before  property key → the rich text value the item has
      * @return array{0: array<array-key, mixed>, 1: array<string, list<string>>}
      */
-    public static function documents(array $values, MarkdownContext $ctx): array
+    public static function documents(array $values, Project $project, User $writer, array $before = []): array
     {
         $keys = array_values(array_filter(array_keys($values), is_string(...)));
         $properties = Property::query()->whereIn('key', $keys)->where('field_type', FieldType::RichText)->get();
         $errors = [];
 
         foreach ($properties as $property) {
+            // the collation finds `notes` for `NOTES`; only the exact key is the property's, check() refuses the other
+            if (! in_array($property->key, $keys, true)) {
+                continue;
+            }
+            $ctx = RichTextRules::context($project, $writer, $before[$property->key] ?? null);
             $document = self::document($property, $values[$property->key], $ctx);
             if (is_string($document)) {
                 $errors["values.{$property->key}"] = [$document];
@@ -54,6 +63,23 @@ final class ItemValues
     }
 
     /**
+     * The rich text values of the item as documents, property key → document, from its loaded `values.property`.
+     *
+     * @return array<string, Document>
+     */
+    public static function documentsOf(WorkItem $item): array
+    {
+        $documents = [];
+        foreach ($item->values as $row) {
+            if ($row->property->field_type === FieldType::RichText) {
+                $documents[$row->property->key] = Document::fromJson((array) $row->value_json);
+            }
+        }
+
+        return $documents;
+    }
+
+    /**
      * The values to store: `$existing` with what `$input` sends merged in, each checked against the properties of the
      * type. An empty value removes a property, unless it is required: when creating always, when updating only when it
      * had a value (a property that became required later stays empty until somebody fills it). When creating (a new
@@ -62,7 +88,7 @@ final class ItemValues
      * picked anew must be able to take work in the project (`Assignable`); people the item has already only need to
      * exist. ULIDs are written in lower case for dropdowns and people only, never in texts (K19).
      *
-     * @param  array<array-key, mixed>  $input  property key → value (rich text as a Document from documents(), or as Markdown or JSON)
+     * @param  array<array-key, mixed>  $input  property key → value (rich text only as a Document from documents(), K9)
      * @param  array<string, mixed>  $existing  the values the item has (of())
      * @param  'create'|'update'  $mode
      * @return array<string, mixed>
@@ -73,7 +99,6 @@ final class ItemValues
     {
         /** @var Collection<string, TypeProperty> $entries */
         $entries = $type->typeProperties()->with('property.options')->get()->keyBy(fn (TypeProperty $entry) => $entry->property->key);
-        $ctx = new MarkdownContext($project);
         $values = $existing;
         $errors = [];
 
@@ -90,7 +115,8 @@ final class ItemValues
             $value = match ($property->field_type) {
                 // ids of options and people in lower case; texts keep their case, even when they look like a ULID
                 FieldType::Dropdown, FieldType::Member => Ids::normalize($raw),
-                FieldType::RichText => self::document($property, $raw, $ctx),
+                // read by documents() before the lock, with the rules of saving; anything else is refused here
+                FieldType::RichText => $raw === null || $raw instanceof Document ? $raw : self::message('rich_text', $property),
                 default => $raw,
             };
             if (is_string($value) && $property->field_type === FieldType::RichText) {
@@ -99,7 +125,7 @@ final class ItemValues
                 continue;
             }
             if ($value instanceof Document) {
-                $value = $value->toJson();
+                $value = $value->isEmpty() ? null : $value->toJson();
             }
 
             if (ItemValue::isEmpty($value)) {
@@ -197,38 +223,34 @@ final class ItemValues
     }
 
     /**
-     * The rich text values of the item as Markdown, property key → text, from its loaded `values.property`.
+     * The rich text values of the item as Markdown for one reader (`$names`, WorkItem::$rich_names), property key →
+     * text, from its loaded `values.property`.
      *
      * @return array<string, string>
      */
-    public static function markdown(WorkItem $item): array
+    public static function markdown(WorkItem $item, ?RichTextNames $names = null): array
     {
-        $markdown = [];
-
-        foreach ($item->values as $row) {
-            if ($row->property->field_type === FieldType::RichText) {
-                $markdown[$row->property->key] = Document::fromJson((array) $row->value_json)->toMarkdown();
-            }
-        }
-
-        return $markdown;
+        return array_map(fn (Document $document) => $document->toMarkdown($names), self::documentsOf($item));
     }
 
     /**
-     * A rich text value as a document: a Document as it is, Markdown or JSON read; `null` when empty. A refusal is the
-     * sentence of what is wrong.
+     * A rich text value as a document: Markdown or JSON read, then the rules of saving; `null` when empty. A refusal is
+     * the sentence of what is wrong.
      */
     private static function document(Property $property, mixed $value, MarkdownContext $ctx): Document|string|null
     {
         try {
             $document = match (true) {
-                $value === null, $value instanceof Document => $value,
+                $value === null => null,
                 is_string($value) => Document::fromMarkdown($value, $ctx),
                 is_array($value) => Document::fromJson($value),
                 default => throw new InvalidDocument('shape'),
             };
+            $document = $document === null ? null : RichTextInput::ruled($document, $ctx, "values.{$property->key}", is_array($value) ? RichTextInput::referenceLabels($value) : []);
         } catch (InvalidDocument $invalid) {
             return $invalid->reason === 'size' ? __('field.rich_text.too_long') : self::message('rich_text', $property);
+        } catch (ValidationException $refused) {
+            return $refused->validator->errors()->first();
         }
 
         return $document === null || $document->isEmpty() ? null : $document;

@@ -3,10 +3,11 @@
  * so a short stale time is fine and a failed call is not repeated on its own: an error shows at once with its retry.
  *
  * Who is signed in decides what everybody sees (visible projects, inbox, favorites): when the person changes, the
- * whole cache is cleared.
+ * whole cache is cleared, and so are the unsent texts of the visit (`lib/drafts.ts`): nobody sends what another wrote.
  */
 
 import { QueryClient } from '@tanstack/react-query';
+import { drafts } from '@/lib/drafts';
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -23,5 +24,6 @@ export const queryClient = new QueryClient({
 export function resetForUser(previousId: string | null, nextId: string | null): void {
   if (previousId !== nextId) {
     queryClient.clear();
+    drafts.clear();
   }
 }

@@ -6,6 +6,7 @@ use App\Actions\Favorites\ToggleFavorite;
 use App\Actions\Projects\CreateProject;
 use App\Actions\Projects\UpdateProject;
 use App\Events\EventType;
+use App\Models\Attachment;
 use App\Models\Favorite;
 use App\Models\Invitation;
 use App\Models\Label;
@@ -23,9 +24,12 @@ use Database\Seeders\DemoSeeder;
 use Database\Seeders\E2eSeeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use PragmaRX\Google2FA\Google2FA;
 
 const E2E_VARIANTS = ['desktop-light', 'desktop-dark', 'phone-light', 'phone-dark'];
+
+beforeEach(fn () => Storage::fake('local'));
 
 it('switches the organization to English, which the demo data alone keep German', function () {
     $this->seed(DemoSeeder::class);
@@ -92,6 +96,22 @@ it('takes the items of an E2E project away with it, before the catalog entries t
         ->and(WorkItem::query()->where('type_id', $type->id)->exists())->toBeFalse()
         ->and(WorkItemType::query()->where('name', 'like', 'E2E %')->exists())->toBeFalse()
         ->and(Project::query()->orderBy('identifier')->pluck('identifier')->all())->toBe(['APP', 'OPS', 'WEB']);
+});
+
+it('takes the uploads nobody owns away, with their files, and keeps the files of the demo', function () {
+    $this->seed(E2eSeeder::class);
+    $erik = User::where('email', 'e2e@example.com')->sole();
+    $web = Project::query()->where('identifier', 'WEB')->sole();
+    $pasted = Attachment::factory()->stored('png', 'image/png', 'bild.png')->create(['project_id' => $web->id, 'uploaded_by' => $erik->id, 'created_at' => now()->subMinute()]);
+    $path = (string) $pasted->getFirstMedia('file')?->getPath();
+    expect($path)->toBeFile();
+
+    $this->seed(E2eSeeder::class);
+
+    expect(Attachment::query()->whereKey($pasted->id)->exists())->toBeFalse()
+        ->and($path)->not->toBeFile()
+        ->and(Attachment::query()->whereNull('attachable_id')->exists())->toBeFalse()
+        ->and(Attachment::query()->pluck('filename')->sort()->values()->all())->toBe(['hero-entwurf.png', 'leistungsseiten-gliederung.pdf', 'postfix-main.cf.txt']);
 });
 
 it('removes the catalog entries of earlier runs and keeps the demo ones', function () {

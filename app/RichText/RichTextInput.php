@@ -2,11 +2,14 @@
 
 namespace App\RichText;
 
+use App\Support\RichTextLookups;
+use App\Support\RichTextRules;
 use Illuminate\Validation\ValidationException;
 
 /**
  * A rich text field of an input: `<field>` as Markdown (REST, MCP) or `<field>_json` as Tiptap JSON (the editor),
- * never both. `null`, `''` and an empty document clear the field.
+ * never both. `null`, `''` and an empty document clear the field. With a project and a writer in the context, the
+ * rules of saving (RichTextRules) run on what was read, JSON and Markdown alike.
  */
 final class RichTextInput
 {
@@ -29,7 +32,8 @@ final class RichTextInput
 
     /**
      * The document of the field, `null` to clear it or when the input does not send it (ask given() first). A
-     * document werkbuch does not take is a 422 at the key that sent it.
+     * document werkbuch does not take is a 422 at the key that sent it, and so is what the rules of saving refuse; a
+     * text that is empty after the rules clears the field.
      *
      * @param  array<string, mixed>  $input
      *
@@ -53,6 +57,7 @@ final class RichTextInput
                 ! $markdown && is_array($value) => Document::fromJson($value),
                 default => throw new InvalidDocument('shape'),
             };
+            $document = self::ruled($document, $ctx, $key, is_array($value) ? self::referenceLabels($value) : []);
         } catch (InvalidDocument $invalid) {
             $message = $invalid->reason === 'size' ? __('field.rich_text.too_long') : __('field.rich_text.invalid');
 
@@ -60,5 +65,44 @@ final class RichTextInput
         }
 
         return $document->isEmpty() ? null : $document;
+    }
+
+    /**
+     * The document after the rules of saving, when the context names a project and a writer (RichTextRules::context()).
+     *
+     * @param  array<string, string>  $labels
+     *
+     * @throws ValidationException
+     * @throws InvalidDocument
+     */
+    public static function ruled(Document $document, MarkdownContext $ctx, string $key, array $labels): Document
+    {
+        return $ctx->project === null || $ctx->writer === null
+            ? $document
+            : RichTextRules::apply($document, $ctx->project, $ctx->writer, $ctx->before, $key, $labels, $ctx->lookup instanceof RichTextLookups ? $ctx->lookup : null);
+    }
+
+    /**
+     * The labels the editor sent with its references, ID (in lower case) → label, read from the JSON as it came: the
+     * stored reference never keeps its label (A229), but one the writer may not make becomes this text. The same ID with
+     * two labels takes the first one for every place it stands (T8-M6).
+     *
+     * @param  array<mixed>  $json
+     * @return array<string, string>
+     */
+    public static function referenceLabels(array $json): array
+    {
+        $labels = [];
+        $attrs = $json['attrs'] ?? null;
+        if (($json['type'] ?? null) === 'reference' && is_array($attrs) && is_string($attrs['id'] ?? null) && is_string($attrs['label'] ?? null)) {
+            $labels[strtolower($attrs['id'])] = $attrs['label'];
+        }
+        foreach (is_array($json['content'] ?? null) ? $json['content'] : [] as $child) {
+            if (is_array($child)) {
+                $labels += self::referenceLabels($child);
+            }
+        }
+
+        return $labels;
     }
 }

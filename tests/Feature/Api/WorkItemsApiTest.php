@@ -1,8 +1,10 @@
 <?php
 
 use App\Access\ProjectRole;
+use App\Access\Visibility;
 use App\Domain\Properties\FieldType;
 use App\Http\Resources\WorkItemResource;
+use App\Models\Attachment;
 use App\Models\Project;
 use App\Models\Property;
 use App\Models\RelationType;
@@ -14,6 +16,7 @@ use App\Models\WorkItemSubscriber;
 use App\Models\WorkItemType;
 use App\Views\Shorthand;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Tests\Support\RichTextFixtures as F;
 
 /** The shape of `WorkItem` in resources/js/types.ts plus what the server adds (Task 5). */
@@ -211,7 +214,12 @@ it('loads a list for the resource with a fixed number of queries, after which th
     WorkItemRelation::factory()->blocks()->create(['source_id' => $blocker->id, 'target_id' => $child->id]);
     WorkItemSubscriber::query()->create(['work_item_id' => $epic->id, 'user_id' => $lene->id, 'reason' => 'manual']);
     WorkItemSubscriber::query()->create(['work_item_id' => $child->id, 'user_id' => $lene->id, 'reason' => 'manual', 'unsubscribed_at' => now()]);
+    // mentions and references in the texts cost one query for the accounts and one for the items, never one per node
+    $epic->update(['description' => F::doc(F::p(F::mention($lene->id, 'alt'), ' ', F::reference($child->id), ' ', F::reference($blocker->id)))]);
+    $child->update(['description' => F::doc(F::p(F::mention($mara->id, 'mara'), ' ', F::reference($epic->id)))]);
     $items = WorkItem::query()->orderBy('number')->get();
+    // what Lene sees is known to a request by then (Authorize asked it)
+    Visibility::projectIds($lene);
 
     DB::enableQueryLog();
     WorkItem::loadForResource($items, $lene);
@@ -220,7 +228,9 @@ it('loads a list for the resource with a fixed number of queries, after which th
     $data = $items->map(fn (WorkItem $item) => (new WorkItemResource($item))->resolve(request()))->keyBy('key');
 
     expect(DB::getQueryLog())->toBe([])
-        ->and($loading)->toBeLessThanOrEqual(8)
+        ->and($loading)->toBeLessThanOrEqual(10)
+        ->and($data['WEB-1']['description'])->toBe("@{$lene->handle} WEB-3 WEB-4")
+        ->and($data['WEB-3']['description'])->toBe("@{$mara->handle} WEB-1")
         ->and($data['WEB-1']['children_progress'])->toBe(['done' => 1, 'total' => 2])
         ->and($data['WEB-1']['subscribed'])->toBeTrue()
         ->and($data['WEB-3']['parent'])->toBe(['id' => $epic->id, 'key' => 'WEB-1', 'title' => 'Relaunch', 'type_id' => $epic->type_id])
@@ -276,9 +286,46 @@ it('shows an item and embeds children, type and workflow on request', function (
         ->assertJsonPath('data.type.is_epic', true);
 
     $this->actingAs($mara)->getJson('/api/v1/work-items/WEB-1?include=children,comments')->assertUnprocessable()
-        ->assertJsonPath('errors.include.0', __('field.include.unknown', ['name' => 'comments', 'allowed' => 'children, type, workflow, relations']));
+        ->assertJsonPath('errors.include.0', __('field.include.unknown', ['name' => 'comments', 'allowed' => 'children, type, workflow, relations, attachments']));
     $this->actingAs($mara)->getJson('/api/v1/work-items/WEB-1?include[]=type')->assertOk()->assertJsonPath('data.type.id', $epic->type_id);
     $this->actingAs($mara)->getJson('/api/v1/work-items/WEB-9')->assertNotFound();
+});
+
+it('embeds the files of the item with include=attachments', function () use ($web) {
+    [$project, $mara] = $web();
+    Storage::fake('local');
+    $item = WorkItem::factory()->for($project)->create();
+    $other = WorkItem::factory()->for($project)->create();
+    $png = (string) base64_decode(explode(',', imageDataUrl())[1]);
+    // oldest first; the picture of the description, the file of another item and an unowned upload stay out
+    $later = Attachment::factory()->forItem($item, 'file')->stored('Später', 'text/plain', 'b.txt')->create(['created_at' => now()->addMinute()]);
+    $first = Attachment::factory()->forItem($item, 'file')->stored($png, 'image/png', 'skizze.png')->create();
+    Attachment::factory()->forItem($item)->stored($png, 'image/png', 'bild.png')->create();
+    Attachment::factory()->forItem($other, 'file')->stored('Fremd', 'text/plain', 'c.txt')->create();
+    Attachment::factory()->create(['project_id' => $project->id, 'uploaded_by' => $mara->id]);
+
+    $response = $this->actingAs($mara)->getJson('/api/v1/work-items/WEB-1?include=attachments')->assertOk();
+
+    expect(array_column($response->json('data.attachments'), 'id'))->toBe([$first->id, $later->id])
+        ->and($response->json('data.attachments.0'))->toBe([
+            'id' => $first->id,
+            'project_id' => $project->id,
+            'owner' => ['type' => 'work_item', 'id' => $item->id],
+            'kind' => 'file',
+            'filename' => 'skizze.png',
+            'mime' => 'image/png',
+            'size' => strlen($png),
+            'inline' => true,
+            'url' => "/attachments/{$first->id}",
+            // the test queue runs synchronously: the preview was made right after the upload
+            'preview_url' => "/attachments/{$first->id}/preview",
+            'uploaded_by' => $first->uploaded_by,
+            'created_at' => $first->created_at?->toJSON(),
+        ]);
+    $this->actingAs($mara)->getJson('/api/v1/work-items/WEB-2?include=attachments')->assertOk()->assertJsonCount(1, 'data.attachments');
+    $this->actingAs($mara)->getJson('/api/v1/work-items/WEB-1')->assertOk()->assertJsonMissingPath('data.attachments');
+    $empty = WorkItem::factory()->for($project)->create();
+    $this->actingAs($mara)->getJson("/api/v1/work-items/{$empty->id}?include=attachments")->assertOk()->assertJsonPath('data.attachments', []);
 });
 
 it('redirects a former key with 301', function () use ($web) {
@@ -439,7 +486,7 @@ it('reads the history over GET …/history, a page at a time', function () use (
     $first = $this->withToken(apiToken($mara, ['read']))->getJson('/api/v1/work-items/web-1/history?per_page=1')->assertOk();
     forgetApiAuth();
     expect($first->json('data'))->toHaveCount(1)
-        ->and(array_keys($first->json('data.0')))->toBe(['id', 'type', 'actor_id', 'subject', 'project_id', 'changes', 'states', 'reason', 'via', 'occurred_at'])
+        ->and(array_keys($first->json('data.0')))->toBe(['id', 'type', 'actor_id', 'subject', 'project_id', 'changes', 'states', 'reason', 'via', 'comment_id', 'comment_author_id', 'occurred_at'])
         ->and($first->json('data.0.changes'))->toBe(['title' => ['old' => 'Alt', 'new' => 'Neu']])
         ->and($first->json('data.0.subject'))->toBe(['type' => 'work_item', 'id' => $item->id])
         ->and($first->json('meta.total'))->toBe(2);

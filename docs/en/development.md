@@ -45,7 +45,9 @@ Open <https://werkbuch.ddev.site/login> and sign in with `ADMIN_EMAIL` and `ADMI
 | Mail | `ddev mailpit` |
 | Database | `ddev mysql`, user, password and database `db` |
 
-The queue worker, the scheduler and Reverb run as DDEV daemons and start with `ddev start`. The worker also listens on the queue `search`, which keeps the search indexes in step with every change. The Meilisearch dashboard asks for the key `MEILISEARCH_KEY` from `.env`.
+The queue worker, the scheduler and Reverb run as DDEV daemons and start with `ddev start`. The worker also listens on the queue `search`, which keeps the search indexes in step with every change, and on `media`, which computes the previews of uploaded images (`MEDIA_QUEUE` in `.env`). The Meilisearch dashboard asks for the key `MEILISEARCH_KEY` from `.env`.
+
+Uploaded files land on the private disk `local` (`storage/app/private`), never in `public/`. One file may be at most `ATTACHMENTS_MAX_MB` (25 MB by default). PHP has its own limits in front of that, `upload_max_filesize` and `post_max_size`; they must be above `ATTACHMENTS_MAX_MB`, otherwise PHP drops a large file before werkbuch can name the limit. DDEV allows 100 MB, the CI sets 30 MB and 32 MB. A file over either limit is a `413` with `reason: payload_too_large`. More under [rich text](/en/concepts/rich-text#images-and-files).
 
 ## Tests and checks
 
@@ -96,11 +98,14 @@ ddev artisan app:sync-roles            # compares the roles and rights in the da
 ddev artisan app:redispatch-events     # hands events that got stuck to their consumers again
 ddev artisan app:search-sync           # sends the settings of the search indexes (config/scout.php) to Meilisearch
 ddev artisan app:search-import         # empties the search indexes and fills them again from the database
+ddev artisan app:prune-attachments --dry-run --min-age=30   # lists pictures and files no text names any more
 ```
 
 `app:sync-roles` is what the migration of the roles runs; call it by hand only after a rights table in the code changed without a migration. `app:redispatch-events` runs every minute in the scheduler, so you only need it by hand to catch up after the scheduler was down.
 
 `app:search-sync` is needed after a change of the index settings in `config/scout.php`. `app:search-import` builds the indexes from scratch: on the first start, after `migrate:fresh`, and as the repair when the search missed changes (for example after Meilisearch was down for hours). During the import the search is briefly empty. More under [Search](/en/search#operation).
+
+Pictures and files pasted into a text stay when the text loses them, so that the history and undo keep working. `app:prune-attachments` removes those that no current text of their project names any more (the description or a rich text value of an item, the text of a comment) and that are older than `--min-age` days (default 30); `--dry-run` only lists them, each with project, id, file name and size, and sums them up. Pictures that only an older version of a text in the history shows go too, so pick the minimum age with that in mind. Files of the file list of an item are never pruned; they are deleted there. The command also removes folders on the media disk whose media row is gone (a preview made while its picture was being deleted), when all their files are older than the minimum age. A project with a text that cannot be read is skipped (`skipped WEB: unreadable text of …`, also in the log) and nothing of it is removed; the other projects still get their turn. Uploads that no text ever took (a picture pasted into a comment that was never sent) go by themselves: a job of the scheduler removes them every hour once they are older than 24 hours. Deleting an item removes the files of the item and of its comments, deleting a comment its files, deleting a project all files of the project. A picture that another text of the project still shows (copied from one text into another) stays: it then belongs to that text.
 
 ## Documentation
 

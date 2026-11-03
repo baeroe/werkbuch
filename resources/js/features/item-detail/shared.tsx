@@ -1,7 +1,7 @@
 /*
  * What the building blocks of the item detail share, in the preview (`ItemPeek`) and on the page (`ItemPage`):
  * - `DetailContext`: where the detail is shown and the actions the detail's shortcuts reach (the title registers `e`,
- *   the relations `r`).
+ *   the comment composer `m`, the relations `r`).
  * - `Section`: a titled part of the detail with actions on the right and a short note beside the heading.
  * - `LinkedItem`: another item in one line (status, key, title), a link that opens it where the detail is.
  * - `useUnsavedGuard`: while text is not saved yet, leaving or reloading the page asks first.
@@ -12,7 +12,6 @@
  */
 
 import { createContext, useContext, useEffect, useId, type ReactNode, type RefObject } from 'react';
-import { ApiError } from '@/api/client';
 import { cx } from '@/components/ui/cx';
 import { StatusIcon } from '@/components/ui/StatusIcon';
 import { formatDay } from '@/components/fields/format';
@@ -33,6 +32,7 @@ export type DetailSurface = 'peek' | 'page';
 /** What the shortcuts of the detail start; each part registers its own while it is mounted. */
 export interface DetailActions {
   editTitle?: () => void;
+  writeComment?: () => void;
   addRelation?: () => void;
 }
 
@@ -61,14 +61,8 @@ export function useChildType(projectId: string): { typeId: string | null; reason
   return { typeId, reason: typeId ? null : t('items.hierarchy.no_child_type') };
 }
 
-/**
- * The item is gone for this reader: deleted, or in a project they no longer see (404, or 403 for lost access). The
- * detail then says so instead of keeping what it loaded before. Any other failure (a 5xx, no answer) keeps the item on
- * screen: it is not lost, the server only failed to answer (13c).
- */
-export function isGone(error: unknown): boolean {
-  return error instanceof ApiError && (error.status === 404 || error.status === 403);
-}
+/** Whether a failed read means the item is gone for the reader; it lives with `ApiError` (the editor reads it too). */
+export { isGone } from '@/api/client';
 
 /** Section headings sit one level below the item's title: h3 in the preview (h2 title), h2 on the page (h1). */
 export function SectionHeading({ id, children, className }: { id: string; children: ReactNode; className?: string }) {

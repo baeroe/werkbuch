@@ -24,7 +24,31 @@ final class SearchIndexer
 
     private const CHUNK = 500;
 
+    /** The most bytes of comment text in an item's document (A245). */
+    public const COMMENTS_MAX = 65536;
+
     public function __construct(private readonly EngineManager $engines) {}
+
+    /**
+     * The text of an item's comments for its document (A245): one after the other, separated by a line break, cut at
+     * COMMENTS_MAX bytes without splitting a character. Joins no more texts than the limit takes.
+     *
+     * @param  list<string>  $texts  the plain text of each comment, oldest first
+     */
+    public static function commentsText(array $texts): string
+    {
+        $parts = [];
+        $length = -1;
+        foreach ($texts as $text) {
+            $parts[] = $text;
+            $length += strlen($text) + 1;
+            if ($length >= self::COMMENTS_MAX) {
+                break;
+            }
+        }
+
+        return mb_strcut(implode("\n", $parts), 0, self::COMMENTS_MAX, 'UTF-8');
+    }
 
     /** Writes the document of an item, or removes it when the item is gone or its project is being deleted (K11). */
     public function upsertItem(string $id): void

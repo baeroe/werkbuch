@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AttachmentFileController;
 use App\Http\Controllers\ItemPageController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\ProjectItemsPageController;
@@ -50,6 +51,15 @@ Route::middleware('auth')->group(function () {
 Route::middleware(['auth:sanctum', SanctumAuthenticateSession::class, EnsureAccountIsActive::class, EnsureTokenAbility::class])
     ->withoutMiddleware(AuthenticateSession::class)
     ->get('/media/{media:uuid}', [MediaController::class, 'show'])->name('media.show');
+
+// the files of attachments (A235), for their readers with the session or a token that may read, like the pictures above;
+// `{attachment}` is bound by ULID in routes/api.php
+Route::middleware(['auth:sanctum', SanctumAuthenticateSession::class, EnsureAccountIsActive::class, EnsureTokenAbility::class])
+    ->withoutMiddleware(AuthenticateSession::class)
+    ->group(function () {
+        Route::get('/attachments/{attachment}', [AttachmentFileController::class, 'show'])->name('attachments.show');
+        Route::get('/attachments/{attachment}/preview', [AttachmentFileController::class, 'preview'])->name('attachments.preview');
+    });
 
 // Every unknown path of the browser app is the Inertia 404 page for signed-in people (the status stays 404) and the
 // sign-in for guests: no auth middleware here, because the fallback also catches unknown /api paths, and those stay an

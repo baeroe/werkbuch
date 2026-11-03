@@ -113,6 +113,44 @@ test('names the reason of a remapped status', async ({ page }) => {
   }
 });
 
+test('filters to comments', async ({ page }) => {
+  const { id, identifier } = await createE2eProject(page, name('comments'), { types: ['Task'] });
+  try {
+    const item = await createItem(page, { project_id: id, title: 'E2E Kommentare filtern' });
+    const comment = await api(page, 'POST', `/api/v1/work-items/${item.id}/comments`, { body: 'Looks good to me.' });
+    expect(comment.status(), await comment.text()).toBe(201);
+
+    await page.goto(`/items/${item.key}`);
+    await expect(page.getByRole('heading', { level: 1, name: 'E2E Kommentare filtern' })).toBeVisible();
+    const timeline = await timelineOf(page);
+    const lines = timeline.getByRole('listitem');
+    const card = timeline.getByRole('article', { name: tr('en', 'items.comments.card', { name: PEOPLE.e2e.name }) });
+    // the creation, then the comment
+    await expect(lines).toHaveCount(2);
+    await expect(lines.nth(0)).toContainText(tr('en', 'items.activity.created'));
+    await expect(card).toContainText('Looks good to me.');
+
+    // "Comments" with the keyboard: only the comment stays, the address says so
+    const filter = page.getByRole('group', { name: tr('en', 'items.activity.filter.label') });
+    await tabTo(page, filter.getByRole('button', { name: tr('en', 'items.activity.filter.all'), exact: true }), { max: 120 });
+    await arrowTo(page, filter.getByRole('button', { name: tr('en', 'items.activity.filter.comments'), exact: true }), 'ArrowRight', 3);
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/\?activity=comments$/);
+    await expect(lines).toHaveCount(1);
+    await expect(card).toBeVisible();
+
+    // "Changes": only the history
+    await arrowTo(page, filter.getByRole('button', { name: tr('en', 'items.activity.filter.changes'), exact: true }), 'ArrowRight', 3);
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/\?activity=changes$/);
+    await expect(lines).toHaveCount(1);
+    await expect(card).toBeHidden();
+    await expect(lines.nth(0)).toContainText(tr('en', 'items.activity.created'));
+  } finally {
+    await cleanUp(page, identifier);
+  }
+});
+
 /** A text as a literal part of a regular expression. */
 function literal(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

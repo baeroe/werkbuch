@@ -83,7 +83,7 @@ describe('reading', () => {
   it('lists items, reads one with its detail, its history and the count per state', async () => {
     api = mockApi({
       'POST /api/v1/work-items/query': () => ({ body: list([web47]) }),
-      'GET /api/v1/work-items/WEB-47': () => ({ body: { data: { ...web47, children: [], relations: web47Relations, type: types[1], workflow: standard } } }),
+      'GET /api/v1/work-items/WEB-47': () => ({ body: { data: { ...web47, children: [], relations: web47Relations, type: types[1], workflow: standard, attachments: [] } } }),
       'GET /api/v1/work-items/WEB-47/history': () => ({ body: list(web47History) }),
       'GET /api/v1/state-usage': () => ({ body: { data: [{ state_id: 'std_progress', items: 2 }] } }),
     });
@@ -101,12 +101,13 @@ describe('reading', () => {
     expect(result.current.items.data?.items).toEqual([web47]);
     expect(result.current.item.data?.state.name).toBe('In Progress');
     expect(result.current.item.data?.relations).toEqual(web47Relations);
-    expect(result.current.activity.data?.items.map((entry) => entry.id)).toEqual(['ev_1', 'ev_2', 'ev_3']);
+    expect(result.current.activity.data?.map((entry) => entry.id)).toEqual(['ev_1', 'ev_2', 'ev_3']);
     expect(result.current.usage.data).toEqual([{ state_id: 'std_progress', items: 2 }]);
     expect(api.calls.map((call) => `${call.method} ${decodeURIComponent(call.url)}`).sort()).toEqual([
       'GET /api/v1/state-usage?project=WEB',
+      'GET /api/v1/work-items/WEB-47/comments',
       'GET /api/v1/work-items/WEB-47/history',
-      'GET /api/v1/work-items/WEB-47?include=children,relations,type,workflow',
+      'GET /api/v1/work-items/WEB-47?include=children,relations,type,workflow,attachments',
       'POST /api/v1/work-items/query',
     ]);
     expect(api.calls.find((call) => call.method === 'POST')!.body).toEqual({ shorthand: { project: 'WEB' } });
@@ -123,8 +124,11 @@ describe('reading', () => {
     const { result } = renderHook(() => useActivity('WEB-47'), { wrapper });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data?.items.map((entry) => entry.id)).toEqual(['ev_1', 'ev_2', 'ev_3']);
-    expect(api.calls.map((call) => call.url)).toEqual(['/api/v1/work-items/WEB-47/history', '/api/v1/work-items/WEB-47/history?cursor=next']);
+    expect(result.current.data?.map((entry) => entry.id)).toEqual(['ev_1', 'ev_2', 'ev_3']);
+    expect(api.calls.map((call) => call.url).filter((url) => url.includes('/history'))).toEqual([
+      '/api/v1/work-items/WEB-47/history',
+      '/api/v1/work-items/WEB-47/history?cursor=next',
+    ]);
   });
 
   it('waits while it lacks a reference or is told to', () => {

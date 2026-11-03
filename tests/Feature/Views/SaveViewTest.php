@@ -125,6 +125,20 @@ it('takes a known icon or one emoji, nothing else', function (mixed $icon, bool 
     'no text' => [['bug'], false],
 ]);
 
+it('takes an emoji with a skin tone, a flag and a keycap as icon', function () use ($input) {
+    $ida = User::factory()->create();
+
+    foreach (['👍🏽', '🇩🇪', "1\u{FE0F}\u{20E3}", "\u{1F3F4}\u{E0067}\u{E0062}\u{E0073}\u{E0063}\u{E0074}\u{E007F}"] as $icon) {
+        expect(SaveView::run(actor($ida), $input(['icon' => $icon]))->refresh()->icon)->toBe($icon);
+    }
+});
+
+it('refuses © as icon', function () use ($input) {
+    $save = fn () => SaveView::run(actor(User::factory()->create()), $input(['icon' => "\u{00A9}"]));
+
+    expect(invalidOf($save))->toBe(['icon' => [__('field.icon.invalid')]]);
+});
+
 it('knows the icons the interface draws', function () {
     $source = (string) file_get_contents(repo_path('resources/js/components/ui/ViewIcon.tsx'));
     preg_match('/VIEW_ICONS[^{]*\{(.*?)\n\};/s', $source, $block);

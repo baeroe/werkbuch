@@ -6,7 +6,8 @@
  * reason (the pickers' read-only look).
  *
  * Rich text properties get the editor here, the one place for their richer documents (lists and forms edit plain
- * paragraphs only, R17): they save after a short pause in typing, on ⌘↵ and when the focus leaves them.
+ * paragraphs only, R17), in the project of the item: `/`, `@` its people, `#` items, pictures and files uploaded into
+ * it. They save after a short pause in typing, on ⌘↵ and when the focus leaves them.
  */
 
 import { RotateCw } from 'lucide-react';
@@ -159,6 +160,7 @@ function RichTextProperty({ item, property, required }: { item: WorkItem; proper
             }}
             onSubmit={() => save.current()}
             preset="description"
+            projectId={item.project_id}
             label={property.label}
             placeholder={`${property.label} …`}
             invalid={error !== null}

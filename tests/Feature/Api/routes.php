@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\Attachment;
+use App\Models\Comment;
 use App\Models\Label;
 use App\Models\Property;
 use App\Models\RelationType;
@@ -7,6 +9,7 @@ use App\Models\Resolution;
 use App\Models\Workflow;
 use App\Models\WorkItemRelation;
 use App\Models\WorkItemType;
+use Illuminate\Http\UploadedFile;
 use Tests\Feature\Access\MatrixWorld;
 
 /*
@@ -94,7 +97,20 @@ return [
         'source_id' => $w->item('project_admin')->id,
         'target_id' => $w->item('project_admin')->id,
     ])->id]],
+    'list the comments of a work item' => ['GET', '/api/v1/work-items/{item}/comments', 'params' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key]],
+    'comment on a work item' => ['POST', '/api/v1/work-items/{item}/comments', 'params' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key], 'body' => ['body' => 'Matrix']],
+    'show a comment' => ['GET', '/api/v1/comments/{comment}', 'params' => fn (MatrixWorld $w) => ['comment' => Comment::factory()->for($w->item('project_admin'), 'workItem')->create()->id]],
+    // the tokens are the org admin's: their own comment
+    'edit a comment' => ['PATCH', '/api/v1/comments/{comment}', 'params' => fn (MatrixWorld $w) => ['comment' => Comment::factory()->for($w->item('project_admin'), 'workItem')->create(['author_id' => $w->account('org_admin')->id])->id], 'body' => ['body' => 'Matrix']],
+    'delete a comment' => ['DELETE', '/api/v1/comments/{comment}', 'params' => fn (MatrixWorld $w) => ['comment' => Comment::factory()->for($w->item('project_admin'), 'workItem')->create()->id]],
+    'react to a comment' => ['PUT', '/api/v1/comments/{comment}/reactions', 'params' => fn (MatrixWorld $w) => ['comment' => Comment::factory()->for($w->item('project_admin'), 'workItem')->create()->id], 'body' => ['emoji' => '👍']],
+    'take back a reaction' => ['DELETE', '/api/v1/comments/{comment}/reactions', 'params' => fn (MatrixWorld $w) => ['comment' => Comment::factory()->for($w->item('project_admin'), 'workItem')->create()->id], 'body' => ['emoji' => '👍']],
     'search items, projects, people and views' => ['GET', '/api/v1/search'],
+    'list who can be mentioned' => ['GET', '/api/v1/mentions', 'body' => ['project' => 'WEB']],
+    'resolve references' => ['GET', '/api/v1/references', 'body' => ['items' => '01jbz7m0000000000000000000']],
+    'upload an attachment' => ['POST', '/api/v1/attachments', 'body' => ['project_id' => 'WEB', 'kind' => 'inline', 'file' => UploadedFile::fake()->createWithContent('matrix.txt', 'Matrix')]],
+    'show an attachment' => ['GET', '/api/v1/attachments/{attachment}', 'params' => fn (MatrixWorld $w) => ['attachment' => Attachment::factory()->forItem($w->item('project_admin'))->create()->id]],
+    'delete an attachment' => ['DELETE', '/api/v1/attachments/{attachment}', 'params' => fn (MatrixWorld $w) => ['attachment' => Attachment::factory()->forItem($w->item('project_admin'), 'file')->create()->id]],
     'list views' => ['GET', '/api/v1/views'],
     'create a view' => ['POST', '/api/v1/views', 'body' => [
         'name' => 'Matrix', 'icon' => 'layers', 'filter' => ['version' => 1, 'conditions' => []],

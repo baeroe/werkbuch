@@ -4,6 +4,7 @@ import '../css/app.css';
 import { createInertiaApp, router } from '@inertiajs/react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import type { ComponentType } from 'react';
+import { setAttachmentLimit } from '@/api/attachments';
 import { setSignedIn } from '@/api/http';
 import { Toaster } from '@/components/ui/Toaster';
 import { TooltipProvider } from '@/components/ui/Tooltip';
@@ -27,6 +28,7 @@ router.on('navigate', (event) => {
 
   // a 401 reloads the page only where somebody was signed in: a guest page would reload for ever
   setSignedIn(props.auth.user !== null);
+  setAttachmentLimit(props.features.attachments_max_mb);
 });
 
 // A visit that replaces the page (`router.reload()` after saving the profile or the organisation) ends without
@@ -48,6 +50,7 @@ void createInertiaApp({
     initI18n(props);
     lastUserId = props.auth.user?.id ?? null;
     setSignedIn(props.auth.user !== null);
+    setAttachmentLimit(props.features.attachments_max_mb);
 
     return (
       <QueryClientProvider client={queryClient}>

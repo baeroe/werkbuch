@@ -7,6 +7,19 @@ use App\Actions\Account\DisableTwoFactor;
 use App\Actions\Account\EnableTwoFactor;
 use App\Actions\Account\GetTwoFactor;
 use App\Actions\Account\RegenerateRecoveryCodes;
+use App\Actions\Attachments\DeleteAttachment;
+use App\Actions\Attachments\GetAttachment;
+use App\Actions\Attachments\PruneAttachments;
+use App\Actions\Attachments\PruneUnownedAttachments;
+use App\Actions\Attachments\ShowAttachment;
+use App\Actions\Attachments\UploadAttachment;
+use App\Actions\Comments\AddComment;
+use App\Actions\Comments\AddReaction;
+use App\Actions\Comments\DeleteComment;
+use App\Actions\Comments\EditComment;
+use App\Actions\Comments\GetComment;
+use App\Actions\Comments\ListComments;
+use App\Actions\Comments\RemoveReaction;
 use App\Actions\Favorites\ListFavorites;
 use App\Actions\Favorites\ToggleFavorite;
 use App\Actions\Invitations\InviteUser;
@@ -39,6 +52,8 @@ use App\Actions\RelationTypes\SaveRelationType;
 use App\Actions\Resolutions\DeleteResolution;
 use App\Actions\Resolutions\ListResolutions;
 use App\Actions\Resolutions\SaveResolution;
+use App\Actions\RichText\ListMentionables;
+use App\Actions\RichText\ResolveReferences;
 use App\Actions\Search\QuerySearch;
 use App\Actions\Tokens\CreateToken;
 use App\Actions\Tokens\ListTokens;
@@ -81,6 +96,9 @@ use App\Actions\WorkItemTypes\DeleteWorkItemType;
 use App\Actions\WorkItemTypes\ListWorkItemTypes;
 use App\Actions\WorkItemTypes\SaveWorkItemType;
 use App\Events\EventType;
+use App\Models\Attachment;
+use App\Models\Comment;
+use App\Models\CommentReaction;
 use App\Models\Label;
 use App\Models\Property;
 use App\Models\RelationType;
@@ -90,6 +108,7 @@ use App\Models\Workflow;
 use App\Models\WorkItemRelation;
 use App\Models\WorkItemType;
 use App\Support\Actor;
+use Illuminate\Http\UploadedFile;
 use Laravel\Fortify\Actions\EnableTwoFactorAuthentication;
 use PragmaRX\Google2FA\Google2FA;
 use Tests\Feature\Access\MatrixWorld;
@@ -151,6 +170,60 @@ return [
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => UpdateOrganization::run($a, ['name' => 'Neu']),
         'allowed' => ['org_admin', 'default_bot'],
         'event' => EventType::OrganizationUpdated,
+    ],
+    // a file of the file list (`item.edit`); an upload into a text (`item.comment`, viewers too, A234) is
+    // UploadAttachmentTest's: one row per action (K10)
+    'UploadAttachment' => [
+        'action' => UploadAttachment::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => UploadAttachment::run($a, [
+            'project_id' => $w->project($column)->id, 'kind' => 'file', 'work_item_id' => $w->item($column)->id,
+        ], UploadedFile::fake()->createWithContent('matrix.txt', 'Matrix')),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::WorkItemUpdated,
+    ],
+    // a file of the file list (`item.edit`); an unowned upload (its uploader) and a picture of a text (409 for all) are
+    // DeleteAttachmentTest's
+    'DeleteAttachment' => [
+        'action' => DeleteAttachment::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => DeleteAttachment::run($a, Attachment::factory()->forItem($w->item($column), 'file')
+            ->stored('Matrix', 'text/plain', 'matrix.txt')->create()),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::WorkItemUpdated,
+    ],
+    'GetAttachment' => [
+        'action' => GetAttachment::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetAttachment::run($a, Attachment::factory()->forItem($w->item($column))->create()),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    'ShowAttachment' => [
+        'action' => ShowAttachment::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ShowAttachment::run($a, Attachment::factory()->forItem($w->item($column))
+            ->stored((string) base64_decode(explode(',', imageDataUrl())[1]), 'image/png', 'matrix.png')->create()),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    // the work of the hourly job PruneUnownedAttachmentsJob: uploads nobody owns, older than a day, without an event (A239)
+    'PruneUnownedAttachments' => [
+        'action' => PruneUnownedAttachments::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            Attachment::factory()->create(['project_id' => $w->web->id, 'uploaded_by' => $w->account('project_member')->id, 'created_at' => now()->subDays(2)]);
+
+            return PruneUnownedAttachments::run($a, now()->subDay());
+        },
+        'system' => true,
+    ],
+    // the work of app:prune-attachments: pictures their text no longer names, without an event (A239)
+    'PruneAttachments' => [
+        'action' => PruneAttachments::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            Attachment::factory()->forItem($w->item('project_member'))->create(['uploaded_by' => $w->account('project_member')->id, 'created_at' => now()->subDays(2)]);
+
+            return PruneAttachments::run($a, 1, false);
+        },
+        'system' => true,
     ],
     'ShowMedia' => [
         'action' => ShowMedia::class,
@@ -360,6 +433,62 @@ return [
         'hidden' => ['outsider_private'],
         'event' => EventType::WorkItemSubscribed,
     ],
+    // comments: whoever reads the item (`item.comment`, viewers too)
+    'ListComments' => [
+        'action' => ListComments::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListComments::run($a, $w->item($column), []),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    'AddComment' => [
+        'action' => AddComment::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => AddComment::run($a, $w->item($column), ['body' => 'Matrix']),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+        'event' => EventType::CommentCreated,
+    ],
+    'GetComment' => [
+        'action' => GetComment::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetComment::run($a, Comment::factory()->for($w->item($column), 'workItem')->create(['author_id' => $w->target->id])),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    // the column's own comment: only its author edits it (an admin is refused another's, EditCommentTest)
+    'EditComment' => [
+        'action' => EditComment::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => EditComment::run($a, Comment::factory()->for($w->item($column), 'workItem')->create(['author_id' => $a->user->id]), ['body' => 'Matrix']),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+        'event' => EventType::CommentUpdated,
+    ],
+    // another's comment: the admins of the project, org admins included (A241); the own one is DeleteCommentTest's
+    'DeleteComment' => [
+        'action' => DeleteComment::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => DeleteComment::run($a, Comment::factory()->for($w->item($column), 'workItem')->create(['author_id' => $w->target->id])),
+        'allowed' => $projectAdmins,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::CommentDeleted,
+    ],
+    // reactions: whoever may comment (`item.comment`, viewers too); the column's own emoji
+    'AddReaction' => [
+        'action' => AddReaction::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => AddReaction::run($a, Comment::factory()->for($w->item($column), 'workItem')->create(['author_id' => $w->target->id]), ['emoji' => '👍']),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+        'event' => EventType::CommentReactionAdded,
+    ],
+    'RemoveReaction' => [
+        'action' => RemoveReaction::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $comment = Comment::factory()->for($w->item($column), 'workItem')->create(['author_id' => $w->target->id]);
+            CommentReaction::query()->create(['comment_id' => $comment->id, 'user_id' => $a->user->id, 'emoji' => '👍']);
+
+            return RemoveReaction::run($a, $comment, ['emoji' => '👍']);
+        },
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+        'event' => EventType::CommentReactionRemoved,
+    ],
     'ListRelations' => [
         'action' => ListRelations::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListRelations::run($a, $w->item($column)),
@@ -522,6 +651,18 @@ return [
     'QuerySearch' => [
         'action' => QuerySearch::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => QuerySearch::run($a, ['q' => 'Matrix']),
+        'allowed' => $everyone,
+    ],
+    'ListMentionables' => [
+        'action' => ListMentionables::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListMentionables::run($a, ['project' => $w->project($column)->identifier]),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    // an item the account does not see is left out, never a 404 (A230)
+    'ResolveReferences' => [
+        'action' => ResolveReferences::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ResolveReferences::run($a, ['items' => [$w->item($column)->id]]),
         'allowed' => $everyone,
     ],
     'ListViews' => [

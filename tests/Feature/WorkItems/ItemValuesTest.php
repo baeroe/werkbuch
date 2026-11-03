@@ -64,7 +64,7 @@ it('takes a valid value of every field type and refuses an invalid one at its ke
         'link' => ' https://example.com/straße ',
         'owner' => strtoupper($lene->id),
         'team' => [$lene->id],
-        'notes' => '**Wichtig**',
+        'notes' => Document::fromMarkdown('**Wichtig**', new MarkdownContext),
     ]))->toBe([
         'note' => 'Rückruf',
         'hours' => 3.5,
@@ -90,6 +90,10 @@ it('takes a valid value of every field type and refuses an invalid one at its ke
         'owner' => ['lene', __('field.values.member', ['label' => 'Owner'])],
         'notes' => [42, __('field.values.rich_text', ['label' => 'Notizen'])],
     ];
+    // rich text comes only as a Document read by documents() before the lock, with the rules of saving (K9)
+    foreach (['**Wichtig**', RichTextFixtures::web47Steps()] as $unread) {
+        expect(invalidOf(fn () => $check(['notes' => $unread])))->toBe(['values.notes' => [__('field.values.rich_text', ['label' => 'Notizen'])]]);
+    }
     foreach ($refused as $key => [$value, $message]) {
         expect(invalidOf(fn () => $check([$key => $value])))->toBe(["values.{$key}" => [$message]], $key);
     }
@@ -141,7 +145,7 @@ it('removes an emptied value, and refuses to empty a required one only when it h
     [$project, $type, $properties] = $world();
     $type->typeProperties()->where('property_id', $properties['note']->id)->update(['required' => true]);
 
-    expect(ItemValues::check($project, $type, ['hours' => null, 'tags' => [], 'notes' => RichTextFixtures::doc(RichTextFixtures::p())], ['hours' => 2, 'tags' => ['x'], 'notes' => ['type' => 'doc']], 'update'))
+    expect(ItemValues::check($project, $type, ['hours' => null, 'tags' => [], 'notes' => Document::fromJson(RichTextFixtures::doc(RichTextFixtures::p()))], ['hours' => 2, 'tags' => ['x'], 'notes' => ['type' => 'doc']], 'update'))
         ->toBe([])
         // the property became required after the item was created: it stays empty until somebody fills it
         ->and(ItemValues::check($project, $type, ['note' => '  '], [], 'update'))->toBe([])
@@ -150,29 +154,32 @@ it('removes an emptied value, and refuses to empty a required one only when it h
         ->toBe(['values.note' => [__('field.values.required', ['label' => 'Notiz'])]]);
 });
 
-it('reads rich text as Markdown or JSON, and refuses what is no document or too long', function () use ($world) {
+it('takes rich text as a document and leaves an empty one out', function () use ($world) {
     [$project, $type] = $world();
     $check = fn (mixed $notes) => ItemValues::check($project, $type, ['notes' => $notes], [], 'create');
 
-    expect($check(RichTextFixtures::web47Steps()))->toBe(['notes' => RichTextFixtures::web47Steps()])
+    expect($check(Document::fromJson(RichTextFixtures::web47Steps())))->toBe(['notes' => RichTextFixtures::web47Steps()])
         ->and($check(Document::fromMarkdown('Text', new MarkdownContext)))->toBe(['notes' => RichTextFixtures::doc(RichTextFixtures::p(RichTextFixtures::text('Text')))])
-        ->and($check(''))->toBe([])
-        ->and(invalidOf(fn () => $check(['type' => 'doc', 'content' => [['type' => 'iframe']]])))->toBe(['values.notes' => [__('field.values.rich_text', ['label' => 'Notizen'])]])
-        ->and(invalidOf(fn () => $check(str_repeat('a', Schema::MAX_BYTES + 1))))->toBe(['values.notes' => [__('field.rich_text.too_long')]]);
+        ->and($check(Document::fromMarkdown('', new MarkdownContext)))->toBe([])
+        ->and($check(null))->toBe([]);
 });
 
 it('reads the rich text values into documents before any lock, and only those', function () use ($world) {
-    [$project] = $world();
-    $ctx = new MarkdownContext($project);
+    [$project, , , $lene] = $world();
 
-    [$values, $errors] = ItemValues::documents(['notes' => '**Wichtig**', 'note' => '**bleibt**', 'unknown' => 'x', 0 => 'y'], $ctx);
+    [$values, $errors] = ItemValues::documents(['notes' => '**Wichtig**', 'note' => '**bleibt**', 'unknown' => 'x', 0 => 'y'], $project, $lene);
 
     expect($values['notes'])->toBeInstanceOf(Document::class)
         ->and($values['notes']->toMarkdown())->toBe('**Wichtig**')
         ->and(array_diff_key($values, ['notes' => true]))->toBe(['note' => '**bleibt**', 'unknown' => 'x', 0 => 'y'])
         ->and($errors)->toBe([])
-        ->and(ItemValues::documents(['notes' => ['type' => 'paragraph']], $ctx))->toBe([['notes' => null], ['values.notes' => [__('field.values.rich_text', ['label' => 'Notizen'])]]])
-        ->and(ItemValues::documents(['notes' => '  '], $ctx)[0])->toBe(['notes' => null]);
+        ->and(ItemValues::documents(['notes' => RichTextFixtures::web47Steps()], $project, $lene)[0]['notes']?->toJson())->toBe(RichTextFixtures::web47Steps())
+        ->and(ItemValues::documents(['notes' => ['type' => 'paragraph']], $project, $lene))->toBe([['notes' => null], ['values.notes' => [__('field.values.rich_text', ['label' => 'Notizen'])]]])
+        ->and(ItemValues::documents(['notes' => ['type' => 'doc', 'content' => [['type' => 'iframe']]]], $project, $lene)[1])->toBe(['values.notes' => [__('field.values.rich_text', ['label' => 'Notizen'])]])
+        ->and(ItemValues::documents(['notes' => 42], $project, $lene)[1])->toBe(['values.notes' => [__('field.values.rich_text', ['label' => 'Notizen'])]])
+        ->and(ItemValues::documents(['notes' => str_repeat('a', Schema::MAX_BYTES + 1)], $project, $lene)[1])->toBe(['values.notes' => [__('field.rich_text.too_long')]])
+        ->and(ItemValues::documents(['notes' => '  '], $project, $lene)[0])->toBe(['notes' => null])
+        ->and(ItemValues::documents(['notes' => null], $project, $lene)[0])->toBe(['notes' => null]);
 });
 
 it('stores a multiple choice as rows in position order and reads them back in it', function () use ($world, $options) {
@@ -192,7 +199,7 @@ it('reads every field type back as it was stored', function () use ($world, $opt
     $item = WorkItem::factory()->for($project)->create(['type_id' => $type->id]);
     $values = ItemValues::check($project, $type, [
         'note' => 'Rückruf', 'hours' => 2, 'count' => '7', 'size' => $options($properties['size'])[1], 'paid' => true,
-        'due' => '2026-10-31', 'link' => 'https://example.com', 'owner' => $lene->id, 'team' => [$lene->id], 'notes' => "# Plan\n\nText",
+        'due' => '2026-10-31', 'link' => 'https://example.com', 'owner' => $lene->id, 'team' => [$lene->id], 'notes' => Document::fromMarkdown("# Plan\n\nText", new MarkdownContext),
     ], [], 'create');
 
     ItemValues::store($item, $values, []);
@@ -207,7 +214,7 @@ it('reads every field type back as it was stored', function () use ($world, $opt
 it('stores the plain text of a rich text value', function () use ($world) {
     [$project, $type] = $world();
     $item = WorkItem::factory()->for($project)->create(['type_id' => $type->id]);
-    $values = ItemValues::check($project, $type, ['notes' => "# Plan\n\nErst **das**, dann\n\n- jenes", 'note' => 'Kurz'], [], 'create');
+    $values = ItemValues::check($project, $type, ['notes' => Document::fromMarkdown("# Plan\n\nErst **das**, dann\n\n- jenes", new MarkdownContext), 'note' => 'Kurz'], [], 'create');
 
     ItemValues::store($item, $values, []);
     $rows = WorkItemValue::query()->where('work_item_id', $item->id)->get()->keyBy(fn (WorkItemValue $row) => $row->value_json === null ? 'note' : 'notes');

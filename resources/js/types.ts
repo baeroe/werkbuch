@@ -267,11 +267,17 @@ export interface Relation {
   target_id: string;
 }
 
+/**
+ * A comment as the API sends it (A243): the text as stored Tiptap JSON (`body_json`, what the editor shows) and as
+ * Markdown for its reader (`body`, with current handles and keys). Reactions in the order of each emoji's first
+ * reaction, the people in the order they reacted.
+ */
 export interface Comment {
   id: string;
   work_item_id: string;
   author_id: string;
-  body: RichText;
+  body: string;
+  body_json: RichText;
   created_at: string;
   edited_at: string | null;
   reactions: { emoji: string; user_ids: string[] }[];
@@ -280,14 +286,22 @@ export interface Comment {
 export interface Attachment {
   id: string;
   project_id: string;
-  /** Null: uploaded for an item that is not saved yet. */
+  /** Null: uploaded for a text that is not saved yet; saving the text links it (A232). */
   owner: { type: 'work_item' | 'comment' | 'page' | 'template'; id: string } | null;
   /** `inline`: from the editor. `file`: from the file list of the item. */
   kind: 'inline' | 'file';
   filename: string;
+  /** Read from the content by the server, never the client's claim. */
   mime: string;
   size: number;
+  /** Whether a browser may show it as a picture (PNG, JPEG, GIF, WebP, AVIF); anything else downloads. */
+  inline: boolean;
+  /** The file (`/attachments/<id>`), for the session's cookie. */
   url: string;
+  /** A smaller picture (`/attachments/<id>/preview`) once the queue made one, otherwise null. */
+  preview_url: string | null;
+  uploaded_by: string;
+  created_at: string;
 }
 
 /** One entry of the event log: the source of the history and, in the real app, the outbox. */
@@ -306,6 +320,9 @@ export interface ItemEvent {
   reason: string | null;
   /** How it happened: `ui`, `api`, `mcp`, `automation`, `template`, `system`; `null` for events that recorded none. */
   via: string | null;
+  /** A change of a comment (`comment.updated`, `comment.deleted`): which one and whose; null for other events. */
+  comment_id: string | null;
+  comment_author_id: string | null;
   occurred_at: string;
 }
 
@@ -692,7 +709,7 @@ export interface WorkItemDetail {
   workflow: Workflow;
   children: WorkItem[];
   relations: RelationEntry[];
-  /** Empty until attachments come (Phase 7). */
+  /** The files of the item's file list (`kind: file`), oldest first. */
   attachments: Attachment[];
   /** Whether the signed-in account watches the item: `item.subscribed`. */
   subscribed: boolean;

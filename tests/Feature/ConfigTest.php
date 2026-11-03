@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Attachment;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
@@ -22,17 +23,14 @@ function setEnv(string $name, ?string $value): void
     }
 }
 
+// back to the values phpunit.xml forces, never to "unset": later tests would read the developer's .env
 afterEach(function () {
-    setEnv('ATTACHMENTS_MAX_MB', null);
-    setEnv('WEBHOOKS_ALLOW_PRIVATE', null);
+    setEnv('ATTACHMENTS_MAX_MB', '25');
+    setEnv('WEBHOOKS_ALLOW_PRIVATE', 'false');
 });
 
 it('has the documented defaults', function () {
-    // independent of the developer's .env
-    setEnv('ATTACHMENTS_MAX_MB', null);
-    setEnv('WEBHOOKS_ALLOW_PRIVATE', null);
-    $this->refreshApplication();
-
+    // phpunit.xml forces the values: no setEnv, no refresh
     expect(config('werkbuch.version'))->toBe('0.1.0-dev')
         ->and(config('werkbuch.attachments_max_mb'))->toBe(25)
         ->and(config('werkbuch.notification_mail_delay'))->toBe(5)
@@ -46,6 +44,20 @@ it('has the documented defaults', function () {
         ->and(config('werkbuch.rate_limits.password_reset_per_ip'))->toBe(6)
         ->and(config('werkbuch.rate_limits.password_update_per_ip'))->toBe(10)
         ->and(config('werkbuch.rate_limits.invitation_accept_per_ip'))->toBe(10);
+});
+
+it('has the documented defaults whatever .env says', function () {
+    // .env is loaded by Laravel; only the forced values of phpunit.xml keep it out of the tests
+    $forced = [];
+
+    foreach (simplexml_load_file(repo_path('phpunit.xml'))->php->env as $env) {
+        if ((string) $env['force'] === 'true') {
+            $forced[(string) $env['name']] = (string) $env['value'];
+        }
+    }
+
+    expect(array_intersect_key($forced, array_flip(['ATTACHMENTS_MAX_MB', 'WEBHOOKS_ALLOW_PRIVATE'])))
+        ->toBe(['ATTACHMENTS_MAX_MB' => '25', 'WEBHOOKS_ALLOW_PRIVATE' => 'false']);
 });
 
 it('reads the environment', function () {
@@ -67,7 +79,7 @@ it('keeps the search settings', function () {
         ->and(config('scout.identify'))->toBeFalse()
         ->and(config('scout.chunk'))->toBe(['searchable' => 500, 'unsearchable' => 500])
         ->and(array_keys(config('scout.meilisearch.index-settings')))->toBe([WorkItem::class, Project::class, User::class])
-        ->and($index(WorkItem::class)['searchableAttributes'])->toBe(['key', 'title', 'description'])
+        ->and($index(WorkItem::class)['searchableAttributes'])->toBe(['key', 'title', 'description', 'comments'])
         ->and($index(WorkItem::class)['filterableAttributes'])->toBe(['project_id', 'archived', 'type_id', 'state_category', 'assignee_id', 'label_ids'])
         ->and($index(WorkItem::class)['rankingRules'])->toBe(['words', 'typo', 'proximity', 'attribute', 'sort', 'exactness', 'updated_at:desc'])
         ->and($index(WorkItem::class)['typoTolerance'])->toBe(['disableOnAttributes' => ['key']])
@@ -81,4 +93,16 @@ it('keeps the search settings', function () {
             'filterableAttributes' => ['disabled', 'type'],
             'typoTolerance' => ['disableOnAttributes' => ['handle']],
         ]);
+});
+
+it('takes the one default of the attachment limit in both configs (T6-M6)', function () {
+    setEnv('ATTACHMENTS_MAX_MB', null);
+
+    expect((require base_path('config/werkbuch.php'))['attachments_max_mb'])->toBe(Attachment::DEFAULT_MAX_MB)
+        ->and((require base_path('config/media-library.php'))['max_file_size'])->toBe(Attachment::DEFAULT_MAX_MB * 1024 * 1024);
+
+    setEnv('ATTACHMENTS_MAX_MB', '40');
+
+    expect((require base_path('config/werkbuch.php'))['attachments_max_mb'])->toBe(40)
+        ->and((require base_path('config/media-library.php'))['max_file_size'])->toBe(40 * 1024 * 1024);
 });

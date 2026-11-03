@@ -112,6 +112,12 @@ it('reads a document as blank the way the clickdummy does', function () {
         ->and(ItemValue::isBlankDoc(['type' => 'mention']))->toBeFalse();
 });
 
+it('reads a document of a reference, an image or a file alone as a value (Phase 7)', function () {
+    foreach (['reference', 'image', 'attachment'] as $node) {
+        expect(ItemValue::isBlankDoc(['type' => 'doc', 'content' => [['type' => 'paragraph', 'content' => [['type' => $node]]]]]))->toBeFalse($node);
+    }
+});
+
 it('trims text with PHP, so a no-break space alone is not empty', function () {
     // the clickdummy's trim() drops every Unicode blank; REST requests lose them to TrimStrings before
     expect(ItemValue::isEmpty("\u{00A0}"))->toBeFalse()

@@ -1,5 +1,6 @@
 <?php
 
+use App\Jobs\PruneUnownedAttachmentsJob;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -11,3 +12,6 @@ Artisan::command('inspire', function () {
 // the outbox: events whose dispatch was lost after the commit; the lock expires after 5 minutes (the default 24 hours
 // would outlive a crashed run in the cache)
 Schedule::command('app:redispatch-events')->everyMinute()->withoutOverlapping(5);
+
+// uploads nobody owns, older than 24 hours (A239); the scheduler only puts the job on the queue, which takes a moment
+Schedule::job(new PruneUnownedAttachmentsJob)->hourly()->withoutOverlapping(60);

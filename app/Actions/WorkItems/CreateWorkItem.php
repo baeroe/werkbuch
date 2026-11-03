@@ -19,10 +19,12 @@ use App\Models\WorkflowState;
 use App\Models\WorkItem;
 use App\Models\WorkItemSubscriber;
 use App\Support\Actor;
+use App\Support\AttachmentLinks;
 use App\Support\CatalogLock;
 use App\Support\ItemInput;
 use App\Support\ItemValues;
 use App\Support\MemberInput;
+use App\Support\Mentions;
 use DateTimeImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -33,6 +35,9 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * Creates a work item (members and admins of the project, `item.create`) in the initial state of the project's
  * workflow: the next number of the project (never used again, even when the item goes), a rank after its last item,
  * labels, values, the creator (a person) and the assignee (a person) as watchers, and the event `work_item.created`.
+ * The description and the rich text values went through the rules of saving before the locks (ItemInput::documents());
+ * their uploads now belong to the item (AttachmentLinks), the people they mention watch it, `meta.mentioned` names
+ * everyone they mention and each bot among them gets `bot.mentioned` (Mentions, A244).
  * Another state named in the input is a move from the initial one, checked before anything is written and made after
  * the creation (TransitionWorkItem::move(), P32). The rich text is read before any lock; then the organization shared
  * (no type or property goes meanwhile), then the project `for update` (one number and one last rank at a time, P1), a
@@ -64,9 +69,9 @@ final class CreateWorkItem
         Authorize::check($actor, 'create', WorkItem::class, $project);
 
         // reading Markdown is the expensive step: never under a lock
-        [$input, $refused] = ItemInput::documents($input, $project);
+        [$input, $refused, $texts] = ItemInput::documents($input, $project, $actor);
 
-        return DB::transaction(function () use ($actor, $project, $input, $refused): WorkItem {
+        return DB::transaction(function () use ($actor, $project, $input, $refused, $texts): WorkItem {
             CatalogLock::share();
             $project = MemberInput::lock($project);
 
@@ -120,13 +125,16 @@ final class CreateWorkItem
 
             $item->labels()->sync($fields['label_ids']);
             ItemValues::store($item, $fields['values'], []);
+            AttachmentLinks::link($item, $project, $actor->user, $texts);
 
             self::watch($item, $actor->user, 'created');
             if ($fields['assignee_id'] !== null && $fields['assignee_id'] !== $actor->user->id) {
                 self::watch($item, User::query()->findOrFail($fields['assignee_id']), 'assigned');
             }
+            $mentioned = Mentions::anew($item, [], $texts, $actor->user);
 
-            EventRecorder::record(EventType::WorkItemCreated, $actor, $item, $project, ['title' => ['old' => null, 'new' => $item->title]]);
+            EventRecorder::record(EventType::WorkItemCreated, $actor, $item, $project, ['title' => ['old' => null, 'new' => $item->title]], Mentions::meta($mentioned));
+            UpdateWorkItem::announceBots($actor, $item, $mentioned);
 
             // another state is a move from the initial one, after the creation: the history shows both (P32)
             if ($target->id !== $initial->id) {

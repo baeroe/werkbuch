@@ -181,6 +181,39 @@ describe('EmojiPicker', () => {
     expect(onPick).toHaveBeenCalledWith('🇩🇪');
   });
 
+  it.each([
+    ['a copyright sign', '\u{00A9}'],
+    ['two emoji', '👍👍'],
+    ['an emoji after a word', 'rakete 🚀'],
+  ])('does not offer %s that the server refuses', (_, typed) => {
+    const onPick = vi.fn();
+    render(<EmojiPicker onPick={onPick} />);
+
+    fireEvent.change(search(), { target: { value: typed } });
+    fireEvent.keyDown(search(), { key: 'Enter' });
+
+    expect(onPick).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Dieses Emoji verwenden' })).toBeNull();
+  });
+
+  it('offers no typed emoji longer than the field takes (T2-M1)', () => {
+    // a kiss with two skin tones: one emoji of 35 bytes, more than the 32 of a view icon
+    const kiss = '\u{1F469}\u{1F3FD}\u{200D}\u{2764}\u{FE0F}\u{200D}\u{1F48B}\u{200D}\u{1F468}\u{1F3FB}';
+    expect(new TextEncoder().encode(kiss).length).toBe(35);
+    const onPick = vi.fn();
+    const { unmount } = render(<EmojiPicker onPick={onPick} maxBytes={32} />);
+    fireEvent.change(search(), { target: { value: kiss } });
+    fireEvent.keyDown(search(), { key: 'Enter' });
+    expect(onPick).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Dieses Emoji verwenden' })).toBeNull();
+    unmount();
+
+    // without a limit (reactions) it is one emoji like any other
+    render(<EmojiPicker onPick={onPick} />);
+    fireEvent.change(search(), { target: { value: kiss } });
+    expect(screen.getByRole('button', { name: 'Dieses Emoji verwenden' })).toBeTruthy();
+  });
+
   it('does not take a plain digit or a number sign as an emoji', () => {
     const onPick = vi.fn();
     render(<EmojiPicker onPick={onPick} />);

@@ -21,7 +21,9 @@
  * Components never call `@/api` directly, only these hooks. Resources of later phases have their keys here already.
  * The work items have no `meta` key: progress, blocked and blocking come with every item (P7). `stateUsage` counts the
  * items per state for the mapping of states: whatever moves items between states, creates or deletes them makes it
- * stale (the item mutations, saving and switching a workflow).
+ * stale (the item mutations, saving and switching a workflow). The activity of an item mixes its history and its
+ * comments (A247): `qk.activity` holds the history, `qk.comments` the comments; whatever changes a comment makes both
+ * stale.
  */
 
 function resource<Name extends string>(name: Name) {
@@ -55,6 +57,15 @@ export const qk = {
   stateUsage: resource('state-usage'),
   attachments: resource('attachments'),
   activity: resource('activity'),
+  /** The comments of an item: `qk.comments.list({ item, pages: 'all' })`; `reaction` is the mutation key of the reactions. */
+  comments: { ...resource('comments'), reaction: ['comments', 'reaction'] as const },
+  /** Who can be mentioned with `@`: `qk.mentions.list({ project, q })`. */
+  mentions: resource('mentions'),
+  /** The item behind a stored reference, one entry per id (`useItemRef`); a hidden one is an error 404. */
+  references: {
+    all: ['references'] as const,
+    item: (id: string) => ['references', 'item', id] as const,
+  },
   views: resource('views'),
   favorites: resource('favorites'),
   notifications: resource('notifications'),

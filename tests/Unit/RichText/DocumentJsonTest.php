@@ -40,7 +40,9 @@ it('has every node and mark of the schema in the fixture', function () {
             $walk($child);
         }
     };
+    // the nodes of Phase 7 join everyNode() with their Markdown (Task 5)
     $walk(F::everyNode());
+    $walk(F::customNodes());
 
     expect(array_values(array_diff(Schema::NODES, $found['nodes'])))->toBe([])
         ->and(array_values(array_diff(Schema::MARKS, $found['marks'])))->toBe([]);
@@ -61,9 +63,8 @@ it('reads attributes as the editor does: defaults for missing ones, unknown ones
 });
 
 it('refuses an unknown node', function () use ($reason) {
-    // Phase 7 takes mentions in
-    expect($reason(F::doc(F::p(['type' => 'mention', 'attrs' => ['id' => 'x']]))))->toBe('node')
-        ->and($reason(F::doc(['type' => 'image'])))->toBe('node');
+    expect($reason(F::doc(F::p(['type' => 'emoji', 'attrs' => ['name' => 'rocket']]))))->toBe('node')
+        ->and($reason(F::doc(['type' => 'video'])))->toBe('node');
 });
 
 it('refuses an unknown mark', function () use ($reason) {
@@ -96,9 +97,9 @@ it('refuses a document of the wrong shape', function (array $json) use ($reason)
     'a mark in code' => [F::doc(['type' => 'codeBlock', 'content' => [F::text('x', 'bold')]])],
     'attributes that are no object' => [F::doc(['type' => 'heading', 'attrs' => 'h2', 'content' => [F::text('x')]])],
     'a heading level beyond three' => [F::doc(['type' => 'heading', 'attrs' => ['level' => 4], 'content' => [F::text('x')]])],
-    'a list type that is no text' => [F::doc(['type' => 'orderedList', 'attrs' => ['type' => 1], 'content' => []])],
+    'a list type that is no text' => [F::doc(['type' => 'orderedList', 'attrs' => ['type' => 1], 'content' => [['type' => 'listItem', 'content' => [F::p('x')]]]])],
     'a checked that is text' => [F::doc(['type' => 'taskList', 'content' => [['type' => 'taskItem', 'attrs' => ['checked' => 'true'], 'content' => [F::p('x')]]]])],
-    'an unknown alignment' => [F::doc(['type' => 'table', 'content' => [['type' => 'tableRow', 'content' => [['type' => 'tableCell', 'attrs' => ['align' => 'justify']]]]]])],
+    'an unknown alignment' => [F::doc(['type' => 'table', 'content' => [['type' => 'tableRow', 'content' => [['type' => 'tableCell', 'attrs' => ['align' => 'justify'], 'content' => [F::p('x')]]]]]])],
     'a link title that is no text' => [F::doc(F::p(['type' => 'text', 'text' => 'x', 'marks' => [['type' => 'link', 'attrs' => ['href' => 'https://example.com', 'title' => 1]]]]))],
 ]);
 
@@ -156,6 +157,114 @@ it('takes the attributes of every kind it knows', function () {
     );
 
     expect(Document::fromJson($json)->toJson())->toBe($json);
+});
+
+it('merges neighbouring text nodes with the same marks', function () {
+    $link = fn (string $href, string $text) => ['type' => 'text', 'marks' => [['type' => 'link', 'attrs' => F::link($href)]], 'text' => $text];
+    $marked = fn (string $text, string ...$marks) => ['type' => 'text', 'marks' => array_map(fn (string $mark) => ['type' => $mark], $marks), 'text' => $text];
+
+    expect(Document::fromJson(F::doc(F::p(
+        F::text('Das '), F::text('Formular'), F::text(' muss', 'bold'), F::text(' senden', 'bold'),
+        ['type' => 'hardBreak'], F::text('neue '), F::text('Zeile'),
+    )))->toJson())->toBe(F::doc(F::p(F::text('Das Formular'), F::text(' muss senden', 'bold'), ['type' => 'hardBreak'], F::text('neue Zeile'))))
+        // the same marks in another order are the same marks
+        ->and(Document::fromJson(F::doc(F::p($marked('a', 'italic', 'bold'), $marked('b', 'bold', 'italic'))))->toJson())
+        ->toBe(F::doc(F::p($marked('ab', 'bold', 'italic'))))
+        // a link is the same mark only with the same address
+        ->and(Document::fromJson(F::doc(F::p($link('https://example.com', 'Do'), $link('https://example.com', 'ku'), $link('https://example.org', '!'))))->toJson())
+        ->toBe(F::doc(F::p($link('https://example.com', 'Doku'), $link('https://example.org', '!'))))
+        // a link that loses its mark is plain text like its neighbours
+        ->and(Document::fromJson(F::doc(F::p(F::text('a'), $link('javascript:alert(1)', 'b'), F::text('c'))))->toJson())
+        ->toBe(F::doc(F::p(F::text('abc'))))
+        // other marks and other blocks stay apart
+        ->and(Document::fromJson(F::doc(F::p(F::text('a'), F::text('b', 'bold'), F::text('c')), F::p('d')))->toJson())
+        ->toBe(F::doc(F::p(F::text('a'), F::text('b', 'bold'), F::text('c')), F::p('d')));
+});
+
+it('orders marks like the editor', function () {
+    $marked = fn (string ...$marks) => F::doc(F::p(['type' => 'text', 'marks' => array_map(fn (string $mark) => $mark === 'link' ? ['type' => 'link', 'attrs' => F::link('https://example.com')] : ['type' => $mark], $marks), 'text' => 'x']));
+
+    // the editor's rank: link first (priority 1000), then StarterKit's order
+    expect(Schema::MARK_ORDER)->toBe(['link', 'bold', 'code', 'italic', 'strike'])
+        ->and(Schema::MARK_ORDER)->toEqualCanonicalizing(Schema::MARKS)
+        ->and(Document::fromJson($marked('italic', 'bold'))->toJson())->toBe($marked('bold', 'italic'))
+        ->and(Document::fromJson($marked('bold', 'link'))->toJson())->toBe($marked('link', 'bold'))
+        ->and(Document::fromJson($marked('strike', 'italic', 'code', 'bold', 'link'))->toJson())->toBe($marked('link', 'bold', 'code', 'italic', 'strike'));
+});
+
+it('drops a repeated mark', function () {
+    $text = fn (array ...$marks) => F::doc(F::p(['type' => 'text', 'marks' => $marks, 'text' => 'x']));
+    $link = fn (string $href) => ['type' => 'link', 'attrs' => F::link($href)];
+
+    expect(Document::fromJson($text(['type' => 'bold'], ['type' => 'italic'], ['type' => 'bold']))->toJson())->toBe($text(['type' => 'bold'], ['type' => 'italic']))
+        ->and(Document::fromJson($text($link('https://example.com'), $link('https://example.org')))->toJson())->toBe($text($link('https://example.com')))
+        // the first that stays: a link that loses its mark is no mark
+        ->and(Document::fromJson($text($link('javascript:alert(1)'), $link('https://example.org')))->toJson())->toBe($text($link('https://example.org')));
+});
+
+it('checks the content expressions of the editor', function (array $node, bool $fits) use ($reason) {
+    expect($reason(F::doc($node)))->toBe($fits ? null : 'shape');
+})->with(function () {
+    $li = fn (array ...$blocks) => ['type' => 'listItem', 'content' => $blocks];
+    $task = fn (array ...$blocks) => ['type' => 'taskItem', 'attrs' => ['checked' => false], 'content' => $blocks];
+    $list = ['type' => 'bulletList', 'content' => [$li(F::p('b'))]];
+    $cell = fn (string $type, array ...$blocks) => ['type' => $type, 'attrs' => ['colspan' => 1, 'rowspan' => 1, 'colwidth' => null, 'align' => null], 'content' => $blocks];
+    $table = fn (array ...$cells) => ['type' => 'table', 'content' => [['type' => 'tableRow', 'content' => $cells]]];
+
+    return [
+        'a list item of a paragraph and blocks' => [['type' => 'bulletList', 'content' => [$li(F::p('a'), $list, F::p('c'))]], true],
+        'a list item that starts with a list' => [['type' => 'bulletList', 'content' => [$li($list)]], false],
+        'a list item without blocks' => [['type' => 'bulletList', 'content' => [$li()]], false],
+        'a task item of a paragraph and blocks' => [['type' => 'taskList', 'content' => [$task(F::p('a'), ['type' => 'blockquote', 'content' => [F::p('b')]])]], true],
+        'a task item that starts with a quote' => [['type' => 'taskList', 'content' => [$task(['type' => 'blockquote', 'content' => [F::p('b')]])]], false],
+        'a quote of blocks' => [['type' => 'blockquote', 'content' => [$list, F::p('a')]], true],
+        'an empty quote' => [['type' => 'blockquote'], false],
+        'a bullet list of items' => [$list, true],
+        'an empty bullet list' => [['type' => 'bulletList', 'content' => []], false],
+        'an ordered list of items' => [['type' => 'orderedList', 'attrs' => ['start' => 1, 'type' => null], 'content' => [$li(F::p('a'))]], true],
+        'an empty ordered list' => [['type' => 'orderedList', 'attrs' => ['start' => 1, 'type' => null]], false],
+        'a task list of items' => [['type' => 'taskList', 'content' => [$task(F::p('a'))]], true],
+        'an empty task list' => [['type' => 'taskList'], false],
+        'a table of rows' => [$table($cell('tableHeader', F::p('a')), $cell('tableCell', $list)), true],
+        'an empty table' => [['type' => 'table'], false],
+        'a table row without cells' => [['type' => 'table', 'content' => [['type' => 'tableRow']]], true],
+        'an empty cell' => [$table($cell('tableCell')), false],
+        'an empty header cell' => [$table($cell('tableHeader')), false],
+    ];
+});
+
+it('checks the content of a long document without running out of stack', function () use ($reason) {
+    // 10,000 empty paragraphs are 210 KB, below MAX_BYTES: a regular expression over them ran out of its JIT stack (4,500
+    // list items are 234 KB)
+    $empty = array_fill(0, 10000, ['type' => 'paragraph']);
+
+    expect($reason(F::doc(...$empty)))->toBeNull()
+        ->and($reason(F::doc(['type' => 'bulletList', 'content' => array_fill(0, 4500, ['type' => 'listItem', 'content' => [['type' => 'paragraph']]])])))->toBeNull()
+        // and still refuses what does not fit: a list item that starts with a quote, then many paragraphs
+        ->and($reason(F::doc(['type' => 'bulletList', 'content' => [['type' => 'listItem', 'content' => [['type' => 'blockquote', 'content' => [F::p('a')]], ...array_slice($empty, 0, 9000)]]]])))->toBe('shape');
+});
+
+it('refuses a list item that starts with a list', function () use ($reason) {
+    $item = ['type' => 'listItem', 'content' => [['type' => 'bulletList', 'content' => [['type' => 'listItem', 'content' => [F::p('a')]]]]]];
+
+    expect($reason(F::doc(['type' => 'bulletList', 'content' => [$item]])))->toBe('shape');
+});
+
+it('refuses an empty blockquote', function () use ($reason) {
+    expect($reason(F::doc(['type' => 'blockquote', 'content' => []])))->toBe('shape');
+});
+
+it('keeps a table row without cells', function () {
+    // Tiptap's row is `(tableCell | tableHeader)*`
+    $json = F::doc(['type' => 'table', 'content' => [['type' => 'tableRow']]]);
+
+    expect(Document::fromJson($json)->toJson())->toBe($json);
+});
+
+it('keeps an empty doc', function () {
+    expect(Document::fromJson(['type' => 'doc'])->toJson())->toBe(['type' => 'doc'])
+        ->and(Document::fromJson(['type' => 'doc', 'content' => []])->toJson())->toBe(['type' => 'doc'])
+        ->and(Document::fromJson(['type' => 'doc'])->isEmpty())->toBeTrue();
 });
 
 it('refuses deep nesting', function () use ($reason, $nested) {

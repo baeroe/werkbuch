@@ -19,10 +19,17 @@
  * on while the last save of a view that is gone was on its way is saved at once, not after the pause, so the guard
  * stays up until it answers.
  *
+ * Typed text the server does not hold yet is a draft of the visit (`lib/drafts.ts`, `description:<id>`, A251): leaving
+ * the page asks while it is there, and a save of a view that is gone that fails (5xx, no answer) keeps it there. The
+ * next time the item opens, the description shows it as unsaved ("Nicht gespeichert"), based on the version it was
+ * typed on, and saves it like any typing (A154/N2); one the server holds by then (the toast's retry went through) is
+ * forgotten. While a save of a view that is gone runs (`drafts.startSending`), a view opened meanwhile leaves the draft
+ * alone; should that save fail, the open view takes the draft over, and a view with nothing typed never lets go of it.
+ * Another person signing in forgets drafts, versions and conflicts (`drafts.onClear`).
+ *
  * Archived meanwhile, or the edit right gone while text is typed (A154): the editor gives way to the stored text, and
  * the unsaved text stays above it, read-only, with "Kopieren" and "Verwerfen"; it is not sent again (the server would
- * refuse it), and leaving the page asks while it stands. What it does not cover: a save of a view that is gone that
- * fails (5xx) lives on only in the retry of the error toast (deferred, see the rulings).
+ * refuse it), and leaving the page asks while it stands.
  */
 
 import { RotateCw } from 'lucide-react';
@@ -34,14 +41,16 @@ import { useEditReason } from '@/components/fields/itemData';
 import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
 import { toast } from '@/components/ui/toast';
-import { isEmptyDoc, RichTextEditor } from '@/editor/RichTextEditor';
+import { EMPTY_DOC, isEmptyDoc, RichTextEditor } from '@/editor/RichTextEditor';
 import { RichTextView } from '@/editor/RichTextView';
 import { useUpdateWorkItem } from '@/hooks/workItems';
+import { descriptionDraft, drafts, useDraft, useDraftSending } from '@/lib/drafts';
 import { t } from '@/lib/i18n';
+import { usePermissions } from '@/lib/permissions';
 import { docToText } from '@/lib/richtext';
 import { useUiStore } from '@/store/ui';
 import type { RichText, WorkItem, WorkItemDetail } from '@/types';
-import { focusWhenLost, Section, useUnsavedGuard } from './shared';
+import { focusWhenLost, Section } from './shared';
 
 /** How long typing pauses before the description saves. */
 export const DESCRIPTION_PAUSE_MS = 1200;
@@ -54,8 +63,12 @@ interface Conflict {
   current: WorkItem;
 }
 
+/** Object keys in one order: the editor writes `text` before `marks`, a document that went through the cache may not. */
+const sortedKeys = (_key: string, value: unknown) =>
+  value && typeof value === 'object' && !Array.isArray(value) ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : 1))) : value;
+
 /** A description as a save sends it (an empty document as null), for comparing. */
-const asSent = (doc: RichText | null | undefined): string => JSON.stringify(doc === undefined || isEmptyDoc(doc) ? null : doc);
+const asSent = (doc: RichText | null | undefined): string => JSON.stringify(doc === undefined || isEmptyDoc(doc) ? null : doc, sortedKeys);
 const same = (a: RichText | null | undefined, b: RichText | null | undefined) => asSent(a) === asSent(b);
 
 function conflictOf(error: unknown): Conflict | null {
@@ -68,6 +81,9 @@ function conflictOf(error: unknown): Conflict | null {
  * server said. Set when a save meets a conflict, also one that ran as the view closed; gone once it is resolved.
  */
 const openConflicts = new Map<string, { mine: RichText | null; message: string }>();
+
+/** The version each unsaved draft (`drafts`, `description:<id>`) was typed on, by item id. */
+const draftBases = new Map<string, number>();
 
 /** Saves of a description on their way, also of views that are gone already. */
 let pendingSaves = 0;
@@ -94,6 +110,13 @@ function dropConflict(id: string): void {
   syncLeaveGuard();
 }
 
+// another person signs in (`drafts.clear()`): the conflicts and versions of the one before go with their texts
+drafts.onClear(() => {
+  openConflicts.clear();
+  draftBases.clear();
+  syncLeaveGuard();
+});
+
 /** A conflict whose view is gone: the toast names the item, and "Öffnen" brings it back with the banner. */
 function announceLeftConflict(item: Pick<WorkItem, 'id' | 'key'>, message: string): void {
   toast({
@@ -107,33 +130,44 @@ function announceLeftConflict(item: Pick<WorkItem, 'id' | 'key'>, message: strin
 export function Description({ detail }: { detail: WorkItemDetail }) {
   const { item } = detail;
   const reason = useEditReason(item);
+  // while the rights load, `reason` says so: no banner then, whose "Verwerfen" would throw a kept text away (T18-M2)
+  const { loading } = usePermissions();
   const editable = useRef(reason === null);
   const update = useUpdateWorkItem();
   const stored = item.description_json;
+
+  const draftKey = descriptionDraft(item.id);
 
   // a conflict left open comes back with this window's version, unless the server holds that text by now
   const [reopened] = useState(() => {
     const open = openConflicts.get(item.id);
     return open && !same(open.mine, stored) ? open : null;
   });
-  const [draft, setDraft] = useState<RichText | null>(reopened ? reopened.mine : stored);
+  /** The item's draft and whether a save of it runs, also one of a view that is gone. */
+  const shared = useDraft(draftKey);
+  const saving = useDraftSending(draftKey);
+  // so does text an earlier view could not save (a failed save as it closed), unless the server holds it by now
+  const [kept] = useState(() => {
+    const text = drafts.get(draftKey);
+    return reopened || text === null || same(text, stored) ? null : text;
+  });
+  const [draft, setDraft] = useState<RichText | null>(reopened ? reopened.mine : (kept ?? stored));
   // against the stored item as it is now: "Neu laden" takes it, "Meine Fassung übernehmen" saves over its version
   const [conflict, setConflict] = useState<Conflict | null>(reopened && { message: reopened.message, current: item });
-  const [state, setState] = useState<SaveState>('idle');
+  const [state, setState] = useState<SaveState>(kept ? 'failed' : 'idle');
   /** A refusal of the text itself (422 at `description_json`, e.g. too long), shown under the editor. */
   const [error, setError] = useState<string | null>(null);
   const errorId = useId();
-  /** Typed text the server does not have yet: leaving or reloading the page asks first. */
-  const [unsaved, setUnsaved] = useState(reopened !== null);
-  useUnsavedGuard(unsaved || conflict !== null);
+  /** Typed text the server does not have yet (also kept in `drafts`: leaving or reloading the page asks first). */
+  const [unsaved, setUnsaved] = useState(reopened !== null || kept !== null);
   /** The draft as typed, for saves that run outside a render. */
   const latest = useRef(draft);
   /** The version the draft is based on. */
-  const base = useRef(item.description_version);
+  const base = useRef(kept ? (draftBases.get(item.id) ?? item.description_version) : item.description_version);
   /** What the server holds of this window's text (or what was taken over from it). */
   const held = useRef<RichText | null>(stored);
   /** Typed text the server does not have yet. Cleared only by a save that went through (or "Neu laden"). */
-  const dirty = useRef(reopened !== null);
+  const dirty = useRef(reopened !== null || kept !== null);
   const inFlight = useRef(false);
   const inConflict = useRef(reopened !== null);
   /** The answer of the last save this window made itself; any other answer of the mutation is a retry from its toast. */
@@ -152,10 +186,29 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
   });
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
+  /** Typed text the server does not have yet: kept as the item's draft with the version it is typed on. */
+  function keepDraft(doc: RichText | null) {
+    dirty.current = true;
+    draftBases.set(item.id, base.current);
+    // an emptied description is unsaved text as well
+    drafts.set(draftKey, doc ?? EMPTY_DOC);
+  }
+
+  /** Nothing typed is left unsaved (a save went through, "Neu laden", "Verwerfen"). */
+  function dropDraft() {
+    dirty.current = false;
+    draftBases.delete(item.id);
+    drafts.set(draftKey, null);
+    setUnsaved(false);
+  }
+
   // a conflict left open whose text the server took in the meantime: nothing left to offer
   useEffect(() => {
     if (!reopened) dropConflict(item.id);
-  }, [reopened, item.id]);
+    // a draft the server holds by now (or none): nothing to keep. Not while a save of a view that is gone runs: the
+    // cache shows its text already, and should the save fail, that text is all there is
+    if (!reopened && !kept && !drafts.sending(draftKey)) drafts.set(draftKey, null);
+  }, [reopened, kept, item.id, draftKey]);
 
   // a newer description from outside shows while nothing is typed here. While text is typed, nothing the cache shows
   // counts: a failed save rolls the item back, and the toast's retry shows its text before the server has it
@@ -167,6 +220,17 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
     setDraft(stored);
   }, [stored, item.description_version]);
 
+  // the save of a view that is gone failed while this one is open (the cache rolled back): its text is the draft here
+  useEffect(() => {
+    if (saving || shared === null || inConflict.current || inFlight.current || dirty.current || same(shared, stored)) return;
+    base.current = draftBases.get(item.id) ?? item.description_version;
+    latest.current = shared;
+    dirty.current = true;
+    setDraft(shared);
+    setUnsaved(true);
+    setState('failed');
+  }, [saving, shared, stored]);
+
   const save = useRef(async (_options?: { force?: boolean }) => {});
   save.current = async ({ force = false } = {}) => {
     clearTimeout(timer.current);
@@ -174,14 +238,15 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
     if (inConflict.current || inFlight.current || !editable.current) return;
     const doc = latest.current;
     if (!force && (!dirty.current || same(doc, held.current))) {
-      // nothing typed, or typed back to what the server holds
-      dirty.current = false;
-      setUnsaved(false);
+      // typed back to what the server holds; with nothing typed here, the draft (of a view that is gone) is not ours
+      if (dirty.current) dropDraft();
       return;
     }
     inFlight.current = true;
     pendingSaves += 1;
     syncLeaveGuard();
+    const epoch = drafts.epoch();
+    const done = drafts.startSending(draftKey);
     setState('saving');
     let conflicted: Conflict | null = null;
     try {
@@ -191,22 +256,23 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
       held.current = doc;
       dropConflict(item.id);
       setState('saved');
-      // typed on while it saved: that is still to save
-      if (same(latest.current, doc)) {
-        dirty.current = false;
-        setUnsaved(false);
-      }
+      // typed on while it saved: that is still to save (and based on the new version)
+      if (same(latest.current, doc)) dropDraft();
+      else draftBases.set(item.id, base.current);
     } catch (error) {
       ownError.current = error as Error;
       // anything else than a conflict: the item mutation names the cause (with "Erneut versuchen" where it helps); the
       // text stays, still to save
       conflicted = conflictOf(error);
       setState(conflicted ? 'idle' : 'failed');
+      // the text is still to save: a view that opened meanwhile may have let go of the draft (A154/N2)
+      if (drafts.epoch() === epoch && drafts.get(draftKey) === null) keepDraft(latest.current);
       if (error instanceof ApiError && error.errors?.description_json) setError(error.errors.description_json[0]!);
     } finally {
       inFlight.current = false;
       pendingSaves -= 1;
       syncLeaveGuard();
+      done();
     }
     if (conflicted) {
       openConflict(conflicted);
@@ -236,12 +302,12 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
     base.current = answer.description_version;
     held.current = sent;
     if (same(latest.current, sent)) {
-      dirty.current = false;
-      setUnsaved(false);
+      dropDraft();
       setState('saved');
       // "Meine Fassung übernehmen" that failed and went through on retry: no conflict left to ask about on unload
       dropConflict(item.id);
     } else {
+      draftBases.set(item.id, base.current);
       clearTimeout(timer.current);
       timer.current = setTimeout(() => void save.current(), DESCRIPTION_PAUSE_MS);
     }
@@ -276,14 +342,13 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
   function reload({ current }: Conflict) {
     dropConflict(item.id);
     inConflict.current = false;
-    dirty.current = false;
+    dropDraft();
     base.current = current.description_version;
     held.current = current.description_json;
     latest.current = current.description_json;
     setDraft(current.description_json);
     setConflict(null);
     setState('idle');
-    setUnsaved(false);
     focusEditor();
   }
 
@@ -291,18 +356,18 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
   function discardParked() {
     dropConflict(item.id);
     inConflict.current = false;
-    dirty.current = false;
+    dropDraft();
     latest.current = stored;
     held.current = stored;
     setDraft(stored);
     setConflict(null);
     setState('idle');
-    setUnsaved(false);
   }
 
   function keepMine({ current }: Conflict) {
     // save over the newer version: based on it now; the history keeps the other one
     base.current = current.description_version;
+    draftBases.set(item.id, base.current);
     inConflict.current = false;
     setConflict(null);
     focusEditor();
@@ -335,7 +400,7 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
           </div>
         </Banner>
       )}
-      {reason && (unsaved || conflict) && (
+      {reason && !loading && (unsaved || conflict) && (
         <Banner tone="danger" role="alert" title={t('items.detail.description.parked')} className="mt-2">
           <p>{reason}</p>
           <div ref={parked} className="mt-2 rounded-md border border-line bg-surface p-2">
@@ -364,7 +429,7 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
               // below the banner: what is kept for the conflict is the text as it reads now
               const open = inConflict.current ? openConflicts.get(item.id) : undefined;
               if (open) open.mine = doc;
-              dirty.current = true;
+              keepDraft(doc);
               setUnsaved(true);
               setDraft(doc);
               setError(null);
@@ -374,6 +439,7 @@ export function Description({ detail }: { detail: WorkItemDetail }) {
             }}
             onSubmit={() => void save.current()}
             preset="description"
+            projectId={item.project_id}
             editorRef={editor}
             invalid={error !== null}
             describedBy={error ? errorId : undefined}

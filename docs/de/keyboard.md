@@ -48,6 +48,7 @@ werkbuch geht ohne Maus. Mit <kbd>?</kbd> zeigt jeder Bildschirm die Kürzel, di
 | <kbd>D</kbd> | Due-Date setzen … |
 | <kbd>⇧</kbd>+<kbd>D</kbd> | Start-Date setzen … |
 | <kbd>⇧</kbd>+<kbd>P</kbd> | Eltern-Item setzen … |
+| <kbd>M</kbd> | Kommentar schreiben |
 | <kbd>R</kbd> | Relation hinzufügen |
 | <kbd>E</kbd> | Titel bearbeiten |
 | <kbd>⌘ / Strg</kbd>+<kbd>⌫</kbd> | Archivieren bzw. löschen (mit Rückgängig) |
@@ -133,3 +134,10 @@ werkbuch geht ohne Maus. Mit <kbd>?</kbd> zeigt jeder Bildschirm die Kürzel, di
 | --- | --- |
 | <kbd>⌘ / Strg</kbd>+<kbd>↵</kbd> | Speichern bzw. absenden |
 | <kbd>Esc</kbd> | Feld verlassen |
+| <kbd>/</kbd> | Block einfügen (am Zeilenanfang oder nach einem Leerzeichen) |
+| <kbd>@</kbd> | Person oder Bot erwähnen (mit Projekt) |
+| <kbd>#</kbd> | Auf ein Item verweisen (mit Projekt) |
+| <kbd>↑</kbd> / <kbd>↓</kbd> | Eintrag der Liste wählen |
+| <kbd>↵</kbd> / <kbd>Tab</kbd> | Eintrag übernehmen |
+| <kbd>Esc</kbd> | Liste schließen |
+| <kbd>↵</kbd> | Alternativtext des ausgewählten Bilds bearbeiten |

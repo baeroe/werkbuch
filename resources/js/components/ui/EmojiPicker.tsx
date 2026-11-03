@@ -1,4 +1,5 @@
 import { useRef, useState, type KeyboardEvent } from 'react';
+import { isEmoji } from '@/domain/emoji';
 import { getLocale, t, type TranslationKey } from '@/lib/i18n';
 import { cx } from './cx';
 import { Input } from './Input';
@@ -97,12 +98,6 @@ const groupsOf = (): EmojiGroup[] =>
     emojis: group.emojis.map(([char, name]) => ({ char, name: t(`ui.emoji_picker.emoji.${name}`) })),
   }));
 
-/**
- * One typed emoji: a flag (two regional indicators), a keycap (1️⃣), or a pictograph with variation selector, skin tone
- * and zero-width joins. The invisible characters are escapes, so no editor can drop them.
- */
-const TYPED_EMOJI = /\p{Regional_Indicator}{2}|[0-9#*]\uFE0F?\u20E3|\p{Extended_Pictographic}(?:\uFE0F|\p{Emoji_Modifier}|\u200D\p{Extended_Pictographic})*/u;
-
 /** Visual rows of the grid as flat indices, so up/down keep the column across groups. */
 function rowsOf(groups: EmojiGroup[], columns: number): number[][] {
   const rows: number[][] = [];
@@ -121,11 +116,15 @@ type EmojiPickerProps = {
   onPick: (emoji: string) => void;
   /** Text already in the search (the gallery shows a search without matches). */
   defaultQuery?: string;
+  /** The longest emoji to offer, in UTF-8 bytes: a view icon takes at most 32 (`ViewInput::ICON_MAX_BYTES`, T2-M1). */
+  maxBytes?: number;
   className?: string;
 };
 
+const bytesOf = (text: string) => new TextEncoder().encode(text).length;
+
 /** Emoji for reactions and page titles: search by name in the language of the page, arrow keys move, Enter picks. */
-export function EmojiPicker({ onPick, defaultQuery = '', className }: EmojiPickerProps) {
+export function EmojiPicker({ onPick, defaultQuery = '', maxBytes, className }: EmojiPickerProps) {
   const [query, setQuery] = useState(defaultQuery);
   const [active, setActive] = useState(0);
   const [shown, setShown] = useState<Emoji | null>(null);
@@ -139,7 +138,8 @@ export function EmojiPicker({ onPick, defaultQuery = '', className }: EmojiPicke
       )
     : all;
   const flat = groups.flatMap((group) => group.emojis);
-  const typed = query.match(TYPED_EMOJI)?.[0];
+  /** The search itself, when it is one emoji (the server takes nothing else) and not longer than the field takes. */
+  const typed = isEmoji(query.trim()) && (maxBytes === undefined || bytesOf(query.trim()) <= maxBytes) ? query.trim() : undefined;
   const current = Math.min(active, Math.max(flat.length - 1, 0));
 
   const focusIndex = (index: number) => {

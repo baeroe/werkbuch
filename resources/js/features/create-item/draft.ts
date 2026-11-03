@@ -2,6 +2,10 @@
  * What the create dialog holds while it is written, and what happens to it when the dialog closes with content (spec
  * 5.1): closing asks nothing; a toast offers to take it back ("Rückgängig", mod+z too), which opens the dialog with it
  * again. One draft is parked at a time, the newest.
+ *
+ * Pictures and files in a parked description stay uploaded: they belong to nobody until the item is created (A232), so
+ * "Rückgängig" brings them back with the text. A draft whose undo ran out deletes none of them: the hourly job removes
+ * uploads nobody owns after 24 hours (A239, ruling T17-I4), as for a comment thrown away.
  */
 
 import { toast } from '@/components/ui/toast';

@@ -1,7 +1,13 @@
 <?php
 
 use App\Access\ProjectRole;
+use App\Access\RoleAssignments;
 use App\Actions\Auth\AcceptInvitation;
+use App\Actions\Comments\AddComment;
+use App\Actions\Comments\AddReaction;
+use App\Actions\Comments\DeleteComment;
+use App\Actions\Comments\EditComment;
+use App\Actions\Comments\RemoveReaction;
 use App\Actions\Favorites\ToggleFavorite;
 use App\Actions\Invitations\InviteUser;
 use App\Actions\Labels\DeleteLabel;
@@ -206,6 +212,47 @@ it('reindexes every item after a label was deleted', function () use ($world, $c
 
     expect($engine->documents('testing_work_items')[$inWeb->id]['label_ids'])->toBe([$bug->id])
         ->and($engine->documents('testing_work_items')[$inOps->id]['label_ids'])->toBe([]);
+});
+
+it('reindexes the item when a comment is added, edited or deleted', function () use ($world, $create) {
+    $engine = searchEngine();
+    [$web, $mara] = $world();
+    $item = $create($web, $mara);
+    $other = $create($web, $mara, 'Impressum');
+    $comments = fn (WorkItem $of): string => $engine->documents('testing_work_items')[$of->id]['comments'];
+    $writes = $engine->writes();
+
+    $first = AddComment::run(actor($mara), $item, ['body' => 'Die **Pflichtfelder** fehlen']);
+    $second = AddComment::run(actor($mara), $item, ['body' => 'Auch im Impressum']);
+    expect($comments($item))->toBe("Die Pflichtfelder fehlen\nAuch im Impressum")
+        ->and($engine->writes())->toBe($writes + 2);
+
+    EditComment::run(actor($mara), $first, ['body' => 'Die Pflichtfelder fehlen weiter']);
+    expect($comments($item))->toBe("Die Pflichtfelder fehlen weiter\nAuch im Impressum");
+
+    DeleteComment::run(actor($mara), $second);
+    expect($comments($item))->toBe('Die Pflichtfelder fehlen weiter')
+        ->and($comments($other))->toBe('')
+        ->and($engine->writes())->toBe($writes + 4);
+});
+
+it('ignores reactions and mentions of bots', function () use ($world, $create) {
+    $engine = searchEngine();
+    [$web, $mara] = $world();
+    $kira = User::factory()->bot($mara)->create(['name' => 'Kira', 'handle' => 'kira']);
+    app(RoleAssignments::class)->setProjectRole($kira, $web, ProjectRole::Member);
+    $item = $create($web, $mara);
+    $writes = $engine->writes();
+
+    // the comment writes the document once (comment.created); its bot.mentioned changes nothing of it
+    $comment = AddComment::run(actor($mara), $item, ['body' => '@kira bitte prüfen']);
+    AddReaction::run(actor($mara), $comment, ['emoji' => '👍']);
+    RemoveReaction::run(actor($mara), $comment, ['emoji' => '👍']);
+
+    expect(eventsOf(EventType::BotMentioned, $item))->toHaveCount(1)
+        ->and(eventsOf(EventType::CommentReactionAdded, $item))->toHaveCount(1)
+        ->and(eventsOf(EventType::CommentReactionRemoved, $item))->toHaveCount(1)
+        ->and($engine->writes())->toBe($writes + 1);
 });
 
 it('ignores events that change no document', function () use ($world) {

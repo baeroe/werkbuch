@@ -4,6 +4,8 @@ namespace App\Providers;
 
 use App\Access\RoleIndex;
 use App\Access\Visibility;
+use App\Models\Attachment;
+use App\Models\Comment;
 use App\Models\Event;
 use App\Models\Invitation;
 use App\Models\Label;
@@ -20,10 +22,13 @@ use App\Models\WorkItem;
 use App\Models\WorkItemType;
 use App\Search\MeilisearchEngine;
 use App\Views\CatalogProperties;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Events\TransactionRolledBack;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event as Events;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Sanctum\Sanctum;
 use Laravel\Scout\EngineManager;
@@ -66,12 +71,17 @@ class AppServiceProvider extends ServiceProvider
             'resolution' => Resolution::class,
             'work_item' => WorkItem::class,
             'view' => View::class,
+            'attachment' => Attachment::class,
+            'comment' => Comment::class,
         ]);
 
         Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);
 
         // roles and visible projects read inside a transaction that rolls back would otherwise outlive it and grant access
         Events::listen(TransactionRolledBack::class, fn () => Visibility::forget());
+
+        // uploads (A234): 60 per minute and account, the routes behind `auth:sanctum` always know the account
+        RateLimiter::for('attachments', fn (Request $request) => Limit::perMinute(60)->by((string) $request->user()?->getAuthIdentifier()));
 
         // the index is written by the search consumer only, never when a model is saved (P1)
         WorkItem::disableSearchSyncing();

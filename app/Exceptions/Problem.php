@@ -20,6 +20,7 @@ final class Problem extends RuntimeException implements HttpExceptionInterface
         'csrf_token_mismatch', 'conflict', 'server_error', 'service_unavailable', 'http_error', 'default_bot', 'already_member',
         'lead_cannot_leave', 'session_required', 'two_factor_enabled', 'two_factor_not_pending', 'two_factor_disabled',
         'invalid_workflow', 'default_workflow', 'default_type', 'built_in', 'is_default', 'state_in_use', 'search_unavailable',
+        'attachment_inline',
     ];
 
     /**
@@ -78,6 +79,12 @@ final class Problem extends RuntimeException implements HttpExceptionInterface
     public static function unprocessable(string $reason, array $errors, array $extensions = [], ?string $detail = null): self
     {
         return new self(422, $reason, $detail, $errors, $extensions);
+    }
+
+    /** A request or file above the limit (`payload_too_large`); the detail names the limit. */
+    public static function tooLarge(string $detail): self
+    {
+        return new self(413, 'payload_too_large', $detail);
     }
 
     public static function locked(string $reason): self

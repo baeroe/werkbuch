@@ -88,7 +88,6 @@ it('records only real changes', function () use ($web, $row) {
     [$project, $mara] = $web();
     $lene = memberOf($project, ProjectRole::Member);
     $item = CreateWorkItem::run(actor($mara), ['project_id' => $project->id, 'title' => 'Formular prüfen']);
-    $never = WorkItem::factory()->for($project)->create();
 
     // Mara watches as the creator already: no change
     SetSubscription::run(actor($mara), $item, true);
@@ -98,14 +97,28 @@ it('records only real changes', function () use ($web, $row) {
     $stamp = $row($item, $lene)?->unsubscribed_at?->toJSON();
     $this->travel(5)->minutes();
     SetSubscription::run(actor($lene), $item, false);
-    // nobody stops watching what they never watched
-    SetSubscription::run(actor($lene), $never, false);
 
     expect($row($item, $mara)?->reason)->toBe('created')
         ->and(eventsOf(EventType::WorkItemSubscribed))->toHaveCount(1)
         ->and(eventsOf(EventType::WorkItemUnsubscribed))->toHaveCount(1)
-        ->and($row($item, $lene)?->unsubscribed_at?->toJSON())->toBe($stamp)
-        ->and($row($never, $lene))->toBeNull();
+        ->and($row($item, $lene)?->unsubscribed_at?->toJSON())->toBe($stamp);
+});
+
+it('stores an opt-out for a person who never watched', function () use ($web, $row) {
+    [$project] = $web();
+    $viewer = memberOf($project, ProjectRole::Viewer);
+    $item = WorkItem::factory()->for($project)->create();
+
+    // over REST, as the brief says (T1-M2)
+    $this->actingAs($viewer)->deleteJson("/api/v1/work-items/{$item->key}/subscription")->assertOk()->assertJsonPath('data.subscribed', false);
+    $stamp = $row($item, $viewer)?->unsubscribed_at?->toJSON();
+    $this->travel(5)->minutes();
+    $this->actingAs($viewer)->deleteJson("/api/v1/work-items/{$item->key}/subscription")->assertOk();
+
+    expect($row($item, $viewer)?->reason)->toBe('manual')
+        ->and($stamp)->not->toBeNull()
+        ->and($row($item, $viewer)?->unsubscribed_at?->toJSON())->toBe($stamp)
+        ->and(eventsOf(EventType::WorkItemUnsubscribed, $item))->toHaveCount(1);
 });
 
 it('watches again after stopping, with reason manual', function () use ($web, $row) {

@@ -22,10 +22,12 @@ export function causeOf(error: unknown): string {
   return error instanceof ApiError ? error.message : t('errors.no_answer');
 }
 
-export function notifyError(title: string, error: unknown, retry?: () => void): void {
+/** An error toast; `subject` keeps apart the same error about different things (two comments, F26). */
+export function notifyError(title: string, error: unknown, retry?: () => void, subject?: string): void {
   if (error instanceof ApiError && error.status === 409 && error.current !== undefined) return;
   toast({
     title,
+    subject,
     description: causeOf(error),
     tone: 'error',
     action: retry && isTransient(error) ? { label: t('common.retry'), onClick: retry } : undefined,
