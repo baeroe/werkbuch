@@ -102,6 +102,13 @@ it('refuses a missing project, a long query and a limit out of range in one answ
     ])->and(ListMentionables::run(actor($mara), ['project' => 'WEB', 'q' => str_repeat('ä', 64), 'limit' => 50]))->toBeEmpty();
 });
 
+it('refuses a query that is no text instead of listing everyone (T11-M1)', function () use ($world) {
+    [, $mara] = $world();
+
+    expect(invalidOf(fn () => ListMentionables::run(actor($mara), ['project' => 'WEB', 'q' => ['ma']])))->toBe(['q' => [__('field.q.invalid')]]);
+    $this->actingAs($mara)->getJson('/api/v1/mentions?project=WEB&q[]=ma')->assertUnprocessable()->assertJsonPath('errors.q', [__('field.q.invalid')]);
+});
+
 it('lists 20 accounts unless asked for more', function () use ($world, $mentionables) {
     [$web, $mara] = $world();
     foreach (range(1, 25) as $n) {

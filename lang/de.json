@@ -260,6 +260,7 @@
     "field.properties.duplicate": "Eine Property ist doppelt zugeordnet.",
     "field.properties.list": "Die Properties sind eine Liste.",
     "field.properties.unknown": "Mindestens eine Property gibt es nicht.",
+    "field.q.invalid": "Die Suche muss ein Text sein.",
     "field.q.max": "Höchstens :max Zeichen.",
     "field.q.required": "Gib einen Suchbegriff ein.",
     "field.query.q_twice": "Schick die Suche entweder als q oder als shorthand.q, nicht beides.",

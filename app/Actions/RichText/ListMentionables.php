@@ -74,7 +74,13 @@ final class ListMentionables
             $errors['project'] = __('field.required');
         }
 
-        $q = is_string($query['q'] ?? null) ? Str::trim($query['q']) : '';
+        $q = $query['q'] ?? '';
+        if (! is_string($q)) {
+            // a list or an object is no search: refused, not taken for none (T11-M1)
+            $errors['q'] = __('field.q.invalid');
+            $q = '';
+        }
+        $q = Str::trim($q);
         if (mb_strlen($q) > self::Q_MAX) {
             $errors['q'] = __('field.q.max', ['max' => self::Q_MAX]);
         }

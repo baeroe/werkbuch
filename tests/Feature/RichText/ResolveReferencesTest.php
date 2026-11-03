@@ -41,7 +41,17 @@ it('keeps the order asked for', function () use ($world, $resolve, $ids) {
     [$first, $second, $third] = WorkItem::factory()->for($web)->count(3)->create()->all();
 
     expect($ids($resolve($ida, ['items' => [$third->id, strtoupper($first->id), $second->id, $third->id]])))->toBe([$third->id, $first->id, $second->id])
-        ->and($ids($resolve($ida, ['items' => " {$second->id} , ,{$first->id}"])))->toBe([$second->id, $first->id]);
+        ->and($ids($resolve($ida, ['items' => " {$second->id} , ,{$first->id}"])))->toBe([$second->id, $first->id])
+        // Unicode spaces around an id go like any other (T11-M3)
+        ->and($ids($resolve($ida, ['items' => "\u{00A0}{$second->id}\u{00A0},\u{2003}{$first->id}"])))->toBe([$second->id, $first->id]);
+});
+
+it('names a child item like any other (T11-M4)', function () use ($world, $resolve, $ids) {
+    [$ida, $web] = $world();
+    $epic = WorkItem::factory()->for($web)->epic()->create();
+    $child = WorkItem::factory()->for($web)->childOf($epic)->create();
+
+    expect($ids($resolve($ida, ['items' => [$child->id, $epic->id]])))->toBe([$child->id, $epic->id]);
 });
 
 it('includes archived items', function () use ($world, $resolve, $ids) {

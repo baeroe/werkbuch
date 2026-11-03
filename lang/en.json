@@ -260,6 +260,7 @@
     "field.properties.duplicate": "A property is assigned twice.",
     "field.properties.list": "The properties are a list.",
     "field.properties.unknown": "At least one property does not exist.",
+    "field.q.invalid": "The search must be a text.",
     "field.q.max": "At most :max characters.",
     "field.q.required": "Enter something to search for.",
     "field.query.q_twice": "Send the search either as q or as shorthand.q, not both.",

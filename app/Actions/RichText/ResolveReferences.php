@@ -9,6 +9,7 @@ use App\Support\Actor;
 use App\Views\ItemQuery;
 use App\Views\ItemQueryInput;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Lorisleiva\Actions\Concerns\AsAction;
 
@@ -60,7 +61,7 @@ final class ResolveReferences
             if (! is_string($name)) {
                 return null;
             }
-            $name = trim($name);
+            $name = Str::trim($name);
             if ($name === '') {
                 continue;
             }
