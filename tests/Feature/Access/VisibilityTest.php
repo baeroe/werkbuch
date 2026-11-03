@@ -8,6 +8,7 @@ use App\Access\Visibility;
 use App\Models\Project;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Tests\Feature\Access\MatrixWorld;
 
 // spec 4.3 "Sichtbarkeit": an org admin, a member of projects, an org member outside them and a disabled org admin,
 // against a public, a private, an archived (public) project and one that is being deleted
@@ -41,6 +42,46 @@ it('gives each account its role in each project', function (string $account, str
     ['disabled', 'public', null], ['disabled', 'private', null],
     ['disabled', 'archived', null], ['disabled', 'deleting', null],
 ]);
+
+it('names the accounts that see a project as roleIn does, in their order', function (string $project) {
+    $accounts = array_values($this->accounts);
+    $expected = array_values(array_filter($accounts, fn (User $user) => Visibility::roleIn($user, $this->projects[$project]) !== null));
+
+    expect(array_map(fn (User $user) => $user->id, Visibility::seeing($this->projects[$project], $accounts)))
+        ->toBe(array_map(fn (User $user) => $user->id, $expected));
+})->with(['public', 'private', 'archived', 'deleting']);
+
+it('names the accounts of every matrix column that see WEB and OPS as roleIn does', function () {
+    $w = MatrixWorld::build();
+    $accounts = [...array_map(fn (string $column) => $w->account($column), MatrixWorld::COLUMNS), $w->target, $w->bot];
+
+    foreach ([$w->web, $w->ops] as $project) {
+        $seeing = array_map(fn (User $user) => $user->id, Visibility::seeing($project, $accounts));
+        foreach ($accounts as $user) {
+            expect(in_array($user->id, $seeing, true))->toBe(Visibility::roleIn($user, $project) !== null, "{$user->name} in {$project->identifier}");
+        }
+    }
+});
+
+it('asks the same number of queries for two accounts and for many', function () {
+    $private = $this->projects['private'];
+    $many = [...array_values($this->accounts), ...User::factory()->count(8)->create()->all()];
+    $count = function (array $users) use ($private): int {
+        Visibility::forget();
+        DB::flushQueryLog();
+        Visibility::seeing($private, $users);
+
+        return count(DB::getQueryLog());
+    };
+
+    DB::enableQueryLog();
+    $two = $count(array_slice($many, 1, 2));
+    $all = $count($many);
+    DB::disableQueryLog();
+
+    // the org roles and the members of the project, once each
+    expect($two)->toBe(2)->and($all)->toBe(2);
+});
 
 it('lists exactly the projects an account sees, and the scope agrees', function (string $account, array $projects) {
     $user = $this->accounts[$account];

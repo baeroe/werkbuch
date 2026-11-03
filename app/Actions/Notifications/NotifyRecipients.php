@@ -7,9 +7,11 @@ use App\Domain\Notifications\Channel;
 use App\Domain\Notifications\NotificationKind;
 use App\Domain\Notifications\Preferences;
 use App\Domain\Notifications\Recipients;
+use App\Enums\AccountType;
 use App\Models\Event;
 use App\Models\Notification;
 use App\Models\NotificationPreference;
+use App\Models\Project;
 use App\Models\User;
 use App\Support\Actor;
 use App\Support\MailSetup;
@@ -90,8 +92,9 @@ final class NotifyRecipients
     }
 
     /**
-     * The candidates who are active people and see the project now, by ID; the role index is read afresh (A35), a
-     * change of access earlier in the same process counts.
+     * The candidates who are active people and see the project now, by ID, with a fixed number of queries however many
+     * there are (Visibility::seeing); the role index is read afresh (A35), a change of access earlier in the same
+     * process counts.
      *
      * @param  list<string>  $ids
      * @return Collection<string, User>
@@ -99,10 +102,10 @@ final class NotifyRecipients
     private function reachable(string $projectId, array $ids): Collection
     {
         Visibility::forget();
+        $project = Project::query()->find($projectId);
+        $people = User::query()->whereKey($ids)->where('type', AccountType::Person)->get();
 
-        return User::query()->whereKey($ids)->get()
-            ->filter(fn (User $user) => $user->isPerson() && Visibility::projectIds($user)->contains($projectId))
-            ->keyBy('id')->toBase();
+        return collect($project === null ? [] : Visibility::seeing($project, $people))->keyBy('id');
     }
 
     /**

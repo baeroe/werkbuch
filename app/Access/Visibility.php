@@ -62,6 +62,31 @@ final class Visibility
     }
 
     /**
+     * The accounts among `$users` that see the project, in their order: the rule of roleIn() (not null) for many
+     * accounts at once, with two queries at most however many there are (all org roles, the members of the project).
+     *
+     * @param  iterable<User>  $users
+     * @return list<User>
+     */
+    public static function seeing(Project $project, iterable $users): array
+    {
+        if ($project->deleting_at !== null) {
+            return [];
+        }
+
+        $public = $project->visibility === ProjectVisibility::Public;
+        $seeing = [];
+        foreach ($users as $user) {
+            if (! $user->isDisabled()
+                && ($public || self::orgRole($user) === OrgRole::Admin || array_key_exists($user->id, self::index()->members($project)))) {
+                $seeing[] = $user;
+            }
+        }
+
+        return $seeing;
+    }
+
+    /**
      * The role in the organization; an account without an assignment is a member.
      */
     public static function orgRole(User $user): OrgRole

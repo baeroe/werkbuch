@@ -4,6 +4,7 @@ use App\Access\ProjectRole;
 use App\Access\RoleAssignments;
 use App\Actions\Comments\AddComment;
 use App\Actions\Comments\EditComment;
+use App\Actions\Projects\AddMember;
 use App\Actions\Projects\RemoveMember;
 use App\Actions\Users\DeactivateUser;
 use App\Actions\WorkItems\AddRelation;
@@ -26,6 +27,7 @@ use App\Models\User;
 use App\Models\WorkItem;
 use App\Models\WorkItemType;
 use App\Notifications\NotificationConsumer;
+use Illuminate\Support\Facades\DB;
 
 /*
  * Who hears of what (Task 5): the consumer `notifications` turns the events of the real actions into rows of
@@ -268,4 +270,58 @@ it('takes the fields of the change, not the values', function () use ($world, $o
         [NotificationKind::ItemChanged, $w['item']->id, ['fields' => ['relation']]],
         [NotificationKind::ItemChanged, $other->id, ['fields' => ['relation']]],
     ]);
+});
+
+it('decides access when it consumes the event, not when the event happened', function () use ($world, $kinds, $watch) {
+    $w = $world();
+    $opsItem = WorkItem::factory()->for($w['ops'])->create(['created_by' => $w['tom']->id]);
+    $watch($w['ole'], $opsItem);
+    $lea = memberOf($w['ops'], ProjectRole::Member, ['name' => 'Lea', 'handle' => 'lea']);
+    $watch($lea, $opsItem);
+    // Lea leaves OPS before the comment and comes back before the consumer runs; Ole leaves in between
+    RemoveMember::run(actor($w['tom']), $w['ops'], $lea);
+    consumers();
+    AddComment::run(actor($w['ida']), $opsItem, ['body' => 'Server ist umgezogen.']);
+    RemoveMember::run(actor($w['tom']), $w['ops'], $w['ole']);
+    AddMember::run(actor($w['tom']), $w['ops'], ['user_id' => $lea->id, 'role' => 'member']);
+    consumers(NotificationConsumer::class);
+
+    app(Outbox::class)->consume(eventsOf(EventType::CommentCreated, $opsItem)->sole()->id, NotificationConsumer::class);
+
+    expect($kinds($w['ole']))->toBe([])
+        ->and($kinds($lea))->toBe(['comment'])
+        ->and($kinds($w['tom']))->toBe(['comment']);
+});
+
+it('asks the same number of queries for two watchers and for ten', function () use ($world, $watch) {
+    $w = $world();
+    $few = WorkItem::factory()->for($w['web'])->create(['created_by' => $w['tom']->id]);
+    $many = WorkItem::factory()->for($w['web'])->create(['created_by' => $w['tom']->id]);
+    $people = [$w['mara'], $w['jonas'], ...collect(range(1, 8))->map(fn (int $n) => memberOf($w['web'], ProjectRole::Member, ['name' => "Person {$n}"]))->all()];
+    foreach (array_slice($people, 0, 2) as $person) {
+        $watch($person, $few);
+    }
+    foreach ($people as $person) {
+        $watch($person, $many);
+    }
+    consumers();
+    AddComment::run(actor($w['ida']), $few, ['body' => 'Erledigt.']);
+    AddComment::run(actor($w['ida']), $many, ['body' => 'Erledigt.']);
+    consumers(NotificationConsumer::class);
+    $queries = function (WorkItem $item): int {
+        DB::flushQueryLog();
+        app(Outbox::class)->consume(eventsOf(EventType::CommentCreated, $item)->sole()->id, NotificationConsumer::class);
+
+        return count(DB::getQueryLog());
+    };
+
+    DB::enableQueryLog();
+    $two = $queries($few);
+    $ten = $queries($many);
+    DB::disableQueryLog();
+
+    // the lead hears of both as well
+    expect(Notification::query()->where('work_item_id', $few->id)->count())->toBe(3)
+        ->and(Notification::query()->where('work_item_id', $many->id)->count())->toBe(11)
+        ->and($ten)->toBe($two);
 });
