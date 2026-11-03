@@ -21,7 +21,6 @@ import { useQueries } from '@tanstack/react-query';
 import type { Editor } from '@tiptap/react';
 import { FileQuestionMark, RotateCw } from 'lucide-react';
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
-import { getAttachment } from '@/api/attachments';
 import type { CreateWorkItemInput } from '@/api/workItems';
 import { TypeGlyph } from '@/components/fields/TypeGlyph';
 import { Banner } from '@/components/ui/Banner';
@@ -34,8 +33,7 @@ import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
 import { labelClass } from '@/components/ui/styles';
 import { RichTextEditor } from '@/editor/RichTextEditor';
 import { UploadContext, useUploadCounter, useUploadsPending } from '@/editor/UploadContext';
-import { ATTACHMENT_FRESH_MS } from '@/hooks/attachments';
-import { qk } from '@/hooks/keys';
+import { attachmentQuery } from '@/hooks/attachments';
 import { useProjects } from '@/hooks/projects';
 import { useProperties } from '@/hooks/properties';
 import { useWorkflows } from '@/hooks/workflows';
@@ -259,23 +257,21 @@ function FormBody({
   const uploading = useUploadsPending(uploads);
   const editor = useRef<Editor | null>(null);
   const foreignId = useId();
-  const attached = useQueries({
-    queries: attachmentIds(draft.description).map((id) => ({
-      queryKey: qk.attachments.detail(id),
-      queryFn: () => getAttachment(id),
-      staleTime: ATTACHMENT_FRESH_MS,
-    })),
-  });
+  const attached = useQueries({ queries: attachmentIds(draft.description).map(attachmentQuery) });
   // the project of an upload never changes; one that is still loading or not found is the server's to judge
   const foreign = attached.some((query) => query.data !== undefined && query.data.project_id !== draft.projectId);
   const uploadWait = t('editor.upload.pending');
   const hold = uploading > 0 ? uploadWait : foreign ? t('items.create.images_other_project') : null;
   useEffect(() => onHold(hold), [hold, onHold]);
   useEffect(() => () => onHold(null), [onHold]);
-  // the uploads are stored: the notice of a press that waited for them goes
+  // the uploads are stored, or the foreign pictures went: the notice of a press that waited for them goes
+  const foreignWait = t('items.create.images_other_project');
   useEffect(() => {
     if (uploading === 0) setBlocked((current) => (current === uploadWait ? null : current));
   }, [uploading, uploadWait]);
+  useEffect(() => {
+    if (!foreign) setBlocked((current) => (current === foreignWait ? null : current));
+  }, [foreign, foreignWait]);
 
   const requestCreate = useCreateSubmit({
     draft,
@@ -421,7 +417,8 @@ function FormBody({
         <p className={`${labelClass} mb-1.5`} aria-hidden="true">
           {t('editor.label.description')}
         </p>
-        {foreign && <Banner id={foreignId} tone="danger" role="status" title={t('items.create.images_other_project')} className="mb-2" />}
+        {/* a live region that is there from the start: a status mounted with its text is often not read (F21) */}
+        <div aria-live="polite">{foreign && <Banner id={foreignId} tone="danger" title={t('items.create.images_other_project')} className="mb-2" />}</div>
         <UploadContext value={uploads}>
           <RichTextEditor
             value={draft.description}

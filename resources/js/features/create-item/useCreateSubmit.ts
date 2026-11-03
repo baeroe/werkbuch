@@ -126,8 +126,9 @@ export function useCreateSubmit(options: CreateSubmitOptions): () => void {
       setBlocked(t('editor.upload.pending'));
       return;
     }
-    // pictures of another project: the notice at the description says what to do, the focus goes there
+    // pictures of another project: the same notice as at the button, and the focus goes to the description (F30)
     if (foreign) {
+      setBlocked(t('items.create.images_other_project'));
       focusDescription();
       return;
     }

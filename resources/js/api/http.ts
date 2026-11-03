@@ -82,6 +82,8 @@ function isObject(value: unknown): value is Record<string, unknown> {
 function fallbackReason(status: number): string {
   if (status === 419) return 'csrf_token_mismatch';
   if (status === 401) return 'unauthenticated';
+  // a web server in front refuses a large body with its own page, not a problem document
+  if (status === 413) return 'payload_too_large';
 
   return 'http_error';
 }
@@ -221,6 +223,9 @@ export function del<T>(path: string, body?: unknown, options: RequestOptions = {
 }
 
 /** `fetch` has no upload progress, so a file goes through `XMLHttpRequest`; the answer is read like any other. */
+/** How long an upload may take before it counts as failed (no answer): 30 minutes, 25 MB at about 110 kbit/s. */
+export const UPLOAD_TIMEOUT_MS = 30 * 60 * 1000;
+
 function viaXhr(url: string, form: FormData, onProgress: ((fraction: number) => void) | undefined, options: RequestOptions): Promise<Raw> {
   return new Promise((resolve, reject) => {
     const { signal } = options;
@@ -234,6 +239,8 @@ function viaXhr(url: string, form: FormData, onProgress: ((fraction: number) => 
 
     xhr.open('POST', url);
     xhr.withCredentials = true;
+    // an upload that never ends would hold the page and the form for ever: after this long it failed (F29)
+    xhr.timeout = UPLOAD_TIMEOUT_MS;
     Object.entries(baseHeaders()).forEach(([name, value]) => xhr.setRequestHeader(name, value));
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) onProgress?.(event.loaded / event.total);
@@ -245,6 +252,10 @@ function viaXhr(url: string, form: FormData, onProgress: ((fraction: number) => 
     xhr.onerror = () => {
       signal?.removeEventListener('abort', abort);
       reject(new TypeError('Network request failed'));
+    };
+    xhr.ontimeout = () => {
+      signal?.removeEventListener('abort', abort);
+      reject(new TypeError('The upload timed out'));
     };
     xhr.onabort = () => reject(signal?.reason ?? new DOMException('The upload was aborted.', 'AbortError'));
     signal?.addEventListener('abort', abort, { once: true });

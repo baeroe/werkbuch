@@ -3,7 +3,7 @@ import { mockApi, type MockApi } from '@/test/api';
 import { makeAttachment } from '@/test/fixtures';
 import { FakeXhr, installFakeXhr, restoreFakeXhr } from '@/test/xhr';
 import { ApiError } from './client';
-import { attachmentUrl, deleteAttachment, getAttachment, uploadAttachment } from './attachments';
+import { attachmentUrl, deleteAttachment, getAttachment, setAttachmentLimit, uploadAttachment } from './attachments';
 
 let api: MockApi | undefined;
 
@@ -62,6 +62,22 @@ describe('attachments', () => {
     );
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({ status: 413, reason: 'payload_too_large', message: '„screenshot.png“ ist größer als 25 MB.' });
+  });
+
+  it('refuses a file over the limit before it goes out, and names the limit in any 413 (F29)', async () => {
+    setAttachmentLimit(1);
+    try {
+      const big = new File([new Uint8Array(1024 * 1024 + 1)], 'gross.png', { type: 'image/png' });
+      await expect(uploadAttachment('p_web', big, null, 'inline')).rejects.toMatchObject({ status: 413, reason: 'payload_too_large', message: 'Uploads können höchstens 1 MB groß sein.' });
+      expect(FakeXhr.all).toEqual([]);
+
+      // under the limit it goes; a web server in front refuses it without a problem document: the sentence names the limit
+      const call = uploadAttachment('p_web', file(), null, 'inline');
+      FakeXhr.last.answer(413, '<html>413</html>', 'text/html');
+      await expect(call).rejects.toMatchObject({ status: 413, message: 'Uploads können höchstens 1 MB groß sein.' });
+    } finally {
+      setAttachmentLimit(null);
+    }
   });
 
   it('stops an upload when the signal aborts', async () => {

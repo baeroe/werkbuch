@@ -16,14 +16,14 @@ import { useApiMutation } from './mutation';
 /** How long a loaded attachment counts as fresh: long enough for a page full of pictures, short enough for the preview. */
 export const ATTACHMENT_FRESH_MS = 30_000;
 
+/** The query of one attachment: the key, the call and how long it is fresh, for useAttachment and `useQueries` (F30). */
+export function attachmentQuery(id: string) {
+  return { queryKey: qk.attachments.detail(id), queryFn: () => getAttachment(id), staleTime: ATTACHMENT_FRESH_MS };
+}
+
 /** One attachment by its id, as the editors and viewers show it. */
 export function useAttachment(id: string | null | undefined, options: HookOptions = {}) {
-  return useQuery({
-    queryKey: qk.attachments.detail(id ?? ''),
-    queryFn: () => getAttachment(id!),
-    enabled: !!id && options.enabled !== false,
-    staleTime: ATTACHMENT_FRESH_MS,
-  });
+  return useQuery({ ...attachmentQuery(id ?? ''), enabled: !!id && options.enabled !== false });
 }
 
 /** Puts attachments that came with something else into the cache, before the texts that show them ask for each one. */

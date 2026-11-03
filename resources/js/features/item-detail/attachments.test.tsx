@@ -101,14 +101,27 @@ describe('Attachments', () => {
     const section = await screen.findByRole('region', { name: 'Dateien' });
     expect(within(section).getByText('3')).toBeTruthy();
     const links = within(section).getAllByRole('link');
-    expect(links.map((link) => link.getAttribute('href'))).toEqual(['/attachments/att_scan?download=1', '/attachments/att_offer?download=1', '/attachments/att_anim?download=1']);
+    // a picture opens as itself in a new tab with its download beside it, any other file is a download (F28)
+    expect(links.map((link) => [link.getAttribute('href'), link.getAttribute('target'), link.getAttribute('download')])).toEqual([
+      ['/attachments/att_scan', '_blank', null],
+      ['/attachments/att_scan?download=1', null, 'scan.png'],
+      ['/attachments/att_offer?download=1', null, 'angebot.pdf'],
+      ['/attachments/att_anim', '_blank', null],
+      ['/attachments/att_anim?download=1', null, 'ladekreis.gif'],
+    ]);
     expect(links[0]!.textContent).toBe(`scan.png${formatSize(512)}`);
-    expect(links[1]!.textContent).toBe(`angebot.pdf${formatSize(120_400)}`);
-    expect(links[2]!.textContent).toBe(`ladekreis.gif${formatSize(25_300_000)}`);
+    expect(links[1]!.getAttribute('aria-label')).toBe('„scan.png“ herunterladen');
+    expect(links[2]!.textContent).toBe(`angebot.pdf${formatSize(120_400)}`);
+    expect(links[3]!.textContent).toBe(`ladekreis.gif${formatSize(25_300_000)}`);
     // a picture shows small, from its preview once the queue made one, otherwise the file itself; anything else an icon
     const pictures = section.querySelectorAll('img');
     expect([...pictures].map((picture) => picture.getAttribute('src'))).toEqual(['/attachments/att_scan/preview', '/attachments/att_anim']);
     expect(pictures[0]!.getAttribute('alt')).toBe('');
+    // previews load when they come into view
+    expect([...pictures].map((picture) => [picture.getAttribute('loading'), picture.getAttribute('decoding')])).toEqual([
+      ['lazy', 'async'],
+      ['lazy', 'async'],
+    ]);
     // the files that came with the detail are in the cache of attachments: a text that shows one asks for nothing
     expect(client.getQueryData(qk.attachments.detail('att_offer'))).toEqual(files[1]);
     // a member may upload and remove
@@ -133,8 +146,9 @@ describe('Attachments', () => {
     choose.mockRestore();
     await userEvent.upload(input, [pdf('angebot.pdf'), pdf('vertrag.pdf')]);
 
-    // one call and one line each, each with its own bar
+    // one call and one line each, each with its own bar; the live region of the section says the last start (F21)
     expect(FakeXhr.all).toHaveLength(2);
+    expect(container.querySelector('[data-attachments-announcer]')!.textContent).toBe('„vertrag.pdf“ wird hochgeladen …');
     const [first, second] = FakeXhr.all as [FakeXhr, FakeXhr];
     expect(first.opened).toEqual(['POST', '/api/v1/attachments']);
     expect(Object.fromEntries([...first.sent!.entries()].filter(([key]) => key !== 'file'))).toEqual({ project_id: 'p_web', kind: 'file', work_item_id: 'wi_web_47' });
@@ -306,8 +320,9 @@ describe('Attachments', () => {
     view.unmount();
     api!.restore();
 
-    // with files the viewer reads the list, and the upload says why it is not possible
-    files = [fileOf('att_offer', 'angebot.pdf')];
+    // with files the viewer reads the list, and the upload says why it is not possible (an id of its own: a removed
+    // file stays hidden for the module's life)
+    files = [fileOf('att_read', 'angebot.pdf')];
     renderFiles({ role: 'viewer' });
     const section = await screen.findByRole('region', { name: 'Dateien' });
     const upload = await within(section).findByRole('button', { name: 'Datei hochladen' });
@@ -316,7 +331,7 @@ describe('Attachments', () => {
   });
 
   it('says why upload is not possible on an archived item', async () => {
-    files = [fileOf('att_offer', 'angebot.pdf')];
+    files = [fileOf('att_archived', 'angebot.pdf')];
     const { container } = renderFiles({ item: { ...web47, archived_at: '2026-10-30T10:00:00.000Z' } });
     const section = await screen.findByRole('region', { name: 'Dateien' });
 
@@ -328,8 +343,49 @@ describe('Attachments', () => {
     // the file stays readable and downloadable, but cannot be removed, and nothing dropped is taken
     expect(within(section).getByRole('link', { name: /angebot\.pdf/ })).toBeTruthy();
     expect(within(section).queryByRole('button', { name: '„angebot.pdf“ entfernen' })).toBeNull();
-    fireEvent.drop(within(section).getByRole('list'), { dataTransfer: { types: ['Files'], files: [pdf('vertrag.pdf')] } });
+    // a file over the section is taken in, so the browser does not open it and leave the page; the drop says why (F27)
+    const heading = within(section).getByRole('heading', { name: 'Dateien' });
+    expect(fireEvent.dragOver(heading, { dataTransfer: { types: ['Files'], files: [] } })).toBe(false);
+    expect(fireEvent.drop(heading, { dataTransfer: { types: ['Files'], files: [pdf('vertrag.pdf')] } })).toBe(false);
     await act(async () => {});
     expect(FakeXhr.all).toHaveLength(0);
+    expect(lastToast()).toMatchObject({ title: 'Keine Datei hinzugefügt', description: 'WEB-47 ist archiviert und schreibgeschützt. Stelle es zuerst wieder her.' });
+  });
+
+  it('hides a removed file in a view opened again, hides it again on retry, and takes a 404 as removed (F27)', async () => {
+    files = [fileOf('att_twice', 'protokoll.pdf'), fileOf('att_gone', 'alt.pdf')];
+    let refuse = true;
+    const routes = {
+      'DELETE /api/v1/attachments/att_twice': () => (refuse ? { status: 503, body: { reason: 'service_unavailable', detail: 'Gerade nicht.' } } : { status: 204 }),
+      'DELETE /api/v1/attachments/att_gone': () => ({ status: 404, body: { reason: 'not_found' } }),
+    };
+    const user = userEvent.setup();
+    const first = renderFiles({ routes });
+    let section = await screen.findByRole('region', { name: 'Dateien' });
+    await user.click(await within(section).findByRole('button', { name: '„protokoll.pdf“ entfernen' }));
+
+    // the view closes and opens again while the undo toast stands: the file stays hidden
+    first.unmount();
+    api!.restore();
+    renderFiles({ routes });
+    section = await screen.findByRole('region', { name: 'Dateien' });
+    await within(section).findByRole('link', { name: /alt\.pdf/ });
+    expect(within(section).queryByRole('link', { name: /protokoll\.pdf/ })).toBeNull();
+
+    // the time runs out, the server fails: back with a retry, which hides it again at once
+    act(() => dismissToast(currentToasts().find((toast) => toast.title === '„protokoll.pdf“ entfernt')!.id));
+    await within(section).findByRole('link', { name: /protokoll\.pdf/ });
+    const failed = await waitFor(() => currentToasts().find((toast) => toast.title === '„protokoll.pdf“ nicht entfernt')!);
+    refuse = false;
+    act(() => runToastAction(failed.id));
+    expect(within(section).queryByRole('link', { name: /protokoll\.pdf/ })).toBeNull();
+
+    // gone meanwhile (404): removed all the same, no error
+    await user.click(within(section).getByRole('button', { name: '„alt.pdf“ entfernen' }));
+    act(() => dismissToast(currentToasts().find((toast) => toast.title === '„alt.pdf“ entfernt')!.id));
+    await waitFor(() => expect(sent('DELETE', '/api/v1/attachments/att_gone')).toHaveLength(1));
+    await act(async () => {});
+    expect(currentToasts().find((toast) => toast.title === '„alt.pdf“ nicht entfernt')).toBeUndefined();
+    expect(within(section).queryByRole('link', { name: /alt\.pdf/ })).toBeNull();
   });
 });

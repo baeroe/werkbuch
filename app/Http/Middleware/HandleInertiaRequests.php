@@ -7,6 +7,7 @@ use App\Access\Permission;
 use App\Access\Visibility;
 use App\Http\Resources\OrganizationResource;
 use App\Http\Resources\UserResource;
+use App\Models\Attachment;
 use App\Models\Organization;
 use App\Models\User;
 use App\Support\MailSetup;
@@ -44,6 +45,8 @@ class HandleInertiaRequests extends Middleware
                 'mail' => MailSetup::configured(),
                 // the live connection (Reverb) is wired up in Phase 8
                 'live' => null,
+                // the browser refuses a larger file before it sends it (F29)
+                'attachments_max_mb' => Attachment::maxMegabytes(),
             ],
             'flash' => [
                 'status' => $request->session()->get('status'),

@@ -24,6 +24,9 @@ export class FakeXhr {
   onload?: () => void;
   onerror?: () => void;
   onabort?: () => void;
+  ontimeout?: () => void;
+  /** The time limit the call set (`xhr.timeout`). */
+  timeout = 0;
   withCredentials = false;
   status = 0;
   responseText = '';
@@ -52,6 +55,11 @@ export class FakeXhr {
 
   send(form: FormData) {
     this.sent = form;
+  }
+
+  /** The time limit ran out without an answer. */
+  timeOut() {
+    this.ontimeout?.();
   }
 
   /** The share of the body that went out so far; `total` 0 is a progress the browser cannot measure. */

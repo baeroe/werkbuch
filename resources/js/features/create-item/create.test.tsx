@@ -835,27 +835,43 @@ describe('pictures and files in the description', () => {
     pasteImage(description);
     await stored(makeAttachment());
     await within(dialog).findByRole('img', { name: 'screenshot.png' });
-    expect(within(dialog).queryByText(/Bilder aus dem alten Projekt/)).toBeNull();
+    expect(within(dialog).queryByText(/Bilder oder Dateien aus einem anderen Projekt/)).toBeNull();
 
     // the image belongs to WEB: in APP the server refuses the description (A233)
     await choose(user, within(dialog).getByRole('combobox', { name: /^Projekt/ }), /Kunden-App/);
-    const warning = await within(dialog).findByText('Bilder aus dem alten Projekt passen nicht: entferne sie oder wechsle zurück.', { selector: 'p' });
+    const warning = await within(dialog).findByText('Die Beschreibung zeigt Bilder oder Dateien aus einem anderen Projekt. Entferne sie oder wähle ihr Projekt.', { selector: 'p' });
     expect(description.getAttribute('aria-invalid')).toBe('true');
     expect(description.getAttribute('aria-describedby')?.split(' ')).toContain(warning.closest('[id]')!.id);
     const submit = within(dialog).getByRole('button', { name: /^Anlegen/ });
     expect(submit.getAttribute('aria-disabled')).toBe('true');
-    // mod+enter sends nothing and goes to the description, where the images are
+    // mod+enter sends nothing, says the same as the button (F30) and goes to the description, where the images are
     await modEnter();
     await waitFor(() => expect(document.activeElement).toBe(description));
     expect(posts()).toEqual([]);
+    expect(within(within(dialog).getByRole('alert')).getByText('Die Beschreibung zeigt Bilder oder Dateien aus einem anderen Projekt. Entferne sie oder wähle ihr Projekt.')).toBeTruthy();
 
     // back in WEB the images fit again
     await choose(user, within(dialog).getByRole('combobox', { name: /^Projekt/ }), /Website-Relaunch/);
-    await waitFor(() => expect(within(dialog).queryByText(/Bilder aus dem alten Projekt/)).toBeNull());
+    await waitFor(() => expect(within(dialog).queryByText(/Bilder oder Dateien aus einem anderen Projekt/)).toBeNull());
     expect(description.getAttribute('aria-invalid')).not.toBe('true');
     await modEnter();
     await waitFor(() => expect(posts()).toHaveLength(1));
     expect(posts()[0].project_id).toBe('p_web');
+  });
+
+  it('says which uploads closing the dialog stopped (F18)', async () => {
+    const user = userEvent.setup();
+    renderWith(<Host />);
+    act(() => useUiStore.getState().openCreate({ project_id: 'p_web' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Neues Item' });
+    await user.type(await within(dialog).findByRole('textbox', { name: /^Titel/ }), 'Plakat drucken');
+    pasteImage(within(dialog).getByRole('textbox', { name: 'Beschreibung' }), 'plakat.png');
+    const upload = FakeXhr.last;
+    await user.click(within(dialog).getByRole('button', { name: 'Abbrechen' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    expect(upload.abort).toHaveBeenCalled();
+    await waitFor(() => expect(currentToasts().map((toast) => toast.title)).toContain('Upload abgebrochen: plakat.png'));
   });
 
   it('keeps the uploads of a parked draft and deletes none whose undo ran out (A239)', async () => {
@@ -878,7 +894,7 @@ describe('pictures and files in the description', () => {
     expect(await within(dialog).findByRole('img', { name: 'screenshot.png' })).toBeTruthy();
     expect(api!.calls.some((call) => call.method === 'GET' && call.url === '/api/v1/attachments/att_1')).toBe(true);
     await choose(user, within(dialog).getByRole('combobox', { name: /^Projekt/ }), /Kunden-App/);
-    expect(await within(dialog).findByText('Bilder aus dem alten Projekt passen nicht: entferne sie oder wechsle zurück.', { selector: 'p' })).toBeTruthy();
+    expect(await within(dialog).findByText('Die Beschreibung zeigt Bilder oder Dateien aus einem anderen Projekt. Entferne sie oder wähle ihr Projekt.', { selector: 'p' })).toBeTruthy();
     await user.click(within(dialog).getByRole('button', { name: 'Abbrechen' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 

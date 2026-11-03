@@ -116,11 +116,15 @@ type EmojiPickerProps = {
   onPick: (emoji: string) => void;
   /** Text already in the search (the gallery shows a search without matches). */
   defaultQuery?: string;
+  /** The longest emoji to offer, in UTF-8 bytes: a view icon takes at most 32 (`ViewInput::ICON_MAX_BYTES`, T2-M1). */
+  maxBytes?: number;
   className?: string;
 };
 
+const bytesOf = (text: string) => new TextEncoder().encode(text).length;
+
 /** Emoji for reactions and page titles: search by name in the language of the page, arrow keys move, Enter picks. */
-export function EmojiPicker({ onPick, defaultQuery = '', className }: EmojiPickerProps) {
+export function EmojiPicker({ onPick, defaultQuery = '', maxBytes, className }: EmojiPickerProps) {
   const [query, setQuery] = useState(defaultQuery);
   const [active, setActive] = useState(0);
   const [shown, setShown] = useState<Emoji | null>(null);
@@ -134,8 +138,8 @@ export function EmojiPicker({ onPick, defaultQuery = '', className }: EmojiPicke
       )
     : all;
   const flat = groups.flatMap((group) => group.emojis);
-  /** The search itself, when it is one emoji (the server takes nothing else). */
-  const typed = isEmoji(query.trim()) ? query.trim() : undefined;
+  /** The search itself, when it is one emoji (the server takes nothing else) and not longer than the field takes. */
+  const typed = isEmoji(query.trim()) && (maxBytes === undefined || bytesOf(query.trim()) <= maxBytes) ? query.trim() : undefined;
   const current = Math.min(active, Math.max(flat.length - 1, 0));
 
   const focusIndex = (index: number) => {
