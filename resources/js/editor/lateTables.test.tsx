@@ -53,9 +53,12 @@ function renderOutsideAct(node: ReactNode): HTMLElement {
 
 it('waits for the tables without calling use() conditionally', async () => {
   await freshModules();
+  // the chunk stays away until the test lets it go: a fixed delay ran out before a slow runner saw the frames
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
   vi.doMock('@tiptap/extension-table', async (importOriginal) => {
     const actual = await importOriginal<typeof import('@tiptap/extension-table')>();
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await held;
     return actual;
   });
   const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -76,6 +79,7 @@ it('waits for the tables without calling use() conditionally', async () => {
 
   // the frames stand while the chunk is on its way, then the editor and the view take their place
   await waitFor(() => expect(container.querySelectorAll('[aria-busy="true"]')).toHaveLength(2));
+  release();
   await waitFor(() => expect(screen.getByRole('textbox', { name: 'Beschreibung' })).toBeTruthy(), { timeout: 3000 });
   expect(container.querySelector('[aria-busy="true"]')).toBeNull();
   expect(container.querySelectorAll('.rt-content')).toHaveLength(2);
