@@ -445,6 +445,8 @@ it('reminds every hour from its job on the queue notifications, for the hour it 
     $due($w['web'], $w['mara'], '2026-11-03');
     $task = collect(app(Schedule::class)->events())->sole(fn ($event) => $event->description === SendDueRemindersJob::class);
     $job = new SendDueRemindersJob(CarbonImmutable::parse('2026-11-03 07:00', 'UTC'));
+    // the job runs within its hour: an hour more than a day back is skipped (F3), so the clock must not be today's
+    $this->travelTo(CarbonImmutable::parse('2026-11-03 07:00:05', 'UTC'));
 
     $job->handle();
 
