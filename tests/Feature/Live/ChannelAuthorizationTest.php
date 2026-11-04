@@ -162,3 +162,19 @@ it('refuses a token', function () {
             ->assertUnauthorized()->assertHeader('Content-Type', 'application/json');
     }
 });
+
+it('refuses channels of another kind than the three, and a socket id of another form, with 403 (T9-M1, T9-M2)', function () use ($refused) {
+    $w = MatrixWorld::build();
+    $admin = $w->account('org_admin');
+    $this->actingAs($admin);
+    $ask = fn (string $channel, string $socket = '1234.5678') => test()->postJson('/broadcasting/auth', ['socket_id' => $socket, 'channel_name' => $channel]);
+
+    // the channels the app has, as another kind: Reverb would sign them all the same
+    $refused($ask('presence-project.'.$w->project('org_admin')->id));
+    $refused($ask('private-user.'.$admin->id));
+    $refused($ask('project.'.$w->project('org_admin')->id));
+    // a socket id Pusher would not sign: refused, not a 500 that is reported
+    $refused($ask('private-project.'.$w->project('org_admin')->id, 'abc'));
+    $refused(test()->postJson('/broadcasting/auth', ['socket_id' => ['1.2'], 'channel_name' => 'presence-user.'.$admin->id]));
+    $refused(test()->postJson('/broadcasting/auth', ['socket_id' => '1.2']));
+});

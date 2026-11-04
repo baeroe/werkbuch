@@ -97,6 +97,13 @@ it('gives SMTP a timeout below the lock wait of the database (T7-M6)', function 
     setEnv('MAIL_TIMEOUT', null);
 });
 
+it('keeps what lets /broadcasting/auth go without a CSRF token: SameSite lax and no CORS beyond the API (T9-M5)', function () {
+    // another site can send no cookie of the session with a POST, and reads no answer of a web route
+    expect(config('session.same_site'))->toBe('lax')
+        ->and(config('cors.paths'))->toBe(['api/*', 'sanctum/csrf-cookie'])
+        ->and(config('cors.supports_credentials'))->toBeFalse();
+});
+
 it('lets Reverb take client events from nobody and only the host of APP_URL', function () {
     $app = (require base_path('config/reverb.php'))['apps']['apps'][0];
 

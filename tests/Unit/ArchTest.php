@@ -2,7 +2,6 @@
 
 use App\Access\Authorize;
 use App\Access\RoleAssignments;
-use App\Access\Visibility;
 use App\Domain\Ulid;
 use App\Events\EventRecorder;
 use App\Exceptions\Problem;
@@ -35,9 +34,9 @@ arch('live tells the channels, records nothing and computes nothing')
 arch('in App\Live only NotificationsChanged speaks to the database, to wait for the commit')
     ->expect(['App\Live\LiveConsumer', 'App\Live\LiveMessage', 'App\Live\Disconnect', 'App\Live\Broadcasts'])
     ->not->toUse('Illuminate\Support\Facades\DB');
-arch('the live channels decide only through the policies and Visibility')
+arch('the live channels decide only through the policies')
     ->expect('App\Broadcasting')->classes()->toBeFinal()->toHaveMethod('join')
-    ->toOnlyUse([Authorize::class, Visibility::class, Actor::class, 'App\Models\User', 'App\Models\Project', 'App\Models\WorkItem', Ulid::class]);
+    ->toOnlyUse([Authorize::class, Actor::class, 'App\Models\User', 'App\Models\Project', 'App\Models\WorkItem', Ulid::class]);
 arch('domain classes are final')->expect('App\Domain')->classes()->toBeFinal();
 arch('rich text is final and leaves actions, http and the database alone')
     ->expect('App\RichText')->classes()->toBeFinal()->not->toUse(['App\Actions', 'App\Http', 'Illuminate\Support\Facades\DB']);
