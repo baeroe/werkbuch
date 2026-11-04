@@ -3,7 +3,7 @@ import { ApiError } from '@/api/client';
 import { currentToasts, dismissToast, resetToasts, runToastAction, toast } from '@/components/ui/toast';
 import en from '../../../lang/en.json';
 import { initI18n } from './i18n';
-import { canUndo, runWithUndo, undoLabel, undoLatest } from './undo';
+import { canUndo, runWithUndo, subscribeUndoPending, undoLabel, undoLatest, undoPending } from './undo';
 
 beforeEach(() => vi.useFakeTimers());
 
@@ -255,5 +255,43 @@ describe('undoLatest (mod+z)', () => {
     expect(canUndo()).toBe(false);
     expect(undoLatest()).toBe(false);
     expect(first).not.toHaveBeenCalled();
+  });
+});
+
+describe('undoPending', () => {
+  it('counts a change as pending from its toast until its action settled, and says when that may have changed', async () => {
+    let finish = () => {};
+    const told = vi.fn();
+    const stop = subscribeUndoPending(told);
+    runWithUndo({ label: 'WEB-51 gelöscht', run: () => new Promise<void>((resolve) => (finish = resolve)) });
+
+    expect(undoPending()).toBe(true);
+    vi.advanceTimersByTime(5000);
+    // the toast is gone, the call still runs
+    expect(canUndo()).toBe(false);
+    expect(undoPending()).toBe(true);
+
+    told.mockClear();
+    finish();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(undoPending()).toBe(false);
+    expect(told).toHaveBeenCalled();
+    stop();
+  });
+
+  it('ends with undo, and with an action that throws at once', () => {
+    runWithUndo({ label: 'WEB-51 archiviert', run: vi.fn() });
+    expect(undoPending()).toBe(true);
+    undoLatest();
+    expect(undoPending()).toBe(false);
+
+    runWithUndo({
+      label: 'WEB-52 archiviert',
+      run: () => {
+        throw new Error('no');
+      },
+    });
+    vi.advanceTimersByTime(5000);
+    expect(undoPending()).toBe(false);
   });
 });

@@ -12,6 +12,9 @@ const name = (what: string) => `E2E live ${what} ${variant()} ${runId()}`;
 /** How long a change may take through the queue worker and Reverb to the other browser. */
 const LIVE = { timeout: 20_000 };
 
+// a second context, the way through the queue and Reverb: more than the default 30 s may pass in a test
+test.describe.configure({ timeout: 60_000 });
+
 /** The id of a state of the default workflow. */
 async function stateOf(page: Page, state: string): Promise<string> {
   const workflow = (await allEntries(page, 'workflows')).find((entry) => entry.is_default === true) as { states: { id: string; name: string }[] };
@@ -135,6 +138,8 @@ test('does not apply the own change twice', async ({ page, browser }) => {
 test.describe('without Reverb', () => {
   test('shows the banner after Reverb went away and hides it when it is back', async ({ page, allowedErrors }) => {
     test.skip(isPhone(page), 'the banner is the same on every width; one run is enough');
+    // pusher-js connects again with a growing pause: the banner may take up to a minute to go
+    test.setTimeout(90_000);
     // Chrome reports the refused websockets (K11)
     allowedErrors.push(/WebSocket connection to .* failed/);
     // every websocket of the page to Reverb goes through this route: passed on while Reverb is "there", closed while away

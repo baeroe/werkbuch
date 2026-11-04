@@ -6,8 +6,8 @@
  *   `user.<id>` (presence). `watchProjects(ids)` keeps the channels `project.<id>` in step with the projects the person
  *   sees, `watchItem(id)` holds `work-item.<id>` while a detail shows the item (counted per id).
  * - Every channel is authorized over `/broadcasting/auth` with the session of the page (`webPost`). A refusal (403,
- *   e.g. after the person lost access, A281) arrives as `live.refused`: the projects load again and the channel goes
- *   with them. Any other failure (a deactivated account is sent to the sign-in) means live updates stop: the tab
+ *   e.g. after the person lost access, A281) arrives as `live.refused` naming the project or item of the channel: the
+ *   projects load again and the channel goes with them. Any other failure (a deactivated account is sent to the sign-in) means live updates stop: the tab
  *   counts as disconnected until the connection comes back and authorizes again.
  * - A message carries IDs and the type only (A279). The tab that made a change never gets it: the HTTP layer names
  *   the socket of the connection in every call (`X-Socket-ID`, `setSocketId`, A282).
@@ -71,6 +71,13 @@ const items = new Map<string, number>();
 
 function browserEvent(type: string): LiveEvent {
   return { event_id: null, type, project_id: null, item_id: null, comment_id: null, actor_id: null };
+}
+
+/** `live.refused` for a channel: the project or the item it is about, so the screens leave that one alone. */
+function refused(channel: string): LiveEvent {
+  const project = /^private-project\.(.+)$/.exec(channel)?.[1] ?? null;
+  const item = /^private-work-item\.(.+)$/.exec(channel)?.[1] ?? null;
+  return { ...browserEvent('live.refused'), project_id: project, item_id: item };
 }
 
 function emit(event: LiveEvent): void {
@@ -153,7 +160,7 @@ function authorize(
     (error: unknown) => {
       const failure = error instanceof Error ? error : new Error(String(error));
       if (error instanceof ApiError && error.status === 403) {
-        emit(browserEvent('live.refused'));
+        emit(refused(channelName));
       } else {
         setDown(true);
       }

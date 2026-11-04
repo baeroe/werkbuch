@@ -300,7 +300,13 @@ describe('the status of the connection', () => {
     const answer = await echo().authorize('private-project.p_ops');
 
     expect(answer.error).toBeInstanceOf(Error);
-    expect(events).toEqual([{ event_id: null, type: 'live.refused', project_id: null, item_id: null, comment_id: null, actor_id: null }]);
+    expect(events).toEqual([{ event_id: null, type: 'live.refused', project_id: 'p_ops', item_id: null, comment_id: null, actor_id: null }]);
+    await echo().authorize('private-work-item.wi_ops_12');
+    await echo().authorize('presence-user.u_mara');
+    expect(events.slice(1).map((event) => [event.project_id, event.item_id])).toEqual([
+      [null, 'wi_ops_12'],
+      [null, null],
+    ]);
     // a refusal is no lost connection
     expect(isLiveConnected()).toBe(true);
     stop();

@@ -241,6 +241,9 @@ function subscribe(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
+/** Calls `listener` whenever the toasts change (shown, waiting, closed), until the returned function is called. */
+export const subscribeToasts = subscribe;
+
 export function useToasts(): readonly Toast[] {
   return useSyncExternalStore(subscribe, currentToasts, currentToasts);
 }
