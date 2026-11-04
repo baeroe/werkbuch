@@ -101,9 +101,11 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
     Route::patch('projects/{project}/members/{user}', [MembersController::class, 'update']);
     Route::delete('projects/{project}/members/{user}', [MembersController::class, 'destroy']);
 
-    // the wiki of a project: the whole tree without text (A315), a page with its text
+    // the wiki of a project: the whole tree without text (A315), a page with its text; creating and saving pages
     Route::get('projects/{project}/pages', [PagesController::class, 'index']);
+    Route::post('projects/{project}/pages', [PagesController::class, 'store']);
     Route::get('pages/{page}', [PagesController::class, 'show']);
+    Route::patch('pages/{page}', [PagesController::class, 'update']);
 
     Route::get('workflows', [WorkflowsController::class, 'index']);
     Route::post('workflows', [WorkflowsController::class, 'store']);

@@ -77,3 +77,46 @@ it('lets a read-only token read the tree and a page', function () use ($world) {
     $this->withToken($token)->getJson('/api/v1/projects/WEB/pages')->assertOk()->assertJsonPath('meta.total', 2);
     $this->withToken($token)->getJson("/api/v1/pages/{$root->id}")->assertOk()->assertJsonPath('data.content', 'Willkommen');
 });
+
+it('creates a page with 201 and saves it with its base version', function () use ($world) {
+    [$web, $mara, , $root] = $world();
+
+    $created = $this->actingAs($mara)->postJson('/api/v1/projects/web/pages', ['title' => 'Glossar', 'parent_id' => $root->id, 'content' => 'Begriffe'])
+        ->assertCreated()
+        ->assertJsonPath('data.title', 'Glossar')
+        ->assertJsonPath('data.parent_id', $root->id)
+        ->assertJsonPath('data.content', 'Begriffe')
+        ->assertJsonPath('data.version', 1);
+    $id = $created->json('data.id');
+
+    $this->actingAs($mara)->patchJson("/api/v1/pages/{$id}", ['content' => 'Begriffe und mehr', 'base_version' => 1])->assertOk()
+        ->assertJsonPath('data.content', 'Begriffe und mehr')
+        ->assertJsonPath('data.version', 2)
+        ->assertJsonPath('data.title', 'Glossar');
+
+    expect(Page::query()->findOrFail($id)->project_id)->toBe($web->id);
+});
+
+it('answers a save on an outdated base with 409 page_conflict and the current page', function () use ($world) {
+    [, $mara, , $root] = $world();
+    $erik = memberOf($root->project, ProjectRole::Member, ['name' => 'Erik']);
+    $this->actingAs($mara)->patchJson("/api/v1/pages/{$root->id}", ['content' => 'Fassung von Mara', 'base_version' => 1])->assertOk();
+
+    $this->actingAs($erik)->patchJson("/api/v1/pages/{$root->id}", ['content' => 'Fassung von Erik', 'base_version' => 1])
+        ->assertStatus(409)
+        ->assertHeader('Content-Type', 'application/problem+json')
+        ->assertJsonPath('reason', 'page_conflict')
+        ->assertJsonPath('detail', __('problem.detail.page_conflict', ['name' => 'Mara']))
+        ->assertJsonPath('current.version', 2)
+        ->assertJsonPath('current.content', 'Fassung von Mara');
+});
+
+it('refuses a viewer and wrong fields over REST', function () use ($world) {
+    [, $mara, $lene, $root] = $world();
+
+    $this->actingAs($lene)->postJson('/api/v1/projects/web/pages', ['title' => 'Neu'])->assertForbidden()
+        ->assertJsonPath('detail', __('problem.detail.wiki_members_only'));
+    $this->actingAs($mara)->patchJson("/api/v1/pages/{$root->id}", ['title' => '', 'base_version' => 'zwei'])->assertUnprocessable()
+        ->assertJsonPath('errors.title.0', __('field.title.required'))
+        ->assertJsonPath('errors.base_version.0', __('field.base_version.invalid'));
+});

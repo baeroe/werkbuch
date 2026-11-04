@@ -11,8 +11,9 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Gives a saved text its uploads (A232, A233): the images and files the texts name that nobody owns yet, that the
- * writer uploaded into the project, now belong to the owner of the texts. Inside the caller's transaction, after its
- * locks (organization, project, owner): the rows are read `for update`, so a DeleteAttachment of the same upload waits
+ * writer uploaded into the project, now belong to the owner of the texts (a work item, a comment or a wiki page).
+ * Inside the caller's transaction, after its locks (organization or none for a page, project, owner): the rows are read
+ * `for update`, so a DeleteAttachment of the same upload waits
  * (or the text waits for it) and a text never points to an attachment that went meanwhile. What the rules of saving
  * let through (RichTextRules::usable()) is checked again under that lock; an attachment that is gone or no longer
  * usable is the same 422 `field.rich_text.attachment` at the key that sent the text. Attachments another text of the

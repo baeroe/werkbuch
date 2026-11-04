@@ -41,8 +41,10 @@ use App\Actions\Notifications\SendDueReminders;
 use App\Actions\Notifications\SendNotificationMail;
 use App\Actions\Organization\GetOrganization;
 use App\Actions\Organization\UpdateOrganization;
+use App\Actions\Pages\CreatePage;
 use App\Actions\Pages\GetPage;
 use App\Actions\Pages\ListPages;
+use App\Actions\Pages\UpdatePage;
 use App\Actions\Projects\AddMember;
 use App\Actions\Projects\ArchiveProject;
 use App\Actions\Projects\AssignWorkflow;
@@ -817,6 +819,21 @@ return [
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetPage::run($a, $w->page($column)),
         'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
         'hidden' => ['outsider_private'],
+    ],
+    // writing the wiki takes `wiki.edit`: members and admins of the project (the default bot is an org admin)
+    'CreatePage' => [
+        'action' => CreatePage::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => CreatePage::run($a, $w->project($column), ['title' => 'Matrix']),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::PageCreated,
+    ],
+    'UpdatePage' => [
+        'action' => UpdatePage::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => UpdatePage::run($a, $w->page($column), ['title' => 'Matrix']),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::PageUpdated,
     ],
     // the inbox is the own one: everybody lists, marks and deletes their own notifications (a bot has none); a
     // notification of a project the account does not see is passed over when marking and a 404 when deleting (K19)

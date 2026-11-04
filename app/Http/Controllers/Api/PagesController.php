@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Actions\Pages\CreatePage;
 use App\Actions\Pages\GetPage;
 use App\Actions\Pages\ListPages;
+use App\Actions\Pages\UpdatePage;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\PageNodeResource;
 use App\Http\Resources\PageResource;
@@ -27,8 +29,20 @@ final class PagesController extends Controller
         return PageNodeResource::tree($pages)->additional(['meta' => ['total' => $pages->count()]]);
     }
 
+    /** A new page at the end of its siblings, 201 `{data: Page}`. */
+    public function store(Request $request, Project $project): PageResource
+    {
+        return new PageResource(CreatePage::run(Actor::fromRequest($request), $project, $request->all()));
+    }
+
     public function show(Request $request, Page $page): PageResource
     {
         return new PageResource(GetPage::run(Actor::fromRequest($request), $page));
+    }
+
+    /** Saves what the body sends; `base_version` guards against an overwrite (409 `page_conflict`). */
+    public function update(Request $request, Page $page): PageResource
+    {
+        return new PageResource(UpdatePage::run(Actor::fromRequest($request), $page, $request->all()));
     }
 }
