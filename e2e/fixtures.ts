@@ -6,7 +6,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { expect, test as base, type Page } from '@playwright/test';
-import { accountPageErrors, isRouterBadGateway, ROOT, watchPageErrors } from './helpers';
+import { accountPageErrors, isRouterBadGateway, ROOT, routerBadGateways, watchPageErrors } from './helpers';
 
 export { expect };
 
@@ -64,8 +64,10 @@ export const test = base.extend<{ allowedErrors: RegExp[]; pageErrors: string[];
     async ({ page, allowedErrors }, use) => {
       const errors: string[] = [];
       watchPageErrors(page, errors);
-      // what a page of another person reported before this test (an earlier test, a beforeAll) is not this test's
+      // what a page of another person reported before this test (an earlier test, a beforeAll) is not this test's, nor
+      // a 502 the router gave then
       accountPageErrors.length = 0;
+      routerBadGateways.clear();
       await use(errors);
       expect(
         [...errors, ...accountPageErrors].filter((error) => !isRouterBadGateway(error) && !allowedErrors.some((allowed) => allowed.test(error))),

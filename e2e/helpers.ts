@@ -254,16 +254,21 @@ export async function signedInContext(
 export const accountPageErrors: string[] = [];
 
 /**
- * The addresses the shared DDEV router answered itself with a 502 "Bad Gateway" (Traefik: its connection to the web
- * container broke, the web container never saw the request; its own answers carry `server: nginx`, the router's do
- * not). Not the app's error: the fixture `pageErrors` leaves the browser's note on exactly these out.
+ * The answers the shared DDEV router gave itself with a 502 "Bad Gateway" during the running test, counted by address
+ * (Traefik: its connection to the web container broke, the web container never saw the request; its own answers carry
+ * `server: nginx`, the router's do not). Not the app's error: the fixture `pageErrors` leaves the browser's note on
+ * exactly these out, one note per such answer, and empties the count when a test starts: a 502 of nginx on the same
+ * address, then or later, still fails the test.
  */
-export const routerBadGateways = new Set<string>();
+export const routerBadGateways = new Map<string, number>();
 
-/** Whether `error` is the browser's note on a 502 the shared router made (`routerBadGateways`). */
+/** Whether `error` is the browser's note on a 502 the shared router made (`routerBadGateways`); each answer counts once. */
 export function isRouterBadGateway(error: string): boolean {
   const url = /status of 502 \(\) \((.+)\)$/.exec(error)?.[1];
-  return url !== undefined && routerBadGateways.has(url);
+  const count = url === undefined ? 0 : (routerBadGateways.get(url) ?? 0);
+  if (count === 0) return false;
+  routerBadGateways.set(url!, count - 1);
+  return true;
 }
 
 /** Collects what `page` reports into `into`: console errors and uncaught exceptions, led by `[<label>] ` when given. */
@@ -275,7 +280,7 @@ export function watchPageErrors(page: Page, into: string[], label?: string): voi
   });
   page.on('response', async (response) => {
     if (response.status() !== 502 || response.headers().server !== undefined) return;
-    if ((await response.text().catch(() => '')).trim() === 'Bad Gateway') routerBadGateways.add(response.url());
+    if ((await response.text().catch(() => '')).trim() === 'Bad Gateway') routerBadGateways.set(response.url(), (routerBadGateways.get(response.url()) ?? 0) + 1);
   });
 }
 
