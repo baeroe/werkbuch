@@ -313,6 +313,19 @@ describe('the wiki', () => {
     await waitFor(() => expect(inertia.replace).toHaveBeenCalledWith({ url: '/projects/WEB/wiki/pg_web_domain?activity=1', preserveState: true, preserveScroll: true }));
     expect(inertia.visit).not.toHaveBeenCalled();
   });
+
+  it('moves to the identifier a project renamed meanwhile has, and keeps the wiki on the screen (T13-M3)', async () => {
+    overrides['GET /api/v1/projects/WEB'] = () => ({ body: { data: { ...web, identifier: 'SITE' } } });
+    inertia.go('/projects/WEB/wiki/pg_web_domain?activity=1');
+    renderWiki({ pageId: 'pg_web_domain', pageFound: true });
+
+    await waitFor(() =>
+      expect(inertia.visit).toHaveBeenCalledWith('/projects/SITE/wiki/pg_web_domain?activity=1', { replace: true, preserveState: true, preserveScroll: true }),
+    );
+    expect(inertia.visit).toHaveBeenCalledTimes(1);
+    expect(inertia.replace).not.toHaveBeenCalled();
+    expect(await pagesTree()).toBeTruthy();
+  });
 });
 
 describe('the open page', () => {

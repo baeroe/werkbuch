@@ -4,7 +4,8 @@
  * - A project that does not exist or that the person does not see is the 404 of the screen; another failure is the
  *   error with retry; meanwhile the skeleton.
  * - Another spelling in the address (`/projects/web/wiki`) becomes the identifier's own (`router.replace`), so the
- *   sidebar finds the project. A former identifier never arrives here: the server answers it with a 301.
+ *   sidebar finds the project. A former identifier never arrives here: the server answers it with a 301. A project
+ *   renamed while the wiki is open moves to its new address (`router.visit`, the wiki stays on the screen; T13-M3).
  * - `pageFound` (the server found the page for the person) only counts together with `pageId`.
  */
 
@@ -52,12 +53,19 @@ export function WikiScreen({ identifier, pageId, pageFound }: WikiScreenProps) {
   const project = useProject(identifier);
   const known = project.data;
 
-  // another spelling in the address: the identifier's own, with the rest of the address as it is
+  // renamed meanwhile (T13-M3): the address of the identifier the project has now, the rest of it as it is; the wiki
+  // stays on the screen (it is keyed by the project), so neither the tree nor an open editor goes
   const { url } = usePage();
+  const moved = known !== undefined && known.identifier !== identifier;
+  const renamed = moved ? url.replace(/^\/projects\/[^/?#]+/, `/projects/${encodeURIComponent(known.identifier)}`) : null;
+  useEffect(() => {
+    if (renamed !== null) router.visit(renamed, { replace: true, preserveState: true, preserveScroll: true });
+  }, [renamed]);
+  // another spelling in the address: the identifier's own, with the rest of the address as it is
   const canonical = url.replace(/^\/projects\/[^/?#]+/, `/projects/${encodeURIComponent(identifier)}`);
   useEffect(() => {
-    if (canonical !== url) router.replace({ url: canonical, preserveState: true, preserveScroll: true });
-  }, [canonical, url]);
+    if (!moved && canonical !== url) router.replace({ url: canonical, preserveState: true, preserveScroll: true });
+  }, [moved, canonical, url]);
 
   if (project.error instanceof ApiError && project.error.status === 404) {
     return <NotFound title={t('wiki.not_found.title', { identifier })} description={t('wiki.not_found.description')} />;
