@@ -107,6 +107,8 @@ it('refuses preferences that are no list', function (mixed $preferences, string 
     'missing' => ['missing', 'field.required'],
     'a text' => ['all', 'field.preferences.invalid'],
     'an object' => [['comment' => ['event' => 'comment', 'channel' => 'mail', 'enabled' => false]], 'field.preferences.invalid'],
+    // there are fewer kinds and channels than that: a list this long is no setting (T4-M2)
+    'more than 100 rows' => [array_fill(0, 101, ['event' => 'comment', 'channel' => 'mail', 'enabled' => true]), 'field.preferences.invalid'],
 ]);
 
 it('refuses a bot with 403', function () {

@@ -24,6 +24,9 @@ final class SaveNotificationPreferences
 {
     use AsAction;
 
+    /** The most rows one call takes. */
+    public const MAX_ROWS = 100;
+
     /**
      * @param  array<string, mixed>  $input
      * @return list<array{user_id: string, event: string, channel: string, enabled: bool}>
@@ -35,7 +38,8 @@ final class SaveNotificationPreferences
         Authorize::check($actor, 'managePreferences', Notification::class);
 
         $valid = Validator::make($input, [
-            'preferences' => ['required', 'list'],
+            // more rows than kinds times channels is no setting (T4-M2)
+            'preferences' => ['required', 'list', 'max:'.self::MAX_ROWS],
             // a row that is no object is refused as a whole, its fields are not asked for
             'preferences.*' => Rule::forEach(fn (mixed $row) => is_array($row) ? [
                 'event' => ['required', Rule::enum(NotificationKind::class)],
@@ -45,6 +49,7 @@ final class SaveNotificationPreferences
         ], [
             'preferences.required' => __('field.required'),
             'preferences.list' => __('field.preferences.invalid'),
+            'preferences.max' => __('field.preferences.invalid'),
             'preferences.*.array' => __('field.preferences.invalid'),
             'preferences.*.*.required' => __('field.required'),
             'preferences.*.event.enum' => __('field.preferences.event'),
@@ -63,7 +68,8 @@ final class SaveNotificationPreferences
             ];
         }
 
-        DB::transaction(fn () => NotificationPreference::query()->upsert(array_values($rows), ['user_id', 'kind', 'channel'], ['enabled']));
+        // two tabs saving at once may deadlock on the unique index: Laravel tries again (T4-M1)
+        DB::transaction(fn () => NotificationPreference::query()->upsert(array_values($rows), ['user_id', 'kind', 'channel'], ['enabled']), 3);
 
         return GetNotificationPreferences::matrix($actor->user);
     }
