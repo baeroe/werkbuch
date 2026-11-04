@@ -15,9 +15,11 @@
 
 import { useMemo, useRef, type ReactNode, type RefObject } from 'react';
 import { BlockedHint } from '@/components/items/BlockedHint';
+import { Banner } from '@/components/ui/Banner';
 import { previewKeysAct } from '@/components/fields/commands/context';
 import { useLiveItem } from '@/hooks/live';
 import { t } from '@/lib/i18n';
+import { useLiveGone } from '@/lib/liveGone';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { useUiStore } from '@/store/ui';
 import type { WorkItemDetail } from '@/types';
@@ -56,11 +58,18 @@ export function ItemDetailProvider({ surface, panel, itemId, children }: ItemDet
   return <DetailContext.Provider value={context}>{children}</DetailContext.Provider>;
 }
 
+/** A live message said the item or its project was deleted: the page keeps what it shows and says so (A298, F36). */
+function DeletedNote({ itemId, projectId }: { itemId: string; projectId: string }) {
+  if (!useLiveGone(itemId, projectId)) return null;
+  return <Banner tone="danger" role="status" title={t('items.detail.deleted.title')} className="mt-3" />;
+}
+
 export function ItemBody({ detail, surface }: { detail: WorkItemDetail; surface: DetailSurface }) {
   const { item } = detail;
   const head: ReactNode = (
     <>
       <ItemTitle item={item} />
+      <DeletedNote itemId={item.id} projectId={item.project_id} />
       <ArchivedNote item={item} />
       <BlockedHint item={item} variant="banner" onOpen={surface === 'peek' ? (id) => useUiStore.getState().openPeek(id) : undefined} className="mt-3" />
     </>

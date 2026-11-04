@@ -2,6 +2,7 @@ import { router } from '@inertiajs/react';
 import { useQueryClient, type Query, type QueryClient, type QueryKey } from '@tanstack/react-query';
 import { useEffect, useSyncExternalStore } from 'react';
 import { isLiveConnected, subscribeLive, subscribeLiveStatus, watchItem, type LiveEvent } from '@/api/live';
+import { clearLiveGone, markLiveGone } from '@/lib/liveGone';
 import { subscribeUndoPending, undoPending } from '@/lib/undo';
 import { useUiStore } from '@/store/ui';
 import { qk } from './keys';
@@ -226,7 +227,11 @@ export function useLiveSync(): void {
         if (order.length > SEEN_MAX) seen.delete(order.shift()!);
       }
       const gone = goneOf(event);
-      if (gone !== null) refresh.markGone(gone);
+      if (gone !== null) {
+        refresh.markGone(gone);
+        // the item page and the preview say so without asking (F36)
+        markLiveGone(gone);
+      }
       if (event.type === 'live.refused') refusals.push(event.project_id ?? event.item_id);
       // only the person's own channel hears it (K14): the role changed is the person's
       if (event.type === 'user.role_changed') roleChanged = true;
@@ -239,6 +244,7 @@ export function useLiveSync(): void {
 
     return () => {
       alive = false;
+      clearLiveGone();
       stopLive();
       stopMutations();
       stopUndo();

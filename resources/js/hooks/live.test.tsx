@@ -6,6 +6,7 @@ import type { ApiError } from '@/api/client';
 import type { LiveEvent } from '@/api/live';
 import { resetToasts } from '@/components/ui/toast';
 import { runWithUndo, undoLatest } from '@/lib/undo';
+import { useLiveGone } from '@/lib/liveGone';
 import { useUiStore } from '@/store/ui';
 import { mockApi, type MockApi } from '@/test/api';
 import { project } from '@/test/fixtures';
@@ -338,6 +339,21 @@ describe('useLiveSync', () => {
       stops.splice(0).forEach((stop) => stop());
       queryClient.clear();
     }
+  });
+
+  it('tells the screens what was deleted and forgets it when it stops (F36)', async () => {
+    const { result, unmount } = renderHook(() => {
+      useLiveSync();
+      return useLiveGone('wi_app_3', 'p_app');
+    }, { wrapper });
+    expect(result.current).toBe(false);
+
+    send({ event_id: 'ev_1', type: 'work_item.deleted', project_id: 'p_app', item_id: 'wi_app_3' });
+    expect(result.current).toBe(true);
+    unmount();
+
+    const again = renderHook(() => useLiveGone('wi_app_3'));
+    expect(again.result.current).toBe(false);
   });
 
   it('remembers the last 200 deleted things, not every one', async () => {
