@@ -12,6 +12,8 @@ use App\Http\Controllers\Api\MembersController;
 use App\Http\Controllers\Api\NotificationPreferencesController;
 use App\Http\Controllers\Api\NotificationsController;
 use App\Http\Controllers\Api\OrganizationController;
+use App\Http\Controllers\Api\PagesController;
+use App\Http\Controllers\Api\PageVersionsController;
 use App\Http\Controllers\Api\PasswordController;
 use App\Http\Controllers\Api\ProjectsController;
 use App\Http\Controllers\Api\PropertiesController;
@@ -37,6 +39,8 @@ use App\Http\Middleware\RedirectFormerItemKey;
 use App\Models\Attachment;
 use App\Models\Comment;
 use App\Models\Notification;
+use App\Models\Page;
+use App\Models\PageVersion;
 use App\Models\Project;
 use App\Models\View;
 use App\Models\WorkItem;
@@ -62,6 +66,12 @@ Route::bind('attachment', fn (string $ref) => (Str::isUlid($ref) ? Attachment::q
 // a notification by its ULID (any case; anything else is no notification); whether it is the account's and still
 // visible to it, the action decides
 Route::bind('notification', fn (string $ref) => (Str::isUlid($ref) ? Notification::query()->find(strtolower($ref)) : null) ?? throw Problem::notFound());
+// a page of a wiki by its ULID (any case; anything else is no page); whether the account sees its project, the action
+// decides. The web route of the wiki names its parameter `{pageId}`, this binding is global
+Route::bind('page', fn (string $ref) => (Str::isUlid($ref) ? Page::query()->find(strtolower($ref)) : null) ?? throw Problem::notFound());
+// a kept version of a page by its ULID (any case; anything else is no version); whether it belongs to the page of the
+// route and the account sees it, the action decides
+Route::bind('pageVersion', fn (string $ref) => (Str::isUlid($ref) ? PageVersion::query()->find(strtolower($ref)) : null) ?? throw Problem::notFound());
 
 // The REST API (prefix api/v1, see bootstrap/app.php): the session of the interface (with CSRF) or a bearer token whose
 // abilities fit the method. Every route has a row in tests/Feature/Api/routes.php.
@@ -95,6 +105,19 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
     Route::post('projects/{project}/members', [MembersController::class, 'store']);
     Route::patch('projects/{project}/members/{user}', [MembersController::class, 'update']);
     Route::delete('projects/{project}/members/{user}', [MembersController::class, 'destroy']);
+
+    // the wiki of a project: the whole tree without text (A315), a page with its text; creating, saving, moving and
+    // deleting pages (a page goes with its subtree)
+    Route::get('projects/{project}/pages', [PagesController::class, 'index']);
+    Route::post('projects/{project}/pages', [PagesController::class, 'store']);
+    Route::get('pages/{page}', [PagesController::class, 'show']);
+    Route::patch('pages/{page}', [PagesController::class, 'update']);
+    Route::post('pages/{page}/move', [PagesController::class, 'move']);
+    Route::delete('pages/{page}', [PagesController::class, 'destroy']);
+    // the kept versions of a page: the list without text (A315), one with its text, restoring one as the newest state
+    Route::get('pages/{page}/versions', [PageVersionsController::class, 'index']);
+    Route::get('pages/{page}/versions/{pageVersion}', [PageVersionsController::class, 'show']);
+    Route::post('pages/{page}/versions/{pageVersion}/restore', [PageVersionsController::class, 'restore']);
 
     Route::get('workflows', [WorkflowsController::class, 'index']);
     Route::post('workflows', [WorkflowsController::class, 'store']);

@@ -426,5 +426,7 @@ it('fills the search index after seeding', function () {
         ->and(WorkItem::count())->toBe(71)
         ->and(collect($engine->documents('testing_projects'))->pluck('identifier')->sort()->values()->all())->toBe(['APP', 'OPS', 'WEB'])
         ->and($engine->documents('testing_users'))->toHaveCount(User::count())
+        // the wiki of the PagesSeeder, written before the index is built anew
+        ->and($engine->documents('testing_pages'))->toHaveCount(19)
         ->and($engine->updatedSettings('testing_work_items'))->not->toBeNull();
 });

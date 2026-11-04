@@ -35,7 +35,8 @@ import { usePermissions } from '@/lib/permissions';
 import { SHORTCUTS } from '@/lib/shortcuts/catalog';
 import { runWithUndo } from '@/lib/undo';
 import type { ListedItem, RelationEntry, RelationType, WorkItem, WorkItemDetail } from '@/types';
-import { focusWhenLost, LinkedItem, Section, useDetail } from './shared';
+import { focusWhenLost } from '@/lib/focusOrigin';
+import { LinkedItem, Section, useDetail } from './shared';
 
 /** How long typing in the item search pauses before the server is asked. */
 export const SEARCH_PAUSE_MS = 200;

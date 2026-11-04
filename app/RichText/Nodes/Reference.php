@@ -5,8 +5,8 @@ namespace App\RichText\Nodes;
 use Tiptap\Core\Node;
 
 /**
- * A reference to an item (or, from Phase 9, a page) in tiptap-php: `<span data-type="reference" data-id
- * data-kind></span>`, empty and without a key or a title, which only a reader who sees the item may get (K5).
+ * A reference to an item or a page in tiptap-php: `<span data-type="reference" data-id data-kind></span>`, empty and
+ * without a key or a title, which only a reader who sees the item or the page may get (K5).
  */
 final class Reference extends Node
 {

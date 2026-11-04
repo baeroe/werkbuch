@@ -46,9 +46,16 @@ export interface LiveEvent {
   event_id: string | null;
   type: string;
   project_id: string | null;
+  /** The page of `page.*` (A318). */
+  page_id: string | null;
   item_id: string | null;
   comment_id: string | null;
   actor_id: string | null;
+  /**
+   * Only on `page.deleted`: the whole subtree, the root first; `null` when it is too large to name
+   * (`LiveMessage::PAGE_IDS_MAX`): the tree of the project then tells what is gone.
+   */
+  page_ids?: string[] | null;
   /** Only on `notifications.changed`. */
   unread_changed?: boolean;
 }
@@ -106,7 +113,7 @@ function markGone(id: string): void {
 }
 
 function browserEvent(type: string): LiveEvent {
-  return { event_id: null, type, project_id: null, item_id: null, comment_id: null, actor_id: null };
+  return { event_id: null, type, project_id: null, page_id: null, item_id: null, comment_id: null, actor_id: null };
 }
 
 /**

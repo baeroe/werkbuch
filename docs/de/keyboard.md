@@ -107,6 +107,13 @@ werkbuch geht ohne Maus. Mit <kbd>?</kbd> zeigt jeder Bildschirm die Kürzel, di
 | <kbd>⇧</kbd>+<kbd>E</kbd> | Alle als gelesen markieren |
 | <kbd>#</kbd> | Benachrichtigung löschen |
 
+## Wiki
+
+| Taste | Aktion |
+| --- | --- |
+| <kbd>⌘ / Strg</kbd>+<kbd>↵</kbd> | Seite jetzt speichern |
+| <kbd>⌘ / Strg</kbd>+<kbd>⌫</kbd> | Seite löschen (mit Rückfrage) |
+
 ## Befehlspalette
 
 | Taste | Aktion |
@@ -137,6 +144,17 @@ werkbuch geht ohne Maus. Mit <kbd>?</kbd> zeigt jeder Bildschirm die Kürzel, di
 | <kbd>↑</kbd> / <kbd>↓</kbd> | Voriger bzw. nächster Kopf |
 | <kbd>↵</kbd> / <kbd>Leertaste</kbd> | Gruppe auf- oder zuklappen |
 
+## Seitenbaum des Wikis
+
+| Taste | Aktion |
+| --- | --- |
+| <kbd>↑</kbd> / <kbd>↓</kbd> | Vorige bzw. nächste Seite |
+| <kbd>→</kbd> | Unterseiten aufklappen bzw. zur ersten Unterseite |
+| <kbd>←</kbd> | Unterseiten zuklappen bzw. zur Eltern-Seite |
+| <kbd>Pos1</kbd> / <kbd>Ende</kbd> | Erste bzw. letzte Seite |
+| <kbd>↵</kbd> | Seite öffnen |
+| <kbd>⌘ / Strg</kbd>+<kbd>⌫</kbd> | Seite der Zeile löschen (mit Rückfrage) |
+
 ## Editoren und Felder
 
 | Taste | Aktion |
@@ -145,7 +163,7 @@ werkbuch geht ohne Maus. Mit <kbd>?</kbd> zeigt jeder Bildschirm die Kürzel, di
 | <kbd>Esc</kbd> | Feld verlassen |
 | <kbd>/</kbd> | Block einfügen (am Zeilenanfang oder nach einem Leerzeichen) |
 | <kbd>@</kbd> | Person oder Bot erwähnen (mit Projekt) |
-| <kbd>#</kbd> | Auf ein Item verweisen (mit Projekt) |
+| <kbd>#</kbd> | Auf ein Item oder eine Seite verweisen (mit Projekt) |
 | <kbd>↑</kbd> / <kbd>↓</kbd> | Eintrag der Liste wählen |
 | <kbd>↵</kbd> / <kbd>Tab</kbd> | Eintrag übernehmen |
 | <kbd>Esc</kbd> | Liste schließen |

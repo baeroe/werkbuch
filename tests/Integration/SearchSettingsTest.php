@@ -5,13 +5,14 @@ use App\Models\WorkItem;
 use Illuminate\Support\Facades\Artisan;
 use Tests\Support\Meili;
 
-it('syncs the settings of the three indexes into Meilisearch', function () {
+it('syncs the settings of the four indexes into Meilisearch', function () {
     $client = Meili::use();
 
     expect(Artisan::call('app:search-sync'))->toBe(0);
     Meili::settle();
 
     $items = $client->index('testing_work_items')->getSettings();
+    $pages = $client->index('testing_pages')->getSettings();
     $projects = $client->index('testing_projects')->getSettings();
     $users = $client->index('testing_users')->getSettings();
 
@@ -19,6 +20,9 @@ it('syncs the settings of the three indexes into Meilisearch', function () {
         ->and($items['rankingRules'][array_key_last($items['rankingRules'])])->toBe('updated_at:desc')
         ->and($items['typoTolerance']['disableOnAttributes'])->toBe(['key'])
         ->and($items['filterableAttributes'])->toContain('project_id', 'label_ids')
+        ->and($pages['searchableAttributes'])->toBe(['title', 'text'])
+        ->and($pages['filterableAttributes'])->toBe(['project_id'])
+        ->and($pages['rankingRules'])->toBe($items['rankingRules'])
         ->and($projects['searchableAttributes'])->toBe(['identifier', 'former_identifiers', 'name', 'description'])
         ->and($users['typoTolerance']['disableOnAttributes'])->toBe(['handle']);
 });

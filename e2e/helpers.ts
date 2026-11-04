@@ -197,13 +197,16 @@ export function totp(secret: string, at = Date.now()): string {
 
 /**
  * Waits until the browser of `page` holds the live channel `channel` (A305): the answer of `/broadcasting/batch` that
- * signs it. With `{ prefix: true }` any channel that starts with `channel`, e.g. `presence-user.` for the own one.
+ * signs it. With `{ prefix: true }` any channel that starts with `channel`, e.g. `presence-user.` for the own one. An
+ * answer whose page was left meanwhile (its body is gone) does not count.
  */
 export function channelHeld(page: Page, channel: string, { prefix = false } = {}): Promise<unknown> {
   const named = (name: string) => (prefix ? name.startsWith(channel) : name === channel);
   return page.waitForResponse(async (response) => {
     if (!response.url().endsWith('/broadcasting/batch') || !response.ok()) return false;
-    const channels = ((await response.json()) as { channels?: Record<string, { auth?: unknown }> }).channels ?? {};
+    // the answer of a page the browser has left since (the sign-in's `/my-items`) has no body any more: not this one
+    const body = (await response.json().catch(() => null)) as { channels?: Record<string, { auth?: unknown }> } | null;
+    const channels = body?.channels ?? {};
     return Object.entries(channels).some(([name, answer]) => named(name) && typeof answer.auth === 'string');
   });
 }
@@ -503,6 +506,23 @@ export async function createItem(page: Page, input: Record<string, unknown>): Pr
 }
 
 /**
+ * Creates a page in the wiki of a project of a spec over the API (`POST /api/v1/projects/{id}/pages`), as the
+ * signed-in person: at the end of the top level, or of the children of `parent_id`; `content_json` is Tiptap JSON. Answers
+ * its id; the page goes with its project (`removeE2eProject()`).
+ */
+export async function createE2ePage(
+  page: Page,
+  projectId: string,
+  input: { title: string; parent_id?: string | null; content_json?: Record<string, unknown> | null },
+): Promise<{ id: string }> {
+  await ensureCsrfCookie(page);
+  const response = await api(page, 'POST', `/api/v1/projects/${projectId}/pages`, input);
+  expect(response.status(), await response.text()).toBe(201);
+  const { data } = (await response.json()) as { data: { id: string } };
+  return { id: data.id };
+}
+
+/**
  * Deletes a project of a spec with its items (cleanup in `finally`): the answer is 202, the purge runs in the queue; a
  * project that is gone already (404) is fine. The page leaves the app for the delete and comes back on `/my-items`
  * afterwards: a page that shows the project, or only joins its live channel, would load it once more while the delete
@@ -600,6 +620,7 @@ export function searchToken(): string {
 
 export type SearchData = {
   items: { id: string; key: string; title: string }[];
+  pages: { id: string; project_id: string; title: string }[];
   projects: { id: string; identifier: string }[];
   people: { id: string }[];
   views: { id: string }[];

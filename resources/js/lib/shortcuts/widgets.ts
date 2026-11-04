@@ -1,7 +1,7 @@
 /*
- * The keys that belong to a widget, not to the catalog: the command palette, the grid of the table, the group headers
- * and the editor (with its `/`, `@` and `#` lists) handle them themselves while they have focus. The shortcut reference
- * lists them next to the catalog.
+ * The keys that belong to a widget, not to the catalog: the command palette, the grid of the table, the group headers,
+ * the page tree of the wiki and the editor (with its `/`, `@` and `#` lists) handle them themselves while they have
+ * focus. The shortcut reference lists them next to the catalog.
  * Type imports only, so `scripts/shortcuts-doc.mjs` can load this file with Node.
  */
 
@@ -54,6 +54,19 @@ export const WIDGET_KEYS: WidgetGroup[] = [
       { keys: 'down', label: 'shortcuts.widget.groups.header' },
       { keys: 'enter', label: 'shortcuts.widget.groups.toggle' },
       { keys: 'space', label: 'shortcuts.widget.groups.toggle' },
+    ],
+  },
+  {
+    group: 'shortcuts.widget.group.tree',
+    entries: [
+      { keys: 'up', label: 'shortcuts.widget.tree.move' },
+      { keys: 'down', label: 'shortcuts.widget.tree.move' },
+      { keys: 'right', label: 'shortcuts.widget.tree.expand' },
+      { keys: 'left', label: 'shortcuts.widget.tree.collapse' },
+      { keys: 'home', label: 'shortcuts.widget.tree.edge' },
+      { keys: 'end', label: 'shortcuts.widget.tree.edge' },
+      { keys: 'enter', label: 'shortcuts.widget.tree.open' },
+      { keys: 'mod+backspace', label: 'shortcuts.widget.tree.delete' },
     ],
   },
   {

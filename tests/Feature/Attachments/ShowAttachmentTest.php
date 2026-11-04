@@ -121,6 +121,9 @@ it('hides an attachment whose owner is gone or of a kind it does not know', func
     $goneComment = Attachment::factory()->stored($png(), 'image/png', 'b.png')->create([
         'project_id' => $project->id, 'uploaded_by' => $admin->id, 'attachable_type' => 'comment', 'attachable_id' => strtolower((string) Str::ulid()),
     ]);
+    $gonePage = Attachment::factory()->stored($png(), 'image/png', 'd.png')->create([
+        'project_id' => $project->id, 'uploaded_by' => $admin->id, 'attachable_type' => 'page', 'attachable_id' => strtolower((string) Str::ulid()),
+    ]);
     $unknown = Attachment::factory()->stored($png(), 'image/png', 'c.png')->create([
         'project_id' => $project->id, 'uploaded_by' => $admin->id, 'attachable_type' => 'project', 'attachable_id' => $project->id,
     ]);
@@ -128,6 +131,7 @@ it('hides an attachment whose owner is gone or of a kind it does not know', func
     // the uploader as well: an owner that is named is never read as "nobody owns it"
     $this->actingAs($admin)->get("/attachments/{$gone->id}")->assertNotFound();
     $this->actingAs($admin)->get("/attachments/{$goneComment->id}")->assertNotFound();
+    $this->actingAs($admin)->get("/attachments/{$gonePage->id}")->assertNotFound();
     $this->actingAs($admin)->get("/attachments/{$unknown->id}")->assertNotFound();
 });
 

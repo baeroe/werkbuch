@@ -22,11 +22,12 @@ describe('keys of the widgets', () => {
     }
   });
 
-  it('lists four groups, each with entries', () => {
+  it('lists five groups, each with entries', () => {
     expect(WIDGET_KEYS.map((group) => group.group)).toEqual([
       'shortcuts.widget.group.palette',
       'shortcuts.widget.group.table',
       'shortcuts.widget.group.groups',
+      'shortcuts.widget.group.tree',
       'shortcuts.widget.group.editor',
     ]);
     for (const group of WIDGET_KEYS) expect(group.entries.length).toBeGreaterThan(0);

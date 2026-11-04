@@ -2,6 +2,7 @@
 
 use App\Access\ProjectRole;
 use App\Enums\Locale;
+use App\Models\Page;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\View;
@@ -16,21 +17,24 @@ $world = function (): array {
     $web = Project::factory()->identifier('WEB')->member($mara, ProjectRole::Member)->create(['name' => 'Kontakt Website']);
     $item = WorkItem::factory()->for($web)->create(['title' => 'Kontaktformular prüfen', 'description_text' => 'Pflichtfelder']);
     $view = View::factory()->create(['name' => 'Kontakt offen', 'created_by' => $mara->id]);
+    $page = Page::factory()->for($web)->withText('Wer antwortet auf das Kontaktformular')->create(['title' => 'Support']);
     app(SearchIndexer::class)->rebuild();
 
-    return [$mara, $web, $item, $view];
+    return [$mara, $web, $item, $view, $page];
 };
 
 it('searches with a read token', function () use ($world) {
     searchEngine();
-    [$mara, $web, $item, $view] = $world();
+    [$mara, $web, $item, $view, $page] = $world();
 
-    $response = $this->withToken(apiToken($mara, ['read']))->getJson('/api/v1/search?q=kontakt&types=items,projects,people,views')->assertOk();
+    $response = $this->withToken(apiToken($mara, ['read']))->getJson('/api/v1/search?q=kontakt&types=items,pages,projects,people,views')->assertOk();
 
     expect(array_keys($response->json()))->toBe(['data'])
-        ->and(array_keys($response->json('data')))->toBe(['items', 'projects', 'people', 'views', 'key_match'])
+        ->and(array_keys($response->json('data')))->toBe(['items', 'pages', 'projects', 'people', 'views', 'key_match'])
         ->and($response->json('data.items.*.id'))->toBe([$item->id])
         ->and($response->json('data.items.0'))->toHaveKeys(['key', 'title', 'values'])->not->toHaveKeys(['description', 'description_json', 'values_markdown'])
+        ->and($response->json('data.pages.*.id'))->toBe([$page->id])
+        ->and($response->json('data.pages.0'))->toHaveKeys(['title', 'parent_id', 'version'])->not->toHaveKeys(['content', 'content_json'])
         ->and($response->json('data.projects.*.id'))->toBe([$web->id])
         ->and($response->json('data.projects.0'))->toHaveKeys(['identifier', 'my_role', 'is_member'])
         ->and($response->json('data.people.*.id'))->toBe([$mara->id])
@@ -42,6 +46,7 @@ it('searches with a read token', function () use ($world) {
 
     expect($key->json('data.key_match'))->toBe($item->id)
         ->and($key->json('data.items.*.key'))->toBe(['WEB-1'])
+        ->and($key->json('data.pages'))->toBe([])
         ->and($key->json('data.projects'))->toBe([])
         ->and($key->json('data.people'))->toBe([])
         ->and($key->json('data.views'))->toBe([]);

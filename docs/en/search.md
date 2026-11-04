@@ -1,12 +1,13 @@
 # Search
 
-One search finds work items, projects, people and bots, and views. In the interface it lives in the command palette (<kbd>⌘ / Ctrl</kbd>+<kbd>K</kbd>); over the API it is `GET /api/v1/search`. Both search the same way and leave out the same items, projects and accounts; the palette asks for fewer hits per kind (8) and shows people and bots only to org admins (see below), and it never searches the archive. The browser never talks to the search engine itself: every search goes through werkbuch, which decides what you may see.
+One search finds work items, wiki pages, projects, people and bots, and views. In the interface it lives in the command palette (<kbd>⌘ / Ctrl</kbd>+<kbd>K</kbd>); over the API it is `GET /api/v1/search`. Both search the same way and leave out the same items, pages, projects and accounts; the palette asks for fewer hits per kind (8) and shows people and bots only to org admins (see below), and it never searches the archive. The browser never talks to the search engine itself: every search goes through werkbuch, which decides what you may see.
 
 ## What is found
 
 | Kind | Found by | A hit in the palette opens |
 |---|---|---|
 | Work items | Key, title, the text of the description and of the comments | The item page |
+| Wiki pages | Title, text | The page in the wiki |
 | Projects | Identifier, former identifiers, name, description | The item list of the project |
 | People and bots | Name, handle | The settings People or Bots (org admins only, see below) |
 | Views | Name | The view |
@@ -15,12 +16,14 @@ Every word you type has to occur; the last word may be the start of a word, so `
 
 A word of a comment finds the item the comment belongs to; the search reads the comments of an item in the order they were written, up to 64 KB of text per item. A comment that is edited or deleted changes the search a moment later, like any other change; reactions change nothing.
 
+A wiki page is found by its title and its text, up to 64 KB of text per page; a hit in the title counts more than one in the text, and among equal hits the page changed last comes first. Saving, moving and deleting a page change the search a moment later.
+
 People and bots are found only while their account is active. Views are searched by every word of their name, case and accents aside, straight in the database: a new view is found at once.
 
 ## Who finds what
 
-- **Only what you may see.** Items and projects come only from projects you may see, decided at the moment of the search, not when the item was indexed. Whoever is removed from a private project, or whose project turns private, finds none of its items from then on, even before the index catches up. An item that was deleted, or whose project is being deleted, never shows up.
-- **Archive as in lists.** Without `include_archived`, the search leaves out archived items and the items and projects of archived projects, like every item list. The palette always searches this way.
+- **Only what you may see.** Items, pages and projects come only from projects you may see, decided at the moment of the search, not when the item was indexed. Whoever is removed from a private project, or whose project turns private, finds none of its items and pages from then on, even before the index catches up. An item or page that was deleted, or whose project is being deleted, never shows up.
+- **Archive as in lists.** Without `include_archived`, the search leaves out archived items and the items, pages and projects of archived projects, like every item list. The palette always searches this way.
 - **A key jumps.** A query in the form of a key, such as `WEB-47` or `web-47`, names its item in `key_match` and puts it first, archived or not. A former identifier works too: after WEB became SITE, `WEB-47` still finds SITE-47. This only happens for an item you see; the key of any other item answers exactly like a key that does not exist.
 - **People.** The API returns people and bots to every account, as the list of accounts does. The palette shows them only to org admins, because a hit leads into the settings of people and bots, which only org admins open.
 - **Views** are found by every account; every account may read every view.
@@ -29,13 +32,13 @@ People and bots are found only while their account is active. Views are searched
 
 <kbd>⌘ / Ctrl</kbd>+<kbd>K</kbd> opens the palette on every screen. <kbd>/</kbd> opens it too, except in item lists, where <kbd>/</kbd> searches the title of the list instead. The button **Search …** at the top of the sidebar, the search icon of the folded sidebar and of the bar on a phone, and **Search** on the page "not found" open it as well.
 
-What you type first matches the commands (by their name, group and keywords), then the search results follow in sections: **Items** (up to 8), **Projects**, **People** and **Views** (up to 4 each). The search starts 150 ms after your last key; while it runs, the palette says "Searching …". <kbd>↑</kbd> and <kbd>↓</kbd> choose a hit, <kbd>↵</kbd> opens it, <kbd>Esc</kbd> closes the palette.
+What you type first matches the commands (by their name, group and keywords), then the search results follow in sections: **Items** (up to 8), **Pages**, **Projects**, **People** and **Views** (up to 4 each). A page shows its emoji, title and project and opens in the wiki. The search starts 150 ms after your last key; while it runs, the palette says "Searching …". <kbd>↑</kbd> and <kbd>↓</kbd> choose a hit, <kbd>↵</kbd> opens it, <kbd>Esc</kbd> closes the palette.
 
 A typed key such as `WEB-47` puts the items first, with **Open WEB-47** at the top: <kbd>↵</kbd> jumps there even before the search has answered. When the key belongs to an item you see under a former identifier, that item leads instead.
 
 Without a hit, the palette says so and gives two tips: commands are found by their name, and a key jumps straight to the item. When the search does not answer, the palette shows the reason with **Try again**; a typed key still jumps, because the item page resolves the key itself.
 
-The dialog **Add relation** (<kbd>R</kbd> on an item) finds the other item through the same search (items only, up to 20), keys included. It suggests nothing before you type.
+The dialog **Add relation** (<kbd>R</kbd> on an item) finds the other item through the same search (items only, up to 20), keys included. It suggests nothing before you type. `#` in a text finds items and pages the same way (see [rich text](/en/concepts/rich-text#references)).
 
 All keys of the palette are on the [keyboard page](/en/keyboard).
 
@@ -46,9 +49,9 @@ All keys of the palette are on the [keyboard page](/en/keyboard).
 | Parameter | Value |
 |---|---|
 | `q` | Required. What to search for, 1 to 255 characters after trimming. |
-| `types` | The kinds to search: `items`, `projects`, `people`, `views`, separated by commas (`types=items,projects`) or as a list (`types[]=items`). All four by default. |
+| `types` | The kinds to search: `items`, `pages`, `projects`, `people`, `views`, separated by commas (`types=items,projects`) or as a list (`types[]=items`). All five by default. |
 | `limit` | Hits per kind, 1 to 50; 20 by default. |
-| `include_archived` | `1` or `true` also searches archived items and archived projects. |
+| `include_archived` | `1` or `true` also searches archived items and archived projects with their items and pages. |
 
 Any other parameter is ignored. There are no pages: ask for a larger `limit` or a narrower `q`.
 
@@ -57,7 +60,7 @@ curl -H "Authorization: Bearer <token>" \
   "https://werkbuch.example.com/api/v1/search?q=kontakt&types=items,projects&limit=5"
 ```
 
-The answer always has all five keys; kinds you did not ask for are empty lists. Items come in the short form of lists, without `description`, `description_json` and `values_markdown`; projects, people and views have the form of their own endpoints.
+The answer always has all six keys; kinds you did not ask for are empty lists. Items come in the short form of lists, without `description`, `description_json` and `values_markdown`, pages in the short form of the tree, without `content` and `content_json`; projects, people and views have the form of their own endpoints.
 
 ```json
 {
@@ -72,6 +75,7 @@ The answer always has all five keys; kinds you did not ask for are empty lists. 
         "…": "…"
       }
     ],
+    "pages": [],
     "projects": [],
     "people": [],
     "views": [],
@@ -123,20 +127,20 @@ werkbuch searches with [Meilisearch](https://www.meilisearch.com) through Larave
 | `SCOUT_DRIVER` | `meilisearch`; `null` turns the index off, and searches then find nothing but a typed key. |
 | `MEILISEARCH_HOST` | Address of Meilisearch as werkbuch reaches it, for example `http://meilisearch:7700`. |
 | `MEILISEARCH_KEY` | A key that may create, fill and configure indexes (the master key or an admin key). It never leaves the server. |
-| `SCOUT_PREFIX` | Put in front of the index names `work_items`, `projects` and `users`; empty for the app. Two installations on one Meilisearch need different prefixes. |
+| `SCOUT_PREFIX` | Put in front of the index names `work_items`, `pages`, `projects` and `users`; empty for the app. Two installations on one Meilisearch need different prefixes. |
 
-**The index follows the events.** Every change in werkbuch writes an event; a consumer on the queue `search` updates the index from it. A queue worker therefore has to listen on `search`, and a change shows up in the search a moment later. Changes that touch many items at once (a new identifier for a project, a changed workflow, a deleted label) rebuild the documents of those items in a job of their own on the same queue.
+**The index follows the events.** Every change in werkbuch writes an event; a consumer on the queue `search` updates the index from it. A queue worker therefore has to listen on `search`, and a change shows up in the search a moment later. Changes that touch many items at once (a new identifier for a project, a changed workflow, a deleted label) rebuild the documents of those items in a job of their own on the same queue; deleting a wiki page removes its whole subtree from the index in one go.
 
 **Commands.**
 
 ```bash
 php artisan app:search-sync      # sends the settings of the indexes to Meilisearch (after an update changed them)
-php artisan app:search-import    # empties the three indexes and fills them again from the database
+php artisan app:search-import    # empties the four indexes and fills them again from the database
 ```
 
 `app:search-import` is the first start and the repair: it sends the settings, empties the indexes and reads everything again; during that, the search is briefly empty. In DDEV, prefix both with `ddev artisan`.
 
-**After an update** that changes what the index holds, run `app:search-sync` once: without it, Meilisearch does not search the new fields. The update that made comments searchable is one of them; run `app:search-import` after it as well, so that the comments written before the update get into the index.
+**After an update** that changes what the index holds, run `app:search-sync` once: without it, Meilisearch does not search the new fields. The update that made comments searchable is one of them; run `app:search-import` after it as well, so that the comments written before the update get into the index. The update that brought the wiki adds the index `pages`: until `app:search-sync` has created it, every search without `types` answers `503`, and `app:search-import` puts the existing pages into it.
 
 **When Meilisearch is down,** the search answers `503` and the palette says "The search did not answer" with **Try again**; jumping to a typed key keeps working. Nothing is lost on the way: the consumer tries every event up to 8 times, with pauses of 10 seconds, 1, 5 and 15 minutes and then one hour, about 3 hours 20 minutes in all. After that, the job lands in `failed_jobs` and werkbuch reports which event the search gave up on. Run `app:search-import` once Meilisearch is back, and the index is complete again.
 

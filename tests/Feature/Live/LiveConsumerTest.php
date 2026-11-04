@@ -4,6 +4,10 @@ use App\Access\ProjectRole;
 use App\Actions\Comments\AddComment;
 use App\Actions\Comments\AddReaction;
 use App\Actions\Labels\SaveLabel;
+use App\Actions\Pages\CreatePage;
+use App\Actions\Pages\DeletePage;
+use App\Actions\Pages\MovePage;
+use App\Actions\Pages\UpdatePage;
 use App\Actions\Projects\AddMember;
 use App\Actions\Projects\UpdateProject;
 use App\Actions\Tokens\CreateToken;
@@ -14,7 +18,9 @@ use App\Actions\WorkItems\UpdateWorkItem;
 use App\Events\EventType;
 use App\Events\Outbox;
 use App\Live\LiveConsumer;
+use App\Live\LiveMessage;
 use App\Models\EventConsumption;
+use App\Models\Page;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\View;
@@ -22,6 +28,7 @@ use App\Models\WorkItem;
 use App\Notifications\NotificationConsumer;
 use App\Search\SearchConsumer;
 use Illuminate\Broadcasting\BroadcastException;
+use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Support\Facades\Exceptions;
 
 /*
@@ -44,9 +51,9 @@ $world = function (): array {
     return compact('tom', 'web', 'mara', 'item');
 };
 
-/** The six keys of every message about an event (A279). */
-$message = fn (string $eventId, string $type, ?string $project, ?string $item, ?string $comment, string $actor) => [
-    'event_id' => $eventId, 'type' => $type, 'project_id' => $project, 'item_id' => $item, 'comment_id' => $comment, 'actor_id' => $actor,
+/** The seven keys of every message about an event (A279, A318): the page is null but on page events. */
+$message = fn (string $eventId, string $type, ?string $project, ?string $item, ?string $comment, string $actor, ?string $page = null) => [
+    'event_id' => $eventId, 'type' => $type, 'project_id' => $project, 'page_id' => $page, 'item_id' => $item, 'comment_id' => $comment, 'actor_id' => $actor,
 ];
 
 it('is a consumer of every event, in the queue live, without retries', function () {
@@ -159,6 +166,100 @@ it('leaves out the tab that made the change', function () use ($world) {
     expect($this->live->sent())->toHaveCount(1)
         ->and($this->live->sent()[0]['socket'])->toBe('1234.5678')
         ->and($this->live->sent()[0]['payload'])->not->toHaveKey('socket');
+});
+
+it('sends page events to the project channel with ids only', function () use ($world, $message) {
+    $w = $world();
+
+    $page = CreatePage::run(actor($w['mara']), $w['web'], ['title' => 'Geheime Preisliste', 'content' => 'Der Preis ist 4.200 €.']);
+    $other = Page::factory()->create(['project_id' => $w['web']->id, 'title' => 'Ablauf']);
+    UpdatePage::run(actor($w['tom']), $page, ['title' => 'Geheime Preisliste 2026', 'content' => 'Der Preis ist 4.800 €.']);
+    MovePage::run(actor($w['mara']), $page, ['parent_id' => $other->id, 'before_id' => null]);
+
+    $channel = ["private-project.{$w['web']->id}"];
+    $sent = fn (EventType $type, User $actor) => [
+        'channels' => $channel,
+        'event' => 'live',
+        'payload' => $message(eventsOf($type, $page)->sole()->id, $type->value, $w['web']->id, null, null, $actor->id, $page->id),
+        'socket' => null,
+    ];
+    expect($this->live->sent())->toBe([
+        $sent(EventType::PageCreated, $w['mara']),
+        $sent(EventType::PageUpdated, $w['tom']),
+        $sent(EventType::PageMoved, $w['mara']),
+    ])
+        ->and(json_encode($this->live->sent()))->not->toContain('Geheim')->not->toContain('Preis')->not->toContain('4.800')->not->toContain('Ablauf');
+});
+
+it('names the deleted subtree in page_ids', function () use ($world, $message) {
+    $w = $world();
+    $root = Page::factory()->create(['project_id' => $w['web']->id, 'title' => 'Geheimes Archiv']);
+    $child = Page::factory()->childOf($root)->create();
+    $grandchild = Page::factory()->childOf($child)->create();
+
+    DeletePage::run(actor($w['tom']), $root);
+
+    $event = eventsOf(EventType::PageDeleted, $root)->sole();
+    expect($this->live->sent())->toBe([[
+        'channels' => ["private-project.{$w['web']->id}"],
+        'event' => 'live',
+        'payload' => $message($event->id, 'page.deleted', $w['web']->id, null, null, $w['tom']->id, $root->id)
+            + ['page_ids' => [$root->id, $child->id, $grandchild->id]],
+        'socket' => null,
+    ]])
+        ->and(json_encode($this->live->sent()))->not->toContain('Geheim');
+});
+
+it('names a deleted subtree of up to 200 pages within what Reverb takes, and none beyond (T6-M3)', function () use ($world) {
+    $w = $world();
+    $large = Page::factory()->create(['project_id' => $w['web']->id]);
+    Page::factory()->count(LiveMessage::PAGE_IDS_MAX)->childOf($large)->create();
+    $largest = Page::factory()->create(['project_id' => $w['web']->id]);
+    Page::factory()->count(LiveMessage::PAGE_IDS_MAX - 1)->childOf($largest)->create();
+
+    DeletePage::run(actor($w['tom']), $largest);
+    DeletePage::run(actor($w['tom']), $large);
+
+    [$named, $unnamed] = array_column($this->live->sent(), 'payload');
+    // the body of the request to Reverb's HTTP API as the Pusher client builds it; Reverb takes 10 000 bytes with the
+    // request line (the signature in the query) and the headers, which stay far below 1 000
+    $body = strlen((string) json_encode([
+        'name' => 'live', 'data' => json_encode($named), 'channels' => ["private-project.{$w['web']->id}"], 'socket_id' => '1234567890.1234567890',
+    ]));
+    expect(LiveMessage::PAGE_IDS_MAX)->toBe(200)
+        ->and($named['page_ids'])->toHaveCount(200)
+        ->and($named['page_ids'][0])->toBe($largest->id)
+        ->and($body)->toBeLessThan(9_000)
+        // too many to name: the browser loads the tree again, what is not in it any more is gone
+        ->and($unnamed['page_id'])->toBe($large->id)
+        ->and($unnamed)->toHaveKey('page_ids', null);
+});
+
+it('names no pages when a page.deleted carries no page_ids (T10-M3)', function () use ($world) {
+    $w = $world();
+    $root = Page::factory()->create(['project_id' => $w['web']->id]);
+    DeletePage::run(actor($w['tom']), $root);
+    $event = eventsOf(EventType::PageDeleted, $root)->sole();
+    $event->meta = array_diff_key($event->meta, ['page_ids' => true]);
+
+    $payload = LiveMessage::of($event, new PrivateChannel("project.{$w['web']->id}"))->broadcastWith();
+
+    // not an empty list (no page deleted): the browser marks the root and reads the tree for the rest
+    expect($payload['page_id'])->toBe($root->id)
+        ->and($payload)->toHaveKey('page_ids', null);
+});
+
+it('leaves out the tab that saved', function () use ($world) {
+    $w = $world();
+    $page = Page::factory()->create(['project_id' => $w['web']->id, 'created_by' => $w['mara']->id, 'updated_by' => $w['mara']->id]);
+
+    $this->actingAs($w['mara'])->withHeader('X-Socket-ID', '1234.5678')
+        ->patchJson("/api/v1/pages/{$page->id}", ['title' => 'Ablauf neu', 'base_version' => 1])->assertOk();
+
+    expect($this->live->sent())->toHaveCount(1)
+        ->and($this->live->sent()[0]['socket'])->toBe('1234.5678')
+        ->and($this->live->sent()[0]['payload'])->not->toHaveKey('socket')
+        ->and($this->live->sent()[0]['payload']['page_id'])->toBe($page->id);
 });
 
 it('sends nothing for catalog, view and token events', function () use ($world) {

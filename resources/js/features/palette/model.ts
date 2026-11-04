@@ -1,8 +1,8 @@
 /*
  * What the command palette lists, as plain data (spec 4.17): the registered commands grouped by their group, the
- * groups of the screen before the shell's own, then the search results grouped as Items, Projekte, Personen and Views.
- * Every word typed must occur somewhere in a command (label, group or keywords); the search itself runs on the server
- * (`useSearch`). Wiki pages join the results with phase 9.
+ * groups of the screen before the shell's own, then the search results grouped as Items, Seiten (wiki pages), Projekte,
+ * Personen and Views. Every word typed must occur somewhere in a command (label, group or keywords); the search itself
+ * runs on the server (`useSearch`).
  *
  * A key such as `WEB-47` jumps straight to the item: its section leads the list, so Enter opens it even before the
  * search has answered. When the search names the item of the key (`key_match`, also over a former identifier such as
@@ -12,12 +12,13 @@
 import { parseKey } from '@/domain/keys';
 import { SHELL_COMMAND_GROUPS, type CommandDef, type CommandOption } from '@/lib/commands';
 import { intlLocale, t } from '@/lib/i18n';
-import type { ListedItem, Project, SearchResults, User, View } from '@/types';
+import type { ListedItem, PageSummary, Project, SearchResults, User, View } from '@/types';
 
 export type PaletteEntry =
   | { kind: 'command'; id: string; command: CommandDef }
   | { kind: 'jump'; id: string; key: string }
   | { kind: 'item'; id: string; item: ListedItem }
+  | { kind: 'page'; id: string; page: PageSummary }
   | { kind: 'project'; id: string; project: Project }
   | { kind: 'person'; id: string; user: User }
   | { kind: 'view'; id: string; view: View };
@@ -39,7 +40,7 @@ const matchesAll = (texts: (string | undefined)[], terms: string[]): boolean => 
 };
 
 /** How many search results each section shows; the palette stays a short list. */
-export const LIMITS = { items: 8, others: 4 };
+export const LIMITS = { items: 8, pages: 4, others: 4 };
 
 /** The typed key in upper case (`web-47` → `WEB-47`), or null when the query is no key. */
 export function typedKey(query: string): string | null {
@@ -79,6 +80,11 @@ function resultSections(key: string | null, results: SearchResults | undefined, 
         ...(key && !match ? [{ kind: 'jump', id: `jump:${key}`, key } as const] : []),
         ...items.slice(0, LIMITS.items).map((item): PaletteEntry => ({ kind: 'item', id: `item:${item.id}`, item })),
       ],
+    },
+    {
+      id: 'pages',
+      label: t('palette.section.pages'),
+      entries: (results?.pages ?? []).slice(0, LIMITS.pages).map((page): PaletteEntry => ({ kind: 'page', id: `page:${page.id}`, page })),
     },
     {
       id: 'projects',

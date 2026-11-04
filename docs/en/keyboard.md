@@ -107,6 +107,13 @@ werkbuch works without a mouse. Press <kbd>?</kbd> on any screen to see the shor
 | <kbd>⇧</kbd>+<kbd>E</kbd> | Mark all as read |
 | <kbd>#</kbd> | Delete notification |
 
+## Wiki
+
+| Keys | Action |
+| --- | --- |
+| <kbd>⌘ / Ctrl</kbd>+<kbd>↵</kbd> | Save the page now |
+| <kbd>⌘ / Ctrl</kbd>+<kbd>⌫</kbd> | Delete the page (asks first) |
+
 ## Command palette
 
 | Keys | Action |
@@ -137,6 +144,17 @@ werkbuch works without a mouse. Press <kbd>?</kbd> on any screen to see the shor
 | <kbd>↑</kbd> / <kbd>↓</kbd> | Previous or next header |
 | <kbd>↵</kbd> / <kbd>Space</kbd> | Fold or unfold the group |
 
+## Page tree of the wiki
+
+| Keys | Action |
+| --- | --- |
+| <kbd>↑</kbd> / <kbd>↓</kbd> | Previous or next page |
+| <kbd>→</kbd> | Unfold subpages, or go to the first subpage |
+| <kbd>←</kbd> | Fold subpages away, or go to the parent page |
+| <kbd>Home</kbd> / <kbd>End</kbd> | First or last page |
+| <kbd>↵</kbd> | Open the page |
+| <kbd>⌘ / Ctrl</kbd>+<kbd>⌫</kbd> | Delete the row’s page (asks first) |
+
 ## Editors and fields
 
 | Keys | Action |
@@ -145,7 +163,7 @@ werkbuch works without a mouse. Press <kbd>?</kbd> on any screen to see the shor
 | <kbd>Esc</kbd> | Leave the field |
 | <kbd>/</kbd> | Insert a block (at the start of a line or after a space) |
 | <kbd>@</kbd> | Mention a person or bot (with a project) |
-| <kbd>#</kbd> | Refer to an item (with a project) |
+| <kbd>#</kbd> | Refer to an item or a page (with a project) |
 | <kbd>↑</kbd> / <kbd>↓</kbd> | Choose an entry of the list |
 | <kbd>↵</kbd> / <kbd>Tab</kbd> | Take the entry |
 | <kbd>Esc</kbd> | Close the list |

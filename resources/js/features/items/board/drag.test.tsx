@@ -28,7 +28,6 @@ import {
   web,
 } from '@/test/board';
 import { lene, organization } from '@/test/fixtures';
-import { springEasing } from './useBoardDrag';
 
 /* --------------------------------------------------------------------- fake Inertia */
 
@@ -193,6 +192,9 @@ describe('dragging a card', () => {
     await waitFor(() => cardIn('Todo', 'WEB-48'));
 
     await pickUp('Todo', 'WEB-48');
+    // the live region stands at the end of the body: a dialog opening on the drop (the resolution of a closing move)
+    // keeps live regions readable and would hide the board along with one inside it
+    expect(document.querySelector('[id^="DndLiveRegion"]')?.parentElement).toBe(document.body);
     const overlay = document.querySelector('[inert]');
     expect(overlay?.getAttribute('aria-hidden')).toBe('true');
     expect(overlay?.querySelector('[data-card-id="wi_web_48"], article')).toBeTruthy();
@@ -465,33 +467,6 @@ describe('dragging a card', () => {
     act(() => void fireEvent.mouseMove(document, { clientX: 700, clientY: 400 }));
     expect(dndSaid()).toBe('');
     act(() => void fireEvent.mouseUp(document, { clientX: 700, clientY: 400 }));
-  });
-});
-
-describe('the drop animation', () => {
-  it('springs with the curve of the design where the browser takes it, else with a plain one', () => {
-    const fallback = 'cubic-bezier(0.34, 1.3, 0.64, 1)';
-    // jsdom knows neither the tokens nor Web Animations
-    expect(springEasing()).toBe(fallback);
-
-    const spring = 'linear(0, 1.2, 1)';
-    document.documentElement.style.setProperty('--ease-spring', spring);
-    vi.stubGlobal(
-      'KeyframeEffect',
-      class {
-        constructor(_target: unknown, _frames: unknown, options: { easing: string }) {
-          if (options.easing.startsWith('linear(')) throw new TypeError('unknown easing');
-        }
-      },
-    );
-    try {
-      expect(springEasing()).toBe(fallback);
-      document.documentElement.style.setProperty('--ease-spring', 'cubic-bezier(0.3, 1.2, 0.6, 1)');
-      expect(springEasing()).toBe('cubic-bezier(0.3, 1.2, 0.6, 1)');
-    } finally {
-      vi.unstubAllGlobals();
-      document.documentElement.style.removeProperty('--ease-spring');
-    }
   });
 });
 

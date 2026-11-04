@@ -3,7 +3,7 @@
  * Mara is org admin, Ida admin of WEB, Theo admin of APP and viewer in WEB, Lene member of WEB and APP; OPS is private.
  * The catalogs (workflows, types, properties, labels, relation types, resolutions) are those of the clickdummy's seed,
  * the work items, relations and history a few of its items (WEB-47, WEB-30, WEB-48, OPS-12), the inbox Mara's (seed
- * inbox.ts, as the NotificationsSeeder writes it).
+ * inbox.ts, as the NotificationsSeeder writes it), the wiki the tree of WEB (seed pages.ts, as the PagesSeeder writes it).
  */
 
 import { queried } from './api';
@@ -20,6 +20,9 @@ import type {
   NotificationData,
   NotificationEvent,
   Organization,
+  Page,
+  PageNode,
+  PageSummary,
   Project,
   ProjectRole,
   Property,
@@ -549,7 +552,7 @@ export const webStateGroups: ItemGroups = {
 };
 
 /** No hits, as `GET /api/v1/search` answers a query that finds nothing. */
-export const emptySearch: SearchResults = { items: [], projects: [], people: [], views: [], key_match: null };
+export const emptySearch: SearchResults = { items: [], pages: [], projects: [], people: [], views: [], key_match: null };
 
 export function searchResults(partial: Partial<SearchResults> = {}): SearchResults {
   return { ...emptySearch, ...partial };
@@ -698,3 +701,80 @@ export function makeSystemStatus(overrides: Partial<SystemStatus> = {}): SystemS
     ...overrides,
   };
 }
+
+/* ------------------------------------------------------------------------- wiki */
+
+/** A page of the wiki of WEB by Ida, as `GET /api/v1/pages/{page}` answers it; override what the test is about. */
+export function makePage(overrides: Partial<Page> = {}): Page {
+  return {
+    id: 'pg_web_new',
+    project_id: 'p_web',
+    parent_id: null,
+    rank: 'a0',
+    title: 'Neue Seite',
+    emoji: null,
+    content: null,
+    content_json: null,
+    version: 1,
+    created_by: 'u_ida',
+    created_at: '2026-10-28T09:00:00.000Z',
+    updated_by: 'u_ida',
+    updated_at: '2026-10-28T09:00:00.000Z',
+    ...overrides,
+  };
+}
+
+/** The lean page of a page (the tree, search hits, references): without its text. */
+export function pageSummary({ content: _content, content_json: _json, ...page }: Page): PageSummary {
+  return page;
+}
+
+/** "Seitenstruktur" below "Projekt-Handbuch" of WEB: Ida's text in its third version. */
+export const seitenstruktur: Page = makePage({
+  id: 'pg_web_structure',
+  parent_id: 'pg_web_handbook',
+  title: 'Seitenstruktur',
+  emoji: '🧭',
+  content: '## Navigation\n\n- Start\n- Referenzen\n\nDie Navigation für Mobilgeräte folgt in [WEB-48](item:wi_web_48).',
+  content_json: {
+    type: 'doc',
+    content: [
+      { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Navigation' }] },
+      {
+        type: 'bulletList',
+        content: ['Start', 'Referenzen'].map((text) => ({ type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] })),
+      },
+      {
+        type: 'paragraph',
+        content: [
+          { type: 'text', text: 'Die Navigation für Mobilgeräte folgt in ' },
+          { type: 'reference', attrs: { id: 'wi_web_48', kind: 'item' } },
+          { type: 'text', text: '.' },
+        ],
+      },
+    ],
+  },
+  version: 3,
+  created_at: '2026-10-02T12:00:00.000Z',
+  updated_at: '2026-10-14T09:00:00.000Z',
+});
+
+/** A node of a tree: the lean page with its children. */
+function pageNode(id: string, title: string, emoji: string, parent_id: string | null, rank: string, children: PageNode[] = []): PageNode {
+  return { ...pageSummary(makePage({ id, title, emoji, parent_id, rank })), children };
+}
+
+/** The tree of the wiki of WEB (12 pages in three levels), as `GET /api/v1/projects/p_web/pages` answers it. */
+export const webTree: PageNode[] = [
+  pageNode('pg_web_handbook', 'Projekt-Handbuch', '📘', null, 'a0', [
+    { ...pageSummary(seitenstruktur), children: [] },
+    pageNode('pg_web_design', 'Designsystem', '🎨', 'pg_web_handbook', 'a1', [pageNode('pg_web_typography', 'Typografie und Farben', '🔤', 'pg_web_design', 'a0')]),
+    pageNode('pg_web_editorial', 'Redaktion und Tonalität', '✍️', 'pg_web_handbook', 'a2'),
+  ]),
+  pageNode('pg_web_tech', 'Technik', '🛠️', null, 'a1', [
+    pageNode('pg_web_contactform', 'Kontaktformular – Technik', '📮', 'pg_web_tech', 'a0'),
+    pageNode('pg_web_hosting', 'Deployment und Hosting', '🚀', 'pg_web_tech', 'a1', [pageNode('pg_web_domain', 'Domain-Umzug', '🌐', 'pg_web_hosting', 'a0')]),
+    pageNode('pg_web_performance', 'Performance-Budget', '⚡', 'pg_web_tech', 'a2'),
+  ]),
+  pageNode('pg_web_meetings', 'Meetings', '📅', null, 'a2', [pageNode('pg_web_kickoff', 'Kickoff-Notizen', '📝', 'pg_web_meetings', 'a0')]),
+];

@@ -2,6 +2,7 @@
 
 use App\Live\LiveConsumer;
 use App\Models\Attachment;
+use App\Models\Page;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
@@ -128,11 +129,16 @@ it('keeps the search settings', function () {
         ->and(config('scout.soft_delete'))->toBeFalse()
         ->and(config('scout.identify'))->toBeFalse()
         ->and(config('scout.chunk'))->toBe(['searchable' => 500, 'unsearchable' => 500])
-        ->and(array_keys(config('scout.meilisearch.index-settings')))->toBe([WorkItem::class, Project::class, User::class])
+        ->and(array_keys(config('scout.meilisearch.index-settings')))->toBe([WorkItem::class, Page::class, Project::class, User::class])
         ->and($index(WorkItem::class)['searchableAttributes'])->toBe(['key', 'title', 'description', 'comments'])
         ->and($index(WorkItem::class)['filterableAttributes'])->toBe(['project_id', 'archived', 'type_id', 'state_category', 'assignee_id', 'label_ids'])
         ->and($index(WorkItem::class)['rankingRules'])->toBe(['words', 'typo', 'proximity', 'attribute', 'sort', 'exactness', 'updated_at:desc'])
         ->and($index(WorkItem::class)['typoTolerance'])->toBe(['disableOnAttributes' => ['key']])
+        ->and($index(Page::class))->toBe([
+            'searchableAttributes' => ['title', 'text'],
+            'filterableAttributes' => ['project_id'],
+            'rankingRules' => ['words', 'typo', 'proximity', 'attribute', 'sort', 'exactness', 'updated_at:desc'],
+        ])
         ->and($index(Project::class))->toBe([
             'searchableAttributes' => ['identifier', 'former_identifiers', 'name', 'description'],
             'filterableAttributes' => ['id', 'archived'],

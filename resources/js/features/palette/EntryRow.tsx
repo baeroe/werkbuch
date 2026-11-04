@@ -1,7 +1,7 @@
 /*
  * The inside of one palette row, per kind: a command with its icon and shortcut (a chevron when it opens a sub-list),
- * the jump to a typed key, an item with its type, key and status, a project, a person or bot, a view; or an option of a
- * sub-list with its hint (moodboard: grouped hits with kbd hints).
+ * the jump to a typed key, an item with its type, key and status, a wiki page with its emoji and project, a project, a
+ * person or bot, a view; or an option of a sub-list with its hint (moodboard: grouped hits with kbd hints).
  */
 
 import { ArrowRight, ChevronRight } from 'lucide-react';
@@ -14,16 +14,18 @@ import { ProjectBadge } from '@/components/ui/ProjectBadge';
 import { StatusIcon } from '@/components/ui/StatusIcon';
 import { typeIcon } from '@/components/ui/TypeTab';
 import { ViewIcon } from '@/components/ui/ViewIcon';
+import { PageGlyph } from '@/features/wiki/PageGlyph';
 import type { CommandOption } from '@/lib/commands';
 import { t } from '@/lib/i18n';
-import type { State, WorkItemType } from '@/types';
+import type { Project, State, WorkItemType } from '@/types';
 import { Highlight } from './Highlight';
 import type { PaletteEntry } from './model';
 
-/** What the rows of items look up: their type and their state. */
+/** What the rows look up: the type and the state of an item, the project of a page. */
 export interface RowLookups {
   typeOf: (id: string) => WorkItemType | undefined;
   stateOf: (id: string) => State | undefined;
+  projectOf: (id: string) => Project | undefined;
 }
 
 /** 16 px slot at the start of a row, so all labels line up; in the tone of an item's type. */
@@ -103,6 +105,24 @@ export function EntryRow({ entry, terms, lookups }: { entry: PaletteEntry; terms
             <Meta className="max-sm:hidden">
               <StatusIcon icon={state.icon} category={state.category} label={state.name} className="size-3.5" aria-hidden="true" />
               {state.name}
+            </Meta>
+          )}
+        </>
+      );
+    }
+    case 'page': {
+      const project = lookups.projectOf(entry.page.project_id);
+      return (
+        <>
+          <Lead>
+            <PageGlyph emoji={entry.page.emoji} className="text-sm leading-4" />
+          </Lead>
+          <Label>
+            <Highlight text={entry.page.title} terms={terms} />
+          </Label>
+          {project && (
+            <Meta>
+              <span translate="no">{t('wiki.place', { identifier: project.identifier })}</span>
             </Meta>
           )}
         </>

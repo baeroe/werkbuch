@@ -17,11 +17,12 @@ class SearchImportCommand extends Command
 
     public function handle(SearchIndexer $indexer): int
     {
-        ['work_items' => $items, 'projects' => $projects, 'users' => $users] = $indexer->rebuild();
+        ['work_items' => $items, 'pages' => $pages, 'projects' => $projects, 'users' => $users] = $indexer->rebuild();
 
         $this->info(sprintf(
-            'Indexed %d %s, %d %s, %d %s.',
+            'Indexed %d %s, %d %s, %d %s, %d %s.',
             $items, Str::plural('work item', $items),
+            $pages, Str::plural('page', $pages),
             $projects, Str::plural('project', $projects),
             $users, Str::plural('account', $users),
         ));

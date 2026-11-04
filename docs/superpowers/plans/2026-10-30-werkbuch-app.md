@@ -320,7 +320,7 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 
 **Liefert:**
 - `Dockerfile` (Node-Stage mit pnpm, `serversideup/php:8.4-fpm-nginx` per Digest, Code schreibgeschützt, beschreibbar nur `storage/` und `bootstrap/cache`, amd64 und arm64), nginx leitet `/app` und `/apps` an Reverb weiter.
-- `docker/entrypoint.d/` (Ordner im Volume, `APP_KEY` und Reverb-Schlüssel aus der Env oder erzeugt und im Volume gespeichert, auf die Datenbank warten, migrieren, `app:ensure-admin`, `app:search-sync`, `optimize`); Queue, Scheduler und Reverb starten ohne Migration.
+- `docker/entrypoint.d/` (Ordner im Volume, `APP_KEY` und Reverb-Schlüssel aus der Env oder erzeugt und im Volume gespeichert, auf die Datenbank warten, migrieren, `app:ensure-admin`, `app:search-sync`, `optimize`); Queue, Scheduler und Reverb starten ohne Migration. `app:search-sync` läuft bei jedem Start, also auch nach jedem Update (Vormerkung aus Phase 9: ohne ihn antwortet nach dem Update auf Phase 9 jede Suche ohne `types` mit 503, weil der Index `pages` fehlt); nach einem Update, das einen Index oder Felder hinzufügt (Phase 7: Kommentare, Phase 9: Seiten), einmal `app:search-import`.
 - `docker-compose.yml` und `docker-compose.standalone.yml` (Dienste aus 8.1, Port `${WERKBUCH_BIND:-0.0.0.0}:${WERKBUCH_PORT:-7740}`, Volumes `werkbuch-data`, `mariadb-data`, `meili-data`, alle Images per Digest), Test auf Gleichschritt; `.env.docker.example`, `.dockerignore`, Healthcheck `/up`.
 - Workflows `docker.yml` (Tag `vX.Y.Z` → Image `X.Y.Z`, `X.Y`, `latest` und GitHub-Release mit Notizen aus `docs/*/upgrading.md`), `dockerhub.yml` (README-Sync); Tests auf `upgrading.md`-Abschnitt und `version` in `config/werkbuch.php`.
 - CI: neuer Job `image` (Multi-Arch-Build ohne Push bei jedem PR); der Job `e2e` läuft ab jetzt gegen den Compose-Stack mit dem lokal gebauten Image.
@@ -365,7 +365,7 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 - [x] Phase 6: Suche und Suchtreffer in der Befehlspalette (PR #18)
 - [x] Phase 7: Editor, Kommentare, Anhänge (PR #19)
 - [x] Phase 8: Benachrichtigungen, Mail, Live-Updates (PR #20)
-- [ ] Phase 9: Wiki
+- [x] Phase 9: Wiki (PR #21)
 - [ ] Phase 10: Vorlagen, Zeitpläne, Automatisierungen
 - [ ] Phase 11: Webhooks
 - [ ] Phase 12: REST vollständig und OpenAPI

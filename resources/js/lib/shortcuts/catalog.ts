@@ -91,6 +91,11 @@ export const SHORTCUTS = {
   'inbox.unread': { keys: 'u', scope: 'list', label: 'shortcuts.inbox.unread', group: 'shortcuts.group.inbox' },
   'inbox.read_all': { keys: 'shift+e', scope: 'list', label: 'shortcuts.inbox.read_all', group: 'shortcuts.group.inbox' },
   'inbox.delete': { keys: '#', scope: 'list', label: 'shortcuts.inbox.delete', group: 'shortcuts.group.inbox' },
+  // the open wiki page (`features/wiki/PageSheet.tsx`), for whoever may edit it. They share their keys with
+  // `settings.save` (another screen) and `item.remove` (the preview of an item, which wins: `wiki.delete` steps aside
+  // while one is open), A324
+  'wiki.save': { keys: 'mod+enter', scope: 'detail', label: 'shortcuts.wiki.save', group: 'shortcuts.group.wiki' },
+  'wiki.delete': { keys: 'mod+backspace', scope: 'detail', label: 'shortcuts.wiki.delete', group: 'shortcuts.group.wiki' },
   // registered only while the preview is open (shell/PeekHost): the first Escape in a field leaves the field
   'peek.close': { keys: 'escape', scope: 'detail', label: 'shortcuts.peek.close', group: 'shortcuts.group.item' },
 } as const satisfies Record<string, CatalogEntry>;

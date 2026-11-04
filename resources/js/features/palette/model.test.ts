@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import en from '../../../../lang/en.json';
 import type { CommandDef } from '@/lib/commands';
 import { initI18n } from '@/lib/i18n';
-import { lene, makeView, makeWorkItem, mara, project, searchResults } from '@/test/fixtures';
+import { lene, makePage, makeView, makeWorkItem, mara, pageSummary, project, searchResults } from '@/test/fixtures';
 import type { SearchResults } from '@/types';
 import { LIMITS, matchingOptions, rootSections, typedKey } from './model';
 
@@ -67,6 +67,23 @@ describe('palette model', () => {
     expect(outline('  ', commands, hits, { people: true }).map(([label]) => label)).toEqual(['Aktionen für WEB-47', 'Aktionen', 'Navigation']);
   });
 
+  it('puts the pages after the items', () => {
+    const page = pageSummary(makePage({ id: 'pg_web_contactform', title: 'Kontaktformular – Technik' }));
+    const withPages = { ...hits, pages: [page] };
+
+    expect(outline('kontakt', [], withPages, { people: true })).toEqual([
+      ['Items', 'item:wi_47', 'item:wi_12'],
+      ['Seiten', 'page:pg_web_contactform'],
+      ['Projekte', 'project:p_web'],
+      ['Personen', 'person:u_mara'],
+      ['Views', 'view:v_kontakt'],
+    ]);
+    // a typed key leads with its items; the pages stay after them, behind the commands
+    expect(outline('web-47', [], { ...withPages, items: [], key_match: null }).map(([label]) => label)).toEqual(['Items', 'Seiten', 'Projekte', 'Views']);
+    // no pages: no section
+    expect(outline('kontakt', [], hits).map(([label]) => label)).toEqual(['Items', 'Projekte', 'Views']);
+  });
+
   it('puts the item of key_match first, also when it came by a former identifier', () => {
     const renamed = makeWorkItem({ id: 'wi_new_12', key: 'NEW-12', title: 'Umgezogen' });
     const results = searchResults({ items: [makeWorkItem({ id: 'wi_other', key: 'NEW-120' }), renamed], key_match: 'wi_new_12' });
@@ -95,11 +112,12 @@ describe('palette model', () => {
     expect(outline('kontakt', [], searchResults({ people: [lene] }), { people: false })).toEqual([]);
   });
 
-  it('shows eight items and four of the others', () => {
-    expect(LIMITS).toEqual({ items: 8, others: 4 });
+  it('shows eight items, four pages and four of the others', () => {
+    expect(LIMITS).toEqual({ items: 8, pages: 4, others: 4 });
     const many = <T,>(make: (n: number) => T) => Array.from({ length: 10 }, (_, n) => make(n));
     const results = searchResults({
       items: many((n) => makeWorkItem({ id: `wi_${n}`, key: `WEB-${n + 1}` })),
+      pages: many((n) => pageSummary(makePage({ id: `pg_${n}` }))),
       projects: many((n) => project(`P${n}X`, 'member')),
       people: many((n) => ({ ...lene, id: `u_${n}` })),
       views: many((n) => makeView({ id: `v_${n}` })),
@@ -107,6 +125,7 @@ describe('palette model', () => {
 
     expect(rootSections('x', [], results, { people: true }).map((section) => [section.id, section.entries.length])).toEqual([
       ['items', 8],
+      ['pages', 4],
       ['projects', 4],
       ['people', 4],
       ['views', 4],

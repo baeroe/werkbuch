@@ -25,6 +25,9 @@ final class RichTextFixtures
 
     public const OPS12 = '01jc0p50000000000000000012';
 
+    /** A page of OPS, which the writer and the reader of the Markdown tests do not see (PAGE they do). */
+    public const OPSPAGE = '01jc0p5page000000000000000';
+
     /** The steps of WEB-47 in the clickdummy (`seed/items.ts`): a paragraph and a numbered list of three. */
     public static function web47Steps(): array
     {

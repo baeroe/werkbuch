@@ -3,6 +3,7 @@
 use App\Access\ProjectRole;
 use App\Actions\Projects\DeleteProject;
 use App\Jobs\ReindexWorkItems;
+use App\Models\Page;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
@@ -55,6 +56,45 @@ it('removes an item by its id', function () use ($world) {
     expect(array_keys($engine->documents('testing_work_items')))->toBe([$other->id]);
 });
 
+it('upserts a page from the database and removes it once it is gone or its project is being deleted', function () use ($world) {
+    $engine = searchEngine();
+    [$web, $ops] = $world();
+    [$page, $other] = Page::factory()->for($web)->count(2)->create();
+    $inOps = Page::factory()->for($ops)->create();
+    $indexer = app(SearchIndexer::class);
+
+    $indexer->upsertPage($page->id);
+    $indexer->upsertPage($inOps->id);
+    DB::table('pages')->where('id', $page->id)->update(['title' => 'Onboarding neu', 'content_text' => 'Der erste Tag']);
+    $indexer->upsertPage($page->id);
+
+    expect(array_keys($engine->documents('testing_pages')))->toBe([$page->id, $inOps->id])
+        ->and($engine->documents('testing_pages')[$page->id])->toMatchArray(['title' => 'Onboarding neu', 'text' => 'Der erste Tag']);
+
+    DB::table('pages')->where('id', $page->id)->delete();
+    DB::table('projects')->where('id', $ops->id)->update(['deleting_at' => now()]);
+    $indexer->upsertPage($page->id);
+    $indexer->upsertPage($inOps->id);
+    $indexer->upsertPage($other->id);
+
+    expect(array_keys($engine->documents('testing_pages')))->toBe([$other->id]);
+});
+
+it('removes pages by their ids', function () use ($world) {
+    $engine = searchEngine();
+    [$web] = $world();
+    [$first, $second, $third] = Page::factory()->for($web)->count(3)->create();
+    $indexer = app(SearchIndexer::class);
+    $indexer->rebuild();
+    $writes = $engine->writes();
+
+    $indexer->removePages([$first->id, $third->id]);
+    $indexer->removePages([]);
+
+    expect(array_keys($engine->documents('testing_pages')))->toBe([$second->id])
+        ->and($engine->writes())->toBe($writes + 1);
+});
+
 it('upserts a project and an account', function () use ($world) {
     $engine = searchEngine();
     [$web, , , , $mara] = $world();
@@ -74,9 +114,11 @@ it('upserts a project and an account', function () use ($world) {
         ->and($engine->documents('testing_users')[$mara->id])->toMatchArray(['name' => 'Mara Lindqvist']);
 });
 
-it('removes a project and every document of its items, also when the rows are gone', function () use ($world) {
+it('removes a project and every document of its items and pages, also when the rows are gone', function () use ($world) {
     $engine = searchEngine();
     [$web, $ops, , $inOps, $mara] = $world();
+    Page::factory()->for($web)->count(2)->create();
+    $kept = Page::factory()->for($ops)->create();
     $indexer = app(SearchIndexer::class);
     $indexer->rebuild();
 
@@ -86,7 +128,8 @@ it('removes a project and every document of its items, also when the rows are go
     $indexer->removeProject($web->id);
 
     expect(array_keys($engine->documents('testing_projects')))->toBe([$ops->id])
-        ->and(array_keys($engine->documents('testing_work_items')))->toBe([$inOps->id]);
+        ->and(array_keys($engine->documents('testing_work_items')))->toBe([$inOps->id])
+        ->and(array_keys($engine->documents('testing_pages')))->toBe([$kept->id]);
 });
 
 it('removes a project being deleted instead of updating it', function () use ($world) {
@@ -160,16 +203,21 @@ it('leaves the items of a project being deleted out of a reindex and a rebuild',
 it('rebuilds every index from scratch', function () use ($world) {
     $engine = searchEngine();
     [$web, $ops, $inWeb, $inOps] = $world();
+    [$page, $gone] = Page::factory()->for($web)->count(2)->create();
+    Page::factory()->for(Project::factory()->create(['deleting_at' => now()]))->create();
     $indexer = app(SearchIndexer::class);
     $indexer->rebuild();
     DB::table('work_items')->where('id', $inWeb[0]->id)->delete();
+    DB::table('pages')->where('id', $gone->id)->delete();
 
     $counts = $indexer->rebuild();
 
     expect(array_keys($engine->documents('testing_work_items')))->toEqualCanonicalizing([$inWeb[1]->id, $inOps->id])
         ->and(array_keys($engine->documents('testing_projects')))->toEqualCanonicalizing([$web->id, $ops->id])
         ->and(count($engine->documents('testing_users')))->toBe(User::count())
-        ->and($counts)->toBe(['work_items' => 2, 'projects' => 2, 'users' => User::count()])
+        ->and(array_keys($engine->documents('testing_pages')))->toBe([$page->id])
+        ->and($counts)->toBe(['work_items' => 2, 'pages' => 1, 'projects' => 2, 'users' => User::count()])
+        ->and($engine->updatedSettings('testing_pages'))->toBe(config('scout.meilisearch.index-settings')[Page::class])
         ->and($engine->updatedSettings('testing_work_items')['filterableAttributes'])->toContain('project_id')
         ->and($engine->updatedSettings('testing_projects'))->toBe(config('scout.meilisearch.index-settings')[Project::class])
         ->and($engine->updatedSettings('testing_users'))->toBe(config('scout.meilisearch.index-settings')[User::class]);

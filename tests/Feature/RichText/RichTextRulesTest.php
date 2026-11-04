@@ -3,12 +3,14 @@
 use App\Access\ProjectRole;
 use App\Access\RoleAssignments;
 use App\Models\Attachment;
+use App\Models\Page;
 use App\Models\Project;
 use App\Models\ProjectIdentifier;
 use App\Models\User;
 use App\Models\WorkItem;
 use App\RichText\Document;
 use App\RichText\RichTextInput;
+use App\Support\ReaderNames;
 use App\Support\RichTextRules;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\RichTextFixtures as F;
@@ -88,6 +90,41 @@ it('keeps a hidden reference that was in the text before', function () use ($wor
         ->and($save($w, "[hidden](item:{$w['secret']->id})", $before)?->toJson())->toBe(F::doc(F::p(F::reference($w['secret']->id))));
 });
 
+it('keeps a page reference the writer sees, turns one they don\'t into its label', function () use ($world, $save, $reference) {
+    $w = $world();
+    $handbook = Page::factory()->for($w['web'])->create(['title' => 'Handbuch']);
+    $plan = Page::factory()->for($w['ops'])->create(['title' => 'Geheimer Plan']);
+    $deleting = Project::factory()->public()->create(['deleting_at' => now()]);
+    $gone = Page::factory()->for($deleting)->create();
+
+    $saved = $save($w, F::doc(F::p(
+        $reference(strtoupper($handbook->id), 'Handbuch', 'page'), ' ', $reference($plan->id, 'Plan', 'page'), ' ',
+        $reference($gone->id, 'Weg', 'page'),
+    )));
+
+    // a page of a project the writer does not see (or that is being deleted) tells nothing: its label is the writer's own
+    expect($saved?->toJson())->toBe(F::doc(F::p(F::reference($handbook->id, 'page'), ' Plan Weg')))
+        // the ID of a page names no item
+        ->and($save($w, F::doc(F::p($reference($handbook->id, 'Item?', 'item'))))?->toJson())->toBe(F::doc(F::p('Item?')))
+        ->and($save($w, "[Handbuch](page:{$handbook->id}) und [Plan](page:{$plan->id})")?->toJson())
+        ->toBe(F::doc(F::p(F::reference($handbook->id, 'page'), ' und Plan')))
+        // Ida sees WEB (public), but not OPS
+        ->and($save($w, "[x](page:{$handbook->id}) [y](page:{$plan->id})", writer: $w['ida'])?->toJson())
+        ->toBe(F::doc(F::p(F::reference($handbook->id, 'page'), ' y')));
+});
+
+it('round-trips [hidden](page:…) a writer cannot see when it stood in the text before', function () use ($world, $save) {
+    $w = $world();
+    $plan = Page::factory()->for($w['ops'])->create(['title' => 'Geheimer Plan']);
+    $before = Document::fromJson(F::doc(F::p('Siehe ', F::reference($plan->id, 'page'))));
+    $markdown = $before->toMarkdown(ReaderNames::of([$before->toJson()], $w['mara']));
+
+    expect($markdown)->toBe("Siehe [hidden](page:{$plan->id})")
+        ->and($save($w, $markdown, $before)?->toJson())->toBe($before->toJson())
+        ->and($save($w, $before->toJson(), $before)?->toJson())->toBe($before->toJson())
+        ->and($save($w, $markdown)?->toJson())->toBe(F::doc(F::p('Siehe hidden')));
+});
+
 it('refuses an image of another project with 422 at the field', function () use ($world, $save) {
     $w = $world();
     $foreign = Attachment::factory()->create(['project_id' => $w['ops']->id, 'uploaded_by' => $w['mara']->id]);
@@ -125,12 +162,15 @@ it('asks the database a fixed number of times for any number of nodes', function
     $people = collect(range(1, 12))->map(fn (int $n) => memberOf($w['web'], ProjectRole::Member, ['handle' => "person-{$n}"]));
     $items = WorkItem::factory()->for($w['web'])->count(12)->create();
     $files = Attachment::factory()->count(12)->create(['project_id' => $w['web']->id, 'uploaded_by' => $w['mara']->id]);
+    $pages = Page::factory()->for($w['web'])->count(12)->create();
     $json = fn (int $n) => F::doc(F::p(...$people->take($n)->map(fn (User $user) => F::mention($user->id, $user->handle))->all(),
         ...$items->take($n)->map(fn (WorkItem $item) => F::reference($item->id))->all(),
+        ...$pages->take($n)->map(fn (Page $page) => F::reference($page->id, 'page'))->all(),
         ...$files->take($n)->map(fn (Attachment $file) => F::file($file->id, null))->all()));
     $markdown = fn (int $n) => implode(' ', [
         ...$people->take($n)->map(fn (User $user) => "@{$user->handle}")->all(),
         ...$items->take($n)->map(fn (WorkItem $item) => "WEB-{$item->number} [x](item:{$item->id})")->all(),
+        ...$pages->take($n)->map(fn (Page $page) => "[p](page:{$page->id})")->all(),
         ...$files->take($n)->map(fn (Attachment $file) => "[f](attachment:{$file->id})")->all(),
     ]);
     $count = function (Closure $save): int {
@@ -147,22 +187,27 @@ it('asks the database a fixed number of times for any number of nodes', function
     expect($count(fn () => $save($w, $json(12))))->toBe($count(fn () => $save($w, $json(1))))
         ->and($count(fn () => $save($w, $markdown(12))))->toBe($count(fn () => $save($w, $markdown(1))))
         ->and($save($w, $json(12))?->mentionedUserIds())->toHaveCount(12)
-        ->and($save($w, $markdown(12))?->itemRefs())->toHaveCount(12);
+        ->and($save($w, $markdown(12))?->itemRefs())->toHaveCount(12)
+        ->and($save($w, $json(12))?->pageRefs())->toHaveCount(12)
+        ->and($save($w, $markdown(12))?->pageRefs())->toHaveCount(12);
 });
 
 it('asks nothing again for the mentions and keys of Markdown that reading it answered (T8-M4)', function () use ($world, $save) {
     $w = $world();
+    $handbook = Page::factory()->for($w['web'])->create();
     $save($w, F::doc(F::p('warm')));
     $queries = [];
     DB::listen(function ($query) use (&$queries): void {
         $queries[] = $query->sql;
     });
 
-    $saved = $save($w, "@lene, WEB-{$w['own']->number} und @mara");
+    $saved = $save($w, "@lene, WEB-{$w['own']->number}, [h](page:{$handbook->id}) und @mara");
 
-    // reading found the accounts by handle and the item by key; the rules ask neither by ID once more
+    // reading found the accounts by handle, the item by key and the page by ID; the rules ask none of them once more
     expect($saved?->mentionedUserIds())->toBe([$w['lene']->id, $w['mara']->id])
         ->and($saved?->itemRefs())->toBe([$w['own']->id])
+        ->and($saved?->pageRefs())->toBe([$handbook->id])
+        ->and(collect($queries)->filter(fn (string $sql) => str_contains($sql, 'from `pages`'))->count())->toBe(1)
         ->and(collect($queries)->filter(fn (string $sql) => str_contains($sql, 'from `users` where `users`.`id` in'))->all())->toBe([])
         ->and(collect($queries)->filter(fn (string $sql) => str_contains($sql, 'from `work_items` where `work_items`.`id` in'))->all())->toBe([]);
 });

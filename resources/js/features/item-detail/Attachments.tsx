@@ -37,7 +37,8 @@ import { runWithUndo } from '@/lib/undo';
 import { useUiStore } from '@/store/ui';
 import type { Attachment, WorkItemDetail } from '@/types';
 import '@/editor/editor.css';
-import { focusWhenLost, Section } from './shared';
+import { focusWhenLost } from '@/lib/focusOrigin';
+import { Section } from './shared';
 
 function FileIcon({ attachment }: { attachment: Attachment }) {
   if (attachment.inline) {

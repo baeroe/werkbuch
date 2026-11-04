@@ -7,6 +7,7 @@ use App\Http\Controllers\MediaController;
 use App\Http\Controllers\ProjectItemsPageController;
 use App\Http\Controllers\ProjectSettingsPageController;
 use App\Http\Controllers\ViewPageController;
+use App\Http\Controllers\WikiPageController;
 use App\Http\Middleware\EnsureAccountIsActive;
 use App\Http\Middleware\EnsureTokenAbility;
 use Illuminate\Http\Request;
@@ -39,6 +40,9 @@ Route::middleware('auth')->group(function () {
     // the items of a project; never `{project}` (see below)
     Route::get('/projects/{identifier}', ProjectItemsPageController::class)->name('projects.show');
     Route::get('/projects/{identifier}/settings/{section?}', ProjectSettingsPageController::class)->name('projects.settings');
+    // the wiki of a project and one of its pages (the target of the links in mails); never `{page}`: the binding of
+    // routes/api.php would answer an unknown id with the 404 page, where the wiki says the page does not exist (A322)
+    Route::get('/projects/{identifier}/wiki/{pageId?}', WikiPageController::class)->name('projects.wiki');
     // the page of an item by its key; never `{item}`: the binding of routes/api.php would resolve it and hide a former key
     Route::get('/items/{key}', ItemPageController::class)->name('items.show');
     // all team views; `?create=1` (the sidebar's "View anlegen") opens the dialog "Neue View" once

@@ -1,5 +1,6 @@
 /*
- * The search of the command palette: items, projects, people and views in one answer, a few hits per kind.
+ * The search of the command palette: items, wiki pages (lean: title and place, no text), projects, people and views in
+ * one answer, a few hits per kind. A hit is only what the reader sees at the time of the query (A200).
  */
 
 import type { SearchResults, SearchType } from '@/types';

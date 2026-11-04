@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { api, createE2eProject, createItem, removeE2eProject, runId, searchToken, tabTo, tr, variant, waitForSearch } from '../helpers';
+import { api, createE2ePage, createE2eProject, createItem, removeE2eProject, runId, searchToken, tabTo, tr, variant, waitForSearch } from '../helpers';
 
 // The rich text editor in the description of an item, signed in as the e2e person in English: pictures pasted, files
 // chosen over `/`, code highlighting, `@` and `#` with the keyboard. jsdom knows no ClipboardEvent and no file choice,
@@ -132,6 +132,48 @@ test('mentions over @ and refers over #', async ({ page }) => {
     await expect(section.locator('.rt-ref')).toContainText(target.key);
     // Markdown names the handle and the key the item has now
     await expect.poll(() => storedDescription(page, item.id)).toMatch(new RegExp(`^Bitte @mara prüfen, siehe ${target.key}\\s*$`));
+  } finally {
+    await page.goto('/my-items');
+    await removeE2eProject(page, identifier);
+  }
+});
+
+test('refers to a wiki page with # in a description', async ({ page }) => {
+  const { id, identifier } = await createE2eProject(page, name('page refs'), { types: ['Task'] });
+  try {
+    const target = await createE2ePage(page, id, { title: `E2E Leuchtfeuer ${searchToken()}` });
+    // `#` takes one word (a blank ends the list): the token alone
+    await waitForSearch(page, searchToken(), (data) => data.pages.some((hit) => hit.id === target.id));
+    const item = await createItem(page, { project_id: id, title: 'E2E Seite verlinken' });
+    const { section, editor } = await editDescription(page, item.key, 'E2E Seite verlinken');
+
+    await page.keyboard.type(`Mehr dazu in #${searchToken()}`);
+    const menu = page.getByRole('listbox', { name: tr('en', 'editor.reference.label') });
+    const pages = menu.getByRole('group', { name: tr('en', 'editor.reference.pages') });
+    await expect(pages.getByRole('option')).toHaveCount(1);
+    await expect(pages.getByRole('option', { name: new RegExp(`E2E Leuchtfeuer ${searchToken()}`) })).toContainText(tr('en', 'wiki.place', { identifier }));
+    // no item has the token: the list holds the page alone, under its heading
+    await expect(menu.getByRole('group', { name: tr('en', 'editor.reference.items') })).toHaveCount(0);
+    await page.keyboard.press('Enter');
+
+    // while editing: the title the page has now, no link
+    await expect(section.locator('.rt-ref')).toHaveText(`E2E Leuchtfeuer ${searchToken()}`);
+    await expect(section.locator('a.rt-ref')).toHaveCount(0);
+    // the stored text names the page by its id; its Markdown carries the title the page has now
+    await expect.poll(() => storedDescription(page, item.id)).toMatch(new RegExp(`^Mehr dazu in \\[E2E Leuchtfeuer ${searchToken()}\\]\\(page:${target.id}\\)\\s*$`));
+
+    // read where no one edits (a comment): a link into the wiki of the project
+    await editor.blur();
+    const comment = await api(page, 'POST', `/api/v1/work-items/${item.id}/comments`, { body: `Siehe [x](page:${target.id})` });
+    expect(comment.status(), await comment.text()).toBe(201);
+    await page.reload();
+    const link = page.locator('[data-comment-card] a.rt-ref');
+    // screen readers hear the wiki the page is in (T18-M2)
+    await expect(link).toHaveAccessibleName(`E2E Leuchtfeuer ${searchToken()}, ${tr('en', 'wiki.place', { identifier })}`);
+    await link.focus();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(new RegExp(`/projects/${identifier}/wiki/${target.id}$`));
+    await expect(page.getByRole('textbox', { name: tr('en', 'wiki.page.title_label') })).toHaveValue(`E2E Leuchtfeuer ${searchToken()}`);
   } finally {
     await page.goto('/my-items');
     await removeE2eProject(page, identifier);

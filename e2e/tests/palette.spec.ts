@@ -1,5 +1,5 @@
 import { expect, test } from '../fixtures';
-import { createE2eProject, createItem, pressMod, removeE2eProject, runId, searchToken, tabTo, tr, variant, waitForSearch } from '../helpers';
+import { createE2ePage, createE2eProject, createItem, pressMod, removeE2eProject, runId, searchToken, tabTo, tr, variant, waitForSearch } from '../helpers';
 
 // The command palette with the keyboard only, signed in as the e2e person (playwright.config.ts), in English: its
 // commands and the search. Items a spec searches carry the search token of its run and variant (all variants share one
@@ -113,6 +113,36 @@ test('searches from the palette', async ({ page }) => {
 
     await expect(page).toHaveURL(new RegExp(`/items/${item.key}$`));
     await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible();
+    await expect(palette).toBeHidden();
+  } finally {
+    await removeE2eProject(page, identifier);
+  }
+});
+
+test('finds a wiki page by a word of its text and opens it', async ({ page }) => {
+  const { id, identifier } = await createE2eProject(page, `E2E palette wiki ${variant()} ${runId()}`);
+  try {
+    // the title has neither word: the page is found by its text
+    const content_json = {
+      type: 'doc',
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: `Der Wegweiser für neue Leute ${searchToken()}.` }] }],
+    };
+    const wikiPage = await createE2ePage(page, id, { title: 'E2E Orientierung', content_json });
+    const query = `${searchToken()} wegweiser`;
+    await waitForSearch(page, query, (data) => data.pages.some((hit) => hit.id === wikiPage.id));
+
+    const palette = await openPalette(page);
+    await page.keyboard.type(query);
+    const pages = palette.getByRole('group', { name: tr('en', 'palette.section.pages') });
+    // its title and where it lives, as in flow 5 of the clickdummy
+    const hit = pages.getByRole('option', { name: `E2E Orientierung ${tr('en', 'wiki.place', { identifier })}` });
+    await expect(hit).toBeVisible();
+    await expect(palette.getByRole('status')).toHaveText(tr('en', 'palette.hits.one'));
+    await expect(hit).toHaveAttribute('aria-selected', 'true');
+    await page.keyboard.press('Enter');
+
+    await expect(page).toHaveURL(new RegExp(`/projects/${identifier}/wiki/${wikiPage.id}$`));
+    await expect(page.getByRole('textbox', { name: tr('en', 'wiki.page.title_label') })).toHaveValue('E2E Orientierung');
     await expect(palette).toBeHidden();
   } finally {
     await removeE2eProject(page, identifier);

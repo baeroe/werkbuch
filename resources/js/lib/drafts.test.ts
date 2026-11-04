@@ -1,7 +1,8 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { makePage } from '@/test/fixtures';
 import type { RichText } from '@/types';
-import { commentDraft, commentEditDraft, descriptionDraft, drafts, useDraft, useDraftSending } from './drafts';
+import { commentDraft, commentEditDraft, descriptionDraft, drafts, pageDraft, useDraft, useDraftSending, usePageDraft, type PageDraft } from './drafts';
 
 const doc = (text: string): RichText => ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] });
 
@@ -127,5 +128,42 @@ describe('drafts', () => {
     stop();
     drafts.clear();
     expect(hook).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps what a page holds unsaved with the version it was typed on, asks before leaving and forgets it on clear', () => {
+    expect(pageDraft('pg_1')).toBe('page:pg_1');
+    const { result } = renderHook(() => usePageDraft(pageDraft('pg_1')));
+    expect(result.current).toBeNull();
+    const kept: PageDraft = { title: 'Ablauf', emoji: '🧭', content: doc('Erstens'), base_version: 3, conflict: null };
+    const listener = vi.fn();
+    drafts.subscribe('page:pg_1', listener);
+
+    act(() => drafts.setPage('page:pg_1', kept));
+    expect(result.current).toBe(kept);
+    // the same draft again is no change
+    drafts.setPage('page:pg_1', kept);
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(drafts.page('page:pg_1')).toBe(kept);
+    expect(drafts.pending()).toEqual(['page:pg_1']);
+    expect(leaving()).toBe(true);
+
+    // with the conflict a save met, the page as the server stores it
+    const conflicted = { ...kept, conflict: { message: 'Ida hat die Seite inzwischen geändert.', current: makePage({ id: 'pg_1', version: 4 }) } };
+    act(() => drafts.setPage('page:pg_1', conflicted));
+    expect(result.current?.conflict?.current.version).toBe(4);
+
+    act(() => drafts.setPage('page:pg_1', null));
+    expect(result.current).toBeNull();
+    expect(leaving()).toBe(false);
+
+    drafts.setPage('page:pg_1', kept);
+    const end = drafts.startSending('page:pg_1');
+    expect(drafts.sending('page:pg_1')).toBe(true);
+    // another person signs in: the page's draft goes with every text
+    act(() => drafts.clear());
+    expect(result.current).toBeNull();
+    expect(drafts.sending('page:pg_1')).toBe(false);
+    expect(leaving()).toBe(false);
+    end();
   });
 });

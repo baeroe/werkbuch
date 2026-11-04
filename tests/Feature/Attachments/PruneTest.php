@@ -9,6 +9,8 @@ use App\Jobs\PruneUnownedAttachmentsJob;
 use App\Models\Attachment;
 use App\Models\Comment;
 use App\Models\Event;
+use App\Models\Page;
+use App\Models\PageVersion;
 use App\Models\Project;
 use App\Models\Property;
 use App\Models\User;
@@ -224,11 +226,58 @@ it('finds unowned uploads over the morph index and keeps the job from running tw
 
 it('leaves pictures of owners whose texts it does not read alone (T13-M2)', function () use ($web, $upload, $system) {
     [$project, $mara] = $web();
-    // an owner a later phase brings (a wiki page, a template): its texts are not read here, so nothing of it goes
+    // an owner whose texts are not read here (a template, Phase 10): nothing of it goes
     $foreign = $upload($mara, 'seite.png', '40 days')->create(['project_id' => $project->id, 'attachable_type' => 'project', 'attachable_id' => $project->id]);
 
     expect(PruneAttachments::run($system(), 30, false))->toBe([])
         ->and($foreign->fresh())->not->toBeNull();
+});
+
+/**
+ * WEB, 40 days ago: the wiki pages Start and Team. Start owns `seite.png` (its text shows it), `alt.png` (only a kept
+ * version of Start shows it), `kopie.png` (only Team's text shows it, copied, A233) and `weg.png` (no text or version
+ * shows it any more).
+ *
+ * @return array<string, Attachment>
+ */
+$pages = function () use ($web, $upload): array {
+    [$project, $mara] = $web();
+    $start = Page::factory()->create(['project_id' => $project->id, 'title' => 'Start', 'created_by' => $mara->id]);
+    $team = Page::factory()->create(['project_id' => $project->id, 'title' => 'Team', 'created_by' => $mara->id]);
+    $a = array_map(fn (string $name) => $upload($mara, "{$name}.png", '40 days')->forPage($start)->create(), [
+        'seite' => 'seite', 'alt' => 'alt', 'kopie' => 'kopie', 'weg' => 'weg',
+    ]);
+    $start->update(['content' => F::doc(F::p('Start'), F::image($a['seite']->id, null))]);
+    PageVersion::factory()->create(['page_id' => $start->id, 'version' => 1, 'content' => F::doc(F::p('Alt'), F::image($a['alt']->id, null))]);
+    $start->update(['version' => 2]);
+    $team->update(['content' => F::doc(F::image($a['kopie']->id, null))]);
+
+    return $a;
+};
+
+it('prunes a picture a page no longer shows', function () use ($pages, $system) {
+    $a = $pages();
+
+    expect(collect(PruneAttachments::run($system(), 30, false))->pluck('id')->all())->toBe([$a['weg']->id])
+        ->and($a['weg']->fresh())->toBeNull();
+});
+
+it('keeps a picture a version of the page still shows (A314)', function () use ($pages, $system) {
+    $a = $pages();
+
+    PruneAttachments::run($system(), 30, false);
+
+    expect($a['alt']->fresh())->not->toBeNull()
+        ->and($a['seite']->fresh())->not->toBeNull();
+});
+
+it('keeps a picture another page shows', function () use ($pages, $system) {
+    $a = $pages();
+
+    PruneAttachments::run($system(), 30, false);
+
+    expect($a['kopie']->fresh()?->attachable_type)->toBe('page')
+        ->and(Attachment::query()->orderBy('filename')->pluck('filename')->all())->toBe(['alt.png', 'kopie.png', 'seite.png']);
 });
 
 /** Makes the description of the item one that Document::fromJson refuses (a node it does not know), naming `$id`. */

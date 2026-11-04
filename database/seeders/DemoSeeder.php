@@ -12,6 +12,7 @@ use Database\Seeders\Demo\FavoritesSeeder;
 use Database\Seeders\Demo\ItemsSeeder;
 use Database\Seeders\Demo\NotificationsSeeder;
 use Database\Seeders\Demo\OrganizationSeeder;
+use Database\Seeders\Demo\PagesSeeder;
 use Database\Seeders\Demo\PeopleSeeder;
 use Database\Seeders\Demo\ProjectsSeeder;
 use Database\Seeders\Demo\TokensSeeder;
@@ -47,6 +48,7 @@ class DemoSeeder extends Seeder
             FavoritesSeeder::class,
             TokensSeeder::class,
             ItemsSeeder::class,
+            PagesSeeder::class,
             ActivitySeeder::class,
             CommentsSeeder::class,
             AttachmentsSeeder::class,

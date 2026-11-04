@@ -11,8 +11,8 @@ namespace App\RichText;
  * ProseMirror's `nodeFromJSON` reads it: missing attributes take the default, unknown ones are dropped.
  *
  * The nodes of Phase 7 stand for something outside the text and carry only its ID, never a URL, a path, a key or a
- * title: `mention` (a person: `id`, the `label` the handle had when it was written), `reference` (an item or, from
- * Phase 9, a page: `id`, `kind`; the editor's label is never stored), `image` (a block: `attachmentId`, `alt`) and
+ * title: `mention` (a person: `id`, the `label` the handle had when it was written), `reference` (an item or a
+ * wiki page: `id`, `kind`; the editor's label is never stored), `image` (a block: `attachmentId`, `alt`) and
  * `attachment` (a file in the text: `attachmentId`, `filename`). An image with a `src` (pasted HTML, `![](https://…)`)
  * becomes no node.
  */
@@ -42,7 +42,7 @@ final class Schema
     /** Nodes inside a line of text that hold nothing (Tiptap's `atom`); like text they may carry marks. */
     public const INLINE_ATOMS = ['mention', 'reference', 'attachment'];
 
-    /** What a reference points to: an item, or a wiki page (Phase 9). */
+    /** What a reference points to: an item, or a wiki page. */
     public const REFERENCE_KINDS = ['item', 'page'];
 
     /** What each node may hold; a node that is missing here holds nothing. */

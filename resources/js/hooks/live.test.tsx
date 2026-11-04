@@ -6,10 +6,10 @@ import type { ApiError } from '@/api/client';
 import type { LiveEvent } from '@/api/live';
 import { resetToasts } from '@/components/ui/toast';
 import { runWithUndo, undoLatest } from '@/lib/undo';
-import { useLiveGone } from '@/lib/liveGone';
+import { useLiveGone, usePageGone } from '@/lib/liveGone';
 import { useUiStore } from '@/store/ui';
 import { mockApi, type MockApi } from '@/test/api';
-import { project } from '@/test/fixtures';
+import { project, webTree } from '@/test/fixtures';
 import { qk } from './keys';
 import { LIVE_BURST_MS, LIVE_MAX_WAIT_MS, useLiveConnected, useLiveItem, useLiveSync } from './live';
 import { useMembers, useProject, useProjects } from './projects';
@@ -47,7 +47,7 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 function send(overrides: Partial<LiveEvent>): void {
-  const event: LiveEvent = { event_id: 'ev_1', type: 'work_item.updated', project_id: 'p_web', item_id: 'wi_web_47', comment_id: null, actor_id: 'u_ida', ...overrides };
+  const event: LiveEvent = { event_id: 'ev_1', type: 'work_item.updated', project_id: 'p_web', page_id: null, item_id: 'wi_web_47', comment_id: null, actor_id: 'u_ida', ...overrides };
   act(() => bus.listeners.forEach((listener) => listener(event)));
 }
 
@@ -264,7 +264,7 @@ describe('useLiveSync', () => {
   });
 
   it('loads everything a screen shows again once the connection is back', async () => {
-    const shownKeys = [qk.workItems.all, qk.activity.all, qk.comments.all, qk.projects.all, qk.members.all, qk.notifications.all];
+    const shownKeys = [qk.workItems.all, qk.activity.all, qk.comments.all, qk.projects.all, qk.members.all, qk.notifications.all, qk.pages.all, qk.pageVersions.all];
     const queries = [];
     for (const key of shownKeys) queries.push(await shown([...key, 'list']));
     renderHook(() => useLiveSync(), { wrapper });
@@ -272,7 +272,7 @@ describe('useLiveSync', () => {
     send({ event_id: null, type: 'live.reconnected', project_id: null, item_id: null, actor_id: null });
     await pass(LIVE_BURST_MS);
 
-    expect(queries.map((query) => query.fetches())).toEqual([2, 2, 2, 2, 2, 2]);
+    expect(queries.map((query) => query.fetches())).toEqual([2, 2, 2, 2, 2, 2, 2, 2]);
     expect(useUiStore.getState().flashIds).toEqual([]);
   });
 
@@ -355,7 +355,16 @@ describe('useLiveSync', () => {
 
     it('loads what a project channel carries, not the inbox and no comments', async () => {
       const queries = [];
-      for (const key of [qk.workItems.list({ project: 'p_web' }), qk.activity.list({ item: 'wi_web_47' }), qk.projects.list({}), qk.members.list({ project: 'p_web' }), qk.notifications.list({}), qk.comments.list({ item: 'wi_web_47' })]) {
+      for (const key of [
+        qk.workItems.list({ project: 'p_web' }),
+        qk.activity.list({ item: 'wi_web_47' }),
+        qk.projects.list({}),
+        qk.members.list({ project: 'p_web' }),
+        qk.pages.list({ project: 'p_web' }),
+        qk.pageVersions.list({ page: 'pg_web_structure' }),
+        qk.notifications.list({}),
+        qk.comments.list({ item: 'wi_web_47' }),
+      ]) {
         queries.push(await shown(key));
       }
       renderHook(() => useLiveSync(), { wrapper });
@@ -363,7 +372,7 @@ describe('useLiveSync', () => {
       send(held('p_web', null));
       await pass(LIVE_BURST_MS);
 
-      expect(queries.map((query) => query.fetches())).toEqual([2, 2, 2, 2, 1, 1]);
+      expect(queries.map((query) => query.fetches())).toEqual([2, 2, 2, 2, 2, 2, 1, 1]);
     });
 
     it('loads only the comments and the history of the item whose channel is held, and lights nothing up', async () => {
@@ -487,6 +496,23 @@ describe('useLiveSync', () => {
     expect([project, members, list, detail, activity].map((query) => query.fetches())).toEqual([1, 1, 1, 1, 1]);
     // not even stale: another view of them mounting would fetch them and get 404 (left alone until the screen is left)
     expect([project, members, list, detail, activity].some((query) => query.stale())).toBe(false);
+  });
+
+  it('does not load a wiki page of a deleted project again when the connection comes back (N4)', async () => {
+    const page = await shown(qk.pages.detail('pg_web_domain'));
+    queryClient.setQueryData(qk.pages.detail('pg_web_domain'), { id: 'pg_web_domain', project_id: 'p_web' });
+    const item = await shown(qk.workItems.detail('WEB-1'));
+    queryClient.setQueryData(qk.workItems.detail('WEB-1'), { item: { id: 'wi_web_1', project_id: 'p_web' } });
+    const inbox = await shown(qk.notifications.list({}));
+    renderHook(() => useLiveSync(), { wrapper });
+
+    send({ event_id: 'ev_1', type: 'project.deleted', project_id: 'p_web', item_id: null });
+    await pass(LIVE_BURST_MS);
+    send({ event_id: null, type: 'live.reconnected', project_id: null, item_id: null });
+    await pass(LIVE_BURST_MS);
+
+    // their answers name the project: they would answer 404
+    expect([page.fetches(), item.fetches(), inbox.fetches()]).toEqual([1, 1, 2]);
   });
 
   it('does not load again a fetch it waited for when its project went meanwhile', async () => {
@@ -651,6 +677,208 @@ describe('useLiveSync', () => {
     expect(useUiStore.getState().flashIds).toEqual([]);
     await pass(LIVE_BURST_MS);
     expect(useUiStore.getState().flashIds).toEqual(['wi_web_47']);
+  });
+
+  describe('wiki pages', () => {
+    /** Holds every request of the fake API until the returned function is called. */
+    function holdRequests(): () => void {
+      let release = () => {};
+      const held = new Promise<void>((resolve) => (release = resolve));
+      const answer = globalThis.fetch;
+      globalThis.fetch = async (...args) => {
+        await held;
+        return answer(...args);
+      };
+      return () => {
+        globalThis.fetch = answer;
+        release();
+      };
+    }
+
+    /** A query a screen shows whose answer is always `data`, counting how often it is fetched. */
+    async function showing(queryKey: QueryKey, data: unknown) {
+      let fetches = 0;
+      const observer = new QueryObserver(queryClient, {
+        queryKey,
+        queryFn: () => {
+          fetches += 1;
+          return Promise.resolve(data);
+        },
+        staleTime: Infinity,
+      });
+      stops.push(observer.subscribe(() => {}));
+      await act(() => vi.advanceTimersByTimeAsync(0));
+      return { fetches: () => fetches, stale: () => queryClient.getQueryState(queryKey)?.isInvalidated };
+    }
+
+    it('refreshes the pages on a page event and leaves a deleted page alone', async () => {
+      const tree = await shown(qk.pages.list({ project: 'p_web' }));
+      const structure = await showing(qk.pages.detail('pg_web_structure'), { id: 'pg_web_structure', project_id: 'p_web' });
+      const tech = await showing(qk.pages.detail('pg_web_tech'), { id: 'pg_web_tech', project_id: 'p_web' });
+      const versions = await shown(qk.pageVersions.list({ page: 'pg_web_domain' }));
+      const version = await showing(qk.pageVersions.detail('pv_domain_1'), { id: 'pv_domain_1', page_id: 'pg_web_domain' });
+      const structureRef = await shown(qk.references.page('pg_web_structure'));
+      const techRef = await shown(qk.references.page('pg_web_tech'));
+      const items = await shown(qk.workItems.list({}));
+      const { result } = renderHook(
+        () => {
+          useLiveSync();
+          return { page: usePageGone('pg_web_domain'), other: useLiveGone('pg_web_domain') };
+        },
+        { wrapper },
+      );
+
+      send({ event_id: 'ev_1', type: 'page.created', page_id: 'pg_web_new', item_id: null });
+      await pass(LIVE_BURST_MS);
+      // a new page changes no title a reference shows
+      expect([tree, structure, tech, versions, version, structureRef, techRef, items].map((query) => query.fetches())).toEqual([2, 2, 2, 2, 2, 1, 1, 1]);
+
+      for (const [index, type] of ['page.updated', 'page.moved'].entries()) {
+        send({ event_id: `ev_${index + 2}`, type, page_id: 'pg_web_structure', item_id: null });
+        await pass(LIVE_BURST_MS);
+      }
+      // a new title or place shows in the references to the page as well (K15)
+      expect([tree, structure, tech, versions, version, structureRef, techRef, items].map((query) => query.fetches())).toEqual([4, 4, 4, 4, 4, 3, 3, 1]);
+
+      send({ event_id: 'ev_4', type: 'page.deleted', page_id: 'pg_web_tech', page_ids: ['pg_web_tech', 'pg_web_domain'], item_id: null });
+      expect(result.current).toEqual({ page: true, other: false });
+      await pass(LIVE_BURST_MS);
+
+      // the tree, the pages that stay and every reference load (a reference asks no page itself: the deleted one goes
+      // missing from the answer, no 404, and the reference stops showing its title, T18-M5); the deleted pages and
+      // their versions stay as they are
+      expect([tree, structure, structureRef, techRef].map((query) => query.fetches())).toEqual([5, 5, 4, 4]);
+      expect([tech, versions, version].map((query) => query.fetches())).toEqual([4, 4, 4]);
+      expect([tech, versions, version].some((query) => query.stale())).toBe(false);
+      expect(items.fetches()).toBe(1);
+      expect(useUiStore.getState().flashIds).toEqual([]);
+    });
+
+    it('loads the tree first when a message cannot name the deleted pages, and leaves alone what is no longer in it', async () => {
+      api = mockApi({ 'GET /api/v1/projects/p_web/pages': () => ({ body: { data: webTree.filter((node) => node.id !== 'pg_web_tech'), meta: { total: 7 } } }) });
+      const release = holdRequests();
+      // the screen asks for the tree by the identifier: what it held tells the pages of the project
+      const tree = await showing(qk.pages.list({ project: 'WEB' }), { items: webTree, next_cursor: null, total: 12 });
+      const hosting = await showing(qk.pages.detail('pg_web_hosting'), { id: 'pg_web_hosting', project_id: 'p_web' });
+      const domain = await shown(qk.pageVersions.list({ page: 'pg_web_domain' }));
+      const lonely = await showing(qk.pages.detail('pg_web_lonely'), { id: 'pg_web_lonely', project_id: 'p_web' });
+      const structure = await showing(qk.pages.detail('pg_web_structure'), { id: 'pg_web_structure', project_id: 'p_web' });
+      const app = await showing(qk.pages.detail('pg_app_vision'), { id: 'pg_app_vision', project_id: 'p_app' });
+      const items = await shown(qk.workItems.list({}));
+      const { result } = renderHook(
+        () => {
+          useLiveSync();
+          return [usePageGone('pg_web_tech'), usePageGone('pg_web_hosting'), usePageGone('pg_web_lonely'), usePageGone('pg_web_structure')];
+        },
+        { wrapper },
+      );
+
+      send({ event_id: 'ev_1', type: 'page.deleted', page_id: 'pg_web_tech', page_ids: null, item_id: null });
+      send({ event_id: 'ev_2', type: 'work_item.updated', item_id: 'wi_web_47' });
+      await pass(LIVE_BURST_MS);
+      // the root is known at once; the rest waits for the tree, what else the burst carries does not
+      expect(result.current).toEqual([true, false, false, false]);
+      expect(items.fetches()).toBe(2);
+      expect([tree, hosting, domain, lonely, structure, app].map((query) => query.fetches())).toEqual([1, 1, 1, 1, 1, 1]);
+
+      // a page event while the tree is asked for waits as well
+      send({ event_id: 'ev_3', type: 'page.updated', page_id: 'pg_web_structure', item_id: null });
+      await pass(LIVE_BURST_MS);
+      expect([tree, hosting, structure].map((query) => query.fetches())).toEqual([1, 1, 1]);
+
+      release();
+      await vi.waitFor(() => expect(tree.fetches()).toBe(2));
+      expect(api.calls.map((call) => call.url)).toEqual(['/api/v1/projects/p_web/pages']);
+      // a page of the project the tree holds no more is deleted (also one only its detail knew); the others load
+      expect(result.current).toEqual([true, true, true, false]);
+      expect([hosting, domain, lonely].map((query) => query.fetches())).toEqual([1, 1, 1]);
+      expect([structure, app].map((query) => query.fetches())).toEqual([2, 2]);
+    });
+
+    it('takes no page as deleted that came into the cache while the tree was read', async () => {
+      api = mockApi({ 'GET /api/v1/projects/p_web/pages': () => ({ body: { data: webTree.filter((node) => node.id !== 'pg_web_tech'), meta: { total: 7 } } }) });
+      const release = holdRequests();
+      const hosting = await showing(qk.pages.detail('pg_web_hosting'), { id: 'pg_web_hosting', project_id: 'p_web' });
+      const { result } = renderHook(
+        () => {
+          useLiveSync();
+          return [usePageGone('pg_web_hosting'), usePageGone('pg_web_fresh')];
+        },
+        { wrapper },
+      );
+
+      send({ event_id: 'ev_1', type: 'page.deleted', page_id: 'pg_web_tech', page_ids: null, item_id: null });
+      await pass(LIVE_BURST_MS);
+      // created while the tree is read: the tree is older than the page
+      const fresh = await showing(qk.pages.detail('pg_web_fresh'), { id: 'pg_web_fresh', project_id: 'p_web' });
+      release();
+      await vi.waitFor(() => expect(result.current).toEqual([true, false]));
+      await pass(0);
+
+      expect([hosting.fetches(), fresh.fetches()]).toEqual([1, 2]);
+    });
+
+    it('takes nothing as deleted when the tree cannot be read', async () => {
+      api = mockApi({ 'GET /api/v1/projects/p_web/pages': () => ({ status: 500, body: { reason: 'server_error' } }) });
+      const hosting = await showing(qk.pages.detail('pg_web_hosting'), { id: 'pg_web_hosting', project_id: 'p_web' });
+      const { result } = renderHook(
+        () => {
+          useLiveSync();
+          return usePageGone('pg_web_hosting');
+        },
+        { wrapper },
+      );
+
+      send({ event_id: 'ev_1', type: 'page.deleted', page_id: 'pg_web_tech', page_ids: null, item_id: null });
+      await pass(LIVE_BURST_MS);
+      await vi.waitFor(() => expect(hosting.fetches()).toBe(2));
+
+      expect(result.current).toBe(false);
+    });
+
+    it('drops the check of the tree when the shell went meanwhile', async () => {
+      api = mockApi({ 'GET /api/v1/projects/p_web/pages': () => ({ body: { data: [], meta: { total: 0 } } }) });
+      const release = holdRequests();
+      const hosting = await showing(qk.pages.detail('pg_web_hosting'), { id: 'pg_web_hosting', project_id: 'p_web' });
+      const { unmount } = renderHook(() => useLiveSync(), { wrapper });
+
+      send({ event_id: 'ev_1', type: 'page.deleted', page_id: 'pg_web_tech', page_ids: null, item_id: null });
+      await pass(LIVE_BURST_MS);
+      unmount();
+      release();
+      await vi.waitFor(() => expect(api!.calls).toHaveLength(1));
+      await pass(0);
+
+      expect(hosting.fetches()).toBe(1);
+      const after = renderHook(() => usePageGone('pg_web_hosting'));
+      expect(after.result.current).toBe(false);
+    });
+
+    it('remembers deleted pages apart from deleted projects and items: a large subtree pushes none of them out', async () => {
+      const item = await showing(qk.workItems.detail('APP-3'), { item: { id: 'wi_app_3' } });
+      const first = await showing(qk.pages.detail('pg_0'), { id: 'pg_0' });
+      const { result } = renderHook(
+        () => {
+          useLiveSync();
+          return [useLiveGone('wi_app_3'), usePageGone('pg_0'), usePageGone('pg_200')];
+        },
+        { wrapper },
+      );
+
+      send({ event_id: 'ev_1', type: 'work_item.deleted', project_id: 'p_app', item_id: 'wi_app_3' });
+      const ids = Array.from({ length: 200 }, (_, index) => `pg_${index}`);
+      send({ event_id: 'ev_2', type: 'page.deleted', page_id: 'pg_0', page_ids: ids, item_id: null });
+      await pass(LIVE_BURST_MS);
+      expect(result.current).toEqual([true, true, false]);
+      expect([item.fetches(), first.fetches()]).toEqual([1, 1]);
+
+      send({ event_id: 'ev_3', type: 'page.deleted', page_id: 'pg_200', page_ids: ['pg_200'], item_id: null });
+      send({ event_id: 'ev_4', type: 'work_item.updated', project_id: 'p_app', item_id: 'wi_app_4' });
+      await pass(LIVE_BURST_MS);
+      // the oldest page fell out, the item stays deleted
+      expect(result.current).toEqual([true, false, true]);
+      expect([item.fetches(), first.fetches()]).toEqual([1, 2]);
+    });
   });
 
   it('stops listening when the shell goes', async () => {

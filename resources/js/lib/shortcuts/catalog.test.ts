@@ -1,16 +1,38 @@
 import { describe, expect, it } from 'vitest';
 import de from '../../../../lang/de.json';
 import en from '../../../../lang/en.json';
-import { SHORTCUTS } from './catalog';
+import { SHORTCUTS, type ShortcutId } from './catalog';
 import { canonicalKeys } from './registry';
 
 describe('shortcut catalog', () => {
-  it('binds no key twice within one scope', () => {
+  /**
+   * Entries that share a key in one scope and still never meet (A324, K3): the settings and the wiki are screens of
+   * their own, so `settings.save` and `wiki.save` are never bound together; `wiki.delete` steps aside (its `when`)
+   * while the preview of an item is open, whose `item.remove` acts then.
+   */
+  const SHARED = [
+    ['settings.save', 'wiki.save'],
+    ['item.remove', 'wiki.delete'],
+  ];
+
+  it('binds no key twice within one scope, apart from the pairs that never meet', () => {
     const seen = new Map<string, string>();
     for (const [id, entry] of Object.entries(SHORTCUTS)) {
       const slot = `${entry.scope}|${canonicalKeys(entry.keys)}`;
-      expect(seen.get(slot), `${id} and ${seen.get(slot)} share ${entry.keys}`).toBeUndefined();
+      const other = seen.get(slot);
+      if (other === undefined || !SHARED.some((pair) => pair.includes(id) && pair.includes(other))) {
+        expect(other, `${id} and ${other} share ${entry.keys}`).toBeUndefined();
+      }
       seen.set(slot, id);
+    }
+  });
+
+  it('saves and deletes a wiki page in the detail scope, beside the keys it shares', () => {
+    expect(SHORTCUTS['wiki.save']).toMatchObject({ keys: 'mod+enter', scope: 'detail', group: 'shortcuts.group.wiki' });
+    expect(SHORTCUTS['wiki.delete']).toMatchObject({ keys: 'mod+backspace', scope: 'detail', group: 'shortcuts.group.wiki' });
+    for (const [one, other] of SHARED) {
+      const [a, b] = [SHORTCUTS[one as ShortcutId], SHORTCUTS[other as ShortcutId]];
+      expect([a.scope, canonicalKeys(a.keys)]).toEqual([b.scope, canonicalKeys(b.keys)]);
     }
   });
 

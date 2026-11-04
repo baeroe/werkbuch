@@ -41,6 +41,15 @@ use App\Actions\Notifications\SendDueReminders;
 use App\Actions\Notifications\SendNotificationMail;
 use App\Actions\Organization\GetOrganization;
 use App\Actions\Organization\UpdateOrganization;
+use App\Actions\Pages\CreatePage;
+use App\Actions\Pages\DeletePage;
+use App\Actions\Pages\GetPage;
+use App\Actions\Pages\GetPageVersion;
+use App\Actions\Pages\ListPages;
+use App\Actions\Pages\ListPageVersions;
+use App\Actions\Pages\MovePage;
+use App\Actions\Pages\RestorePageVersion;
+use App\Actions\Pages\UpdatePage;
 use App\Actions\Projects\AddMember;
 use App\Actions\Projects\ArchiveProject;
 use App\Actions\Projects\AssignWorkflow;
@@ -117,6 +126,7 @@ use App\Models\Event;
 use App\Models\Label;
 use App\Models\Notification;
 use App\Models\NotificationMail;
+use App\Models\PageVersion;
 use App\Models\Property;
 use App\Models\RelationType;
 use App\Models\Resolution;
@@ -802,6 +812,80 @@ return [
         ]),
         'allowed' => $people,
         'event' => EventType::UserPasswordChanged,
+    ],
+    // the wiki: whoever sees the project reads its tree and its pages (viewers and outsiders of a public one too)
+    'ListPages' => [
+        'action' => ListPages::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListPages::run($a, $w->project($column)),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    'GetPage' => [
+        'action' => GetPage::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetPage::run($a, $w->page($column)),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    // writing the wiki takes `wiki.edit`: members and admins of the project (the default bot is an org admin)
+    'CreatePage' => [
+        'action' => CreatePage::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => CreatePage::run($a, $w->project($column), ['title' => 'Matrix']),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::PageCreated,
+    ],
+    'UpdatePage' => [
+        'action' => UpdatePage::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => UpdatePage::run($a, $w->page($column), ['title' => 'Matrix']),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::PageUpdated,
+    ],
+    'MovePage' => [
+        'action' => MovePage::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $page = $w->page($column);
+
+            return MovePage::run($a, $page, ['parent_id' => $w->page($column)->id, 'before_id' => null]);
+        },
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::PageMoved,
+    ],
+    'DeletePage' => [
+        'action' => DeletePage::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => DeletePage::run($a, $w->page($column)),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::PageDeleted,
+    ],
+    // the versions of a page: whoever sees the project reads them, restoring one takes `wiki.edit`
+    'ListPageVersions' => [
+        'action' => ListPageVersions::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListPageVersions::run($a, $w->page($column), []),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    'GetPageVersion' => [
+        'action' => GetPageVersion::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $page = $w->page($column);
+
+            return GetPageVersion::run($a, $page, PageVersion::factory()->create(['page_id' => $page->id]));
+        },
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    'RestorePageVersion' => [
+        'action' => RestorePageVersion::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $page = $w->page($column);
+
+            return RestorePageVersion::run($a, $page, PageVersion::factory()->create(['page_id' => $page->id]));
+        },
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::PageUpdated,
     ],
     // the inbox is the own one: everybody lists, marks and deletes their own notifications (a bot has none); a
     // notification of a project the account does not see is passed over when marking and a 404 when deleting (K19)

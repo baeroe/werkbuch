@@ -11,6 +11,10 @@ use App\Actions\Comments\RemoveReaction;
 use App\Actions\Favorites\ToggleFavorite;
 use App\Actions\Invitations\InviteUser;
 use App\Actions\Labels\DeleteLabel;
+use App\Actions\Pages\CreatePage;
+use App\Actions\Pages\DeletePage;
+use App\Actions\Pages\MovePage;
+use App\Actions\Pages\UpdatePage;
 use App\Actions\Projects\AddMember;
 use App\Actions\Projects\ArchiveProject;
 use App\Actions\Projects\CreateProject;
@@ -35,6 +39,7 @@ use App\Events\Outbox;
 use App\Jobs\ConsumeEvent;
 use App\Models\Event;
 use App\Models\Label;
+use App\Models\Page;
 use App\Models\Project;
 use App\Models\RelationType;
 use App\Models\User;
@@ -42,6 +47,7 @@ use App\Models\Workflow;
 use App\Models\WorkItem;
 use App\Search\SearchConsumer;
 use App\Search\SearchIndexer;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Tests\Support\WorkflowFixtures;
 
@@ -148,6 +154,88 @@ it('removes a deleted project and its items, also after the purge ran', function
 
     expect($ids($engine, 'testing_work_items'))->toBe([$kept->id])
         ->and($ids($engine, 'testing_projects'))->toBe([$ops->id]);
+});
+
+it('indexes a created, saved and moved page', function () use ($world) {
+    $engine = searchEngine();
+    [$web, $mara] = $world();
+    $document = fn (Page $page): ?array => $engine->documents('testing_pages')[$page->id] ?? null;
+
+    $guide = CreatePage::run(actor($mara), $web, ['title' => 'Handbuch']);
+    $page = CreatePage::run(actor($mara), $web, ['title' => 'Onboarding', 'content' => 'Der **erste** Tag']);
+    expect($document($page))->toMatchArray(['project_id' => $web->id, 'title' => 'Onboarding', 'text' => 'Der erste Tag']);
+
+    UpdatePage::run(actor($mara), $page, ['title' => 'Onboarding im Team', 'content' => 'Die erste Woche']);
+    expect($document($page))->toMatchArray(['title' => 'Onboarding im Team', 'text' => 'Die erste Woche']);
+
+    $writes = $engine->writes();
+    MovePage::run(actor($mara), Page::query()->findOrFail($page->id), ['parent_id' => $guide->id, 'before_id' => null]);
+    expect($engine->writes())->toBe($writes + 1)
+        ->and(array_keys($engine->documents('testing_pages')))->toBe([$guide->id, $page->id]);
+});
+
+it('removes every page of a deleted subtree', function () use ($world) {
+    $engine = searchEngine();
+    [$web, $mara] = $world();
+    $root = CreatePage::run(actor($mara), $web, ['title' => 'Handbuch']);
+    $child = CreatePage::run(actor($mara), $web, ['title' => 'Kapitel', 'parent_id' => $root->id]);
+    $grandchild = CreatePage::run(actor($mara), $web, ['title' => 'Abschnitt', 'parent_id' => $child->id]);
+    $kept = CreatePage::run(actor($mara), $web, ['title' => 'Impressum']);
+    expect(array_keys($engine->documents('testing_pages')))->toHaveCount(4);
+
+    DeletePage::run(actor($mara), Page::query()->findOrFail($root->id));
+
+    expect(eventsOf(EventType::PageDeleted)->sole()->meta['page_ids'])->toEqualCanonicalizing([$root->id, $child->id, $grandchild->id])
+        ->and(array_keys($engine->documents('testing_pages')))->toBe([$kept->id]);
+});
+
+it('removes the pages of a deleted project', function () use ($world, $ids) {
+    $engine = searchEngine();
+    [$web, $mara] = $world();
+    $ops = Project::factory()->identifier('OPS')->member($mara, ProjectRole::Admin)->create();
+    CreatePage::run(actor($mara), $web, ['title' => 'Onboarding']);
+    $kept = CreatePage::run(actor($mara), $ops, ['title' => 'Backup']);
+    Queue::fake([ConsumeEvent::class]);
+
+    DeleteProject::run(actor($mara), $web);
+
+    // the purge ran first: the rows are gone, the documents go by the project's id
+    expect(Page::query()->where('project_id', $web->id)->count())->toBe(0)
+        ->and($ids($engine, 'testing_pages'))->toHaveCount(2);
+
+    Queue::pushed(ConsumeEvent::class)->sole(fn (ConsumeEvent $job) => $job->consumer === SearchConsumer::class)->handle(app(Outbox::class));
+
+    expect($ids($engine, 'testing_pages'))->toBe([$kept->id]);
+});
+
+it('takes a page.updated twice the same way', function () use ($world) {
+    $engine = searchEngine();
+    [$web, $mara] = $world();
+    $page = CreatePage::run(actor($mara), $web, ['title' => 'Onboarding']);
+    UpdatePage::run(actor($mara), $page, ['title' => 'Onboarding neu', 'content' => 'Der erste Tag']);
+    $event = eventsOf(EventType::PageUpdated, $page)->sole();
+    $before = $engine->documents('testing_pages');
+
+    // a retry after a failure later in the claim transaction writes the same document again
+    app(SearchConsumer::class)->consume($event);
+    app(SearchConsumer::class)->consume($event);
+
+    expect($engine->documents('testing_pages'))->toBe($before)
+        ->and($before[$page->id])->toMatchArray(['title' => 'Onboarding neu', 'text' => 'Der erste Tag']);
+});
+
+it('removes a page that is gone when its event arrives', function () use ($world, $ids) {
+    $engine = searchEngine();
+    [$web, $mara] = $world();
+    $page = CreatePage::run(actor($mara), $web, ['title' => 'Onboarding']);
+    $kept = CreatePage::run(actor($mara), $web, ['title' => 'Impressum']);
+    Queue::fake([ConsumeEvent::class]);
+    UpdatePage::run(actor($mara), $page, ['title' => 'Onboarding neu']);
+    DB::table('pages')->where('id', $page->id)->delete();
+
+    Queue::pushed(ConsumeEvent::class)->sole(fn (ConsumeEvent $job) => $job->consumer === SearchConsumer::class)->handle(app(Outbox::class));
+
+    expect($ids($engine, 'testing_pages'))->toBe([$kept->id]);
 });
 
 it('indexes people and bots and marks deactivated accounts', function () use ($world) {

@@ -460,10 +460,11 @@ function EditorBody({ value, onChange, preset, projectId, label, placeholder, au
     if (changed) editor.view.dispatch(editor.state.tr.setMeta('editable', !readOnly));
   }, [editor, name, hint, describedBy, invalid, readOnly]);
 
-  // a document from outside (reload, reset) replaces what the editor shows; its own output changes nothing
+  // a document from outside (reload, reset) replaces what the editor shows; its own output changes nothing. It never
+  // enters the undo history: undo stops at it, and never brings back a text it replaced (a reloaded conflict, T15-I1)
   useEffect(() => {
     if (editor.isDestroyed || reports.isOwn(value)) return;
-    if (!showsDoc(editor, content)) editor.commands.setContent(content, { emitUpdate: false });
+    if (!showsDoc(editor, content)) editor.chain().setMeta('addToHistory', false).setContent(content, { emitUpdate: false }).run();
   }, [editor, value, content, reports]);
 
   return (

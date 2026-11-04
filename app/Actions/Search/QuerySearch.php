@@ -7,6 +7,7 @@ use App\Access\Visibility;
 use App\Domain\Filter\Filter;
 use App\Domain\WorkItems\ItemKey;
 use App\Exceptions\Problem;
+use App\Models\Page;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\View;
@@ -25,12 +26,12 @@ use Meilisearch\Exceptions\ExceptionInterface;
 use Psr\Http\Client\ClientExceptionInterface;
 
 /**
- * The one search (spec 4.17): items, projects, people and views at once, up to `limit` hits of each kind.
+ * The one search (spec 4.17): items, pages, projects, people and views at once, up to `limit` hits of each kind.
  *
- * - Every word of `q` has to hit (`matchingStrategy: all`, P13). Items and projects are searched in Meilisearch only
- *   within the projects the account sees (`Visibility::projectIds`, without `include_archived` none that is archived,
- *   P3) and read again from the database (ItemQuery, `Project::visibleTo`): a document the index still holds (item
- *   deleted, project being deleted, access lost) never comes back (P2). People are active persons and bots (P7), views
+ * - Every word of `q` has to hit (`matchingStrategy: all`, P13). Items, pages and projects are searched in Meilisearch
+ *   only within the projects the account sees (`Visibility::projectIds`, without `include_archived` none that is
+ *   archived, P3, A201) and read again from the database (ItemQuery, `Page::visibleTo`, `Project::visibleTo`): a
+ *   document the index still holds (item or page deleted, project being deleted, access lost) never comes back (P2). People are active persons and bots (P7), views
  *   come from the database by every word of their name (P6).
  * - A `q` in the form of a key (`web-47`, also with a former identifier) names its item in `keyMatch` and puts it first,
  *   archived or not, but only when the account sees it: the key of a hidden item reads like an unknown one (P4, A139).
@@ -47,7 +48,7 @@ final class QuerySearch
     use AsAction;
 
     /** @var list<string> */
-    public const TYPES = ['items', 'projects', 'people', 'views'];
+    public const TYPES = ['items', 'pages', 'projects', 'people', 'views'];
 
     public const DEFAULT_LIMIT = 20;
 
@@ -75,6 +76,7 @@ final class QuerySearch
 
         try {
             $items = in_array('items', $types, true) ? self::items($actor, $q, $scope, $limit, $includeArchived, $keyMatch) : (new WorkItem)->newCollection();
+            $pages = in_array('pages', $types, true) ? self::pages($user, $q, $scope, $limit) : (new Page)->newCollection();
             $projects = in_array('projects', $types, true) ? self::projects($user, $q, $scope, $limit) : (new Project)->newCollection();
             $people = in_array('people', $types, true) ? self::people($q, $limit) : (new User)->newCollection();
         } catch (ExceptionInterface|ClientExceptionInterface $e) {
@@ -87,7 +89,7 @@ final class QuerySearch
             ? self::views($q, $limit)
             : (new View)->newCollection();
 
-        return new SearchResults($items, $projects, $people, $views, $keyMatch?->id);
+        return new SearchResults($items, $pages, $projects, $people, $views, $keyMatch?->id);
     }
 
     /**
@@ -201,6 +203,26 @@ final class QuerySearch
         WorkItem::loadForResource($items, $actor->user, lean: true);
 
         return $items;
+    }
+
+    /**
+     * The pages of the scope, read again through `Page::visibleTo` in the order of the index, lean (the title of a page
+     * the reader no longer sees never comes back).
+     *
+     * @param  list<string>  $scope
+     * @return EloquentCollection<int, Page>
+     */
+    private static function pages(User $user, string $q, array $scope, int $limit): EloquentCollection
+    {
+        if ($scope === []) {
+            return (new Page)->newCollection();
+        }
+
+        $ids = self::keys(Page::search($q)->options(self::OPTIONS)->whereIn('project_id', $scope)->take($limit));
+        $pages = self::inOrder($ids, Page::query()->visibleTo($user)->whereKey($ids)->get((new Page)->qualifyColumns(Page::LEAN_COLUMNS)));
+        Page::loadForResource($pages, $user, lean: true);
+
+        return $pages;
     }
 
     /**

@@ -2,6 +2,7 @@
 
 namespace App\Search;
 
+use App\Models\Page;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
@@ -20,11 +21,11 @@ use Laravel\Scout\EngineManager;
 final class SearchIndexer
 {
     /** The searchable models, by the name of their table (the index without its prefix). */
-    private const MODELS = ['work_items' => WorkItem::class, 'projects' => Project::class, 'users' => User::class];
+    private const MODELS = ['work_items' => WorkItem::class, 'pages' => Page::class, 'projects' => Project::class, 'users' => User::class];
 
     private const CHUNK = 500;
 
-    /** The most bytes of comment text in an item's document (A245). */
+    /** The most bytes of comment text in an item's document (A245), and of text in a page's document (A317). */
     public const COMMENTS_MAX = 65536;
 
     public function __construct(private readonly EngineManager $engines) {}
@@ -47,7 +48,13 @@ final class SearchIndexer
             }
         }
 
-        return mb_strcut(implode("\n", $parts), 0, self::COMMENTS_MAX, 'UTF-8');
+        return self::cut(implode("\n", $parts));
+    }
+
+    /** The text cut at COMMENTS_MAX bytes without splitting a character. */
+    public static function cut(string $text): string
+    {
+        return mb_strcut($text, 0, self::COMMENTS_MAX, 'UTF-8');
     }
 
     /** Writes the document of an item, or removes it when the item is gone or its project is being deleted (K11). */
@@ -83,7 +90,35 @@ final class SearchIndexer
         $project->searchableSync();
     }
 
-    /** Removes the document of a project and of all its items, also when their rows are gone already. */
+    /** Writes the document of a page, or removes it when the page is gone or its project is being deleted. */
+    public function upsertPage(string $id): void
+    {
+        $page = $this->query(Page::class)->whereKey($id)->first();
+
+        if ($page === null || ! $page->shouldBeSearchable()) {
+            $this->removePages([$id]);
+
+            return;
+        }
+
+        $page->searchableSync();
+    }
+
+    /**
+     * Removes the documents of these pages (a deleted subtree: `meta.page_ids` of `page.deleted`), in one write.
+     *
+     * @param  list<string>  $ids
+     */
+    public function removePages(array $ids): void
+    {
+        if ($ids === []) {
+            return;
+        }
+
+        (new Page)->syncRemoveFromSearch((new Page)->newCollection(array_map(fn (string $id) => (new Page)->setRawAttributes(['id' => $id]), $ids)));
+    }
+
+    /** Removes the document of a project and of all its items and pages, also when their rows are gone already. */
     public function removeProject(string $id): void
     {
         (new Project)->setRawAttributes(['id' => $id])->unsearchableSync();
@@ -91,6 +126,7 @@ final class SearchIndexer
         $engine = $this->engines->engine();
         if ($engine instanceof RemovesWhere) {
             $engine->removeWhere(new WorkItem, 'project_id', $id);
+            $engine->removeWhere(new Page, 'project_id', $id);
         }
     }
 
@@ -120,7 +156,7 @@ final class SearchIndexer
             return;
         }
 
-        /** @var array<class-string<WorkItem|Project|User>, array<string, mixed>> $settings */
+        /** @var array<class-string<WorkItem|Page|Project|User>, array<string, mixed>> $settings */
         $settings = config('scout.meilisearch.index-settings');
 
         foreach ($settings as $class => $indexSettings) {
@@ -131,7 +167,7 @@ final class SearchIndexer
     /**
      * Builds every index from scratch (P18): the settings, then each index emptied and filled from the database.
      *
-     * @return array{work_items: int, projects: int, users: int} the documents written to each index
+     * @return array{work_items: int, pages: int, projects: int, users: int} the documents written to each index
      */
     public function rebuild(): array
     {
@@ -149,7 +185,7 @@ final class SearchIndexer
     /**
      * Writes every searchable row of the model, as Scout's makeAllSearchable() does, and counts the documents.
      *
-     * @param  class-string<WorkItem|Project|User>  $class
+     * @param  class-string<WorkItem|Page|Project|User>  $class
      */
     private function import(string $class): int
     {
@@ -157,7 +193,7 @@ final class SearchIndexer
         $model = new $class;
 
         $this->query($class)->chunkById(self::CHUNK, function (Collection $chunk) use ($model, &$count): void {
-            $searchable = $chunk->filter(fn (WorkItem|Project|User $found) => $found->shouldBeSearchable());
+            $searchable = $chunk->filter(fn (WorkItem|Page|Project|User $found) => $found->shouldBeSearchable());
             $model->syncMakeSearchable($searchable);
             $count += $searchable->count();
         }, $model->qualifyColumn('id'), 'id');
@@ -168,7 +204,7 @@ final class SearchIndexer
     /**
      * The query of a rebuild (Scout's makeAllSearchableQuery(): the model's makeAllSearchableUsing(), ordered by key).
      *
-     * @template T of WorkItem|Project|User
+     * @template T of WorkItem|Page|Project|User
      *
      * @param  class-string<T>  $class
      * @return Builder<T>

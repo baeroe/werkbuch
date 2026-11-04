@@ -124,7 +124,7 @@ const CONFIG = { key: 'werkbuch-key', host: 'werkbuch.example.com', port: 6001, 
 const echo = (): FakeEcho => FakeEcho.instances.at(-1)!;
 
 function message(overrides: Partial<LiveEvent> = {}): LiveEvent {
-  return { event_id: 'ev_1', type: 'work_item.updated', project_id: 'p_web', item_id: 'wi_web_47', comment_id: null, actor_id: 'u_ida', ...overrides };
+  return { event_id: 'ev_1', type: 'work_item.updated', project_id: 'p_web', page_id: null, item_id: 'wi_web_47', comment_id: null, actor_id: 'u_ida', ...overrides };
 }
 
 /** What `/broadcasting/batch` answers when it signs every channel it is asked for. */
@@ -265,7 +265,7 @@ describe('the status of the connection', () => {
     expect(isLiveConnected()).toBe(true);
     echo().state('connecting', 'connected');
 
-    expect(events).toEqual([{ event_id: null, type: 'live.reconnected', project_id: null, item_id: null, comment_id: null, actor_id: null }]);
+    expect(events).toEqual([{ event_id: null, type: 'live.reconnected', project_id: null, page_id: null, item_id: null, comment_id: null, actor_id: null }]);
     echo().state('connected', 'connected');
     expect(events).toHaveLength(1);
     stop();
@@ -324,7 +324,7 @@ describe('the status of the connection', () => {
     const answer = await echo().authorize('private-project.p_ops');
 
     expect(answer.error).toBeInstanceOf(Error);
-    expect(events).toEqual([{ event_id: null, type: 'live.refused', project_id: 'p_ops', item_id: null, comment_id: null, actor_id: null }]);
+    expect(events).toEqual([{ event_id: null, type: 'live.refused', project_id: 'p_ops', page_id: null, item_id: null, comment_id: null, actor_id: null }]);
     await echo().authorize('private-work-item.wi_ops_12');
     await echo().authorize('presence-user.u_mara');
     expect(events.slice(1).map((event) => [event.project_id, event.item_id])).toEqual([
@@ -468,7 +468,7 @@ describe('channels', () => {
     release();
     stop();
 
-    const held = (project_id: string | null, item_id: string | null): LiveEvent => ({ event_id: null, type: 'live.subscribed', project_id, item_id, comment_id: null, actor_id: null });
+    const held = (project_id: string | null, item_id: string | null): LiveEvent => ({ event_id: null, type: 'live.subscribed', project_id, page_id: null, item_id, comment_id: null, actor_id: null });
     expect(events).toEqual([held(null, null), held('p_web', null), held(null, 'wi_web_47'), held('p_web', null)]);
   });
 

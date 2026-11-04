@@ -2,6 +2,7 @@
 
 namespace App\Search;
 
+use App\Models\Page;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\View;
@@ -16,12 +17,14 @@ final readonly class SearchResults
 {
     /**
      * @param  EloquentCollection<int, WorkItem>  $items  lean, loaded for the resource
+     * @param  EloquentCollection<int, Page>  $pages  lean
      * @param  EloquentCollection<int, Project>  $projects
      * @param  EloquentCollection<int, User>  $people
      * @param  EloquentCollection<int, View>  $views
      */
     public function __construct(
         public EloquentCollection $items,
+        public EloquentCollection $pages,
         public EloquentCollection $projects,
         public EloquentCollection $people,
         public EloquentCollection $views,

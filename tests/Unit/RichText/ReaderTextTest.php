@@ -29,3 +29,12 @@ it('writes the text for one reader: visible references with key and title, hidde
 it('writes the text without names as before: no key of any reference', function () use ($doc) {
     expect($doc()->toText())->toBe("Bitte @mara-alt und @lene ansehen, siehe und .\nOhne Label: protokoll.pdf");
 });
+
+it('writes a page the reader sees as its title and any other as hidden', function () {
+    app()->setLocale('de');
+    $doc = Document::fromJson(F::doc(F::p('Siehe ', F::reference(F::PAGE, 'page'), ' und ', F::reference(F::OPSPAGE, 'page'), '.')));
+    // an item under the ID of a page names no page
+    $names = new RichTextNames(items: [F::OPSPAGE => ['key' => 'OPS-1', 'title' => 'Item']], pages: [F::PAGE => ['title' => 'Handbuch', 'identifier' => 'WEB']]);
+
+    expect($doc->toText($names))->toBe('Siehe Handbuch und verborgen.');
+});

@@ -1,6 +1,6 @@
 # Rich Text
 
-Beschreibungen, Rich-Text-Properties und Kommentare sind Rich Text: formatierter Text mit Erwähnungen, Verweisen auf Items, Bildern und Dateien. werkbuch speichert ihn als JSON in der Form des Editors (Tiptap) und liest und schreibt ihn auch als Markdown, damit API und Agenten mit schlichtem Text arbeiten. HTML, das jemand einfügt oder schickt, zeigt werkbuch nie so, wie es kam; dargestellt werden nur die Knoten, die werkbuch kennt.
+Beschreibungen, Rich-Text-Properties, Kommentare und Wiki-Seiten sind Rich Text: formatierter Text mit Erwähnungen, Verweisen auf Items und Seiten, Bildern und Dateien. werkbuch speichert ihn als JSON in der Form des Editors (Tiptap) und liest und schreibt ihn auch als Markdown, damit API und Agenten mit schlichtem Text arbeiten. HTML, das jemand einfügt oder schickt, zeigt werkbuch nie so, wie es kam; dargestellt werden nur die Knoten, die werkbuch kennt.
 
 ## Stufen des Editors
 
@@ -10,9 +10,9 @@ Es gibt einen Editor in drei Stufen. Jede Stufe zeigt, was an ihren Ort passt:
 |---|---|---|
 | Kommentar | Kommentare | Text, Listen, Zitate, Code, Links, Erwähnungen, Verweise, Bilder und Dateien |
 | Beschreibung | Beschreibungen von Items, Rich-Text-Properties | Dazu Überschriften (drei Ebenen), Checklisten und Tabellen |
-| Seite | Wiki-Seiten (spätere Phase) | Dazu Trennlinien; Tabellen im `/`-Menü |
+| Seite | [Wiki-Seiten](/de/concepts/wiki) | Dazu Trennlinien; Tabellen im `/`-Menü |
 
-Ein Text mit Blöcken, die seine Stufe nicht kennt (eine Tabelle in einem Kommentar), zeigt deren Text als Absätze. `mod+enter` speichert bzw. sendet; Beschreibung und Rich-Text-Properties speichern außerdem nach einer kurzen Pause und beim Verlassen des Felds von selbst.
+Ein Text mit Blöcken, die seine Stufe nicht kennt (eine Tabelle in einem Kommentar), zeigt deren Text als Absätze. `mod+enter` speichert bzw. sendet; Beschreibung, Rich-Text-Properties und Wiki-Seiten speichern außerdem nach einer kurzen Pause und beim Verlassen des Felds von selbst.
 
 ## Blöcke und Kürzel
 
@@ -34,15 +34,15 @@ Ein `/` am Zeilenanfang oder nach einem Leerzeichen öffnet das Blockmenü (dire
 
 `@` öffnet eine Liste der Personen und Bots, die im Projekt erwähnt werden können: seine aktiven Mitglieder und Personen, die Org-Admins sind. Ein Bot nur, wenn er Mitglied des Projekts ist, auch der Standard-Bot. Tippen grenzt die Liste über Name oder Handle ein. Eine Erwähnung zeigt den aktuellen Handle des Kontos, auch nach einer Umbenennung; ein deaktiviertes Konto ist als solches markiert.
 
-Wer erwähnt wird, beobachtet das Item danach, auch wenn er es abbestellt hatte. Ein erwähnter Bot bekommt das Event `bot.mentioned`. Es zählen nur neu Erwähnte: Wer einen Text bearbeitet, in dem eine Erwähnung bleibt, erwähnt niemanden noch einmal, und wer sich selbst erwähnt, zählt nicht. Benachrichtigungen zu Erwähnungen kommen in einer späteren Phase.
+Wer in einem Item oder Kommentar erwähnt wird, beobachtet das Item danach, auch wenn er es abbestellt hatte, und bekommt eine [Benachrichtigung](/de/concepts/notifications). Ein erwähnter Bot bekommt das Event `bot.mentioned`. Es zählen nur neu Erwähnte: Wer einen Text bearbeitet, in dem eine Erwähnung bleibt, erwähnt niemanden noch einmal, und wer sich selbst erwähnt, zählt nicht. Eine Erwähnung in einer Wiki-Seite bleibt eine Erwähnung, benachrichtigt aber niemanden.
 
 Die Erwähnung von jemandem, der im Projekt nicht erwähnt werden kann, etwa weil er es verlassen hat, wird beim Speichern zu Text `@handle`. Eine Erwähnung, die schon im Text stand, bleibt eine Erwähnung.
 
 ## Verweise
 
-`#` sucht die Items, die du siehst, mit derselben [Suche](/de/search) wie die Befehlspalette: über den Key (auch einen früheren), den Titel und den Text. Ein Verweis zeigt den Typ und den aktuellen Key des Items, den Titel für Screenreader, und führt beim Lesen zum Item. Wiki-Seiten kommen in einer späteren Phase.
+`#` sucht die Items und Wiki-Seiten, die du siehst, mit derselben [Suche](/de/search) wie die Befehlspalette: Items über den Key (auch einen früheren), den Titel und den Text, Seiten darunter über Titel und Text. Ein Verweis auf ein Item zeigt dessen Typ und aktuellen Key, den Titel für Screenreader, und führt beim Lesen zum Item; ein Verweis auf eine Seite zeigt ihr Emoji und ihren aktuellen Titel und führt zur Seite.
 
-werkbuch speichert nur die ULID des Items, nie Key oder Titel. Wer den Text liest, sieht den Verweis so, wie er darf: Ein Item, das er nicht sieht, steht als **verborgen** da, ohne Key und Titel, in der Oberfläche, in der API und in Mails. Beim Speichern kannst du nur auf Items verweisen, die du siehst; ein Verweis, der schon im Text stand, bleibt, auch auf ein Item, das du nicht siehst.
+werkbuch speichert nur die ULID des Items bzw. der Seite, nie Key oder Titel. Wer den Text liest, sieht den Verweis so, wie er darf: Ein Item oder eine Seite, die er nicht sieht, steht als **verborgen** da, ohne Key und Titel, in der Oberfläche, in der API und in Mails. Beim Speichern kannst du nur auf Items und Seiten verweisen, die du siehst; ein Verweis, der schon im Text stand, bleibt, auch auf eins, das du nicht siehst.
 
 ## Bilder und Dateien
 
@@ -52,7 +52,7 @@ Füge einen Screenshot oder ein im Browser kopiertes Bild ein, ziehe Dateien in 
 - **Größe:** höchstens `ATTACHMENTS_MAX_MB` je Datei, standardmäßig 25 MB. Eine größere Datei lehnt der Browser ab, bevor er sie hochlädt; über die API ist sie ein `413`. Solange ein Upload läuft, fragt das Verlassen der Seite nach; wer den Text schließt, bricht den Upload ab und bekommt das gesagt.
 - **Vorschauen:** Für PNG, JPEG und WebP rechnet werkbuch im Hintergrund (Queue `media`) eine Vorschau von höchstens 1600 × 1600 Pixeln; bis sie da ist, zeigt es das Original. GIF behält seine Animation, AVIF erscheint ohne Vorschau.
 - **Wer:** Bilder und Dateien in einen Text einfügen darf, wer kommentieren darf, auch Viewer. Die Dateiliste eines Items braucht das Recht, das Item zu ändern (siehe [Work Items](/de/concepts/work-items#dateien)).
-- **Wer sie sieht:** Eine Datei bekommt nur, wer das Item (oder das Item des Kommentars) sieht, zu dem sie gehört; für alle anderen ist sie ein `404`, als gäbe es sie nicht.
+- **Wer sie sieht:** Eine Datei bekommt nur, wer das Item (oder das Item des Kommentars) sieht, zu dem sie gehört, bzw. das Projekt ihrer Wiki-Seite; für alle anderen ist sie ein `404`, als gäbe es sie nicht.
 
 Ein Upload gehört niemandem, bis der Text gespeichert ist, der ihn nennt; dann gehört er diesem Text. Ein Text darf auch ein Bild eines anderen Texts desselben Projekts zeigen (aus einer Beschreibung in eine andere kopiert); das Bild bleibt bei seinem ersten Text. Ein Bild eines anderen Projekts oder den Upload einer anderen Person, den noch kein Text übernommen hat, kann er nie nennen.
 
@@ -60,14 +60,15 @@ Bilder und Dateien, die aus einem Text verschwinden, bleiben erhalten, damit His
 
 ## Markdown
 
-Über die API kommt jeder Rich Text in zwei Formen: Markdown (`description`, `body`, `values_markdown`) und Tiptap-JSON (`description_json`, `body_json`, `values`). Geschrieben wird eine der beiden, nie beide. Markdown liest werkbuch als GitHub-Markdown; HTML darin bleibt Text. werkbuch schreibt jeden Knoten in genau einer Form, ein gelesener und unverändert zurückgeschickter Text bleibt also derselbe.
+Über die API kommt jeder Rich Text in zwei Formen: Markdown (`description`, `body`, `content`, `values_markdown`) und Tiptap-JSON (`description_json`, `body_json`, `content_json`, `values`). Geschrieben wird eine der beiden, nie beide. Markdown liest werkbuch als GitHub-Markdown; HTML darin bleibt Text. werkbuch schreibt jeden Knoten in genau einer Form, ein gelesener und unverändert zurückgeschickter Text bleibt also derselbe.
 
 | Was | Markdown |
 |---|---|
 | Erwähnung | `@mara` |
 | Verweis auf ein Item | `WEB-123` |
 | Verweis auf ein Item, das der Leser nicht sieht | `[hidden](item:<ulid>)` |
-| Verweis auf eine Seite (spätere Phase) | `[Titel](page:<ulid>)` |
+| Verweis auf eine Seite | `[Titel](page:<ulid>)`, mit dem aktuellen Titel |
+| Verweis auf eine Seite, die der Leser nicht sieht | `[hidden](page:<ulid>)` |
 | Bild | `![Alternativtext](attachment:<ulid>)` |
 | Datei | `[angebot.pdf](attachment:<ulid>)` |
 
@@ -83,7 +84,8 @@ Für Markdown und JSON gelten dieselben Regeln, geprüft für das Konto, das sch
 | `WEB-123` eines Items, das du nicht siehst oder das es nicht gibt | Bleibt Text; niemand erfährt, ob es das Item gibt. |
 | `[hidden](item:<ulid>)`, das schon im Text stand | Bleibt ein Verweis. |
 | `[x](item:<ulid>)` eines Items, das du nicht siehst, neu im Text | Bleibt Text: `x`. |
-| `[Titel](page:<ulid>)` | Bleibt Text, bis es Wiki-Seiten gibt. |
+| `[Titel](page:<ulid>)` einer Seite, die du siehst | Ein Verweis; werkbuch behält nur die ULID und schreibt beim Lesen den aktuellen Titel. |
+| `[Titel](page:<ulid>)` einer Seite, die du nicht siehst, neu im Text | Bleibt Text: `Titel`. |
 | `attachment:<ulid>` des Projekts, das ein Text besitzt, oder dein eigener Upload | Ein Bild bzw. eine Datei. |
 | `attachment:<ulid>` eines anderen Projekts oder eines fremden Uploads ohne Text | `422` am Feld, das den Text schickte; nichts wird gespeichert. |
 
@@ -103,7 +105,7 @@ Lesen braucht ein Token mit `read`, Schreiben eins mit `write`. Ein Kommentar od
 | `GET`, `DELETE /api/v1/attachments/{id}` | Die Daten eines Anhangs; ihn löschen (`204`). |
 | `GET /attachments/{id}` | Die Datei selbst; `?download=1` immer als Download, `/attachments/{id}/preview` die Vorschau. |
 | `GET /api/v1/mentions?project=WEB&q=ma` | Wer im Projekt erwähnt werden kann, beste Treffer zuerst. |
-| `GET /api/v1/references?items=<ulid>,<ulid>` | Die Items hinter Verweisen, nur die, die du siehst, ohne zu sagen, welche fehlen. |
+| `GET /api/v1/references?items=<ulid>,<ulid>&pages=<ulid>` | Die Items und Seiten hinter Verweisen (zusammen höchstens 100), nur die, die du siehst, ohne zu sagen, welche fehlen. |
 | `GET /api/v1/work-items/{item}?include=attachments` | Bettet die Dateiliste des Items ein. |
 
 Die Datei-Route nimmt auch ein Bearer-Token mit `read`, so laden Skripte Dateien herunter. Hochladen geht höchstens 60-mal je Minute und Konto.
@@ -210,6 +212,6 @@ Ein Bild oder eine Datei zu löschen, die zu einem Text gehört, ist ein `409` m
 Zwei Dinge halten Uploads klein:
 
 - **Uploads, die kein Text übernommen hat** (ein Bild in einem Kommentar, der nie abgeschickt wurde): Ein Job des Schedulers entfernt sie stündlich, sobald sie älter als 24 Stunden sind. Der Browser löscht Uploads nie selbst, denn ein Text kann schon mit ihnen gespeichert sein.
-- **Bilder und Dateien, die kein Text mehr nennt:** `php artisan app:prune-attachments --dry-run --min-age=30` listet die Bilder und Dateien, die kein aktueller Text ihres Projekts nennt (Beschreibungen, Rich-Text-Werte, Kommentare) und die älter als das Mindestalter in Tagen sind; ohne `--dry-run` entfernt es sie. Auch Bilder, die nur eine ältere Fassung in der History zeigt, gehen dabei; wähle das Mindestalter danach. Dateien der Dateiliste räumt es nie ab.
+- **Bilder und Dateien, die kein Text mehr nennt:** `php artisan app:prune-attachments --dry-run --min-age=30` listet die Bilder und Dateien, die kein aktueller Text ihres Projekts nennt (Beschreibungen, Rich-Text-Werte, Kommentare, Wiki-Seiten und ihre Versionen) und die älter als das Mindestalter in Tagen sind; ohne `--dry-run` entfernt es sie. Ein Bild, das nur noch eine Version einer Wiki-Seite zeigt, bleibt, denn Versionen lassen sich wiederherstellen; Bilder, die nur eine ältere Fassung in der History eines Items zeigt, gehen dabei, wähle das Mindestalter danach. Dateien der Dateiliste räumt es nie ab.
 
-Wer ein Item löscht, löscht seine Dateien und die seiner Kommentare, wer einen Kommentar löscht, dessen Dateien, wer ein Projekt löscht, alle; ein Bild, das ein anderer Text des Projekts noch zeigt, bleibt und gehört dann diesem Text. Dateien gehen erst, wenn die Änderung gespeichert ist: Scheitert sie, geht nichts verloren. Mehr unter [Entwicklung](/de/development#wartungsbefehle).
+Wer ein Item löscht, löscht seine Dateien und die seiner Kommentare, wer einen Kommentar löscht, dessen Dateien, wer eine Wiki-Seite löscht, die ihres Teilbaums, wer ein Projekt löscht, alle; ein Bild, das ein anderer Text des Projekts noch zeigt, bleibt und gehört dann diesem Text. Dateien gehen erst, wenn die Änderung gespeichert ist: Scheitert sie, geht nichts verloren. Mehr unter [Entwicklung](/de/development#wartungsbefehle).

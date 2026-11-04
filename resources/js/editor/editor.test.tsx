@@ -9,7 +9,7 @@ import { Dialog } from '@/components/ui/Dialog';
 import { qk } from '@/hooks/keys';
 import { textDoc } from '@/lib/richtext';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
-import { ida, list, mara, person, searchResults, types, web47 } from '@/test/fixtures';
+import { ida, list, makePage, mara, pageSummary, person, project, searchResults, types, web47 } from '@/test/fixtures';
 import type { RichText, User } from '@/types';
 import { PRESETS, type EditorPreset } from './presets';
 import { EMPTY_DOC, isEmptyDoc, LateBoundary, LateChunkError, preloadEditor, RichTextEditor } from './RichTextEditor';
@@ -85,7 +85,10 @@ const kira: User = { ...person('u_kira', 'Kira', 'kira'), type: 'bot', email: nu
 
 const paragraph = (...content: RichText[]): RichText => ({ type: 'doc', content: [{ type: 'paragraph', content }] });
 const mention = (id: string, label: string): RichText => ({ type: 'mention', attrs: { id, label, mentionSuggestionChar: '@' } });
-const reference = (id: string): RichText => ({ type: 'reference', attrs: { id, label: null, mentionSuggestionChar: '#', kind: 'item' } });
+const reference = (id: string, kind: 'item' | 'page' = 'item'): RichText => ({ type: 'reference', attrs: { id, label: null, mentionSuggestionChar: '#', kind } });
+
+/** "Seitenstruktur" of WEB as references and the search answer it: lean, with its emoji. */
+const structure = pageSummary(makePage({ id: 'pg_web_structure', title: 'Seitenstruktur', emoji: '🧭' }));
 
 /** Escape on the editor, with the legacy keyCode ProseMirror reads. */
 const pressEscape = (editor: HTMLElement) => act(() => void fireEvent.keyDown(editor, { key: 'Escape', code: 'Escape', keyCode: 27 }));
@@ -191,6 +194,31 @@ describe('RichTextEditor', () => {
     rerender(<RichTextEditor value={null} onChange={onChange} preset="description" />);
     expect(editor.querySelectorAll('p')).toHaveLength(1);
     expect(editor.querySelector('p')?.getAttribute('data-placeholder')).toBe('Beschreibung schreiben … / fügt ein');
+  });
+
+  it('never undoes past a document from outside', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const { rerender } = render(<RichTextEditor value={textDoc('Hallo Welt')} onChange={onChange} preset="page" autoFocus />);
+    const editor = await screen.findByRole('textbox', { name: 'Inhalt der Seite' });
+    await waitFor(() => expect(document.activeElement).toBe(editor));
+    // typed and deleted: both are steps of the editor's own history
+    await user.keyboard(' und Mond{Backspace}{Backspace}{Backspace}{Backspace}{Backspace}');
+    expect(editor.textContent).toBe('Hallo Welt und');
+
+    // another version from outside (a reload): undo cannot bring the own text back over it
+    rerender(<RichTextEditor value={textDoc('Von nebenan')} onChange={onChange} preset="page" />);
+    expect(editor.textContent).toBe('Von nebenan');
+    const calls = onChange.mock.calls.length;
+    await user.keyboard('{Control>}z{/Control}{Control>}z{/Control}{Control>}z{/Control}');
+    expect(editor.textContent).toBe('Von nebenan');
+    expect(onChange).toHaveBeenCalledTimes(calls);
+
+    // what is typed on it is undone as always, back to that document
+    await user.keyboard('!');
+    expect(editor.textContent).toContain('!');
+    await user.keyboard('{Control>}z{/Control}');
+    expect(editor.textContent).toBe('Von nebenan');
   });
 
   it('keeps every key of fast typing, also when the parent renders a document the editor has moved past', async () => {
@@ -732,14 +760,14 @@ describe('the menus of the editor', () => {
     await user.keyboard('Siehe #');
 
     // nothing typed yet: a hint, no search
-    const items = await screen.findByRole('listbox', { name: 'Items' });
-    expect(screen.getByText('Key oder Titel eingeben, zum Beispiel WEB-42.', { selector: 'p' })).toBeTruthy();
+    const items = await screen.findByRole('listbox', { name: 'Items und Seiten' });
+    expect(screen.getByText('Key oder Titel eingeben, zum Beispiel WEB-42 oder den Titel einer Seite.', { selector: 'p' })).toBeTruthy();
     expect(api!.calls.filter((call) => call.url.startsWith('/api/v1/search'))).toEqual([]);
 
     await user.keyboard('WEB');
     const option = await within(items).findByRole('option', { name: /WEB-47/ });
     expect(option.textContent).toBe('WEB-47Kontaktformular sendet doppelt');
-    expect(api!.calls.map((call) => call.url)).toContain('/api/v1/search?q=WEB&types=items&limit=6');
+    expect(api!.calls.map((call) => call.url)).toContain('/api/v1/search?q=WEB&types=items%2Cpages&limit=6');
 
     await user.keyboard('{Enter}');
     // only the id and the kind: no key, no title in the stored text
@@ -747,6 +775,38 @@ describe('the menus of the editor', () => {
     // the chosen item shows at once, without asking the server; while editing it is no link
     await waitFor(() => expect(editor.querySelector('.rt-ref')?.textContent).toBe('WEB-47 Kontaktformular sendet doppelt'));
     expect(editor.querySelector('.rt-ref svg')).not.toBeNull();
+    expect(editor.querySelector('a.rt-ref')).toBeNull();
+    expect(api!.calls.filter((call) => call.url.startsWith('/api/v1/references'))).toEqual([]);
+  });
+
+  it('offers pages below items for # and stores the id and kind only', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    renderWithData(<RichTextEditor value={null} onChange={onChange} preset="page" projectId="p_web" />, {
+      'GET /api/v1/search': (_body, url) => ({ body: { data: searchResults(url.searchParams.get('q') === 'struktur' ? { items: [web47], pages: [structure] } : {}) } }),
+      'GET /api/v1/work-item-types': () => ({ body: list(types) }),
+      'GET /api/v1/projects': () => ({ body: list([project('WEB', 'member')]) }),
+    });
+    const editor = screen.getByRole('textbox', { name: 'Inhalt der Seite' });
+    await user.click(editor);
+    await user.keyboard('#struktur');
+
+    // items first, then the pages, each kind under its heading
+    const menu = await screen.findByRole('listbox', { name: 'Items und Seiten' });
+    await waitFor(() => expect(within(menu).getAllByRole('group').map((group) => group.getAttribute('aria-labelledby') && document.getElementById(group.getAttribute('aria-labelledby')!)!.textContent)).toEqual(['Items', 'Seiten']));
+    expect(api!.calls.map((call) => call.url)).toContain('/api/v1/search?q=struktur&types=items%2Cpages&limit=6');
+    const page = within(menu).getByRole('option', { name: /Seitenstruktur/ });
+    // the emoji (decorative), the title and where it lives
+    await waitFor(() => expect(page.textContent).toBe('🧭SeitenstrukturWiki WEB'));
+    expect(page.querySelector('[aria-hidden="true"]')!.textContent).toBe('🧭');
+    // the identifier is never translated (T18-M4)
+    expect(within(page).getByText('Wiki WEB').getAttribute('translate')).toBe('no');
+
+    await user.keyboard('{ArrowDown}{Enter}');
+    // only the id and the kind: no title in the stored text (A229)
+    await waitFor(() => expect(nodesOf(lastDoc(onChange), 'reference').map((node) => node.attrs)).toEqual([{ id: 'pg_web_structure', label: null, mentionSuggestionChar: '#', kind: 'page' }]));
+    // the chosen page shows its emoji and title at once, without asking the server; while editing it is no link
+    await waitFor(() => expect(editor.querySelector('.rt-ref')?.textContent).toBe('🧭Seitenstruktur'));
     expect(editor.querySelector('a.rt-ref')).toBeNull();
     expect(api!.calls.filter((call) => call.url.startsWith('/api/v1/references'))).toEqual([]);
   });
@@ -762,18 +822,18 @@ describe('the menus of the editor', () => {
     const editor = screen.getByRole('textbox', { name: 'Kommentar' });
     await user.click(editor);
     await user.keyboard('#WEB-4');
-    const items = await screen.findByRole('listbox', { name: 'Items' });
+    const items = await screen.findByRole('listbox', { name: 'Items und Seiten' });
     await waitFor(() => expect(within(items).getByRole('option', { name: /WEB-4/ }).getAttribute('aria-disabled')).toBeNull());
 
     // one more key, the server holds its answer: the old hit stays in sight, but greyed and not to be taken
     const { release, held } = holdAnswers();
     await user.keyboard('7');
-    await waitFor(() => expect(held).toContain('/api/v1/search?q=WEB-47&types=items&limit=6'));
+    await waitFor(() => expect(held).toContain('/api/v1/search?q=WEB-47&types=items%2Cpages&limit=6'));
     const old = within(items).getByRole('option', { name: /WEB-4/ });
     expect(old.getAttribute('aria-disabled')).toBe('true');
     expect(old.getAttribute('aria-selected')).toBe('false');
     expect(editor.getAttribute('aria-activedescendant')).toBeNull();
-    expect(within(screen.getByRole('listbox', { name: 'Items' }).parentElement!).getByText('Sucht …')).toBeTruthy();
+    expect(within(screen.getByRole('listbox', { name: 'Items und Seiten' }).parentElement!).getByText('Sucht …')).toBeTruthy();
     const before = lastDoc(onChange);
     // Enter, Tab and a click take nothing and add no line break
     await user.keyboard('{Enter}{Tab}');
@@ -794,7 +854,7 @@ describe('the menus of the editor', () => {
     const { client } = renderWithData(<RichTextEditor value={null} onChange={onChange} preset="comment" projectId="p_web" />, {
       'GET /api/v1/work-item-types': () => ({ body: list(types) }),
     });
-    client.setQueryData(qk.search.list({ q: 'WEB-47', types: ['items'], limit: 6 }), searchResults({ items: [web47] }));
+    client.setQueryData(qk.search.list({ q: 'WEB-47', types: ['items', 'pages'], limit: 6 }), searchResults({ items: [web47] }));
     const editor = screen.getByRole('textbox', { name: 'Kommentar' });
     await user.click(editor);
     // the server would answer nothing in time: the cached hit is the one for what is typed
@@ -847,7 +907,7 @@ describe('the menus of the editor', () => {
     await user.click(editor);
     await user.keyboard('#zz');
     expect(await screen.findByText('Sucht …', { selector: 'p' })).toBeTruthy();
-    expect(await screen.findByText('Kein Item zu „zz“.', { selector: 'p' })).toBeTruthy();
+    expect(await screen.findByText('Kein Item und keine Seite zu „zz“.', { selector: 'p' })).toBeTruthy();
     fail = true;
     await user.keyboard('x');
     expect(await screen.findByText('Die Suche antwortet gerade nicht.', { selector: 'p' })).toBeTruthy();
@@ -871,6 +931,43 @@ describe('the menus of the editor', () => {
     expect(asked).toHaveLength(1);
     expect(new URL(asked[0].url, 'https://werkbuch.test').searchParams.get('items')?.split(',').sort()).toEqual(['wi_hidden', 'wi_web_47']);
     client.clear();
+  });
+
+  it('shows a page reference with its current title and links it while reading', async () => {
+    const renamed = { ...structure, title: 'Navigation und Struktur' };
+    const { client } = renderWithData(<RichTextView value={paragraph({ type: 'text', text: 'Siehe ' }, reference('pg_web_structure', 'page'))} preset="comment" />, {
+      'GET /api/v1/references': () => ({ body: { data: { items: [], pages: [renamed] } } }),
+      'GET /api/v1/projects': () => ({ body: list([project('WEB', 'member')]) }),
+    });
+    // on its way
+    await waitFor(() => expect(document.querySelector('.rt-ref')?.textContent).toBe('…'));
+
+    // the title the page has now, its emoji before it, a link into the wiki of its project; screen readers hear which
+    // wiki, so a page reads apart from a link of the same name (T18-M2)
+    const link = await screen.findByRole('link', { name: 'Navigation und Struktur, Wiki WEB' });
+    expect(link.textContent).toBe('🧭Navigation und Struktur');
+    await waitFor(() => expect(link.getAttribute('href')).toBe('/projects/WEB/wiki/pg_web_structure'));
+    const asked = api!.calls.filter((call) => call.url.startsWith('/api/v1/references'));
+    expect(asked.map((call) => call.url)).toEqual(['/api/v1/references?pages=pg_web_structure']);
+    client.clear();
+  });
+
+  it('shows a hidden page reference as verborgen', async () => {
+    renderWithData(<RichTextView value={paragraph(reference('pg_hidden', 'page'))} preset="comment" />, {
+      'GET /api/v1/references': () => ({ body: { data: { items: [], pages: [] } } }),
+      'GET /api/v1/projects': () => ({ body: list([project('WEB', 'member')]) }),
+    });
+    await waitFor(() => expect(document.querySelector('.rt-ref-hidden')?.textContent).toBe('verborgen'));
+    expect(document.querySelector('.rt-ref-hidden svg')).not.toBeNull();
+    expect(screen.queryByRole('link')).toBeNull();
+  });
+
+  it('says a page reference did not load when the server fails', async () => {
+    renderWithData(<RichTextView value={paragraph(reference('pg_web_structure', 'page'))} preset="comment" />, {
+      'GET /api/v1/references': () => ({ status: 500, body: { title: 'Server Error' } }),
+      'GET /api/v1/projects': () => ({ body: list([project('WEB', 'member')]) }),
+    });
+    await waitFor(() => expect(document.querySelector('.rt-ref')?.textContent).toBe('Verweis'));
   });
 
   it('turns a reference into a link as soon as the editor becomes read-only (F22)', async () => {
