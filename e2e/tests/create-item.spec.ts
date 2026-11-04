@@ -249,6 +249,9 @@ test('creates a child item of an epic from its children section', async ({ page 
     await expect(page.getByRole('heading', { level: 1, name: 'E2E Relaunch Phase 2' })).toBeVisible();
     const section = page.getByRole('region', { name: tr('en', 'items.detail.children.title') });
     const add = section.getByRole('button', { name: new RegExp(`^${tr('en', 'items.detail.children.add')}`) });
+    // the button stays focusable but locked ("The types are still loading.") until the types have loaded: on a busy
+    // server (the full run) they come well after the item, and Enter on the locked button rightly opens nothing
+    await expect(add).not.toHaveAttribute('aria-disabled', 'true');
     await tabTo(page, add, { max: 80 });
     await page.keyboard.press('Enter');
 
