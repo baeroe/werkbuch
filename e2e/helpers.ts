@@ -250,11 +250,12 @@ type MailpitSearch = { messages: { ID: string; Created: string }[] };
  * differ, so a mail counts as new when its ID was not there before.
  */
 export const mailpit = {
-  /** The IDs of every mail to `email`, newest first. */
-  async idsTo(email: string): Promise<string[]> {
+  /** The IDs of every mail to `email` (with `subject`: only those whose subject holds it), newest first. */
+  async idsTo(email: string, subject?: string): Promise<string[]> {
     const api = await request.newContext({ baseURL: MAILPIT_URL, ignoreHTTPSErrors: true });
     try {
-      const search = await api.get('/api/v1/search', { params: { query: `to:"${email}"` } });
+      const query = `to:"${email}"${subject === undefined ? '' : ` subject:"${subject}"`}`;
+      const search = await api.get('/api/v1/search', { params: { query } });
       expect(search.ok(), await search.text()).toBe(true);
       const { messages } = (await search.json()) as MailpitSearch;
       return messages
@@ -266,16 +267,16 @@ export const mailpit = {
     }
   },
 
-  /** The newest mail to `email` whose ID is not in `before` (from `idsTo`), or null. */
-  async newTo(email: string, before: readonly string[]): Promise<{ html: string } | null> {
-    const id = (await mailpit.idsTo(email)).find((candidate) => !before.includes(candidate));
+  /** The newest mail to `email` (with `subject`: whose subject holds it) whose ID is not in `before` (from `idsTo`), or null. */
+  async newTo(email: string, before: readonly string[], subject?: string): Promise<{ html: string; subject: string } | null> {
+    const id = (await mailpit.idsTo(email, subject)).find((candidate) => !before.includes(candidate));
     if (id === undefined) return null;
     const api = await request.newContext({ baseURL: MAILPIT_URL, ignoreHTTPSErrors: true });
     try {
       const message = await api.get(`/api/v1/message/${id}`);
       expect(message.ok(), await message.text()).toBe(true);
-      const { HTML } = (await message.json()) as { HTML: string };
-      return { html: HTML };
+      const { HTML, Subject } = (await message.json()) as { HTML: string; Subject: string };
+      return { html: HTML, subject: Subject };
     } finally {
       await api.dispose();
     }
@@ -547,6 +548,39 @@ export async function waitForSearch(page: Page, q: string, found: (data: SearchD
       last = `${response.status()} ${await response.text()}`;
     }
     if (Date.now() > until) throw new Error(`waitForSearch "${q}" found nothing after ${timeout} ms: ${JSON.stringify(last)}`);
+    await page.waitForTimeout(250);
+  }
+}
+
+/** A notification as `GET /api/v1/notifications` gives it (the fields the specs read). */
+export type StoredNotification = {
+  id: string;
+  event: string;
+  work_item_id: string | null;
+  project_id: string | null;
+  actor_id: string | null;
+  data: Record<string, unknown>;
+  read_at: string | null;
+  mailed_at: string | null;
+};
+
+/**
+ * Asks `GET /api/v1/notifications` of the signed-in person of `page` every 250 ms until one of the newest 100 matches
+ * `found` (notifications follow the queue `notifications`) and returns it; fails with the last answer.
+ */
+export async function waitForNotification(page: Page, found: (notification: StoredNotification) => boolean, timeout = 20_000): Promise<StoredNotification> {
+  const until = Date.now() + timeout;
+  let last: StoredNotification[] | string = 'no answer';
+  for (;;) {
+    const response = await api(page, 'GET', '/api/v1/notifications?per_page=100');
+    if (response.status() === 200) {
+      last = ((await response.json()) as { data: StoredNotification[] }).data;
+      const match = last.find(found);
+      if (match) return match;
+    } else {
+      last = `${response.status()} ${await response.text()}`;
+    }
+    if (Date.now() > until) throw new Error(`waitForNotification found nothing after ${timeout} ms: ${JSON.stringify(last)}`);
     await page.waitForTimeout(250);
   }
 }
