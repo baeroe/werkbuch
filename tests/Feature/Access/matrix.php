@@ -44,8 +44,11 @@ use App\Actions\Organization\UpdateOrganization;
 use App\Actions\Pages\CreatePage;
 use App\Actions\Pages\DeletePage;
 use App\Actions\Pages\GetPage;
+use App\Actions\Pages\GetPageVersion;
 use App\Actions\Pages\ListPages;
+use App\Actions\Pages\ListPageVersions;
 use App\Actions\Pages\MovePage;
+use App\Actions\Pages\RestorePageVersion;
 use App\Actions\Pages\UpdatePage;
 use App\Actions\Projects\AddMember;
 use App\Actions\Projects\ArchiveProject;
@@ -123,6 +126,7 @@ use App\Models\Event;
 use App\Models\Label;
 use App\Models\Notification;
 use App\Models\NotificationMail;
+use App\Models\PageVersion;
 use App\Models\Property;
 use App\Models\RelationType;
 use App\Models\Resolution;
@@ -854,6 +858,34 @@ return [
         'allowed' => $itemWriters,
         'hidden' => ['outsider_private'],
         'event' => EventType::PageDeleted,
+    ],
+    // the versions of a page: whoever sees the project reads them, restoring one takes `wiki.edit`
+    'ListPageVersions' => [
+        'action' => ListPageVersions::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListPageVersions::run($a, $w->page($column), []),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    'GetPageVersion' => [
+        'action' => GetPageVersion::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $page = $w->page($column);
+
+            return GetPageVersion::run($a, $page, PageVersion::factory()->create(['page_id' => $page->id]));
+        },
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    'RestorePageVersion' => [
+        'action' => RestorePageVersion::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $page = $w->page($column);
+
+            return RestorePageVersion::run($a, $page, PageVersion::factory()->create(['page_id' => $page->id]));
+        },
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::PageUpdated,
     ],
     // the inbox is the own one: everybody lists, marks and deletes their own notifications (a bot has none); a
     // notification of a project the account does not see is passed over when marking and a 404 when deleting (K19)

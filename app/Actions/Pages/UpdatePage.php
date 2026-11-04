@@ -116,6 +116,16 @@ final class UpdatePage
             return null;
         }
 
+        return self::snapshot($locked);
+    }
+
+    /**
+     * Keeps the stored state of the locked page as a version and gives its number (also RestorePageVersion, which
+     * always keeps it): its number, title, text, last author and time as stored; a number kept already stays as it is
+     * (`insertOrIgnore`).
+     */
+    public static function snapshot(Page $locked): int
+    {
         PageVersion::query()->insertOrIgnore([
             'id' => strtolower((string) Str::ulid()),
             'page_id' => $locked->id,
