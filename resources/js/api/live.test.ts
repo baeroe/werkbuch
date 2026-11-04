@@ -520,3 +520,48 @@ describe('disconnectLive and pauseLive', () => {
   });
 });
 
+describe('the edges of the live connection', () => {
+  it('forgets the oldest of more than 200 deleted projects', () => {
+    connectLive(CONFIG, 'u_mara');
+    watchProjects(['p_0']);
+    for (let n = 0; n <= 200; n += 1) {
+      watchProjects([`p_${n}`]);
+      echo().deliver(`private-project.p_${n}`, message({ type: 'project.deleted', project_id: `p_${n}`, item_id: null }));
+    }
+
+    // p_0 fell out: a list that names it joins it again, p_1 stays left
+    watchProjects(['p_0', 'p_1']);
+    expect([...echo().channels.keys()]).toEqual(['presence-user.u_mara', 'private-project.p_0']);
+  });
+
+  it('passes over the states of a connection that was closed, and connects nothing while paused', () => {
+    connectLive(CONFIG, 'u_mara');
+    const first = echo();
+    const resume = pauseLive();
+    first.state('connecting', 'connected');
+    expect(liveStatus()).toBe('connecting');
+
+    // the shell asking again while paused opens nothing; the resume does
+    connectLive(CONFIG, 'u_mara');
+    expect(FakeEcho.instances).toHaveLength(1);
+    resume();
+    expect(FakeEcho.instances).toHaveLength(2);
+  });
+
+  it('asks an item channel again after a failure, once for two failures in a row', async () => {
+    vi.useFakeTimers();
+    api = mockApi({ 'POST /broadcasting/auth': () => ({ status: 500, body: { reason: 'server_error' } }) });
+    connectLive(CONFIG, 'u_mara');
+    echo().state('connecting', 'connected');
+    const release = watchItem('wi_web_47');
+
+    await echo().authorize('private-work-item.wi_web_47');
+    await echo().authorize('private-work-item.wi_web_47');
+    vi.advanceTimersByTime(5_000);
+
+    expect(echo().left).toEqual(['work-item.wi_web_47']);
+    expect(echo().channels.has('private-work-item.wi_web_47')).toBe(true);
+    release();
+  });
+});
+

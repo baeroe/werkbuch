@@ -206,18 +206,19 @@ function retryLater(channel: string): void {
 
 /** Leaves the channel and joins it again (Echo then authorizes it anew), if the tab still holds it. */
 function resubscribe(channel: string): void {
-  if (echo === null) return;
+  // a timer of a closed connection was stopped with it (`close`)
+  const live = echo!;
   const project = /^private-project\.(.+)$/.exec(channel)?.[1];
   const item = /^private-work-item\.(.+)$/.exec(channel)?.[1];
   if (project !== undefined && projects.has(project)) {
-    echo.leave(`project.${project}`);
+    live.leave(`project.${project}`);
     joinProject(project);
   } else if (item !== undefined && items.has(item)) {
-    echo.leave(`work-item.${item}`);
+    live.leave(`work-item.${item}`);
     joinItem(item);
   } else if (me !== null && channel === `presence-user.${me}`) {
-    echo.leave(`user.${me}`);
-    echo.join(`user.${me}`).listen(MESSAGE, deliver);
+    live.leave(`user.${me}`);
+    live.join(`user.${me}`).listen(MESSAGE, deliver);
   } else {
     retries.delete(channel);
   }
