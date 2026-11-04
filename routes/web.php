@@ -22,6 +22,7 @@ Route::middleware('auth')->group(function () {
     Route::inertia('/my-items', 'Items/MyItems')->name('my-items');
     Route::inertia('/created', 'Items/Created')->name('created');
     Route::inertia('/subscribed', 'Items/Subscribed')->name('subscribed');
+    Route::inertia('/inbox', 'Inbox/Index')->name('inbox');
     // the settings of the organization, one address per section; an unknown section is the page's business (it says so
     // and keeps the list)
     Route::redirect('/settings', '/settings/general');

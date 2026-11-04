@@ -36,12 +36,9 @@ test('goes to projects with g p', async ({ page }) => {
 });
 
 test('shows the 404 page inside the shell', async ({ page, allowedErrors }) => {
-  // the inbox arrives with a later phase
-  allowedErrors.push(notFound('/inbox'));
-  await page.keyboard.press('g');
-  await page.keyboard.press('i');
+  allowedErrors.push(notFound('/no-such-page'));
+  await page.goto('/no-such-page');
 
-  await expect(page).toHaveURL(/\/inbox$/);
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(tr('en', 'errors.page.not_found.title'));
   if (isPhone(page)) {
     await expect(page.getByRole('button', { name: tr('en', 'shell.mobile.open_navigation') })).toBeVisible();
@@ -55,17 +52,16 @@ test('shows the 404 page inside the shell', async ({ page, allowedErrors }) => {
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(tr('en', 'items.my.title'));
 });
 
-test('reaches the other main places with their g sequences', async ({ page, allowedErrors }) => {
-  allowedErrors.push(notFound('/inbox'));
-  for (const [key, path] of [
-    ['i', '/inbox'],
-    ['v', '/views'],
-    ['m', '/my-items'],
+test('reaches the other main places with their g sequences', async ({ page }) => {
+  for (const [key, path, title] of [
+    ['i', '/inbox', 'inbox.title'],
+    ['v', '/views', 'views.title'],
+    ['m', '/my-items', 'items.my.title'],
   ] as const) {
     await page.keyboard.press('g');
     await page.keyboard.press(key);
     await expect(page).toHaveURL(new RegExp(`${path}$`));
-    if (path === '/views') await expect(page.getByRole('heading', { level: 1 })).toHaveText(tr('en', 'views.title'));
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(tr('en', title));
   }
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(tr('en', 'items.my.title'));
 });
