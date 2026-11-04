@@ -6,10 +6,14 @@
  * Pictures and files in a parked description stay uploaded: they belong to nobody until the item is created (A232), so
  * "Rückgängig" brings them back with the text. A draft whose undo ran out deletes none of them: the hourly job removes
  * uploads nobody owns after 24 hours (A239, ruling T17-I4), as for a comment thrown away.
+ *
+ * Who is signed in owns the parked draft: when the person changes (`resetForUser` → `drafts.clear()`), it is forgotten
+ * with the names the forms saw, and its toast goes.
  */
 
-import { toast } from '@/components/ui/toast';
+import { dismissToast, toast } from '@/components/ui/toast';
 import { isEmptyDoc } from '@/editor/RichTextEditor';
+import { drafts } from '@/lib/drafts';
 import { t } from '@/lib/i18n';
 import { undoLabel } from '@/lib/undo';
 import { useUiStore } from '@/store/ui';
@@ -47,11 +51,14 @@ let parked: Draft | null = null;
 /** "Rückgängig" was pressed: the next form starts from the parked draft. */
 let restoring = false;
 
+/** The toast of the parked draft, which goes with it when the person changes. */
+let parkToast: number | null = null;
+
 /** Parks the draft and says so with a toast whose "Rückgängig" (mod+z too) opens the dialog with it again. */
 export function park(draft: Draft): void {
   parked = draft;
   restoring = false;
-  toast({
+  parkToast = toast({
     title: t('items.create.parked'),
     description: draft.title.trim() || t('items.create.parked_untitled'),
     keep: true,
@@ -84,3 +91,12 @@ export function parkedTaken(): void {
   parked = null;
   restoring = false;
 }
+
+// another person signs in: nobody gets back what the one before wrote, nor learns the names of their projects
+drafts.onClear(() => {
+  parked = null;
+  restoring = false;
+  seenNames.clear();
+  if (parkToast !== null) dismissToast(parkToast);
+  parkToast = null;
+});

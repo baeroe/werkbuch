@@ -16,6 +16,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { currentToasts, dismissToast, resetToasts, runToastAction } from '@/components/ui/toast';
 import { preloadEditor } from '@/editor/RichTextEditor';
 import { qk } from '@/hooks/keys';
+import { resetForUser } from '@/hooks/queryClient';
 import { MyItemsEmpty } from '@/features/items/MyItemsEmpty';
 import { canUndo, undoLatest } from '@/lib/undo';
 import { CreateHost } from '@/shell/CreateHost';
@@ -271,6 +272,29 @@ describe('CreateItemDialog', () => {
 
     expect((await within(restored).findByRole<HTMLInputElement>('textbox', { name: /^Titel/ })).value).toBe('Export als CSV');
     expect(within(restored).getByText('„Kunden-App“ steht nicht mehr zur Wahl. Prüfe Projekt und Typ.')).toBeTruthy();
+  });
+
+  it('forgets a parked draft and the names it saw when another person signs in', async () => {
+    const user = userEvent.setup();
+    renderWith(<Host />);
+    act(() => useUiStore.getState().openCreate({ project_id: 'p_app' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Neues Item' });
+    await user.type(await within(dialog).findByRole('textbox', { name: /^Titel/ }), 'Export als CSV');
+    await user.click(within(dialog).getByRole('button', { name: 'Abbrechen' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(parkedToasts()).toHaveLength(1);
+
+    // Lene signs out, Mara signs in within the five seconds of the toast; she does not see the project of the draft
+    act(() => resetForUser(lene.id, mara.id));
+    expect(parkedToasts()).toEqual([]);
+    projects = [web, ops];
+    await act(() => client.refetchQueries({ type: 'all' }));
+
+    // whatever still reopens the dialog opens it empty, and names no project of Lene
+    act(() => useUiStore.getState().openCreate(null));
+    const fresh = await screen.findByRole('dialog', { name: 'Neues Item' });
+    expect((await within(fresh).findByRole<HTMLInputElement>('textbox', { name: /^Titel/ })).value).toBe('');
+    expect(within(fresh).queryByText(/steht nicht mehr zur Wahl/)).toBeNull();
   });
 
   it('clears errors and the blocked reason on the fallback', async () => {
