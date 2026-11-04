@@ -652,6 +652,36 @@ describe('pages of a list', () => {
     ]);
   });
 
+  it('forgets a rebuild when the cache is cleared (sign-out): the next mount starts with the first page (T15-M2)', async () => {
+    let items = ranked('abcdef');
+    api = mockApi({ 'POST /api/v1/work-items/query': keysetServer(() => items) });
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const inner = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      if (typeof init?.body === 'string' && (JSON.parse(init.body) as { cursor?: string }).cursor === 'a1') await gate;
+      return inner(input, init);
+    };
+    const first = renderHook(() => useInfiniteWorkItems({ q: 'weg' }), { wrapper });
+    await waitFor(() => expect(titles(first.result.current.data)).toHaveLength(2));
+    act(() => first.result.current.loadMore());
+    await waitFor(() => expect(titles(first.result.current.data)).toHaveLength(4));
+
+    items = items.map((item) => (item.id === 'wi_e' ? { ...item, rank: 'a0' } : item));
+    await act(() => queryClient.invalidateQueries({ queryKey: qk.workItems.all }));
+    first.unmount();
+    // another person signs in: the cache goes, and with it the rebuild of the list
+    act(() => queryClient.clear());
+    release();
+    const before = bodies().length;
+    const again = renderHook(() => useInfiniteWorkItems({ q: 'weg' }), { wrapper });
+
+    await waitFor(() => expect(titles(again.result.current.data)).toEqual(['e', 'a']));
+    // the new list asks its first page only; the page the old round still had on its way leaves no trace in the cache
+    await waitFor(() => expect(bodies().slice(before).filter((body) => (body as { cursor?: string }).cursor !== 'a1')).toEqual([{ shorthand: { q: 'weg' } }]));
+    await waitFor(() => expect(queryClient.getQueryCache().findAll({ queryKey: qk.workItems.all }).map((query) => query.queryKey)).toHaveLength(1));
+  });
+
   it('loads every page for ⌘A during a rebuild along the new cursors, never the old ones', async () => {
     let items = ranked('abcdef');
     api = mockApi({ 'POST /api/v1/work-items/query': keysetServer(() => items) });

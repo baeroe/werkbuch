@@ -163,10 +163,19 @@ type RebuildListener = (chain: (string | null)[], done: boolean) => void;
 const rebuildsByClient = new WeakMap<QueryClient, Map<string, Rebuild>>();
 const listenersByClient = new WeakMap<QueryClient, Map<string, Set<RebuildListener>>>();
 
-/** The lists of a query client being rebuilt, by the query hash of their first page. */
+/**
+ * The lists of a query client being rebuilt, by the query hash of their first page. A rebuild goes with its first page
+ * (T15-M2): the cache cleared at sign-out, or the first page left the cache; the list then starts anew.
+ */
 function rebuildsOf(queryClient: QueryClient): Map<string, Rebuild> {
   let rebuilds = rebuildsByClient.get(queryClient);
-  if (!rebuilds) rebuildsByClient.set(queryClient, (rebuilds = new Map()));
+  if (!rebuilds) {
+    const created = new Map<string, Rebuild>();
+    rebuildsByClient.set(queryClient, (rebuilds = created));
+    queryClient.getQueryCache().subscribe((event) => {
+      if (event.type === 'removed') created.delete(event.query.queryHash);
+    });
+  }
   return rebuilds;
 }
 
@@ -346,8 +355,10 @@ function usePagedLists(lists: readonly PagedList[], all: boolean): Record<string
       void (async () => {
         const chain: (string | null)[] = [null];
         let next = first.data!.next_cursor;
+        // forgotten meanwhile (the cache was cleared at sign-out, the first page left it): the round ends without a trace
+        const forgotten = () => rebuilds.get(list.hash) !== rebuild;
         try {
-          while (next !== null && chain.length < depth) {
+          while (next !== null && chain.length < depth && !forgotten()) {
             const cursor = next;
             chain.push(cursor);
             next = (await queryClient.fetchQuery({ queryKey: pageKey(list.args, cursor), queryFn: () => pageOf(list.args, cursor) })).next_cursor;
@@ -356,6 +367,10 @@ function usePagedLists(lists: readonly PagedList[], all: boolean): Record<string
           // the page that failed stays the last one: it offers "Erneut versuchen"
         }
         rebuild.running = false;
+        if (forgotten()) {
+          chain.slice(1).forEach((cursor) => queryClient.removeQueries({ queryKey: pageKey(list.args, cursor), exact: true }));
+          return;
+        }
         for (const cursor of old.slice(1)) {
           if (!chain.includes(cursor)) queryClient.removeQueries({ queryKey: pageKey(list.args, cursor), exact: true });
         }
