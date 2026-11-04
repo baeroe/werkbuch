@@ -198,7 +198,7 @@ const toastTitles = () => currentToasts().map((toast) => toast.title);
 const rowOf = (pattern: RegExp) => rows().find((row) => pattern.test(row.textContent ?? ''))!;
 
 function send(event: Partial<LiveEvent>): void {
-  act(() => bus.listeners.forEach((listener) => listener({ event_id: null, type: 'notifications.changed', project_id: null, item_id: null, comment_id: null, actor_id: null, ...event })));
+  act(() => bus.listeners.forEach((listener) => listener({ event_id: null, type: 'notifications.changed', project_id: null, page_id: null, item_id: null, comment_id: null, actor_id: null, ...event })));
 }
 
 /* ------------------------------------------------------------------------ tests */

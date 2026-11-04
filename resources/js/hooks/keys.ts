@@ -61,16 +61,22 @@ export const qk = {
   comments: { ...resource('comments'), reaction: ['comments', 'reaction'] as const },
   /** Who can be mentioned with `@`: `qk.mentions.list({ project, q })`. */
   mentions: resource('mentions'),
-  /** The item behind a stored reference, one entry per id (`useItemRef`); a hidden one is an error 404. */
+  /**
+   * What a stored reference names, one entry per id: an item (`useItemRef`) or a wiki page (`usePageRef`); a hidden
+   * one is an error 404.
+   */
   references: {
     all: ['references'] as const,
     item: (id: string) => ['references', 'item', id] as const,
+    page: (id: string) => ['references', 'page', id] as const,
   },
   views: resource('views'),
   favorites: resource('favorites'),
   notifications: resource('notifications'),
   preferences: resource('preferences'),
+  /** The wiki: `qk.pages.list({ project })` is the tree of a project, `qk.pages.detail(id)` a page with its text. */
   pages: resource('pages'),
+  /** The versions of a page: `qk.pageVersions.list({ page })` (without text), `qk.pageVersions.detail(id)` (one with). */
   pageVersions: resource('page-versions'),
   templates: resource('templates'),
   templateRuns: resource('template-runs'),

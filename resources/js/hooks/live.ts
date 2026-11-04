@@ -1,10 +1,13 @@
 import { router } from '@inertiajs/react';
 import { useQueryClient, type Query, type QueryClient, type QueryKey } from '@tanstack/react-query';
 import { useEffect, useSyncExternalStore } from 'react';
+import type { Page } from '@/api/client';
 import { isLiveConnected, subscribeLive, subscribeLiveStatus, watchItem, type LiveEvent } from '@/api/live';
+import { listPages } from '@/api/pages';
 import { clearLiveGone, markLiveGone } from '@/lib/liveGone';
 import { subscribeUndoPending, undoPending } from '@/lib/undo';
 import { useUiStore } from '@/store/ui';
+import type { PageNode } from '@/types';
 import { qk } from './keys';
 
 /** How long the messages have to pause before the screens load again: a burst loads once. */
@@ -16,17 +19,26 @@ export const LIVE_MAX_WAIT_MS = 2_000;
 /** How many event ids the tab remembers to drop a message it has seen (the original and the redispatch, P10). */
 const SEEN_MAX = 1000;
 
-/** How many deleted projects and items the tab remembers to leave their queries alone (the oldest go first). */
+/**
+ * How many deleted projects and items, and apart from them how many deleted pages, the tab remembers to leave their
+ * queries alone (the oldest go first): a large subtree (`LiveMessage::PAGE_IDS_MAX`) pushes no project or item out.
+ */
 const GONE_MAX = 200;
 
+/** The wiki of a project: the trees, the pages, their versions. */
+const WIKI: readonly QueryKey[] = [qk.pages.all, qk.pageVersions.all];
+
 /** Everything a live message can make stale: what a screen shows again after the connection was gone. */
-const EVERYTHING: readonly QueryKey[] = [qk.workItems.all, qk.activity.all, qk.comments.all, qk.projects.all, qk.members.all, qk.notifications.all];
+const EVERYTHING: readonly QueryKey[] = [qk.workItems.all, qk.activity.all, qk.comments.all, qk.projects.all, qk.members.all, qk.notifications.all, ...WIKI];
 
 /** What the person's own channel carries (watching, a new project, a new org role, the inbox): stale once it is held. */
 const OWN_CHANNEL: readonly QueryKey[] = [qk.notifications.all, qk.projects.all, qk.members.all, qk.workItems.all, qk.activity.all];
 
-/** What the channel of a project carries (its items and their history, the project and its members). */
-const PROJECT_CHANNEL: readonly QueryKey[] = [qk.workItems.all, qk.activity.all, qk.projects.all, qk.members.all];
+/** What the channel of a project carries (its items and their history, the project and its members, its wiki). */
+const PROJECT_CHANNEL: readonly QueryKey[] = [qk.workItems.all, qk.activity.all, qk.projects.all, qk.members.all, ...WIKI];
+
+/** The caches of the wiki and of references (a reference to a page shows its title): what waits for a check of a tree. */
+const WIKI_ROOTS: readonly unknown[] = [qk.pages.all[0], qk.pageVersions.all[0], qk.references.all[0]];
 
 /**
  * What a channel carries that Reverb holds now (`live.subscribed`): what loaded before may have missed a message sent
@@ -41,7 +53,8 @@ function heldKeys(event: LiveEvent): readonly QueryKey[] {
 /**
  * The caches a message makes stale. Items and their history on `work_item.*` (also watching, on the person's own
  * channel), comments and the history on `comment.*`, projects and members on `project.*` (on `project.updated` the
- * items too: their keys carry the identifier), the projects on a new org role (K14: the channels follow the list; the
+ * items too: their keys carry the identifier), the wiki on `page.*` (on `page.updated` and `page.moved` the references
+ * too: a reference shows the title of its page, K15), the projects on a new org role (K14: the channels follow the list; the
  * shell reloads the shared props `auth` for it, M2), the inbox on `notifications.changed`; everything after the connection was
  * back (`live.reconnected`); what a channel carries once Reverb holds it (`live.subscribed`, `heldKeys`). A refused
  * channel (`live.refused`) loads everything as well (A281: access lost; what the person may not see any more answers
@@ -61,6 +74,8 @@ function keysOf(event: LiveEvent): readonly QueryKey[] {
   // a new identifier changes the keys of the items: the lists of the project load again (T14-M6)
   if (event.type === 'project.updated') return [qk.projects.all, qk.members.all, qk.workItems.all];
   if (group === 'project') return [qk.projects.all, qk.members.all];
+  if (event.type === 'page.updated' || event.type === 'page.moved') return [...WIKI, qk.references.all];
+  if (group === 'page') return WIKI;
   return [];
 }
 
@@ -75,11 +90,32 @@ function goneOf(event: LiveEvent): string | null {
   return null;
 }
 
-/** The id a cached answer is about: a project or an item (`id`), or the item of a detail (`item.id`). */
-function dataId(data: unknown): unknown {
-  if (typeof data !== 'object' || data === null) return undefined;
-  const record = data as { id?: unknown; item?: { id?: unknown } | null };
-  return record.id ?? record.item?.id;
+/**
+ * The pages `page.deleted` names (the subtree, the root first), and whether that is all of them: a subtree too large to
+ * name comes as `null` (`LiveMessage::PAGE_IDS_MAX`), then only the root is known.
+ */
+function deletedPages(event: LiveEvent): { ids: string[]; complete: boolean } {
+  if (Array.isArray(event.page_ids)) return { ids: event.page_ids, complete: true };
+  return { ids: event.page_id === null ? [] : [event.page_id], complete: false };
+}
+
+/**
+ * The ids a cached answer is about: a project, an item or a page (`id`), the item of a detail (`item.id`), the page of
+ * a version (`page_id`).
+ */
+function dataIds(data: unknown): unknown[] {
+  if (typeof data !== 'object' || data === null) return [];
+  const record = data as { id?: unknown; item?: { id?: unknown } | null; page_id?: unknown };
+  return [record.id ?? record.item?.id, record.page_id];
+}
+
+/** Every page of a tree. */
+function treeIds(nodes: readonly PageNode[], into = new Set<string>()): Set<string> {
+  for (const node of nodes) {
+    into.add(node.id);
+    treeIds(node.children, into);
+  }
+  return into;
 }
 
 /** Whether live updates arrive: false while the banner says they are paused. */
@@ -102,24 +138,25 @@ class LiveRefresh {
   private readonly deferred = new Map<string, QueryKey>();
   /** Queries to load again once their running fetch ends (and nothing is pending). */
   private readonly afterFetch = new Set<string>();
-  /** Deleted projects and items (the last `GONE_MAX`): their queries are not loaded again (they would answer 404). */
-  private readonly gone = new Set<string>();
+  /** Deleted projects and items, and deleted pages (the last `GONE_MAX` each): their queries are not loaded again (404). */
+  private readonly gone = { other: new Set<string>(), page: new Set<string>() };
 
   constructor(
     private readonly client: QueryClient,
     private readonly pending: () => boolean,
   ) {}
 
-  /** Whether `id` is known to be deleted. */
+  /** Whether `id` (a project or an item) is known to be deleted. */
   isGone(id: string): boolean {
-    return this.gone.has(id);
+    return this.gone.other.has(id);
   }
 
-  /** `id` was deleted: it never comes back. */
-  markGone(id: string): void {
-    this.gone.delete(id);
-    this.gone.add(id);
-    if (this.gone.size > GONE_MAX) this.gone.delete(this.gone.values().next().value!);
+  /** `id` (a project or an item, or with `kind` `page` a page) was deleted: it never comes back. */
+  markGone(id: string, kind: 'page' | 'other' = 'other'): void {
+    const ids = this.gone[kind];
+    ids.delete(id);
+    ids.add(id);
+    if (ids.size > GONE_MAX) ids.delete(ids.values().next().value!);
   }
 
   apply(keys: readonly QueryKey[]): void {
@@ -158,10 +195,11 @@ class LiveRefresh {
     this.load(query);
   }
 
-  /** Whether a query is about something gone: its key names it, or its answer is it. */
+  /** Whether a query is about something gone: its key names it, or its answer is it (or a version of it). */
   private aboutGone(query: Query): boolean {
-    for (const id of this.gone) {
-      if (query.queryHash.includes(id) || dataId(query.state.data) === id) return true;
+    const ids = dataIds(query.state.data);
+    for (const id of [...this.gone.other, ...this.gone.page]) {
+      if (query.queryHash.includes(id) || ids.includes(id)) return true;
     }
     return false;
   }
@@ -204,9 +242,61 @@ export function useLiveSync(): void {
     /** A new org role of the person in the burst: the shared props `auth` (account, rights) load again (M2). */
     let roleChanged = false;
     const refresh = new LiveRefresh(queryClient, () => queryClient.isMutating() > 0 || undoPending());
+    /** Projects whose `page.deleted` could not name the pages (too many): their trees tell, when the burst loads. */
+    const unnamed = new Set<string>();
+    /** How many checks of trees run: meanwhile the caches of the wiki wait (they could ask for a deleted page). */
+    let checking = 0;
+    const waitingWiki = new Map<string, QueryKey>();
     let quiet: ReturnType<typeof setTimeout> | null = null;
     let longest: ReturnType<typeof setTimeout> | null = null;
     let alive = true;
+
+    const markPageGone = (id: string) => {
+      refresh.markGone(id, 'page');
+      // the wiki page says so without asking
+      markLiveGone(id, 'page');
+    };
+
+    /**
+     * The pages of a project's tree before the delete that its tree on the server holds no more are gone: the trees of
+     * the cache (by the project in the key, or the pages in the answer: a screen may name it by its identifier) and
+     * the pages of the cache tell which there were. The tree is read past the cache, so no answer of a screen is
+     * replaced while a change of this tab is pending; a tree that cannot be read takes nothing as gone.
+     */
+    const checkTree = async (project: string) => {
+      let fresh: Set<string>;
+      try {
+        fresh = treeIds((await listPages(project)).items);
+      } catch {
+        return;
+      }
+      if (!alive) return;
+      const known = new Set<string>();
+      const cache = queryClient.getQueryCache();
+      for (const query of cache.findAll({ queryKey: [...qk.pages.all, 'list'] })) {
+        const nodes = (query.state.data as Page<PageNode> | undefined)?.items ?? [];
+        if ((query.queryKey[2] as { project?: unknown } | undefined)?.project === project || nodes.some((node) => node.project_id === project)) treeIds(nodes, known);
+      }
+      for (const query of cache.findAll({ queryKey: [...qk.pages.all, 'detail'] })) {
+        const page = query.state.data as { id?: string; project_id?: string } | undefined;
+        if (page?.id !== undefined && page.project_id === project) known.add(page.id);
+      }
+      known.forEach((id) => {
+        if (!fresh.has(id)) markPageGone(id);
+      });
+    };
+
+    /** Checks the trees, then loads what of the wiki waited for them, once no check runs any more. */
+    const checkTrees = (projects: string[]) => {
+      checking += 1;
+      void Promise.all(projects.map(checkTree)).then(() => {
+        checking -= 1;
+        if (!alive || checking > 0) return;
+        const keys = [...waitingWiki.values()];
+        waitingWiki.clear();
+        refresh.apply(keys);
+      });
+    };
 
     const flush = () => {
       if (quiet !== null) clearTimeout(quiet);
@@ -217,7 +307,14 @@ export function useLiveSync(): void {
       const lost = refusals.splice(0).some((id) => id === null || !refresh.isGone(id));
       const keys = lost ? EVERYTHING : [...burst.values()];
       burst.clear();
-      refresh.apply(keys);
+      if (unnamed.size > 0) {
+        checkTrees([...unnamed]);
+        unnamed.clear();
+      }
+      // while a tree is checked, the wiki waits (the rest of the burst loads now)
+      const waits = (queryKey: QueryKey) => checking > 0 && WIKI_ROOTS.includes(queryKey[0]);
+      keys.filter(waits).forEach((queryKey) => waitingWiki.set(JSON.stringify(queryKey), queryKey));
+      refresh.apply(keys.filter((queryKey) => !waits(queryKey)));
       if (roleChanged) {
         roleChanged = false;
         // only the account and its rights, never the page: what it shows stays (usePermissions reads `auth`)
@@ -249,6 +346,12 @@ export function useLiveSync(): void {
         refresh.markGone(gone);
         // the item page and the preview say so without asking (F36)
         markLiveGone(gone);
+      }
+      if (event.type === 'page.deleted') {
+        const { ids, complete } = deletedPages(event);
+        ids.forEach(markPageGone);
+        // too many to name: the tree of the project tells the rest when the burst loads
+        if (!complete && event.project_id !== null) unnamed.add(event.project_id);
       }
       if (event.type === 'live.refused') refusals.push(event.project_id ?? event.item_id);
       // only the person's own channel hears it (K14): the role changed is the person's

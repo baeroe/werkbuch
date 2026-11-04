@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { mockApi, type MockApi } from '@/test/api';
-import { ida, mara, web47 } from '@/test/fixtures';
+import { ida, mara, pageSummary, seitenstruktur, web47 } from '@/test/fixtures';
 import { listMentionables, resolveReferences } from './richText';
 
 let api: MockApi;
@@ -18,10 +18,17 @@ describe('rich text', () => {
     expect(sent()).toEqual(['GET /api/v1/mentions?project=WEB&q=i&limit=6', 'GET /api/v1/mentions?project=p_web&q=']);
   });
 
-  it('resolves the items behind references in one call: those the reader sees', async () => {
-    api = mockApi({ 'GET /api/v1/references': () => ({ body: { data: { items: [web47] } } }) });
+  it('resolves the items and pages behind references in one call: those the reader sees', async () => {
+    const structure = pageSummary(seitenstruktur);
+    api = mockApi({ 'GET /api/v1/references': () => ({ body: { data: { items: [web47], pages: [structure] } } }) });
 
-    expect(await resolveReferences(['wi_web_47', 'wi_ops_12'])).toEqual([web47]);
-    expect(sent()).toEqual(['GET /api/v1/references?items=wi_web_47%2Cwi_ops_12']);
+    expect(await resolveReferences({ items: ['wi_web_47', 'wi_ops_12'], pages: ['pg_web_structure'] })).toEqual({ items: [web47], pages: [structure] });
+    await resolveReferences({ items: ['wi_web_47'] });
+    await resolveReferences({ pages: ['pg_web_structure'] });
+    expect(sent()).toEqual([
+      'GET /api/v1/references?items=wi_web_47%2Cwi_ops_12&pages=pg_web_structure',
+      'GET /api/v1/references?items=wi_web_47',
+      'GET /api/v1/references?pages=pg_web_structure',
+    ]);
   });
 });

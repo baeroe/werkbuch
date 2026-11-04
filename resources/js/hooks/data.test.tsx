@@ -20,11 +20,13 @@ import {
   mara,
   ops12,
   organization,
+  pageSummary,
   project,
   properties,
   relationTypes,
   resolutions,
   searchResults,
+  seitenstruktur,
   standard,
   types,
   web47,
@@ -68,7 +70,7 @@ import {
   useUpdateUserRole,
   useUsers,
 } from './users';
-import { primeItemRef, useItemRef, useMentionables } from './richText';
+import { primeItemRef, primePageRef, useItemRef, useMentionables, usePageRef } from './richText';
 import { useFavorites, useToggleFavorite } from './views';
 import { useActivity } from './workItems';
 import { useDeleteWorkItemType, useSaveWorkItemType, useWorkItemTypes } from './workItemTypes';
@@ -984,6 +986,51 @@ describe('mentions and references', () => {
     expect(result.current.map((ref) => ref.data?.key)).toEqual(['WEB-47', 'OPS-12', 'WEB-42', 'WEB-47', undefined]);
     expect(api.calls.map((call) => decodeURIComponent(call.url))).toEqual(['/api/v1/references?items=wi_web_47,wi_ops_12,wi_web_42']);
     expect(queryClient.getQueryData(qk.references.item('wi_ops_12'))).toEqual(ops12);
+  });
+
+  it('resolves items and pages of a tick in one request', async () => {
+    const structure = pageSummary(seitenstruktur);
+    api = mockApi({ 'GET /api/v1/references': () => ({ body: { data: { items: [web47], pages: [structure] } } }) });
+    const { result } = renderHook(() => ({ item: useItemRef('wi_web_47'), page: usePageRef('pg_web_structure'), hidden: usePageRef('pg_ops_servers'), none: usePageRef(null) }), {
+      wrapper,
+    });
+
+    await waitFor(() => expect(result.current.hidden.isError).toBe(true));
+    expect(result.current.item.data).toEqual(web47);
+    expect(result.current.page.data).toEqual(structure);
+    expect(result.current.hidden.error).toMatchObject({ status: 404, reason: 'not_found' });
+    expect(result.current.none.fetchStatus).toBe('idle');
+    expect(api.calls.map((call) => decodeURIComponent(call.url))).toEqual(['/api/v1/references?items=wi_web_47&pages=pg_web_structure,pg_ops_servers']);
+    expect(queryClient.getQueryData(qk.references.page('pg_web_structure'))).toEqual(structure);
+  });
+
+  it('asks only for pages when a tick names no item, and counts both kinds into the hundred of a request', async () => {
+    const pages = Array.from({ length: 60 }, (_, index) => `pg_${String(index).padStart(2, '0')}`);
+    const items = Array.from({ length: 60 }, (_, index) => `wi_${String(index).padStart(2, '0')}`);
+    api = mockApi({
+      'GET /api/v1/references': (_body, url) => ({
+        body: {
+          data: {
+            items: (url.searchParams.get('items')?.split(',') ?? []).map((id) => ({ ...web47, id })),
+            pages: (url.searchParams.get('pages')?.split(',') ?? []).map((id) => ({ ...pageSummary(seitenstruktur), id })),
+          },
+        },
+      }),
+    });
+    primePageRef({ ...pageSummary(seitenstruktur), id: 'pg_primed' }, queryClient);
+    const first = renderHook(() => [usePageRef('pg_web_structure'), usePageRef('pg_primed')], { wrapper });
+    await waitFor(() => expect(first.result.current.every((ref) => ref.isSuccess)).toBe(true));
+    const second = renderHook(() => [...pages.map((id) => usePageRef(id)), ...items.map((id) => useItemRef(id))], { wrapper });
+    await waitFor(() => expect(second.result.current.every((ref) => ref.isSuccess)).toBe(true));
+
+    const asked = api.calls.map((call) => new URL(call.url, 'http://werkbuch.test').searchParams);
+    expect(asked.map((query) => [query.get('items')?.split(',').length ?? 0, query.get('pages')?.split(',').length ?? 0])).toEqual([
+      [0, 1],
+      [40, 60],
+      [20, 0],
+    ]);
+    expect(second.result.current[0]!.data?.id).toBe('pg_00');
+    expect(second.result.current[119]!.data?.id).toBe('wi_59');
   });
 
   it('marks a reference the server leaves out as hidden', async () => {

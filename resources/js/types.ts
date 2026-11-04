@@ -525,7 +525,11 @@ export interface Automation {
   settings: AutomationSettings;
 }
 
-/** A wiki page (spec 4.15). Its place in the tree is `parent_id` plus `rank`. */
+/**
+ * A wiki page (spec 4.15) as `GET /api/v1/pages/{page}` answers it. Its place in the tree is `parent_id` plus `rank`.
+ * The text comes twice (A321): as Markdown for its reader (`content`: a reference the reader may not see reads
+ * `[hidden](page:<ulid>)`) and as the stored Tiptap JSON the editor reads (`content_json`), both `null` without text.
+ */
 export interface Page {
   id: string;
   project_id: string;
@@ -533,26 +537,39 @@ export interface Page {
   rank: string;
   title: string;
   emoji: string | null;
-  content: RichText | null;
-  /** Counts up on every save; a save with an outdated base version is a conflict. */
+  content: string | null;
+  content_json: RichText | null;
+  /** Counts up on every save that changes something; a save with an outdated base version is a conflict. */
   version: number;
   created_by: string;
   created_at: string;
   updated_by: string;
   updated_at: string;
-  /** Clickdummy only: the next save reports a conflict once, so the banner can be shown. */
-  simulate_conflict_once?: boolean;
 }
 
-/** A saved state of a page, kept after 10 minutes of pause and before a foreign version is overwritten. */
+/** A page without its text (A174): the tree, search hits and references (`[Titel](page:<ulid>)`). */
+export type PageSummary = Omit<Page, 'content' | 'content_json'>;
+
+/** A page in the tree of a project: no text, but its children, siblings by `rank` (A315). */
+export type PageNode = PageSummary & { children: PageNode[] };
+
+/**
+ * A kept state of a page, kept after 10 minutes of pause and before a foreign version is overwritten (A307). The list
+ * of versions comes without the text (A315); one version read on its own carries it (`PageVersionDetail`).
+ */
 export interface PageVersion {
   id: string;
   page_id: string;
   version: number;
   title: string;
-  content: RichText | null;
   author_id: string;
   created_at: string;
+}
+
+/** A version read on its own (`GET /api/v1/pages/{page}/versions/{version}`): with its text as Markdown and JSON. */
+export interface PageVersionDetail extends PageVersion {
+  content: string | null;
+  content_json: RichText | null;
 }
 
 export type NotificationEvent =
@@ -803,20 +820,18 @@ export interface Invitation {
 }
 
 /** What `GET /api/v1/search` can look through. */
-export type SearchType = 'items' | 'projects' | 'people' | 'views';
+export type SearchType = 'items' | 'pages' | 'projects' | 'people' | 'views';
 
-/** Hits per kind (wiki pages come with phase 9). */
+/** Hits per kind; pages without their text. */
 export interface SearchResults {
   items: ListedItem[];
+  pages: PageSummary[];
   projects: Project[];
   people: User[];
   views: View[];
   /** The id of the item a typed key names, also over a former identifier (`OLD-12`). */
   key_match: string | null;
 }
-
-/** A wiki page in the tree of a project: no content, but its children. */
-export type PageNode = Omit<Page, 'content' | 'simulate_conflict_once'> & { children: PageNode[] };
 
 /** What saving a webhook returns: the secret in plain text only on creating and on renewing it. */
 export interface WebhookSaved {
