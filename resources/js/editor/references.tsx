@@ -125,14 +125,16 @@ function Loading({ failed }: { failed: boolean }) {
   return <span className="rt-ref">{failed ? t('editor.reference.unknown') : '…'}</span>;
 }
 
-/** A link while reading (with `spoken` for screen readers after its text), plain text while editing. */
-function Shown({ href, editable, spoken, children }: { href: string; editable: boolean; spoken?: string; children: ReactNode }) {
+/**
+ * A link while reading, plain text while editing. `label` names the link for screen readers in full: a visually
+ * hidden span after the text would be read with a space before its comma (Chrome sets a positioned element apart).
+ */
+function Shown({ href, editable, label, children }: { href: string; editable: boolean; label?: string; children: ReactNode }) {
   return editable ? (
     <span className="rt-ref">{children}</span>
   ) : (
-    <Link href={href} className="rt-ref">
+    <Link href={href} className="rt-ref" aria-label={label}>
       {children}
-      {spoken && <span className="sr-only">, {spoken}</span>}
     </Link>
   );
 }
@@ -164,9 +166,9 @@ function PageReference({ id, editable }: { id: string; editable: boolean }) {
   const known = projects?.find((project) => project.id === page.project_id)?.identifier;
   const identifier = known ?? page.project_id;
   // which wiki, for screen readers: a page reads apart from a link of the same name (T18-M2)
-  const spoken = known ? t('wiki.place', { identifier: known }) : undefined;
+  const label = known ? `${page.title}, ${t('wiki.place', { identifier: known })}` : undefined;
   return (
-    <Shown href={paths.wiki(identifier, page.id)} editable={editable} spoken={spoken}>
+    <Shown href={paths.wiki(identifier, page.id)} editable={editable} label={label}>
       <PageGlyph emoji={page.emoji} className="" />
       {page.title}
     </Shown>

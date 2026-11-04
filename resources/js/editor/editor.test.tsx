@@ -945,7 +945,7 @@ describe('the menus of the editor', () => {
     // the title the page has now, its emoji before it, a link into the wiki of its project; screen readers hear which
     // wiki, so a page reads apart from a link of the same name (T18-M2)
     const link = await screen.findByRole('link', { name: 'Navigation und Struktur, Wiki WEB' });
-    expect(link.textContent).toBe('🧭Navigation und Struktur, Wiki WEB');
+    expect(link.textContent).toBe('🧭Navigation und Struktur');
     await waitFor(() => expect(link.getAttribute('href')).toBe('/projects/WEB/wiki/pg_web_structure'));
     const asked = api!.calls.filter((call) => call.url.startsWith('/api/v1/references'));
     expect(asked.map((call) => call.url)).toEqual(['/api/v1/references?pages=pg_web_structure']);
