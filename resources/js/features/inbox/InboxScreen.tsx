@@ -46,11 +46,12 @@ import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
 import { currentToasts, toast } from '@/components/ui/toast';
 import { useSelection } from '@/features/items/selection/useSelection';
 import { qk } from '@/hooks/keys';
-import { useDeleteNotification, useNotifications } from '@/hooks/notifications';
+import { UNREAD_COUNT_ARGS, useDeleteNotification, useNotifications } from '@/hooks/notifications';
 import { useOrganization } from '@/hooks/organization';
 import { useProjects } from '@/hooks/projects';
 import { useProperties } from '@/hooks/properties';
 import { useRefetchFailed } from '@/hooks/retry';
+import { useWorkflows } from '@/hooks/workflows';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
 import { useCommand } from '@/lib/commands';
 import { intlLocale, t, tn } from '@/lib/i18n';
@@ -71,7 +72,8 @@ export const INBOX_PAGE_SIZE = 50;
 type FilterValue = 'unread' | 'mentions';
 
 /** The query of the unread count: the sidebar's badge asks the same, so both always agree. */
-const UNREAD = { unread_only: true, per_page: 1 } as const;
+/** The query of the count in the head: the badge's (T16-M7). */
+const UNREAD = UNREAD_COUNT_ARGS;
 /** The query of the unread mentions, for "Alle als gelesen markieren" in the filter "Erwähnungen" (A291). */
 const UNREAD_MENTIONS = { unread_only: true, mentions_only: true, per_page: 1 } as const;
 
@@ -191,7 +193,9 @@ export function InboxScreen() {
   const refetchFailed = useRefetchFailed();
 
   const users = useUserMap();
-  const projects = useProjects({ include_archived: true }).data?.items;
+  const projectsQuery = useProjects({ include_archived: true });
+  const projects = projectsQuery.data?.items;
+  const workflows = useWorkflows().data?.items;
   const properties = useProperties().data?.items;
   const types = useWorkItemTypes().data?.items;
   const timeZone = useOrganization().data.timezone;
@@ -232,6 +236,8 @@ export function InboxScreen() {
     users,
     propertyLabel: (key) => properties?.find((property) => property.key === key)?.label,
     project: (id) => projects?.find((project) => project.id === id),
+    projectsLoading: projectsQuery.isPending,
+    stateIcon: (id) => workflows?.flatMap((workflow) => workflow.states).find((state) => state.id === id)?.icon,
     now,
     timeZone,
   };

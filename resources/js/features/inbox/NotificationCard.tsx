@@ -17,6 +17,7 @@ import { useId, type MouseEvent, type ReactNode } from 'react';
 import { Link } from '@inertiajs/react';
 import { IndexCard } from '@/components/ui/IndexCard';
 import { ProjectBadge } from '@/components/ui/ProjectBadge';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { t } from '@/lib/i18n';
 import { paths } from '@/lib/links';
 import type { WorkItemType } from '@/types';
@@ -38,11 +39,11 @@ type NotificationCardProps = {
 };
 
 /** The project of a card: its mark and name, or nothing while the projects load. */
-function ProjectName({ ctx, projectId }: { ctx: RowContext; projectId: string | null }) {
+function ProjectName({ ctx, projectId, id }: { ctx: RowContext; projectId: string | null; id?: string }) {
   const project = ctx.project(projectId);
   if (!project) return null;
   return (
-    <span className="flex min-w-0 items-center gap-1.5 text-sm text-muted">
+    <span id={id} className="flex min-w-0 items-center gap-1.5 text-sm text-muted">
       <ProjectBadge project={project} />
       <span className="min-w-0 truncate">{project.name}</span>
     </span>
@@ -51,6 +52,7 @@ function ProjectName({ ctx, projectId }: { ctx: RowContext; projectId: string | 
 
 export function NotificationCard({ group, ctx, types, current, tabStop, previewed, actions, onOpenItem }: NotificationCardProps) {
   const headingId = useId();
+  const projectId = useId();
   const item = group.itemId === null ? null : (group.notifications.find((notification) => notification.item)?.item ?? null);
   const project = ctx.project(group.projectId);
   let subject = item?.key ?? t('inbox.item.unavailable');
@@ -95,12 +97,19 @@ export function NotificationCard({ group, ctx, types, current, tabStop, previewe
       );
     }
     return (
-      <IndexCard tone={type?.tone ?? 'slate'} icon={type?.icon ?? 'square-check'} tabLabel={item?.key ?? '—'} selected={previewed} aria-labelledby={headingId}>
+      <IndexCard
+        tone={type?.tone ?? 'slate'}
+        icon={type?.icon ?? 'square-check'}
+        tabLabel={item?.key ?? '—'}
+        selected={previewed}
+        // cards of items no longer available are told apart by their project (T16-M6)
+        aria-labelledby={item ? headingId : `${headingId} ${projectId}`}
+      >
         <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
           <h2 id={headingId} className="min-w-0 text-ui font-medium text-pretty break-words text-ink">
             {title}
           </h2>
-          <ProjectName ctx={ctx} projectId={item?.project_id ?? group.projectId} />
+          <ProjectName ctx={ctx} projectId={item?.project_id ?? group.projectId} id={projectId} />
         </div>
         {rows}
       </IndexCard>
@@ -115,11 +124,14 @@ export function NotificationCard({ group, ctx, types, current, tabStop, previewe
             <Building2 className="size-4 text-muted" aria-hidden="true" />
             {t('inbox.organization')}
           </>
-        ) : (
+        ) : project || !ctx.projectsLoading ? (
           <>
             {project && <ProjectBadge project={project} />}
             <span className="min-w-0 truncate">{project?.name ?? t('items.group.hidden.project')}</span>
           </>
+        ) : (
+          // the projects are on their way: no "Verborgenes Projekt" for a moment (T16-M3)
+          <Skeleton className="h-4 w-32" />
         )}
       </h2>
       {rows}

@@ -28,11 +28,12 @@ import { cx } from '@/components/ui/cx';
 import { IconButton } from '@/components/ui/IconButton';
 import { Kbd } from '@/components/ui/Kbd';
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '@/components/ui/Menu';
+import { StatusIcon } from '@/components/ui/StatusIcon';
 import { formatMoment } from '@/features/item-detail/activity/when';
 import { tx } from '@/features/item-detail/activity/phrases';
 import { t } from '@/lib/i18n';
 import { paths } from '@/lib/links';
-import type { Notification, Project, StateSnapshot, User } from '@/types';
+import type { Notification, Project, StateIcon, StateSnapshot, User } from '@/types';
 import { changedFields, opensElsewhere, timeAgo } from './notifications';
 
 /** What every row reads from the catalogs; the screen loads them once. */
@@ -40,6 +41,10 @@ export interface RowContext {
   users: ReadonlyMap<string, User>;
   propertyLabel: (key: string) => string | undefined;
   project: (id: string | null) => Project | undefined;
+  /** The projects are still on their way: a card without an item waits to name its project (T16-M3). */
+  projectsLoading: boolean;
+  /** The shape of a state by its id (the snapshot of a move has its category only), undefined for one that is gone. */
+  stateIcon: (id: string) => StateIcon | undefined;
   now: Date;
   timeZone: string;
 }
@@ -98,8 +103,15 @@ function Who({ user, unread }: { user: User | undefined; unread: boolean }) {
   );
 }
 
-function StateName({ state, fallback }: { state: StateSnapshot | null | undefined; fallback: string }) {
-  return <span className="font-medium text-ink">{state?.name ?? fallback}</span>;
+/** A state of a move by name, with its shape and colour as everywhere a state is named (T16-M1); a gone one by name only. */
+function StateName({ state, fallback, ctx }: { state: StateSnapshot | null | undefined; fallback: string; ctx: RowContext }) {
+  const icon = state ? ctx.stateIcon(state.id) : undefined;
+  return (
+    <span className="font-medium text-ink">
+      {state && icon && <StatusIcon icon={icon} category={state.category} label="" aria-hidden="true" className="mr-1 inline size-3.5 align-[-2px]" />}
+      {state?.name ?? fallback}
+    </span>
+  );
 }
 
 /** The sentence of a notification and the excerpt below it. */
@@ -117,8 +129,8 @@ function sentenceOf(notification: Notification, ctx: RowContext): { sentence: Re
       return {
         sentence: tx('inbox.kind.state_changed', {
           actor,
-          from: <StateName state={data.from} fallback={t('inbox.state.unknown_from')} />,
-          to: <StateName state={data.to} fallback={t('inbox.state.unknown_to')} />,
+          from: <StateName state={data.from} fallback={t('inbox.state.unknown_from')} ctx={ctx} />,
+          to: <StateName state={data.to} fallback={t('inbox.state.unknown_to')} ctx={ctx} />,
         }),
         excerpt: null,
       };

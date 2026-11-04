@@ -331,6 +331,50 @@ describe('the inbox', () => {
     expect(useUiStore.getState().peekItemId).toBe('wi_gone');
   });
 
+  it('names cards whose item is no longer available apart, by their project (T16-M6)', async () => {
+    notifications = [
+      makeNotification({ id: 'n_gone_ops', work_item_id: 'wi_gone_1', project_id: 'p_ops', item: null }),
+      makeNotification({ id: 'n_gone_web', work_item_id: 'wi_gone_2', project_id: 'p_web', item: null, created_at: '2026-10-28T06:40:00.000Z' }),
+    ];
+    renderInbox();
+
+    expect(await screen.findByRole('article', { name: 'Nicht mehr verfügbar Infrastruktur' })).toBeTruthy();
+    expect(screen.getByRole('article', { name: 'Nicht mehr verfügbar Website-Relaunch' })).toBeTruthy();
+  });
+
+  it('shows the state of a move with its shape and colour (T16-M1)', async () => {
+    notifications = [
+      makeNotification({
+        id: 'n_state',
+        event: 'state_changed',
+        data: { from: { id: 'std_todo', name: 'Todo', category: 'unstarted' }, to: { id: 'std_done', name: 'Done', category: 'completed' } },
+      }),
+    ];
+    renderInbox();
+
+    const link = await screen.findByRole('link', { name: /hat den Status von Todo auf Done gesetzt/ });
+    // decorative next to the name, as everywhere a state is named
+    expect(link.querySelectorAll('svg[aria-hidden="true"].text-st-unstarted, svg[aria-hidden="true"].text-st-completed')).toHaveLength(2);
+  });
+
+  it('shows no hidden project on a card without an item while the projects load (T16-M3)', async () => {
+    notifications = [makeNotification({ id: 'n_tpl', event: 'template_run_failed', work_item_id: null, item: null, actor_id: null, data: { error: 'kaputt' } })];
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const inner = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      if (String(input).includes('/api/v1/projects')) await gate;
+      return inner(input, init);
+    };
+    onTestFinished(() => void (globalThis.fetch = inner));
+    renderInbox();
+
+    await screen.findByRole('link', { name: /Eine Vorlage hat kein Item angelegt/ });
+    expect(screen.queryByText('Verborgenes Projekt')).toBeNull();
+    release();
+    expect(await screen.findByRole('region', { name: 'Website-Relaunch' })).toBeTruthy();
+  });
+
   it('opens the item in the preview on a plain click and leaves a click with a modifier to the browser', async () => {
     renderInbox();
     await loaded();

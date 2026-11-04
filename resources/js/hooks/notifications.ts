@@ -17,9 +17,12 @@ export function useNotifications(args: ListNotificationsArgs = {}) {
   return useQuery({ queryKey: qk.notifications.list(args), queryFn: () => listNotifications(args) });
 }
 
+/** The query of the badge and of the count in the head of the inbox: one unread row, for its total (T16-M7). */
+export const UNREAD_COUNT_ARGS = { unread_only: true, per_page: 1 } as const;
+
 /** The number on the inbox badge: the total of a page of one unread row; 0 until it is known. */
 export function useUnreadCount(): number {
-  return useNotifications({ unread_only: true, per_page: 1 }).data?.total ?? 0;
+  return useNotifications(UNREAD_COUNT_ARGS).data?.total ?? 0;
 }
 
 /**
