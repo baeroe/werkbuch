@@ -8,6 +8,7 @@ use App\Actions\Notifications\SendDueReminders;
 use App\Actions\Notifications\SendNotificationMail;
 use App\Actions\Projects\RemoveMember;
 use App\Domain\Notifications\NotificationKind;
+use App\Domain\Workflow\StateCategory;
 use App\Enums\Locale;
 use App\Jobs\SendDueRemindersJob;
 use App\Jobs\SendNotificationMailJob;
@@ -355,6 +356,34 @@ it('leaves an item out of the reminder mail whose project the person lost before
 
     Mail::sent(NotificationDigest::class)->sole()->assertSeeInHtml('Kontaktformular')
         ->assertDontSeeInHtml('Server umziehen')->assertDontSeeInHtml('OPS-1')->assertDontSeeInText('Server umziehen');
+});
+
+it('leaves an item out of the reminder mail that was closed, archived or given to someone else before it went (T8-M5)', function () use ($world, $due, $remind, $collectionOf) {
+    $w = $world();
+    $open = $due($w['web'], $w['mara'], '2026-11-03', 'Kontaktformular');
+    $closed = $due($w['web'], $w['mara'], '2026-11-03', 'Impressum');
+    $archived = $due($w['web'], $w['mara'], '2026-11-03', 'Footer');
+    $given = $due($w['web'], $w['mara'], '2026-11-03', 'Datenschutz');
+    $this->travelTo(CarbonImmutable::parse('2026-11-03 07:00', 'UTC'));
+    $remind();
+
+    // between 08:00 and the mail: one is done, one archived (done first), one assigned to Nina
+    $done = $w['web']->workflow->states->firstWhere('category', StateCategory::Completed);
+    $closed->update(['state_id' => $done->id]);
+    $archived->update(['state_id' => $done->id, 'archived_at' => now()]);
+    $given->update(['assignee_id' => $w['nina']->id]);
+    SendNotificationMail::run(Actor::system(User::defaultBot(), 'notification_mail'), $collectionOf($w['mara'], '2026-11-03')->id);
+
+    Mail::sent(NotificationDigest::class)->sole()->assertSeeInHtml($open->title)
+        ->assertDontSeeInHtml('Impressum')->assertDontSeeInHtml('Footer')->assertDontSeeInHtml('Datenschutz');
+
+    // nothing left: skipped
+    $item = $due($w['web'], $w['tom'], '2026-11-03', 'Server');
+    $this->travelTo(CarbonImmutable::parse('2026-11-04 07:00', 'UTC'));
+    $remind();
+    $item->update(['state_id' => $done->id]);
+    $w['web']->update(['archived_at' => now()]);
+    expect(SendNotificationMail::run(Actor::system(User::defaultBot(), 'notification_mail'), $collectionOf($w['tom'], '2026-11-04')->id))->toBe(NotificationMail::SKIPPED);
 });
 
 it('writes the reminder mail in the language of the person', function () use ($world, $due, $remind, $collectionOf) {

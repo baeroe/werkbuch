@@ -4,12 +4,14 @@ namespace App\Actions\Notifications;
 
 use App\Access\Visibility;
 use App\Domain\Notifications\Channel;
+use App\Domain\Notifications\NotificationKind;
 use App\Domain\Notifications\Preferences;
 use App\Mail\NotificationDigest;
 use App\Models\Notification;
 use App\Models\NotificationMail;
 use App\Models\NotificationPreference;
 use App\Models\User;
+use App\Models\WorkItem;
 use App\RichText\Document;
 use App\Support\Actor;
 use App\Support\MailSetup;
@@ -25,7 +27,8 @@ use Throwable;
  * sent one (`sent_at`) does nothing, so two jobs of the same collection send one mail. Whether a line still goes out is
  * decided now, not when it was collected (Review Focus 3): the person active and a person, the project one they see
  * (Notification::visibleTo, read afresh; never through NotificationPolicy, which is the inbox's), the item there, the
- * line unread (a read one needs no mail) and mail still on for its kind, and a mail server still set (T7-M5). Nothing
+ * line unread (a read one needs no mail) and mail still on for its kind, a reminder only for an item that is still
+ * open, not archived and the person's (T8-M5), and a mail server still set (T7-M5). Nothing
  * left: `skipped`, closed like a sent one (K8). The texts are the current ones, written for the person (ReaderNames: a reference to an item they do not see
  * stays hidden, A229). `open_key` goes right after the lock, before the lines are read and before SMTP: a consumer
  * collecting for the same person and item waits at its insert and opens a new collection once this one is closed (K7);
@@ -127,8 +130,19 @@ final class SendNotificationMail
         $stored = NotificationPreference::storedFor([$person->id])[$person->id] ?? [];
 
         return Notification::query()->where('mail_id', $mail->id)->whereNull('read_at')->visibleTo($person)
-            ->with(['workItem.project', 'actor'])->orderBy('created_at')->orderBy('id')->sharedLock()->get()
-            ->filter(fn (Notification $line) => $line->workItem !== null && Preferences::enabled($line->kind, Channel::Mail, $stored))
+            ->with(['workItem.project', 'workItem.state', 'actor'])->orderBy('created_at')->orderBy('id')->sharedLock()->get()
+            ->filter(fn (Notification $line) => $line->workItem !== null && Preferences::enabled($line->kind, Channel::Mail, $stored)
+                && ($line->kind !== NotificationKind::Due || self::stillDue($line->workItem, $person)))
             ->values();
+    }
+
+    /**
+     * Whether a reminder still holds when its mail goes (T8-M5): the item open, not archived, in a project that is not
+     * archived, and still the person's.
+     */
+    private static function stillDue(WorkItem $item, User $person): bool
+    {
+        return $item->archived_at === null && $item->project->archived_at === null && $item->assignee_id === $person->id
+            && ! $item->state->category->isClosed();
     }
 }
