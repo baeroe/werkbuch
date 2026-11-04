@@ -168,7 +168,8 @@ test('refers to a wiki page with # in a description', async ({ page }) => {
     expect(comment.status(), await comment.text()).toBe(201);
     await page.reload();
     const link = page.locator('[data-comment-card] a.rt-ref');
-    await expect(link).toHaveText(`E2E Leuchtfeuer ${searchToken()}`);
+    // screen readers hear the wiki the page is in (T18-M2)
+    await expect(link).toHaveAccessibleName(`E2E Leuchtfeuer ${searchToken()}, ${tr('en', 'wiki.place', { identifier })}`);
     await link.focus();
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(new RegExp(`/projects/${identifier}/wiki/${target.id}$`));

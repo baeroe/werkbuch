@@ -79,7 +79,11 @@ function ReferenceSuggestions({ suggestion, ref }: PopupProps) {
             <PageGlyph emoji={page.emoji} />
           </span>
           <span className="min-w-0 flex-1 truncate">{page.title}</span>
-          {project && <span className="shrink-0 text-sm text-muted">{t('wiki.place', { identifier: project.identifier })}</span>}
+          {project && (
+            <span translate="no" className="shrink-0 text-sm text-muted">
+              {t('wiki.place', { identifier: project.identifier })}
+            </span>
+          )}
         </>
       ),
       pick: () => {
@@ -121,13 +125,14 @@ function Loading({ failed }: { failed: boolean }) {
   return <span className="rt-ref">{failed ? t('editor.reference.unknown') : '…'}</span>;
 }
 
-/** A link while reading, plain text while editing. */
-function Shown({ href, editable, children }: { href: string; editable: boolean; children: ReactNode }) {
+/** A link while reading (with `spoken` for screen readers after its text), plain text while editing. */
+function Shown({ href, editable, spoken, children }: { href: string; editable: boolean; spoken?: string; children: ReactNode }) {
   return editable ? (
     <span className="rt-ref">{children}</span>
   ) : (
     <Link href={href} className="rt-ref">
       {children}
+      {spoken && <span className="sr-only">, {spoken}</span>}
     </Link>
   );
 }
@@ -156,9 +161,12 @@ function PageReference({ id, editable }: { id: string; editable: boolean }) {
   if (isGone(reference.error)) return <HiddenReference />;
   if (!page) return <Loading failed={reference.isError} />;
   // until the projects are there the project's id leads to the same wiki (the server answers with the identifier)
-  const identifier = projects?.find((project) => project.id === page.project_id)?.identifier ?? page.project_id;
+  const known = projects?.find((project) => project.id === page.project_id)?.identifier;
+  const identifier = known ?? page.project_id;
+  // which wiki, for screen readers: a page reads apart from a link of the same name (T18-M2)
+  const spoken = known ? t('wiki.place', { identifier: known }) : undefined;
   return (
-    <Shown href={paths.wiki(identifier, page.id)} editable={editable}>
+    <Shown href={paths.wiki(identifier, page.id)} editable={editable} spoken={spoken}>
       <PageGlyph emoji={page.emoji} className="" />
       {page.title}
     </Shown>

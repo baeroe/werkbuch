@@ -78,7 +78,7 @@
     "editor.placeholder.plain.page": "Schreiben … / für Blöcke",
     "editor.reference.failed": "Die Suche antwortet gerade nicht.",
     "editor.reference.hidden": "verborgen",
-    "editor.reference.hint": "Key oder Titel eingeben, zum Beispiel WEB-42.",
+    "editor.reference.hint": "Key oder Titel eingeben, zum Beispiel WEB-42 oder den Titel einer Seite.",
     "editor.reference.items": "Items",
     "editor.reference.label": "Items und Seiten",
     "editor.reference.none": "Kein Item und keine Seite zu „:query“.",

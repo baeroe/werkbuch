@@ -761,7 +761,7 @@ describe('the menus of the editor', () => {
 
     // nothing typed yet: a hint, no search
     const items = await screen.findByRole('listbox', { name: 'Items und Seiten' });
-    expect(screen.getByText('Key oder Titel eingeben, zum Beispiel WEB-42.', { selector: 'p' })).toBeTruthy();
+    expect(screen.getByText('Key oder Titel eingeben, zum Beispiel WEB-42 oder den Titel einer Seite.', { selector: 'p' })).toBeTruthy();
     expect(api!.calls.filter((call) => call.url.startsWith('/api/v1/search'))).toEqual([]);
 
     await user.keyboard('WEB');
@@ -799,6 +799,8 @@ describe('the menus of the editor', () => {
     // the emoji (decorative), the title and where it lives
     await waitFor(() => expect(page.textContent).toBe('🧭SeitenstrukturWiki WEB'));
     expect(page.querySelector('[aria-hidden="true"]')!.textContent).toBe('🧭');
+    // the identifier is never translated (T18-M4)
+    expect(within(page).getByText('Wiki WEB').getAttribute('translate')).toBe('no');
 
     await user.keyboard('{ArrowDown}{Enter}');
     // only the id and the kind: no title in the stored text (A229)
@@ -940,9 +942,10 @@ describe('the menus of the editor', () => {
     // on its way
     await waitFor(() => expect(document.querySelector('.rt-ref')?.textContent).toBe('…'));
 
-    // the title the page has now, its emoji before it, a link into the wiki of its project
-    const link = await screen.findByRole('link', { name: 'Navigation und Struktur' });
-    expect(link.textContent).toBe('🧭Navigation und Struktur');
+    // the title the page has now, its emoji before it, a link into the wiki of its project; screen readers hear which
+    // wiki, so a page reads apart from a link of the same name (T18-M2)
+    const link = await screen.findByRole('link', { name: 'Navigation und Struktur, Wiki WEB' });
+    expect(link.textContent).toBe('🧭Navigation und Struktur, Wiki WEB');
     await waitFor(() => expect(link.getAttribute('href')).toBe('/projects/WEB/wiki/pg_web_structure'));
     const asked = api!.calls.filter((call) => call.url.startsWith('/api/v1/references'));
     expect(asked.map((call) => call.url)).toEqual(['/api/v1/references?pages=pg_web_structure']);

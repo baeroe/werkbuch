@@ -78,7 +78,7 @@
     "editor.placeholder.plain.page": "Write … / for blocks",
     "editor.reference.failed": "The search is not answering right now.",
     "editor.reference.hidden": "hidden",
-    "editor.reference.hint": "Type a key or a title, for example WEB-42.",
+    "editor.reference.hint": "Type a key or a title, for example WEB-42 or the title of a page.",
     "editor.reference.items": "Items",
     "editor.reference.label": "Items and pages",
     "editor.reference.none": "No item and no page for “:query”.",
