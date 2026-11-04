@@ -73,7 +73,7 @@ function browserEvent(type: string): LiveEvent {
   return { event_id: null, type, project_id: null, item_id: null, comment_id: null, actor_id: null };
 }
 
-/** `live.refused` for a channel: the project or the item it is about, so the screens leave that one alone. */
+/** `live.refused` for a channel, naming the project or the item it is about. */
 function refused(channel: string): LiveEvent {
   const project = /^private-project\.(.+)$/.exec(channel)?.[1] ?? null;
   const item = /^private-work-item\.(.+)$/.exec(channel)?.[1] ?? null;

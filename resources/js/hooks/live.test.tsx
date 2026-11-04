@@ -2,12 +2,16 @@ import { QueryClient, QueryClientProvider, QueryObserver, type QueryKey } from '
 import { act, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ApiError } from '@/api/client';
 import type { LiveEvent } from '@/api/live';
 import { resetToasts } from '@/components/ui/toast';
 import { runWithUndo, undoLatest } from '@/lib/undo';
 import { useUiStore } from '@/store/ui';
+import { mockApi, type MockApi } from '@/test/api';
+import { project } from '@/test/fixtures';
 import { qk } from './keys';
 import { LIVE_BURST_MS, LIVE_MAX_WAIT_MS, useLiveConnected, useLiveItem, useLiveSync } from './live';
+import { useMembers, useProject, useProjects } from './projects';
 
 /* The live connection stands in as a bus the test sends messages over. */
 const bus = vi.hoisted(() => ({
@@ -31,6 +35,7 @@ vi.mock('@/api/live', () => ({
 }));
 
 let queryClient: QueryClient;
+let api: MockApi | null = null;
 const stops: (() => void)[] = [];
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -102,6 +107,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  api?.restore();
+  api = null;
   resetToasts();
   stops.splice(0).forEach((stop) => stop());
   queryClient.clear();
@@ -241,16 +248,62 @@ describe('useLiveSync', () => {
     expect(useUiStore.getState().flashIds).toEqual([]);
   });
 
-  it('loads the projects and the items again when a channel is refused (A281)', async () => {
-    const projects = await shown(qk.projects.list({}));
-    const items = await shown(qk.workItems.detail('OPS-12'));
+  it('loads what the person lost access to, so the screen shows it as not found (A281)', async () => {
+    let lost = false;
+    const ops = project('OPS', 'member');
+    api = mockApi({
+      'GET /api/v1/projects': () => ({ body: { data: lost ? [] : [ops], links: {}, meta: { next_cursor: null, total: lost ? 0 : 1 } } }),
+      'GET /api/v1/projects/OPS': () => (lost ? { status: 404, body: { reason: 'not_found' } } : { body: { data: ops } }),
+      'GET /api/v1/projects/p_ops/members': () =>
+        lost ? { status: 404, body: { reason: 'not_found' } } : { body: { data: [], links: {}, meta: { next_cursor: null, total: 0 } } },
+    });
+    const { result } = renderHook(
+      () => {
+        useLiveSync();
+        return { projects: useProjects({ include_archived: true }), project: useProject('OPS'), members: useMembers('p_ops') };
+      },
+      { wrapper },
+    );
+    await vi.waitFor(() => expect(result.current.project.data).toEqual(ops));
+
+    lost = true;
+    send({ event_id: null, type: 'live.refused', project_id: 'p_ops', item_id: null, actor_id: null });
+    await pass(LIVE_BURST_MS);
+    await vi.waitFor(() => expect(result.current.project.error).not.toBeNull());
+
+    expect(result.current.projects.data?.items).toEqual([]);
+    expect((result.current.project.error as ApiError | null)?.status).toBe(404);
+    expect((result.current.members.error as ApiError | null)?.status).toBe(404);
+  });
+
+  it('loads items, history, comments and the inbox again when a channel is refused', async () => {
+    const queries = [];
+    for (const key of [qk.workItems.detail('OPS-12'), qk.activity.list({ item: 'wi_ops_12' }), qk.comments.list({ item: 'wi_ops_12' }), qk.notifications.list({})]) {
+      queries.push(await shown(key));
+    }
     renderHook(() => useLiveSync(), { wrapper });
 
-    send({ event_id: null, type: 'live.refused', project_id: null, item_id: null, actor_id: null });
+    send({ event_id: null, type: 'live.refused', project_id: null, item_id: 'wi_ops_12', actor_id: null });
     await pass(LIVE_BURST_MS);
 
-    expect(projects.fetches()).toBe(2);
-    expect(items.fetches()).toBe(2);
+    expect(queries.map((query) => query.fetches())).toEqual([2, 2, 2, 2]);
+  });
+
+  it('remembers the last 200 deleted things, not every one', async () => {
+    const first = await shown(qk.workItems.detail('WEB-1'));
+    queryClient.setQueryData(qk.workItems.detail('WEB-1'), { item: { id: 'wi_0' } });
+    const second = await shown(qk.workItems.detail('WEB-2'));
+    queryClient.setQueryData(qk.workItems.detail('WEB-2'), { item: { id: 'wi_1' } });
+    renderHook(() => useLiveSync(), { wrapper });
+
+    for (let n = 0; n < 200; n += 1) send({ event_id: `ev_del_${n}`, type: 'work_item.deleted', item_id: `wi_${n}` });
+    await pass(LIVE_BURST_MS);
+    expect([first.fetches(), second.fetches()]).toEqual([1, 1]);
+
+    send({ event_id: 'ev_del_200', type: 'work_item.deleted', item_id: 'wi_200' });
+    await pass(LIVE_BURST_MS);
+    // the oldest fell out: its query loads again (it would say the item is gone), the next one stays alone
+    expect([first.fetches(), second.fetches()]).toEqual([2, 1]);
   });
 
   it('passes over messages no screen shows', async () => {
@@ -300,20 +353,6 @@ describe('useLiveSync', () => {
     release();
     await pass(0);
 
-    expect(members.fetches()).toBe(2);
-  });
-
-  it('leaves the project of a refused channel alone until a message of it comes again', async () => {
-    const members = await shown(qk.members.list({ project: 'p_ops' }));
-    renderHook(() => useLiveSync(), { wrapper });
-
-    send({ event_id: null, type: 'live.refused', project_id: 'p_ops', item_id: null, actor_id: null });
-    await pass(LIVE_BURST_MS);
-    expect(members.fetches()).toBe(1);
-
-    // access came back: the channel speaks again
-    send({ event_id: 'ev_3', type: 'project.member_added', project_id: 'p_ops', item_id: null });
-    await pass(LIVE_BURST_MS);
     expect(members.fetches()).toBe(2);
   });
 

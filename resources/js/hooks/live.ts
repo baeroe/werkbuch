@@ -14,6 +14,9 @@ export const LIVE_MAX_WAIT_MS = 2_000;
 /** How many event ids the tab remembers to drop a message it has seen (the original and the redispatch, P10). */
 const SEEN_MAX = 1000;
 
+/** How many deleted projects and items the tab remembers to leave their queries alone (the oldest go first). */
+const GONE_MAX = 200;
+
 /** Everything a live message can make stale: what a screen shows again after the connection was gone. */
 const EVERYTHING: readonly QueryKey[] = [qk.workItems.all, qk.activity.all, qk.comments.all, qk.projects.all, qk.members.all, qk.notifications.all];
 
@@ -21,12 +24,12 @@ const EVERYTHING: readonly QueryKey[] = [qk.workItems.all, qk.activity.all, qk.c
  * The caches a message makes stale. Items and their history on `work_item.*` (also watching, on the person's own
  * channel), comments and the history on `comment.*`, projects and members on `project.*`, the projects on a new org
  * role (K14: the channels follow the list), the inbox on `notifications.changed`; everything after the connection was
- * back (`live.reconnected`); projects and items after a refused channel (A281: access lost).
+ * back (`live.reconnected`); everything after a refused channel as well (A281: access lost; what the person may not
+ * see any more answers 404 or leaves the lists, as the screen should show it).
  */
 function keysOf(event: LiveEvent): readonly QueryKey[] {
   const group = event.type.split('.')[0];
-  if (event.type === 'live.reconnected') return EVERYTHING;
-  if (event.type === 'live.refused') return [qk.projects.all, qk.workItems.all];
+  if (event.type === 'live.reconnected' || event.type === 'live.refused') return EVERYTHING;
   if (event.type === 'notifications.changed') return [qk.notifications.all];
   if (event.type === 'user.role_changed') return [qk.projects.all];
   if (group === 'work_item') return [qk.workItems.all, qk.activity.all];
@@ -36,14 +39,13 @@ function keysOf(event: LiveEvent): readonly QueryKey[] {
 }
 
 /**
- * What a message says is gone for this tab: a deleted project or item, or the project or item of a refused channel
- * (access lost, A281). Its own queries would answer 404 now (which the browser reports as an error): live leaves them
- * alone, the screen keeps what it shows until it is left (see `LiveRefresh`).
+ * What a message says is deleted: a project or an item. Its own queries would answer 404 now (which the browser
+ * reports as an error): live leaves them alone, the screen keeps what it shows until it is left (see `LiveRefresh`).
+ * A refused channel (access lost, A281) is not gone: its queries load again and show that the person may not see it.
  */
 function goneOf(event: LiveEvent): string | null {
   if (event.type === 'project.deleted') return event.project_id;
   if (event.type === 'work_item.deleted') return event.item_id;
-  if (event.type === 'live.refused') return event.project_id ?? event.item_id;
   return null;
 }
 
@@ -74,7 +76,7 @@ class LiveRefresh {
   private readonly deferred = new Map<string, QueryKey>();
   /** Queries to load again once their running fetch ends (and nothing is pending). */
   private readonly afterFetch = new Set<string>();
-  /** Projects and items gone for this tab: their queries are not loaded again (they would answer 404). */
+  /** Deleted projects and items (the last `GONE_MAX`): their queries are not loaded again (they would answer 404). */
   private readonly gone = new Set<string>();
 
   constructor(
@@ -82,10 +84,11 @@ class LiveRefresh {
     private readonly pending: () => boolean,
   ) {}
 
-  /** `id` is gone (deleted, or its channel refused), or back (a message about it came on its channel). */
-  markGone(id: string, gone: boolean): void {
-    if (gone) this.gone.add(id);
-    else this.gone.delete(id);
+  /** `id` was deleted: it never comes back. */
+  markGone(id: string): void {
+    this.gone.delete(id);
+    this.gone.add(id);
+    if (this.gone.size > GONE_MAX) this.gone.delete(this.gone.values().next().value!);
   }
 
   apply(keys: readonly QueryKey[]): void {
@@ -199,8 +202,7 @@ export function useLiveSync(): void {
         if (order.length > SEEN_MAX) seen.delete(order.shift()!);
       }
       const gone = goneOf(event);
-      if (gone !== null) refresh.markGone(gone, true);
-      else [event.project_id, event.item_id].forEach((id) => id !== null && refresh.markGone(id, false));
+      if (gone !== null) refresh.markGone(gone);
       for (const queryKey of keysOf(event)) burst.set(JSON.stringify(queryKey), queryKey);
       if (event.item_id) flashes.add(event.item_id);
       if (quiet !== null) clearTimeout(quiet);
