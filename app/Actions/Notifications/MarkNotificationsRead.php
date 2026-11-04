@@ -78,7 +78,7 @@ final class MarkNotificationsRead
      */
     public static function inbox(User $user): Builder
     {
-        return Notification::query()->where('user_id', $user->id)->where('inbox', true)->visibleTo($user);
+        return Notification::query()->inboxOf($user);
     }
 
     /**

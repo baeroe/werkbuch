@@ -139,6 +139,17 @@ final class Notification extends Model
     }
 
     /**
+     * The inbox of the person (the one place of it): their rows with `inbox` on that they may still see (visibleTo). The
+     * list, the read marks and the policy read it through here.
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeInboxOf(Builder $query, User $user): void
+    {
+        $query->where($query->qualifyColumn('user_id'), $user->id)->where($query->qualifyColumn('inbox'), true)->visibleTo($user);
+    }
+
+    /**
      * @return BelongsTo<User, $this>
      */
     public function user(): BelongsTo

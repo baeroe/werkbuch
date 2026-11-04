@@ -38,7 +38,7 @@ final class NotificationPolicy
     private static function own(User $user, Notification $notification): Response
     {
         $visible = $notification->user_id === $user->id
-            && Notification::query()->visibleTo($user)->where('inbox', true)->whereKey($notification->getKey())->exists();
+            && Notification::query()->inboxOf($user)->whereKey($notification->getKey())->exists();
 
         return $visible ? Response::allow() : Response::denyAsNotFound();
     }

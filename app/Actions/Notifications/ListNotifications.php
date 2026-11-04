@@ -42,7 +42,7 @@ final class ListNotifications
         $notifications = Notification::query()
             // the stamp as the database has it for the cursor: the cast would lose the microseconds (Carbon as text)
             ->select('notifications.*')->addSelect('notifications.created_at as created_cursor')
-            ->where('user_id', $actor->user->id)->where('inbox', true)->visibleTo($actor->user)
+            ->inboxOf($actor->user)
             ->when((bool) ($valid['unread_only'] ?? false), fn ($unread) => $unread->whereNull('read_at'))
             ->when((bool) ($valid['mentions_only'] ?? false), fn ($mentions) => $mentions->where('kind', NotificationKind::Mentioned))
             ->orderByDesc('created_cursor')->orderByDesc('id');
