@@ -1,8 +1,10 @@
 <?php
 
 use App\Access\ProjectRole;
+use App\Actions\Pages\DeletePage;
 use App\Actions\Pages\MovePage;
 use App\Events\EventType;
+use App\Exceptions\Problem;
 use App\Models\Page;
 use App\Models\Project;
 use App\Models\User;
@@ -58,4 +60,42 @@ it('two moves that would put A under B and B under A give one move and one cycle
         ->and($a->fresh()?->parent_id)->toBe($b->id)
         ->and($b->fresh()?->parent_id)->toBeNull()
         ->and(eventsOf(EventType::PageMoved))->toHaveCount(1);
+});
+
+it('makes a move into a subtree being deleted wait, and refuses it then at parent_id (K12)', function () use ($world) {
+    [$a, $b, $mara, $erik] = $world();
+    $c = Page::factory()->childOf($a)->create(['title' => 'C']);
+    $move = fn () => MovePage::run(actor($erik), Page::query()->findOrFail($b->id), ['parent_id' => $c->id, 'before_id' => null]);
+
+    RaceConnections::hold(fn () => DeletePage::run(actor($mara), $a));
+
+    RaceConnections::expectLockWait(RaceConnections::second($move), 'projects');
+
+    RaceConnections::releaseBeforeLock('projects');
+    $outcome = RaceConnections::second($move);
+
+    expect($outcome)->toBeInstanceOf(ValidationException::class);
+    assert($outcome instanceof ValidationException);
+    // the parent went with the subtree: B stays where it was, no page hangs below a page that is gone
+    expect($outcome->errors())->toBe(['parent_id' => [__('field.parent_page.unknown')]])
+        ->and(Page::query()->get(['id', 'parent_id'])->toArray())->toBe([['id' => $b->id, 'parent_id' => null]])
+        ->and(eventsOf(EventType::PageMoved))->toHaveCount(0);
+});
+
+it('makes moving a page of the subtree being deleted wait, and answers 404 then (K12)', function () use ($world) {
+    [$a, $b, $mara, $erik] = $world();
+    $c = Page::factory()->childOf($a)->create(['title' => 'C']);
+    $move = fn () => MovePage::run(actor($erik), Page::query()->findOrFail($c->id), ['parent_id' => $b->id, 'before_id' => null]);
+
+    RaceConnections::hold(fn () => DeletePage::run(actor($mara), $a));
+
+    RaceConnections::expectLockWait(RaceConnections::second($move), 'projects');
+
+    RaceConnections::releaseBeforeLock('projects');
+    $outcome = RaceConnections::second($move);
+
+    expect($outcome)->toBeInstanceOf(Problem::class)
+        ->and($outcome instanceof Problem ? $outcome->getStatusCode() : null)->toBe(404)
+        ->and(Page::query()->pluck('id')->all())->toBe([$b->id])
+        ->and(eventsOf(EventType::PageMoved))->toHaveCount(0);
 });

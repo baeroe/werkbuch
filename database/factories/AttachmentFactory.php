@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\Attachment;
+use App\Models\Page;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
@@ -10,7 +11,7 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
  * An upload into a text nobody owns yet, without a file (factories write no events); `forItem()` gives it to an item,
- * `stored()` writes its file.
+ * `forPage()` to a wiki page as a picture or file of its text, `stored()` writes its file.
  *
  * @extends Factory<Attachment>
  */
@@ -39,6 +40,17 @@ class AttachmentFactory extends Factory
             'attachable_type' => $item->getMorphClass(),
             'attachable_id' => $item->id,
             'kind' => $kind,
+        ]);
+    }
+
+    /** Owned by the wiki page, in its project: a picture or file of its text. */
+    public function forPage(Page $page): self
+    {
+        return $this->state([
+            'project_id' => $page->project_id,
+            'attachable_type' => $page->getMorphClass(),
+            'attachable_id' => $page->id,
+            'kind' => 'inline',
         ]);
     }
 

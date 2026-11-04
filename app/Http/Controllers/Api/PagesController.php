@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Actions\Pages\CreatePage;
+use App\Actions\Pages\DeletePage;
 use App\Actions\Pages\GetPage;
 use App\Actions\Pages\ListPages;
 use App\Actions\Pages\MovePage;
@@ -13,6 +14,7 @@ use App\Http\Resources\PageResource;
 use App\Models\Page;
 use App\Models\Project;
 use App\Support\Actor;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
@@ -51,5 +53,11 @@ final class PagesController extends Controller
     public function move(Request $request, Page $page): PageResource
     {
         return new PageResource(MovePage::run(Actor::fromRequest($request), $page, $request->all()));
+    }
+
+    /** Deletes the page with its whole subtree, 200 `{deleted}` (how many pages went). */
+    public function destroy(Request $request, Page $page): JsonResponse
+    {
+        return response()->json(['deleted' => DeletePage::run(Actor::fromRequest($request), $page)]);
     }
 }

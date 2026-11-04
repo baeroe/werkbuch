@@ -42,6 +42,7 @@ use App\Actions\Notifications\SendNotificationMail;
 use App\Actions\Organization\GetOrganization;
 use App\Actions\Organization\UpdateOrganization;
 use App\Actions\Pages\CreatePage;
+use App\Actions\Pages\DeletePage;
 use App\Actions\Pages\GetPage;
 use App\Actions\Pages\ListPages;
 use App\Actions\Pages\MovePage;
@@ -846,6 +847,13 @@ return [
         'allowed' => $itemWriters,
         'hidden' => ['outsider_private'],
         'event' => EventType::PageMoved,
+    ],
+    'DeletePage' => [
+        'action' => DeletePage::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => DeletePage::run($a, $w->page($column)),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::PageDeleted,
     ],
     // the inbox is the own one: everybody lists, marks and deletes their own notifications (a bot has none); a
     // notification of a project the account does not see is passed over when marking and a 404 when deleting (K19)

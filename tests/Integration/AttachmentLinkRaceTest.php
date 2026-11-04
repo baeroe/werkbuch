@@ -2,10 +2,13 @@
 
 use App\Access\ProjectRole;
 use App\Actions\Attachments\DeleteAttachment;
+use App\Actions\Pages\DeletePage;
+use App\Actions\Pages\UpdatePage;
 use App\Actions\WorkItems\DeleteWorkItem;
 use App\Actions\WorkItems\UpdateWorkItem;
 use App\Exceptions\Problem;
 use App\Models\Attachment;
+use App\Models\Page;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
@@ -125,5 +128,51 @@ it('lets two deletions with attachments in one project both go through (N1)', fu
         // READ COMMITTED was the deletion's only: the session is back on its level
         ->and(DB::connection('mariadb_second')->scalar('select @@session.transaction_isolation'))->toBe('REPEATABLE-READ')
         ->and(WorkItem::query()->whereKey([$first->id, $second->id])->count())->toBe(0)
+        ->and(Attachment::query()->count())->toBe(0);
+});
+
+/** WEB with Mara as its admin and the pages A (which owns a picture) and B. */
+$wiki = function (): array {
+    $mara = User::factory()->create();
+    $web = Project::factory()->member($mara, ProjectRole::Admin)->create(['lead_id' => $mara->id]);
+    $a = Page::factory()->create(['project_id' => $web->id, 'title' => 'A', 'created_by' => $mara->id]);
+    $b = Page::factory()->create(['project_id' => $web->id, 'title' => 'B', 'created_by' => $mara->id]);
+    $picture = Attachment::factory()->forPage($a)->create(['uploaded_by' => $mara->id]);
+
+    return [$mara, $a, $b, $picture];
+};
+
+it('makes the deletion of a page wait for a page that saves its picture, and hands the picture over (K12)', function () use ($wiki) {
+    [$mara, $a, $b, $picture] = $wiki();
+    $delete = fn () => DeletePage::run(actor($mara), Page::query()->findOrFail($a->id));
+
+    // B copies A's picture (A233), still uncommitted: it holds the project shared
+    RaceConnections::hold(fn () => UpdatePage::run(actor($mara), $b, ['content_json' => F::doc(F::image($picture->id, 'Plan'))]));
+
+    // the tree lock of the deletion waits for the save
+    RaceConnections::expectLockWait(RaceConnections::second($delete), 'projects');
+
+    RaceConnections::releaseBeforeLock('projects');
+    $outcome = RaceConnections::second($delete);
+
+    expect($outcome)->toBe(1)
+        ->and(Page::query()->pluck('id')->all())->toBe([$b->id])
+        ->and($picture->fresh()?->only(['attachable_type', 'attachable_id']))->toBe(['attachable_type' => 'page', 'attachable_id' => $b->id]);
+});
+
+it('makes a page that saves a picture of a page being deleted wait, and refuses it then (K12)', function () use ($wiki) {
+    [$mara, $a, $b, $picture] = $wiki();
+    $save = fn () => UpdatePage::run(actor($mara), Page::query()->findOrFail($b->id), ['content_json' => F::doc(F::image($picture->id, 'Plan'))]);
+
+    RaceConnections::hold(fn () => DeletePage::run(actor($mara), $a));
+
+    RaceConnections::expectLockWait(RaceConnections::second($save), 'projects', sqlEnd: 'lock in share mode');
+
+    RaceConnections::releaseBeforeLock('projects', 'lock in share mode');
+    $outcome = RaceConnections::second($save);
+
+    expect($outcome)->toBeInstanceOf(ValidationException::class)
+        ->and($outcome instanceof ValidationException ? $outcome->errors() : null)->toBe(['content_json' => [__('field.rich_text.attachment')]])
+        ->and($b->fresh()?->content)->toBeNull()
         ->and(Attachment::query()->count())->toBe(0);
 });

@@ -15,6 +15,8 @@ use App\Models\Comment;
 use App\Models\Event;
 use App\Models\Favorite;
 use App\Models\Label;
+use App\Models\Page;
+use App\Models\PageVersion;
 use App\Models\Project;
 use App\Models\ProjectIdentifier;
 use App\Models\ProjectMember;
@@ -220,4 +222,26 @@ it('purges only a project that is being deleted', function () {
 
     expect(fn () => PurgeProjectAction::run(actor(User::defaultBot()), $web))->toThrow(LogicException::class, 'not being deleted')
         ->and($web->fresh())->not->toBeNull();
+});
+
+it('purges a project whose pages form a chain of 20', function () {
+    [$web, $admin] = projectToDelete();
+    $other = Page::factory()->create();
+    // deeper than the 15 levels InnoDB cascades; the purge loosens the tree itself before the project goes (K1, T2-M1)
+    $page = Page::factory()->create(['project_id' => $web->id]);
+    $picture = Attachment::factory()->forPage($page)->stored('Inhalt', 'image/png', 'bild.png')->create(['uploaded_by' => $admin->id]);
+    $file = (string) $picture->getFirstMedia('file')?->getPathRelativeToRoot();
+    foreach (range(1, 19) as $level) {
+        $page = Page::factory()->childOf($page)->create();
+        PageVersion::factory()->create(['page_id' => $page->id]);
+    }
+    $web->update(['deleting_at' => now()]);
+
+    PurgeProjectAction::run(actor(User::defaultBot()), $web);
+
+    expect(Project::query()->find($web->id))->toBeNull()
+        ->and(Page::query()->pluck('id')->all())->toBe([$other->id])
+        ->and(PageVersion::query()->count())->toBe(0)
+        ->and(Attachment::query()->count())->toBe(0)
+        ->and(Storage::disk('local')->exists($file))->toBeFalse();
 });

@@ -6,6 +6,7 @@ use App\Access\Permission;
 use App\Access\Visibility;
 use App\Models\Attachment;
 use App\Models\Comment;
+use App\Models\Page;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
@@ -28,8 +29,8 @@ final class AttachmentPolicy
     }
 
     /**
-     * Reading an attachment: one of an item or of a comment whoever sees the item; one nobody owns yet (`attachable_id`
-     * empty) only the person who uploaded it. An owner that is named but gone hides it from everybody, and so does a
+     * Reading an attachment: one of an item or of a comment whoever sees the item, one of a wiki page whoever sees the
+     * project of the page; one nobody owns yet (`attachable_id` empty) only the person who uploaded it. An owner that is named but gone hides it from everybody, and so does a
      * project being deleted.
      */
     public function view(User $user, Attachment $attachment): Response
@@ -45,15 +46,16 @@ final class AttachmentPolicy
         return $visible ? Response::allow() : Response::denyAsNotFound();
     }
 
-    /** Whether the owner exists and the account may see it: an item, or the item of a comment. */
+    /** Whether the owner exists and the account may see it: an item, the item of a comment, or a page of a wiki. */
     private static function ownerVisible(User $user, Attachment $attachment): bool
     {
-        $item = match ($attachment->attachable_type) {
-            (new WorkItem)->getMorphClass() => WorkItem::query()->with('project')->find($attachment->attachable_id),
-            (new Comment)->getMorphClass() => Comment::query()->with('workItem.project')->find($attachment->attachable_id)?->workItem,
+        $project = match ($attachment->attachable_type) {
+            (new WorkItem)->getMorphClass() => WorkItem::query()->with('project')->find($attachment->attachable_id)?->project,
+            (new Comment)->getMorphClass() => Comment::query()->with('workItem.project')->find($attachment->attachable_id)?->workItem->project,
+            (new Page)->getMorphClass() => Page::query()->with('project')->find($attachment->attachable_id)?->project,
             default => null,
         };
 
-        return $item !== null && Visibility::roleIn($user, $item->project) !== null;
+        return $project !== null && Visibility::roleIn($user, $project) !== null;
     }
 }
