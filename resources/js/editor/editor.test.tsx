@@ -193,6 +193,31 @@ describe('RichTextEditor', () => {
     expect(editor.querySelector('p')?.getAttribute('data-placeholder')).toBe('Beschreibung schreiben … / fügt ein');
   });
 
+  it('never undoes past a document from outside', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const { rerender } = render(<RichTextEditor value={textDoc('Hallo Welt')} onChange={onChange} preset="page" autoFocus />);
+    const editor = await screen.findByRole('textbox', { name: 'Inhalt der Seite' });
+    await waitFor(() => expect(document.activeElement).toBe(editor));
+    // typed and deleted: both are steps of the editor's own history
+    await user.keyboard(' und Mond{Backspace}{Backspace}{Backspace}{Backspace}{Backspace}');
+    expect(editor.textContent).toBe('Hallo Welt und');
+
+    // another version from outside (a reload): undo cannot bring the own text back over it
+    rerender(<RichTextEditor value={textDoc('Von nebenan')} onChange={onChange} preset="page" />);
+    expect(editor.textContent).toBe('Von nebenan');
+    const calls = onChange.mock.calls.length;
+    await user.keyboard('{Control>}z{/Control}{Control>}z{/Control}{Control>}z{/Control}');
+    expect(editor.textContent).toBe('Von nebenan');
+    expect(onChange).toHaveBeenCalledTimes(calls);
+
+    // what is typed on it is undone as always, back to that document
+    await user.keyboard('!');
+    expect(editor.textContent).toContain('!');
+    await user.keyboard('{Control>}z{/Control}');
+    expect(editor.textContent).toBe('Von nebenan');
+  });
+
   it('keeps every key of fast typing, also when the parent renders a document the editor has moved past', async () => {
     const user = userEvent.setup();
     function Controlled() {

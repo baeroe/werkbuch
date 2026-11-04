@@ -249,6 +249,38 @@ describe('a conflict on a wiki page', () => {
     expect(saved).toContain('Noch ein Satz.');
   });
 
+  it('⌘Z in the editor after Neu laden does not bring the own text back over the other one', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const { editor, banner } = await meetConflict(user);
+    await user.click(within(banner).getByRole('button', { name: 'Neu laden' }));
+    await waitFor(() => expect(document.activeElement).toBe(editor));
+    expect(editor.textContent).toBe('Idas Nachtrag.');
+
+    // the editor's own undo: the other version is where its history begins
+    await user.keyboard('{Control>}z{/Control}{Control>}z{/Control}');
+    expect(editor.textContent).toBe('Idas Nachtrag.');
+    // nothing changed, so nothing is typed that would save over it
+    expect(drafts.page(pageDraft('pg_web_domain'))).toBeNull();
+    expect(saves()).toHaveLength(1);
+  });
+
+  it('a conflict standing when the page is left says so in a toast with Öffnen', async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderPage();
+    await meetConflict(user);
+    unmount();
+
+    const left = toastTitled('„Domain-Umzug“ nicht gespeichert');
+    expect(left?.description).toBe('Ida Brenner hat die Seite inzwischen geändert. Deine Fassung wartet auf der Seite.');
+    expect(left?.action?.label).toBe('Öffnen');
+    act(() => runToastAction(left!.id));
+    expect(visit).toHaveBeenCalledWith('/projects/WEB/wiki/pg_web_domain');
+    // the text and the conflict wait in the draft, and nothing was sent on leaving
+    expect(drafts.page(pageDraft('pg_web_domain'))?.conflict?.current.version).toBe(4);
+    expect(saves()).toHaveLength(1);
+  });
+
   it('asks before the tab closes while a conflict is open', async () => {
     const user = userEvent.setup();
     renderPage();

@@ -28,9 +28,11 @@
  *   names who saved meanwhile; was that the person's own account (another window), it says so instead (T4-M5). The
  *   conflict lives in the draft beside the text: it outlives the view, and a save on leaving that meets one says so in
  *   a toast with "Öffnen" (`href`). While it stands, leaving the tab asks.
- *   - `reload()` takes the stored page into the editor and drops the own text, with a toast whose "Rückgängig" (or ⌘Z)
- *     brings the own text and the conflict back; a version this view saved since then is what the conflict is about
- *     now (13c).
+ *   - `reload()` takes the stored page into the editor and drops the own text, with a toast whose "Rückgängig" (⌘Z
+ *     with the focus outside a text field) brings the own text and the conflict back; a version this view saved since
+ *     then is what the conflict is about now (13c). The editor's own undo stops at the reloaded page (it never enters
+ *     the editor's history), so it never saves the own text over the other one without the conflict.
+ *   - A conflict that stands when the view goes says so in the same toast with "Öffnen"; nothing is sent then.
  *   - `keepMine()` saves the own text on top of the stored version (or of a newer own one) and asks the server to keep
  *     the stored state as a version first (`keep_current`, A307), so an own version from another window or saved
  *     after a taken-back "Neu laden" stays too.
@@ -311,16 +313,8 @@ export function usePageSave(page: WikiPage, { canEdit, uploads, me, href }: Page
       // the header, the versions and a page opened again know it; the tree may show another title
       queryClient.setQueryData<WikiPage>(qk.pages.detail(page.id), (cached) => (cached && cached.version > stored.version ? cached : stored));
       void queryClient.invalidateQueries({ queryKey: [...qk.pages.all, 'list'] });
-      if (!mounted.current) {
-        // left while it saved: the text waits on the page, and the toast says where
-        const to = options.current.href;
-        toast({
-          title: t('wiki.save.not_saved', { title }),
-          description: `${conflicted.message} ${t('wiki.conflict.waits')}`,
-          tone: 'error',
-          action: to ? { label: t('wiki.conflict.open'), onClick: () => router.visit(to) } : undefined,
-        });
-      }
+      // left while it saved: the text waits on the page, and the toast says where
+      if (!mounted.current) announceLeft(conflicted, title);
     } else if (dirty.current && !same(latest.current, mine) && !isPageGone(page.id)) {
       // typed on meanwhile; with the view gone at once
       if (mounted.current) timer.current = setTimeout(() => void save.current(), SAVE_PAUSE_MS);
@@ -328,13 +322,27 @@ export function usePageSave(page: WikiPage, { canEdit, uploads, me, href }: Page
     }
   };
 
-  // what is typed is saved when the page is left
+  /** A conflict whose view is gone: the toast names the page, and "Öffnen" brings it back with the banner. */
+  function announceLeft(found: PageConflict, title: string) {
+    const to = options.current.href;
+    toast({
+      title: t('wiki.save.not_saved', { title }),
+      description: `${found.message} ${t('wiki.conflict.waits')}`,
+      tone: 'error',
+      action: to ? { label: t('wiki.conflict.open'), onClick: () => router.visit(to) } : undefined,
+    });
+  }
+
+  // what is typed is saved when the page is left; a conflict that stands then says so, as one met on leaving does
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
-      void save.current();
+      const found = open.current;
+      if (found && editable.current && !isPageGone(page.id)) announceLeft(found, latest.current.title.trim() || held.current.title);
+      else void save.current();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when the view goes
   }, []);
 
   function change(patch: Partial<PageFields>, { now = false } = {}) {
