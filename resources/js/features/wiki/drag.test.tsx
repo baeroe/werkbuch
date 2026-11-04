@@ -14,6 +14,8 @@ import { drafts } from '@/lib/drafts';
 import { clearLiveGone } from '@/lib/liveGone';
 import { mara, organization } from '@/test/fixtures';
 import { callsTo, renderWiki, startWikiServer, stopWikiServer, wiki } from '@/test/wiki';
+import pageTreeSource from './PageTree.tsx?raw';
+import { DROPPING } from './useTreeDrag';
 import { clearHiddenPages } from './Wiki';
 
 const inertia = vi.hoisted(() => {
@@ -271,4 +273,9 @@ describe('dragging pages in the tree', () => {
     expect(callsTo('POST', '/api/v1/pages/pg_web_tech/move')).toHaveLength(1);
     expect(outline(tree)).toEqual(before);
   });
+});
+
+it('writes the classes that straighten the dropped page out in full, so Tailwind finds them', () => {
+  // a class built in a template string never reaches the stylesheet: the overlay would stay tilted on a drop
+  for (const name of ['translate-y-0', 'scale-100', 'rotate-0']) expect(pageTreeSource).toContain(`in-[.${DROPPING}]:${name}`);
 });

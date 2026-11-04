@@ -29,10 +29,11 @@ import type { PageNode } from '@/types';
 import { subpages } from './format';
 import { PageGlyph } from './PageGlyph';
 import { subtreeIds, type PageRow, type Placement } from './tree';
-import { DROPPING, INDENT, useTreeDrag } from './useTreeDrag';
+import { INDENT, useTreeDrag } from './useTreeDrag';
 
 /** While the overlay flies to its place the lifted row straightens up again (DESIGN.md: "beim Ablegen federt sie zurück"). */
-const SETTLE = `in-[.${DROPPING}]:translate-y-0 in-[.${DROPPING}]:scale-100 in-[.${DROPPING}]:rotate-0`;
+// written out: Tailwind finds classes only as literal text, never in a template string (DROPPING is 'wiki-dropping')
+const SETTLE = 'in-[.wiki-dropping]:translate-y-0 in-[.wiki-dropping]:scale-100 in-[.wiki-dropping]:rotate-0';
 
 export interface PageTreeProps {
   nodes: readonly PageNode[];
