@@ -25,6 +25,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Facades\DB;
 use Lorisleiva\Actions\Concerns\AsAction;
+use Throwable;
 
 /**
  * The reminders "due" and "overdue" (spec 4.14, A275), run every hour by SendDueRemindersJob for the hour it was
@@ -37,7 +38,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * as off without a mail server (K9). The lines with mail on join the collection `due:<day>` of their person: one mail
  * per person and day with all of them. A run that comes again (the job twice in the hour) writes nothing and opens no
  * mail: only people who got a new line join one. A fixed number of queries per zone, however many people and items.
- * Work of a job without an event of its own. After the commit, every person with a new reminder in the inbox hears
+ * The zones go one after another; one that fails is no reason to leave out the others (the first failure is thrown
+ * at the end, later ones are reported). Work of a job without an event of its own. After the commit, every person with a new reminder in the inbox hears
  * `notifications.changed` on their live channel (NotificationsChanged, K10).
  */
 final class SendDueReminders
@@ -55,13 +57,23 @@ final class SendDueReminders
             return 0;
         }
         $organization = Organization::current()->timezone;
-        $zones = self::active()->distinct()->pluck('timezone')->map(fn (?string $zone) => $zone ?? $organization)->unique();
+        $zones = self::active()->distinct()->pluck('timezone')->map(fn (?string $zone) => $zone ?? $organization)->unique()->sort()->values();
 
+        // one zone that fails (a zone that cannot be read, a lost connection) keeps no other from its reminders; the job
+        // fails afterwards and is tried again, which writes nothing twice (T8-M2)
         $written = 0;
+        $failure = null;
         foreach ($zones as $zone) {
-            if (Reminders::isReminderHour($hour, new DateTimeZone($zone))) {
-                $written += $this->remind($zone, $zone === $organization, Reminders::localDay($hour, new DateTimeZone($zone)));
+            try {
+                if (Reminders::isReminderHour($hour, new DateTimeZone($zone))) {
+                    $written += $this->remind($zone, $zone === $organization, Reminders::localDay($hour, new DateTimeZone($zone)));
+                }
+            } catch (Throwable $e) {
+                $failure === null ? $failure = $e : report($e);
             }
+        }
+        if ($failure !== null) {
+            throw $failure;
         }
 
         return $written;

@@ -219,6 +219,22 @@ it('keeps a mail-only reminder two days after its mail: a second run, also in a 
     expect(Notification::query()->where('user_id', $w['tom']->id)->count())->toBe(0);
 });
 
+it('reminds the other zones when one fails, and fails afterwards (T8-M2)', function () use ($world, $due, $remind, $remindersOf) {
+    $w = $world();
+    $due($w['web'], $w['mara'], '2026-11-03');
+    // a zone that cannot be read (written around the validation), sorted before Berlin
+    $lost = memberOf($w['web'], ProjectRole::Member, ['name' => 'Lost', 'timezone' => 'Atlantis/Nowhere']);
+    $due($w['web'], $lost, '2026-11-03');
+    $this->travelTo(CarbonImmutable::parse('2026-11-03 07:00', 'UTC'));
+
+    expect(fn () => $remind())->toThrow(Exception::class);
+
+    // Berlin got its reminder all the same; the job fails and is tried again, which writes nothing twice
+    expect($remindersOf($w['mara']))->toHaveCount(1);
+    expect(fn () => $remind())->toThrow(Exception::class);
+    expect($remindersOf($w['mara']))->toHaveCount(1);
+});
+
 it('reminds nobody for an hour more than a day ago, e.g. a job taken back from failed_jobs', function () use ($world, $due) {
     $w = $world();
     $due($w['web'], $w['mara'], '2026-11-03');
