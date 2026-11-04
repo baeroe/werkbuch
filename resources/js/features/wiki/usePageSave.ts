@@ -21,8 +21,10 @@
  *   node in the text yet. Uploads belong to nobody until the page saves (A232). A page left meanwhile saves at once:
  *   its editor is gone and puts no picture in any more, and nothing would wake a waiting save up.
  * - A failed save (5xx, no answer) keeps the text, says "Nicht gespeichert" and raises an error toast with "Erneut
- *   versuchen"; a 422 at `title` stands at the title. A 404 or 403 means the page is gone (deleted meanwhile, K5): it
- *   is marked as gone (`markLiveGone`), the text stays in the draft to copy, nothing is retried, no toast.
+ *   versuchen"; a 422 at `title` stands at the title. A 404 means the page is gone (deleted meanwhile, K5): it is
+ *   marked as gone (`markLiveGone`), the text stays in the draft to copy, nothing is retried, no toast. A 403 means the
+ *   right is gone (made a viewer, T14-M5): the rights load again (`projects`), the text stays in the draft, and the
+ *   sheet shows it parked with the reason (`ParkedDraft`), no toast.
  * - A conflict (409 `page_conflict`) stops the saves until it is settled, and the save state says "Nicht gespeichert".
  *   The stored page it brings goes into the cache (only when newer, Task 12) and the tree goes stale. Its sentence
  *   names who saved meanwhile; was that the person's own account (another window), it says so instead (T4-M5). The
@@ -96,7 +98,9 @@ function conflictOf(error: unknown, me: string | undefined): PageConflict | null
 const newest = (first: WikiPage, ...more: (WikiPage | undefined)[]): WikiPage => more.reduce<WikiPage>((a, b) => (b && b.version > a.version ? b : a), first);
 
 /** The page is gone for the writer: deleted meanwhile, or a project they no longer see. */
-const isGone = (error: unknown) => error instanceof ApiError && (error.status === 404 || error.status === 403);
+const isGone = (error: unknown) => error instanceof ApiError && error.status === 404;
+/** Refused for want of the right (a member made a viewer meanwhile): the page is still there to read. */
+const isRefused = (error: unknown) => error instanceof ApiError && error.status === 403;
 
 export interface PageSave {
   /** The page as it reads in the view: what is typed, or the stored page. */
@@ -291,6 +295,10 @@ export function usePageSave(page: WikiPage, { canEdit, uploads, me, href }: Page
         // deleted meanwhile (K5): the view says so, the text stays to copy
         markLiveGone(page.id, 'page');
         setState('idle');
+      } else if (isRefused(error)) {
+        // the right is gone, not the page (T14-M5): the rights load again, and the text stands parked with the reason
+        setState('failed');
+        void queryClient.invalidateQueries({ queryKey: qk.projects.all });
       } else {
         keepCurrent.current = keep;
         setState('failed');

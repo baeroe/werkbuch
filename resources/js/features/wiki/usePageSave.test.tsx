@@ -15,6 +15,7 @@ import { drafts, pageDraft } from '@/lib/drafts';
 import { clearLiveGone, isPageGone } from '@/lib/liveGone';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import { makePage } from '@/test/fixtures';
+import { qk } from '@/hooks/keys';
 import type { RichText, Page as WikiPage } from '@/types';
 import { SAVE_PAUSE_MS, usePageSave } from './usePageSave';
 
@@ -68,10 +69,11 @@ function holdSaves() {
 function renderSave(options: { canEdit?: boolean; uploads?: UploadCounter; page?: WikiPage } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-  return renderHook(({ shown }: { shown: WikiPage }) => usePageSave(shown, { canEdit: options.canEdit ?? true, uploads: options.uploads }), {
+  const view = renderHook(({ shown }: { shown: WikiPage }) => usePageSave(shown, { canEdit: options.canEdit ?? true, uploads: options.uploads }), {
     wrapper,
     initialProps: { shown: options.page ?? page },
   });
+  return { ...view, client };
 }
 
 describe('usePageSave', () => {
@@ -307,7 +309,7 @@ describe('usePageSave', () => {
 
   it('a save that meets a 404 says the page was deleted and keeps the text', async () => {
     patch = () => problem(404, 'not_found');
-    const { result } = renderSave();
+    const { result, unmount } = renderSave();
     await act(async () => result.current.change({ content: doc('Rette mich') }, { now: true }));
     await waitFor(() => expect(isPageGone('pg_web_domain')).toBe(true));
     expect(currentToasts()).toHaveLength(0);
@@ -316,6 +318,23 @@ describe('usePageSave', () => {
     await act(async () => result.current.change({ content: doc('Rette mich bitte') }, { now: true }));
     expect(saves()).toHaveLength(1);
     expect(drafts.page(key)?.content).toEqual(doc('Rette mich bitte'));
+    // nor when the view goes (here, before the next test forgets which pages are gone)
+    unmount();
+    expect(saves()).toHaveLength(1);
+  });
+
+  it('a save refused with 403 keeps the page, reloads the rights and keeps the text (T14-M5)', async () => {
+    patch = () => problem(403, 'wiki_members_only', { detail: 'Nur Mitglieder bearbeiten das Wiki.' });
+    const { result, client } = renderSave();
+    client.setQueryData(qk.projects.list({ include_archived: true }), { items: [], next_cursor: null, total: 0 });
+    await act(async () => result.current.change({ content: doc('Rette mich') }, { now: true }));
+    await waitFor(() => expect(result.current.state).toBe('failed'));
+
+    // a member made a viewer meanwhile: the page is still there to read, the rights load again and park the text
+    expect(isPageGone('pg_web_domain')).toBe(false);
+    expect(client.getQueryState(qk.projects.list({ include_archived: true }))?.isInvalidated).toBe(true);
+    expect(currentToasts()).toHaveLength(0);
+    expect(drafts.page(key)?.content).toEqual(doc('Rette mich'));
   });
 
   it('saves nothing for a reader, and nothing unchanged', async () => {
