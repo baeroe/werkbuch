@@ -12,6 +12,7 @@ use App\Models\NotificationPreference;
 use App\Models\User;
 use App\RichText\Document;
 use App\Support\Actor;
+use App\Support\MailSetup;
 use App\Support\ReaderNames;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Facades\DB;
@@ -24,8 +25,8 @@ use Throwable;
  * sent one (`sent_at`) does nothing, so two jobs of the same collection send one mail. Whether a line still goes out is
  * decided now, not when it was collected (Review Focus 3): the person active and a person, the project one they see
  * (Notification::visibleTo, read afresh; never through NotificationPolicy, which is the inbox's), the item there, the
- * line unread (a read one needs no mail) and mail still on for its kind. Nothing left: `skipped`, closed like a sent one
- * (K8). The texts are the current ones, written for the person (ReaderNames: a reference to an item they do not see
+ * line unread (a read one needs no mail) and mail still on for its kind, and a mail server still set (T7-M5). Nothing
+ * left: `skipped`, closed like a sent one (K8). The texts are the current ones, written for the person (ReaderNames: a reference to an item they do not see
  * stays hidden, A229). `open_key` goes right after the lock, before the lines are read and before SMTP: a consumer
  * collecting for the same person and item waits at its insert and opens a new collection once this one is closed (K7);
  * if it took the key first, the two meet before anything was sent, and the retry of the victim is harmless (I1 of the
@@ -75,7 +76,8 @@ final class SendNotificationMail
         $mail->update(['open_key' => null]);
 
         $person = User::query()->findOrFail($mail->user_id);
-        $lines = $this->lines($mail, $person);
+        // a mail server that went away since the collection opened (`log`, `array`) sends nothing: skipped, never `sent`
+        $lines = MailSetup::configured() ? $this->lines($mail, $person) : new EloquentCollection;
         if ($lines->isNotEmpty()) {
             $texts = Notification::textsOf($lines);
             $digest = new NotificationDigest(

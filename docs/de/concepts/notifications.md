@@ -53,7 +53,7 @@ Ein Auszug kommt immer aus dem aktuellen Text: ein bearbeiteter Kommentar zeigt 
 - **Ohne Mailserver** (`MAIL_MAILER` `log` oder `array`) gibt es keine Benachrichtigungsmails, nur die Inbox, und es kommen auch keine nach, wenn später ein Mailserver eingerichtet wird.
 - **Scheitert der Mailserver,** versucht werkbuch es erneut (nach 1, 5, 15 und 30 Minuten, und der Scheduler gibt eine Mail erst erneut an die Queue, wenn 35 Minuten lang nichts sie versucht hat: ihr Job ging verloren). Eine Mail, die 24 Stunden nach ihrer Fälligkeit noch scheitert, wird aufgegeben und im Log gemeldet. Ein Absturz genau zwischen Mailserver und Datenbank kann eine Mail doppelt schicken; verloren geht so keine.
 
-`php artisan app:send-notification-mails --now` schickt jede offene Sammlung sofort, etwa vor einer Wartung.
+`php artisan app:send-notification-mails --now` schickt jede offene Sammlung sofort, etwa vor einer Wartung. Scheitert eine Mail, steht sie im Log, die übrigen gehen trotzdem raus; der Befehl endet dann mit einem Fehler. Ohne die Option gibt er höchstens 500 verlorene Mails je Minute an die Queue.
 
 ## Erinnerungen
 

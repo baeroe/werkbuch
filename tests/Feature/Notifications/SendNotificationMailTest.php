@@ -210,6 +210,20 @@ it('sends a collection only once, even when its job runs twice', function () use
     Mail::assertSentCount(1);
 });
 
+it('closes a collection without a mail when the mail server went away meanwhile (T7-M5)', function () use ($world, $watch, $collection, $send) {
+    $w = $world();
+    $watch($w['mara'], $w['item']);
+    AddComment::run(actor($w['ida']), $w['item'], ['body' => 'Das Formular ist live.']);
+    $mail = $collection($w['mara'], $w['item']);
+    // switched to `log` after the collection opened
+    config(['mail.default' => 'log']);
+
+    expect($send($mail))->toBe(NotificationMail::SKIPPED);
+    // skipped, not sent: the inbox never says the mail went (`mailed_at` stays empty)
+    Mail::assertNothingSent();
+    expect($mail->refresh()->outcome)->toBe(NotificationMail::SKIPPED);
+});
+
 it('keeps the collection open when SMTP fails, and sends it on the next try', function () use ($world, $watch, $collection, $send) {
     $w = $world();
     $watch($w['mara'], $w['item']);

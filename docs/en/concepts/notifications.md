@@ -53,7 +53,7 @@ An excerpt always comes from the current text: an edited comment shows its new w
 - **Without a mail server** (`MAIL_MAILER` `log` or `array`), there are no notification mails, only the inbox, and none follow later once a mail server is set up.
 - **When the mail server fails,** werkbuch tries again (after 1, 5, 15 and 30 minutes, and the scheduler hands a mail to the queue again only when nothing tried it for 35 minutes: its job was lost). A mail that still fails 24 hours after it was due is given up and reported in the log. A crash right between the mail server and the database can send a mail twice; a mail is never lost that way.
 
-`php artisan app:send-notification-mails --now` sends every open collection right away, for example before maintenance.
+`php artisan app:send-notification-mails --now` sends every open collection right away, for example before maintenance. A mail that fails is logged and the others go out all the same; the command then ends with an error. Without the option it hands at most 500 lost mails to the queue per minute.
 
 ## Reminders
 

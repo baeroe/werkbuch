@@ -13,8 +13,11 @@ use App\Models\User;
 use App\Models\WorkItem;
 use App\Support\Actor;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
+use Symfony\Component\Mailer\Exception\TransportException;
+use Tests\Support\ScriptedTransport;
 
 /*
  * The sweeper of the mail collections (Task 7, A288, K8): `app:send-notification-mails` puts a collection that lost its
@@ -37,7 +40,7 @@ $collection = function (array $w, array $attributes = []): NotificationMail {
     return $mail;
 };
 
-$sweep = fn (bool $now = false) => DispatchDueMails::run(Actor::system(User::defaultBot(), 'notification_mail'), $now);
+$sweep = fn (bool $now = false) => DispatchDueMails::run(Actor::system(User::defaultBot(), 'notification_mail'), $now)['taken'];
 
 /** The collections the jobs on the queue are for. */
 $pushed = fn () => Queue::pushed(SendNotificationMailJob::class)->map(fn (SendNotificationMailJob $job) => $job->mailId)->all();
@@ -121,6 +124,43 @@ it('sends everything open with --now', function () use ($world, $collection) {
     Mail::assertSent(NotificationDigest::class, 1);
     expect($open->refresh()->outcome)->toBe(NotificationMail::SENT)
         ->and($read->refresh()->outcome)->toBe(NotificationMail::SKIPPED);
+});
+
+it('takes at most 500 collections a run, the longest due first (T7-M3)', function () use ($world, $sweep, $pushed) {
+    Queue::fake([SendNotificationMailJob::class]);
+    $this->freezeTime();
+    $w = $world();
+    $ids = [];
+    foreach (range(1, DispatchDueMails::BATCH + 1) as $n) {
+        $ids[] = NotificationMail::factory()->create(['user_id' => $w['mara']->id, 'scope' => "item:{$n}", 'due_at' => now()->subMinutes(10 + $n), 'dispatched_at' => null])->id;
+    }
+
+    expect($sweep())->toBe(DispatchDueMails::BATCH)
+        // the last one made is due longest: it is among them, the first one made waits for the next run
+        ->and($pushed())->toContain($ids[DispatchDueMails::BATCH])
+        ->and($pushed())->not->toContain($ids[0]);
+    expect($sweep())->toBe(1)
+        ->and(Queue::pushed(SendNotificationMailJob::class)->last()->mailId)->toBe($ids[0]);
+});
+
+it('sends every other collection with --now when one fails, and ends with an error (T7-M4)', function () use ($world, $collection) {
+    Exceptions::fake();
+    $w = $world();
+    $first = $collection($w, ['due_at' => now()->subMinutes(2)]);
+    $second = $collection($w, ['due_at' => now()->subMinute(), 'scope' => 'item:other']);
+    ScriptedTransport::use(function (int $attempt): void {
+        if ($attempt === 1) {
+            throw new TransportException('Connection could not be established.');
+        }
+    });
+
+    $this->artisan('app:send-notification-mails', ['--now' => true])
+        ->expectsOutput('Sent or skipped 1 open mail collections, 1 failed.')
+        ->assertFailed();
+
+    expect($first->refresh()->sent_at)->toBeNull()
+        ->and($second->refresh()->outcome)->toBe(NotificationMail::SENT);
+    Exceptions::assertReported(TransportException::class);
 });
 
 it('runs every minute, and the command dispatches without --now', function () use ($world, $collection) {
