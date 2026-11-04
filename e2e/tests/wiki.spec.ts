@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { api, createE2ePage, createE2eProject, isPhone, openNavigation, pasteFile, PEOPLE, pngBytes, removeE2eProject, runId, tabTo, tr, variant } from '../helpers';
+import { api, createE2ePage, createE2eProject, isPhone, openNavigation, pasteFile, PEOPLE, pngBytes, pressMod, removeE2eProject, runId, tabTo, tr, variant } from '../helpers';
 
 // The wiki of a project with the keyboard only, signed in as the e2e person (org admin, English). Every test makes its
 // own project `E2E <variant> <run> …` with its own pages (`createE2ePage`) and removes it in `finally`; the demo wiki
@@ -149,6 +149,47 @@ test('pastes an image into a page', async ({ page }) => {
     const saved = page.getByRole('textbox', { name: tr('en', 'editor.label.page') }).getByRole('img', { name: 'floor.png' });
     await expect(saved).toBeVisible();
     await expect.poll(() => loadedWidth(saved), { timeout: 15_000 }).toBeGreaterThan(0);
+  } finally {
+    await removeE2eProject(page, project.identifier);
+  }
+});
+
+test('opens the versions with the keyboard and restores one', async ({ page }) => {
+  const project = await createE2eProject(page, projectName('wiki versions'));
+  const paragraph = (text: string) => ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] });
+  try {
+    const notes = await createE2ePage(page, project.id, { title: 'Release notes', content_json: paragraph('First draft.') });
+    // saved over at once, asking to keep the stored state: version 1 stays as a version (A307)
+    const saved = await api(page, 'PATCH', `/api/v1/pages/${notes.id}`, { title: 'Release notes', content_json: paragraph('Second draft.'), base_version: 1, keep_current: true });
+    expect(saved.status(), await saved.text()).toBe(200);
+    await page.goto(`/projects/${project.identifier}/wiki/${notes.id}`);
+    const editor = page.getByRole('textbox', { name: tr('en', 'editor.label.page') });
+    await expect(editor).toHaveText('Second draft.');
+
+    // the palette's command opens the versions
+    await pressMod(page, 'k');
+    const palette = page.getByRole('dialog', { name: tr('en', 'palette.title') });
+    await expect(palette.getByRole('combobox', { name: tr('en', 'palette.input') })).toBeFocused();
+    await page.keyboard.type(tr('en', 'wiki.versions.command'));
+    await expect(palette.getByRole('option', { name: new RegExp(`^${tr('en', 'wiki.versions.command')}`) })).toBeVisible();
+    await page.keyboard.press('Enter');
+
+    const dialog = page.getByRole('dialog', { name: tr('en', 'wiki.versions.title', { title: 'Release notes' }) });
+    await expect(dialog).toBeVisible();
+    const first = dialog.getByRole('radio', { name: /^Version 1, / });
+    await expect(first).toBeChecked();
+    await expect(dialog.getByRole('region', { name: tr('en', 'wiki.versions.preview') })).toContainText('First draft.');
+    const restore = dialog.getByRole('button', { name: tr('en', 'wiki.versions.restore') });
+    await tabTo(page, restore);
+    await page.keyboard.press('Enter');
+
+    await expect(page.getByText(tr('en', 'wiki.versions.restored.title', { number: 1 }))).toBeVisible();
+    await expect(dialog).toBeHidden();
+    // the restored text is the page's newest version, and the editor shows it
+    await expect(editor).toHaveText('First draft.');
+    const stored = await storedPage(page, notes.id);
+    expect(stored.content).toBe('First draft.');
+    expect(stored.version).toBe(3);
   } finally {
     await removeE2eProject(page, project.identifier);
   }

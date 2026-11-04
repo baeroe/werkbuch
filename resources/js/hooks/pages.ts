@@ -205,10 +205,17 @@ export function usePageVersion(pageId: string | null | undefined, versionId: str
   });
 }
 
-/** Variables: `{ page_id, version_id }`; answers the page in its new version. */
+/**
+ * Variables: `{ page_id, version_id }`; answers the page in its new version, which goes into the cache like a save's
+ * (only when at least as new): the open page shows the restored text at once.
+ */
 export function useRestorePageVersion() {
   return useApiMutation(
     ({ page_id, version_id }: { page_id: string; version_id: string }) => restorePageVersion(page_id, version_id),
     PAGE_KEYS,
+    {
+      onSuccess: (page, { page_id }, queryClient) =>
+        queryClient.setQueryData<WikiPage>(qk.pages.detail(page_id), (cached) => (cached && cached.version > page.version ? cached : page)),
+    },
   );
 }

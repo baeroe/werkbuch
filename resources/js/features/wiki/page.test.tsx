@@ -333,6 +333,34 @@ describe('a wiki page', () => {
     expect(onDelete).toHaveBeenCalledTimes(1);
   });
 
+  it('a page that becomes read-only keeps the unsaved text above it to copy', async () => {
+    const user = userEvent.setup();
+    const { client, rerender } = renderPage();
+    const title = await titleField();
+    await user.clear(title);
+    await user.type(title, 'Domain neu');
+    // the project is archived before the pause runs out (live): the person reads the page now (A154)
+    const props: PageViewProps = { projectId: 'p_web', identifier: 'WEB', pageId: 'pg_web_domain', pageFound: true, ancestors: [hosting], rights: { ready: true, denied: 'Das Projekt ist archiviert.' } };
+    rerender(
+      <QueryClientProvider client={client}>
+        <PageView {...props} />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByRole('heading', { level: 1, name: 'Domain-Umzug' })).toBeTruthy();
+    const parked = screen.getByRole('alert');
+    expect(within(parked).getByText('Dein Text ist nicht gespeichert')).toBeTruthy();
+    expect(within(parked).getByText('Das Projekt ist archiviert.')).toBeTruthy();
+    expect(within(parked).getByText('Domain neu')).toBeTruthy();
+    expect(within(parked).getByRole('button', { name: 'Kopieren' })).toBeTruthy();
+    // still unsaved: leaving asks, and nothing went to the server
+    expect(drafts.page(pageDraft('pg_web_domain'))?.title).toBe('Domain neu');
+    expect(saves()).toHaveLength(0);
+
+    await user.click(within(parked).getByRole('button', { name: 'Verwerfen' }));
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(drafts.page(pageDraft('pg_web_domain'))).toBeNull();
+  });
+
   it('neither saves nor deletes with the keys for a reader', async () => {
     const user = userEvent.setup();
     const onDelete = vi.fn();

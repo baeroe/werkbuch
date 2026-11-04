@@ -11,25 +11,19 @@
 
 import { Link } from '@inertiajs/react';
 import { FileQuestionMark } from 'lucide-react';
-import { useRef } from 'react';
 import { ApiError } from '@/api/client';
-import { Banner } from '@/components/ui/Banner';
-import { Button, buttonClass } from '@/components/ui/Button';
+import { buttonClass } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
-import { isEmptyDoc } from '@/editor/RichTextEditor';
-import { RichTextView } from '@/editor/RichTextView';
-import { CopyButton } from '@/features/settings/tokens/CopyButton';
 import { usePage } from '@/hooks/pages';
-import { drafts, pageDraft, usePageDraft } from '@/lib/drafts';
 import { t } from '@/lib/i18n';
 import { usePageGone } from '@/lib/liveGone';
 import { paths } from '@/lib/links';
-import { docToText } from '@/lib/richtext';
 import type { PageNode } from '@/types';
 import { SHEET } from './format';
 import { PageSheet } from './PageSheet';
+import { ParkedDraft } from './ParkedDraft';
 
 export interface PageViewProps {
   projectId: string;
@@ -86,25 +80,9 @@ function PageGone({ identifier, deleted }: { identifier: string; deleted: boolea
 
 /** A page deleted meanwhile, with what was typed into it and not saved, to copy. */
 function PageDeleted({ identifier, pageId }: { identifier: string; pageId: string }) {
-  const key = pageDraft(pageId);
-  const unsaved = usePageDraft(key);
-  const parked = useRef<HTMLDivElement>(null);
   return (
     <div className="flex max-w-[52rem] flex-col gap-4">
-      {unsaved && (
-        <Banner tone="danger" role="alert" title={t('wiki.page.deleted.unsaved')}>
-          <div ref={parked} className="mt-2 rounded-md border border-line bg-surface p-3">
-            <p className="font-display font-bold text-ink">{unsaved.title}</p>
-            {unsaved.content && !isEmptyDoc(unsaved.content) && <RichTextView value={unsaved.content} preset="page" className="mt-1" />}
-          </div>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <CopyButton text={[unsaved.title, docToText(unsaved.content)].filter(Boolean).join('\n\n')} target={() => parked.current} size="sm" />
-            <Button variant="secondary" size="sm" onClick={() => drafts.setPage(key, null)}>
-              {t('wiki.page.deleted.discard')}
-            </Button>
-          </div>
-        </Banner>
-      )}
+      <ParkedDraft pageId={pageId} />
       <PageGone identifier={identifier} deleted />
     </div>
   );

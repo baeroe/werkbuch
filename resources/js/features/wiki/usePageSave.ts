@@ -18,24 +18,38 @@
  * - A blank title: while the page is open the title says what is missing and nothing goes; a page left with only its
  *   title blanked sends nothing, one left with other changes saves them under the title it had, with a toast.
  * - Running uploads (the editor's `UploadCounter`): a save waits until they are stored, an upload on its way is no
- *   node in the text yet. Uploads belong to nobody until the page saves (A232).
+ *   node in the text yet. Uploads belong to nobody until the page saves (A232). A page left meanwhile saves at once:
+ *   its editor is gone and puts no picture in any more, and nothing would wake a waiting save up.
  * - A failed save (5xx, no answer) keeps the text, says "Nicht gespeichert" and raises an error toast with "Erneut
  *   versuchen"; a 422 at `title` stands at the title. A 404 or 403 means the page is gone (deleted meanwhile, K5): it
  *   is marked as gone (`markLiveGone`), the text stays in the draft to copy, nothing is retried, no toast.
- * - A conflict (409 `page_conflict`) stops the saves until it is settled: `reload()` takes the stored page, `keepMine()`
- *   saves the own text on top of its version and keeps the stored one as a version first (`keep_current`, A307).
+ * - A conflict (409 `page_conflict`) stops the saves until it is settled, and the save state says "Nicht gespeichert".
+ *   The stored page it brings goes into the cache (only when newer, Task 12) and the tree goes stale. Its sentence
+ *   names who saved meanwhile; was that the person's own account (another window), it says so instead (T4-M5). The
+ *   conflict lives in the draft beside the text: it outlives the view, and a save on leaving that meets one says so in
+ *   a toast with "Öffnen" (`href`). While it stands, leaving the tab asks.
+ *   - `reload()` takes the stored page into the editor and drops the own text, with a toast whose "Rückgängig" (or ⌘Z)
+ *     brings the own text and the conflict back; a version this view saved since then is what the conflict is about
+ *     now (13c).
+ *   - `keepMine()` saves the own text on top of the stored version (or of a newer own one) and asks the server to keep
+ *     the stored state as a version first (`keep_current`, A307), so an own version from another window or saved
+ *     after a taken-back "Neu laden" stays too.
  */
 
+import { router } from '@inertiajs/react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { ApiError } from '@/api/client';
 import { toast } from '@/components/ui/toast';
 import { isEmptyDoc } from '@/editor/RichTextEditor';
 import type { UploadCounter } from '@/editor/UploadContext';
+import { qk } from '@/hooks/keys';
 import { useSavePage } from '@/hooks/pages';
 import { drafts, pageDraft, useDraftSending, usePageDraft, type PageDraft } from '@/lib/drafts';
 import { notifyError } from '@/lib/errors';
 import { t } from '@/lib/i18n';
 import { isPageGone, markLiveGone } from '@/lib/liveGone';
+import { undoLabel } from '@/lib/undo';
 import type { RichText, Page as WikiPage } from '@/types';
 
 /** The pause in typing after which the page saves itself. */
@@ -69,10 +83,15 @@ const sortedKeys = (_key: string, value: unknown) =>
 const asSent = (doc: RichText | null): string => JSON.stringify(isEmptyDoc(doc) ? null : doc, sortedKeys);
 const same = (a: PageFields, b: PageFields) => a.title === b.title && a.emoji === b.emoji && asSent(a.content) === asSent(b.content);
 
-function conflictOf(error: unknown): PageConflict | null {
+/** The conflict a refused save met; the server names whoever saved last, which may be the writer in another window. */
+function conflictOf(error: unknown, me: string | undefined): PageConflict | null {
   if (!(error instanceof ApiError) || error.reason !== 'page_conflict' || !error.current) return null;
-  return { message: error.message, current: error.current as WikiPage };
+  const current = error.current as WikiPage;
+  return { message: me !== undefined && current.updated_by === me ? t('wiki.conflict.self') : error.message, current };
 }
+
+/** The newest of the pages (by version). */
+const newest = (first: WikiPage, ...more: (WikiPage | undefined)[]): WikiPage => more.reduce<WikiPage>((a, b) => (b && b.version > a.version ? b : a), first);
 
 /** The page is gone for the writer: deleted meanwhile, or a project they no longer see. */
 const isGone = (error: unknown) => error instanceof ApiError && (error.status === 404 || error.status === 403);
@@ -89,7 +108,7 @@ export interface PageSave {
   spoken: string;
   titleError: string | null;
   conflict: PageConflict | null;
-  /** The conflict settled with the stored page: the own text is gone. */
+  /** The conflict settled with the stored page: the own text is gone, until the toast's "Rückgängig". */
   reload(): void;
   /** The conflict settled with the own text: saved on top of the stored version, which is kept as a version first. */
   keepMine(): void;
@@ -97,9 +116,19 @@ export interface PageSave {
   flush(): Promise<boolean>;
 }
 
-export function usePageSave(page: WikiPage, { canEdit, uploads }: { canEdit: boolean; uploads?: UploadCounter }): PageSave {
+export interface PageSaveOptions {
+  canEdit: boolean;
+  uploads?: UploadCounter;
+  /** The signed-in account: a conflict with its own save (another window) says so. */
+  me?: string;
+  /** The address of the page, for "Öffnen" of a conflict met after the view went away. */
+  href?: string;
+}
+
+export function usePageSave(page: WikiPage, { canEdit, uploads, me, href }: PageSaveOptions): PageSave {
   const key = pageDraft(page.id);
   const savePage = useSavePage();
+  const queryClient = useQueryClient();
   /** The page's draft and whether a save of it runs, also one of a view that is gone. */
   const shared = usePageDraft(key);
   const sending = useDraftSending(key);
@@ -114,12 +143,16 @@ export function usePageSave(page: WikiPage, { canEdit, uploads }: { canEdit: boo
   const [conflict, setConflict] = useState<PageConflict | null>(() =>
     kept?.conflict ? { message: kept.conflict.message, current: page.version >= kept.conflict.current.version ? page : kept.conflict.current } : null,
   );
-  const [state, setState] = useState<SaveState>(kept && !kept.conflict ? 'failed' : 'idle');
+  const [state, setState] = useState<SaveState>(kept ? 'failed' : 'idle');
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [titleError, setTitleError] = useState<string | null>(null);
 
   /** The page as typed, for saves that run outside a render. */
   const latest = useRef(draft);
+  /** The page as the latest render had it, for an undo that runs later. */
+  const latestPage = useRef(page);
+  /** The options as the latest render had them. */
+  const options = useRef({ me, href });
   /** The version the typed text is based on. */
   const base = useRef(kept ? kept.base_version : page.version);
   /** What the server holds of this view's text. */
@@ -138,6 +171,8 @@ export function usePageSave(page: WikiPage, { canEdit, uploads }: { canEdit: boo
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => {
     editable.current = canEdit;
+    latestPage.current = page;
+    options.current = { me, href };
   });
 
   /** Typed text the server does not have yet: kept as the page's draft with the version it is typed on. */
@@ -205,7 +240,8 @@ export function usePageSave(page: WikiPage, { canEdit, uploads }: { canEdit: boo
       if (dirty.current) dropDraft();
       return;
     }
-    if (uploads && uploads.current() > 0) {
+    // left meanwhile: the editor is gone, no picture comes into the text any more, so it saves at once
+    if (uploads && uploads.current() > 0 && mounted.current) {
       waiting.current = true;
       setState('saving');
       return;
@@ -247,8 +283,8 @@ export function usePageSave(page: WikiPage, { canEdit, uploads }: { canEdit: boo
       setTitleError(null);
       if (keptTitle) toast({ title: t('wiki.save.kept_title.title', { title }), description: t('wiki.save.kept_title.description'), tone: 'success' });
     } catch (error) {
-      conflicted = conflictOf(error);
-      if (conflicted) setState('idle');
+      conflicted = conflictOf(error, options.current.me);
+      if (conflicted) setState('failed');
       else if (isGone(error)) {
         // deleted meanwhile (K5): the view says so, the text stays to copy
         markLiveGone(page.id, 'page');
@@ -268,8 +304,24 @@ export function usePageSave(page: WikiPage, { canEdit, uploads }: { canEdit: boo
       flight.current = null;
       done();
     }
-    if (conflicted) showConflict(conflicted);
-    else if (dirty.current && !same(latest.current, mine) && !isPageGone(page.id)) {
+    if (conflicted) {
+      showConflict(conflicted);
+      const stored = conflicted.current;
+      // a refused save refreshes nothing: the page it brought goes into the cache (unless something newer is there), so
+      // the header, the versions and a page opened again know it; the tree may show another title
+      queryClient.setQueryData<WikiPage>(qk.pages.detail(page.id), (cached) => (cached && cached.version > stored.version ? cached : stored));
+      void queryClient.invalidateQueries({ queryKey: [...qk.pages.all, 'list'] });
+      if (!mounted.current) {
+        // left while it saved: the text waits on the page, and the toast says where
+        const to = options.current.href;
+        toast({
+          title: t('wiki.save.not_saved', { title }),
+          description: `${conflicted.message} ${t('wiki.conflict.waits')}`,
+          tone: 'error',
+          action: to ? { label: t('wiki.conflict.open'), onClick: () => router.visit(to) } : undefined,
+        });
+      }
+    } else if (dirty.current && !same(latest.current, mine) && !isPageGone(page.id)) {
       // typed on meanwhile; with the view gone at once
       if (mounted.current) timer.current = setTimeout(() => void save.current(), SAVE_PAUSE_MS);
       else void save.current();
@@ -306,6 +358,7 @@ export function usePageSave(page: WikiPage, { canEdit, uploads }: { canEdit: boo
   function reload() {
     const found = open.current;
     if (!found) return;
+    const mine = latest.current;
     showConflict(null);
     dropDraft();
     base.current = found.current.version;
@@ -315,6 +368,30 @@ export function usePageSave(page: WikiPage, { canEdit, uploads }: { canEdit: boo
     setDraft(theirs);
     setState('idle');
     setTitleError(null);
+    // the own text left the editor: "Rückgängig" (or ⌘Z) brings it back, with the conflict
+    toast({
+      title: t('wiki.conflict.dropped.title'),
+      description: t('wiki.conflict.dropped.description'),
+      keep: true,
+      action: { label: undoLabel(), onClick: () => restoreMine(mine, found) },
+    });
+  }
+
+  function restoreMine(mine: PageFields, before: PageConflict) {
+    // a copy: the editor ignores documents it reported itself
+    const copy: PageFields = { ...mine, content: mine.content ? structuredClone(mine.content) : null };
+    // what this view saved after "Neu laden" is newer than the page the conflict met: that is the stored state now
+    const current = newest(before.current, latestPage.current, queryClient.getQueryData<WikiPage>(qk.pages.detail(page.id)));
+    const again: PageConflict = { message: before.message, current };
+    drafts.setPage(key, { ...copy, base_version: Math.max(base.current, current.version), conflict: again });
+    // a page left meanwhile shows it again when it opens
+    if (!mounted.current) return;
+    clearTimeout(timer.current);
+    dirty.current = true;
+    latest.current = copy;
+    setDraft(copy);
+    showConflict(again);
+    setState('failed');
   }
 
   function keepMine() {

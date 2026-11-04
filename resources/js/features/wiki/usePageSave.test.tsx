@@ -291,6 +291,20 @@ describe('usePageSave', () => {
     expect(saves()).toHaveLength(1);
   });
 
+  it('saves what is typed when the page is left while a picture uploads', async () => {
+    const uploads = new UploadCounter();
+    const { result, unmount } = renderSave({ uploads });
+    act(() => uploads.add(1));
+    // a save waits for the upload while the page is open
+    await act(async () => result.current.change({ content: doc('Vor dem Bild') }, { now: true }));
+    expect(saves()).toHaveLength(0);
+    // left meanwhile: the editor is gone and puts no picture in any more, nothing would wake the save up
+    unmount();
+    await waitFor(() => expect(saves()).toHaveLength(1));
+    expect(saves()[0]).toMatchObject({ content_json: doc('Vor dem Bild'), base_version: 3 });
+    await waitFor(() => expect(drafts.page(key)).toBeNull());
+  });
+
   it('a save that meets a 404 says the page was deleted and keeps the text', async () => {
     patch = () => problem(404, 'not_found');
     const { result } = renderSave();

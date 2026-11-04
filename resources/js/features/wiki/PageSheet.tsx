@@ -10,30 +10,43 @@
  *   (A232); the page waits for them before it saves (`UploadContext`).
  * - ⌘↵ saves now (`wiki.save`), ⌘⌫ asks to delete the page (`wiki.delete`, `onDelete`), both only for whoever may edit;
  *   with the preview of an item open, ⌘⌫ is the item's (K3).
+ * - A conflict (409) stands as a banner above the text (`ConflictBanner`): "Neu laden" or "Meine Fassung übernehmen",
+ *   both give the focus on into the text (`usePageSave`).
+ * - "Versionen …" in the head row and the palette's `wiki.page.versions` open the kept versions (`VersionsDialog`);
+ *   a restore saves what is typed first and waits while a conflict stands ("Erst den Konflikt klären").
  * - A viewer reads: the title as heading, the text in the viewer (or "Diese Seite ist noch leer."), why they cannot
- *   edit; no save state, no emoji to choose.
+ *   edit, the versions without restoring; no save state, no emoji to choose. Text typed that the person can no
+ *   longer save (the project archived, the role lowered while the page was open) stands above that, read-only, with
+ *   "Kopieren" and "Verwerfen" (`ParkedDraft`, like A154).
  */
 
-import { Eye, SmilePlus, X } from 'lucide-react';
+import { Eye, History, SmilePlus, X } from 'lucide-react';
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { useUserMap } from '@/components/fields/itemData';
 import { Button } from '@/components/ui/Button';
 import { cx } from '@/components/ui/cx';
 import { EmojiPicker } from '@/components/ui/EmojiPicker';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/Popover';
+import { toast } from '@/components/ui/toast';
 import { isEmptyDoc, RichTextEditor } from '@/editor/RichTextEditor';
 import { RichTextView } from '@/editor/RichTextView';
 import { UploadContext, useUploadCounter } from '@/editor/UploadContext';
 import { useInstantDay } from '@/features/item-detail/shared';
+import { useCurrentUser } from '@/hooks/users';
+import { useCommand } from '@/lib/commands';
 import { t } from '@/lib/i18n';
+import { paths } from '@/lib/links';
 import { useDialogScope, useShortcut } from '@/lib/shortcuts/useShortcut';
 import { useUiStore } from '@/store/ui';
 import type { Page as WikiPage } from '@/types';
+import { ConflictBanner } from './ConflictBanner';
 import { SHEET } from './format';
 import { PageHeader } from './PageHeader';
 import type { PageViewProps } from './PageView';
+import { ParkedDraft } from './ParkedDraft';
 import { SaveStatus } from './SaveStatus';
 import { MAX_TITLE, usePageSave } from './usePageSave';
+import { VersionsDialog } from './VersionsDialog';
 
 /** Mounted while the emoji choice is open: its grid takes letters, so the page's single-key shortcuts wait. */
 function PausePageShortcuts() {
@@ -44,13 +57,20 @@ function PausePageShortcuts() {
 export function PageSheet({ page, projectId, identifier, ancestors, rights, focusTitle = false, onDelete }: PageViewProps & { page: WikiPage }) {
   const canEdit = rights.denied === null;
   const uploads = useUploadCounter();
-  const { draft, change, save, state, savedAt, spoken, titleError } = usePageSave(page, { canEdit, uploads });
+  const me = useCurrentUser()?.id;
+  const { draft, change, save, state, savedAt, spoken, titleError, conflict, reload, keepMine, flush } = usePageSave(page, {
+    canEdit,
+    uploads,
+    me,
+    href: paths.wiki(identifier, page.id),
+  });
   const users = useUserMap();
   const day = useInstantDay();
   const titleRef = useRef<HTMLTextAreaElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const ids = useId();
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [versionsOpen, setVersionsOpen] = useState(false);
 
   // a page just made: the title takes the focus, ready to be typed over
   useEffect(() => {
@@ -61,6 +81,14 @@ export function PageSheet({ page, projectId, identifier, ancestors, rights, focu
   }, []);
 
   useShortcut('wiki.save', () => void save(), { when: () => canEdit });
+  useCommand({
+    id: 'wiki.page.versions',
+    label: t('wiki.versions.command'),
+    group: t('wiki.page.command_group', { title: page.title }),
+    icon: <History />,
+    keywords: [t('wiki.versions.keywords')],
+    run: () => setVersionsOpen(true),
+  });
   useShortcut('wiki.delete', () => onDelete?.(), { when: () => canEdit && onDelete !== undefined && useUiStore.getState().peekItemId === null });
 
   function onTitleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -70,6 +98,18 @@ export function PageSheet({ page, projectId, identifier, ancestors, rights, focu
       event.preventDefault();
       bodyRef.current?.querySelector<HTMLElement>('.ProseMirror')?.focus();
     }
+  }
+
+  /** The banner's buttons go away with it: the focus goes on into the text. */
+  const focusText = () => requestAnimationFrame(() => bodyRef.current?.querySelector<HTMLElement>('.ProseMirror')?.focus());
+
+  /** A restore takes the place of the text: what is typed is saved first, and a conflict is settled first. */
+  async function beforeRestore(): Promise<boolean> {
+    if (conflict) {
+      toast({ title: t('wiki.conflict.first.title'), description: t('wiki.conflict.first.description'), tone: 'error' });
+      return false;
+    }
+    return flush();
   }
 
   const pickEmoji = (emoji: string | null) => {
@@ -83,7 +123,11 @@ export function PageSheet({ page, projectId, identifier, ancestors, rights, focu
     <article aria-labelledby={`${ids}-title`} className={SHEET}>
       <PageHeader identifier={identifier} ancestors={ancestors}>
         {canEdit && <SaveStatus state={state} savedAt={savedAt} spoken={spoken} />}
+        <Button variant="ghost" size="sm" icon={History} onClick={() => setVersionsOpen(true)}>
+          {t('wiki.versions.open')}
+        </Button>
       </PageHeader>
+      <VersionsDialog page={page} open={versionsOpen} onOpenChange={setVersionsOpen} restoreReason={rights.denied} beforeRestore={beforeRestore} />
 
       <div className="mt-5 flex items-start gap-2 md:mt-7 md:gap-3">
         {canEdit ? (
@@ -159,6 +203,22 @@ export function PageSheet({ page, projectId, identifier, ancestors, rights, focu
           )}
         </div>
       </div>
+
+      {conflict && canEdit && (
+        <ConflictBanner
+          message={conflict.message}
+          onReload={() => {
+            reload();
+            focusText();
+          }}
+          onKeepMine={() => {
+            keepMine();
+            focusText();
+          }}
+          className="mt-5"
+        />
+      )}
+      {!canEdit && <ParkedDraft pageId={page.id} reason={rights.denied} className="mt-5" />}
 
       <div
         ref={bodyRef}

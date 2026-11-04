@@ -1,6 +1,6 @@
 /*
  * The head row of an open wiki page: the pages above it as links (the path, from the top), and on the right what acts
- * on the page (the save state; the versions and the menu follow with Tasks 15 and 16).
+ * on the page (`children`: the save state and "Versionen …"; the menu follows with Task 16).
  */
 
 import { Link } from '@inertiajs/react';
