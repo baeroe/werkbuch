@@ -4,6 +4,7 @@ use App\Access\ProjectRole;
 use App\Access\RoleAssignments;
 use App\Domain\Properties\FieldType;
 use App\Models\Attachment;
+use App\Models\Page;
 use App\Models\Project;
 use App\Models\Property;
 use App\Models\User;
@@ -100,6 +101,39 @@ it('shows no key and no title of a hidden reference in description_json', functi
         ->assertJsonPath('data.description_json', F::doc(F::p(F::reference($w['secret']->id))))->getContent();
 
     expect($json)->not->toContain('OPS-1')->not->toContain('Geheim');
+});
+
+it('leaves a page Ida does not see as text and writes a page with its current title for a reader who sees it', function () use ($world) {
+    $w = $world();
+    $ida = User::query()->where('handle', 'ida')->sole();
+    app(RoleAssignments::class)->setProjectRole($ida, $w['web'], ProjectRole::Member);
+    $plan = Page::factory()->for($w['ops'])->create(['title' => 'Umzugsplan']);
+    $handbook = Page::factory()->for($w['web'])->create(['title' => 'Handbuch']);
+
+    $this->actingAs($ida)->patchJson("/api/v1/work-items/{$w['item']->key}", [
+        'description' => "[Plan](page:{$plan->id}) und [Seite](page:{$handbook->id})",
+    ])->assertOk()
+        ->assertJsonPath('data.description_json', F::doc(F::p('Plan und ', F::reference($handbook->id, 'page'))))
+        ->assertJsonPath('data.description', "Plan und [Handbuch](page:{$handbook->id})");
+    $handbook->update(['title' => 'Handbuch *neu*']);
+
+    $this->actingAs($w['mara'])->getJson("/api/v1/work-items/{$w['item']->key}")->assertOk()
+        ->assertJsonPath('data.description', "Plan und [Handbuch \\*neu\\*](page:{$handbook->id})");
+});
+
+it('writes a page only the writer sees as [hidden](page:…) for others and keeps it when they write it back', function () use ($world) {
+    $w = $world();
+    $plan = Page::factory()->for($w['ops'])->create(['title' => 'Umzugsplan']);
+
+    $this->actingAs($w['erik'])->patchJson("/api/v1/work-items/{$w['item']->key}", ['description' => "Siehe [x](page:{$plan->id})"])
+        ->assertOk()->assertJsonPath('data.description', "Siehe [Umzugsplan](page:{$plan->id})");
+
+    $read = $this->actingAs($w['mara'])->getJson("/api/v1/work-items/{$w['item']->key}")->assertOk()
+        ->assertJsonPath('data.description', "Siehe [hidden](page:{$plan->id})");
+    expect($read->getContent())->not->toContain('Umzugsplan');
+
+    $this->actingAs($w['mara'])->patchJson("/api/v1/work-items/{$w['item']->key}", ['description' => $read->json('data.description').'!'])->assertOk()
+        ->assertJsonPath('data.description_json', F::doc(F::p('Siehe ', F::reference($plan->id, 'page'), '!')));
 });
 
 it('keeps a kept mention of a former member through Markdown', function () use ($world) {

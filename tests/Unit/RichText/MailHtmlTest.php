@@ -28,6 +28,17 @@ it('renders a hidden reference as hidden, without key or id', function () use ($
         ->not->toContain(F::ITEM)->not->toContain(F::PAGE);
 });
 
+it('links a visible page to its wiki address and hides the other', function () use ($mail, $url) {
+    app()->setLocale('de');
+    // the page is known to the reader; the item names under the IDs of pages name no page (the kind decides)
+    $names = new RichTextNames(items: [F::OPSPAGE => ['key' => 'OPS-1', 'title' => 'Item']], pages: [F::PAGE => ['title' => 'Handbuch <v2>', 'identifier' => 'WEB']]);
+
+    $html = $mail(F::doc(F::p('Siehe ', F::reference(F::PAGE, 'page') + ['marks' => [['type' => 'italic']]], ' und ', F::reference(F::OPSPAGE, 'page'), '.')), $names);
+
+    expect($html)->toBe('<p>Siehe <a target="_blank" rel="noopener noreferrer nofollow" href="'.$url.'/projects/WEB/wiki/'.F::PAGE.'"><em>Handbuch &lt;v2&gt;</em></a> und verborgen.</p>')
+        ->not->toContain(F::OPSPAGE)->not->toContain('OPS-1');
+});
+
 it('renders an image as a link, never as img', function () use ($mail, $url) {
     app()->setLocale('de');
 

@@ -65,7 +65,7 @@ final class Page extends Model
     /**
      * Prepares one page or several for PageResource with a fixed number of queries (none per page, K5): lean pages ask
      * nothing; the others get the names of their texts for the reader (ReaderNames: one query for all mentioned
-     * accounts, one for all referenced items the reader sees, none without such nodes).
+     * accounts, one for all referenced items and one for all referenced pages the reader sees, none without such nodes).
      *
      * @param  EloquentCollection<int, self>|self  $pages
      */

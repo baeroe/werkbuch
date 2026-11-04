@@ -7,11 +7,18 @@ use App\RichText\RichTextNames;
 use Tests\Support\FakeRichTextLookup;
 use Tests\Support\RichTextFixtures as F;
 
-// Kira exists but may not be mentioned here, Lene left the project; OPS-12 exists, but the writer does not see it
-$lookup = new FakeRichTextLookup(['mara' => F::MARA], ['kira' => F::KIRA, 'lene' => F::LENE], ['WEB-47' => F::ITEM, 'OLD-47' => F::ITEM]);
+// Kira exists but may not be mentioned here, Lene left the project; OPS-12 and the page of OPS exist, but the writer
+// does not see them
+$lookup = new FakeRichTextLookup(['mara' => F::MARA], ['kira' => F::KIRA, 'lene' => F::LENE], ['WEB-47' => F::ITEM, 'OLD-47' => F::ITEM], [F::PAGE]);
 $read = fn (string $markdown, array $kept = [], array $keptRefs = []): Document => Document::fromMarkdown($markdown, new MarkdownContext(null, $lookup, $kept, $keptRefs));
 // every ID known to the reader, as the API gives them to someone who sees everything
-$names = new RichTextNames(handles: [F::MARA => 'mara'], items: [F::ITEM => ['key' => 'WEB-47', 'title' => 'Doppelte Mails']]);
+$names = new RichTextNames(
+    handles: [F::MARA => 'mara'],
+    items: [F::ITEM => ['key' => 'WEB-47', 'title' => 'Doppelte Mails']],
+    pages: [F::PAGE => ['title' => 'Handbuch [v2] *neu*', 'identifier' => 'WEB']],
+);
+/** A reference to a page as Document stores it. */
+$page = fn (string $id, array $marks = []): array => ['type' => 'reference', 'attrs' => F::reference($id, 'page')['attrs']] + ($marks === [] ? [] : ['marks' => $marks]);
 
 it('reads a mention and a key in a sentence', function () use ($read) {
     expect($read('Danke @mara, siehe (WEB-47), web-47 und OLD-47. #WEB-47')->toJson())->toBe(F::doc(F::p(
@@ -72,7 +79,7 @@ it('turns [x](item:<ulid>) into a reference only when the writer sees it or it w
     expect($read('[x](item:'.F::ITEM.') [y](item:'.$upper.')')->toJson())->toBe(F::doc(F::p(F::reference(F::ITEM), ' ', F::reference(F::ITEM))))
         ->and($read('[verborgen](item:'.F::OPS12.')')->toJson())->toBe(F::doc(F::p('verborgen')))
         ->and($read('[verborgen](item:'.F::OPS12.')', [], [F::OPS12])->toJson())->toBe(F::doc(F::p(F::reference(F::OPS12))))
-        ->and($read('[kaputt](item:WEB-47) [Seite](page:'.F::PAGE.')')->toJson())->toBe(F::doc(F::p('kaputt Seite')))
+        ->and($read('[kaputt](item:WEB-47) [Seite](item:'.F::PAGE.')')->toJson())->toBe(F::doc(F::p('kaputt Seite')))
         ->and(Document::fromMarkdown('[x](item:'.F::ITEM.') @mara WEB-47', new MarkdownContext)->toJson())->toBe(F::doc(F::p('x @mara WEB-47')))
         ->and(Document::fromMarkdown('[x](item:'.F::OPS12.')', new MarkdownContext(keptRefs: [F::OPS12]))->toJson())->toBe(F::doc(F::p(F::reference(F::OPS12))));
 });
@@ -132,11 +139,64 @@ it('writes a visible reference as its current key and a hidden one as [hidden](i
         ->and($document->toMarkdown())->toBe('Siehe [hidden](item:'.F::ITEM.') und [hidden](item:'.F::OPS12.').');
 });
 
-it('writes a page reference as hidden and reads it back as text until Phase 9', function () use ($read, $names) {
-    $markdown = Document::fromJson(F::doc(F::p(F::reference(F::PAGE, 'page'))))->toMarkdown($names);
+it('reads a page link of a visible page as a reference', function () use ($read, $page) {
+    $upper = strtoupper(F::PAGE);
 
-    expect($markdown)->toBe('[hidden](page:'.F::PAGE.')')
-        ->and($read($markdown, [], [F::PAGE])->toJson())->toBe(F::doc(F::p('hidden')));
+    expect($read('Siehe [Handbuch](page:'.F::PAGE.') und **[alt](page:'.$upper.')**')->toJson())
+        ->toBe(F::doc(F::p('Siehe ', $page(F::PAGE), ' und ', $page(F::PAGE, [['type' => 'bold']]))))
+        ->and($read('[x](page:'.F::PAGE.')')->pageRefs())->toBe([F::PAGE])
+        ->and($read('[x](page:'.F::PAGE.')')->itemRefs())->toBe([]);
+});
+
+it('leaves the link of a hidden page as text', function () use ($read) {
+    expect($read('[Plan](page:'.F::OPSPAGE.')')->toJson())->toBe(F::doc(F::p('Plan')))
+        // no ULID, an item's ULID behind page:, a page's behind item:, no lookup at all
+        ->and($read('[kaputt](page:WEB-47) [Item](page:'.F::ITEM.') [Seite](item:'.F::PAGE.')')->toJson())->toBe(F::doc(F::p('kaputt Item Seite')))
+        ->and(Document::fromMarkdown('[x](page:'.F::PAGE.')', new MarkdownContext)->toJson())->toBe(F::doc(F::p('x')));
+});
+
+it('keeps a hidden page reference that stood in the text before', function () use ($read, $page) {
+    expect($read('[hidden](page:'.F::OPSPAGE.')', [], [F::OPSPAGE])->toJson())->toBe(F::doc(F::p($page(F::OPSPAGE))))
+        ->and($read('[hidden](page:'.strtoupper(F::OPSPAGE).')', [], [F::OPSPAGE])->toJson())->toBe(F::doc(F::p($page(F::OPSPAGE))))
+        ->and(Document::fromMarkdown('[x](page:'.F::OPSPAGE.')', new MarkdownContext(keptRefs: [F::OPSPAGE]))->toJson())->toBe(F::doc(F::p($page(F::OPSPAGE))));
+});
+
+it('writes a visible page reference with its current title and a hidden one as [hidden](page:…)', function () use ($names, $page) {
+    $document = Document::fromJson(F::doc(F::p('Siehe ', $page(F::PAGE), ' und ', $page(F::OPSPAGE), '.')));
+    // an item known under the ID of a page names no page: the kind decides
+    $mixed = new RichTextNames(items: [F::OPSPAGE => ['key' => 'OPS-1', 'title' => 'Item']], pages: [F::ITEM => ['title' => 'Seite', 'identifier' => 'WEB']]);
+
+    expect($document->toMarkdown($names))->toBe('Siehe [Handbuch \\[v2\\] \\*neu\\*](page:'.F::PAGE.') und [hidden](page:'.F::OPSPAGE.').')
+        ->and($document->toMarkdown())->toBe('Siehe [hidden](page:'.F::PAGE.') und [hidden](page:'.F::OPSPAGE.').')
+        ->and($document->toMarkdown($mixed))->toBe('Siehe [hidden](page:'.F::PAGE.') und [hidden](page:'.F::OPSPAGE.').')
+        ->and(Document::fromJson(F::doc(F::p(F::reference(F::ITEM))))->toMarkdown($mixed))->toBe('[hidden](item:'.F::ITEM.')');
+});
+
+it('round-trips a text with page references to the same JSON', function () use ($read, $names, $page) {
+    $json = F::doc(
+        F::p('Siehe ', $page(F::PAGE), ', ', $page(F::OPSPAGE, [['type' => 'italic']]), ' und ', F::reference(F::ITEM), '.'),
+        ['type' => 'bulletList', 'content' => [['type' => 'listItem', 'content' => [F::p($page(F::PAGE, [['type' => 'bold']]))]]]],
+    );
+    $markdown = Document::fromJson($json)->toMarkdown($names);
+
+    expect($read($markdown, [], [F::OPSPAGE])->toJson())->toBe($json)
+        ->and($read(Document::fromJson($json)->toMarkdown(), [], [F::OPSPAGE])->toJson())->toBe($json)
+        // without the hidden page kept, its link is its text
+        ->and($read($markdown)->pageRefs())->toBe([F::PAGE]);
+});
+
+it('reads no page link in code or link text', function () use ($read) {
+    $document = $read(implode("\n\n", [
+        '`[x](page:'.F::PAGE.')`',
+        "```\n[x](page:".F::PAGE.")\n```",
+        '![[x](page:'.F::PAGE.') [y](item:'.F::ITEM.')](https://example.com/a.png)',
+        '![[x](page:'.F::PAGE.')](attachment:'.F::IMAGE.')',
+    ]));
+
+    expect($document->pageRefs())->toBe([])
+        ->and($document->itemRefs())->toBe([])
+        ->and($document->toText())->toContain('[x](page:'.F::PAGE.')')
+        ->and($document->toText())->toContain('x y');
 });
 
 it('writes a mention with the current handle', function () use ($names) {
@@ -148,7 +208,7 @@ it('writes a mention with the current handle', function () use ($names) {
 });
 
 it('reads its own Markdown back to the same JSON', function () use ($read, $names) {
-    // every node of the schema, the ones of Phase 7 with marks, but no page reference: pages come with Phase 9
+    // every node of the schema, the ones of Phase 7 and 9 with marks
     $json = F::everyNode();
     $custom = F::customNodes();
     $json['content'][] = F::p(
@@ -158,6 +218,10 @@ it('reads its own Markdown back to the same JSON', function () use ($read, $name
         F::reference(F::ITEM),
         ' und ',
         ['type' => 'reference', 'attrs' => F::reference(F::OPS12)['attrs'], 'marks' => [['type' => 'italic']]],
+        ', ',
+        F::reference(F::PAGE, 'page'),
+        ', ',
+        F::reference(F::OPSPAGE, 'page'),
         ': ',
         F::file(F::FILE, 'protokoll [final] *v2*.pdf'),
         '.',
@@ -167,9 +231,9 @@ it('reads its own Markdown back to the same JSON', function () use ($read, $name
 
     $markdown = Document::fromJson($json)->toMarkdown($names);
 
-    expect($read($markdown, [], [F::OPS12])->toJson())->toBe($json)
+    expect($read($markdown, [], [F::OPS12, F::OPSPAGE])->toJson())->toBe($json)
         ->and($markdown)->toEndWith(implode("\n\n", [
-            'Bitte **@mara** ansehen, siehe WEB-47 und *[hidden](item:'.F::OPS12.')*: [protokoll \\[final\\] \\*v2\\*.pdf](attachment:'.F::FILE.').',
+            'Bitte **@mara** ansehen, siehe WEB-47 und *[hidden](item:'.F::OPS12.')*, [Handbuch \\[v2\\] \\*neu\\*](page:'.F::PAGE.'), [hidden](page:'.F::OPSPAGE.'): [protokoll \\[final\\] \\*v2\\*.pdf](attachment:'.F::FILE.').',
             '![Screenshot des Formulars](attachment:'.F::IMAGE.')',
             '![](attachment:'.F::IMAGE.')',
         ]));
@@ -272,9 +336,9 @@ it('reads a handle between the tags of HTML in Markdown like any text', function
     expect($read('<b>@mara</b>')->mentionedUserIds())->toBe([F::MARA]);
 });
 
-it('tells the lookup every handle, key and item link once, before it asks (T5-M4)', function () {
+it('tells the lookup every handle, key, item and page link once, before it asks (T5-M4)', function () {
     $lookup = new FakeRichTextLookup(['mara' => F::MARA]);
-    Document::fromMarkdown('@mara @mara web-47 WEB-47 `@kira` [x](item:'.strtoupper(F::OPS12).') [y](item:'.F::OPS12.')', new MarkdownContext(null, $lookup));
+    Document::fromMarkdown('@mara @mara web-47 WEB-47 `@kira` [x](item:'.strtoupper(F::OPS12).') [y](item:'.F::OPS12.') [z](page:'.strtoupper(F::PAGE).') [w](page:'.F::PAGE.')', new MarkdownContext(null, $lookup));
 
-    expect($lookup->prepared)->toBe([[['mara'], ['WEB-47'], [F::OPS12]]]);
+    expect($lookup->prepared)->toBe([[['mara'], ['WEB-47'], [F::OPS12], [F::PAGE]]]);
 });

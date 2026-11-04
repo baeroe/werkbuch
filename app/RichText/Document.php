@@ -96,8 +96,9 @@ final class Document
 
     /**
      * The document as Markdown for one reader; Markdown::fromHtml() lists how it is written. A mention is `@` and the
-     * current handle (`$names->handles`, else its label if that is a handle; nothing without either), a reference the
-     * reader sees (`$names->items`) its current key, any other `[hidden](item:<ulid>)` (no key, no title), an image
+     * current handle (`$names->handles`, else its label if that is a handle; nothing without either), a reference to an
+     * item the reader sees (`$names->items`) its current key, to a page the reader sees (`$names->pages`)
+     * `[<current title>](page:<ulid>)`, any other `[hidden](<kind>:<ulid>)` (no key, no title), an image
      * `![alt](attachment:<ulid>)` and a file `[name](attachment:<ulid>)`; text that would read as a mention or a key
      * gets a backslash (`\@mara`, `WEB\-47`). Read back with the same lookup and the kept IDs (MarkdownContext), it
      * gives the same JSON, but for the code and link marks of mentions, references and files: Markdown reads nothing
@@ -112,9 +113,10 @@ final class Document
 
     /**
      * The text without any markup: one line per paragraph, heading or code block, a line break as a line break. Without
-     * names (the stored `description_text`, `body_text`, `value_text`) a mention is `@` and its label and a reference
-     * nothing; for one reader (`$names`, ReaderNames; excerpts of the inbox, K13) a mention is `@` and the current name,
-     * a reference the reader sees its key and title, any other `richtext.hidden` (no key, no title), as in a mail.
+     * names (the stored `description_text`, `body_text`, `value_text`, `content_text`) a mention is `@` and its label
+     * and a reference nothing; for one reader (`$names`, ReaderNames; excerpts of the inbox, K13) a mention is `@` and
+     * the current name, a reference to an item the reader sees its key and title, to a page the reader sees its title,
+     * any other `richtext.hidden` (no key, no title), as in a mail.
      */
     public function toText(?RichTextNames $names = null): string
     {
@@ -140,8 +142,10 @@ final class Document
     }
 
     /**
-     * The HTML of a mail to one reader (spec 4.14): a mention as `@` and the name, a reference the reader sees as a
-     * link to the item with its key and title, any other as `richtext.hidden` (no key, no ID), an image as a link
+     * The HTML of a mail to one reader (spec 4.14): a mention as `@` and the name, a reference to an item the reader
+     * sees as a link to the item with its key and title, to a page the reader sees as a link to its wiki address
+     * (`/projects/<IDENTIFIER>/wiki/<id>`, A316) with its title, any other as `richtext.hidden` (no key, no title, no
+     * ID), an image as a link
      * `richtext.image` to the file (never embedded), a file as a link with its name. Images and files take their alt
      * text or file name, else the name the caller gives for the attachment's ID, else the ID. Everything is text of
      * the standard nodes, so tiptap-php escapes it. The caller sets the reader's language.
@@ -186,7 +190,7 @@ final class Document
     }
 
     /**
-     * The pages the text refers to (Phase 9), without repeats, in the order of the text.
+     * The pages the text refers to, without repeats, in the order of the text.
      *
      * @return list<string>
      */
@@ -476,12 +480,13 @@ final class Document
         $label = $inline['attrs']['label'] ?? null;
         if ($names !== null && in_array($inline['type'], ['mention', 'reference'], true)) {
             $id = (string) $inline['attrs']['id'];
-            $item = $names->items[$id] ?? null;
+            [$item, $page] = self::referred($inline, $names);
             $mention = $names->names[$id] ?? ($names->handles[$id] ?? $label);
 
             return match (true) {
                 $inline['type'] === 'mention' && is_string($mention) => '@'.$mention,
                 $item !== null => "{$item['key']} {$item['title']}",
+                $page !== null => $page['title'],
                 default => __('richtext.hidden'),
             };
         }
@@ -594,7 +599,7 @@ final class Document
         /** @var array<string, mixed> $attrs */
         $attrs = $node['attrs'];
         $id = (string) ($attrs['id'] ?? $attrs['attachmentId']);
-        $item = $names->items[$id] ?? null;
+        [$item, $page] = self::referred($node, $names);
         // an image is named by its alt text, a file by its file name; without one by its name, else by its ID
         $own = $node['type'] === 'image' ? ($attrs['alt'] ?? null) : ($attrs['filename'] ?? null);
         $file = is_string($own) && $own !== '' ? $own : ($names->names[$id] ?? $id);
@@ -602,11 +607,29 @@ final class Document
 
         return match (true) {
             $node['type'] === 'mention' && is_string($mention) => self::mailText('@'.$mention, $node),
-            $node['type'] === 'reference' && $item !== null => self::mailText("{$item['key']} {$item['title']}", $node, "{$base}/items/".rawurlencode($item['key'])),
+            $item !== null => self::mailText("{$item['key']} {$item['title']}", $node, "{$base}/items/".rawurlencode($item['key'])),
+            $page !== null => self::mailText($page['title'], $node, "{$base}/projects/".rawurlencode($page['identifier'])."/wiki/{$id}"),
             $node['type'] === 'image' => ['type' => 'paragraph', 'content' => [self::mailText(__('richtext.image', ['name' => $file]), [], "{$base}/attachments/{$id}")]],
             $node['type'] === 'attachment' => self::mailText($file, $node, "{$base}/attachments/{$id}"),
             default => self::mailText(__('richtext.hidden'), $node),
         };
+    }
+
+    /**
+     * The item or the page a reference names, as far as the reader sees it: the kind decides where to look, so the name
+     * of an item never stands for a page or the other way round. Both `null` for any other node.
+     *
+     * @param  array<string, mixed>  $node
+     * @return array{0: array{key: string, title: string}|null, 1: array{title: string, identifier: string}|null}
+     */
+    private static function referred(array $node, RichTextNames $names): array
+    {
+        if ($node['type'] !== 'reference') {
+            return [null, null];
+        }
+        $id = (string) $node['attrs']['id'];
+
+        return $node['attrs']['kind'] === 'page' ? [null, $names->pages[$id] ?? null] : [$names->items[$id] ?? null, null];
     }
 
     /**

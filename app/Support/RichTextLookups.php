@@ -5,6 +5,7 @@ namespace App\Support;
 use App\Access\Assignable;
 use App\Access\Visibility;
 use App\Domain\WorkItems\ItemKey;
+use App\Models\Page;
 use App\Models\Project;
 use App\Models\ProjectIdentifier;
 use App\Models\User;
@@ -15,7 +16,8 @@ use Illuminate\Database\Eloquent\Collection;
 /**
  * What a writer's Markdown names, answered from the database (RichTextLookup): who may be mentioned in the project
  * (Assignable, A231), which accounts exist at all (K8), which items the writer sees by key (a former identifier too) or
- * by ID (Visibility, never a project being deleted). Each handle, key and ID is asked once: prepare() loads all a text
+ * by ID and which pages by ID (Visibility, never a project being deleted). Each handle, key and ID is asked once:
+ * prepare() loads all a text
  * names with a fixed number of queries (in blocks of CHUNK), a single question asks for that one alone and keeps the
  * answer.
  */
@@ -39,13 +41,17 @@ final class RichTextLookups implements RichTextLookup
     /** @var array<string, bool> item ID → whether the writer sees it */
     private array $items = [];
 
+    /** @var array<string, bool> page ID → whether the writer sees it */
+    private array $pages = [];
+
     public function __construct(private readonly Project $project, private readonly User $writer) {}
 
-    public function prepare(array $handles, array $keys, array $items): void
+    public function prepare(array $handles, array $keys, array $items, array $pages = []): void
     {
         $this->loadAccounts(array_values(array_filter($handles, fn (string $handle) => ! array_key_exists($handle, $this->accounts))));
         $this->loadKeys(array_values(array_filter($keys, fn (string $key) => ! array_key_exists($key, $this->keys))));
         $this->loadItems(array_values(array_filter($items, fn (string $id) => ! array_key_exists($id, $this->items))));
+        $this->loadPages(array_values(array_filter($pages, fn (string $id) => ! array_key_exists($id, $this->pages))));
     }
 
     public function mentionable(string $handle): ?array
@@ -75,6 +81,13 @@ final class RichTextLookups implements RichTextLookup
         $this->prepare([], [], [$id]);
 
         return $this->items[$id];
+    }
+
+    public function visiblePage(string $id): bool
+    {
+        $this->prepare([], [], [], [$id]);
+
+        return $this->pages[$id];
     }
 
     /**
@@ -179,6 +192,21 @@ final class RichTextLookups implements RichTextLookup
             $seen = WorkItem::query()->whereKey($chunk)->whereIn('project_id', $visible)->pluck('id')->all();
             foreach ($chunk as $id) {
                 $this->items[$id] = in_array($id, $seen, true);
+            }
+        }
+    }
+
+    /** @param list<string> $ids */
+    private function loadPages(array $ids): void
+    {
+        if ($ids === []) {
+            return;
+        }
+        $visible = Visibility::projectIds($this->writer)->all();
+        foreach (array_chunk($ids, self::CHUNK) as $chunk) {
+            $seen = Page::query()->whereKey($chunk)->whereIn('project_id', $visible)->pluck('id')->all();
+            foreach ($chunk as $id) {
+                $this->pages[$id] = in_array($id, $seen, true);
             }
         }
     }

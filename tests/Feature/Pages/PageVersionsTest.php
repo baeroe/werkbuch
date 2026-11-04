@@ -167,6 +167,21 @@ it('keeps a reference and a mention of the version the restorer may not see or u
     expect($restored->content)->toBe(F::doc(F::p(F::mention($kira->id, 'kira2'), ' siehe ', F::reference($hidden->id))));
 });
 
+it('restore keeps a page reference, also to a page the restorer does not see (K10)', function () use ($world, $version) {
+    $w = $world();
+    $sibling = Page::factory()->for($w['web'])->create(['title' => 'Handbuch']);
+    $hidden = Page::factory()->for(Project::factory()->private()->create())->create(['title' => 'Geheim']);
+    $json = F::doc(F::p('Siehe ', F::reference($sibling->id, 'page'), ' und ', F::reference($hidden->id, 'page')));
+    $old = $version($w['page'], 1, ['content' => $json]);
+
+    $restored = RestorePageVersion::run(actor($w['jonas']), $w['page'], $old);
+    $shown = GetPageVersion::run(actor($w['jonas']), $w['page'], $old);
+
+    expect($restored->content)->toBe($json)
+        ->and((new PageVersionResource($shown))->resolve(Request::create('/'))['content'])
+        ->toBe("Siehe [Handbuch](page:{$sibling->id}) und [hidden](page:{$hidden->id})");
+});
+
 it('drops a picture of the version that is gone and keeps one that is still there', function () use ($world, $version) {
     $w = $world();
     $kept = Attachment::factory()->forPage($w['page'])->create(['filename' => 'skizze.png']);

@@ -30,14 +30,16 @@ use League\CommonMark\Util\Xml;
  * - a key (ItemKey::PATTERN as a word of its own: no word character and no `-` before or after) is a reference if the
  *   lookup names an item the writer sees; the key of any other item stays text, so a key never tells whether its item
  *   exists;
- * - `[text](item:<ulid>)` is a reference if the writer sees the item or the text referred to it before
- *   (MarkdownContext::$keptRefs); otherwise its text stays;
+ * - `[text](item:<ulid>)` is a reference to an item and `[text](page:<ulid>)` one to a page (A316) if the writer sees
+ *   the item or the page or the text referred to it before (MarkdownContext::$keptRefs); otherwise its text stays (the
+ *   ULID in either case, stored in lower case);
  * - `![alt](attachment:<ulid>)` is an image and `[name](attachment:<ulid>)` a file, whose attachment the rules check
  *   when the text is saved; an image from anywhere else is no node, its alt text stays as text (P5).
  *
- * Without a lookup, mentions and keys stay text and an `item:` link becomes a reference only when it was kept. Nothing
- * in code or the text of a link or an image (autolinks too) is read, and `page:` links stay text until Phase 9. HTML
- * in Markdown is text (`html_input: escape`): a `@handle` between two tags is read like any other text.
+ * Without a lookup, mentions and keys stay text and an `item:` or `page:` link becomes a reference only when it was
+ * kept. Nothing in code or the text of a link or an image (autolinks too) is read: no mention, no key, no link in the
+ * alt text of an image. HTML in Markdown is text (`html_input: escape`): a `@handle` between two tags is read like any
+ * other text.
  *
  * `\@` and `\-` are text that is never part of a mention or a key (EscapedCharacter): `\@mara`, `WEB\-47`. Markdown
  * writes text that would read as a mention or a key that way (Markdown::shield()), so text stays text and only the
@@ -98,7 +100,8 @@ final class MentionsAndReferences implements ExtensionInterface, InlineParserInt
             match (true) {
                 $node instanceof Text => $texts[] = $node,
                 $node instanceof Image && $event->isEntering() => $images[] = $node,
-                $node instanceof Link && $event->isEntering() => $links[] = $node,
+                // a link in the alt text of an image is its text, never a reference or a file
+                $node instanceof Link && $event->isEntering() && ! self::sheltered($node) => $links[] = $node,
                 default => null,
             };
         }
@@ -116,8 +119,8 @@ final class MentionsAndReferences implements ExtensionInterface, InlineParserInt
     }
 
     /**
-     * Tells the lookup every handle, key and `item:` link of the text at once (each once), so it asks the database
-     * a few times for the whole text, never once per word.
+     * Tells the lookup every handle, key, `item:` and `page:` link of the text at once (each once), so it asks the
+     * database a few times for the whole text, never once per word.
      *
      * @param  list<list<array{0: string, 1: int}>>  $words
      * @param  list<Link>  $links
@@ -135,8 +138,8 @@ final class MentionsAndReferences implements ExtensionInterface, InlineParserInt
                 $keys["{$key['identifier']}-{$key['number']}"] = true;
             }
         }
-        $items = array_values(array_unique(array_filter(array_map(fn (Link $link) => self::target($link->getUrl(), 'item'), $links))));
-        $this->ctx->lookup->prepare(array_map(strval(...), array_keys($handles)), array_map(strval(...), array_keys($keys)), $items);
+        $targets = fn (string $scheme) => array_values(array_unique(array_filter(array_map(fn (Link $link) => self::target($link->getUrl(), $scheme), $links))));
+        $this->ctx->lookup->prepare(array_map(strval(...), array_keys($handles)), array_map(strval(...), array_keys($keys)), $targets('item'), $targets('page'));
     }
 
     /**
@@ -215,6 +218,12 @@ final class MentionsAndReferences implements ExtensionInterface, InlineParserInt
 
             return;
         }
+        $id = self::target($link->getUrl(), 'page');
+        if ($id !== null && (($this->ctx->lookup?->visiblePage($id) ?? false) || in_array($id, $this->ctx->keptRefs, true))) {
+            $link->replaceWith(self::reference($id, 'page'));
+
+            return;
+        }
         $id = self::target($link->getUrl(), 'attachment');
         if ($id !== null) {
             $link->replaceWith(new MarkdownAtom('span', ['data-type' => 'attachment', 'data-attachment-id' => $id, 'data-filename' => self::plain($link)]));
@@ -235,9 +244,9 @@ final class MentionsAndReferences implements ExtensionInterface, InlineParserInt
         $image->detach();
     }
 
-    private static function reference(string $id): MarkdownAtom
+    private static function reference(string $id, string $kind = 'item'): MarkdownAtom
     {
-        return new MarkdownAtom('span', ['data-type' => 'reference', 'data-id' => $id, 'data-kind' => 'item']);
+        return new MarkdownAtom('span', ['data-type' => 'reference', 'data-id' => $id, 'data-kind' => $kind]);
     }
 
     /** The ULID of a `<scheme>:<ulid>` address, in lower case; null for any other address. */

@@ -49,9 +49,10 @@ use SplStack;
  * - `>` before each line of a quote, alone on a blank one;
  * - tables with the first row as the header and `| --- |` below it (Markdown has no table without a header row);
  * - `~` in text escaped, so it never becomes a strike;
- * - a mention as `@` and the reader's handle, a reference the reader sees as its key (spans()), any other as
- *   `[hidden](<kind>:<ulid>)`, a file as `[name](attachment:<ulid>)`, an image as `![alt](attachment:<ulid>)` on a
- *   line of its own; names and alt texts on one line, escaped like text (label());
+ * - a mention as `@` and the reader's handle, a reference to an item the reader sees as its key, one to a page the
+ *   reader sees as `[<current title>](page:<ulid>)` (spans()), any other as `[hidden](<kind>:<ulid>)`, a file as
+ *   `[name](attachment:<ulid>)`, an image as `![alt](attachment:<ulid>)` on a line of its own; titles, names and alt
+ *   texts on one line, escaped like text (label());
  * - text that would read as a mention or a key with a backslash before its `@` or `-` (`\@mara`, `WEB\-47`,
  *   shield()), so only mentions and references come back as nodes; not in code and the text of links, which are never
  *   read for them.
@@ -69,8 +70,7 @@ use SplStack;
  *   never read for them, and Markdown has no link inside a link), and the marks inside the name of a file or the alt
  *   text of an image;
  * - a mention or a key next to a letter, a digit, `_` or `-` (`x@mara`, `@maras`, `WEB-47x`): it reads back as text,
- *   as a word of its own would not;
- * - a reference to a page until Phase 9 (`page:` links stay text).
+ *   as a word of its own would not.
  */
 final class Markdown
 {
@@ -344,9 +344,10 @@ final class Markdown
 
     /**
      * The empty elements of the inline nodes: a mention as `@` and the reader's handle for it (else its label, if that
-     * is a handle; else nothing), a reference the reader sees as its key, any other as `[hidden](<kind>:<ulid>)`, a
-     * file as `[name](attachment:<ulid>)`; any other span as league writes it. Mentions and keys go out as they are,
-     * so they read back as nodes, while text that looks like them is shielded (text()).
+     * is a handle; else nothing), a reference to an item the reader sees as its key, one to a page the reader sees as
+     * `[<title>](page:<ulid>)`, any other as `[hidden](<kind>:<ulid>)` (the kind decides which names count), a file as
+     * `[name](attachment:<ulid>)`; any other span as league writes it. Mentions and keys go out as they are, so they
+     * read back as nodes, while text that looks like them is shielded (text()).
      */
     private static function spans(RichTextNames $names): ConverterInterface
     {
@@ -372,9 +373,21 @@ final class Markdown
 
                 return match ($element->getAttribute('data-type')) {
                     'mention' => $handle === null ? '' : '@'.$handle,
-                    'reference' => $this->names->items[$id]['key'] ?? '[hidden]('.$element->getAttribute('data-kind').':'.$element->getAttribute('data-id').')',
+                    'reference' => $this->reference($element->getAttribute('data-kind'), $id),
                     'attachment' => '['.Markdown::label($element->getAttribute('data-filename')).'](attachment:'.$element->getAttribute('data-attachment-id').')',
                     default => $this->other->convert($element),
+                };
+            }
+
+            private function reference(string $kind, string $id): string
+            {
+                $page = $kind === 'page' ? $this->names->pages[$id] ?? null : null;
+                $item = $kind === 'item' ? $this->names->items[$id] ?? null : null;
+
+                return match (true) {
+                    $item !== null => $item['key'],
+                    $page !== null => '['.Markdown::label($page['title']).'](page:'.$id.')',
+                    default => "[hidden]({$kind}:{$id})",
                 };
             }
 
