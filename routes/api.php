@@ -192,7 +192,7 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
     // the system page (A287, org admins); the status reads, the rest writes
     Route::get('system', [SystemController::class, 'show']);
     Route::post('system/failed-jobs/retry', [SystemController::class, 'retry']);
-    Route::post('system/test-mail', [SystemController::class, 'testMail']);
+    Route::post('system/test-mail', [SystemController::class, 'testMail'])->middleware('throttle:test-mail');
 
     Route::get('tokens', [TokensController::class, 'index']);
     Route::delete('tokens/{token}', [TokensController::class, 'destroy']);

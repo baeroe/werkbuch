@@ -88,6 +88,15 @@ it('works every queue in DDEV and the CI, search and media in a worker of their 
         ->and(array_merge(...$workers('.ddev/config.yaml')))->toEqualCanonicalizing(config('werkbuch.queues'));
 });
 
+it('gives SMTP a timeout below the lock wait of the database (T7-M6)', function () {
+    setEnv('MAIL_TIMEOUT', null);
+    expect((require base_path('config/mail.php'))['mailers']['smtp']['timeout'])->toBe(20);
+
+    setEnv('MAIL_TIMEOUT', '8');
+    expect((require base_path('config/mail.php'))['mailers']['smtp']['timeout'])->toBe(8);
+    setEnv('MAIL_TIMEOUT', null);
+});
+
 it('lets Reverb take client events from nobody and only the host of APP_URL', function () {
     $app = (require base_path('config/reverb.php'))['apps']['apps'][0];
 

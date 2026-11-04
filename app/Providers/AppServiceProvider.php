@@ -85,6 +85,8 @@ class AppServiceProvider extends ServiceProvider
 
         // uploads (A234): 60 per minute and account, the routes behind `auth:sanctum` always know the account
         RateLimiter::for('attachments', fn (Request $request) => Limit::perMinute(60)->by((string) $request->user()?->getAuthIdentifier()));
+        // the test mail of the system page: six a minute per account, a mail server is not to be flooded from it (T11-M4)
+        RateLimiter::for('test-mail', fn (Request $request) => Limit::perMinute(6)->by((string) $request->user()?->getAuthIdentifier()));
 
         // the index is written by the search consumer only, never when a model is saved (P1)
         WorkItem::disableSearchSyncing();
