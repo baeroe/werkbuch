@@ -192,6 +192,17 @@ it('finds a page by a word of its text, only in projects the reader sees', funct
         ->and($ids($search($mara, ['q' => 'ablauf', 'types' => 'items'])->pages))->toBe([]);
 });
 
+it('reads the pages it found without their text (T9-M1)', function () use ($world, $rebuild, $search) {
+    searchEngine();
+    [$mara, $web] = $world();
+    Page::factory()->for($web)->withText('Der Ablauf am ersten Tag')->create(['title' => 'Ablauf']);
+    $rebuild();
+
+    $page = $search($mara, ['q' => 'ablauf'])->pages->sole();
+
+    expect(array_keys($page->getAttributes()))->toEqualCanonicalizing(Page::LEAN_COLUMNS);
+});
+
 it('shows no page the index still holds after it was deleted or its project is being deleted', function () use ($world, $rebuild, $search, $ids) {
     searchEngine();
     [$mara, $web] = $world();

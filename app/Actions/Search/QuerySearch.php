@@ -219,7 +219,7 @@ final class QuerySearch
         }
 
         $ids = self::keys(Page::search($q)->options(self::OPTIONS)->whereIn('project_id', $scope)->take($limit));
-        $pages = self::inOrder($ids, Page::query()->visibleTo($user)->whereKey($ids)->get());
+        $pages = self::inOrder($ids, Page::query()->visibleTo($user)->whereKey($ids)->get((new Page)->qualifyColumns(Page::LEAN_COLUMNS)));
         Page::loadForResource($pages, $user, lean: true);
 
         return $pages;

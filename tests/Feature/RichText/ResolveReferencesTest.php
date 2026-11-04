@@ -110,6 +110,15 @@ it('resolves pages the reader sees, in the order asked, and leaves out hidden on
         ->and(ResolveReferences::run(actor($ida), ['pages' => [$second->id]])['items'])->toBeEmpty();
 });
 
+it('reads the pages without their text (N2)', function () use ($world) {
+    [$ida, $web] = $world();
+    $page = Page::factory()->for($web)->withText('Der Ablauf am ersten Tag')->create();
+
+    $read = ResolveReferences::run(actor($ida), ['pages' => [$page->id]])['pages']->sole();
+
+    expect(array_keys($read->getAttributes()))->toEqualCanonicalizing(Page::LEAN_COLUMNS);
+});
+
 it('refuses a list of pages with what is no ULID', function () use ($world) {
     [$ida] = $world();
     $message = ['pages' => [__('field.pages.invalid', ['max' => 100])]];

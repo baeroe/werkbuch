@@ -52,7 +52,7 @@ final class AttachmentPolicy
         $project = match ($attachment->attachable_type) {
             (new WorkItem)->getMorphClass() => WorkItem::query()->with('project')->find($attachment->attachable_id)?->project,
             (new Comment)->getMorphClass() => Comment::query()->with('workItem.project')->find($attachment->attachable_id)?->workItem->project,
-            (new Page)->getMorphClass() => Page::query()->with('project')->find($attachment->attachable_id)?->project,
+            (new Page)->getMorphClass() => Page::query()->with('project')->find($attachment->attachable_id, ['id', 'project_id'])?->project,
             default => null,
         };
 

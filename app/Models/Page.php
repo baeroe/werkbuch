@@ -53,6 +53,12 @@ final class Page extends Model
     use HasFactory, HasUlids, Searchable;
 
     /**
+     * The columns of a lean page: everything but its text (`content`, `content_text`, up to 256 KB of JSON and the plain
+     * text). The tree, search results and references read only these (T9-M1).
+     */
+    public const LEAN_COLUMNS = ['id', 'project_id', 'parent_id', 'rank', 'title', 'emoji', 'version', 'created_by', 'updated_by', 'created_at', 'updated_at'];
+
+    /**
      * Set by loadForResource(), never stored: whether PageResource leaves out the content (`lean`: the tree, search
      * results and references ask lean, a page in full).
      */

@@ -13,6 +13,8 @@ use App\Models\PageVersion;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
+use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 use Tests\Feature\Access\MatrixWorld;
@@ -136,6 +138,22 @@ it('gives the picture of a page to whoever sees the project and 404 to everyone 
     $owner = $this->getJson("/api/v1/attachments/{$pictures['private']->id}")->assertStatus($sees ? 200 : 404);
     $sees ? $owner->assertJsonPath('data.owner', ['type' => 'page', 'id' => $ops->id]) : $owner->assertJsonMissingPath('detail');
 })->with(MatrixWorld::COLUMNS);
+
+it('reads only the project of the page that owns a picture, never its text (N2)', function () use ($world, $pictureOf) {
+    $w = $world();
+    $picture = $pictureOf($w['start'], 'karte.png');
+    $pages = [];
+    DB::listen(function (QueryExecuted $query) use (&$pages) {
+        if (str_contains($query->sql, '`pages`')) {
+            $pages[] = $query->sql;
+        }
+    });
+
+    $this->actingAs($w['mara'])->get("/attachments/{$picture->id}")->assertOk();
+
+    expect($pages)->toHaveCount(1)
+        ->and($pages[0])->toStartWith('select `id`, `project_id` from `pages`');
+});
 
 it('hides the picture of a page of a project being deleted, also from an org admin', function () use ($matrix) {
     [$w, $pictures] = $matrix();

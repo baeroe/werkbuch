@@ -20,9 +20,6 @@ final class ListPages
 {
     use AsAction;
 
-    /** The columns of a node: everything but the text. */
-    private const COLUMNS = ['id', 'project_id', 'parent_id', 'rank', 'title', 'emoji', 'version', 'created_by', 'updated_by', 'created_at', 'updated_at'];
-
     /**
      * @return Collection<int, Page>
      *
@@ -35,7 +32,7 @@ final class ListPages
 
         $pages = Page::query()->where('project_id', $project->id)
             ->orderBy('parent_id')->orderBy('rank')->orderBy('id')
-            ->get(array_map(fn (string $column) => "pages.{$column}", self::COLUMNS));
+            ->get((new Page)->qualifyColumns(Page::LEAN_COLUMNS));
         Page::loadForResource($pages, $actor->user, lean: true);
 
         return $pages;

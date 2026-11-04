@@ -56,7 +56,7 @@ final class ResolveReferences
         $items = new EloquentCollection(self::ordered($found, $items));
         WorkItem::loadForResource($items, $actor->user, lean: true);
 
-        $seen = $pages === [] ? new EloquentCollection : Page::query()->visibleTo($actor->user)->whereKey($pages)->get()->keyBy('id');
+        $seen = $pages === [] ? new EloquentCollection : Page::query()->visibleTo($actor->user)->whereKey($pages)->get((new Page)->qualifyColumns(Page::LEAN_COLUMNS))->keyBy('id');
         $pages = new EloquentCollection(self::ordered($seen, $pages));
         Page::loadForResource($pages, $actor->user, lean: true);
 
