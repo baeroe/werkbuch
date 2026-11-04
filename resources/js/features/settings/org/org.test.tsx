@@ -145,6 +145,8 @@ describe('OrgSettings', () => {
     expect(within(nav).getByRole('link', { name: 'Bots' }).getAttribute('href')).toBe('/settings/bots');
     // the catalogs follow in their own group, in the order of the clickdummy
     expect(within(nav).getByText('Kataloge')).toBeTruthy();
+    // operations last (the system page; webhooks follow in Phase 11)
+    expect(within(nav).getByText('Betrieb')).toBeTruthy();
     expect(within(nav).getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')])).toEqual([
       ['Allgemein', '/settings/general'],
       ['Personen', '/settings/people'],
@@ -155,6 +157,7 @@ describe('OrgSettings', () => {
       ['Labels', '/settings/labels'],
       ['Relationstypen', '/settings/relation-types'],
       ['Resolutions', '/settings/resolutions'],
+      ['System', '/settings/system'],
     ]);
     expect(screen.getByRole('heading', { level: 1, name: 'Einstellungen' })).toBeTruthy();
     expect(document.title).toBe('Allgemein – Einstellungen – werkbuch');

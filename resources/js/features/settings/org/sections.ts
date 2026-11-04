@@ -1,18 +1,18 @@
 /*
  * The sections of the organisation settings (spec 5.2). The slugs are the contract with the route and the other
  * screens: `/settings/{section}`. Phase 2 brings General, People and Bots (group "Organisation"), Phase 3 the catalogs
- * (workflows, types, properties, labels, relation types and resolutions); operations (webhooks, system) come with their
- * phases. Members read the catalogs, admins change them.
+ * (workflows, types, properties, labels, relation types and resolutions), Phase 8 the system page in the group
+ * "Betrieb" (webhooks follow there in Phase 11). Members read the catalogs, admins change them.
  */
 
 import type { LucideIcon } from 'lucide-react';
-import { BadgeCheck, Bot, Building2, Link2, Shapes, SlidersHorizontal, Tags, Users, Workflow } from 'lucide-react';
+import { BadgeCheck, Bot, Building2, Link2, Server, Shapes, SlidersHorizontal, Tags, Users, Workflow } from 'lucide-react';
 import { t, type TranslationKey } from '@/lib/i18n';
 import type { OrgPermission } from '../frame/access';
 
-export type SectionSlug = 'general' | 'people' | 'bots' | 'workflows' | 'types' | 'properties' | 'labels' | 'relation-types' | 'resolutions';
+export type SectionSlug = 'general' | 'people' | 'bots' | 'workflows' | 'types' | 'properties' | 'labels' | 'relation-types' | 'resolutions' | 'system';
 
-export type SectionGroup = 'organization' | 'catalogs';
+export type SectionGroup = 'organization' | 'catalogs' | 'operations';
 
 export interface SectionDef {
   slug: SectionSlug;
@@ -29,6 +29,7 @@ export interface SectionDef {
 export const GROUP_NAMES: Record<SectionGroup, TranslationKey> = {
   organization: 'settings.org.group.organization',
   catalogs: 'settings.org.group.catalogs',
+  operations: 'settings.org.group.operations',
 };
 
 export const SECTIONS: readonly SectionDef[] = [
@@ -41,6 +42,7 @@ export const SECTIONS: readonly SectionDef[] = [
   { slug: 'labels', labelKey: 'settings.org.section.labels', icon: Tags, group: 'catalogs', permission: 'org.manage_catalog', members: 'read' },
   { slug: 'relation-types', labelKey: 'settings.org.section.relation_types', icon: Link2, group: 'catalogs', permission: 'org.manage_catalog', members: 'read' },
   { slug: 'resolutions', labelKey: 'settings.org.section.resolutions', icon: BadgeCheck, group: 'catalogs', permission: 'org.manage_catalog', members: 'read' },
+  { slug: 'system', labelKey: 'settings.org.section.system', icon: Server, group: 'operations', permission: 'org.manage', members: 'blocked' },
 ];
 
 /** The name of a section in the language of the page (only known after `initI18n`, so it is looked up each time). */
