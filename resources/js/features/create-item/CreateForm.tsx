@@ -372,6 +372,8 @@ function FormBody({
   function changeType(typeId: string) {
     // a refusal of a property the new type does not have is about the old one: it goes with it
     setErrors((current) => errorsForType(current, typeId));
+    // the notice of a press is about the draft before, as after a change of the project (T15-M5)
+    setBlocked(null);
     setGoneName(null);
     update({ typeId, values: keptValues(draft.values, typeId) });
   }

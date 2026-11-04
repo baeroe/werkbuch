@@ -725,6 +725,19 @@ describe('CreateItemDialog', () => {
     await waitFor(() => expect(posts()).toHaveLength(1));
   });
 
+  it('drops the notice of a press with an own change of the type (T15-M5)', async () => {
+    const user = userEvent.setup();
+    const { dialog, title } = await openDialog({ project_id: 'p_app', type_id: 't_wish' });
+    await user.type(title, 'Ticket verlinken');
+    await user.type(within(dialog).getByRole('textbox', { name: 'Ticket' }), 'kein link');
+    await user.click(within(dialog).getByRole('button', { name: /^Anlegen/ }));
+    expect(await within(dialog).findByText('Noch nicht angelegt')).toBeTruthy();
+
+    // the type without that field: the notice was about the old one
+    await choose(user, within(dialog).getByRole('combobox', { name: /^Typ/ }), 'Task');
+    await waitFor(() => expect(within(dialog).queryByText('Noch nicht angelegt')).toBeNull());
+  });
+
   it('waits while a property still shows a text it cannot read', async () => {
     const user = userEvent.setup();
     const { dialog, title } = await openDialog({ project_id: 'p_app', type_id: 't_wish' });
