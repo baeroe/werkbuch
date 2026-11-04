@@ -227,11 +227,15 @@ jobs:
           php artisan reverb:start --host=127.0.0.1 --port=8080 > reverb.log 2>&1 &
           curl -fsS --retry 30 --retry-delay 1 --retry-all-errors http://127.0.0.1:8080/up
 
-      # QUEUE_CONNECTION=database as in production: the worker runs the queued jobs (the reset mail goes out on the
+      # QUEUE_CONNECTION=database as in production: the workers run the queued jobs (the reset mail goes out on the
       # queue `notifications`, the search consumer works in the queue `search`, previews of pictures are made in the
-      # queue `media`, a deleted project is purged in the queue `bulk`) like the `queue` daemon of DDEV
-      - name: Queue worker
-        run: php artisan queue:work --queue=default,live,notifications,search,media,bulk --sleep=1 --tries=3 > queue.log 2>&1 &
+      # queue `media`, a deleted project is purged in the queue `bulk`) like the `queue` and `queue-index` daemons of
+      # DDEV: search and media in a worker of their own, so the jobs every event makes for `default`, `live` and
+      # `notifications` never keep them waiting
+      - name: Queue workers
+        run: |
+          php artisan queue:work --queue=default,live,notifications,bulk --sleep=1 --tries=3 > queue.log 2>&1 &
+          php artisan queue:work --queue=search,media --sleep=1 --tries=3 > queue-index.log 2>&1 &
 
       - name: Playwright
         run: |
@@ -262,6 +266,7 @@ jobs:
           path: |
             serve.log
             queue.log
+            queue-index.log
             reverb.log
             storage/logs
             e2e/test-results

@@ -289,6 +289,30 @@ describe('useLiveSync', () => {
     expect(queries.map((query) => query.fetches())).toEqual([2, 2, 2, 2]);
   });
 
+  it('loads nothing again for a refused channel of a project it knows is deleted, whichever message comes first', async () => {
+    for (const order of [['project.deleted', 'live.refused'], ['live.refused', 'project.deleted']]) {
+      const projects = await shown(qk.projects.list({ include_archived: true }));
+      const project = await shown(qk.projects.detail('WEB'));
+      queryClient.setQueryData(qk.projects.detail('WEB'), { id: 'p_web', identifier: 'WEB' });
+      const items = await shown(qk.workItems.list({ preset: 'my' }));
+      const inbox = await shown(qk.notifications.list({}));
+      const { unmount } = renderHook(() => useLiveSync(), { wrapper });
+
+      for (const type of order) send({ event_id: type === 'live.refused' ? null : 'ev_del', type, project_id: 'p_web', item_id: null, actor_id: null });
+      await pass(LIVE_BURST_MS);
+
+      // deleted wins: the lists that name the project load, the project's own queries and everything else stay
+      expect([projects.fetches(), project.fetches(), items.fetches(), inbox.fetches()], order.join(' then ')).toEqual([2, 1, 1, 1]);
+
+      send({ event_id: null, type: 'live.refused', project_id: 'p_web', item_id: null, actor_id: null });
+      await pass(LIVE_BURST_MS);
+      expect([projects.fetches(), project.fetches(), items.fetches(), inbox.fetches()]).toEqual([2, 1, 1, 1]);
+      unmount();
+      stops.splice(0).forEach((stop) => stop());
+      queryClient.clear();
+    }
+  });
+
   it('remembers the last 200 deleted things, not every one', async () => {
     const first = await shown(qk.workItems.detail('WEB-1'));
     queryClient.setQueryData(qk.workItems.detail('WEB-1'), { item: { id: 'wi_0' } });

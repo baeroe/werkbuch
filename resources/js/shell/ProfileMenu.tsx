@@ -5,8 +5,10 @@
  */
 
 import { Link, router } from '@inertiajs/react';
+import { onlineManager } from '@tanstack/react-query';
 import { LogOut, UserRound } from 'lucide-react';
 import { useRef, useState } from 'react';
+import { pauseLive } from '@/api/live';
 import { AlertDialog } from '@/components/ui/AlertDialog';
 import { Avatar } from '@/components/ui/Avatar';
 import { Menu, MenuContent, MenuGroup, MenuGroupLabel, MenuLinkItem, MenuItem, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger } from '@/components/ui/Menu';
@@ -24,8 +26,17 @@ const THEMES: { value: ThemeChoice; label: TranslationKey }[] = [
   { value: 'dark', label: 'theme.dark' },
 ];
 
-/** Signs out; whatever goes wrong shows as a toast with its cause, the page stays. */
+/**
+ * Signs out; whatever goes wrong shows as a toast with its cause, the page stays. While the visit runs, live updates
+ * are paused and no query fetches (`onlineManager` offline): the session ends with the visit, and a list loading again
+ * meanwhile (a live message, a row that mounts) would only be answered 401. Once the visit is over the sign-in page is
+ * there (the person's cache went with it, `resetForUser`) and fetching goes on; a sign-out that failed or was cut off
+ * connects again.
+ */
 function logout(): void {
+  const resume = pauseLive();
+  onlineManager.setOnline(false);
+  let signedOut = false;
   const failed = (description: string) => {
     toast({ title: t('shell.profile.logout_failed'), description, tone: 'error' });
     // the toast says it; Inertia's own error dialog for the response would say it twice
@@ -37,6 +48,14 @@ function logout(): void {
     {
       onHttpException: (response) => failed(t('errors.http_status', { status: response.status })),
       onNetworkError: () => failed(t('errors.no_answer')),
+      onSuccess: () => {
+        signedOut = true;
+      },
+      onFinish: () => {
+        onlineManager.setOnline(true);
+        // signed out, the connection stays closed (the shell that held it goes with the page)
+        if (!signedOut) resume();
+      },
     },
   );
 }

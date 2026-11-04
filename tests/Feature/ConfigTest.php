@@ -75,6 +75,19 @@ it('lists the queues in the worker\'s order', function () {
     expect(config('werkbuch.queues'))->toBe(['default', 'live', 'notifications', 'webhooks', 'search', 'media', 'bulk']);
 });
 
+it('works every queue in DDEV and the CI, search and media in a worker of their own (they starved behind the events)', function () {
+    $workers = function (string $file): array {
+        preg_match_all('/queue:(?:listen|work) --queue=([a-z,]+)/', (string) file_get_contents(repo_path($file)), $matches);
+
+        return array_map(fn (string $list): array => explode(',', $list), $matches[1]);
+    };
+
+    expect($workers('.ddev/config.yaml'))->toBe([['default', 'live', 'notifications', 'webhooks', 'bulk'], ['search', 'media']])
+        // no webhooks yet in the CI (phase 11)
+        ->and($workers('.github/workflows/tests.yml'))->toBe([['default', 'live', 'notifications', 'bulk'], ['search', 'media']])
+        ->and(array_merge(...$workers('.ddev/config.yaml')))->toEqualCanonicalizing(config('werkbuch.queues'));
+});
+
 it('lets Reverb take client events from nobody and only the host of APP_URL', function () {
     $app = (require base_path('config/reverb.php'))['apps']['apps'][0];
 

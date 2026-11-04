@@ -6,7 +6,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { expect, test as base, type Page } from '@playwright/test';
-import { accountPageErrors, ROOT, watchPageErrors } from './helpers';
+import { accountPageErrors, isRouterBadGateway, ROOT, watchPageErrors } from './helpers';
 
 export { expect };
 
@@ -57,7 +57,8 @@ export const test = base.extend<{ allowedErrors: RegExp[]; pageErrors: string[];
 
   /**
    * Fails the test on errors the page reports, and the pages of other people the test signed in (`signedInContext`,
-   * `accountPageErrors`): console errors and uncaught exceptions, except the allowed ones.
+   * `accountPageErrors`): console errors and uncaught exceptions, except the allowed ones and a 502 the shared DDEV
+   * router made itself (`isRouterBadGateway`).
    */
   pageErrors: [
     async ({ page, allowedErrors }, use) => {
@@ -67,7 +68,7 @@ export const test = base.extend<{ allowedErrors: RegExp[]; pageErrors: string[];
       accountPageErrors.length = 0;
       await use(errors);
       expect(
-        [...errors, ...accountPageErrors].filter((error) => !allowedErrors.some((allowed) => allowed.test(error))),
+        [...errors, ...accountPageErrors].filter((error) => !isRouterBadGateway(error) && !allowedErrors.some((allowed) => allowed.test(error))),
         'the page reported errors',
       ).toEqual([]);
     },

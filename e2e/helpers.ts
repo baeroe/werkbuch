@@ -240,12 +240,29 @@ export async function signedInContext(
  */
 export const accountPageErrors: string[] = [];
 
+/**
+ * The addresses the shared DDEV router answered itself with a 502 "Bad Gateway" (Traefik: its connection to the web
+ * container broke, the web container never saw the request; its own answers carry `server: nginx`, the router's do
+ * not). Not the app's error: the fixture `pageErrors` leaves the browser's note on exactly these out.
+ */
+export const routerBadGateways = new Set<string>();
+
+/** Whether `error` is the browser's note on a 502 the shared router made (`routerBadGateways`). */
+export function isRouterBadGateway(error: string): boolean {
+  const url = /status of 502 \(\) \((.+)\)$/.exec(error)?.[1];
+  return url !== undefined && routerBadGateways.has(url);
+}
+
 /** Collects what `page` reports into `into`: console errors and uncaught exceptions, led by `[<label>] ` when given. */
 export function watchPageErrors(page: Page, into: string[], label?: string): void {
   const lead = label ? `[${label}] ` : '';
   page.on('pageerror', (error) => into.push(`${lead}page error: ${error.message}`));
   page.on('console', (message) => {
     if (message.type() === 'error') into.push(`${lead}console error: ${message.text()} (${message.location().url})`);
+  });
+  page.on('response', async (response) => {
+    if (response.status() !== 502 || response.headers().server !== undefined) return;
+    if ((await response.text().catch(() => '')).trim() === 'Bad Gateway') routerBadGateways.add(response.url());
   });
 }
 
@@ -469,12 +486,18 @@ export async function createItem(page: Page, input: Record<string, unknown>): Pr
 
 /**
  * Deletes a project of a spec with its items (cleanup in `finally`): the answer is 202, the purge runs in the queue; a
- * project that is gone already (404) is fine.
+ * project that is gone already (404) is fine. The page leaves the app for the delete and comes back on `/my-items`
+ * afterwards: a page that shows the project, or only joins its live channel, would load it once more while the delete
+ * is on its way (a live message of something else, the join of a list from just before) and get a 404 or a refused
+ * channel (403) for it; the page that comes back never sees the project.
  */
 export async function removeE2eProject(page: Page, identifier: string): Promise<void> {
   await ensureCsrfCookie(page);
+  const inApp = !page.isClosed() && page.url().startsWith(test.info().project.use.baseURL!);
+  if (inApp) await page.goto('about:blank');
   const response = await api(page, 'DELETE', `/api/v1/projects/${identifier}`);
   expect([202, 404], await response.text()).toContain(response.status());
+  if (inApp) await page.goto('/my-items');
 }
 
 /**

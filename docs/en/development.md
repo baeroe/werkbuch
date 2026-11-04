@@ -45,7 +45,7 @@ Open <https://werkbuch.ddev.site/login> and sign in with `ADMIN_EMAIL` and `ADMI
 | Mail | `ddev mailpit` |
 | Database | `ddev mysql`, user, password and database `db` |
 
-The queue worker, the scheduler and Reverb run as DDEV daemons and start with `ddev start`. The worker takes the queues in this order: `default` (handing every event to its consumers), `live` (live updates through Reverb), `notifications` (the inbox, notification mails, reminders, password reset and invitation mails), `webhooks`, `search` (keeps the search indexes in step with every change), `media` (previews of uploaded images, `MEDIA_QUEUE` in `.env`) and `bulk` (deleting projects). The order is `config('werkbuch.queues')`. The Meilisearch dashboard asks for the key `MEILISEARCH_KEY` from `.env`.
+Two queue workers, the scheduler and Reverb run as DDEV daemons and start with `ddev start`. The worker `queue` takes the queues in this order: `default` (handing every event to its consumers), `live` (live updates through Reverb), `notifications` (the inbox, notification mails, reminders, password reset and invitation mails), `webhooks` and `bulk` (deleting projects). The worker `queue-index` takes `search` (keeps the search indexes in step with every change) and `media` (previews of uploaded images, `MEDIA_QUEUE` in `.env`). `queue:listen` starts PHP anew for every job and always takes the first queue that has a job, and every event makes jobs for `default`, `live` and `notifications`: behind them search results and previews came minutes late, so they have a worker of their own. The order of all queues is `config('werkbuch.queues')`. The Meilisearch dashboard asks for the key `MEILISEARCH_KEY` from `.env`.
 
 The scheduler runs `app:redispatch-events` and `app:send-notification-mails` every minute, and every hour it clears uploads nobody took, sends the reminders for everyone for whom it is now 08:00, and prunes old notifications (all in `routes/console.php`).
 
@@ -83,7 +83,7 @@ pnpm --dir e2e test                          # seeds the e2e data, then runs the
 ddev exec pnpm coverage:merge                # Vitest and Playwright together: 100 % lines over resources/js
 ```
 
-The CI job `e2e` runs the same suite against `php artisan serve` with MariaDB, Meilisearch and Mailpit as services, Reverb on port 8080 (`e2e/ci.env`) and one worker on `default,live,notifications,search,media,bulk`. Live specs need Reverb and the queue `live`; without them, the banner "Live updates paused" shows and the specs wait in vain.
+The CI job `e2e` runs the same suite against `php artisan serve` with MariaDB, Meilisearch and Mailpit as services, Reverb on port 8080 (`e2e/ci.env`) and two workers, one on `default,live,notifications,bulk` and one on `search,media`. Live specs need Reverb and the queue `live`; without them, the banner "Live updates paused" shows and the specs wait in vain.
 
 The frontend must be covered to 100 % lines by Vitest and Playwright together. After the Playwright run, `coverage:merge` fails below that. Run `ddev exec pnpm build` afterwards to leave an uninstrumented build behind.
 

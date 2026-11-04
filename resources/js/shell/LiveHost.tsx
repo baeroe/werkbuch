@@ -27,9 +27,10 @@ export function LiveHost() {
   const projects = useProjects({ include_archived: true });
   const ids = projects.data?.items.map((project) => project.id);
   const joined = ids === undefined ? null : ids.join(',');
+  // after a new connection as well: closing one forgets the projects (`disconnectLive`)
   useEffect(() => {
     if (joined !== null) watchProjects(joined === '' ? [] : joined.split(','));
-  }, [joined]);
+  }, [joined, settings, me]);
 
   return null;
 }

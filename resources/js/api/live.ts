@@ -7,8 +7,13 @@
  *   sees, `watchItem(id)` holds `work-item.<id>` while a detail shows the item (counted per id).
  * - Every channel is authorized over `/broadcasting/auth` with the session of the page (`webPost`). A refusal (403,
  *   e.g. after the person lost access, A281) arrives as `live.refused` naming the project or item of the channel: the
- *   projects load again and the channel goes with them. Any other failure (a deactivated account is sent to the sign-in) means live updates stop: the tab
- *   counts as disconnected until the connection comes back and authorizes again.
+ *   channel is left at once, the projects load again (a project the person sees again is joined anew with the list).
+ *   Any other failure (a deactivated account is sent to the sign-in) means live updates stop: the tab counts as
+ *   disconnected until the connection comes back and authorizes again.
+ * - `project.deleted` and `work_item.deleted` leave the channel of what was deleted, and it is never asked for again
+ *   (a list from before the delete, a detail still holding the item, the next connection): it would only be refused.
+ * - `disconnectLive` forgets the projects (the next person joins their own list), `pauseLive` closes the connection
+ *   while signing out and answers how to open it again.
  * - A message carries IDs and the type only (A279). The tab that made a change never gets it: the HTTP layer names
  *   the socket of the connection in every call (`X-Socket-ID`, `setSocketId`, A282).
  * - Status: `connecting` (also while the page loads), `connected`, `unavailable`. The banner (`isLiveConnected()`
@@ -68,15 +73,43 @@ let currentSocket: string | null = null;
 
 const projects = new Set<string>();
 const items = new Map<string, number>();
+/** The settings of the open connection, for `pauseLive` to open it again. */
+let current: { config: LiveConfig; me: string } | null = null;
+/** Whether `pauseLive` holds the connection closed. */
+let paused = false;
+
+/** How many deleted projects and items the tab remembers to leave their channels alone (the oldest go first). */
+const GONE_MAX = 200;
+
+/**
+ * Projects and items a message said were deleted (`project.deleted`, `work_item.deleted`): their channels are left at
+ * once and never asked for again, not by a list from before the delete, not by a detail that still holds the item,
+ * not on the next connection. Asking would only be refused (403).
+ */
+const gone = new Set<string>();
+
+function markGone(id: string): void {
+  gone.delete(id);
+  gone.add(id);
+  if (gone.size > GONE_MAX) gone.delete(gone.values().next().value!);
+}
 
 function browserEvent(type: string): LiveEvent {
   return { event_id: null, type, project_id: null, item_id: null, comment_id: null, actor_id: null };
 }
 
-/** `live.refused` for a channel, naming the project or the item it is about. */
+/**
+ * `live.refused` for a channel, naming the project or the item it is about. The channel is left: a new connection would
+ * only be refused again. A project comes back with the project list (`watchProjects`) once the person sees it again.
+ */
 function refused(channel: string): LiveEvent {
   const project = /^private-project\.(.+)$/.exec(channel)?.[1] ?? null;
   const item = /^private-work-item\.(.+)$/.exec(channel)?.[1] ?? null;
+  if (project !== null) leaveProject(project);
+  if (item !== null) {
+    items.delete(item);
+    echo?.leave(`work-item.${item}`);
+  }
   return { ...browserEvent('live.refused'), project_id: project, item_id: item };
 }
 
@@ -170,15 +203,29 @@ function authorize(
 }
 
 function deliver(payload: unknown): void {
-  emit(payload as LiveEvent);
+  const event = payload as LiveEvent;
+  if (event.type === 'project.deleted' && event.project_id !== null) {
+    markGone(event.project_id);
+    leaveProject(event.project_id);
+  }
+  if (event.type === 'work_item.deleted' && event.item_id !== null) {
+    markGone(event.item_id);
+    echo?.leave(`work-item.${event.item_id}`);
+  }
+  emit(event);
+}
+
+function leaveProject(id: string): void {
+  projects.delete(id);
+  echo?.leave(`project.${id}`);
 }
 
 function joinProject(id: string): void {
-  echo?.private(`project.${id}`).listen(MESSAGE, deliver);
+  if (!gone.has(id)) echo?.private(`project.${id}`).listen(MESSAGE, deliver);
 }
 
 function joinItem(id: string): void {
-  echo?.private(`work-item.${id}`).listen(MESSAGE, deliver);
+  if (!gone.has(id)) echo?.private(`work-item.${id}`).listen(MESSAGE, deliver);
 }
 
 /**
@@ -187,7 +234,13 @@ function joinItem(id: string): void {
  */
 export function connectLive(config: LiveConfig | null, me: string): () => void {
   if (config === null || echo !== null) return disconnectLive;
+  current = { config, me };
+  if (paused) return disconnectLive;
+  open(config, me);
+  return disconnectLive;
+}
 
+function open(config: LiveConfig, me: string): void {
   status = 'connecting';
   echo = new Echo({
     broadcaster: 'reverb',
@@ -206,12 +259,9 @@ export function connectLive(config: LiveConfig | null, me: string): () => void {
   items.forEach((_count, id) => joinItem(id));
   startTimer();
   notifyStatus();
-
-  return disconnectLive;
 }
 
-/** Closes the connection; the channels the screens hold are joined again by the next `connectLive`. */
-export function disconnectLive(): void {
+function close(): void {
   stopTimer();
   if (echo !== null) {
     echo.disconnect();
@@ -221,6 +271,36 @@ export function disconnectLive(): void {
   status = 'connecting';
   interrupted = false;
   setDown(false);
+}
+
+/**
+ * Closes the connection and forgets the projects (the next person, or the next connection of the shell, joins its
+ * own list) and what was deleted; the item channels the screens still hold are joined again by the next `connectLive`.
+ */
+export function disconnectLive(): void {
+  close();
+  current = null;
+  paused = false;
+  projects.clear();
+  gone.clear();
+}
+
+/**
+ * Closes the connection for a while, e.g. while signing out: no message arrives that would load something with a
+ * session that is ending. Answers the function that opens it again with the same settings and channels (once; a
+ * `disconnectLive` meanwhile wins).
+ */
+export function pauseLive(): () => void {
+  if (current === null) return () => {};
+  paused = true;
+  close();
+  let resumed = false;
+  return () => {
+    if (resumed || !paused) return;
+    resumed = true;
+    paused = false;
+    if (current !== null) open(current.config, current.me);
+  };
 }
 
 /** Calls `callback` for every live message until the returned function is called. */

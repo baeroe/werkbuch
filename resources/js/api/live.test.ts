@@ -6,6 +6,7 @@ import {
   disconnectLive,
   isLiveConnected,
   liveStatus,
+  pauseLive,
   socketId,
   subscribeLive,
   subscribeLiveStatus,
@@ -367,3 +368,93 @@ describe('channels', () => {
     again();
   });
 });
+
+describe('deleted and refused channels', () => {
+  it('leaves the channel of a deleted project and never joins it again, not even on the next connection', () => {
+    connectLive(CONFIG, 'u_mara');
+    watchProjects(['p_web', 'p_app']);
+
+    echo().deliver('private-project.p_web', message({ type: 'project.deleted', item_id: null }));
+    expect(echo().left).toEqual(['project.p_web']);
+
+    // a list from before the delete still names it: no authorization that would be refused
+    watchProjects(['p_app']);
+    watchProjects(['p_web', 'p_app']);
+    expect([...echo().channels.keys()]).toEqual(['presence-user.u_mara', 'private-project.p_app']);
+    echo().state('connected', 'connecting');
+    pauseLive()();
+    expect([...echo().channels.keys()]).toEqual(['presence-user.u_mara', 'private-project.p_app']);
+  });
+
+  it('leaves the channel of a deleted item and joins it no more while a detail still holds it', () => {
+    connectLive(CONFIG, 'u_mara');
+    const page = watchItem('wi_web_47');
+
+    echo().deliver('private-work-item.wi_web_47', message({ type: 'work_item.deleted' }));
+    expect(echo().left).toEqual(['work-item.wi_web_47']);
+    const peek = watchItem('wi_web_47');
+    pauseLive()();
+
+    expect([...echo().channels.keys()]).toEqual(['presence-user.u_mara']);
+    page();
+    peek();
+  });
+
+  it('leaves a refused channel, so a new connection does not ask for it again', async () => {
+    api = mockApi({ 'POST /broadcasting/auth': () => ({ status: 403, body: { reason: 'forbidden' } }) });
+    connectLive(CONFIG, 'u_mara');
+    watchProjects(['p_ops']);
+    const item = watchItem('wi_ops_12');
+
+    await echo().authorize('private-project.p_ops');
+    await echo().authorize('private-work-item.wi_ops_12');
+    expect(echo().left).toEqual(['project.p_ops', 'work-item.wi_ops_12']);
+    pauseLive()();
+    expect([...echo().channels.keys()]).toEqual(['presence-user.u_mara']);
+
+    // the project list that comes again with it joins it anew: access may be back
+    watchProjects([]);
+    watchProjects(['p_ops']);
+    expect([...echo().channels.keys()]).toEqual(['presence-user.u_mara', 'private-project.p_ops']);
+    item();
+  });
+});
+
+describe('disconnectLive and pauseLive', () => {
+  it('forgets the projects of the person on disconnectLive: the next person never asks for them', () => {
+    connectLive(CONFIG, 'u_mara');
+    watchProjects(['p_web']);
+    disconnectLive();
+    connectLive(CONFIG, 'u_ida');
+
+    expect([...echo().channels.keys()]).toEqual(['presence-user.u_ida']);
+  });
+
+  it('closes the connection while paused and opens it again with the same settings and channels', () => {
+    connectLive(CONFIG, 'u_mara');
+    watchProjects(['p_web']);
+    const first = echo();
+    const resume = pauseLive();
+
+    expect(first.disconnected).toBe(true);
+    expect(socketId()).toBeNull();
+    // nothing joins while paused
+    watchProjects(['p_web', 'p_app']);
+    expect(FakeEcho.instances).toHaveLength(1);
+
+    resume();
+    expect(FakeEcho.instances).toHaveLength(2);
+    expect(echo().options).toMatchObject({ key: 'werkbuch-key' });
+    expect([...echo().channels.keys()]).toEqual(['presence-user.u_mara', 'private-project.p_web', 'private-project.p_app']);
+    // a second resume does nothing
+    resume();
+    expect(FakeEcho.instances).toHaveLength(2);
+  });
+
+  it('pauses nothing without a connection', () => {
+    pauseLive()();
+
+    expect(FakeEcho.instances).toEqual([]);
+  });
+});
+

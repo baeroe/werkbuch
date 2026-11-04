@@ -45,7 +45,7 @@ ddev exec pnpm dev
 | Mail | `ddev mailpit` |
 | Datenbank | `ddev mysql`, Benutzer, Passwort und Datenbank `db` |
 
-Queue-Worker, Scheduler und Reverb laufen als DDEV-Daemons und starten mit `ddev start`. Der Worker nimmt die Queues in dieser Reihenfolge: `default` (gibt jedes Event an seine Konsumenten), `live` (Live-Updates über Reverb), `notifications` (Inbox, Benachrichtigungsmails, Erinnerungen, Mails für „Passwort vergessen“ und Einladungen), `webhooks`, `search` (zieht die Suchindizes bei jeder Änderung nach), `media` (Vorschauen hochgeladener Bilder, `MEDIA_QUEUE` in `.env`) und `bulk` (Projekte löschen). Die Reihenfolge steht in `config('werkbuch.queues')`. Das Dashboard von Meilisearch fragt nach dem Schlüssel `MEILISEARCH_KEY` aus `.env`.
+Zwei Queue-Worker, Scheduler und Reverb laufen als DDEV-Daemons und starten mit `ddev start`. Der Worker `queue` nimmt die Queues in dieser Reihenfolge: `default` (gibt jedes Event an seine Konsumenten), `live` (Live-Updates über Reverb), `notifications` (Inbox, Benachrichtigungsmails, Erinnerungen, Mails für „Passwort vergessen“ und Einladungen), `webhooks` und `bulk` (Projekte löschen). Der Worker `queue-index` nimmt `search` (zieht die Suchindizes bei jeder Änderung nach) und `media` (Vorschauen hochgeladener Bilder, `MEDIA_QUEUE` in `.env`). `queue:listen` startet PHP für jeden Job neu und nimmt immer die erste Queue, die einen Job hat, und jedes Event macht Jobs für `default`, `live` und `notifications`: dahinter kamen Suchtreffer und Vorschauen Minuten zu spät, darum haben sie einen eigenen Worker. Die Reihenfolge aller Queues steht in `config('werkbuch.queues')`. Das Dashboard von Meilisearch fragt nach dem Schlüssel `MEILISEARCH_KEY` aus `.env`.
 
 Der Scheduler ruft jede Minute `app:redispatch-events` und `app:send-notification-mails` auf; stündlich räumt er Uploads ab, die kein Text übernommen hat, schickt die Erinnerungen an alle, bei denen es gerade 08:00 ist, und räumt alte Benachrichtigungen auf (alles in `routes/console.php`).
 
@@ -83,7 +83,7 @@ pnpm --dir e2e test                          # legt die E2E-Daten an, dann laufe
 ddev exec pnpm coverage:merge                # Vitest und Playwright zusammen: 100 % Zeilen über resources/js
 ```
 
-Der CI-Job `e2e` läuft dieselbe Suite gegen `php artisan serve` mit MariaDB, Meilisearch und Mailpit als Services, Reverb auf Port 8080 (`e2e/ci.env`) und einem Worker auf `default,live,notifications,search,media,bulk`. Live-Specs brauchen Reverb und die Queue `live`; ohne beides steht das Banner „Live-Updates pausiert“, und die Specs warten vergeblich.
+Der CI-Job `e2e` läuft dieselbe Suite gegen `php artisan serve` mit MariaDB, Meilisearch und Mailpit als Services, Reverb auf Port 8080 (`e2e/ci.env`) und zwei Workern, einem auf `default,live,notifications,bulk` und einem auf `search,media`. Live-Specs brauchen Reverb und die Queue `live`; ohne beides steht das Banner „Live-Updates pausiert“, und die Specs warten vergeblich.
 
 Das Frontend muss von Vitest und Playwright zusammen zu 100 % an Zeilen abgedeckt sein. Nach dem Playwright-Lauf schlägt `coverage:merge` darunter fehl. Führe danach `ddev exec pnpm build` aus, damit ein Build ohne Instrumentierung zurückbleibt.
 

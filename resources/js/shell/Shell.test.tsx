@@ -1,5 +1,5 @@
 import { router } from '@inertiajs/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render as renderDom, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactElement, ReactNode } from 'react';
@@ -11,6 +11,7 @@ import { drafts } from '@/lib/drafts';
 import { useUiStore } from '@/store/ui';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import { list, makeView, project } from '@/test/fixtures';
+import { pauseLive } from '@/api/live';
 import { ProfileMenu } from './ProfileMenu';
 import { Shell } from './Shell';
 
@@ -33,6 +34,9 @@ vi.mock('@inertiajs/react', () => ({
     </a>
   ),
 }));
+
+const live = vi.hoisted(() => ({ resume: vi.fn() }));
+vi.mock('@/api/live', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/api/live')>()), pauseLive: vi.fn(() => live.resume) }));
 
 let api: MockApi | undefined;
 let client: QueryClient;
@@ -379,8 +383,44 @@ describe('ProfileMenu', () => {
     await userEvent.click(within(sidebar()).getByRole('button', { name: /Mara Lindqvist/ }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Abmelden' }));
     expect(router.post).toHaveBeenCalledWith('/logout', {}, expect.any(Object));
-    return vi.mocked(router.post).mock.calls[0]![2] as { onHttpException: (response: { status: number }) => boolean; onNetworkError: (error: Error) => boolean };
+    return vi.mocked(router.post).mock.calls[0]![2] as {
+      onHttpException: (response: { status: number }) => boolean;
+      onNetworkError: (error: Error) => boolean;
+      onSuccess: () => void;
+      onFinish: () => void;
+    };
   }
+
+  it('stops live updates and every fetch while signing out: nothing asks with a session that is ending', async () => {
+    live.resume.mockClear();
+    const options = await signOut();
+
+    expect(pauseLive).toHaveBeenCalled();
+    expect(onlineManager.isOnline()).toBe(false);
+    const calls = api!.calls.length;
+    await act(() => client.invalidateQueries());
+    expect(api!.calls.length).toBe(calls);
+
+    // the sign-in page is there (the cache of the person went with the visit): fetching may go on
+    act(() => {
+      options.onSuccess();
+      options.onFinish();
+    });
+    expect(onlineManager.isOnline()).toBe(true);
+    expect(live.resume).not.toHaveBeenCalled();
+  });
+
+  it('connects again and fetches again when signing out fails', async () => {
+    live.resume.mockClear();
+    const options = await signOut();
+
+    act(() => {
+      options.onNetworkError(new Error('offline'));
+      options.onFinish();
+    });
+    expect(live.resume).toHaveBeenCalledTimes(1);
+    expect(onlineManager.isOnline()).toBe(true);
+  });
 
   it('names the status of the server when signing out is refused', async () => {
     const options = await signOut();

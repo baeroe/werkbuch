@@ -24,12 +24,16 @@ const EVERYTHING: readonly QueryKey[] = [qk.workItems.all, qk.activity.all, qk.c
  * The caches a message makes stale. Items and their history on `work_item.*` (also watching, on the person's own
  * channel), comments and the history on `comment.*`, projects and members on `project.*`, the projects on a new org
  * role (K14: the channels follow the list), the inbox on `notifications.changed`; everything after the connection was
- * back (`live.reconnected`); everything after a refused channel as well (A281: access lost; what the person may not
- * see any more answers 404 or leaves the lists, as the screen should show it).
+ * back (`live.reconnected`). A refused channel (`live.refused`) loads everything as well (A281: access lost; what the
+ * person may not see any more answers 404 or leaves the lists, as the screen should show it), unless the project or
+ * item it is about was deleted: that is decided when the burst loads, so a delete and a refusal that come together
+ * give the same whichever comes first.
  */
 function keysOf(event: LiveEvent): readonly QueryKey[] {
   const group = event.type.split('.')[0];
-  if (event.type === 'live.reconnected' || event.type === 'live.refused') return EVERYTHING;
+  if (event.type === 'live.reconnected') return EVERYTHING;
+  // decided when the burst loads (`refusalKeys`): a refused channel of something deleted loads nothing
+  if (event.type === 'live.refused') return [];
   if (event.type === 'notifications.changed') return [qk.notifications.all];
   if (event.type === 'user.role_changed') return [qk.projects.all];
   if (group === 'work_item') return [qk.workItems.all, qk.activity.all];
@@ -83,6 +87,11 @@ class LiveRefresh {
     private readonly client: QueryClient,
     private readonly pending: () => boolean,
   ) {}
+
+  /** Whether `id` is known to be deleted. */
+  isGone(id: string): boolean {
+    return this.gone.has(id);
+  }
 
   /** `id` was deleted: it never comes back. */
   markGone(id: string): void {
@@ -166,6 +175,8 @@ export function useLiveSync(): void {
     const seen = new Set<string>();
     const order: string[] = [];
     const burst = new Map<string, QueryKey>();
+    /** What the refused channels of the burst were about: a project or an item, `null` for the person's own channel. */
+    const refusals: (string | null)[] = [];
     const flashes = new Set<string>();
     const refresh = new LiveRefresh(queryClient, () => queryClient.isMutating() > 0 || undoPending());
     let quiet: ReturnType<typeof setTimeout> | null = null;
@@ -177,7 +188,9 @@ export function useLiveSync(): void {
       if (longest !== null) clearTimeout(longest);
       quiet = null;
       longest = null;
-      const keys = [...burst.values()];
+      // a refusal is lost access (A281), unless what it is about was deleted: then the delete decides, whichever came first
+      const lost = refusals.splice(0).some((id) => id === null || !refresh.isGone(id));
+      const keys = lost ? EVERYTHING : [...burst.values()];
       burst.clear();
       refresh.apply(keys);
       flashes.forEach((id) => useUiStore.getState().flash(id));
@@ -203,6 +216,7 @@ export function useLiveSync(): void {
       }
       const gone = goneOf(event);
       if (gone !== null) refresh.markGone(gone);
+      if (event.type === 'live.refused') refusals.push(event.project_id ?? event.item_id);
       for (const queryKey of keysOf(event)) burst.set(JSON.stringify(queryKey), queryKey);
       if (event.item_id) flashes.add(event.item_id);
       if (quiet !== null) clearTimeout(quiet);
