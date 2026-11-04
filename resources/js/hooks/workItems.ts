@@ -218,8 +218,14 @@ function usePagedLists(lists: readonly PagedList[], all: boolean): Record<string
   // who waits for the rebuild of a list to end (`loadAll`, ⌘A)
   const waiting = useRef(new Map<string, Waiter[]>());
   let cursorsOf = state;
+  /** The old pages a list took over from a running rebuild when it mounted, by its arguments (T15-M1). */
+  const adopted = useRef(new Map<string, (string | null)[]>());
   const missing = keyed.filter((list) => !(list.argsKey in state));
   if (missing.length > 0) {
+    for (const list of missing) {
+      const old = rebuilds.get(list.hash)?.old;
+      if (old && !state[list.argsKey]) adopted.current.set(list.argsKey, old);
+    }
     // a new list starts with the pages it had in this visit (the old ones while its rebuild runs); lists that are gone
     // are forgotten
     cursorsOf = Object.fromEntries(
@@ -334,6 +340,17 @@ function usePagedLists(lists: readonly PagedList[], all: boolean): Record<string
       };
       const shown = listeners.get(hash) ?? new Set();
       listeners.set(hash, shown.add(tell));
+      // the round may have ended between the render that took its old pages over and this registration: then the list
+      // would show and ask those pages with their old cursors; it takes what the rebuild left instead (T15-M1)
+      const took = adopted.current.get(argsKey);
+      adopted.current.delete(argsKey);
+      const rebuild = rebuildsOf(queryClient).get(hash);
+      /* istanbul ignore next -- the window between a commit and its passive effects; Vitest flushes both in one act() */
+      if (took && rebuild?.old !== took) {
+        const args = (JSON.parse(argsKey) as ListWorkItemsArgs);
+        const now = rebuild?.old ?? cachedCursors(queryClient, args, loadedPages.get(argsKey) ?? 1);
+        setState((current) => (current[argsKey] === took ? { ...current, [argsKey]: now } : current));
+      }
       return () => {
         shown.delete(tell);
         if (shown.size === 0) listeners.delete(hash);
