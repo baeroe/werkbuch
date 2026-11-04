@@ -364,7 +364,7 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 - [x] Phase 5: Views, Filter-Engine, Listen-Layouts (PR #15)
 - [x] Phase 6: Suche und Suchtreffer in der Befehlspalette (PR #18)
 - [x] Phase 7: Editor, Kommentare, Anhänge (PR #19)
-- [ ] Phase 8: Benachrichtigungen, Mail, Live-Updates
+- [x] Phase 8: Benachrichtigungen, Mail, Live-Updates (PR #20)
 - [ ] Phase 9: Wiki
 - [ ] Phase 10: Vorlagen, Zeitpläne, Automatisierungen
 - [ ] Phase 11: Webhooks
