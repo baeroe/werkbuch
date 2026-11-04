@@ -16,7 +16,7 @@ it('shares the page context with guests', function () {
     $this->get(inertiaProbe())->assertInertia(fn (Assert $page) => $page
         ->where('auth.user', null)->where('auth.permissions', [])
         ->where('organization', ['id' => Organization::current()->id, 'name' => 'werkbuch', 'locale' => 'en', 'timezone' => 'UTC', 'week_start' => 1, 'logo_url' => null])
-        ->where('features', ['mail' => false, 'live' => null, 'attachments_max_mb' => 25])
+        ->where('features', ['mail' => false, 'live' => null, 'attachments_max_mb' => 25, 'notification_mail_delay' => 5])
         ->where('flash', ['status' => null, 'error' => null]));
 });
 

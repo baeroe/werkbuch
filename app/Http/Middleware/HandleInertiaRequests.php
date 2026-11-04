@@ -54,6 +54,8 @@ class HandleInertiaRequests extends Middleware
                     ] : null,
                 // the browser refuses a larger file before it sends it (F29)
                 'attachments_max_mb' => Attachment::maxMegabytes(),
+                // how long the mails about an item are collected (NOTIFICATION_MAIL_DELAY): the settings say it (T18-M2)
+                'notification_mail_delay' => (int) config('werkbuch.notification_mail_delay'),
             ],
             'flash' => [
                 'status' => $request->session()->get('status'),

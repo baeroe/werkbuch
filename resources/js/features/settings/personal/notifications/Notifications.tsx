@@ -12,7 +12,7 @@ import { Checkbox } from '@/components/ui/Checkbox';
 import { toast } from '@/components/ui/toast';
 import { usePreferences, useSavePreferences } from '@/hooks/notifications';
 import { notifyError } from '@/lib/errors';
-import { t, type TranslationKey } from '@/lib/i18n';
+import { t, tn, type TranslationKey } from '@/lib/i18n';
 import { useSharedProps } from '@/lib/page';
 import type { NotificationChannel, NotificationEvent, User } from '@/types';
 import { useDraft, useSaveShortcut } from '../../frame/form';
@@ -41,7 +41,7 @@ const EVENT_TEXT: Record<NotificationEvent, { label: TranslationKey; hint: Trans
 export function Notifications({ user }: { user: User }) {
   const form = useRef<HTMLFormElement>(null);
   const noMailId = useId();
-  const mailOn = useSharedProps().features.mail;
+  const { mail: mailOn, notification_mail_delay: delay } = useSharedProps().features;
   const preferences = usePreferences();
   const save = useSavePreferences();
   const saved = useMemo(() => toChoices(preferences.data ?? []), [preferences.data]);
@@ -108,6 +108,8 @@ export function Notifications({ user }: { user: User }) {
                 {CHANNELS.map((channel) => (
                   <th key={channel.id} scope="col" className="w-20 px-1 py-2 text-center font-medium md:w-24">
                     {t(channel.label)}
+                    {/* the reason of the locked column where the column is named, not only under the boxes (T18-M1) */}
+                    {channel.id === 'mail' && !mailOn && <span className="block text-xs font-normal">{t('settings.notifications.channel.mail_off')}</span>}
                   </th>
                 ))}
               </tr>
@@ -140,7 +142,7 @@ export function Notifications({ user }: { user: User }) {
         </div>
         <div className="flex max-w-[65ch] flex-col gap-1.5 text-ui text-pretty text-muted">
           <p>{t('settings.notifications.scope')}</p>
-          <p>{t('settings.notifications.digest')}</p>
+          <p>{tn('settings.notifications.digest', delay)}</p>
         </div>
       </SettingsCard>
     </form>

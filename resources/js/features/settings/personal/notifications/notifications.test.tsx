@@ -8,7 +8,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode, Ref } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { NOTIFICATION_EVENTS } from '@/api/notifications';
 import { currentToasts, resetToasts, runToastAction } from '@/components/ui/toast';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
@@ -24,9 +24,10 @@ type Listener = (event: { detail: { visit: Visit } }) => boolean | void;
 const inertia = vi.hoisted(() => ({ listeners: new Map<string, Set<(event: never) => unknown>>() }));
 let signedIn: User = mara;
 let mail = true;
+let delay = 5;
 
 vi.mock('@inertiajs/react', () => ({
-  usePage: () => ({ props: { auth: { user: signedIn, permissions: [] }, organization, features: { mail, live: null, attachments_max_mb: 20 } } }),
+  usePage: () => ({ props: { auth: { user: signedIn, permissions: [] }, organization, features: { mail, live: null, attachments_max_mb: 20, notification_mail_delay: delay } } }),
   Link: ({ href, children, ref, ...rest }: { href: string; children: ReactNode; ref?: Ref<HTMLAnchorElement> }) => (
     <a href={href} ref={ref} {...rest}>
       {children}
@@ -270,6 +271,15 @@ describe('Notifications', () => {
     ]);
   });
 
+  it('names the minutes the mails are collected as the instance sets them (T18-M2)', async () => {
+    delay = 10;
+    onTestFinished(() => void (delay = 5));
+    renderSettings();
+    await screen.findByRole('table');
+
+    expect(screen.getByText(/E-Mails zu einem Item werden 10\s+Minuten gesammelt/)).toBeTruthy();
+  });
+
   it('locks the mail column without a mail server and says why', async () => {
     const user = userEvent.setup();
     mail = false;
@@ -277,13 +287,18 @@ describe('Notifications', () => {
     renderSettings();
     await screen.findByRole('table');
 
-    const reason = 'Diese Instanz hat keinen Mailserver: E-Mails gehen erst raus, wenn eine Administratorin ihn eingerichtet hat.';
+    // no mail later either (A274, T18-M3)
+    const reason = 'Diese Instanz hat keinen Mailserver: Es gehen keine E-Mails raus, auch später keine für das, was jetzt passiert. Die Inbox zeigt alles.';
     const note = screen.getByText(reason);
     for (const row of screen.getAllByRole('rowheader')) {
       const box = cell(row.firstElementChild!.textContent!, 'E-Mail');
       expect(box.getAttribute('aria-disabled')).toBe('true');
       expect(box.getAttribute('aria-describedby')).toBe(note.id);
+      // locked so it shows (T18-M1)
+      expect(box.className).toContain('data-disabled:opacity-50');
     }
+    // the head of the column says it too
+    expect(screen.getByRole('columnheader', { name: /E-Mail/ }).textContent).toBe('E-Mailkein Mailserver');
     // the stored choice still shows; a click changes nothing
     expect(checked('Statuswechsel', 'E-Mail')).toBe(true);
     await user.click(cell('Neuer Kommentar', 'E-Mail'));
