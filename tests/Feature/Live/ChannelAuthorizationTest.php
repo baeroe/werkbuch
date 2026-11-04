@@ -2,10 +2,12 @@
 
 use App\Access\RoleAssignments;
 use App\Access\Visibility;
+use App\Actions\Pages\GetPage;
 use App\Broadcasting\ProjectChannel;
 use App\Broadcasting\UserChannel;
 use App\Broadcasting\WorkItemChannel;
 use App\Enums\ProjectVisibility;
+use App\Models\Page;
 use App\Models\User;
 use App\Models\WorkItem;
 use Illuminate\Support\Str;
@@ -83,6 +85,16 @@ it('lets a person join only their own channel, present under their id', function
     $refused($listen('presence-user.'.$w->target->id));
     $refused($listen('private-user.'.$w->target->id));
 })->with(MatrixWorld::COLUMNS);
+
+it('lets a viewer hear the pages of a public project, on the channel of the project (A318)', function (string $column) use ($listen) {
+    $w = MatrixWorld::build();
+    $page = Page::factory()->create(['project_id' => $w->web->id]);
+    $this->actingAs($w->account($column));
+
+    // the viewer of WEB and the outsider who reads the public project: both read its pages and hear them change
+    expect($listen('private-project.'.$w->web->id)->assertOk()->json('auth'))->toStartWith('live-key:')
+        ->and(GetPage::run(actor($w->account($column)), $page)->id)->toBe($page->id);
+})->with(['project_viewer', 'outsider_public']);
 
 it('refuses the channels of a project being deleted', function () use ($listen, $refused) {
     $w = MatrixWorld::build();

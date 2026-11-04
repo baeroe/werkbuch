@@ -1,8 +1,13 @@
 <?php
 
 use App\Access\ProjectRole;
+use App\Access\RoleAssignments;
 use App\Actions\Comments\AddComment;
 use App\Actions\Notifications\NotifyRecipients;
+use App\Actions\Pages\CreatePage;
+use App\Actions\Pages\DeletePage;
+use App\Actions\Pages\MovePage;
+use App\Actions\Pages\UpdatePage;
 use App\Actions\Projects\DeleteProject;
 use App\Actions\WorkItems\DeleteWorkItem;
 use App\Events\EventType;
@@ -13,14 +18,18 @@ use App\Live\LiveConsumer;
 use App\Models\Event;
 use App\Models\EventConsumption;
 use App\Models\Notification;
+use App\Models\Page;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
 use App\Notifications\NotificationConsumer;
+use App\RichText\Document;
 use App\Search\SearchConsumer;
 use App\Support\Actor;
+use App\Support\NotificationFacts;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
+use Tests\Support\RichTextFixtures as F;
 
 /*
  * The consumer `notifications` (Task 5): its queue and tries, and that it writes once whatever the outbox does twice.
@@ -121,4 +130,25 @@ it('passes an event whose item is gone', function () use ($world, $comment, $con
     expect($consume($event))->toBeTrue()
         ->and($consume(eventsOf(EventType::WorkItemDeleted)->sole()))->toBeTrue()
         ->and(Notification::query()->count())->toBe(0);
+});
+
+it('notifies nobody about a page, also not a person mentioned in it (A313)', function () use ($world, $consume) {
+    $w = $world();
+    $kira = User::factory()->bot($w['tom'])->create(['name' => 'Kira', 'handle' => 'kira']);
+    app(RoleAssignments::class)->setProjectRole($kira, $w['web'], ProjectRole::Member);
+    $other = Page::factory()->create(['project_id' => $w['web']->id]);
+
+    $page = CreatePage::run(actor($w['ida']), $w['web'], ['title' => 'Ablauf', 'content_json' => F::doc(F::p(F::mention($w['tom']->id, 'tom'), ' bitte prüfen'))]);
+    $page = UpdatePage::run(actor($w['ida']), $page, ['content_json' => F::doc(F::p(F::mention($w['tom']->id, 'tom'), ' und ', F::mention($kira->id, 'kira'), ' bitte prüfen'))]);
+    MovePage::run(actor($w['ida']), $page, ['parent_id' => $other->id, 'before_id' => null]);
+    DeletePage::run(actor($w['ida']), $other);
+
+    $events = Event::query()->where('type', 'like', 'page.%')->get();
+    expect(Document::fromJson((array) $page->content)->mentionedUserIds())->toEqualCanonicalizing([$w['tom']->id, $kira->id])
+        ->and($events)->toHaveCount(4)
+        ->and($events->map(fn (Event $event) => NotificationFacts::of($event))->filter()->all())->toBe([])
+        ->and($events->map(fn (Event $event) => $consume($event))->unique()->all())->toBe([true])
+        ->and(Notification::query()->count())->toBe(0)
+        // a mentioned bot hears of it nowhere either
+        ->and(eventsOf(EventType::BotMentioned))->toHaveCount(0);
 });

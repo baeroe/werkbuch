@@ -15,7 +15,7 @@ use Illuminate\Broadcasting\PrivateChannel;
  *
  * | Event | Channel |
  * |---|---|
- * | `work_item.*` (not `subscribed`/`unsubscribed`), `project.*` | `private-project.{project}` |
+ * | `work_item.*` (not `subscribed`/`unsubscribed`), `project.*`, `page.*` (A318) | `private-project.{project}` |
  * | `comment.*` (also the reactions) | `private-work-item.{item}` |
  * | `work_item.subscribed`/`unsubscribed` | `presence-user.{actor}` |
  * | `project.member_added` | also `presence-user.{new member}` (K14: the person does not listen to the project yet) |
@@ -73,7 +73,7 @@ final class LiveConsumer implements EventConsumer, RetriesConsumption
             $event->type === EventType::WorkItemSubscribed, $event->type === EventType::WorkItemUnsubscribed => $user($event->actor_id),
             $event->type === EventType::ProjectMemberAdded => [...$project, ...$user(data_get($event->changes, 'member.new.user_id'))],
             $event->type === EventType::UserRoleChanged => $user($event->subject_id),
-            in_array($event->type->group(), ['work_item', 'project'], true) => $project,
+            in_array($event->type->group(), ['work_item', 'project', 'page'], true) => $project,
             $event->type->group() === 'comment' => [new PrivateChannel("work-item.{$event->subject_id}")],
             default => [],
         };
