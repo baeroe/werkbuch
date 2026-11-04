@@ -1,5 +1,5 @@
 import { expect, test } from '../fixtures';
-import { arrowTo, isPhone, openProfileMenu, PEOPLE, tabTo, tr } from '../helpers';
+import { allEntries, api, arrowTo, createE2eProject, createItem, isPhone, openProfileMenu, PEOPLE, removeE2eProject, runId, signedInContext, tabTo, tr, variant } from '../helpers';
 
 // signed in as the e2e person (playwright.config.ts), in English. Never sign out for real here: that ends the shared
 // session of every later test.
@@ -205,4 +205,54 @@ test('loads everything from its own origin', async ({ page, baseURL }) => {
 
   expect(fonts).toEqual({ loaded: true, figtree: true, bricolage: true });
   expect(foreign).toEqual([]);
+});
+
+test('counts a new notification up live', async ({ page, browser }) => {
+  // a second context and the way through the queues and Reverb: more than the default 30 s may pass
+  test.setTimeout(60_000);
+  // the inbox account of the variant (A289) is a member of a project of the test's own; the e2e person writes
+  const project = await createE2eProject(page, `E2E shell badge ${variant()} ${runId()}`, { types: ['Task'] });
+  const inbox = PEOPLE.inbox[variant()]!;
+  const person = (await allEntries(page, 'users')).find((entry) => entry.email === inbox.email) as { id: string };
+  const added = await api(page, 'POST', `/api/v1/projects/${project.id}/members`, { user_id: person.id, role: 'member' });
+  expect(added.status(), await added.text()).toBe(201);
+  const other = await signedInContext(browser, inbox);
+  try {
+    /** The unread notifications of the inbox person, as the server holds them. */
+    const unread = async () => {
+      const response = await api(other.page, 'GET', '/api/v1/notifications?unread_only=1&per_page=100');
+      expect(response.status(), await response.text()).toBe(200);
+      return (await response.json()) as { data: { work_item_id: string | null; event: string }[]; meta: { total: number } };
+    };
+    const has = async (itemId: string, event: string) => (await unread()).data.some((entry) => entry.work_item_id === itemId && entry.event === event);
+
+    // assigned: the person watches the item from then on; the notification is there before the page opens
+    const item = await createItem(page, { project_id: project.id, title: 'E2E Badge Rechnung', assignee_id: person.id });
+    await expect.poll(() => has(item.id, 'assigned'), { timeout: 20_000 }).toBe(true);
+
+    const held = other.page.waitForResponse(
+      (response) => response.url().endsWith('/broadcasting/auth') && (response.request().postData() ?? '').includes(`"presence-user.${person.id}"`) && response.ok(),
+    );
+    await other.page.goto('/my-items');
+    await held;
+    await other.page.evaluate(() => ((window as Window & { __badge?: boolean }).__badge = true));
+    // the inbox link that shows: in the sidebar, on the phone in the top bar
+    const link = other.page.getByRole('link', { name: /^Inbox(, \d+ unread)?$/ }).filter({ visible: true });
+    const before = (await unread()).meta.total;
+    await expect(link).toHaveAccessibleName(tr('en', 'shell.nav.inbox_unread', { count: before }));
+    await expect(link.locator('[data-inbox-badge]')).toHaveText(before > 99 ? '99+' : String(before));
+
+    // a comment on the watched item: the badge counts up without a reload
+    const commented = await api(page, 'POST', `/api/v1/work-items/${item.id}/comments`, { body: 'E2E Badge: die Rechnung ist raus.' });
+    expect(commented.status(), await commented.text()).toBe(201);
+    await expect.poll(() => has(item.id, 'comment'), { timeout: 20_000 }).toBe(true);
+    const after = (await unread()).meta.total;
+    expect(after).toBeGreaterThan(before);
+    await expect(link).toHaveAccessibleName(tr('en', 'shell.nav.inbox_unread', { count: after }), { timeout: 20_000 });
+    await expect(link.locator('[data-inbox-badge]')).toHaveText(after > 99 ? '99+' : String(after));
+    expect(await other.page.evaluate(() => (window as Window & { __badge?: boolean }).__badge)).toBe(true);
+  } finally {
+    await other.context.close();
+    await removeE2eProject(page, project.identifier);
+  }
 });

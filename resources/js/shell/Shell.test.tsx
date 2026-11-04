@@ -49,6 +49,7 @@ beforeEach(() => {
     'GET /api/v1/projects': () => ({ body: list([web, app]) }),
     'GET /api/v1/favorites': () => ({ body: list([]) }),
     'GET /api/v1/views': () => ({ body: list([]) }),
+    'GET /api/v1/notifications': () => ({ body: list([], 0) }),
   };
   vi.mocked(router.post).mockClear();
   useUiStore.setState(useUiStore.getInitialState());
@@ -136,6 +137,57 @@ describe('Shell', () => {
     expect(screen.getByText('Inhalt')).toBeTruthy();
     expect(errors()).toEqual([]);
     expect(successes()).toEqual([]);
+  });
+});
+
+describe('Inbox badge', () => {
+  /** The inbox answers `total` unread notifications to the badge (a page of one row). */
+  const unread = (total: number) => {
+    routes['GET /api/v1/notifications'] = () => ({ body: list([], total) });
+  };
+  const inboxLinks = () => screen.getAllByRole('link', { name: /^Inbox/ });
+
+  it('shows the unread count on the inbox in the sidebar, the rail and the mobile bar', async () => {
+    unread(3);
+    render(<Shell>Inhalt</Shell>);
+    const header = screen.getByRole('banner');
+
+    // the sidebar and the phone bar: the name says it, the badge shows it
+    const full = await within(sidebar()).findByRole('link', { name: 'Inbox, 3 ungelesen' });
+    expect(full.textContent).toBe('Inbox3');
+    expect(full.getAttribute('href')).toBe('/inbox');
+    const bar = within(header).getByRole('link', { name: 'Inbox, 3 ungelesen' });
+    expect(bar.textContent).toBe('3');
+    // the badge is a picture of the name: read once, through the link
+    expect(full.querySelector('[data-inbox-badge]')?.getAttribute('aria-hidden')).toBe('true');
+
+    // the rail
+    act(() => useUiStore.getState().toggleSidebar());
+    const rail = await within(sidebar()).findByRole('link', { name: 'Inbox, 3 ungelesen' });
+    expect(rail.textContent).toBe('3');
+
+    // the count follows the inbox: `notifications.changed` makes it stale, the badge asks again (Task 14)
+    unread(4);
+    await act(() => client.invalidateQueries({ queryKey: ['notifications'] }));
+    expect(await within(sidebar()).findByRole('link', { name: 'Inbox, 4 ungelesen' })).toBe(within(sidebar()).getByRole('link', { name: /^Inbox/ }));
+    expect(within(header).getByRole('link', { name: 'Inbox, 4 ungelesen' }).textContent).toBe('4');
+    expect(api!.calls.filter((call) => call.url.startsWith('/api/v1/notifications')).map((call) => call.url)).toContain('/api/v1/notifications?unread_only=1&per_page=1');
+  });
+
+  it('hides the badge at zero and says 99+ above 99', async () => {
+    render(<Shell>Inhalt</Shell>);
+    await waitFor(() => expect(api!.calls.some((call) => call.url.startsWith('/api/v1/notifications'))).toBe(true));
+    // nothing unread: no badge, the plain name
+    await waitFor(() => expect(inboxLinks().map((link) => link.getAttribute('aria-label') ?? link.textContent)).toEqual(['Inbox', 'Inbox']));
+    expect(document.querySelector('[data-inbox-badge]')).toBeNull();
+
+    unread(120);
+    await act(() => client.invalidateQueries({ queryKey: ['notifications'] }));
+    const full = await within(sidebar()).findByRole('link', { name: 'Inbox, 120 ungelesen' });
+    expect(full.querySelector('[data-inbox-badge]')?.textContent).toBe('99+');
+    expect(within(screen.getByRole('banner')).getByRole('link', { name: 'Inbox, 120 ungelesen' }).textContent).toBe('99+');
+    act(() => useUiStore.getState().toggleSidebar());
+    expect((await within(sidebar()).findByRole('link', { name: 'Inbox, 120 ungelesen' })).textContent).toBe('99+');
   });
 });
 

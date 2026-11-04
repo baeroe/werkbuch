@@ -1,6 +1,6 @@
 /*
- * The personal settings (spec 5.2) in the shared settings frame: Profile, Security, and API & MCP, one address each
- * (`/me/{section?}`, the profile without a section; Notifications come with Phase 8). Everybody changes their own;
+ * The personal settings (spec 5.2) in the shared settings frame: Profile, Security, Notifications, and API & MCP, one
+ * address each (`/me/{section?}`, the profile without a section). Everybody changes their own;
  * nobody sees another person's. The account is the signed-in one from the shared props, so there is nothing to load
  * before the sections show; an unknown section says so and keeps the list.
  */
@@ -16,10 +16,11 @@ import { paths } from '@/lib/links';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import { SectionNav, SettingsFrame } from '../frame/SettingsFrame';
 import { ApiAndMcp } from './ApiAndMcp';
+import { Notifications } from './notifications/Notifications';
 import { Profile } from './Profile';
 import { Security } from './Security';
 
-const SECTIONS = ['profile', 'security', 'api'] as const;
+const SECTIONS = ['profile', 'security', 'notifications', 'api'] as const;
 type Section = (typeof SECTIONS)[number];
 
 const isSection = (slug: string): slug is Section => (SECTIONS as readonly string[]).includes(slug);
@@ -65,6 +66,7 @@ export function PersonalSettings({ section }: { section: string }) {
     >
       {current === 'profile' && <Profile key={me.id} user={me} />}
       {current === 'security' && <Security key={me.id} user={me} />}
+      {current === 'notifications' && <Notifications key={me.id} user={me} />}
       {current === 'api' && <ApiAndMcp key={me.id} user={me} />}
       {current === null && <UnknownSection />}
     </SettingsFrame>
