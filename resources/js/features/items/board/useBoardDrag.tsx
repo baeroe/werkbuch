@@ -47,6 +47,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { boardLockReason, checkMove, type BoardReason, type BoardRules, type MoveCheck } from '@/domain/boardRules';
 import { sortItems } from '@/domain/sort';
 import { t } from '@/lib/i18n';
+import { reducedMotion, SPRING_MS, springEasing } from '@/lib/motion';
 import type { ListedItem, SortSpec, StateCategory } from '@/types';
 import { reasonText } from './moves';
 import type { BoardColumnData } from './useBoardColumns';
@@ -85,21 +86,6 @@ function place(columns: BoardColumnData[], item: ListedItem, key: string, index:
 function columnKeyOf(columns: readonly BoardColumnData[], id: string): string | null {
   if (id.startsWith('column:')) return id.slice('column:'.length);
   return columns.find((column) => column.ids.includes(id))?.key ?? null;
-}
-
-const reducedMotion = () => typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-/** The spring of DESIGN.md for the drop animation (Web Animations need the curve itself, not the variable). */
-export function springEasing(): string {
-  const fallback = 'cubic-bezier(0.34, 1.3, 0.64, 1)';
-  const value = getComputedStyle(document.documentElement).getPropertyValue('--ease-spring').trim();
-  if (!value || typeof KeyframeEffect === 'undefined') return fallback;
-  try {
-    new KeyframeEffect(null, null, { easing: value });
-    return value;
-  } catch {
-    return fallback;
-  }
 }
 
 export interface BoardDragOptions {
@@ -322,7 +308,7 @@ export function useBoardDrag(served: BoardColumnData[], rules: BoardRules, optio
 
   const dropAnimation = useMemo<DropAnimation>(
     () => ({
-      duration: reducedMotion() ? 1 : 420,
+      duration: reducedMotion() ? 1 : SPRING_MS,
       easing: springEasing(),
       sideEffects: defaultDropAnimationSideEffects({ className: { dragOverlay: 'board-dropping' }, styles: { active: { opacity: '0' } } }),
     }),

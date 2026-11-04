@@ -9,8 +9,9 @@
  * - A new page is called "Neue Seite" (at the top level, or below the open page: "Unterseite anlegen"); after the toast
  *   the wiki opens it with `?focus=title`. The wiki reads that once when the page opens, takes it out of the address
  *   (`router.replace`), and the page selects its title, ready to be typed over.
- * - Moving ("Verschieben nach …", `MovePageDialog`) shows at once (`movedTree` in the cached tree); a refusal of the
- *   server takes it back: a 422 at the field of the dialog, anything else as a toast (`notifyError`).
+ * - Moving ("Verschieben nach …", `MovePageDialog`, or dragging a row of the tree for whoever may edit the wiki) shows
+ *   at once (`movedTree` in the cached tree); a refusal of the server takes it back: a 422 at the field of the dialog,
+ *   anything else (and every refusal of a drag) as a toast (`notifyError`).
  * - Deleting takes a page with its subtree and always asks first (`DeletePageDialog`), on every way: the page's menu,
  *   ⌘⌫ on the page (`wiki.delete`), ⌘⌫ on a row of the tree (the row's page, not the open one), the palette's
  *   `wiki.page.delete`; "Abbrechen" gives the focus back to where it was. After the yes the pages leave the tree at once
@@ -286,7 +287,21 @@ export function Wiki({ project, pageId, pageFound }: WikiProps) {
       />
     );
   } else if (tree.length > 0) {
-    treeArea = <PageTree nodes={tree} hrefOf={hrefOf} currentId={pageId} collapsed={collapsed} onToggle={toggle} onDelete={canEdit ? requestDelete : undefined} />;
+    treeArea = (
+      <PageTree
+        nodes={tree}
+        hrefOf={hrefOf}
+        currentId={pageId}
+        collapsed={collapsed}
+        onToggle={toggle}
+        canMove={canEdit}
+        onMove={(id, placement) => {
+          const node = findPage(tree, id);
+          return node ? move(node, placement) : undefined;
+        }}
+        onDelete={canEdit ? requestDelete : undefined}
+      />
+    );
   }
 
   let content = null;

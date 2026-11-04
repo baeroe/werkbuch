@@ -79,9 +79,17 @@ function arrayMove<T>(list: readonly T[], from: number, to: number): T[] {
 }
 
 /**
+ * How many levels a pull of `offset` px sideways changes: one from three quarters of an indent (12 px at 16), each
+ * further indent one more; a hand that wobbles by half an indent keeps the depth (13c, the clickdummy rounded at 8 px).
+ */
+function depthStep(offset: number, indent: number): number {
+  return Math.trunc(offset / indent + Math.sign(offset) * 0.25);
+}
+
+/**
  * Where the dragged row would land: `rows` are the rows on screen without the subtree of the dragged page (it travels
- * along), `overId` the row it is over, `offset` how far it was pulled sideways. The depth lies between the next row's
- * (it must not lose its parent) and one deeper than the row above.
+ * along), `overId` the row it is over, `offset` how far it was pulled sideways (`depthStep`). The depth lies between the
+ * next row's (it must not lose its parent) and one deeper than the row above.
  */
 export function projectDrop(rows: readonly PageRow[], activeId: string, overId: string, offset: number, indent: number): { depth: number; parentId: string | null } {
   const activeIndex = rows.findIndex((row) => row.id === activeId);
@@ -93,7 +101,7 @@ export function projectDrop(rows: readonly PageRow[], activeId: string, overId: 
   const next = moved[overIndex + 1];
   const maxDepth = previous ? previous.depth + 1 : 0;
   const minDepth = next ? next.depth : 0;
-  const depth = Math.min(maxDepth, Math.max(minDepth, rows[activeIndex].depth + Math.round(offset / indent)));
+  const depth = Math.min(maxDepth, Math.max(minDepth, rows[activeIndex].depth + depthStep(offset, indent)));
 
   let parentId: string | null = null;
   if (depth > 0 && previous) {

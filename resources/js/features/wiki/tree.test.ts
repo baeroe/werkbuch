@@ -129,6 +129,17 @@ describe('dragging in the tree', () => {
     expect(projectDrop(rowsFor('performance'), 'performance', 'performance', 4 * INDENT, INDENT)).toEqual({ depth: 3, parentId: 'domain' });
   });
 
+  it('changes the depth only from three quarters of an indent', () => {
+    // 11 px sideways is a hand that wobbles: the page stays; 12 px (¾ of 16) takes it one level, each further 16 px one more
+    expect(dropPlacement(tree, new Set(), 'performance', 'performance', 11, INDENT)).toBeNull();
+    expect(dropPlacement(tree, new Set(), 'performance', 'performance', 12, INDENT)).toEqual({ parent_id: 'hosting', before_id: null });
+    expect(dropPlacement(tree, new Set(), 'kickoff', 'kickoff', -11, INDENT)).toBeNull();
+    expect(dropPlacement(tree, new Set(), 'kickoff', 'kickoff', -12, INDENT)).toEqual({ parent_id: null, before_id: null });
+    expect(projectDrop(rowsFor('performance'), 'performance', 'performance', 8, INDENT).depth).toBe(1);
+    expect(projectDrop(rowsFor('performance'), 'performance', 'performance', 27, INDENT).depth).toBe(2);
+    expect(projectDrop(rowsFor('performance'), 'performance', 'performance', 28, INDENT).depth).toBe(3);
+  });
+
   it('dropped below a collapsed page, it becomes that page’s last subpage, after the hidden ones', () => {
     // hosting is folded away: domain is no row, but performance still lands behind it
     expect(flattenPages(tree, new Set(['hosting'])).map((row) => row.id)).not.toContain('domain');
