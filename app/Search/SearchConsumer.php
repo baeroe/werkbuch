@@ -58,9 +58,14 @@ final class SearchConsumer implements EventConsumer, RetriesConsumption
             // the events of a comment hang on its item (A227), whose document holds the text of the comments (A245)
             EventType::CommentCreated, EventType::CommentUpdated, EventType::CommentDeleted => $this->indexer->upsertItem($id),
             EventType::WorkItemDeleted => $this->indexer->removeItem($id),
+            // a move changes nothing the document holds today, but writing it again is cheap and keeps it in step
+            EventType::PageCreated, EventType::PageUpdated, EventType::PageMoved => $this->indexer->upsertPage($id),
+            // the root and every page below it went in one event
+            EventType::PageDeleted => $this->indexer->removePages($this->pageIds($event)),
             EventType::ProjectCreated, EventType::ProjectArchived, EventType::ProjectRestored => $this->indexer->upsertProject($id),
             EventType::ProjectUpdated => $this->projectUpdated($event),
-            // the rows may be gone already (the purge runs in the queue `bulk`): the documents go by the project's id
+            // the rows may be gone already (the purge runs in the queue `bulk`): the documents of the project, its items
+            // and its pages go by the project's id
             EventType::ProjectDeleted => $this->indexer->removeProject($id),
             EventType::UserCreated, EventType::UserUpdated, EventType::UserRoleChanged, EventType::UserDeactivated,
             EventType::UserReactivated, EventType::BotCreated => $this->indexer->upsertUser($id),
@@ -70,6 +75,16 @@ final class SearchConsumer implements EventConsumer, RetriesConsumption
             EventType::LabelDeleted => $this->reindex(null),
             default => null,
         };
+    }
+
+    /**
+     * The pages a `page.deleted` removed (`meta.page_ids`, the root first), at least its root.
+     *
+     * @return list<string>
+     */
+    private function pageIds(Event $event): array
+    {
+        return array_values(array_filter((array) ($event->meta['page_ids'] ?? [$event->subject_id]), is_string(...)));
     }
 
     /** A new identifier changes the key of every item of the project. */

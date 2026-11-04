@@ -92,6 +92,7 @@ class AppServiceProvider extends ServiceProvider
 
         // the index is written by the search consumer only, never when a model is saved (P1)
         WorkItem::disableSearchSyncing();
+        Page::disableSearchSyncing();
         Project::disableSearchSyncing();
         User::disableSearchSyncing();
 

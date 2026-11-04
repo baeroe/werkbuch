@@ -16,7 +16,7 @@ use RuntimeException;
 final class Meili
 {
     /** @var list<string> */
-    public const INDEXES = ['testing_work_items', 'testing_projects', 'testing_users'];
+    public const INDEXES = ['testing_work_items', 'testing_pages', 'testing_projects', 'testing_users'];
 
     /** The uid of the newest failed task of the test indexes that settle() has looked at already (or found before use()). */
     private static int $checked = -1;

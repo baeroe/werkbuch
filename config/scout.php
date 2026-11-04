@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Page;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
@@ -160,6 +161,11 @@ return [
                 'filterableAttributes' => ['project_id', 'archived', 'type_id', 'state_category', 'assignee_id', 'label_ids'],
                 'rankingRules' => ['words', 'typo', 'proximity', 'attribute', 'sort', 'exactness', 'updated_at:desc'],
                 'typoTolerance' => ['disableOnAttributes' => ['key']],
+            ],
+            Page::class => [
+                'searchableAttributes' => ['title', 'text'],
+                'filterableAttributes' => ['project_id'],
+                'rankingRules' => ['words', 'typo', 'proximity', 'attribute', 'sort', 'exactness', 'updated_at:desc'],
             ],
             Project::class => [
                 'searchableAttributes' => ['identifier', 'former_identifiers', 'name', 'description'],

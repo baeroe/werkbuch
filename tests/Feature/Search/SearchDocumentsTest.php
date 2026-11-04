@@ -1,12 +1,15 @@
 <?php
 
 use App\Access\ProjectRole;
+use App\Actions\Pages\CreatePage;
+use App\Actions\Pages\UpdatePage;
 use App\Actions\Projects\UpdateProject;
 use App\Actions\WorkItems\CreateWorkItem;
 use App\Actions\WorkItems\DeleteWorkItem;
 use App\Actions\WorkItems\UpdateWorkItem;
 use App\Models\Comment;
 use App\Models\Label;
+use App\Models\Page;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
@@ -23,6 +26,7 @@ $web = function (): array {
 
 it('names the indexes with the prefix', function () {
     expect((new WorkItem)->searchableAs())->toBe('testing_work_items')
+        ->and((new Page)->searchableAs())->toBe('testing_pages')
         ->and((new Project)->searchableAs())->toBe('testing_projects')
         ->and((new User)->searchableAs())->toBe('testing_users');
 });
@@ -81,6 +85,52 @@ it('puts the text of the comments into the item\'s document, cut at 64 KB', func
         ->and($document($item))->toBe("Zuerst die Pflichtfelder\nBitte auch\ndas Impressum\nErledigt")
         ->and($document($long))->toBe(str_repeat('a', SearchIndexer::COMMENTS_MAX - 6)."\nbbbb")
         ->and(strlen($document($long)))->toBe(SearchIndexer::COMMENTS_MAX - 1);
+});
+
+it('indexes a page with its title and text, cut to 64 KB without splitting a character', function () use ($web) {
+    [$web] = $web();
+    $page = Page::factory()->for($web)->withText("# Onboarding\n\nDer **erste** Tag")->create(['title' => 'Onboarding']);
+    $empty = Page::factory()->for($web)->create(['title' => 'Leer']);
+    // the cut falls into the two bytes of the ä: the document ends before it, never with half a character
+    $long = Page::factory()->for($web)->create(['title' => 'Lang', 'content_text' => str_repeat('a', SearchIndexer::COMMENTS_MAX - 1).'ä und mehr']);
+
+    $document = fn (Page $of): array => Page::makeAllSearchableQuery()->whereKey($of->id)->sole()->toSearchableArray();
+
+    expect($document($page))->toBe([
+        'id' => $page->id,
+        'project_id' => $web->id,
+        'title' => 'Onboarding',
+        'text' => "Onboarding\nDer erste Tag",
+        'updated_at' => $page->updated_at?->getTimestamp(),
+    ])
+        ->and($document($empty)['text'])->toBe('')
+        ->and($document($long)['text'])->toBe(str_repeat('a', SearchIndexer::COMMENTS_MAX - 1))
+        ->and(Page::query()->findOrFail($long->id)->toSearchableArray()['text'])->toBe(str_repeat('a', SearchIndexer::COMMENTS_MAX - 1));
+});
+
+it('loads no more of a page than its document takes (T12-M1)', function () use ($web) {
+    [$web] = $web();
+    Page::factory()->for($web)->withText('Ein Text')->create(['content_text' => str_repeat('a', SearchIndexer::COMMENTS_MAX + 10)]);
+
+    $loaded = Page::makeAllSearchableQuery()->get()->sole();
+
+    // the database cuts the text, and the Tiptap JSON (up to 256 KB) stays where it is
+    expect(strlen((string) $loaded->content_text))->toBe(SearchIndexer::COMMENTS_MAX)
+        ->and($loaded->getAttributes())->not->toHaveKey('content');
+});
+
+it('leaves the pages of a project being deleted out', function () use ($web) {
+    [$web] = $web();
+    $gone = Project::factory()->create(['deleting_at' => now()]);
+    $kept = Page::factory()->for($web)->create();
+    Page::factory()->for($gone)->create();
+
+    $loaded = Page::makeAllSearchableQuery()->get();
+    DB::enableQueryLog();
+
+    expect($loaded->filter->shouldBeSearchable()->modelKeys())->toBe([$kept->id])
+        ->and($loaded)->toHaveCount(2)
+        ->and(DB::getQueryLog())->toBe([]);
 });
 
 it('builds the document of a project with its former identifiers', function () use ($web) {
@@ -154,9 +204,12 @@ it('never writes the index when a model is saved', function () use ($web) {
     UpdateWorkItem::run(actor($mara), $item, ['title' => 'Kontaktformular prüfen']);
     DeleteWorkItem::run(actor($mara), WorkItem::query()->findOrFail($item->id));
     UpdateProject::run(actor($mara), $web, ['name' => 'Website']);
+    $page = CreatePage::run(actor($mara), $web, ['title' => 'Onboarding']);
+    UpdatePage::run(actor($mara), $page, ['title' => 'Onboarding neu']);
     $mara->update(['name' => 'Mara Maier']);
 
     expect($engine->documents('testing_work_items'))->toBe([])
+        ->and($engine->documents('testing_pages'))->toBe([])
         ->and($engine->documents('testing_projects'))->toBe([])
         ->and($engine->documents('testing_users'))->toBe([])
         ->and($engine->writes())->toBe(0);

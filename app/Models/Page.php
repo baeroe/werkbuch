@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Access\Visibility;
 use App\RichText\RichTextNames;
+use App\Search\SearchIndexer;
 use App\Support\ReaderNames;
 use Database\Factories\PageFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -16,6 +17,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Support\Carbon;
+use Laravel\Scout\Searchable;
 
 /**
  * A page of the wiki of a project (spec 4.15): a node of the tree (`parent_id`, `rank` among its siblings, compared byte
@@ -48,7 +50,7 @@ use Illuminate\Support\Carbon;
 final class Page extends Model
 {
     /** @use HasFactory<PageFactory> */
-    use HasFactory, HasUlids;
+    use HasFactory, HasUlids, Searchable;
 
     /**
      * Set by loadForResource(), never stored: whether PageResource leaves out the content (`lean`: the tree, search
@@ -88,6 +90,45 @@ final class Page extends Model
     public function scopeVisibleTo(Builder $query, User $user): void
     {
         $query->whereIn('pages.project_id', Visibility::projectIds($user));
+    }
+
+    /**
+     * The search document (index `pages`, settings in config/scout.php): the title and the plain text to search, cut at
+     * SearchIndexer::COMMENTS_MAX bytes without splitting a character, the project to filter by. Who may see the page is
+     * not in it: the search filters by the projects the reader sees when it asks (P2, A317).
+     *
+     * @return array{id: string, project_id: string, title: string, text: string, updated_at: int}
+     */
+    public function toSearchableArray(): array
+    {
+        return [
+            'id' => $this->id,
+            'project_id' => $this->project_id,
+            'title' => $this->title,
+            'text' => SearchIndexer::cut($this->content_text ?? ''),
+            'updated_at' => (int) $this->updated_at?->getTimestamp(),
+        ];
+    }
+
+    /** A page of a project being deleted is gone for everyone at once, from the index as well. */
+    public function shouldBeSearchable(): bool
+    {
+        return $this->project->deleting_at === null;
+    }
+
+    /**
+     * What toSearchableArray() and shouldBeSearchable() read, loaded with the query of a rebuild
+     * (makeAllSearchableQuery()): only the columns of the document, the text cut by the database (no page brings its
+     * Tiptap JSON or more text than the document takes, T12-M1), and whether its project is being deleted.
+     *
+     * @param  Builder<self>  $query
+     * @return Builder<self>
+     */
+    protected function makeAllSearchableUsing(Builder $query): Builder
+    {
+        return $query->select(['pages.id', 'pages.project_id', 'pages.title', 'pages.updated_at'])
+            ->selectRaw('left(pages.content_text, ?) as content_text', [SearchIndexer::COMMENTS_MAX])
+            ->with('project:id,deleting_at');
     }
 
     /**

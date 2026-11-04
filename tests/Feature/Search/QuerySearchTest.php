@@ -1,6 +1,7 @@
 <?php
 
 use App\Access\ProjectRole;
+use App\Access\Visibility;
 use App\Actions\Projects\DeleteProject;
 use App\Actions\Projects\RemoveMember;
 use App\Actions\Projects\UpdateProject;
@@ -8,6 +9,7 @@ use App\Actions\Search\QuerySearch;
 use App\Actions\Users\DeactivateUser;
 use App\Actions\WorkItems\DeleteWorkItem;
 use App\Jobs\PurgeProject;
+use App\Models\Page;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\View;
@@ -167,6 +169,109 @@ it('lists archived projects only with include_archived', function () use ($world
         ->and($ids($search($mara, ['q' => 'website'])->projects))->toBe([$web->id, $arc->id]);
 });
 
+// pages (A317)
+
+it('finds a page by a word of its text, only in projects the reader sees', function () use ($world, $rebuild, $search, $ids) {
+    $engine = searchEngine();
+    [$mara, $web, $ops] = $world();
+    $page = Page::factory()->for($web)->withText('Der Ablauf am ersten Tag')->create(['title' => 'Onboarding']);
+    $titled = Page::factory()->for($web)->create(['title' => 'Ablauf der Releases']);
+    $hidden = Page::factory()->for($ops)->withText('Der Ablauf der Wartung')->create(['title' => 'Geheim']);
+    $rebuild();
+
+    $results = $search($mara, ['q' => 'ablauf']);
+    $response = $this->actingAs($mara)->getJson('/api/v1/search?q=ablauf&types=pages')->assertOk();
+
+    expect($engine->documents('testing_pages'))->toHaveKey($hidden->id)
+        ->and($ids($results->pages))->toEqualCanonicalizing([$page->id, $titled->id])
+        ->and($ids($search($mara, ['q' => 'ersten tag'])->pages))->toBe([$page->id])
+        ->and($response->json('data.pages.*.id'))->toEqualCanonicalizing([$page->id, $titled->id])
+        // lean: the text stays on the page, and the title of the hidden page never leaves the server
+        ->and($response->json('data.pages.0'))->toHaveKeys(['title', 'emoji', 'parent_id', 'version'])->not->toHaveKeys(['content', 'content_json'])
+        ->and($response->getContent())->not->toContain('Geheim')
+        ->and($ids($search($mara, ['q' => 'ablauf', 'types' => 'items'])->pages))->toBe([]);
+});
+
+it('shows no page the index still holds after it was deleted or its project is being deleted', function () use ($world, $rebuild, $search, $ids) {
+    searchEngine();
+    [$mara, $web] = $world();
+    $gone = Page::factory()->for($web)->create(['title' => 'Ablauf alt']);
+    $kept = Page::factory()->for($web)->create(['title' => 'Ablauf neu']);
+    $rebuild();
+
+    DB::table('pages')->where('id', $gone->id)->delete();
+    expect($ids($search($mara, ['q' => 'ablauf'])->pages))->toBe([$kept->id]);
+
+    DB::table('projects')->where('id', $web->id)->update(['deleting_at' => now()]);
+    Visibility::forget();
+    expect($ids($search($mara, ['q' => 'ablauf'])->pages))->toBe([]);
+});
+
+it('leaves out pages of archived projects without include_archived', function () use ($world, $rebuild, $search, $ids) {
+    searchEngine();
+    [$mara, $web] = $world();
+    $arc = Project::factory()->identifier('ARC')->archived()->member($mara, ProjectRole::Member)->create(['name' => 'Altes Portal']);
+    $open = Page::factory()->for($web)->create(['title' => 'Ablauf offen']);
+    $old = Page::factory()->for($arc)->create(['title' => 'Ablauf alt']);
+    $rebuild();
+
+    expect($ids($search($mara, ['q' => 'ablauf'])->pages))->toBe([$open->id])
+        ->and($ids($search($mara, ['q' => 'ablauf', 'include_archived' => '1'])->pages))->toBe([$open->id, $old->id]);
+});
+
+it('lets the engine leave out hidden pages before take', function () use ($world, $search, $ids) {
+    searchEngine();
+    [$mara, $web, $ops] = $world();
+    $arc = Project::factory()->identifier('ARC')->archived()->member($mara, ProjectRole::Member)->create();
+    $hidden = Page::factory()->for($ops)->create(['title' => 'Ablauf geheim']);
+    $archived = Page::factory()->for($arc)->create(['title' => 'Ablauf archiviert']);
+    $open = Page::factory()->for($web)->create(['title' => 'Ablauf offen']);
+    // what the reader may not get stands first in the index: only a filter in the engine leaves room for the rest
+    $indexer = app(SearchIndexer::class);
+    foreach ([$hidden, $archived, $open] as $indexed) {
+        $indexer->upsertPage($indexed->id);
+    }
+
+    expect($ids($search($mara, ['q' => 'ablauf', 'limit' => 1])->pages))->toBe([$open->id]);
+});
+
+it('keeps the order of the index for pages', function () use ($world, $search, $ids) {
+    searchEngine();
+    [$mara, $web] = $world();
+    $first = Page::factory()->for($web)->create(['title' => 'Ablauf A']);
+    $second = Page::factory()->for($web)->create(['title' => 'Ablauf B']);
+    $indexer = app(SearchIndexer::class);
+    $indexer->upsertPage($second->id);
+    $indexer->upsertPage($first->id);
+
+    expect($ids($search($mara, ['q' => 'ablauf'])->pages))->toBe([$second->id, $first->id]);
+});
+
+it('asks the database as often for 50 hits as for 5', function () use ($world, $rebuild) {
+    searchEngine();
+    [$mara, $web] = $world();
+    $more = function (int $count) use ($web, $rebuild) {
+        Page::factory()->for($web)->withText('Ein Ablauf')->count($count)->create();
+        $rebuild();
+    };
+    $count = function () use ($mara): int {
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $this->actingAs($mara)->getJson('/api/v1/search?q=ablauf&types=pages&limit=50')->assertOk();
+        DB::disableQueryLog();
+
+        return count(DB::getQueryLog());
+    };
+
+    $more(5);
+    $count();
+    $few = $count();
+    $more(45);
+
+    expect($this->actingAs($mara)->getJson('/api/v1/search?q=ablauf&types=pages&limit=50')->json('data.pages'))->toHaveCount(50)
+        ->and($count())->toBe($few);
+});
+
 // the key jump (P4, review focus 2)
 
 it('puts the item of a typed key first and names it in key_match', function () use ($world, $item, $rebuild, $search, $ids) {
@@ -302,6 +407,7 @@ it('searches only the types asked for', function () use ($world, $item, $rebuild
     $projects = $search($mara, ['q' => 'web', 'types' => 'projects']);
     expect($ids($projects->projects))->toBe([$web->id, $shop->id])
         ->and($ids($projects->items))->toBe([])
+        ->and($projects->pages)->toBeEmpty()
         ->and($projects->people)->toBeEmpty()
         ->and($projects->views)->toBeEmpty()
         ->and($projects->keyMatch)->toBeNull()
@@ -326,15 +432,15 @@ it('refuses an empty query, an unknown type, a limit outside 1–50 and a non-bo
 
     expect($refusal($mara, ['q' => '  ', 'types' => 'items,wiki', 'limit' => '51', 'include_archived' => 'ja']))->toBe([
         'q' => [__('field.q.required')],
-        'types' => [__('field.types.unknown', ['name' => 'wiki', 'allowed' => 'items, projects, people, views'])],
+        'types' => [__('field.types.unknown', ['name' => 'wiki', 'allowed' => 'items, pages, projects, people, views'])],
         'limit' => [__('field.limit.invalid', ['max' => 50])],
         'include_archived' => [__('field.include_archived.invalid')],
     ])
         ->and($refusal($mara, []))->toBe(['q' => [__('field.q.required')]])
         ->and($refusal($mara, ['q' => ['kontakt']]))->toBe(['q' => [__('field.q.required')]])
         ->and($refusal($mara, ['q' => str_repeat('ä', 256)]))->toBe(['q' => [__('field.q.max', ['max' => 255])]])
-        ->and($refusal($mara, ['q' => 'x', 'types' => ['items', 7]]))->toBe(['types' => [__('field.types.unknown', ['name' => 'int', 'allowed' => 'items, projects, people, views'])]])
-        ->and($refusal($mara, ['q' => 'x', 'types' => 7]))->toBe(['types' => [__('field.types.unknown', ['name' => 'int', 'allowed' => 'items, projects, people, views'])]]);
+        ->and($refusal($mara, ['q' => 'x', 'types' => ['items', 7]]))->toBe(['types' => [__('field.types.unknown', ['name' => 'int', 'allowed' => 'items, pages, projects, people, views'])]])
+        ->and($refusal($mara, ['q' => 'x', 'types' => 7]))->toBe(['types' => [__('field.types.unknown', ['name' => 'int', 'allowed' => 'items, pages, projects, people, views'])]]);
 
     foreach (['0', 0, 'abc', '2.5', ['3'], true] as $limit) {
         expect($refusal($mara, ['q' => 'x', 'limit' => $limit]))->toBe(['limit' => [__('field.limit.invalid', ['max' => 50])]]);
