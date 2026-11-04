@@ -3,9 +3,9 @@
 use App\Exceptions\Rendering;
 use App\Http\Middleware\ConvertEmptyStringsToNull;
 use App\Http\Middleware\EnsureAccountIsActive;
-use App\Http\Middleware\GuardChannelAuthorization;
 use App\Http\Middleware\EnsureSession;
 use App\Http\Middleware\EnsureTokenAbility;
+use App\Http\Middleware\GuardChannelAuthorization;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\TrustProxies;
