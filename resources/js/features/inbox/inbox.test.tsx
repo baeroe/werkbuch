@@ -284,6 +284,22 @@ describe('the inbox', () => {
     expect(screen.getByRole('link', { name: /Jemand hat das Item angelegt/ })).toBeTruthy();
   });
 
+  it('keeps the inbox for a kind it does not know yet and a reminder without its day (T16-M5)', async () => {
+    notifications = [
+      makeNotification({ id: 'n_new', event: 'something_new' as Notification['event'], actor_id: 'u_lene', excerpt: 'Geheim', created_at: '2026-10-28T07:00:00.000Z' }),
+      makeNotification({ id: 'n_due', event: 'due', actor_id: null, data: {}, created_at: '2026-10-28T06:59:00.000Z' }),
+      makeNotification({ id: 'n_comment', event: 'comment', actor_id: 'u_lene', created_at: '2026-10-28T06:58:00.000Z' }),
+    ];
+    renderInbox();
+
+    const unknown = await screen.findByRole('link', { name: /Lene Vogt hat etwas geändert/ });
+    expect(unknown.textContent).not.toContain('Geheim');
+    // the reminder without a day: no empty place for it
+    const due = screen.getByRole('link', { name: /werkbuch erinnert: fällig/ });
+    expect(due.textContent).not.toMatch(/fällig am/);
+    expect(screen.getByRole('link', { name: /Lene Vogt hat kommentiert/ })).toBeTruthy();
+  });
+
   it('shows what belongs to no item without the template or the webhook behind it', async () => {
     renderInbox();
     await loaded();

@@ -127,13 +127,17 @@ function sentenceOf(notification: Notification, ctx: RowContext): { sentence: Re
     case 'due': {
       // overdue only as the reminder said it on its day (A275): the inbox does not work it out again
       const system = <span className={cx(unread ? 'font-semibold' : 'font-medium', 'text-ink')}>{t('inbox.system')}</span>;
-      const day = data.due_date ? formatDay(data.due_date) : '';
-      return { sentence: tx(data.overdue ? 'inbox.kind.overdue' : 'inbox.kind.due', { actor: system, day }), excerpt: null };
+      // a reminder without its day says so without an empty place (T16-M5)
+      if (!data.due_date) return { sentence: tx('inbox.kind.due_undated', { actor: system }), excerpt: null };
+      return { sentence: tx(data.overdue ? 'inbox.kind.overdue' : 'inbox.kind.due', { actor: system, day: formatDay(data.due_date) }), excerpt: null };
     }
     case 'template_run_failed':
       return { sentence: t('inbox.kind.template_run_failed'), excerpt: data.error ?? null };
     case 'webhook_disabled':
       return { sentence: t('inbox.kind.webhook_disabled'), excerpt: t('inbox.webhook_reason') };
+    default:
+      // a kind of a later version (a tab older than the server): a neutral sentence, never a broken inbox (T16-M5)
+      return { sentence: tx('inbox.kind.unknown', { actor }), excerpt: null };
   }
 }
 
