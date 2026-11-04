@@ -291,6 +291,15 @@ test('a page deleted by someone else says so and keeps unsaved text to copy', as
     await expect(editor).toHaveText('Nicht gespeichert. Erster Stand.');
     await door.sent;
 
+    // from here on, every answer Erik's tab gets about the page (its detail, its versions): the gone rule (A298, K5)
+    // allows exactly one, the held save meeting the 404, and no new try after it (T19-M1/M2)
+    const aboutNotes: string[] = [];
+    page.on('response', (response) => {
+      if (new URL(response.url()).pathname.startsWith(`/api/v1/pages/${notes.id}`)) {
+        aboutNotes.push(`${response.request().method()} ${new URL(response.url()).pathname} ${response.status()}`);
+      }
+    });
+
     // Mara deletes the page over the API while Erik's text is on its way
     const deleted = await api(mara.page, 'DELETE', `/api/v1/pages/${notes.id}`);
     expect(deleted.status(), await deleted.text()).toBe(200);
@@ -313,6 +322,7 @@ test('a page deleted by someone else says so and keeps unsaved text to copy', as
     await tabTo(page, parked.getByRole('button', { name: tr('en', 'common.copy') }), { max: 120 });
     await page.keyboard.press('Enter');
     await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('Release notes\n\nNicht gespeichert. Erster Stand.');
+    expect(aboutNotes).toEqual([`PATCH /api/v1/pages/${notes.id} 404`]);
   } finally {
     await mara?.context.close();
     await removeE2eProject(page, project.identifier);
