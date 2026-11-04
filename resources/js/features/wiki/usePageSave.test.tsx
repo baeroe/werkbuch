@@ -223,6 +223,26 @@ describe('usePageSave', () => {
     await waitFor(() => expect(saves().at(-1)).toMatchObject({ emoji: '🧭', base_version: 7 }));
   });
 
+  it('saves what was typed after Neu laden before it takes the own text back (T15-M1)', async () => {
+    const current = makePage({ ...page, title: 'Domain-Umzug (Ida)', content_json: doc('Idas'), version: 5 });
+    patch = () => problem(409, 'page_conflict', { detail: 'Ida Brenner hat die Seite inzwischen geändert.', current });
+    const { result } = renderSave();
+    await act(async () => result.current.change({ content: doc('Meins') }, { now: true }));
+    await waitFor(() => expect(result.current.conflict).not.toBeNull());
+    act(() => result.current.reload());
+    patch = (body) => stored(body);
+    // typed on the other version, still within the pause when "Rückgängig" comes
+    act(() => result.current.change({ content: doc('Idas und meins') }));
+    const dropped = currentToasts().find((toast) => toast.title === 'Deine Fassung verworfen')!;
+
+    await act(async () => runToastAction(dropped.id));
+
+    // stored first (nothing typed is lost), then the own text with the conflict against what is stored now
+    await waitFor(() => expect(result.current.conflict?.current.version).toBe(6));
+    expect(saves().at(-1)).toEqual({ title: 'Domain-Umzug (Ida)', emoji: null, content_json: doc('Idas und meins'), base_version: 5 });
+    expect(result.current.draft.content).toEqual(doc('Meins'));
+  });
+
   it('takes a newer page from outside only while nothing is typed', async () => {
     const { result, rerender } = renderSave();
     rerender({ shown: makePage({ ...page, title: 'Domain-Umzug (neu)', version: 4 }) });

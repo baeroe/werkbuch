@@ -32,7 +32,8 @@
  *   a toast with "Öffnen" (`href`). While it stands, leaving the tab asks.
  *   - `reload()` takes the stored page into the editor and drops the own text, with a toast whose "Rückgängig" (⌘Z
  *     with the focus outside a text field) brings the own text and the conflict back; a version this view saved since
- *     then is what the conflict is about now (13c). The editor's own undo stops at the reloaded page (it never enters
+ *     then is what the conflict is about now (13c); text typed since then and not saved yet is saved first (T15-M1).
+ *     The editor's own undo stops at the reloaded page (it never enters
  *     the editor's history), so it never saves the own text over the other one without the conflict.
  *   - A conflict that stands when the view goes says so in the same toast with "Öffnen"; nothing is sent then.
  *   - `keepMine()` saves the own text on top of the stored version (or of a newer own one) and asks the server to keep
@@ -389,11 +390,14 @@ export function usePageSave(page: WikiPage, { canEdit, uploads, me, href }: Page
       title: t('wiki.conflict.dropped.title'),
       description: t('wiki.conflict.dropped.description'),
       keep: true,
-      action: { label: undoLabel(), onClick: () => restoreMine(mine, found) },
+      action: { label: undoLabel(), onClick: () => void restoreMine(mine, found) },
     });
   }
 
-  function restoreMine(mine: PageFields, before: PageConflict) {
+  async function restoreMine(mine: PageFields, before: PageConflict) {
+    // typed after "Neu laden" and not saved yet: saved first, so taking the own text back loses none of it (T15-M1);
+    // should that save fail or meet a conflict, the newer text stays and the old one is not brought back over it
+    if (mounted.current && !(await flush())) return;
     // a copy: the editor ignores documents it reported itself
     const copy: PageFields = { ...mine, content: mine.content ? structuredClone(mine.content) : null };
     // what this view saved after "Neu laden" is newer than the page the conflict met: that is the stored state now
