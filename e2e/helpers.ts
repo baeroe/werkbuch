@@ -503,6 +503,23 @@ export async function createItem(page: Page, input: Record<string, unknown>): Pr
 }
 
 /**
+ * Creates a page in the wiki of a project of a spec over the API (`POST /api/v1/projects/{id}/pages`), as the
+ * signed-in person: at the end of the top level, or of the children of `parent_id`; `content_json` is Tiptap JSON. Answers
+ * its id; the page goes with its project (`removeE2eProject()`).
+ */
+export async function createE2ePage(
+  page: Page,
+  projectId: string,
+  input: { title: string; parent_id?: string | null; content_json?: Record<string, unknown> | null },
+): Promise<{ id: string }> {
+  await ensureCsrfCookie(page);
+  const response = await api(page, 'POST', `/api/v1/projects/${projectId}/pages`, input);
+  expect(response.status(), await response.text()).toBe(201);
+  const { data } = (await response.json()) as { data: { id: string } };
+  return { id: data.id };
+}
+
+/**
  * Deletes a project of a spec with its items (cleanup in `finally`): the answer is 202, the purge runs in the queue; a
  * project that is gone already (404) is fine. The page leaves the app for the delete and comes back on `/my-items`
  * afterwards: a page that shows the project, or only joins its live channel, would load it once more while the delete
