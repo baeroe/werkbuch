@@ -17,7 +17,7 @@ use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
  * channel as `GuardChannelAuthorization`, the same channel classes of routes/channels.php, the session of the interface
  * only, A283).
  *
- * Body `{socket_id, channel_names}` (a list of 1 to `MAX` names); anything else is a 403, like a refused channel.
+ * JSON body `{socket_id, channel_names}` (a list of 1 to `MAX` names); anything else is a 403, like a refused channel.
  * Answer `{channels: {<name>: {auth, channel_data?} | {refused: true}}}`: a refusal of one channel refuses only it.
  */
 final class ChannelBatchController extends Controller
@@ -27,6 +27,14 @@ final class ChannelBatchController extends Controller
 
     public function __invoke(Request $request): JsonResponse
     {
+        // like Laravel's BroadcastController: these background requests must not age the flash data of the page
+        $request->session()->reflash();
+
+        // JSON only: a form body or a query could carry a `channel_name` of its own past the checks below
+        if (! $request->isJson()) {
+            throw new AccessDeniedHttpException;
+        }
+
         $socket = $request->input('socket_id');
         $names = $request->input('channel_names');
 
@@ -53,7 +61,7 @@ final class ChannelBatchController extends Controller
      */
     private function authorize(Request $request, string $socket, string $name): array
     {
-        $single = $request->duplicate();
+        $single = $request->duplicate([], []);
         $single->setJson(new InputBag(['socket_id' => $socket, 'channel_name' => $name]));
 
         try {

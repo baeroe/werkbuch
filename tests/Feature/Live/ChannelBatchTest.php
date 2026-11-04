@@ -73,6 +73,32 @@ it('takes up to MAX channels and refuses a body of another form with 403', funct
     $refused(test()->postJson('/broadcasting/batch', ['socket_id' => '1.2']));
 });
 
+it('takes JSON only: a form body or a query never smuggles in another channel name', function () {
+    $w = MatrixWorld::build();
+    $admin = $w->account('org_admin');
+    $this->actingAs($admin);
+    $own = 'presence-user.'.$admin->id;
+
+    $this->post('/broadcasting/batch', ['socket_id' => '1.2', 'channel_names' => [$own], 'channel_name' => 'private-user.'.$admin->id], ['Accept' => 'application/json'])
+        ->assertForbidden()->assertJsonMissingPath('channels');
+
+    $answers = test()->postJson('/broadcasting/batch?channel_name=private-user.'.$admin->id, ['socket_id' => '1.2', 'channel_names' => [$own]])->assertOk()->json('channels');
+    expect(array_keys($answers))->toBe([$own])
+        ->and(json_decode($answers[$own]['channel_data'], true)['user_id'])->toBe($admin->id)
+        ->and($answers[$own]['auth'])->toBe(test()->postJson('/broadcasting/auth', ['socket_id' => '1.2', 'channel_name' => $own])->json('auth'));
+});
+
+it('keeps the flash data of the session, as /broadcasting/auth does', function () use ($batch) {
+    $w = MatrixWorld::build();
+    $admin = $w->account('org_admin');
+    $this->actingAs($admin);
+    $this->withSession(['_flash' => ['old' => ['status'], 'new' => []], 'status' => 'saved']);
+
+    $batch(['presence-user.'.$admin->id])->assertOk();
+
+    expect(session('_flash.old'))->toContain('status')->and(session('status'))->toBe('saved');
+});
+
 it('needs a session of an active account, never a token (A283)', function () use ($batch) {
     $w = MatrixWorld::build();
     $admin = $w->account('org_admin');
