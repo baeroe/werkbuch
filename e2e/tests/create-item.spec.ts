@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { allEntries, api, arrowTo, createE2eProject, createItem, PEOPLE, pressMod, removeCatalogEntries, removeE2eProject, runId, signedInContext, tabTo, tr, variant } from '../helpers';
+import { allEntries, api, arrowTo, channelHeld, createE2eProject, createItem, PEOPLE, pressMod, removeCatalogEntries, removeE2eProject, runId, signedInContext, tabTo, tr, variant } from '../helpers';
 
 // The create dialog with the keyboard only, signed in as the e2e person (org admin) in English. Each test works in a
 // project of its own (`E2E …`, removed in `finally`); the dialog opens with `c` on a page of that project, which it
@@ -315,9 +315,7 @@ test('keeps the typed title when the project is archived in another tab', async 
   const other = await signedInContext(browser, inbox);
   try {
     // the page holds the live channel of the project before the change comes
-    const held = page.waitForResponse(
-      (response) => response.url().endsWith('/broadcasting/auth') && (response.request().postData() ?? '').includes(`"private-project.${project.id}"`) && response.ok(),
-    );
+    const held = channelHeld(page, `private-project.${project.id}`);
     await openProject(page, project.identifier);
     await held;
     const { dialog, title } = await openDialog(page);

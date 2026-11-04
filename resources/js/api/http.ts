@@ -224,7 +224,7 @@ export function post<T>(path: string, body?: unknown, options: RequestOptions = 
 }
 
 /**
- * A `POST` to a path of the web app outside `/api/v1`, e.g. `/broadcasting/auth` for the live channels: with session
+ * A `POST` to a path of the web app outside `/api/v1`, e.g. `/broadcasting/batch` for the live channels: with session
  * cookie, CSRF token and its renewal after a 419, the answer read as JSON like any call of the API.
  */
 export function webPost<T>(path: string, body?: unknown, options: RequestOptions = {}): Promise<T> {

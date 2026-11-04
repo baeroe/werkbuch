@@ -1,5 +1,5 @@
 import { expect, test } from '../fixtures';
-import { allEntries, api, arrowTo, createE2eProject, createItem, isPhone, openProfileMenu, PEOPLE, removeE2eProject, runId, signedInContext, tabTo, tr, variant } from '../helpers';
+import { allEntries, api, arrowTo, channelHeld, createE2eProject, createItem, isPhone, openProfileMenu, PEOPLE, removeE2eProject, runId, signedInContext, tabTo, tr, variant } from '../helpers';
 
 // signed in as the e2e person (playwright.config.ts), in English. Never sign out for real here: that ends the shared
 // session of every later test.
@@ -230,9 +230,7 @@ test('counts a new notification up live', async ({ page, browser }) => {
     const item = await createItem(page, { project_id: project.id, title: 'E2E Badge Rechnung', assignee_id: person.id });
     await expect.poll(() => has(item.id, 'assigned'), { timeout: 20_000 }).toBe(true);
 
-    const held = other.page.waitForResponse(
-      (response) => response.url().endsWith('/broadcasting/auth') && (response.request().postData() ?? '').includes(`"presence-user.${person.id}"`) && response.ok(),
-    );
+    const held = channelHeld(other.page, `presence-user.${person.id}`);
     await other.page.goto('/my-items');
     await held;
     await other.page.evaluate(() => ((window as Window & { __badge?: boolean }).__badge = true));

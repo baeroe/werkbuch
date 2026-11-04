@@ -5,9 +5,10 @@
  *   nothing connects, the tab counts as connected and shows no banner, A285) and joins the person's own channel
  *   `user.<id>` (presence). `watchProjects(ids)` keeps the channels `project.<id>` in step with the projects the person
  *   sees, `watchItem(id)` holds `work-item.<id>` while a detail shows the item (counted per id).
- * - Every channel is authorized over `/broadcasting/auth` with the session of the page (`webPost`). A refusal (403,
- *   e.g. after the person lost access, A281) arrives as `live.refused` naming the project or item of the channel: the
- *   channel is left at once, the projects load again (a project the person sees again is joined anew with the list).
+ * - Every channel is authorized with the session of the page (`webPost`), all channels asked for in one task in one
+ *   `POST /broadcasting/batch` (A305). A refusal (e.g. after the person lost access, A281) arrives as `live.refused`
+ *   naming the project or item of the channel: the channel is left at once, the projects load again (a project the
+ *   person sees again is joined anew with the list).
  *   Any other failure (a deactivated account is sent to the sign-in) means live updates stop: the tab counts as
  *   disconnected until the connection comes back and authorizes again. A failure that may pass (5xx, no answer) asks
  *   for the channel again after 5, 15 and 60 seconds (`AUTH_RETRY_MS`); the banner goes once no channel fails.
@@ -228,34 +229,80 @@ function isAuthAnswer(value: unknown): value is { auth: string } {
   return typeof value === 'object' && value !== null && typeof (value as { auth?: unknown }).auth === 'string';
 }
 
+/** The most channels one `/broadcasting/batch` authorizes (`ChannelBatchController::MAX`); more go in several. */
+export const AUTH_BATCH_MAX = 100;
+
+type AuthCallback = (error: Error | null, data: { auth: string; channel_data?: string } | null) => void;
+
+/** The channels Pusher asked for in the running task, sent together once it ends (`flushAuthorizations`). */
+let queued: { socketId: string; channelName: string; callback: AuthCallback }[] = [];
+
 /**
- * Authorizes a channel over the web route with the session of the page. A 403 is a refusal of this channel; anything
- * else (no signature, the HTML of the sign-in after a redirect, a server error) means live updates stopped.
+ * Authorizes a channel over the web route with the session of the page (A305): Pusher asks for each channel on its
+ * own, one after the other in the same task (the connection opens, a list of projects arrives), and every channel
+ * that asks before the task ends goes in one `POST /broadcasting/batch` (per socket, `AUTH_BATCH_MAX` at most). One
+ * request per channel held up every other request of the page for seconds when the person sees many projects.
  */
-function authorize(
-  { socketId, channelName }: { socketId: string; channelName: string },
-  callback: (error: Error | null, data: { auth: string; channel_data?: string } | null) => void,
-): void {
-  webPost<unknown>('/broadcasting/auth', { socket_id: socketId, channel_name: channelName }).then(
+function authorize({ socketId, channelName }: { socketId: string; channelName: string }, callback: AuthCallback): void {
+  queued.push({ socketId, channelName, callback });
+  if (queued.length === 1) queueMicrotask(flushAuthorizations);
+}
+
+function flushAuthorizations(): void {
+  const waiting = queued;
+  queued = [];
+  const bySocket = new Map<string, typeof waiting>();
+  waiting.forEach((entry) => bySocket.set(entry.socketId, [...(bySocket.get(entry.socketId) ?? []), entry]));
+  bySocket.forEach((entries, socketId) => {
+    for (let start = 0; start < entries.length; start += AUTH_BATCH_MAX) sendBatch(socketId, entries.slice(start, start + AUTH_BATCH_MAX));
+  });
+}
+
+function channelAnswers(answer: unknown): Record<string, unknown> {
+  const channels = typeof answer === 'object' && answer !== null ? (answer as { channels?: unknown }).channels : undefined;
+  return typeof channels === 'object' && channels !== null ? (channels as Record<string, unknown>) : {};
+}
+
+function isRefusal(value: unknown): value is { refused: true } {
+  return typeof value === 'object' && value !== null && (value as { refused?: unknown }).refused === true;
+}
+
+/**
+ * A refusal of a channel (A281: e.g. after the person lost access) arrives as `live.refused`; anything else that is no
+ * signature (the HTML of the sign-in after a redirect, a server error) means live updates stopped.
+ */
+function sendBatch(socketId: string, entries: { channelName: string; callback: AuthCallback }[]): void {
+  const names = [...new Set(entries.map((entry) => entry.channelName))];
+  webPost<unknown>('/broadcasting/batch', { socket_id: socketId, channel_names: names }).then(
     (answer) => {
-      if (isAuthAnswer(answer)) {
-        // a channel that failed for a while works again: once none is failing, the banner goes
-        if (retries.delete(channelName) && retries.size === 0 && status === 'connected') setDown(false);
-        callback(null, answer);
-        return;
-      }
-      setDown(true);
-      callback(new Error('live: the authorization answered no signature'), null);
+      const answers = channelAnswers(answer);
+      entries.forEach(({ channelName, callback }) => {
+        const own = answers[channelName];
+        if (isAuthAnswer(own)) {
+          // a channel that failed for a while works again: once none is failing, the banner goes
+          if (retries.delete(channelName) && retries.size === 0 && status === 'connected') setDown(false);
+          callback(null, own as { auth: string; channel_data?: string });
+        } else if (isRefusal(own)) {
+          emit(refused(channelName));
+          callback(new Error('live: the channel was refused'), null);
+        } else {
+          setDown(true);
+          callback(new Error('live: the authorization answered no signature'), null);
+        }
+      });
     },
     (error: unknown) => {
       const failure = error instanceof Error ? error : new Error(String(error));
-      if (error instanceof ApiError && error.status === 403) {
-        emit(refused(channelName));
-      } else {
-        setDown(true);
-        if (isPassing(error)) retryLater(channelName);
-      }
-      callback(failure, null);
+      entries.forEach(({ channelName, callback }) => {
+        // a 403 of the whole request (a body of another form) refuses its channels
+        if (error instanceof ApiError && error.status === 403) {
+          emit(refused(channelName));
+        } else {
+          setDown(true);
+          if (isPassing(error)) retryLater(channelName);
+        }
+        callback(failure, null);
+      });
     },
   );
 }
@@ -310,7 +357,7 @@ function open(config: LiveConfig, person: string): void {
     wssPort: config.port,
     forceTLS: config.scheme === 'https',
     enabledTransports: ['ws', 'wss'],
-    channelAuthorization: { endpoint: '/broadcasting/auth', transport: 'ajax', customHandler: authorize },
+    channelAuthorization: { endpoint: '/broadcasting/batch', transport: 'ajax', customHandler: authorize },
   });
   echo.connector.pusher.connection.bind('state_change', ({ current }: { current: string }) => onState(current));
   echo.join(`user.${person}`).listen(MESSAGE, deliver);

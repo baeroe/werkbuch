@@ -5,6 +5,7 @@ import {
   api,
   artisan,
   artisanEval,
+  channelHeld,
   createE2eProject,
   createItem,
   mailpit,
@@ -64,11 +65,6 @@ function recordSockets(page: Page): SocketLog[] {
 
 /** The frames of `sockets` on the live channel `channel`. */
 const framesOn = (sockets: SocketLog[], channel: string) => sockets.flatMap((socket) => socket.frames).filter((frame) => frame.includes(`"channel":"${channel}"`));
-
-/** Waits until the browser of `page` holds the live channel `channel` (its authorization answered). */
-function channelHeld(page: Page, channel: string) {
-  return page.waitForResponse((response) => response.url().endsWith('/broadcasting/auth') && (response.request().postData() ?? '').includes(`"${channel}"`) && response.ok());
-}
 
 /** The inbox account signed in in a context of its own, on its inbox, holding its own live channel; its sockets recorded. */
 async function openInbox(browser: Browser, inbox: Inbox, personId: string, channel?: string) {
@@ -211,7 +207,7 @@ test('opening the notification reads it, and the other tab of the same person fo
   }
 });
 
-test('a removed member loses the live channel and the notifications', async ({ page, browser, allowedErrors }) => {
+test('a removed member loses the live channel and the notifications', async ({ page, browser }) => {
   const { project, inbox, person } = await projectWithInbox(page, 'removed', 'private');
   const item = await createItem(page, { project_id: project.id, title: 'E2E Accept Vertrag' });
   const channel = `private-project.${project.id}`;
@@ -239,8 +235,7 @@ test('a removed member loses the live channel and the notifications', async ({ p
 
     // once removed, Reverb cuts her connection (A281); the browser connects again and loads anew, the inbox without the
     // project. The list of her projects usually loads before the connection is back; if not, holding the channel of
-    // the project again is refused, and her page reports the 403 of /broadcasting/auth
-    allowedErrors.push(/^\[inbox-[a-z-]+@example\.com\] console error: .*status of 403 .*\/broadcasting\/auth\)$/);
+    // the project again is refused inside the answer of /broadcasting/batch (A305), which reports no error
     const removed = await api(page, 'DELETE', `/api/v1/projects/${project.id}/members/${person.id}`);
     expect(removed.status(), await removed.text()).toBe(204);
     await expect.poll(() => old.closed, LIVE).toBe(true);

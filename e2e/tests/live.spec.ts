@@ -1,6 +1,6 @@
 import type { Browser, BrowserContext, Page, WebSocketRoute } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { allEntries, api, createE2eProject, createItem, isPhone, PEOPLE, removeE2eProject, runId, signedInContext, tabTo, tr, variant } from '../helpers';
+import { allEntries, api, channelHeld, createE2eProject, createItem, isPhone, PEOPLE, removeE2eProject, runId, signedInContext, tabTo, tr, variant } from '../helpers';
 
 // Live updates (spec 7.2) between two people: the e2e person (Erik Ende) changes something over the API, the inbox
 // account of the variant (A289) sees it without a reload, in a context of its own. Both are members of a project of the
@@ -37,11 +37,6 @@ async function twoPeople(page: Page, browser: Browser, what: string) {
   expect(added.status(), await added.text()).toBe(201);
   const other = await signedInContext(browser, inbox);
   return { project, other };
-}
-
-/** Waits until the browser of `page` holds the live channel `channel` (its authorization answered). */
-function channelHeld(page: Page, channel: string) {
-  return page.waitForResponse((response) => response.url().endsWith('/broadcasting/auth') && (response.request().postData() ?? '').includes(`"${channel}"`) && response.ok());
 }
 
 /** Marks the document, so a test can tell that the page did not load again. */
@@ -173,7 +168,7 @@ test.describe('without Reverb', () => {
       ws.connectToServer();
       open = ws;
     });
-    const held = page.waitForResponse((response) => response.url().endsWith('/broadcasting/auth') && (response.request().postData() ?? '').includes('presence-user.'));
+    const held = channelHeld(page, 'presence-user.', { prefix: true });
     await page.goto('/my-items');
     await held;
     const banner = page.getByRole('status').filter({ hasText: tr('en', 'shell.live.paused_title') });

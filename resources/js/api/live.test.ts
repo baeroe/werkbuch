@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockApi, type MockApi } from '@/test/api';
 import { setSocketId } from './http';
 import {
+  AUTH_BATCH_MAX,
   connectLive,
   disconnectLive,
   isLiveConnected,
@@ -91,11 +92,11 @@ const { FakeEcho } = vi.hoisted(() => {
     }
 
     /** What `channelAuthorization.customHandler` answers for `channel`. */
-    authorize(channel: string): Promise<{ error: Error | null; data: unknown }> {
+    authorize(channel: string, socketId = '123.456'): Promise<{ error: Error | null; data: unknown }> {
       const { customHandler } = this.options.channelAuthorization as {
         customHandler: (params: { socketId: string; channelName: string }, callback: (error: Error | null, data: unknown) => void) => void;
       };
-      return new Promise((resolve) => customHandler({ socketId: '123.456', channelName: channel }, (error, data) => resolve({ error, data })));
+      return new Promise((resolve) => customHandler({ socketId, channelName: channel }, (error, data) => resolve({ error, data })));
     }
   }
 
@@ -116,6 +117,18 @@ function message(overrides: Partial<LiveEvent> = {}): LiveEvent {
   return { event_id: 'ev_1', type: 'work_item.updated', project_id: 'p_web', item_id: 'wi_web_47', comment_id: null, actor_id: 'u_ida', ...overrides };
 }
 
+/** What `/broadcasting/batch` answers when it signs every channel it is asked for. */
+function signed(body: unknown) {
+  const names = (body as { channel_names: string[] }).channel_names;
+  return { body: { channels: Object.fromEntries(names.map((name) => [name, { auth: `werkbuch-key:${name}` }])) } };
+}
+
+/** What `/broadcasting/batch` answers when it refuses every channel it is asked for. */
+function refusedAll(body: unknown) {
+  const names = (body as { channel_names: string[] }).channel_names;
+  return { body: { channels: Object.fromEntries(names.map((name) => [name, { refused: true }])) } };
+}
+
 let api: MockApi | null = null;
 
 beforeEach(() => {
@@ -133,7 +146,7 @@ afterEach(() => {
 
 describe('connectLive', () => {
   it('connects with the settings of the page and authorizes over the web route', async () => {
-    api = mockApi({ 'POST /broadcasting/auth': () => ({ body: { auth: 'werkbuch-key:signature' } }) });
+    api = mockApi({ 'POST /broadcasting/batch': signed });
     connectLive(CONFIG, 'u_mara');
 
     expect(echo().options).toMatchObject({
@@ -144,7 +157,7 @@ describe('connectLive', () => {
       wssPort: 6001,
       forceTLS: true,
       enabledTransports: ['ws', 'wss'],
-      channelAuthorization: { endpoint: '/broadcasting/auth', transport: 'ajax' },
+      channelAuthorization: { endpoint: '/broadcasting/batch', transport: 'ajax' },
     });
     expect(echo().options.Pusher).toBeTypeOf('function');
     // the person's own channel at once
@@ -152,8 +165,8 @@ describe('connectLive', () => {
 
     const answer = await echo().authorize('private-project.p_web');
 
-    expect(answer).toEqual({ error: null, data: { auth: 'werkbuch-key:signature' } });
-    expect(api.calls).toEqual([{ method: 'POST', url: '/broadcasting/auth', body: { socket_id: '123.456', channel_name: 'private-project.p_web' } }]);
+    expect(answer).toEqual({ error: null, data: { auth: 'werkbuch-key:private-project.p_web' } });
+    expect(api.calls).toEqual([{ method: 'POST', url: '/broadcasting/batch', body: { socket_id: '123.456', channel_names: ['private-project.p_web'] } }]);
   });
 
   it('speaks plain ws when the page says http', () => {
@@ -267,7 +280,7 @@ describe('the status of the connection', () => {
 
   it('counts as disconnected at once when the authorization is no refusal, e.g. a deactivated account sent to the sign-in', async () => {
     // the web route redirects a deactivated account: fetch follows to the HTML of the sign-in
-    api = mockApi({ 'POST /broadcasting/auth': () => ({ status: 200, body: '<!DOCTYPE html><title>Sign in</title>' }) });
+    api = mockApi({ 'POST /broadcasting/batch': () => ({ status: 200, body: '<!DOCTYPE html><title>Sign in</title>' }) });
     connectLive(CONFIG, 'u_mara');
     echo().state('connecting', 'connected');
 
@@ -282,7 +295,7 @@ describe('the status of the connection', () => {
   });
 
   it('counts as disconnected when the authorization fails on the server', async () => {
-    api = mockApi({ 'POST /broadcasting/auth': () => ({ status: 500, body: { reason: 'server_error' } }) });
+    api = mockApi({ 'POST /broadcasting/batch': () => ({ status: 500, body: { reason: 'server_error' } }) });
     connectLive(CONFIG, 'u_mara');
     echo().state('connecting', 'connected');
 
@@ -293,7 +306,7 @@ describe('the status of the connection', () => {
   });
 
   it('passes a refusal of a channel on as live.refused, so the projects load again (A281)', async () => {
-    api = mockApi({ 'POST /broadcasting/auth': () => ({ status: 403, body: { reason: 'forbidden' } }) });
+    api = mockApi({ 'POST /broadcasting/batch': refusedAll });
     const events: LiveEvent[] = [];
     const stop = subscribeLive((event) => events.push(event));
     connectLive(CONFIG, 'u_mara');
@@ -312,13 +325,51 @@ describe('the status of the connection', () => {
     expect(isLiveConnected()).toBe(true);
     stop();
   });
+
+  it('asks for the channels of one task in one request, per socket and at most AUTH_BATCH_MAX at a time (A305)', async () => {
+    api = mockApi({ 'POST /broadcasting/batch': signed });
+    connectLive(CONFIG, 'u_mara');
+    const projects = Array.from({ length: AUTH_BATCH_MAX + 1 }, (_, n) => `private-project.p_${n}`);
+
+    // what Pusher does when the connection opens: one channel after the other, in the same task
+    const answers = await Promise.all([
+      echo().authorize('presence-user.u_mara'),
+      ...projects.map((channel) => echo().authorize(channel)),
+      echo().authorize('private-project.p_web', '789.012'),
+      echo().authorize('private-project.p_web', '789.012'),
+    ]);
+
+    expect(answers.every((answer) => answer.error === null)).toBe(true);
+    expect(answers.at(-1)).toEqual({ error: null, data: { auth: 'werkbuch-key:private-project.p_web' } });
+    expect(api.calls.map((call) => call.body)).toEqual([
+      { socket_id: '123.456', channel_names: ['presence-user.u_mara', ...projects.slice(0, AUTH_BATCH_MAX - 1)] },
+      { socket_id: '123.456', channel_names: projects.slice(AUTH_BATCH_MAX - 1) },
+      // the same channel twice in one batch is asked for once, and both get the answer
+      { socket_id: '789.012', channel_names: ['private-project.p_web'] },
+    ]);
+
+    // a later task asks again
+    await echo().authorize('private-work-item.wi_web_47');
+    expect(api.calls).toHaveLength(4);
+  });
+
+  it('counts a channel the answer leaves out as no signature', async () => {
+    api = mockApi({ 'POST /broadcasting/batch': () => ({ body: { channels: [] } }) });
+    connectLive(CONFIG, 'u_mara');
+    echo().state('connecting', 'connected');
+
+    const answer = await echo().authorize('private-project.p_web');
+
+    expect(answer).toEqual({ error: expect.any(Error), data: null });
+    expect(isLiveConnected()).toBe(false);
+  });
 });
 
 describe('a channel whose authorization fails for a while (T14-M3)', () => {
   it('asks again after 5, 15 and 60 seconds, and the banner goes once it works', async () => {
     vi.useFakeTimers();
     let answer: { status: number; body: unknown } = { status: 502, body: { reason: 'http_error' } };
-    api = mockApi({ 'POST /broadcasting/auth': () => answer });
+    api = mockApi({ 'POST /broadcasting/batch': () => answer });
     connectLive(CONFIG, 'u_mara');
     echo().state('connecting', 'connected');
     watchProjects(['p_web']);
@@ -335,7 +386,7 @@ describe('a channel whose authorization fails for a while (T14-M3)', () => {
       if (left < 3) await echo().authorize('private-project.p_web');
     }
     // three tries, then it waits for the next connection
-    answer = { status: 200, body: { auth: 'werkbuch-key:signature' } };
+    answer = { status: 200, body: { channels: { 'private-project.p_web': { auth: 'werkbuch-key:signature' } } } };
     await echo().authorize('private-project.p_web');
     expect(isLiveConnected()).toBe(true);
     vi.advanceTimersByTime(120_000);
@@ -344,7 +395,7 @@ describe('a channel whose authorization fails for a while (T14-M3)', () => {
 
   it('asks the own channel again after a lost answer, and leaves nothing it no longer watches', async () => {
     vi.useFakeTimers();
-    api = mockApi({ 'POST /broadcasting/auth': () => ({ status: 503, body: { reason: 'service_unavailable' } }) });
+    api = mockApi({ 'POST /broadcasting/batch': () => ({ status: 503, body: { reason: 'service_unavailable' } }) });
     connectLive(CONFIG, 'u_mara');
     echo().state('connecting', 'connected');
     watchProjects(['p_web']);
@@ -362,7 +413,7 @@ describe('a channel whose authorization fails for a while (T14-M3)', () => {
   it('asks nothing again after a refusal or a redirect to the sign-in', async () => {
     vi.useFakeTimers();
     let answer: { status: number; body: unknown } = { status: 403, body: { reason: 'forbidden' } };
-    api = mockApi({ 'POST /broadcasting/auth': () => answer });
+    api = mockApi({ 'POST /broadcasting/batch': () => answer });
     connectLive(CONFIG, 'u_mara');
     echo().state('connecting', 'connected');
 
@@ -463,7 +514,8 @@ describe('deleted and refused channels', () => {
   });
 
   it('leaves a refused channel, so a new connection does not ask for it again', async () => {
-    api = mockApi({ 'POST /broadcasting/auth': () => ({ status: 403, body: { reason: 'forbidden' } }) });
+    // refused as a whole (a body of another form) as well as one by one
+    api = mockApi({ 'POST /broadcasting/batch': () => ({ status: 403, body: { reason: 'forbidden' } }) });
     connectLive(CONFIG, 'u_mara');
     watchProjects(['p_ops']);
     const item = watchItem('wi_ops_12');
@@ -550,7 +602,7 @@ describe('the edges of the live connection', () => {
 
   it('asks an item channel again after a failure, once for two failures in a row', async () => {
     vi.useFakeTimers();
-    api = mockApi({ 'POST /broadcasting/auth': () => ({ status: 500, body: { reason: 'server_error' } }) });
+    api = mockApi({ 'POST /broadcasting/batch': () => ({ status: 500, body: { reason: 'server_error' } }) });
     connectLive(CONFIG, 'u_mara');
     echo().state('connecting', 'connected');
     const release = watchItem('wi_web_47');

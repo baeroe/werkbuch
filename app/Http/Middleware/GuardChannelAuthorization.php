@@ -22,13 +22,22 @@ final class GuardChannelAuthorization
 
     public function handle(Request $request, Closure $next): Response
     {
-        $channel = $request->input('channel_name');
-        $socket = $request->input('socket_id');
-
-        if (! is_string($channel) || ! Str::startsWith($channel, self::PREFIXES) || ! is_string($socket) || preg_match(Actor::SOCKET_PATTERN, $socket) !== 1) {
+        if (! self::allowsChannel($request->input('channel_name')) || ! self::allowsSocket($request->input('socket_id'))) {
             throw new AccessDeniedHttpException;
         }
 
         return $next($request);
+    }
+
+    /** Whether `$channel` is a channel of one of the three kinds the app has (also for `ChannelBatchController`). */
+    public static function allowsChannel(mixed $channel): bool
+    {
+        return is_string($channel) && Str::startsWith($channel, self::PREFIXES);
+    }
+
+    /** Whether `$socket` has the form of a socket id Pusher signs. */
+    public static function allowsSocket(mixed $socket): bool
+    {
+        return is_string($socket) && preg_match(Actor::SOCKET_PATTERN, $socket) === 1;
     }
 }

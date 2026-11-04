@@ -196,6 +196,19 @@ export function totp(secret: string, at = Date.now()): string {
 }
 
 /**
+ * Waits until the browser of `page` holds the live channel `channel` (A305): the answer of `/broadcasting/batch` that
+ * signs it. With `{ prefix: true }` any channel that starts with `channel`, e.g. `presence-user.` for the own one.
+ */
+export function channelHeld(page: Page, channel: string, { prefix = false } = {}): Promise<unknown> {
+  const named = (name: string) => (prefix ? name.startsWith(channel) : name === channel);
+  return page.waitForResponse(async (response) => {
+    if (!response.url().endsWith('/broadcasting/batch') || !response.ok()) return false;
+    const channels = ((await response.json()) as { channels?: Record<string, { auth?: unknown }> }).channels ?? {};
+    return Object.entries(channels).some(([name, answer]) => named(name) && typeof answer.auth === 'string');
+  });
+}
+
+/**
  * A browser context of its own, signed in as `person`, with the settings of the running project (address, viewport,
  * language, time zone, color scheme) and the clipboard, and its one page. The first time an account signs in during a
  * run, the cache is emptied first (sign-in is limited per IP); its session is kept in `e2e/.auth/<email>.json`, so later
