@@ -4,6 +4,9 @@ namespace App\Models;
 
 use App\Access\Visibility;
 use App\Domain\Schedule\Schedule;
+use App\RichText\RichTextNames;
+use App\Support\ReaderNames;
+use App\Support\TemplateInput;
 use Carbon\CarbonImmutable;
 use Database\Factories\TemplateFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -50,6 +53,38 @@ final class Template extends Model
 
     /** With microseconds: `schedule_from` is datetime(6); MariaDB cuts them off for the columns without. */
     protected $dateFormat = 'Y-m-d H:i:s.u';
+
+    /** Public, never stored: a lean template (the palette, K24) leaves its texts out of the resource. */
+    public bool $lean = false;
+
+    /** Public, never stored: what the reader may see of the mentions and references of its texts (loadForResource()). */
+    public ?RichTextNames $rich_names = null;
+
+    /**
+     * Readies templates for TemplateResource: lean ones ask nothing, the others get the names of all their texts (the
+     * description and the rich text values) for the reader, with a fixed number of queries for any number of templates.
+     *
+     * @param  EloquentCollection<int, self>|self  $templates
+     */
+    public static function loadForResource(EloquentCollection|self $templates, User $reader, bool $lean = false): void
+    {
+        $templates = $templates instanceof self ? $templates->newCollection([$templates]) : $templates;
+        $templates->each(fn (self $template) => $template->lean = $lean);
+        if ($lean) {
+            return;
+        }
+
+        $texts = [];
+        foreach ($templates as $template) {
+            foreach ([$template->payload['description'] ?? null, ...array_values((array) ($template->payload['values'] ?? []))] as $text) {
+                if (TemplateInput::isDoc($text)) {
+                    $texts[] = $text;
+                }
+            }
+        }
+        $names = ReaderNames::of($texts, $reader);
+        $templates->each(fn (self $template) => $template->rich_names = $names);
+    }
 
     /**
      * Only the templates of projects the account sees (never of one being deleted).

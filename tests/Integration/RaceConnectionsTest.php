@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Organization;
 use App\Support\CatalogLock;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\RaceConnections;
@@ -44,7 +45,7 @@ it('commits the first connection before a shared lock of the second', function (
     RaceConnections::releaseBeforeLock('organization', 'lock in share mode');
 
     // connection 2: a change of items asks for it shared and gets it once connection 1 is done
-    expect(RaceConnections::second(fn () => DB::transaction(fn () => CatalogLock::share())))->toBeNull()
+    expect(RaceConnections::second(fn () => DB::transaction(fn () => CatalogLock::share())))->toBeInstanceOf(Organization::class)
         ->and(DB::connection('mariadb')->transactionLevel())->toBe(0);
 });
 
@@ -52,6 +53,6 @@ it('waits for the shared lock of the organization behind a change of the catalog
     RaceConnections::hold(fn () => CatalogLock::share());
 
     // shared locks share; the lock for update waits for them
-    expect(RaceConnections::second(fn () => DB::transaction(fn () => CatalogLock::share())))->toBeNull();
+    expect(RaceConnections::second(fn () => DB::transaction(fn () => CatalogLock::share())))->toBeInstanceOf(Organization::class);
     RaceConnections::expectLockWait(RaceConnections::second(fn () => DB::transaction(fn () => CatalogLock::take())), 'organization');
 });

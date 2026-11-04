@@ -78,6 +78,10 @@ use App\Actions\Search\QuerySearch;
 use App\Actions\System\GetSystemStatus;
 use App\Actions\System\RetryFailedJobs;
 use App\Actions\System\SendTestMail;
+use App\Actions\Templates\DeleteTemplate;
+use App\Actions\Templates\GetTemplate;
+use App\Actions\Templates\ListTemplates;
+use App\Actions\Templates\SaveTemplate;
 use App\Actions\Tokens\CreateToken;
 use App\Actions\Tokens\ListTokens;
 use App\Actions\Tokens\RevokeToken;
@@ -886,6 +890,34 @@ return [
         'allowed' => $itemWriters,
         'hidden' => ['outsider_private'],
         'event' => EventType::PageUpdated,
+    ],
+    // templates: whoever sees the project reads them, managing them takes `template.manage` (members and admins of the
+    // project; the default bot is an org admin)
+    'ListTemplates' => [
+        'action' => ListTemplates::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListTemplates::run($a, $w->project($column), []),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    'GetTemplate' => [
+        'action' => GetTemplate::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetTemplate::run($a, $w->template($column)),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    'SaveTemplate' => [
+        'action' => SaveTemplate::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => SaveTemplate::run($a, null, ['name' => 'Matrix', 'payload' => ['title' => 'Matrix'], 'schedule' => null], $w->template($column)),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::TemplateUpdated,
+    ],
+    'DeleteTemplate' => [
+        'action' => DeleteTemplate::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => DeleteTemplate::run($a, $w->template($column)),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::TemplateDeleted,
     ],
     // the inbox is the own one: everybody lists, marks and deletes their own notifications (a bot has none); a
     // notification of a project the account does not see is passed over when marking and a 404 when deleting (K19)

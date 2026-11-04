@@ -12,6 +12,7 @@ use App\Models\Organization;
  *   workflow in use, unique names), and every change of the catalogs that rewrites items.
  * - `share()`, `lock in share mode`: every change of work items. They run side by side, and wait for a change of the
  *   catalogs (and it for them), so an item never ends up in a state or type a change of the catalogs just took away.
+ *   It answers the row as locked: zone and language for the work under it (K3), never the scoped copy read before.
  */
 final class CatalogLock
 {
@@ -20,8 +21,8 @@ final class CatalogLock
         Organization::query()->lockForUpdate()->sole();
     }
 
-    public static function share(): void
+    public static function share(): Organization
     {
-        Organization::query()->sharedLock()->sole();
+        return Organization::query()->sharedLock()->sole();
     }
 }

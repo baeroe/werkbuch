@@ -25,6 +25,7 @@ use App\Http\Controllers\Api\SearchController;
 use App\Http\Controllers\Api\StateUsageController;
 use App\Http\Controllers\Api\SubscribersController;
 use App\Http\Controllers\Api\SystemController;
+use App\Http\Controllers\Api\TemplatesController;
 use App\Http\Controllers\Api\TokensController;
 use App\Http\Controllers\Api\TwoFactorController;
 use App\Http\Controllers\Api\UsersController;
@@ -42,6 +43,7 @@ use App\Models\Notification;
 use App\Models\Page;
 use App\Models\PageVersion;
 use App\Models\Project;
+use App\Models\Template;
 use App\Models\View;
 use App\Models\WorkItem;
 use App\Models\WorkItemRelation;
@@ -72,6 +74,9 @@ Route::bind('page', fn (string $ref) => (Str::isUlid($ref) ? Page::query()->find
 // a kept version of a page by its ULID (any case; anything else is no version); whether it belongs to the page of the
 // route and the account sees it, the action decides
 Route::bind('pageVersion', fn (string $ref) => (Str::isUlid($ref) ? PageVersion::query()->find(strtolower($ref)) : null) ?? throw Problem::notFound());
+// a template by its ULID (any case; anything else is no template); whether the account sees its project, the action
+// decides. The web route of the templates names its parameter `{templateId}`, this binding is global
+Route::bind('template', fn (string $ref) => (Str::isUlid($ref) ? Template::query()->find(strtolower($ref)) : null) ?? throw Problem::notFound());
 
 // The REST API (prefix api/v1, see bootstrap/app.php): the session of the interface (with CSRF) or a bearer token whose
 // abilities fit the method. Every route has a row in tests/Feature/Api/routes.php.
@@ -118,6 +123,15 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
     Route::get('pages/{page}/versions', [PageVersionsController::class, 'index']);
     Route::get('pages/{page}/versions/{pageVersion}', [PageVersionsController::class, 'show']);
     Route::post('pages/{page}/versions/{pageVersion}/restore', [PageVersionsController::class, 'restore']);
+
+    // the templates of a project (spec 4.12): all the account sees (the palette, `?project=` narrows) or those of one
+    // project; creating, replacing (A75) and deleting one
+    Route::get('templates', [TemplatesController::class, 'index']);
+    Route::get('projects/{project}/templates', [TemplatesController::class, 'projectIndex']);
+    Route::post('projects/{project}/templates', [TemplatesController::class, 'store']);
+    Route::get('templates/{template}', [TemplatesController::class, 'show']);
+    Route::put('templates/{template}', [TemplatesController::class, 'update']);
+    Route::delete('templates/{template}', [TemplatesController::class, 'destroy']);
 
     Route::get('workflows', [WorkflowsController::class, 'index']);
     Route::post('workflows', [WorkflowsController::class, 'store']);

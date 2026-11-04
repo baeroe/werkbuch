@@ -63,6 +63,12 @@ return [
     'restore a version of a page' => ['POST', '/api/v1/pages/{page}/versions/{pageVersion}/restore', 'params' => fn (MatrixWorld $w) => [
         'page' => ($page = $w->page('project_admin'))->id, 'pageVersion' => PageVersion::factory()->create(['page_id' => $page->id])->id,
     ]],
+    'list the templates' => ['GET', '/api/v1/templates'],
+    'list the templates of a project' => ['GET', '/api/v1/projects/{project}/templates', 'params' => fn (MatrixWorld $w) => ['project' => $w->web->identifier]],
+    'create a template' => ['POST', '/api/v1/projects/{project}/templates', 'params' => fn (MatrixWorld $w) => ['project' => $w->web->identifier], 'body' => ['name' => 'Matrix', 'payload' => ['title' => 'Matrix'], 'schedule' => null]],
+    'show a template' => ['GET', '/api/v1/templates/{template}', 'params' => fn (MatrixWorld $w) => ['template' => $w->template('project_admin')->id]],
+    'replace a template' => ['PUT', '/api/v1/templates/{template}', 'params' => fn (MatrixWorld $w) => ['template' => $w->template('project_admin')->id], 'body' => ['name' => 'Matrix', 'payload' => ['title' => 'Matrix'], 'schedule' => null]],
+    'delete a template' => ['DELETE', '/api/v1/templates/{template}', 'params' => fn (MatrixWorld $w) => ['template' => $w->template('project_admin')->id]],
     'list workflows' => ['GET', '/api/v1/workflows'],
     'create a workflow' => ['POST', '/api/v1/workflows'],
     'change a workflow' => ['PUT', '/api/v1/workflows/{workflow}', 'params' => fn (MatrixWorld $w) => ['workflow' => Workflow::factory()->create()->id]],
