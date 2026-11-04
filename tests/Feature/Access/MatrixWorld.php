@@ -7,6 +7,7 @@ use App\Access\RoleAssignments;
 use App\Models\Organization;
 use App\Models\Page;
 use App\Models\Project;
+use App\Models\Template;
 use App\Models\User;
 use App\Models\View;
 use App\Models\WorkItem;
@@ -120,6 +121,15 @@ final class MatrixWorld
     public function page(string $column): Page
     {
         return Page::factory()->create([
+            'project_id' => $this->project($column)->id,
+            'created_by' => $this->account('project_admin')->id,
+        ]);
+    }
+
+    /** A fresh template in the project of the column, by the project admin, through the factory: no events. */
+    public function template(string $column): Template
+    {
+        return Template::factory()->create([
             'project_id' => $this->project($column)->id,
             'created_by' => $this->account('project_admin')->id,
         ]);

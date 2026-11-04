@@ -44,7 +44,12 @@ enum EventType: string
     case BotAssigned = 'bot.assigned';
     case BotCreated = 'bot.created';
 
+    case TemplateCreated = 'template.created';
+    case TemplateUpdated = 'template.updated';
+    case TemplateDeleted = 'template.deleted';
     case TemplateRunFailed = 'template.run_failed';
+
+    case AutomationUpdated = 'automation.updated';
 
     case OrganizationUpdated = 'organization.updated';
 

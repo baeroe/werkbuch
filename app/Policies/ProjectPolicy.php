@@ -74,6 +74,12 @@ final class ProjectPolicy
         return $this->view($user, $project);
     }
 
+    /** Switching the automations of the project on and off and changing their settings: `project.manage` (spec 4.3). */
+    public function manageAutomations(User $user, Project $project): Response
+    {
+        return self::inProject($user, $project, Permission::ProjectManage, __('problem.detail.automations_admins_only'));
+    }
+
     private static function inProject(User $user, Project $project, Permission $permission, string $refusal): Response
     {
         if (Visibility::roleIn($user, $project) === null) {
