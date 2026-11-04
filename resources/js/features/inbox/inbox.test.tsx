@@ -1,17 +1,22 @@
 /*
  * The inbox against a fake REST API (`mockApi`): Mara's inbox as the NotificationsSeeder writes it (`maraInbox`), the
- * filters in the address (an Inertia mock whose `router.replace` moves it), the states of the list and a live message
- * that loads it again. Ported from the clickdummy's features/inbox/inbox.test.tsx ("the list" and the states); the keys,
- * the read marks and deleting come with task 17. The flows with a real server run in e2e/tests/inbox.spec.ts.
+ * filters in the address (an Inertia mock whose `router.replace` moves it), the states of the list, a live message
+ * that loads it again, the keys, reading on open, the read marks and deleting with undo. Ported from the clickdummy's
+ * features/inbox/inbox.test.tsx; the counts while a mark is on its way: useReadMarks.test.ts. The flows with a real
+ * server run in e2e/tests/inbox.spec.ts.
  */
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useSyncExternalStore, type ReactNode } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import type { LiveEvent } from '@/api/live';
+import { currentToasts, dismissToast, resetToasts } from '@/components/ui/toast';
 import { useLiveSync } from '@/hooks/live';
+import { listCommands } from '@/lib/commands';
+import { useShortcut } from '@/lib/shortcuts/useShortcut';
+import { canUndo, undoLatest } from '@/lib/undo';
 import { useUiStore } from '@/store/ui';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import { ida, lene, list, makeNotification, mara, maraInbox, organization, person, project, properties, theo, types } from '@/test/fixtures';
@@ -103,14 +108,25 @@ function route(key: string): MockRoute | undefined {
   if (key === 'GET /api/v1/notifications') return listRoute;
   if (key === 'POST /api/v1/notifications/read')
     return (body) => {
-      const { mentions_only: mentionsOnly } = body as { all: true; mentions_only?: boolean };
+      const { ids, all, mentions_only: mentionsOnly } = body as { ids?: string[]; all?: true; mentions_only?: boolean };
       let updated = 0;
       notifications = notifications.map((entry) => {
-        if (entry.read_at !== null || (mentionsOnly && entry.event !== 'mentioned')) return entry;
+        if (entry.read_at !== null || (all ? mentionsOnly && entry.event !== 'mentioned' : !ids!.includes(entry.id))) return entry;
         updated += 1;
         return { ...entry, read_at: '2026-10-28T09:00:00.000Z' };
       });
       return { body: { updated } };
+    };
+  if (key === 'POST /api/v1/notifications/unread')
+    return (body) => {
+      const { ids } = body as { ids: string[] };
+      notifications = notifications.map((entry) => (ids.includes(entry.id) ? { ...entry, read_at: null } : entry));
+      return { body: { updated: ids.length } };
+    };
+  if (key.startsWith('DELETE /api/v1/notifications/'))
+    return () => {
+      notifications = notifications.filter((entry) => entry.id !== key.slice('DELETE /api/v1/notifications/'.length));
+      return { status: 204 };
     };
   if (key === 'GET /api/v1/projects') return () => ({ body: list(projects) });
   if (key === 'GET /api/v1/work-item-types') return () => ({ body: list(types) });
@@ -137,6 +153,7 @@ beforeEach(() => {
   address.replace.mockClear();
   address.visit.mockClear();
   useUiStore.setState(useUiStore.getInitialState());
+  resetToasts();
   api = mockApi(server);
 });
 
@@ -146,9 +163,10 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-/** What the shell does for the screen: the live sync. */
+/** What the shell does for the screen: the live sync and mod+z. */
 function LiveSync() {
   useLiveSync();
+  useShortcut('shell.undo', () => undoLatest(), { when: canUndo });
   return null;
 }
 
@@ -171,6 +189,10 @@ const rows = () => screen.getAllByRole('listitem');
 const rowLinks = () => screen.getAllByRole('link').filter((link) => link.hasAttribute('data-nav-target'));
 const card = (name: RegExp) => screen.getByRole('article', { name });
 const status = () => screen.getByRole('status');
+
+const posts = (path: string) => api.calls.filter((call) => call.method === 'POST' && call.url === `/api/v1/notifications/${path}`).map((call) => call.body);
+const toastTitles = () => currentToasts().map((toast) => toast.title);
+const rowOf = (pattern: RegExp) => rows().find((row) => pattern.test(row.textContent ?? ''))!;
 
 function send(event: Partial<LiveEvent>): void {
   act(() => bus.listeners.forEach((listener) => listener({ event_id: null, type: 'notifications.changed', project_id: null, item_id: null, comment_id: null, actor_id: null, ...event })));
@@ -463,6 +485,295 @@ describe('the inbox', () => {
     expect(await screen.findByRole('link', { name: /^Ungelesen: Lene Vogt hat kommentiert/ })).toBeTruthy();
     await waitFor(() => expect(status().textContent).toBe('4 ungelesen'));
     expect(within(card(/WEB-47/)).getAllByRole('listitem')).toHaveLength(4);
+  });
+});
+
+describe('the keys and the read marks', () => {
+  const setup = () => userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+  it('marks read with e and unread with u', async () => {
+    const user = setup();
+    renderInbox();
+    await loaded();
+    await waitFor(() => expect(status().textContent).toBe('3 ungelesen'));
+
+    // without a cursor e says how to get one and changes nothing
+    await user.keyboard('e');
+    expect(toastTitles()).toContain('Keine Benachrichtigung ausgewählt');
+    expect(posts('read')).toEqual([]);
+
+    // j puts the cursor and the focus on the first row
+    await user.keyboard('j');
+    expect(document.activeElement).toBe(rowLinks()[0]);
+    expect(rows()[0]!.hasAttribute('data-unread')).toBe(true);
+
+    await user.keyboard('e');
+    // at once: the dot goes, the count follows, no toast for it
+    expect(rows()[0]!.hasAttribute('data-unread')).toBe(false);
+    expect(status().textContent).toBe('2 ungelesen');
+    await waitFor(() => expect(posts('read')).toEqual([{ ids: ['n_01'] }]));
+    // the cursor stays on the row, which now names u
+    expect(within(rows()[0]!).getByText('wieder ungelesen')).toBeTruthy();
+
+    await user.keyboard('u');
+    expect(rows()[0]!.hasAttribute('data-unread')).toBe(true);
+    expect(status().textContent).toBe('3 ungelesen');
+    await waitFor(() => expect(posts('unread')).toEqual([{ ids: ['n_01'] }]));
+    await waitFor(() => expect(notifications.find((entry) => entry.id === 'n_01')!.read_at).toBeNull());
+    expect(status().textContent).toBe('3 ungelesen');
+
+    // e on a read row and u on an unread one change nothing
+    await user.keyboard('u');
+    await user.keyboard('j');
+    expect(document.activeElement).toBe(rowLinks()[1]);
+    await user.keyboard('e');
+    expect(posts('read')).toHaveLength(1);
+    expect(posts('unread')).toHaveLength(1);
+    expect(toastTitles().filter((title) => title !== 'Keine Benachrichtigung ausgewählt')).toEqual([]);
+  });
+
+  it('marks all read with shift+e, only mentions in the mentions filter', async () => {
+    const user = setup();
+    renderInbox('/inbox?mentions=1');
+    await loaded();
+    await waitFor(() => expect(status().textContent).toBe('3 ungelesen'));
+    const button = () => screen.getByRole('button', { name: /Alle als gelesen markieren/ });
+    expect(button().getAttribute('aria-disabled')).toBeNull();
+    expect(button().getAttribute('aria-keyshortcuts')).toBe('Shift+E');
+
+    await user.keyboard('{Shift>}E{/Shift}');
+    await waitFor(() => expect(posts('read')).toEqual([{ all: true, mentions_only: true }]));
+    // the toast says how many; the other unread ones stay
+    await waitFor(() => expect(toastTitles()).toContain('1 Erwähnung als gelesen markiert'));
+    expect(status().textContent).toBe('2 ungelesen');
+    // nothing unread in the filter: the button is off and says why, shift+e says so without asking the server
+    await waitFor(() => expect(button().getAttribute('aria-disabled')).toBe('true'));
+    expect(screen.getByText('Es gibt keine ungelesenen Erwähnungen.')).toBeTruthy();
+    await user.keyboard('{Shift>}E{/Shift}');
+    expect(toastTitles()).toContain('Alles gelesen');
+    expect(posts('read')).toHaveLength(1);
+
+    // without the filter: everything
+    act(() => address.set('/inbox'));
+    await waitFor(() => expect(button().getAttribute('aria-disabled')).toBeNull());
+    await user.keyboard('{Shift>}E{/Shift}');
+    // at once, before the answer
+    expect(rows().filter((row) => row.hasAttribute('data-unread'))).toHaveLength(0);
+    await waitFor(() => expect(posts('read').at(-1)).toEqual({ all: true }));
+    await waitFor(() => expect(toastTitles()).toContain('2 Benachrichtigungen als gelesen markiert'));
+    await waitFor(() => expect(status().textContent).toBe('Alles gelesen'));
+  });
+
+  it('deletes with # and brings it back with mod+z', async () => {
+    const user = setup();
+    renderInbox();
+    await loaded();
+
+    await user.keyboard('j');
+    await user.keyboard('#');
+    // the row goes at once, the focus goes on to the row that moves up
+    expect(rows()).toHaveLength(13);
+    expect(screen.queryByRole('article', { name: /WEB-42/ })).toBeNull();
+    expect(document.activeElement).toBe(rowLinks()[0]);
+    expect(rowLinks()[0]!.textContent).toContain('erinnert');
+    expect(toastTitles()).toContain('Benachrichtigung gelöscht');
+
+    await user.keyboard('{Control>}z{/Control}');
+    expect(rows()).toHaveLength(14);
+    expect(api.calls.some((call) => call.method === 'DELETE')).toBe(false);
+
+    // the next one goes for real when the toast runs out
+    await user.keyboard('#');
+    expect(rows()).toHaveLength(13);
+    act(() => currentToasts().forEach((toast) => dismissToast(toast.id)));
+    await waitFor(() => expect(api.calls.filter((call) => call.method === 'DELETE').map((call) => call.url)).toEqual(['/api/v1/notifications/n_02']));
+    await waitFor(() => expect(notifications).toHaveLength(13));
+    expect(rows()).toHaveLength(13);
+  });
+
+  it('puts the focus on "Alle als gelesen markieren" when the last row goes', async () => {
+    const user = setup();
+    notifications = notifications.slice(0, 1);
+    renderInbox();
+    await loaded();
+
+    await user.keyboard('j');
+    await user.keyboard('#');
+    expect(screen.queryAllByRole('listitem')).toHaveLength(0);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: /Alle als gelesen markieren/ }));
+  });
+
+  it('brings a row back and says why when the delete fails', async () => {
+    const user = setup();
+    overrides['DELETE /api/v1/notifications/n_01'] = () => unavailable;
+    renderInbox();
+    await loaded();
+
+    await user.keyboard('j');
+    await user.keyboard('#');
+    act(() => currentToasts().forEach((toast) => dismissToast(toast.id)));
+    await waitFor(() => expect(toastTitles()).toContain('Benachrichtigung nicht gelöscht'));
+    expect(rows()).toHaveLength(14);
+  });
+
+  it('opens the preview with Enter and reads it', async () => {
+    const user = setup();
+    renderInbox();
+    await loaded();
+
+    await user.keyboard('j');
+    await user.keyboard('{Enter}');
+    // the preview, not the page; the notification is read, the cursor stays on it
+    expect(useUiStore.getState().peekItemId).toBe('wi_web_42');
+    expect(address.visit).not.toHaveBeenCalled();
+    expect(rows()[0]!.hasAttribute('data-unread')).toBe(false);
+    expect(status().textContent).toBe('2 ungelesen');
+    await waitFor(() => expect(posts('read')).toEqual([{ ids: ['n_01'] }]));
+    expect(rows()[0]!.hasAttribute('data-current')).toBe(true);
+
+    // with the focus nowhere in particular Enter opens the row under the cursor as well
+    act(() => useUiStore.getState().openPeek(null));
+    await user.keyboard('j');
+    await user.keyboard('j');
+    await user.keyboard('j');
+    act(() => (document.activeElement as HTMLElement).blur());
+    await user.keyboard('{Enter}');
+    expect(useUiStore.getState().peekItemId).toBe('wi_app_24');
+    await waitFor(() => expect(posts('read')).toEqual([{ ids: ['n_01'] }, { ids: ['n_04'] }]));
+    // the focus goes back to the row, so e and u act on it beside the preview
+    expect(document.activeElement).toBe(rowLinks()[3]);
+    // the space bar hides the preview of the row's item and shows it again
+    await user.keyboard(' ');
+    expect(useUiStore.getState().peekItemId).toBeNull();
+    await user.keyboard(' ');
+    expect(useUiStore.getState().peekItemId).toBe('wi_app_24');
+  });
+
+  it('reads on a click with mod and on a middle click', async () => {
+    // jsdom cannot open a new tab: the click ends with the screen
+    const stay = (event: Event) => event.preventDefault();
+    document.addEventListener('click', stay);
+    onTestFinished(() => document.removeEventListener('click', stay));
+    renderInbox();
+    await loaded();
+
+    // ⌘/Ctrl or ⇧ and the middle button: the browser opens the page in a new tab, the notification is read
+    fireEvent.click(screen.getByRole('link', { name: /^Ungelesen: Theo Okafor hat dir das Item zugewiesen/ }), { ctrlKey: true });
+    fireEvent(screen.getByRole('link', { name: /Theo Okafor hat kommentiert/ }), new MouseEvent('auxclick', { bubbles: true, button: 1 }));
+    // Alt saves the link: nothing opens, nothing is read
+    fireEvent.click(screen.getByRole('link', { name: /Ida Brenner hat dich erwähnt.*Hero/ }), { altKey: true });
+    expect(useUiStore.getState().peekItemId).toBeNull();
+    await waitFor(() => expect(posts('read')).toEqual([{ ids: ['n_04'] }, { ids: ['n_03'] }]));
+    expect(rowOf(/hat dich erwähnt.*Hero/).hasAttribute('data-unread')).toBe(true);
+
+    // the title of a card opens the item's page: all of its notifications are read
+    fireEvent.click(screen.getByRole('link', { name: 'WEB-42: Startseite: Hero und Teaser bauen' }), { metaKey: true });
+    await waitFor(() => expect(posts('read').at(-1)).toEqual({ ids: ['n_01'] }));
+    await waitFor(() => expect(status().textContent).toBe('Alles gelesen'));
+    // in a new tab by the middle button as well; a card with nothing unread asks nothing
+    fireEvent(screen.getByRole('link', { name: 'APP-18: TestFlight-Gruppe für Kunden einrichten' }), new MouseEvent('auxclick', { bubbles: true, button: 1 }));
+    expect(posts('read')).toHaveLength(3);
+  });
+
+  it('moves on when a read row leaves the unread filter', async () => {
+    const user = setup();
+    renderInbox('/inbox?unread=1');
+    await loaded();
+    expect(rows()).toHaveLength(3);
+
+    await user.keyboard('j');
+    await user.keyboard('e');
+    // the row leaves, the cursor and the focus go on to the row that moves up
+    expect(rows()).toHaveLength(2);
+    expect(document.activeElement).toBe(rowLinks()[0]);
+    expect(rowLinks()[0]!.textContent).toContain('Theo Okafor hat dir das Item zugewiesen');
+    expect(rows()[0]!.hasAttribute('data-current')).toBe(true);
+
+    // opening reads as well: the row leaves, the preview stays open
+    await user.keyboard('{Enter}');
+    expect(useUiStore.getState().peekItemId).toBe('wi_app_24');
+    expect(rows()).toHaveLength(1);
+    expect(document.activeElement).toBe(rowLinks()[0]);
+    expect(rowLinks()[0]!.textContent).toContain('Theo Okafor hat kommentiert');
+
+    // the last one goes: the focus stays in reach, on the button of the header
+    await user.keyboard('e');
+    expect(screen.queryAllByRole('listitem')).toHaveLength(0);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: /Alle als gelesen markieren/ }));
+    await waitFor(() => expect(posts('read')).toEqual([{ ids: ['n_01'] }, { ids: ['n_04'] }, { ids: ['n_03'] }]));
+  });
+
+  it('reaches the row actions with Tab', async () => {
+    const user = setup();
+    renderInbox();
+    await loaded();
+    const read = (key: string) => screen.getByRole('button', { name: `Als gelesen markieren: ${key}` });
+
+    // the row is one stop, its actions follow it; the actions of the other rows are no stops
+    expect(read('WEB-42').tabIndex).toBe(0);
+    expect(read('APP-24').tabIndex).toBe(-1);
+    await user.keyboard('j');
+    await user.tab();
+    expect(document.activeElement).toBe(read('WEB-42'));
+    await user.tab();
+    expect(document.activeElement).toBe(screen.getAllByRole('button', { name: 'Löschen: WEB-42' })[0]);
+
+    // the button acts on its row and keeps the focus, now as the way back
+    await user.tab({ shift: true });
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(posts('read')).toEqual([{ ids: ['n_01'] }]));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Als ungelesen markieren: WEB-42' }));
+
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(posts('unread')).toEqual([{ ids: ['n_01'] }]));
+    expect(document.activeElement).toBe(read('WEB-42'));
+
+    // the delete button takes the row away, the focus goes on to the row that moves up
+    await user.tab();
+    await user.keyboard('{Enter}');
+    expect(screen.queryByRole('article', { name: /WEB-42/ })).toBeNull();
+    expect(document.activeElement).toBe(rowLinks()[0]);
+    expect(rowLinks()[0]!.textContent).toContain('erinnert');
+
+    // what belongs to no item names its card
+    expect(screen.getByRole('button', { name: 'Löschen: Organisation' })).toBeTruthy();
+    // a mouse click on a row's button is that row's
+    await user.click(screen.getByRole('button', { name: 'Als gelesen markieren: APP-24' }));
+    await waitFor(() => expect(posts('read').at(-1)).toEqual({ ids: ['n_04'] }));
+    expect(useUiStore.getState().peekItemId).toBeNull();
+  });
+
+  it('offers the row commands in the palette', async () => {
+    const user = setup();
+    renderInbox();
+    await loaded();
+    const offered = () =>
+      listCommands()
+        .filter((command) => command.id.startsWith('inbox.') && (command.when?.() ?? true))
+        .map((command) => [command.label, command.keys]);
+    const run = (id: string) => act(() => listCommands().find((command) => command.id === id)!.run());
+
+    // without a cursor only "all read"
+    expect(offered()).toEqual([['Alle Benachrichtigungen als gelesen markieren', 'shift+e']]);
+    await user.keyboard('j');
+    expect(offered()).toEqual([
+      ['Benachrichtigung als gelesen markieren', 'e'],
+      ['Benachrichtigung löschen', '#'],
+      ['Alle Benachrichtigungen als gelesen markieren', 'shift+e'],
+    ]);
+    run('inbox.read');
+    await waitFor(() => expect(posts('read')).toEqual([{ ids: ['n_01'] }]));
+    expect(offered().map(([label]) => label)).toContain('Benachrichtigung als ungelesen markieren');
+    run('inbox.unread');
+    await waitFor(() => expect(posts('unread')).toEqual([{ ids: ['n_01'] }]));
+    run('inbox.delete');
+    expect(rows()).toHaveLength(13);
+    run('inbox.read_all');
+    await waitFor(() => expect(posts('read').at(-1)).toEqual({ all: true }));
+
+    // in the mentions filter "all read" names the mentions
+    act(() => address.set('/inbox?mentions=1'));
+    await waitFor(() => expect(offered().map(([label]) => label)).toContain('Alle Erwähnungen als gelesen markieren'));
   });
 });
 

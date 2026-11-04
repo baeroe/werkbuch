@@ -98,6 +98,15 @@ werkbuch geht ohne Maus. Mit <kbd>?</kbd> zeigt jeder Bildschirm die Kürzel, di
 | <kbd>⌥ / Alt</kbd>+<kbd>←</kbd> | Epic kürzer machen |
 | <kbd>⌥ / Alt</kbd>+<kbd>→</kbd> | Epic länger machen |
 
+## Inbox
+
+| Taste | Aktion |
+| --- | --- |
+| <kbd>E</kbd> | Als gelesen markieren |
+| <kbd>U</kbd> | Als ungelesen markieren |
+| <kbd>⇧</kbd>+<kbd>E</kbd> | Alle als gelesen markieren |
+| <kbd>#</kbd> | Benachrichtigung löschen |
+
 ## Befehlspalette
 
 | Taste | Aktion |

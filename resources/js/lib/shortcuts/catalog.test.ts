@@ -28,6 +28,14 @@ describe('shortcut catalog', () => {
     expect(SHORTCUTS['dialog.submit']).toMatchObject({ keys: 'mod+enter', scope: 'dialog' });
   });
 
+  it('works the inbox in the list scope, so e of the preview’s title (detail) wins only where the preview acts', () => {
+    expect(SHORTCUTS['inbox.read']).toMatchObject({ keys: 'e', scope: 'list', group: 'shortcuts.group.inbox' });
+    expect(SHORTCUTS['inbox.unread']).toMatchObject({ keys: 'u', scope: 'list', group: 'shortcuts.group.inbox' });
+    expect(SHORTCUTS['inbox.read_all']).toMatchObject({ keys: 'shift+e', scope: 'list', group: 'shortcuts.group.inbox' });
+    expect(SHORTCUTS['inbox.delete']).toMatchObject({ keys: '#', scope: 'list', group: 'shortcuts.group.inbox' });
+    expect(SHORTCUTS['item.title']).toMatchObject({ keys: 'e', scope: 'detail' });
+  });
+
   it('starts no sequence with a key that is a shortcut of its own', () => {
     // the registry begins a sequence before it looks at single keys, so a "g" of its own would never run
     const singles = new Set(

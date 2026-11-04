@@ -7,6 +7,8 @@
  * A layout mounts `useSelection` once (list, table, board) with the item ids in the order it shows them. The cursor and
  * the selection themselves belong to the items screen (`LayoutProps`), so the item commands of the list act on them,
  * whatever the layout. The table passes `arrows: false`: ↑/↓ belong to its grid of cells (K19), which moves with `move`.
+ * The inbox mounts it without `selection` and `onSelect`: it has a cursor and nothing to choose, so the keys that
+ * choose (⇧J/⇧K, x, ⇧X, ⌘A, Esc) stay unbound there.
  *
  * When the keys act: j/k, x and the like whenever the list's shortcuts run (not while typing, not under a dialog).
  * The arrows only while the focus is in the layout or nowhere in particular, so they keep working in menus and
@@ -46,6 +48,9 @@ export function revealBelowToolbar(element: HTMLElement): void {
 
 /* -------------------------------------------------------------------------------- hook */
 
+const NONE: string[] = [];
+const ignore = () => {};
+
 export interface SelectionOptions {
   /** The item ids in the order the layout shows them, without the ones in collapsed groups. */
   order: string[];
@@ -55,8 +60,9 @@ export interface SelectionOptions {
   onSelectAll?: () => void;
   cursorId: string | null;
   onCursor: (id: string | null) => void;
-  selection: string[];
-  onSelect: (ids: string[]) => void;
+  /** The chosen items; a list without a selection (the inbox) leaves both out and binds no keys for it. */
+  selection?: string[];
+  onSelect?: (ids: string[]) => void;
   /** Enter: the item's page. */
   onOpen: (id: string) => void;
   /** Space: the preview of the item. */
@@ -79,7 +85,8 @@ export interface SelectionOptions {
  * moves the cursor as j/k and ⇧J/⇧K do (`move`), for a layout whose own keys step through the items (the table's ↑/↓).
  */
 export function useSelection(options: SelectionOptions): { clickSelect: (id: string, range: boolean) => void; move: (step: 1 | -1, extend: boolean) => void } {
-  const { order, cursorId, selection, arrows = true } = options;
+  const { order, cursorId, selection = NONE, arrows = true } = options;
+  const selectable = options.onSelect !== undefined;
   const latest = useRef(options);
   useLayoutEffect(() => {
     latest.current = options;
@@ -91,7 +98,7 @@ export function useSelection(options: SelectionOptions): { clickSelect: (id: str
   const inLayout = () => focusIsNeutral() || Boolean(latest.current.container.current?.contains(document.activeElement));
 
   function move(step: 1 | -1, extend: boolean) {
-    const { order: ids, cursorId: current, onCursor, focus, onSelect, selection: chosen, step: stepOf } = latest.current;
+    const { order: ids, cursorId: current, onCursor, focus, onSelect = ignore, selection: chosen = NONE, step: stepOf } = latest.current;
     const next = stepOf ? stepOf(current, step) : nextInOrder(ids, current, step);
     if (!next) return;
     if (extend) {
@@ -104,7 +111,7 @@ export function useSelection(options: SelectionOptions): { clickSelect: (id: str
   }
 
   function clickSelect(id: string, range: boolean) {
-    const { order: ids, selection: chosen, onSelect, onCursor } = latest.current;
+    const { order: ids, selection: chosen = NONE, onSelect = ignore, onCursor } = latest.current;
     if (range && anchor.current !== null) onSelect(selectRange(chosen, ids, anchor.current, id));
     else {
       onSelect(toggleId(chosen, id));
@@ -115,15 +122,19 @@ export function useSelection(options: SelectionOptions): { clickSelect: (id: str
 
   const hasCursor = () => latest.current.cursorId !== null && latest.current.order.includes(latest.current.cursorId);
   const arrowKeys = { when: inLayout, enabled: arrows };
+  const selectKeys = { enabled: selectable };
+  const extendArrowKeys = { when: inLayout, enabled: arrows && selectable };
+  /** What a key that chooses reads: the latest selection and its setter (only bound while there is one). */
+  const chosen = () => ({ selection: latest.current.selection ?? NONE, onSelect: latest.current.onSelect ?? ignore });
 
   useShortcut('list.next', () => move(1, false));
   useShortcut('list.prev', () => move(-1, false));
   useShortcut('list.next_arrow', () => move(1, false), arrowKeys);
   useShortcut('list.prev_arrow', () => move(-1, false), arrowKeys);
-  useShortcut('list.extend_next', () => move(1, true));
-  useShortcut('list.extend_prev', () => move(-1, true));
-  useShortcut('list.extend_next_arrow', () => move(1, true), arrowKeys);
-  useShortcut('list.extend_prev_arrow', () => move(-1, true), arrowKeys);
+  useShortcut('list.extend_next', () => move(1, true), selectKeys);
+  useShortcut('list.extend_prev', () => move(-1, true), selectKeys);
+  useShortcut('list.extend_next_arrow', () => move(1, true), extendArrowKeys);
+  useShortcut('list.extend_prev_arrow', () => move(-1, true), extendArrowKeys);
 
   useShortcut('list.open', () => latest.current.onOpen(latest.current.cursorId!), { when: () => hasCursor() && focusIsNeutral() });
   useShortcut(
@@ -141,37 +152,39 @@ export function useSelection(options: SelectionOptions): { clickSelect: (id: str
     'list.select',
     () => {
       const id = latest.current.cursorId!;
-      latest.current.onSelect(toggleId(latest.current.selection, id));
+      const { selection: current, onSelect } = chosen();
+      onSelect(toggleId(current, id));
       anchor.current = id;
     },
-    { when: hasCursor },
+    { when: hasCursor, enabled: selectable },
   );
   useShortcut(
     'list.select_range',
     () => {
-      const { order: ids, selection: chosen, cursorId: current, onSelect } = latest.current;
-      onSelect(selectRange(chosen, ids, anchor.current ?? current, current!));
+      const { order: ids, cursorId: current } = latest.current;
+      const { selection: picked, onSelect } = chosen();
+      onSelect(selectRange(picked, ids, anchor.current ?? current, current!));
       anchor.current = current;
     },
-    { when: hasCursor },
+    { when: hasCursor, enabled: selectable },
   );
   useShortcut(
     'list.select_all',
     () => {
-      const { onSelectAll, onSelect, all, order: ids } = latest.current;
+      const { onSelectAll, all, order: ids } = latest.current;
       if (onSelectAll) onSelectAll();
-      else onSelect([...(all ?? ids)]);
+      else chosen().onSelect([...(all ?? ids)]);
     },
-    { when: () => (latest.current.all ?? latest.current.order).length > 0 },
+    { when: () => (latest.current.all ?? latest.current.order).length > 0, enabled: selectable },
   );
   useShortcut(
     'list.clear',
     () => {
-      latest.current.onSelect([]);
+      chosen().onSelect([]);
       anchor.current = null;
     },
     // Escape in a field belongs to the field (the filter search clears itself)
-    { when: () => latest.current.selection.length > 0 && !isTyping(document.activeElement) },
+    { when: () => chosen().selection.length > 0 && !isTyping(document.activeElement), enabled: selectable },
   );
 
   // the cursor item went away (archived, filtered out, its group collapsed): the cursor takes the item at its place

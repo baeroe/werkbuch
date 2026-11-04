@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { allEntries, api, createE2eProject, createItem, PEOPLE, removeE2eProject, runId, signedInContext, tr, variant } from '../helpers';
+import { allEntries, api, createE2eProject, createItem, PEOPLE, pressMod, removeE2eProject, runId, signedInContext, tr, variant } from '../helpers';
 
 // The inbox (spec 4.14) of the inbox account of the variant (A289), in a context of its own. Its notifications come
 // from the e2e person (Erik Ende), who assigns, comments and mentions over the API in a project of the test's own
@@ -67,24 +67,100 @@ test('groups notifications by item and filters unread', async ({ page, browser }
     await expect(card(mentionedIn.key)).toContainText(tr('en', 'inbox.kind.mentioned', { actor: PEOPLE.e2e.name }));
 
     // unread only: the read assignment leaves, the address keeps the filter
-    await other.page.getByRole('button', { name: tr('en', 'inbox.filter.unread') }).click();
+    await other.page.getByRole('button', { name: tr('en', 'inbox.filter.unread'), exact: true }).click();
     await expect(other.page).toHaveURL(/\/inbox\?unread=1$/);
     await expect(rows).toHaveCount(1);
     await expect(rows.nth(0)).toContainText(tr('en', 'inbox.kind.comment', { actor: PEOPLE.e2e.name }));
 
     // and mentions only: the card of the first item goes
-    await other.page.getByRole('button', { name: tr('en', 'inbox.filter.mentions') }).click();
+    await other.page.getByRole('button', { name: tr('en', 'inbox.filter.mentions'), exact: true }).click();
     await expect(other.page).toHaveURL(/\/inbox\?unread=1&mentions=1$/);
     await expect(card(assigned.key)).toHaveCount(0);
     await expect(card(mentionedIn.key).getByRole('listitem')).toHaveCount(1);
 
     // a reload starts from the filter in the address
     await other.page.reload();
-    await expect(other.page.getByRole('button', { name: tr('en', 'inbox.filter.unread') })).toHaveAttribute('aria-pressed', 'true');
+    await expect(other.page.getByRole('button', { name: tr('en', 'inbox.filter.unread'), exact: true })).toHaveAttribute('aria-pressed', 'true');
     await expect(card(mentionedIn.key).getByRole('listitem')).toHaveCount(1);
     await expect(card(assigned.key)).toHaveCount(0);
   } finally {
     // away from the inbox first: live would load it again while the project goes
+    await other.page.goto('/my-items');
+    await other.context.close();
+    await removeE2eProject(page, project.identifier);
+  }
+});
+
+test('works the inbox with the keyboard only', async ({ page, browser }) => {
+  const project = await createE2eProject(page, name('keys'), { types: ['Task'] });
+  const inbox = PEOPLE.inbox[variant()]!;
+  const person = (await allEntries(page, 'users')).find((entry) => entry.email === inbox.email) as { id: string; handle: string };
+  const added = await api(page, 'POST', `/api/v1/projects/${project.id}/members`, { user_id: person.id, role: 'member' });
+  expect(added.status(), await added.text()).toBe(201);
+  const other = await signedInContext(browser, inbox);
+  try {
+    // two items assigned to the person, then a comment on the first: three unread rows, the comment the newest
+    const first = await createItem(page, { project_id: project.id, title: 'E2E Inbox Tasten Rechnung', assignee_id: person.id });
+    const second = await createItem(page, { project_id: project.id, title: 'E2E Inbox Tasten Angebot', assignee_id: person.id });
+    const commented = await api(page, 'POST', `/api/v1/work-items/${first.id}/comments`, { body: 'E2E Inbox Tasten: bitte prüfen.' });
+    expect(commented.status(), await commented.text()).toBe(201);
+
+    const ours = async () => (await notificationsOf(other.page)).filter((entry) => [first.id, second.id].includes(entry.work_item_id ?? ''));
+    await expect.poll(async () => (await ours()).length, { timeout: 20_000 }).toBe(3);
+    const stored = await ours();
+    const comment = stored.find((entry) => entry.event === 'comment')!;
+    const assignedFirst = stored.find((entry) => entry.event === 'assigned' && entry.work_item_id === first.id)!;
+    const assignedSecond = stored.find((entry) => entry.event === 'assigned' && entry.work_item_id === second.id)!;
+    const readAt = async (id: string) => (await notificationsOf(other.page)).find((entry) => entry.id === id)?.read_at;
+
+    const inboxPage = other.page;
+    await inboxPage.goto('/inbox');
+    const card = (key: string) => inboxPage.getByRole('article', { name: new RegExp(`^${key}:`) });
+    const firstRows = card(first.key).getByRole('listitem');
+    await expect(firstRows).toHaveCount(2);
+
+    // j: the cursor and the focus on the newest row, the comment
+    await inboxPage.keyboard.press('j');
+    const commentLink = firstRows.nth(0).getByRole('link');
+    await expect(commentLink).toBeFocused();
+    await expect(commentLink).toContainText('E2E Inbox Tasten: bitte prüfen.');
+
+    // e reads it, u takes it back; the server ends where the last key left it
+    await inboxPage.keyboard.press('e');
+    await expect(firstRows.nth(0)).not.toHaveAttribute('data-unread');
+    await expect.poll(() => readAt(comment.id)).not.toBeNull();
+    await inboxPage.keyboard.press('u');
+    await expect(firstRows.nth(0)).toHaveAttribute('data-unread', 'true');
+    await expect.poll(() => readAt(comment.id)).toBeNull();
+
+    // # deletes the next row with five seconds of undo, the focus goes on; mod+z brings it back
+    await inboxPage.keyboard.press('j');
+    await expect(firstRows.nth(1).getByRole('link')).toBeFocused();
+    await inboxPage.keyboard.press('#');
+    await expect(firstRows).toHaveCount(1);
+    await expect(inboxPage.getByText(tr('en', 'inbox.delete.done'))).toBeVisible();
+    const secondLink = card(second.key).getByRole('listitem').getByRole('link');
+    await expect(secondLink).toBeFocused();
+    await pressMod(inboxPage, 'z');
+    await expect(firstRows).toHaveCount(2);
+
+    // Enter opens the item in the preview and reads the notification
+    await expect(secondLink).toBeFocused();
+    await inboxPage.keyboard.press('Enter');
+    const preview = inboxPage.getByRole('complementary', { name: tr('en', 'items.peek.label') });
+    await expect(preview.getByText('E2E Inbox Tasten Angebot').first()).toBeVisible();
+    await expect.poll(() => readAt(assignedSecond.id)).not.toBeNull();
+    await inboxPage.keyboard.press('Escape');
+    await expect(preview).toHaveCount(0);
+
+    // shift+e: everything read; the toast says how many
+    await inboxPage.keyboard.press('Shift+E');
+    await expect(inboxPage.getByText(/notifications? marked as read$/)).toBeVisible();
+    await expect.poll(async () => (await ours()).filter((entry) => entry.read_at === null).length).toBe(0);
+    await expect(inboxPage.getByRole('status').filter({ hasText: tr('en', 'inbox.all_read') })).toBeVisible();
+    // the undone delete never went to the server
+    expect((await ours()).map((entry) => entry.id)).toContain(assignedFirst.id);
+  } finally {
     await other.page.goto('/my-items');
     await other.context.close();
     await removeE2eProject(page, project.identifier);

@@ -1,10 +1,16 @@
 /*
  * One notification of the inbox (spec 4.14), ported from the clickdummy's NotificationRow: who did what, an excerpt for
- * comments and mentions, how long ago. A row with an unread notification has the ink-blue dot and the word "Ungelesen"
- * for screen readers. The whole row is the link: a plain click (or Enter) opens the item in the preview, a click with
- * ⌘/Ctrl or ⇧ and a middle click are the browser's (the item's page in a new tab); what belongs to no item leads to its
- * page. The list is one stop in the tab order (`tabStop`, roving over `data-nav-target`); under the row with the cursor
- * a hint names the key that changes it (13c: e for an unread one, u for a read one).
+ * comments and mentions, how long ago, and the two things you do with it: mark it read (or unread again, once it is
+ * read) and delete it. A row with an unread notification has the ink-blue dot and the word "Ungelesen" for screen
+ * readers. The whole row is the link: a plain click (or Enter) opens the item in the preview, a click with ⌘/Ctrl or ⇧
+ * and a middle click are the browser's (the item's page in a new tab); either way the screen reads the notification
+ * (Alt saves the link: nothing opens, nothing is read). What belongs to no item leads to its page.
+ *
+ * Keyboard: the list is one stop in the tab order (`tabStop`, roving over `data-nav-target`); the row's two buttons
+ * follow it in the tab order (13c "Zeilenaktionen per Tab"), named with the key of the card ("Löschen: WEB-47"). With a
+ * mouse they take the place of the time while the pointer, the focus or the cursor is on the row; on a phone they show
+ * on the row with the cursor. Under that row a hint names the key that changes it (13c: e for an unread one, u for a
+ * read one).
  *
  * Who: the actor's avatar and name (a bot with the word "Bot"), an account the list does not know as "Jemand"; a
  * reminder has nobody behind it and reads as werkbuch, a failed template or a switched-off webhook says what happened
@@ -12,19 +18,20 @@
  * renamed or removed status still reads.
  */
 
-import { CalendarClock, CalendarSync, Webhook, type LucideIcon } from 'lucide-react';
+import { CalendarClock, CalendarSync, Check, CircleDot, Trash2, Webhook, type LucideIcon } from 'lucide-react';
 import type { MouseEvent, ReactNode } from 'react';
 import { botWord, formatDay } from '@/components/fields/format';
 import { linkFocusRing } from '@/components/items/ItemLink';
 import { Avatar } from '@/components/ui/Avatar';
 import { cx } from '@/components/ui/cx';
+import { IconButton } from '@/components/ui/IconButton';
 import { Kbd } from '@/components/ui/Kbd';
 import { formatMoment } from '@/features/item-detail/activity/when';
 import { tx } from '@/features/item-detail/activity/phrases';
 import { t } from '@/lib/i18n';
 import { paths } from '@/lib/links';
 import type { Notification, Project, StateSnapshot, User } from '@/types';
-import { changedFields, timeAgo } from './notifications';
+import { changedFields, opensElsewhere, timeAgo } from './notifications';
 
 /** What every row reads from the catalogs; the screen loads them once. */
 export interface RowContext {
@@ -34,6 +41,26 @@ export interface RowContext {
   now: Date;
   timeZone: string;
 }
+
+/** What the rows do; the screen acts on the notification. */
+export interface RowActions {
+  /** A plain click or Enter: the screen opens the item in the preview, or the page of what belongs to no item. */
+  open: (notification: Notification, href: string) => void;
+  /** The browser opens the page in a new tab or window (⌘/Ctrl- or ⇧-click, middle click): the screen reads it. */
+  openedElsewhere: (notification: Notification) => void;
+  /** The link got the focus: the cursor follows. */
+  cursor: (notificationId: string) => void;
+  markRead: (notification: Notification) => void;
+  markUnread: (notification: Notification) => void;
+  remove: (notificationId: string) => void;
+  /** The row's link, for the keys that move the focus. */
+  register: (notificationId: string, element: HTMLAnchorElement | null) => void;
+}
+
+/** With a mouse: what shows (the buttons) and what goes (the time) while the pointer, the focus or the cursor is on a row. */
+const SHOW_ON_ROW =
+  'md:pointer-events-none md:opacity-0 md:group-hover/row:pointer-events-auto md:group-hover/row:opacity-100 md:group-focus-within/row:pointer-events-auto md:group-focus-within/row:opacity-100 md:group-data-[current]/row:pointer-events-auto md:group-data-[current]/row:opacity-100';
+const HIDE_ON_ROW = 'md:group-hover/row:opacity-0 md:group-focus-within/row:opacity-0 md:group-data-[current]/row:opacity-0';
 
 /** The lead of a row without a person behind it: a reminder or something the system did. */
 const SYSTEM_ICONS: Partial<Record<Notification['event'], LucideIcon>> = {
@@ -110,17 +137,16 @@ function sentenceOf(notification: Notification, ctx: RowContext): { sentence: Re
 type NotificationRowProps = {
   notification: Notification;
   ctx: RowContext;
+  /** What the buttons name the row by: the key of the card's item, else the card's heading. */
+  subject: string;
   /** The keyboard cursor is on this row. */
   current: boolean;
-  /** The one row of the list that is in the tab order. */
+  /** The one row of the list that is in the tab order, its buttons with it. */
   tabStop: boolean;
-  /** A plain click or Enter: the screen opens the item in the preview, or the page of what belongs to no item. */
-  onOpen: (notification: Notification, href: string) => void;
-  /** The link got the focus: the cursor follows. */
-  onCursor: (notificationId: string) => void;
+  actions: RowActions;
 };
 
-export function NotificationRow({ notification, ctx, current, tabStop, onOpen, onCursor }: NotificationRowProps) {
+export function NotificationRow({ notification, ctx, subject, current, tabStop, actions }: NotificationRowProps) {
   const unread = notification.read_at === null;
   const actor = notification.actor_id ? ctx.users.get(notification.actor_id) : undefined;
   const { sentence, excerpt } = sentenceOf(notification, ctx);
@@ -139,10 +165,12 @@ export function NotificationRow({ notification, ctx, current, tabStop, onOpen, o
   const stamp = formatMoment(notification.created_at, ctx.timeZone);
 
   function click(event: MouseEvent<HTMLAnchorElement>) {
-    // a click with a modifier key, or with another button, is the browser's: a new tab, a new window, a saved link
-    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (event.button !== 0) return;
+    // a click with a modifier key is the browser's: a new tab or window opens the notification as well, Alt saves the link
+    if (opensElsewhere(event)) actions.openedElsewhere(notification);
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
-    onOpen(notification, href);
+    actions.open(notification, href);
   }
 
   return (
@@ -159,13 +187,18 @@ export function NotificationRow({ notification, ctx, current, tabStop, onOpen, o
       {lead}
       <div className="min-w-0 flex-1">
         <a
+          ref={(element) => actions.register(notification.id, element)}
           href={href}
           data-nav-target=""
           data-focus-ring="none"
           tabIndex={tabStop ? 0 : -1}
           aria-current={current || undefined}
-          onFocus={() => onCursor(notification.id)}
+          onFocus={() => actions.cursor(notification.id)}
           onClick={click}
+          onAuxClick={(event) => {
+            // the middle button opens the page in a new tab
+            if (event.button === 1) actions.openedElsewhere(notification);
+          }}
           className={cx('block text-ui text-pretty break-words no-underline outline-none after:absolute after:inset-0 after:rounded-ctl', unread ? 'text-ink' : 'text-muted')}
         >
           {unread && (
@@ -186,9 +219,33 @@ export function NotificationRow({ notification, ctx, current, tabStop, onOpen, o
           </p>
         )}
       </div>
-      <time dateTime={notification.created_at} title={stamp} className="mt-0.5 shrink-0 text-sm whitespace-nowrap text-muted tabular-nums max-md:hidden">
-        {ago}
-      </time>
+      {/* the right edge: how long ago, and in its place the two buttons (on a phone: beside the row with the cursor) */}
+      <div className="-mt-0.5 grid shrink-0 items-center justify-items-end max-md:-my-1.5">
+        <time
+          dateTime={notification.created_at}
+          title={stamp}
+          className={cx('col-start-1 row-start-1 mt-0.5 text-sm whitespace-nowrap text-muted tabular-nums transition-opacity duration-120 max-md:hidden', HIDE_ON_ROW)}
+        >
+          {ago}
+        </time>
+        <div
+          className={cx(
+            'relative z-10 col-start-1 row-start-1 flex items-center gap-0.5 transition-opacity duration-120',
+            'max-md:hidden max-md:group-focus-within/row:flex max-md:group-data-[current]/row:flex',
+            SHOW_ON_ROW,
+          )}
+        >
+          {/* one button that changes its word, so it keeps the focus */}
+          <IconButton
+            icon={unread ? Check : CircleDot}
+            label={t(unread ? 'inbox.row.read' : 'inbox.row.unread', { key: subject })}
+            shortcut={unread ? 'e' : 'u'}
+            tabIndex={tabStop ? 0 : -1}
+            onClick={() => (unread ? actions.markRead(notification) : actions.markUnread(notification))}
+          />
+          <IconButton icon={Trash2} label={t('inbox.row.delete', { key: subject })} shortcut="#" tabIndex={tabStop ? 0 : -1} onClick={() => actions.remove(notification.id)} />
+        </div>
+      </div>
     </li>
   );
 }

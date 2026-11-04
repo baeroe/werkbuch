@@ -7,18 +7,21 @@
  * The item comes with its notifications (lean, `Notification.item`). One that comes without it (its project went into
  * deletion between counting and reading) is "Nicht mehr verfügbar" (13c), never "gibt es nicht mehr": the row still
  * opens the preview, which says why it cannot show the item.
+ *
+ * The title opens the item's page, here or in a new tab: every notification of the card is read then (Alt alone saves
+ * the link and reads nothing).
  */
 
 import { Building2 } from 'lucide-react';
-import { useId, type ReactNode } from 'react';
+import { useId, type MouseEvent, type ReactNode } from 'react';
 import { Link } from '@inertiajs/react';
 import { IndexCard } from '@/components/ui/IndexCard';
 import { ProjectBadge } from '@/components/ui/ProjectBadge';
 import { t } from '@/lib/i18n';
 import { paths } from '@/lib/links';
-import type { Notification, WorkItemType } from '@/types';
+import type { WorkItemType } from '@/types';
 import type { NotificationGroup } from './notifications';
-import { NotificationRow, type RowContext } from './NotificationRow';
+import { NotificationRow, type RowActions, type RowContext } from './NotificationRow';
 
 type NotificationCardProps = {
   group: NotificationGroup;
@@ -29,8 +32,9 @@ type NotificationCardProps = {
   tabStop: string | null;
   /** The card's item is in the preview. */
   previewed: boolean;
-  onOpen: (notification: Notification, href: string) => void;
-  onCursor: (notificationId: string) => void;
+  actions: RowActions;
+  /** The title opened the item's page; `focused`: the title had the focus. */
+  onOpenItem: (group: NotificationGroup, focused: boolean) => void;
 };
 
 /** The project of a card: its mark and name, or nothing while the projects load. */
@@ -45,8 +49,12 @@ function ProjectName({ ctx, projectId }: { ctx: RowContext; projectId: string | 
   );
 }
 
-export function NotificationCard({ group, ctx, types, current, tabStop, previewed, onOpen, onCursor }: NotificationCardProps) {
+export function NotificationCard({ group, ctx, types, current, tabStop, previewed, actions, onOpenItem }: NotificationCardProps) {
   const headingId = useId();
+  const item = group.itemId === null ? null : (group.notifications.find((notification) => notification.item)?.item ?? null);
+  const project = ctx.project(group.projectId);
+  let subject = item?.key ?? t('inbox.item.unavailable');
+  if (group.itemId === null) subject = group.projectId === null ? t('inbox.organization') : (project?.name ?? t('items.group.hidden.project'));
 
   const rows = (
     <ul className="-mx-2 mt-1.5 flex flex-col">
@@ -55,23 +63,33 @@ export function NotificationCard({ group, ctx, types, current, tabStop, previewe
           key={notification.id}
           notification={notification}
           ctx={ctx}
+          subject={subject}
           current={current === notification.id}
           tabStop={tabStop === notification.id}
-          onOpen={onOpen}
-          onCursor={onCursor}
+          actions={actions}
         />
       ))}
     </ul>
   );
 
   if (group.itemId !== null) {
-    const item = group.notifications.find((notification) => notification.item)?.item ?? null;
     const type = item ? types?.find((entry) => entry.id === item.type_id) : undefined;
     let title: ReactNode = <span className="text-muted">{t('inbox.item.unavailable')}</span>;
     if (item) {
+      // the item's page, here or in a new tab, reads all of the card's notifications (Alt alone saves the link)
+      const openItem = (event: MouseEvent) => onOpenItem(group, document.activeElement === event.currentTarget);
       title = (
         // the padding makes the target taller without moving anything: 24 px on desktop, 44 px on a phone
-        <Link href={paths.item(item.key)} className="rounded-chip py-3.5 text-inherit no-underline hover:underline md:py-1">
+        <Link
+          href={paths.item(item.key)}
+          onClick={(event: MouseEvent) => {
+            if (event.button === 0 && !event.altKey) openItem(event);
+          }}
+          onAuxClick={(event: MouseEvent) => {
+            if (event.button === 1) openItem(event);
+          }}
+          className="rounded-chip py-3.5 text-inherit no-underline hover:underline md:py-1"
+        >
           <span className="sr-only">{item.key}:</span> {item.title}
         </Link>
       );
@@ -89,7 +107,6 @@ export function NotificationCard({ group, ctx, types, current, tabStop, previewe
     );
   }
 
-  const project = ctx.project(group.projectId);
   return (
     <section aria-labelledby={headingId} className="relative mt-5 rounded-card border border-line bg-surface p-3 shadow-elev-1">
       <h2 id={headingId} className="flex items-center gap-2 text-ui font-medium text-ink">
