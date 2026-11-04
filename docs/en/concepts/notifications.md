@@ -67,7 +67,7 @@ Read notifications are deleted after 90 days; unread ones stay. Collected mails 
 
 ## Live updates
 
-Lists, boards, tables and timelines, the item page and the preview (fields, comments, reactions, history), the list of projects and their members, and the inbox with its badge follow changes by others live. A message only says what changed (ids and the kind of change, never a title, a text or a value); the browser then loads the new state through the API, which checks your access. Changes to catalogs, views, accounts and favorites show the next time a page loads.
+Lists, boards, tables and timelines, the item page and the preview (fields, comments, reactions, history), the projects you see already and their members, and the inbox with its badge follow changes by others live. A message only says what changed (ids and the kind of change, never a title, a text or a value); the browser then loads the new state through the API, which checks your access. Changes to catalogs, views, accounts and favorites show the next time a page loads, and so does a project that is new or turns public while you are no member of it. When your org role changes, the page takes your new rights at once. An item page or a preview of an item that was deleted says so.
 
 - **Your own changes** are not applied twice: the tab that made a change does not get it back, your other tabs do.
 - **Losing access cuts the connection.** When you are removed from a project, a project turns private, your org role goes from admin to member or your account is deactivated, werkbuch closes your live connections. The browser connects again and asks for every channel anew; a project you no longer see is refused, and its lists and pages reload and show what you may still see.
@@ -146,10 +146,10 @@ Ids of other accounts, of notifications you no longer see and unknown ids are pa
 Org admins find the state of the instance in the settings of the organization under **System** (`/settings/system`):
 
 - **Version** of werkbuch.
-- **Queues:** the backlog per queue and since when its oldest job waits. Jobs meant for later, such as collected mails, count apart as scheduled and are no backlog.
-- **Failed jobs:** the newest 50 with queue, job, error and time; **Retry all** puts them back into their queue.
+- **Queues:** the backlog per queue and since when its oldest job waits (a job whose worker stopped counts as waiting; a queue werkbuch does not know shows at the end). Jobs meant for later, such as collected mails, count apart as scheduled and are no backlog.
+- **Failed jobs:** the newest 50 with queue, job, error and time; **Retry all** puts them back into their queue, 500 at a time.
 - **Search:** whether Meilisearch answers, with its open tasks and the tasks that failed in the last 24 hours.
 - **Email:** whether a mail server is set up, and a **test mail** to your own address that goes out at once and shows the error of the mail server when it fails.
 - **Live updates:** running, not reachable or off.
 
-Over the API: `GET /api/v1/system`, `POST /api/v1/system/failed-jobs/retry` (optionally `{"ids": [...]}`, answers `{"retried": n}`) and `POST /api/v1/system/test-mail` (answers `{"sent_to": "…"}`; `409` with `reason: mail_not_configured` without a mail server, `503` with `reason: mail_failed` when the server refuses). Members and bots get a `403`.
+Over the API: `GET /api/v1/system`, `POST /api/v1/system/failed-jobs/retry` (optionally `{"ids": [...]}`, answers `{"retried": n}`) and `POST /api/v1/system/test-mail` (answers `{"sent_to": "…"}`; `409` with `reason: mail_not_configured` without a mail server, `503` with `reason: mail_failed` when the server refuses; six test mails a minute per account, more answer `429`). werkbuch waits 20 seconds for a mail server that does not answer (`MAIL_TIMEOUT`). Members and bots get a `403`.

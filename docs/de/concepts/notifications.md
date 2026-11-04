@@ -67,7 +67,7 @@ Gelesene Benachrichtigungen werden nach 90 Tagen gelöscht; ungelesene bleiben. 
 
 ## Live-Updates
 
-Listen, Boards, Tabellen und Timelines, die Item-Seite und die Vorschau (Felder, Kommentare, Reaktionen, History), die Liste der Projekte und ihrer Mitglieder sowie die Inbox mit ihrem Badge folgen den Änderungen anderer live. Eine Nachricht sagt nur, was sich geändert hat (IDs und die Art der Änderung, nie einen Titel, einen Text oder einen Wert); der Browser lädt den neuen Stand dann über die API, die deinen Zugriff prüft. Änderungen an Katalogen, Views, Konten und Favoriten erscheinen, wenn eine Seite das nächste Mal lädt.
+Listen, Boards, Tabellen und Timelines, die Item-Seite und die Vorschau (Felder, Kommentare, Reaktionen, History), die Projekte, die du schon siehst, und ihre Mitglieder sowie die Inbox mit ihrem Badge folgen den Änderungen anderer live. Eine Nachricht sagt nur, was sich geändert hat (IDs und die Art der Änderung, nie einen Titel, einen Text oder einen Wert); der Browser lädt den neuen Stand dann über die API, die deinen Zugriff prüft. Änderungen an Katalogen, Views, Konten und Favoriten erscheinen, wenn eine Seite das nächste Mal lädt, ebenso ein Projekt, das neu ist oder öffentlich wird, solange du kein Mitglied bist. Ändert sich deine Org-Rolle, übernimmt die Seite deine neuen Rechte sofort. Eine Item-Seite oder Vorschau eines gelöschten Items sagt, dass es gelöscht wurde.
 
 - **Eigene Änderungen** werden nicht doppelt angewendet: der Tab, der eine Änderung gemacht hat, bekommt sie nicht zurück, deine anderen Tabs schon.
 - **Zugriff verloren heißt getrennt.** Wirst du aus einem Projekt entfernt, wird ein Projekt privat, geht deine Org-Rolle von Admin zu Member oder wird dein Konto deaktiviert, schließt werkbuch deine Live-Verbindungen. Der Browser verbindet neu und fragt jeden Kanal neu an; ein Projekt, das du nicht mehr siehst, wird abgelehnt, und seine Listen und Seiten laden neu und zeigen, was du noch sehen darfst.
@@ -146,10 +146,10 @@ IDs anderer Konten, Benachrichtigungen, die du nicht mehr siehst, und unbekannte
 Org-Admins finden den Zustand der Instanz in den Einstellungen der Organisation unter **System** (`/settings/system`):
 
 - **Version** von werkbuch.
-- **Queues:** der Rückstand je Queue und seit wann ihr ältester Job wartet. Jobs, die erst später laufen sollen, etwa gesammelte Mails, zählen getrennt als geplant und sind kein Rückstand.
-- **Fehlgeschlagene Jobs:** die neuesten 50 mit Queue, Job, Fehler und Zeit; **Alle erneut versuchen** legt sie zurück in ihre Queue.
+- **Queues:** der Rückstand je Queue und seit wann ihr ältester Job wartet (ein Job, dessen Worker stehen blieb, zählt als wartend; eine Queue, die werkbuch nicht kennt, steht am Ende). Jobs, die erst später laufen sollen, etwa gesammelte Mails, zählen getrennt als geplant und sind kein Rückstand.
+- **Fehlgeschlagene Jobs:** die neuesten 50 mit Queue, Job, Fehler und Zeit; **Alle erneut versuchen** legt sie zurück in ihre Queue, je 500 auf einmal.
 - **Suche:** ob Meilisearch antwortet, mit den offenen Aufgaben und den in den letzten 24 Stunden gescheiterten.
 - **E-Mail:** ob ein Mailserver eingerichtet ist, und eine **Testmail** an deine eigene Adresse, die sofort rausgeht und den Fehler des Mailservers zeigt, wenn sie scheitert.
 - **Live-Updates:** läuft, nicht erreichbar oder aus.
 
-Über die API: `GET /api/v1/system`, `POST /api/v1/system/failed-jobs/retry` (optional `{"ids": [...]}`, antwortet `{"retried": n}`) und `POST /api/v1/system/test-mail` (antwortet `{"sent_to": "…"}`; `409` mit `reason: mail_not_configured` ohne Mailserver, `503` mit `reason: mail_failed`, wenn der Server ablehnt). Members und Bots bekommen ein `403`.
+Über die API: `GET /api/v1/system`, `POST /api/v1/system/failed-jobs/retry` (optional `{"ids": [...]}`, antwortet `{"retried": n}`) und `POST /api/v1/system/test-mail` (antwortet `{"sent_to": "…"}`; `409` mit `reason: mail_not_configured` ohne Mailserver, `503` mit `reason: mail_failed`, wenn der Server ablehnt; sechs Testmails je Minute und Konto, mehr antworten `429`). Auf einen Mailserver, der nicht antwortet, wartet werkbuch 20 Sekunden (`MAIL_TIMEOUT`). Members und Bots bekommen ein `403`.
