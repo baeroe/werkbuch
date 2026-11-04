@@ -10,8 +10,10 @@ use Lorisleiva\Actions\Concerns\AsAction;
 /**
  * The sweeper of the mail collections (`app:send-notification-mails`, every minute, A288): a collection that is due
  * for more than LATE_MINUTES and not sent lost its job (a crash between the commit and the dispatch, a job that ended in
- * failed_jobs), so it gets one again. Each at most every PAUSE_MINUTES (`dispatched_at`, K8): while SMTP is down, the
- * jobs that are there wait out their backoff instead of a new one each minute. The job checks everything afresh and
+ * failed_jobs), so it gets one again. Only when nothing tried it for PAUSE_MINUTES (`dispatched_at`, K8, I1): the
+ * collection is stamped with its `due_at` when it opens and again by every try of its job, and the longest pause of the
+ * job is shorter, so while SMTP is down the job that is there waits out its backoff alone instead of a new one each
+ * quarter of an hour. The job checks everything afresh and
  * sends at most once, so one too many does no harm. With `$now` it sends every open collection at once, due or not, in
  * this process (operation before a maintenance, e2e). Work of a job without an event of its own.
  */
@@ -22,8 +24,8 @@ final class DispatchDueMails
     /** How long a collection may be due before the sweeper takes it. */
     public const LATE_MINUTES = 2;
 
-    /** How long the sweeper waits before it dispatches the same collection again. */
-    public const PAUSE_MINUTES = 15;
+    /** How long no try may have run before the sweeper dispatches the collection again (longer than the job's longest pause). */
+    public const PAUSE_MINUTES = 35;
 
     /**
      * @return int how many collections it dispatched (or, with `$now`, sent or skipped)

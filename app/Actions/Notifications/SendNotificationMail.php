@@ -49,6 +49,9 @@ final class SendNotificationMail
      */
     public function handle(Actor $actor, string $mailId): string
     {
+        // a try: the sweeper waits for the next one (I1); outside the transaction, which a failure rolls back
+        NotificationMail::query()->whereKey($mailId)->whereNull('sent_at')->update(['dispatched_at' => now()]);
+
         try {
             return DB::transaction(fn (): string => $this->send($mailId), 3);
         } catch (Throwable $failure) {

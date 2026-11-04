@@ -222,10 +222,13 @@ it('keeps the collection open when SMTP fails, and sends it on the next try', fu
         }
     });
 
+    $this->travel(10)->minutes();
     expect(fn () => $send($mail))->toThrow(TransportException::class);
     $mail->refresh();
     expect($mail->sent_at)->toBeNull()
         ->and($mail->outcome)->toBeNull()
+        // every try stamps the collection, outside the rolled back sending: the sweeper waits for the retries (I1)
+        ->and($mail->dispatched_at?->toDateTimeString())->toBe(now()->toDateTimeString())
         ->and($mail->open_key)->toBe("{$w['mara']->id}:item:{$w['item']->id}");
 
     expect($send($mail))->toBe(NotificationMail::SENT)
@@ -413,7 +416,7 @@ it('sends the collection from its job on the queue notifications, with five trie
 
     expect($job->queue)->toBe('notifications')
         ->and($job->tries)->toBe(5)
-        ->and($job->backoff)->toBe([60, 300, 900, 3600])
+        ->and($job->backoff)->toBe([60, 300, 900, 1800])
         ->and($collection($w['mara'], $w['item'])->outcome)->toBe(NotificationMail::SENT);
     Mail::assertSent(NotificationDigest::class, 1);
 });

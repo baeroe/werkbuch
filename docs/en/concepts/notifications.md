@@ -51,7 +51,7 @@ An excerpt always comes from the current text: an edited comment shows its new w
 - **Comments and mentions** come with their current text. Links stay links, pictures and files appear as links to werkbuch; a mail never has attachments or embedded pictures. A long text is cut with **Read more**.
 - **Checked when sending.** Right before the mail goes out, werkbuch checks every line again: the account is active, it still sees the project, the item exists, the notification is still unread and mail is still on for that event. What you read in the inbox in the meantime is not mailed. When nothing is left, no mail goes out.
 - **Without a mail server** (`MAIL_MAILER` `log` or `array`), there are no notification mails, only the inbox, and none follow later once a mail server is set up.
-- **When the mail server fails,** werkbuch tries again (after 1, 5, 15 and 60 minutes, and the scheduler hands a lost mail to the queue again at most every 15 minutes). A mail that still fails 24 hours after it was due is given up and reported in the log. A crash right between the mail server and the database can send a mail twice; a mail is never lost that way.
+- **When the mail server fails,** werkbuch tries again (after 1, 5, 15 and 30 minutes, and the scheduler hands a mail to the queue again only when nothing tried it for 35 minutes: its job was lost). A mail that still fails 24 hours after it was due is given up and reported in the log. A crash right between the mail server and the database can send a mail twice; a mail is never lost that way.
 
 `php artisan app:send-notification-mails --now` sends every open collection right away, for example before maintenance.
 

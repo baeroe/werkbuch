@@ -144,7 +144,8 @@ final class NotifyRecipients
             foreach (array_diff($ids, array_keys($open)) as $id) {
                 $new["{$id}:{$scope}"] = [
                     'id' => (new NotificationMail)->newUniqueId(), 'user_id' => $id, 'scope' => $scope, 'open_key' => "{$id}:{$scope}",
-                    'due_at' => $due, 'dispatched_at' => now(), 'created_at' => now(), 'updated_at' => now(),
+                    // its job tries first at `due_at`: the sweeper counts its pause from there (T7-M2)
+                    'due_at' => $due, 'dispatched_at' => $due, 'created_at' => now(), 'updated_at' => now(),
                 ];
             }
             NotificationMail::query()->insertOrIgnore(array_values($new));

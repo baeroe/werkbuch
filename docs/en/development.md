@@ -112,7 +112,7 @@ ddev artisan app:prune-attachments --dry-run --min-age=30   # lists pictures and
 
 `app:sync-roles` is what the migration of the roles runs; call it by hand only after a rights table in the code changed without a migration. `app:redispatch-events` runs every minute in the scheduler, so you only need it by hand to catch up after the scheduler was down.
 
-`app:send-notification-mails` runs every minute as well: it hands collected mails that are due and lost their job to the queue again, at most every 15 minutes per mail. With `--now` it sends every open collection in its own process, due or not; use it before maintenance, or locally instead of waiting five minutes.
+`app:send-notification-mails` runs every minute as well: it hands collected mails that are due and lost their job to the queue again, once no try ran for 35 minutes. With `--now` it sends every open collection in its own process, due or not; use it before maintenance, or locally instead of waiting five minutes.
 
 `app:search-sync` is needed after a change of the index settings in `config/scout.php`. `app:search-import` builds the indexes from scratch: on the first start, after `migrate:fresh`, and as the repair when the search missed changes (for example after Meilisearch was down for hours). During the import the search is briefly empty. More under [Search](/en/search#operation).
 

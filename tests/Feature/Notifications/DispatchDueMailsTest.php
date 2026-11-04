@@ -2,6 +2,7 @@
 
 use App\Access\ProjectRole;
 use App\Actions\Notifications\DispatchDueMails;
+use App\Actions\Notifications\NotifyRecipients;
 use App\Domain\Notifications\NotificationKind;
 use App\Jobs\SendNotificationMailJob;
 use App\Mail\NotificationDigest;
@@ -17,7 +18,7 @@ use Illuminate\Support\Facades\Queue;
 
 /*
  * The sweeper of the mail collections (Task 7, A288, K8): `app:send-notification-mails` puts a collection that lost its
- * job on the queue again, at most every 15 minutes, and sends every open one with `--now`. Mara watches an item of WEB;
+ * job on the queue again, only when no try of its job ran for 35 minutes, and sends every open one with `--now`. Mara watches an item of WEB;
  * the collections are made by hand, each with a comment line.
  */
 
@@ -60,23 +61,47 @@ it('dispatches the job again for a collection left behind', function () use ($wo
     expect(Queue::pushed(SendNotificationMailJob::class)->sole()->queue)->toBe('notifications');
 });
 
-it('dispatches a collection again at most every 15 minutes', function () use ($world, $collection, $sweep, $pushed) {
+it('dispatches a collection again only when no try of its job ran for 35 minutes', function () use ($world, $collection, $sweep, $pushed) {
     Queue::fake([SendNotificationMailJob::class]);
     $w = $world();
-    // dispatched with its delay when it opened; SMTP is down, the job waits out its backoff
-    $mail = $collection($w, ['due_at' => now()->subMinutes(3), 'dispatched_at' => now()->subMinutes(8)]);
+    // SMTP is down: the last try of the job was half an hour ago, its next one (after a pause of 30 minutes) is due
+    $mail = $collection($w, ['due_at' => now()->subHour(), 'dispatched_at' => now()->subMinutes(30)]);
 
     expect($sweep())->toBe(0);
 
-    $this->travel(8)->minutes();
+    // no try for 36 minutes: the job is gone (failed_jobs, a lost dispatch)
+    $this->travel(6)->minutes();
     expect($sweep())->toBe(1);
 
     $this->travel(1)->minutes();
     expect($sweep())->toBe(0);
 
-    $this->travel(16)->minutes();
+    $this->travel(DispatchDueMails::PAUSE_MINUTES)->minutes();
     expect($sweep())->toBe(1)
         ->and($pushed())->toBe([$mail->id, $mail->id]);
+});
+
+it('waits longer than the longest pause of the job (I1)', function () {
+    expect(DispatchDueMails::PAUSE_MINUTES * 60)->toBeGreaterThan(max((new SendNotificationMailJob('x'))->backoff))
+        ->and((new SendNotificationMailJob('x'))->backoff)->toBe([60, 300, 900, 1800]);
+});
+
+it('takes a collection whose job was lost from 35 minutes after it was due', function () use ($world, $sweep, $pushed) {
+    Queue::fake([SendNotificationMailJob::class]);
+    $this->freezeTime();
+    $w = $world();
+    // collected now: the job comes after the delay, its first try at due_at
+    NotifyRecipients::collect([$w['mara']->id], 'item:'.$w['item']->id);
+    $mail = NotificationMail::query()->sole();
+    expect($mail->dispatched_at?->toDateTimeString())->toBe($mail->due_at->toDateTimeString());
+    Queue::fake([SendNotificationMailJob::class]);
+
+    // the dispatch was lost (a crash after the commit): nothing within 35 minutes of due_at
+    $this->travelTo($mail->due_at->addMinutes(DispatchDueMails::PAUSE_MINUTES));
+    expect($sweep())->toBe(0);
+    $this->travel(1)->minutes();
+    expect($sweep())->toBe(1)
+        ->and($pushed())->toBe([$mail->id]);
 });
 
 it('sends everything open with --now', function () use ($world, $collection) {
