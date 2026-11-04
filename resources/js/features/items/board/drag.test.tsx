@@ -192,6 +192,9 @@ describe('dragging a card', () => {
     await waitFor(() => cardIn('Todo', 'WEB-48'));
 
     await pickUp('Todo', 'WEB-48');
+    // the live region stands at the end of the body: a dialog opening on the drop (the resolution of a closing move)
+    // keeps live regions readable and would hide the board along with one inside it
+    expect(document.querySelector('[id^="DndLiveRegion"]')?.parentElement).toBe(document.body);
     const overlay = document.querySelector('[inert]');
     expect(overlay?.getAttribute('aria-hidden')).toBe('true');
     expect(overlay?.querySelector('[data-card-id="wi_web_48"], article')).toBeTruthy();

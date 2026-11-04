@@ -328,7 +328,9 @@ export function useBoardDrag(served: BoardColumnData[], rules: BoardRules, optio
     collisionDetection,
     measuring: MEASURING,
     autoScroll: AUTO_SCROLL,
-    accessibility: { announcements },
+    // the live region stands at the end of the body, outside the board: a dialog that opens on the drop (the resolution
+    // of a closing move) keeps the live regions of the page readable and would hide one inside the board with it
+    accessibility: { announcements, container: document.body },
     onDragStart,
     onDragOver,
     onDragEnd,

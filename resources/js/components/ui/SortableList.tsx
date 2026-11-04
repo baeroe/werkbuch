@@ -125,7 +125,9 @@ export function SortableList<T extends { id: string }>({ items, onReorder, label
       onDragStart={({ active }) => setActiveId(active.id)}
       onDragEnd={onDragEnd}
       onDragCancel={() => setActiveId(null)}
-      accessibility={{ announcements, screenReaderInstructions }}
+      // the live region stands at the end of the body: a modal dialog keeps the live regions of the page readable and
+      // would hide one inside the list with its siblings
+      accessibility={{ announcements, screenReaderInstructions, container: document.body }}
     >
       <SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
         <ul aria-label={label} className={cx(className, activeIndex >= 0 && 'select-none')}>

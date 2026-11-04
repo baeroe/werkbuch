@@ -70,6 +70,11 @@ function listen() {
 }
 
 describe('SortableList handle', () => {
+  it('says what happens in a live region at the end of the body, which a modal dialog keeps readable', async () => {
+    renderList();
+    await waitFor(() => expect(document.querySelector('[id^="DndLiveRegion"]')?.parentElement).toBe(document.body));
+  });
+
   it('lifts a row with the bare Space key, and leaves Ctrl+Enter to the page so the save shortcut still runs', async () => {
     const user = userEvent.setup();
     const save = vi.fn();
