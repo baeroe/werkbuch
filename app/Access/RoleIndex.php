@@ -69,6 +69,10 @@ final class RoleIndex
     public function loadMembers(array $projectIds): void
     {
         $missing = array_values(array_diff($projectIds, array_keys($this->members)));
+        // nothing new to read: no query (T8-M3)
+        if ($missing === []) {
+            return;
+        }
         $byProject = $this->highestIn(ProjectRole::cases(), 'team_id', $missing, 'model_id');
 
         foreach ($missing as $id) {

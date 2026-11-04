@@ -157,6 +157,13 @@ it('reads the members of many projects with one query, then answers seeing() of 
     expect($load)->toBe(1)->and($after)->toBe(0)->and($seeing)->toBe($expected)
         ->and(app(RoleIndex::class)->members($other))->toBe([$outsider->id => ProjectRole::Viewer])
         ->and(app(RoleIndex::class)->members($empty))->toBe([]);
+
+    // nothing to load (no project, or all of them known): no query (T8-M3)
+    DB::enableQueryLog();
+    Visibility::loadMembers([]);
+    Visibility::loadMembers($projects);
+    expect(DB::getQueryLog())->toBe([]);
+    DB::disableQueryLog();
 });
 
 it('reads the project roles of an account with one query per request', function () {
