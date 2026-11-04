@@ -203,6 +203,8 @@ test('reads and deletes from the menu of a row on the phone, without opening it'
     await inboxPage.getByRole('button', { name: tr('en', 'inbox.row.menu', { key: item.key }) }).click();
     await inboxPage.getByRole('menuitem', { name: tr('en', 'shortcuts.inbox.read') }).click();
     await expect(row).not.toHaveAttribute('data-unread');
+    // the menu closes with its item; on a slow machine its popup animates out a while longer, still with its items
+    await expect(inboxPage.getByRole('menu')).toHaveCount(0);
     await expect(inboxPage.getByRole('complementary', { name: tr('en', 'items.peek.label') })).toHaveCount(0);
     await expect(inboxPage).toHaveURL(/\/inbox$/);
     await expect.poll(async () => (await find((entry) => entry.id === assigned.id))?.read_at ?? null).not.toBeNull();
@@ -210,7 +212,9 @@ test('reads and deletes from the menu of a row on the phone, without opening it'
     // a row without an item, which a tap would leave for its page: deleted from the menu, for real once the toast ends
     const card = inboxPage.getByRole('region', { name: new RegExp(web.data.name) });
     await card.getByRole('button', { name: tr('en', 'inbox.row.menu', { key: web.data.name }) }).click();
-    await inboxPage.getByRole('menuitem', { name: tr('en', 'shortcuts.inbox.delete') }).click();
+    // the one open menu is the card's
+    await expect(inboxPage.getByRole('menu')).toHaveCount(1);
+    await inboxPage.getByRole('menu').getByRole('menuitem', { name: tr('en', 'shortcuts.inbox.delete') }).click();
     await expect(card).toHaveCount(0);
     // the menu gave the focus back to its row, which left: it goes on to the row before it
     await expect(row.getByRole('link')).toBeFocused();
