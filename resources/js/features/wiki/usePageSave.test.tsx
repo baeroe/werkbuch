@@ -1,0 +1,389 @@
+/*
+ * The autosave of a wiki page (`usePageSave`) against a fake REST API: the pause, the base version of every save, text
+ * typed while a save runs, a failed save and its retry, the draft that outlives the view (`lib/drafts.ts`, K4), a newer
+ * page from outside, an emptied title, running uploads, a conflict, a page deleted meanwhile (K5) and an unchanged save
+ * on an older base (K17).
+ */
+
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, renderHook, waitFor } from '@testing-library/react';
+import type { ReactNode } from 'react';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { currentToasts, resetToasts, runToastAction } from '@/components/ui/toast';
+import { UploadCounter } from '@/editor/UploadContext';
+import { drafts, pageDraft } from '@/lib/drafts';
+import { clearLiveGone, isPageGone } from '@/lib/liveGone';
+import { mockApi, type MockApi, type MockRoute } from '@/test/api';
+import { makePage } from '@/test/fixtures';
+import type { RichText, Page as WikiPage } from '@/types';
+import { SAVE_PAUSE_MS, usePageSave } from './usePageSave';
+
+const doc = (text: string): RichText => ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] });
+
+const page = makePage({ id: 'pg_web_domain', title: 'Domain-Umzug', content_json: doc('Erstens'), version: 3 });
+const key = pageDraft('pg_web_domain');
+
+let api: MockApi;
+let patch: MockRoute;
+
+/** The answer of a save: the page as the server stores it now, one version up (unless `version` says otherwise). */
+const stored = (body: unknown, version?: number): { body: { data: WikiPage } } => {
+  const sent = body as { title: string; emoji: string | null; content_json: RichText | null; base_version: number };
+  return { body: { data: { ...page, title: sent.title, emoji: sent.emoji, content_json: sent.content_json, version: version ?? sent.base_version + 1 } } };
+};
+
+const problem = (status: number, reason: string, extra: Record<string, unknown> = {}) => ({
+  status,
+  body: { type: 'about:blank', title: reason, status, reason, ...extra },
+});
+
+beforeEach(() => {
+  patch = (body) => stored(body);
+  api = mockApi({ 'PATCH /api/v1/pages/pg_web_domain': (body, url) => patch(body, url) });
+});
+
+afterEach(() => {
+  api.restore();
+  drafts.clear();
+  clearLiveGone();
+  act(() => resetToasts());
+});
+
+const saves = () => api.calls.filter((call) => call.method === 'PATCH').map((call) => call.body as Record<string, unknown>);
+
+/** Holds every save until the test lets it go, in order. */
+function holdSaves() {
+  const through = globalThis.fetch;
+  const held: (() => void)[] = [];
+  globalThis.fetch = (input: RequestInfo | URL, init?: RequestInit) =>
+    init?.method === 'PATCH' ? new Promise<Response>((resolve) => held.push(() => resolve(through(input, init)))) : through(input, init);
+  return {
+    release: () => act(async () => held.shift()!()),
+    get waiting() {
+      return held.length;
+    },
+  };
+}
+
+function renderSave(options: { canEdit?: boolean; uploads?: UploadCounter; page?: WikiPage } = {}) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  return renderHook(({ shown }: { shown: WikiPage }) => usePageSave(shown, { canEdit: options.canEdit ?? true, uploads: options.uploads }), {
+    wrapper,
+    initialProps: { shown: options.page ?? page },
+  });
+}
+
+describe('usePageSave', () => {
+  it('saves after a pause with the base version', async () => {
+    const { result } = renderSave();
+    expect(result.current.draft).toEqual({ title: 'Domain-Umzug', emoji: null, content: doc('Erstens') });
+    act(() => result.current.change({ content: doc('Erstens, zweitens') }));
+    // typed text is a draft of the visit at once, on the version it was typed on
+    expect(drafts.page(key)).toMatchObject({ content: doc('Erstens, zweitens'), base_version: 3, conflict: null });
+    expect(saves()).toHaveLength(0);
+
+    await waitFor(() => expect(saves()).toHaveLength(1), { timeout: SAVE_PAUSE_MS + 2000 });
+    expect(saves()[0]).toEqual({ title: 'Domain-Umzug', emoji: null, content_json: doc('Erstens, zweitens'), base_version: 3 });
+    await waitFor(() => expect(result.current.state).toBe('saved'));
+    expect(result.current.spoken).toBe('Gespeichert');
+    expect(result.current.savedAt).toBeInstanceOf(Date);
+    expect(drafts.page(key)).toBeNull();
+
+    // the next save is based on the version the last one made
+    await act(async () => result.current.change({ emoji: '🧭' }, { now: true }));
+    await waitFor(() => expect(saves()).toHaveLength(2));
+    expect(saves()[1]).toMatchObject({ emoji: '🧭', base_version: 4 });
+  });
+
+  it('saves what is typed during a save on the next run', async () => {
+    const hold = holdSaves();
+    const { result } = renderSave();
+    act(() => result.current.change({ title: 'Domain' }, { now: true }));
+    await waitFor(() => expect(hold.waiting).toBe(1));
+    expect(result.current.state).toBe('saving');
+    expect(result.current.spoken).toBe('Speichert …');
+
+    // typed while the save is on its way: no second save meanwhile
+    act(() => result.current.change({ content: doc('Neu') }, { now: true }));
+    expect(hold.waiting).toBe(1);
+    await hold.release();
+    // the next run takes the newest draft, on the version the first save made
+    await waitFor(() => expect(hold.waiting).toBe(1), { timeout: SAVE_PAUSE_MS + 2000 });
+    await hold.release();
+    await waitFor(() => expect(result.current.state).toBe('saved'));
+    expect(saves()).toEqual([
+      { title: 'Domain', emoji: null, content_json: doc('Erstens'), base_version: 3 },
+      { title: 'Domain', emoji: null, content_json: doc('Neu'), base_version: 4 },
+    ]);
+    expect(drafts.page(key)).toBeNull();
+  });
+
+  it('keeps the draft after a failed save and saves it on retry', async () => {
+    patch = () => problem(503, 'service_unavailable', { detail: 'Der Server ist gerade nicht erreichbar.' });
+    const { result } = renderSave();
+    act(() => result.current.change({ title: 'Domain' }, { now: true }));
+    await waitFor(() => expect(result.current.state).toBe('failed'));
+    expect(result.current.spoken).toBe('Nicht gespeichert');
+    expect(drafts.page(key)).toMatchObject({ title: 'Domain', base_version: 3 });
+    const failure = currentToasts().at(-1)!;
+    expect(failure).toMatchObject({ title: '„Domain“ nicht gespeichert', tone: 'error' });
+
+    patch = (body) => stored(body);
+    await act(async () => runToastAction(failure.id));
+    await waitFor(() => expect(result.current.state).toBe('saved'));
+    expect(saves().at(-1)).toMatchObject({ title: 'Domain', base_version: 3 });
+    expect(drafts.page(key)).toBeNull();
+  });
+
+  it('shows a refused title at the title, without a toast', async () => {
+    patch = () => problem(422, 'validation_failed', { errors: { title: ['Der Titel ist zu lang.'] } });
+    const { result } = renderSave();
+    act(() => result.current.change({ title: 'Domain' }, { now: true }));
+    await waitFor(() => expect(result.current.titleError).toBe('Der Titel ist zu lang.'));
+    expect(result.current.state).toBe('failed');
+    expect(currentToasts()).toHaveLength(0);
+    // typing a title again takes the refusal away
+    act(() => result.current.change({ title: 'Dom' }));
+    expect(result.current.titleError).toBeNull();
+  });
+
+  it('brings an unsaved draft back when the page opens again', async () => {
+    patch = () => problem(503, 'service_unavailable');
+    const first = renderSave();
+    act(() => first.result.current.change({ title: 'Domain', content: doc('Halb') }));
+    // leaving saves what is typed; the save fails, the draft stays
+    first.unmount();
+    await waitFor(() => expect(saves()).toHaveLength(1));
+    await waitFor(() => expect(drafts.sending(key)).toBe(false));
+
+    const second = renderSave();
+    expect(second.result.current.draft).toEqual({ title: 'Domain', emoji: null, content: doc('Halb') });
+    expect(second.result.current.state).toBe('failed');
+
+    // a draft the server holds by now is settled: the page shows as it is stored
+    second.unmount();
+    await waitFor(() => expect(drafts.sending(key)).toBe(false));
+    const held = makePage({ ...page, title: 'Domain', content_json: doc('Halb'), version: 4 });
+    const third = renderSave({ page: held });
+    expect(third.result.current.state).toBe('idle');
+    expect(drafts.page(key)).toBeNull();
+  });
+
+  it('a draft brought back after someone else saved meets the conflict, it never saves on the newer version', async () => {
+    drafts.setPage(key, { title: 'Domain', emoji: null, content: doc('Meins'), base_version: 3, conflict: null });
+    const current = makePage({ ...page, title: 'Domain-Umzug (Ida)', version: 5 });
+    patch = () => problem(409, 'page_conflict', { detail: 'Ida Brenner hat die Seite inzwischen geändert.', current });
+    const { result } = renderSave({ page: current });
+    expect(result.current.draft.content).toEqual(doc('Meins'));
+
+    await act(() => result.current.save());
+    expect(saves()).toEqual([{ title: 'Domain', emoji: null, content_json: doc('Meins'), base_version: 3 }]);
+    expect(result.current.conflict).toEqual({ message: 'Ida Brenner hat die Seite inzwischen geändert.', current });
+    expect(drafts.page(key)?.conflict?.current.version).toBe(5);
+    // while the conflict stands, nothing saves
+    act(() => result.current.change({ title: 'Domain 2' }, { now: true }));
+    await act(() => result.current.save());
+    expect(saves()).toHaveLength(1);
+    expect(await act(() => result.current.flush())).toBe(false);
+
+    // the conflict comes back with the view
+    const again = renderSave({ page: current });
+    expect(again.result.current.conflict?.message).toBe('Ida Brenner hat die Seite inzwischen geändert.');
+    expect(again.result.current.draft.title).toBe('Domain 2');
+  });
+
+  it('keeps the own text on top of the newer version, or loads the other one', async () => {
+    const current = makePage({ ...page, title: 'Domain-Umzug (Ida)', content_json: doc('Idas'), version: 5 });
+    patch = () => problem(409, 'page_conflict', { detail: 'Ida Brenner hat die Seite inzwischen geändert.', current });
+    const { result } = renderSave();
+    await act(async () => result.current.change({ content: doc('Meins') }, { now: true }));
+    await waitFor(() => expect(result.current.conflict).not.toBeNull());
+
+    // "Meine Fassung übernehmen": on the stored version, and the server keeps that one as a version first (A307)
+    patch = (body) => stored(body);
+    await act(async () => result.current.keepMine());
+    await waitFor(() => expect(result.current.state).toBe('saved'));
+    expect(saves().at(-1)).toEqual({ title: 'Domain-Umzug', emoji: null, content_json: doc('Meins'), base_version: 5, keep_current: true });
+    expect(result.current.conflict).toBeNull();
+
+    // "Neu laden": the other text in the editor, the own one gone
+    patch = () => problem(409, 'page_conflict', { detail: 'Ida Brenner hat die Seite inzwischen geändert.', current: { ...current, version: 7 } });
+    await act(async () => result.current.change({ content: doc('Noch meins') }, { now: true }));
+    await waitFor(() => expect(result.current.conflict).not.toBeNull());
+    act(() => result.current.reload());
+    expect(result.current.conflict).toBeNull();
+    expect(result.current.draft).toEqual({ title: 'Domain-Umzug (Ida)', emoji: null, content: doc('Idas') });
+    expect(drafts.page(key)).toBeNull();
+    // the next save is based on the version it loaded
+    patch = (body) => stored(body);
+    await act(async () => result.current.change({ emoji: '🧭' }, { now: true }));
+    await waitFor(() => expect(saves().at(-1)).toMatchObject({ emoji: '🧭', base_version: 7 }));
+  });
+
+  it('takes a newer page from outside only while nothing is typed', async () => {
+    const { result, rerender } = renderSave();
+    rerender({ shown: makePage({ ...page, title: 'Domain-Umzug (neu)', version: 4 }) });
+    expect(result.current.draft.title).toBe('Domain-Umzug (neu)');
+
+    act(() => result.current.change({ content: doc('Getippt') }));
+    // a newer page while text is typed: the text stays, and so does the version it is typed on
+    rerender({ shown: makePage({ ...page, title: 'Ganz anders', version: 6 }) });
+    expect(result.current.draft).toEqual({ title: 'Domain-Umzug (neu)', emoji: null, content: doc('Getippt') });
+    expect(drafts.page(key)?.base_version).toBe(4);
+    await act(() => result.current.save());
+    expect(saves()[0]).toMatchObject({ content_json: doc('Getippt'), base_version: 4 });
+
+    // an older version than the one it is based on changes nothing
+    rerender({ shown: makePage({ ...page, title: 'Alt', version: 2 }) });
+    expect(result.current.draft.title).toBe('Domain-Umzug (neu)');
+  });
+
+  it('an unchanged save on an older base takes the newer version as its base', async () => {
+    // nothing changed on the server's side, so it answers 200 with its newer version
+    patch = (body) => stored(body, 8);
+    const { result } = renderSave();
+    await act(async () => result.current.change({ title: 'Domain' }, { now: true }));
+    await waitFor(() => expect(result.current.state).toBe('saved'));
+    patch = (body) => stored(body);
+    await act(async () => result.current.change({ title: 'Domain 2' }, { now: true }));
+    await waitFor(() => expect(saves()).toHaveLength(2));
+    expect(saves()[1]).toMatchObject({ base_version: 8 });
+  });
+
+  it('sends nothing for a blanked title alone and saves other changes under the old title', async () => {
+    const first = renderSave();
+    act(() => first.result.current.change({ title: '  ' }, { now: true }));
+    // while the page is open, the title says what is missing and nothing goes
+    expect(first.result.current.titleError).toBe('Gib der Seite einen Titel. Ohne Titel wird nichts gespeichert.');
+    await act(() => first.result.current.save());
+    expect(saves()).toHaveLength(0);
+    // left with only the title blanked: nothing to keep, nothing sent
+    first.unmount();
+    expect(saves()).toHaveLength(0);
+    expect(drafts.page(key)).toBeNull();
+
+    const second = renderSave();
+    act(() => second.result.current.change({ title: '', content: doc('Wichtig') }));
+    second.unmount();
+    await waitFor(() => expect(saves()).toHaveLength(1));
+    expect(saves()[0]).toMatchObject({ title: 'Domain-Umzug', content_json: doc('Wichtig') });
+    await waitFor(() => expect(currentToasts().map((toast) => toast.title)).toEqual(['„Domain-Umzug“ gespeichert']));
+    expect(drafts.page(key)).toBeNull();
+  });
+
+  it('waits for running uploads before it saves', async () => {
+    const uploads = new UploadCounter();
+    const { result } = renderSave({ uploads });
+    act(() => uploads.add(1));
+    await act(async () => result.current.change({ content: doc('Mit Bild') }, { now: true }));
+    expect(saves()).toHaveLength(0);
+    expect(result.current.state).toBe('saving');
+    act(() => uploads.add(1));
+    act(() => uploads.add(-1));
+    expect(saves()).toHaveLength(0);
+    act(() => uploads.add(-1));
+    await waitFor(() => expect(saves()).toHaveLength(1));
+    await waitFor(() => expect(result.current.state).toBe('saved'));
+    // an upload that ends with nothing waiting saves nothing
+    act(() => uploads.add(1));
+    act(() => uploads.add(-1));
+    expect(saves()).toHaveLength(1);
+  });
+
+  it('a save that meets a 404 says the page was deleted and keeps the text', async () => {
+    patch = () => problem(404, 'not_found');
+    const { result } = renderSave();
+    await act(async () => result.current.change({ content: doc('Rette mich') }, { now: true }));
+    await waitFor(() => expect(isPageGone('pg_web_domain')).toBe(true));
+    expect(currentToasts()).toHaveLength(0);
+    expect(drafts.page(key)?.content).toEqual(doc('Rette mich'));
+    // a page known to be gone is never asked for again
+    await act(async () => result.current.change({ content: doc('Rette mich bitte') }, { now: true }));
+    expect(saves()).toHaveLength(1);
+    expect(drafts.page(key)?.content).toEqual(doc('Rette mich bitte'));
+  });
+
+  it('saves nothing for a reader, and nothing unchanged', async () => {
+    const reader = renderSave({ canEdit: false });
+    await act(() => reader.result.current.save(true));
+    reader.unmount();
+    const { result } = renderSave();
+    await act(() => result.current.save());
+    // typed back to what the server holds: nothing to save, nothing kept
+    act(() => result.current.change({ title: 'Domain' }));
+    act(() => result.current.change({ title: 'Domain-Umzug' }));
+    await act(() => result.current.save());
+    expect(saves()).toHaveLength(0);
+    expect(drafts.page(key)).toBeNull();
+    // forced: it goes anyway
+    await act(() => result.current.save(true));
+    expect(saves()).toHaveLength(1);
+  });
+
+  it('flushes: waits for the save on its way and answers whether everything is saved', async () => {
+    const hold = holdSaves();
+    const { result } = renderSave();
+    act(() => result.current.change({ title: 'Domain' }, { now: true }));
+    await waitFor(() => expect(hold.waiting).toBe(1));
+    let flushed!: Promise<boolean>;
+    act(() => {
+      flushed = result.current.flush();
+    });
+    await hold.release();
+    expect(await flushed).toBe(true);
+    expect(saves()).toHaveLength(1);
+  });
+
+  it('leaves the draft of a view whose save still runs alone, and takes it over when that save fails', async () => {
+    const hold = holdSaves();
+    patch = () => problem(503, 'service_unavailable');
+    const first = renderSave();
+    act(() => first.result.current.change({ title: 'Domain' }));
+    // left: its save runs on
+    first.unmount();
+    await waitFor(() => expect(hold.waiting).toBe(1));
+
+    const second = renderSave();
+    expect(second.result.current.draft.title).toBe('Domain-Umzug');
+    expect(second.result.current.state).toBe('idle');
+    await hold.release();
+    // the save failed: its text is the draft here, still to save
+    await waitFor(() => expect(second.result.current.draft.title).toBe('Domain'));
+    expect(second.result.current.state).toBe('failed');
+    expect(drafts.page(key)).toMatchObject({ title: 'Domain', base_version: 3 });
+  });
+
+  it('takes over the conflict a save of a view that is gone met', async () => {
+    const hold = holdSaves();
+    const current = makePage({ ...page, version: 5 });
+    patch = () => problem(409, 'page_conflict', { detail: 'Ida Brenner hat die Seite inzwischen geändert.', current });
+    const first = renderSave();
+    act(() => first.result.current.change({ title: 'Domain' }));
+    first.unmount();
+    await waitFor(() => expect(hold.waiting).toBe(1));
+
+    const second = renderSave();
+    await hold.release();
+    await waitFor(() => expect(second.result.current.conflict).toEqual({ message: 'Ida Brenner hat die Seite inzwischen geändert.', current }));
+    expect(second.result.current.draft.title).toBe('Domain');
+  });
+
+  it('saves at once what was typed on while the save of a view that is gone ran', async () => {
+    const hold = holdSaves();
+    const { result, unmount } = renderSave();
+    act(() => result.current.change({ title: 'Domain' }, { now: true }));
+    await waitFor(() => expect(hold.waiting).toBe(1));
+    act(() => result.current.change({ content: doc('Mehr') }));
+    unmount();
+    await hold.release();
+    // not after the pause: the view is gone
+    await waitFor(() => expect(hold.waiting).toBe(1));
+    await hold.release();
+    expect(saves()).toEqual([
+      { title: 'Domain', emoji: null, content_json: doc('Erstens'), base_version: 3 },
+      { title: 'Domain', emoji: null, content_json: doc('Mehr'), base_version: 4 },
+    ]);
+    await waitFor(() => expect(drafts.page(key)).toBeNull());
+  });
+});

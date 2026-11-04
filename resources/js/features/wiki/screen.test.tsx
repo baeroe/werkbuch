@@ -87,6 +87,7 @@ function routes(): Record<string, MockRoute> {
     'GET /api/v1/users': () => ({ body: list([mara, ida, theo]) }),
     'GET /api/v1/pages/pg_web_domain': () => ({ body: { data: makePage({ id: 'pg_web_domain', parent_id: 'pg_web_hosting', title: 'Domain-Umzug' }) } }),
     'POST /api/v1/projects/p_web/pages': (body) => ({ status: 201, body: { data: makePage({ id: 'pg_web_new', title: (body as { title: string }).title }) } }),
+    'PATCH /api/v1/pages/pg_web_new': (body) => ({ body: { data: makePage({ id: 'pg_web_new', title: (body as { title: string }).title, version: 2 }) } }),
   };
   return new Proxy(base, { get: (target, key: string) => overrides[key] ?? target[key] });
 }
@@ -219,13 +220,15 @@ describe('the wiki', () => {
     expect(inertia.replace).toHaveBeenCalledWith({ url: '/projects/WEB/wiki/pg_web_new?from=x', preserveState: true, preserveScroll: true });
     await user.keyboard('Impressum');
     expect(title.value).toBe('Impressum');
+    // leaving the title saves it
     act(() => title.blur());
+    await waitFor(() => expect(api.calls.find((call) => call.method === 'PATCH')).toMatchObject({ url: '/api/v1/pages/pg_web_new', body: { title: 'Impressum', base_version: 1 } }));
 
     // to another page and back: the title is not selected again
     go('/projects/WEB/wiki/pg_web_domain', { pageId: 'pg_web_domain', pageFound: true });
     expect(((await screen.findByRole('textbox', { name: 'Titel der Seite' })) as HTMLTextAreaElement).value).toBe('Domain-Umzug');
     go('/projects/WEB/wiki/pg_web_new', { pageId: 'pg_web_new', pageFound: true });
-    expect(((await screen.findByRole('textbox', { name: 'Titel der Seite' })) as HTMLTextAreaElement).value).toBe('Neue Seite');
+    expect(((await screen.findByRole('textbox', { name: 'Titel der Seite' })) as HTMLTextAreaElement).value).toBe('Impressum');
     expect(document.activeElement).toBe(document.body);
   });
 
@@ -346,10 +349,13 @@ describe('the open page', () => {
     expect(((await screen.findByRole('textbox', { name: 'Titel der Seite' })) as HTMLTextAreaElement).value).toBe('Domain-Umzug');
   });
 
-  it('lets a viewer read the title only', async () => {
+  it('lets a viewer read the page with the reason, without fields to edit', async () => {
     projects = [project('WEB', 'viewer', { name: 'Website-Relaunch' })];
     renderWiki({ pageId: 'pg_web_domain', pageFound: true });
-    const title = (await screen.findByRole('textbox', { name: 'Titel der Seite' })) as HTMLTextAreaElement;
-    await waitFor(() => expect(title.readOnly).toBe(true));
+    const sheet = await screen.findByRole('article', { name: 'Domain-Umzug' });
+    expect(within(sheet).getByText('Im Projekt WEB darfst du nur lesen. Das Wiki bearbeiten dürfen Member und Admins.')).toBeTruthy();
+    expect(screen.queryByRole('textbox', { name: 'Titel der Seite' })).toBeNull();
+    // the path of the page: the pages above it in the tree
+    expect(within(screen.getByRole('navigation', { name: 'Pfad der Seite' })).getAllByRole('link').map((link) => link.textContent)).toEqual(['🛠️Technik', '🚀Deployment und Hosting']);
   });
 });

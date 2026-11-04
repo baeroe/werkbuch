@@ -11,6 +11,10 @@
  *
  * Keys: `comment:<itemId>`, `comment-edit:<commentId>`, `description:<itemId>`.
  *
+ * A wiki page keeps more than its text (`page:<pageId>`, K4): the title, the emoji and the text as typed, the version
+ * they were typed on (`base_version`, so a draft brought back never saves over a newer version without the 409), and
+ * the conflict a save met (`drafts.setPage`, `usePageDraft`). It asks before leaving like any text.
+ *
  * Beside the text, the store knows whether a send or save of a key is on its way (`startSending`, `useDraftSending`):
  * a view opened again while the call of an earlier one runs follows it (its button stays busy, and the answer that
  * changes the text reaches it), so nothing is sent twice.
@@ -27,18 +31,33 @@
  */
 
 import { useCallback, useSyncExternalStore } from 'react';
-import type { RichText } from '@/types';
+import type { RichText, Page as WikiPage } from '@/types';
 
 export type DraftKey = `comment:${string}` | `comment-edit:${string}` | `description:${string}`;
+export type PageDraftKey = `page:${string}`;
+type AnyKey = DraftKey | PageDraftKey;
 
 export const commentDraft = (itemId: string): DraftKey => `comment:${itemId}`;
 export const commentEditDraft = (commentId: string): DraftKey => `comment-edit:${commentId}`;
 export const descriptionDraft = (itemId: string): DraftKey => `description:${itemId}`;
+export const pageDraft = (pageId: string): PageDraftKey => `page:${pageId}`;
+
+/** What a wiki page holds that the server does not have yet. */
+export interface PageDraft {
+  title: string;
+  emoji: string | null;
+  content: RichText | null;
+  /** The version of the page the draft was typed on: saving it sends this, never a newer one. */
+  base_version: number;
+  /** The conflict a save of it met (409 `page_conflict`): the server's sentence and the page as it is stored. */
+  conflict: { message: string; current: WikiPage } | null;
+}
 
 const texts = new Map<DraftKey, RichText>();
-const listeners = new Map<DraftKey, Set<() => void>>();
+const pageDrafts = new Map<PageDraftKey, PageDraft>();
+const listeners = new Map<AnyKey, Set<() => void>>();
 /** Calls on their way, by key (two views of an item may each have one). */
-const sendingCounts = new Map<DraftKey, number>();
+const sendingCounts = new Map<AnyKey, number>();
 /** The server's refusal of the text under a key, until the text changes. */
 const problems = new Map<DraftKey, string>();
 const clearHooks = new Set<() => void>();
@@ -48,11 +67,11 @@ let epoch = 0;
 let holds = 0;
 
 const warnOnUnload = (event: BeforeUnloadEvent) => {
-  if (texts.size > 0 || holds > 0) event.preventDefault();
+  if (texts.size > 0 || pageDrafts.size > 0 || holds > 0) event.preventDefault();
 };
 window.addEventListener('beforeunload', warnOnUnload);
 
-function notify(key: DraftKey): void {
+function notify(key: AnyKey): void {
   listeners.get(key)?.forEach((listener) => listener());
 }
 
@@ -72,6 +91,19 @@ export const drafts = {
     notify(key);
   },
 
+  /** What a wiki page holds unsaved under `key`, or null. */
+  page(key: PageDraftKey): PageDraft | null {
+    return pageDrafts.get(key) ?? null;
+  },
+
+  /** Keeps `draft` as what the page under `key` holds unsaved; null: nothing is unsaved there any more. */
+  setPage(key: PageDraftKey, draft: PageDraft | null): void {
+    if ((pageDrafts.get(key) ?? null) === draft) return;
+    if (draft === null) pageDrafts.delete(key);
+    else pageDrafts.set(key, draft);
+    notify(key);
+  },
+
   /** The server's refusal of the text under `key` (a 422), or null. */
   problem(key: DraftKey): string | null {
     return problems.get(key) ?? null;
@@ -86,7 +118,7 @@ export const drafts = {
   },
 
   /** Hears every change under `key`; returns the unsubscribe. */
-  subscribe(key: DraftKey, listener: () => void): () => void {
+  subscribe(key: AnyKey, listener: () => void): () => void {
     const own = listeners.get(key) ?? new Set();
     own.add(listener);
     listeners.set(key, own);
@@ -96,18 +128,18 @@ export const drafts = {
     };
   },
 
-  /** The keys with unsent text. */
-  pending(): DraftKey[] {
-    return [...texts.keys()];
+  /** The keys with unsent text (and the pages with unsaved changes). */
+  pending(): AnyKey[] {
+    return [...texts.keys(), ...pageDrafts.keys()];
   },
 
   /** Whether a send or save of `key` is on its way. */
-  sending(key: DraftKey): boolean {
+  sending(key: AnyKey): boolean {
     return (sendingCounts.get(key) ?? 0) > 0;
   },
 
   /** A send or save of `key` begins; the function returned ends it (once). */
-  startSending(key: DraftKey): () => void {
+  startSending(key: AnyKey): () => void {
     const began = epoch;
     sendingCounts.set(key, (sendingCounts.get(key) ?? 0) + 1);
     notify(key);
@@ -147,9 +179,10 @@ export const drafts = {
 
   /** Forgets every text and every call on its way (another person signs in; tests). */
   clear(): void {
-    const keys = new Set([...texts.keys(), ...sendingCounts.keys()]);
+    const keys = new Set<AnyKey>([...texts.keys(), ...pageDrafts.keys(), ...sendingCounts.keys()]);
     epoch += 1;
     texts.clear();
+    pageDrafts.clear();
     sendingCounts.clear();
     problems.clear();
     clearHooks.forEach((hook) => hook());
@@ -169,8 +202,14 @@ export function useDraftProblem(key: DraftKey): string | null {
   return useSyncExternalStore(subscribe, () => drafts.problem(key));
 }
 
+/** What the wiki page under `key` holds unsaved, rendered anew when it changes. */
+export function usePageDraft(key: PageDraftKey): PageDraft | null {
+  const subscribe = useCallback((listener: () => void) => drafts.subscribe(key, listener), [key]);
+  return useSyncExternalStore(subscribe, () => drafts.page(key));
+}
+
 /** Whether a send or save of `key` is on its way, rendered anew when that changes. */
-export function useDraftSending(key: DraftKey): boolean {
+export function useDraftSending(key: AnyKey): boolean {
   const subscribe = useCallback((listener: () => void) => drafts.subscribe(key, listener), [key]);
   return useSyncExternalStore(subscribe, () => drafts.sending(key));
 }

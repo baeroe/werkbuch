@@ -107,6 +107,13 @@ werkbuch geht ohne Maus. Mit <kbd>?</kbd> zeigt jeder Bildschirm die Kürzel, di
 | <kbd>⇧</kbd>+<kbd>E</kbd> | Alle als gelesen markieren |
 | <kbd>#</kbd> | Benachrichtigung löschen |
 
+## Wiki
+
+| Taste | Aktion |
+| --- | --- |
+| <kbd>⌘ / Strg</kbd>+<kbd>↵</kbd> | Seite jetzt speichern |
+| <kbd>⌘ / Strg</kbd>+<kbd>⌫</kbd> | Seite löschen (mit Rückfrage) |
+
 ## Befehlspalette
 
 | Taste | Aktion |

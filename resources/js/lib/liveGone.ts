@@ -56,6 +56,11 @@ export function useLiveGone(...ids: (string | null | undefined)[]): boolean {
   return ids.some((id) => id != null && gone.other.has(id));
 }
 
+/** Whether the wiki page is known to be deleted, outside a render (a save that runs as its view goes away). */
+export function isPageGone(pageId: string): boolean {
+  return gone.page.has(pageId);
+}
+
 /** Whether a live message (or this tab) said the wiki page was deleted, with its subtree. */
 export function usePageGone(pageId: string | null | undefined): boolean {
   useSyncExternalStore(subscribe, () => version);

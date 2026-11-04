@@ -5,38 +5,35 @@
  *   the rights load it waits with that reason). The palette has the same as `wiki.create`.
  * - The tree (`PageTree`) stands on the left from lg on, as the navigation "Seiten des Wikis"; below lg only the
  *   overview shows it, an open page shows alone. The ancestors of the open page are never folded away.
- * - Without a page: the overview (`WikiHome`). With one: the page (`PageArea`, until Task 14 brings `PageView` only its
- *   title).
- * - A new page is called "Neue Seite"; after the toast the wiki opens it with `?focus=title`. The page reads that once
- *   when it opens, takes it out of the address (`router.replace`), and selects its title, ready to be typed over.
+ * - Without a page: the overview (`WikiHome`). With one: the page (`PageView`) with the pages above it as its path.
+ * - A new page is called "Neue Seite"; after the toast the wiki opens it with `?focus=title`. The wiki reads that once
+ *   when the page opens, takes it out of the address (`router.replace`), and the page selects its title, ready to be
+ *   typed over.
  * The tree and the pages are read by the project's ULID, never its identifier, so live updates and deletes meet one
  * cache entry (`usePages`).
  */
 
 import { Link, router, usePage as useInertiaPage } from '@inertiajs/react';
 import { useQueryClient } from '@tanstack/react-query';
-import { ChevronRight, FilePlus2, FileQuestionMark, Plus } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
-import { ApiError } from '@/api/client';
-import { Button, buttonClass } from '@/components/ui/Button';
+import { ChevronRight, FilePlus2, Plus } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Button } from '@/components/ui/Button';
 import { cx } from '@/components/ui/cx';
-import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { ProjectBadge } from '@/components/ui/ProjectBadge';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
 import { toast } from '@/components/ui/toast';
 import { qk } from '@/hooks/keys';
-import { useCreatePage, usePage, usePages } from '@/hooks/pages';
+import { useCreatePage, usePages } from '@/hooks/pages';
 import { useCommand } from '@/lib/commands';
 import { notifyError } from '@/lib/errors';
 import { t } from '@/lib/i18n';
-import { usePageGone } from '@/lib/liveGone';
 import { paths } from '@/lib/links';
 import { usePermissions } from '@/lib/permissions';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import type { Project, Page as WikiPage } from '@/types';
-import { SHEET } from './format';
 import { PageTree } from './PageTree';
+import { PageView } from './PageView';
 import { pathTo } from './tree';
 import { WikiHome } from './WikiHome';
 
@@ -145,7 +142,18 @@ export function Wiki({ project, pageId, pageFound }: WikiProps) {
 
   let content = null;
   if (pageId !== null) {
-    content = <PageArea key={pageId} identifier={project.identifier} pageId={pageId} pageFound={pageFound} canEdit={canEdit} focusTitle={focusTitle} />;
+    content = (
+      <PageView
+        key={pageId}
+        projectId={project.id}
+        identifier={project.identifier}
+        pageId={pageId}
+        pageFound={pageFound}
+        ancestors={pathTo(tree, pageId).slice(0, -1)}
+        rights={{ ready: !permissions.loading, denied: createReason }}
+        focusTitle={focusTitle}
+      />
+    );
   } else if (!pages.isError || pages.data) {
     content = (
       <WikiHome
@@ -207,84 +215,5 @@ export function Wiki({ project, pageId, pageFound }: WikiProps) {
         <div className={cx('min-w-0', pageId === null && treeArea && 'max-lg:mt-6')}>{content}</div>
       </div>
     </div>
-  );
-}
-
-/** A page the wiki cannot show: it does not exist for the person, or it was deleted meanwhile. */
-function PageGone({ identifier, deleted }: { identifier: string; deleted: boolean }) {
-  return (
-    <EmptyState
-      icon={FileQuestionMark}
-      titleAs="h1"
-      title={deleted ? t('wiki.page.deleted.title') : t('wiki.page.missing.title')}
-      description={t('wiki.page.missing.description')}
-      actions={
-        <Link href={paths.wiki(identifier)} className={buttonClass({ variant: 'secondary' })}>
-          {t('wiki.page.to_overview')}
-        </Link>
-      }
-      className="max-w-[52rem]"
-    />
-  );
-}
-
-type PageAreaProps = { identifier: string; pageId: string; pageFound: boolean; canEdit: boolean; focusTitle: boolean };
-
-/**
- * The open page until Task 14 brings `PageView`: its title, selected after "Neue Seite". A page the server did not
- * find is never asked for; one known to be deleted (live, own delete) is not asked for again.
- */
-function PageArea({ identifier, pageId, pageFound, canEdit, focusTitle }: PageAreaProps) {
-  const gone = usePageGone(pageId);
-  const query = usePage(pageFound ? pageId : null);
-
-  if (!pageFound || gone) return <PageGone identifier={identifier} deleted={gone} />;
-  if (query.isError && !query.data) {
-    if (query.error instanceof ApiError && (query.error.status === 404 || query.error.status === 403)) return <PageGone identifier={identifier} deleted={false} />;
-    return (
-      <ErrorState
-        title={t('wiki.page.failed')}
-        description={query.error.message || t('errors.no_answer')}
-        onRetry={() => void query.refetch()}
-        retrying={query.isFetching}
-        className="max-w-[52rem]"
-      />
-    );
-  }
-  if (!query.data) {
-    return (
-      <SkeletonGroup label={t('wiki.page.loading')} className={cx(SHEET, 'flex flex-col gap-3')}>
-        <Skeleton className="h-8 w-2/3" />
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-4 w-4/5" />
-      </SkeletonGroup>
-    );
-  }
-  return (
-    <article className={SHEET}>
-      <PageTitle title={query.data.title} readOnly={!canEdit} focus={focusTitle} />
-    </article>
-  );
-}
-
-function PageTitle({ title, readOnly, focus }: { title: string; readOnly: boolean; focus: boolean }) {
-  const ref = useRef<HTMLTextAreaElement>(null);
-  // a page just made: the title takes the focus, ready to be typed over
-  useEffect(() => {
-    if (!focus) return;
-    ref.current!.focus();
-    ref.current!.select();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when the page opens
-  }, []);
-  return (
-    <textarea
-      ref={ref}
-      rows={1}
-      defaultValue={title}
-      readOnly={readOnly}
-      maxLength={200}
-      aria-label={t('wiki.page.title_label')}
-      className="w-full resize-none bg-transparent font-display text-2xl font-bold tracking-title text-ink outline-none"
-    />
   );
 }

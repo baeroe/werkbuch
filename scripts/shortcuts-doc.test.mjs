@@ -52,6 +52,7 @@ describe('keyboard docs', () => {
       'Board',
       'Timeline',
       'Inbox',
+      'Wiki',
       'Command palette',
       'Table',
       'Group headers (list and table)',
@@ -62,6 +63,7 @@ describe('keyboard docs', () => {
     expect(page).toContain('| <kbd>J</kbd> / <kbd>↓</kbd> | Next item |');
     expect(page).toContain('| <kbd>G</kbd> then <kbd>I</kbd> | Inbox |');
     expect(page).toContain('| <kbd>#</kbd> | Delete notification |');
+    expect(page).toContain('| <kbd>⌘ / Ctrl</kbd>+<kbd>↵</kbd> | Save the page now |');
   });
 
   it('lists the grid keys of the table', async () => {

@@ -107,6 +107,13 @@ werkbuch works without a mouse. Press <kbd>?</kbd> on any screen to see the shor
 | <kbd>⇧</kbd>+<kbd>E</kbd> | Mark all as read |
 | <kbd>#</kbd> | Delete notification |
 
+## Wiki
+
+| Keys | Action |
+| --- | --- |
+| <kbd>⌘ / Ctrl</kbd>+<kbd>↵</kbd> | Save the page now |
+| <kbd>⌘ / Ctrl</kbd>+<kbd>⌫</kbd> | Delete the page (asks first) |
+
 ## Command palette
 
 | Keys | Action |
