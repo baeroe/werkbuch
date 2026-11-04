@@ -32,6 +32,17 @@ export function artisan(...args: string[]): void {
 }
 
 /**
+ * Runs PHP in the app under test (`artisan tinker`, the code on stdin, so no shell reads it) and returns the last line it
+ * printed: for a spec that must read what no API shows, e.g. the outcome of a mail collection. The code `echo`es one
+ * line of JSON.
+ */
+export function artisanEval(php: string): string {
+  const [command, ...prefix] = (process.env.E2E_ARTISAN ?? 'ddev artisan').split(/\s+/).filter(Boolean);
+  const output = execFileSync(command!, [...prefix, 'tinker'], { cwd: ROOT, input: php, encoding: 'utf8' });
+  return output.trim().split('\n').at(-1)!.trim();
+}
+
+/**
  * Against DDEV (`E2E_EXEC ?? 'ddev exec'` starts with `ddev`): waits until Mutagen has synced the Mac and the container
  * both ways. Mutagen syncs in the background, seconds late: right after `ddev exec pnpm build:coverage` the Mac may still
  * have the old public/build or none at all (Vite emptied it, the new files are on their way), and the coverage/e2e the
@@ -190,7 +201,7 @@ export function totp(secret: string, at = Date.now()): string {
  * run, the cache is emptied first (sign-in is limited per IP); its session is kept in `e2e/.auth/<email>.json`, so later
  * specs use it without signing in again. The page of the sign-in stays the page of the test: closing the only page of a
  * fresh context and opening another can hang in Chromium (`Target.createTarget`). Close the context at the end of the
- * test.
+ * test. What its page reports goes to `accountPageErrors`, which the test's fixture checks like its own page.
  */
 export async function signedInContext(
   browser: Browser,
@@ -201,13 +212,16 @@ export async function signedInContext(
   const file = path.join(ACCOUNT_AUTH_DIR, `${person.email}.json`);
   if (existsSync(file)) {
     const context = await browser.newContext({ ...options, storageState: file });
-    return { context, page: await context.newPage() };
+    const page = await context.newPage();
+    watchPageErrors(page, accountPageErrors, person.email);
+    return { context, page };
   }
 
   artisan('cache:clear');
   // without a state of its own, Playwright hands a new context the one of the project (the e2e person's session)
   const context = await browser.newContext({ ...options, storageState: { cookies: [], origins: [] } });
   const page = await context.newPage();
+  watchPageErrors(page, accountPageErrors, person.email);
   await page.goto('/login');
   await login(page, person.email, person.password);
   await expect(page).toHaveURL(/\/my-items$/);
@@ -216,6 +230,23 @@ export async function signedInContext(
   await expect(page.locator('html')).toHaveAttribute('lang', person.locale ?? 'en');
   await context.storageState({ path: file });
   return { context, page };
+}
+
+/**
+ * The errors the pages of `signedInContext()` reported during the running test, each led by the account
+ * (`[<email>] console error: <text> (<url>)`). The fixture `pageErrors` empties the list when a test starts and checks
+ * it at its end together with the errors of the test's own page, against the same `allowedErrors`: a page of another
+ * person fails the test just like the page of the e2e person.
+ */
+export const accountPageErrors: string[] = [];
+
+/** Collects what `page` reports into `into`: console errors and uncaught exceptions, led by `[<label>] ` when given. */
+export function watchPageErrors(page: Page, into: string[], label?: string): void {
+  const lead = label ? `[${label}] ` : '';
+  page.on('pageerror', (error) => into.push(`${lead}page error: ${error.message}`));
+  page.on('console', (message) => {
+    if (message.type() === 'error') into.push(`${lead}console error: ${message.text()} (${message.location().url})`);
+  });
 }
 
 /**

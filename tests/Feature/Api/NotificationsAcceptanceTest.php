@@ -1,9 +1,11 @@
 <?php
 
 use App\Access\ProjectRole;
+use App\Enums\Locale;
 use App\Jobs\SendNotificationMailJob;
 use App\Mail\NotificationDigest;
 use App\Models\NotificationMail;
+use App\Models\Organization;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
@@ -25,6 +27,8 @@ $world = function (): array {
     Queue::fake([SendNotificationMailJob::class]);
     consumers(NotificationConsumer::class);
 
+    // the organization writes German, Mara reads English: her mail is English
+    Organization::current()->update(['locale' => Locale::De]);
     $ida = User::factory()->create(['name' => 'Ida', 'handle' => 'ida']);
     $web = Project::factory()->identifier('WEB')->member($ida, ProjectRole::Admin)->create(['lead_id' => $ida->id]);
     $mara = memberOf($web, ProjectRole::Member, ['name' => 'Mara', 'handle' => 'mara', 'locale' => 'en']);
@@ -70,8 +74,15 @@ it('mentions Mara over REST: her inbox has it, a read mention mails nothing, the
 
     $this->artisan('app:send-notification-mails', ['--now' => true])->assertSuccessful();
     Mail::assertSent(NotificationDigest::class, 1);
-    Mail::assertSent(NotificationDigest::class, fn (NotificationDigest $mail) => $mail->hasTo($w['mara']->email)
-        && $mail->envelope()->subject === "[{$key}] Kontaktformular");
+    $digest = Mail::sent(NotificationDigest::class)->sole();
+    // in Mara's language, not the organization's; with the link to the item and to her settings
+    expect($digest->hasTo($w['mara']->email))->toBeTrue()
+        ->and($digest->locale)->toBe('en');
+    $digest->assertHasSubject("[{$key}] Kontaktformular")
+        ->assertSeeInHtml('Ida mentioned you')->assertDontSeeInHtml('hat dich erwähnt')
+        ->assertSeeInHtml('@Mara und der Footer?')->assertDontSeeInHtml('schaust du kurz drauf?')
+        ->assertSeeInHtml(url("/items/{$key}"), false)
+        ->assertSeeInHtml(url('/me/notifications'), false);
 
     $this->getJson('/api/v1/notifications?unread_only=1')->assertJsonPath('data.0.mailed_at', fn (?string $at) => $at !== null);
     // the sent collection is not sent again

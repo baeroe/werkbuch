@@ -1,9 +1,10 @@
-import type { Browser, Page } from '@playwright/test';
+import type { Browser, BrowserContext, Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
 import {
   allEntries,
   api,
   artisan,
+  artisanEval,
   createE2eProject,
   createItem,
   mailpit,
@@ -45,22 +46,60 @@ async function projectWithInbox(page: Page, what: string, visibility?: 'private'
   return { project, inbox, person };
 }
 
-/** The inbox account signed in in a context of its own, on its inbox, holding its own live channel. */
+/** A websocket of a page to Reverb: every frame it received, and whether it closed. */
+type SocketLog = { frames: string[]; closed: boolean };
+
+/** Records every websocket `page` opens from now on, in the order they open. */
+function recordSockets(page: Page): SocketLog[] {
+  const sockets: SocketLog[] = [];
+  page.on('websocket', (socket) => {
+    if (!/\/app\/[^/?]+/.test(socket.url())) return;
+    const log: SocketLog = { frames: [], closed: false };
+    sockets.push(log);
+    socket.on('framereceived', ({ payload }) => log.frames.push(String(payload)));
+    socket.on('close', () => (log.closed = true));
+  });
+  return sockets;
+}
+
+/** The frames of `sockets` on the live channel `channel`. */
+const framesOn = (sockets: SocketLog[], channel: string) => sockets.flatMap((socket) => socket.frames).filter((frame) => frame.includes(`"channel":"${channel}"`));
+
+/** Waits until the browser of `page` holds the live channel `channel` (its authorization answered). */
+function channelHeld(page: Page, channel: string) {
+  return page.waitForResponse((response) => response.url().endsWith('/broadcasting/auth') && (response.request().postData() ?? '').includes(`"${channel}"`) && response.ok());
+}
+
+/** The inbox account signed in in a context of its own, on its inbox, holding its own live channel; its sockets recorded. */
 async function openInbox(browser: Browser, inbox: Inbox, personId: string, channel?: string) {
-  const other = await signedInContext(browser, inbox);
-  const held = Promise.all(
-    [`presence-user.${personId}`, ...(channel ? [channel] : [])].map((name) =>
-      other.page.waitForResponse(
-        (response) => response.url().endsWith('/broadcasting/auth') && (response.request().postData() ?? '').includes(`"${name}"`) && response.ok(),
-      ),
-    ),
-  );
+  const signedIn = await signedInContext(browser, inbox);
+  const other = { ...signedIn, sockets: recordSockets(signedIn.page) };
+  const held = Promise.all([`presence-user.${personId}`, ...(channel ? [channel] : [])].map((name) => channelHeld(other.page, name)));
   await other.page.goto('/inbox');
   await expect(other.page.getByRole('heading', { level: 1, name: tr('en', 'inbox.title') })).toBeVisible();
   await held;
   // a mark on the document: a test can tell the page did not load again
   await other.page.evaluate(() => ((window as Window & { __accept?: boolean }).__accept = true));
   return other;
+}
+
+/**
+ * The end of a test: every page leaves for My items first (live would load what goes with the project and report
+ * the 404), then they close and the project goes. A page that hangs after a failure never keeps the project.
+ */
+async function cleanUp(page: Page, identifier: string, ...contexts: { context: BrowserContext; page: Page }[]): Promise<void> {
+  try {
+    for (const each of [page, ...contexts.map((other) => other.page)]) await each.goto('/my-items').catch(() => {});
+    for (const other of contexts) await other.context.close().catch(() => {});
+  } finally {
+    await removeE2eProject(page, identifier);
+  }
+}
+
+/** The mail collections of a person for an item, as the server holds them (no API shows them). */
+function collectionsOf(userId: string, itemId: string): { outcome: string | null; sent: boolean }[] {
+  const php = `echo json_encode(App\\Models\\NotificationMail::query()->where('user_id', '${userId}')->where('scope', 'item:${itemId}')->orderBy('id')->get()->map(fn ($mail) => ['outcome' => $mail->outcome, 'sent' => $mail->sent_at !== null])->all()), PHP_EOL;`;
+  return JSON.parse(artisanEval(php)) as { outcome: string | null; sent: boolean }[];
 }
 
 async function stillTheSameDocument(page: Page): Promise<void> {
@@ -117,11 +156,15 @@ test('Erfolgskriterium 2.4: a comment mentions a person, who sees it live in the
     await expect(card.getByRole('listitem')).toContainText(tr('en', 'inbox.kind.mentioned', { actor: PEOPLE.e2e.name }), LIVE);
     await expect(card.getByRole('listitem')).toContainText(`@${inbox.name} schaust du kurz drauf?`);
     await expect(card.getByRole('listitem')).toHaveAttribute('data-unread', 'true');
-    await expectBadge(other.page, before + 1, LIVE);
+    const mention = await waitForNotification(other.page, (entry) => entry.work_item_id === item.id && entry.event === 'mentioned');
+    // the server's count (a late notification of an earlier spec may have come too), and up from before
+    const after = await unreadCount(other.page);
+    expect(after).toBeGreaterThan(before);
+    await expectBadge(other.page, after, LIVE);
     await stillTheSameDocument(other.page);
 
-    // the mail: collected with the notification, sent now instead of after the delay, with the key and the link
-    const mention = await waitForNotification(other.page, (entry) => entry.work_item_id === item.id && entry.event === 'mentioned');
+    // the mail: collected with the notification, sent now instead of after the delay, in her language (English), with
+    // the key, the link to the item and the one to her settings
     expect(mention.mailed_at).toBeNull();
     artisan('app:send-notification-mails', '--now');
     await expect.poll(() => mailpit.newTo(inbox.email, mailsBefore, item.key), { timeout: 15_000 }).not.toBeNull();
@@ -129,11 +172,12 @@ test('Erfolgskriterium 2.4: a comment mentions a person, who sees it live in the
     expect(mail.subject).toBe(`[${item.key}] E2E Accept Kontaktformular`);
     expect(mail.html).toContain(`/items/${item.key}`);
     expect(mail.html).toContain('schaust du kurz drauf?');
+    expect(mail.html).toContain(tr('en', 'mail.notifications.kind.mentioned', { actor: PEOPLE.e2e.name }));
+    expect(mail.html).toContain(tr('en', 'mail.notifications.settings'));
+    expect(mail.html).toContain('/me/notifications');
     await expect.poll(async () => (await waitForNotification(other.page, (entry) => entry.id === mention.id)).mailed_at).not.toBeNull();
   } finally {
-    await other.page.goto('/my-items');
-    await other.context.close();
-    await removeE2eProject(page, project.identifier);
+    await cleanUp(page, project.identifier, other);
   }
 });
 
@@ -163,74 +207,66 @@ test('opening the notification reads it, and the other tab of the same person fo
     await expect(cardOf(second.page, item.key).getByRole('listitem')).not.toHaveAttribute('data-unread');
     await stillTheSameDocument(second.page);
   } finally {
-    await first.page.goto('/my-items');
-    await second.page.goto('/my-items');
-    await first.context.close();
-    await second.context.close();
-    await removeE2eProject(page, project.identifier);
+    await cleanUp(page, project.identifier, first, second);
   }
 });
 
 test('a removed member loses the live channel and the notifications', async ({ page, browser, allowedErrors }) => {
   const { project, inbox, person } = await projectWithInbox(page, 'removed', 'private');
   const item = await createItem(page, { project_id: project.id, title: 'E2E Accept Vertrag' });
+  const channel = `private-project.${project.id}`;
   // the mention makes her a watcher, so a status change would tell her too; its mail is collected, not sent yet
   const mentioned = await api(page, 'POST', `/api/v1/work-items/${item.id}/comments`, { body: `@${person.handle} bitte gegenlesen.` });
   expect(mentioned.status(), await mentioned.text()).toBe(201);
-  const other = await openInbox(browser, inbox, person.id, `private-project.${project.id}`);
+  // Erik holds the channel of the project too: what reaches him there would have reached her
+  const erikSockets = recordSockets(page);
+  const erikHeld = channelHeld(page, channel);
+  await page.goto(`/projects/${project.identifier}`);
+  await erikHeld;
+  const other = await openInbox(browser, inbox, person.id, channel);
   try {
     await waitForNotification(other.page, (entry) => entry.work_item_id === item.id && entry.event === 'mentioned');
+    expect(collectionsOf(person.id, item.id)).toEqual([{ outcome: null, sent: false }]);
     const card = cardOf(other.page, item.key);
     await expect(card.getByRole('listitem')).toHaveCount(1);
     const before = await unreadCount(other.page);
     await expectBadge(other.page, before);
+    // her one connection, holding the channel of the project
+    expect(other.sockets.filter((socket) => !socket.closed)).toHaveLength(1);
+    const cut = other.sockets.length;
+    const old = other.sockets[cut - 1]!;
+    expect(framesOn([old], channel).some((frame) => frame.includes('pusher_internal:subscription_succeeded'))).toBe(true);
 
-    // once removed, her browser is cut off (A281): it connects again and loads anew, the inbox without the project. The
-    // list of her projects usually loads before the connection is back; if not, holding the channel of the project
-    // again is refused, and the browser reports the 403 of /broadcasting/auth
-    allowedErrors.push(/status of 403 .*\/broadcasting\/auth\)$/);
-    // what reaches her browser on the channel of the project from now on (the socket after the cut is a new one)
-    const onProject: string[] = [];
-    other.page.on('websocket', (socket) =>
-      socket.on('framereceived', ({ payload }) => {
-        if (String(payload).includes(`"private-project.${project.id}"`)) onProject.push(String(payload));
-      }),
-    );
+    // once removed, Reverb cuts her connection (A281); the browser connects again and loads anew, the inbox without the
+    // project. The list of her projects usually loads before the connection is back; if not, holding the channel of
+    // the project again is refused, and her page reports the 403 of /broadcasting/auth
+    allowedErrors.push(/^\[inbox-[a-z-]+@example\.com\] console error: .*status of 403 .*\/broadcasting\/auth\)$/);
     const removed = await api(page, 'DELETE', `/api/v1/projects/${project.id}/members/${person.id}`);
     expect(removed.status(), await removed.text()).toBe(204);
+    await expect.poll(() => old.closed, LIVE).toBe(true);
+    await expect.poll(() => other.sockets.slice(cut).some((socket) => socket.frames.some((frame) => frame.includes('pusher:connection_established'))), LIVE).toBe(true);
     await expect(card).toHaveCount(0, LIVE);
-    await expectBadge(other.page, before - 1, LIVE);
+    await expectBadge(other.page, await unreadCount(other.page), LIVE);
     await stillTheSameDocument(other.page);
 
-    // a status change of the item reaches her no more: the badge stays for a second (at least ten looks), and a reload
-    // shows nothing
+    // a status change of the item: Erik's channel carries it, hers does not; then a reload shows nothing either
     const workflow = (await allEntries(page, 'workflows')).find((entry) => entry.is_default === true) as { states: { id: string; name: string }[] };
     const moved = await api(page, 'POST', `/api/v1/work-items/${item.id}/transition`, { to_state_id: workflow.states.find((state) => state.name === 'Todo')!.id });
     expect(moved.status(), await moved.text()).toBe(200);
-    const seen: string[] = [];
     await expect
-      .poll(
-        async () => {
-          seen.push(await inboxLink(other.page).innerText());
-          return seen.length;
-        },
-        { intervals: [100], timeout: 5_000 },
-      )
-      .toBeGreaterThanOrEqual(10);
-    expect(new Set(seen).size, seen.join(', ')).toBe(1);
-    // neither a live message nor even the subscription of the channel came back
-    expect(onProject).toEqual([]);
+      .poll(() => framesOn(erikSockets, channel).filter((frame) => frame.includes('work_item.state_changed') && frame.includes(item.id)).length, LIVE)
+      .toBeGreaterThan(0);
+    expect(framesOn(other.sockets.slice(cut), channel)).toEqual([]);
+    await expectBadge(other.page, await unreadCount(other.page));
     await other.page.reload();
     await expect(other.page.getByRole('heading', { level: 1, name: tr('en', 'inbox.title') })).toBeVisible();
-    await expectBadge(other.page, before - 1);
     await expect(cardOf(other.page, item.key)).toHaveCount(0);
 
-    // and the mail she had not got: the collection is skipped, nothing reaches Mailpit
+    // and the mail she had not got: her collection is skipped, nothing reaches Mailpit
     artisan('app:send-notification-mails', '--now');
+    expect(collectionsOf(person.id, item.id)).toEqual([{ outcome: 'skipped', sent: true }]);
     expect(await mailpit.idsTo(inbox.email, item.key)).toEqual([]);
   } finally {
-    await other.page.goto('/my-items');
-    await other.context.close();
-    await removeE2eProject(page, project.identifier);
+    await cleanUp(page, project.identifier, other);
   }
 });

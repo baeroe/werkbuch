@@ -26,7 +26,9 @@ async function storedDescription(page: Page, id: string): Promise<string | null>
   return ((await response.json()) as { data: { description: string | null } }).data.description;
 }
 
-test('warns the second editor of a description and keeps both versions', async ({ page, browser }) => {
+test('warns the second editor of a description and keeps both versions', async ({ page, browser, allowedErrors }) => {
+  // Mara's save meets Erik's first: the 409 `description_conflict` the test is about (the browser reports it)
+  allowedErrors.push(/^\[mara@feldwerk\.example\.com\] console error: .*status of 409 .*\/api\/v1\/work-items\/[0-9a-z]{26}\)$/);
   const { id, identifier } = await createE2eProject(page, name('conflict'), { types: ['Task'] });
   let other: Awaited<ReturnType<typeof signedInContext>> | undefined;
   try {

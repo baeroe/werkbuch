@@ -183,7 +183,9 @@ test('refuses an image of another project in the description', async ({ page, al
   }
 });
 
-test('gives Ida neither the image nor its preview', async ({ page, browser }) => {
+test('gives Ida neither the image nor its preview', async ({ page, browser, allowedErrors }) => {
+  // her page of the item answers 404, as the test asks (the browser reports it)
+  allowedErrors.push(/^\[ida@feldwerk\.example\.com\] console error: .*status of 404 .*\/items\/[A-Z0-9]+-\d+\)$/);
   // Ida is a member of WEB only: a private project of the e2e person is unknown to her
   const { id, identifier } = await createE2eProject(page, name('private'), { types: ['Task'], visibility: 'private' });
   let ida: Awaited<ReturnType<typeof signedInContext>> | undefined;
