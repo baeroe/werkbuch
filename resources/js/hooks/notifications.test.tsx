@@ -89,6 +89,24 @@ describe('the inbox', () => {
     ]);
   });
 
+  it('makes the notifications stale also when a later block of a mark fails: the first ones went through (T13-M1)', async () => {
+    let calls = 0;
+    api = mockApi({
+      'POST /api/v1/notifications/read': () => (++calls === 1 ? { body: { updated: 100 } } : { status: 500, body: { reason: 'server_error' } }),
+      'POST /api/v1/notifications/unread': () => ({ status: 500, body: { reason: 'server_error' } }),
+    });
+    const ids = Array.from({ length: 150 }, (_, n) => `n_${n}`);
+    queryClient.setQueryData(qk.notifications.list({}), 'cached');
+    const { result } = renderHook(() => ({ read: useMarkRead(), unread: useMarkUnread() }), { wrapper });
+
+    await act(() => expect(result.current.read.mutateAsync(ids)).rejects.toThrow());
+    expect(queryClient.getQueryState(qk.notifications.list({}))?.isInvalidated).toBe(true);
+
+    queryClient.setQueryData(qk.notifications.list({}), 'cached');
+    await act(() => expect(result.current.unread.mutateAsync(ids)).rejects.toThrow());
+    expect(queryClient.getQueryState(qk.notifications.list({}))?.isInvalidated).toBe(true);
+  });
+
   it('marks everything read without options', async () => {
     api = mockApi({ 'POST /api/v1/notifications/read': () => ({ body: { updated: 3 } }) });
     const { result } = renderHook(() => useMarkAllRead(), { wrapper });

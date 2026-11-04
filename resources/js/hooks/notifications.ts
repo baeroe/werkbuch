@@ -22,14 +22,17 @@ export function useUnreadCount(): number {
   return useNotifications({ unread_only: true, per_page: 1 }).data?.total ?? 0;
 }
 
-/** Variable: the ids to mark as read. Every list of the inbox and the badge follow. */
+/**
+ * Variable: the ids to mark as read. Every list of the inbox and the badge follow, also after a failure: more than 100
+ * go in blocks, and the blocks before the one that failed are stored (the own tab hears no `notifications.changed`).
+ */
 export function useMarkRead() {
-  return useApiMutation(markRead, [qk.notifications.all]);
+  return useApiMutation(markRead, [qk.notifications.all], { invalidateOnError: true });
 }
 
-/** Variable: the ids to mark as unread again. */
+/** Variable: the ids to mark as unread again (in blocks as well, see useMarkRead). */
 export function useMarkUnread() {
-  return useApiMutation(markUnread, [qk.notifications.all]);
+  return useApiMutation(markUnread, [qk.notifications.all], { invalidateOnError: true });
 }
 
 /** Variable: `{ mentions_only }` or nothing (A291). */

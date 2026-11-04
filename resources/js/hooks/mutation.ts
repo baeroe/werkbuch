@@ -41,6 +41,11 @@ export interface ApiMutationOptions<TVars, TData> {
    * shown once (a token, recovery codes): it is dropped as soon as its dialog lets go of it.
    */
   gcTime?: number;
+  /**
+   * Makes the keys stale after a failure as well (an array of keys only): for a call in parts, of which the first may
+   * have gone through before a later one failed (the read marks in blocks of 100, T13-M1).
+   */
+  invalidateOnError?: boolean;
 }
 
 export function useApiMutation<TVars, TData>(
@@ -56,6 +61,7 @@ export function useApiMutation<TVars, TData>(
       options.onSuccess?.(data, vars, queryClient);
       return invalidateAll(queryClient, typeof invalidate === 'function' ? invalidate(data, vars) : invalidate);
     },
+    onError: options.invalidateOnError && typeof invalidate !== 'function' ? () => invalidateAll(queryClient, invalidate) : undefined,
   });
 }
 
