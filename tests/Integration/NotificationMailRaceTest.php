@@ -55,11 +55,12 @@ it('sends one mail when two jobs take the same collection', function () use ($wo
 
     expect(RaceConnections::hold($send($w['mail'])))->toBe(NotificationMail::SENT);
 
-    // the second job waits for the lock on the collection ...
-    RaceConnections::expectLockWait(RaceConnections::second($send($w['mail'])), 'notification_mails');
+    // the second job waits for the collection: already the stamp of its try (I1) waits for the row the first holds ...
+    $stamp = 'update `notification_mails` set `dispatched_at`';
+    RaceConnections::expectLockWait(RaceConnections::second($send($w['mail'])), 'notification_mails', $stamp, 'is null');
 
     // ... and finds it sent once the first one committed
-    RaceConnections::releaseBeforeLock('notification_mails');
+    RaceConnections::releaseBefore($stamp);
     expect(RaceConnections::second($send($w['mail'])))->toBe(SendNotificationMail::ALREADY);
 
     Mail::assertSent(NotificationDigest::class, 1);
