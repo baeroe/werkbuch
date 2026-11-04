@@ -21,6 +21,9 @@ const bus = vi.hoisted(() => ({
   released: [] as string[],
 }));
 
+const inertia = vi.hoisted(() => ({ reload: vi.fn() }));
+vi.mock('@inertiajs/react', () => ({ router: { reload: inertia.reload } }));
+
 vi.mock('@/api/live', () => ({
   subscribeLive: (callback: (event: LiveEvent) => void) => {
     bus.listeners.add(callback);
@@ -233,6 +236,30 @@ describe('useLiveSync', () => {
 
     expect(projects.fetches()).toBe(3);
     expect(members.fetches()).toBe(2);
+  });
+
+  it('loads the lists of items again on project.updated: their keys name the identifier (T14-M6)', async () => {
+    const items = await shown(qk.workItems.list({ project: 'p_web' }));
+    renderHook(() => useLiveSync(), { wrapper });
+
+    send({ event_id: 'ev_1', type: 'project.updated', item_id: null });
+    await pass(LIVE_BURST_MS);
+
+    expect(items.fetches()).toBe(2);
+  });
+
+  it('loads the account and its rights of the page again on a new org role, nothing else of the page (M2)', async () => {
+    inertia.reload.mockClear();
+    renderHook(() => useLiveSync(), { wrapper });
+
+    send({ event_id: 'ev_1', type: 'user.role_changed', project_id: null, item_id: null });
+    send({ event_id: 'ev_2', type: 'user.role_changed', project_id: null, item_id: null });
+    expect(inertia.reload).not.toHaveBeenCalled();
+    await pass(LIVE_BURST_MS);
+
+    // once for the burst
+    expect(inertia.reload).toHaveBeenCalledTimes(1);
+    expect(inertia.reload).toHaveBeenCalledWith({ only: ['auth'] });
   });
 
   it('loads everything a screen shows again once the connection is back', async () => {

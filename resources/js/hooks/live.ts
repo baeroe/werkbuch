@@ -1,3 +1,4 @@
+import { router } from '@inertiajs/react';
 import { useQueryClient, type Query, type QueryClient, type QueryKey } from '@tanstack/react-query';
 import { useEffect, useSyncExternalStore } from 'react';
 import { isLiveConnected, subscribeLive, subscribeLiveStatus, watchItem, type LiveEvent } from '@/api/live';
@@ -22,8 +23,9 @@ const EVERYTHING: readonly QueryKey[] = [qk.workItems.all, qk.activity.all, qk.c
 
 /**
  * The caches a message makes stale. Items and their history on `work_item.*` (also watching, on the person's own
- * channel), comments and the history on `comment.*`, projects and members on `project.*`, the projects on a new org
- * role (K14: the channels follow the list), the inbox on `notifications.changed`; everything after the connection was
+ * channel), comments and the history on `comment.*`, projects and members on `project.*` (on `project.updated` the
+ * items too: their keys carry the identifier), the projects on a new org role (K14: the channels follow the list; the
+ * shell reloads the shared props `auth` for it, M2), the inbox on `notifications.changed`; everything after the connection was
  * back (`live.reconnected`). A refused channel (`live.refused`) loads everything as well (A281: access lost; what the
  * person may not see any more answers 404 or leaves the lists, as the screen should show it), unless the project or
  * item it is about was deleted: that is decided when the burst loads, so a delete and a refusal that come together
@@ -38,6 +40,8 @@ function keysOf(event: LiveEvent): readonly QueryKey[] {
   if (event.type === 'user.role_changed') return [qk.projects.all];
   if (group === 'work_item') return [qk.workItems.all, qk.activity.all];
   if (group === 'comment') return [qk.comments.all, qk.activity.all];
+  // a new identifier changes the keys of the items: the lists of the project load again (T14-M6)
+  if (event.type === 'project.updated') return [qk.projects.all, qk.members.all, qk.workItems.all];
   if (group === 'project') return [qk.projects.all, qk.members.all];
   return [];
 }
@@ -178,6 +182,8 @@ export function useLiveSync(): void {
     /** What the refused channels of the burst were about: a project or an item, `null` for the person's own channel. */
     const refusals: (string | null)[] = [];
     const flashes = new Set<string>();
+    /** A new org role of the person in the burst: the shared props `auth` (account, rights) load again (M2). */
+    let roleChanged = false;
     const refresh = new LiveRefresh(queryClient, () => queryClient.isMutating() > 0 || undoPending());
     let quiet: ReturnType<typeof setTimeout> | null = null;
     let longest: ReturnType<typeof setTimeout> | null = null;
@@ -193,6 +199,11 @@ export function useLiveSync(): void {
       const keys = lost ? EVERYTHING : [...burst.values()];
       burst.clear();
       refresh.apply(keys);
+      if (roleChanged) {
+        roleChanged = false;
+        // only the account and its rights, never the page: what it shows stays (usePermissions reads `auth`)
+        router.reload({ only: ['auth'] });
+      }
       flashes.forEach((id) => useUiStore.getState().flash(id));
       flashes.clear();
     };
@@ -217,6 +228,8 @@ export function useLiveSync(): void {
       const gone = goneOf(event);
       if (gone !== null) refresh.markGone(gone);
       if (event.type === 'live.refused') refusals.push(event.project_id ?? event.item_id);
+      // only the person's own channel hears it (K14): the role changed is the person's
+      if (event.type === 'user.role_changed') roleChanged = true;
       for (const queryKey of keysOf(event)) burst.set(JSON.stringify(queryKey), queryKey);
       if (event.item_id) flashes.add(event.item_id);
       if (quiet !== null) clearTimeout(quiet);
