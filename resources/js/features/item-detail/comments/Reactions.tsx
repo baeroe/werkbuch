@@ -18,7 +18,7 @@ import { useToggleReaction } from '@/hooks/comments';
 import { useCurrentUser } from '@/hooks/users';
 import { intlLocale, t, tn } from '@/lib/i18n';
 import type { Comment } from '@/types';
-import { focusWhenLost } from '../shared';
+import { focusWhenLost } from '@/lib/focusOrigin';
 
 const CHIP =
   'inline-flex h-11 items-center gap-1 rounded-chip border border-line bg-sunken px-1.5 text-sm font-medium text-ink tabular-nums transition-colors duration-120 md:h-6';

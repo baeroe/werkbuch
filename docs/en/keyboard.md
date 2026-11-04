@@ -153,6 +153,7 @@ werkbuch works without a mouse. Press <kbd>?</kbd> on any screen to see the shor
 | <kbd>←</kbd> | Fold subpages away, or go to the parent page |
 | <kbd>Home</kbd> / <kbd>End</kbd> | First or last page |
 | <kbd>↵</kbd> | Open the page |
+| <kbd>⌘ / Ctrl</kbd>+<kbd>⌫</kbd> | Delete the row’s page (asks first) |
 
 ## Editors and fields
 

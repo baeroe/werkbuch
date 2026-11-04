@@ -28,7 +28,7 @@ import { runWithUndo } from '@/lib/undo';
 import type { Comment, WorkItem } from '@/types';
 import { Actor, When } from '../activity/EventLine';
 import { formatMoment } from '../activity/when';
-import { focusWhenLost } from '../shared';
+import { focusWhenLost } from '@/lib/focusOrigin';
 import { CommentEditor, hasEditDraft } from './CommentEditor';
 import { Reactions } from './Reactions';
 

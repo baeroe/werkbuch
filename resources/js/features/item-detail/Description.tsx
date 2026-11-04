@@ -50,7 +50,8 @@ import { usePermissions } from '@/lib/permissions';
 import { docToText } from '@/lib/richtext';
 import { useUiStore } from '@/store/ui';
 import type { RichText, WorkItem, WorkItemDetail } from '@/types';
-import { focusWhenLost, Section } from './shared';
+import { focusWhenLost } from '@/lib/focusOrigin';
+import { Section } from './shared';
 
 /** How long typing pauses before the description saves. */
 export const DESCRIPTION_PAUSE_MS = 1200;

@@ -7,7 +7,6 @@
  * - `useUnsavedGuard`: while text is not saved yet, leaving or reloading the page asks first.
  * - `isGone`: whether a failed read means the item is gone for the reader.
  * - `useChildType`: the type a new child of the item takes ("Kind-Item anlegen …"), or why there is none.
- * - `focusWhenLost`: where the focus goes when the control that had it goes away.
  * - `useInstantDay`: the day of an instant (created, changed, archived) in the organisation's time zone (13c).
  */
 
@@ -97,17 +96,6 @@ export function Section({ title, actions, aside, children, className }: SectionP
       {children}
     </section>
   );
-}
-
-/**
- * When the control that had the focus goes away (the "Wiederherstellen" of the archived note), the focus would fall
- * back to the page: once React has drawn the change, it goes to `next` instead.
- */
-export function focusWhenLost(next: () => HTMLElement | null | undefined): void {
-  requestAnimationFrame(() => {
-    const active = document.activeElement;
-    if (!active || active === document.body || !active.isConnected) next()?.focus();
-  });
 }
 
 /** Formats the day of an instant as the organisation counts days: 31.10.2026 (never in a fixed zone such as Berlin). */

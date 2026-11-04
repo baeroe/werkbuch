@@ -10,7 +10,8 @@ import { useRestoreWorkItem } from '@/hooks/workItems';
 import { t } from '@/lib/i18n';
 import { usePermissions } from '@/lib/permissions';
 import type { WorkItem } from '@/types';
-import { focusWhenLost, useInstantDay } from '../shared';
+import { focusWhenLost } from '@/lib/focusOrigin';
+import { useInstantDay } from '../shared';
 
 /** Restores with its confirmation; a failure names itself (the item mutation's toast). */
 export function useRestore(item: WorkItem): { restore: () => void; pending: boolean } {

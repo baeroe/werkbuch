@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { api, createE2ePage, createE2eProject, isPhone, openNavigation, pasteFile, PEOPLE, pngBytes, pressMod, removeE2eProject, runId, tabTo, tr, variant } from '../helpers';
+import { api, arrowTo, createE2ePage, createE2eProject, isPhone, openNavigation, pasteFile, PEOPLE, pngBytes, pressMod, removeE2eProject, runId, tabTo, tr, variant } from '../helpers';
 
 // The wiki of a project with the keyboard only, signed in as the e2e person (org admin, English). Every test makes its
 // own project `E2E <variant> <run> …` with its own pages (`createE2ePage`) and removes it in `finally`; the demo wiki
@@ -190,6 +190,100 @@ test('opens the versions with the keyboard and restores one', async ({ page }) =
     const stored = await storedPage(page, notes.id);
     expect(stored.content).toBe('First draft.');
     expect(stored.version).toBe(3);
+  } finally {
+    await removeE2eProject(page, project.identifier);
+  }
+});
+
+test('moves a page with Verschieben nach … and deletes a subtree with undo', async ({ page }) => {
+  const project = await createE2eProject(page, projectName('wiki move'));
+  try {
+    const handbook = await createE2ePage(page, project.id, { title: 'Handbook' });
+    await createE2ePage(page, project.id, { title: 'Processes', parent_id: handbook.id });
+    const notes = await createE2ePage(page, project.id, { title: 'Notes' });
+    await createE2ePage(page, project.id, { title: 'Technology' });
+    await page.goto(`/projects/${project.identifier}/wiki/${notes.id}`);
+    await expect(page.getByRole('textbox', { name: tr('en', 'wiki.page.title_label') })).toHaveValue('Notes');
+    const tree = page.getByRole('tree', { name: tr('en', 'wiki.tree.label') });
+    const row = (name: string) => tree.getByRole('treeitem', { name, exact: true });
+
+    // the page's menu: "Move to …"
+    const more = page.getByRole('main').getByRole('button', { name: tr('en', 'wiki.page.more') });
+    await tabTo(page, more, { max: 80 });
+    await page.keyboard.press('Enter');
+    await arrowTo(page, page.getByRole('menuitem', { name: tr('en', 'wiki.move.menu') }));
+    await page.keyboard.press('Enter');
+    const dialog = page.getByRole('dialog', { name: tr('en', 'wiki.move.title', { title: 'Notes' }) });
+    await expect(dialog).toBeVisible();
+    const under = dialog.getByRole('combobox', { name: `${tr('en', 'wiki.move.parent')}: ${tr('en', 'wiki.move.top')}` });
+    await tabTo(page, under);
+    await page.keyboard.press('Enter');
+    const search = page.getByRole('combobox', { name: tr('en', 'wiki.move.search') });
+    await expect(search).toBeFocused();
+    await page.keyboard.type('Handbook');
+    // Handbook itself, and Processes below it; the first is highlighted
+    const first = page.getByRole('option').first();
+    await expect(first).toHaveAccessibleName(/^Handbook/);
+    await expect(first).toHaveAttribute('data-highlighted', '');
+    await page.keyboard.press('Enter');
+    await expect(dialog.getByRole('combobox', { name: `${tr('en', 'wiki.move.parent')}: Handbook` })).toBeFocused();
+    await pressMod(page, 'Enter');
+
+    await expect(dialog).toBeHidden();
+    await expect(page.getByText(tr('en', 'wiki.move.done.title', { title: 'Notes' }))).toBeVisible();
+    await expect
+      .poll(async () => ((await (await api(page, 'GET', `/api/v1/pages/${notes.id}`)).json()) as { data: { parent_id: string | null } }).data.parent_id)
+      .toBe(handbook.id);
+    if (!isPhone(page)) await expect(row('Notes')).toHaveAttribute('aria-level', '2');
+
+    // the parent page: ⌘⌫ asks, and names what goes along
+    await page.goto(`/projects/${project.identifier}/wiki/${handbook.id}`);
+    await expect(page.getByRole('textbox', { name: tr('en', 'wiki.page.title_label') })).toHaveValue('Handbook');
+    await tabTo(page, page.getByRole('main').getByRole('button', { name: tr('en', 'wiki.page.more') }), { max: 80 });
+    await pressMod(page, 'Backspace');
+    const ask = page.getByRole('alertdialog', { name: tr('en', 'wiki.delete.title_with', { title: 'Handbook', subpages: '2 subpages' }) });
+    await expect(ask).toBeVisible();
+    await expect(ask).toContainText('“Processes” and “Notes”');
+    const confirm = ask.getByRole('button', { name: tr('en', 'wiki.delete.confirm_many', { count: 3 }) });
+    await tabTo(page, confirm);
+    await page.keyboard.press('Enter');
+
+    // gone at once, the overview instead; ⌘Z brings the pages and the page back
+    const done = tr('en', 'wiki.delete.done_with', { title: 'Handbook', subpages: '2 subpages' });
+    await expect(page.getByText(done)).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/projects/${project.identifier}/wiki$`));
+    await expect(row('Handbook')).toHaveCount(0);
+    await expect(page.getByRole('heading', { level: 1, name: tr('en', 'wiki.title') })).toBeFocused();
+    await pressMod(page, 'z');
+    await expect(page).toHaveURL(new RegExp(`/projects/${project.identifier}/wiki/${handbook.id}$`));
+    await expect(page.getByRole('textbox', { name: tr('en', 'wiki.page.title_label') })).toHaveValue('Handbook');
+    expect((await api(page, 'GET', `/api/v1/pages/${handbook.id}`)).status()).toBe(200);
+
+    if (!isPhone(page)) {
+      // ⌘⌫ on a row of the tree takes that row's page; the focus lands on the row of its parent
+      await tabTo(page, row('Handbook'), { max: 80 });
+      await page.keyboard.press('ArrowDown');
+      await expect(row('Processes')).toBeFocused();
+      await pressMod(page, 'Backspace');
+      const single = page.getByRole('alertdialog', { name: tr('en', 'wiki.delete.title', { title: 'Processes' }) });
+      await tabTo(page, single.getByRole('button', { name: tr('en', 'wiki.delete.confirm') }));
+      await page.keyboard.press('Enter');
+      await expect(row('Processes')).toHaveCount(0);
+      await expect(row('Handbook')).toBeFocused();
+      await expect(page).toHaveURL(new RegExp(`/projects/${project.identifier}/wiki/${handbook.id}$`));
+      await pressMod(page, 'z');
+      await expect(row('Processes')).toBeVisible();
+    }
+
+    // again, and this time the toast runs out: the subtree is deleted on the server
+    await tabTo(page, page.getByRole('main').getByRole('button', { name: tr('en', 'wiki.page.more') }), { max: 80 });
+    await pressMod(page, 'Backspace');
+    await tabTo(page, confirm);
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(new RegExp(`/projects/${project.identifier}/wiki$`));
+    await expect.poll(async () => (await api(page, 'GET', `/api/v1/pages/${notes.id}`)).status(), { timeout: 15_000 }).toBe(404);
+    await expect(row('Technology')).toBeVisible();
+    await expect(row('Handbook')).toHaveCount(0);
   } finally {
     await removeE2eProject(page, project.identifier);
   }

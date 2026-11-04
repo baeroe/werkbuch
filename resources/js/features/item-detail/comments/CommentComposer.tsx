@@ -41,7 +41,8 @@ import { t } from '@/lib/i18n';
 import { usePermissions } from '@/lib/permissions';
 import { docToText } from '@/lib/richtext';
 import type { RichText, WorkItem } from '@/types';
-import { focusWhenLost, useDetail } from '../shared';
+import { focusWhenLost } from '@/lib/focusOrigin';
+import { useDetail } from '../shared';
 
 const same = (a: RichText | undefined, b: RichText | undefined) => JSON.stringify(a) === JSON.stringify(b);
 

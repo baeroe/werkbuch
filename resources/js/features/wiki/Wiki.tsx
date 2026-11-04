@@ -6,9 +6,19 @@
  * - The tree (`PageTree`) stands on the left from lg on, as the navigation "Seiten des Wikis"; below lg only the
  *   overview shows it, an open page shows alone. The ancestors of the open page are never folded away.
  * - Without a page: the overview (`WikiHome`). With one: the page (`PageView`) with the pages above it as its path.
- * - A new page is called "Neue Seite"; after the toast the wiki opens it with `?focus=title`. The wiki reads that once
- *   when the page opens, takes it out of the address (`router.replace`), and the page selects its title, ready to be
- *   typed over.
+ * - A new page is called "Neue Seite" (at the top level, or below the open page: "Unterseite anlegen"); after the toast
+ *   the wiki opens it with `?focus=title`. The wiki reads that once when the page opens, takes it out of the address
+ *   (`router.replace`), and the page selects its title, ready to be typed over.
+ * - Moving ("Verschieben nach …", `MovePageDialog`) shows at once (`movedTree` in the cached tree); a refusal of the
+ *   server takes it back: a 422 at the field of the dialog, anything else as a toast (`notifyError`).
+ * - Deleting takes a page with its subtree and always asks first (`DeletePageDialog`), on every way: the page's menu,
+ *   ⌘⌫ on the page (`wiki.delete`), ⌘⌫ on a row of the tree (the row's page, not the open one), the palette's
+ *   `wiki.page.delete`; "Abbrechen" gives the focus back to where it was. After the yes the pages leave the tree at once
+ *   (`hiddenPages`, at module level: a visit draws the wiki anew) and an open page of the subtree gives way to its
+ *   parent page (or the overview). The delete itself runs when the undo toast runs out (`runWithUndo`, 5 s;
+ *   `useDeletePage` with the subtree as the wiki knew it). "Rückgängig" brings the pages back, and the page that was
+ *   open while the person still stands where the delete led; a failure brings them back too. The focus goes to the
+ *   row of the parent page in the tree where the tree shows, else to the screen's heading.
  * The tree and the pages are read by the project's ULID, never its identifier, so live updates and deletes meet one
  * cache entry (`usePages`).
  */
@@ -16,7 +26,8 @@
 import { Link, router, usePage as useInertiaPage } from '@inertiajs/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, FilePlus2, Plus } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
+import { ApiError, type Page as ListPage } from '@/api/client';
 import { Button } from '@/components/ui/Button';
 import { cx } from '@/components/ui/cx';
 import { ErrorState } from '@/components/ui/ErrorState';
@@ -24,17 +35,23 @@ import { ProjectBadge } from '@/components/ui/ProjectBadge';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
 import { toast } from '@/components/ui/toast';
 import { qk } from '@/hooks/keys';
-import { useCreatePage, usePages } from '@/hooks/pages';
+import { useCreatePage, useDeletePage, useMovePage, usePages } from '@/hooks/pages';
 import { useCommand } from '@/lib/commands';
+import { drafts } from '@/lib/drafts';
 import { notifyError } from '@/lib/errors';
+import { focusBackTo, focusOriginNow, focusWhenLost } from '@/lib/focusOrigin';
 import { t } from '@/lib/i18n';
 import { paths } from '@/lib/links';
 import { usePermissions } from '@/lib/permissions';
+import { runWithUndo } from '@/lib/undo';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
-import type { Project, Page as WikiPage } from '@/types';
+import type { PageNode, Project, Page as WikiPage } from '@/types';
+import { DeletePageDialog } from './DeletePageDialog';
+import { subpages } from './format';
+import { MovePageDialog } from './MovePageDialog';
 import { PageTree } from './PageTree';
 import { PageView } from './PageView';
-import { pathTo } from './tree';
+import { findPage, movedTree, pathTo, subtreeIds, withoutPages, type Placement } from './tree';
 import { WikiHome } from './WikiHome';
 
 export interface WikiProps {
@@ -45,6 +62,42 @@ export interface WikiProps {
 }
 
 const without = (set: ReadonlySet<string>, ids: readonly string[]) => new Set([...set].filter((id) => !ids.includes(id)));
+
+/** How long the focus is watched after a delete or its undo: a visit draws the next page later. */
+const FOCUS_WATCH_MS = 800;
+
+/**
+ * Pages deleted while their undo toast stands, and after it (a deleted page never comes back), for every wiki on the
+ * screen: a visit draws the wiki anew, and its tree must not show them meanwhile. A person change forgets them.
+ */
+let hiddenPages: ReadonlySet<string> = new Set();
+const hiddenListeners = new Set<() => void>();
+
+function setPagesHidden(ids: readonly string[], on: boolean): void {
+  hiddenPages = on ? new Set([...hiddenPages, ...ids]) : without(hiddenPages, ids);
+  hiddenListeners.forEach((listener) => listener());
+}
+
+/** Forgets the hidden pages (a person change; tests). */
+export function clearHiddenPages(): void {
+  setPagesHidden([...hiddenPages], false);
+}
+drafts.onClear(clearHiddenPages);
+
+const subscribeHidden = (listener: () => void) => {
+  hiddenListeners.add(listener);
+  return () => void hiddenListeners.delete(listener);
+};
+
+/** The address of the wiki on the screen (null: none): "Rückgängig" leads back only from where the delete led. */
+let shownAt: string | null = null;
+
+/** The row of a page in the tree, where the tree shows; else the screen's heading. */
+function landingFocus(pageId: string | null): HTMLElement | null {
+  const rows = [...document.querySelectorAll<HTMLElement>('[role="treeitem"][data-page-id]')];
+  const row = pageId ? rows.find((element) => element.dataset.pageId === pageId && element.getClientRects().length > 0) : undefined;
+  return row ?? document.querySelector<HTMLElement>('[data-screen-heading]');
+}
 
 /** The rows of the tree while it loads. */
 export function TreeSkeleton({ className }: { className?: string }) {
@@ -82,6 +135,9 @@ export function Wiki({ project, pageId, pageFound }: WikiProps) {
   const queryClient = useQueryClient();
   const pages = usePages(project.id);
   const createPage = useCreatePage();
+  const movePage = useMovePage();
+  const deletePage = useDeletePage();
+  const hidden = useSyncExternalStore(subscribeHidden, () => hiddenPages);
   const permissions = usePermissions();
   const createReason = permissions.reason('wiki.edit', project.id);
   const canEdit = createReason === null;
@@ -90,7 +146,27 @@ export function Wiki({ project, pageId, pageFound }: WikiProps) {
   useDocumentTitle(t('wiki.tab', { identifier: project.identifier }));
 
   const hrefOf = (id: string) => paths.wiki(project.identifier, id);
-  const tree = pages.data?.items ?? [];
+  const listKey = qk.pages.list({ project: project.id });
+  const tree = useMemo(() => withoutPages(pages.data?.items ?? [], hidden), [pages.data, hidden]);
+
+  const here = paths.wiki(project.identifier, pageId ?? undefined);
+  useLayoutEffect(() => {
+    shownAt = here;
+    return () => {
+      if (shownAt === here) shownAt = null;
+    };
+  }, [here]);
+
+  const [moving, setMoving] = useState<{ open: boolean; page: PageNode | null }>({ open: false, page: null });
+  const [asking, setAsking] = useState<{ open: boolean; page: PageNode | null }>({ open: false, page: null });
+  /** Where the focus goes when the question closes: back where it was, or, after the yes, where the pages went. */
+  const askedFrom = useRef<Element | null>(null);
+  const confirmed = useRef<{ parentId: string | null } | null>(null);
+  const askFocus: RefObject<HTMLElement | null> = {
+    get current() {
+      return confirmed.current ? landingFocus(confirmed.current.parentId) : focusBackTo(askedFrom.current);
+    },
+  };
 
   // the open page is never folded away
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
@@ -101,15 +177,88 @@ export function Wiki({ project, pageId, pageFound }: WikiProps) {
   }, [ancestorIds]);
   const toggle = (id: string, open: boolean) => setCollapsed((state) => (open ? without(state, [id]) : new Set(state).add(id)));
 
-  async function create() {
+  async function create(parentId: string | null) {
     try {
-      const page = await createPage.mutateAsync({ project_id: project.id, parent_id: null, title: t('wiki.new_title') });
+      const page = await createPage.mutateAsync({ project_id: project.id, parent_id: parentId, title: t('wiki.new_title') });
       queryClient.setQueryData<WikiPage>(qk.pages.detail(page.id), page);
+      if (parentId) setCollapsed((state) => without(state, [parentId]));
       toast({ title: t('wiki.created.title'), description: t('wiki.created.description'), tone: 'success' });
       router.visit(`${paths.wiki(project.identifier, page.id)}?focus=title`);
     } catch (error) {
-      notifyError(t('wiki.create_failed'), error, () => void create());
+      notifyError(t('wiki.create_failed'), error, () => void create(parentId));
     }
+  }
+
+  /**
+   * Shows the move at once; a refusal of the server takes it back. Answers a 422 for the dialog to show at its fields
+   * (`inDialog`); every other refusal says so in a toast.
+   */
+  async function move(node: PageNode, placement: Placement, inDialog = false): Promise<ApiError | null> {
+    const { id } = node;
+    await queryClient.cancelQueries({ queryKey: listKey });
+    const before = queryClient.getQueryData<ListPage<PageNode>>(listKey);
+    if (before) queryClient.setQueryData<ListPage<PageNode>>(listKey, { ...before, items: movedTree(before.items, id, placement.parent_id, placement.before_id) });
+    const parent = placement.parent_id ? findPage(tree, placement.parent_id) : undefined;
+    if (parent) setCollapsed((state) => without(state, [parent.id]));
+    try {
+      await movePage.mutateAsync({ id, ...placement });
+      toast({
+        title: t('wiki.move.done.title', { title: node.title }),
+        description: parent ? t('wiki.move.done.under', { title: parent.title }) : t('wiki.move.done.top'),
+        tone: 'success',
+      });
+      return null;
+    } catch (error) {
+      if (before) queryClient.setQueryData(listKey, before);
+      if (inDialog && error instanceof ApiError && error.status === 422) return error;
+      notifyError(t('wiki.move.failed', { title: node.title }), error, () => void move(node, placement));
+      return null;
+    }
+  }
+
+  /** Every delete asks first; the question remembers where the focus was. */
+  function requestDelete(id: string) {
+    const node = findPage(tree, id);
+    if (!node) return;
+    askedFrom.current = focusOriginNow();
+    confirmed.current = null;
+    setAsking({ open: true, page: node });
+  }
+
+  /** After the yes: the pages go at once, the delete when the undo toast runs out. */
+  function remove(node: PageNode) {
+    const ids = subtreeIds(tree, node.id);
+    const parentId = pathTo(tree, node.id).at(-2)?.id ?? null;
+    const openPage = pageId;
+    const wasOpen = openPage !== null && ids.includes(openPage);
+    const landing = paths.wiki(project.identifier, parentId ?? undefined);
+    const back = openPage === null ? null : paths.wiki(project.identifier, openPage);
+    const { title } = node;
+    confirmed.current = { parentId };
+    setPagesHidden(ids, true);
+    if (wasOpen) router.visit(landing);
+    // the control that had the focus (menu, question, row) went away with the page
+    focusWhenLost(() => landingFocus(parentId), FOCUS_WATCH_MS);
+    runWithUndo({
+      label: ids.length > 1 ? t('wiki.delete.done_with', { title, subpages: subpages(ids.length - 1) }) : t('wiki.delete.done', { title }),
+      failureTitle: t('wiki.delete.failed', { title }),
+      undo: () => {
+        setPagesHidden(ids, false);
+        // back to the page that was open, unless the person has moved on
+        if (wasOpen && back && shownAt === landing) {
+          router.visit(back);
+          focusWhenLost(() => landingFocus(openPage), FOCUS_WATCH_MS);
+        }
+      },
+      run: async () => {
+        try {
+          await deletePage.mutateAsync({ id: node.id, project_id: project.id, subtree: ids });
+        } catch (error) {
+          setPagesHidden(ids, false);
+          throw error;
+        }
+      },
+    });
   }
 
   useCommand(
@@ -119,7 +268,7 @@ export function Wiki({ project, pageId, pageFound }: WikiProps) {
       group: t('wiki.command_group', { identifier: project.identifier }),
       icon: <FilePlus2 />,
       keywords: [t('commands.create.keywords'), t('wiki.title')],
-      run: () => void create(),
+      run: () => void create(null),
       when: () => canEdit,
     },
     [canEdit],
@@ -137,7 +286,7 @@ export function Wiki({ project, pageId, pageFound }: WikiProps) {
       />
     );
   } else if (tree.length > 0) {
-    treeArea = <PageTree nodes={tree} hrefOf={hrefOf} currentId={pageId} collapsed={collapsed} onToggle={toggle} />;
+    treeArea = <PageTree nodes={tree} hrefOf={hrefOf} currentId={pageId} collapsed={collapsed} onToggle={toggle} onDelete={canEdit ? requestDelete : undefined} />;
   }
 
   let content = null;
@@ -152,6 +301,9 @@ export function Wiki({ project, pageId, pageFound }: WikiProps) {
         ancestors={pathTo(tree, pageId).slice(0, -1)}
         rights={{ ready: !permissions.loading, denied: createReason }}
         focusTitle={focusTitle}
+        onMove={() => setMoving({ open: true, page: findPage(tree, pageId) ?? null })}
+        onDelete={() => requestDelete(pageId)}
+        onCreateChild={() => void create(pageId)}
       />
     );
   } else if (!pages.isError || pages.data) {
@@ -163,7 +315,7 @@ export function Wiki({ project, pageId, pageFound }: WikiProps) {
         createReason={createReason}
         readOnly={readOnly}
         creating={createPage.isPending}
-        onCreate={() => void create()}
+        onCreate={() => void create(null)}
       />
     );
   }
@@ -194,7 +346,7 @@ export function Wiki({ project, pageId, pageFound }: WikiProps) {
           )}
         </div>
         <div className="ml-auto">
-          <Button variant="secondary" icon={Plus} pending={createPage.isPending} disabledReason={createReason} onClick={() => void create()}>
+          <Button variant="secondary" icon={Plus} pending={createPage.isPending} disabledReason={createReason} onClick={() => void create(null)}>
             {t('wiki.new')}
           </Button>
         </div>
@@ -214,6 +366,24 @@ export function Wiki({ project, pageId, pageFound }: WikiProps) {
         )}
         <div className={cx('min-w-0', pageId === null && treeArea && 'max-lg:mt-6')}>{content}</div>
       </div>
+
+      <MovePageDialog
+        open={moving.open}
+        onOpenChange={(open) => setMoving((state) => ({ ...state, open }))}
+        tree={tree}
+        page={moving.page && (findPage(tree, moving.page.id) ?? moving.page)}
+        onMove={(placement) => move(moving.page!, placement, true)}
+      />
+      <DeletePageDialog
+        open={asking.open}
+        onOpenChange={(open) => setAsking((state) => ({ ...state, open }))}
+        page={asking.page}
+        finalFocus={askFocus}
+        onConfirm={() => {
+          setAsking((state) => ({ ...state, open: false }));
+          remove(asking.page!);
+        }}
+      />
     </div>
   );
 }

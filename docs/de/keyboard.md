@@ -153,6 +153,7 @@ werkbuch geht ohne Maus. Mit <kbd>?</kbd> zeigt jeder Bildschirm die Kürzel, di
 | <kbd>←</kbd> | Unterseiten zuklappen bzw. zur Eltern-Seite |
 | <kbd>Pos1</kbd> / <kbd>Ende</kbd> | Erste bzw. letzte Seite |
 | <kbd>↵</kbd> | Seite öffnen |
+| <kbd>⌘ / Strg</kbd>+<kbd>⌫</kbd> | Seite der Zeile löschen (mit Rückfrage) |
 
 ## Editoren und Felder
 

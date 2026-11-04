@@ -1,11 +1,15 @@
 /*
  * The head row of an open wiki page: the pages above it as links (the path, from the top), and on the right what acts
- * on the page (`children`: the save state and "Versionen …"; the menu follows with Task 16).
+ * on the page (`children`: the save state, "Versionen …" and the menu `PageMenu`).
  */
 
 import { Link } from '@inertiajs/react';
-import type { ReactNode } from 'react';
+import { Ellipsis, FilePlus2, FolderInput, Trash2 } from 'lucide-react';
+import { useRef, type ReactNode } from 'react';
+import { IconButton } from '@/components/ui/IconButton';
+import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@/components/ui/Menu';
 import { t } from '@/lib/i18n';
+import { SHORTCUTS } from '@/lib/shortcuts/catalog';
 import { paths } from '@/lib/links';
 import type { PageNode } from '@/types';
 
@@ -34,5 +38,41 @@ export function PageHeader({ identifier, ancestors, children }: { identifier: st
       )}
       <div className="ml-auto flex min-w-0 items-center gap-1">{children}</div>
     </div>
+  );
+}
+
+export interface PageMenuProps {
+  onCreateChild: () => void;
+  onMove: () => void;
+  onDelete: () => void;
+}
+
+/**
+ * What else acts on the page, for whoever may edit the wiki: "Unterseite anlegen", "Verschieben nach …" and
+ * "Löschen …" (with the key of `wiki.delete`). An entry gives the focus to the menu's button before it acts, so the
+ * dialog it opens gives it back there.
+ */
+export function PageMenu({ onCreateChild, onMove, onDelete }: PageMenuProps) {
+  const trigger = useRef<HTMLButtonElement>(null);
+  const act = (run: () => void) => () => {
+    trigger.current?.focus();
+    run();
+  };
+  return (
+    <Menu>
+      <MenuTrigger ref={trigger} render={<IconButton icon={Ellipsis} label={t('wiki.page.more')} tooltip={false} />} />
+      <MenuContent align="end" className="w-60">
+        <MenuItem icon={FilePlus2} onClick={act(onCreateChild)}>
+          {t('wiki.child.command')}
+        </MenuItem>
+        <MenuItem icon={FolderInput} onClick={act(onMove)}>
+          {t('wiki.move.menu')}
+        </MenuItem>
+        <MenuSeparator />
+        <MenuItem icon={Trash2} danger shortcut={SHORTCUTS['wiki.delete'].keys} onClick={act(onDelete)}>
+          {t('wiki.delete.menu')}
+        </MenuItem>
+      </MenuContent>
+    </Menu>
   );
 }

@@ -66,6 +66,7 @@ export const WIDGET_KEYS: WidgetGroup[] = [
       { keys: 'home', label: 'shortcuts.widget.tree.edge' },
       { keys: 'end', label: 'shortcuts.widget.tree.edge' },
       { keys: 'enter', label: 'shortcuts.widget.tree.open' },
+      { keys: 'mod+backspace', label: 'shortcuts.widget.tree.delete' },
     ],
   },
   {

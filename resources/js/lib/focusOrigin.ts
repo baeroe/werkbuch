@@ -39,3 +39,28 @@ export const createReturnFocus: RefObject<HTMLElement | null> = {
     return focusBackTo(beforeCreate);
   },
 };
+
+/**
+ * When the control that had the focus goes away (the "Wiederherstellen" of the archived note, a deleted page with its
+ * menu, row or question), the focus would fall back to the page: once React has drawn the change, it goes to `next`
+ * instead. With `watch` (ms) it keeps an eye on the focus for that long (a visit draws the next page later, a closing
+ * menu gives the focus back to its trigger first, and that may go too): whenever it is lost meanwhile, what `next`
+ * names then takes it; still lost at the end with nothing to take it, it goes to the main area (`#main`).
+ */
+export function focusWhenLost(next: () => HTMLElement | null | undefined, watch = 0): void {
+  const until = performance.now() + watch;
+  const lost = () => {
+    const active = document.activeElement;
+    return !active || active === document.body || !active.isConnected || (watch > 0 && active.id === 'main');
+  };
+  const look = () => {
+    const over = performance.now() >= until;
+    if (lost()) {
+      const element = next();
+      if (element) element.focus();
+      else if (watch > 0 && over) document.getElementById('main')?.focus();
+    }
+    if (!over) requestAnimationFrame(look);
+  };
+  requestAnimationFrame(look);
+}

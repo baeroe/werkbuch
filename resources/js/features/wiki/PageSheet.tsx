@@ -10,6 +10,9 @@
  *   (A232); the page waits for them before it saves (`UploadContext`).
  * - ⌘↵ saves now (`wiki.save`), ⌘⌫ asks to delete the page (`wiki.delete`, `onDelete`), both only for whoever may edit;
  *   with the preview of an item open, ⌘⌫ is the item's (K3).
+ * - The menu of the page (`PageMenu`) and the palette offer "Unterseite anlegen" (`wiki.page.child`, `onCreateChild`),
+ *   "Verschieben nach …" (`wiki.page.move`, `onMove`) and "Löschen …" (`wiki.page.delete`, `onDelete`), only for whoever
+ *   may edit and only as far as the wiki passes them.
  * - A conflict (409) stands as a banner above the text (`ConflictBanner`): "Neu laden" or "Meine Fassung übernehmen",
  *   both give the focus on into the text (`usePageSave`).
  * - "Versionen …" in the head row and the palette's `wiki.page.versions` open the kept versions (`VersionsDialog`);
@@ -20,7 +23,7 @@
  *   "Kopieren" and "Verwerfen" (`ParkedDraft`, like A154).
  */
 
-import { Eye, History, SmilePlus, X } from 'lucide-react';
+import { Eye, FilePlus2, FolderInput, History, SmilePlus, Trash2, X } from 'lucide-react';
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { useUserMap } from '@/components/fields/itemData';
 import { Button } from '@/components/ui/Button';
@@ -36,12 +39,13 @@ import { useCurrentUser } from '@/hooks/users';
 import { useCommand } from '@/lib/commands';
 import { t } from '@/lib/i18n';
 import { paths } from '@/lib/links';
+import { SHORTCUTS } from '@/lib/shortcuts/catalog';
 import { useDialogScope, useShortcut } from '@/lib/shortcuts/useShortcut';
 import { useUiStore } from '@/store/ui';
 import type { Page as WikiPage } from '@/types';
 import { ConflictBanner } from './ConflictBanner';
 import { SHEET } from './format';
-import { PageHeader } from './PageHeader';
+import { PageHeader, PageMenu } from './PageHeader';
 import type { PageViewProps } from './PageView';
 import { ParkedDraft } from './ParkedDraft';
 import { SaveStatus } from './SaveStatus';
@@ -54,7 +58,7 @@ function PausePageShortcuts() {
   return null;
 }
 
-export function PageSheet({ page, projectId, identifier, ancestors, rights, focusTitle = false, onDelete }: PageViewProps & { page: WikiPage }) {
+export function PageSheet({ page, projectId, identifier, ancestors, rights, focusTitle = false, onMove, onDelete, onCreateChild }: PageViewProps & { page: WikiPage }) {
   const canEdit = rights.denied === null;
   const uploads = useUploadCounter();
   const me = useCurrentUser()?.id;
@@ -90,6 +94,28 @@ export function PageSheet({ page, projectId, identifier, ancestors, rights, focu
     run: () => setVersionsOpen(true),
   });
   useShortcut('wiki.delete', () => onDelete?.(), { when: () => canEdit && onDelete !== undefined && useUiStore.getState().peekItemId === null });
+  const group = t('wiki.page.command_group', { title: page.title });
+  useCommand(
+    { id: 'wiki.page.move', label: t('wiki.move.command'), group, icon: <FolderInput />, keywords: [t('wiki.move.keywords')], run: () => onMove?.(), when: () => canEdit && onMove !== undefined },
+    [canEdit, onMove !== undefined],
+  );
+  useCommand(
+    { id: 'wiki.page.child', label: t('wiki.child.command'), group, icon: <FilePlus2 />, keywords: [t('wiki.child.keywords')], run: () => onCreateChild?.(), when: () => canEdit && onCreateChild !== undefined },
+    [canEdit, onCreateChild !== undefined],
+  );
+  useCommand(
+    {
+      id: 'wiki.page.delete',
+      label: t('wiki.delete.command'),
+      group,
+      keys: SHORTCUTS['wiki.delete'].keys,
+      icon: <Trash2 />,
+      keywords: [t('wiki.delete.keywords')],
+      run: () => onDelete?.(),
+      when: () => canEdit && onDelete !== undefined,
+    },
+    [canEdit, onDelete !== undefined],
+  );
 
   function onTitleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.nativeEvent.isComposing || event.keyCode === 229) return;
@@ -126,6 +152,7 @@ export function PageSheet({ page, projectId, identifier, ancestors, rights, focu
         <Button variant="ghost" size="sm" icon={History} onClick={() => setVersionsOpen(true)}>
           {t('wiki.versions.open')}
         </Button>
+        {canEdit && onMove && onDelete && onCreateChild && <PageMenu onCreateChild={onCreateChild} onMove={onMove} onDelete={onDelete} />}
       </PageHeader>
       <VersionsDialog page={page} open={versionsOpen} onOpenChange={setVersionsOpen} restoreReason={rights.denied} beforeRestore={beforeRestore} />
 
