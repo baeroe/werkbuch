@@ -1376,6 +1376,7 @@
     "problem.detail.transition_not_allowed": "Von „:from“ nach „:to“ ist im Workflow „:workflow“ nicht erlaubt.",
     "problem.detail.types_admins_only": "Typen ändern nur Org-Admins.",
     "problem.detail.view_creator_only": "Nur :name und Org-Admins dürfen „:view“ ändern.",
+    "problem.detail.wiki_members_only": "Das Wiki bearbeiten nur Member und Admins des Projekts.",
     "problem.detail.workflow_in_use": "Der Workflow wird noch von :projects benutzt.",
     "problem.detail.workflows_admins_only": "Workflows ändern nur Org-Admins.",
     "problem.reason.already_member": "Du bist schon Mitglied.",

@@ -5,6 +5,7 @@ namespace Tests\Feature\Access;
 use App\Access\ProjectRole;
 use App\Access\RoleAssignments;
 use App\Models\Organization;
+use App\Models\Page;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\View;
@@ -113,6 +114,15 @@ final class MatrixWorld
         }
 
         return $factory->create();
+    }
+
+    /** A fresh page at the top of the wiki of the project of the column, by the project admin, through the factory: no events. */
+    public function page(string $column): Page
+    {
+        return Page::factory()->create([
+            'project_id' => $this->project($column)->id,
+            'created_by' => $this->account('project_admin')->id,
+        ]);
     }
 
     /** A fresh view of the target (a member of WEB, none of the columns), through the factory: no events. */

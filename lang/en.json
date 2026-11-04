@@ -1376,6 +1376,7 @@
     "problem.detail.transition_not_allowed": "From “:from” to “:to” is not allowed in the workflow “:workflow”.",
     "problem.detail.types_admins_only": "Only org admins change types.",
     "problem.detail.view_creator_only": "Only :name and org admins may change “:view”.",
+    "problem.detail.wiki_members_only": "Only members and admins of the project edit the wiki.",
     "problem.detail.workflow_in_use": "The workflow is still used by :projects.",
     "problem.detail.workflows_admins_only": "Only org admins change workflows.",
     "problem.reason.already_member": "You are already a member.",

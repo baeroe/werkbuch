@@ -11,6 +11,7 @@ use App\Models\Invitation;
 use App\Models\Label;
 use App\Models\Notification;
 use App\Models\Organization;
+use App\Models\Page;
 use App\Models\PersonalAccessToken;
 use App\Models\Project;
 use App\Models\Property;
@@ -76,6 +77,7 @@ class AppServiceProvider extends ServiceProvider
             'attachment' => Attachment::class,
             'comment' => Comment::class,
             'notification' => Notification::class,
+            'page' => Page::class,
         ]);
 
         Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);

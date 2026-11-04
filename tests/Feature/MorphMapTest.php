@@ -6,6 +6,7 @@ use App\Models\Event;
 use App\Models\Invitation;
 use App\Models\Label;
 use App\Models\Notification;
+use App\Models\Page;
 use App\Models\Project;
 use App\Models\Property;
 use App\Models\RelationType;
@@ -69,4 +70,9 @@ it('maps the comment to its short name', function () {
 it('maps the notification to its short name', function () {
     expect(Relation::getMorphedModel('notification'))->toBe(Notification::class)
         ->and((new Notification)->getMorphClass())->toBe('notification');
+});
+
+it('maps the page to its short name', function () {
+    expect(Relation::getMorphedModel('page'))->toBe(Page::class)
+        ->and((new Page)->getMorphClass())->toBe('page');
 });
