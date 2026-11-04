@@ -27,7 +27,9 @@ werkbuch kennt zwei Arten von Rollen. Eine **Organisationsrolle** gilt überall,
 | Projekteinstellungen, Mitglieder, Workflow, Typen, Automatisierungen | ✓ | – | – |
 | Projekt archivieren und löschen | ✓ | – | – |
 
-Manche Zeilen gehören zu späteren Phasen der Roadmap. Die Rechte stehen schon hier, damit sich die Rollen nicht ändern, wenn die Funktionen kommen.
+Manche Zeilen (Webhooks, Vorlagen, Zeitpläne, Automatisierungen) gehören zu späteren Phasen der Roadmap. Die Rechte stehen schon hier, damit sich die Rollen nicht ändern, wenn die Funktionen kommen.
+
+Im [Wiki](/de/concepts/wiki) lesen Viewer und Außenstehende eines öffentlichen Projekts die Seiten und ihre Versionen; Member und Admins legen Seiten an, bearbeiten, verschieben und löschen sie und stellen Versionen wieder her. In einem archivierten Projekt ist das Wiki für alle schreibgeschützt.
 
 ## Org-Admins sind überall Admin
 
