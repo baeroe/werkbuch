@@ -1,14 +1,12 @@
 import { router } from '@inertiajs/react';
 import { useQueryClient, type Query, type QueryClient, type QueryKey } from '@tanstack/react-query';
 import { useEffect, useSyncExternalStore } from 'react';
-import type { Page } from '@/api/client';
 import { isLiveConnected, subscribeLive, subscribeLiveStatus, watchItem, type LiveEvent } from '@/api/live';
-import { listPages } from '@/api/pages';
 import { clearLiveGone, markLiveGone } from '@/lib/liveGone';
 import { subscribeUndoPending, undoPending } from '@/lib/undo';
 import { useUiStore } from '@/store/ui';
-import type { PageNode } from '@/types';
 import { qk } from './keys';
+import { goneFromTree } from './pages';
 
 /** How long the messages have to pause before the screens load again: a burst loads once. */
 export const LIVE_BURST_MS = 300;
@@ -107,15 +105,6 @@ function dataIds(data: unknown): unknown[] {
   if (typeof data !== 'object' || data === null) return [];
   const record = data as { id?: unknown; item?: { id?: unknown } | null; page_id?: unknown };
   return [record.id ?? record.item?.id, record.page_id];
-}
-
-/** Every page of a tree. */
-function treeIds(nodes: readonly PageNode[], into = new Set<string>()): Set<string> {
-  for (const node of nodes) {
-    into.add(node.id);
-    treeIds(node.children, into);
-  }
-  return into;
 }
 
 /** Whether live updates arrive: false while the banner says they are paused. */
@@ -257,33 +246,10 @@ export function useLiveSync(): void {
       markLiveGone(id, 'page');
     };
 
-    /**
-     * The pages of a project's tree before the delete that its tree on the server holds no more are gone: the trees of
-     * the cache (by the project in the key, or the pages in the answer: a screen may name it by its identifier) and
-     * the pages of the cache tell which there were. The tree is read past the cache, so no answer of a screen is
-     * replaced while a change of this tab is pending; a tree that cannot be read takes nothing as gone.
-     */
+    /** The pages of the project the cache knows and its tree on the server holds no more are gone (`goneFromTree`). */
     const checkTree = async (project: string) => {
-      let fresh: Set<string>;
-      try {
-        fresh = treeIds((await listPages(project)).items);
-      } catch {
-        return;
-      }
-      if (!alive) return;
-      const known = new Set<string>();
-      const cache = queryClient.getQueryCache();
-      for (const query of cache.findAll({ queryKey: [...qk.pages.all, 'list'] })) {
-        const nodes = (query.state.data as Page<PageNode> | undefined)?.items ?? [];
-        if ((query.queryKey[2] as { project?: unknown } | undefined)?.project === project || nodes.some((node) => node.project_id === project)) treeIds(nodes, known);
-      }
-      for (const query of cache.findAll({ queryKey: [...qk.pages.all, 'detail'] })) {
-        const page = query.state.data as { id?: string; project_id?: string } | undefined;
-        if (page?.id !== undefined && page.project_id === project) known.add(page.id);
-      }
-      known.forEach((id) => {
-        if (!fresh.has(id)) markPageGone(id);
-      });
+      const ids = await goneFromTree(queryClient, project);
+      if (alive) ids.forEach(markPageGone);
     };
 
     /** Checks the trees, then loads what of the wiki waited for them, once no check runs any more. */

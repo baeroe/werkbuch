@@ -1,16 +1,19 @@
 /*
  * The wiki of a project (`@/api/pages`), and `allPages` for every list the screens read to the end.
  *
- * The hooks have the names of the clickdummy. Every change waits for the server, then makes the tree, the versions and
- * the search stale (`PAGE_KEYS`). Two rules keep a page the screen shows from going wrong:
+ * The hooks have the names of the clickdummy. Every change waits for the server, then makes the tree, the versions,
+ * the search and the references stale (`PAGE_KEYS`: a reference shows the title of its page, and this tab does not
+ * hear its own changes live, A282). Two rules keep a page the screen shows from going wrong:
  * - A saved page goes into the cache only when it is at least as new as what is there (13c: a late answer of a save
  *   must not overwrite a newer page that loaded meanwhile, e.g. after a live message).
  * - Deleting a page takes the queries of its subtree out of the cache before the tree loads again, and marks the
  *   subtree as gone (`usePageGone`): `usePage`, `usePageVersions` and `usePageVersion` ask for a gone page no more,
- *   so a screen still showing it never reads a 404.
+ *   so a screen still showing it never reads a 404. The subtree is what the caller names, what the cached trees hold
+ *   below the page, and every cached page of the project the tree on the server holds no more (`goneFromTree`): a
+ *   screen may have taken the subtree out of its tree already (the undo toast of a delete, `withoutPages`).
  */
 
-import { useQuery, type Query, type QueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, type Query, type QueryClient } from '@tanstack/react-query';
 import type { Page } from '@/api/client';
 import {
   createPage,
@@ -42,7 +45,43 @@ export function usePage(id: string | null | undefined) {
   return useQuery({ queryKey: qk.pages.detail(id ?? ''), queryFn: () => getPage(id!), enabled: !!id && !gone });
 }
 
-const PAGE_KEYS = [qk.pages.all, qk.pageVersions.all, qk.search.all] as const;
+const PAGE_KEYS = [qk.pages.all, qk.pageVersions.all, qk.search.all, qk.references.all] as const;
+
+/** Every page of a tree. */
+export function treeIds(nodes: readonly PageNode[], into = new Set<string>()): Set<string> {
+  for (const node of nodes) {
+    into.add(node.id);
+    treeIds(node.children, into);
+  }
+  return into;
+}
+
+/**
+ * The pages of a project the cache knows that its tree on the server holds no more: deleted (with `useDeletePage`
+ * here, or by somebody else when a live message could not name them all). The cached trees of the project (by the
+ * project in the key, or the pages in the answer: a screen may name it by its identifier) and the cached pages of the
+ * project tell which there were. The tree is read past the cache, so no answer a screen shows is replaced; a tree
+ * that cannot be read takes nothing as gone.
+ */
+export async function goneFromTree(queryClient: QueryClient, project: string): Promise<string[]> {
+  let fresh: Set<string>;
+  try {
+    fresh = treeIds((await listPages(project)).items);
+  } catch {
+    return [];
+  }
+  const known = new Set<string>();
+  const cache = queryClient.getQueryCache();
+  for (const query of cache.findAll({ queryKey: [...qk.pages.all, 'list'] })) {
+    const nodes = (query.state.data as Page<PageNode> | undefined)?.items ?? [];
+    if ((query.queryKey[2] as { project?: unknown } | undefined)?.project === project || nodes.some((node) => node.project_id === project)) treeIds(nodes, known);
+  }
+  for (const query of cache.findAll({ queryKey: [...qk.pages.all, 'detail'] })) {
+    const page = query.state.data as { id?: string; project_id?: string } | undefined;
+    if (page?.id !== undefined && page.project_id === project) known.add(page.id);
+  }
+  return [...known].filter((id) => !fresh.has(id));
+}
 
 /** Variables: `{ project_id, parent_id?, title, emoji?, content? }`; the page comes last among its siblings. */
 export function useCreatePage() {
@@ -90,6 +129,17 @@ function subtreeOf(queryClient: QueryClient, id: string): Set<string> {
   return new Set([id]);
 }
 
+/** The project of a page as the cache knows it: its detail, or a tree that holds it. */
+function projectOf(queryClient: QueryClient, id: string): string | undefined {
+  const detail = queryClient.getQueryData<WikiPage>(qk.pages.detail(id));
+  if (detail) return detail.project_id;
+  for (const [, tree] of queryClient.getQueriesData<Page<PageNode>>({ queryKey: [...qk.pages.all, 'list'] })) {
+    const nodes = tree?.items ?? [];
+    if (treeIds(nodes).has(id)) return nodes[0]!.project_id;
+  }
+  return undefined;
+}
+
 /** Whether a cached query is about one of `ids`: a page, the versions of one, or one of its versions. */
 function aboutPages(query: Query, ids: Set<string>): boolean {
   const [, kind, arg] = query.queryKey as readonly unknown[];
@@ -100,19 +150,41 @@ function aboutPages(query: Query, ids: Set<string>): boolean {
   return kind === 'list' && typeof arg === 'object' && arg !== null && ids.has((arg as { page?: string }).page ?? '');
 }
 
+export interface DeletePageVars {
+  id: string;
+  /** The project of the page, when the cache may not know it any more. */
+  project_id?: string;
+  /** The page and its subtree as the screen knew it before it took them out of its tree (the undo toast). */
+  subtree?: readonly string[];
+}
+
 /**
- * Deletes a page with its subtree; the UI calls this when the undo toast has run out. Answers `{ deleted }`. The
- * subtree leaves the cache (detail, versions) and counts as gone before the tree loads again.
+ * Deletes a page with its subtree; the UI calls this when the undo toast has run out. Variable: the page id, or
+ * `{ id, project_id?, subtree? }`. Answers `{ deleted }`. Before the tree loads again, the subtree counts as gone and
+ * leaves the cache (detail, versions): what the variables name, what the cached trees hold below the page, and every
+ * cached page of the project the tree on the server holds no more (read once more past the cache, `goneFromTree`).
  */
 export function useDeletePage() {
-  return useApiMutation(deletePage, PAGE_KEYS, {
-    onSuccess: (_answer, id, queryClient) => {
-      const ids = subtreeOf(queryClient, id);
-      ids.forEach((page) => markLiveGone(page, 'page'));
-      const roots: unknown[] = [qk.pages.all[0], qk.pageVersions.all[0]];
-      queryClient.removeQueries({ predicate: (query) => roots.includes(query.queryKey[0]) && aboutPages(query, ids) });
+  const queryClient = useQueryClient();
+  return useApiMutation(
+    async (vars: string | DeletePageVars) => {
+      const { id, project_id, subtree = [] } = typeof vars === 'string' ? { id: vars } : vars;
+      const project = project_id ?? projectOf(queryClient, id);
+      const answer = await deletePage(id);
+      const ids = new Set([...subtree, ...subtreeOf(queryClient, id)]);
+      if (project !== undefined) (await goneFromTree(queryClient, project)).forEach((page) => ids.add(page));
+      forget(queryClient, ids);
+      return answer;
     },
-  });
+    PAGE_KEYS,
+  );
+}
+
+/** Marks deleted pages as gone and takes their queries (detail, versions) out of the cache. */
+function forget(queryClient: QueryClient, ids: Set<string>): void {
+  const roots: unknown[] = [qk.pages.all[0], qk.pageVersions.all[0]];
+  ids.forEach((page) => markLiveGone(page, 'page'));
+  queryClient.removeQueries({ predicate: (query) => roots.includes(query.queryKey[0]) && aboutPages(query, ids) });
 }
 
 /** The kept versions of a page, the newest first, without their text. */

@@ -81,7 +81,7 @@ describe('pages', () => {
     expect(api.calls).toEqual([]);
   });
 
-  it('makes the pages, their versions and the search stale after every change', async () => {
+  it('makes the pages, their versions, the search and the references stale after every change (a reference shows the title)', async () => {
     api = mockApi({
       'POST /api/v1/projects/p_web/pages': () => ({ status: 201, body: { data: makePage() } }),
       'PATCH /api/v1/pages/pg_web_structure': () => ({ body: { data: { ...seitenstruktur, version: 4 } } }),
@@ -89,7 +89,7 @@ describe('pages', () => {
       'POST /api/v1/pages/pg_web_structure/versions/pv_structure_2/restore': () => ({ body: { data: { ...seitenstruktur, version: 5 } } }),
       'DELETE /api/v1/pages/pg_web_kickoff': () => ({ body: { deleted: 1 } }),
     });
-    const probes = [qk.pages.list({ project: 'p_web' }), qk.pageVersions.list({ page: 'pg_web_design' }), qk.search.list({ q: 'seite' }), qk.workItems.all];
+    const probes = [qk.pages.list({ project: 'p_web' }), qk.pageVersions.list({ page: 'pg_web_design' }), qk.search.list({ q: 'seite' }), qk.references.page('pg_web_structure'), qk.workItems.all];
     const fill = () => probes.forEach((queryKey) => queryClient.setQueryData(queryKey, { items: [], next_cursor: null, total: 0 }));
     const stale = () => probes.map((queryKey) => queryClient.getQueryState(queryKey)?.isInvalidated);
     const { result } = renderHook(
@@ -107,7 +107,7 @@ describe('pages', () => {
     for (const change of changes) {
       fill();
       await act(change);
-      expect(stale()).toEqual([true, true, true, false]);
+      expect(stale()).toEqual([true, true, true, true, false]);
     }
     expect(api.calls.map(({ method, url }) => `${method} ${url}`)).toEqual([
       'POST /api/v1/projects/p_web/pages',
@@ -126,7 +126,7 @@ describe('pages', () => {
     api = mockApi({
       'GET /api/v1/projects/p_web/pages': () => {
         cachedWhenAsked = [qk.pages.detail('pg_web_hosting'), qk.pageVersions.list({ page: 'pg_web_tech' }), qk.pageVersions.detail('pv_domain_1')].map((queryKey) =>
-          queryClient.getQueryState(queryKey),
+          queryClient.getQueryData(queryKey),
         );
         return { body: { data: tree, meta: { total: 12 } } };
       },
@@ -136,6 +136,7 @@ describe('pages', () => {
       'GET /api/v1/pages/pg_web_structure': () => ({ body: { data: seitenstruktur } }),
       'DELETE /api/v1/pages/pg_web_tech': () => ({ body: { deleted: 5 } }),
     });
+    queryClient.setQueryData(qk.pages.detail('pg_web_tech'), makePage({ id: 'pg_web_tech' }));
     const { result } = renderHook(
       () => ({
         tree: usePages('p_web'),
@@ -165,22 +166,77 @@ describe('pages', () => {
       'GET /api/v1/pages/pg_web_domain/versions/pv_domain_1',
       'GET /api/v1/pages/pg_web_structure',
       'DELETE /api/v1/pages/pg_web_tech',
+      // once past the cache, to tell what the tree holds no more; then the tree of the screen
+      'GET /api/v1/projects/p_web/pages',
       'GET /api/v1/projects/p_web/pages',
       'GET /api/v1/pages/pg_web_structure',
     ]);
   });
 
-  it('removes only the page itself when no tree in the cache names it', async () => {
-    api = mockApi({ 'DELETE /api/v1/pages/pg_app_vision': () => ({ body: { deleted: 1 } }) });
-    queryClient.setQueryData(qk.pages.detail('pg_app_vision'), makePage({ id: 'pg_app_vision', project_id: 'p_app' }));
+  it('deletes the whole subtree when the screen took it out of the tree for the undo toast before', async () => {
+    // the screen showed the tree without "Technik" while its undo toast stood (`withoutPages`)
+    const emptied = webTree.filter((node) => node.id !== 'pg_web_tech');
+    const hosting = makePage({ id: 'pg_web_hosting', parent_id: 'pg_web_tech' });
+    api = mockApi({
+      'GET /api/v1/projects/p_web/pages': () => ({ body: { data: emptied, meta: { total: 7 } } }),
+      'GET /api/v1/pages/pg_web_hosting': () => ({ body: { data: hosting } }),
+      'GET /api/v1/pages/pg_web_hosting/versions': () => ({ body: list([]) }),
+      'DELETE /api/v1/pages/pg_web_tech': () => ({ body: { deleted: 5 } }),
+    });
+    const { result } = renderHook(
+      () => ({ hosting: usePage('pg_web_hosting'), versions: usePageVersions('pg_web_hosting'), gone: usePageGone('pg_web_hosting'), remove: useDeletePage() }),
+      { wrapper },
+    );
+    await waitFor(() => expect([result.current.hosting.data, result.current.versions.data]).not.toContain(undefined));
+    queryClient.setQueryData(qk.pages.list({ project: 'p_web' }), { items: emptied, next_cursor: null, total: 7 });
     queryClient.setQueryData(qk.pages.detail('pg_web_tech'), makePage({ id: 'pg_web_tech' }));
-    queryClient.setQueryData(qk.pages.list({ project: 'p_web' }), { items: webTree, next_cursor: null, total: 12 });
+    const before = api.calls.length;
+
+    // the screen names neither the project nor the subtree: the tree on the server tells
+    await act(() => result.current.remove.mutateAsync('pg_web_tech'));
+
+    expect(result.current.gone).toBe(true);
+    // out of the cache; a screen still showing them asks for them no more
+    expect(queryClient.getQueryData(qk.pages.detail('pg_web_hosting'))).toBeUndefined();
+    expect(queryClient.getQueryData(qk.pageVersions.list({ page: 'pg_web_hosting' }))).toBeUndefined();
+    expect(api.calls.slice(before).map(({ method, url }) => `${method} ${url}`)).toEqual(['DELETE /api/v1/pages/pg_web_tech', 'GET /api/v1/projects/p_web/pages']);
+  });
+
+  it('takes the subtree and the project the screen names, and no more when the tree cannot be read', async () => {
+    api = mockApi({
+      'GET /api/v1/projects/p_web/pages': () => ({ status: 500, body: { reason: 'server_error' } }),
+      'DELETE /api/v1/pages/pg_web_tech': () => ({ body: { deleted: 5 } }),
+      'DELETE /api/v1/pages/pg_app_vision': () => ({ body: { deleted: 1 } }),
+    });
+    for (const id of ['pg_web_tech', 'pg_web_domain', 'pg_web_structure', 'pg_app_vision']) queryClient.setQueryData(qk.pages.detail(id), makePage({ id }));
     const { result } = renderHook(() => useDeletePage(), { wrapper });
 
+    await act(() => result.current.mutateAsync({ id: 'pg_web_tech', project_id: 'p_web', subtree: ['pg_web_tech', 'pg_web_domain'] }));
+    // no tree names it and the cache knows no project of it: the page alone
+    queryClient.removeQueries({ queryKey: qk.pages.detail('pg_app_vision') });
     await act(() => result.current.mutateAsync('pg_app_vision'));
 
-    expect(queryClient.getQueryState(qk.pages.detail('pg_app_vision'))).toBeUndefined();
-    expect(queryClient.getQueryData(qk.pages.detail('pg_web_tech'))).toBeDefined();
+    expect(['pg_web_tech', 'pg_web_domain', 'pg_web_structure'].map((id) => queryClient.getQueryData(qk.pages.detail(id)) !== undefined)).toEqual([false, false, true]);
+    expect(api.calls.map(({ method, url }) => `${method} ${url}`)).toEqual([
+      'DELETE /api/v1/pages/pg_web_tech',
+      'GET /api/v1/projects/p_web/pages',
+      'DELETE /api/v1/pages/pg_app_vision',
+    ]);
+  });
+
+  it('finds the project of a page in a cached tree that still holds it', async () => {
+    api = mockApi({
+      'GET /api/v1/projects/p_web/pages': () => ({ body: { data: webTree.filter((node) => node.id !== 'pg_web_meetings'), meta: { total: 10 } } }),
+      'DELETE /api/v1/pages/pg_web_meetings': () => ({ body: { deleted: 2 } }),
+    });
+    queryClient.setQueryData(qk.pages.list({ project: 'WEB' }), { items: webTree, next_cursor: null, total: 12 });
+    queryClient.setQueryData(qk.pages.detail('pg_web_kickoff'), makePage({ id: 'pg_web_kickoff' }));
+    const { result } = renderHook(() => useDeletePage(), { wrapper });
+
+    await act(() => result.current.mutateAsync('pg_web_meetings'));
+
+    expect(queryClient.getQueryState(qk.pages.detail('pg_web_kickoff'))).toBeUndefined();
+    expect(api.calls.map((call) => call.url)).toContain('/api/v1/projects/p_web/pages');
   });
 
   it('keeps a newer cached page when a save answers late', async () => {
