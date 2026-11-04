@@ -9,7 +9,8 @@
  *   e.g. after the person lost access, A281) arrives as `live.refused` naming the project or item of the channel: the
  *   channel is left at once, the projects load again (a project the person sees again is joined anew with the list).
  *   Any other failure (a deactivated account is sent to the sign-in) means live updates stop: the tab counts as
- *   disconnected until the connection comes back and authorizes again.
+ *   disconnected until the connection comes back and authorizes again. A failure that may pass (5xx, no answer) asks
+ *   for the channel again after 5, 15 and 60 seconds (`AUTH_RETRY_MS`); the banner goes once no channel fails.
  * - `project.deleted` and `work_item.deleted` leave the channel of what was deleted, and it is never asked for again
  *   (a list from before the delete, a detail still holding the item, the next connection): it would only be refused.
  * - `disconnectLive` forgets the projects (the next person joins their own list), `pauseLive` closes the connection
@@ -70,6 +71,13 @@ let down = false;
 let interrupted = false;
 let downTimer: ReturnType<typeof setTimeout> | null = null;
 let currentSocket: string | null = null;
+let me: string | null = null;
+
+/** The pauses before a channel whose authorization failed for a while (5xx, no answer) is asked for again (T14-M3). */
+export const AUTH_RETRY_MS: readonly number[] = [5_000, 15_000, 60_000];
+
+/** Channels whose authorization failed for a while: how often they were asked again, and the timer of the next try. */
+const retries = new Map<string, { tries: number; timer: ReturnType<typeof setTimeout> | null }>();
 
 const projects = new Set<string>();
 const items = new Map<string, number>();
@@ -150,6 +158,8 @@ function onState(current: string): void {
   if (echo === null) return;
   if (current === 'connected') {
     stopTimer();
+    // every channel is authorized anew with the connection
+    stopRetries();
     setSocket(echo.socketId() ?? null);
     status = 'connected';
     setDown(false);
@@ -169,6 +179,50 @@ function onState(current: string): void {
   startTimer();
 }
 
+/** A failure that may pass: a server error or no answer at all (a refusal or the sign-in page does not). */
+function isPassing(error: unknown): boolean {
+  return !(error instanceof ApiError) || error.status >= 500;
+}
+
+function stopRetries(): void {
+  retries.forEach((retry) => {
+    if (retry.timer !== null) clearTimeout(retry.timer);
+  });
+  retries.clear();
+}
+
+/** Asks for the channel again after the next pause of AUTH_RETRY_MS; after the last one it waits for a new connection. */
+function retryLater(channel: string): void {
+  const retry = retries.get(channel) ?? { tries: 0, timer: null };
+  retries.set(channel, retry);
+  const wait = AUTH_RETRY_MS[retry.tries];
+  if (wait === undefined || retry.timer !== null) return;
+  retry.tries += 1;
+  retry.timer = setTimeout(() => {
+    retry.timer = null;
+    resubscribe(channel);
+  }, wait);
+}
+
+/** Leaves the channel and joins it again (Echo then authorizes it anew), if the tab still holds it. */
+function resubscribe(channel: string): void {
+  if (echo === null) return;
+  const project = /^private-project\.(.+)$/.exec(channel)?.[1];
+  const item = /^private-work-item\.(.+)$/.exec(channel)?.[1];
+  if (project !== undefined && projects.has(project)) {
+    echo.leave(`project.${project}`);
+    joinProject(project);
+  } else if (item !== undefined && items.has(item)) {
+    echo.leave(`work-item.${item}`);
+    joinItem(item);
+  } else if (me !== null && channel === `presence-user.${me}`) {
+    echo.leave(`user.${me}`);
+    echo.join(`user.${me}`).listen(MESSAGE, deliver);
+  } else {
+    retries.delete(channel);
+  }
+}
+
 function isAuthAnswer(value: unknown): value is { auth: string } {
   return typeof value === 'object' && value !== null && typeof (value as { auth?: unknown }).auth === 'string';
 }
@@ -184,6 +238,8 @@ function authorize(
   webPost<unknown>('/broadcasting/auth', { socket_id: socketId, channel_name: channelName }).then(
     (answer) => {
       if (isAuthAnswer(answer)) {
+        // a channel that failed for a while works again: once none is failing, the banner goes
+        if (retries.delete(channelName) && retries.size === 0 && status === 'connected') setDown(false);
         callback(null, answer);
         return;
       }
@@ -196,6 +252,7 @@ function authorize(
         emit(refused(channelName));
       } else {
         setDown(true);
+        if (isPassing(error)) retryLater(channelName);
       }
       callback(failure, null);
     },
@@ -240,7 +297,8 @@ export function connectLive(config: LiveConfig | null, me: string): () => void {
   return disconnectLive;
 }
 
-function open(config: LiveConfig, me: string): void {
+function open(config: LiveConfig, person: string): void {
+  me = person;
   status = 'connecting';
   echo = new Echo({
     broadcaster: 'reverb',
@@ -254,7 +312,7 @@ function open(config: LiveConfig, me: string): void {
     channelAuthorization: { endpoint: '/broadcasting/auth', transport: 'ajax', customHandler: authorize },
   });
   echo.connector.pusher.connection.bind('state_change', ({ current }: { current: string }) => onState(current));
-  echo.join(`user.${me}`).listen(MESSAGE, deliver);
+  echo.join(`user.${person}`).listen(MESSAGE, deliver);
   projects.forEach(joinProject);
   items.forEach((_count, id) => joinItem(id));
   startTimer();
@@ -263,6 +321,7 @@ function open(config: LiveConfig, me: string): void {
 
 function close(): void {
   stopTimer();
+  stopRetries();
   if (echo !== null) {
     echo.disconnect();
     echo = null;

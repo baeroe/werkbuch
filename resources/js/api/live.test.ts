@@ -314,6 +314,68 @@ describe('the status of the connection', () => {
   });
 });
 
+describe('a channel whose authorization fails for a while (T14-M3)', () => {
+  it('asks again after 5, 15 and 60 seconds, and the banner goes once it works', async () => {
+    vi.useFakeTimers();
+    let answer: { status: number; body: unknown } = { status: 502, body: { reason: 'http_error' } };
+    api = mockApi({ 'POST /broadcasting/auth': () => answer });
+    connectLive(CONFIG, 'u_mara');
+    echo().state('connecting', 'connected');
+    watchProjects(['p_web']);
+
+    await echo().authorize('private-project.p_web');
+    expect(isLiveConnected()).toBe(false);
+    for (const [wait, left] of [[5_000, 1], [15_000, 2], [60_000, 3]] as const) {
+      vi.advanceTimersByTime(wait - 1);
+      expect(echo().left).toHaveLength(left - 1);
+      vi.advanceTimersByTime(1);
+      // left and joined again: Echo authorizes the new subscription
+      expect(echo().left).toEqual(Array.from({ length: left }, () => 'project.p_web'));
+      expect(echo().channels.has('private-project.p_web')).toBe(true);
+      if (left < 3) await echo().authorize('private-project.p_web');
+    }
+    // three tries, then it waits for the next connection
+    answer = { status: 200, body: { auth: 'werkbuch-key:signature' } };
+    await echo().authorize('private-project.p_web');
+    expect(isLiveConnected()).toBe(true);
+    vi.advanceTimersByTime(120_000);
+    expect(echo().left).toHaveLength(3);
+  });
+
+  it('asks the own channel again after a lost answer, and leaves nothing it no longer watches', async () => {
+    vi.useFakeTimers();
+    api = mockApi({ 'POST /broadcasting/auth': () => ({ status: 503, body: { reason: 'service_unavailable' } }) });
+    connectLive(CONFIG, 'u_mara');
+    echo().state('connecting', 'connected');
+    watchProjects(['p_web']);
+
+    await echo().authorize('presence-user.u_mara');
+    await echo().authorize('private-project.p_web');
+    watchProjects([]);
+    vi.advanceTimersByTime(5_000);
+
+    // the own channel again; the project is gone from the list: it stays left
+    expect(echo().left).toEqual(['project.p_web', 'user.u_mara']);
+    expect([...echo().channels.keys()]).toEqual(['presence-user.u_mara']);
+  });
+
+  it('asks nothing again after a refusal or a redirect to the sign-in', async () => {
+    vi.useFakeTimers();
+    let answer: { status: number; body: unknown } = { status: 403, body: { reason: 'forbidden' } };
+    api = mockApi({ 'POST /broadcasting/auth': () => answer });
+    connectLive(CONFIG, 'u_mara');
+    echo().state('connecting', 'connected');
+
+    await echo().authorize('presence-user.u_mara');
+    answer = { status: 200, body: '<!DOCTYPE html><title>Sign in</title>' };
+    await echo().authorize('presence-user.u_mara');
+    vi.advanceTimersByTime(120_000);
+
+    expect(echo().left).toEqual([]);
+    expect(isLiveConnected()).toBe(false);
+  });
+});
+
 describe('channels', () => {
   it('delivers the messages of the person and of the projects to every subscriber until it unsubscribes', () => {
     const events: LiveEvent[] = [];
