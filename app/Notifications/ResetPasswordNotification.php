@@ -22,6 +22,7 @@ final class ResetPasswordNotification extends ResetPassword implements ShouldBeE
 {
     use Queueable;
 
+    /** Stands in the payload (`maxTries`); next to retryUntil() Laravel counts no tries, the pauses decide. */
     public int $tries = 5;
 
     /** When the token runs out: the broker wrote it just before this mail was made. */
@@ -36,8 +37,9 @@ final class ResetPasswordNotification extends ResetPassword implements ShouldBeE
     }
 
     /**
-     * The worker fails the job instead of running it after this moment (it then counts no tries: the pauses of
-     * backoff() leave four attempts within the 60 minutes of a token).
+     * The worker fails the job instead of running it after this moment. With retryUntil() Laravel counts no tries
+     * (`$tries` has no effect next to it): the number of attempts comes from the pauses of backoff() alone, five
+     * within the 60 minutes of a token (51 minutes of pauses; the next one, the last pause again, ends after it).
      */
     public function retryUntil(): DateTimeInterface
     {
@@ -60,7 +62,7 @@ final class ResetPasswordNotification extends ResetPassword implements ShouldBeE
      */
     public function backoff(): array
     {
-        return [60, 300, 900, 3600];
+        return [60, 300, 900, 1800];
     }
 
     /**

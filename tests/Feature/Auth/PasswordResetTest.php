@@ -186,7 +186,7 @@ it('writes the token once and leaves the retries to the mail', function () use (
         ->and($queued()[0]['displayName'])->toBe(ResetPasswordNotification::class)
         ->and($queued()[0]['data']['commandName'])->toBe(SendQueuedNotifications::class)
         ->and($queued()[0]['maxTries'])->toBe(5)
-        ->and($queued()[0]['backoff'])->toBe('60,300,900,3600');
+        ->and($queued()[0]['backoff'])->toBe('60,300,900,1800');
 });
 
 it('keeps the link out of the queued mail in plain text', function () use ($work) {
@@ -217,17 +217,18 @@ it('tries the mail only while the token lives', function () use ($work, $queued,
     expect($queued()[0]['retryUntil'])->toBe($expiry->getTimestamp());
 
     $work(); // at once
-    foreach ([60, 300, 900] as $pause) {
+    foreach ([60, 300, 900, 1800] as $pause) {
         $this->travel($pause)->seconds();
         $work();
     }
-    expect($attempts)->toHaveCount(4)->and(now()->lessThan($expiry))->toBeTrue();
+    // five tries within the 60 minutes of the token (51 minutes of pauses)
+    expect($attempts)->toHaveCount(5)->and(now()->lessThan($expiry))->toBeTrue();
 
-    // the last pause (an hour) ends after the token: the worker fails the mail instead of sending a dead link
-    $this->travel(3600)->seconds();
+    // the next pause (the last one again) ends after the token: the worker fails the mail instead of sending a dead link
+    $this->travel(1800)->seconds();
     $work();
 
-    expect($attempts)->toHaveCount(4)->and($queued())->toBe([]);
+    expect($attempts)->toHaveCount(5)->and($queued())->toBe([]);
     Exceptions::assertReported(MaxAttemptsExceededException::class);
 });
 
