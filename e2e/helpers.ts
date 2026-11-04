@@ -197,13 +197,16 @@ export function totp(secret: string, at = Date.now()): string {
 
 /**
  * Waits until the browser of `page` holds the live channel `channel` (A305): the answer of `/broadcasting/batch` that
- * signs it. With `{ prefix: true }` any channel that starts with `channel`, e.g. `presence-user.` for the own one.
+ * signs it. With `{ prefix: true }` any channel that starts with `channel`, e.g. `presence-user.` for the own one. An
+ * answer whose page was left meanwhile (its body is gone) does not count.
  */
 export function channelHeld(page: Page, channel: string, { prefix = false } = {}): Promise<unknown> {
   const named = (name: string) => (prefix ? name.startsWith(channel) : name === channel);
   return page.waitForResponse(async (response) => {
     if (!response.url().endsWith('/broadcasting/batch') || !response.ok()) return false;
-    const channels = ((await response.json()) as { channels?: Record<string, { auth?: unknown }> }).channels ?? {};
+    // the answer of a page the browser has left since (the sign-in's `/my-items`) has no body any more: not this one
+    const body = (await response.json().catch(() => null)) as { channels?: Record<string, { auth?: unknown }> } | null;
+    const channels = body?.channels ?? {};
     return Object.entries(channels).some(([name, answer]) => named(name) && typeof answer.auth === 'string');
   });
 }
