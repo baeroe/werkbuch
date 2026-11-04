@@ -20,7 +20,7 @@
  */
 
 import { CalendarClock, CalendarSync, Check, CircleDot, Ellipsis, Trash2, Webhook, type LucideIcon } from 'lucide-react';
-import type { MouseEvent, ReactNode } from 'react';
+import { useId, type MouseEvent, type ReactNode } from 'react';
 import { botWord, formatDay } from '@/components/fields/format';
 import { linkFocusRing } from '@/components/items/ItemLink';
 import { Avatar } from '@/components/ui/Avatar';
@@ -182,6 +182,8 @@ export function NotificationRow({ notification, ctx, subject, current, tabStop, 
   );
   const ago = timeAgo(notification.created_at, ctx.now, ctx.timeZone);
   const stamp = formatMoment(notification.created_at, ctx.timeZone);
+  // the buttons of every row of a card have the same name: the sentence tells them apart (T17-M1)
+  const sentenceId = useId();
 
   function click(event: MouseEvent<HTMLAnchorElement>) {
     if (event.button !== 0) return;
@@ -225,7 +227,7 @@ export function NotificationRow({ notification, ctx, subject, current, tabStop, 
               <span className="sr-only">{t('inbox.unread_mark')}</span>{' '}
             </>
           )}
-          {sentence}
+          <span id={sentenceId}>{sentence}</span>
           {excerpt && <span className="mt-0.5 line-clamp-2 block max-w-[65ch] text-sm break-words text-muted">„{excerpt}“</span>}
         </a>
         <time dateTime={notification.created_at} title={stamp} className="mt-0.5 block text-sm text-muted tabular-nums md:hidden">
@@ -254,9 +256,17 @@ export function NotificationRow({ notification, ctx, subject, current, tabStop, 
             label={t(unread ? 'inbox.row.read' : 'inbox.row.unread', { key: subject })}
             shortcut={unread ? 'e' : 'u'}
             tabIndex={tabStop ? 0 : -1}
+            aria-describedby={sentenceId}
             onClick={() => (unread ? actions.markRead(notification) : actions.markUnread(notification))}
           />
-          <IconButton icon={Trash2} label={t('inbox.row.delete', { key: subject })} shortcut="#" tabIndex={tabStop ? 0 : -1} onClick={() => actions.remove(notification.id)} />
+          <IconButton
+            icon={Trash2}
+            label={t('inbox.row.delete', { key: subject })}
+            shortcut="#"
+            tabIndex={tabStop ? 0 : -1}
+            aria-describedby={sentenceId}
+            onClick={() => actions.remove(notification.id)}
+          />
         </div>
       </div>
       {/* on touch screens (a phone, a tablet without a mouse): one 44 px target with the same two actions, without opening the row */}
@@ -268,7 +278,9 @@ export function NotificationRow({ notification, ctx, subject, current, tabStop, 
                 type="button"
                 tabIndex={tabStop ? 0 : -1}
                 aria-label={t('inbox.row.menu', { key: subject })}
-                className="inline-flex size-11 cursor-pointer items-center justify-center rounded-chip text-muted transition-colors duration-120 hover:bg-hover hover:text-ink data-popup-open:bg-hover md:size-7"
+                aria-describedby={sentenceId}
+                // 44 px wherever the pointer is a finger, also on a tablet; smaller only with a mouse (T17-M7)
+                className="inline-flex size-11 cursor-pointer items-center justify-center rounded-chip text-muted transition-colors duration-120 hover:bg-hover hover:text-ink data-popup-open:bg-hover [@media(pointer:fine)]:size-7"
               >
                 <Ellipsis className="size-4" aria-hidden="true" />
               </button>

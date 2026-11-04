@@ -595,6 +595,50 @@ describe('the keys and the read marks', () => {
     expect(toastTitles().filter((title) => title !== 'Keine Benachrichtigung ausgewählt')).toEqual([]);
   });
 
+  it('leaves the row alone with u and # while the focus is in the preview (T17-M6)', async () => {
+    const user = setup();
+    renderInbox();
+    await loaded();
+    await user.keyboard('j');
+    await user.keyboard('e');
+    await waitFor(() => expect(posts('read')).toHaveLength(1));
+    const preview = document.createElement('aside');
+    preview.setAttribute('data-peek-panel', '');
+    const inside = document.createElement('button');
+    preview.append(inside);
+    document.body.append(preview);
+    onTestFinished(() => preview.remove());
+
+    act(() => inside.focus());
+    await user.keyboard('u');
+    await user.keyboard('#');
+    expect(posts('unread')).toEqual([]);
+    expect(rows()[0]!.hasAttribute('data-unread')).toBe(false);
+    expect(canUndo()).toBe(false);
+  });
+
+  it('describes the buttons of a row by its sentence (T17-M1)', async () => {
+    renderInbox();
+    await loaded();
+
+    const menu = within(rows()[0]!).getByRole('button', { name: /^Aktionen/ });
+    const described = document.getElementById(menu.getAttribute('aria-describedby')!);
+    expect(described?.textContent).toMatch(/Ida Brenner hat dich erwähnt/);
+  });
+
+  it('says that all was read when marking all finds nothing left (T17-M4)', async () => {
+    const user = setup();
+    overrides['POST /api/v1/notifications/read'] = () => ({ body: { updated: 0 } });
+    renderInbox();
+    await loaded();
+    await waitFor(() => expect(status().textContent).toBe('3 ungelesen'));
+
+    await user.keyboard('{Shift>}E{/Shift}');
+    await waitFor(() => expect(posts('read')).toEqual([{ all: true }]));
+    await waitFor(() => expect(toastTitles()).toContain('Alles gelesen'));
+    expect(toastTitles().some((title) => title.startsWith('0 '))).toBe(false);
+  });
+
   it('marks all read with shift+e, only mentions in the mentions filter', async () => {
     const user = setup();
     renderInbox('/inbox?mentions=1');

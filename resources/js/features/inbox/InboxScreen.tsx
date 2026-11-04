@@ -44,6 +44,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
 import { currentToasts, toast } from '@/components/ui/toast';
+import { outrankPreview } from '@/components/fields/commands/context';
 import { useSelection } from '@/features/items/selection/useSelection';
 import { qk } from '@/hooks/keys';
 import { UNREAD_COUNT_ARGS, useDeleteNotification, useNotifications } from '@/hooks/notifications';
@@ -76,6 +77,9 @@ type FilterValue = 'unread' | 'mentions';
 const UNREAD = UNREAD_COUNT_ARGS;
 /** The query of the unread mentions, for "Alle als gelesen markieren" in the filter "Erwähnungen" (A291). */
 const UNREAD_MENTIONS = { unread_only: true, mentions_only: true, per_page: 1 } as const;
+
+/** The preview beside the inbox (`PeekHost`). */
+const PREVIEW = 'aside[data-peek-panel]';
 
 /** A popup that gives the focus back when it closes: the palette, the menu of a row. */
 const inPopup = (element: Element | null) => Boolean(element?.closest('[role="dialog"], [role="menu"]'));
@@ -326,7 +330,9 @@ export function InboxScreen() {
       ids.flatMap((id) => storedOf(id) ?? []),
       mentionsOnly ? { mentions_only: true } : {},
     );
-    if (updated !== null) toast({ title: tn(mentionsOnly ? 'inbox.read_all.done_mentions' : 'inbox.read_all.done', updated) });
+    // nothing was left to mark (another tab was quicker): said like an inbox that was read already, no "0 …" (T17-M4)
+    if (updated === 0) hint(t('inbox.all_read'), t(mentionsOnly ? 'inbox.read_all.none_mentions' : 'inbox.read_all.none'));
+    else if (updated !== null) toast({ title: tn(mentionsOnly ? 'inbox.read_all.done_mentions' : 'inbox.read_all.done', updated) });
   }
 
   /** The row goes at once, the call follows when the toast runs out; "Rückgängig" (⌘Z) brings the row back. */
@@ -411,10 +417,15 @@ export function InboxScreen() {
     focus: (id) => links.current.get(id)?.focus(),
     container: listRef,
   });
-  const hasRows = () => order.length > 0;
+  // the keys of a row act on the inbox, not while the focus is in the preview (its keys are the item's, T17-M6)
+  const hasRows = () => order.length > 0 && !document.activeElement?.closest(PREVIEW);
   useShortcut('inbox.read', () => onCursorRow((notification) => setRead([notification], true)), { when: hasRows });
   useShortcut('inbox.unread', () => onCursorRow((notification) => setRead([notification], false)), { when: hasRows });
   useShortcut('inbox.delete', () => onCursorRow((notification) => remove(notification.id)), { when: hasRows });
+  // with the focus nowhere, e marks the row with the cursor read, not the preview's title (T17-M2)
+  const cursorRef = useRef(current);
+  cursorRef.current = current;
+  useEffect(() => outrankPreview(() => cursorRef.current !== null), []);
   useShortcut('inbox.read_all', () => void markAll());
 
   const commandGroup = t('shortcuts.group.inbox');

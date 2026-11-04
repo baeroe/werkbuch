@@ -195,12 +195,27 @@ function currentTargets(own?: { id: number; options: ItemCommandsOptions }): Tar
 export function previewKeysAct(panel: RefObject<HTMLElement | null> | undefined): boolean {
   const focus = document.activeElement;
   if (panel?.current && focus && panel.current.contains(focus)) return true;
-  const outranked = mounts.some((mount) => {
-    const options = mount.options();
-    return Boolean(options.itemId) || Boolean(options.current?.());
-  });
+  const outranked =
+    mounts.some((mount) => {
+      const options = mount.options();
+      return Boolean(options.itemId) || Boolean(options.current?.());
+    }) || [...outranks].some((has) => has());
   if (outranked || useUiStore.getState().selection.length > 0) return false;
   return !focus || focus === document.body || focus.id === 'main';
+}
+
+/** Lists that are no item list but have a cursor of their own (the inbox): asked like the cursor of a list (rule 4). */
+const outranks = new Set<() => boolean>();
+
+/**
+ * A screen with a cursor of its own outranks the preview while it has one (T17-M2: e of the inbox marks its row read,
+ * not the preview's title). Answers the function that ends it.
+ */
+export function outrankPreview(hasCursor: () => boolean): () => void {
+  outranks.add(hasCursor);
+  return () => {
+    outranks.delete(hasCursor);
+  };
 }
 
 /** The targets of the moment the palette opened: it takes the focus, so asking again would lose the preview. */
