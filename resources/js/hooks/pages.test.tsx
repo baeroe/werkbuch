@@ -239,6 +239,42 @@ describe('pages', () => {
     expect(api.calls.map((call) => call.url)).toContain('/api/v1/projects/p_web/pages');
   });
 
+  it('takes no page as deleted that came into the cache while the tree was read', async () => {
+    api = mockApi({
+      'GET /api/v1/projects/p_web/pages': () => ({ body: { data: webTree.filter((node) => node.id !== 'pg_web_meetings'), meta: { total: 10 } } }),
+      'DELETE /api/v1/pages/pg_web_meetings': () => ({ body: { deleted: 2 } }),
+    });
+    let reading = () => {};
+    const read = new Promise<void>((resolve) => (reading = resolve));
+    let release = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const answer = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      if (String(input).includes('/projects/p_web/pages')) {
+        reading();
+        await held;
+      }
+      return answer(input, init);
+    };
+    queryClient.setQueryData(qk.pages.detail('pg_web_meetings'), makePage({ id: 'pg_web_meetings' }));
+    const { result } = renderHook(() => ({ remove: useDeletePage(), fresh: usePageGone('pg_web_fresh'), kickoff: usePageGone('pg_web_kickoff') }), { wrapper });
+
+    try {
+      queryClient.setQueryData(qk.pages.list({ project: 'p_web' }), { items: webTree, next_cursor: null, total: 12 });
+      const removal = act(() => result.current.remove.mutateAsync('pg_web_meetings'));
+      await read;
+      // meanwhile a page is created (the tree being read is older than it)
+      queryClient.setQueryData(qk.pages.detail('pg_web_fresh'), makePage({ id: 'pg_web_fresh' }));
+      release();
+      await removal;
+    } finally {
+      globalThis.fetch = answer;
+    }
+
+    expect(result.current).toMatchObject({ fresh: false, kickoff: true });
+    expect(queryClient.getQueryData(qk.pages.detail('pg_web_fresh'))).toBeDefined();
+  });
+
   it('keeps a newer cached page when a save answers late', async () => {
     let answer = () => {};
     const held = new Promise<void>((resolve) => (answer = resolve));

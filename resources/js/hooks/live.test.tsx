@@ -776,6 +776,29 @@ describe('useLiveSync', () => {
       expect([structure, app].map((query) => query.fetches())).toEqual([2, 2]);
     });
 
+    it('takes no page as deleted that came into the cache while the tree was read', async () => {
+      api = mockApi({ 'GET /api/v1/projects/p_web/pages': () => ({ body: { data: webTree.filter((node) => node.id !== 'pg_web_tech'), meta: { total: 7 } } }) });
+      const release = holdRequests();
+      const hosting = await showing(qk.pages.detail('pg_web_hosting'), { id: 'pg_web_hosting', project_id: 'p_web' });
+      const { result } = renderHook(
+        () => {
+          useLiveSync();
+          return [usePageGone('pg_web_hosting'), usePageGone('pg_web_fresh')];
+        },
+        { wrapper },
+      );
+
+      send({ event_id: 'ev_1', type: 'page.deleted', page_id: 'pg_web_tech', page_ids: null, item_id: null });
+      await pass(LIVE_BURST_MS);
+      // created while the tree is read: the tree is older than the page
+      const fresh = await showing(qk.pages.detail('pg_web_fresh'), { id: 'pg_web_fresh', project_id: 'p_web' });
+      release();
+      await vi.waitFor(() => expect(result.current).toEqual([true, false]));
+      await pass(0);
+
+      expect([hosting.fetches(), fresh.fetches()]).toEqual([1, 2]);
+    });
+
     it('takes nothing as deleted when the tree cannot be read', async () => {
       api = mockApi({ 'GET /api/v1/projects/p_web/pages': () => ({ status: 500, body: { reason: 'server_error' } }) });
       const hosting = await showing(qk.pages.detail('pg_web_hosting'), { id: 'pg_web_hosting', project_id: 'p_web' });

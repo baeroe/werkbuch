@@ -60,16 +60,12 @@ export function treeIds(nodes: readonly PageNode[], into = new Set<string>()): S
  * The pages of a project the cache knows that its tree on the server holds no more: deleted (with `useDeletePage`
  * here, or by somebody else when a live message could not name them all). The cached trees of the project (by the
  * project in the key, or the pages in the answer: a screen may name it by its identifier) and the cached pages of the
- * project tell which there were. The tree is read past the cache, so no answer a screen shows is replaced; a tree
- * that cannot be read takes nothing as gone.
+ * project tell which there were, as they stand before the read: a page that comes into the cache while the tree is
+ * read (just created, a live message) may be missing from a tree read before it. The tree is read past the cache, so
+ * no answer a screen shows is replaced; a tree that cannot be read takes nothing as gone.
  */
 export async function goneFromTree(queryClient: QueryClient, project: string): Promise<string[]> {
-  let fresh: Set<string>;
-  try {
-    fresh = treeIds((await listPages(project)).items);
-  } catch {
-    return [];
-  }
+  // what the cache knows before the read: a page that comes into it meanwhile may be newer than the tree that is read
   const known = new Set<string>();
   const cache = queryClient.getQueryCache();
   for (const query of cache.findAll({ queryKey: [...qk.pages.all, 'list'] })) {
@@ -79,6 +75,12 @@ export async function goneFromTree(queryClient: QueryClient, project: string): P
   for (const query of cache.findAll({ queryKey: [...qk.pages.all, 'detail'] })) {
     const page = query.state.data as { id?: string; project_id?: string } | undefined;
     if (page?.id !== undefined && page.project_id === project) known.add(page.id);
+  }
+  let fresh: Set<string>;
+  try {
+    fresh = treeIds((await listPages(project)).items);
+  } catch {
+    return [];
   }
   return [...known].filter((id) => !fresh.has(id));
 }
