@@ -11,7 +11,8 @@ use Throwable;
  * The broadcaster of the feature tests (`broadcasts()` in tests/Pest.php, driver `recording`): it keeps what would go
  * to Reverb. A message is `{channels, event, payload, socket}`, the socket pulled out of the payload as the Pusher
  * broadcaster does (the tab it leaves out); `terminated()` names the accounts whose connections Reverb would close
- * (K4). `failWith()` makes both throw, as a Reverb that is down.
+ * (K4). `failWith()` makes both throw, as a Reverb that is down; `attempts()` counts every broadcast and termination
+ * that reached it, failed or not.
  */
 final class RecordingBroadcaster extends Broadcaster implements TerminatesUsers
 {
@@ -22,6 +23,14 @@ final class RecordingBroadcaster extends Broadcaster implements TerminatesUsers
     private array $terminated = [];
 
     private ?Throwable $failure = null;
+
+    private int $attempts = 0;
+
+    /** How many broadcasts and terminations reached the broadcaster, failed ones included. */
+    public function attempts(): int
+    {
+        return $this->attempts;
+    }
 
     /**
      * @return list<array{channels: list<string>, event: string, payload: array<string, mixed>, socket: string|null}>
@@ -62,6 +71,7 @@ final class RecordingBroadcaster extends Broadcaster implements TerminatesUsers
      */
     public function broadcast(array $channels, $event, array $payload = []): void
     {
+        $this->attempts++;
         if ($this->failure !== null) {
             throw $this->failure;
         }
@@ -74,6 +84,7 @@ final class RecordingBroadcaster extends Broadcaster implements TerminatesUsers
 
     public function terminateUser(string $id): void
     {
+        $this->attempts++;
         if ($this->failure !== null) {
             throw $this->failure;
         }

@@ -20,6 +20,7 @@ use GuzzleHttp\Middleware;
 use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
 use Illuminate\Broadcasting\BroadcastManager;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Exceptions;
 use Pusher\Pusher;
 
@@ -145,6 +146,20 @@ it("disconnects through Reverb's terminate connections", function () use ($world
     expect($paths)->toBe(['POST /apps/live/events', "POST /apps/live/users/{$w['mara']->id}/terminate_connections"]);
 });
 
+it('goes on with the other accounts after a refusal for one, and sets no mark (T10-M4)', function () use ($world, $reverb) {
+    $w = $world();
+    $requests = $reverb([new Response(200, [], '{}'), new Response(404, [], 'Unknown user'), new Response(200, [], '{}')]);
+    User::factory()->create(['name' => 'Lene']);
+    Exceptions::fake();
+
+    UpdateProject::run(actor($w['tom']), $w['web'], ['visibility' => 'private']);
+
+    // the message and both disconnections: a 4xx is about one account, not about Reverb
+    expect($requests)->toHaveCount(3)
+        ->and(Cache::has('live-down'))->toBeFalse();
+    Exceptions::assertReportedCount(1);
+});
+
 it('stops at the first failure when Reverb is down and reports it once', function () use ($world, $reverb) {
     $w = $world();
     $down = fn () => new ConnectException('Connection refused', new Request('POST', '/'));
@@ -155,6 +170,7 @@ it('stops at the first failure when Reverb is down and reports it once', functio
     UpdateProject::run(actor($w['tom']), $w['web'], ['visibility' => 'private']);
 
     // the message and the first of three disconnections: no wait for every account against a dead Reverb
-    expect($requests)->toHaveCount(2);
+    expect($requests)->toHaveCount(2)
+        ->and(Cache::has('live-down'))->toBeTrue();
     Exceptions::assertReportedCount(1);
 });

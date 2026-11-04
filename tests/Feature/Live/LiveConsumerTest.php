@@ -191,8 +191,12 @@ it('keeps going when Reverb is down and reports once in ten minutes', function (
     UpdateWorkItem::run(actor($w['mara']), $w['item'], ['title' => 'Drei']);
     Exceptions::assertReportedCount(2);
 
+    // the failure of "Drei" holds the messages back for 30 seconds (A297), Reverb or not
     $this->live->failWith(null);
     UpdateWorkItem::run(actor($w['mara']), $w['item'], ['title' => 'Vier']);
+    expect($this->live->sent())->toBe([]);
+    $this->travel(31)->seconds();
+    UpdateWorkItem::run(actor($w['mara']), $w['item'], ['title' => 'Fünf']);
     expect($this->live->sent())->toHaveCount(1);
 });
 
