@@ -18,14 +18,18 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * "Erneut versuchen" on the system page (A287): puts the failed jobs named in `ids` (UUIDs as the page lists them, any
  * case; 1 to MAX_IDS; unknown ones are passed over), or all of them without `ids`, back into the queue they failed in,
  * with their attempts reset as `queue:retry` does, and forgets them. Their rows are read under a lock, so two admins
- * who retry at once put each job back once. One event `system.failed_jobs_retried` (subject the organization,
- * `meta.count`, `meta.ids`) when something went back; answers how many.
+ * who retry at once put each job back once. All of them go in blocks of BLOCK, each in its own transaction. One event
+ * `system.failed_jobs_retried` (subject the organization, `meta.count`, `meta.ids`) per block that put something back;
+ * answers how many in all.
  */
 final class RetryFailedJobs
 {
     use AsAction;
 
     public const MAX_IDS = 100;
+
+    /** How many failed jobs one transaction puts back when all of them go. */
+    public const BLOCK = 500;
 
     /**
      * @param  array<string, mixed>  $input
@@ -48,9 +52,29 @@ final class RetryFailedJobs
         /** @var list<string>|null $ids */
         $ids = isset($input['ids']) ? array_map(strtolower(...), $input['ids']) : null;
 
+        if ($ids !== null) {
+            return $this->block($actor, $ids);
+        }
+
+        // all of them: block after block, so no transaction holds thousands of rows (T11-M1)
+        $total = 0;
+        do {
+            $total += $retried = $this->block($actor, null);
+        } while ($retried === self::BLOCK);
+
+        return $total;
+    }
+
+    /**
+     * Puts back the named jobs, or the first BLOCK of all of them, in one transaction with one event.
+     *
+     * @param  list<string>|null  $ids
+     */
+    private function block(Actor $actor, ?array $ids): int
+    {
         return DB::transaction(function () use ($actor, $ids): int {
             $jobs = DB::connection(config('queue.failed.database'))->table(config('queue.failed.table'))
-                ->when($ids !== null, fn ($query) => $query->whereIn('uuid', $ids))
+                ->when($ids !== null, fn ($query) => $query->whereIn('uuid', $ids), fn ($query) => $query->limit(self::BLOCK))
                 ->orderBy('id')->lockForUpdate()
                 ->get(['uuid', 'connection', 'queue', 'payload']);
 

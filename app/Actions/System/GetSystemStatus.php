@@ -17,8 +17,9 @@ use Laravel\Scout\EngineManager;
 use Lorisleiva\Actions\Concerns\AsAction;
 
 /**
- * What the system page shows its org admins (spec 5.2, A287): the version; per queue of `werkbuch.queues` the jobs that
- * are due and not being worked (`pending`) and since when the oldest of them is due (`oldest_at`), `queued_jobs` their
+ * What the system page shows its org admins (spec 5.2, A287): the version; per queue of `werkbuch.queues` (then the
+ * queues of the table it does not know) the jobs that are due and not being worked (`pending`, also one whose
+ * reservation ran out: its worker died) and since when the oldest of them is due (`oldest_at`), `queued_jobs` their
  * sum; jobs due later (mail collections, `delayed_jobs`) are no backlog. The newest FAILED_SHOWN failed jobs with the
  * first line of their error (at most ERROR_MAX characters) and how many there are; Meilisearch over the engine
  * (ReportsStatus, `down` for an engine that cannot say, K15); whether mail can go out (MailSetup); and Reverb: `off`
@@ -78,8 +79,10 @@ final class GetSystemStatus
             ->groupBy('queue')->selectRaw('queue, count(*) as pending, min(available_at) as oldest')
             ->get()->keyBy('queue');
 
-        /** @var list<string> $names */
-        $names = config('werkbuch.queues');
+        /** @var list<string> $known */
+        $known = config('werkbuch.queues');
+        // a queue no worker of the app listens on (a job of an older version, a typo) shows at the end, not nowhere
+        $names = [...$known, ...array_values(array_diff($due->keys()->map(fn ($queue) => (string) $queue)->sort()->all(), $known))];
 
         return array_map(fn (string $queue): array => [
             'queue' => $queue,
@@ -88,12 +91,17 @@ final class GetSystemStatus
         ], $names);
     }
 
-    /** The jobs of the database queue that no worker holds. */
+    /**
+     * The jobs of the database queue that no worker holds: never reserved, or reserved longer ago than `retry_after`
+     * (its worker is gone, the next one takes it again).
+     */
     private function jobs(): Builder
     {
+        $expired = now()->getTimestamp() - (int) config('queue.connections.database.retry_after');
+
         return DB::connection(config('queue.connections.database.connection'))
             ->table(config('queue.connections.database.table'))
-            ->whereNull('reserved_at');
+            ->where(fn (Builder $free) => $free->whereNull('reserved_at')->orWhere('reserved_at', '<=', $expired));
     }
 
     /**

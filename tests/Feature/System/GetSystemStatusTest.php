@@ -63,6 +63,24 @@ it('shows version, backlog per queue and delayed jobs apart', function () use ($
         ]);
 });
 
+it('counts a job whose worker died as backlog, and a queue it does not know at the end (T11-M5)', function () use ($job) {
+    $now = now()->getTimestamp();
+    $retry = (int) config('queue.connections.database.retry_after');
+    // reserved longer ago than retry_after: its worker is gone, the next one takes it again
+    $job('notifications', $now - 600, reservedAt: $now - $retry - 1);
+    $job('notifications', $now - 60, reservedAt: $now - $retry + 5);
+    $job('reports', $now - 30);
+
+    $status = GetSystemStatus::run(actor($this->admin));
+    $queues = collect($status['queues'])->keyBy('queue');
+
+    expect($queues['notifications']['pending'])->toBe(1)
+        ->and($queues['notifications']['oldest_at']?->toJSON())->toBe('2026-11-03T09:50:00.000000Z')
+        ->and(array_column($status['queues'], 'queue'))->toBe([...config('werkbuch.queues'), 'reports'])
+        ->and($queues['reports']['pending'])->toBe(1)
+        ->and($status['queued_jobs'])->toBe(2);
+});
+
 it('lists the newest failed jobs with the first line of the error only', function () use ($failed) {
     foreach (range(1, 51) as $n) {
         $failed('webhooks', 'App\\Jobs\\Old', "old {$n}", sprintf('2026-10-01 %02d:%02d:00', intdiv($n, 60), $n % 60));

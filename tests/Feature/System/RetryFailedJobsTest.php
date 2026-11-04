@@ -51,6 +51,22 @@ it('puts all failed jobs back and records one event', function () use ($failed) 
         ->and($event->meta)->toMatchArray(['count' => 2, 'ids' => [$mail, $hook]]);
 });
 
+it('puts all of many back in blocks of 500, each with its own event (T11-M1)', function () {
+    $now = now()->utc();
+    DB::table('failed_jobs')->insert(array_map(fn (int $n) => [
+        'uuid' => (string) Str::uuid(), 'connection' => 'database', 'queue' => 'notifications',
+        'payload' => json_encode(['displayName' => 'App\\Jobs\\Example', 'attempts' => 5]), 'exception' => 'RuntimeException: boom', 'failed_at' => $now,
+    ], range(1, RetryFailedJobs::BLOCK + 1)));
+
+    expect(RetryFailedJobs::run(actor($this->admin), []))->toBe(RetryFailedJobs::BLOCK + 1)
+        ->and(DB::table('failed_jobs')->count())->toBe(0)
+        ->and(DB::table('jobs')->count())->toBe(RetryFailedJobs::BLOCK + 1);
+
+    $events = eventsOf(EventType::SystemFailedJobsRetried);
+    expect($events->map(fn ($event) => $event->meta['count'])->all())->toBe([RetryFailedJobs::BLOCK, 1])
+        ->and(count($events[0]->meta['ids']))->toBe(RetryFailedJobs::BLOCK);
+});
+
 it('puts back only the named ones', function () use ($failed) {
     $first = $failed('notifications');
     $second = $failed('default');
