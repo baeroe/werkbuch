@@ -872,8 +872,11 @@ describe('the keys and the read marks', () => {
     await user.click(await screen.findByRole('menuitem', { name: 'Benachrichtigung löschen' }));
     expect(screen.queryByRole('region', { name: 'Organisation' })).toBeNull();
     expect(address.visit).not.toHaveBeenCalled();
-    await waitFor(() => expect(document.activeElement?.textContent).toContain('Eine Vorlage hat kein Item angelegt'));
-    expect(document.activeElement?.hasAttribute('data-nav-target')).toBe(true);
+    // the link of that row, not a container on the way (Base UI hands the focus back a frame later; `main` holds the text too)
+    await waitFor(() => {
+      expect(document.activeElement?.hasAttribute('data-nav-target')).toBe(true);
+      expect(document.activeElement?.textContent).toContain('Eine Vorlage hat kein Item angelegt');
+    });
     act(() => currentToasts().forEach((toast) => dismissToast(toast.id)));
     await waitFor(() => expect(api.calls.filter((call) => call.method === 'DELETE').map((call) => call.url)).toEqual(['/api/v1/notifications/n_10']));
   });
