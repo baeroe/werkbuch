@@ -63,7 +63,7 @@ The scheduler runs the reminders every hour, for everyone for whom it is just 08
 
 ## Cleanup
 
-Read notifications are deleted after 90 days; unread ones stay. Collected mails are deleted 90 days after they went out. The scheduler cleans up every hour.
+Read notifications are deleted after 90 days; unread ones stay. Collected mails are deleted 90 days after they went out; notifications you only get by mail go two days after their mail. A reminder hour more than a day ago reminds nobody. The scheduler cleans up every hour.
 
 ## Live updates
 

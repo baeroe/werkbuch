@@ -29,7 +29,7 @@ use Lorisleiva\Actions\Concerns\AsAction;
 /**
  * The reminders "due" and "overdue" (spec 4.14, A275), run every hour by SendDueRemindersJob for the hour it was
  * planned in (`$hourUtc`, K10: a job that waited on the queue past the hour still reminds the zones of its hour, no
- * other). For every time zone of an active person (their own, else the organization's) in which that hour is 08:xx,
+ * other; an hour more than a day ago reminds nobody). For every time zone of an active person (their own, else the organization's) in which that hour is 08:xx,
  * the people of the zone are reminded of each open item assigned to them that is due on their day or before: not
  * archived, its project neither archived nor being deleted, its state neither completed nor canceled, and a project
  * they still see (Visibility, read afresh). One notification `due` per person, item and day (`dedupe_key`
@@ -50,6 +50,10 @@ final class SendDueReminders
     public function handle(Actor $actor, CarbonImmutable $hourUtc): int
     {
         $hour = $hourUtc->utc()->startOfHour();
+        // a job back from failed_jobs after a day would remind of a day that is over (and its mail-only rows may be gone)
+        if ($hour->lessThan(now()->subDay())) {
+            return 0;
+        }
         $organization = Organization::current()->timezone;
         $zones = self::active()->distinct()->pluck('timezone')->map(fn (?string $zone) => $zone ?? $organization)->unique();
 

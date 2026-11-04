@@ -12,7 +12,7 @@ use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Support\Str;
 
 /*
- * Tidying up (Task 8, A276): every hour the read notifications older than 90 days go, the rows only for mail once their
+ * Tidying up (Task 8, A276): every hour the read notifications older than 90 days go, the rows only for mail two days after their
  * collection is sent (or skipped, K8), and the sent collections older than 90 days. Mara's notifications about one item.
  */
 
@@ -40,8 +40,9 @@ it('deletes read notifications after 90 days, keeps unread ones', function () us
 
 it('deletes sent mail-only rows and old collections', function () use ($world, $line, $prune) {
     $w = $world();
-    $sent = NotificationMail::factory()->sent()->create(['user_id' => $w['mara']->id]);
-    $skipped = NotificationMail::factory()->skipped()->create(['user_id' => $w['mara']->id]);
+    $sent = NotificationMail::factory()->sent(now()->subDays(3))->create(['user_id' => $w['mara']->id]);
+    $skipped = NotificationMail::factory()->skipped()->create(['user_id' => $w['mara']->id, 'sent_at' => now()->subDays(3)]);
+    $justSent = NotificationMail::factory()->sent(now()->subDays(2)->addMinute())->create(['user_id' => $w['mara']->id]);
     $open = NotificationMail::factory()->create(['user_id' => $w['mara']->id, 'due_at' => now()->subDays(100)]);
     $old = NotificationMail::factory()->sent(now()->subDays(91))->create(['user_id' => $w['mara']->id]);
     $young = NotificationMail::factory()->sent(now()->subDays(89))->create(['user_id' => $w['mara']->id]);
@@ -49,15 +50,17 @@ it('deletes sent mail-only rows and old collections', function () use ($world, $
     $mailOnlySent = $line($w, ['inbox' => false, 'mail_id' => $sent->id]);
     $mailOnlySkipped = $line($w, ['inbox' => false, 'mail_id' => $skipped->id]);
     $mailOnlyOpen = $line($w, ['inbox' => false, 'mail_id' => $open->id]);
+    // two days after its mail at the earliest (the day of a reminder in every zone, and a job that runs again, T8-M1)
+    $mailOnlyJustSent = $line($w, ['inbox' => false, 'mail_id' => $justSent->id]);
     $inboxOfOld = $line($w, ['mail_id' => $old->id]);
     $inboxOfSent = $line($w, ['mail_id' => $sent->id]);
 
     // two mail-only rows and one collection
     expect($prune())->toBe(3)
         ->and(Notification::query()->pluck('id')->sort()->values()->all())
-        ->toBe(collect([$mailOnlyOpen->id, $inboxOfOld->id, $inboxOfSent->id])->sort()->values()->all())
+        ->toBe(collect([$mailOnlyOpen->id, $mailOnlyJustSent->id, $inboxOfOld->id, $inboxOfSent->id])->sort()->values()->all())
         ->and(NotificationMail::query()->pluck('id')->sort()->values()->all())
-        ->toBe(collect([$sent->id, $skipped->id, $open->id, $young->id])->sort()->values()->all())
+        ->toBe(collect([$sent->id, $skipped->id, $justSent->id, $open->id, $young->id])->sort()->values()->all())
         // an inbox row of a pruned collection stays, without its mail
         ->and($inboxOfOld->fresh()->mail_id)->toBeNull()
         ->and($mailOnlySent->fresh())->toBeNull()

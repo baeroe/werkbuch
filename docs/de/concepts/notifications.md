@@ -63,7 +63,7 @@ Der Scheduler startet die Erinnerungen jede Stunde, für alle, bei denen es gera
 
 ## Aufräumen
 
-Gelesene Benachrichtigungen werden nach 90 Tagen gelöscht; ungelesene bleiben. Gesammelte Mails werden 90 Tage nach dem Versand gelöscht. Der Scheduler räumt stündlich auf.
+Gelesene Benachrichtigungen werden nach 90 Tagen gelöscht; ungelesene bleiben. Gesammelte Mails werden 90 Tage nach dem Versand gelöscht; Benachrichtigungen, die du nur per Mail bekommst, zwei Tage nach ihrer Mail. Eine Erinnerungs-Stunde, die mehr als einen Tag zurückliegt, erinnert niemanden. Der Scheduler räumt stündlich auf.
 
 ## Live-Updates
 

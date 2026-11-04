@@ -2,6 +2,7 @@
 
 use App\Access\ProjectRole;
 use App\Access\RoleAssignments;
+use App\Actions\Notifications\PruneNotifications;
 use App\Actions\Notifications\SaveNotificationPreferences;
 use App\Actions\Notifications\SendDueReminders;
 use App\Actions\Notifications\SendNotificationMail;
@@ -189,6 +190,45 @@ it('opens no second mail when the job runs again after the mail went', function 
 
     expect(NotificationMail::query()->where('user_id', $w['mara']->id)->count())->toBe(1);
     Mail::assertSent(NotificationDigest::class, 1);
+});
+
+it('keeps a mail-only reminder two days after its mail: a second run, also in a later zone, writes nothing (T8-M1)', function () use ($world, $due, $collectionOf) {
+    $w = $world();
+    SaveNotificationPreferences::run(actor($w['tom']), ['preferences' => [['event' => 'due', 'channel' => 'inbox', 'enabled' => false]]]);
+    $due($w['ops'], $w['tom'], '2026-11-03');
+    $at = fn (string $hour) => SendDueReminders::run(Actor::system(User::defaultBot(), 'due_reminders'), CarbonImmutable::parse($hour, 'UTC'));
+    $prune = fn () => PruneNotifications::run(Actor::system(User::defaultBot(), 'prune_notifications'));
+    $this->travelTo(CarbonImmutable::parse('2026-11-03 07:00', 'UTC'));
+    expect($at('2026-11-03 07:00'))->toBe(1);
+    SendNotificationMail::run(Actor::system(User::defaultBot(), 'notification_mail'), $collectionOf($w['tom'], '2026-11-03')->id);
+
+    // an hour later: the row only for mail stays, so the job of 07:00 once more and Tom now in London (08:00 there,
+    // the same day) find it and write nothing
+    $this->travelTo(CarbonImmutable::parse('2026-11-03 08:10', 'UTC'));
+    $prune();
+    expect(Notification::query()->where('user_id', $w['tom']->id)->count())->toBe(1)
+        ->and($at('2026-11-03 07:00'))->toBe(0);
+    $w['tom']->update(['timezone' => 'Europe/London']);
+    expect($at('2026-11-03 08:00'))->toBe(0)
+        ->and(NotificationMail::query()->where('user_id', $w['tom']->id)->count())->toBe(1);
+    Mail::assertSent(NotificationDigest::class, 1);
+
+    // two days after the mail it goes
+    $this->travelTo(CarbonImmutable::parse('2026-11-05 08:10', 'UTC'));
+    $prune();
+    expect(Notification::query()->where('user_id', $w['tom']->id)->count())->toBe(0);
+});
+
+it('reminds nobody for an hour more than a day ago, e.g. a job taken back from failed_jobs', function () use ($world, $due) {
+    $w = $world();
+    $due($w['web'], $w['mara'], '2026-11-03');
+    $this->travelTo(CarbonImmutable::parse('2026-11-05 07:00', 'UTC'));
+
+    expect(SendDueReminders::run(Actor::system(User::defaultBot(), 'due_reminders'), CarbonImmutable::parse('2026-11-03 07:00', 'UTC')))->toBe(0)
+        ->and(Notification::query()->where('kind', NotificationKind::Due)->count())->toBe(0);
+    // within a day it still reminds (a job that waited)
+    $this->travelTo(CarbonImmutable::parse('2026-11-04 06:59', 'UTC'));
+    expect(SendDueReminders::run(Actor::system(User::defaultBot(), 'due_reminders'), CarbonImmutable::parse('2026-11-03 07:00', 'UTC')))->toBe(1);
 });
 
 it('does not remind about closed or archived items or items of archived projects', function () use ($world, $due, $remind, $remindersOf) {
