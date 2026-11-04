@@ -21,6 +21,8 @@
  * - Status: `connecting` (also while the page loads), `connected`, `unavailable`. The banner (`isLiveConnected()`
  *   false) comes only after three seconds without a connection. After an interruption the subscribers get
  *   `live.reconnected` and load again what they show.
+ * - Once Reverb holds a channel (first time and after every reconnect) the subscribers get `live.subscribed` naming
+ *   its project or item: a message sent before that was lost, so what loaded before is loaded once more.
  */
 
 import Echo from 'laravel-echo';
@@ -38,7 +40,7 @@ export interface LiveConfig {
 
 /**
  * A live message: what happened, never what it says (A279). `notifications.changed` and the messages of the browser
- * itself (`live.reconnected`, `live.refused`) have no event behind them (`event_id` null).
+ * itself (`live.reconnected`, `live.refused`, `live.subscribed`) have no event behind them (`event_id` null).
  */
 export interface LiveEvent {
   event_id: string | null;
@@ -105,6 +107,16 @@ function markGone(id: string): void {
 
 function browserEvent(type: string): LiveEvent {
   return { event_id: null, type, project_id: null, item_id: null, comment_id: null, actor_id: null };
+}
+
+/**
+ * `live.subscribed` once Reverb holds a channel (`pusher:subscription_succeeded`, on the first subscription and again
+ * after every reconnect): a message sent before that never reached the tab, so what loaded before may be stale (the
+ * inbox loaded while the mention was being written). Names the project or the item of the channel, neither for the
+ * person's own channel.
+ */
+function held(project: string | null, item: string | null): () => void {
+  return () => emit({ ...browserEvent('live.subscribed'), project_id: project, item_id: item });
 }
 
 /**
@@ -219,7 +231,7 @@ function resubscribe(channel: string): void {
     joinItem(item);
   } else if (me !== null && channel === `presence-user.${me}`) {
     live.leave(`user.${me}`);
-    live.join(`user.${me}`).listen(MESSAGE, deliver);
+    joinOwn(live, me);
   } else {
     retries.delete(channel);
   }
@@ -326,11 +338,15 @@ function leaveProject(id: string): void {
 }
 
 function joinProject(id: string): void {
-  if (!gone.has(id)) echo?.private(`project.${id}`).listen(MESSAGE, deliver);
+  if (!gone.has(id)) echo?.private(`project.${id}`).listen(MESSAGE, deliver).subscribed(held(id, null));
 }
 
 function joinItem(id: string): void {
-  if (!gone.has(id)) echo?.private(`work-item.${id}`).listen(MESSAGE, deliver);
+  if (!gone.has(id)) echo?.private(`work-item.${id}`).listen(MESSAGE, deliver).subscribed(held(null, id));
+}
+
+function joinOwn(live: Echo<'reverb'>, person: string): void {
+  live.join(`user.${person}`).listen(MESSAGE, deliver).subscribed(held(null, null));
 }
 
 /**
@@ -360,7 +376,7 @@ function open(config: LiveConfig, person: string): void {
     channelAuthorization: { endpoint: '/broadcasting/batch', transport: 'ajax', customHandler: authorize },
   });
   echo.connector.pusher.connection.bind('state_change', ({ current }: { current: string }) => onState(current));
-  echo.join(`user.${person}`).listen(MESSAGE, deliver);
+  joinOwn(echo, person);
   projects.forEach(joinProject);
   items.forEach((_count, id) => joinItem(id));
   startTimer();

@@ -22,19 +22,36 @@ const GONE_MAX = 200;
 /** Everything a live message can make stale: what a screen shows again after the connection was gone. */
 const EVERYTHING: readonly QueryKey[] = [qk.workItems.all, qk.activity.all, qk.comments.all, qk.projects.all, qk.members.all, qk.notifications.all];
 
+/** What the person's own channel carries (watching, a new project, a new org role, the inbox): stale once it is held. */
+const OWN_CHANNEL: readonly QueryKey[] = [qk.notifications.all, qk.projects.all, qk.members.all, qk.workItems.all, qk.activity.all];
+
+/** What the channel of a project carries (its items and their history, the project and its members). */
+const PROJECT_CHANNEL: readonly QueryKey[] = [qk.workItems.all, qk.activity.all, qk.projects.all, qk.members.all];
+
+/**
+ * What a channel carries that Reverb holds now (`live.subscribed`): what loaded before may have missed a message sent
+ * before (the inbox loaded while the mention was written), so it loads once more. The channel of an item carries its
+ * comments only: their queries and the history of that item, no list.
+ */
+function heldKeys(event: LiveEvent): readonly QueryKey[] {
+  if (event.item_id !== null) return [qk.comments.list({ item: event.item_id }), qk.activity.list({ item: event.item_id })];
+  return event.project_id !== null ? PROJECT_CHANNEL : OWN_CHANNEL;
+}
+
 /**
  * The caches a message makes stale. Items and their history on `work_item.*` (also watching, on the person's own
  * channel), comments and the history on `comment.*`, projects and members on `project.*` (on `project.updated` the
  * items too: their keys carry the identifier), the projects on a new org role (K14: the channels follow the list; the
  * shell reloads the shared props `auth` for it, M2), the inbox on `notifications.changed`; everything after the connection was
- * back (`live.reconnected`). A refused channel (`live.refused`) loads everything as well (A281: access lost; what the
- * person may not see any more answers 404 or leaves the lists, as the screen should show it), unless the project or
- * item it is about was deleted: that is decided when the burst loads, so a delete and a refusal that come together
- * give the same whichever comes first.
+ * back (`live.reconnected`); what a channel carries once Reverb holds it (`live.subscribed`, `heldKeys`). A refused
+ * channel (`live.refused`) loads everything as well (A281: access lost; what the person may not see any more answers
+ * 404 or leaves the lists, as the screen should show it), unless the project or item it is about was deleted: that is
+ * decided when the burst loads, so a delete and a refusal that come together give the same whichever comes first.
  */
 function keysOf(event: LiveEvent): readonly QueryKey[] {
   const group = event.type.split('.')[0];
   if (event.type === 'live.reconnected') return EVERYTHING;
+  if (event.type === 'live.subscribed') return heldKeys(event);
   // decided when the burst loads (`refusalKeys`): a refused channel of something deleted loads nothing
   if (event.type === 'live.refused') return [];
   if (event.type === 'notifications.changed') return [qk.notifications.all];
@@ -172,7 +189,8 @@ class LiveRefresh {
  * Mount once in the shell (`LiveHost`): a live message (somebody else changed something) makes the screens that show
  * it load again and lights the changed item up for two seconds (`flash`). A message seen before (by its event) is
  * dropped; messages are collected until they pause for 300 ms (at most two seconds), then every cache they touch is
- * made stale once and loads again (`LiveRefresh`).
+ * made stale once and loads again (`LiveRefresh`). So the channels Reverb holds on a page load (`live.subscribed`, one
+ * per project) load each query once more, not once per channel.
  */
 export function useLiveSync(): void {
   const queryClient = useQueryClient();
@@ -236,7 +254,8 @@ export function useLiveSync(): void {
       // only the person's own channel hears it (K14): the role changed is the person's
       if (event.type === 'user.role_changed') roleChanged = true;
       for (const queryKey of keysOf(event)) burst.set(JSON.stringify(queryKey), queryKey);
-      if (event.item_id) flashes.add(event.item_id);
+      // only a change lights up, never what the browser says about a channel (`live.*`)
+      if (event.item_id && !event.type.startsWith('live.')) flashes.add(event.item_id);
       if (quiet !== null) clearTimeout(quiet);
       quiet = setTimeout(flush, LIVE_BURST_MS);
       longest ??= setTimeout(flush, LIVE_MAX_WAIT_MS);

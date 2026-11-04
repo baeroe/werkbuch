@@ -123,14 +123,26 @@ async function expectBadge(page: Page, count: number, options = {}): Promise<voi
   else await expect(link.locator('[data-inbox-badge]')).toHaveCount(0);
 }
 
+/**
+ * The badge shows what the server counts, and that count: read again until both agree, since a late notification of an
+ * earlier spec may come in between (other specs leave unread ones for the account).
+ */
+async function serverBadge(page: Page, { timeout = 5_000 } = {}): Promise<number> {
+  let count = 0;
+  await expect(async () => {
+    count = await unreadCount(page);
+    await expectBadge(page, count, { timeout: 1_000 });
+  }).toPass({ timeout });
+  return count;
+}
+
 test('Erfolgskriterium 2.4: a comment mentions a person, who sees it live in the inbox and gets a mail', async ({ page, browser }) => {
   const { project, inbox, person } = await projectWithInbox(page, 'mention');
   const item = await createItem(page, { project_id: project.id, title: 'E2E Accept Kontaktformular' });
   const other = await openInbox(browser, inbox, person.id);
   try {
     // the seeder starts her with one read notification, other specs leave unread ones: the count is the server's
-    const before = await unreadCount(other.page);
-    await expectBadge(other.page, before);
+    const before = await serverBadge(other.page);
     const mailsBefore = await mailpit.idsTo(inbox.email);
 
     // Erik comments with the keyboard: m, @ and her name from the list, the text, mod+Enter
@@ -154,9 +166,8 @@ test('Erfolgskriterium 2.4: a comment mentions a person, who sees it live in the
     await expect(card.getByRole('listitem')).toHaveAttribute('data-unread', 'true');
     const mention = await waitForNotification(other.page, (entry) => entry.work_item_id === item.id && entry.event === 'mentioned');
     // the server's count (a late notification of an earlier spec may have come too), and up from before
-    const after = await unreadCount(other.page);
+    const after = await serverBadge(other.page, LIVE);
     expect(after).toBeGreaterThan(before);
-    await expectBadge(other.page, after, LIVE);
     await stillTheSameDocument(other.page);
 
     // the mail: collected with the notification, sent now instead of after the delay, in her language (English), with
@@ -223,10 +234,10 @@ test('a removed member loses the live channel and the notifications', async ({ p
   try {
     await waitForNotification(other.page, (entry) => entry.work_item_id === item.id && entry.event === 'mentioned');
     expect(collectionsOf(person.id, item.id)).toEqual([{ outcome: null, sent: false }]);
+    // the inbox may have loaded before the mention was there and before her channel was held: holding it loads it again
     const card = cardOf(other.page, item.key);
-    await expect(card.getByRole('listitem')).toHaveCount(1);
-    const before = await unreadCount(other.page);
-    await expectBadge(other.page, before);
+    await expect(card.getByRole('listitem')).toHaveCount(1, LIVE);
+    await serverBadge(other.page, LIVE);
     // her one connection, holding the channel of the project
     expect(other.sockets.filter((socket) => !socket.closed)).toHaveLength(1);
     const cut = other.sockets.length;
@@ -241,7 +252,7 @@ test('a removed member loses the live channel and the notifications', async ({ p
     await expect.poll(() => old.closed, LIVE).toBe(true);
     await expect.poll(() => other.sockets.slice(cut).some((socket) => socket.frames.some((frame) => frame.includes('pusher:connection_established'))), LIVE).toBe(true);
     await expect(card).toHaveCount(0, LIVE);
-    await expectBadge(other.page, await unreadCount(other.page), LIVE);
+    await serverBadge(other.page, LIVE);
     await stillTheSameDocument(other.page);
 
     // a status change of the item: Erik's channel carries it, hers does not; then a reload shows nothing either
@@ -252,7 +263,7 @@ test('a removed member loses the live channel and the notifications', async ({ p
       .poll(() => framesOn(erikSockets, channel).filter((frame) => frame.includes('work_item.state_changed') && frame.includes(item.id)).length, LIVE)
       .toBeGreaterThan(0);
     expect(framesOn(other.sockets.slice(cut), channel)).toEqual([]);
-    await expectBadge(other.page, await unreadCount(other.page));
+    await serverBadge(other.page);
     await other.page.reload();
     await expect(other.page.getByRole('heading', { level: 1, name: tr('en', 'inbox.title') })).toBeVisible();
     await expect(cardOf(other.page, item.key)).toHaveCount(0);

@@ -26,8 +26,13 @@ const { FakeEcho } = vi.hoisted(() => {
 
   class FakeChannel {
     readonly handlers = new Map<string, Handler>();
+    readonly onSubscribed: (() => void)[] = [];
     listen(event: string, handler: Handler): this {
       this.handlers.set(event, handler);
+      return this;
+    }
+    subscribed(callback: () => void): this {
+      this.onSubscribed.push(callback);
       return this;
     }
   }
@@ -89,6 +94,11 @@ const { FakeEcho } = vi.hoisted(() => {
     /** A message `live` arrives on `channel` (with its prefix). */
     deliver(channel: string, payload: unknown): void {
       this.channels.get(channel)!.handlers.get('.live')!(payload);
+    }
+
+    /** Reverb confirms the subscription of `channel` (`pusher:subscription_succeeded`, also again after a reconnect). */
+    succeed(channel: string): void {
+      this.channels.get(channel)!.onSubscribed.forEach((callback) => callback());
     }
 
     /** What `channelAuthorization.customHandler` answers for `channel`. */
@@ -440,6 +450,26 @@ describe('channels', () => {
     echo().deliver('private-project.p_web', message({ event_id: 'ev_2' }));
 
     expect(events.map((event) => event.type)).toEqual(['notifications.changed', 'work_item.updated']);
+  });
+
+  it('announces every channel once Reverb holds it, also again after a reconnect: what loaded before may miss a message', () => {
+    const events: LiveEvent[] = [];
+    const stop = subscribeLive((event) => events.push(event));
+    watchProjects(['p_web']);
+    connectLive(CONFIG, 'u_mara');
+    const release = watchItem('wi_web_47');
+
+    // asked for, not held yet: nothing
+    expect(events).toEqual([]);
+    echo().succeed('presence-user.u_mara');
+    echo().succeed('private-project.p_web');
+    echo().succeed('private-work-item.wi_web_47');
+    echo().succeed('private-project.p_web');
+    release();
+    stop();
+
+    const held = (project_id: string | null, item_id: string | null): LiveEvent => ({ event_id: null, type: 'live.subscribed', project_id, item_id, comment_id: null, actor_id: null });
+    expect(events).toEqual([held(null, null), held('p_web', null), held(null, 'wi_web_47'), held('p_web', null)]);
   });
 
   it('joins and leaves project channels as the list changes', () => {

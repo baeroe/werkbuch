@@ -315,6 +315,89 @@ describe('useLiveSync', () => {
     await pass(LIVE_BURST_MS);
 
     expect(queries.map((query) => query.fetches())).toEqual([2, 2, 2, 2]);
+    // a refusal is no change: the item does not light up
+    expect(useUiStore.getState().flashIds).toEqual([]);
+  });
+
+  describe('a channel Reverb holds now (live.subscribed): what loaded before it may have missed a message', () => {
+    const held = (project_id: string | null, item_id: string | null) => ({ event_id: null, type: 'live.subscribed', project_id, item_id, actor_id: null });
+
+    it('loads the inbox, the projects and the items again once the own channel is held', async () => {
+      const inbox = await shown(qk.notifications.list({}));
+      const projects = await shown(qk.projects.list({ include_archived: true }));
+      const items = await shown(qk.workItems.detail('WEB-47'));
+      const comments = await shown(qk.comments.list({ item: 'wi_web_47', pages: 'all' }));
+      renderHook(() => useLiveSync(), { wrapper });
+
+      send(held(null, null));
+      await pass(LIVE_BURST_MS);
+
+      expect([inbox.fetches(), projects.fetches(), items.fetches(), comments.fetches()]).toEqual([2, 2, 2, 1]);
+      // the person's own channel names no item: nothing lights up
+      expect(useUiStore.getState().flashIds).toEqual([]);
+    });
+
+    it('loads the inbox again after its answer when it was on its way as the channel was held', async () => {
+      const inbox = await shown(qk.notifications.list({}));
+      const release = inbox.hold();
+      void queryClient.refetchQueries({ queryKey: qk.notifications.all });
+      await pass(0);
+      renderHook(() => useLiveSync(), { wrapper });
+
+      send(held(null, null));
+      await pass(LIVE_BURST_MS);
+      expect(inbox.fetches()).toBe(2);
+      release();
+      await pass(0);
+
+      expect(inbox.fetches()).toBe(3);
+    });
+
+    it('loads what a project channel carries, not the inbox and no comments', async () => {
+      const queries = [];
+      for (const key of [qk.workItems.list({ project: 'p_web' }), qk.activity.list({ item: 'wi_web_47' }), qk.projects.list({}), qk.members.list({ project: 'p_web' }), qk.notifications.list({}), qk.comments.list({ item: 'wi_web_47' })]) {
+        queries.push(await shown(key));
+      }
+      renderHook(() => useLiveSync(), { wrapper });
+
+      send(held('p_web', null));
+      await pass(LIVE_BURST_MS);
+
+      expect(queries.map((query) => query.fetches())).toEqual([2, 2, 2, 2, 1, 1]);
+    });
+
+    it('loads only the comments and the history of the item whose channel is held, and lights nothing up', async () => {
+      const queries = [];
+      for (const key of [
+        qk.comments.list({ item: 'wi_web_47', pages: 'all' }),
+        qk.activity.list({ item: 'wi_web_47', pages: 'all' }),
+        qk.comments.list({ item: 'wi_web_30', pages: 'all' }),
+        qk.activity.list({ item: 'wi_web_30', pages: 'all' }),
+        qk.workItems.list({ project: 'p_web' }),
+        qk.notifications.list({}),
+      ]) {
+        queries.push(await shown(key));
+      }
+      renderHook(() => useLiveSync(), { wrapper });
+
+      send(held(null, 'wi_web_47'));
+      await pass(LIVE_BURST_MS);
+
+      expect(queries.map((query) => query.fetches())).toEqual([2, 2, 1, 1, 1, 1]);
+      expect(useUiStore.getState().flashIds).toEqual([]);
+    });
+
+    it('loads each query once for many channels held together (a page load with many projects)', async () => {
+      const items = await shown(qk.workItems.list({}));
+      const inbox = await shown(qk.notifications.list({}));
+      renderHook(() => useLiveSync(), { wrapper });
+
+      send(held(null, null));
+      for (let index = 0; index < 40; index += 1) send(held(`p_${index}`, null));
+      await pass(LIVE_BURST_MS);
+
+      expect([items.fetches(), inbox.fetches()]).toEqual([2, 2]);
+    });
   });
 
   it('loads nothing again for a refused channel of a project it knows is deleted, whichever message comes first', async () => {
