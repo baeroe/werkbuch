@@ -71,7 +71,7 @@ Images and files inside a text (the description, a comment) are not part of this
 
 ## Watching
 
-Watchers will hear about changes once notifications arrive (a later phase). The person who creates an item, the person it is assigned to, whoever comments on it and whoever is mentioned in it watch it automatically. Anyone who can read an item can start or stop watching it, viewers included, also in an archived project. Whoever stops watching stays away until the item is assigned to them again or they are mentioned in it anew; commenting does not bring them back. Bots do not watch items.
+Watchers hear about comments, state changes and other changes of the item in their inbox and, if they like, by mail; who hears about what is on [Notifications](/en/concepts/notifications). The person who creates an item, the person it is assigned to, whoever comments on it and whoever is mentioned in it watch it automatically. Anyone who can read an item can start or stop watching it, viewers included, also in an archived project. Whoever stops watching stays away until the item is assigned to them again or they are mentioned in it anew; commenting does not bring them back. Bots do not watch items.
 
 ## Archive and delete
 

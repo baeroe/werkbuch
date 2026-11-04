@@ -11,7 +11,7 @@ const description = 'Open, self-hosted project management: work items with your 
 // every page exists in docs/en and docs/de under the same path (tests/Unit/DocsTest.php); later phases add theirs
 const groups: { title: string; pages: string[] }[] = [
     { title: 'guide', pages: ['development', 'keyboard'] },
-    { title: 'concepts', pages: ['concepts/permissions', 'concepts/projects', 'concepts/workflows', 'concepts/types-and-properties', 'concepts/work-items', 'concepts/rich-text', 'concepts/views', 'search', 'bots'] },
+    { title: 'concepts', pages: ['concepts/permissions', 'concepts/projects', 'concepts/workflows', 'concepts/types-and-properties', 'concepts/work-items', 'concepts/rich-text', 'concepts/views', 'concepts/notifications', 'search', 'bots'] },
 ];
 
 const sidebar = (prefix: string, t: Record<string, string>): DefaultTheme.SidebarItem[] =>
@@ -29,6 +29,7 @@ const en: Record<string, string> = {
     'concepts/work-items': 'Work items',
     'concepts/rich-text': 'Rich text',
     'concepts/views': 'Views',
+    'concepts/notifications': 'Notifications',
     search: 'Search',
     bots: 'Bots',
 };
@@ -45,6 +46,7 @@ const de: Record<string, string> = {
     'concepts/work-items': 'Work Items',
     'concepts/rich-text': 'Rich Text',
     'concepts/views': 'Views',
+    'concepts/notifications': 'Benachrichtigungen',
     search: 'Suche',
     bots: 'Bots',
 };

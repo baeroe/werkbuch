@@ -45,7 +45,13 @@ ddev exec pnpm dev
 | Mail | `ddev mailpit` |
 | Datenbank | `ddev mysql`, Benutzer, Passwort und Datenbank `db` |
 
-Queue-Worker, Scheduler und Reverb laufen als DDEV-Daemons und starten mit `ddev start`. Der Worker hört auch auf die Queue `search`, die die Suchindizes bei jeder Änderung nachzieht, und auf `media`, die die Vorschauen hochgeladener Bilder rechnet (`MEDIA_QUEUE` in `.env`). Das Dashboard von Meilisearch fragt nach dem Schlüssel `MEILISEARCH_KEY` aus `.env`.
+Queue-Worker, Scheduler und Reverb laufen als DDEV-Daemons und starten mit `ddev start`. Der Worker nimmt die Queues in dieser Reihenfolge: `default` (gibt jedes Event an seine Konsumenten), `live` (Live-Updates über Reverb), `notifications` (Inbox, Benachrichtigungsmails, Erinnerungen, Mails für „Passwort vergessen“ und Einladungen), `webhooks`, `search` (zieht die Suchindizes bei jeder Änderung nach), `media` (Vorschauen hochgeladener Bilder, `MEDIA_QUEUE` in `.env`) und `bulk` (Projekte löschen). Die Reihenfolge steht in `config('werkbuch.queues')`. Das Dashboard von Meilisearch fragt nach dem Schlüssel `MEILISEARCH_KEY` aus `.env`.
+
+Der Scheduler ruft jede Minute `app:redispatch-events` und `app:send-notification-mails` auf; stündlich räumt er Uploads ab, die kein Text übernommen hat, schickt die Erinnerungen an alle, bei denen es gerade 08:00 ist, und räumt alte Benachrichtigungen auf (alles in `routes/console.php`).
+
+Jede Mail der App landet in Mailpit (`ddev mailpit`): „Passwort vergessen“, Einladungen und Benachrichtigungsmails. Benachrichtigungsmails werden je Person und Item `NOTIFICATION_MAIL_DELAY` Minuten gesammelt (5 in `.env.example`); `ddev artisan app:send-notification-mails --now` schickt alles Offene sofort. Mit `MAIL_MAILER=log` oder `array` gilt werkbuch als ohne Mailserver: dann gibt es gar keine Benachrichtigungsmails, nur die Inbox.
+
+Reverb liefert die Live-Updates auf Port 6001 (`REVERB_*` in `.env`; der Browser bekommt Host, Port und Schema zur Laufzeit, es gibt keine `VITE_REVERB_*`-Variablen). Reverb liest den Code nur beim Start: nach einer Änderung an Kanälen oder am Live-Konsumenten `ddev restart`. Ohne Reverb (`BROADCAST_CONNECTION=null`) verbindet nichts, und Listen ziehen nach, wenn sie das nächste Mal laden. Mehr unter [Benachrichtigungen](/de/concepts/notifications#live-updates).
 
 Hochgeladene Dateien liegen auf der privaten Disk `local` (`storage/app/private`), nie in `public/`. Eine Datei darf höchstens `ATTACHMENTS_MAX_MB` groß sein (standardmäßig 25 MB). Davor hat PHP eigene Grenzen, `upload_max_filesize` und `post_max_size`; sie müssen über `ATTACHMENTS_MAX_MB` liegen, sonst verwirft PHP eine große Datei, bevor werkbuch die Grenze nennen kann. DDEV erlaubt 100 MB, die CI setzt 30 MB und 32 MB. Eine Datei über einer der Grenzen ist ein `413` mit `reason: payload_too_large`. Mehr unter [Rich Text](/de/concepts/rich-text#bilder-und-dateien).
 
@@ -77,6 +83,8 @@ pnpm --dir e2e test                          # legt die E2E-Daten an, dann laufe
 ddev exec pnpm coverage:merge                # Vitest und Playwright zusammen: 100 % Zeilen über resources/js
 ```
 
+Der CI-Job `e2e` läuft dieselbe Suite gegen `php artisan serve` mit MariaDB, Meilisearch und Mailpit als Services, Reverb auf Port 8080 (`e2e/ci.env`) und einem Worker auf `default,live,notifications,search,media,bulk`. Live-Specs brauchen Reverb und die Queue `live`; ohne beides steht das Banner „Live-Updates pausiert“, und die Specs warten vergeblich.
+
 Das Frontend muss von Vitest und Playwright zusammen zu 100 % an Zeilen abgedeckt sein. Nach dem Playwright-Lauf schlägt `coverage:merge` darunter fehl. Führe danach `ddev exec pnpm build` aus, damit ein Build ohne Instrumentierung zurückbleibt.
 
 ## Passwort vergessen
@@ -96,12 +104,15 @@ Authenticator-App und Recovery-Codes verloren? `ddev artisan app:reset-two-facto
 ```bash
 ddev artisan app:sync-roles            # gleicht Rollen und Rechte in der Datenbank mit dem Code ab
 ddev artisan app:redispatch-events     # reicht liegengebliebene Events erneut an ihre Konsumenten
+ddev artisan app:send-notification-mails   # stellt gesammelte Benachrichtigungsmails ohne Job neu ein; mit --now gehen alle offenen sofort raus
 ddev artisan app:search-sync           # schickt die Einstellungen der Suchindizes (config/scout.php) an Meilisearch
 ddev artisan app:search-import         # leert die Suchindizes und füllt sie neu aus der Datenbank
 ddev artisan app:prune-attachments --dry-run --min-age=30   # nennt Bilder und Dateien, die kein Text mehr nennt
 ```
 
 Die Migration der Rollen führt `app:sync-roles` aus; von Hand brauchst du es nur, wenn sich eine Rechtetabelle im Code ohne Migration geändert hat. `app:redispatch-events` läuft jede Minute im Scheduler, von Hand brauchst du es nur, um nach einem Ausfall des Schedulers aufzuholen.
+
+Auch `app:send-notification-mails` läuft jede Minute: es gibt fällige Sammelmails, deren Job verloren ging, erneut an die Queue, je Mail höchstens alle 15 Minuten. Mit `--now` schickt es jede offene Sammlung im eigenen Prozess, fällig oder nicht; das brauchst du vor einer Wartung oder lokal, statt fünf Minuten zu warten.
 
 `app:search-sync` brauchst du nach einer Änderung der Index-Einstellungen in `config/scout.php`. `app:search-import` baut die Indizes von Grund auf: beim ersten Start, nach `migrate:fresh` und als Reparatur, wenn die Suche Änderungen verpasst hat (etwa nachdem Meilisearch stundenlang ausgefallen war). Während des Imports ist die Suche kurz leer. Mehr unter [Suche](/de/search#betrieb).
 

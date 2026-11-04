@@ -71,7 +71,7 @@ Bilder und Dateien in einem Text (der Beschreibung, einem Kommentar) gehören ni
 
 ## Beobachten
 
-Wer ein Item beobachtet, erfährt von Änderungen, sobald es Benachrichtigungen gibt (eine spätere Phase). Wer ein Item anlegt, wem es zugewiesen wird, wer es kommentiert und wer darin erwähnt wird, beobachtet es automatisch. Wer ein Item lesen kann, kann es beobachten oder nicht mehr beobachten, auch als Viewer und auch in einem archivierten Projekt. Wer sich abmeldet, bleibt abgemeldet, bis das Item ihm erneut zugewiesen wird oder er darin neu erwähnt wird; Kommentieren meldet ihn nicht wieder an. Bots beobachten keine Items.
+Wer ein Item beobachtet, erfährt von Kommentaren, Statuswechseln und anderen Änderungen in der Inbox und, wenn gewünscht, per Mail; wer wovon erfährt, steht unter [Benachrichtigungen](/de/concepts/notifications). Wer ein Item anlegt, wem es zugewiesen wird, wer es kommentiert und wer darin erwähnt wird, beobachtet es automatisch. Wer ein Item lesen kann, kann es beobachten oder nicht mehr beobachten, auch als Viewer und auch in einem archivierten Projekt. Wer sich abmeldet, bleibt abgemeldet, bis das Item ihm erneut zugewiesen wird oder er darin neu erwähnt wird; Kommentieren meldet ihn nicht wieder an. Bots beobachten keine Items.
 
 ## Archivieren und Löschen
 
