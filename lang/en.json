@@ -2163,6 +2163,7 @@
     "settings.system.queues.pending.other": ":count jobs",
     "settings.system.queues.waiting.one": ":count job waiting",
     "settings.system.queues.waiting.other": ":count jobs waiting",
+    "settings.system.reload_failed": "The state of the system could not be loaded again",
     "settings.system.search.down": "Not reachable",
     "settings.system.search.down_note": "The search finds nothing until Meilisearch answers again.",
     "settings.system.search.label": "Search (Meilisearch)",

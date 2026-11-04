@@ -5,7 +5,7 @@
  */
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode, Ref } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -30,6 +30,7 @@ vi.mock('@inertiajs/react', () => ({
 const problem = (status: number, reason: string, detail: string) => ({ status, body: { type: 'about:blank', title: reason, status, reason, detail } });
 
 let api: MockApi | undefined;
+let client: QueryClient;
 
 function renderSystem(status: SystemStatus | MockRoute = makeSystemStatus(), overrides: Record<string, MockRoute> = {}) {
   api = mockApi({
@@ -38,7 +39,7 @@ function renderSystem(status: SystemStatus | MockRoute = makeSystemStatus(), ove
     'GET /api/v1/system': typeof status === 'function' ? status : () => ({ body: { data: status } }),
     ...overrides,
   });
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
       <OrgSettings section="system" />
@@ -49,7 +50,7 @@ function renderSystem(status: SystemStatus | MockRoute = makeSystemStatus(), ove
 const calls = (method: string, path: string) => api!.calls.filter((call) => call.method === method && call.url === path);
 const toastNamed = (title: string) => currentToasts().find((entry) => entry.title === title);
 /** A fact of the instance by its label: the row that holds it. */
-const fact = (instance: HTMLElement, label: string) => within(instance).getByText(label, { selector: 'span' }).closest('li')!;
+const fact = (instance: HTMLElement, label: string) => within(instance).getByText(label, { selector: 'dt' }).closest('div')!;
 
 afterEach(() => {
   api?.restore();
@@ -72,7 +73,10 @@ describe('System', () => {
   it('shows version, backlog, search, mail and live', async () => {
     renderSystem(makeSystemStatus({ search_tasks: { enqueued: 1, processing: 1, failed_last_day: 1 } }));
 
-    const instance = await screen.findByRole('list', { name: 'Zustand der Instanz' });
+    const instance = await screen.findByRole('group', { name: 'Zustand der Instanz' });
+    // a list of terms and their definitions (T19-M5)
+    expect(instance.tagName).toBe('DL');
+    expect(within(fact(instance, 'Version')).getByRole('definition').textContent).toBe('0.1.0-dev');
     expect(within(fact(instance, 'Version')).getByText('0.1.0-dev').getAttribute('translate')).toBe('no');
 
     const queues = fact(instance, 'Queues');
@@ -111,16 +115,16 @@ describe('System', () => {
   it('says the queues are empty when nothing waits', async () => {
     renderSystem(makeSystemStatus({ queued_jobs: 0, delayed_jobs: 0, queues: [{ queue: 'default', pending: 0, oldest_at: null }] }));
 
-    const queues = fact(await screen.findByRole('list', { name: 'Zustand der Instanz' }), 'Queues');
+    const queues = fact(await screen.findByRole('group', { name: 'Zustand der Instanz' }), 'Queues');
     expect(within(queues).getByText('0 Jobs warten')).toBeTruthy();
     expect(within(queues).getByText('Die Queues sind leer, alles ist abgearbeitet.')).toBeTruthy();
-    expect(within(fact(screen.getByRole('list', { name: 'Zustand der Instanz' }), 'Geplante Jobs')).getByText('0 Jobs geplant')).toBeTruthy();
+    expect(within(fact(screen.getByRole('group', { name: 'Zustand der Instanz' }), 'Geplante Jobs')).getByText('0 Jobs geplant')).toBeTruthy();
   });
 
   it('says search is down and live is off', async () => {
     renderSystem(makeSystemStatus({ search: 'down', search_tasks: null, live: 'off' }));
 
-    const instance = await screen.findByRole('list', { name: 'Zustand der Instanz' });
+    const instance = await screen.findByRole('group', { name: 'Zustand der Instanz' });
     const search = fact(instance, 'Suche (Meilisearch)');
     expect(within(search).getByText('Nicht erreichbar')).toBeTruthy();
     expect(within(search).getByText('Die Suche findet nichts, bis Meilisearch wieder antwortet.')).toBeTruthy();
@@ -136,7 +140,7 @@ describe('System', () => {
   it('says live is down and points at the switch of the proxy', async () => {
     renderSystem(makeSystemStatus({ live: 'down' }));
 
-    const live = fact(await screen.findByRole('list', { name: 'Zustand der Instanz' }), 'Live-Updates (Reverb)');
+    const live = fact(await screen.findByRole('group', { name: 'Zustand der Instanz' }), 'Live-Updates (Reverb)');
     expect(within(live).getByText('Nicht erreichbar')).toBeTruthy();
     expect(within(live).getByText('Reverb antwortet nicht: Listen und Inbox aktualisieren sich erst beim nächsten Laden.')).toBeTruthy();
     expect(within(live).getByText(/„Websockets Support“/)).toBeTruthy();
@@ -170,7 +174,7 @@ describe('System', () => {
     expect(calls('POST', '/api/v1/system/failed-jobs/retry').map((call) => call.body)).toEqual([{}]);
     expect(toastNamed('1 Job wieder eingereiht')?.description).toBe('Sie laufen mit der nächsten Runde der Queue.');
     // reloaded: the queue holds them now
-    expect(within(screen.getByRole('list', { name: 'Zustand der Instanz' })).getByText('4 Jobs warten')).toBeTruthy();
+    expect(within(screen.getByRole('group', { name: 'Zustand der Instanz' })).getByText('4 Jobs warten')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Fehlgeschlagene Jobs' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Alle erneut versuchen' })).toBeNull();
   });
@@ -273,7 +277,7 @@ describe('System', () => {
     expect(alert.textContent).toContain('Es ist kein Mailserver eingerichtet.');
     expect(currentToasts()).toEqual([]);
     // the state is read anew: the fact and the button follow, the banner that says why keeps the focus
-    expect(await within(fact(screen.getByRole('list', { name: 'Zustand der Instanz' }), 'E-Mail')).findByText('Nicht eingerichtet')).toBeTruthy();
+    expect(await within(fact(screen.getByRole('group', { name: 'Zustand der Instanz' }), 'E-Mail')).findByText('Nicht eingerichtet')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /^Testmail an/ })).toBeNull();
     expect(screen.getByText(/^Es ist kein Mailserver eingerichtet\. Trage ihn/)).toBeTruthy();
     expect(document.activeElement).toBe(alert);
@@ -285,7 +289,7 @@ describe('System', () => {
     const panel = (await screen.findByRole('heading', { name: 'Testmail' })).closest('section')!;
     expect(within(panel).queryByRole('button')).toBeNull();
     expect(within(panel).getByText(/^Es ist kein Mailserver eingerichtet\. Trage ihn in der Konfiguration/)).toBeTruthy();
-    expect(within(fact(screen.getByRole('list', { name: 'Zustand der Instanz' }), 'E-Mail')).getByText('Nicht eingerichtet')).toBeTruthy();
+    expect(within(fact(screen.getByRole('group', { name: 'Zustand der Instanz' }), 'E-Mail')).getByText('Nicht eingerichtet')).toBeTruthy();
   });
 
   it('blocks members', async () => {
@@ -297,6 +301,19 @@ describe('System', () => {
     const nav = screen.getByRole('navigation', { name: 'Bereiche der Einstellungen' });
     expect(within(nav).getByRole('link', { name: /System/ }).textContent).toContain('nur für Admins');
     expect(calls('GET', '/api/v1/system')).toEqual([]);
+  });
+
+  it('keeps the state when loading it again fails, and says so above it (T19-M4)', async () => {
+    let fail = false;
+    renderSystem(() => (fail ? problem(500, 'server_error', 'Auf dem Server ist etwas schiefgegangen.') : { body: { data: makeSystemStatus() } }));
+    await screen.findByRole('group', { name: 'Zustand der Instanz' });
+
+    fail = true;
+    await act(() => client.refetchQueries());
+
+    expect(await screen.findByText('Der Systemzustand konnte nicht neu geladen werden')).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Zustand der Instanz' })).toBeTruthy();
+    expect(screen.queryByText('Der Systemzustand konnte nicht geladen werden')).toBeNull();
   });
 
   it('shows the outline while it loads and the cause with "Erneut versuchen" when it failed', async () => {
@@ -311,6 +328,6 @@ describe('System', () => {
     fail = false;
     await user.click(screen.getByRole('button', { name: 'Erneut versuchen' }));
 
-    expect(await screen.findByRole('list', { name: 'Zustand der Instanz' })).toBeTruthy();
+    expect(await screen.findByRole('group', { name: 'Zustand der Instanz' })).toBeTruthy();
   });
 });

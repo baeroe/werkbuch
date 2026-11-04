@@ -24,7 +24,7 @@ test('opens the system page with the keyboard and sends a test mail that arrives
   await expect(page.getByRole('heading', { level: 2, name: tr('en', 'settings.org.section.system') })).toBeVisible();
 
   // the state of the instance as the server reads it: a version, the queues and a mail server (Mailpit)
-  const instance = page.getByRole('list', { name: tr('en', 'settings.system.instance.label') });
+  const instance = page.getByRole('group', { name: tr('en', 'settings.system.instance.label') });
   await expect(instance).toBeVisible();
   await expect(instance.getByRole('list', { name: tr('en', 'settings.system.queues.list') }).getByText('notifications', { exact: true })).toBeVisible();
   await expect(instance.getByText(tr('en', 'settings.system.mail.ok'))).toBeVisible();

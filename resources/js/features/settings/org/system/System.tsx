@@ -26,20 +26,29 @@ import type { SectionProps } from '../sections';
 
 const count = (value: number): string => new Intl.NumberFormat(intlLocale()).format(value);
 
+/** The facts of the instance as terms and their definitions (T19-M5), named as a group. */
+function Facts({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <dl role="group" aria-label={label} className="divide-y divide-line">
+      {children}
+    </dl>
+  );
+}
+
 /** One fact of the instance: its label, the state, and a sentence on what the state means. */
 function Fact({ label, children, notes = [] }: { label: string; children: ReactNode; notes?: (string | null)[] }) {
   return (
-    <Row className="items-start">
-      <span className="w-44 shrink-0 text-ui text-muted">{label}</span>
-      <div className="min-w-0 flex-1 basis-48">
+    <div className="flex flex-wrap items-start gap-x-4 gap-y-2 px-4 py-3">
+      <dt className="w-44 shrink-0 text-ui text-muted">{label}</dt>
+      <dd className="min-w-0 flex-1 basis-48">
         <div className="text-ui font-medium text-ink">{children}</div>
         {notes.map((note) => note && (
           <p key={note} className="mt-0.5 max-w-[65ch] text-sm text-pretty text-muted">
             {note}
           </p>
         ))}
-      </div>
-    </Row>
+      </dd>
+    </div>
   );
 }
 
@@ -76,7 +85,7 @@ function Instance({ status }: { status: SystemStatus }) {
   const proxy = status.live === 'off' ? null : t('settings.system.live.proxy_note');
   return (
     <Panel title={t('settings.system.instance.title')}>
-      <Rows label={t('settings.system.instance.label')}>
+      <Facts label={t('settings.system.instance.label')}>
         <Fact label={t('settings.system.version')}>
           <span translate="no">{status.version}</span>
         </Fact>
@@ -106,7 +115,7 @@ function Instance({ status }: { status: SystemStatus }) {
             </Badge>
           )}
         </Fact>
-      </Rows>
+      </Facts>
     </Panel>
   );
 }
@@ -245,9 +254,15 @@ export default function System(_props: SectionProps) {
   return (
     <div className="flex flex-col gap-4">
       <SectionHeader title={t('settings.org.section.system')} description={t('settings.system.description')} />
-      <Loaded queries={[status]} failure={t('settings.system.load_failed')} skeleton={<FormSkeleton label={t('settings.system.loading')} />}>
+      <Loaded keepData queries={[status]} failure={t('settings.system.load_failed')} skeleton={<FormSkeleton label={t('settings.system.loading')} />}>
         {() => (
           <>
+            {/* a reload that failed keeps what was there and says so (T19-M4) */}
+            {status.isError && (
+              <Banner tone="danger" role="alert" title={t('settings.system.reload_failed')}>
+                {causeOf(status.error)}
+              </Banner>
+            )}
             <Instance status={status.data!} />
             <FailedJobs status={status.data!} readAt={status.dataUpdatedAt} />
             <TestMail status={status.data!} />
