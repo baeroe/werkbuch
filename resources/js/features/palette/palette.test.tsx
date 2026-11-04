@@ -15,7 +15,7 @@ import { PaletteHost } from '@/shell/PaletteHost';
 import { useShellBindings } from '@/shell/bindings';
 import { useUiStore } from '@/store/ui';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
-import { ida, lene, list, makeView, makeWorkItem, mara, person, project, searchResults, standard, types, web47 } from '@/test/fixtures';
+import { ida, lene, list, makePage, makeView, makeWorkItem, mara, pageSummary, person, project, searchResults, standard, types, web47 } from '@/test/fixtures';
 import type { Project, User } from '@/types';
 
 const signedIn = vi.hoisted(() => ({ user: undefined as unknown }));
@@ -473,6 +473,41 @@ describe('search', () => {
     expect(await open('Feldwerk-Bugs')).toBe('/views/v_feld');
     expect(await open('Ida Brenner')).toBe('/settings/people');
     expect(await open('Kira')).toBe('/settings/bots');
+  });
+
+  it('opens a page from the results', async () => {
+    const user = userEvent.setup();
+    const structure = pageSummary(makePage({ id: 'pg_web_structure', title: 'Seitenstruktur', emoji: '🧭' }));
+    // a page of a project the cached list does not hold (yet): its id leads there, the server names the identifier
+    const elsewhere = pageSummary(makePage({ id: 'pg_new_start', project_id: 'p_new', title: 'Struktur im neuen Projekt' }));
+    searchRoute = answers({ struktur: { items: [web47], pages: [structure, elsewhere] } });
+    renderShell();
+    await waitFor(() => expect(api!.calls.some((call) => call.url.startsWith('/api/v1/projects'))).toBe(true));
+
+    await openPalette();
+    await user.keyboard('struktur');
+    const row = await screen.findByRole('option', { name: /Seitenstruktur/ });
+    expect(outline()).toEqual([
+      ['Items', 'Kontaktformular sendet doppelt'],
+      ['Seiten', 'Seitenstruktur', 'Struktur im neuen Projekt'],
+    ]);
+    // its emoji (decorative), its title, where it lives (as in flow 5 of the clickdummy)
+    await waitFor(() => expect(row.textContent).toBe('🧭SeitenstrukturWiki WEB'));
+    expect(row.querySelector('[aria-hidden="true"]')!.textContent).toBe('🧭');
+    expect([...row.querySelectorAll('mark')].map((mark) => mark.textContent)).toEqual(['struktur']);
+    // the hits of both kinds count
+    await waitFor(() => expect(live()).toBe('3 Treffer'));
+
+    await user.keyboard('{ArrowDown}');
+    expect(active()).toBe('Seitenstruktur');
+    await user.keyboard('{Enter}');
+    expect(router.visit).toHaveBeenCalledWith('/projects/WEB/wiki/pg_web_structure');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    await openPalette();
+    await user.keyboard('struktur');
+    await user.click(await screen.findByRole('option', { name: /Struktur im neuen Projekt/ }));
+    expect(router.visit).toHaveBeenLastCalledWith('/projects/p_new/wiki/pg_new_start');
   });
 
   it('shows a member no people', async () => {

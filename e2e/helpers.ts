@@ -617,6 +617,7 @@ export function searchToken(): string {
 
 export type SearchData = {
   items: { id: string; key: string; title: string }[];
+  pages: { id: string; project_id: string; title: string }[];
   projects: { id: string; identifier: string }[];
   people: { id: string }[];
   views: { id: string }[];

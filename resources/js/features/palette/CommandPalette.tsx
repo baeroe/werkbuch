@@ -19,6 +19,7 @@ import { IconButton } from '@/components/ui/IconButton';
 import { Kbd } from '@/components/ui/Kbd';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
 import { optionClass } from '@/components/ui/styles';
+import { useProjects } from '@/hooks/projects';
 import { useSearch } from '@/hooks/search';
 import { useWorkflows } from '@/hooks/workflows';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
@@ -49,12 +50,15 @@ function useDebounced<T>(value: T, ms: number): T {
 }
 
 /** Where a hit leads; a command runs instead. */
-function targetOf(entry: Exclude<PaletteEntry, { kind: 'command' }>): string {
+function targetOf(entry: Exclude<PaletteEntry, { kind: 'command' }>, lookups: RowLookups): string {
   switch (entry.kind) {
     case 'jump':
       return paths.item(entry.key);
     case 'item':
       return paths.item(entry.item.key);
+    case 'page':
+      // a project the list does not hold (yet) is named by its id: the server answers with its identifier
+      return paths.wiki(lookups.projectOf(entry.page.project_id)?.identifier ?? entry.page.project_id, entry.page.id);
     case 'project':
       return paths.project(entry.project.identifier);
     case 'person':
@@ -99,6 +103,7 @@ function PaletteBody({ inputRef }: { inputRef: RefObject<HTMLInputElement | null
   const search = useSearch(searchQuery, { limit: LIMITS.items }, { enabled: !subpage });
   const types = useWorkItemTypes();
   const workflows = useWorkflows();
+  const projects = useProjects({ include_archived: true });
   const people = usePermissions().can('org.manage');
   const listId = useId();
   useDialogScope();
@@ -108,11 +113,12 @@ function PaletteBody({ inputRef }: { inputRef: RefObject<HTMLInputElement | null
   const lookups: RowLookups = {
     typeOf: (id) => types.data?.items.find((type) => type.id === id),
     stateOf: (id) => states.get(id),
+    projectOf: (id) => projects.data?.items.find((project) => project.id === id),
   };
 
   function choose(entry: PaletteEntry) {
     if (entry.kind !== 'command') {
-      router.visit(targetOf(entry));
+      router.visit(targetOf(entry, lookups));
       close();
       return;
     }

@@ -79,7 +79,7 @@ export function attachmentIds(doc: RichText | null | undefined): string[] {
   return attributeOf(doc, ['image', 'attachment'], 'attachmentId');
 }
 
-/** The ids of the items a document refers to (`reference` nodes of `kind: item`; pages come with Phase 9), without repeats. */
+/** The ids of the items a document refers to (`reference` nodes of `kind: item`, not the pages of `kind: page`), without repeats. */
 export function referenceIds(doc: RichText | null | undefined): string[] {
   return attributeOf(doc, ['reference'], 'id', (node) => node.attrs?.kind === 'item');
 }
