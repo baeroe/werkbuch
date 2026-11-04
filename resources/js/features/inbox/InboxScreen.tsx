@@ -75,6 +75,29 @@ const UNREAD = { unread_only: true, per_page: 1 } as const;
 /** The query of the unread mentions, for "Alle als gelesen markieren" in the filter "Erwähnungen" (A291). */
 const UNREAD_MENTIONS = { unread_only: true, mentions_only: true, per_page: 1 } as const;
 
+/** A popup that gives the focus back when it closes: the palette, the menu of a row. */
+const inPopup = (element: Element | null) => Boolean(element?.closest('[role="dialog"], [role="menu"]'));
+
+/**
+ * Moves the focus to `target`; from a popup (a command of the palette, an entry of a row's menu) once it has closed.
+ * The popup gives the focus back to what had it before, and that is often the row that just left the list: the focus
+ * would fall to the page. So it waits until the focus has left the popup (at most 60 frames, the closing animation) and
+ * takes it only when it fell to the page; somewhere else (the popup gave it to a row that is still there) it stays.
+ */
+export function focusLater(target: () => HTMLElement | null | undefined): void {
+  if (!inPopup(document.activeElement)) {
+    target()?.focus();
+    return;
+  }
+  let frames = 0;
+  const step = () => {
+    const focus = document.activeElement;
+    if (!focus || focus === document.body || !focus.isConnected) target()?.focus();
+    else if (inPopup(focus) && frames++ < 60) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
 const without = (set: ReadonlySet<string>, ids: readonly string[]): Set<string> => new Set([...set].filter((id) => !ids.includes(id)));
 
 /**
@@ -227,7 +250,7 @@ export function InboxScreen() {
 
   function focusRow(id: string) {
     setCursorId(id);
-    links.current.get(id)?.focus();
+    focusLater(() => links.current.get(id));
   }
 
   /**
@@ -254,11 +277,17 @@ export function InboxScreen() {
       return;
     }
     setCursorId(null);
-    if (listRef.current?.contains(document.activeElement)) readAllRef.current?.focus();
+    if (listRef.current?.contains(document.activeElement) || inPopup(document.activeElement)) focusLater(() => readAllRef.current);
   }
 
-  /** Whether the focus is in the row of `id` (its link or one of its buttons): it goes on with the row. */
-  const focusIn = (id: string) => Boolean(links.current.get(id)?.closest('li')?.contains(document.activeElement));
+  /**
+   * Whether the focus is in the row of `id` (its link or one of its buttons) or in the open menu of the row: it goes on
+   * with the row.
+   */
+  const focusIn = (id: string) => {
+    const row = links.current.get(id)?.closest('li');
+    return Boolean(row?.contains(document.activeElement) || row?.querySelector('[data-popup-open]'));
+  };
 
   function noCursor() {
     hint(t('inbox.no_cursor.title'), t('inbox.no_cursor.description'));

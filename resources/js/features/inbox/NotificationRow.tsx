@@ -8,9 +8,10 @@
  *
  * Keyboard: the list is one stop in the tab order (`tabStop`, roving over `data-nav-target`); the row's two buttons
  * follow it in the tab order (13c "Zeilenaktionen per Tab"), named with the key of the card ("Löschen: WEB-47"). With a
- * mouse they take the place of the time while the pointer, the focus or the cursor is on the row; on a phone they show
- * on the row with the cursor. Under that row a hint names the key that changes it (13c: e for an unread one, u for a
- * read one).
+ * mouse they take the place of the time while the pointer, the focus or the cursor is on the row; touch screens get the
+ * same two actions in a menu on every row (one 44 px target, "Aktionen: WEB-47"), so a row can be read or deleted
+ * without opening it. Under the row with the cursor a hint names the key that changes it (13c: e for an unread one, u
+ * for a read one).
  *
  * Who: the actor's avatar and name (a bot with the word "Bot"), an account the list does not know as "Jemand"; a
  * reminder has nobody behind it and reads as werkbuch, a failed template or a switched-off webhook says what happened
@@ -18,7 +19,7 @@
  * renamed or removed status still reads.
  */
 
-import { CalendarClock, CalendarSync, Check, CircleDot, Trash2, Webhook, type LucideIcon } from 'lucide-react';
+import { CalendarClock, CalendarSync, Check, CircleDot, Ellipsis, Trash2, Webhook, type LucideIcon } from 'lucide-react';
 import type { MouseEvent, ReactNode } from 'react';
 import { botWord, formatDay } from '@/components/fields/format';
 import { linkFocusRing } from '@/components/items/ItemLink';
@@ -26,6 +27,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { cx } from '@/components/ui/cx';
 import { IconButton } from '@/components/ui/IconButton';
 import { Kbd } from '@/components/ui/Kbd';
+import { Menu, MenuContent, MenuItem, MenuTrigger } from '@/components/ui/Menu';
 import { formatMoment } from '@/features/item-detail/activity/when';
 import { tx } from '@/features/item-detail/activity/phrases';
 import { t } from '@/lib/i18n';
@@ -59,8 +61,9 @@ export interface RowActions {
 
 /** With a mouse: what shows (the buttons) and what goes (the time) while the pointer, the focus or the cursor is on a row. */
 const SHOW_ON_ROW =
-  'md:pointer-events-none md:opacity-0 md:group-hover/row:pointer-events-auto md:group-hover/row:opacity-100 md:group-focus-within/row:pointer-events-auto md:group-focus-within/row:opacity-100 md:group-data-[current]/row:pointer-events-auto md:group-data-[current]/row:opacity-100';
-const HIDE_ON_ROW = 'md:group-hover/row:opacity-0 md:group-focus-within/row:opacity-0 md:group-data-[current]/row:opacity-0';
+  'md:[@media(hover:hover)]:group-hover/row:opacity-100 md:[@media(hover:hover)]:group-focus-within/row:opacity-100 md:[@media(hover:hover)]:group-data-[current]/row:opacity-100';
+const HIDE_ON_ROW =
+  'md:[@media(hover:hover)]:group-hover/row:opacity-0 md:[@media(hover:hover)]:group-focus-within/row:opacity-0 md:[@media(hover:hover)]:group-data-[current]/row:opacity-0';
 
 /** The lead of a row without a person behind it: a reminder or something the system did. */
 const SYSTEM_ICONS: Partial<Record<Notification['event'], LucideIcon>> = {
@@ -219,22 +222,16 @@ export function NotificationRow({ notification, ctx, subject, current, tabStop, 
           </p>
         )}
       </div>
-      {/* the right edge: how long ago, and in its place the two buttons (on a phone: beside the row with the cursor) */}
-      <div className="-mt-0.5 grid shrink-0 items-center justify-items-end max-md:-my-1.5">
+      {/* the right edge: how long ago. With a mouse, the two buttons take its place while the pointer, the focus or the cursor is on the row */}
+      <div className="-mt-0.5 grid shrink-0 items-center justify-items-end max-md:hidden">
         <time
           dateTime={notification.created_at}
           title={stamp}
-          className={cx('col-start-1 row-start-1 mt-0.5 text-sm whitespace-nowrap text-muted tabular-nums transition-opacity duration-120 max-md:hidden', HIDE_ON_ROW)}
+          className={cx('col-start-1 row-start-1 mt-0.5 text-sm whitespace-nowrap text-muted tabular-nums transition-opacity duration-120', HIDE_ON_ROW)}
         >
           {ago}
         </time>
-        <div
-          className={cx(
-            'relative z-10 col-start-1 row-start-1 flex items-center gap-0.5 transition-opacity duration-120',
-            'max-md:hidden max-md:group-focus-within/row:flex max-md:group-data-[current]/row:flex',
-            SHOW_ON_ROW,
-          )}
-        >
+        <div className={cx('relative z-10 col-start-1 row-start-1 hidden items-center gap-0.5 opacity-0 transition-opacity duration-120 md:[@media(hover:hover)]:flex', SHOW_ON_ROW)}>
           {/* one button that changes its word, so it keeps the focus */}
           <IconButton
             icon={unread ? Check : CircleDot}
@@ -245,6 +242,37 @@ export function NotificationRow({ notification, ctx, subject, current, tabStop, 
           />
           <IconButton icon={Trash2} label={t('inbox.row.delete', { key: subject })} shortcut="#" tabIndex={tabStop ? 0 : -1} onClick={() => actions.remove(notification.id)} />
         </div>
+      </div>
+      {/* on touch screens (a phone, a tablet without a mouse): one 44 px target with the same two actions, without opening the row */}
+      <div className="relative z-10 -my-2 md:[@media(hover:hover)]:hidden">
+        <Menu>
+          <MenuTrigger
+            render={
+              <button
+                type="button"
+                tabIndex={tabStop ? 0 : -1}
+                aria-label={t('inbox.row.menu', { key: subject })}
+                className="inline-flex size-11 cursor-pointer items-center justify-center rounded-chip text-muted transition-colors duration-120 hover:bg-hover hover:text-ink data-popup-open:bg-hover md:size-7"
+              >
+                <Ellipsis className="size-4" aria-hidden="true" />
+              </button>
+            }
+          />
+          <MenuContent align="end">
+            {unread ? (
+              <MenuItem icon={Check} onClick={() => actions.markRead(notification)}>
+                {t('shortcuts.inbox.read')}
+              </MenuItem>
+            ) : (
+              <MenuItem icon={CircleDot} onClick={() => actions.markUnread(notification)}>
+                {t('shortcuts.inbox.unread')}
+              </MenuItem>
+            )}
+            <MenuItem icon={Trash2} danger onClick={() => actions.remove(notification.id)}>
+              {t('shortcuts.inbox.delete')}
+            </MenuItem>
+          </MenuContent>
+        </Menu>
       </div>
     </li>
   );

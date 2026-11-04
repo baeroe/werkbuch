@@ -13,6 +13,7 @@ use App\Actions\Resolutions\DeleteResolution;
 use App\Actions\Views\DeleteView;
 use App\Actions\Workflows\DeleteWorkflow;
 use App\Actions\WorkItemTypes\DeleteWorkItemType;
+use App\Domain\Notifications\NotificationKind;
 use App\Enums\AccountType;
 use App\Enums\Locale;
 use App\Models\Invitation;
@@ -114,8 +115,8 @@ class E2eSeeder extends Seeder
                 'two_factor_confirmed_at' => Carbon::now(),
             ]);
             // the inbox and live specs (A289): every variant its own inbox, so that "mark all read" in one leaves the
-            // others alone; it starts empty, with the default preferences
-            $this->emptyInbox($this->person("inbox-{$variant}@example.com", "Inge Inbox {$variant}", extra: [
+            // others alone; it starts with the default preferences and one read notification without an item
+            $this->freshInbox($this->person("inbox-{$variant}@example.com", "Inge Inbox {$variant}", extra: [
                 'locale' => Locale::En,
                 'timezone' => 'Europe/Berlin',
             ]));
@@ -143,12 +144,29 @@ class E2eSeeder extends Seeder
         Resolution::query()->where('label', 'like', $like)->each(fn (Resolution $resolution) => DeleteResolution::run($actor, $resolution));
     }
 
-    /** Takes the notifications of the account away, with its mail collections and its preferences. */
-    private function emptyInbox(User $user): void
+    /**
+     * Takes the notifications of the account away, with its mail collections and its preferences, and leaves one read
+     * notification without an item: a failed template of the public project WEB (as the demo inbox has one of OPS), which
+     * the inbox spec deletes on the phone. Of the organisation (a switched-off webhook) only org admins hear.
+     */
+    private function freshInbox(User $user): void
     {
         Notification::query()->where('user_id', $user->id)->delete();
         NotificationMail::query()->where('user_id', $user->id)->delete();
         NotificationPreference::query()->where('user_id', $user->id)->delete();
+
+        $at = Carbon::now()->subWeek();
+        (new Notification)->forceFill([
+            'user_id' => $user->id,
+            'kind' => NotificationKind::TemplateRunFailed,
+            'project_id' => Project::query()->where('identifier', 'WEB')->value('id'),
+            'data' => ['error' => 'Required property Environment is missing'],
+            'inbox' => true,
+            'dedupe_key' => 'e2e:template',
+            'read_at' => $at,
+            'created_at' => $at,
+            'updated_at' => $at,
+        ])->save();
     }
 
     /**

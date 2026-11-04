@@ -409,6 +409,7 @@
     "inbox.read_all.none": "There are no unread notifications.",
     "inbox.read_all.none_mentions": "There are no unread mentions.",
     "inbox.row.delete": "Delete: :key",
+    "inbox.row.menu": "Actions: :key",
     "inbox.row.read": "Mark as read: :key",
     "inbox.row.unread": "Mark as unread: :key",
     "inbox.stale.description": "Updating it failed. The list shows the last state.",

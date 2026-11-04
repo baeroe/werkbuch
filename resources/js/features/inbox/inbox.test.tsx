@@ -13,17 +13,18 @@ import { useSyncExternalStore, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import type { LiveEvent } from '@/api/live';
 import { currentToasts, dismissToast, resetToasts } from '@/components/ui/toast';
+import { CommandPalette } from '@/features/palette/CommandPalette';
 import { useLiveSync } from '@/hooks/live';
 import { listCommands } from '@/lib/commands';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { canUndo, undoLatest } from '@/lib/undo';
 import { useUiStore } from '@/store/ui';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
-import { ida, lene, list, makeNotification, mara, maraInbox, organization, person, project, properties, theo, types } from '@/test/fixtures';
+import { ida, lene, list, makeNotification, mara, maraInbox, organization, person, project, properties, standard, theo, types } from '@/test/fixtures';
 import type { Notification, User } from '@/types';
 import InboxPage from '@/pages/Inbox/Index';
 import { shellLayout } from '@/shell/layout';
-import { InboxScreen } from './InboxScreen';
+import { focusLater, InboxScreen } from './InboxScreen';
 
 /* ----------------------------------------------------------------- Inertia, live */
 
@@ -130,6 +131,7 @@ function route(key: string): MockRoute | undefined {
     };
   if (key === 'GET /api/v1/projects') return () => ({ body: list(projects) });
   if (key === 'GET /api/v1/work-item-types') return () => ({ body: list(types) });
+  if (key === 'GET /api/v1/workflows') return () => ({ body: list([standard]) });
   if (key === 'GET /api/v1/properties') return () => ({ body: list(properties) });
   if (key === 'GET /api/v1/users') return () => ({ body: list([mara, ida, theo, lene, jonas, automation]) });
   return undefined;
@@ -170,7 +172,7 @@ function LiveSync() {
   return null;
 }
 
-function renderInbox(url = '/inbox') {
+function renderInbox(url = '/inbox', { palette = false } = {}) {
   address.set(url);
   client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   render(
@@ -179,6 +181,7 @@ function renderInbox(url = '/inbox') {
       <main id="main" tabIndex={-1}>
         <InboxScreen />
       </main>
+      {palette && <CommandPalette />}
     </QueryClientProvider>,
   );
 }
@@ -741,6 +744,81 @@ describe('the keys and the read marks', () => {
     await user.click(screen.getByRole('button', { name: 'Als gelesen markieren: APP-24' }));
     await waitFor(() => expect(posts('read').at(-1)).toEqual({ ids: ['n_04'] }));
     expect(useUiStore.getState().peekItemId).toBeNull();
+  });
+
+  it('reads and deletes from the menu of a row without opening it, also a row without an item', async () => {
+    const user = setup();
+    renderInbox();
+    await loaded();
+
+    // every row has the menu of a touch screen; an unread one is read there, nothing opens
+    await user.click(screen.getByRole('button', { name: 'Aktionen: WEB-42' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Als gelesen markieren' }));
+    await waitFor(() => expect(posts('read')).toEqual([{ ids: ['n_01'] }]));
+    expect(useUiStore.getState().peekItemId).toBeNull();
+    expect(address.visit).not.toHaveBeenCalled();
+    expect(rows()[0]!.hasAttribute('data-unread')).toBe(false);
+    // and unread again
+    await user.click(screen.getByRole('button', { name: 'Aktionen: WEB-42' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Als ungelesen markieren' }));
+    await waitFor(() => expect(posts('unread')).toEqual([{ ids: ['n_01'] }]));
+
+    // the switched-off webhook belongs to no item: deleted from its menu, the focus goes on to the row that moves up
+    await user.click(screen.getByRole('button', { name: 'Aktionen: Organisation' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Benachrichtigung löschen' }));
+    expect(screen.queryByRole('region', { name: 'Organisation' })).toBeNull();
+    expect(address.visit).not.toHaveBeenCalled();
+    await waitFor(() => expect(document.activeElement?.textContent).toContain('Eine Vorlage hat kein Item angelegt'));
+    expect(document.activeElement?.hasAttribute('data-nav-target')).toBe(true);
+    act(() => currentToasts().forEach((toast) => dismissToast(toast.id)));
+    await waitFor(() => expect(api.calls.filter((call) => call.method === 'DELETE').map((call) => call.url)).toEqual(['/api/v1/notifications/n_10']));
+  });
+
+  it('puts the focus on the next row after a delete from the palette', async () => {
+    const user = setup();
+    renderInbox('/inbox', { palette: true });
+    await loaded();
+
+    await user.keyboard('j');
+    act(() => useUiStore.getState().setPaletteOpen(true));
+    const input = await screen.findByRole('combobox');
+    await waitFor(() => expect(document.activeElement).toBe(input));
+    await user.keyboard('Benachrichtigung löschen');
+    await user.keyboard('{Enter}');
+
+    // the palette gave the focus back to the row that left: it goes on to the row that moved up, not to the page
+    expect(screen.queryByRole('article', { name: /WEB-42/ })).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(rowLinks()[0]));
+    expect(rowLinks()[0]!.textContent).toContain('erinnert');
+  });
+
+  it('waits until a popup has given the focus back, and takes it only when it fell to the page', async () => {
+    const popup = document.createElement('div');
+    popup.setAttribute('role', 'menu');
+    const entry = document.createElement('button');
+    popup.append(entry);
+    const target = document.createElement('button');
+    const elsewhere = document.createElement('button');
+    document.body.append(popup, target, elsewhere);
+    onTestFinished(() => [popup, target, elsewhere].forEach((element) => element.remove()));
+    const frame = () => act(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+
+    // the popup is still open: nothing moves
+    entry.focus();
+    focusLater(() => target);
+    await frame();
+    expect(document.activeElement).toBe(entry);
+    // it closed and the focus fell to the page: the target takes it
+    popup.remove();
+    await waitFor(() => expect(document.activeElement).toBe(target));
+
+    // a popup that gave the focus somewhere else leaves it there
+    document.body.append(popup);
+    entry.focus();
+    focusLater(() => target);
+    elsewhere.focus();
+    await frame();
+    expect(document.activeElement).toBe(elsewhere);
   });
 
   it('offers the row commands in the palette', async () => {

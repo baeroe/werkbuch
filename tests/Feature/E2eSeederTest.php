@@ -5,6 +5,7 @@ use App\Access\Visibility;
 use App\Actions\Favorites\ToggleFavorite;
 use App\Actions\Projects\CreateProject;
 use App\Actions\Projects\UpdateProject;
+use App\Domain\Notifications\NotificationKind;
 use App\Enums\AccountType;
 use App\Events\EventType;
 use App\Models\Attachment;
@@ -192,7 +193,7 @@ it('seeds the accounts of every Playwright project', function () {
     expect(User::where('type', 'person')->count())->toBe(6 + 1 + 4 * 4);
 });
 
-it('creates an inbox account per variant and empties its inbox on every run', function () {
+it('creates an inbox account per variant and empties its inbox on every run, but for one read row without an item', function () {
     $this->seed(E2eSeeder::class);
     $inbox = User::where('email', 'inbox-desktop-light@example.com')->sole();
     $other = User::where('email', 'inbox-phone-dark@example.com')->sole();
@@ -212,9 +213,13 @@ it('creates an inbox account per variant and empties its inbox on every run', fu
         expect([$user->type, $user->name, $user->handle, $user->locale?->value, $user->timezone])
             ->toBe([AccountType::Person, "Inge Inbox {$variant}", "inbox-{$variant}", 'en', 'Europe/Berlin'])
             ->and(Hash::check(E2eSeeder::PASSWORD, $user->password))->toBeTrue()
-            ->and(Notification::query()->where('user_id', $user->id)->exists())->toBeFalse()
             ->and(NotificationMail::query()->where('user_id', $user->id)->exists())->toBeFalse()
             ->and(NotificationPreference::query()->where('user_id', $user->id)->exists())->toBeFalse();
+        // one read notification without an item (a failed template of WEB, which everyone sees): the row the spec deletes on the phone
+        $left = Notification::query()->where('user_id', $user->id)->sole();
+        expect([$left->kind, $left->project_id, $left->work_item_id, $left->actor_id, $left->inbox, $left->read_at !== null])
+            ->toBe([NotificationKind::TemplateRunFailed, Project::query()->where('identifier', 'WEB')->value('id'), null, null, true, true])
+            ->and(Notification::query()->where('user_id', $user->id)->visibleTo($user)->exists())->toBeTrue();
     }
 
     // Mara's inbox stays as the demo data have it

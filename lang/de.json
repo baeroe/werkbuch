@@ -409,6 +409,7 @@
     "inbox.read_all.none": "Es gibt keine ungelesenen Benachrichtigungen.",
     "inbox.read_all.none_mentions": "Es gibt keine ungelesenen Erwähnungen.",
     "inbox.row.delete": "Löschen: :key",
+    "inbox.row.menu": "Aktionen: :key",
     "inbox.row.read": "Als gelesen markieren: :key",
     "inbox.row.unread": "Als ungelesen markieren: :key",
     "inbox.stale.description": "Beim Aktualisieren ist ein Fehler aufgetreten. Die Liste zeigt den letzten Stand.",

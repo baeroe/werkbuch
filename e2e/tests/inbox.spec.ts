@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { allEntries, api, createE2eProject, createItem, PEOPLE, pressMod, removeE2eProject, runId, signedInContext, tr, variant } from '../helpers';
+import { allEntries, api, createE2eProject, createItem, isPhone, PEOPLE, pressMod, removeE2eProject, runId, signedInContext, tr, variant } from '../helpers';
 
 // The inbox (spec 4.14) of the inbox account of the variant (A289), in a context of its own. Its notifications come
 // from the e2e person (Erik Ende), who assigns, comments and mentions over the API in a project of the test's own
@@ -160,6 +160,63 @@ test('works the inbox with the keyboard only', async ({ page, browser }) => {
     await expect(inboxPage.getByRole('status').filter({ hasText: tr('en', 'inbox.all_read') })).toBeVisible();
     // the undone delete never went to the server
     expect((await ours()).map((entry) => entry.id)).toContain(assignedFirst.id);
+
+    // a delete from the palette: the focus goes on to the row that moves up, not to the page
+    await expect(secondLink).toBeFocused();
+    await pressMod(inboxPage, 'k');
+    const input = inboxPage.getByRole('combobox', { name: tr('en', 'palette.input') });
+    await expect(input).toBeFocused();
+    await input.fill(tr('en', 'inbox.command.delete'));
+    await inboxPage.keyboard.press('Enter');
+    await expect(card(second.key)).toHaveCount(0);
+    await expect(inboxPage.locator('[data-nav-target]:focus')).toHaveCount(1);
+  } finally {
+    await other.page.goto('/my-items');
+    await other.context.close();
+    await removeE2eProject(page, project.identifier);
+  }
+});
+
+test('reads and deletes from the menu of a row on the phone, without opening it', async ({ page, browser }) => {
+  test.skip(!isPhone(page), 'the menu of a touch screen');
+  const project = await createE2eProject(page, name('menu'), { types: ['Task'] });
+  const inbox = PEOPLE.inbox[variant()]!;
+  const person = (await allEntries(page, 'users')).find((entry) => entry.email === inbox.email) as { id: string };
+  const added = await api(page, 'POST', `/api/v1/projects/${project.id}/members`, { user_id: person.id, role: 'member' });
+  expect(added.status(), await added.text()).toBe(201);
+  const other = await signedInContext(browser, inbox);
+  try {
+    const item = await createItem(page, { project_id: project.id, title: 'E2E Inbox Menü Vertrag', assignee_id: person.id });
+    const find = async (match: (entry: StoredNotification) => boolean) => (await notificationsOf(other.page)).find(match);
+    await expect.poll(async () => (await find((entry) => entry.work_item_id === item.id))?.event, { timeout: 20_000 }).toBe('assigned');
+    const assigned = (await find((entry) => entry.work_item_id === item.id))!;
+    // the seeder leaves every inbox account one read notification without an item: a failed template of WEB
+    const template = (await find((entry) => entry.event === 'template_run_failed'))!;
+    const web = (await (await api(other.page, 'GET', '/api/v1/projects/WEB')).json()) as { data: { name: string } };
+
+    const inboxPage = other.page;
+    await inboxPage.goto('/inbox');
+    const row = inboxPage.getByRole('article', { name: new RegExp(`^${item.key}:`) }).getByRole('listitem');
+    await expect(row).toHaveAttribute('data-unread', 'true');
+
+    // read from the menu: nothing opens
+    await inboxPage.getByRole('button', { name: tr('en', 'inbox.row.menu', { key: item.key }) }).click();
+    await inboxPage.getByRole('menuitem', { name: tr('en', 'shortcuts.inbox.read') }).click();
+    await expect(row).not.toHaveAttribute('data-unread');
+    await expect(inboxPage.getByRole('complementary', { name: tr('en', 'items.peek.label') })).toHaveCount(0);
+    await expect(inboxPage).toHaveURL(/\/inbox$/);
+    await expect.poll(async () => (await find((entry) => entry.id === assigned.id))?.read_at ?? null).not.toBeNull();
+
+    // a row without an item, which a tap would leave for its page: deleted from the menu, for real once the toast ends
+    const card = inboxPage.getByRole('region', { name: new RegExp(web.data.name) });
+    await card.getByRole('button', { name: tr('en', 'inbox.row.menu', { key: web.data.name }) }).click();
+    await inboxPage.getByRole('menuitem', { name: tr('en', 'shortcuts.inbox.delete') }).click();
+    await expect(card).toHaveCount(0);
+    // the menu gave the focus back to its row, which left: it goes on to the row before it
+    await expect(row.getByRole('link')).toBeFocused();
+    await expect(inboxPage.getByText(tr('en', 'inbox.delete.done'))).toBeVisible();
+    await expect(inboxPage).toHaveURL(/\/inbox$/);
+    await expect.poll(async () => (await find((entry) => entry.id === template.id)) ?? null, { timeout: 15_000 }).toBeNull();
   } finally {
     await other.page.goto('/my-items');
     await other.context.close();
