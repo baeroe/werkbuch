@@ -31,7 +31,7 @@ function ItemPageContent({ detail }: { detail: WorkItemDetail }) {
   useItemCommands({ scope: 'detail', itemId: item.id });
   return (
     // a new detail for each item: drafts and edits never carry over to the next one
-    <ItemDetailProvider key={item.id} surface="page">
+    <ItemDetailProvider key={item.id} surface="page" itemId={item.id}>
       <article className="max-w-6xl pb-8">
         <ItemHeader detail={detail} surface="page" />
         <div className="relative mt-8 rounded-card border border-line bg-surface shadow-elev-1">

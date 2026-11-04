@@ -28,6 +28,17 @@ use App\Actions\Labels\DeleteLabel;
 use App\Actions\Labels\ListLabels;
 use App\Actions\Labels\SaveLabel;
 use App\Actions\Media\ShowMedia;
+use App\Actions\Notifications\DeleteNotification;
+use App\Actions\Notifications\DispatchDueMails;
+use App\Actions\Notifications\GetNotificationPreferences;
+use App\Actions\Notifications\ListNotifications;
+use App\Actions\Notifications\MarkNotificationsRead;
+use App\Actions\Notifications\MarkNotificationsUnread;
+use App\Actions\Notifications\NotifyRecipients;
+use App\Actions\Notifications\PruneNotifications;
+use App\Actions\Notifications\SaveNotificationPreferences;
+use App\Actions\Notifications\SendDueReminders;
+use App\Actions\Notifications\SendNotificationMail;
 use App\Actions\Organization\GetOrganization;
 use App\Actions\Organization\UpdateOrganization;
 use App\Actions\Projects\AddMember;
@@ -55,6 +66,9 @@ use App\Actions\Resolutions\SaveResolution;
 use App\Actions\RichText\ListMentionables;
 use App\Actions\RichText\ResolveReferences;
 use App\Actions\Search\QuerySearch;
+use App\Actions\System\GetSystemStatus;
+use App\Actions\System\RetryFailedJobs;
+use App\Actions\System\SendTestMail;
 use App\Actions\Tokens\CreateToken;
 use App\Actions\Tokens\ListTokens;
 use App\Actions\Tokens\RevokeToken;
@@ -99,7 +113,10 @@ use App\Events\EventType;
 use App\Models\Attachment;
 use App\Models\Comment;
 use App\Models\CommentReaction;
+use App\Models\Event;
 use App\Models\Label;
+use App\Models\Notification;
+use App\Models\NotificationMail;
 use App\Models\Property;
 use App\Models\RelationType;
 use App\Models\Resolution;
@@ -109,6 +126,9 @@ use App\Models\WorkItemRelation;
 use App\Models\WorkItemType;
 use App\Support\Actor;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 use Laravel\Fortify\Actions\EnableTwoFactorAuthentication;
 use PragmaRX\Google2FA\Google2FA;
 use Tests\Feature\Access\MatrixWorld;
@@ -782,6 +802,106 @@ return [
         ]),
         'allowed' => $people,
         'event' => EventType::UserPasswordChanged,
+    ],
+    // the inbox is the own one: everybody lists, marks and deletes their own notifications (a bot has none); a
+    // notification of a project the account does not see is passed over when marking and a 404 when deleting (K19)
+    'ListNotifications' => [
+        'action' => ListNotifications::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListNotifications::run($a, []),
+        'allowed' => $everyone,
+    ],
+    'MarkNotificationsRead' => [
+        'action' => MarkNotificationsRead::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => MarkNotificationsRead::run($a, ['ids' => [
+            Notification::factory()->forItem($w->item($column))->create(['user_id' => $a->user->id])->id,
+        ]]),
+        'allowed' => $everyone,
+    ],
+    'MarkNotificationsUnread' => [
+        'action' => MarkNotificationsUnread::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => MarkNotificationsUnread::run($a, ['ids' => [
+            Notification::factory()->forItem($w->item($column))->read()->create(['user_id' => $a->user->id])->id,
+        ]]),
+        'allowed' => $everyone,
+    ],
+    'DeleteNotification' => [
+        'action' => DeleteNotification::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => DeleteNotification::run($a, Notification::factory()->forItem($w->item($column))->create(['user_id' => $a->user->id])),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    // a bot gets no notifications: it reads an empty matrix and may not change one (K6)
+    'GetNotificationPreferences' => [
+        'action' => GetNotificationPreferences::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetNotificationPreferences::run($a),
+        'allowed' => $everyone,
+    ],
+    'SaveNotificationPreferences' => [
+        'action' => SaveNotificationPreferences::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => SaveNotificationPreferences::run($a, [
+            'preferences' => [['event' => 'comment', 'channel' => 'mail', 'enabled' => false]],
+        ]),
+        'allowed' => $people,
+    ],
+    // the system page (A287): org admins who are people; the default bot is an org admin, but no person (K6)
+    'GetSystemStatus' => [
+        'action' => GetSystemStatus::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetSystemStatus::run($a),
+        'allowed' => ['org_admin'],
+    ],
+    'RetryFailedJobs' => [
+        'action' => RetryFailedJobs::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            DB::table('failed_jobs')->insert(['uuid' => (string) Str::uuid(), 'connection' => 'database', 'queue' => 'default',
+                'payload' => '{"attempts":1}', 'exception' => 'RuntimeException: matrix', 'failed_at' => now()->utc()]);
+
+            return RetryFailedJobs::run($a, []);
+        },
+        'allowed' => ['org_admin'],
+        'event' => EventType::SystemFailedJobsRetried,
+    ],
+    // sends at once, nothing is written; a mail server is set and keeps what it gets (Mail::fake)
+    'SendTestMail' => [
+        'action' => SendTestMail::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            Mail::fake();
+            config(['mail.default' => 'smtp']);
+
+            return SendTestMail::run($a);
+        },
+        'allowed' => ['org_admin'],
+    ],
+    // the work of the consumer `notifications` for an event of the outbox (here one of the migrations, which tells
+    // nobody), without an event of its own
+    'NotifyRecipients' => [
+        'action' => NotifyRecipients::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => NotifyRecipients::run($a, Event::query()->where('type', EventType::BotCreated)->firstOrFail()),
+        'system' => true,
+    ],
+    // the work of SendNotificationMailJob for a collection that is due (here one without lines: it is skipped), without
+    // an event of its own
+    'SendNotificationMail' => [
+        'action' => SendNotificationMail::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => SendNotificationMail::run($a, NotificationMail::factory()->create(['user_id' => $w->target->id])->id),
+        'system' => true,
+    ],
+    // the sweeper of the mail collections (`app:send-notification-mails`), without an event of its own
+    'DispatchDueMails' => [
+        'action' => DispatchDueMails::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => DispatchDueMails::run($a),
+        'system' => true,
+    ],
+    // the hourly reminders of what is due (SendDueRemindersJob, A275), without an event of their own
+    'SendDueReminders' => [
+        'action' => SendDueReminders::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => SendDueReminders::run($a, now()->utc()->startOfHour()->toImmutable()),
+        'system' => true,
+    ],
+    // the hourly tidying up of notifications and collections (PruneNotificationsJob, A276), without an event
+    'PruneNotifications' => [
+        'action' => PruneNotifications::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => PruneNotifications::run($a),
+        'system' => true,
     ],
     'GetTwoFactor' => [
         'action' => GetTwoFactor::class,

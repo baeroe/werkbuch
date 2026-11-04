@@ -9,6 +9,7 @@ use App\Models\Comment;
 use App\Models\Event;
 use App\Models\Invitation;
 use App\Models\Label;
+use App\Models\Notification;
 use App\Models\Organization;
 use App\Models\PersonalAccessToken;
 use App\Models\Project;
@@ -22,6 +23,7 @@ use App\Models\WorkItem;
 use App\Models\WorkItemType;
 use App\Search\MeilisearchEngine;
 use App\Views\CatalogProperties;
+use GuzzleHttp\Client as GuzzleClient;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -73,6 +75,7 @@ class AppServiceProvider extends ServiceProvider
             'view' => View::class,
             'attachment' => Attachment::class,
             'comment' => Comment::class,
+            'notification' => Notification::class,
         ]);
 
         Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);
@@ -82,16 +85,24 @@ class AppServiceProvider extends ServiceProvider
 
         // uploads (A234): 60 per minute and account, the routes behind `auth:sanctum` always know the account
         RateLimiter::for('attachments', fn (Request $request) => Limit::perMinute(60)->by((string) $request->user()?->getAuthIdentifier()));
+        // the test mail of the system page: six a minute per account, a mail server is not to be flooded from it (T11-M4)
+        RateLimiter::for('test-mail', fn (Request $request) => Limit::perMinute(6)->by((string) $request->user()?->getAuthIdentifier()));
 
         // the index is written by the search consumer only, never when a model is saved (P1)
         WorkItem::disableSearchSyncing();
         Project::disableSearchSyncing();
         User::disableSearchSyncing();
 
-        // Scout's engine, able to remove the documents of a project's items by filter (RemovesWhere)
+        // Scout's engine, able to remove the documents of a project's items by filter (RemovesWhere) and to say how
+        // Meilisearch is (ReportsStatus) over a client of its own that gives up after 2 s (K15)
         resolve(EngineManager::class)->extend('meilisearch', fn (Application $app) => new MeilisearchEngine(
             $app->make(Client::class),
             (bool) config('scout.soft_delete'),
+            new Client(
+                (string) config('scout.meilisearch.host'),
+                config('scout.meilisearch.key'),
+                new GuzzleClient(['connect_timeout' => 2, 'timeout' => 2]),
+            ),
         ));
     }
 }

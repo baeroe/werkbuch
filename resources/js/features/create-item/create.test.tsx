@@ -16,6 +16,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { currentToasts, dismissToast, resetToasts, runToastAction } from '@/components/ui/toast';
 import { preloadEditor } from '@/editor/RichTextEditor';
 import { qk } from '@/hooks/keys';
+import { resetForUser } from '@/hooks/queryClient';
 import { MyItemsEmpty } from '@/features/items/MyItemsEmpty';
 import { canUndo, undoLatest } from '@/lib/undo';
 import { CreateHost } from '@/shell/CreateHost';
@@ -224,6 +225,134 @@ describe('CreateItemDialog', () => {
     expect(await within(dialog).findByText('Hier kannst du kein Item anlegen')).toBeTruthy();
     await modEnter();
     expect(posts()).toEqual([]);
+  });
+
+  it('parks the draft when the last project goes away', async () => {
+    const user = userEvent.setup();
+    renderWith(<Host />);
+    act(() => useUiStore.getState().openCreate({ project_id: 'p_web' }));
+    let dialog = await screen.findByRole('dialog', { name: 'Neues Item' });
+    await user.type(await within(dialog).findByRole('textbox', { name: /^Titel/ }), 'Export als CSV');
+
+    // the person loses the right to create in every project while the dialog is open
+    projects = [ops];
+    await act(() => client.invalidateQueries());
+    expect(await within(dialog).findByText('Hier kannst du kein Item anlegen')).toBeTruthy();
+    // the typed title is not lost: it is parked as if the dialog closed
+    expect(parkedToasts().map((entry) => entry.description)).toEqual(['Export als CSV']);
+
+    // closing the dialog parks it no second time
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(parkedToasts()).toHaveLength(1);
+
+    // the right is back: "Rückgängig" opens the dialog with the draft
+    projects = [web, app, ops];
+    await act(() => client.invalidateQueries());
+    act(() => void undoLatest());
+    dialog = await screen.findByRole('dialog', { name: 'Neues Item' });
+    expect((await within(dialog).findByRole<HTMLInputElement>('textbox', { name: /^Titel/ })).value).toBe('Export als CSV');
+  });
+
+  it('brings a parked draft back on undo after its project went, on the first project with a notice (T15-M3)', async () => {
+    const user = userEvent.setup();
+    renderWith(<Host />);
+    act(() => useUiStore.getState().openCreate({ project_id: 'p_app' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Neues Item' });
+    await user.type(await within(dialog).findByRole('textbox', { name: /^Titel/ }), 'Export als CSV');
+    await user.click(within(dialog).getByRole('button', { name: 'Abbrechen' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    // the project of the draft is gone from the list (deleted, or the person lost it); WEB still takes items
+    projects = [web, ops];
+    // known before the dialog comes back, not only after it opened
+    await act(() => client.refetchQueries({ type: 'all' }));
+    act(() => void undoLatest());
+    const restored = await screen.findByRole('dialog', { name: 'Neues Item' });
+
+    expect((await within(restored).findByRole<HTMLInputElement>('textbox', { name: /^Titel/ })).value).toBe('Export als CSV');
+    expect(within(restored).getByText('„Kunden-App“ steht nicht mehr zur Wahl. Prüfe Projekt und Typ.')).toBeTruthy();
+  });
+
+  it('forgets a parked draft and the names it saw when another person signs in', async () => {
+    const user = userEvent.setup();
+    renderWith(<Host />);
+    act(() => useUiStore.getState().openCreate({ project_id: 'p_app' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Neues Item' });
+    await user.type(await within(dialog).findByRole('textbox', { name: /^Titel/ }), 'Export als CSV');
+    await user.click(within(dialog).getByRole('button', { name: 'Abbrechen' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(parkedToasts()).toHaveLength(1);
+
+    // Lene signs out, Mara signs in within the five seconds of the toast; she does not see the project of the draft
+    act(() => resetForUser(lene.id, mara.id));
+    expect(parkedToasts()).toEqual([]);
+    projects = [web, ops];
+    await act(() => client.refetchQueries({ type: 'all' }));
+
+    // whatever still reopens the dialog opens it empty, and names no project of Lene
+    act(() => useUiStore.getState().openCreate(null));
+    const fresh = await screen.findByRole('dialog', { name: 'Neues Item' });
+    expect((await within(fresh).findByRole<HTMLInputElement>('textbox', { name: /^Titel/ })).value).toBe('');
+    expect(within(fresh).queryByText(/steht nicht mehr zur Wahl/)).toBeNull();
+  });
+
+  it('clears errors and the blocked reason on the fallback', async () => {
+    const user = userEvent.setup();
+    const { dialog, title } = await openDialog({ project_id: 'p_app', type_id: 't_wish' });
+    await user.type(title, 'Ticket verlinken');
+    await user.type(within(dialog).getByRole('textbox', { name: 'Ticket' }), 'kein link');
+    await user.click(within(dialog).getByRole('button', { name: /^Anlegen/ }));
+    expect(await within(dialog).findByText('Noch nicht angelegt')).toBeTruthy();
+
+    // the project is archived: the draft falls back to WEB, the notice about a field of the old one goes
+    projects = [web, { ...app, archived_at: '2026-10-01T00:00:00Z' }, ops];
+    await act(() => client.invalidateQueries());
+    await waitFor(() => expect(within(dialog).getByRole('combobox', { name: /^Projekt/ }).textContent).toContain('Website-Relaunch'));
+    expect(within(dialog).queryByText('Noch nicht angelegt')).toBeNull();
+
+    // a refusal of the type and of a property only the old type had
+    answerCreate = () => invalid({ type_id: ['Der Typ ist ausgeschaltet.'], 'values.ticket_url': ['Das Ticket fehlt.'] });
+    await modEnter();
+    expect(await within(dialog).findByText('Der Typ ist ausgeschaltet.')).toBeTruthy();
+    expect(within(dialog).getByRole('alert').textContent).toContain('Das Ticket fehlt.');
+
+    // the type is switched off: the draft falls back to another type, and the refusals of the old one go
+    projects = [{ ...web, enabled_type_ids: ['t_bug', 't_epic'] }, { ...app, archived_at: '2026-10-01T00:00:00Z' }, ops];
+    await act(() => client.invalidateQueries());
+    await waitFor(() => expect(within(dialog).getByRole('combobox', { name: /^Typ/ }).textContent).toContain('Bug'));
+    expect(within(dialog).queryByText('Der Typ ist ausgeschaltet.')).toBeNull();
+    expect(within(dialog).queryByRole('alert')).toBeNull();
+  });
+
+  it('drops the draft_gone banner after an own change and after create another', async () => {
+    const user = userEvent.setup();
+    const { dialog, title } = await openDialog({ project_id: 'p_app', type_id: 't_wish' });
+    await user.type(title, 'Export als CSV');
+    const gone = () => within(dialog).queryByText(/steht nicht mehr zur Wahl/);
+
+    // the type is switched off in APP; the person then picks another project herself
+    projects = [web, { ...app, enabled_type_ids: ['t_task', 't_bug', 't_epic'] }, ops];
+    await act(() => client.invalidateQueries());
+    await waitFor(() => expect(gone()).not.toBeNull());
+    await choose(user, within(dialog).getByRole('combobox', { name: /^Projekt/ }), 'Website-Relaunch');
+    await waitFor(() => expect(gone()).toBeNull());
+
+    // Task is switched off in WEB; the person then picks another type herself
+    projects = [{ ...web, enabled_type_ids: ['t_bug', 't_epic'] }, { ...app, enabled_type_ids: ['t_task', 't_bug', 't_epic'] }, ops];
+    await act(() => client.invalidateQueries());
+    await waitFor(() => expect(gone()).not.toBeNull());
+    await choose(user, within(dialog).getByRole('combobox', { name: /^Typ/ }), 'Epic');
+    await waitFor(() => expect(gone()).toBeNull());
+
+    // Epic is switched off too; then the item is created with "Weitere anlegen"
+    projects = [{ ...web, enabled_type_ids: ['t_bug'] }, { ...app, enabled_type_ids: ['t_task', 't_bug', 't_epic'] }, ops];
+    await act(() => client.invalidateQueries());
+    await waitFor(() => expect(gone()).not.toBeNull());
+    await user.click(within(dialog).getByRole('switch', { name: 'Weitere anlegen' }));
+    await modEnter();
+    await waitFor(() => expect(toastTitles()).toContain('WEB-52 angelegt'));
+    await waitFor(() => expect(gone()).toBeNull());
   });
 
   it('starts in the title', async () => {
@@ -618,6 +747,19 @@ describe('CreateItemDialog', () => {
     await user.paste('🚀'.repeat(200));
     await modEnter();
     await waitFor(() => expect(posts()).toHaveLength(1));
+  });
+
+  it('drops the notice of a press with an own change of the type (T15-M5)', async () => {
+    const user = userEvent.setup();
+    const { dialog, title } = await openDialog({ project_id: 'p_app', type_id: 't_wish' });
+    await user.type(title, 'Ticket verlinken');
+    await user.type(within(dialog).getByRole('textbox', { name: 'Ticket' }), 'kein link');
+    await user.click(within(dialog).getByRole('button', { name: /^Anlegen/ }));
+    expect(await within(dialog).findByText('Noch nicht angelegt')).toBeTruthy();
+
+    // the type without that field: the notice was about the old one
+    await choose(user, within(dialog).getByRole('combobox', { name: /^Typ/ }), 'Task');
+    await waitFor(() => expect(within(dialog).queryByText('Noch nicht angelegt')).toBeNull());
   });
 
   it('waits while a property still shows a text it cannot read', async () => {

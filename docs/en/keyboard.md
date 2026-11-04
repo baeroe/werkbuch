@@ -98,6 +98,15 @@ werkbuch works without a mouse. Press <kbd>?</kbd> on any screen to see the shor
 | <kbd>⌥ / Alt</kbd>+<kbd>←</kbd> | Make the epic shorter |
 | <kbd>⌥ / Alt</kbd>+<kbd>→</kbd> | Make the epic longer |
 
+## Inbox
+
+| Keys | Action |
+| --- | --- |
+| <kbd>E</kbd> | Mark as read |
+| <kbd>U</kbd> | Mark as unread |
+| <kbd>⇧</kbd>+<kbd>E</kbd> | Mark all as read |
+| <kbd>#</kbd> | Delete notification |
+
 ## Command palette
 
 | Keys | Action |

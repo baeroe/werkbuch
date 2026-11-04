@@ -26,6 +26,7 @@ import { closePeekOnNavigation, PeekHost } from '@/shell/PeekHost';
 import { SAVE_PAUSE_MS } from './FieldsPanel';
 import { ItemPage } from './ItemPage';
 import { ItemPeek } from './ItemPeek';
+import { clearLiveGone, markLiveGone } from '@/lib/liveGone';
 
 type Listener = (event: { detail: { page: { url: string } } }) => void;
 
@@ -354,6 +355,22 @@ describe('ItemPage', () => {
     press('e');
     await waitFor(() => expect(lastToast()).toMatchObject({ title: 'Nicht möglich', description: readOnly, tone: 'error' }));
     expect(screen.queryByRole('textbox', { name: 'Titel' })).toBeNull();
+  });
+
+  it('says the item was deleted when live said so, without asking for it again (F36)', async () => {
+    renderWith(<ItemPage itemKey="WEB-50" />);
+    expect(await screen.findByRole('heading', { level: 1 })).toBeTruthy();
+    const calls = api!.calls.length;
+
+    act(() => markLiveGone(web50.id));
+    expect(await screen.findByText('Dieses Item wurde gelöscht. Du siehst, wie es zuletzt war.')).toBeTruthy();
+    // and for its project too
+    act(() => clearLiveGone());
+    expect(screen.queryByText(/Dieses Item wurde gelöscht/)).toBeNull();
+    act(() => markLiveGone(web50.project_id));
+    expect(await screen.findByText(/Dieses Item wurde gelöscht/)).toBeTruthy();
+    expect(api!.calls.length).toBe(calls);
+    act(() => clearLiveGone());
   });
 
   it('marks an archived item read-only and restores it', async () => {

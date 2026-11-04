@@ -20,7 +20,7 @@ final class Problem extends RuntimeException implements HttpExceptionInterface
         'csrf_token_mismatch', 'conflict', 'server_error', 'service_unavailable', 'http_error', 'default_bot', 'already_member',
         'lead_cannot_leave', 'session_required', 'two_factor_enabled', 'two_factor_not_pending', 'two_factor_disabled',
         'invalid_workflow', 'default_workflow', 'default_type', 'built_in', 'is_default', 'state_in_use', 'search_unavailable',
-        'attachment_inline',
+        'attachment_inline', 'mail_not_configured', 'mail_failed',
     ];
 
     /**
@@ -92,7 +92,7 @@ final class Problem extends RuntimeException implements HttpExceptionInterface
         return new self(409, $reason);
     }
 
-    /** A service the request needs does not answer (`search_unavailable`): 503, the text of the reason explains it. */
+    /** A service the request needs does not answer (`search_unavailable`, `mail_failed`): 503, the text of the reason explains it. */
     public static function unavailable(string $reason): self
     {
         return new self(503, $reason);

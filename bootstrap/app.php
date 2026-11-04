@@ -5,6 +5,7 @@ use App\Http\Middleware\ConvertEmptyStringsToNull;
 use App\Http\Middleware\EnsureAccountIsActive;
 use App\Http\Middleware\EnsureSession;
 use App\Http\Middleware\EnsureTokenAbility;
+use App\Http\Middleware\GuardChannelAuthorization;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\TrustProxies;
@@ -35,9 +36,10 @@ return Application::configure(basePath: dirname(__DIR__))
         api: __DIR__.'/../routes/api.php',
         apiPrefix: 'api/v1',
         commands: __DIR__.'/../routes/console.php',
-        channels: __DIR__.'/../routes/channels.php',
         health: '/up',
     )
+    // the channels (routes/channels.php) authorize through /broadcasting/auth: a signed-in, active account (spec 7.2)
+    ->withBroadcasting(__DIR__.'/../routes/channels.php', ['middleware' => ['web', 'auth', EnsureAccountIsActive::class, GuardChannelAuthorization::class]])
     ->withMiddleware(function (Middleware $middleware): void {
         // reverse proxy in front: X-Forwarded-* only from TRUSTED_PROXIES (default: localhost and private networks);
         // the Host header must be the host of APP_URL (outside local and tests)

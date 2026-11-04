@@ -85,6 +85,12 @@ export const SHORTCUTS = {
   'list.move_down': { keys: 'alt+down', scope: 'list', label: 'shortcuts.list.move_down', group: 'shortcuts.group.list' },
   'list.shorter': { keys: 'alt+left', scope: 'list', label: 'shortcuts.list.shorter', group: 'shortcuts.group.timeline', repeat: true },
   'list.longer': { keys: 'alt+right', scope: 'list', label: 'shortcuts.list.longer', group: 'shortcuts.group.timeline', repeat: true },
+  // the inbox (`features/inbox/InboxScreen.tsx`); its cursor moves with `list.next`/`list.prev`, Enter opens the preview.
+  // e of the preview's title (`item.title`, detail) acts only with the focus in the preview or nowhere (`previewKeysAct`)
+  'inbox.read': { keys: 'e', scope: 'list', label: 'shortcuts.inbox.read', group: 'shortcuts.group.inbox' },
+  'inbox.unread': { keys: 'u', scope: 'list', label: 'shortcuts.inbox.unread', group: 'shortcuts.group.inbox' },
+  'inbox.read_all': { keys: 'shift+e', scope: 'list', label: 'shortcuts.inbox.read_all', group: 'shortcuts.group.inbox' },
+  'inbox.delete': { keys: '#', scope: 'list', label: 'shortcuts.inbox.delete', group: 'shortcuts.group.inbox' },
   // registered only while the preview is open (shell/PeekHost): the first Escape in a field leaves the field
   'peek.close': { keys: 'escape', scope: 'detail', label: 'shortcuts.peek.close', group: 'shortcuts.group.item' },
 } as const satisfies Record<string, CatalogEntry>;

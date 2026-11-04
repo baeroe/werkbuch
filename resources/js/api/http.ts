@@ -5,6 +5,7 @@
  *
  * A single resource comes wrapped in `{data}` like a list (P27): the API functions unwrap it with `one()`, a list
  * becomes a `Page` with `getPage()`. Answers that are no resource (`{token, plain_text}`, 204) pass through as they are.
+ * While the tab has a live connection, every call names its socket (`X-Socket-ID`, `setSocketId`).
  */
 
 import { ApiError, type Page } from './client';
@@ -64,6 +65,17 @@ function csrfToken(): string | null {
   return entry === undefined ? null : decodeURIComponent(entry.slice('XSRF-TOKEN='.length));
 }
 
+/** The socket of this tab's live connection (Reverb), or null while there is none. */
+let socketId: string | null = null;
+
+/**
+ * Tells the HTTP layer the socket of this tab's live connection: every call sends it as `X-Socket-ID`, so the change it
+ * makes comes back to every other tab but not to this one (A282), which shows it already.
+ */
+export function setSocketId(id: string | null): void {
+  socketId = id;
+}
+
 function baseHeaders(): Record<string, string> {
   const token = csrfToken();
 
@@ -71,6 +83,7 @@ function baseHeaders(): Record<string, string> {
     Accept: 'application/json',
     'X-Requested-With': 'XMLHttpRequest',
     ...(token === null ? {} : { 'X-XSRF-TOKEN': token }),
+    ...(socketId === null ? {} : { 'X-Socket-ID': socketId }),
   };
 }
 
@@ -208,6 +221,14 @@ export async function postPage<T>(path: string, body: unknown, options: RequestO
 
 export function post<T>(path: string, body?: unknown, options: RequestOptions = {}): Promise<T> {
   return request<T>('POST', path, body, options);
+}
+
+/**
+ * A `POST` to a path of the web app outside `/api/v1`, e.g. `/broadcasting/batch` for the live channels: with session
+ * cookie, CSRF token and its renewal after a 419, the answer read as JSON like any call of the API.
+ */
+export function webPost<T>(path: string, body?: unknown, options: RequestOptions = {}): Promise<T> {
+  return send<T>(() => viaFetch('POST', path, body, options), options);
 }
 
 export function patch<T>(path: string, body?: unknown, options: RequestOptions = {}): Promise<T> {

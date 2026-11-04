@@ -25,7 +25,7 @@ const props: SharedProps = {
   organization: { id: '01k8z0a1b2c3d4e5f6g7h8j9k1', name: 'Feldwerk', locale: 'de', timezone: 'Europe/Berlin', week_start: 1, logo_url: null },
   locale: 'de',
   translations: {},
-  features: { mail: true, live: null, attachments_max_mb: 25 },
+  features: { mail: true, live: { key: 'k', host: 'werkbuch.ddev.site', port: 6001, scheme: 'https' }, attachments_max_mb: 25, notification_mail_delay: 5 },
   flash: { status: null, error: null },
   errors: {},
 };

@@ -61,10 +61,28 @@ final class RaceConnections
      */
     public static function releaseBeforeLock(string $table, string $sqlEnd = 'for update'): void
     {
+        self::releaseWhen(fn (string $query) => str_starts_with($query, "select * from `{$table}`") && str_ends_with($query, $sqlEnd));
+    }
+
+    /**
+     * Commits the transaction `hold()` opened at the moment `mariadb_second` runs a statement that starts with
+     * `$sqlStart`, once, like releaseBeforeLock(): for a statement that waits without a locking read, such as an insert
+     * of a unique key whose row the first request holds.
+     */
+    public static function releaseBefore(string $sqlStart): void
+    {
+        self::releaseWhen(fn (string $query) => str_starts_with($query, $sqlStart));
+    }
+
+    /**
+     * @param  Closure(string): bool  $matches
+     */
+    private static function releaseWhen(Closure $matches): void
+    {
         $released = false;
 
-        DB::connection('mariadb_second')->beforeExecuting(function (string $query) use ($table, $sqlEnd, &$released): void {
-            if (! $released && str_starts_with($query, "select * from `{$table}`") && str_ends_with($query, $sqlEnd)) {
+        DB::connection('mariadb_second')->beforeExecuting(function (string $query) use ($matches, &$released): void {
+            if (! $released && $matches($query)) {
                 $released = true;
                 $default = DB::getDefaultConnection();
                 DB::setDefaultConnection('mariadb');

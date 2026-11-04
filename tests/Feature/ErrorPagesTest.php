@@ -1,5 +1,6 @@
 <?php
 
+use App\Exceptions\Problem;
 use App\Models\User;
 use Illuminate\Support\Facades\Route;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -9,6 +10,7 @@ beforeEach(function () {
     Route::middleware('web')->get('_t/broken', fn () => throw new LogicException('Broken on purpose.'));
     Route::middleware('web')->get('_t/unavailable', fn () => abort(503));
     Route::middleware('web')->get('_t/teapot', fn () => abort(418));
+    Route::middleware('web')->get('_t/problem', fn () => throw Problem::forbidden());
     Route::get('_t/bare-unavailable', fn () => abort(503));
 });
 
@@ -41,6 +43,14 @@ it('leaves every other status to Laravel', function () {
 
 it('leaves an answer without the shared props of the web group to Laravel', function () {
     $this->get('_t/bare-unavailable')->assertStatus(503)->assertDontSee('<script data-page="app"', false);
+});
+
+it('keeps a JSON 403 on a web route for a JSON request', function () {
+    // a fetch with Accept: application/json (the channel authorization of the live updates) reads the refusal as JSON
+    $this->getJson('_t/problem')->assertForbidden()->assertHeader('Content-Type', 'application/json')->assertJsonStructure(['message']);
+
+    $this->get('_t/problem')->assertForbidden()
+        ->assertInertia(fn (Assert $page) => $page->component('Errors/Error')->where('status', 403));
 });
 
 it('keeps the problem documents of /api', function () {

@@ -5,6 +5,7 @@ use App\Models\Comment;
 use App\Models\Event;
 use App\Models\Invitation;
 use App\Models\Label;
+use App\Models\Notification;
 use App\Models\Project;
 use App\Models\Property;
 use App\Models\RelationType;
@@ -63,4 +64,9 @@ it('maps the attachment to its short name', function () {
 it('maps the comment to its short name', function () {
     expect(Relation::getMorphedModel('comment'))->toBe(Comment::class)
         ->and((new Comment)->getMorphClass())->toBe('comment');
+});
+
+it('maps the notification to its short name', function () {
+    expect(Relation::getMorphedModel('notification'))->toBe(Notification::class)
+        ->and((new Notification)->getMorphClass())->toBe('notification');
 });

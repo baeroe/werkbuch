@@ -137,8 +137,11 @@ test('assigns a workflow with restricted transitions to a project', async ({ pag
     expect((await readProject(page, project.identifier)).workflow_id).toBe(stored.id);
   } finally {
     // the workflow can only go once no project uses it, the project in deletion included; every step runs, the
-    // E2eSeeder removes what is left on the next run
+    // E2eSeeder removes what is left on the next run. Away from the settings of the project first: the live event of
+    // switching back (`project.updated`) may reach the page only after the project is deleted, and the project it
+    // loads again then answers 404
     try {
+      await page.goto('/my-items');
       const standard = (await allEntries(page, 'workflows')).find((workflow) => workflow.is_default === true)!;
       const back = await api(page, 'PUT', `/api/v1/projects/${project.identifier}/workflow`, { workflow_id: standard.id, mapping: {} });
       expect(back.status(), await back.text()).toBe(200);

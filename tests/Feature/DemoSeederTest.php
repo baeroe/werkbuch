@@ -9,6 +9,7 @@ use App\Models\Attachment;
 use App\Models\Event;
 use App\Models\Favorite;
 use App\Models\Label;
+use App\Models\Notification;
 use App\Models\Organization;
 use App\Models\PersonalAccessToken;
 use App\Models\Project;
@@ -383,13 +384,13 @@ it('seeds the tokens of Mara and Kira with their times in UTC and a secret nobod
 it('runs again without changing anything and resets the demo password', function () {
     $this->seed(DemoSeeder::class);
     $secrets = PersonalAccessToken::orderBy('name')->pluck('token', 'name')->all();
-    $counts = fn () => [User::count(), Project::count(), ProjectMember::count(), Favorite::count(), PersonalAccessToken::count(), WorkItem::count(), Event::count()];
+    $counts = fn () => [User::count(), Project::count(), ProjectMember::count(), Favorite::count(), PersonalAccessToken::count(), WorkItem::count(), Event::count(), Notification::count()];
     $before = $counts();
     User::where('handle', 'lene')->sole()->update(['password' => 'changed-elsewhere']);
 
     $this->seed(DemoSeeder::class);
 
-    expect($counts())->toBe($before)->and($before)->toBe([8, 3, 13, 15, 3, 71, 53])
+    expect($counts())->toBe($before)->and($before)->toBe([8, 3, 13, 15, 3, 71, 53, 14])
         ->and(PersonalAccessToken::orderBy('name')->pluck('token', 'name')->all())->toBe($secrets)
         ->and(Hash::check(DemoSeeder::PASSWORD, User::where('handle', 'lene')->sole()->password))->toBeTrue()
         ->and(Visibility::roleIn(User::where('handle', 'theo')->sole(), Project::where('identifier', 'WEB')->sole())?->value)->toBe('viewer');

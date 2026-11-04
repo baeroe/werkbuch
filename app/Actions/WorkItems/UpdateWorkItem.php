@@ -125,7 +125,7 @@ final class UpdateWorkItem
         AttachmentLinks::link($locked, $locked->project, $actor->user, $texts);
         $mentionedBefore = $texts === [] ? [] : Mentions::ofItem($locked);
 
-        $actor = $reason === null ? $actor : new Actor($actor->user, $actor->via, $reason, $actor->token);
+        $actor = $reason === null ? $actor : $actor->withReason($reason);
         $changes = [];
         $record = function (string $field, mixed $old, mixed $new) use (&$changes): void {
             if (json_encode($old) !== json_encode($new)) {

@@ -88,6 +88,7 @@ export function PeekHost() {
     <aside
       ref={panel}
       tabIndex={-1}
+      data-peek-panel=""
       aria-label={t('items.peek.label')}
       className="tracing fixed inset-x-2 top-16 bottom-2 z-30 flex animate-peek-in flex-col rounded-card md:top-8 md:right-2 md:left-auto md:w-[var(--panel-w)]"
     >

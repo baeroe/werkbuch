@@ -1,9 +1,11 @@
 <?php
 
+use App\Live\LiveConsumer;
 use App\Models\Attachment;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
+use App\Notifications\NotificationConsumer;
 use App\Search\SearchConsumer;
 use Illuminate\Support\Env;
 
@@ -36,7 +38,7 @@ it('has the documented defaults', function () {
         ->and(config('werkbuch.notification_mail_delay'))->toBe(5)
         ->and(config('werkbuch.webhooks_allow_private'))->toBeFalse()
         // the file's default: the tests switch the consumers off (Tests\TestCase)
-        ->and((require base_path('config/werkbuch.php'))['event_consumers'])->toBe([SearchConsumer::class])
+        ->and((require base_path('config/werkbuch.php'))['event_consumers'])->toBe([SearchConsumer::class, NotificationConsumer::class, LiveConsumer::class])
         ->and(config('werkbuch.event_consumers'))->toBe([])
         ->and(config('werkbuch.rate_limits.api'))->toBe(600)
         ->and(config('werkbuch.rate_limits.mcp'))->toBe(300)
@@ -67,6 +69,54 @@ it('reads the environment', function () {
 
     expect(config('werkbuch.attachments_max_mb'))->toBe(50)
         ->and(config('werkbuch.webhooks_allow_private'))->toBeTrue();
+});
+
+it('lists the queues in the worker\'s order', function () {
+    expect(config('werkbuch.queues'))->toBe(['default', 'live', 'notifications', 'webhooks', 'search', 'media', 'bulk']);
+});
+
+it('works every queue in DDEV and the CI, search and media in a worker of their own (they starved behind the events)', function () {
+    $workers = function (string $file): array {
+        preg_match_all('/queue:(?:listen|work) --queue=([a-z,]+)/', (string) file_get_contents(repo_path($file)), $matches);
+
+        return array_map(fn (string $list): array => explode(',', $list), $matches[1]);
+    };
+
+    expect($workers('.ddev/config.yaml'))->toBe([['default', 'live', 'notifications', 'webhooks', 'bulk'], ['search', 'media']])
+        // no webhooks yet in the CI (phase 11)
+        ->and($workers('.github/workflows/tests.yml'))->toBe([['default', 'live', 'notifications', 'bulk'], ['search', 'media']])
+        ->and(array_merge(...$workers('.ddev/config.yaml')))->toEqualCanonicalizing(config('werkbuch.queues'));
+});
+
+it('gives SMTP a timeout below the lock wait of the database (T7-M6)', function () {
+    setEnv('MAIL_TIMEOUT', null);
+    expect((require base_path('config/mail.php'))['mailers']['smtp']['timeout'])->toBe(20);
+
+    setEnv('MAIL_TIMEOUT', '8');
+    expect((require base_path('config/mail.php'))['mailers']['smtp']['timeout'])->toBe(8);
+    setEnv('MAIL_TIMEOUT', null);
+});
+
+it('keeps what lets /broadcasting/auth go without a CSRF token: SameSite lax and no CORS beyond the API (T9-M5)', function () {
+    // another site can send no cookie of the session with a POST, and reads no answer of a web route
+    expect(config('session.same_site'))->toBe('lax')
+        ->and(config('cors.paths'))->toBe(['api/*', 'sanctum/csrf-cookie'])
+        ->and(config('cors.supports_credentials'))->toBeFalse();
+});
+
+it('lets Reverb take client events from nobody and only the host of APP_URL', function () {
+    $previous = env('APP_URL');
+    setEnv('APP_URL', 'https://werkbuch.example.com:8443/app');
+    $app = (require base_path('config/reverb.php'))['apps']['apps'][0];
+    setEnv('APP_URL', is_string($previous) ? $previous : null);
+
+    // the host alone, as a literal (T2-M1): never the scheme, the port or a path
+    expect($app['accept_client_events_from'])->toBe('none')
+        ->and($app['allowed_origins'])->toBe(['werkbuch.example.com']);
+});
+
+it('gives the Reverb connection short timeouts, so a broadcast never hangs a request (K1)', function () {
+    expect(config('broadcasting.connections.reverb.client_options'))->toBe(['connect_timeout' => 2, 'timeout' => 3]);
 });
 
 it('keeps the search settings', function () {

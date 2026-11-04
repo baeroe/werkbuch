@@ -42,6 +42,12 @@ jobs:
           MEILI_NO_ANALYTICS: 'true'
         ports:
           - 7700:7700
+      # tests/Integration sends the notification digest over SMTP (the same image as in the job `e2e`)
+      mailpit:
+        image: axllent/mailpit:v1.32.0@sha256:0790692be935ea4420d085694f7985b1f692ca6a8771ab0e0bd8ba75ac180498
+        ports:
+          - 1025:1025
+          - 8025:8025
 
     env:
       DB_CONNECTION: mariadb
@@ -53,6 +59,7 @@ jobs:
       # real environment variables win over .env (copied from .env.example)
       MEILISEARCH_HOST: http://127.0.0.1:7700
       MEILISEARCH_KEY: ci-werkbuch-master-key
+      MAILPIT_URL: http://127.0.0.1:8025
 
     steps:
       - uses: actions/checkout@v4
@@ -118,8 +125,9 @@ jobs:
   # the Vitest coverage (100 % lines of the frontend). Not a required check.
   e2e:
     runs-on: ubuntu-latest
-    # Phase 5 brought the suite to 500+ tests on one worker (about 45 minutes in CI).
-    timeout-minutes: 75
+    # Phase 8 brought the suite to about 700 tests on one worker (about 80 minutes in CI: the tests themselves take
+    # nearly all of it, one shared database keeps them serial).
+    timeout-minutes: 120
 
     services:
       mariadb:
@@ -214,11 +222,21 @@ jobs:
           PHP_CLI_SERVER_WORKERS=4 php artisan serve --host=127.0.0.1 --port=8000 > serve.log 2>&1 &
           curl -fsS --retry 30 --retry-delay 1 --retry-all-errors http://127.0.0.1:8000/up
 
-      # QUEUE_CONNECTION=database as in production: the worker runs the queued jobs (the reset mail goes out on the
+      # the WebSocket server of the live updates (the app broadcasts to it, the browser listens on it)
+      - name: Reverb
+        run: |
+          php artisan reverb:start --host=127.0.0.1 --port=8080 > reverb.log 2>&1 &
+          curl -fsS --retry 30 --retry-delay 1 --retry-all-errors http://127.0.0.1:8080/up
+
+      # QUEUE_CONNECTION=database as in production: the workers run the queued jobs (the reset mail goes out on the
       # queue `notifications`, the search consumer works in the queue `search`, previews of pictures are made in the
-      # queue `media`, a deleted project is purged in the queue `bulk`) like the `queue` daemon of DDEV
-      - name: Queue worker
-        run: php artisan queue:work --queue=default,notifications,search,media,bulk --sleep=1 --tries=3 > queue.log 2>&1 &
+      # queue `media`, a deleted project is purged in the queue `bulk`) like the `queue` and `queue-index` daemons of
+      # DDEV: search and media in a worker of their own, so the jobs every event makes for `default`, `live` and
+      # `notifications` never keep them waiting
+      - name: Queue workers
+        run: |
+          php artisan queue:work --queue=default,live,notifications,bulk --sleep=1 --tries=3 > queue.log 2>&1 &
+          php artisan queue:work --queue=search,media --sleep=1 --tries=3 > queue-index.log 2>&1 &
 
       - name: Playwright
         run: |
@@ -249,6 +267,8 @@ jobs:
           path: |
             serve.log
             queue.log
+            queue-index.log
+            reverb.log
             storage/logs
             e2e/test-results
           if-no-files-found: ignore

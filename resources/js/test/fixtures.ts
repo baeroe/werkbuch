@@ -2,7 +2,8 @@
  * Fictional records for tests of the data layer, after the people and projects of the clickdummy's seed (Feldwerk).
  * Mara is org admin, Ida admin of WEB, Theo admin of APP and viewer in WEB, Lene member of WEB and APP; OPS is private.
  * The catalogs (workflows, types, properties, labels, relation types, resolutions) are those of the clickdummy's seed,
- * the work items, relations and history a few of its items (WEB-47, WEB-30, WEB-48, OPS-12).
+ * the work items, relations and history a few of its items (WEB-47, WEB-30, WEB-48, OPS-12), the inbox Mara's (seed
+ * inbox.ts, as the NotificationsSeeder writes it).
  */
 
 import { queried } from './api';
@@ -14,6 +15,10 @@ import type {
   ItemEvent,
   ItemGroups,
   Label,
+  ListedItem,
+  Notification,
+  NotificationData,
+  NotificationEvent,
   Organization,
   Project,
   ProjectRole,
@@ -22,6 +27,7 @@ import type {
   RelationType,
   SearchResults,
   Resolution,
+  SystemStatus,
   User,
   View,
   Workflow,
@@ -547,4 +553,148 @@ export const emptySearch: SearchResults = { items: [], projects: [], people: [],
 
 export function searchResults(partial: Partial<SearchResults> = {}): SearchResults {
   return { ...emptySearch, ...partial };
+}
+
+/* -------------------------------------------------------------- notifications */
+
+/** A notification of Mara's inbox as `GET /api/v1/notifications` answers it, unread; override what the test is about. */
+export function makeNotification(overrides: Partial<Notification> = {}): Notification {
+  return {
+    id: 'n_1',
+    user_id: 'u_mara',
+    event_id: 'ev_1',
+    event: 'assigned',
+    project_id: 'p_web',
+    work_item_id: web47.id,
+    actor_id: 'u_ida',
+    data: {},
+    excerpt: null,
+    read_at: null,
+    mailed_at: null,
+    created_at: '2026-10-28T07:40:00.000Z',
+    item: web47,
+    ...overrides,
+  };
+}
+
+/** The items of Mara's inbox that the fixtures above do not have yet, lean as the inbox lists them. */
+const inboxItems = {
+  web42: makeWorkItem({ id: 'wi_web_42', number: 42, key: 'WEB-42', title: 'Startseite: Hero und Teaser bauen', state_id: 'std_progress', assignee_id: 'u_ida' }),
+  web40: makeWorkItem({ id: 'wi_web_40', number: 40, key: 'WEB-40', type_id: 't_bug', title: 'Favicon fehlt im Safari', state_id: 'std_done', priority: 'low' }),
+  app15: makeWorkItem({ id: 'wi_app_15', project_id: 'p_app', number: 15, key: 'APP-15', type_id: 't_wish', title: 'Bestellhistorie als PDF exportieren', state_id: 'app_approval' }),
+  app18: makeWorkItem({ id: 'wi_app_18', project_id: 'p_app', number: 18, key: 'APP-18', title: 'TestFlight-Gruppe für Kunden einrichten', state_id: 'app_review', assignee_id: 'u_mara', priority: 'medium', due_date: '2026-10-28' }),
+  app24: makeWorkItem({ id: 'wi_app_24', project_id: 'p_app', number: 24, key: 'APP-24', title: 'Feedback der Beta-Tester sammeln', state_id: 'app_backlog', assignee_id: 'u_mara', priority: 'medium' }),
+  ops3: makeWorkItem({ id: 'wi_ops_3', project_id: 'p_ops', number: 3, key: 'OPS-3', type_id: 't_epic', title: 'Server-Migration', state_id: 'std_progress' }),
+  ops11: makeWorkItem({ id: 'wi_ops_11', project_id: 'p_ops', number: 11, key: 'OPS-11', title: 'DNS-Einträge umstellen', state_id: 'std_done', assignee_id: 'u_mara', priority: 'high' }),
+};
+
+const snapshot = (id: string, name: string, category: 'unstarted' | 'started' | 'completed') => ({ id, name, category });
+const todo = snapshot('std_todo', 'Todo', 'unstarted');
+const progress = snapshot('std_progress', 'In Progress', 'started');
+const done = snapshot('std_done', 'Done', 'completed');
+
+function inboxRow(
+  id: string,
+  event: NotificationEvent,
+  item: WorkItem | null,
+  actor: string | null,
+  created: string,
+  read: string | null,
+  extra: { data?: NotificationData; excerpt?: string; project_id?: string | null } = {},
+): Notification {
+  return makeNotification({
+    id,
+    event_id: null,
+    event,
+    project_id: extra.project_id !== undefined ? extra.project_id : (item?.project_id ?? null),
+    work_item_id: item?.id ?? null,
+    actor_id: actor,
+    data: extra.data ?? {},
+    excerpt: extra.excerpt ?? null,
+    read_at: read,
+    created_at: created,
+    item: item && lean(item),
+  });
+}
+
+/** An item as a lean answer of the API carries it (P17): without the description and the Markdown of the values (T13-M2). */
+function lean(item: ListedItem): ListedItem {
+  const { description: _description, description_json: _json, values_markdown: _markdown, ...listed } = item as WorkItem;
+  return listed;
+}
+
+/**
+ * Mara's inbox as the NotificationsSeeder writes it from the clickdummy's seed (14 rows, newest first, the first three
+ * unread are n_01, n_03, n_04), with the `data` the app stores and the excerpts the API reads. Times in UTC.
+ */
+export const maraInbox: Notification[] = [
+  inboxRow('n_01', 'mentioned', inboxItems.web42, 'u_ida', '2026-10-28T07:40:00.000Z', null, {
+    data: { source: 'comment', comment_id: 'c_web42_1' },
+    excerpt: 'Hero-Entwurf ist drin, die Teaser kommen heute Nachmittag. @Mara Lindqvist kannst du die Texte kurz gegenlesen?',
+  }),
+  inboxRow('n_02', 'due', inboxItems.app18, null, '2026-10-28T07:00:00.000Z', '2026-10-28T07:10:00.000Z', { data: { due_date: '2026-10-28', overdue: false } }),
+  inboxRow('n_04', 'assigned', inboxItems.app24, 'u_theo', '2026-10-27T15:05:00.000Z', null),
+  inboxRow('n_03', 'comment', inboxItems.app15, 'u_theo', '2026-10-27T14:10:00.000Z', null, {
+    data: { comment_id: 'c_app15_1' },
+    excerpt: 'Hafenkontor möchte das bis Ende November. Wir brauchen noch das PDF-Layout vom Kunden.',
+  }),
+  inboxRow('n_05', 'state_changed', inboxItems.ops11, 'u_jonas', '2026-10-27T13:00:00.000Z', '2026-10-27T15:00:00.000Z', { data: { from: progress, to: done } }),
+  inboxRow('n_06', 'item_changed', web47, 'u_ida', '2026-10-27T09:20:00.000Z', '2026-10-27T11:00:00.000Z', { data: { fields: ['priority'] } }),
+  inboxRow('n_07', 'state_changed', web47, 'u_jonas', '2026-10-27T08:15:00.000Z', '2026-10-27T11:00:00.000Z', { data: { from: todo, to: progress } }),
+  inboxRow('n_09', 'mentioned', inboxItems.ops3, 'u_jonas', '2026-10-26T16:00:00.000Z', '2026-10-27T07:30:00.000Z', {
+    data: { source: 'comment', comment_id: 'c_ops3_1' },
+    excerpt: 'Fehlt nur noch das Mail-Limit (OPS-12). @Mara Lindqvist das Wartungsfenster für die alten Server brauche ich noch von dir.',
+  }),
+  inboxRow('n_08', 'comment', ops12, 'u_jonas', '2026-10-26T15:30:00.000Z', '2026-10-27T07:30:00.000Z', {
+    data: { comment_id: 'c_ops12_2' },
+    excerpt: 'Setze ich um, sobald das Wartungsfenster steht.',
+  }),
+  inboxRow('n_11', 'state_changed', inboxItems.web40, 'u_lene', '2026-10-23T12:10:00.000Z', '2026-10-23T14:00:00.000Z', { data: { from: todo, to: done } }),
+  // the webhook "Altes CRM" (phase 11): a notification of the organisation, without project and webhook
+  inboxRow('n_10', 'webhook_disabled', null, null, '2026-10-22T08:00:00.000Z', '2026-10-23T07:00:00.000Z', { project_id: null }),
+  inboxRow('n_12', 'assigned', inboxItems.app18, 'u_theo', '2026-10-21T09:00:00.000Z', '2026-10-21T11:00:00.000Z'),
+  inboxRow('n_13', 'mentioned', web47, 'u_ida', '2026-10-20T09:30:00.000Z', '2026-10-20T13:00:00.000Z', {
+    data: { source: 'description' },
+    excerpt: 'Beim Absenden kommt die Mail zweimal an.',
+  }),
+  // the template "Zertifikate prüfen" (phase 10), without the template
+  inboxRow('n_14', 'template_run_failed', null, null, '2026-10-01T05:00:05.000Z', '2026-10-02T07:00:00.000Z', {
+    project_id: 'p_ops',
+    data: { error: 'Pflicht-Property Umgebung fehlt' },
+  }),
+];
+
+/* --------------------------------------------------------------------- system */
+
+/** The system page as `GET /api/v1/system` answers it, after the clickdummy's seed; override what the test is about. */
+export function makeSystemStatus(overrides: Partial<SystemStatus> = {}): SystemStatus {
+  return {
+    version: '0.1.0-dev',
+    queued_jobs: 3,
+    delayed_jobs: 1,
+    queues: [
+      { queue: 'default', pending: 2, oldest_at: '2026-10-28T07:59:00.000Z' },
+      { queue: 'live', pending: 0, oldest_at: null },
+      { queue: 'notifications', pending: 1, oldest_at: '2026-10-28T07:58:30.000Z' },
+      { queue: 'webhooks', pending: 0, oldest_at: null },
+      { queue: 'search', pending: 0, oldest_at: null },
+      { queue: 'media', pending: 0, oldest_at: null },
+      { queue: 'bulk', pending: 0, oldest_at: null },
+    ],
+    failed_jobs: [
+      {
+        id: '9b3e6a52-1c0f-4f1e-9a57-2d6f3e8c1a01',
+        queue: 'notifications',
+        job: 'App\\Jobs\\SendNotificationMailJob',
+        error: 'Connection to mail-1.feldwerk.example.com:587 refused',
+        failed_at: '2026-10-26T12:05:00.000Z',
+      },
+    ],
+    failed_jobs_total: 1,
+    search: 'ok',
+    search_tasks: { enqueued: 0, processing: 0, failed_last_day: 0 },
+    mail_configured: true,
+    live: 'ok',
+    ...overrides,
+  };
 }

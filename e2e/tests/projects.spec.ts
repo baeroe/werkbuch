@@ -157,7 +157,9 @@ test('joins a public project with one click', async ({ page, browser }) => {
   }
 });
 
-test('hides a private project from a non-member', async ({ browser }) => {
+test('hides a private project from a non-member', async ({ browser, allowedErrors }) => {
+  // the settings of OPS answer her 404, as the test asks (the browser reports it)
+  allowedErrors.push(/^\[ida@feldwerk\.example\.com\] console error: .*status of 404 .*\/projects\/OPS\/settings\)$/);
   // Ida is in WEB, not in the private OPS
   const { context, page: ida } = await signedInContext(browser, PEOPLE.ida);
   try {

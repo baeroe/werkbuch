@@ -12,6 +12,7 @@ use App\Models\Organization;
 use App\Models\Project;
 use App\Models\User;
 use App\Support\Actor;
+use Illuminate\Broadcasting\BroadcastManager;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -23,6 +24,7 @@ use Inertia\Inertia;
 use Laravel\Scout\EngineManager;
 use Symfony\Component\Finder\Finder;
 use Tests\Support\ArraySearchEngine;
+use Tests\Support\RecordingBroadcaster;
 use Tests\TestCase;
 
 pest()->extend(TestCase::class)->use(RefreshDatabase::class)->in('Feature');
@@ -270,6 +272,45 @@ function searchEngine(): ArraySearchEngine
     app(EngineManager::class)->forgetDrivers();
 
     return $engine;
+}
+
+/**
+ * Broadcasting through Reverb with fixed keys and the channels of routes/channels.php on that broadcaster (K3): the
+ * channels register on the broadcaster that was the default while the app booted (`null` in tests), so they are
+ * registered again here. Signing an answer of /broadcasting/auth calls nothing outside.
+ */
+function liveChannels(): void
+{
+    config([
+        'broadcasting.default' => 'reverb',
+        'broadcasting.connections.reverb' => [
+            'driver' => 'reverb',
+            'key' => 'live-key',
+            'secret' => 'live-secret',
+            'app_id' => 'live',
+            'options' => ['host' => '127.0.0.1', 'port' => 6001, 'scheme' => 'http', 'useTLS' => false],
+            'client_options' => ['connect_timeout' => 2, 'timeout' => 3],
+        ],
+    ]);
+    app(BroadcastManager::class)->forgetDrivers();
+
+    require repo_path('routes/channels.php');
+}
+
+/**
+ * Switches broadcasting to a new RecordingBroadcaster and returns it (K3, K4): what the app sends to Reverb and whom it
+ * disconnects is kept there; the channels of routes/channels.php register on it as well.
+ */
+function broadcasts(): RecordingBroadcaster
+{
+    $recorder = new RecordingBroadcaster;
+    app(BroadcastManager::class)->extend('recording', fn () => $recorder);
+    config(['broadcasting.default' => 'recording', 'broadcasting.connections.recording' => ['driver' => 'recording']]);
+    app(BroadcastManager::class)->forgetDrivers();
+
+    require repo_path('routes/channels.php');
+
+    return $recorder;
 }
 
 /**

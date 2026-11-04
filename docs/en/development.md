@@ -45,7 +45,13 @@ Open <https://werkbuch.ddev.site/login> and sign in with `ADMIN_EMAIL` and `ADMI
 | Mail | `ddev mailpit` |
 | Database | `ddev mysql`, user, password and database `db` |
 
-The queue worker, the scheduler and Reverb run as DDEV daemons and start with `ddev start`. The worker also listens on the queue `search`, which keeps the search indexes in step with every change, and on `media`, which computes the previews of uploaded images (`MEDIA_QUEUE` in `.env`). The Meilisearch dashboard asks for the key `MEILISEARCH_KEY` from `.env`.
+Two queue workers, the scheduler and Reverb run as DDEV daemons and start with `ddev start`. The worker `queue` takes the queues in this order: `default` (handing every event to its consumers), `live` (live updates through Reverb), `notifications` (the inbox, notification mails, reminders, password reset and invitation mails), `webhooks` and `bulk` (deleting projects). The worker `queue-index` takes `search` (keeps the search indexes in step with every change) and `media` (previews of uploaded images, `MEDIA_QUEUE` in `.env`). `queue:listen` starts PHP anew for every job and always takes the first queue that has a job, and every event makes jobs for `default`, `live` and `notifications`: behind them search results and previews came minutes late, so they have a worker of their own. The order of all queues is `config('werkbuch.queues')`. The Meilisearch dashboard asks for the key `MEILISEARCH_KEY` from `.env`.
+
+The scheduler runs `app:redispatch-events` and `app:send-notification-mails` every minute, and every hour it clears uploads nobody took, sends the reminders for everyone for whom it is now 08:00, and prunes old notifications (all in `routes/console.php`).
+
+Every mail of the app lands in Mailpit (`ddev mailpit`): password resets, invitations and notification mails. Notification mails are collected per person and item for `NOTIFICATION_MAIL_DELAY` minutes (5 in `.env.example`); `ddev artisan app:send-notification-mails --now` sends everything that is open right away. With `MAIL_MAILER=log` or `array`, werkbuch counts as having no mail server: there are no notification mails at all, only the inbox.
+
+Reverb serves the live updates on port 6001 (`REVERB_*` in `.env`; the browser gets host, port and scheme at runtime, there are no `VITE_REVERB_*` variables). Reverb reads the code only at its start: after changing a channel or the live consumer, run `ddev restart`. Without Reverb (`BROADCAST_CONNECTION=null`), nothing connects and lists update when they load next. More under [Notifications](/en/concepts/notifications#live-updates).
 
 Uploaded files land on the private disk `local` (`storage/app/private`), never in `public/`. One file may be at most `ATTACHMENTS_MAX_MB` (25 MB by default). PHP has its own limits in front of that, `upload_max_filesize` and `post_max_size`; they must be above `ATTACHMENTS_MAX_MB`, otherwise PHP drops a large file before werkbuch can name the limit. DDEV allows 100 MB, the CI sets 30 MB and 32 MB. A file over either limit is a `413` with `reason: payload_too_large`. More under [rich text](/en/concepts/rich-text#images-and-files).
 
@@ -77,6 +83,8 @@ pnpm --dir e2e test                          # seeds the e2e data, then runs the
 ddev exec pnpm coverage:merge                # Vitest and Playwright together: 100 % lines over resources/js
 ```
 
+The CI job `e2e` runs the same suite against `php artisan serve` with MariaDB, Meilisearch and Mailpit as services, Reverb on port 8080 (`e2e/ci.env`) and two workers, one on `default,live,notifications,bulk` and one on `search,media`. Live specs need Reverb and the queue `live`; without them, the banner "Live updates paused" shows and the specs wait in vain.
+
 The frontend must be covered to 100 % lines by Vitest and Playwright together. After the Playwright run, `coverage:merge` fails below that. Run `ddev exec pnpm build` afterwards to leave an uninstrumented build behind.
 
 ## Lost password
@@ -96,12 +104,15 @@ Lost the authenticator app and the recovery codes? `ddev artisan app:reset-two-f
 ```bash
 ddev artisan app:sync-roles            # compares the roles and rights in the database with the code
 ddev artisan app:redispatch-events     # hands events that got stuck to their consumers again
+ddev artisan app:send-notification-mails   # queues collected notification mails that have no job; --now sends all open ones at once
 ddev artisan app:search-sync           # sends the settings of the search indexes (config/scout.php) to Meilisearch
 ddev artisan app:search-import         # empties the search indexes and fills them again from the database
 ddev artisan app:prune-attachments --dry-run --min-age=30   # lists pictures and files no text names any more
 ```
 
 `app:sync-roles` is what the migration of the roles runs; call it by hand only after a rights table in the code changed without a migration. `app:redispatch-events` runs every minute in the scheduler, so you only need it by hand to catch up after the scheduler was down.
+
+`app:send-notification-mails` runs every minute as well: it hands collected mails that are due and lost their job to the queue again, once no try ran for 35 minutes. With `--now` it sends every open collection in its own process, due or not; use it before maintenance, or locally instead of waiting five minutes.
 
 `app:search-sync` is needed after a change of the index settings in `config/scout.php`. `app:search-import` builds the indexes from scratch: on the first start, after `migrate:fresh`, and as the repair when the search missed changes (for example after Meilisearch was down for hours). During the import the search is briefly empty. More under [Search](/en/search#operation).
 

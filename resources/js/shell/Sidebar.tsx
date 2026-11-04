@@ -3,7 +3,7 @@
  * sidebar/ProjectsSection; a project opens to Items, Wiki, Templates and Settings), at the bottom the profile and the
  * settings. Tracing paper floating over the dot paper; collapsed it shrinks to a rail of icons. Below md the same
  * content lives in the drawer of the top bar (MobileBar). Below the wordmark the search opens the command palette
- * (`SearchButton`). The unread count joins with the phase that brings the inbox.
+ * (`SearchButton`). The inbox carries the unread count (`InboxBadge`), in the sidebar and in the rail.
  */
 
 import { Link } from '@inertiajs/react';
@@ -18,6 +18,7 @@ import { t, type TranslationKey } from '@/lib/i18n';
 import { paths, useActivePath } from '@/lib/links';
 import { SHORTCUTS } from '@/lib/shortcuts/catalog';
 import { useUiStore } from '@/store/ui';
+import { InboxBadge, useInboxName } from './InboxBadge';
 import { ProfileMenu } from './ProfileMenu';
 import { SearchButton } from './SearchButton';
 import { ProjectsSection } from './sidebar/ProjectsSection';
@@ -48,6 +49,23 @@ function SettingsLink({ rail = false }: { rail?: boolean }) {
   );
 }
 
+/** The inbox row: its name says the unread count, the badge shows it. */
+function InboxLink() {
+  const name = useInboxName();
+  return (
+    <SideLink
+      href={paths.inbox()}
+      end
+      strong
+      label={name}
+      leading={<Inbox className="size-4" aria-hidden="true" />}
+      trailing={<InboxBadge look="full" />}
+    >
+      {t('shell.nav.inbox')}
+    </SideLink>
+  );
+}
+
 /** The whole sidebar content; `headerAction` sits next to the wordmark (collapse, or close in the drawer). */
 export function SidebarContent({ headerAction }: { headerAction?: ReactNode }) {
   return (
@@ -61,9 +79,7 @@ export function SidebarContent({ headerAction }: { headerAction?: ReactNode }) {
       <SearchButton variant="full" />
       <ul className="flex shrink-0 flex-col gap-0.5">
         <li>
-          <SideLink href={paths.inbox()} end strong leading={<Inbox className="size-4" aria-hidden="true" />}>
-            {t('shell.nav.inbox')}
-          </SideLink>
+          <InboxLink />
         </li>
         <li>
           <SideLink href={paths.myItems()} end also={[paths.created(), paths.subscribed()]} strong leading={<UserRoundCheck className="size-4" aria-hidden="true" />}>
@@ -84,12 +100,22 @@ export function SidebarContent({ headerAction }: { headerAction?: ReactNode }) {
   );
 }
 
-type RailLinkProps = { href: string; label: TranslationKey; icon: LucideIcon; end?: boolean; also?: string[]; shortcut: keyof typeof SHORTCUTS };
+type RailLinkProps = {
+  href: string;
+  label: TranslationKey;
+  icon: LucideIcon;
+  end?: boolean;
+  also?: string[];
+  shortcut: keyof typeof SHORTCUTS;
+  /** A name other than the label, e.g. the inbox with its unread count. */
+  name?: string;
+  /** On the corner of the icon, e.g. the unread badge of the inbox. */
+  badge?: ReactNode;
+};
 
-function RailLink({ href, label, icon: Icon, end = false, also = [], shortcut }: RailLinkProps) {
+function RailLink({ href, label, icon: Icon, end = false, also = [], shortcut, name = t(label), badge }: RailLinkProps) {
   const active = useActivePath(href, end, also);
   const keys = SHORTCUTS[shortcut].keys;
-  const name = t(label);
   return (
     <Tooltip content={name} shortcut={keys} side="right">
       <Link
@@ -103,6 +129,7 @@ function RailLink({ href, label, icon: Icon, end = false, also = [], shortcut }:
         )}
       >
         <Icon className="size-4" aria-hidden="true" />
+        {badge}
       </Link>
     </Tooltip>
   );
@@ -111,12 +138,13 @@ function RailLink({ href, label, icon: Icon, end = false, also = [], shortcut }:
 /** The collapsed sidebar: a rail of icons with tooltips. */
 function SidebarRail() {
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
+  const inbox = useInboxName();
   return (
     <nav aria-label={t('shell.sidebar.label')} className="tracing fixed top-2 bottom-2 left-2 z-20 hidden w-12 flex-col items-center gap-1 rounded-card py-2 [--glass-shadow:var(--elev-1)] md:flex">
       <IconButton icon={PanelLeftOpen} label={t('shell.sidebar.expand')} onClick={toggleSidebar} className="md:size-9" />
       <SearchButton variant="rail" />
       <span className="my-1 h-px w-6 bg-edge" aria-hidden="true" />
-      <RailLink href={paths.inbox()} end label="shell.nav.inbox" icon={Inbox} shortcut="shell.go.inbox" />
+      <RailLink href={paths.inbox()} end label="shell.nav.inbox" name={inbox} icon={Inbox} shortcut="shell.go.inbox" badge={<InboxBadge look="rail" />} />
       <RailLink href={paths.myItems()} end also={[paths.created(), paths.subscribed()]} label="shell.nav.my_items" icon={UserRoundCheck} shortcut="shell.go.my_items" />
       <RailLink href={paths.views()} label="shell.nav.views" icon={Layers} shortcut="shell.go.views" />
       <RailLink href={paths.projects()} label="shell.nav.projects" icon={FolderKanban} shortcut="shell.go.projects" />

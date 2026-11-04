@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AttachmentFileController;
+use App\Http\Controllers\ChannelBatchController;
 use App\Http\Controllers\ItemPageController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\ProjectItemsPageController;
@@ -22,6 +23,7 @@ Route::middleware('auth')->group(function () {
     Route::inertia('/my-items', 'Items/MyItems')->name('my-items');
     Route::inertia('/created', 'Items/Created')->name('created');
     Route::inertia('/subscribed', 'Items/Subscribed')->name('subscribed');
+    Route::inertia('/inbox', 'Inbox/Index')->name('inbox');
     // the settings of the organization, one address per section; an unknown section is the page's business (it says so
     // and keeps the list)
     Route::redirect('/settings', '/settings/general');
@@ -44,6 +46,8 @@ Route::middleware('auth')->group(function () {
         ->name('views');
     // the items of a saved view; never `{view}`: the binding of routes/api.php would answer an unknown id before the page
     Route::get('/views/{viewId}', ViewPageController::class)->name('views.show');
+    // the live channels of a tab in one request (A305), next to Laravel's /broadcasting/auth for one channel
+    Route::post('/broadcasting/batch', ChannelBatchController::class)->name('broadcasting.batch');
 });
 
 // pictures (logo, avatars, project pictures) from the private disk, for the session and for tokens that may read (P15);

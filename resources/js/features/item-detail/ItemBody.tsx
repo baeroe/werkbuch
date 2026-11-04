@@ -3,9 +3,10 @@
  * - `ItemDetailProvider` goes around a whole detail (header and body): where it is shown and the actions of its
  *   shortcuts, registered here in detail scope: `e` edits the title, `m` writes a comment, `r` adds a relation. The
  *   screens key it by the item, so nothing of one item's drafts carries over to the next (an unsent comment waits in
- *   `lib/drafts.ts` for its own item). On the page `e` and `m` always act; in the preview only while the focus is in its
- *   panel or nowhere in particular (`previewKeysAct`), so the screen beside it keeps the key otherwise. `r` always acts,
- *   as in the clickdummy: no screen beside a preview binds it.
+ *   `lib/drafts.ts` for its own item). With `itemId` it holds the item's live channel (`useLiveItem`). On the page `e`
+ *   and `m` always act; in the preview only while the focus is in its panel or nowhere in particular
+ *   (`previewKeysAct`), so the screen beside it keeps the key otherwise. `r` always acts, as in the clickdummy: no
+ *   screen beside a preview binds it.
  * - `ItemBody`: the title, the archived and blocked notes, the fields, the description, the children, the relations,
  *   the files, the activity (comments and history, with the comment composer at its end). In the preview one column, as in the
  *   moodboard panel; on the page the fields stand in a column on the right from lg on (they stay in view while the
@@ -14,8 +15,11 @@
 
 import { useMemo, useRef, type ReactNode, type RefObject } from 'react';
 import { BlockedHint } from '@/components/items/BlockedHint';
+import { Banner } from '@/components/ui/Banner';
 import { previewKeysAct } from '@/components/fields/commands/context';
+import { useLiveItem } from '@/hooks/live';
 import { t } from '@/lib/i18n';
+import { useLiveGone } from '@/lib/liveGone';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { useUiStore } from '@/store/ui';
 import type { WorkItemDetail } from '@/types';
@@ -33,10 +37,13 @@ type ItemDetailProviderProps = {
   surface: DetailSurface;
   /** The preview's panel (`PeekHost`): with the focus inside, the preview's e and m act (see `previewKeysAct`). */
   panel?: RefObject<HTMLElement | null>;
+  /** The item shown: its live channel is held while the detail is (its comments arrive there, A227). */
+  itemId?: string;
   children: ReactNode;
 };
 
-export function ItemDetailProvider({ surface, panel, children }: ItemDetailProviderProps) {
+export function ItemDetailProvider({ surface, panel, itemId, children }: ItemDetailProviderProps) {
+  useLiveItem(itemId ?? null);
   const actions = useRef<DetailActions>({});
   const context = useMemo<DetailContextValue>(() => ({ surface, actions }), [surface]);
   useShortcut('item.title', () => actions.current.editTitle?.(), {
@@ -51,11 +58,18 @@ export function ItemDetailProvider({ surface, panel, children }: ItemDetailProvi
   return <DetailContext.Provider value={context}>{children}</DetailContext.Provider>;
 }
 
+/** A live message said the item or its project was deleted: the page keeps what it shows and says so (A298, F36). */
+function DeletedNote({ itemId, projectId }: { itemId: string; projectId: string }) {
+  if (!useLiveGone(itemId, projectId)) return null;
+  return <Banner tone="danger" role="status" title={t('items.detail.deleted.title')} className="mt-3" />;
+}
+
 export function ItemBody({ detail, surface }: { detail: WorkItemDetail; surface: DetailSurface }) {
   const { item } = detail;
   const head: ReactNode = (
     <>
       <ItemTitle item={item} />
+      <DeletedNote itemId={item.id} projectId={item.project_id} />
       <ArchivedNote item={item} />
       <BlockedHint item={item} variant="banner" onOpen={surface === 'peek' ? (id) => useUiStore.getState().openPeek(id) : undefined} className="mt-3" />
     </>

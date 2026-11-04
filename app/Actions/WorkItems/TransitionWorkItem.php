@@ -108,7 +108,7 @@ final class TransitionWorkItem
         $locked->updated_at = $now;
         $locked->save();
 
-        $actor = $reason === null ? $actor : new Actor($actor->user, $actor->via, $reason, $actor->token);
+        $actor = $reason === null ? $actor : $actor->withReason($reason);
         EventRecorder::record($same ? EventType::WorkItemUpdated : EventType::WorkItemStateChanged, $actor, $locked, $locked->project, $changes, $same ? [] : ['states' => StateSnapshot::of($from, $to)]);
 
         return true;

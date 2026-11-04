@@ -22,9 +22,11 @@ final class Rendering
 {
     public static function register(Exceptions $exceptions): void
     {
-        // refusals below 500 are expected answers, not errors; a search engine that does not answer is reported once,
-        // by QuerySearch with its cause, not a second time as the 503 that tells the client
-        $exceptions->dontReportWhen(fn (Throwable $e): bool => $e instanceof Problem && ($e->status < 500 || $e->reason === 'search_unavailable'));
+        // refusals below 500 are expected answers, not errors; a search engine that does not answer and a mail server
+        // that refuses the test mail are reported once, by QuerySearch and SendTestMail with their cause, not a second
+        // time as the 503 that tells the client
+        $exceptions->dontReportWhen(fn (Throwable $e): bool => $e instanceof Problem
+            && ($e->status < 500 || in_array($e->reason, ['search_unavailable', 'mail_failed'], true)));
 
         // changing the own password: the limit shows at the current password, which it protects from guessing
         $exceptions->render(fn (ThrottleRequestsException $e, Request $request) => $request->is('api/v1/me/password')
@@ -70,11 +72,14 @@ final class Rendering
         // the browser app shows a refusal (403), an unknown page (404), a failure (500) and an outage (503) as an Inertia page
         // in the shell (the status stays); /api keeps its problem documents, and in debug mode a 500 stays Laravel's own page.
         // Where the web group did not run (maintenance mode, an untrusted host), the page would lack its shared props:
-        // Laravel's own page stays.
+        // Laravel's own page stays. A request that expects JSON (a fetch with Accept: application/json, like the channel
+        // authorization of the live updates) keeps the JSON answer (shouldRenderJsonWhen below); Inertia's own visits
+        // ask for HTML.
         $exceptions->respond(function (Response $response, Throwable $e, Request $request) {
             $status = $response->getStatusCode();
 
             if ($request->is('api/*')
+                || $request->expectsJson()
                 || ! in_array($status, [403, 404, 500, 503], true)
                 || ($status === 500 && config('app.debug'))
                 || Inertia::getShared('locale') === null) {

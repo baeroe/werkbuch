@@ -1,8 +1,8 @@
 /*
  * The frame every screen lives in (spec 5.2): the sidebar from md on, below it a top bar whose menu opens the same
- * content as a drawer; the live banner above the screen; the preview panel of an item beside the screen; the create
- * dialog, the command palette, the follow-up questions of the item commands and the shortcut help above everything.
- * The shell's shortcuts and commands are registered here.
+ * content as a drawer; the live connection (`LiveHost`) and its banner above the screen; the preview panel of an item
+ * beside the screen; the create dialog, the command palette, the follow-up questions of the item commands and the
+ * shortcut help above everything. The shell's shortcuts and commands are registered here.
  */
 
 import { useEffect, useRef, type ReactNode } from 'react';
@@ -16,6 +16,7 @@ import { HelpOverlay } from '@/lib/shortcuts/HelpOverlay';
 import { useUiStore } from '@/store/ui';
 import { useShellBindings } from './bindings';
 import { CreateHost } from './CreateHost';
+import { LiveHost } from './LiveHost';
 import { LiveIndicator } from './LiveIndicator';
 import { MobileBar } from './MobileBar';
 import { PaletteHost } from './PaletteHost';
@@ -62,6 +63,7 @@ export function Shell({ children }: { children: ReactNode }) {
         <LiveIndicator />
         {children}
       </main>
+      <LiveHost />
       <PeekHost />
       <CreateHost />
       <PaletteHost />

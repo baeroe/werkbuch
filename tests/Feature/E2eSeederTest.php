@@ -5,11 +5,16 @@ use App\Access\Visibility;
 use App\Actions\Favorites\ToggleFavorite;
 use App\Actions\Projects\CreateProject;
 use App\Actions\Projects\UpdateProject;
+use App\Domain\Notifications\NotificationKind;
+use App\Enums\AccountType;
 use App\Events\EventType;
 use App\Models\Attachment;
 use App\Models\Favorite;
 use App\Models\Invitation;
 use App\Models\Label;
+use App\Models\Notification;
+use App\Models\NotificationMail;
+use App\Models\NotificationPreference;
 use App\Models\Organization;
 use App\Models\Project;
 use App\Models\Property;
@@ -49,7 +54,7 @@ it('makes Erik an org admin and everybody else of the e2e accounts a member', fu
     expect(Visibility::orgRole(User::where('email', 'e2e@example.com')->sole()))->toBe(OrgRole::Admin)
         ->and(User::where('email', 'e2e@example.com')->sole()->locale)->toBeNull();
 
-    foreach (['reset', 'security', 'twofactor'] as $kind) {
+    foreach (['reset', 'security', 'twofactor', 'inbox'] as $kind) {
         expect(Visibility::orgRole(User::where('email', "{$kind}-phone-dark@example.com")->sole()))->toBe(OrgRole::Member);
     }
 });
@@ -185,7 +190,40 @@ it('seeds the accounts of every Playwright project', function () {
         expect(User::where('email', "security-{$variant}@example.com")->sole()->two_factor_secret)->toBeNull();
     }
 
-    expect(User::where('type', 'person')->count())->toBe(6 + 1 + 3 * 4);
+    expect(User::where('type', 'person')->count())->toBe(6 + 1 + 4 * 4);
+});
+
+it('creates an inbox account per variant and empties its inbox on every run, but for one read row without an item', function () {
+    $this->seed(E2eSeeder::class);
+    $inbox = User::where('email', 'inbox-desktop-light@example.com')->sole();
+    $other = User::where('email', 'inbox-phone-dark@example.com')->sole();
+    $mara = User::where('handle', 'mara')->sole();
+    $mail = NotificationMail::query()->create(['user_id' => $inbox->id, 'scope' => 'item:x', 'open_key' => "{$inbox->id}:item:x", 'due_at' => now()]);
+    Notification::factory()->for($inbox)->create(['mail_id' => $mail->id]);
+    Notification::factory()->for($other)->read()->create();
+    NotificationPreference::query()->create(['user_id' => $inbox->id, 'kind' => 'comment', 'channel' => 'mail', 'enabled' => false]);
+    $inbox->update(['name' => 'Changed', 'locale' => 'de', 'timezone' => 'America/New_York', 'password' => 'changed']);
+    $maras = Notification::query()->where('user_id', $mara->id)->count();
+
+    $this->seed(E2eSeeder::class);
+
+    foreach (E2E_VARIANTS as $variant) {
+        $user = User::where('email', "inbox-{$variant}@example.com")->sole();
+
+        expect([$user->type, $user->name, $user->handle, $user->locale?->value, $user->timezone])
+            ->toBe([AccountType::Person, "Inge Inbox {$variant}", "inbox-{$variant}", 'en', 'Europe/Berlin'])
+            ->and(Hash::check(E2eSeeder::PASSWORD, $user->password))->toBeTrue()
+            ->and(NotificationMail::query()->where('user_id', $user->id)->exists())->toBeFalse()
+            ->and(NotificationPreference::query()->where('user_id', $user->id)->exists())->toBeFalse();
+        // one read notification without an item (a failed template of WEB, which everyone sees): the row the spec deletes on the phone
+        $left = Notification::query()->where('user_id', $user->id)->sole();
+        expect([$left->kind, $left->project_id, $left->work_item_id, $left->actor_id, $left->inbox, $left->read_at !== null])
+            ->toBe([NotificationKind::TemplateRunFailed, Project::query()->where('identifier', 'WEB')->value('id'), null, null, true, true])
+            ->and(Notification::query()->where('user_id', $user->id)->visibleTo($user)->exists())->toBeTrue();
+    }
+
+    // Mara's inbox stays as the demo data have it
+    expect(Notification::query()->where('user_id', $mara->id)->count())->toBe($maras)->and($maras)->toBe(14);
 });
 
 it('confirms two-factor authentication for the twofactor accounts, with a secret that yields valid codes', function () {
@@ -228,7 +266,7 @@ it('sets every account back on the next run: password, used recovery codes, a ch
         ->and(Hash::check(E2eSeeder::PASSWORD, $twofactor->password))->toBeTrue()
         ->and([$security->two_factor_secret, $security->two_factor_confirmed_at])->toBe([null, null])
         ->and(Hash::check(E2eSeeder::PASSWORD, $security->password))->toBeTrue()
-        ->and(User::where('type', 'person')->count())->toBe(6 + 1 + 3 * 4);
+        ->and(User::where('type', 'person')->count())->toBe(6 + 1 + 4 * 4);
 });
 
 it('refuses production', function () {

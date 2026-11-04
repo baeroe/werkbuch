@@ -32,6 +32,17 @@ export function artisan(...args: string[]): void {
 }
 
 /**
+ * Runs PHP in the app under test (`artisan tinker`, the code on stdin, so no shell reads it) and returns the last line it
+ * printed: for a spec that must read what no API shows, e.g. the outcome of a mail collection. The code `echo`es one
+ * line of JSON.
+ */
+export function artisanEval(php: string): string {
+  const [command, ...prefix] = (process.env.E2E_ARTISAN ?? 'ddev artisan').split(/\s+/).filter(Boolean);
+  const output = execFileSync(command!, [...prefix, 'tinker'], { cwd: ROOT, input: php, encoding: 'utf8' });
+  return output.trim().split('\n').at(-1)!.trim();
+}
+
+/**
  * Against DDEV (`E2E_EXEC ?? 'ddev exec'` starts with `ddev`): waits until Mutagen has synced the Mac and the container
  * both ways. Mutagen syncs in the background, seconds late: right after `ddev exec pnpm build:coverage` the Mac may still
  * have the old public/build or none at all (Vite emptied it, the new files are on their way), and the coverage/e2e the
@@ -112,6 +123,10 @@ export const PEOPLE = {
   twoFactor: Object.fromEntries(
     VARIANTS.map((project) => [project, { email: `twofactor-${project}@example.com`, password: E2E_PASSWORD, secret: TOTP_SECRET, recoveryCodes: recoveryCodes(project) }]),
   ) as Record<string, { email: string; password: string; secret: string; recoveryCodes: string[] }>,
+  /** One inbox per variant for the inbox and live specs (A289): the seeder empties it on every run. */
+  inbox: Object.fromEntries(
+    VARIANTS.map((project) => [project, { email: `inbox-${project}@example.com`, password: E2E_PASSWORD, name: `Inge Inbox ${project}`, locale: 'en' as const }]),
+  ) as Record<string, { email: string; password: string; name: string; locale: 'en' }>,
 };
 
 /**
@@ -181,12 +196,25 @@ export function totp(secret: string, at = Date.now()): string {
 }
 
 /**
+ * Waits until the browser of `page` holds the live channel `channel` (A305): the answer of `/broadcasting/batch` that
+ * signs it. With `{ prefix: true }` any channel that starts with `channel`, e.g. `presence-user.` for the own one.
+ */
+export function channelHeld(page: Page, channel: string, { prefix = false } = {}): Promise<unknown> {
+  const named = (name: string) => (prefix ? name.startsWith(channel) : name === channel);
+  return page.waitForResponse(async (response) => {
+    if (!response.url().endsWith('/broadcasting/batch') || !response.ok()) return false;
+    const channels = ((await response.json()) as { channels?: Record<string, { auth?: unknown }> }).channels ?? {};
+    return Object.entries(channels).some(([name, answer]) => named(name) && typeof answer.auth === 'string');
+  });
+}
+
+/**
  * A browser context of its own, signed in as `person`, with the settings of the running project (address, viewport,
  * language, time zone, color scheme) and the clipboard, and its one page. The first time an account signs in during a
  * run, the cache is emptied first (sign-in is limited per IP); its session is kept in `e2e/.auth/<email>.json`, so later
  * specs use it without signing in again. The page of the sign-in stays the page of the test: closing the only page of a
  * fresh context and opening another can hang in Chromium (`Target.createTarget`). Close the context at the end of the
- * test.
+ * test. What its page reports goes to `accountPageErrors`, which the test's fixture checks like its own page.
  */
 export async function signedInContext(
   browser: Browser,
@@ -197,13 +225,16 @@ export async function signedInContext(
   const file = path.join(ACCOUNT_AUTH_DIR, `${person.email}.json`);
   if (existsSync(file)) {
     const context = await browser.newContext({ ...options, storageState: file });
-    return { context, page: await context.newPage() };
+    const page = await context.newPage();
+    watchPageErrors(page, accountPageErrors, person.email);
+    return { context, page };
   }
 
   artisan('cache:clear');
   // without a state of its own, Playwright hands a new context the one of the project (the e2e person's session)
   const context = await browser.newContext({ ...options, storageState: { cookies: [], origins: [] } });
   const page = await context.newPage();
+  watchPageErrors(page, accountPageErrors, person.email);
   await page.goto('/login');
   await login(page, person.email, person.password);
   await expect(page).toHaveURL(/\/my-items$/);
@@ -212,6 +243,45 @@ export async function signedInContext(
   await expect(page.locator('html')).toHaveAttribute('lang', person.locale ?? 'en');
   await context.storageState({ path: file });
   return { context, page };
+}
+
+/**
+ * The errors the pages of `signedInContext()` reported during the running test, each led by the account
+ * (`[<email>] console error: <text> (<url>)`). The fixture `pageErrors` empties the list when a test starts and checks
+ * it at its end together with the errors of the test's own page, against the same `allowedErrors`: a page of another
+ * person fails the test just like the page of the e2e person.
+ */
+export const accountPageErrors: string[] = [];
+
+/**
+ * The answers the shared DDEV router gave itself with a 502 "Bad Gateway" during the running test, counted by address
+ * (Traefik: its connection to the web container broke, the web container never saw the request; its own answers carry
+ * `server: nginx`, the router's do not). Not the app's error: the fixture `pageErrors` leaves the browser's note on
+ * exactly these out, one note per such answer, and empties the count when a test starts: a 502 of nginx on the same
+ * address, then or later, still fails the test.
+ */
+export const routerBadGateways = new Map<string, number>();
+
+/** Whether `error` is the browser's note on a 502 the shared router made (`routerBadGateways`); each answer counts once. */
+export function isRouterBadGateway(error: string): boolean {
+  const url = /status of 502 \(\) \((.+)\)$/.exec(error)?.[1];
+  const count = url === undefined ? 0 : (routerBadGateways.get(url) ?? 0);
+  if (count === 0) return false;
+  routerBadGateways.set(url!, count - 1);
+  return true;
+}
+
+/** Collects what `page` reports into `into`: console errors and uncaught exceptions, led by `[<label>] ` when given. */
+export function watchPageErrors(page: Page, into: string[], label?: string): void {
+  const lead = label ? `[${label}] ` : '';
+  page.on('pageerror', (error) => into.push(`${lead}page error: ${error.message}`));
+  page.on('console', (message) => {
+    if (message.type() === 'error') into.push(`${lead}console error: ${message.text()} (${message.location().url})`);
+  });
+  page.on('response', async (response) => {
+    if (response.status() !== 502 || response.headers().server !== undefined) return;
+    if ((await response.text().catch(() => '')).trim() === 'Bad Gateway') routerBadGateways.set(response.url(), (routerBadGateways.get(response.url()) ?? 0) + 1);
+  });
 }
 
 /**
@@ -246,11 +316,12 @@ type MailpitSearch = { messages: { ID: string; Created: string }[] };
  * differ, so a mail counts as new when its ID was not there before.
  */
 export const mailpit = {
-  /** The IDs of every mail to `email`, newest first. */
-  async idsTo(email: string): Promise<string[]> {
+  /** The IDs of every mail to `email` (with `subject`: only those whose subject holds it), newest first. */
+  async idsTo(email: string, subject?: string): Promise<string[]> {
     const api = await request.newContext({ baseURL: MAILPIT_URL, ignoreHTTPSErrors: true });
     try {
-      const search = await api.get('/api/v1/search', { params: { query: `to:"${email}"` } });
+      const query = `to:"${email}"${subject === undefined ? '' : ` subject:"${subject}"`}`;
+      const search = await api.get('/api/v1/search', { params: { query } });
       expect(search.ok(), await search.text()).toBe(true);
       const { messages } = (await search.json()) as MailpitSearch;
       return messages
@@ -262,16 +333,16 @@ export const mailpit = {
     }
   },
 
-  /** The newest mail to `email` whose ID is not in `before` (from `idsTo`), or null. */
-  async newTo(email: string, before: readonly string[]): Promise<{ html: string } | null> {
-    const id = (await mailpit.idsTo(email)).find((candidate) => !before.includes(candidate));
+  /** The newest mail to `email` (with `subject`: whose subject holds it) whose ID is not in `before` (from `idsTo`), or null. */
+  async newTo(email: string, before: readonly string[], subject?: string): Promise<{ html: string; subject: string } | null> {
+    const id = (await mailpit.idsTo(email, subject)).find((candidate) => !before.includes(candidate));
     if (id === undefined) return null;
     const api = await request.newContext({ baseURL: MAILPIT_URL, ignoreHTTPSErrors: true });
     try {
       const message = await api.get(`/api/v1/message/${id}`);
       expect(message.ok(), await message.text()).toBe(true);
-      const { HTML } = (await message.json()) as { HTML: string };
-      return { html: HTML };
+      const { HTML, Subject } = (await message.json()) as { HTML: string; Subject: string };
+      return { html: HTML, subject: Subject };
     } finally {
       await api.dispose();
     }
@@ -433,12 +504,18 @@ export async function createItem(page: Page, input: Record<string, unknown>): Pr
 
 /**
  * Deletes a project of a spec with its items (cleanup in `finally`): the answer is 202, the purge runs in the queue; a
- * project that is gone already (404) is fine.
+ * project that is gone already (404) is fine. The page leaves the app for the delete and comes back on `/my-items`
+ * afterwards: a page that shows the project, or only joins its live channel, would load it once more while the delete
+ * is on its way (a live message of something else, the join of a list from just before) and get a 404 or a refused
+ * channel (403) for it; the page that comes back never sees the project.
  */
 export async function removeE2eProject(page: Page, identifier: string): Promise<void> {
   await ensureCsrfCookie(page);
+  const inApp = !page.isClosed() && page.url().startsWith(test.info().project.use.baseURL!);
+  if (inApp) await page.goto('about:blank');
   const response = await api(page, 'DELETE', `/api/v1/projects/${identifier}`);
   expect([202, 404], await response.text()).toContain(response.status());
+  if (inApp) await page.goto('/my-items');
 }
 
 /**
@@ -543,6 +620,39 @@ export async function waitForSearch(page: Page, q: string, found: (data: SearchD
       last = `${response.status()} ${await response.text()}`;
     }
     if (Date.now() > until) throw new Error(`waitForSearch "${q}" found nothing after ${timeout} ms: ${JSON.stringify(last)}`);
+    await page.waitForTimeout(250);
+  }
+}
+
+/** A notification as `GET /api/v1/notifications` gives it (the fields the specs read). */
+export type StoredNotification = {
+  id: string;
+  event: string;
+  work_item_id: string | null;
+  project_id: string | null;
+  actor_id: string | null;
+  data: Record<string, unknown>;
+  read_at: string | null;
+  mailed_at: string | null;
+};
+
+/**
+ * Asks `GET /api/v1/notifications` of the signed-in person of `page` every 250 ms until one of the newest 100 matches
+ * `found` (notifications follow the queue `notifications`) and returns it; fails with the last answer.
+ */
+export async function waitForNotification(page: Page, found: (notification: StoredNotification) => boolean, timeout = 20_000): Promise<StoredNotification> {
+  const until = Date.now() + timeout;
+  let last: StoredNotification[] | string = 'no answer';
+  for (;;) {
+    const response = await api(page, 'GET', '/api/v1/notifications?per_page=100');
+    if (response.status() === 200) {
+      last = ((await response.json()) as { data: StoredNotification[] }).data;
+      const match = last.find(found);
+      if (match) return match;
+    } else {
+      last = `${response.status()} ${await response.text()}`;
+    }
+    if (Date.now() > until) throw new Error(`waitForNotification found nothing after ${timeout} ms: ${JSON.stringify(last)}`);
     await page.waitForTimeout(250);
   }
 }

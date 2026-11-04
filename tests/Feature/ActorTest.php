@@ -10,7 +10,9 @@ beforeEach(function () {
     Route::middleware('auth:sanctum')->get('_t/actor', function (Request $request) {
         $actor = Actor::fromRequest($request);
 
-        return ['user' => $actor->user->id, 'via' => $actor->via, 'token' => $actor->token?->id, 'meta' => $actor->meta()];
+        return [
+            'user' => $actor->user->id, 'via' => $actor->via, 'token' => $actor->token?->id, 'socket' => $actor->socket, 'meta' => $actor->meta(),
+        ];
     });
 });
 
@@ -18,7 +20,46 @@ it('acts in the interface for a signed-in session, without a token', function ()
     $user = User::factory()->create();
 
     $this->actingAs($user)->getJson('/_t/actor')
-        ->assertExactJson(['user' => $user->id, 'via' => 'ui', 'token' => null, 'meta' => ['via' => 'ui', 'reason' => null]]);
+        ->assertExactJson(['user' => $user->id, 'via' => 'ui', 'token' => null, 'socket' => null, 'meta' => ['via' => 'ui', 'reason' => null]]);
+});
+
+it('keeps the socket of the interface (A282)', function () {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)->withHeader('X-Socket-ID', '98765.4321')->getJson('/_t/actor')->assertExactJson([
+        'user' => $user->id,
+        'via' => 'ui',
+        'token' => null,
+        'socket' => '98765.4321',
+        'meta' => ['via' => 'ui', 'reason' => null, 'socket' => '98765.4321'],
+    ]);
+});
+
+it('takes no socket of another form', function () {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)->withHeader('X-Socket-ID', '98765')->getJson('/_t/actor')->assertJsonPath('socket', null)
+        ->assertJsonPath('meta', ['via' => 'ui', 'reason' => null]);
+});
+
+it('takes no socket from a token', function () {
+    $user = User::factory()->create();
+
+    $this->withToken(apiToken($user, ['read']))->withHeader('X-Socket-ID', '98765.4321')->getJson('/_t/actor')
+        ->assertJsonPath('via', 'api')->assertJsonPath('socket', null)->assertJsonMissingPath('meta.socket');
+});
+
+it('keeps token and socket when a reason is added', function () {
+    $user = User::factory()->create();
+    $token = $user->createToken('ci')->accessToken;
+
+    $ui = (new Actor($user, Actor::VIA_UI, socket: '1.2'))->withReason('parent_deleted');
+    $api = (new Actor($user, Actor::VIA_API, 'old', $token))->withReason('state_removed');
+
+    expect($ui->meta())->toBe(['via' => 'ui', 'reason' => 'parent_deleted', 'socket' => '1.2'])
+        ->and($api->meta())->toBe(['via' => 'api', 'reason' => 'state_removed', 'token_id' => $token->id])
+        ->and($api->token)->toBe($token)
+        ->and($api->user)->toBe($user);
 });
 
 it('acts through the api with the bearer token', function () {
@@ -29,6 +70,7 @@ it('acts through the api with the bearer token', function () {
         'user' => $user->id,
         'via' => 'api',
         'token' => $token->accessToken->id,
+        'socket' => null,
         'meta' => ['via' => 'api', 'reason' => null, 'token_id' => $token->accessToken->id],
     ]);
 });

@@ -60,7 +60,7 @@ final class DeleteWorkItem
             $children = WorkItem::query()->where('parent_id', $locked->id)->orderBy('id')->lockForUpdate()->get();
             $relations = self::relations($locked);
 
-            $orphaned = new Actor($actor->user, $actor->via, self::PARENT_DELETED, $actor->token);
+            $orphaned = $actor->withReason(self::PARENT_DELETED);
             foreach ($children as $child) {
                 $child->parent_id = null;
                 $child->updated_at = $child->freshTimestamp();

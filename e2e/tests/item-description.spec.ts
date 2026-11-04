@@ -26,23 +26,40 @@ async function storedDescription(page: Page, id: string): Promise<string | null>
   return ((await response.json()) as { data: { description: string | null } }).data.description;
 }
 
-test('warns the second editor of a description and keeps both versions', async ({ page, browser }) => {
+test('warns the second editor of a description and keeps both versions', async ({ page, browser, allowedErrors }) => {
   const { id, identifier } = await createE2eProject(page, name('conflict'), { types: ['Task'] });
   let other: Awaited<ReturnType<typeof signedInContext>> | undefined;
   try {
     other = await signedInContext(browser, PEOPLE.mara);
     const item = await createItem(page, { project_id: id, title: 'E2E Startseite umbauen', description: 'Erster Stand.' });
+    // Mara's save meets Erik's first: the 409 `description_conflict` of this item the test is about (the browser reports it)
+    allowedErrors.push(new RegExp(`^\\[mara@feldwerk\\.example\\.com\\] console error: .*status of 409 .*/api/v1/work-items/${item.id}\\)$`));
 
     // both open the item; Mara's window loads before Erik saves
     const mara = await editDescription(other.page, 'de', item.key, 'E2E Startseite umbauen');
     const erik = await editDescription(page, 'en', item.key, 'E2E Startseite umbauen');
 
+    // Mara types on her older version first. Her save waits at the door until Erik's is stored: typed after it, live
+    // would have shown her Erik's version already, and her text on top of it is no conflict at all
+    let letMaraThrough = () => {};
+    const maraWaits = new Promise<void>((resolve) => (letMaraThrough = resolve));
+    let maraSends = () => {};
+    const maraSaving = new Promise<void>((resolve) => (maraSends = resolve));
+    await other.page.route(`**/api/v1/work-items/${item.id}`, async (route) => {
+      if (route.request().method() !== 'PATCH') return route.fallback();
+      maraSends();
+      await maraWaits;
+      return route.fallback();
+    });
+    await other.page.keyboard.type('Von Mara. ');
+    await maraSaving;
+
     await page.keyboard.type('Von Erik. ');
     await expect(erik.status).toHaveText(tr('en', 'items.detail.description.saved'));
     expect(await storedDescription(page, item.id)).toBe('Von Erik. Erster Stand.');
 
-    // Mara types on her older version: her save is refused, the banner names Erik, her text stays
-    await other.page.keyboard.type('Von Mara. ');
+    // Mara's save reaches the server after Erik's: it is refused, the banner names Erik, her text stays
+    letMaraThrough();
     const banner = mara.section.getByRole('alert');
     // the sentence is the server's (`problem.detail.description_conflict`), in Mara's language; it names whoever saved last
     await expect(banner).toContainText(tr('de', 'problem.detail.description_conflict', { name: PEOPLE.e2e.name }));

@@ -12,6 +12,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { currentToasts, dismissToast, resetToasts, runToastAction } from '@/components/ui/toast';
 import { preloadEditor } from '@/editor/RichTextEditor';
 import { plainText, textDoc } from '@/lib/richtext';
+import { qk } from '@/hooks/keys';
 import { resetForUser } from '@/hooks/queryClient';
 import { descriptionDraft, drafts } from '@/lib/drafts';
 import { useUiStore } from '@/store/ui';
@@ -371,6 +372,67 @@ describe('Description', () => {
     ]);
     await waitFor(() => expect(within(section).getByRole('status').textContent).toBe('Gespeichert'));
     expect(editor.textContent).toBe('Erstens. Zweitens. Beim Absenden kommt die Mail zweimal an.');
+  });
+
+  /**
+   * PATCH of WEB-47 as the server answers it: a save based on another version than the stored one meets Erik's
+   * (409 `description_conflict`), as `UpdateWorkItem` does.
+   */
+  const guardedPatch: MockRoute = (body) => {
+    const { description_json, base_description_version } = body as { description_json: RichText | null; base_description_version: number };
+    const before = items.find((entry) => entry.id === web47.id)!;
+    if (base_description_version !== before.description_version) {
+      return problem(409, 'description_conflict', { detail: 'Erik Ende hat die Beschreibung inzwischen geändert.', current: before });
+    }
+    const next = { ...before, description_json, description_version: before.description_version + 1 };
+    items = items.map((entry) => (entry.id === web47.id ? next : entry));
+    return { body: { data: next } };
+  };
+  /** Erik saves his version on the server; the window hears of it later (live: its queries load again). */
+  const erikSaves = () => {
+    const erik = { ...web47, description_json: doc('Von Erik. Beim Absenden kommt die Mail zweimal an.'), description_version: 4 };
+    items = items.map((entry) => (entry.id === web47.id ? erik : entry));
+  };
+
+  it('keeps the text and the version of a draft when a newer description comes in while it is typed (live)', async () => {
+    const client = newClient();
+    renderWith(<ItemPage itemKey="WEB-47" />, { client, routes: { 'PATCH /api/v1/work-items/wi_web_47': guardedPatch } });
+    const { section, editor } = await descriptionEditor();
+    paste(editor, 'Von Mara. ');
+
+    // Erik saved meanwhile; live loads the item again while Mara's text is unsaved
+    erikSaves();
+    const loads = sent('GET', '/api/v1/work-items/WEB-47').length;
+    await act(() => client.invalidateQueries({ queryKey: qk.workItems.all }));
+    await waitFor(() => expect(sent('GET', '/api/v1/work-items/WEB-47').length).toBeGreaterThan(loads));
+    expect(editor.textContent).toBe('Von Mara. Beim Absenden kommt die Mail zweimal an.');
+
+    // her save is based on the version she typed on: it meets Erik's, nothing of his is overwritten
+    press('Enter', { ctrlKey: true }, editor);
+    const banner = await within(section).findByRole('alert');
+    expect(banner.textContent).toContain('Erik Ende hat die Beschreibung inzwischen geändert.');
+    expect(descriptionSaves()).toEqual([['Von Mara. Beim Absenden kommt die Mail zweimal an.', 3]]);
+    expect(plainText(items.find((entry) => entry.id === web47.id)!.description_json)).toBe('Von Erik. Beim Absenden kommt die Mail zweimal an.');
+    expect(editor.textContent).toBe('Von Mara. Beim Absenden kommt die Mail zweimal an.');
+  });
+
+  it('shows a newer description from outside while nothing is typed, and saves on its version', async () => {
+    const client = newClient();
+    renderWith(<ItemPage itemKey="WEB-47" />, { client, routes: { 'PATCH /api/v1/work-items/wi_web_47': guardedPatch } });
+    const { section, editor } = await descriptionEditor();
+
+    erikSaves();
+    await act(() => client.invalidateQueries({ queryKey: qk.workItems.all }));
+    await waitFor(() => expect(editor.textContent).toBe('Von Erik. Beim Absenden kommt die Mail zweimal an.'));
+
+    // typed on what the window shows: saved on Erik's version, without a conflict
+    paste(editor, 'Von Mara. ');
+    press('Enter', { ctrlKey: true }, editor);
+    await waitFor(() => expect(within(section).getByRole('status').textContent).toBe('Gespeichert'));
+    expect(descriptionSaves()).toEqual([[plainText(items.find((entry) => entry.id === web47.id)!.description_json), 4]]);
+    expect(editor.textContent).toContain('Von Erik.');
+    expect(editor.textContent).toContain('Von Mara.');
+    expect(within(section).queryByRole('alert')).toBeNull();
   });
 
   it('keeps the draft after a failed save and retries', async () => {

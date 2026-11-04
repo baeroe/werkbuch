@@ -5,12 +5,22 @@ use App\Enums\Locale;
 use App\Models\Organization;
 use App\Models\User;
 use App\Notifications\ResetPasswordNotification;
+use Carbon\Carbon;
+use Illuminate\Notifications\SendQueuedNotifications;
+use Illuminate\Queue\MaxAttemptsExceededException;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Queue;
 use Inertia\Testing\AssertableInertia as Assert;
+use Symfony\Component\Mailer\Exception\TransportException;
+use Symfony\Component\Mailer\SentMessage;
+use Symfony\Component\Mailer\Transport\AbstractTransport;
+use Symfony\Component\Mime\Email;
 
 it('builds the reset link from APP_URL, not from the request host, and mails in the language of the account', function () {
     Notification::fake();
@@ -120,6 +130,158 @@ it('mails the link from the job only to an existing, active person', function ()
 
     Notification::assertSentTimes(ResetPasswordNotification::class, 1);
     Notification::assertSentTo($lene, ResetPasswordNotification::class);
+});
+
+// the queue as outside tests (the sync queue retries nothing), and one worker run of the queue `notifications`
+$work = function (): void {
+    Artisan::call('queue:work', ['--once' => true, '--queue' => 'notifications', '--sleep' => 0]);
+};
+$queued = fn () => DB::table('jobs')->where('queue', 'notifications')->orderBy('id')->get()
+    ->map(fn (object $job): array => json_decode($job->payload, true))->all();
+// a mail server that refuses the first `$refuse` mails and takes every later one; it keeps each attempt
+$mailServer = function (int $refuse = 0): ArrayObject {
+    $attempts = new ArrayObject;
+    Mail::extend('recording', fn () => new class($attempts, $refuse) extends AbstractTransport
+    {
+        public function __construct(private readonly ArrayObject $attempts, private readonly int $refuse)
+        {
+            parent::__construct();
+        }
+
+        protected function doSend(SentMessage $message): void
+        {
+            $this->attempts->append($message->getOriginalMessage());
+
+            if ($this->attempts->count() <= $this->refuse) {
+                throw new TransportException('Connection could not be established.');
+            }
+        }
+
+        public function __toString(): string
+        {
+            return 'recording://';
+        }
+    });
+    config(['mail.mailers.recording' => ['transport' => 'recording'], 'mail.default' => 'recording']);
+
+    return $attempts;
+};
+
+it('writes the token once and leaves the retries to the mail', function () use ($work, $queued) {
+    config(['queue.default' => 'database']);
+    Mail::fake();
+    User::factory()->create(['email' => 'lene@example.com']);
+
+    $this->post('/forgot-password', ['email' => 'lene@example.com'])->assertSessionHas('status');
+
+    // a second run of the link would write a new token and make the link of a mail that is still on its way useless
+    expect($queued())->toHaveCount(1)
+        ->and($queued()[0]['displayName'])->toBe(SendPasswordResetLink::class)
+        ->and($queued()[0]['maxTries'])->toBe(1);
+
+    $work();
+
+    expect(DB::table('password_reset_tokens')->count())->toBe(1)
+        ->and($queued())->toHaveCount(1)
+        ->and($queued()[0]['displayName'])->toBe(ResetPasswordNotification::class)
+        ->and($queued()[0]['data']['commandName'])->toBe(SendQueuedNotifications::class)
+        ->and($queued()[0]['maxTries'])->toBe(5)
+        ->and($queued()[0]['backoff'])->toBe('60,300,900,1800');
+});
+
+it('keeps the link out of the queued mail in plain text', function () use ($work) {
+    config(['queue.default' => 'database']);
+    User::factory()->create(['email' => 'lene@example.com']);
+    $this->post('/forgot-password', ['email' => 'lene@example.com']);
+    $work();
+    $job = DB::table('jobs')->where('queue', 'notifications')->sole();
+
+    $notification = unserialize(decrypt(json_decode($job->payload, true)['data']['command']))->notification;
+
+    expect($notification)->toBeInstanceOf(ResetPasswordNotification::class)
+        ->and($notification->token)->toHaveLength(64)
+        ->and($job->payload)->not->toContain($notification->token);
+});
+
+it('tries the mail only while the token lives', function () use ($work, $queued, $mailServer) {
+    config(['queue.default' => 'database']);
+    Exceptions::fake();
+    $attempts = $mailServer(PHP_INT_MAX);
+    $this->freezeTime();
+    User::factory()->create(['email' => 'lene@example.com']);
+    $this->post('/forgot-password', ['email' => 'lene@example.com']);
+    $work();
+    $expiry = Carbon::parse(DB::table('password_reset_tokens')->sole()->created_at)->addMinutes(config('auth.passwords.users.expire'));
+
+    // the last moment of a try is the end of the token, never later
+    expect($queued()[0]['retryUntil'])->toBe($expiry->getTimestamp());
+
+    $work(); // at once
+    foreach ([60, 300, 900, 1800] as $pause) {
+        $this->travel($pause)->seconds();
+        $work();
+    }
+    // five tries within the 60 minutes of the token (51 minutes of pauses)
+    expect($attempts)->toHaveCount(5)->and(now()->lessThan($expiry))->toBeTrue();
+
+    // the next pause (the last one again) ends after the token: the worker fails the mail instead of sending a dead link
+    $this->travel(1800)->seconds();
+    $work();
+
+    expect($attempts)->toHaveCount(5)->and($queued())->toBe([]);
+    Exceptions::assertReported(MaxAttemptsExceededException::class);
+});
+
+it('sends no mail to an account disabled since the link was asked for', function () use ($work, $queued, $mailServer) {
+    config(['queue.default' => 'database']);
+    $attempts = $mailServer();
+    $lene = User::factory()->create(['email' => 'lene@example.com']);
+    $sven = User::factory()->create(['email' => 'sven@example.com']);
+    $this->post('/forgot-password', ['email' => 'lene@example.com']);
+    $this->post('/forgot-password', ['email' => 'sven@example.com']);
+    $work();
+    $work();
+
+    $lene->update(['disabled_at' => now()]);
+    $work();
+    $work();
+
+    expect($attempts)->toHaveCount(1)
+        ->and($attempts[0]->getTo()[0]->getAddress())->toBe('sven@example.com')
+        ->and($queued())->toBe([]);
+});
+
+it('retries a failed reset mail with the same link', function () use ($work, $queued, $mailServer) {
+    config(['queue.default' => 'database']);
+    Exceptions::fake();
+    $attempts = $mailServer(1);
+    $this->freezeTime();
+    User::factory()->create(['email' => 'lene@example.com']);
+
+    $this->post('/forgot-password', ['email' => 'lene@example.com']);
+    $work(); // the link: the token
+    $work(); // the mail: refused
+
+    expect($attempts)->toHaveCount(1);
+    Exceptions::assertReported(TransportException::class);
+
+    $work(); // the backoff holds the retry back
+    expect($attempts)->toHaveCount(1);
+
+    $this->travel(61)->seconds();
+    $work(); // the mail again
+
+    $links = array_map(function (Email $mail): string {
+        preg_match('~/reset-password/([^?\s]+)\?~', (string) $mail->getTextBody(), $match);
+
+        return $match[1];
+    }, $attempts->getArrayCopy());
+    $stored = DB::table('password_reset_tokens')->sole();
+
+    expect($attempts)->toHaveCount(2)
+        ->and($links[0])->toBe($links[1])
+        ->and(Hash::check($links[0], $stored->token))->toBeTrue()
+        ->and($queued())->toBe([]);
 });
 
 it('limits the reset links per IP and names the wait at the email field', function () {

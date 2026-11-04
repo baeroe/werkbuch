@@ -126,7 +126,7 @@ afterEach(() => {
 /* ------------------------------------------------------------------------- frame */
 
 describe('PersonalSettings', () => {
-  it('opens the profile first, links the three sections and names the person at the top', async () => {
+  it('opens the profile first, links the four sections and names the person at the top', async () => {
     api = mockApi(routes());
     const client = new QueryClient();
     render(
@@ -141,6 +141,7 @@ describe('PersonalSettings', () => {
     expect(links.map((link) => [link.textContent, link.getAttribute('href')])).toEqual([
       ['Profil', '/me/profile'],
       ['Sicherheit', '/me/security'],
+      ['Benachrichtigungen', '/me/notifications'],
       ['API & MCP', '/me/api'],
     ]);
     expect(within(nav).getByRole('link', { name: 'Profil' }).getAttribute('aria-current')).toBe('page');

@@ -7,6 +7,7 @@ import { t } from '@/lib/i18n';
 import { paths } from '@/lib/links';
 import { useDialogScope } from '@/lib/shortcuts/useShortcut';
 import { useUiStore } from '@/store/ui';
+import { InboxBadge, useInboxName } from './InboxBadge';
 import { openSearch } from './SearchButton';
 import { SidebarContent } from './Sidebar';
 
@@ -26,6 +27,7 @@ export function MobileBar() {
   // so does the palette (its search button sits in the drawer, mod+k works in it): one modal dialog at a time, and a
   // command that leads nowhere (theme, help) does not leave the drawer behind the closed palette
   const paletteOpen = useUiStore((state) => state.paletteOpen);
+  const inbox = useInboxName();
   useEffect(() => {
     if (paletteOpen) setOpen(false);
   }, [paletteOpen]);
@@ -53,13 +55,13 @@ export function MobileBar() {
       </span>
       <div className="ml-auto flex items-center">
         <IconButton icon={Search} label={t('shell.search_icon')} tooltip={false} onClick={openSearch} />
-        {/* the unread count joins the label with Phase 8 */}
         <Link
           href={paths.inbox()}
-          aria-label={t('shell.nav.inbox')}
+          aria-label={inbox}
           className="relative inline-flex size-11 items-center justify-center rounded-chip text-muted transition-colors duration-120 hover:bg-hover hover:text-ink"
         >
           <Inbox className="size-4" aria-hidden="true" />
+          <InboxBadge look="bar" />
         </Link>
       </div>
     </header>

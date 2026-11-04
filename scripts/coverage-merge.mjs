@@ -41,6 +41,10 @@ export function mergeCoverage(unit, e2e, root) {
 /**
  * Coverage data of the built code mapped back to the sources through the source maps they carry. The runs of one build
  * share their maps, so their hits are added up first and mapped once.
+ *
+ * `runs` may be any iterable, also a generator that reads one file per step: a full run leaves well over a thousand
+ * files of about 2 MB each (every one carries the source maps), and holding them all at once ran Node out of heap.
+ * Only the added-up map stays in memory, one entry per source file.
  */
 export async function remapCoverage(runs) {
   const built = libCoverage.createCoverageMap({});
@@ -59,7 +63,10 @@ export async function loadCoverage(root) {
   if (!fs.existsSync(unitFile)) throw new Error('No unit coverage: run `ddev exec pnpm test:coverage` first.');
   const e2eDir = path.join(root, 'coverage/e2e');
   const e2eFiles = fs.existsSync(e2eDir) ? fs.readdirSync(e2eDir).filter((name) => name.endsWith('.json')).sort() : [];
-  const e2e = await remapCoverage(e2eFiles.map((name) => readJson(path.join(e2eDir, name))));
+  // read and added up one file at a time (see remapCoverage)
+  const e2e = await remapCoverage((function* () {
+    for (const name of e2eFiles) yield readJson(path.join(e2eDir, name));
+  })());
   return mergeCoverage(readJson(unitFile), [e2e], root);
 }
 

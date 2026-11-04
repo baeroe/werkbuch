@@ -25,7 +25,7 @@ import { ItemDialogsHost } from '../ItemDialogs';
 // the questions load lazily; loaded with the file, so the first question does not wait for the editor's modules
 import '../ResolutionPrompt';
 import '../TypePicker';
-import { previewKeysAct } from './context';
+import { outrankPreview, previewKeysAct } from './context';
 import { datePresets, PreviewItemCommands, useItemCommands } from './index';
 
 let signedIn: User = lene;
@@ -225,6 +225,14 @@ describe('item commands', () => {
     expect(previewKeysAct(panel)).toBe(true);
     inside.blur();
     act(() => useUiStore.getState().setSelection([]));
+
+    // a screen with a cursor of its own (the inbox) outranks it while it has one (T17-M2)
+    let cursor = true;
+    const stop = outrankPreview(() => cursor);
+    expect(previewKeysAct(panel)).toBe(false);
+    cursor = false;
+    expect(previewKeysAct(panel)).toBe(true);
+    stop();
 
     // an item page outranks it (rule 2)
     renderWith(<ItemPage id="wi_web_47" />);

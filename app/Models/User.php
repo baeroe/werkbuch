@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
@@ -115,6 +116,16 @@ class User extends Authenticatable implements HasLocalePreference, HasMedia
     }
 
     /**
+     * The stored notification choices of the account (spec 4.14); a missing one is the default.
+     *
+     * @return HasMany<NotificationPreference, $this>
+     */
+    public function notificationPreferences(): HasMany
+    {
+        return $this->hasMany(NotificationPreference::class);
+    }
+
+    /**
      * The interface language of this account: its own, else the default of the organization.
      */
     public function effectiveLocale(): Locale
@@ -168,7 +179,8 @@ class User extends Authenticatable implements HasLocalePreference, HasMedia
 
     /**
      * The reset link goes only to active people, in the language of the account; for everyone else nothing goes out,
-     * while the form answers the same (App\Http\Controllers\Auth\PasswordResetLinkController).
+     * while the form answers the same (App\Http\Controllers\Auth\PasswordResetLinkController). It only hands the
+     * notification on: the mail queues itself with its own retries (ResetPasswordNotification).
      *
      * @param  string  $token
      */

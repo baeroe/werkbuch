@@ -26,6 +26,7 @@ import General from './General';
 import People from './People';
 import Properties from './properties/Properties';
 import { findSection, GROUP_NAMES, SECTIONS, sectionLabel, type SectionDef, type SectionProps, type SectionSlug } from './sections';
+import System from './system/System';
 import Types from './types/Types';
 import Workflows from './workflows/Workflows';
 
@@ -39,6 +40,7 @@ const COMPONENTS: Record<SectionSlug, ComponentType<SectionProps>> = {
   labels: Labels,
   'relation-types': RelationTypes,
   resolutions: Resolutions,
+  system: System,
 };
 
 /** The chosen section, once the rights are known: its screen, a notice for members, or the reason it could not load. */

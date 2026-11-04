@@ -10,7 +10,7 @@
  *   });
  */
 
-import { currentToasts, runToastAction, toast, waitingToasts } from '@/components/ui/toast';
+import { currentToasts, runToastAction, subscribeToasts, toast, waitingToasts } from '@/components/ui/toast';
 import { t } from '@/lib/i18n';
 import { notifyError } from './errors';
 
@@ -37,13 +37,49 @@ export interface UndoOptions {
 export function runWithUndo({ label, run, undo, delay = 5000, failureTitle }: UndoOptions): number {
   const fail = (error: unknown) => notifyError(failureTitle ?? t('errors.not_done', { label }), error, execute);
   function execute() {
+    const done = holdRunning();
     try {
-      void Promise.resolve(run()).catch(fail);
+      void Promise.resolve(run()).catch(fail).finally(done);
     } catch (error) {
       fail(error);
+      done();
     }
   }
   return toast({ title: label, duration: delay, keep: true, action: { label: undoLabel(), onClick: () => undo?.() }, onExpire: execute });
+}
+
+/** How many actions of undo toasts run right now (between the toast running out and the end of their call). */
+let running = 0;
+const runningListeners = new Set<() => void>();
+
+function holdRunning(): () => void {
+  running += 1;
+  let ended = false;
+  return () => {
+    if (ended) return;
+    ended = true;
+    running -= 1;
+    [...runningListeners].forEach((listener) => listener());
+  };
+}
+
+/**
+ * Whether a change the screen shows already is not stored yet: an undo toast still offers to take it back (or waits for
+ * a place), or its action still runs. Live updates (`useLiveSync`) only mark caches stale meanwhile, as during a
+ * mutation: a fresh answer would bring a hidden row back while the toast still says it is gone.
+ */
+export function undoPending(): boolean {
+  return running > 0 || canUndo();
+}
+
+/** Calls `callback` whenever `undoPending()` may have changed, until the returned function is called. */
+export function subscribeUndoPending(callback: () => void): () => void {
+  runningListeners.add(callback);
+  const stopToasts = subscribeToasts(callback);
+  return () => {
+    runningListeners.delete(callback);
+    stopToasts();
+  };
 }
 
 /** The toasts that can take something back, oldest first: on screen, and those still waiting for a place. */

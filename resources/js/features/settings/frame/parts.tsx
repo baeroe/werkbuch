@@ -302,7 +302,7 @@ export function FormSkeleton({ label = t('settings.frame.loading') }: { label?: 
   );
 }
 
-type Query = Pick<UseQueryResult, 'isPending' | 'isError' | 'error' | 'refetch' | 'isFetching'>;
+type Query = Pick<UseQueryResult, 'isPending' | 'isError' | 'error' | 'refetch' | 'isFetching'> & { data?: unknown };
 
 type LoadedProps = {
   queries: Query[];
@@ -311,14 +311,19 @@ type LoadedProps = {
   skeleton: ReactNode;
   /** What loaded; a function when it reads the data, because the data are not there while the view loads or failed. */
   children: ReactNode | (() => ReactNode);
+  /**
+   * A reload that fails keeps the content of what came before (the content says so itself, T19-M4); otherwise any
+   * failure shows the error state.
+   */
+  keepData?: boolean;
 };
 
 /**
  * The four states of a view with data: loading (the skeleton), error (cause and "Try again"), and content. The empty
  * state is the content's own business, because only it knows what is missing.
  */
-export function Loaded({ queries, failure, skeleton, children }: LoadedProps) {
-  const failed = queries.find((query) => query.isError);
+export function Loaded({ queries, failure, skeleton, children, keepData = false }: LoadedProps) {
+  const failed = queries.find((query) => query.isError && !(keepData && query.data !== undefined));
   if (failed) {
     return (
       <ErrorState

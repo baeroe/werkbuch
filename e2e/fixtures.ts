@@ -6,7 +6,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { expect, test as base, type Page } from '@playwright/test';
-import { ROOT } from './helpers';
+import { accountPageErrors, isRouterBadGateway, ROOT, routerBadGateways, watchPageErrors } from './helpers';
 
 export { expect };
 
@@ -55,17 +55,22 @@ export const test = base.extend<{ allowedErrors: RegExp[]; pageErrors: string[];
    */
   allowedErrors: async ({}, use) => use([]),
 
-  /** Fails the test on errors the page reports: console errors and uncaught exceptions, except the allowed ones. */
+  /**
+   * Fails the test on errors the page reports, and the pages of other people the test signed in (`signedInContext`,
+   * `accountPageErrors`): console errors and uncaught exceptions, except the allowed ones and a 502 the shared DDEV
+   * router made itself (`isRouterBadGateway`).
+   */
   pageErrors: [
     async ({ page, allowedErrors }, use) => {
       const errors: string[] = [];
-      page.on('pageerror', (error) => errors.push(`page error: ${error.message}`));
-      page.on('console', (message) => {
-        if (message.type() === 'error') errors.push(`console error: ${message.text()} (${message.location().url})`);
-      });
+      watchPageErrors(page, errors);
+      // what a page of another person reported before this test (an earlier test, a beforeAll) is not this test's, nor
+      // a 502 the router gave then
+      accountPageErrors.length = 0;
+      routerBadGateways.clear();
       await use(errors);
       expect(
-        errors.filter((error) => !allowedErrors.some((allowed) => allowed.test(error))),
+        [...errors, ...accountPageErrors].filter((error) => !isRouterBadGateway(error) && !allowedErrors.some((allowed) => allowed.test(error))),
         'the page reported errors',
       ).toEqual([]);
     },

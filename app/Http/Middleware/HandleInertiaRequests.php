@@ -43,10 +43,19 @@ class HandleInertiaRequests extends Middleware
             'organization' => (new OrganizationResource(Organization::current()))->resolve($request),
             'features' => [
                 'mail' => MailSetup::configured(),
-                // the live connection (Reverb) is wired up in Phase 8
-                'live' => null,
+                // what the browser needs to open the WebSocket; null without Reverb (A285) and while its key or host is
+                // missing from the environment (T2-M3: the browser would connect nowhere)
+                'live' => config('broadcasting.default') === 'reverb' && filled(config('broadcasting.connections.reverb.key'))
+                    && filled(config('broadcasting.connections.reverb.options.host')) ? [
+                        'key' => config('broadcasting.connections.reverb.key'),
+                        'host' => config('broadcasting.connections.reverb.options.host'),
+                        'port' => (int) config('broadcasting.connections.reverb.options.port'),
+                        'scheme' => config('broadcasting.connections.reverb.options.scheme'),
+                    ] : null,
                 // the browser refuses a larger file before it sends it (F29)
                 'attachments_max_mb' => Attachment::maxMegabytes(),
+                // how long the mails about an item are collected (NOTIFICATION_MAIL_DELAY): the settings say it (T18-M2)
+                'notification_mail_delay' => (int) config('werkbuch.notification_mail_delay'),
             ],
             'flash' => [
                 'status' => $request->session()->get('status'),

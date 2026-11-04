@@ -60,4 +60,19 @@ describe('coverage-merge', () => {
     expect(map.fileCoverageFor('/repo/resources/js/x.ts').getLineCoverage()).toEqual({ 3: 4, 5: 0, 7: 0 });
     expect(Object.values(mapped)[0].inputSourceMap).toBeUndefined();
   });
+
+  it('adds up runs that a generator reads one at a time', async () => {
+    let read = 0;
+    const runs = (function* () {
+      for (const hits of [1, 2, 3]) {
+        read += 1;
+        yield built(hits);
+      }
+    })();
+
+    const mapped = await remapCoverage(runs);
+
+    expect(read).toBe(3);
+    expect(mergeCoverage({}, [mapped], '/repo').fileCoverageFor('/repo/resources/js/x.ts').getLineCoverage()).toEqual({ 3: 6 });
+  });
 });

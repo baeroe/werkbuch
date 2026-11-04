@@ -52,6 +52,15 @@ describe('Checkbox', () => {
 
     expect(onCheckedChange).not.toHaveBeenCalled();
     expect(container.querySelector('label')?.className).toContain('cursor-not-allowed');
+    // the row dims the box with it, once: the box itself does not dim again
+    expect(container.querySelector('label')?.className).toContain('opacity-50');
+    expect(screen.getByRole('checkbox', { name: 'Alle' }).className).not.toContain('opacity-50');
+  });
+
+  it('dims a locked box without a label itself', () => {
+    render(<Checkbox aria-label="Mail" disabled />);
+
+    expect(screen.getByRole('checkbox', { name: 'Mail' }).className).toContain('data-disabled:opacity-50');
   });
 
   it('is only the box without a label, with its larger hit area and the name of the caller', () => {

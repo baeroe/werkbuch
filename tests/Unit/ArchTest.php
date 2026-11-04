@@ -1,6 +1,8 @@
 <?php
 
+use App\Access\Authorize;
 use App\Access\RoleAssignments;
+use App\Domain\Ulid;
 use App\Events\EventRecorder;
 use App\Exceptions\Problem;
 use App\Support\Actor;
@@ -24,6 +26,17 @@ arch('views translate into queries and write nothing')
 arch('search turns models into documents and writes nothing')
     ->expect('App\Search')->classes()->toBeFinal()
     ->not->toUse([EventRecorder::class, 'Illuminate\Support\Facades\DB', 'Illuminate\Support\Facades\Schema']);
+arch('the consumer of notifications hands every event to its action and computes nothing')
+    ->expect('App\Notifications\NotificationConsumer')->toBeFinal()
+    ->not->toUse([EventRecorder::class, 'Illuminate\Support\Facades\DB', 'App\Domain', 'App\Models\Notification']);
+arch('live tells the channels, records nothing and computes nothing')
+    ->expect('App\Live')->classes()->toBeFinal()->not->toUse([EventRecorder::class, 'Illuminate\Support\Facades\Schema', 'App\Domain']);
+arch('in App\Live only NotificationsChanged speaks to the database, to wait for the commit')
+    ->expect(['App\Live\LiveConsumer', 'App\Live\LiveMessage', 'App\Live\Disconnect', 'App\Live\Broadcasts'])
+    ->not->toUse('Illuminate\Support\Facades\DB');
+arch('the live channels decide only through the policies')
+    ->expect('App\Broadcasting')->classes()->toBeFinal()->toHaveMethod('join')
+    ->toOnlyUse([Authorize::class, Actor::class, 'App\Models\User', 'App\Models\Project', 'App\Models\WorkItem', Ulid::class]);
 arch('domain classes are final')->expect('App\Domain')->classes()->toBeFinal();
 arch('rich text is final and leaves actions, http and the database alone')
     ->expect('App\RichText')->classes()->toBeFinal()->not->toUse(['App\Actions', 'App\Http', 'Illuminate\Support\Facades\DB']);
@@ -100,6 +113,23 @@ it('keeps App\Search free of writes', function () {
 
     expect(appFiles('app/Search'))->not->toBe([])
         ->and($hits)->toBe([]);
+});
+
+// App\Live only reads (who lost access) and broadcasts: no model write, no insert (phase plan 8, Global Constraints)
+it('keeps App\Live free of writes', function () {
+    $hits = collect(appFiles('app/Live'))
+        ->flatMap(fn (string $f) => [...modelWrites((string) file_get_contents(repo_path($f)), $f), ...inserts((string) file_get_contents(repo_path($f)), $f)])
+        ->all();
+
+    expect(appFiles('app/Live'))->not->toBe([])
+        ->and($hits)->toBe([]);
+});
+
+it('keeps the consumer of notifications free of writes', function () {
+    $file = 'app/Notifications/NotificationConsumer.php';
+    $code = (string) file_get_contents(repo_path($file));
+
+    expect([...modelWrites($code, $file), ...inserts($code, $file)])->toBe([]);
 });
 
 it('detects a handle() without an Actor first', function () {
