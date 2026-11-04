@@ -139,7 +139,7 @@ curl -X PUT -H "Authorization: Bearer <token>" -H "Content-Type: application/jso
   https://werkbuch.example.com/api/v1/notification-preferences
 ```
 
-IDs anderer Konten, Benachrichtigungen, die du nicht mehr siehst, und unbekannte IDs werden übergangen (`updated` zählt nur, was sich geändert hat); eine davon zu löschen ist ein `404`. `ids` und `all` zusammen oder eine Zeile mit unbekanntem `event` oder `channel` sind ein `422` mit allen Fehlern auf einmal. Bots lesen eine leere Inbox und leere Einstellungen; Einstellungen ändern ist für sie ein `403`. Lesen, Markieren und Löschen schreiben keine History.
+IDs anderer Konten, Benachrichtigungen, die du nicht mehr siehst, und unbekannte IDs werden übergangen (`updated` zählt nur, was sich geändert hat); eine davon zu löschen ist ein `404`. `ids` und `all` zusammen, `mentions_only` neben `ids` oder eine Zeile mit unbekanntem `event` oder `channel` sind ein `422` mit allen Fehlern auf einmal. Bots lesen eine leere Inbox und leere Einstellungen; Einstellungen ändern ist für sie ein `403`. Lesen, Markieren und Löschen schreiben keine History.
 
 ## System-Seite
 

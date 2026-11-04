@@ -110,6 +110,8 @@ it('refuses more than 100 ids', function () use ($world) {
         ->and(MarkNotificationsUnread::run(actor($w['mara']), ['ids' => $ulids(100)]))->toBe(0)
         // ids or all, never both; all and mentions_only only true or false
         ->and($errors(MarkNotificationsRead::class, ['all' => true, 'ids' => $ulids(1)]))->toBe(['all' => [__('field.notifications.ids_or_all')]])
+        // mentions_only belongs to all: next to ids it would be passed over in silence (T6-M3)
+        ->and($errors(MarkNotificationsRead::class, ['ids' => $ulids(1), 'mentions_only' => true]))->toBe(['mentions_only' => [__('field.notifications.mentions_only_with_all')]])
         ->and($errors(MarkNotificationsRead::class, ['all' => 'yes', 'mentions_only' => 'no']))->toBe([
             'all' => [__('field.boolean')],
             'mentions_only' => [__('field.boolean')],

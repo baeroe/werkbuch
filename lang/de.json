@@ -240,6 +240,7 @@
     "field.name.required": "Der Name darf nicht leer sein.",
     "field.name.taken": "Diesen Namen gibt es schon.",
     "field.notifications.ids_or_all": "Schick entweder ids oder all, nicht beides.",
+    "field.notifications.mentions_only_with_all": "mentions_only gilt nur mit all, nicht mit ids.",
     "field.options.dropdown_only": "Nur ein Dropdown hat Optionen.",
     "field.options.duplicate_id": "Zwei Optionen haben dieselbe ID.",
     "field.options.id_invalid": "Eine Options-ID ist ein Text mit höchstens :max Zeichen.",

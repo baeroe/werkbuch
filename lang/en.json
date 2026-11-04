@@ -240,6 +240,7 @@
     "field.name.required": "The name must not be empty.",
     "field.name.taken": "This name already exists.",
     "field.notifications.ids_or_all": "Send either ids or all, not both.",
+    "field.notifications.mentions_only_with_all": "mentions_only goes with all, not with ids.",
     "field.options.dropdown_only": "Only a dropdown has options.",
     "field.options.duplicate_id": "Two options have the same ID.",
     "field.options.id_invalid": "An option ID is a text of at most :max characters.",

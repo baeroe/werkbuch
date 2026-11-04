@@ -50,6 +50,10 @@ final class MarkNotificationsRead
             }
             $unread->when((bool) ($valid['mentions_only'] ?? false), fn ($mentions) => $mentions->where('kind', NotificationKind::Mentioned));
         } else {
+            // the mentions are a filter of "all": next to ids it would be passed over in silence (T6-M3)
+            if (($input['ids'] ?? null) !== null && (bool) ($valid['mentions_only'] ?? false)) {
+                throw ValidationException::withMessages(['mentions_only' => __('field.notifications.mentions_only_with_all')]);
+            }
             $unread->whereKey(self::ids($input));
         }
 

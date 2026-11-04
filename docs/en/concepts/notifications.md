@@ -139,7 +139,7 @@ curl -X PUT -H "Authorization: Bearer <token>" -H "Content-Type: application/jso
   https://werkbuch.example.com/api/v1/notification-preferences
 ```
 
-Ids of other accounts, of notifications you no longer see and unknown ids are passed over (`updated` counts only what changed); deleting one of them is a `404`. Sending `ids` and `all` together, or a row with an unknown `event` or `channel`, is a `422` with every problem at once. Bots read an empty inbox and empty settings; changing settings is a `403` for them. Reading, marking and deleting write no history.
+Ids of other accounts, of notifications you no longer see and unknown ids are passed over (`updated` counts only what changed); deleting one of them is a `404`. Sending `ids` and `all` together, `mentions_only` next to `ids`, or a row with an unknown `event` or `channel`, is a `422` with every problem at once. Bots read an empty inbox and empty settings; changing settings is a `403` for them. Reading, marking and deleting write no history.
 
 ## System page
 
