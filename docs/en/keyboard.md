@@ -137,6 +137,16 @@ werkbuch works without a mouse. Press <kbd>?</kbd> on any screen to see the shor
 | <kbd>↑</kbd> / <kbd>↓</kbd> | Previous or next header |
 | <kbd>↵</kbd> / <kbd>Space</kbd> | Fold or unfold the group |
 
+## Page tree of the wiki
+
+| Keys | Action |
+| --- | --- |
+| <kbd>↑</kbd> / <kbd>↓</kbd> | Previous or next page |
+| <kbd>→</kbd> | Unfold subpages, or go to the first subpage |
+| <kbd>←</kbd> | Fold subpages away, or go to the parent page |
+| <kbd>Home</kbd> / <kbd>End</kbd> | First or last page |
+| <kbd>↵</kbd> | Open the page |
+
 ## Editors and fields
 
 | Keys | Action |

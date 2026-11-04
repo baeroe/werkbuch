@@ -137,6 +137,16 @@ werkbuch geht ohne Maus. Mit <kbd>?</kbd> zeigt jeder Bildschirm die Kürzel, di
 | <kbd>↑</kbd> / <kbd>↓</kbd> | Voriger bzw. nächster Kopf |
 | <kbd>↵</kbd> / <kbd>Leertaste</kbd> | Gruppe auf- oder zuklappen |
 
+## Seitenbaum des Wikis
+
+| Taste | Aktion |
+| --- | --- |
+| <kbd>↑</kbd> / <kbd>↓</kbd> | Vorige bzw. nächste Seite |
+| <kbd>→</kbd> | Unterseiten aufklappen bzw. zur ersten Unterseite |
+| <kbd>←</kbd> | Unterseiten zuklappen bzw. zur Eltern-Seite |
+| <kbd>Pos1</kbd> / <kbd>Ende</kbd> | Erste bzw. letzte Seite |
+| <kbd>↵</kbd> | Seite öffnen |
+
 ## Editoren und Felder
 
 | Taste | Aktion |

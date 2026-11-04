@@ -55,6 +55,7 @@ describe('keyboard docs', () => {
       'Command palette',
       'Table',
       'Group headers (list and table)',
+      'Page tree of the wiki',
       'Editors and fields',
     ]);
     // one line for the keys of the same action

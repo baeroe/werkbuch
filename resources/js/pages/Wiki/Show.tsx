@@ -1,22 +1,16 @@
+import { WikiScreen } from '@/features/wiki/WikiScreen';
 import { shellLayout } from '@/shell/layout';
 
 interface Props {
   identifier: string;
   pageId: string | null;
+  /** Whether the server found the page for the person; false without a page as well. */
   pageFound: boolean;
 }
 
-/**
- * `/projects/{identifier}/wiki/{pageId?}`: the wiki of a project and one of its pages. A placeholder until the wiki
- * screen comes (Task 13 renders `WikiScreen({ identifier, pageId, pageFound })` here).
- */
-export default function Show({ identifier, pageId }: Props) {
-  return (
-    <div className="p-6">
-      <h1 translate="no">{identifier}</h1>
-      {pageId !== null && <p translate="no">{pageId}</p>}
-    </div>
-  );
+/** `/projects/{identifier}/wiki/{pageId?}`: the wiki of a project and one of its pages. */
+export default function Show({ identifier, pageId, pageFound }: Props) {
+  return <WikiScreen identifier={identifier} pageId={pageId} pageFound={pageFound} />;
 }
 
 Show.layout = shellLayout;
