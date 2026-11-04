@@ -120,3 +120,22 @@ it('refuses a viewer and wrong fields over REST', function () use ($world) {
         ->assertJsonPath('errors.title.0', __('field.title.required'))
         ->assertJsonPath('errors.base_version.0', __('field.base_version.invalid'));
 });
+
+it('moves a page with its place in the answer and refuses a cycle at parent_id', function () use ($world) {
+    [, $mara, $lene, $root, $child] = $world();
+
+    $this->actingAs($mara)->postJson("/api/v1/pages/{$child->id}/move", ['parent_id' => null, 'before_id' => strtoupper($root->id)])->assertOk()
+        ->assertJsonPath('data.id', $child->id)
+        ->assertJsonPath('data.parent_id', null)
+        ->assertJsonPath('data.version', 1)
+        ->assertJsonPath('data.content', 'Wie wir arbeiten');
+    expect(strcmp((string) $child->fresh()?->rank, $root->rank))->toBeLessThan(0);
+
+    $this->actingAs($mara)->postJson("/api/v1/pages/{$root->id}/move", ['parent_id' => $root->id, 'before_id' => null])->assertUnprocessable()
+        ->assertJsonPath('errors.parent_id.0', __('field.parent_page.cycle'));
+    $this->actingAs($mara)->postJson("/api/v1/pages/{$root->id}/move", [])->assertUnprocessable()
+        ->assertJsonPath('errors.parent_id.0', __('field.required'))
+        ->assertJsonPath('errors.before_id.0', __('field.required'));
+    $this->actingAs($lene)->postJson("/api/v1/pages/{$root->id}/move", ['parent_id' => null, 'before_id' => null])->assertForbidden()
+        ->assertJsonPath('detail', __('problem.detail.wiki_members_only'));
+});

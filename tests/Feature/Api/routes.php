@@ -53,6 +53,7 @@ return [
     'create a page' => ['POST', '/api/v1/projects/{project}/pages', 'params' => fn (MatrixWorld $w) => ['project' => $w->web->identifier], 'body' => ['title' => 'Matrix']],
     'show a page' => ['GET', '/api/v1/pages/{page}', 'params' => fn (MatrixWorld $w) => ['page' => $w->page('project_admin')->id]],
     'save a page' => ['PATCH', '/api/v1/pages/{page}', 'params' => fn (MatrixWorld $w) => ['page' => $w->page('project_admin')->id], 'body' => ['title' => 'Matrix']],
+    'move a page' => ['POST', '/api/v1/pages/{page}/move', 'params' => fn (MatrixWorld $w) => ['page' => $w->page('project_admin')->id], 'body' => ['parent_id' => null, 'before_id' => null]],
     'list workflows' => ['GET', '/api/v1/workflows'],
     'create a workflow' => ['POST', '/api/v1/workflows'],
     'change a workflow' => ['PUT', '/api/v1/workflows/{workflow}', 'params' => fn (MatrixWorld $w) => ['workflow' => Workflow::factory()->create()->id]],

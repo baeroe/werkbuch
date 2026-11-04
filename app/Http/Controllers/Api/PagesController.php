@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Actions\Pages\CreatePage;
 use App\Actions\Pages\GetPage;
 use App\Actions\Pages\ListPages;
+use App\Actions\Pages\MovePage;
 use App\Actions\Pages\UpdatePage;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\PageNodeResource;
@@ -44,5 +45,11 @@ final class PagesController extends Controller
     public function update(Request $request, Page $page): PageResource
     {
         return new PageResource(UpdatePage::run(Actor::fromRequest($request), $page, $request->all()));
+    }
+
+    /** Moves the page under `parent_id`, in front of `before_id` (`null`: at the end), `{data: Page}`. */
+    public function move(Request $request, Page $page): PageResource
+    {
+        return new PageResource(MovePage::run(Actor::fromRequest($request), $page, $request->all()));
     }
 }
