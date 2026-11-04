@@ -13,7 +13,7 @@
     "typecheck": "tsc -p .",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "coverage:merge": "node scripts/coverage-merge.mjs",
+    "coverage:merge": "ulimit -c 0; node scripts/coverage-merge.mjs",
     "shortcuts:doc": "node scripts/shortcuts-doc.mjs",
     "clickdummy": "pnpm --dir prototypes/clickdummy dev --host 0.0.0.0 --port 5176 --strictPort"
   },
