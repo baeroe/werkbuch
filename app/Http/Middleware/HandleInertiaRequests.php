@@ -43,8 +43,10 @@ class HandleInertiaRequests extends Middleware
             'organization' => (new OrganizationResource(Organization::current()))->resolve($request),
             'features' => [
                 'mail' => MailSetup::configured(),
-                // what the browser needs to open the WebSocket; null without Reverb (A285)
-                'live' => config('broadcasting.default') === 'reverb' ? [
+                // what the browser needs to open the WebSocket; null without Reverb (A285) and while its key or host is
+                // missing from the environment (T2-M3: the browser would connect nowhere)
+                'live' => config('broadcasting.default') === 'reverb' && filled(config('broadcasting.connections.reverb.key'))
+                    && filled(config('broadcasting.connections.reverb.options.host')) ? [
                     'key' => config('broadcasting.connections.reverb.key'),
                     'host' => config('broadcasting.connections.reverb.options.host'),
                     'port' => (int) config('broadcasting.connections.reverb.options.port'),

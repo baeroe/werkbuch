@@ -37,6 +37,21 @@ it('shares no live settings for the log broadcaster', function () {
     $this->get(inertiaProbe())->assertInertia(fn (Assert $page) => $page->where('features.live', null));
 });
 
+it('shares no live settings while the key or the host of Reverb is missing (T2-M3)', function (array $missing) {
+    config([
+        'broadcasting.default' => 'reverb',
+        'broadcasting.connections.reverb.key' => 'live-key',
+        'broadcasting.connections.reverb.options' => ['host' => 'live.example.com', 'port' => '6001', 'scheme' => 'https'],
+        ...$missing,
+    ]);
+
+    $this->get(inertiaProbe())->assertInertia(fn (Assert $page) => $page->where('features.live', null));
+})->with([
+    'no key' => [['broadcasting.connections.reverb.key' => null]],
+    'an empty key' => [['broadcasting.connections.reverb.key' => '']],
+    'no host' => [['broadcasting.connections.reverb.options.host' => null]],
+]);
+
 it('shares exactly the fields of the signed-in account', function () {
     $user = User::factory()->locale(Locale::De)->create();
     $this->actingAs($user)->get(inertiaProbe())->assertInertia(fn (Assert $page) => $page
