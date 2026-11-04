@@ -7,10 +7,12 @@
  */
 
 import { CircleAlert, CircleCheck, CircleMinus, RotateCw, Send } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
 import { toast } from '@/components/ui/toast';
+import { qk } from '@/hooks/keys';
 import { useSettle } from '@/hooks/mutation';
 import { useRetryFailedJobs, useSendTestMail, useSystemStatus } from '@/hooks/system';
 import { useCurrentUser } from '@/hooks/users';
@@ -109,15 +111,31 @@ function Instance({ status }: { status: SystemStatus }) {
   );
 }
 
-function FailedJobs({ status }: { status: SystemStatus }) {
+/** `readAt`: when the state was read (`dataUpdatedAt`), to tell the state after a retry from the one before it. */
+function FailedJobs({ status, readAt }: { status: SystemStatus; readAt: number }) {
   const settle = useSettle();
   const retry = useRetryFailedJobs();
   const zone = useOrgZone();
   const total = status.failed_jobs_total;
+  const empty = useRef<HTMLParagraphElement>(null);
+  const handled = useRef(0);
+
+  // The button goes once nothing is left to retry, and it had the focus: once the call succeeded and the state read
+  // after it is shown, the sentence that took its place takes the focus, unless the person moved on meanwhile. A run
+  // that left jobs keeps the button, and the focus on it.
+  useEffect(() => {
+    if (!retry.isSuccess || readAt < retry.submittedAt || handled.current === retry.submittedAt) return;
+    handled.current = retry.submittedAt;
+    const lost = document.activeElement === null || document.activeElement === document.body;
+    if (lost) empty.current?.focus();
+  }, [retry.isSuccess, retry.submittedAt, readAt]);
 
   function run() {
     settle(retry.mutateAsync(undefined), {
-      onSuccess: ({ retried }) => toast({ title: tn('settings.system.failed.retried', retried), description: t('settings.system.failed.retried_note'), tone: 'success' }),
+      onSuccess: ({ retried }) =>
+        retried === 0
+          ? toast({ title: t('settings.system.failed.retried_none'), description: t('settings.system.failed.retried_none_note') })
+          : toast({ title: tn('settings.system.failed.retried', retried), description: t('settings.system.failed.retried_note'), tone: 'success' }),
       onError: (error) => notifyError(t('settings.system.failed.retry_failed'), error, run),
     });
   }
@@ -135,7 +153,7 @@ function FailedJobs({ status }: { status: SystemStatus }) {
       }
     >
       {status.failed_jobs.length === 0 ? (
-        <p className="flex items-center gap-2 px-4 py-3 text-ui text-muted">
+        <p ref={empty} tabIndex={-1} data-focus-ring="none" className="flex items-center gap-2 px-4 py-3 text-ui text-muted outline-none">
           <CircleCheck className="size-4 shrink-0 text-st-completed" aria-hidden="true" />
           {t('settings.system.no_failed')}
         </p>
@@ -174,14 +192,29 @@ function TestMail({ status }: { status: SystemStatus }) {
   const settle = useSettle();
   const email = useCurrentUser()?.email ?? '';
   const send = useSendTestMail();
+  const queryClient = useQueryClient();
   const [refusal, setRefusal] = useState<string | null>(null);
+  const banner = useRef<HTMLDivElement>(null);
+
+  // the button goes with the reload below: the banner that says why takes the focus
+  useEffect(() => {
+    if (refusal) banner.current?.focus();
+  }, [refusal]);
 
   function run() {
     setRefusal(null);
     settle(send.mutateAsync(undefined), {
       onSuccess: ({ sent_to }) => toast({ title: t('settings.system.test_mail.sent', { email: sent_to }), description: t('settings.system.test_mail.sent_note'), tone: 'success' }),
-      // the mail server went away since the page loaded: the panel says so, a retry could only fail again
-      onError: (error) => (hasReason(error, 'mail_not_configured') ? setRefusal(causeOf(error)) : notifyError(t('settings.system.test_mail.failed'), error, run)),
+      onError: (error) => {
+        if (!hasReason(error, 'mail_not_configured')) {
+          notifyError(t('settings.system.test_mail.failed'), error, run);
+          return;
+        }
+        // the mail server went away since the page loaded: the panel says so, a retry could only fail again, and the
+        // state is read anew (the fact "E-Mail" and the button follow)
+        setRefusal(causeOf(error));
+        void queryClient.invalidateQueries({ queryKey: qk.system.all });
+      },
     });
   }
 
@@ -189,7 +222,7 @@ function TestMail({ status }: { status: SystemStatus }) {
     <Panel title={t('settings.system.test_mail.title')} description={t('settings.system.test_mail.description')}>
       <div className="flex flex-col gap-3 p-4">
         {refusal && (
-          <Banner tone="danger" role="alert" title={t('settings.system.test_mail.refused')}>
+          <Banner ref={banner} tabIndex={-1} tone="danger" role="alert" title={t('settings.system.test_mail.refused')} data-focus-ring="none" className="outline-none">
             {refusal}
           </Banner>
         )}
@@ -216,7 +249,7 @@ export default function System(_props: SectionProps) {
         {() => (
           <>
             <Instance status={status.data!} />
-            <FailedJobs status={status.data!} />
+            <FailedJobs status={status.data!} readAt={status.dataUpdatedAt} />
             <TestMail status={status.data!} />
           </>
         )}

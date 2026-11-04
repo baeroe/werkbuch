@@ -2125,6 +2125,8 @@
     "settings.system.failed.newest": "The newest :shown of :total.",
     "settings.system.failed.retried.one": ":count job queued again",
     "settings.system.failed.retried.other": ":count jobs queued again",
+    "settings.system.failed.retried_none": "Nothing queued again",
+    "settings.system.failed.retried_none_note": "The jobs were gone already, perhaps because someone else retried them.",
     "settings.system.failed.retried_note": "They run with the next round of the queue.",
     "settings.system.failed.retry": "Retry all",
     "settings.system.failed.retry_failed": "Jobs not queued again",

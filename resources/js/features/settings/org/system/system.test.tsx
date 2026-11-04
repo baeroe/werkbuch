@@ -164,13 +164,54 @@ describe('System', () => {
 
     await user.click(within(panel).getByRole('button', { name: 'Alle erneut versuchen' }));
 
-    expect(await screen.findByText('Keine fehlgeschlagenen Jobs')).toBeTruthy();
+    const none = await screen.findByText('Keine fehlgeschlagenen Jobs');
+    // the button went with the jobs: the sentence in its place has the focus, not the page
+    await waitFor(() => expect(document.activeElement).toBe(none));
     expect(calls('POST', '/api/v1/system/failed-jobs/retry').map((call) => call.body)).toEqual([{}]);
     expect(toastNamed('1 Job wieder eingereiht')?.description).toBe('Sie laufen mit der nächsten Runde der Queue.');
     // reloaded: the queue holds them now
     expect(within(screen.getByRole('list', { name: 'Zustand der Instanz' })).getByText('4 Jobs warten')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Fehlgeschlagene Jobs' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Alle erneut versuchen' })).toBeNull();
+  });
+
+  it('keeps the button and its focus when jobs are left after a retry', async () => {
+    const user = userEvent.setup();
+    let status = makeSystemStatus();
+    renderSystem(() => ({ body: { data: status } }), {
+      'POST /api/v1/system/failed-jobs/retry': () => {
+        // a job failed again in the meantime
+        status = makeSystemStatus({ failed_jobs: [{ ...makeSystemStatus().failed_jobs[0]!, id: 'b2', failed_at: '2026-10-28T08:00:00.000Z' }] });
+        return { body: { retried: 1 } };
+      },
+    });
+
+    const button = await screen.findByRole('button', { name: 'Alle erneut versuchen' });
+    await user.click(button);
+
+    await waitFor(() => expect(toastNamed('1 Job wieder eingereiht')).toBeTruthy());
+    expect(await screen.findByText('28.10.2026, 09:00')).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Alle erneut versuchen' }));
+  });
+
+  it('says that nothing was left to retry instead of a success with no jobs', async () => {
+    const user = userEvent.setup();
+    let status = makeSystemStatus();
+    renderSystem(() => ({ body: { data: status } }), {
+      'POST /api/v1/system/failed-jobs/retry': () => {
+        // another admin was quicker
+        status = makeSystemStatus({ failed_jobs: [], failed_jobs_total: 0 });
+        return { body: { retried: 0 } };
+      },
+    });
+
+    await user.click(await screen.findByRole('button', { name: 'Alle erneut versuchen' }));
+
+    await waitFor(() => expect(toastNamed('Nichts wieder eingereiht')).toBeTruthy());
+    expect(toastNamed('Nichts wieder eingereiht')!.description).toBe('Die Jobs waren schon fort, etwa weil sie jemand anderes erneut versucht hat.');
+    expect(toastNamed('Nichts wieder eingereiht')!.tone).not.toBe('success');
+    expect(currentToasts().some((entry) => entry.title.startsWith('0 '))).toBe(false);
+    expect(document.activeElement).toBe(await screen.findByText('Keine fehlgeschlagenen Jobs'));
   });
 
   it('says that only the newest failed jobs are listed', async () => {
@@ -217,7 +258,13 @@ describe('System', () => {
 
   it('says in the panel that the mail server went away since the page loaded', async () => {
     const user = userEvent.setup();
-    renderSystem(makeSystemStatus(), { 'POST /api/v1/system/test-mail': () => problem(409, 'mail_not_configured', 'Es ist kein Mailserver eingerichtet.') });
+    let status = makeSystemStatus();
+    renderSystem(() => ({ body: { data: status } }), {
+      'POST /api/v1/system/test-mail': () => {
+        status = makeSystemStatus({ mail_configured: false });
+        return problem(409, 'mail_not_configured', 'Es ist kein Mailserver eingerichtet.');
+      },
+    });
 
     await user.click(await screen.findByRole('button', { name: 'Testmail an mara@feldwerk.example.com' }));
 
@@ -225,6 +272,11 @@ describe('System', () => {
     expect(alert.textContent).toContain('Die Testmail ist nicht rausgegangen');
     expect(alert.textContent).toContain('Es ist kein Mailserver eingerichtet.');
     expect(currentToasts()).toEqual([]);
+    // the state is read anew: the fact and the button follow, the banner that says why keeps the focus
+    expect(await within(fact(screen.getByRole('list', { name: 'Zustand der Instanz' }), 'E-Mail')).findByText('Nicht eingerichtet')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Testmail an/ })).toBeNull();
+    expect(screen.getByText(/^Es ist kein Mailserver eingerichtet\. Trage ihn/)).toBeTruthy();
+    expect(document.activeElement).toBe(alert);
   });
 
   it('offers no test mail without a mail server', async () => {

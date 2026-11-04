@@ -2125,6 +2125,8 @@
     "settings.system.failed.newest": "Die neuesten :shown von :total.",
     "settings.system.failed.retried.one": ":count Job wieder eingereiht",
     "settings.system.failed.retried.other": ":count Jobs wieder eingereiht",
+    "settings.system.failed.retried_none": "Nichts wieder eingereiht",
+    "settings.system.failed.retried_none_note": "Die Jobs waren schon fort, etwa weil sie jemand anderes erneut versucht hat.",
     "settings.system.failed.retried_note": "Sie laufen mit der nächsten Runde der Queue.",
     "settings.system.failed.retry": "Alle erneut versuchen",
     "settings.system.failed.retry_failed": "Jobs nicht wieder eingereiht",
