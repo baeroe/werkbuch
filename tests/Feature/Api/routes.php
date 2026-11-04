@@ -49,6 +49,8 @@ return [
     'add a member to a project' => ['POST', '/api/v1/projects/{project}/members', 'params' => fn (MatrixWorld $w) => ['project' => $w->web->identifier]],
     'change the role of a member' => ['PATCH', '/api/v1/projects/{project}/members/{user}', 'params' => fn (MatrixWorld $w) => ['project' => $w->web->identifier, 'user' => $w->target->id]],
     'remove a member from a project' => ['DELETE', '/api/v1/projects/{project}/members/{user}', 'params' => fn (MatrixWorld $w) => ['project' => $w->web->identifier, 'user' => $w->target->id]],
+    'list the pages of a project' => ['GET', '/api/v1/projects/{project}/pages', 'params' => fn (MatrixWorld $w) => ['project' => $w->web->identifier]],
+    'show a page' => ['GET', '/api/v1/pages/{page}', 'params' => fn (MatrixWorld $w) => ['page' => $w->page('project_admin')->id]],
     'list workflows' => ['GET', '/api/v1/workflows'],
     'create a workflow' => ['POST', '/api/v1/workflows'],
     'change a workflow' => ['PUT', '/api/v1/workflows/{workflow}', 'params' => fn (MatrixWorld $w) => ['workflow' => Workflow::factory()->create()->id]],
