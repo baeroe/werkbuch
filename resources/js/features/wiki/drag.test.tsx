@@ -205,6 +205,9 @@ describe('dragging pages in the tree', () => {
     const tree = await pagesTree();
     const before = outline(tree);
     act(() => rowOf(tree, 'Meetings').focus());
+    // pressing the handle takes the focus from nothing (a browser moves it to the body on a mouse press, T17-M1)
+    const handle = tree.querySelector('[data-drag-handle="pg_web_tech"]')!;
+    expect(fireEvent.mouseDown(handle, { button: 0 })).toBe(false);
     const at = await pickUp(tree, 'Technik');
     pointTo(at, 20, 2 * ROW);
 

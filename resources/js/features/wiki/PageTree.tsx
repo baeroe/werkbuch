@@ -89,6 +89,8 @@ function TreeRow({ row, href, position, open, current, tabStop, movable, landing
           <span
             ref={setActivatorNodeRef}
             {...listeners}
+            // a mouse press on it keeps the focus where it is (the drag starts on pointerdown, T17-M1)
+            onMouseDown={(event) => event.preventDefault()}
             aria-hidden="true"
             data-drag-handle={row.id}
             title={t('wiki.tree.drag.handle')}
