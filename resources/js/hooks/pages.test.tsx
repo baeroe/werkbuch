@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { drafts, pageDraft } from '@/lib/drafts';
 import { clearLiveGone, markLiveGone, usePageGone } from '@/lib/liveGone';
 import { mockApi, type MockApi } from '@/test/api';
 import { list, makePage, seitenstruktur, webTree } from '@/test/fixtures';
@@ -222,6 +223,25 @@ describe('pages', () => {
       'GET /api/v1/projects/p_web/pages',
       'DELETE /api/v1/pages/pg_app_vision',
     ]);
+  });
+
+  it('drops the drafts of the subtree it deleted, never those of a page another tab deleted (T16-M1)', async () => {
+    // "Kickoff" was deleted elsewhere: the tree read after the delete holds it no more either
+    api = mockApi({
+      'GET /api/v1/projects/p_web/pages': () => ({
+        body: { data: webTree.filter((node) => !['pg_web_tech', 'pg_web_meetings'].includes(node.id)), meta: { total: 6 } },
+      }),
+      'DELETE /api/v1/pages/pg_web_tech': () => ({ body: { deleted: 2 } }),
+    });
+    queryClient.setQueryData(qk.pages.list({ project: 'p_web' }), { items: webTree, next_cursor: null, total: 12 });
+    const draft = { title: 'Entwurf', emoji: null, content: null, base_version: 1, conflict: null };
+    for (const id of ['pg_web_tech', 'pg_web_domain', 'pg_web_kickoff']) drafts.setPage(pageDraft(id), draft);
+    const { result } = renderHook(() => useDeletePage(), { wrapper });
+
+    await act(() => result.current.mutateAsync({ id: 'pg_web_tech', project_id: 'p_web', subtree: ['pg_web_tech', 'pg_web_domain'] }));
+
+    // what the person deleted was their own decision; the text of a page deleted by someone else stays parked
+    expect(['pg_web_tech', 'pg_web_domain', 'pg_web_kickoff'].map((id) => drafts.page(pageDraft(id)) !== null)).toEqual([false, false, true]);
   });
 
   it('finds the project of a page in a cached tree that still holds it', async () => {

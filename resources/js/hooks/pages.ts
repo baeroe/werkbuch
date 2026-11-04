@@ -27,6 +27,7 @@ import {
   savePage,
   type SavePageInput,
 } from '@/api/pages';
+import { drafts, pageDraft } from '@/lib/drafts';
 import { markLiveGone, usePageGone } from '@/lib/liveGone';
 import type { PageNode, Page as WikiPage } from '@/types';
 import { qk } from './keys';
@@ -165,6 +166,7 @@ export interface DeletePageVars {
  * `{ id, project_id?, subtree? }`. Answers `{ deleted }`. Before the tree loads again, the subtree counts as gone and
  * leaves the cache (detail, versions): what the variables name, what the cached trees hold below the page, and every
  * cached page of the project the tree on the server holds no more (read once more past the cache, `goneFromTree`).
+ * The drafts (`page:<id>`) of the subtree it deleted go too; those of pages only `goneFromTree` found stay.
  */
 export function useDeletePage() {
   const queryClient = useQueryClient();
@@ -173,9 +175,13 @@ export function useDeletePage() {
       const { id, project_id, subtree = [] } = typeof vars === 'string' ? { id: vars } : vars;
       const project = project_id ?? projectOf(queryClient, id);
       const answer = await deletePage(id);
-      const ids = new Set([...subtree, ...subtreeOf(queryClient, id)]);
+      const deleted = new Set([id, ...subtree, ...subtreeOf(queryClient, id)]);
+      const ids = new Set(deleted);
       if (project !== undefined) (await goneFromTree(queryClient, project)).forEach((page) => ids.add(page));
       forget(queryClient, ids);
+      // the text this person kept on the pages they deleted goes with them (their own decision, T16-M1); a page someone
+      // else deleted keeps its draft as a parked text (`ParkedDraft`)
+      deleted.forEach((page) => drafts.setPage(pageDraft(page), null));
       return answer;
     },
     PAGE_KEYS,
