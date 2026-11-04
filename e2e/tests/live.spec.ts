@@ -21,6 +21,13 @@ async function stateOf(page: Page, state: string): Promise<string> {
   return workflow.states.find((entry) => entry.name === state)!.id;
 }
 
+/** The frames the live sockets of `page` receive from now on (record before the page loads). */
+function framesOf(page: Page): string[] {
+  const frames: string[] = [];
+  page.on('websocket', (socket) => socket.on('framereceived', ({ payload }) => frames.push(String(payload))));
+  return frames;
+}
+
 /** A project of the test with the inbox account of the variant as a member, and that person signed in in a context of its own. */
 async function twoPeople(page: Page, browser: Browser, what: string) {
   const project = await createE2eProject(page, name(what), { types: ['Task'] });
@@ -100,7 +107,14 @@ test('does not apply the own change twice', async ({ page, browser }) => {
   const { project, other } = await twoPeople(page, browser, 'own');
   try {
     const item = await createItem(page, { project_id: project.id, title: 'E2E Live Footer' });
+    // the frames of this tab and of a second tab of the same person, on the channel of the project (T14-M2)
+    const ownFrames = framesOf(other.page);
+    const second = await other.context.newPage();
+    const secondFrames = framesOf(second);
     const held = channelHeld(other.page, `private-work-item.${item.id}`);
+    const secondHeld = channelHeld(second, `private-project.${project.id}`);
+    await second.goto(`/projects/${project.identifier}`);
+    await secondHeld;
     await other.page.goto(`/items/${item.key}`);
     await held;
     const patches: { socket: string | undefined }[] = [];
@@ -122,6 +136,12 @@ test('does not apply the own change twice', async ({ page, browser }) => {
     // the change of the other person comes after the own one: once it shows, the own event would have come too
     await api(page, 'PATCH', `/api/v1/work-items/${item.id}`, { title: 'E2E Live Footer neu' });
     await expect(other.page.getByRole('heading', { level: 1, name: 'E2E Live Footer neu' })).toBeVisible(LIVE);
+
+    // the second tab heard both changes: the own one went out; this tab heard only the other person's (A282)
+    const updates = (frames: string[]) => frames.filter((frame) => frame.includes(`private-project.${project.id}`) && frame.includes('work_item.updated'));
+    await expect.poll(() => updates(secondFrames).length, LIVE).toBe(2);
+    expect(updates(ownFrames)).toHaveLength(1);
+    await second.close();
 
     // the call named the tab's socket, so Reverb left this tab out (A282): one PATCH, one line of the priority
     expect(patches).toHaveLength(1);

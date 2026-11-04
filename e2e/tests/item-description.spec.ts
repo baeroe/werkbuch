@@ -27,13 +27,13 @@ async function storedDescription(page: Page, id: string): Promise<string | null>
 }
 
 test('warns the second editor of a description and keeps both versions', async ({ page, browser, allowedErrors }) => {
-  // Mara's save meets Erik's first: the 409 `description_conflict` the test is about (the browser reports it)
-  allowedErrors.push(/^\[mara@feldwerk\.example\.com\] console error: .*status of 409 .*\/api\/v1\/work-items\/[0-9a-z]{26}\)$/);
   const { id, identifier } = await createE2eProject(page, name('conflict'), { types: ['Task'] });
   let other: Awaited<ReturnType<typeof signedInContext>> | undefined;
   try {
     other = await signedInContext(browser, PEOPLE.mara);
     const item = await createItem(page, { project_id: id, title: 'E2E Startseite umbauen', description: 'Erster Stand.' });
+    // Mara's save meets Erik's first: the 409 `description_conflict` of this item the test is about (the browser reports it)
+    allowedErrors.push(new RegExp(`^\\[mara@feldwerk\\.example\\.com\\] console error: .*status of 409 .*/api/v1/work-items/${item.id}\\)$`));
 
     // both open the item; Mara's window loads before Erik saves
     const mara = await editDescription(other.page, 'de', item.key, 'E2E Startseite umbauen');

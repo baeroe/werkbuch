@@ -184,14 +184,14 @@ test('refuses an image of another project in the description', async ({ page, al
 });
 
 test('gives Ida neither the image nor its preview', async ({ page, browser, allowedErrors }) => {
-  // her page of the item answers 404, as the test asks (the browser reports it)
-  allowedErrors.push(/^\[ida@feldwerk\.example\.com\] console error: .*status of 404 .*\/items\/[A-Z0-9]+-\d+\)$/);
   // Ida is a member of WEB only: a private project of the e2e person is unknown to her
   const { id, identifier } = await createE2eProject(page, name('private'), { types: ['Task'], visibility: 'private' });
   let ida: Awaited<ReturnType<typeof signedInContext>> | undefined;
   try {
     ida = await signedInContext(browser, PEOPLE.ida);
     const item = await createItem(page, { project_id: id, title: 'E2E Geheimer Plan' });
+    // her page of this item answers 404, as the test asks (the browser reports it), nothing else may
+    allowedErrors.push(new RegExp(`^\\[ida@feldwerk\\.example\\.com\\] console error: .*status of 404 .*/items/${item.key}\\)$`));
     const { id: attachmentId } = await uploadViaApi(page, id, { name: 'plan.png', type: 'image/png', bytes: pngBytes(64, 48) });
     const described = await api(page, 'PATCH', `/api/v1/work-items/${item.id}`, { description: `![plan.png](attachment:${attachmentId})` });
     expect(described.status(), await described.text()).toBe(200);

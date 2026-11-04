@@ -180,8 +180,6 @@ test('finds a project and a view by name', async ({ page }) => {
 });
 
 test('shows Ida no item of a private project she is not in', async ({ page, browser, allowedErrors }) => {
-  // the key jumps to the 404 page, as the test asks (the browser reports it)
-  allowedErrors.push(/^\[ida@feldwerk\.example\.com\] console error: .*status of 404 .*\/items\/[A-Z0-9]+-\d+\)$/);
   await page.goto('/my-items');
   const { id, identifier } = await createE2eProject(page, name('search private'), { types: ['Task'], visibility: 'private' });
   // signed in inside the try: a sign-in that fails still removes the project
@@ -189,6 +187,8 @@ test('shows Ida no item of a private project she is not in', async ({ page, brow
   try {
     ida = await signedInContext(browser, PEOPLE.ida);
     const item = await createItem(page, { project_id: id, title: `E2E Geheimsache ${searchToken()}` });
+    // the key of this item jumps to the 404 page, as the test asks (the browser reports it), nothing else may
+    allowedErrors.push(new RegExp(`^\\[ida@feldwerk\\.example\\.com\\] console error: .*status of 404 .*/items/${item.key}\\)$`));
     const query = `${searchToken()} geheimsache`;
     // the e2e person (org admin) finds it: it is in the index
     await waitForSearch(page, query, (data) => data.items.some((hit) => hit.id === item.id));
