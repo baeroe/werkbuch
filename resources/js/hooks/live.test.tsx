@@ -744,10 +744,12 @@ describe('useLiveSync', () => {
       expect(result.current).toEqual({ page: true, other: false });
       await pass(LIVE_BURST_MS);
 
-      // the tree and the pages that stay load; the deleted pages, their versions and references to them stay as they are
-      expect([tree, structure, structureRef].map((query) => query.fetches())).toEqual([5, 5, 3]);
-      expect([tech, versions, version, techRef].map((query) => query.fetches())).toEqual([4, 4, 4, 3]);
-      expect([tech, versions, version, techRef].some((query) => query.stale())).toBe(false);
+      // the tree, the pages that stay and every reference load (a reference asks no page itself: the deleted one goes
+      // missing from the answer, no 404, and the reference stops showing its title, T18-M5); the deleted pages and
+      // their versions stay as they are
+      expect([tree, structure, structureRef, techRef].map((query) => query.fetches())).toEqual([5, 5, 4, 4]);
+      expect([tech, versions, version].map((query) => query.fetches())).toEqual([4, 4, 4]);
+      expect([tech, versions, version].some((query) => query.stale())).toBe(false);
       expect(items.fetches()).toBe(1);
       expect(useUiStore.getState().flashIds).toEqual([]);
     });

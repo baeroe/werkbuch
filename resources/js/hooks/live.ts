@@ -52,7 +52,8 @@ function heldKeys(event: LiveEvent): readonly QueryKey[] {
  * The caches a message makes stale. Items and their history on `work_item.*` (also watching, on the person's own
  * channel), comments and the history on `comment.*`, projects and members on `project.*` (on `project.updated` the
  * items too: their keys carry the identifier), the wiki on `page.*` (on `page.updated` and `page.moved` the references
- * too: a reference shows the title of its page, K15), the projects on a new org role (K14: the channels follow the list; the
+ * too: a reference shows the title of its page, K15; on `page.deleted` as well: a reference to a deleted page loads and
+ * finds it missing, T18-M5), the projects on a new org role (K14: the channels follow the list; the
  * shell reloads the shared props `auth` for it, M2), the inbox on `notifications.changed`; everything after the connection was
  * back (`live.reconnected`); what a channel carries once Reverb holds it (`live.subscribed`, `heldKeys`). A refused
  * channel (`live.refused`) loads everything as well (A281: access lost; what the person may not see any more answers
@@ -72,7 +73,7 @@ function keysOf(event: LiveEvent): readonly QueryKey[] {
   // a new identifier changes the keys of the items: the lists of the project load again (T14-M6)
   if (event.type === 'project.updated') return [qk.projects.all, qk.members.all, qk.workItems.all];
   if (group === 'project') return [qk.projects.all, qk.members.all];
-  if (event.type === 'page.updated' || event.type === 'page.moved') return [...WIKI, qk.references.all];
+  if (event.type === 'page.updated' || event.type === 'page.moved' || event.type === 'page.deleted') return [...WIKI, qk.references.all];
   if (group === 'page') return WIKI;
   return [];
 }
@@ -185,8 +186,12 @@ class LiveRefresh {
     this.load(query);
   }
 
-  /** Whether a query is about something gone: its key names it, or its answer is it (or a version of it). */
+  /**
+   * Whether a query is about something gone: its key names it, or its answer is it (or a version of it). References are
+   * never: they ask `GET /references`, which leaves out what is gone without a 404, so they load and stop showing it.
+   */
   private aboutGone(query: Query): boolean {
+    if (query.queryKey[0] === qk.references.all[0]) return false;
     const ids = dataIds(query.state.data);
     for (const id of [...this.gone.other, ...this.gone.page]) {
       if (query.queryHash.includes(id) || ids.includes(id)) return true;
