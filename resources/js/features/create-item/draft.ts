@@ -66,13 +66,17 @@ export function park(draft: Draft): void {
 }
 
 /**
- * The parked draft when its toast reopened the dialog and its project still takes new items. Only reads: rendering may
- * run twice (StrictMode) or be thrown away; the form that shows it lets go of it with `parkedTaken`.
+ * The parked draft when its toast reopened the dialog, while some project takes new items. One whose own project went
+ * meanwhile comes back all the same: the form moves it to the first project and says so (`items.create.draft_gone`, as
+ * when the project goes while the dialog is open, T15-M3), instead of throwing the text away. Only reads: rendering
+ * may run twice (StrictMode) or be thrown away; the form that shows it lets go of it with `parkedTaken`.
  */
 export function parkedToRestore(projects: readonly Project[]): Draft | null {
-  const draft = restoring ? parked : null;
-  return draft && projects.some((project) => project.id === draft.projectId) ? draft : null;
+  return restoring && projects.length > 0 ? parked : null;
 }
+
+/** Names of every project and type a form has seen, so the notice can still name one that left the lists. */
+export const seenNames = new Map<string, string>();
 
 /** A form appeared after "Rückgängig": the parked draft is its own now (or its project is gone), nothing is left to restore. */
 export function parkedTaken(): void {

@@ -49,7 +49,7 @@ import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import type { CreateDefaults } from '@/store/ui';
 import type { Project, Property, PropertyValue, WorkItem, WorkItemType, Workflow } from '@/types';
 import { useUnsavedGuard } from '@/features/item-detail/shared';
-import { hasContent, park, parkedTaken, parkedToRestore, type Draft } from './draft';
+import { hasContent, park, parkedTaken, parkedToRestore, seenNames, type Draft } from './draft';
 import { ItemFields, type Errors } from './ItemFields';
 import { PropertyInputs, type PropertyEntry } from './PropertyInputs';
 import { useCreateSubmit } from './useCreateSubmit';
@@ -245,9 +245,8 @@ function FormBody({
       values: {},
     };
   });
-  // names of every project and type seen, so the notice can still name one that left the lists
-  const seen = useRef(new Map<string, string>());
-  for (const entry of [...projects, ...types]) seen.current.set(entry.id, entry.name);
+  // names of every project and type seen (also by the form of a parked draft), so the notice can name one that left
+  for (const entry of [...projects, ...types]) seenNames.set(entry.id, entry.name);
   // project or type of the draft fell out of the lists while the dialog is open (archived, switched off, right lost):
   // the draft takes the first project that takes items, or the default type, and says so
   const projectGone = !projects.some((entry) => entry.id === stored.projectId);
@@ -270,7 +269,7 @@ function FormBody({
   const [blocked, setBlocked] = useState<string | null>(null);
   useEffect(() => {
     if (!projectGone && !typeGone) return;
-    setGoneName(seen.current.get(projectGone ? stored.projectId : stored.typeId) ?? '');
+    setGoneName(seenNames.get(projectGone ? stored.projectId : stored.typeId) ?? '');
     // what the server refused and the notice of a press were about the old draft, as after an own change
     setErrors((current) => (projectGone ? {} : errorsForType(current, draft.typeId)));
     setBlocked(null);

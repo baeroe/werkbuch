@@ -253,6 +253,26 @@ describe('CreateItemDialog', () => {
     expect((await within(dialog).findByRole<HTMLInputElement>('textbox', { name: /^Titel/ })).value).toBe('Export als CSV');
   });
 
+  it('brings a parked draft back on undo after its project went, on the first project with a notice (T15-M3)', async () => {
+    const user = userEvent.setup();
+    renderWith(<Host />);
+    act(() => useUiStore.getState().openCreate({ project_id: 'p_app' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Neues Item' });
+    await user.type(await within(dialog).findByRole('textbox', { name: /^Titel/ }), 'Export als CSV');
+    await user.click(within(dialog).getByRole('button', { name: 'Abbrechen' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    // the project of the draft is gone from the list (deleted, or the person lost it); WEB still takes items
+    projects = [web, ops];
+    // known before the dialog comes back, not only after it opened
+    await act(() => client.refetchQueries({ type: 'all' }));
+    act(() => void undoLatest());
+    const restored = await screen.findByRole('dialog', { name: 'Neues Item' });
+
+    expect((await within(restored).findByRole<HTMLInputElement>('textbox', { name: /^Titel/ })).value).toBe('Export als CSV');
+    expect(within(restored).getByText('„Kunden-App“ steht nicht mehr zur Wahl. Prüfe Projekt und Typ.')).toBeTruthy();
+  });
+
   it('clears errors and the blocked reason on the fallback', async () => {
     const user = userEvent.setup();
     const { dialog, title } = await openDialog({ project_id: 'p_app', type_id: 't_wish' });
