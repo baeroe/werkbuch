@@ -28,6 +28,7 @@ use App\Models\WorkItem;
 use App\Notifications\NotificationConsumer;
 use App\Search\SearchConsumer;
 use Illuminate\Broadcasting\BroadcastException;
+use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Support\Facades\Exceptions;
 
 /*
@@ -232,6 +233,20 @@ it('names a deleted subtree of up to 200 pages within what Reverb takes, and non
         // too many to name: the browser loads the tree again, what is not in it any more is gone
         ->and($unnamed['page_id'])->toBe($large->id)
         ->and($unnamed)->toHaveKey('page_ids', null);
+});
+
+it('names no pages when a page.deleted carries no page_ids (T10-M3)', function () use ($world) {
+    $w = $world();
+    $root = Page::factory()->create(['project_id' => $w['web']->id]);
+    DeletePage::run(actor($w['tom']), $root);
+    $event = eventsOf(EventType::PageDeleted, $root)->sole();
+    $event->meta = array_diff_key($event->meta, ['page_ids' => true]);
+
+    $payload = LiveMessage::of($event, new PrivateChannel("project.{$w['web']->id}"))->broadcastWith();
+
+    // not an empty list (no page deleted): the browser marks the root and reads the tree for the rest
+    expect($payload['page_id'])->toBe($root->id)
+        ->and($payload)->toHaveKey('page_ids', null);
 });
 
 it('leaves out the tab that saved', function () use ($world) {
