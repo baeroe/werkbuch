@@ -65,14 +65,21 @@ it('keeps one open collection per person and scope', function () {
 
 it('goes with its item and its project', function () {
     $item = WorkItem::factory()->create();
-    $onItem = Notification::factory()->forItem($item)->create();
-    $other = Notification::factory()->forItem(WorkItem::factory()->create())->create();
+    Notification::factory()->forItem($item)->count(2)->create();
+    $sibling = WorkItem::factory()->for($item->project)->create();
+    Notification::factory()->forItem($sibling)->create();
+    $other = WorkItem::factory()->create();
+    Notification::factory()->forItem($other)->count(3)->create();
 
+    // the item takes its two, its project keeps the one of the other item (T4-M4)
     $item->delete();
-    expect($onItem->fresh())->toBeNull()->and($other->fresh())->not->toBeNull();
+    expect(Notification::query()->count())->toBe(4)
+        ->and(Notification::query()->where('work_item_id', $sibling->id)->count())->toBe(1);
 
-    $other->project?->delete();
-    expect($other->fresh())->toBeNull();
+    // the project takes what is left of it, the other project keeps its three
+    $sibling->project->delete();
+    expect(Notification::query()->count())->toBe(3)
+        ->and(Notification::query()->where('project_id', $other->project_id)->count())->toBe(3);
 });
 
 it('lets the person see notifications of the projects they see, and the organization ones only as org admin (K5)', function () {

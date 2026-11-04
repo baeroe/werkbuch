@@ -21,7 +21,7 @@ use App\RichText\Document;
 final class NotificationFacts
 {
     /** The events that may tell somebody something (App\Domain\Notifications\Recipients); all of them hang on an item. */
-    private const TELLING = [
+    public const TELLING = [
         EventType::WorkItemCreated, EventType::WorkItemUpdated, EventType::WorkItemStateChanged, EventType::WorkItemAssigned,
         EventType::WorkItemRelationAdded, EventType::WorkItemRelationRemoved, EventType::CommentCreated, EventType::CommentUpdated,
     ];

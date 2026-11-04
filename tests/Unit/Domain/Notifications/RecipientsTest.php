@@ -4,6 +4,8 @@ use App\Domain\Notifications\EventFacts;
 use App\Domain\Notifications\NotificationKind as Kind;
 use App\Domain\Notifications\Recipient;
 use App\Domain\Notifications\Recipients;
+use App\Events\EventType;
+use App\Support\NotificationFacts;
 
 // people of the clickdummy, as plain IDs: ULIDs sort like these names
 $ida = 'u_ida';
@@ -189,4 +191,15 @@ it('sorts the recipients by their ID and the kinds by rank', function () use ($f
 
     expect(array_map(fn (Recipient $recipient) => $recipient->userId, $recipients))->toBe(['u_a', 'u_b', 'u_c'])
         ->and($recipients[1]->kinds)->toBe([Kind::Mentioned, Kind::Comment]);
+});
+
+it('tells somebody for exactly the events NotificationFacts reads (T5-M2)', function () use ($facts, $tom) {
+    $telling = array_map(fn (EventType $type) => $type->value, NotificationFacts::TELLING);
+
+    foreach (EventType::cases() as $type) {
+        // as much as an event can carry: a changed field, a mention, an assignee, watchers and a lead
+        $recipients = Recipients::of($facts($type->value, ['changedFields' => ['title'], 'mentioned' => [$tom], 'assignee' => $tom]));
+
+        expect($recipients !== [])->toBe(in_array($type->value, $telling, true), $type->value);
+    }
 });

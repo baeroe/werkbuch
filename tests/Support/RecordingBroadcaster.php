@@ -26,6 +26,19 @@ final class RecordingBroadcaster extends Broadcaster implements TerminatesUsers
 
     private int $attempts = 0;
 
+    /** @var list<string> */
+    private array $log = [];
+
+    /**
+     * What reached Reverb in order: `send <channel>` and `terminate <id>`.
+     *
+     * @return list<string>
+     */
+    public function log(): array
+    {
+        return $this->log;
+    }
+
     /** How many broadcasts and terminations reached the broadcaster, failed ones included. */
     public function attempts(): int
     {
@@ -80,6 +93,7 @@ final class RecordingBroadcaster extends Broadcaster implements TerminatesUsers
         /** @var list<string> $names */
         $names = $this->formatChannels($channels);
         $this->sent[] = ['channels' => $names, 'event' => $event, 'payload' => $payload, 'socket' => is_string($socket) ? $socket : null];
+        array_push($this->log, ...array_map(fn (string $name) => "send {$name}", $names));
     }
 
     public function terminateUser(string $id): void
@@ -90,5 +104,6 @@ final class RecordingBroadcaster extends Broadcaster implements TerminatesUsers
         }
 
         $this->terminated[] = $id;
+        $this->log[] = "terminate {$id}";
     }
 }

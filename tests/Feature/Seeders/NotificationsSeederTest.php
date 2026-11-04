@@ -57,11 +57,25 @@ $clickdummy = function (): array {
     return $rows;
 };
 
+/**
+ * The comments of the clickdummy's activity.ts by their ID: item, author and time as the file writes them (T12-M2: the
+ * comment a notification names is checked against the seed, not against the rule that picked it).
+ *
+ * @return array<string, array{key: string, author: string, when: string}>
+ */
+$seedComments = function (): array {
+    $source = (string) file_get_contents(repo_path('prototypes/clickdummy/src/api/seed/activity.ts'));
+    preg_match_all("/comment\('(c_\w+)', '([A-Z]+-\d+)', '(\w+)', '([\d :-]+)'/", $source, $rows, PREG_SET_ORDER);
+
+    return collect($rows)->mapWithKeys(fn (array $row) => [$row[1] => ['key' => $row[2], 'author' => $row[3], 'when' => $row[4]]])->all();
+};
+
 /** The n-th comment of an item by time. */
 $commentOf = fn (string $key, int $n): ?string => Comment::query()->where('work_item_id', ItemsSeeder::find($key)?->id)
     ->orderBy('created_at')->orderBy('id')->skip($n - 1)->value('id');
 
-it("seeds Mara's inbox like the clickdummy", function () use ($clickdummy, $commentOf) {
+it("seeds Mara's inbox like the clickdummy", function () use ($clickdummy, $commentOf, $seedComments) {
+    $comments = $seedComments();
     $this->seed(DemoSeeder::class);
     $expected = $clickdummy();
     $mara = User::query()->where('handle', 'mara')->sole();
@@ -94,6 +108,11 @@ it("seeds Mara's inbox like the clickdummy", function () use ($clickdummy, $comm
 
         if ($row['comment'] !== null) {
             expect($notification->data['comment_id'])->toBe($commentOf(...$row['comment']))->not->toBeNull();
+            // the comment of the seed: its item, its author, its time (Berlin wall clock)
+            $seed = $comments['c_'.strtolower(str_replace('-', '', $row['comment'][0])).'_'.$row['comment'][1]];
+            $comment = Comment::query()->with(['author', 'workItem.project'])->findOrFail($notification->data['comment_id']);
+            expect([$comment->workItem->key, $comment->author->handle, $comment->created_at->setTimezone('Europe/Berlin')->format('m-d H:i')])
+                ->toBe([$seed['key'], $seed['author'], substr($seed['when'], -11)]);
         }
         if ($row['states'] !== null) {
             expect([$notification->data['from']['name'], $notification->data['to']['name']])
@@ -132,8 +151,14 @@ it('shows the inbox to Mara through the API', function () {
 
 it('writes no events and no mail collections', function () {
     $this->seed(DemoSeeder::class);
+    // the seeder once more on an empty inbox: every event there was before, none more (T12-M1)
+    Notification::query()->delete();
+    $events = Event::query()->count();
 
-    expect(Event::query()->where('type', 'like', 'notification%')->exists())->toBeFalse()
+    $this->seed(NotificationsSeeder::class);
+
+    expect(Notification::query()->count())->toBe(14)
+        ->and(Event::query()->count())->toBe($events)
         ->and(NotificationMail::query()->exists())->toBeFalse();
 });
 

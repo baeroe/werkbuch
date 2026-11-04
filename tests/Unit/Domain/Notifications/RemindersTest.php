@@ -17,6 +17,19 @@ it('finds 08:00 in Berlin on the day the clocks go back', function () use ($utc,
         ->and(Reminders::localDay($utc('2026-10-25 07:00'), $berlin))->toBe('2026-10-25');
 });
 
+it('finds 08:00 in Berlin on the day the clocks go forward, and in New York on the days they change (T3-M3)', function () use ($utc, $berlin, $newYork) {
+    // 2026-03-29: 02:00 winter time becomes 03:00 summer time, so 08:00 is 06:00 UTC (the day before 07:00 UTC)
+    expect(Reminders::isReminderHour($utc('2026-03-29 06:00'), $berlin))->toBeTrue()
+        ->and(Reminders::isReminderHour($utc('2026-03-29 07:00'), $berlin))->toBeFalse()
+        ->and(Reminders::isReminderHour($utc('2026-03-28 07:00'), $berlin))->toBeTrue()
+        // New York: 2026-03-08 forward (08:00 EDT = 12:00 UTC), 2026-11-01 back (08:00 EST = 13:00 UTC)
+        ->and(Reminders::isReminderHour($utc('2026-03-08 12:00'), $newYork))->toBeTrue()
+        ->and(Reminders::isReminderHour($utc('2026-03-08 13:00'), $newYork))->toBeFalse()
+        ->and(Reminders::isReminderHour($utc('2026-11-01 13:00'), $newYork))->toBeTrue()
+        ->and(Reminders::isReminderHour($utc('2026-11-01 12:00'), $newYork))->toBeFalse()
+        ->and(Reminders::localDay($utc('2026-11-01 13:00'), $newYork))->toBe('2026-11-01');
+});
+
 it('finds 08:30 in Kolkata in the hour of 03:00 UTC', function () use ($utc, $kolkata) {
     expect(Reminders::isReminderHour($utc('2026-10-25 03:00'), $kolkata))->toBeTrue()
         ->and(Reminders::isReminderHour($utc('2026-10-25 02:30'), $kolkata))->toBeTrue()

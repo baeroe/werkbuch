@@ -15,6 +15,7 @@ import type {
   ItemEvent,
   ItemGroups,
   Label,
+  ListedItem,
   Notification,
   NotificationData,
   NotificationEvent,
@@ -612,8 +613,14 @@ function inboxRow(
     excerpt: extra.excerpt ?? null,
     read_at: read,
     created_at: created,
-    item,
+    item: item && lean(item),
   });
+}
+
+/** An item as a lean answer of the API carries it (P17): without the description and the Markdown of the values (T13-M2). */
+function lean(item: ListedItem): ListedItem {
+  const { description: _description, description_json: _json, values_markdown: _markdown, ...listed } = item as WorkItem;
+  return listed;
 }
 
 /**

@@ -215,8 +215,9 @@ it('asks the database a fixed number of times for 5 and 50 notifications', funct
             Notification::factory()->forItem($item)->kind(NotificationKind::Comment, ['comment_id' => $comment->id])->create(['user_id' => $w['mara']->id, 'mail_id' => $mail->id]);
         }
 
-        // the roles of the reader, as the request reads them before
+        // the first run reads the models' boot; then the roles forgotten, so the count holds their queries too (T6-M4)
         ListNotifications::run(actor($w['mara']), []);
+        Visibility::forget();
         DB::enableQueryLog();
         DB::flushQueryLog();
         $page = ListNotifications::run(actor($w['mara']), []);

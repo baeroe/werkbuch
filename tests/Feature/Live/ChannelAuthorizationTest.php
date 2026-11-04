@@ -41,6 +41,19 @@ it('lets everyone who reads a project listen to it', function (string $column) u
     }
 })->with(MatrixWorld::COLUMNS);
 
+it('lets only who reads the private project OPS listen to it and its items (T9-M4)', function (string $column) use ($listen, $refused) {
+    $w = MatrixWorld::build();
+    $this->actingAs($w->account($column));
+    $item = WorkItem::factory()->for($w->ops)->create();
+
+    // the org admin without being a member, and the members of every role; nobody else, never a bot
+    $readers = ['org_admin', 'project_admin', 'project_member', 'project_viewer'];
+    foreach (['private-project.'.$w->ops->id, 'private-work-item.'.$item->id] as $channel) {
+        $response = $listen($channel);
+        in_array($column, $readers, true) ? $response->assertOk() : $refused($response);
+    }
+})->with(MatrixWorld::COLUMNS);
+
 it('lets everyone who sees an item listen to it', function (string $column) use ($listen, $refused) {
     $w = MatrixWorld::build();
     $this->actingAs($w->account($column));

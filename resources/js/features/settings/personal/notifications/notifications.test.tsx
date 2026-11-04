@@ -15,6 +15,7 @@ import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import { ida, mara, organization } from '@/test/fixtures';
 import type { NotificationChannel, NotificationEvent, NotificationPreference, User } from '@/types';
 import { PersonalSettings } from '../PersonalSettings';
+import notificationKindPhp from '/app/Domain/Notifications/NotificationKind.php?raw';
 import { cellKey, changedPreferences, defaultEnabled, defaultsFor, toChoices } from './matrix';
 
 type Visit = { url: URL; method: string; prefetch: boolean; preserveUrl: boolean };
@@ -313,3 +314,15 @@ describe('Notifications', () => {
     expect(checked('Sonstige Änderungen', 'In-App')).toBe(false);
   });
 });
+
+describe('the defaults', () => {
+  it('mails by default exactly what NotificationKind::mailByDefault names (T18-M4)', () => {
+    const cases = Object.fromEntries([...notificationKindPhp.matchAll(/case (\w+) = '(\w+)';/g)].map((match) => [match[1], match[2]]));
+    const list = /function mailByDefault\(\)[^[]*\[([^\]]*)\]/.exec(notificationKindPhp)![1]!;
+    const server = [...list.matchAll(/self::(\w+)/g)].map((match) => cases[match[1]!]!);
+
+    expect(NOTIFICATION_EVENTS.filter((event) => defaultEnabled(event, 'mail')).sort()).toEqual([...server].sort());
+    expect(server.length).toBeGreaterThan(0);
+  });
+});
+

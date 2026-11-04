@@ -109,9 +109,8 @@ it('disconnects an org admin who became a member', function () use ($world) {
 
     UpdateUserRole::run(actor($w['tom']), $w['erik'], 'member');
 
-    expect($this->live->terminated())->toBe([$w['erik']->id])
-        // the message to the own channel goes out before the connection closes
-        ->and(array_column($this->live->sent(), 'channels'))->toBe([["presence-user.{$w['erik']->id}"]]);
+    // the message to the own channel goes out before the connection closes (T10-M5)
+    expect($this->live->log())->toBe(["send presence-user.{$w['erik']->id}", "terminate {$w['erik']->id}"]);
 });
 
 it('disconnects a deactivated account', function () use ($world) {

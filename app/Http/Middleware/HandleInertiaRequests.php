@@ -47,11 +47,11 @@ class HandleInertiaRequests extends Middleware
                 // missing from the environment (T2-M3: the browser would connect nowhere)
                 'live' => config('broadcasting.default') === 'reverb' && filled(config('broadcasting.connections.reverb.key'))
                     && filled(config('broadcasting.connections.reverb.options.host')) ? [
-                    'key' => config('broadcasting.connections.reverb.key'),
-                    'host' => config('broadcasting.connections.reverb.options.host'),
-                    'port' => (int) config('broadcasting.connections.reverb.options.port'),
-                    'scheme' => config('broadcasting.connections.reverb.options.scheme'),
-                ] : null,
+                        'key' => config('broadcasting.connections.reverb.key'),
+                        'host' => config('broadcasting.connections.reverb.options.host'),
+                        'port' => (int) config('broadcasting.connections.reverb.options.port'),
+                        'scheme' => config('broadcasting.connections.reverb.options.scheme'),
+                    ] : null,
                 // the browser refuses a larger file before it sends it (F29)
                 'attachments_max_mb' => Attachment::maxMegabytes(),
             ],

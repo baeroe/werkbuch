@@ -8,10 +8,9 @@ use Symfony\Component\Mailer\Exception\TransportException;
 use Tests\Support\ScriptedTransport;
 
 /** The shape of `SystemStatus` (phase plan 8 "REST"; the clickdummy's types.ts plus backlog, delays, Meilisearch tasks and live). */
-const SYSTEM_STATUS_SHAPE = ['version', 'queued_jobs', 'delayed_jobs', 'queues', 'failed_jobs', 'failed_jobs_total', 'search',
-    'search_tasks', 'mail_configured', 'live'];
+$shape = ['version', 'queued_jobs', 'delayed_jobs', 'queues', 'failed_jobs', 'failed_jobs_total', 'search', 'search_tasks', 'mail_configured', 'live'];
 
-it('shows the system to an org admin', function () {
+it('shows the system to an org admin', function () use ($shape) {
     $this->travelTo(now()->parse('2026-11-03 10:00:00', 'UTC'));
     DB::table('jobs')->insert(['queue' => 'search', 'payload' => '{}', 'attempts' => 0, 'reserved_at' => null,
         'available_at' => now()->getTimestamp() - 60, 'created_at' => now()->getTimestamp() - 60]);
@@ -21,7 +20,7 @@ it('shows the system to an org admin', function () {
 
     $response = $this->actingAs(User::factory()->admin()->create())->getJson('/api/v1/system')->assertOk();
 
-    expect(array_keys($response->json('data')))->toBe(SYSTEM_STATUS_SHAPE)
+    expect(array_keys($response->json('data')))->toBe($shape)
         ->and($response->json('data'))->toMatchArray([
             'queued_jobs' => 1, 'delayed_jobs' => 0, 'failed_jobs_total' => 1, 'search' => 'down', 'search_tasks' => null,
             'mail_configured' => false, 'live' => 'off',

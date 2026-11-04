@@ -105,10 +105,14 @@ it('keeps what lets /broadcasting/auth go without a CSRF token: SameSite lax and
 });
 
 it('lets Reverb take client events from nobody and only the host of APP_URL', function () {
+    $previous = env('APP_URL');
+    setEnv('APP_URL', 'https://werkbuch.example.com:8443/app');
     $app = (require base_path('config/reverb.php'))['apps']['apps'][0];
+    setEnv('APP_URL', is_string($previous) ? $previous : null);
 
+    // the host alone, as a literal (T2-M1): never the scheme, the port or a path
     expect($app['accept_client_events_from'])->toBe('none')
-        ->and($app['allowed_origins'])->toBe([parse_url((string) env('APP_URL'), PHP_URL_HOST) ?: 'localhost']);
+        ->and($app['allowed_origins'])->toBe(['werkbuch.example.com']);
 });
 
 it('gives the Reverb connection short timeouts, so a broadcast never hangs a request (K1)', function () {
