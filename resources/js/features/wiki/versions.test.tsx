@@ -17,6 +17,7 @@ import { drafts } from '@/lib/drafts';
 import { clearLiveGone } from '@/lib/liveGone';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import { ida, list, makePage, mara, organization } from '@/test/fixtures';
+import { FakeXhr, installFakeXhr, restoreFakeXhr } from '@/test/xhr';
 import type { PageVersion, PageVersionDetail, RichText, Page as WikiPage } from '@/types';
 import { PageView, type PageViewProps } from './PageView';
 
@@ -239,6 +240,42 @@ describe('the versions of a wiki page', () => {
     );
     expect(calls('POST', '/api/v1/pages/pg_web_domain/versions')).toHaveLength(0);
     expect(screen.getByRole('dialog')).toBeTruthy();
+  });
+
+  it('says why it restores nothing while a picture uploads or the title is blank (T15-M3)', async () => {
+    installFakeXhr();
+    try {
+      const user = userEvent.setup();
+      renderPage();
+      const editor = await screen.findByRole('textbox', { name: 'Inhalt der Seite' });
+      act(() => editor.focus());
+      fireEvent.paste(editor, { clipboardData: { types: ['Files'], files: [new File([new Uint8Array([137, 80, 78, 71])], 'skizze.png', { type: 'image/png' })], getData: () => '' } });
+      const dialog = await openVersions(user);
+      await user.click(await within(dialog).findByRole('radio', { name: /^Version 1,/ }));
+      const restore = within(dialog).getByRole('button', { name: 'Diese Version wiederherstellen' });
+
+      await user.click(restore);
+      await waitFor(() => expect(toastTitles()).toContain('Erst die Seite speichern'));
+      expect(currentToasts().find((item) => item.title === 'Erst die Seite speichern')?.description).toBe(
+        'Ein Bild wird noch hochgeladen. Danach lässt sich eine Version wiederherstellen.',
+      );
+
+      act(() => resetToasts());
+      FakeXhr.last.abort();
+      await user.keyboard('{Escape}');
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      await user.clear(screen.getByRole('textbox', { name: 'Titel der Seite' }));
+      await user.click(await screen.findByRole('button', { name: 'Versionen …' }));
+      const again = await screen.findByRole('dialog', { name: /^Versionen von/ });
+      await user.click(await within(again).findByRole('radio', { name: /^Version 1,/ }));
+      await user.click(within(again).getByRole('button', { name: 'Diese Version wiederherstellen' }));
+      await waitFor(() => expect(currentToasts().find((item) => item.title === 'Erst die Seite speichern')?.description).toBe(
+        'Die Seite braucht einen Titel. Danach lässt sich eine Version wiederherstellen.',
+      ));
+      expect(calls('POST', '/api/v1/pages/pg_web_domain/versions')).toHaveLength(0);
+    } finally {
+      restoreFakeXhr();
+    }
   });
 
   it('lets a viewer read the versions without restoring', async () => {

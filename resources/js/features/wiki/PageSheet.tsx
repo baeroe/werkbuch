@@ -135,6 +135,12 @@ export function PageSheet({ page, projectId, identifier, ancestors, rights, focu
       toast({ title: t('wiki.conflict.first.title'), description: t('wiki.conflict.first.description'), tone: 'error' });
       return false;
     }
+    // what keeps the typed text from saving first, said instead of restoring nothing in silence (T15-M3)
+    const waiting = uploads && uploads.current() > 0 ? 'uploads' : draft.title.trim() === '' ? 'title_required' : null;
+    if (waiting !== null) {
+      toast({ title: t('wiki.versions.not_saved.title'), description: t(`wiki.versions.not_saved.${waiting}`), tone: 'error' });
+      return false;
+    }
     return flush();
   }
 
