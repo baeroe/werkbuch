@@ -498,6 +498,23 @@ describe('useLiveSync', () => {
     expect([project, members, list, detail, activity].some((query) => query.stale())).toBe(false);
   });
 
+  it('does not load a wiki page of a deleted project again when the connection comes back (N4)', async () => {
+    const page = await shown(qk.pages.detail('pg_web_domain'));
+    queryClient.setQueryData(qk.pages.detail('pg_web_domain'), { id: 'pg_web_domain', project_id: 'p_web' });
+    const item = await shown(qk.workItems.detail('WEB-1'));
+    queryClient.setQueryData(qk.workItems.detail('WEB-1'), { item: { id: 'wi_web_1', project_id: 'p_web' } });
+    const inbox = await shown(qk.notifications.list({}));
+    renderHook(() => useLiveSync(), { wrapper });
+
+    send({ event_id: 'ev_1', type: 'project.deleted', project_id: 'p_web', item_id: null });
+    await pass(LIVE_BURST_MS);
+    send({ event_id: null, type: 'live.reconnected', project_id: null, item_id: null });
+    await pass(LIVE_BURST_MS);
+
+    // their answers name the project: they would answer 404
+    expect([page.fetches(), item.fetches(), inbox.fetches()]).toEqual([1, 1, 2]);
+  });
+
   it('does not load again a fetch it waited for when its project went meanwhile', async () => {
     const members = await shown(qk.members.list({ project: 'p_web' }));
     renderHook(() => useLiveSync(), { wrapper });

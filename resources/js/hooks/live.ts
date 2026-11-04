@@ -99,12 +99,13 @@ function deletedPages(event: LiveEvent): { ids: string[]; complete: boolean } {
 
 /**
  * The ids a cached answer is about: a project, an item or a page (`id`), the item of a detail (`item.id`), the page of
- * a version (`page_id`).
+ * a version (`page_id`), and the project of a page or an item (`project_id`, `item.project_id`: a page or item of a
+ * deleted project would answer 404 too, N4).
  */
 function dataIds(data: unknown): unknown[] {
   if (typeof data !== 'object' || data === null) return [];
-  const record = data as { id?: unknown; item?: { id?: unknown } | null; page_id?: unknown };
-  return [record.id ?? record.item?.id, record.page_id];
+  const record = data as { id?: unknown; item?: { id?: unknown; project_id?: unknown } | null; page_id?: unknown; project_id?: unknown };
+  return [record.id ?? record.item?.id, record.page_id, record.project_id ?? record.item?.project_id];
 }
 
 /** Whether live updates arrive: false while the banner says they are paused. */
