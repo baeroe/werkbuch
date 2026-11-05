@@ -26,14 +26,17 @@ const GONE_MAX = 200;
 /** The wiki of a project: the trees, the pages, their versions. */
 const WIKI: readonly QueryKey[] = [qk.pages.all, qk.pageVersions.all];
 
+/** The templates with their runs and the automations of a project (the preview of a schedule is no live data). */
+const AUTOMATION: readonly QueryKey[] = [qk.templates.all, qk.templateRuns.all, qk.automations.all];
+
 /** Everything a live message can make stale: what a screen shows again after the connection was gone. */
-const EVERYTHING: readonly QueryKey[] = [qk.workItems.all, qk.activity.all, qk.comments.all, qk.projects.all, qk.members.all, qk.notifications.all, ...WIKI];
+const EVERYTHING: readonly QueryKey[] = [qk.workItems.all, qk.activity.all, qk.comments.all, qk.projects.all, qk.members.all, qk.notifications.all, ...WIKI, ...AUTOMATION];
 
 /** What the person's own channel carries (watching, a new project, a new org role, the inbox): stale once it is held. */
 const OWN_CHANNEL: readonly QueryKey[] = [qk.notifications.all, qk.projects.all, qk.members.all, qk.workItems.all, qk.activity.all];
 
 /** What the channel of a project carries (its items and their history, the project and its members, its wiki). */
-const PROJECT_CHANNEL: readonly QueryKey[] = [qk.workItems.all, qk.activity.all, qk.projects.all, qk.members.all, ...WIKI];
+const PROJECT_CHANNEL: readonly QueryKey[] = [qk.workItems.all, qk.activity.all, qk.projects.all, qk.members.all, ...WIKI, ...AUTOMATION];
 
 /** The caches of the wiki and of references (a reference to a page shows its title): what waits for a check of a tree. */
 const WIKI_ROOTS: readonly unknown[] = [qk.pages.all[0], qk.pageVersions.all[0], qk.references.all[0]];
@@ -51,7 +54,8 @@ function heldKeys(event: LiveEvent): readonly QueryKey[] {
 /**
  * The caches a message makes stale. Items and their history on `work_item.*` (also watching, on the person's own
  * channel), comments and the history on `comment.*`, projects and members on `project.*` (on `project.updated` the
- * items too: their keys carry the identifier), the wiki on `page.*` (on `page.updated` and `page.moved` the references
+ * items too: their keys carry the identifier), the templates on `template.*`, the automations on `automation.*`, the
+ * log of the runs on `work_item.created` (a scheduled run ends in an item), the wiki on `page.*` (on `page.updated` and `page.moved` the references
  * too: a reference shows the title of its page, K15; on `page.deleted` as well: a reference to a deleted page loads and
  * finds it missing, T18-M5), the projects on a new org role (K14: the channels follow the list; the
  * shell reloads the shared props `auth` for it, M2), the inbox on `notifications.changed`; everything after the connection was
@@ -68,7 +72,11 @@ function keysOf(event: LiveEvent): readonly QueryKey[] {
   if (event.type === 'live.refused') return [];
   if (event.type === 'notifications.changed') return [qk.notifications.all];
   if (event.type === 'user.role_changed') return [qk.projects.all];
+  // a scheduled run ends in a new item: the log of the runs shows it
+  if (event.type === 'work_item.created') return [qk.workItems.all, qk.activity.all, qk.templateRuns.all];
   if (group === 'work_item') return [qk.workItems.all, qk.activity.all];
+  if (group === 'template') return [qk.templates.all];
+  if (group === 'automation') return [qk.automations.all];
   if (group === 'comment') return [qk.comments.all, qk.activity.all];
   // a new identifier changes the keys of the items: the lists of the project load again (T14-M6)
   if (event.type === 'project.updated') return [qk.projects.all, qk.members.all, qk.workItems.all];

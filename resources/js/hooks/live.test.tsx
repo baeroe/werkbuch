@@ -893,6 +893,49 @@ describe('useLiveSync', () => {
   });
 });
 
+describe('templates and automations', () => {
+  it('refreshes the templates on a template event, the automations on an automation event, and the runs on a new item', async () => {
+    const templates = await shown(qk.templates.list({ project: 'p_app' }));
+    const runs = await shown(qk.templateRuns.list({ template: 'tpl_app_report' }));
+    const automations = await shown(qk.automations.list({ project: 'p_app' }));
+    const preview = await shown(qk.schedulePreview.list({ title: 'x' }));
+    renderHook(() => useLiveSync(), { wrapper });
+    const counts = () => [templates, runs, automations, preview].map((query) => query.fetches());
+
+    send({ event_id: 'ev_1', type: 'template.updated', item_id: null });
+    await pass(LIVE_BURST_MS);
+    expect(counts()).toEqual([2, 1, 1, 1]);
+
+    send({ event_id: 'ev_2', type: 'automation.updated', item_id: null });
+    await pass(LIVE_BURST_MS);
+    expect(counts()).toEqual([2, 1, 2, 1]);
+
+    send({ event_id: 'ev_3', type: 'work_item.created' });
+    await pass(LIVE_BURST_MS);
+    // a scheduled run ends in a new item: its log changes with it
+    expect(counts()).toEqual([2, 2, 2, 1]);
+
+    send({ event_id: 'ev_4', type: 'work_item.updated' });
+    await pass(LIVE_BURST_MS);
+    expect(counts()).toEqual([2, 2, 2, 1]);
+  });
+
+  it('loads them again once the channel of a project is held, and after the connection was gone', async () => {
+    const templates = await shown(qk.templates.list({ project: 'p_app' }));
+    const runs = await shown(qk.templateRuns.list({ template: 'tpl_app_report' }));
+    const automations = await shown(qk.automations.list({ project: 'p_app' }));
+    renderHook(() => useLiveSync(), { wrapper });
+
+    send({ event_id: null, type: 'live.subscribed', project_id: 'p_app', item_id: null });
+    await pass(LIVE_BURST_MS);
+    expect([templates, runs, automations].map((query) => query.fetches())).toEqual([2, 2, 2]);
+
+    send({ event_id: null, type: 'live.reconnected', project_id: null, item_id: null });
+    await pass(LIVE_BURST_MS);
+    expect([templates, runs, automations].map((query) => query.fetches())).toEqual([3, 3, 3]);
+  });
+});
+
 describe('useLiveItem', () => {
   it('holds the channel of the item while it is shown, and none without an item', () => {
     const { rerender, unmount } = renderHook(({ id }: { id: string | null }) => useLiveItem(id), { initialProps: { id: 'wi_web_47' as string | null } });

@@ -14,7 +14,7 @@
  * the change as the server would compute it: a new `parent_id` names its item, a changed parent its new title.
  */
 
-import { useMutation, useQueryClient, type QueryClient, type QueryKey, type UseMutationResult } from '@tanstack/react-query';
+import { useMutation, useQueryClient, type MutationKey, type QueryClient, type QueryKey, type UseMutationResult } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef } from 'react';
 import type { Page } from '@/api/client';
 import { parseKey } from '@/domain/keys';
@@ -46,6 +46,8 @@ export interface ApiMutationOptions<TVars, TData> {
    * have gone through before a later one failed (the read marks in blocks of 100, T13-M1).
    */
   invalidateOnError?: boolean;
+  /** The key of the mutation, to tell its calls apart (`useIsMutating`, `isMutating({ mutationKey })`). */
+  mutationKey?: MutationKey;
 }
 
 export function useApiMutation<TVars, TData>(
@@ -56,6 +58,7 @@ export function useApiMutation<TVars, TData>(
   const queryClient = useQueryClient();
   return useMutation<TData, Error, TVars>({
     mutationFn,
+    mutationKey: options.mutationKey,
     gcTime: options.gcTime,
     onSuccess: (data, vars) => {
       options.onSuccess?.(data, vars, queryClient);

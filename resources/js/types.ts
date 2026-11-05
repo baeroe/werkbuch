@@ -323,6 +323,8 @@ export interface ItemEvent {
   /** A change of a comment (`comment.updated`, `comment.deleted`): which one and whose; null for other events. */
   comment_id: string | null;
   comment_author_id: string | null;
+  /** The template an item was made from (`work_item.created`), its name as it was then; null elsewhere. */
+  template: { id: string; name: string } | null;
   occurred_at: string;
 }
 
@@ -472,11 +474,17 @@ export interface TemplatePayload {
   type_id: string;
   /** May contain placeholders such as `{week}` or `{month_name}`. */
   title: string;
-  description: RichText | null;
+  /** The description as Markdown for its reader (a reference the reader may not see reads `[hidden](<kind>:<ulid>)`). */
+  description: string | null;
+  /** The description as stored Tiptap JSON, with the ids of the template's own pictures. */
+  description_json: RichText | null;
   priority: Priority;
   assignee_id: string | null;
   label_ids: string[];
+  /** By property key; rich text as Tiptap JSON. */
   values: Record<string, PropertyValue>;
+  /** The rich text values by key as Markdown for the reader. */
+  values_markdown: Record<string, string>;
   parent_id: string | null;
   start_offset_days: number | null;
   due_offset_days: number | null;
@@ -492,16 +500,44 @@ export interface Template {
   last_run_at: string | null;
   next_run_at: string | null;
   created_by: string;
+  created_at: string;
+  updated_at: string;
 }
 
+/** What a run of a template logs (A338): who pressed „Jetzt ausführen“, or `null` for the scheduler. */
 export interface TemplateRun {
   id: string;
   template_id: string;
-  /** The planned instant; unique per template. */
-  scheduled_for: string;
+  /** The planned instant; `null` for a run by hand. */
+  scheduled_for: string | null;
+  ran_at: string;
   work_item_id: string | null;
   status: 'created' | 'failed';
   error: string | null;
+  triggered_by: string | null;
+}
+
+/** The fields of an item made from a template now (A335), as the create dialog takes them over. */
+export interface TemplateDraft {
+  project_id: string;
+  template_id: string;
+  type_id: string;
+  title: string;
+  description: string | null;
+  description_json: RichText | null;
+  priority: Priority;
+  assignee_id: string | null;
+  label_ids: string[];
+  values: Record<string, PropertyValue>;
+  parent_id: string | null;
+  start_date: string | null;
+  due_date: string | null;
+}
+
+/** The next terms of a schedule as the scheduler will run them, and a title rendered at the first of them. */
+export interface SchedulePreview {
+  runs: string[];
+  title: string | null;
 }
 
 /* ------------------------------------------------------------ further resources */
@@ -513,12 +549,13 @@ export interface AutomationSettings {
   /** `auto_archive`, `auto_close`: after how many days. */
   days?: number;
   /** `auto_close`: the Canceled status the item moves to. */
-  state_id?: string;
+  state_id?: string | null;
 }
 
 /** One switchable automation of a project (spec 4.13). */
 export interface Automation {
-  id: string;
+  /** `null` while the key has no row yet: the browser identifies an automation by `project_id` and `key`. */
+  id: string | null;
   project_id: string;
   key: AutomationKey;
   enabled: boolean;
