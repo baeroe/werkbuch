@@ -13,7 +13,10 @@
  *   there), a name and a title. Refusals of the server (422) stand at their fields (`payload.title`,
  *   `payload.values.<key>`, `schedule.<field>`) with the focus on the first; any other refusal on top; a failure without
  *   an answer in a toast with "Erneut versuchen".
- * - A new template leads to its own address once saved, and its heading takes the focus (`focusWhenLost`, 13c).
+ * - A new template leads to its own address once saved, and its heading takes the focus (`focusWhenLost`, 13c). The
+ *   editor stays the same instance across that visit (`preserveState`, `editorKeyOf`): what is typed until the address
+ *   has loaded stays, unreadable texts of fields included, and a press meanwhile saves the new template (`PUT`) instead
+ *   of creating another (T16-I1, T17-I1).
  * - A newer stored template (saved here or elsewhere) is taken over while nothing is typed.
  * - "Jetzt ausführen" runs the saved template as the scheduler would, as the default bot: the toast leads to the new
  *   item in the preview, or says why the run failed (it is logged, A350). It waits for "Speichern" while there are
@@ -53,6 +56,7 @@ import { runWithUndo } from '@/lib/undo';
 import { useUiStore } from '@/store/ui';
 import type { Project, Property, Schedule, Template, WorkItemType } from '@/types';
 import { useTemplateTimes } from './format';
+import { NEW_TEMPLATE } from './TemplateList';
 import { hideTemplate, showTemplate } from './removed';
 import { RunLog } from './RunLog';
 import { ScheduleEditor } from './ScheduleEditor';
@@ -118,10 +122,14 @@ function toInput(draft: Draft, types: readonly WorkItemType[]): Draft {
 const snapshot = (draft: Draft, types: readonly WorkItemType[]) => JSON.stringify(toInput(draft, types), sortedKeys);
 
 /**
- * What was typed while a new template was being created (T16-I1): the editor at its new address starts with it, unsaved
- * against the stored template, instead of dropping it. A module map, because that editor is another instance.
+ * Templates this tab has just created, by id: the key of the editor that created them (T17-I1). `TemplatesScreen` keys
+ * the editor of such a template with it, so the editor that created it stays the same instance at its new address,
+ * with all that was typed meanwhile (also texts a field could not read yet). Forgotten when that editor goes.
  */
-const handedOver = new Map<string, Draft>();
+const createdHere = new Map<string, string>();
+
+/** The React key of the editor of a template: the key of the editor that created it in this tab, else its id. */
+export const editorKeyOf = (id: string) => createdHere.get(id) ?? id;
 
 /** The line under the name: what the template does. */
 function leadOf(template: Template | null): string {
@@ -211,13 +219,19 @@ function EditorBody({ project, template, denied, ready = true, types, properties
   const uploading = useUploadsPending(uploads) > 0;
   const fieldId = (path: string) => `${formId}-${path}`;
 
-  const [draft, setDraft] = useState<Draft>(() => (template && handedOver.get(template.id)) || draftOf(template, project));
+  const [draft, setDraft] = useState<Draft>(() => draftOf(template, project));
   const latest = useRef(draft);
   const [baseline, setBaseline] = useState(() => snapshot(draftOf(template, project), types));
-  // taken over once: a later editor of the template starts from what is stored
-  useEffect(() => {
-    if (template) handedOver.delete(template.id);
-  }, [template]);
+  /** The id of the template this editor has created, while the visit to its address may still be on its way (T17-I1). */
+  const created = useRef<string | null>(null);
+  const [createdId, setCreatedId] = useState<string | null>(null);
+  // the key goes with this editor: a later editor of the template is keyed by its id
+  useEffect(
+    () => () => {
+      if (created.current) createdHere.delete(created.current);
+    },
+    [],
+  );
   const [errors, setErrors] = useState<Errors>({});
   const [blocked, setBlocked] = useState<string | null>(null);
   /** Typed texts the fields cannot read, by path: nothing is saved while there is one. */
@@ -330,7 +344,8 @@ function EditorBody({ project, template, denied, ready = true, types, properties
       return;
     }
     // nothing changed: nothing to send (T16-M3); a new template still says what it lacks
-    if (!isNew && !live.current.dirty) {
+    const savedId = template?.id ?? created.current;
+    if (savedId !== null && !live.current.dirty) {
       toast({ title: t('templates.editor.unchanged'), tone: 'neutral' });
       return;
     }
@@ -345,18 +360,33 @@ function EditorBody({ project, template, denied, ready = true, types, properties
     setBlocked(null);
     setErrors({});
     sending.current = true;
-    settle(save.mutateAsync({ id: template?.id, project_id: project.id, ...toInput(current, types) }), {
+    const creating = savedId === null;
+    settle(save.mutateAsync({ id: savedId ?? undefined, project_id: project.id, ...toInput(current, types) }), {
       onSuccess: (saved) => {
         setBaseline(snapshot(current, types));
-        // typed while it was being created: the editor at the new address goes on with it (T16-I1)
-        if (isNew && snapshot(latest.current, types) !== snapshot(current, types)) handedOver.set(saved.id, latest.current);
         const next = saved.schedule && !saved.schedule.paused ? (saved.next_run_at ? t('templates.editor.next_run', { when: times.short(saved.next_run_at) }) : t('templates.editor.next_none')) : undefined;
-        toast({ title: t(isNew ? 'templates.editor.created' : 'templates.editor.saved', { name: saved.name }), description: next, tone: 'success' });
-        if (isNew) {
-          // the editor of the new template takes over at its own address, and its heading takes the focus
+        toast({ title: t(creating ? 'templates.editor.created' : 'templates.editor.saved', { name: saved.name }), description: next, tone: 'success' });
+        if (creating) {
+          // this editor goes on at the template's own address (the same instance: what is typed meanwhile stays)
+          created.current = saved.id;
+          setCreatedId(saved.id);
+          createdHere.set(saved.id, NEW_TEMPLATE);
           bypass.current = true;
-          router.visit(paths.templates(project.identifier, saved.id), { replace: true });
-          focusWhenLost(() => document.querySelector<HTMLElement>('[data-screen-heading]'), 800);
+          router.visit(paths.templates(project.identifier, saved.id), {
+            replace: true,
+            preserveState: true,
+            preserveScroll: true,
+            // from then on leaving with unsaved changes asks again
+            onFinish: () => {
+              bypass.current = false;
+            },
+          });
+          // its heading takes the focus, unless the person typed on meanwhile (they keep their place)
+          const typedOn = snapshot(latest.current, types) !== snapshot(current, types);
+          if (!typedOn) {
+            document.querySelector<HTMLElement>('[data-screen-heading]')?.focus();
+            focusWhenLost(() => document.querySelector<HTMLElement>('[data-screen-heading]'), 800);
+          }
         }
       },
       onError: (error) => {
@@ -366,7 +396,7 @@ function EditorBody({ project, template, denied, ready = true, types, properties
         } else if (error instanceof ApiError && error.status < 500) {
           setErrors({ form: error.message });
         } else {
-          notifyError(t(isNew ? 'templates.editor.not_created' : 'templates.editor.not_saved'), error, requestSave);
+          notifyError(t(creating ? 'templates.editor.not_created' : 'templates.editor.not_saved'), error, requestSave);
         }
       },
       onSettled: () => {
@@ -481,7 +511,7 @@ function EditorBody({ project, template, denied, ready = true, types, properties
           )}
           {canManage && (
             <Button variant="primary" icon={Save} shortcut="mod+enter" pending={save.isPending} disabledReason={uploading ? t('editor.upload.pending') : null} onClick={requestSave}>
-              {t(isNew ? 'templates.editor.create' : 'templates.editor.save')}
+              {t(isNew && createdId === null ? 'templates.editor.create' : 'templates.editor.save')}
             </Button>
           )}
         </div>

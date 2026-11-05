@@ -28,7 +28,7 @@ import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import { NotFound } from '@/shell/PageStates';
 import type { Project } from '@/types';
 import { useTemplateRights, type TemplateRights } from './rights';
-import { TemplateEditor } from './TemplateEditor';
+import { editorKeyOf, TemplateEditor } from './TemplateEditor';
 import { NEW_TEMPLATE, TemplateList } from './TemplateList';
 
 export interface TemplatesScreenProps {
@@ -126,7 +126,10 @@ function Templates({ project, templateId }: { project: Project; templateId: stri
   );
 }
 
-/** One template in its editor, keyed by the template: a new one that was just saved starts afresh at its own address. */
+/**
+ * One template in its editor, keyed by the template; a template this tab has just created keeps the editor that created
+ * it (`editorKeyOf`, T17-I1).
+ */
 function TemplateDetail({ project, templateId, rights }: { project: Project; templateId: string; rights: TemplateRights }) {
   const templates = useTemplates(project.id);
   if (templateId === NEW_TEMPLATE) return <TemplateEditor key={NEW_TEMPLATE} project={project} template={null} denied={rights.denied} ready={rights.ready} />;
@@ -157,5 +160,5 @@ function TemplateDetail({ project, templateId, rights }: { project: Project; tem
       />
     );
   }
-  return <TemplateEditor key={template.id} project={project} template={template} denied={rights.denied} ready={rights.ready} />;
+  return <TemplateEditor key={editorKeyOf(template.id)} project={project} template={template} denied={rights.denied} ready={rights.ready} />;
 }

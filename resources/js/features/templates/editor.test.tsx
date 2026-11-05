@@ -616,6 +616,8 @@ describe('saving', () => {
     } finally {
       held.restore();
     }
+    // the visit lands
+    act(() => (inertia.visit.mock.calls.at(-1)?.[1] as { onFinish?: () => void } | undefined)?.onFinish?.());
     inertia.go('/projects/APP/templates/tpl_app_new');
     rerender('tpl_app_new');
     await screen.findByRole('heading', { level: 1, name: 'Release-Notizen' });
@@ -628,6 +630,53 @@ describe('saving', () => {
     expect(unload.defaultPrevented).toBe(true);
     await user.click(saveButton());
     await waitFor(() => expect(calls('PUT', '/api/v1/templates/tpl_app_new')).toHaveLength(1));
+  });
+
+  it('stays the same editor until the address of the new template has loaded: what is typed meanwhile stays, a second press saves it there (T17-I1)', async () => {
+    const user = userEvent.setup();
+    inertia.go('/projects/APP/templates/new');
+    overrides['PUT /api/v1/templates/tpl_app_new'] = (body) => {
+      const saved = stored('tpl_app_new', body as never);
+      templates = templates.map((template) => (template.id === saved.id ? saved : template));
+      return { body: { data: saved } };
+    };
+    const { rerender } = renderEditor('new');
+    const name = await ready();
+    await user.type(name, 'Release-Notizen');
+    const title = screen.getByRole('textbox', { name: /^Titel/ });
+    await user.type(title, 'Release-Notizen');
+    await user.click(saveButton());
+    // created: the visit to its address is on its way (it lands only below), the editor still stands
+    await waitFor(() => expect(inertia.visit).toHaveBeenCalledWith('/projects/APP/templates/tpl_app_new', expect.objectContaining({ replace: true })));
+    await user.type(title, ' KW {{week}');
+    // a second press in that window creates nothing a second time: it saves the new template
+    await user.click(saveButton());
+    await waitFor(() => expect(calls('PUT', '/api/v1/templates/tpl_app_new')).toHaveLength(1));
+    expect(calls('POST', '/api/v1/projects/p_app/templates')).toHaveLength(1);
+    expect(calls('PUT', '/api/v1/templates/tpl_app_new')[0].body).toMatchObject({ payload: { title: 'Release-Notizen KW {week}' } });
+    // a text a field cannot read stays as typed (T17-M2)
+    const start = screen.getByRole('textbox', { name: 'Start-Date' }) as HTMLInputElement;
+    await user.type(start, 'drei');
+
+    // the visit lands
+    act(() => (inertia.visit.mock.calls.at(-1)?.[1] as { onFinish?: () => void } | undefined)?.onFinish?.());
+    inertia.go('/projects/APP/templates/tpl_app_new');
+    rerender('tpl_app_new');
+    await screen.findByRole('heading', { level: 1, name: 'Release-Notizen' });
+    expect((screen.getByRole('textbox', { name: /^Titel/ }) as HTMLInputElement).value).toBe('Release-Notizen KW {week}');
+    const after = screen.getByRole('textbox', { name: 'Start-Date' }) as HTMLInputElement;
+    expect(after.value).toBe('drei');
+    await user.click(saveButton());
+    expect(await screen.findByText('Ein Feld enthält noch eine Eingabe, die nicht passt. Korrigiere sie oder leere das Feld.')).toBeTruthy();
+    expect(document.activeElement).toBe(after);
+    expect(calls('PUT', '/api/v1/templates/tpl_app_new')).toHaveLength(1);
+    expect(calls('POST', '/api/v1/projects/p_app/templates')).toHaveLength(1);
+    // leaving asks again once the visit has landed
+    await user.clear(after);
+    await user.type(screen.getByRole('textbox', { name: /^Titel/ }), '!');
+    const unload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
   });
 
   it('asks before leaving with unsaved changes, and not after saving them', async () => {
