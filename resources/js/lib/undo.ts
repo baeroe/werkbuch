@@ -20,6 +20,8 @@ export const undoLabel = (): string => t('common.undo');
 export interface UndoOptions {
   /** What happened, as the toast says it: "WEB-51 deleted". */
   label: string;
+  /** A second line of the toast, when there is more to say (unsaved changes that go with it). */
+  description?: string;
   /** Does it for real when the toast runs out (time up or closed; newer toasts never push it out); may return a promise. */
   run: () => unknown;
   /** Takes back what the screen already shows. */
@@ -34,7 +36,7 @@ export interface UndoOptions {
  * Shows the toast and runs the action when it runs out. Answers the id of the toast. Newer toasts never push it out
  * (`keep`): the action runs when its time is up or it is closed, never early.
  */
-export function runWithUndo({ label, run, undo, delay = 5000, failureTitle }: UndoOptions): number {
+export function runWithUndo({ label, description, run, undo, delay = 5000, failureTitle }: UndoOptions): number {
   const fail = (error: unknown) => notifyError(failureTitle ?? t('errors.not_done', { label }), error, execute);
   function execute() {
     const done = holdRunning();
@@ -45,7 +47,7 @@ export function runWithUndo({ label, run, undo, delay = 5000, failureTitle }: Un
       done();
     }
   }
-  return toast({ title: label, duration: delay, keep: true, action: { label: undoLabel(), onClick: () => undo?.() }, onExpire: execute });
+  return toast({ title: label, description, duration: delay, keep: true, action: { label: undoLabel(), onClick: () => undo?.() }, onExpire: execute });
 }
 
 /** How many actions of undo toasts run right now (between the toast running out and the end of their call). */

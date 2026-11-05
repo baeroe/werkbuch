@@ -886,6 +886,22 @@ describe('deleting from the editor', () => {
     act(() => dismissToast(currentToasts().find((item) => item.title === 'Vorlage „Monatsbericht“ gelöscht')!.id));
     await waitFor(() => expect(calls('DELETE', '/api/v1/templates/tpl_app_report')).toHaveLength(1));
   });
+
+  it('says that unsaved changes go with it, and only then (T16-M5)', async () => {
+    const user = userEvent.setup();
+    renderEditor();
+    await ready();
+    const toastOf = () => currentToasts().find((item) => item.title === 'Vorlage „Monatsbericht“ gelöscht')!;
+    // saved as it is: nothing more to say
+    act(() => listCommands().find((command) => command.id === 'template.delete')!.run());
+    expect(toastOf().description).toBeUndefined();
+    act(() => runToastAction(toastOf().id));
+    await ready();
+
+    await user.type(screen.getByRole('textbox', { name: 'Name' }), ' neu');
+    act(() => listCommands().find((command) => command.id === 'template.delete')!.run());
+    expect(toastOf().description).toBe('Deine ungespeicherten Änderungen sind mit ihr weg; Rückgängig holt die gespeicherte Vorlage zurück.');
+  });
 });
 
 /* -------------------------------------------------------------------------- viewer */

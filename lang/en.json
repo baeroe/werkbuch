@@ -2779,6 +2779,7 @@
     "templates.command_group": "Templates :identifier",
     "templates.command_keywords": "create template schedule",
     "templates.deleted": "Template “:name” deleted",
+    "templates.deleted_unsaved": "Your unsaved changes went with it; Undo brings back the saved template.",
     "templates.description": "Templates create items with fixed fields. With a schedule, the bot “Automation” does that at a set time.",
     "templates.editor.blocked_title": "Not saved yet",
     "templates.editor.command.delete": "Delete the template",

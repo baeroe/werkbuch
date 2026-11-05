@@ -2779,6 +2779,7 @@
     "templates.command_group": "Vorlagen :identifier",
     "templates.command_keywords": "anlegen vorlage zeitplan",
     "templates.deleted": "Vorlage „:name“ gelöscht",
+    "templates.deleted_unsaved": "Deine ungespeicherten Änderungen sind mit ihr weg; Rückgängig holt die gespeicherte Vorlage zurück.",
     "templates.description": "Vorlagen legen Items mit festen Feldern an. Mit Zeitplan tut das der Bot „Automation“ zur festen Zeit.",
     "templates.editor.blocked_title": "Noch nicht gespeichert",
     "templates.editor.command.delete": "Vorlage löschen",

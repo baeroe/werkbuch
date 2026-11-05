@@ -449,6 +449,8 @@ function EditorBody({ project, template, denied, ready = true, types, properties
     focusWhenLost(() => document.querySelector<HTMLElement>('[data-screen-heading]'), 800);
     runWithUndo({
       label: t('templates.deleted', { name }),
+      // the changes not saved yet go with it: undo brings back the saved template (T16-M5)
+      description: live.current.dirty ? t('templates.deleted_unsaved') : undefined,
       failureTitle: t('templates.not_deleted', { name }),
       undo: () => {
         showTemplate(id);
