@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Domain\Schedule\Recurrence;
 use App\Domain\Schedule\Schedule;
+use App\Models\Template;
 use DateTimeImmutable;
 use DateTimeZone;
 
@@ -28,6 +29,18 @@ final class TemplateSchedule
         return Recurrence::catchUp($schedule, $since, $now, $zone, $runCount)
             ?? Recurrence::next($schedule, $since !== null && $since > $now ? $since : $now, 1, $zone, $runCount)[0]
             ?? null;
+    }
+
+    /**
+     * Since when the terms of the template count (A339): the later of its last scheduled term that ran and the moment
+     * its schedule was set; null with neither.
+     */
+    public static function since(Template $template): ?DateTimeImmutable
+    {
+        $last = $template->last_run_at?->toDateTimeImmutable();
+        $from = $template->schedule_from?->toDateTimeImmutable();
+
+        return $last === null || ($from !== null && $from > $last) ? $from : $last;
     }
 
     /**

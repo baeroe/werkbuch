@@ -533,3 +533,17 @@ it('reads Markdown before any lock', function () use ($world) {
         ->and($lock)->toBeGreaterThan($handles)
         ->and($queries[$lock])->toStartWith('select * from `organization`');
 });
+
+it('tells two saves of the same second apart by updated_at (K16)', function () use ($world) {
+    [$web, $mara] = $world();
+    $this->travelTo('2026-11-02 09:00:00.100000');
+    $template = SaveTemplate::run(actor($mara), $web, ['name' => 'Wartung', 'payload' => ['title' => 'Eins'], 'schedule' => null]);
+    $first = DB::table('templates')->where('id', $template->id)->value('updated_at');
+
+    $this->travelTo('2026-11-02 09:00:00.200000');
+    SaveTemplate::run(actor($mara), null, ['name' => 'Wartung', 'payload' => ['title' => 'Zwei'], 'schedule' => null], $template);
+
+    expect($first)->toBe('2026-11-02 09:00:00.100000')
+        ->and(DB::table('templates')->where('id', $template->id)->value('updated_at'))->toBe('2026-11-02 09:00:00.200000')
+        ->and(DB::table('templates')->where('id', $template->id)->value('created_at'))->toBe('2026-11-02 09:00:00.100000');
+});

@@ -81,8 +81,10 @@ use App\Actions\System\SendTestMail;
 use App\Actions\Templates\DeleteTemplate;
 use App\Actions\Templates\DraftFromTemplate;
 use App\Actions\Templates\GetTemplate;
+use App\Actions\Templates\ListTemplateRuns;
 use App\Actions\Templates\ListTemplates;
 use App\Actions\Templates\PreviewSchedule;
+use App\Actions\Templates\RunTemplate;
 use App\Actions\Templates\SaveTemplate;
 use App\Actions\Tokens\CreateToken;
 use App\Actions\Tokens\ListTokens;
@@ -926,6 +928,20 @@ return [
         'action' => DraftFromTemplate::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => DraftFromTemplate::run($a, $w->template($column)),
         'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+    ],
+    // running a template by hand manages it; the item is the default bot's (Actor::template), so the account records
+    // no event of its own
+    'RunTemplate' => [
+        'action' => RunTemplate::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => RunTemplate::run($a, $w->template($column)),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+    ],
+    'ListTemplateRuns' => [
+        'action' => ListTemplateRuns::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListTemplateRuns::run($a, $w->template($column), []),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
         'hidden' => ['outsider_private'],
     ],
     // the preview of a schedule reads nothing of a project: every active account

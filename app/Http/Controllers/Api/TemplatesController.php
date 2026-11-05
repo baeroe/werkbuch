@@ -5,13 +5,17 @@ namespace App\Http\Controllers\Api;
 use App\Actions\Templates\DeleteTemplate;
 use App\Actions\Templates\DraftFromTemplate;
 use App\Actions\Templates\GetTemplate;
+use App\Actions\Templates\ListTemplateRuns;
 use App\Actions\Templates\ListTemplates;
 use App\Actions\Templates\PreviewSchedule;
+use App\Actions\Templates\RunTemplate;
 use App\Actions\Templates\SaveTemplate;
 use App\Http\Api\ApiList;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\TemplateDraftResource;
 use App\Http\Resources\TemplateResource;
+use App\Http\Resources\TemplateRunResource;
+use App\Http\Resources\WorkItemResource;
 use App\Models\Project;
 use App\Models\Template;
 use App\Support\Actor;
@@ -66,6 +70,23 @@ final class TemplatesController extends Controller
     public function draft(Request $request, Template $template): TemplateDraftResource
     {
         return new TemplateDraftResource(DraftFromTemplate::run(Actor::fromRequest($request), $template));
+    }
+
+    /** „Jetzt ausführen“: 200 with the run, also when it failed (then without an item, A350). */
+    public function run(Request $request, Template $template): JsonResponse
+    {
+        ['run' => $run, 'item' => $item] = RunTemplate::run(Actor::fromRequest($request), $template);
+
+        return response()->json(['data' => [
+            'run' => (new TemplateRunResource($run))->resolve($request),
+            'item' => $item === null ? null : (new WorkItemResource($item))->resolve($request),
+        ]]);
+    }
+
+    /** The log of its runs, newest first. */
+    public function runs(Request $request, Template $template): JsonResponse
+    {
+        return ApiList::respond(ListTemplateRuns::run(Actor::fromRequest($request), $template, $request->query()), TemplateRunResource::class);
     }
 
     /** The next terms of a schedule and a title at the first of them (a reading POST). */
