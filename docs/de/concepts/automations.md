@@ -19,7 +19,7 @@ Zieht eine Person ein Item ohne Assignee aus einem nicht begonnenen Status (Back
 
 - **Nur Personen.** Bots lösen es nie aus, auch kein Lauf einer [Vorlage](/de/concepts/templates).
 - **Nur wer die Arbeit übernehmen darf:** ein Mitglied des Projekts oder eine Person, die Org-Admin ist.
-- **Ein gewählter Assignee gewinnt.** Eine Änderung, die einen Assignee zusammen mit dem Status setzt (etwa eine Mehrfachbearbeitung), behält diesen Assignee.
+- **Ein gewählter Assignee gewinnt.** Eine Änderung, die einen Assignee zusammen mit dem Status setzt (etwa eine Mehrfachbearbeitung), behält diesen Assignee, auch „Niemand“ (über die API `assignee_id: null` im selben Patch wie der Status).
 - Die Person bekommt über sich selbst keine Benachrichtigung „Zugewiesen“.
 
 ## Eltern schließen

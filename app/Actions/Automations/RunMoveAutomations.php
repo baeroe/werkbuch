@@ -25,8 +25,9 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * another state, K26; never for RemapStates, which moves nothing by hand):
  *
  * - `assign_on_start`: a person (never a bot, never a template run) who moves an item nobody has from a state that is
- *   not started into a started one and can take work in the project becomes its assignee and watches it like any new
- *   assignee; `work_item.assigned` of the default bot on behalf of the person.
+ *   not started into a started one (and does not name the assignee in the same change, even as nobody) and can take
+ *   work in the project becomes its assignee and watches it like any new assignee; `work_item.assigned` of the
+ *   default bot on behalf of the person.
  * - `close_parent`: a child that closes moves its parent into the first Completed state of the workflow it may move to,
  *   when every child is closed and one of them is completed (CloseParentRule), on behalf of the person whose move it
  *   was (or of the person the acting automation acted for), quiet when that move was (A357); an archived parent stays. The parent is locked after the
@@ -41,14 +42,17 @@ final class RunMoveAutomations
 {
     use AsAction;
 
-    public function handle(Actor $actor, WorkItem $locked, WorkflowState $from, WorkflowState $to, int $chain = 0): void
+    /** `$assigneeNamed`: the change that moved the item named its assignee (even as nobody); that one wins (T11-M1). */
+    public function handle(Actor $actor, WorkItem $locked, WorkflowState $from, WorkflowState $to, int $chain = 0, bool $assigneeNamed = false): void
     {
         if ($from->id === $to->id) {
             return;
         }
 
-        DB::transaction(function () use ($actor, $locked, $from, $to, $chain): void {
-            self::assignOnStart($actor, $locked, $from, $to);
+        DB::transaction(function () use ($actor, $locked, $from, $to, $chain, $assigneeNamed): void {
+            if (! $assigneeNamed) {
+                self::assignOnStart($actor, $locked, $from, $to);
+            }
             self::closeParent($actor, $locked, $to, $chain);
         });
     }

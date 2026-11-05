@@ -76,14 +76,16 @@ final class TransitionWorkItem
      * `meta.states` (StateSnapshot, so the history names them after a rename or removal). `$reason` notes why in
      * the event (an automation); without `$checkTransition` the workflow is not asked (the caller did, CreateWorkItem).
      * After a move into another state the automations of a move run in the same transaction (RunMoveAutomations:
-     * Assignee beim Start, Eltern schließen, whose move of the parent comes back here with `$chain` one higher).
+     * Assignee beim Start, Eltern schließen, whose move of the parent comes back here with `$chain` one higher);
+     * `$assigneeNamed`: the same change named the assignee, even as nobody (UpdateWorkItem), so Assignee beim Start
+     * leaves it as it is (T11-M1).
      *
      * @return bool whether anything changed
      *
      * @throws ValidationException
      * @throws Problem
      */
-    public static function move(Actor $actor, WorkItem $locked, string $toStateId, ?string $resolutionId, ?string $reason = null, bool $checkTransition = true, int $chain = 0): bool
+    public static function move(Actor $actor, WorkItem $locked, string $toStateId, ?string $resolutionId, ?string $reason = null, bool $checkTransition = true, int $chain = 0, bool $assigneeNamed = false): bool
     {
         if ($locked->archived_at !== null) {
             throw Problem::conflict('archived', [], __('problem.detail.item_archived', ['key' => $locked->key]));
@@ -114,7 +116,7 @@ final class TransitionWorkItem
 
         $actor = $reason === null ? $actor : $actor->withReason($reason);
         EventRecorder::record($same ? EventType::WorkItemUpdated : EventType::WorkItemStateChanged, $actor, $locked, $locked->project, $changes, $same ? [] : ['states' => StateSnapshot::of($from, $to)]);
-        RunMoveAutomations::run($actor, $locked, $from, $to, $chain);
+        RunMoveAutomations::run($actor, $locked, $from, $to, $chain, $assigneeNamed);
 
         return true;
     }

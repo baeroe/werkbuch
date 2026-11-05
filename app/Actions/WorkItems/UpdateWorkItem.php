@@ -207,7 +207,7 @@ final class UpdateWorkItem
         }
 
         if ($moving) {
-            $changed = TransitionWorkItem::move($actor, $locked, $state, $resolution, $reason) || $changed;
+            $changed = TransitionWorkItem::move($actor, $locked, $state, $resolution, $reason, assigneeNamed: array_key_exists('assignee_id', $fields)) || $changed;
         }
 
         return $changed;

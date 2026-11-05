@@ -19,7 +19,7 @@ When a person moves an item that has no assignee from a state that is not starte
 
 - **Only people.** Bots never trigger it, and neither does a run of a [template](/en/concepts/templates).
 - **Only who may take the work:** a member of the project, or a person who is an org admin.
-- **An assignee you choose wins.** A change that sets the assignee together with the state (a bulk change, for example) keeps the assignee you chose.
+- **An assignee you choose wins.** A change that sets the assignee together with the state (a bulk change, for example) keeps the assignee you chose, also "nobody" (over the API `assignee_id: null` in the same patch as the state).
 - The person does not get the notification "Assigned" about themselves.
 
 ## Close parent

@@ -95,6 +95,17 @@ it('assigns nobody when the patch names an assignee with the move', function () 
         ->and(eventsOf(EventType::WorkItemAssigned, $item)->sole()->actor_id)->toBe($erik->id);
 });
 
+it('assigns nobody when the patch names nobody with the move (T11-M1)', function () use ($world, $state) {
+    [$web, $mara, $erik] = $world();
+    $item = WorkItem::factory()->for($web)->inState('Todo')->create(['assignee_id' => $mara->id]);
+
+    UpdateWorkItem::run(actor($erik), $item, ['state_id' => $state($web, 'In Progress'), 'assignee_id' => null]);
+
+    expect($item->fresh()->assignee_id)->toBeNull()
+        ->and($item->fresh()->state_id)->toBe($state($web, 'In Progress'))
+        ->and(eventsOf(EventType::WorkItemAssigned, $item)->sole()->changes)->toBe(['assignee_id' => ['old' => $mara->id, 'new' => null]]);
+});
+
 it('also from the board\'s bulk move', function () use ($world, $state) {
     [$web, $mara, $erik] = $world();
     [$one, $two] = WorkItem::factory()->for($web)->inState('Backlog')->count(2)->create();
