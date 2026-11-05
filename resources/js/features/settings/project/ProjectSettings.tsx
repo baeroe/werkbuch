@@ -1,6 +1,6 @@
 /*
- * The settings of a project (spec 5.2) in the shared settings frame: General, Members, Workflow and Types, one address
- * each (`/projects/{identifier}/settings/{section?}`, General without a section; Automations join with Phase 10).
+ * The settings of a project (spec 5.2) in the shared settings frame: General, Members, Workflow, Types and Automations,
+ * one address each (`/projects/{identifier}/settings/{section?}`, General without a section).
  * Project admins and org admins change them; everybody else reads, with the reason from `usePermissions` (spec 4.3).
  * The server answers an old identifier with a 301; a rename made here (or elsewhere, while the page is open) moves the
  * address to the identifier the project has now.
@@ -23,12 +23,13 @@ import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import { NotFound } from '@/shell/PageStates';
 import { ReadOnlyBanner, SettingsError, SettingsSkeleton } from '../frame/parts';
 import { SectionNav, SectionNavSkeleton, SettingsFrame } from '../frame/SettingsFrame';
+import { Automations } from './Automations';
 import { General } from './General';
 import { Members } from './Members';
 import { Types } from './Types';
 import { Workflow } from './Workflow';
 
-const SECTIONS = ['general', 'members', 'workflow', 'types'] as const;
+const SECTIONS = ['general', 'members', 'workflow', 'types', 'automations'] as const;
 type Section = (typeof SECTIONS)[number];
 
 const isSection = (slug: string): slug is Section => (SECTIONS as readonly string[]).includes(slug);
@@ -135,6 +136,7 @@ export function ProjectSettings({ identifier, section }: { identifier: string; s
             {current === 'members' && <Members {...props} />}
             {current === 'workflow' && <Workflow {...props} />}
             {current === 'types' && <Types {...props} />}
+            {current === 'automations' && <Automations {...props} />}
           </Fragment>
         </>
       )}

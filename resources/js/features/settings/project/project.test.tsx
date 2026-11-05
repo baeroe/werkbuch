@@ -12,7 +12,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { currentToasts, dismissToast, resetToasts, runToastAction } from '@/components/ui/toast';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import { agency, ida, lene, list, mara, organization, person, project, standard, theo, types } from '@/test/fixtures';
-import type { ProjectMember, User, WorkItemType } from '@/types';
+import type { Automation, ProjectMember, User, Workflow as WorkflowRecord, WorkItemType } from '@/types';
 import { ProjectSettings } from './ProjectSettings';
 
 type Visit = { url: URL; method: string; prefetch: boolean; preserveUrl: boolean };
@@ -59,6 +59,10 @@ const members = [member('u_ida', 'admin'), member('u_theo', 'viewer'), member('u
 /** An archived type, in the catalog after the others. */
 const legacy: WorkItemType = { ...types[0]!, id: 't_legacy', name: 'Altlast', description: '', archived_at: '2026-09-01T10:00:00.000Z' };
 
+/** The four automations of WEB as the server lists them, all off unless changed. */
+const automationsOf = (changes: Partial<Record<Automation['key'], Partial<Automation>>> = {}): Automation[] =>
+  (['auto_archive', 'auto_close', 'close_parent', 'assign_on_start'] as const).map((key) => ({ id: null, project_id: 'p_web', key, enabled: false, settings: {}, ...changes[key] }));
+
 const problem = (status: number, reason: string, extra: Record<string, unknown> = {}) => ({ status, body: { type: 'about:blank', title: reason, status, reason, ...extra } });
 const unavailable = () => problem(503, 'service_unavailable', { detail: 'Der Server ist gerade nicht erreichbar.' });
 
@@ -79,6 +83,7 @@ function renderSettings(
     'GET /api/v1/workflows': () => ({ body: list([standard, agency]) }),
     'GET /api/v1/work-item-types': () => ({ body: list([...types, legacy]) }),
     'GET /api/v1/state-usage': () => ({ body: { data: [] } }),
+    'GET /api/v1/projects/p_web/automations': () => ({ body: { data: automationsOf() } }),
     ...overrides,
   });
   // after the fake API is in place and before anything asks it: a test can hold some of its answers
@@ -180,10 +185,10 @@ describe('ProjectSettings', () => {
   });
 
   it('says that an unknown section does not exist, keeps the list and leads to General', async () => {
-    renderSettings('automations');
+    renderSettings('webhooks');
 
     expect(await screen.findByText('Diesen Bereich gibt es nicht')).toBeTruthy();
-    expect(screen.getByText('Die Einstellungen von WEB haben die Bereiche Allgemein, Mitglieder, Workflow und Typen.')).toBeTruthy();
+    expect(screen.getByText('Die Einstellungen von WEB haben die Bereiche Allgemein, Mitglieder, Workflow, Typen und Automatisierungen.')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Zu Allgemein' }).getAttribute('href')).toBe('/projects/WEB/settings/general');
     expect(screen.getByRole('navigation', { name: 'Bereiche der Projekteinstellungen' }).querySelector('[aria-current]')).toBeNull();
     expect(document.title).toBe('Projekteinstellungen – werkbuch');
@@ -778,6 +783,56 @@ describe('Workflow', () => {
     act(() => runToastAction(toastNamed('Workflow nicht gewechselt').id));
     await waitFor(() => expect(toastTitles()).toContain('Workflow gewechselt'));
     expect(calls('PUT', '/api/v1/projects/p_web/workflow')).toHaveLength(2);
+  });
+
+  /** Auto-Close of WEB is on and moves into „Cancelled“ of the standard workflow. */
+  const autoCloseOn = { 'GET /api/v1/projects/p_web/automations': () => ({ body: { data: automationsOf({ auto_close: { enabled: true, settings: { days: 90, state_id: 'std_cancelled' } } }) } }) };
+  const autoCloseNote = (dialog: HTMLElement) => within(dialog).queryByText(/^Auto-Close (nimmt|wird)/);
+
+  it('says in the switch that Auto-Close takes the first Canceled status of the new workflow', async () => {
+    const user = userEvent.setup();
+    renderSettings('workflow', { ...switchable(), ...autoCloseOn });
+
+    await chooseAgency(user);
+    await user.click(screen.getByRole('button', { name: /Workflow wechseln …/ }));
+    const dialog = await screen.findByRole('dialog', { name: 'Zu „Agentur-Freigabe“ wechseln' });
+    const note = await within(dialog).findByText('Auto-Close nimmt danach „Cancelled“.');
+    expect(note.closest('[role="status"]')).toBeTruthy();
+  });
+
+  it('follows the mapping of the Auto-Close status when it names a Canceled one', async () => {
+    const user = userEvent.setup();
+    const two: WorkflowRecord = { ...agency, states: [...agency.states, { id: 'app_dropped', name: 'Dropped', icon: 'cross', category: 'canceled', position: 7 }] };
+    renderSettings('workflow', { ...switchable(), ...autoCloseOn, ...counted([{ state_id: 'std_cancelled', items: 2 }]), 'GET /api/v1/workflows': () => ({ body: list([standard, two]) }) });
+
+    await chooseAgency(user);
+    await user.click(screen.getByRole('button', { name: /Workflow wechseln …/ }));
+    const dialog = await screen.findByRole('dialog');
+    expect(await within(dialog).findByText('Auto-Close nimmt danach „Cancelled“.')).toBeTruthy();
+    await user.click(choice('Cancelled'));
+    await user.click(await screen.findByRole('option', { name: 'Dropped' }));
+    expect(await within(dialog).findByText('Auto-Close nimmt danach „Dropped“.')).toBeTruthy();
+  });
+
+  it('says that Auto-Close switches off when the new workflow has no Canceled status, and nothing when it is off', async () => {
+    const user = userEvent.setup();
+    const lean: WorkflowRecord = { ...agency, name: 'Schlank', states: agency.states.filter((state) => state.category !== 'canceled'), transitions: [] };
+    const { unmount } = renderSettings('workflow', { ...switchable(), ...autoCloseOn, 'GET /api/v1/workflows': () => ({ body: list([standard, lean]) }) });
+
+    await user.click(await screen.findByRole('combobox', { name: /Neuer Workflow/ }));
+    await user.click(await screen.findByRole('option', { name: 'Schlank' }));
+    await user.click(screen.getByRole('button', { name: /Workflow wechseln …/ }));
+    const dialog = await screen.findByRole('dialog');
+    expect(await within(dialog).findByText('Auto-Close wird ausgeschaltet: „Schlank“ hat keinen Canceled-Status.')).toBeTruthy();
+    unmount();
+    api?.restore();
+
+    renderSettings('workflow', switchable());
+    await chooseAgency(user);
+    await user.click(screen.getByRole('button', { name: /Workflow wechseln …/ }));
+    const plain = await screen.findByRole('dialog');
+    expect(within(plain).getByText('WEB nutzt bisher „Standard“. Neue Items starten im Startstatus „Backlog“.')).toBeTruthy();
+    expect(autoCloseNote(plain)).toBeNull();
   });
 
   /** The items of WEB per state of the standard workflow. */
