@@ -10,8 +10,10 @@ use App\Actions\WorkItems\DeleteWorkItem;
 use App\Actions\WorkItems\RemoveRelation;
 use App\Actions\WorkItems\TransitionWorkItem;
 use App\Actions\WorkItems\UpdateWorkItem;
+use App\Domain\Automations\AutomationKey;
 use App\Events\EventType;
 use App\Models\Attachment;
+use App\Models\Automation;
 use App\Models\Event;
 use App\Models\Project;
 use App\Models\RelationType;
@@ -100,4 +102,27 @@ it('retries an upload after a deadlock: one row, one file, nothing left of the f
         ->and(Media::query()->count())->toBe(1)
         ->and(Storage::disk('local')->allFiles())->toBe([(string) $attachment->getFirstMedia('file')?->getPathRelativeToRoot()])
         ->and(Event::query()->where('type', EventType::WorkItemUpdated)->count())->toBe(1);
+});
+
+it('retries a move after a deadlock on the parent that Eltern schließen locks (K25)', function () {
+    $mara = User::factory()->create(['name' => 'Mara']);
+    $web = Project::factory()->identifier('WEB')->member($mara, ProjectRole::Admin)->create(['lead_id' => $mara->id]);
+    Automation::factory()->for($web)->key(AutomationKey::CloseParent)->enabled()->create();
+    $epic = WorkItem::factory()->for($web)->epic()->create(['created_by' => $mara->id]);
+    $child = WorkItem::factory()->childOf($epic)->create(['created_by' => $mara->id]);
+    $done = $web->workflow()->firstOrFail()->states()->where('name', 'Done')->value('id');
+    $thrown = 0;
+    // the lock of the parent fails once, as MariaDB reports a deadlock with another move of a child of the epic
+    DB::listen(function (QueryExecuted $query) use (&$thrown, $epic) {
+        if ($thrown === 0 && str_starts_with($query->sql, 'select * from `work_items`') && str_ends_with($query->sql, 'for update') && in_array($epic->id, $query->bindings, true)) {
+            $thrown++;
+            throw new QueryException($query->connectionName, $query->sql, $query->bindings, new PDOException('SQLSTATE[40001]: Serialization failure: 1213 Deadlock found when trying to get lock; try restarting transaction'));
+        }
+    });
+
+    TransitionWorkItem::run(actor($mara), $child, ['to_state_id' => $done]);
+
+    expect($thrown)->toBe(1)
+        ->and($epic->fresh()?->state_id)->toBe($done)
+        ->and(Event::query()->where('type', EventType::WorkItemStateChanged)->pluck('subject_id')->all())->toBe([$child->id, $epic->id]);
 });

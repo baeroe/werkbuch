@@ -15,6 +15,7 @@ use App\Actions\Attachments\ShowAttachment;
 use App\Actions\Attachments\UploadAttachment;
 use App\Actions\Automations\FollowWorkflow;
 use App\Actions\Automations\ListAutomations;
+use App\Actions\Automations\RunMoveAutomations;
 use App\Actions\Automations\SaveAutomation;
 use App\Actions\Comments\AddComment;
 use App\Actions\Comments\AddReaction;
@@ -149,6 +150,7 @@ use App\Models\RelationType;
 use App\Models\Resolution;
 use App\Models\User;
 use App\Models\Workflow;
+use App\Models\WorkItem;
 use App\Models\WorkItemRelation;
 use App\Models\WorkItemType;
 use App\Support\Actor;
@@ -1002,6 +1004,22 @@ return [
             FollowWorkflow::run($a, $project, [], Workflow::factory()->create(), RemapStates::WORKFLOW_CHANGED);
         },
         'event' => EventType::AutomationUpdated,
+        'system' => true,
+    ],
+    'RunMoveAutomations' => [
+        'action' => RunMoveAutomations::class,
+        // the work of a move (TransitionWorkItem::move()) in its transaction: the last child of an epic closed, and with
+        // Eltern schließen switched on the epic follows it into Done
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $project = $w->project($column);
+            Automation::factory()->for($project)->key(AutomationKey::CloseParent)->enabled()->create();
+            $epic = WorkItem::factory()->for($project)->epic()->create();
+            $child = WorkItem::factory()->childOf($epic)->closed()->create();
+            $from = $project->workflow()->firstOrFail()->states()->where('category', StateCategory::Backlog)->firstOrFail();
+
+            RunMoveAutomations::run($a, $child->load('project'), $from, $child->state()->firstOrFail());
+        },
+        'event' => EventType::WorkItemStateChanged,
         'system' => true,
     ],
     // the inbox is the own one: everybody lists, marks and deletes their own notifications (a bot has none); a

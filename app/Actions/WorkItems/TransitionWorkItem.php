@@ -3,6 +3,7 @@
 namespace App\Actions\WorkItems;
 
 use App\Access\Authorize;
+use App\Actions\Automations\RunMoveAutomations;
 use App\Domain\Workflow\StateCategory;
 use App\Domain\WorkItems\MoveStamps;
 use App\Domain\WorkItems\ResolutionChoice;
@@ -31,8 +32,9 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * locks of P1 (ItemLock::take), then everything checked against the item as locked; an archived project and an
  * archived item are read-only (409 `project_archived`, `archived`).
  *
- * The transaction runs up to three times (`DB::transaction(…, 3)`) like every change that locks items, defensively: it
- * locks one item row, so it is in no lock cycle of its own today.
+ * The transaction runs up to three times (`DB::transaction(…, 3)`) like every change that locks items: "Eltern
+ * schließen" locks the parent after the item and then its children shared, so two moves of children of one parent can
+ * deadlock (RunMoveAutomations).
  */
 final class TransitionWorkItem
 {
@@ -73,13 +75,15 @@ final class TransitionWorkItem
      * `work_item.state_changed` with `changes.state_id` (and `resolution_id` when it changes) and both states in
      * `meta.states` (StateSnapshot, so the history names them after a rename or removal). `$reason` notes why in
      * the event (an automation); without `$checkTransition` the workflow is not asked (the caller did, CreateWorkItem).
+     * After a move into another state the automations of a move run in the same transaction (RunMoveAutomations:
+     * Assignee beim Start, Eltern schließen, whose move of the parent comes back here with `$chain` one higher).
      *
      * @return bool whether anything changed
      *
      * @throws ValidationException
      * @throws Problem
      */
-    public static function move(Actor $actor, WorkItem $locked, string $toStateId, ?string $resolutionId, ?string $reason = null, bool $checkTransition = true): bool
+    public static function move(Actor $actor, WorkItem $locked, string $toStateId, ?string $resolutionId, ?string $reason = null, bool $checkTransition = true, int $chain = 0): bool
     {
         if ($locked->archived_at !== null) {
             throw Problem::conflict('archived', [], __('problem.detail.item_archived', ['key' => $locked->key]));
@@ -110,6 +114,7 @@ final class TransitionWorkItem
 
         $actor = $reason === null ? $actor : $actor->withReason($reason);
         EventRecorder::record($same ? EventType::WorkItemUpdated : EventType::WorkItemStateChanged, $actor, $locked, $locked->project, $changes, $same ? [] : ['states' => StateSnapshot::of($from, $to)]);
+        RunMoveAutomations::run($actor, $locked, $from, $to, $chain);
 
         return true;
     }
