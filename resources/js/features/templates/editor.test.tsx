@@ -331,9 +331,10 @@ describe('the fields of a template', () => {
 
     await user.clear(start);
     expect(start.getAttribute('aria-invalid')).toBeNull();
+    await user.type(start, '7');
     await user.click(saveButton());
     await waitFor(() => expect(puts()).toHaveLength(1));
-    expect(puts()[0].body).toMatchObject({ payload: { start_offset_days: null } });
+    expect(puts()[0].body).toMatchObject({ payload: { start_offset_days: 7 } });
   });
 
   it('does not save while a property field still shows a text it refuses', async () => {
@@ -468,7 +469,7 @@ describe('saving', () => {
   it('sends one call per press: a press while one is on its way does nothing', async () => {
     const user = userEvent.setup();
     renderEditor();
-    await ready();
+    await user.type(await ready(), ' neu');
     const held = hold('PUT', '/api/v1/templates/tpl_app_report');
     try {
       await user.click(saveButton());
@@ -476,7 +477,7 @@ describe('saving', () => {
       await modEnter();
       await user.click(saveButton());
       held.release();
-      await waitFor(() => expect(toastTitles()).toContain('„Monatsbericht“ gespeichert'));
+      await waitFor(() => expect(toastTitles()).toContain('„Monatsbericht neu“ gespeichert'));
       expect(puts()).toHaveLength(1);
     } finally {
       held.restore();
@@ -516,7 +517,7 @@ describe('saving', () => {
     overrides['PUT /api/v1/templates/tpl_app_report'] = () =>
       refused({ 'payload.title': ['Der Titel kann mit Platzhaltern länger als 255 Zeichen werden.'], 'schedule.time': ['Eine Uhrzeit wie 09:00.'] });
     renderEditor();
-    await ready();
+    await user.type(await ready(), ' neu');
     await user.click(saveButton());
 
     const title = screen.getByRole('textbox', { name: /^Titel/ });
@@ -533,7 +534,7 @@ describe('saving', () => {
     const user = userEvent.setup();
     overrides['PUT /api/v1/templates/tpl_app_certs'] = () => refused({ 'schedule.time': ['Eine Uhrzeit wie 09:00.'] });
     renderEditor('tpl_app_certs');
-    await ready();
+    await user.type(await ready(), ' neu');
     await user.click(saveButton());
     const schedule = screen.getByRole('region', { name: 'Zeitplan' });
     expect(await within(schedule).findByText('Eine Uhrzeit wie 09:00.')).toBeTruthy();
@@ -552,7 +553,7 @@ describe('saving', () => {
     const user = userEvent.setup();
     overrides['PUT /api/v1/templates/tpl_app_report'] = () => ({ status: 409, body: { type: 'about:blank', title: 'archived', status: 409, reason: 'project_archived', detail: 'Das Projekt ist archiviert.' } });
     renderEditor();
-    await ready();
+    await user.type(await ready(), ' neu');
     await user.click(saveButton());
     expect((await screen.findByRole('alert')).textContent).toContain('Das Projekt ist archiviert.');
 
@@ -561,7 +562,72 @@ describe('saving', () => {
     await waitFor(() => expect(toastTitles()).toContain('Vorlage nicht gespeichert'));
     delete overrides['PUT /api/v1/templates/tpl_app_report'];
     act(() => runToastAction(currentToasts().find((item) => item.title === 'Vorlage nicht gespeichert')!.id));
-    await waitFor(() => expect(toastTitles()).toContain('„Monatsbericht“ gespeichert'));
+    await waitFor(() => expect(toastTitles()).toContain('„Monatsbericht neu“ gespeichert'));
+  });
+
+  it('sends nothing without a change, for the button and for mod+enter, and says so (T16-M3)', async () => {
+    const user = userEvent.setup();
+    renderEditor();
+    await ready();
+    await user.click(saveButton());
+    await modEnter();
+    await waitFor(() => expect(toastTitles()).toContain('Nichts zu speichern'));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(puts()).toEqual([]);
+  });
+
+  it('leaves mod+enter to the preview of an item outside the form, and saves from the form while it is open (T16-M2)', async () => {
+    const user = userEvent.setup();
+    renderEditor();
+    const name = await ready();
+    await user.type(name, ' neu');
+    act(() => useUiStore.getState().openPeek('wi_app_3'));
+    name.blur();
+    await modEnter();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(puts()).toEqual([]);
+    name.focus();
+    await modEnter();
+    await waitFor(() => expect(puts()).toHaveLength(1));
+  });
+
+  it('never submits the form itself (T16-M8)', async () => {
+    renderEditor();
+    const name = await ready();
+    expect(fireEvent.submit(name.form!)).toBe(false);
+  });
+
+  it('keeps what was typed while a new template was created, unsaved in its editor (T16-I1)', async () => {
+    const user = userEvent.setup();
+    inertia.go('/projects/APP/templates/new');
+    overrides['PUT /api/v1/templates/tpl_app_new'] = (body) => ({ body: { data: stored('tpl_app_new', body as never) } });
+    const { rerender } = renderEditor('new');
+    const name = await ready();
+    await user.type(name, 'Release-Notizen');
+    const title = screen.getByRole('textbox', { name: /^Titel/ });
+    await user.type(title, 'Release-Notizen');
+    const held = hold('POST', '/api/v1/projects/p_app/templates');
+    try {
+      await user.click(saveButton());
+      await waitFor(() => expect(saveButton().getAttribute('aria-busy')).toBe('true'));
+      await user.type(title, ' KW {{week}');
+      held.release();
+      await waitFor(() => expect(inertia.visit).toHaveBeenCalledWith('/projects/APP/templates/tpl_app_new', expect.objectContaining({ replace: true })));
+    } finally {
+      held.restore();
+    }
+    inertia.go('/projects/APP/templates/tpl_app_new');
+    rerender('tpl_app_new');
+    await screen.findByRole('heading', { level: 1, name: 'Release-Notizen' });
+    const next = (await screen.findByRole('textbox', { name: /^Titel/ })) as HTMLInputElement;
+    expect(next.value).toBe('Release-Notizen KW {week}');
+    // it is not saved yet: the run waits, and leaving asks
+    expect(screen.getByRole('button', { name: /Jetzt ausführen/ }).getAttribute('aria-disabled')).toBe('true');
+    const unload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+    await user.click(saveButton());
+    await waitFor(() => expect(calls('PUT', '/api/v1/templates/tpl_app_new')).toHaveLength(1));
   });
 
   it('asks before leaving with unsaved changes, and not after saving them', async () => {
@@ -714,6 +780,25 @@ describe('running a template now', () => {
     expect(command.group).toBe('Vorlage „Monatsbericht neu“');
     act(() => command.run());
     await waitFor(() => expect(toastTitles()).toContain('APP-9 angelegt'));
+  });
+
+  it('starts no second run while one is on its way, from the button or the palette (T16-M6)', async () => {
+    const user = userEvent.setup();
+    renderEditor();
+    await ready();
+    const held = hold('POST', '/api/v1/templates/tpl_app_report/run');
+    try {
+      const run = screen.getByRole('button', { name: /Jetzt ausführen/ });
+      await user.click(run);
+      await waitFor(() => expect(run.getAttribute('aria-busy')).toBe('true'));
+      act(() => listCommands().find((entry) => entry.id === 'template.run')!.run());
+      fireEvent.click(run);
+      held.release();
+      await waitFor(() => expect(toastTitles()).toContain('APP-9 angelegt'));
+      expect(calls('POST', '/api/v1/templates/tpl_app_report/run')).toHaveLength(1);
+    } finally {
+      held.restore();
+    }
   });
 });
 

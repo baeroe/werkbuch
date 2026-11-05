@@ -115,6 +115,12 @@ function toInput(draft: Draft, types: readonly WorkItemType[]): Draft {
 
 const snapshot = (draft: Draft, types: readonly WorkItemType[]) => JSON.stringify(toInput(draft, types), sortedKeys);
 
+/**
+ * What was typed while a new template was being created (T16-I1): the editor at its new address starts with it, unsaved
+ * against the stored template, instead of dropping it. A module map, because that editor is another instance.
+ */
+const handedOver = new Map<string, Draft>();
+
 /** The line under the name: what the template does. */
 function leadOf(template: Template | null): string {
   if (!template) return t('templates.editor.lead.new');
@@ -203,9 +209,13 @@ function EditorBody({ project, template, denied, ready = true, types, properties
   const uploading = useUploadsPending(uploads) > 0;
   const fieldId = (path: string) => `${formId}-${path}`;
 
-  const [draft, setDraft] = useState<Draft>(() => draftOf(template, project));
+  const [draft, setDraft] = useState<Draft>(() => (template && handedOver.get(template.id)) || draftOf(template, project));
   const latest = useRef(draft);
-  const [baseline, setBaseline] = useState(() => snapshot(draft, types));
+  const [baseline, setBaseline] = useState(() => snapshot(draftOf(template, project), types));
+  // taken over once: a later editor of the template starts from what is stored
+  useEffect(() => {
+    if (template) handedOver.delete(template.id);
+  }, [template]);
   const [errors, setErrors] = useState<Errors>({});
   const [blocked, setBlocked] = useState<string | null>(null);
   /** Typed texts the fields cannot read, by path: nothing is saved while there is one. */
@@ -219,9 +229,9 @@ function EditorBody({ project, template, denied, ready = true, types, properties
   const runReason = denied ?? (dirty ? t('templates.editor.run_save_first') : null);
 
   // what a press later reads: the render of the moment it runs, not of the one that scheduled it
-  const live = useRef({ canManage, uploading, unreadable, runReason });
+  const live = useRef({ canManage, uploading, unreadable, runReason, dirty });
   useLayoutEffect(() => {
-    live.current = { canManage, uploading, unreadable, runReason };
+    live.current = { canManage, uploading, unreadable, runReason, dirty };
   });
 
   // a newer stored template (saved here, or by someone else) is taken over while nothing is typed
@@ -295,6 +305,11 @@ function EditorBody({ project, template, denied, ready = true, types, properties
       document.getElementById(fieldId(stuck))?.focus();
       return;
     }
+    // nothing changed: nothing to send (T16-M3); a new template still says what it lacks
+    if (!isNew && !live.current.dirty) {
+      toast({ title: t('templates.editor.unchanged'), tone: 'neutral' });
+      return;
+    }
     const own: Errors = {};
     if (current.name.trim() === '') own.name = t('templates.editor.name_required');
     if (current.payload.title.trim() === '') own['payload.title'] = t('templates.editor.title_required');
@@ -309,6 +324,8 @@ function EditorBody({ project, template, denied, ready = true, types, properties
     settle(save.mutateAsync({ id: template?.id, project_id: project.id, ...toInput(current, types) }), {
       onSuccess: (saved) => {
         setBaseline(snapshot(current, types));
+        // typed while it was being created: the editor at the new address goes on with it (T16-I1)
+        if (isNew && snapshot(latest.current, types) !== snapshot(current, types)) handedOver.set(saved.id, latest.current);
         const next = saved.schedule && !saved.schedule.paused ? (saved.next_run_at ? t('templates.editor.next_run', { when: times.short(saved.next_run_at) }) : t('templates.editor.next_none')) : undefined;
         toast({ title: t(isNew ? 'templates.editor.created' : 'templates.editor.saved', { name: saved.name }), description: next, tone: 'success' });
         if (isNew) {
@@ -334,7 +351,10 @@ function EditorBody({ project, template, denied, ready = true, types, properties
     });
   }
 
-  useShortcut('template.save', () => requestSave(), { when: () => canManage });
+  // with an item open in the preview, mod+enter outside this form is the preview's (T16-M2, like wiki.delete, A324)
+  useShortcut('template.save', () => requestSave(), {
+    when: () => canManage && (useUiStore.getState().peekItemId === null || (form.current?.contains(document.activeElement) ?? false)),
+  });
 
   /* ----------------------------------------------------------------------- running */
 
@@ -465,6 +485,8 @@ function EditorBody({ project, template, denied, ready = true, types, properties
         ref={form}
         id={formId}
         noValidate
+        // never a submit of its own (Enter in a single field would reload the page, T16-M8)
+        onSubmit={(event) => event.preventDefault()}
         // a field that keeps mod+enter for itself (it refused its text on Enter) still saves, which then says why not
         onKeyDown={(event) => {
           if (event.defaultPrevented && !event.repeat && isModEnter(event)) requestSave();

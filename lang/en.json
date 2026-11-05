@@ -2716,6 +2716,7 @@
     "templates.editor.type_archived": "This type is archived: runs fail until you choose an active type.",
     "templates.editor.type_choose": "Choose a type …",
     "templates.editor.type_none": "no type",
+    "templates.editor.unchanged": "Nothing to save",
     "templates.empty.description": "A template creates items with fixed fields, by hand or on a schedule, such as the monthly report on the first Monday.",
     "templates.empty.title": "No templates yet",
     "templates.leave": "The changes to “:name”",

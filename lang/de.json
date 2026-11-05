@@ -2716,6 +2716,7 @@
     "templates.editor.type_archived": "Dieser Typ ist archiviert: Läufe scheitern, bis du einen aktiven Typ wählst.",
     "templates.editor.type_choose": "Typ wählen …",
     "templates.editor.type_none": "kein Typ",
+    "templates.editor.unchanged": "Nichts zu speichern",
     "templates.empty.description": "Eine Vorlage legt Items mit festen Feldern an, von Hand oder nach Zeitplan, etwa den Monatsbericht am ersten Montag.",
     "templates.empty.title": "Noch keine Vorlagen",
     "templates.leave": "Die Änderungen an „:name“",
