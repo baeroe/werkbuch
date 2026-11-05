@@ -38,7 +38,8 @@ use RuntimeException;
  * - Auto-Close: the default bot moves the items in Backlog or Unstarted whose last activity, the later of `updated_at`
  *   and their last comment (A344, K11: an item without a comment counts its `updated_at`), lies at least `days` days
  *   back into the Canceled state of its settings, with the transitions of the workflow (TransitionWorkItem::move,
- *   reason `auto_close`), then comments why in the language of the organisation as the same actor. A move the workflow
+ *   reason `auto_close`), then comments why in the language of the organisation as the same actor. Both are quiet
+ *   (A357, `meta.quiet`): nobody is told, not of a parent the move closes (`close_parent`) either. A move the workflow
  *   does not allow (409 `transition_not_allowed`, or a 422 of the move) skips the item and writes nothing. A state that
  *   is no Canceled state of the current workflow (K11) passes the project over and is reported.
  *
@@ -53,6 +54,11 @@ final class RunDailyAutomations
     use AsAction;
 
     public const BLOCK = 200;
+
+    /** The reasons of the two nights; the one of Auto-Close is quiet (A357): its move and comment tell nobody. */
+    public const AUTO_ARCHIVE = 'auto_archive';
+
+    public const AUTO_CLOSE = 'auto_close';
 
     /** The last activity of an item: its own change or its last comment, whichever is later (K11). */
     private const ACTIVITY = 'greatest(work_items.updated_at, coalesce((select max(comments.created_at) from comments where comments.work_item_id = work_items.id), work_items.updated_at))';
@@ -96,7 +102,7 @@ final class RunDailyAutomations
     {
         $cutoff = now()->subDays($days);
         $closed = self::states($project, [StateCategory::Completed, StateCategory::Canceled]);
-        $bot = Actor::automation('auto_archive');
+        $bot = Actor::automation(self::AUTO_ARCHIVE);
         $archived = 0;
 
         self::each(
@@ -132,7 +138,7 @@ final class RunDailyAutomations
 
         $cutoff = now()->subDays($days);
         $open = self::states($project, [StateCategory::Backlog, StateCategory::Unstarted]);
-        $bot = Actor::automation('auto_close');
+        $bot = Actor::automation(self::AUTO_CLOSE)->quietly();
         $text = $days === 1
             ? __('automations.auto_close.comment.one', ['days' => $days], $locale)
             : __('automations.auto_close.comment.other', ['days' => $days], $locale);

@@ -29,7 +29,7 @@ use Lorisleiva\Actions\Concerns\AsAction;
  *   assignee; `work_item.assigned` of the default bot on behalf of the person.
  * - `close_parent`: a child that closes moves its parent into the first Completed state of the workflow it may move to,
  *   when every child is closed and one of them is completed (CloseParentRule), on behalf of the person whose move it
- *   was (or of the person the acting automation acted for); an archived parent stays. The parent is locked after the
+ *   was (or of the person the acting automation acted for), quiet when that move was (A357); an archived parent stays. The parent is locked after the
  *   child (`for update`), then its children with a shared lock: two people closing the last two children at once wait
  *   for each other (or deadlock, and the transaction of the move runs again), and the second one sees the first child
  *   closed. Its move runs the automations again, up to CloseParentRule::MAX_CHAIN levels up.
@@ -104,9 +104,13 @@ final class RunMoveAutomations
         TransitionWorkItem::move(self::onBehalf(Actor::automation('close_parent'), $actor), $parent, $target, null, chain: $chain + 1);
     }
 
-    /** The automation acting for the person whose move it was, or for the person the acting automation acted for. */
+    /**
+     * The automation acting for the person whose move it was, or for the person the acting automation acted for; quiet
+     * when the move was (A357: a parent the night of Auto-Close closes tells nobody either).
+     */
     private static function onBehalf(Actor $automation, Actor $actor): Actor
     {
+        $automation = $actor->quiet ? $automation->quietly() : $automation;
         $person = $actor->user->isPerson() ? $actor->user : ($actor->onBehalfOf === null ? null : User::query()->find($actor->onBehalfOf));
 
         return $person === null ? $automation : $automation->onBehalfOf($person);

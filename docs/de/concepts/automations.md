@@ -45,7 +45,7 @@ Jede Nacht zieht Auto-Close die Items in Backlog oder Unstarted (Todo), an denen
 Auto-Archiv und Auto-Close laufen jede Nacht um 03:00 in der Zeitzone der Organisation, auch in den Nächten der Zeitumstellung. „Seit 30 Tagen“ heißt 30 × 24 Stunden vor dem Lauf. Fiel eine Nacht aus (Wartung), erledigt die nächste die Arbeit: Die Items erfüllen die Schwelle weiter.
 
 - **Archivierte Projekte** und Projekte in Löschung bleiben außen vor.
-- **Niemand wird benachrichtigt.** Weder der Statuswechsel noch der Kommentar der Nacht schreiben eine Benachrichtigung; die History des Items zeigt beides.
+- **Niemand wird benachrichtigt.** Weder der Statuswechsel noch der Kommentar der Nacht schreiben eine Benachrichtigung, auch nicht ein Eltern-Item, das der Statuswechsel über „Eltern schließen“ schließt; die History des Items zeigt alles.
 - `php artisan app:run-automations --now` führt beide sofort aus, etwa nach einer Wartung; `--project=<ULID>` grenzt auf ein Projekt ein.
 
 ## Wenn der Workflow wechselt

@@ -87,6 +87,17 @@ it('notes on_behalf_of in the meta and keeps it with another reason', function (
         ->and($api->token)->toBe($token);
 });
 
+it('notes quiet in the meta only when quiet, and keeps it with another reason or person (A357)', function () {
+    $person = User::factory()->create();
+
+    $night = Actor::automation('auto_close')->quietly();
+
+    expect(Actor::automation('auto_close')->quiet)->toBeFalse()
+        ->and($night->meta())->toBe(['via' => 'automation', 'reason' => 'auto_close', 'quiet' => true])
+        ->and($night->withReason('close_parent')->meta())->toBe(['via' => 'automation', 'reason' => 'close_parent', 'quiet' => true])
+        ->and($night->onBehalfOf($person)->meta())->toBe(['via' => 'automation', 'reason' => 'auto_close', 'on_behalf_of' => $person->id, 'quiet' => true]);
+});
+
 it('acts through the api with the bearer token', function () {
     $user = User::factory()->create();
     $token = $user->createToken('ci');

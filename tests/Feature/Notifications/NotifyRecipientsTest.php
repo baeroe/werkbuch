@@ -2,6 +2,7 @@
 
 use App\Access\ProjectRole;
 use App\Access\RoleAssignments;
+use App\Actions\Automations\RunDailyAutomations;
 use App\Actions\Comments\AddComment;
 use App\Actions\Comments\EditComment;
 use App\Actions\Notifications\NotifyRecipients;
@@ -15,12 +16,14 @@ use App\Actions\WorkItems\RemapStates;
 use App\Actions\WorkItems\SetSubscription;
 use App\Actions\WorkItems\TransitionWorkItem;
 use App\Actions\WorkItems\UpdateWorkItem;
+use App\Domain\Automations\AutomationKey;
 use App\Domain\Notifications\NotificationKind;
 use App\Domain\Properties\FieldType;
 use App\Domain\Ranking\Rank;
 use App\Events\EventType;
 use App\Events\Outbox;
 use App\Jobs\SendNotificationMailJob;
+use App\Models\Automation;
 use App\Models\Notification;
 use App\Models\NotificationMail;
 use App\Models\NotificationPreference;
@@ -35,6 +38,7 @@ use App\Models\WorkItemType;
 use App\Notifications\NotificationConsumer;
 use App\Support\Actor;
 use App\Support\NotificationFacts;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
@@ -394,6 +398,36 @@ it('tells nobody about a state a rebuilt workflow moved (ruling of T3-M4)', func
     expect($kinds($w['jonas']))->toBe(['state_changed'])
         ->and($kinds($w['tom']))->toBe(['state_changed']);
 })->with([RemapStates::WORKFLOW_CHANGED, RemapStates::STATE_REMOVED]);
+
+it('tells nobody about the night of auto-close: its move, its comment and the parent it closes (A357)', function () use ($world, $kinds, $watch, $mailServer, $mails) {
+    $mailServer();
+    $w = $world();
+    $workflow = $w['web']->workflow;
+    $canceled = (string) $workflow->states()->where('name', 'Cancelled')->value('id');
+    Automation::factory()->for($w['web'])->key(AutomationKey::AutoClose)->enabled(['state_id' => $canceled])->create();
+    Automation::factory()->for($w['web'])->key(AutomationKey::CloseParent)->enabled()->create();
+    $epic = WorkItem::factory()->for($w['web'])->epic()->inState('In Progress')->create(['created_by' => $w['tom']->id]);
+    WorkItem::factory()->childOf($epic)->closed()->create(['created_by' => $w['tom']->id]);
+    $stale = WorkItem::factory()->childOf($epic)->inState('Backlog')->create(['created_by' => $w['tom']->id]);
+    $watch($w['mara'], $stale);
+    $watch($w['jonas'], $epic);
+    WorkItem::query()->whereKey($stale->id)->toBase()->update(['updated_at' => now()->subDays(100)]);
+
+    expect(RunDailyAutomations::run(Actor::system(User::defaultBot(), 'daily_automations'), CarbonImmutable::now('UTC'), true))
+        ->toBe(['archived' => 0, 'closed' => 1, 'skipped' => 0]);
+
+    // the history shows all three, nobody hears of them: neither the watchers nor the lead, neither inbox nor mail
+    expect(eventsOf(EventType::WorkItemStateChanged, $stale))->toHaveCount(1)
+        ->and(eventsOf(EventType::CommentCreated, $stale))->toHaveCount(1)
+        ->and(eventsOf(EventType::WorkItemStateChanged, $epic)->sole()->meta['reason'])->toBe('close_parent')
+        ->and(Notification::query()->count())->toBe(0)
+        ->and(NotificationMail::query()->count())->toBe(0);
+
+    // a comment of a person on the same item tells the watcher as ever
+    AddComment::run(actor($w['ida']), $stale->refresh(), ['body' => 'Doch noch gebraucht.']);
+    expect($kinds($w['mara']))->toBe(['comment'])
+        ->and($mails($w['mara']))->toHaveCount(1);
+});
 
 it('takes the fields of the change, not the values', function () use ($world, $of) {
     $w = $world();

@@ -45,7 +45,7 @@ Every night, auto-close moves the items in Backlog or Unstarted (Todo) that noth
 Auto-archive and auto-close run every night at 03:00 in the time zone of the organization, also on the nights the clocks change. "For 30 days" means 30 × 24 hours before the run. When a night was missed (maintenance), the next one does the work: the items still meet the threshold.
 
 - **Archived projects** and projects being deleted are left out.
-- **Nobody is notified.** Neither the move nor the comment of the night writes a notification; the history of the item shows both.
+- **Nobody is notified.** Neither the move nor the comment of the night writes a notification, and neither does a parent the move closes through "close parent"; the history of the item shows all of it.
 - `php artisan app:run-automations --now` runs both at once, for example after maintenance; `--project=<ULID>` narrows it to one project.
 
 ## When the workflow changes

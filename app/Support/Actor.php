@@ -38,6 +38,11 @@ final readonly class Actor
         public ?string $socket = null,
         /** The person an automation acts for (A342): `meta.on_behalf_of`, so the person is not told of the result of their own move. */
         public ?string $onBehalfOf = null,
+        /**
+         * Work nobody is told of (A357): the night of Auto-Close and what it sets off (`meta.quiet`). The history shows
+         * it, NotificationFacts passes it over.
+         */
+        public bool $quiet = false,
     ) {}
 
     /**
@@ -70,7 +75,7 @@ final readonly class Actor
      */
     public function withReason(string $reason): self
     {
-        return new self($this->user, $this->via, $reason, $this->token, $this->socket, $this->onBehalfOf);
+        return new self($this->user, $this->via, $reason, $this->token, $this->socket, $this->onBehalfOf, $this->quiet);
     }
 
     /**
@@ -79,7 +84,13 @@ final readonly class Actor
      */
     public function onBehalfOf(User $person): self
     {
-        return new self($this->user, $this->via, $this->reason, $this->token, $this->socket, $person->id);
+        return new self($this->user, $this->via, $this->reason, $this->token, $this->socket, $person->id, $this->quiet);
+    }
+
+    /** The same actor doing work nobody is told of (A357): its events carry `meta.quiet`. */
+    public function quietly(): self
+    {
+        return new self($this->user, $this->via, $this->reason, $this->token, $this->socket, $this->onBehalfOf, true);
     }
 
     /**
@@ -110,9 +121,9 @@ final readonly class Actor
     /**
      * What an event notes about the actor besides the account. The socket is for the live consumer alone: neither the
      * history nor any resource shows it (and webhooks never send it, phase 11). `on_behalf_of` only when an automation
-     * acts for a person.
+     * acts for a person, `quiet` only for work nobody is told of (A357).
      *
-     * @return array{via: string, reason: string|null, token_id?: string, socket?: string, on_behalf_of?: string}
+     * @return array{via: string, reason: string|null, token_id?: string, socket?: string, on_behalf_of?: string, quiet?: true}
      */
     public function meta(): array
     {
@@ -128,6 +139,10 @@ final readonly class Actor
 
         if ($this->onBehalfOf !== null) {
             $meta['on_behalf_of'] = $this->onBehalfOf;
+        }
+
+        if ($this->quiet) {
+            $meta['quiet'] = true;
         }
 
         return $meta;

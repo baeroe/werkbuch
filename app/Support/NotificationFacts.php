@@ -39,7 +39,8 @@ final class NotificationFacts
 
     /**
      * The facts of the event, or null when it tells nobody: a type without a kind of notification, a state moved by a
-     * rebuilt workflow, an item that is gone or a project being deleted. Reads the item with its project, the
+     * rebuilt workflow, work of the night nobody is told of (`meta.quiet`, A357: the move and the comment of Auto-Close
+     * and a parent its move closes), an item that is gone or a project being deleted. Reads the item with its project, the
      * subscribers (watchers and opt-outs together) and the people among the mentioned in one query each; the assignee
      * of a new item with one more. A failed template run reads only its project: the lead, and the author from
      * `meta.author_id` (the template may be gone by now; the run failed all the same). Whoever an automation or a run by
@@ -48,7 +49,7 @@ final class NotificationFacts
     public static function of(Event $event): ?EventFacts
     {
         $meta = $event->meta;
-        if (! in_array($event->type, self::TELLING, true)
+        if (! in_array($event->type, self::TELLING, true) || ($meta['quiet'] ?? false) === true
             || ($event->type === EventType::WorkItemStateChanged && in_array($meta['reason'] ?? null, self::QUIET_REASONS, true))) {
             return null;
         }
