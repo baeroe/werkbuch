@@ -1,6 +1,7 @@
 <?php
 
 use App\Domain\Webhooks\Backoff;
+use App\Jobs\DeliverWebhook;
 use App\Live\LiveConsumer;
 use App\Models\Attachment;
 use App\Models\Page;
@@ -9,6 +10,8 @@ use App\Models\User;
 use App\Models\WorkItem;
 use App\Notifications\NotificationConsumer;
 use App\Search\SearchConsumer;
+use App\Webhooks\WebhookBackoff;
+use App\Webhooks\WebhookConsumer;
 use Illuminate\Support\Env;
 use Illuminate\Support\Facades\Http;
 use Spatie\WebhookServer\Signer\DefaultSigner;
@@ -42,7 +45,7 @@ it('has the documented defaults', function () {
         ->and(config('werkbuch.notification_mail_delay'))->toBe(5)
         ->and(config('werkbuch.webhooks_allow_private'))->toBeFalse()
         // the file's default: the tests switch the consumers off (Tests\TestCase)
-        ->and((require base_path('config/werkbuch.php'))['event_consumers'])->toBe([SearchConsumer::class, NotificationConsumer::class, LiveConsumer::class])
+        ->and((require base_path('config/werkbuch.php'))['event_consumers'])->toBe([SearchConsumer::class, NotificationConsumer::class, LiveConsumer::class, WebhookConsumer::class])
         ->and(config('werkbuch.event_consumers'))->toBe([])
         ->and(config('werkbuch.rate_limits.api'))->toBe(600)
         ->and(config('werkbuch.rate_limits.mcp'))->toBe(300)
@@ -181,11 +184,11 @@ it('configures the webhook job of spatie', function () {
         'headers' => ['Content-Type' => 'application/json'],
         'timeout_in_seconds' => 10,
         'tries' => Backoff::TRIES,
-        'backoff_strategy' => 'App\Webhooks\WebhookBackoff',
+        'backoff_strategy' => WebhookBackoff::class,
         'retryable_status_codes' => null,
         'respect_retry_after' => false,
         'retry_with_jitter' => false,
-        'webhook_job' => 'App\Jobs\DeliverWebhook',
+        'webhook_job' => DeliverWebhook::class,
         'verify_ssl' => true,
         'throw_exception_on_failure' => false,
         'tags' => [],

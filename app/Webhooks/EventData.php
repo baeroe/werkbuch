@@ -20,6 +20,7 @@ use App\Models\User;
 use App\Models\WorkItem;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use LogicException;
 
 /**
  * `data` of a webhook (plan "`data` je Ereignis", A362, A363): the subject of the event as REST reads it for one reader
@@ -35,10 +36,6 @@ final class EventData
      */
     public static function of(Event $event, User $reader): ?array
     {
-        if (! $event->type->webhook()) {
-            return null;
-        }
-
         $request = new Request;
         $request->setUserResolver(fn () => $reader);
         $meta = $event->meta;
@@ -55,7 +52,11 @@ final class EventData
             EventType::PageCreated, EventType::PageUpdated, EventType::PageMoved => self::page($event->subject_id, $reader, $request),
             EventType::BotMentioned, EventType::BotAssigned => self::bot($event, $reader, $request),
             EventType::TemplateRunFailed => self::run($event, $reader, $request),
-            default => self::item($event->subject_id, $reader, $request),
+            EventType::WorkItemCreated, EventType::WorkItemUpdated, EventType::WorkItemStateChanged, EventType::WorkItemAssigned,
+            EventType::WorkItemArchived, EventType::WorkItemRestored, EventType::WorkItemRelationAdded,
+            EventType::WorkItemRelationRemoved => self::item($event->subject_id, $reader, $request),
+            // a new event of the catalog needs a branch of its own (T5-M3); the others have no data
+            default => $event->type->webhook() ? throw new LogicException("No webhook data for {$event->type->value}.") : null,
         };
     }
 

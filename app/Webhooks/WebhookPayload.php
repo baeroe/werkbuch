@@ -15,10 +15,35 @@ use App\Support\RelationChanges;
  * `changes` are those of the event with the relation ends resolved for the reader (RelationChanges, like the history)
  * and without the text of a comment that is gone (A228). Nothing of `meta` ever leaves: not `socket` (A282),
  * `on_behalf_of` (A342), `quiet` (A357), `mentioned`, `kept_version`; the small forms of deletions take only their
- * named fields. The body is built once when the event is consumed and encoded there (task 6, A362).
+ * named fields. The body is built once when the event is consumed and stored encoded (encode(), task 6, A362).
  */
 final class WebhookPayload
 {
+    /**
+     * The most a body may have in bytes (T5-M2): a description of 256 KB stands in `data` twice (Markdown and JSON) and
+     * in `changes` as old and new, rich text values come on top; a body over this goes out without `changes`, and if
+     * still too large without `data` too (like a subject that is gone, A362): the receiver reads the subject over REST.
+     */
+    public const MAX_BYTES = 1_048_576;
+
+    /**
+     * The body as it is stored and sent: JSON with slashes and Unicode as they are, within MAX_BYTES.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    public static function encode(array $payload): string
+    {
+        $json = self::json($payload);
+        if (strlen($json) > self::MAX_BYTES) {
+            $json = self::json([...$payload, 'changes' => null]);
+        }
+        if (strlen($json) > self::MAX_BYTES) {
+            $json = self::json([...$payload, 'data' => null, 'changes' => null]);
+        }
+
+        return $json;
+    }
+
     /**
      * @return array{id: string, event: string, occurred_at: string, actor: array{id: string, type: string, name: string, handle: string}, project: array{id: string, identifier: string|null}|null, data: array<string, mixed>|null, changes: array<string, mixed>|null}
      */
@@ -56,6 +81,14 @@ final class WebhookPayload
             'data' => ['webhook' => ['id' => $webhook->id, 'name' => $webhook->name]],
             'changes' => null,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private static function json(array $payload): string
+    {
+        return json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
     }
 
     /**

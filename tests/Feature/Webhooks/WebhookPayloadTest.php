@@ -32,6 +32,7 @@ use App\Webhooks\EventData;
 use App\Webhooks\WebhookPayload;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 // The body of a webhook (plan "Payload und Header", A362, A363): the envelope of the event, `data` from the resources
 // as REST reads them for one reader (the bot of the webhook, else the default bot), `changes` with the relation ends
@@ -407,4 +408,20 @@ it('asks as often for an item with 20 relations as for one with one', function (
     };
 
     expect($count(20))->toBe($count(1));
+});
+
+// every event of the catalog has a branch of its own; one without would throw instead of reading the subject as an
+// item (T5-M3); an event outside the catalog has no data
+it('has data for every event of the catalog and none for the others', function () {
+    $event = fn (EventType $type): Event => (new Event)->forceFill([
+        'type' => $type, 'subject_type' => 'work_item', 'subject_id' => (string) Str::ulid(), 'meta' => [],
+    ]);
+
+    foreach (EventType::cases() as $type) {
+        $data = EventData::of($event($type), User::defaultBot());
+        expect($data === null || is_array($data))->toBeTrue();
+        if (! $type->webhook()) {
+            expect($data)->toBeNull();
+        }
+    }
 });

@@ -27,6 +27,7 @@ use App\RichText\Document;
 use App\Search\SearchConsumer;
 use App\Support\Actor;
 use App\Support\NotificationFacts;
+use App\Webhooks\WebhookConsumer;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Tests\Support\RichTextFixtures as F;
@@ -58,7 +59,7 @@ it('is a consumer of every event, in the queue notifications, with the tries of 
     $consumer = new NotificationConsumer;
 
     expect(config('werkbuch.event_consumers'))->toBe([])        // off in tests until a test switches it on (K2)
-        ->and(require repo_path('config/werkbuch.php'))->toHaveKey('event_consumers', [SearchConsumer::class, NotificationConsumer::class, LiveConsumer::class])
+        ->and(require repo_path('config/werkbuch.php'))->toHaveKey('event_consumers', [SearchConsumer::class, NotificationConsumer::class, LiveConsumer::class, WebhookConsumer::class])
         ->and($consumer->key())->toBe('notifications')
         ->and($consumer->queue())->toBe('notifications')
         ->and($consumer->tries())->toBe(8)

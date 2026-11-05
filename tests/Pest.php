@@ -102,7 +102,8 @@ function modelWrites(string $code, string $file = 'code'): array
 {
     return codeMatches($code, $file, [
         '/->(?:save|update|delete|forceFill|fill|forceDelete|restore|increment|decrement)\(/',
-        '/::(?:create|insert|destroy|updateOrCreate|firstOrCreate)\(/',
+        // spatie's WebhookCall::create() builds a job, it writes no row
+        '/(?<!WebhookCall)::(?:create|insert|destroy|updateOrCreate|firstOrCreate)\(/',
     ]);
 }
 

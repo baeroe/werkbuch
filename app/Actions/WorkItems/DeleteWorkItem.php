@@ -28,7 +28,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * the attachments of the item and of its comments (pictures of their texts, files of the file list) go with their
  * files after the commit (AttachmentFiles, K12), except those another saved text of the project still names (copied,
  * A233): they become that text's (AttachmentTexts::handOverOrRemove, Ruling T13-I1). Its own events stay, with a last `work_item.deleted` naming its key
- * and title.
+ * and title, and its assignee in `meta.assignee_id` (the webhook of a bot hears that its item is gone, K9; meta never
+ * leaves the server).
  *
  * The locks of P1 (ItemLock::take), then the children `for update` and the relations of the item `for update` (each
  * end through its own index, so the lock covers only those rows): a second deletion of the other end of a relation
@@ -85,7 +86,7 @@ final class DeleteWorkItem
             $key = $locked->key;
             $locked->delete();
 
-            EventRecorder::record(EventType::WorkItemDeleted, $actor, $locked, $locked->project, null, ['key' => $key, 'title' => $locked->title]);
+            EventRecorder::record(EventType::WorkItemDeleted, $actor, $locked, $locked->project, null, ['key' => $key, 'title' => $locked->title, 'assignee_id' => $locked->assignee_id]);
         }, 3));
     }
 

@@ -111,6 +111,7 @@ use App\Actions\Views\SaveView;
 use App\Actions\Webhooks\DeleteWebhook;
 use App\Actions\Webhooks\GetWebhook;
 use App\Actions\Webhooks\ListWebhooks;
+use App\Actions\Webhooks\QueueDeliveries;
 use App\Actions\Webhooks\RotateWebhookSecret;
 use App\Actions\Webhooks\SaveWebhook;
 use App\Actions\Workflows\DeleteWorkflow;
@@ -1155,6 +1156,13 @@ return [
     'NotifyRecipients' => [
         'action' => NotifyRecipients::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => NotifyRecipients::run($a, Event::query()->where('type', EventType::BotCreated)->firstOrFail()),
+        'system' => true,
+    ],
+    // the work of the consumer `webhooks` for an event of the outbox (here one of the migrations, which no webhook can
+    // take), without an event of its own
+    'QueueDeliveries' => [
+        'action' => QueueDeliveries::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => QueueDeliveries::run($a, Event::query()->where('type', EventType::BotCreated)->firstOrFail()),
         'system' => true,
     ],
     // the work of SendNotificationMailJob for a collection that is due (here one without lines: it is skipped), without

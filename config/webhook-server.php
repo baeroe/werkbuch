@@ -1,13 +1,15 @@
 <?php
 
 use App\Domain\Webhooks\Backoff;
+use App\Jobs\DeliverWebhook;
+use App\Webhooks\WebhookBackoff;
 use Spatie\WebhookServer\Signer\DefaultSigner;
 
 /*
  * spatie/laravel-webhook-server 4 (phase 11, K1). Every webhook job comes out of WebhookCall::create(), which reads this
  * file: a call to useJob() after create() would throw the configured job away, so the job, its queue and the retries
  * stand here. The job signs each attempt itself (`X-Werkbuch-Signature` with a fresh timestamp), so spatie's signer
- * and its `Webhook-Id` header stay unused. The job class and the backoff strategy come with tasks 6 and 7.
+ * and its `Webhook-Id` header stay unused.
  */
 return [
 
@@ -76,7 +78,7 @@ return [
     /*
      * This class determines how many seconds there should be between attempts (Backoff::OFFSETS).
      */
-    'backoff_strategy' => 'App\Webhooks\WebhookBackoff',
+    'backoff_strategy' => WebhookBackoff::class,
 
     /*
      * Retry all unsuccessful HTTP statuses by default. Set an array to limit them.
@@ -97,7 +99,7 @@ return [
     /*
      * This class is used to dispatch webhooks onto the queue.
      */
-    'webhook_job' => 'App\Jobs\DeliverWebhook',
+    'webhook_job' => DeliverWebhook::class,
 
     /*
      * By default we will verify that the ssl certificate of the destination
