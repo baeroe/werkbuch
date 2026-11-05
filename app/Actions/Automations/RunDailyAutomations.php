@@ -27,6 +27,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Lorisleiva\Actions\Concerns\AsAction;
 use RuntimeException;
+use Throwable;
 
 /**
  * The nightly automations (spec 4.13, A343, A344): the hourly RunDailyAutomationsJob acts in the hour 03:00–03:59 in the
@@ -172,7 +173,8 @@ final class RunDailyAutomations
     /**
      * Each candidate in a transaction of its own, locked and checked again by `$work` (`done` or `none`); a refusal
      * (409 `transition_not_allowed` or another conflict, a 422 of the move) is `skipped` and leaves nothing behind, an
-     * item gone or a project being deleted meanwhile (404) `none`. `$tally` hears each.
+     * item gone or a project being deleted meanwhile (404) `none`; any other failure is reported and `skipped`, and the
+     * night goes on with the next item (W1 of the final review). `$tally` hears each.
      *
      * @param  Builder<WorkItem>  $candidates
      * @param  Closure(WorkItem): string  $work
@@ -190,6 +192,10 @@ final class RunDailyAutomations
                     }, 3);
                 } catch (Problem|ValidationException $refusal) {
                     $outcome = $refusal instanceof Problem && $refusal->status === 404 ? 'none' : 'skipped';
+                } catch (Throwable $failure) {
+                    // anything else (a lock wait timeout after its three attempts) costs this item, never the night
+                    report($failure);
+                    $outcome = 'skipped';
                 }
 
                 $tally($outcome);

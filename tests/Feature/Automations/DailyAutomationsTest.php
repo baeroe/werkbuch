@@ -16,6 +16,7 @@ use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Str;
 
 /*
@@ -146,4 +147,29 @@ it('checks each item again under its lock: reopened or commented after it was re
         ->and($reads)->toBe(2)
         ->and($closed->fresh()->archived_at)->toBeNull()
         ->and($stale->fresh()->state_id)->toBe($stale->state_id);
+});
+
+it('reports an item that fails with anything but a refusal, counts it as skipped and goes on with the night (W1)', function () use ($run) {
+    Exceptions::fake();
+    $this->travelTo(CarbonImmutable::parse('2026-11-10 02:00', 'UTC'));
+    $project = Project::factory()->create();
+    $canceled = (string) $project->workflow()->firstOrFail()->states()->where('name', 'Cancelled')->value('id');
+    Automation::factory()->for($project)->key(AutomationKey::AutoClose)->enabled(['state_id' => $canceled])->create();
+    [$first, $second] = WorkItem::factory()->for($project)->inState('Backlog')->count(2)->create(['updated_at' => now()->subDays(100)])
+        ->sortBy('id')->values()->all();
+    $later = Project::factory()->create();
+    Automation::factory()->for($later)->key(AutomationKey::AutoArchive)->enabled()->create();
+    $closed = WorkItem::factory()->for($later)->closed()->create(['closed_at' => now()->subDays(40)]);
+    // the lock of the first item fails as a lock wait timeout would after its three attempts
+    DB::listen(function (QueryExecuted $query) use ($first): void {
+        if (str_contains($query->sql, 'for update') && str_starts_with($query->sql, 'select * from `work_items`') && in_array($first->id, $query->bindings, true)) {
+            throw new RuntimeException('Lock wait timeout exceeded');
+        }
+    });
+
+    expect($run('2026-11-10 02:00', true))->toBe(['archived' => 1, 'closed' => 1, 'skipped' => 1])
+        ->and($first->fresh()->state_id)->toBe($first->state_id)
+        ->and($second->fresh()->state_id)->toBe($canceled)
+        ->and($closed->fresh()->archived_at)->not->toBeNull();
+    Exceptions::assertReported(fn (RuntimeException $e) => $e->getMessage() === 'Lock wait timeout exceeded');
 });
