@@ -14,6 +14,7 @@ use App\Actions\Templates\DeleteTemplate;
 use App\Actions\Templates\RunTemplate;
 use App\Actions\Users\DeactivateUser;
 use App\Actions\Users\UpdateUserRole;
+use App\Actions\Webhooks\DisableWebhook;
 use App\Actions\WorkItems\SetSubscription;
 use App\Actions\WorkItems\TransitionWorkItem;
 use App\Actions\WorkItems\UpdateWorkItem;
@@ -30,6 +31,7 @@ use App\Models\Organization;
 use App\Models\Project;
 use App\Models\Template;
 use App\Models\User;
+use App\Models\Webhook;
 use App\Models\WorkItem;
 use App\Notifications\NotificationConsumer;
 use App\Support\Actor;
@@ -505,5 +507,59 @@ it('checks a line of a failed run like any line: read or mail off', function () 
 
     expect($send($templateMail($w['mara'], $template)))->toBe(NotificationMail::SKIPPED)
         ->and($send($templateMail($w['tom'], $template)))->toBe(NotificationMail::SKIPPED);
+    Mail::assertNothingSent();
+});
+
+/** Lena switched the mail of `webhook_disabled` on; the system switches the webhook off. */
+$disabledWebhook = function (array $w): array {
+    SaveNotificationPreferences::run(actor($w['lena']), ['preferences' => [['event' => 'webhook_disabled', 'channel' => 'mail', 'enabled' => true]]]);
+    $webhook = Webhook::factory()->create(['name' => 'Build-Hook']);
+    DisableWebhook::run(Actor::system(User::defaultBot(), 'webhooks'), $webhook);
+
+    return [$webhook, NotificationMail::query()->where('user_id', $w['lena']->id)->where('scope', "webhook:{$webhook->id}")->sole()];
+};
+
+it('mails an org admin of a webhook the system switched off, with the link to its deliveries', function () use ($world, $send, $disabledWebhook, $mailsTo) {
+    $w = $world();
+    [$webhook, $mail] = $disabledWebhook($w);
+
+    expect($send($mail))->toBe(NotificationMail::SENT);
+
+    $link = "https://werkbuch.example.com/settings/webhooks?deliveries={$webhook->id}";
+    $mailsTo($w['lena'])->sole()
+        ->assertHasSubject('Webhook „Build-Hook“ abgeschaltet')
+        ->assertSeeInHtml($link, false)->assertSeeInText($link)
+        ->assertSeeInHtml('https://werkbuch.example.com/me/notifications', false)
+        ->assertDontSeeInText('<');
+    expect($mailsTo($w['tom']))->toBeEmpty();
+});
+
+it('skips a disabled-webhook mail for a person no longer admin', function () use ($world, $send, $disabledWebhook) {
+    $w = $world();
+    [, $mail] = $disabledWebhook($w);
+
+    UpdateUserRole::run(actor(User::factory()->admin()->create()), $w['lena'], OrgRole::Member);
+
+    expect($send($mail))->toBe(NotificationMail::SKIPPED);
+    Mail::assertNothingSent();
+});
+
+it('skips the mail once the webhook is on again', function () use ($world, $send, $disabledWebhook) {
+    $w = $world();
+    [$webhook, $mail] = $disabledWebhook($w);
+
+    $webhook->update(['active' => true, 'disabled_at' => null]);
+
+    expect($send($mail))->toBe(NotificationMail::SKIPPED);
+    Mail::assertNothingSent();
+});
+
+it('skips the mail once the webhook is deleted', function () use ($world, $send, $disabledWebhook) {
+    $w = $world();
+    [$webhook, $mail] = $disabledWebhook($w);
+
+    $webhook->delete();
+
+    expect($send($mail))->toBe(NotificationMail::SKIPPED);
     Mail::assertNothingSent();
 });

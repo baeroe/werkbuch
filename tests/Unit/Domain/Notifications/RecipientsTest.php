@@ -198,7 +198,7 @@ it('tells somebody for exactly the events NotificationFacts reads (T5-M2)', func
 
     foreach (EventType::cases() as $type) {
         // as much as an event can carry: a changed field, a mention, an assignee, watchers and a lead
-        $recipients = Recipients::of($facts($type->value, ['changedFields' => ['title'], 'mentioned' => [$tom], 'assignee' => $tom]));
+        $recipients = Recipients::of($facts($type->value, ['changedFields' => ['title'], 'mentioned' => [$tom], 'assignee' => $tom, 'orgAdmins' => [$tom]]));
 
         expect($recipients !== [])->toBe(in_array($type->value, $telling, true), $type->value);
     }
@@ -236,4 +236,21 @@ it('leaves out who ran the template now (K12)', function () use ($facts, $table,
     $failed = $facts('template.run_failed', ['actorId' => 'u_bot', 'itemId' => null, 'watchers' => [], 'templateAuthorId' => $tom, 'causedBy' => 'u_mara']);
 
     expect($table(Recipients::of($failed)))->toBe([$tom => ['template_run_failed']]);
+});
+
+it('tells every org admin of a disabled webhook', function () use ($facts, $table, $ida, $mara, $tom) {
+    // the system acts, the event hangs on no item and no project
+    $disabled = $facts('webhook.disabled', ['actorId' => 'u_bot', 'projectId' => null, 'itemId' => null, 'watchers' => [], 'orgAdmins' => [$tom, $mara]]);
+
+    expect($table(Recipients::of($disabled)))->toBe([$mara => ['webhook_disabled'], $tom => ['webhook_disabled']])
+        ->and(Recipients::of($facts('webhook.disabled', ['orgAdmins' => []])))->toBe([])
+        ->and($ida)->not->toBeNull();
+});
+
+it('tells no member and no watcher of a disabled webhook', function () use ($facts, $table, $lene, $mara, $noah, $tom) {
+    $disabled = $facts('webhook.disabled', ['actorId' => 'u_bot', 'mentioned' => [$noah], 'assignee' => $lene, 'watchers' => [$lene], 'orgAdmins' => [$tom]]);
+
+    expect($table(Recipients::of($disabled)))->toBe([$tom => ['webhook_disabled']])
+        // the lead of the project is no admin by that
+        ->and(array_key_exists($mara, $table(Recipients::of($disabled))))->toBeFalse();
 });

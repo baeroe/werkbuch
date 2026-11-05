@@ -2,6 +2,7 @@
 
 namespace App\Actions\Notifications;
 
+use App\Access\OrgRole;
 use App\Access\Visibility;
 use App\Domain\Notifications\Channel;
 use App\Domain\Notifications\NotificationKind;
@@ -49,7 +50,7 @@ final class NotifyRecipients
             return 0;
         }
 
-        $people = $this->reachable((string) $facts->projectId, array_map(fn ($recipient) => $recipient->userId, $recipients));
+        $people = $this->reachable($facts->projectId, array_map(fn ($recipient) => $recipient->userId, $recipients));
         $stored = NotificationPreference::storedFor(array_values($people->keys()->all()));
         $mail = MailSetup::configured();
         $described = null;
@@ -108,11 +109,15 @@ final class NotifyRecipients
 
     /**
      * The mail collection a row of the event joins: the one of its item, or of its template for a failed run, which has
-     * no item (A348).
+     * no item (A348), or of its webhook for one the system switched off (phase 11).
      */
     private static function scopeOf(Event $event, ?string $itemId): string
     {
-        return $event->type === EventType::TemplateRunFailed ? "template:{$event->subject_id}" : "item:{$itemId}";
+        return match ($event->type) {
+            EventType::TemplateRunFailed => "template:{$event->subject_id}",
+            EventType::WebhookDisabled => "webhook:{$event->subject_id}",
+            default => "item:{$itemId}",
+        };
     }
 
     /**
@@ -173,18 +178,22 @@ final class NotifyRecipients
     }
 
     /**
-     * The candidates who are active people and see the project now, by ID, with a fixed number of queries however many
+     * The candidates who are active people and see the project now (without a project: active org admins), by ID, with a fixed number of queries however many
      * there are (Visibility::seeing); the role index is read afresh (A35), a change of access earlier in the same
      * process counts.
      *
      * @param  list<string>  $ids
      * @return Collection<string, User>
      */
-    private function reachable(string $projectId, array $ids): Collection
+    private function reachable(?string $projectId, array $ids): Collection
     {
         Visibility::forget();
-        $project = Project::query()->find($projectId);
         $people = User::query()->whereKey($ids)->where('type', AccountType::Person)->get();
+        if ($projectId === null) {
+            // no project (`webhook_disabled`, K12): the rule of Notification::visibleTo, active org admins
+            return $people->filter(fn (User $person) => ! $person->isDisabled() && Visibility::orgRole($person) === OrgRole::Admin)->keyBy('id');
+        }
+        $project = Project::query()->find($projectId);
 
         return collect($project === null ? [] : Visibility::seeing($project, $people))->keyBy('id');
     }

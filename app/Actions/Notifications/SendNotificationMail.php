@@ -12,6 +12,7 @@ use App\Models\NotificationMail;
 use App\Models\NotificationPreference;
 use App\Models\Template;
 use App\Models\User;
+use App\Models\Webhook;
 use App\Models\WorkItem;
 use App\RichText\Document;
 use App\Support\Actor;
@@ -29,7 +30,7 @@ use Throwable;
  * decided now, not when it was collected (Review Focus 3): the person active and a person, the project one they see
  * (Notification::visibleTo, read afresh; never through NotificationPolicy, which is the inbox's), the item there, the
  * line unread (a read one needs no mail) and mail still on for its kind, a reminder only for an item that is still
- * open, not archived and the person's (T8-M5), a failed template run only while its template is there (A348), and a
+ * open, not archived and the person's (T8-M5), a failed template run only while its template is there (A348), a switched-off webhook only while it is there and still off (phase 11), and a
  * mail server still set (T7-M5). Nothing left: `skipped`, closed like a sent one (K8). The texts are the current ones,
  * written for the person (ReaderNames: a reference to an item they do not see stays hidden, A229). `open_key` goes right after the lock, before the lines are read and before SMTP: a consumer
  * collecting for the same person and item waits at its insert and opens a new collection once this one is closed (K7);
@@ -81,8 +82,9 @@ final class SendNotificationMail
 
         $person = User::query()->findOrFail($mail->user_id);
         $template = self::templateOf($mail);
+        $webhook = self::webhookOf($mail);
         // a mail server that went away since the collection opened (`log`, `array`) sends nothing: skipped, never `sent`
-        $lines = MailSetup::configured() ? $this->lines($mail, $person, $template) : new EloquentCollection;
+        $lines = MailSetup::configured() ? $this->lines($mail, $person, $template, $webhook) : new EloquentCollection;
         if ($lines->isNotEmpty()) {
             $texts = Notification::textsOf($lines);
             $digest = new NotificationDigest(
@@ -91,6 +93,7 @@ final class SendNotificationMail
                 ReaderNames::of(array_values($texts), $person),
                 reminders: str_starts_with($mail->scope, 'due:'),
                 template: $template,
+                webhook: $webhook,
             );
             Mail::to($person)->locale($person->preferredLocale())->send($digest);
         }
@@ -123,7 +126,7 @@ final class SendNotificationMail
      *
      * @return EloquentCollection<int, Notification>
      */
-    private function lines(NotificationMail $mail, User $person, ?Template $template): EloquentCollection
+    private function lines(NotificationMail $mail, User $person, ?Template $template, ?Webhook $webhook): EloquentCollection
     {
         if (! $person->isPerson() || $person->isDisabled()) {
             return new EloquentCollection;
@@ -137,6 +140,9 @@ final class SendNotificationMail
             ->filter(fn (Notification $line) => Preferences::enabled($line->kind, Channel::Mail, $stored) && match (true) {
                 // a failed run has no item: it needs its template still there (A348)
                 $line->kind === NotificationKind::TemplateRunFailed => $template !== null && ($line->data['template_id'] ?? null) === $template->id,
+                // a switched-off webhook has no item: it needs to be there and still off (phase 11, K12); that the person is
+                // still an org admin is Notification::visibleTo
+                $line->kind === NotificationKind::WebhookDisabled => $webhook !== null && ! $webhook->active && ($line->data['webhook_id'] ?? null) === $webhook->id,
                 $line->workItem === null => false,
                 $line->kind === NotificationKind::Due => self::stillDue($line->workItem, $person),
                 default => true,
@@ -155,6 +161,19 @@ final class SendNotificationMail
         }
 
         return Template::query()->with('project')->find(substr($mail->scope, strlen('template:')));
+    }
+
+    /**
+     * The webhook of a collection of switch-offs (`webhook:<id>`, phase 11), if it is still there; null for every other
+     * collection.
+     */
+    private static function webhookOf(NotificationMail $mail): ?Webhook
+    {
+        if (! str_starts_with($mail->scope, 'webhook:')) {
+            return null;
+        }
+
+        return Webhook::query()->find(substr($mail->scope, strlen('webhook:')));
     }
 
     /**
