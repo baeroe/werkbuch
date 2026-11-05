@@ -109,9 +109,12 @@ use App\Actions\Views\GetView;
 use App\Actions\Views\ListViews;
 use App\Actions\Views\SaveView;
 use App\Actions\Webhooks\DeleteWebhook;
+use App\Actions\Webhooks\DisableWebhook;
 use App\Actions\Webhooks\GetWebhook;
 use App\Actions\Webhooks\ListWebhooks;
+use App\Actions\Webhooks\PrepareWebhookAttempt;
 use App\Actions\Webhooks\QueueDeliveries;
+use App\Actions\Webhooks\RecordWebhookAttempt;
 use App\Actions\Webhooks\RotateWebhookSecret;
 use App\Actions\Webhooks\SaveWebhook;
 use App\Actions\Workflows\DeleteWorkflow;
@@ -157,6 +160,9 @@ use App\Models\Property;
 use App\Models\RelationType;
 use App\Models\Resolution;
 use App\Models\User;
+use App\Models\Webhook;
+use App\Models\WebhookAttempt;
+use App\Models\WebhookDelivery;
 use App\Models\Workflow;
 use App\Models\WorkItem;
 use App\Models\WorkItemRelation;
@@ -168,6 +174,7 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Laravel\Fortify\Actions\EnableTwoFactorAuthentication;
 use PragmaRX\Google2FA\Google2FA;
+use RuntimeException;
 use Tests\Feature\Access\MatrixWorld;
 use Tests\Support\WorkflowFixtures;
 
@@ -1164,6 +1171,28 @@ return [
         'action' => QueueDeliveries::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => QueueDeliveries::run($a, Event::query()->where('type', EventType::BotCreated)->firstOrFail()),
         'system' => true,
+    ],
+    // the check before a try of DeliverWebhook (a pending delivery of a fresh webhook: the checked target), without an
+    // event of its own
+    'PrepareWebhookAttempt' => [
+        'action' => PrepareWebhookAttempt::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => PrepareWebhookAttempt::run($a, WebhookDelivery::factory()->for($w->webhook())->create()->id, WebhookAttempt::SCHEDULED)
+            ?? throw new RuntimeException('Nothing to send.'),
+        'system' => true,
+    ],
+    // the log of a try of DeliverWebhook (here a success), bookkeeping without an event
+    'RecordWebhookAttempt' => [
+        'action' => RecordWebhookAttempt::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => RecordWebhookAttempt::run($a, WebhookDelivery::factory()->for($w->webhook())->create()->id, 200, 40, 'ok', null, WebhookAttempt::SCHEDULED)
+            ?? throw new RuntimeException('Nothing logged.'),
+        'system' => true,
+    ],
+    // the system switches a webhook off that failed for 24 hours (A366), from RecordWebhookAttempt under its lock
+    'DisableWebhook' => [
+        'action' => DisableWebhook::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => DB::transaction(fn () => DisableWebhook::run($a, Webhook::query()->lockForUpdate()->findOrFail($w->webhook()->id))),
+        'system' => true,
+        'event' => EventType::WebhookDisabled,
     ],
     // the work of SendNotificationMailJob for a collection that is due (here one without lines: it is skipped), without
     // an event of its own

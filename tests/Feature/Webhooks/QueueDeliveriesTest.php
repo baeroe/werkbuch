@@ -34,7 +34,9 @@ use App\Support\Actor;
 use App\Webhooks\WebhookBackoff;
 use App\Webhooks\WebhookConsumer;
 use App\Webhooks\WebhookPayload;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Tests\Support\RichTextFixtures as F;
@@ -111,7 +113,7 @@ it('queues one delivery per matching webhook, with the body of its reader', func
         ->toBe($deliveries->pluck('id')->sort()->values()->all());
 });
 
-it('queues a job spatie can send, without body, secret and signature, after the commit (K1, K7)', function () use ($world, $create) {
+it('queues a job spatie can send, without body, URL, secret and signature, after the commit (K1, K7, T6-M4)', function () use ($world, $create) {
     Queue::fake([DeliverWebhook::class]);
     $w = $world();
     $webhook = Webhook::factory()->create(['url' => 'https://receiver.example.com/hook?token=t0k3n']);
@@ -120,7 +122,7 @@ it('queues a job spatie can send, without body, secret and signature, after the 
 
     $delivery = WebhookDelivery::query()->sole();
     Queue::assertPushedOn('webhooks', DeliverWebhook::class, fn (DeliverWebhook $job) => $job->uuid === $delivery->id
-        && $job->webhookUrl === $webhook->url
+        && $job->webhookUrl === DeliverWebhook::PLACEHOLDER_URL && ! str_contains(serialize($job), 't0k3n')
         && $job->meta === ['delivery_id' => $delivery->id, 'kind' => 'scheduled']
         && $job->payload === '' && $job->getBody() === ''
         && $job->httpVerb === 'post' && $job->verifySsl === true && $job->tries === 8 && $job->requestTimeout === 10
@@ -136,14 +138,18 @@ it('waits between the tries as the plan says (A365)', function () {
         ->toBe([60, 300, 1800, 7200, 21600, 43200, 12240]);
 });
 
-it('sends nothing yet: the job only waits for task 7', function () use ($world, $create) {
+it('sends the delivery after the commit, signed, and logs the attempt (task 7)', function () use ($world, $create) {
     $w = $world();
-    Webhook::factory()->create();
+    Webhook::factory()->create(['url' => 'https://receiver.example.com/hook']);
+    resolver(['receiver.example.com' => ['93.184.216.34']]);
+    Http::fake(['*' => Http::response('ok')]);
 
     $create($w['mara'], $w['ops']);
 
-    // the sync queue of the tests ran the job; Http::preventStrayRequests would have thrown on any request
-    expect(WebhookDelivery::query()->sole()->only(['status', 'attempts']))->toBe(['status' => WebhookDelivery::PENDING, 'attempts' => 0]);
+    // the sync queue of the tests ran the job at the commit
+    Http::assertSent(fn (Request $request) => $request->header('X-Werkbuch-Event') === ['work_item.created']
+        && $request->body() === WebhookDelivery::query()->sole()->body);
+    expect(WebhookDelivery::query()->sole()->only(['status', 'attempts']))->toBe(['status' => WebhookDelivery::SUCCEEDED, 'attempts' => 1]);
 });
 
 it('skips an event the webhook did not choose', function () use ($world, $create, $delivered) {

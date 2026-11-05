@@ -1,7 +1,9 @@
 <?php
 
 use App\Access\ProjectRole;
+use App\Actions\Webhooks\PrepareWebhookAttempt;
 use App\Actions\Webhooks\QueueDeliveries;
+use App\Actions\Webhooks\RecordWebhookAttempt;
 use App\Actions\WorkItems\CreateWorkItem;
 use App\Events\EventType;
 use App\Events\Outbox;
@@ -10,19 +12,19 @@ use App\Models\Event;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\Webhook;
+use App\Models\WebhookAttempt;
 use App\Models\WebhookDelivery;
 use App\Support\Actor;
 use App\Webhooks\WebhookConsumer;
 use Illuminate\Database\QueryException;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Tests\Support\RaceConnections;
 
 /*
  * Two at work on one event (task 6, Review Focus 1, K16): `mariadb` holds a consumer that has just written the
  * deliveries, like a job in progress; `mariadb_second` is a second consumer of the same event (a redispatch), a second
- * QueueDeliveries without the claim (queue:retry), or a failing attempt that switches the webhook off, and gives up
- * waiting for a lock after one second.
+ * QueueDeliveries without the claim (queue:retry), or a failing attempt that switches the webhook off (RecordWebhookAttempt,
+ * both ways round), and gives up waiting for a lock after one second.
  */
 
 beforeEach(function () {
@@ -83,24 +85,50 @@ it('queues one job per webhook when two QueueDeliveries of one event run without
     Queue::assertPushed(DeliverWebhook::class, 2);
 });
 
-it('lets a consumer and a failing attempt of the same webhook both finish without a deadlock', function () use ($world, $consume) {
+/** A pending delivery of the webhook whose try fails 24 hours after its first failure: it switches the webhook off. */
+$failing = function (Webhook $webhook): Closure {
+    $webhook->update(['failing_since' => now()->subDay()->subMinute()]);
+    $delivery = WebhookDelivery::factory()->for($webhook)->create(['event_id' => null]);
+
+    return fn () => RecordWebhookAttempt::run(Actor::system(User::defaultBot(), 'webhooks'), $delivery->id, 500, 80, 'down', null, WebhookAttempt::SCHEDULED, false);
+};
+
+it('lets a failing attempt that switches the webhook off wait for a consumer, and cancels what it queued', function () use ($world, $consume, $failing) {
     $w = $world();
     $webhook = $w['webhooks']->first();
+    $fail = $failing($webhook);
 
     RaceConnections::hold($consume($w['event']));
 
-    // what RecordWebhookAttempt (task 7) does when a try switches the webhook off: lock it, switch it off, cancel what
-    // is still pending; it waits for the consumer, which holds the webhook shared for the foreign key of its rows
+    // the consumer holds the webhook shared for the foreign key of its rows: the attempt waits for its lock ...
+    RaceConnections::expectLockWait(RaceConnections::second($fail), 'webhooks');
+
+    // ... and then switches it off and cancels the delivery the consumer just wrote
     RaceConnections::releaseBeforeLock('webhooks');
-    $disabled = RaceConnections::second(fn () => DB::transaction(function () use ($webhook) {
-        $locked = Webhook::query()->lockForUpdate()->findOrFail($webhook->id);
-        $locked->update(['active' => false, 'disabled_at' => now()]);
-
-        return WebhookDelivery::query()->where('webhook_id', $locked->id)->where('status', WebhookDelivery::PENDING)
-            ->update(['status' => WebhookDelivery::CANCELLED]);
-    }));
-
-    expect($disabled)->toBe(1)
-        ->and(WebhookDelivery::query()->where('webhook_id', $webhook->id)->sole()->status)->toBe(WebhookDelivery::CANCELLED)
+    expect(RaceConnections::second($fail))->toBeInstanceOf(WebhookAttempt::class)
+        ->and($webhook->fresh()->active)->toBeFalse()
+        ->and(eventsOf(EventType::WebhookDisabled, $webhook))->toHaveCount(1)
+        ->and(WebhookDelivery::query()->where('webhook_id', $webhook->id)->pluck('status')->unique()->all())->toBe([WebhookDelivery::CANCELLED])
         ->and(WebhookDelivery::query()->where('webhook_id', '!=', $webhook->id)->sole()->status)->toBe(WebhookDelivery::PENDING);
+});
+
+it('lets a consumer wait for an attempt that switches the webhook off, and its delivery never goes out', function () use ($world, $consume, $failing) {
+    $w = $world();
+    $webhook = $w['webhooks']->first();
+    $fail = $failing($webhook);
+
+    RaceConnections::hold($fail);
+
+    // the attempt holds the webhook exclusively: the insert of the consumer waits for it (the foreign key) ...
+    $insert = 'insert ignore into `webhook_deliveries`';
+    RaceConnections::expectLockWait(RaceConnections::second($consume($w['event'])), 'webhook_deliveries', $insert, ')');
+
+    // ... then writes its delivery as pending: it read the webhook before it went off, but its try stops at once
+    RaceConnections::releaseBefore($insert);
+    expect(RaceConnections::second($consume($w['event'])))->toBeTrue();
+    $queued = WebhookDelivery::query()->where('webhook_id', $webhook->id)->whereNotNull('event_id')->sole();
+    expect($queued->status)->toBe(WebhookDelivery::PENDING)
+        ->and(PrepareWebhookAttempt::run(Actor::system(User::defaultBot(), 'webhooks'), $queued->id, WebhookAttempt::SCHEDULED))->toBeNull()
+        ->and($queued->fresh()->status)->toBe(WebhookDelivery::CANCELLED)
+        ->and(eventsOf(EventType::WebhookDisabled, $webhook))->toHaveCount(1);
 });
