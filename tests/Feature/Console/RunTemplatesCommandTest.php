@@ -6,6 +6,8 @@ use App\Models\Template;
 use App\Models\TemplateRun;
 use App\Models\User;
 use App\Models\WorkItem;
+use Illuminate\Contracts\Debug\ExceptionHandler;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
@@ -30,6 +32,46 @@ it('runs the due templates in its own process with --now', function () {
         ->and(TemplateRun::query()->count())->toBe(1);
 
     $this->artisan('app:run-templates', ['--now' => true])->expectsOutput('Ran 0 templates.')->assertSuccessful();
+});
+
+it('runs only the template it names with --template (K9)', function () {
+    $other = Template::factory()->create(['schedule' => Template::query()->sole()->schedule, 'next_run_at' => now()->subMinute()]);
+    $first = Template::query()->whereKeyNot($other->id)->sole();
+
+    $this->artisan('app:run-templates', ['--now' => true, '--template' => strtoupper($first->id)])
+        ->expectsOutput('Ran 1 templates.')
+        ->assertSuccessful();
+
+    expect(TemplateRun::query()->pluck('template_id')->all())->toBe([$first->id]);
+
+    // queued the same way: only the one it names
+    config(['queue.default' => 'database']);
+    $this->artisan('app:run-templates', ['--template' => $other->id])->expectsOutput('Queued 1 templates.')->assertSuccessful();
+    expect(json_decode(DB::table('jobs')->sole()->payload, true)['data']['command'])->toContain($other->id);
+});
+
+it('runs the other templates when one fails with --now, reports it and ends with a failure (T8-M1)', function () {
+    $first = Template::query()->sole();
+    $second = Template::factory()->create(['schedule' => $first->schedule, 'next_run_at' => now()->subMinute()]);
+    // the run of the first one crashes
+    DB::listen(function (QueryExecuted $query) use ($first): void {
+        if (str_starts_with($query->sql, 'insert into `work_items`') && in_array($first->id, $query->bindings, true)) {
+            throw new RuntimeException('boom');
+        }
+    });
+    $reported = [];
+    $this->app->make(ExceptionHandler::class)->reportable(function (RuntimeException $e) use (&$reported) {
+        $reported[] = $e->getMessage();
+
+        return false;
+    });
+
+    $this->artisan('app:run-templates', ['--now' => true])
+        ->expectsOutput('Ran 2 templates, 1 failed.')
+        ->assertFailed();
+
+    expect(WorkItem::query()->sole()->template_id)->toBe($second->id)
+        ->and($reported)->toBe(['boom']);
 });
 
 it('queues a job per due template without --now', function () {

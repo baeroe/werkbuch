@@ -85,6 +85,7 @@ use App\Actions\System\RetryFailedJobs;
 use App\Actions\System\SendTestMail;
 use App\Actions\Templates\DeleteTemplate;
 use App\Actions\Templates\DraftFromTemplate;
+use App\Actions\Templates\FailScheduledTemplate;
 use App\Actions\Templates\GetTemplate;
 use App\Actions\Templates\ListTemplateRuns;
 use App\Actions\Templates\ListTemplates;
@@ -961,6 +962,13 @@ return [
     'RunScheduledTemplate' => [
         'action' => RunScheduledTemplate::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => RunScheduledTemplate::run($a, $w->template($column)->id),
+        'system' => true,
+    ],
+    // the term of a run that kept crashing (RunTemplateJob::failed()): booked as failed, with template.run_failed when
+    // a term is due (none is in the world)
+    'FailScheduledTemplate' => [
+        'action' => FailScheduledTemplate::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => FailScheduledTemplate::run($a, $w->template($column)->id),
         'system' => true,
     ],
     'RunDueTemplates' => [

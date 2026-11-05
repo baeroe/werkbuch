@@ -2618,6 +2618,7 @@
     "shortcuts.wiki.delete": "Seite löschen (mit Rückfrage)",
     "shortcuts.wiki.save": "Seite jetzt speichern",
     "templates.run.and": "und",
+    "templates.run.crashed": "Interner Fehler beim Anlegen des Items",
     "templates.run.required_missing.one": "Pflicht-Property :properties fehlt",
     "templates.run.required_missing.other": "Pflicht-Properties :properties fehlen",
     "theme.dark": "Dunkel",

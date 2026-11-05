@@ -523,6 +523,60 @@ export async function createE2ePage(
 }
 
 /**
+ * Creates a template of a spec over the API (`POST /api/v1/projects/{id}/templates`), in a project of the spec; it goes
+ * with the project. The payload holds the title (placeholders allowed) and what the spec names; the type is the
+ * project's default without one; `schedule` is the REST input of a schedule (none without).
+ */
+export async function createE2eTemplate(
+  page: Page,
+  projectId: string,
+  input: { name: string; title: string; schedule?: Record<string, unknown> | null; type?: string; assignee_id?: string | null; description_json?: Record<string, unknown> | null },
+): Promise<{ id: string }> {
+  await ensureCsrfCookie(page);
+  const response = await api(page, 'POST', `/api/v1/projects/${projectId}/templates`, {
+    name: input.name,
+    payload: {
+      type_id: input.type ?? null,
+      title: input.title,
+      description_json: input.description_json ?? null,
+      priority: 'none',
+      assignee_id: input.assignee_id ?? null,
+      label_ids: [],
+      values: {},
+      parent_id: null,
+      start_offset_days: null,
+      due_offset_days: null,
+    },
+    schedule: input.schedule ?? null,
+  });
+  expect(response.status(), await response.text()).toBe(201);
+  const { data } = (await response.json()) as { data: { id: string } };
+  return { id: data.id };
+}
+
+/**
+ * Makes a template of a spec due on the server (K10; the clock of the server cannot be set in e2e): every day at 00:00
+ * from a week ago in the zone of the organisation, counted from two days ago (`schedule_from` and `last_run_at`), so its
+ * due term is today 00:00 there, before now whatever the clocks of Mac and container say; `next_run_at` a minute ago.
+ * Its `updated_at` stays (the mark of the version an open editor saves on). Run it with
+ * `artisan('app:run-templates', '--now', `--template=${id}`)`; the DDEV scheduler may take it first, so a spec checks
+ * the item, never the output of the command (K9).
+ */
+export function makeTemplateDue(id: string): void {
+  if (!/^[0-9a-z]{26}$/i.test(id)) throw new Error(`No template id: ${id}`);
+  const php = [
+    `$template = App\\Models\\Template::query()->findOrFail('${id.toLowerCase()}');`,
+    `$start = now()->setTimezone(App\\Models\\Organization::current()->timezone)->subDays(7)->format('Y-m-d');`,
+    `$schedule = App\\Domain\\Schedule\\Schedule::parse(['frequency' => 'daily', 'interval' => 1, 'time' => '00:00', 'starts_on' => $start, 'ends' => ['type' => 'never']]);`,
+    `$template->timestamps = false;`,
+    `$template->forceFill(['schedule' => $schedule->toArray(), 'schedule_from' => now()->subDays(2), 'last_run_at' => now()->subDays(2), 'next_run_at' => now()->subMinute()])->save();`,
+    `echo json_encode(['next_run_at' => $template->next_run_at?->toJSON()]), PHP_EOL;`,
+  ].join('\n');
+  const { next_run_at } = JSON.parse(artisanEval(php)) as { next_run_at: string | null };
+  if (next_run_at === null) throw new Error(`Template ${id} is not due.`);
+}
+
+/**
  * Deletes a project of a spec with its items (cleanup in `finally`): the answer is 202, the purge runs in the queue; a
  * project that is gone already (404) is fine. The page leaves the app for the delete and comes back on `/my-items`
  * afterwards: a page that shows the project, or only joins its live channel, would load it once more while the delete
