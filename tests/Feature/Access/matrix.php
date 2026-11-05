@@ -79,8 +79,10 @@ use App\Actions\System\GetSystemStatus;
 use App\Actions\System\RetryFailedJobs;
 use App\Actions\System\SendTestMail;
 use App\Actions\Templates\DeleteTemplate;
+use App\Actions\Templates\DraftFromTemplate;
 use App\Actions\Templates\GetTemplate;
 use App\Actions\Templates\ListTemplates;
+use App\Actions\Templates\PreviewSchedule;
 use App\Actions\Templates\SaveTemplate;
 use App\Actions\Tokens\CreateToken;
 use App\Actions\Tokens\ListTokens;
@@ -918,6 +920,19 @@ return [
         'allowed' => $itemWriters,
         'hidden' => ['outsider_private'],
         'event' => EventType::TemplateDeleted,
+    ],
+    // the draft serves creating an item: who sees the template and may create items in its project
+    'DraftFromTemplate' => [
+        'action' => DraftFromTemplate::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => DraftFromTemplate::run($a, $w->template($column)),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+    ],
+    // the preview of a schedule reads nothing of a project: every active account
+    'PreviewSchedule' => [
+        'action' => PreviewSchedule::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => PreviewSchedule::run($a, ['schedule' => ['frequency' => 'daily', 'interval' => 1, 'time' => '09:00', 'starts_on' => '2026-11-01', 'ends' => ['type' => 'never']]]),
+        'allowed' => $everyone,
     ],
     // the inbox is the own one: everybody lists, marks and deletes their own notifications (a bot has none); a
     // notification of a project the account does not see is passed over when marking and a 404 when deleting (K19)

@@ -233,7 +233,7 @@ export interface WorkItemRecord {
   /** Entry into a Completed or Canceled status; cleared on reopening. */
   closed_at: string | null;
   archived_at: string | null;
-  /** Always null until templates come (Phase 10). */
+  /** The template the item was made from; null once that template is gone. */
   template_id: string | null;
 }
 

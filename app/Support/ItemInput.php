@@ -11,6 +11,7 @@ use App\Domain\WorkItems\Priority;
 use App\Exceptions\Problem;
 use App\Models\Label;
 use App\Models\Project;
+use App\Models\Template;
 use App\Models\User;
 use App\Models\WorkItem;
 use App\Models\WorkItemType;
@@ -296,6 +297,23 @@ final class ItemInput
         }
 
         return null;
+    }
+
+    /**
+     * The template an item is made from (spec 4.12): one of this project, by ULID in any case; anything else is the
+     * same `field.template_id.unknown` at `template_id` (a template of another project or none at all).
+     *
+     * @param  callable(string, string): void  $fail
+     */
+    public static function template(mixed $id, Project $project, callable $fail): ?Template
+    {
+        $id = is_string($id) && Str::isUlid($id) ? strtolower($id) : null;
+        $template = $id === null ? null : Template::query()->where('project_id', $project->id)->find($id);
+        if ($template === null) {
+            $fail('template_id', __('field.template_id.unknown'));
+        }
+
+        return $template;
     }
 
     /**

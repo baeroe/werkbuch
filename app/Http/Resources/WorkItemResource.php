@@ -15,7 +15,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * decides `subscribed`. The description comes as Markdown (`description`) and as Tiptap JSON (`description_json`),
  * rich text values as JSON in `values` and as Markdown in `values_markdown`; the Markdown is the reader's
  * (`WorkItem::$rich_names`): a reference to an item the reader does not see is `[hidden](item:<ulid>)`.
- * `template_id` stays `null` until templates come (Phase 10, P22); `children_progress` is `null` for an item without children. A lean item
+ * `template_id` names the template the item was made from (`null` once that template is gone); `children_progress` is `null` for an item without children. A lean item
  * (`WorkItem::$lean`, P17) comes without `description`, `description_json` and `values_markdown`. What GetWorkItem loaded
  * through `include` (`WorkItem::$includes`) comes after the fields: `children` (items in manual order), `type`
  * (WorkItemTypeResource), `workflow` (the workflow of the project, WorkflowResource) and `relations` (RelationEntryResource,
@@ -63,7 +63,7 @@ final class WorkItemResource extends JsonResource
             'started_at' => $item->started_at?->toJSON(),
             'closed_at' => $item->closed_at?->toJSON(),
             'archived_at' => $item->archived_at?->toJSON(),
-            'template_id' => null,
+            'template_id' => $item->template_id,
             'children_progress' => $item->children_total === 0 ? null : ['done' => $item->children_done, 'total' => $item->children_total],
             'blocked' => $item->is_blocked,
             'blocking' => $item->is_blocking,

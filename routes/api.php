@@ -132,6 +132,9 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
     Route::get('templates/{template}', [TemplatesController::class, 'show']);
     Route::put('templates/{template}', [TemplatesController::class, 'update']);
     Route::delete('templates/{template}', [TemplatesController::class, 'destroy']);
+    Route::get('templates/{template}/draft', [TemplatesController::class, 'draft']);
+    // reads only, over a body: a read token may ask it (P15)
+    Route::post('templates/preview', [TemplatesController::class, 'preview'])->defaults('token_ability', 'read');
 
     Route::get('workflows', [WorkflowsController::class, 'index']);
     Route::post('workflows', [WorkflowsController::class, 'store']);

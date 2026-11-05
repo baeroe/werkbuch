@@ -69,6 +69,8 @@ return [
     'show a template' => ['GET', '/api/v1/templates/{template}', 'params' => fn (MatrixWorld $w) => ['template' => $w->template('project_admin')->id]],
     'replace a template' => ['PUT', '/api/v1/templates/{template}', 'params' => fn (MatrixWorld $w) => ['template' => $w->template('project_admin')->id], 'body' => ['name' => 'Matrix', 'payload' => ['title' => 'Matrix'], 'schedule' => null]],
     'delete a template' => ['DELETE', '/api/v1/templates/{template}', 'params' => fn (MatrixWorld $w) => ['template' => $w->template('project_admin')->id]],
+    'draft an item from a template' => ['GET', '/api/v1/templates/{template}/draft', 'params' => fn (MatrixWorld $w) => ['template' => $w->template('project_admin')->id]],
+    'preview a schedule' => ['POST', '/api/v1/templates/preview', 'ability' => 'read', 'body' => ['schedule' => ['frequency' => 'daily', 'interval' => 1, 'time' => '09:00', 'starts_on' => '2026-11-01', 'ends' => ['type' => 'never']]]],
     'list workflows' => ['GET', '/api/v1/workflows'],
     'create a workflow' => ['POST', '/api/v1/workflows'],
     'change a workflow' => ['PUT', '/api/v1/workflows/{workflow}', 'params' => fn (MatrixWorld $w) => ['workflow' => Workflow::factory()->create()->id]],

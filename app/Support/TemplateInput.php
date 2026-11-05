@@ -333,7 +333,8 @@ final class TemplateInput
         return $schedule;
     }
 
-    private static function scheduleMessage(string $path, string $code): string
+    /** The field message of a code of Schedule::parse() at its path below `schedule` (PreviewSchedule as well). */
+    public static function scheduleMessage(string $path, string $code): string
     {
         return match (true) {
             $path === 'schedule.paused' => __('field.boolean'),

@@ -134,6 +134,7 @@ it('names who did it, how and why', function () use ($world, $history) {
         // no comment: an item's own change
         'comment_id' => null,
         'comment_author_id' => null,
+        'template' => null,
         'occurred_at' => Event::query()->findOrFail($patched['id'])->occurred_at->toJSON(),
     ])
         ->and([$orphaned['type'], $orphaned['via'], $orphaned['reason']])->toBe(['work_item.updated', 'ui', DeleteWorkItem::PARENT_DELETED])

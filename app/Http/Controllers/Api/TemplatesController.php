@@ -3,11 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use App\Actions\Templates\DeleteTemplate;
+use App\Actions\Templates\DraftFromTemplate;
 use App\Actions\Templates\GetTemplate;
 use App\Actions\Templates\ListTemplates;
+use App\Actions\Templates\PreviewSchedule;
 use App\Actions\Templates\SaveTemplate;
 use App\Http\Api\ApiList;
 use App\Http\Controllers\Controller;
+use App\Http\Resources\TemplateDraftResource;
 use App\Http\Resources\TemplateResource;
 use App\Models\Project;
 use App\Models\Template;
@@ -18,7 +21,7 @@ use Illuminate\Http\Response;
 
 /**
  * The templates of the projects. `{template}` is bound by ULID only (any case); saving replaces a template as a whole
- * (`PUT`, A75).
+ * (`PUT`, A75). The draft and the preview are what the server counts for the editor and the create dialog (A335).
  */
 final class TemplatesController extends Controller
 {
@@ -57,5 +60,17 @@ final class TemplatesController extends Controller
         DeleteTemplate::run(Actor::fromRequest($request), $template);
 
         return response()->noContent();
+    }
+
+    /** The fields of an item made from the template now. */
+    public function draft(Request $request, Template $template): TemplateDraftResource
+    {
+        return new TemplateDraftResource(DraftFromTemplate::run(Actor::fromRequest($request), $template));
+    }
+
+    /** The next terms of a schedule and a title at the first of them (a reading POST). */
+    public function preview(Request $request): JsonResponse
+    {
+        return response()->json(['data' => PreviewSchedule::run(Actor::fromRequest($request), $request->all())]);
     }
 }
