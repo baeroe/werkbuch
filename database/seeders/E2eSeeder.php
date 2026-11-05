@@ -85,11 +85,13 @@ class E2eSeeder extends Seeder
         Organization::current()->update(['locale' => Locale::En]);
 
         // the DDEV scheduler runs templates and automations for real, on the database the specs share (K9): the demo
-        // projects keep their automations off and their templates without a next term (the log stays), so no night
-        // archives or cancels a demo item and no Monday adds one; `updated_at` stays (the mark of a template's version)
+        // projects keep their automations off and their templates paused without a next term (the log stays), so no
+        // night archives or cancels a demo item and no Monday adds one, also after something plans them anew (a zone
+        // change, a restored project: RescheduleTemplates, W2); `updated_at` stays (the mark of a template's version)
         $demo = Project::query()->whereIn('identifier', ['WEB', 'APP', 'OPS'])->select('id');
         Automation::query()->whereIn('project_id', $demo)->toBase()->update(['enabled' => false]);
         Template::query()->whereIn('project_id', $demo)->toBase()->update(['next_run_at' => null]);
+        Template::query()->whereIn('project_id', $demo)->whereNotNull('schedule')->toBase()->update(['schedule->paused' => true]);
 
         // the invitations of earlier runs: the lists of the specs stay short, and a run never meets an old link
         Invitation::query()->whereNull('accepted_at')->where('email', 'like', '%@example.com')->delete();

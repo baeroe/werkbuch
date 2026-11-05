@@ -5,6 +5,7 @@ use App\Access\Visibility;
 use App\Actions\Favorites\ToggleFavorite;
 use App\Actions\Projects\CreateProject;
 use App\Actions\Projects\UpdateProject;
+use App\Actions\Templates\RescheduleTemplates;
 use App\Actions\Templates\RunDueTemplates;
 use App\Domain\Notifications\NotificationKind;
 use App\Enums\AccountType;
@@ -309,8 +310,16 @@ it('leaves the demo automations off and the demo schedules paused (K9)', functio
         ->and(Template::query()->count())->toBe(3)
         ->and(RunDueTemplates::run(Actor::system(User::defaultBot(), 'templates'), true))->toBe(0);
 
+    // the schedules are paused too (W2): whatever plans them anew (a zone change, a restored project) finds no term
+    $updated = Template::query()->orderBy('id')->pluck('updated_at', 'id')->map(fn ($at) => $at?->format('Y-m-d H:i:s.u'))->all();
+    expect(Template::query()->whereNotNull('schedule')->get()->every(fn (Template $template) => $template->schedule()?->paused === true))->toBeTrue()
+        ->and(RescheduleTemplates::run(Actor::system(User::defaultBot(), 'templates'), 'Pacific/Auckland'))->toBeGreaterThan(0)
+        ->and(Template::query()->whereNotNull('next_run_at')->count())->toBe(0)
+        ->and(Template::query()->orderBy('id')->pluck('updated_at', 'id')->map(fn ($at) => $at?->format('Y-m-d H:i:s.u'))->all())->toBe($updated);
+
     // a second run changes nothing
     $this->seed(E2eSeeder::class);
     expect(Automation::query()->where('enabled', true)->count())->toBe(0)
-        ->and(Template::query()->whereNotNull('next_run_at')->count())->toBe(0);
+        ->and(Template::query()->whereNotNull('next_run_at')->count())->toBe(0)
+        ->and(Template::query()->whereNotNull('schedule')->get()->every(fn (Template $template) => $template->schedule()?->paused === true))->toBeTrue();
 });
