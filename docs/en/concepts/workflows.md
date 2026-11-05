@@ -39,7 +39,7 @@ A workflow is either free or has a transition matrix.
 - **Free:** every state can follow every other state. The default workflow is free.
 - **Matrix:** only the pairs you allow (from → to) are possible. The editor shows a grid with one row per "from" state and one column per "to" state; each cell is one transition. When you switch **Free transitions** off, the matrix starts with every pair allowed, so you only take away what you do not want.
 
-Staying in the same state is always allowed. The rule applies everywhere alike: in the interface and over the REST API, and with the later phases in MCP, automations and templates. An item created directly in another state goes through the same check as a transition from the start status.
+Staying in the same state is always allowed. The rule applies everywhere alike: in the interface and over the REST API, for [automations](/en/concepts/automations) and runs of [templates](/en/concepts/templates), and with a later phase in MCP. An item created directly in another state goes through the same check as a transition from the start status.
 
 ## The default workflow
 
@@ -55,7 +55,7 @@ New states and new transitions apply at once, in every project that uses the wor
 
 Project admins switch the workflow of their project under **Project settings → Workflow**: choose the new workflow, then **Switch workflow …** and confirm.
 
-Without items it is a plain confirmation. Otherwise the dialog lists every state that holds items, with their number and a proposal (the state of the same name, else the first one of the same category), and says what the switch does to them: closed items that land in an open state lose their resolution, open ones that land in a closed state get its default. You confirm once every state has its target. The same question comes when you save a workflow without a state that still holds items (**Replace statuses**): the states that stay and the new ones are the targets. werkbuch moves the items at once, deliberately without the transition rules, and their history names the person who did it.
+Without items it is a plain confirmation. Otherwise the dialog lists every state that holds items, with their number and a proposal (the state of the same name, else the first one of the same category), and says what the switch does to them: closed items that land in an open state lose their resolution, open ones that land in a closed state get its default. You confirm once every state has its target. The same question comes when you save a workflow without a state that still holds items (**Replace statuses**): the states that stay and the new ones are the targets. werkbuch moves the items at once, deliberately without the transition rules, and their history names the person who did it. Nobody is notified about these moves. When [auto-close](/en/concepts/automations#when-the-workflow-changes) is on, the dialog also says which Canceled state it takes from then on, or that it is switched off.
 
 ## Delete
 

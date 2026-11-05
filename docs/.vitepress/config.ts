@@ -11,7 +11,7 @@ const description = 'Open, self-hosted project management: work items with your 
 // every page exists in docs/en and docs/de under the same path (tests/Unit/DocsTest.php); later phases add theirs
 const groups: { title: string; pages: string[] }[] = [
     { title: 'guide', pages: ['development', 'keyboard'] },
-    { title: 'concepts', pages: ['concepts/permissions', 'concepts/projects', 'concepts/workflows', 'concepts/types-and-properties', 'concepts/work-items', 'concepts/rich-text', 'concepts/wiki', 'concepts/views', 'concepts/notifications', 'search', 'bots'] },
+    { title: 'concepts', pages: ['concepts/permissions', 'concepts/projects', 'concepts/workflows', 'concepts/types-and-properties', 'concepts/work-items', 'concepts/rich-text', 'concepts/wiki', 'concepts/views', 'concepts/templates', 'concepts/automations', 'concepts/notifications', 'search', 'bots'] },
 ];
 
 const sidebar = (prefix: string, t: Record<string, string>): DefaultTheme.SidebarItem[] =>
@@ -30,6 +30,8 @@ const en: Record<string, string> = {
     'concepts/rich-text': 'Rich text',
     'concepts/wiki': 'Wiki',
     'concepts/views': 'Views',
+    'concepts/templates': 'Templates',
+    'concepts/automations': 'Automations',
     'concepts/notifications': 'Notifications',
     search: 'Search',
     bots: 'Bots',
@@ -48,6 +50,8 @@ const de: Record<string, string> = {
     'concepts/rich-text': 'Rich Text',
     'concepts/wiki': 'Wiki',
     'concepts/views': 'Views',
+    'concepts/templates': 'Vorlagen',
+    'concepts/automations': 'Automatisierungen',
     'concepts/notifications': 'Benachrichtigungen',
     search: 'Suche',
     bots: 'Bots',

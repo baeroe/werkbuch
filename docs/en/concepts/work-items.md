@@ -21,7 +21,7 @@ Anyone who sees a project reads its items. Members and admins of the project cre
 | Parent item | An epic of the same project. See below. |
 | Properties | The fields of the type, such as "Customer" or "Effort (h)", some of them required. |
 
-werkbuch also keeps who created the item and when, when it was last changed, when it was first started (the first time it entered a Started state), when it was closed (entering Completed or Canceled; emptied when it opens again) and when it was archived. An open item whose due date has passed shows as overdue, counted in the time zone of the organization.
+werkbuch also keeps who created the item and when, when it was last changed, when it was first started (the first time it entered a Started state), when it was closed (entering Completed or Canceled; emptied when it opens again) and when it was archived. An item made from a [template](/en/concepts/templates) remembers it in `template_id`; when the template is deleted, the item stays and `template_id` becomes `null`. An open item whose due date has passed shows as overdue, counted in the time zone of the organization.
 
 ## Key
 
@@ -93,7 +93,7 @@ The description is guarded: the interface sends the version of the description i
 
 ## History
 
-Every change is an entry in the history of the item, with who made it, when, and how (in the interface, over the API, by an automation). A change of a field shows the old and the new value; a move names both states as they were called then, even if a state was renamed or removed later. The interface groups the changes one person makes within five minutes and shows the comments in the same timeline; the filter switches between everything, comments and changes. Editing and deleting a comment, and adding and removing a file of the file list, are entries too. Watching, reactions and the manual order of items are not part of the history.
+Every change is an entry in the history of the item, with who made it, when, and how (in the interface, over the API, by an [automation](/en/concepts/automations) or a template). An item a template created says "From template "…"" with the name the template had then; a step of an automation names its reason, such as "Automation: close parent". A change of a field shows the old and the new value; a move names both states as they were called then, even if a state was renamed or removed later. The interface groups the changes one person makes within five minutes and shows the comments in the same timeline; the filter switches between everything, comments and changes. Editing and deleting a comment, and adding and removing a file of the file list, are entries too. Watching, reactions and the manual order of items are not part of the history.
 
 ## REST
 
@@ -121,7 +121,7 @@ An item the account of the token does not see is a `404`, like one that does not
 
 ### Create an item
 
-`project_id` takes the identifier or the ULID of the project. The description comes as Markdown in `description` or as Tiptap JSON in `description_json`, not both; the answer has both forms. HTML in Markdown stays text, links keep only `http`, `https` and `mailto`, and a description is at most 256 KB. `values` holds the properties by their key; a dropdown takes the ULID of an option.
+`project_id` takes the identifier or the ULID of the project. The description comes as Markdown in `description` or as Tiptap JSON in `description_json`, not both; the answer has both forms. HTML in Markdown stays text, links keep only `http`, `https` and `mailto`, and a description is at most 256 KB. `values` holds the properties by their key; a dropdown takes the ULID of an option. `template_id` makes the item from a template of the project and copies its images (see [templates](/en/concepts/templates#apply-a-template)).
 
 ```bash
 curl -X POST https://werkbuch.example.com/api/v1/work-items \

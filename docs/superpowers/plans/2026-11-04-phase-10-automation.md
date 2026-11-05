@@ -155,7 +155,7 @@ Geprüft am 2026-11-04 im Root-`pnpm-lock.yaml` und `composer.lock`: keine neuen
 |---|---|---|---|
 | `spatie/laravel-medialibrary` | 11 | 6 | `Media::copy($model, 'file')` für die Bildkopien (A337) |
 | `@tiptap/*` | 3.32.0 | 16 | Stufe `description` im Vorlagen-Editor |
-| PHP `DateTimeZone`/`DateTimeImmutable` | PHP 8.4 | 1 | Lücke vorwärts und doppelte Stunde „erste“ sind PHP-Verhalten; Tests halten es fest (kein ext-intl nötig, A353) |
+| PHP `DateTimeZone`/`DateTimeImmutable` | PHP 8.4 | 1 | Lücke vorwärts ist PHP-Verhalten; die doppelte Stunde „erste“ nicht (PHP 8.4 nimmt in Berlin die zweite, in New York die erste): `WallClock::at` prüft dafür die Offsets selbst wie `toUtc` (Task 1, A353); Tests halten beides fest (kein ext-intl nötig) |
 
 ## Port-Umfang aus `prototypes/clickdummy/src/`
 

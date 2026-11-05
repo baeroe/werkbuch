@@ -27,9 +27,11 @@ werkbuch has two kinds of roles. An **organization role** applies everywhere, a 
 | Project settings, members, workflow, types, automations | ✓ | – | – |
 | Archive and delete the project | ✓ | – | – |
 
-Some rows (webhooks, templates, schedules, automations) belong to later phases of the roadmap. The rights are listed here so the roles do not change when the features arrive.
+Webhooks belong to a later phase of the roadmap. The right is listed here so the roles do not change when they arrive.
 
 In the [wiki](/en/concepts/wiki), viewers and people outside a public project read the pages and their versions; members and admins create, edit, move and delete pages and restore versions. In an archived project, the wiki is read-only for everyone.
+
+[Templates](/en/concepts/templates) are read by everyone who sees the project, logs included; members and admins create, change, delete and run them. [Automations](/en/concepts/automations) are switched by admins of the project only; everyone else who sees the project reads them.
 
 ## Org admins are admins everywhere
 
