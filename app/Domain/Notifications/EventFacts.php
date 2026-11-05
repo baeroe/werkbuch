@@ -17,6 +17,9 @@ final readonly class EventFacts
      * @param  list<string>  $optedOut  the subscribers of the item with `unsubscribed_at`
      * @param  ?string  $leadId  the lead of the project
      * @param  ?array<string, mixed>  $stateSnapshot  `meta.states` of `work_item.state_changed`
+     * @param  ?string  $templateAuthorId  who wrote the template of `template.run_failed` (`meta.author_id`)
+     * @param  ?string  $causedBy  the person an automation or a template run acted for (`meta.on_behalf_of`, A342,
+     *                             K12): left out like the actor
      */
     public function __construct(
         public string $type,
@@ -30,6 +33,8 @@ final readonly class EventFacts
         public array $optedOut,
         public ?string $leadId,
         public ?array $stateSnapshot,
+        public ?string $templateAuthorId = null,
+        public ?string $causedBy = null,
     ) {}
 
     /**

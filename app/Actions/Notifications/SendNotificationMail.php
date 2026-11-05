@@ -10,6 +10,7 @@ use App\Mail\NotificationDigest;
 use App\Models\Notification;
 use App\Models\NotificationMail;
 use App\Models\NotificationPreference;
+use App\Models\Template;
 use App\Models\User;
 use App\Models\WorkItem;
 use App\RichText\Document;
@@ -28,9 +29,9 @@ use Throwable;
  * decided now, not when it was collected (Review Focus 3): the person active and a person, the project one they see
  * (Notification::visibleTo, read afresh; never through NotificationPolicy, which is the inbox's), the item there, the
  * line unread (a read one needs no mail) and mail still on for its kind, a reminder only for an item that is still
- * open, not archived and the person's (T8-M5), and a mail server still set (T7-M5). Nothing
- * left: `skipped`, closed like a sent one (K8). The texts are the current ones, written for the person (ReaderNames: a reference to an item they do not see
- * stays hidden, A229). `open_key` goes right after the lock, before the lines are read and before SMTP: a consumer
+ * open, not archived and the person's (T8-M5), a failed template run only while its template is there (A348), and a
+ * mail server still set (T7-M5). Nothing left: `skipped`, closed like a sent one (K8). The texts are the current ones,
+ * written for the person (ReaderNames: a reference to an item they do not see stays hidden, A229). `open_key` goes right after the lock, before the lines are read and before SMTP: a consumer
  * collecting for the same person and item waits at its insert and opens a new collection once this one is closed (K7);
  * if it took the key first, the two meet before anything was sent, and the retry of the victim is harmless (I1 of the
  * review of Task 7: a deadlock after SMTP would send twice). When SMTP fails, everything rolls back and the job tries
@@ -79,8 +80,9 @@ final class SendNotificationMail
         $mail->update(['open_key' => null]);
 
         $person = User::query()->findOrFail($mail->user_id);
+        $template = self::templateOf($mail);
         // a mail server that went away since the collection opened (`log`, `array`) sends nothing: skipped, never `sent`
-        $lines = MailSetup::configured() ? $this->lines($mail, $person) : new EloquentCollection;
+        $lines = MailSetup::configured() ? $this->lines($mail, $person, $template) : new EloquentCollection;
         if ($lines->isNotEmpty()) {
             $texts = Notification::textsOf($lines);
             $digest = new NotificationDigest(
@@ -88,6 +90,7 @@ final class SendNotificationMail
                 array_values($lines->map(fn (Notification $line) => ['notification' => $line, 'text' => isset($texts[$line->id]) ? Document::fromJson($texts[$line->id]) : null])->all()),
                 ReaderNames::of(array_values($texts), $person),
                 reminders: str_starts_with($mail->scope, 'due:'),
+                template: $template,
             );
             Mail::to($person)->locale($person->preferredLocale())->send($digest);
         }
@@ -120,7 +123,7 @@ final class SendNotificationMail
      *
      * @return EloquentCollection<int, Notification>
      */
-    private function lines(NotificationMail $mail, User $person): EloquentCollection
+    private function lines(NotificationMail $mail, User $person, ?Template $template): EloquentCollection
     {
         if (! $person->isPerson() || $person->isDisabled()) {
             return new EloquentCollection;
@@ -131,9 +134,27 @@ final class SendNotificationMail
 
         return Notification::query()->where('mail_id', $mail->id)->whereNull('read_at')->visibleTo($person)
             ->with(['workItem.project', 'workItem.state', 'actor'])->orderBy('created_at')->orderBy('id')->sharedLock()->get()
-            ->filter(fn (Notification $line) => $line->workItem !== null && Preferences::enabled($line->kind, Channel::Mail, $stored)
-                && ($line->kind !== NotificationKind::Due || self::stillDue($line->workItem, $person)))
+            ->filter(fn (Notification $line) => Preferences::enabled($line->kind, Channel::Mail, $stored) && match (true) {
+                // a failed run has no item: it needs its template still there (A348)
+                $line->kind === NotificationKind::TemplateRunFailed => $template !== null && ($line->data['template_id'] ?? null) === $template->id,
+                $line->workItem === null => false,
+                $line->kind === NotificationKind::Due => self::stillDue($line->workItem, $person),
+                default => true,
+            })
             ->values();
+    }
+
+    /**
+     * The template of a collection of failed runs (`template:<id>`, A348) with its project, if it is still there; null
+     * for every other collection.
+     */
+    private static function templateOf(NotificationMail $mail): ?Template
+    {
+        if (! str_starts_with($mail->scope, 'template:')) {
+            return null;
+        }
+
+        return Template::query()->with('project')->find(substr($mail->scope, strlen('template:')));
     }
 
     /**

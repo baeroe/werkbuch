@@ -8,6 +8,7 @@ use App\Domain\Notifications\NotificationKind;
 use App\Enums\AccountType;
 use App\Events\EventType;
 use App\Models\Event;
+use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
 use App\Models\WorkItemSubscriber;
@@ -20,10 +21,14 @@ use App\RichText\Document;
  */
 final class NotificationFacts
 {
-    /** The events that may tell somebody something (App\Domain\Notifications\Recipients); all of them hang on an item. */
+    /**
+     * The events that may tell somebody something (App\Domain\Notifications\Recipients); all of them hang on an item but
+     * `template.run_failed`, which hangs on its template (phase 10).
+     */
     public const TELLING = [
         EventType::WorkItemCreated, EventType::WorkItemUpdated, EventType::WorkItemStateChanged, EventType::WorkItemAssigned,
         EventType::WorkItemRelationAdded, EventType::WorkItemRelationRemoved, EventType::CommentCreated, EventType::CommentUpdated,
+        EventType::TemplateRunFailed,
     ];
 
     /**
@@ -36,7 +41,9 @@ final class NotificationFacts
      * The facts of the event, or null when it tells nobody: a type without a kind of notification, a state moved by a
      * rebuilt workflow, an item that is gone or a project being deleted. Reads the item with its project, the
      * subscribers (watchers and opt-outs together) and the people among the mentioned in one query each; the assignee
-     * of a new item with one more.
+     * of a new item with one more. A failed template run reads only its project: the lead, and the author from
+     * `meta.author_id` (the template may be gone by now; the run failed all the same). Whoever an automation or a run by
+     * hand acted for (`meta.on_behalf_of`) is `causedBy`, for every event (A342, K12).
      */
     public static function of(Event $event): ?EventFacts
     {
@@ -44,6 +51,10 @@ final class NotificationFacts
         if (! in_array($event->type, self::TELLING, true)
             || ($event->type === EventType::WorkItemStateChanged && in_array($meta['reason'] ?? null, self::QUIET_REASONS, true))) {
             return null;
+        }
+
+        if ($event->type === EventType::TemplateRunFailed) {
+            return self::ofTemplateRun($event);
         }
 
         // the events of a comment hang on its item (A227): the subject is always the item
@@ -71,6 +82,32 @@ final class NotificationFacts
             optedOut: self::userIds($subscribers->whereNotNull('unsubscribed_at')),
             leadId: $item->project->lead_id,
             stateSnapshot: is_array($meta['states'] ?? null) ? $meta['states'] : null,
+            causedBy: self::id($meta['on_behalf_of'] ?? null),
+        );
+    }
+
+    /** The facts of a failed run of a template: its project, lead and author, no item. */
+    private static function ofTemplateRun(Event $event): ?EventFacts
+    {
+        $project = Project::query()->find($event->project_id);
+        if ($project === null || $project->deleting_at !== null) {
+            return null;
+        }
+
+        return new EventFacts(
+            type: $event->type->value,
+            actorId: $event->actor_id,
+            projectId: $project->id,
+            itemId: null,
+            changedFields: [],
+            mentioned: [],
+            assignee: null,
+            watchers: [],
+            optedOut: [],
+            leadId: $project->lead_id,
+            stateSnapshot: null,
+            templateAuthorId: self::id($event->meta['author_id'] ?? null),
+            causedBy: self::id($event->meta['on_behalf_of'] ?? null),
         );
     }
 
@@ -92,6 +129,7 @@ final class NotificationFacts
             NotificationKind::Comment => ['comment_id' => $event->meta['comment_id'] ?? null],
             NotificationKind::StateChanged => ['from' => $event->meta['states']['old'] ?? null, 'to' => $event->meta['states']['new'] ?? null],
             NotificationKind::ItemChanged => ['fields' => EventFacts::fieldsOf($event->type->value, $event->changes)],
+            NotificationKind::TemplateRunFailed => ['template_id' => $event->subject_id, 'error' => $event->meta['error'] ?? null],
             default => [],
         };
     }

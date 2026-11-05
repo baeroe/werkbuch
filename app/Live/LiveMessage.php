@@ -35,7 +35,7 @@ final class LiveMessage implements ShouldBroadcastNow
     /**
      * What an event says on a channel: `{event_id, type, project_id, page_id, item_id, comment_id, actor_id}`, missing
      * ones as `null`. The item is the subject of `work_item.*` and `comment.*` (A227), the comment stands in their meta,
-     * the page is the subject of `page.*` (A318). `page.deleted` adds `page_ids`, the whole subtree from `meta.page_ids`
+     * the page is the subject of `page.*` (A318); `template.*` and `automation.updated` name only their project (A347). `page.deleted` adds `page_ids`, the whole subtree from `meta.page_ids`
      * (the root first); a subtree of more than PAGE_IDS_MAX pages is too large to name and comes as `null`, as does an
      * event that names none: the browser loads the tree again and takes what is no longer in it as gone.
      */

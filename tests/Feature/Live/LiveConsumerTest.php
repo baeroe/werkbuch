@@ -10,18 +10,24 @@ use App\Actions\Pages\MovePage;
 use App\Actions\Pages\UpdatePage;
 use App\Actions\Projects\AddMember;
 use App\Actions\Projects\UpdateProject;
+use App\Actions\Templates\DeleteTemplate;
+use App\Actions\Templates\RunTemplate;
+use App\Actions\Templates\SaveTemplate;
 use App\Actions\Tokens\CreateToken;
 use App\Actions\Users\UpdateUserRole;
 use App\Actions\Views\DeleteView;
 use App\Actions\WorkItems\SetSubscription;
 use App\Actions\WorkItems\UpdateWorkItem;
+use App\Events\EventRecorder;
 use App\Events\EventType;
 use App\Events\Outbox;
 use App\Live\LiveConsumer;
 use App\Live\LiveMessage;
+use App\Models\Automation;
 use App\Models\EventConsumption;
 use App\Models\Page;
 use App\Models\Project;
+use App\Models\Template;
 use App\Models\User;
 use App\Models\View;
 use App\Models\WorkItem;
@@ -29,6 +35,7 @@ use App\Notifications\NotificationConsumer;
 use App\Search\SearchConsumer;
 use Illuminate\Broadcasting\BroadcastException;
 use Illuminate\Broadcasting\PrivateChannel;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Exceptions;
 
 /*
@@ -260,6 +267,46 @@ it('leaves out the tab that saved', function () use ($world) {
         ->and($this->live->sent()[0]['socket'])->toBe('1234.5678')
         ->and($this->live->sent()[0]['payload'])->not->toHaveKey('socket')
         ->and($this->live->sent()[0]['payload']['page_id'])->toBe($page->id);
+});
+
+it('sends template and automation events to the project channel with ids only, and the search passes over them (A347)', function () use ($world, $message) {
+    $engine = searchEngine();
+    consumers(LiveConsumer::class, SearchConsumer::class);
+    $w = $world();
+
+    $template = SaveTemplate::run(actor($w['mara']), $w['web'], ['name' => 'Wartung', 'payload' => ['title' => 'Wartung KW {week}'], 'schedule' => null]);
+    SaveTemplate::run(actor($w['mara']), $w['web'], ['name' => 'Wöchentliche Wartung', 'payload' => ['title' => 'Wartung KW {week}'], 'schedule' => null], $template);
+    $automation = Automation::factory()->for($w['web'])->create();
+    DB::transaction(fn () => EventRecorder::record(EventType::AutomationUpdated, actor($w['tom']), $automation, $w['web'], ['enabled' => ['old' => false, 'new' => true]]));
+    DeleteTemplate::run(actor($w['mara']), $template);
+
+    $created = eventsOf(EventType::TemplateCreated, $template)->sole();
+    $updated = eventsOf(EventType::TemplateUpdated, $template)->sole();
+    $deleted = eventsOf(EventType::TemplateDeleted, $template)->sole();
+    $switched = eventsOf(EventType::AutomationUpdated, $automation)->sole();
+    $channel = ["private-project.{$w['web']->id}"];
+    expect($this->live->sent())->toBe([
+        ['channels' => $channel, 'event' => 'live', 'payload' => $message($created->id, 'template.created', $w['web']->id, null, null, $w['mara']->id), 'socket' => null],
+        ['channels' => $channel, 'event' => 'live', 'payload' => $message($updated->id, 'template.updated', $w['web']->id, null, null, $w['mara']->id), 'socket' => null],
+        ['channels' => $channel, 'event' => 'live', 'payload' => $message($switched->id, 'automation.updated', $w['web']->id, null, null, $w['tom']->id), 'socket' => null],
+        ['channels' => $channel, 'event' => 'live', 'payload' => $message($deleted->id, 'template.deleted', $w['web']->id, null, null, $w['mara']->id), 'socket' => null],
+    ])->and($engine->writes())->toBe(0);
+});
+
+it('sends a failed run of a template to the project channel', function () use ($world, $message) {
+    $w = $world();
+    $template = Template::factory()->create(['project_id' => $w['web']->id, 'created_by' => $w['mara']->id]);
+    $template->update(['payload' => [...$template->payload, 'assignee_id' => User::factory()->create()->id]]);
+
+    RunTemplate::run(actor($w['mara']), $template);
+
+    $failed = eventsOf(EventType::TemplateRunFailed, $template)->sole();
+    expect($this->live->sent())->toBe([[
+        'channels' => ["private-project.{$w['web']->id}"],
+        'event' => 'live',
+        'payload' => $message($failed->id, 'template.run_failed', $w['web']->id, null, null, User::defaultBot()->id),
+        'socket' => null,
+    ]]);
 });
 
 it('sends nothing for catalog, view and token events', function () use ($world) {
