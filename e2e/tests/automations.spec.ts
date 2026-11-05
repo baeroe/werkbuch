@@ -8,10 +8,22 @@ import { allEntries, api, artisan, artisanEval, createE2eProject, createItem, re
 
 const projectName = (what: string) => `E2E ${what} ${variant()} ${runId()}`;
 
+// tinker and artisan go through ddev synchronously (about two seconds each, more under load), besides the API calls:
+// more than the default 30 s may pass (T19-I1)
+test.describe.configure({ timeout: 90_000 });
+
+/** The states of the default workflow, read once per page (a test reads them again and again). */
+const defaultStates = new WeakMap<Page, Promise<{ id: string; name: string }[]>>();
+
 /** The id of the state named `name` in the default workflow. */
 async function stateOf(page: Page, name: string): Promise<string> {
-  const workflow = (await allEntries(page, 'workflows')).find((entry) => entry.is_default === true) as { states: { id: string; name: string }[] };
-  return workflow.states.find((state) => state.name === name)!.id;
+  if (!defaultStates.has(page)) {
+    defaultStates.set(
+      page,
+      allEntries(page, 'workflows').then((entries) => (entries.find((entry) => entry.is_default === true) as { states: { id: string; name: string }[] }).states),
+    );
+  }
+  return (await defaultStates.get(page)!).find((state) => state.name === name)!.id;
 }
 
 async function typeOf(page: Page, name: string): Promise<string> {
@@ -55,6 +67,10 @@ test('switches Assignee beim Start on with the keyboard; a person who starts an 
     const toggle = page.getByRole('switch', { name: title, exact: true });
     await expect(toggle).toHaveAttribute('aria-checked', 'false');
     await tabTo(page, toggle, { max: 80 });
+    const puts: string[] = [];
+    page.on('request', (request) => {
+      if (request.method() === 'PUT' && request.url().endsWith(`/automations/assign_on_start`)) puts.push(request.url());
+    });
     await page.keyboard.press('Space');
     await expect(toggle).toHaveAttribute('aria-checked', 'true');
     await expect(page.getByText(tr('en', 'automations.saved.on', { name: title }), { exact: true })).toBeVisible();
@@ -65,6 +81,7 @@ test('switches Assignee beim Start on with the keyboard; a person who starts an 
         return ((await response.json()) as { data: { key: string; enabled: boolean }[] }).data.find((entry) => entry.key === 'assign_on_start')?.enabled;
       })
       .toBe(true);
+    expect(puts).toHaveLength(1);
 
     const item = await createItem(page, { project_id: project.id, title: 'E2E Startseite bauen' });
     expect((await itemOf(page, item.key)).assignee_id).toBeNull();
@@ -101,8 +118,9 @@ test('Auto-Archiv archives an item closed long ago', async ({ page }) => {
   const project = await createE2eProject(page, projectName('auto archive'), { types: ['Task'] });
   try {
     await switchOn(page, project.id, 'auto_archive', { days: 30 });
-    const old = await createItem(page, { project_id: project.id, title: 'E2E Alte Rechnung', state_id: await stateOf(page, 'Done') });
-    const recent = await createItem(page, { project_id: project.id, title: 'E2E Neue Rechnung', state_id: await stateOf(page, 'Done') });
+    const done = await stateOf(page, 'Done');
+    const old = await createItem(page, { project_id: project.id, title: 'E2E Alte Rechnung', state_id: done });
+    const recent = await createItem(page, { project_id: project.id, title: 'E2E Neue Rechnung', state_id: done });
     // the server's clock cannot be set: the item was closed 40 days ago
     expect(artisanEval(`App\\Models\\WorkItem::query()->whereKey('${old.id}')->update(['closed_at' => now()->subDays(40)]); echo 'ok';`)).toBe('ok');
 
