@@ -1,16 +1,16 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { render } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import { shellLayout } from '@/shell/layout';
 import Index from './Index';
 
-// Until the templates screen comes, the page is its frame: the heading and a skeleton.
+const screen = vi.hoisted(() => vi.fn((_props: unknown) => null));
+vi.mock('@/features/templates/TemplatesScreen', () => ({ TemplatesScreen: screen }));
 
 describe('templates page', () => {
-  it('shows the heading and that it loads', () => {
-    render(<Index identifier="WEB" templateId={null} />);
+  it('renders the templates screen with the identifier and the template of the address', () => {
+    render(<Index identifier="WEB" templateId="new" />);
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Vorlagen' })).toBeTruthy();
-    expect(screen.getByRole('status').textContent).toBe('Lädt …');
+    expect(screen).toHaveBeenCalledWith({ identifier: 'WEB', templateId: 'new' }, undefined);
   });
 
   it('lives in the shell', () => {
