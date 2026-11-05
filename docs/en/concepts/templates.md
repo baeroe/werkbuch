@@ -105,6 +105,7 @@ The **Log** of a template lists every run, the newest first: when, whether on th
 - **Members and admins** of the project create, change, delete and run templates; org admins do so in every project, bots only as members.
 - **Viewers** and people outside a public project read the templates and their logs, without the editor.
 - **Archived projects** keep their templates readable; saving, deleting and **Run now** are refused with `409 project_archived`, and no schedule runs.
+- **Saved meanwhile:** when the template is saved again and again while **Run now** prepares, the run gives up after three tries and answers `409 template_changed`; nothing is created, try again.
 - **Applying** a template in the create dialog needs the right to create items in its project.
 
 ## REST

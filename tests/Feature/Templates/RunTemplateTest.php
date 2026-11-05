@@ -386,3 +386,20 @@ it('starts over with the language of the organisation as locked (K3)', function 
 
     expect(RunTemplate::run(actor($mara), $template)['run']->error)->toBe('Required property Umgebung is missing');
 });
+
+it('answers a run by hand of a template saved again and again with 409 template_changed, never 404 (T7-M3)', function () use ($world) {
+    [, $mara, , $template] = $world();
+    $tries = 0;
+    DB::connection()->beforeExecuting(function (string $query) use ($template, &$tries): void {
+        if (str_starts_with($query, 'select * from `templates`') && str_ends_with($query, 'for update')) {
+            $tries++;
+            DB::table('templates')->where('id', $template->id)->update(['updated_at' => CarbonImmutable::now()->addMicroseconds($tries)->format('Y-m-d H:i:s.u')]);
+        }
+    });
+
+    $problem = problemOf(fn () => RunTemplate::run(actor($mara), $template));
+
+    expect([$problem->status, $problem->reason, $problem->detail])->toBe([409, 'template_changed', null])
+        ->and($tries)->toBe(RunTemplate::ATTEMPTS)
+        ->and([TemplateRun::query()->count(), WorkItem::query()->count()])->toBe([0, 0]);
+});

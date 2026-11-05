@@ -1492,6 +1492,7 @@
     "problem.reason.service_unavailable": "The service is not available right now.",
     "problem.reason.session_required": "This only works signed in to werkbuch, not with a token.",
     "problem.reason.state_in_use": "Removed statuses with items have no new status.",
+    "problem.reason.template_changed": "The template changed while it ran. Try again.",
     "problem.reason.too_many_requests": "Too many requests. Try again in a moment.",
     "problem.reason.transition_not_allowed": "The workflow does not allow this transition.",
     "problem.reason.two_factor_disabled": "Two-factor authentication is off.",

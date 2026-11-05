@@ -1492,6 +1492,7 @@
     "problem.reason.service_unavailable": "Der Dienst ist gerade nicht erreichbar.",
     "problem.reason.session_required": "Das geht nur angemeldet in werkbuch, nicht mit einem Token.",
     "problem.reason.state_in_use": "Für entfernte Status mit Items fehlt ein neuer Status.",
+    "problem.reason.template_changed": "Die Vorlage wurde während des Laufs geändert. Versuche es noch einmal.",
     "problem.reason.too_many_requests": "Zu viele Anfragen. Versuch es gleich noch einmal.",
     "problem.reason.transition_not_allowed": "Der Übergang ist im Workflow nicht erlaubt.",
     "problem.reason.two_factor_disabled": "Die Zwei-Faktor-Authentifizierung ist ausgeschaltet.",

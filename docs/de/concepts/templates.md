@@ -105,6 +105,7 @@ Das **Protokoll** einer Vorlage listet jeden Lauf, den neuesten zuerst: wann, ob
 - **Member und Admins** des Projekts legen Vorlagen an, ändern, löschen und führen sie aus; Org-Admins in jedem Projekt, Bots nur als Mitglied.
 - **Viewer** und Außenstehende eines öffentlichen Projekts lesen die Vorlagen und ihre Protokolle, ohne Editor.
 - **Archivierte Projekte** behalten ihre Vorlagen lesbar; Speichern, Löschen und **Jetzt ausführen** werden mit `409 project_archived` abgelehnt, und kein Zeitplan läuft.
+- **Gleichzeitig gespeichert:** Wird die Vorlage während **Jetzt ausführen** immer wieder gespeichert, gibt der Lauf nach drei Versuchen auf und antwortet `409 template_changed`; nichts ist angelegt, versuche es noch einmal.
 - **Anwenden** im Anlegen-Dialog braucht das Recht, im Projekt der Vorlage Items anzulegen.
 
 ## REST

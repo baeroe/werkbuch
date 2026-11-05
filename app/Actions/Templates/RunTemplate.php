@@ -79,7 +79,8 @@ final class RunTemplate
      *
      * @return array{run: TemplateRun, item: ?WorkItem}|null
      *
-     * @throws Problem 409 `project_archived` for a run by hand
+     * @throws Problem 409 `project_archived` for a run by hand, 409 `template_changed` for one whose template was saved
+     *                 again on each of its ATTEMPTS
      */
     public static function execute(Template $template, ?DateTimeImmutable $scheduledFor, ?User $trigger): ?array
     {
@@ -93,8 +94,13 @@ final class RunTemplate
         try {
             for ($attempt = 1; ; $attempt++) {
                 $outcome = self::attempt($template->id, $scheduledFor, $trigger, $actor, $organization, $locale);
-                if (! $outcome instanceof Organization || $attempt === self::ATTEMPTS) {
-                    return $outcome instanceof Organization ? null : $outcome;
+                if (! $outcome instanceof Organization) {
+                    return $outcome;
+                }
+                if ($attempt === self::ATTEMPTS) {
+                    // saved again on every try: a run by hand says so (the person tries again), a term is passed over
+                    // until the sweeper takes it again (T7-M3)
+                    return $scheduledFor === null ? throw Problem::conflict('template_changed') : null;
                 }
                 // the template or the organization changed while the run prepared: again, as they are now
                 $organization = $outcome;
