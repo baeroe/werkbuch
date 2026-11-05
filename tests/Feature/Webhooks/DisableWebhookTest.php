@@ -200,3 +200,11 @@ it('switches off only a webhook that is still on', function () use ($system) {
         ->and($pending->fresh()->status)->toBe(WebhookDelivery::PENDING)
         ->and(eventsOf(EventType::WebhookDisabled))->toHaveCount(0);
 });
+
+it('leaves a cancelled delivery cancelled when its last scheduled try fails (T7-M2)', function () use ($record) {
+    $delivery = WebhookDelivery::factory()->create(['status' => WebhookDelivery::CANCELLED]);
+
+    $record($delivery, 500, final: true);
+
+    expect($delivery->fresh()->only(['status', 'attempts']))->toBe(['status' => WebhookDelivery::CANCELLED, 'attempts' => 1]);
+});

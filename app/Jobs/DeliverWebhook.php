@@ -139,6 +139,8 @@ final class DeliverWebhook extends CallWebhookJob
         return [
             ...parent::requestOptions(),
             'allow_redirects' => false,
+            // Guzzle would unpack gzip/br: the progress callback counts the bytes of the wire, and 50 KB can be 50 MB (T7-I1)
+            'decode_content' => false,
             'connect_timeout' => self::CONNECT_TIMEOUT,
             'proxy' => '',
             'curl' => $pin === null ? [] : [CURLOPT_RESOLVE => [$pin]],

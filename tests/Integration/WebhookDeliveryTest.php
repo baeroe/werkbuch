@@ -83,6 +83,18 @@ it('stops reading a large answer and counts it a failure (K4)', function () use 
         ->and(DB::table('jobs')->where('queue', 'webhooks')->count())->toBe(1);
 });
 
+it('does not unpack a compressed answer, so the limit counts what it keeps (T7-I1)', function () use ($deliver) {
+    $before = memory_get_peak_usage(true);
+
+    $deliver($this->receiver, '/gzip');
+
+    $attempt = WebhookAttempt::query()->sole();
+    expect($attempt->status_code)->toBe(200)
+        // the excerpt is the packed bytes, never 50 MB of `a`
+        ->and((string) $attempt->response_excerpt)->not->toContain('aaaa')
+        ->and(memory_get_peak_usage(true) - $before)->toBeLessThan(20 * 1024 * 1024);
+});
+
 it('records a refused connection with the URL masked', function () use ($deliver) {
     $this->receiver->stop();
 
