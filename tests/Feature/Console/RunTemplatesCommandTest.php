@@ -102,7 +102,7 @@ it('runs a job of the template with three tries and pauses', function () {
     $job = new RunTemplateJob(Template::query()->sole()->id);
 
     expect([$job->tries, $job->backoff, $job->uniqueFor, $job->uniqueId(), $job->queue])
-        ->toBe([3, [60, 300], 300, Template::query()->sole()->id, 'default']);
+        ->toBe([3, [60, 300], 900, Template::query()->sole()->id, 'default']);
 
     $job->handle();
     expect(WorkItem::query()->count())->toBe(1);
