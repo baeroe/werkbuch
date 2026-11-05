@@ -1257,6 +1257,160 @@ describe('templates in the create dialog', () => {
     expect(toastTitles()).toContain('Vorlage „Release-Check“ angewendet');
   });
 
+  /** Holds the answers of `GET /templates/<id>/draft` until `release`. */
+  function holdDrafts() {
+    const real = globalThis.fetch;
+    const waiting: (() => void)[] = [];
+    globalThis.fetch = (input: RequestInfo | URL, init?: RequestInit) =>
+      String(input).includes('/draft') ? new Promise<Response>((resolve) => waiting.push(() => resolve(real(input, init)))) : real(input, init);
+    return {
+      held: () => waiting.length,
+      release: () =>
+        act(async () => {
+          globalThis.fetch = real;
+          waiting.splice(0).forEach((resume) => resume());
+        }),
+    };
+  }
+  /** The describing text of a control (its hint or error). */
+  const describing = (control: HTMLElement) =>
+    (control.getAttribute('aria-describedby') ?? '')
+      .split(' ')
+      .map((id) => document.getElementById(id)?.textContent ?? '')
+      .join(' ');
+
+  it('takes back what was typed before the template (I1)', async () => {
+    const user = userEvent.setup();
+    const { dialog, title } = await openDialog({ project_id: 'p_web' });
+    await waitFor(() => expect(templateSelect(dialog).textContent).toContain('Keine Vorlage'));
+    await user.type(title, 'Mein eigener Titel');
+    await choose(user, within(dialog).getByRole('combobox', { name: /^Priorität/ }), 'Low');
+
+    await choose(user, templateSelect(dialog), 'Release-Check');
+    await waitFor(() => expect(title.value).toBe('Release-Check KW 45'));
+    const applied = currentToasts().find((entry) => entry.title === 'Vorlage „Release-Check“ angewendet')!;
+    expect(applied.action?.label).toBe('Rückgängig');
+    expect(canUndo()).toBe(true);
+
+    // mod+z presses it: the draft before comes back, without the template
+    act(() => void undoLatest());
+    await waitFor(() => expect(title.value).toBe('Mein eigener Titel'));
+    expect(within(dialog).getByRole('combobox', { name: 'Priorität: Low' })).toBeTruthy();
+    expect(templateSelect(dialog).textContent).toContain('Keine Vorlage');
+    await modEnter();
+    await waitFor(() => expect(posts()).toHaveLength(1));
+    expect(posts()[0]).toMatchObject({ title: 'Mein eigener Titel', priority: 'low' });
+    expect(posts()[0]).not.toHaveProperty('template_id');
+  });
+
+  it('applies the same template again, and its undo brings back the draft with the template (I1, M5)', async () => {
+    const user = userEvent.setup();
+    const { dialog, title } = await openDialog({ project_id: 'p_web', template_id: 'tpl_web_release' });
+    await waitFor(() => expect(title.value).toBe('Release-Check KW 45'));
+    await user.type(title, ' (geändert)');
+
+    await choose(user, templateSelect(dialog), 'Release-Check');
+    await waitFor(() => expect(draftCalls()).toHaveLength(2));
+    await waitFor(() => expect(title.value).toBe('Release-Check KW 45'));
+
+    act(() => void undoLatest());
+    await waitFor(() => expect(title.value).toBe('Release-Check KW 45 (geändert)'));
+    expect(templateSelect(dialog).textContent).toContain('Release-Check');
+    await modEnter();
+    await waitFor(() => expect(posts()).toHaveLength(1));
+    expect(posts()[0]).toMatchObject({ title: 'Release-Check KW 45 (geändert)', template_id: 'tpl_web_release' });
+  });
+
+  it('keeps what was typed while the template loads, and says so (I1)', async () => {
+    const user = userEvent.setup();
+    const { dialog, title } = await openDialog({ project_id: 'p_web' });
+    await waitFor(() => expect(templateSelect(dialog).textContent).toContain('Keine Vorlage'));
+    const drafts = holdDrafts();
+    await choose(user, templateSelect(dialog), 'Release-Check');
+    await waitFor(() => expect(drafts.held()).toBe(1));
+    await user.type(title, 'Schnell getippt');
+    await drafts.release();
+
+    await waitFor(() => expect(toastTitles()).toContain('Vorlage „Release-Check“ nicht angewendet'));
+    expect(currentToasts().find((entry) => entry.title === 'Vorlage „Release-Check“ nicht angewendet')?.description).toBe(
+      'Du hast weitergeschrieben, während sie lud. Wähle sie noch einmal, um sie anzuwenden.',
+    );
+    expect(title.value).toBe('Schnell getippt');
+    expect(templateSelect(dialog).textContent).toContain('Keine Vorlage');
+    expect(toastTitles()).not.toContain('Vorlage „Release-Check“ angewendet');
+  });
+
+  it('shows a refused template at its field and lets the person create without it (I2)', async () => {
+    answerCreate = () => invalid({ template_id: ['Diese Vorlage gibt es nicht mehr.'] });
+    const user = userEvent.setup();
+    const { dialog, title } = await openDialog({ project_id: 'p_web', template_id: 'tpl_web_release' });
+    await waitFor(() => expect(title.value).toBe('Release-Check KW 45'));
+    await modEnter();
+    await waitFor(() => expect(templateSelect(dialog).getAttribute('aria-invalid')).toBe('true'));
+    expect(describing(templateSelect(dialog))).toContain('Diese Vorlage gibt es nicht mehr.');
+    expect(document.activeElement).toBe(templateSelect(dialog));
+    // at its field, not on top
+    expect(within(dialog).queryByText('Nicht angelegt')).toBeNull();
+
+    answerCreate = created;
+    await choose(user, templateSelect(dialog), 'Keine Vorlage');
+    await waitFor(() => expect(templateSelect(dialog).getAttribute('aria-invalid')).toBeNull());
+    // the fields of the template stay
+    expect(title.value).toBe('Release-Check KW 45');
+    await modEnter();
+    await waitFor(() => expect(posts()).toHaveLength(2));
+    expect(posts()[1]).not.toHaveProperty('template_id');
+    expect(posts()[1]).toMatchObject({ title: 'Release-Check KW 45' });
+  });
+
+  it('lets go of a template that left the list, and says so (I2)', async () => {
+    const { dialog, title } = await openDialog({ project_id: 'p_web', template_id: 'tpl_web_release' });
+    await waitFor(() => expect(title.value).toBe('Release-Check KW 45'));
+    // deleted meanwhile (another tab, live)
+    webTemplates = [];
+    await act(() => client.invalidateQueries());
+    await waitFor(() => expect(describing(templateSelect(dialog))).toContain('Die gewählte Vorlage gibt es nicht mehr. Das Item entsteht ohne sie, ihre Felder bleiben.'));
+    expect(title.value).toBe('Release-Check KW 45');
+    await modEnter();
+    await waitFor(() => expect(posts()).toHaveLength(1));
+    expect(posts()[0]).not.toHaveProperty('template_id');
+  });
+
+  it('says at the type when the type of the template is not active in the project (M1)', async () => {
+    answerDraft = () => ({ body: { data: { ...releaseDraft, type_id: 't_wish', values: {} } } });
+    const user = userEvent.setup();
+    const { dialog, title } = await openDialog({ project_id: 'p_web' });
+    await waitFor(() => expect(templateSelect(dialog).textContent).toContain('Keine Vorlage'));
+    await choose(user, templateSelect(dialog), 'Release-Check');
+    await waitFor(() => expect(title.value).toBe('Release-Check KW 45'));
+    const typeSelect = within(dialog).getByRole('combobox', { name: /^Typ/ });
+    expect(typeSelect.textContent).toContain('Task');
+    expect(describing(typeSelect)).toContain('Den Typ „Kundenwunsch“ der Vorlage gibt es in diesem Projekt nicht. Das Item bekommt den gewählten Typ.');
+
+    // a type chosen by hand answers it
+    await choose(user, typeSelect, 'Bug');
+    await waitFor(() => expect(describing(within(dialog).getByRole('combobox', { name: /^Typ/ }))).not.toContain('Kundenwunsch'));
+  });
+
+  it('names no empty template in its toast (M5)', async () => {
+    answerDraft = () => problem(503, 'service_unavailable', 'Der Server ist gerade nicht erreichbar.');
+    const user = userEvent.setup();
+    const { dialog, title } = await openDialog({ project_id: 'p_web' });
+    await waitFor(() => expect(templateSelect(dialog).textContent).toContain('Keine Vorlage'));
+    await choose(user, templateSelect(dialog), 'Release-Check');
+    await waitFor(() => expect(toastTitles()).toContain('Vorlage nicht angewendet'));
+    const failure = currentToasts().find((entry) => entry.title === 'Vorlage nicht angewendet')!;
+
+    // the list reloads without it before the retry
+    webTemplates = [makeTemplate({ id: 'tpl_web_other', project_id: 'p_web', name: 'Anderes' })];
+    await act(() => client.invalidateQueries());
+    answerDraft = () => ({ body: { data: releaseDraft } });
+    act(() => runToastAction(failure.id));
+    await waitFor(() => expect(title.value).toBe('Release-Check KW 45'));
+    expect(toastTitles()).toContain('Vorlage „Release-Check“ angewendet');
+    expect(toastTitles()).not.toContain('Vorlage „“ angewendet');
+  });
+
   it('says that the templates are loading', async () => {
     let release = () => {};
     const gate = new Promise<void>((resolve) => (release = resolve));

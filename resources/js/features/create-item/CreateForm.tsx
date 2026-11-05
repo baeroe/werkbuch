@@ -23,8 +23,16 @@
  *   and fills type, title, description, the fields and the values with them; a toast says so. A failure says so with
  *   "Erneut versuchen". The item names the template (`template_id`): its pictures are copied for it on the server. A
  *   change of project lets go of the template (its pictures then belong to another project, A233); `defaults.template_id`
- *   ("Vorlage anwenden …" in the palette) is applied once.
+ *   ("Vorlage anwenden …" in the palette) is applied once. Applying never loses what was typed: its toast offers
+ *   "Rückgängig" (mod+z too), which brings back the draft from before, with its template; an answer that comes after
+ *   the person kept writing fills nothing and says so (choosing the template again applies it). A type of the template
+ *   the project does not take is said at the type, the type stays. "Keine Vorlage" lets go of the template (its fields
+ *   stay), so does a template that left the list (deleted meanwhile, said at the field); a refusal of the server at
+ *   `template_id` shows there with the focus.
  */
+
+/** The value of "Keine Vorlage" in the field: no ULID is ever this. */
+const NO_TEMPLATE = 'none';
 
 import { usePage } from '@inertiajs/react';
 import { useQueries } from '@tanstack/react-query';
@@ -42,7 +50,7 @@ import { ProjectBadge } from '@/components/ui/ProjectBadge';
 import { Select } from '@/components/ui/Select';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
 import { labelClass } from '@/components/ui/styles';
-import { toast } from '@/components/ui/toast';
+import { dismissToast, toast } from '@/components/ui/toast';
 import { RichTextEditor } from '@/editor/RichTextEditor';
 import { UploadContext, useUploadCounter, useUploadsPending } from '@/editor/UploadContext';
 import { attachmentQuery } from '@/hooks/attachments';
@@ -55,6 +63,7 @@ import { useWorkItemTypes } from '@/hooks/workItemTypes';
 import { notifyError } from '@/lib/errors';
 import { t } from '@/lib/i18n';
 import { usePermissions } from '@/lib/permissions';
+import { undoLabel } from '@/lib/undo';
 import { attachmentIds } from '@/lib/richtext';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import type { CreateDefaults } from '@/store/ui';
@@ -181,7 +190,7 @@ type FormBodyProps = CreateFormProps & {
 };
 
 /** The paths of the fields this form shows an error at; any other refusal stands on top. */
-const FIELD_PATHS = new Set(['project_id', 'type_id', 'title', 'description_json', 'state_id', 'assignee_id', 'priority', 'label_ids', 'start_date', 'due_date', 'parent_id']);
+const FIELD_PATHS = new Set(['project_id', 'type_id', 'template_id', 'title', 'description_json', 'state_id', 'assignee_id', 'priority', 'label_ids', 'start_date', 'due_date', 'parent_id']);
 
 function FormBody({
   formId,
@@ -279,6 +288,9 @@ function FormBody({
   const [unreadable, setUnreadable] = useState<Record<string, string>>({});
   const [attempted, setAttempted] = useState(false);
   const [blocked, setBlocked] = useState<string | null>(null);
+  /** What the form says at the type and at the template about the template applied last, or null. */
+  const [typeHint, setTypeHint] = useState<string | null>(null);
+  const [templateHint, setTemplateHint] = useState<string | null>(null);
   useEffect(() => {
     if (!projectGone && !typeGone) return;
     setGoneName(seenNames.get(projectGone ? stored.projectId : stored.typeId) ?? '');
@@ -375,9 +387,24 @@ function FormBody({
   // the templates of the project; choosing one fills the draft with what the server makes of it now
   const templates = useTemplateSummaries(draft.projectId);
   const templateList = templates.data?.items ?? [];
+  for (const entry of templateList) seenNames.set(entry.id, entry.name);
   const settle = useSettle();
   /** Counts the templates asked for: only the answer to the last one (and in the same project) fills the draft. */
   const asked = useRef(0);
+  /** The draft as it is now, for answers that arrive later. */
+  const latest = useRef(draft);
+  useLayoutEffect(() => {
+    latest.current = draft;
+  });
+  /** The toast of the template applied last: its "Rückgängig" belongs to this form and goes with it. */
+  const appliedToast = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (appliedToast.current !== null) dismissToast(appliedToast.current);
+      appliedToast.current = null;
+    },
+    [],
+  );
 
   function fromTemplate(current: Draft, filled: TemplateDraft): Draft {
     const typeId = typesOf(current.projectId).some((entry) => entry.id === filled.type_id) ? filled.type_id : current.typeId;
@@ -397,25 +424,74 @@ function FormBody({
     };
   }
 
+  /** What the form said about the draft before goes: it is about other fields now. */
+  function forgetNotices() {
+    setErrors({});
+    setBlocked(null);
+    setGoneName(null);
+    setTemplateHint(null);
+  }
+
   function applyTemplate(templateId: string) {
     const round = ++asked.current;
-    const projectId = draft.projectId;
-    const name = templateList.find((entry) => entry.id === templateId)?.name ?? '';
+    const chosen = JSON.stringify(latest.current);
     settle(templateDraft(templateId), {
       onSuccess: (filled) => {
         if (round !== asked.current) return;
-        setDraft((current) => (current.projectId === projectId ? fromTemplate(current, filled) : current));
-        // what was said about the draft before is about other fields
-        setErrors({});
-        setBlocked(null);
-        setGoneName(null);
-        toast({ title: t('items.create.template_applied', { name }), description: t('items.create.template_applied_description'), tone: 'success' });
+        const before = latest.current;
+        const name = seenNames.get(templateId);
+        // written on while it loaded: what was typed wins, nothing is overwritten unasked
+        if (JSON.stringify(before) !== chosen) {
+          toast({ title: name ? t('items.create.template_late', { name }) : t('items.create.template_failed'), description: t('items.create.template_late_description') });
+          return;
+        }
+        const type = types.find((entry) => entry.id === filled.type_id);
+        const inactive = !typesOf(before.projectId).some((entry) => entry.id === filled.type_id);
+        setDraft(fromTemplate(before, filled));
+        forgetNotices();
+        setTypeHint(inactive ? t('items.create.template_type_inactive', { name: type?.name ?? filled.type_id }) : null);
+        if (appliedToast.current !== null) dismissToast(appliedToast.current);
+        appliedToast.current = toast({
+          title: name ? t('items.create.template_applied', { name }) : t('items.create.template_applied_unnamed'),
+          description: t('items.create.template_applied_description'),
+          tone: 'success',
+          // the draft from before comes back, with the template it had
+          action: {
+            label: undoLabel(),
+            onClick: () => {
+              asked.current += 1;
+              appliedToast.current = null;
+              setDraft(before);
+              forgetNotices();
+              setTypeHint(null);
+            },
+          },
+        });
       },
       onError: (error) => {
         if (round === asked.current) notifyError(t('items.create.template_failed'), error, () => applyTemplate(templateId));
       },
     });
   }
+
+  /** "Keine Vorlage": the item is made without it; what it filled in stays. */
+  function letGoOfTemplate() {
+    asked.current += 1;
+    update({ templateId: null });
+    clearError('template_id');
+    setTemplateHint(null);
+    setTypeHint(null);
+  }
+
+  // a template that left the list (deleted meanwhile): the item is made without it, and the field says so
+  const templateGone = templates.isSuccess && draft.templateId !== null && !templateList.some((entry) => entry.id === draft.templateId);
+  useEffect(() => {
+    if (!templateGone) return;
+    setDraft((current) => ({ ...current, templateId: null }));
+    clearError('template_id');
+    setTemplateHint(t('items.create.template_gone'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- when it goes
+  }, [templateGone]);
 
   // a dialog opened with a template ("Vorlage anwenden …") applies it once, as soon as its name is known
   const appliedDefault = useRef(false);
@@ -432,6 +508,8 @@ function FormBody({
     setErrors({});
     setBlocked(null);
     setGoneName(null);
+    setTypeHint(null);
+    setTemplateHint(null);
     // a template still on its way fills nothing in the other project
     asked.current += 1;
     // status, assignee and parent belong to the project, and so does the template
@@ -444,6 +522,7 @@ function FormBody({
     // the notice of a press is about the draft before, as after a change of the project (T15-M5)
     setBlocked(null);
     setGoneName(null);
+    setTypeHint(null);
     update({ typeId, values: keptValues(draft.values, typeId) });
   }
 
@@ -491,6 +570,7 @@ function FormBody({
           options={typesOf(draft.projectId).map((entry) => ({ value: entry.id, label: entry.name, icon: <TypeGlyph type={entry} /> }))}
           value={draft.typeId}
           onValueChange={(next) => next && changeType(next)}
+          hint={typeHint}
           error={errors.type_id}
         />
         <Select
@@ -504,10 +584,15 @@ function FormBody({
                   ? 'items.create.template_unavailable'
                   : 'items.create.template_empty',
           )}
-          disabled={templateList.length === 0}
-          options={templateList.map((entry) => ({ value: entry.id, label: entry.name }))}
+          disabled={templateList.length === 0 && draft.templateId === null && !errors.template_id}
+          options={[{ value: NO_TEMPLATE, label: t('items.create.template_none') }, ...templateList.map((entry) => ({ value: entry.id, label: entry.name }))]}
           value={draft.templateId}
-          onValueChange={(next) => next && applyTemplate(next)}
+          onValueChange={(next) => {
+            if (next === NO_TEMPLATE) letGoOfTemplate();
+            else if (next) applyTemplate(next);
+          }}
+          hint={templateHint}
+          error={errors.template_id}
         />
       </div>
       <Input
