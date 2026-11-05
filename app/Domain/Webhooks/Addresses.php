@@ -5,12 +5,14 @@ namespace App\Domain\Webhooks;
 /**
  * The addresses a webhook never reaches (spec 6.3, A368): private, loopback, link-local, carrier-grade NAT,
  * documentation, benchmark, multicast and reserved IPv4 networks; IPv6 loopback, unique local, link-local, multicast,
- * discard, documentation, site-local and Teredo. An IPv6 address that carries an IPv4 address (v4-mapped,
- * v4-compatible, NAT64 `64:ff9b::/96`, 6to4) is checked by that IPv4 address; the local NAT64 prefix `64:ff9b:1::/48`
- * is blocked whole (it embeds the IPv4 address around the u octet, K4).
+ * discard, documentation (also `3fff::/20`), site-local, Teredo, benchmarking, ORCHID and SRv6 SIDs. An IPv6 address
+ * that carries an IPv4 address (v4-mapped, SIIT `::ffff:0:0:0/96`, v4-compatible, NAT64 `64:ff9b::/96`, 6to4) is
+ * checked by that IPv4 address; the local NAT64 prefix `64:ff9b:1::/48` is blocked whole (it embeds the IPv4 address
+ * around the u octet, K4).
  *
  * Only strict literals count as addresses (`inet_pton`): `127.1`, `0x7f.1`, `2130706433` or `[::1]` are none, though
- * curl reads some of them as 127.0.0.1 (K5), so they are blocked like anything that is no literal.
+ * curl reads some of them as 127.0.0.1 (K5), so they are blocked like anything that is no literal; so is a host with a
+ * NUL byte (inet_pton would throw, T1-I1).
  */
 final class Addresses
 {
@@ -28,7 +30,7 @@ final class Addresses
      */
     public const IPV6 = [
         '::/128', '::1/128', 'fc00::/7', 'fe80::/10', 'fec0::/10', 'ff00::/8', '100::/64', '2001:db8::/32',
-        '2001::/32', '64:ff9b:1::/48',
+        '2001::/32', '64:ff9b:1::/48', '2001:2::/48', '2001:10::/28', '2001:20::/28', '3fff::/20', '5f00::/16',
     ];
 
     /**
@@ -38,6 +40,7 @@ final class Addresses
      */
     public const EMBEDDING = [
         '::ffff:0:0/96' => 12,
+        '::ffff:0:0:0/96' => 12,
         '::/96' => 12,
         '64:ff9b::/96' => 12,
         '2002::/16' => 2,
@@ -48,7 +51,7 @@ final class Addresses
      */
     public static function isBlocked(string $ip): bool
     {
-        $bytes = @inet_pton($ip);
+        $bytes = self::bytes($ip);
         if ($bytes === false) {
             return true;
         }
@@ -72,7 +75,15 @@ final class Addresses
      */
     public static function isIp(string $host): bool
     {
-        return @inet_pton($host) !== false;
+        return self::bytes($host) !== false;
+    }
+
+    /**
+     * The bytes of a strict literal, or false; a NUL byte makes inet_pton throw a ValueError, so it is no literal.
+     */
+    private static function bytes(string $host): string|false
+    {
+        return str_contains($host, "\0") ? false : @inet_pton($host);
     }
 
     /**

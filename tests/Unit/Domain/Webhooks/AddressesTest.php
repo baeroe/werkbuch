@@ -59,6 +59,11 @@ it('blocks every address of the blocked IPv6 networks', function (string $ip) {
     '64:ff9b:1::/48 with a private IPv4 (K4)' => ['64:ff9b:1::a9fe:a9fe'],
     '64:ff9b:1::/48 with a public IPv4 (K4)' => ['64:ff9b:1::808:808'],
     '64:ff9b:1::/48 last' => ['64:ff9b:1:ffff:ffff:ffff:ffff:ffff'],
+    '2001:2::/48 (benchmarking)' => ['2001:2::1'], '2001:2::/48 last' => ['2001:2:0:ffff:ffff:ffff:ffff:ffff'],
+    '2001:10::/28 (ORCHID)' => ['2001:10::1'], '2001:10::/28 last' => ['2001:1f:ffff:ffff:ffff:ffff:ffff:ffff'],
+    '2001:20::/28 (ORCHIDv2)' => ['2001:20::1'], '2001:20::/28 last' => ['2001:2f:ffff:ffff:ffff:ffff:ffff:ffff'],
+    '3fff::/20 (documentation)' => ['3fff::1'], '3fff::/20 last' => ['3fff:fff:ffff:ffff:ffff:ffff:ffff:ffff'],
+    '5f00::/16 (SRv6 SIDs)' => ['5f00::1'], '5f00::/16 last' => ['5f00:ffff:ffff:ffff:ffff:ffff:ffff:ffff'],
 ]);
 
 it('lets the neighbours of the blocked IPv6 networks through', function (string $ip) {
@@ -70,6 +75,10 @@ it('lets the neighbours of the blocked IPv6 networks through', function (string 
     'before 2001:db8::/32' => ['2001:db7:ffff:ffff:ffff:ffff:ffff:ffff'], 'after 2001:db8::/32' => ['2001:db9::1'],
     'after 2001::/32' => ['2001:1::1'],
     'after 64:ff9b:1::/48' => ['64:ff9b:2::1'],
+    'after 2001:2::/48' => ['2001:2:1::1'], 'before 2001:10::/28' => ['2001:f:ffff:ffff:ffff:ffff:ffff:ffff'],
+    'after 2001:20::/28' => ['2001:30::1'],
+    'before 3fff::/20' => ['3ffe:ffff:ffff:ffff:ffff:ffff:ffff:ffff'], 'after 3fff::/20' => ['3fff:1000::1'],
+    'before 5f00::/16' => ['5eff:ffff:ffff:ffff:ffff:ffff:ffff:ffff'], 'after 5f00::/16' => ['5f01::1'],
     'a public host' => ['2606:4700::1111'],
     'a public resolver' => ['2001:4860:4860::8888'],
 ]);
@@ -92,6 +101,9 @@ it('checks the IPv4 address an IPv6 address carries', function (string $ip, bool
     '6to4 loopback' => ['2002:7f00:1::', true],
     '6to4 private' => ['2002:c0a8:101::1', true],
     '6to4 public' => ['2002:0808:0808::1', false],
+    'SIIT loopback' => ['::ffff:0:7f00:1', true],
+    'SIIT metadata' => ['::ffff:0:169.254.169.254', true],
+    'SIIT public' => ['::ffff:0:808:808', false],
 ]);
 
 it('blocks what is no address literal', function (string $host) {
@@ -111,6 +123,9 @@ it('blocks what is no address literal', function (string $host) {
     'brackets' => ['[::1]'],
     'a zone' => ['fe80::1%eth0'],
     'a dangling colon' => ['::1:'],
+    // inet_pton throws a ValueError for a NUL byte (T1-I1)
+    'a NUL byte after an address' => ["8.8.8.8\0x"],
+    'a NUL byte alone' => ["\0"],
 ]);
 
 it('knows an address literal', function (string $host) {
