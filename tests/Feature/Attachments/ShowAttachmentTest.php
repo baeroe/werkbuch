@@ -5,6 +5,7 @@ use App\Actions\Attachments\UploadAttachment;
 use App\Actions\Comments\AddComment;
 use App\Models\Attachment;
 use App\Models\Project;
+use App\Models\Template;
 use App\Models\User;
 use App\Models\WorkItem;
 use Illuminate\Http\UploadedFile;
@@ -124,6 +125,9 @@ it('hides an attachment whose owner is gone or of a kind it does not know', func
     $gonePage = Attachment::factory()->stored($png(), 'image/png', 'd.png')->create([
         'project_id' => $project->id, 'uploaded_by' => $admin->id, 'attachable_type' => 'page', 'attachable_id' => strtolower((string) Str::ulid()),
     ]);
+    $goneTemplate = Attachment::factory()->stored($png(), 'image/png', 'e.png')->create([
+        'project_id' => $project->id, 'uploaded_by' => $admin->id, 'attachable_type' => 'template', 'attachable_id' => strtolower((string) Str::ulid()),
+    ]);
     $unknown = Attachment::factory()->stored($png(), 'image/png', 'c.png')->create([
         'project_id' => $project->id, 'uploaded_by' => $admin->id, 'attachable_type' => 'project', 'attachable_id' => $project->id,
     ]);
@@ -132,7 +136,29 @@ it('hides an attachment whose owner is gone or of a kind it does not know', func
     $this->actingAs($admin)->get("/attachments/{$gone->id}")->assertNotFound();
     $this->actingAs($admin)->get("/attachments/{$goneComment->id}")->assertNotFound();
     $this->actingAs($admin)->get("/attachments/{$gonePage->id}")->assertNotFound();
+    $this->actingAs($admin)->get("/attachments/{$goneTemplate->id}")->assertNotFound();
     $this->actingAs($admin)->get("/attachments/{$unknown->id}")->assertNotFound();
+});
+
+it('shows the image of a template to everyone who sees its project, 404 to others', function () use ($png) {
+    $ops = Project::factory()->identifier('OPS')->private()->create();
+    $erik = memberOf($ops, ProjectRole::Viewer);
+    $ida = User::factory()->create(['name' => 'Ida']);
+    $web = Project::factory()->identifier('WEB')->public()->create();
+    $private = Template::factory()->create(['project_id' => $ops->id]);
+    $public = Template::factory()->create(['project_id' => $web->id]);
+    $image = Attachment::factory()->forTemplate($private)->stored($png(), 'image/png', 'karte.png')->create(['uploaded_by' => $erik->id]);
+    $shared = Attachment::factory()->forTemplate($public)->stored($png(), 'image/png', 'plan.png')->create(['uploaded_by' => $erik->id]);
+
+    $this->actingAs($erik)->get("/attachments/{$image->id}")->assertOk()->assertHeader('Content-Type', 'image/png');
+    $this->actingAs($erik)->getJson("/api/v1/attachments/{$image->id}")->assertOk()
+        ->assertJsonPath('data.owner', ['type' => 'template', 'id' => $private->id]);
+    $this->actingAs(User::factory()->admin()->create())->get("/attachments/{$image->id}")->assertOk();
+
+    // an outsider of OPS: nothing of its template, the picture of the public project's template as anyone
+    $this->actingAs($ida)->get("/attachments/{$image->id}")->assertNotFound();
+    $this->actingAs($ida)->getJson("/api/v1/attachments/{$image->id}")->assertNotFound()->assertJsonMissingPath('detail');
+    $this->actingAs($ida)->get("/attachments/{$shared->id}")->assertOk();
 });
 
 it('serves the image of a comment to readers of its item only', function () use ($stored, $png) {

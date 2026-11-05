@@ -4,12 +4,14 @@ use App\Access\ProjectRole;
 use App\Actions\Attachments\DeleteAttachment;
 use App\Actions\Pages\DeletePage;
 use App\Actions\Pages\UpdatePage;
+use App\Actions\Templates\DeleteTemplate;
 use App\Actions\WorkItems\DeleteWorkItem;
 use App\Actions\WorkItems\UpdateWorkItem;
 use App\Exceptions\Problem;
 use App\Models\Attachment;
 use App\Models\Page;
 use App\Models\Project;
+use App\Models\Template;
 use App\Models\User;
 use App\Models\WorkItem;
 use Illuminate\Support\Facades\DB;
@@ -175,4 +177,51 @@ it('makes a page that saves a picture of a page being deleted wait, and refuses 
         ->and($outcome instanceof ValidationException ? $outcome->errors() : null)->toBe(['content_json' => [__('field.rich_text.attachment')]])
         ->and($b->fresh()?->content)->toBeNull()
         ->and(Attachment::query()->count())->toBe(0);
+});
+
+/** WEB with Mara as its admin, an item, and a template that owns a picture its description shows. */
+$template = function (): array {
+    $mara = User::factory()->create();
+    $web = Project::factory()->member($mara, ProjectRole::Admin)->create(['lead_id' => $mara->id]);
+    $item = WorkItem::factory()->for($web)->create(['created_by' => $mara->id]);
+    $template = Template::factory()->create(['project_id' => $web->id, 'created_by' => $mara->id]);
+    $picture = Attachment::factory()->forTemplate($template)->create(['uploaded_by' => $mara->id]);
+    $template->update(['payload' => [...$template->payload, 'description' => F::doc(F::image($picture->id, null))]]);
+
+    return [$mara, $item, $template, $picture];
+};
+
+it('a save that copies an image of a template waits for its deletion', function () use ($template) {
+    [$mara, $item, $wartung, $picture] = $template();
+    $save = fn () => UpdateWorkItem::run(actor($mara), WorkItem::query()->findOrFail($item->id), ['description_json' => F::doc(F::image($picture->id, 'Plan'))]);
+
+    RaceConnections::hold(fn () => DeleteTemplate::run(actor($mara), $wartung));
+
+    // the deletion holds the project `for update` (K13): the save waits for it before it links the picture
+    RaceConnections::expectLockWait(RaceConnections::second($save), 'projects', sqlEnd: 'lock in share mode');
+
+    RaceConnections::releaseBeforeLock('projects', 'lock in share mode');
+    $outcome = RaceConnections::second($save);
+
+    expect($outcome)->toBeInstanceOf(ValidationException::class)
+        ->and($outcome instanceof ValidationException ? $outcome->errors() : null)->toBe(['description_json' => [__('field.rich_text.attachment')]])
+        ->and($item->fresh()?->description)->toBeNull()
+        ->and(Attachment::query()->count())->toBe(0);
+});
+
+it('makes the deletion of a template wait for a save that copies its image, and hands the image over (K13)', function () use ($template) {
+    [$mara, $item, $wartung, $picture] = $template();
+    $delete = fn () => DeleteTemplate::run(actor($mara), Template::query()->findOrFail($wartung->id));
+
+    // the item copies the template's picture (A233), still uncommitted: it holds the project shared
+    RaceConnections::hold(fn () => UpdateWorkItem::run(actor($mara), $item, ['description_json' => F::doc(F::image($picture->id, 'Plan'))]));
+
+    RaceConnections::expectLockWait(RaceConnections::second($delete), 'projects');
+
+    RaceConnections::releaseBeforeLock('projects');
+    $outcome = RaceConnections::second($delete);
+
+    expect($outcome)->toBeNull()
+        ->and(Template::query()->count())->toBe(0)
+        ->and($picture->fresh()?->only(['attachable_type', 'attachable_id']))->toBe(['attachable_type' => 'work_item', 'attachable_id' => $item->id]);
 });

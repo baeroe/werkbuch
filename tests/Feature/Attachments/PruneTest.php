@@ -13,6 +13,7 @@ use App\Models\Page;
 use App\Models\PageVersion;
 use App\Models\Project;
 use App\Models\Property;
+use App\Models\Template;
 use App\Models\User;
 use App\Models\WorkItem;
 use App\Models\WorkItemValue;
@@ -226,7 +227,7 @@ it('finds unowned uploads over the morph index and keeps the job from running tw
 
 it('leaves pictures of owners whose texts it does not read alone (T13-M2)', function () use ($web, $upload, $system) {
     [$project, $mara] = $web();
-    // an owner whose texts are not read here (a template, Phase 10): nothing of it goes
+    // an owner whose texts are not read here: nothing of it goes
     $foreign = $upload($mara, 'seite.png', '40 days')->create(['project_id' => $project->id, 'attachable_type' => 'project', 'attachable_id' => $project->id]);
 
     expect(PruneAttachments::run($system(), 30, false))->toBe([])
@@ -278,6 +279,48 @@ it('keeps a picture another page shows', function () use ($pages, $system) {
 
     expect($a['kopie']->fresh()?->attachable_type)->toBe('page')
         ->and(Attachment::query()->orderBy('filename')->pluck('filename')->all())->toBe(['alt.png', 'kopie.png', 'seite.png']);
+});
+
+/**
+ * WEB, 40 days ago: the template Wartung owns `vorlage.png` (its description shows it), `wert.png` (a rich text value
+ * shows it) and `weg.png` (none of its texts shows it any more); an item owns `kopie.png`, which only the template shows.
+ *
+ * @return array<string, Attachment>
+ */
+$templates = function () use ($web, $upload): array {
+    [$project, $mara] = $web();
+    $template = Template::factory()->create(['project_id' => $project->id, 'name' => 'Wartung', 'created_by' => $mara->id]);
+    $item = WorkItem::factory()->for($project)->create();
+    $a = [
+        ...array_map(fn (string $name) => $upload($mara, "{$name}.png", '40 days')->forTemplate($template)->create(), [
+            'vorlage' => 'vorlage', 'wert' => 'wert', 'weg' => 'weg',
+        ]),
+        'kopie' => $upload($mara, 'kopie.png', '40 days')->forItem($item)->create(),
+    ];
+    $template->update(['payload' => [
+        ...$template->payload,
+        'description' => F::doc(F::p('Wartung'), F::image($a['vorlage']->id, null), F::image($a['kopie']->id, null)),
+        'values' => ['notes' => F::doc(F::image($a['wert']->id, null))],
+    ]]);
+
+    return $a;
+};
+
+it('keeps an image only a template shows', function () use ($templates, $system) {
+    $a = $templates();
+
+    PruneAttachments::run($system(), 30, false);
+
+    expect(Attachment::query()->orderBy('filename')->pluck('filename')->all())->toBe(['kopie.png', 'vorlage.png', 'wert.png'])
+        ->and($a['kopie']->fresh()?->attachable_type)->toBe('work_item');
+});
+
+it('prunes an image of a template that no text shows any more', function () use ($templates, $system) {
+    $a = $templates();
+
+    expect(collect(PruneAttachments::run($system(), 30, true))->pluck('id')->all())->toBe([$a['weg']->id])
+        ->and(collect(PruneAttachments::run($system(), 30, false))->pluck('id')->all())->toBe([$a['weg']->id])
+        ->and($a['weg']->fresh())->toBeNull();
 });
 
 /** Makes the description of the item one that Document::fromJson refuses (a node it does not know), naming `$id`. */

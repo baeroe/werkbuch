@@ -8,6 +8,7 @@ use App\Models\Attachment;
 use App\Models\Comment;
 use App\Models\Page;
 use App\Models\Project;
+use App\Models\Template;
 use App\Models\User;
 use App\Models\WorkItem;
 use Illuminate\Auth\Access\Response;
@@ -29,9 +30,9 @@ final class AttachmentPolicy
     }
 
     /**
-     * Reading an attachment: one of an item or of a comment whoever sees the item, one of a wiki page whoever sees the
-     * project of the page; one nobody owns yet (`attachable_id` empty) only the person who uploaded it. An owner that is named but gone hides it from everybody, and so does a
-     * project being deleted.
+     * Reading an attachment: one of an item or of a comment whoever sees the item, one of a wiki page or of a template
+     * whoever sees its project; one nobody owns yet (`attachable_id` empty) only the person who uploaded it. An owner
+     * that is named but gone hides it from everybody, and so does a project being deleted.
      */
     public function view(User $user, Attachment $attachment): Response
     {
@@ -46,13 +47,14 @@ final class AttachmentPolicy
         return $visible ? Response::allow() : Response::denyAsNotFound();
     }
 
-    /** Whether the owner exists and the account may see it: an item, the item of a comment, or a page of a wiki. */
+    /** Whether the owner exists and the account may see it: an item, the item of a comment, a page of a wiki or a template. */
     private static function ownerVisible(User $user, Attachment $attachment): bool
     {
         $project = match ($attachment->attachable_type) {
             (new WorkItem)->getMorphClass() => WorkItem::query()->with('project')->find($attachment->attachable_id)?->project,
             (new Comment)->getMorphClass() => Comment::query()->with('workItem.project')->find($attachment->attachable_id)?->workItem->project,
             (new Page)->getMorphClass() => Page::query()->with('project')->find($attachment->attachable_id, ['id', 'project_id'])?->project,
+            (new Template)->getMorphClass() => Template::query()->with('project')->find($attachment->attachable_id, ['id', 'project_id'])?->project,
             default => null,
         };
 
