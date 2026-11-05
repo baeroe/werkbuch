@@ -104,6 +104,15 @@ it('lists the newest failed jobs with the first line of the error only', functio
         ->and(array_column($jobs, 'error'))->not->toContain('old 1', 'old 2', 'old 3')->toContain('old 4', 'old 51');
 });
 
+it('masks the query and the user of a URL in a failed job (T11-M7)', function () use ($failed) {
+    $failed('webhooks', 'App\\Jobs\\DeliverWebhook', 'Guzzle: cURL error 28 for https://user:pw@hooks.example.com/in?token=s3cret#frag after 10 s', '2026-11-02 08:15:00');
+
+    $error = GetSystemStatus::run(actor($this->admin))['failed_jobs'][0]['error'];
+
+    expect($error)->toBe('Guzzle: cURL error 28 for https://…@hooks.example.com/in?… after 10 s')
+        ->and($error)->not->toContain('s3cret')->not->toContain('pw');
+});
+
 it('names no job for a payload it cannot read', function () {
     DB::table('failed_jobs')->insert(['uuid' => $uuid = (string) Str::uuid(), 'connection' => 'database', 'queue' => 'default',
         'payload' => 'not json', 'exception' => '', 'failed_at' => '2026-11-02 08:15:00']);

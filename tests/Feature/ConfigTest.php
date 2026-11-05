@@ -90,9 +90,17 @@ it('works every queue in DDEV and the CI, search and media in a worker of their 
     };
 
     expect($workers('.ddev/config.yaml'))->toBe([['default', 'live', 'notifications', 'webhooks', 'bulk'], ['search', 'media']])
-        // no webhooks yet in the CI (phase 11)
-        ->and($workers('.github/workflows/tests.yml'))->toBe([['default', 'live', 'notifications', 'bulk'], ['search', 'media']])
+        // the first worker of the CI hears `webhooks` as well (task 10), the other one stays with search and media
+        ->and($workers('.github/workflows/tests.yml'))->toBe([['default', 'live', 'notifications', 'webhooks', 'bulk'], ['search', 'media']])
         ->and(array_merge(...$workers('.ddev/config.yaml')))->toEqualCanonicalizing(config('werkbuch.queues'));
+});
+
+it('allows private webhook targets in DDEV and the e2e run only (task 10, A373)', function () {
+    expect((string) file_get_contents(repo_path('.ddev/config.yaml')))->toContain('- WEBHOOKS_ALLOW_PRIVATE=true')
+        ->and((string) file_get_contents(repo_path('e2e/ci.env')))->toContain("\nWEBHOOKS_ALLOW_PRIVATE=true\n")
+        ->and((string) file_get_contents(repo_path('.github/workflows/tests.yml')))->toContain('E2E_WEBHOOK_HOST: 127.0.0.1')
+        // the tests force them off (phpunit.xml), whatever the environment says
+        ->and((string) file_get_contents(repo_path('phpunit.xml')))->toContain('<env name="WEBHOOKS_ALLOW_PRIVATE" value="false" force="true"/>');
 });
 
 it('gives SMTP a timeout below the lock wait of the database (T7-M6)', function () {

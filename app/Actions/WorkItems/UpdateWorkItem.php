@@ -3,6 +3,7 @@
 namespace App\Actions\WorkItems;
 
 use App\Access\Authorize;
+use App\Enums\AccountType;
 use App\Events\EventRecorder;
 use App\Events\EventType;
 use App\Exceptions\Problem;
@@ -204,6 +205,7 @@ final class UpdateWorkItem
         if ($assignee) {
             self::watch($locked, $locked->assignee_id);
             EventRecorder::record(EventType::WorkItemAssigned, $actor, $locked, $locked->project, ['assignee_id' => ['old' => $previous, 'new' => $locked->assignee_id]]);
+            self::announceAssignedBot($actor, $locked);
         }
 
         if ($moving) {
@@ -227,6 +229,23 @@ final class UpdateWorkItem
                     EventRecorder::record(EventType::BotMentioned, $actor, $item, $item->project, null, ['bot_id' => $account->id, 'source' => $source] + ($commentId === null ? [] : ['comment_id' => $commentId]));
                 }
             }
+        }
+    }
+
+    /**
+     * `bot.assigned` when the assignee of the item is a bot and not the actor itself (A371, K9; a bot that takes an item
+     * on its own needs no call to hear of it): subject the item, `meta.bot_id` the bot. After `work_item.assigned` of
+     * a change (apply) and after `work_item.created` of an item made for a bot (CreateWorkItem::insert: a request, a
+     * template, a schedule).
+     */
+    public static function announceAssignedBot(Actor $actor, WorkItem $item): void
+    {
+        $assignee = $item->assignee_id;
+        if ($assignee === null || $assignee === $actor->user->id) {
+            return;
+        }
+        if (User::query()->whereKey($assignee)->where('type', AccountType::Bot)->exists()) {
+            EventRecorder::record(EventType::BotAssigned, $actor, $item, $item->project, null, ['bot_id' => $assignee]);
         }
     }
 

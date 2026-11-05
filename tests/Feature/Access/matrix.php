@@ -115,6 +115,7 @@ use App\Actions\Webhooks\ListWebhookDeliveries;
 use App\Actions\Webhooks\ListWebhooks;
 use App\Actions\Webhooks\PingWebhook;
 use App\Actions\Webhooks\PrepareWebhookAttempt;
+use App\Actions\Webhooks\PruneWebhookDeliveries;
 use App\Actions\Webhooks\QueueDeliveries;
 use App\Actions\Webhooks\RecordWebhookAttempt;
 use App\Actions\Webhooks\RedeliverWebhook;
@@ -1240,6 +1241,12 @@ return [
     'PruneNotifications' => [
         'action' => PruneNotifications::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => PruneNotifications::run($a),
+        'system' => true,
+    ],
+    // the hourly tidying up of the webhook log (PruneWebhookDeliveriesJob, K15), without an event
+    'PruneWebhookDeliveries' => [
+        'action' => PruneWebhookDeliveries::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => PruneWebhookDeliveries::run($a),
         'system' => true,
     ],
     'GetTwoFactor' => [

@@ -80,10 +80,8 @@ $consume = fn (Event $event): bool => app(Outbox::class)->consume($event->id, We
 
 $system = fn (): Actor => Actor::system(User::defaultBot(), 'webhooks');
 
-/** A `bot.assigned` as task 10 will record it: subject the item, `meta.bot_id` the bot. */
-$botAssigned = fn (User $mara, WorkItem $item, User $bot): Event => DB::transaction(
-    fn () => EventRecorder::record(EventType::BotAssigned, actor($mara), $item, $item->project, null, ['bot_id' => $bot->id]),
-);
+/** The `bot.assigned` that creating the item for the bot recorded (task 10): subject the item, `meta.bot_id` the bot. */
+$botAssigned = fn (User $mara, WorkItem $item, User $bot): Event => eventsOf(EventType::BotAssigned, $item)->sole();
 
 it('queues one delivery per matching webhook, with the body of its reader', function () use ($world, $create, $delivered) {
     Queue::fake([DeliverWebhook::class]);
@@ -247,7 +245,7 @@ it('filters by bot: its own bot events, the events of its items, nothing of an i
     $botAssigned($w['mara'], $other, $w['otto']);
     $botAssigned($w['mara'], $mine, $w['kira']);
     AddRelation::run(actor($w['mara']), $mine, ['type_id' => RelationType::query()->where('built_in', 'relates')->firstOrFail()->id, 'target_id' => $create($w['mara'], $secret)->id]);
-    expect($delivered($kira))->toBe(['work_item.created', 'comment.created', 'bot.mentioned', 'bot.assigned', 'work_item.relation_added']);
+    expect($delivered($kira))->toBe(['work_item.created', 'bot.assigned', 'comment.created', 'bot.mentioned', 'work_item.relation_added']);
 
     // each body reads as its reader: Kira does not see the other end, the organization does (A363)
     $relation = fn (Webhook $webhook): array => json_decode(WebhookDelivery::query()->where('webhook_id', $webhook->id)
@@ -265,7 +263,7 @@ it('filters by bot: its own bot events, the events of its items, nothing of an i
     $third = $create($w['mara'], $w['web'], ['assignee_id' => $w['kira']->id]);
     DeleteWorkItem::run(actor($w['mara']), $third);
     DeleteWorkItem::run(actor($w['mara']), $other);
-    expect(array_slice($delivered($kira), 6))->toBe(['work_item.created', 'work_item.deleted'])
+    expect(array_slice($delivered($kira), 6))->toBe(['work_item.created', 'bot.assigned', 'work_item.deleted'])
         ->and(eventsOf(EventType::WorkItemDeleted, $third)->sole()->meta)->toMatchArray(['assignee_id' => $w['kira']->id]);
 });
 
@@ -288,8 +286,8 @@ it('sends nothing to a bot webhook once the bot lost the private project or went
     DeleteWorkItem::run(actor($w['mara']), $hers);
     DeleteWorkItem::run(actor($w['mara']), $his);
 
-    expect($delivered($kira))->toBe(['work_item.created'])
-        ->and($delivered($otto))->toBe(['work_item.created'])
+    expect($delivered($kira))->toBe(['work_item.created', 'bot.assigned'])
+        ->and($delivered($otto))->toBe(['work_item.created', 'bot.assigned'])
         ->and($delivered($org))->toBe(['work_item.created', 'work_item.created', 'work_item.updated', 'work_item.updated', 'work_item.deleted', 'work_item.deleted']);
 });
 

@@ -272,8 +272,7 @@ it('sends bot.mentioned without a comment that is gone', function () use ($world
 it('sends bot.assigned with the bot and the item', function () use ($world, $payload, $rest, $user, $item) {
     $w = $world();
     $item = $item($w['mara'], $w['web'], ['assignee_id' => $w['kira']->id]);
-    // recorded by UpdateWorkItem from task 10 on; its form: the item as subject, the bot in `meta.bot_id`
-    DB::transaction(fn () => EventRecorder::record(EventType::BotAssigned, actor($w['mara']), $item, $w['web'], null, ['bot_id' => $w['kira']->id]));
+    // recorded when the item was made for the bot (task 10): the item as subject, the bot in `meta.bot_id`
 
     $data = $payload(eventsOf(EventType::BotAssigned, $item)->sole(), $w['kira'])['data'];
 
