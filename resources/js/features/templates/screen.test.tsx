@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { currentToasts, dismissToast, resetToasts, runToastAction } from '@/components/ui/toast';
 import { listCommands } from '@/lib/commands';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
-import { ida, list, makeTemplate, makeTemplateRun, makeWorkItem, mara, organization, project, theo, types } from '@/test/fixtures';
+import { ida, list, makeTemplate, makeTemplateRun, makeWorkItem, mara, organization, project, properties, theo, types } from '@/test/fixtures';
 import type { Project, Template, TemplateRun } from '@/types';
 import { TemplatesScreen, type TemplatesScreenProps } from './TemplatesScreen';
 
@@ -92,6 +92,11 @@ function routes(): Record<string, MockRoute> {
     'GET /api/v1/projects/APP': () => ({ body: { data: projects[0] } }),
     'GET /api/v1/projects/p_app/templates': () => ({ body: list(templates) }),
     'GET /api/v1/work-item-types': () => ({ body: list(types) }),
+    // the editor of one template (task 16): its catalogs, the people of the project and the preview of the title
+    'GET /api/v1/properties': () => ({ body: list(properties) }),
+    'GET /api/v1/labels': () => ({ body: list([]) }),
+    'GET /api/v1/projects/p_app/members': () => ({ body: list([]) }),
+    'POST /api/v1/templates/preview': () => ({ body: { data: { runs: [], title: null } } }),
     'GET /api/v1/users': () => ({ body: list([mara, ida, theo]) }),
     'GET /api/v1/templates/tpl_app_report/runs': () => ({ body: list(runs) }),
     'GET /api/v1/references': () => ({ body: { data: { items: [makeWorkItem({ id: 'wi_app_8', key: 'APP-8', title: 'Monatsbericht Oktober 2026' })], pages: [] } } }),

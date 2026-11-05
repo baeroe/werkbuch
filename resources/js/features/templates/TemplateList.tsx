@@ -23,6 +23,7 @@ import { useCommand } from '@/lib/commands';
 import { intlLocale, t } from '@/lib/i18n';
 import { paths } from '@/lib/links';
 import type { Project, Template } from '@/types';
+import { useRemovedTemplates } from './removed';
 import type { TemplateRights } from './rights';
 import { TemplateRow } from './TemplateRow';
 
@@ -60,13 +61,15 @@ export function TemplateList({ project, header, heading, rights }: TemplateListP
   const types = useWorkItemTypes().data?.items;
   const deleteTemplate = useDeleteTemplate();
   const { hidden, remove } = useRemoval();
+  // deleted from their editor, while the undo toast runs
+  const removed = useRemovedTemplates();
   const newButton = useRef<HTMLButtonElement>(null);
   const canManage = rights.ready && rights.denied === null;
 
   const visible = useMemo(() => {
     const collator = new Intl.Collator(intlLocale());
-    return (templates.data?.items ?? []).filter((template) => !hidden.has(template.id)).sort((a, b) => collator.compare(a.name, b.name));
-  }, [templates.data, hidden]);
+    return (templates.data?.items ?? []).filter((template) => !hidden.has(template.id) && !removed.has(template.id)).sort((a, b) => collator.compare(a.name, b.name));
+  }, [templates.data, hidden, removed]);
 
   const create = () => router.visit(paths.templates(project.identifier, NEW_TEMPLATE));
   // registered anew when the right arrives, so an open palette shows it then

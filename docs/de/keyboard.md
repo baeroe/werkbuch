@@ -114,6 +114,12 @@ werkbuch geht ohne Maus. Mit <kbd>?</kbd> zeigt jeder Bildschirm die Kürzel, di
 | <kbd>⌘ / Strg</kbd>+<kbd>↵</kbd> | Seite jetzt speichern |
 | <kbd>⌘ / Strg</kbd>+<kbd>⌫</kbd> | Seite löschen (mit Rückfrage) |
 
+## Vorlage
+
+| Taste | Aktion |
+| --- | --- |
+| <kbd>⌘ / Strg</kbd>+<kbd>↵</kbd> | Vorlage speichern |
+
 ## Befehlspalette
 
 | Taste | Aktion |

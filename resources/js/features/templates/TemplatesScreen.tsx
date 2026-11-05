@@ -6,9 +6,9 @@
  * - Another spelling in the address (`/projects/app/templates`) becomes the identifier's own (`router.replace`), so the
  *   sidebar finds the project; a project renamed meanwhile moves to its new address. A former identifier never arrives
  *   here: the server answers it with a 301.
- * - Without an id the list (`TemplateList`); with one the template (`new` makes a new one, task 16 brings the editor).
- *   Templates are only read as the list of their project (A347): a template deleted meanwhile, or an id that names
- *   none, reads "Diese Vorlage gibt es nicht", without a request that would answer 404.
+ * - Without an id the list (`TemplateList`); with one the template in its editor (`TemplateEditor`; `new` makes a new
+ *   one). Templates are only read as the list of their project (A347): a template deleted meanwhile, or an id that
+ *   names none, reads "Diese Vorlage gibt es nicht", without a request that would answer 404.
  */
 
 import { Link, router, usePage } from '@inertiajs/react';
@@ -27,8 +27,8 @@ import { paths } from '@/lib/links';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import { NotFound } from '@/shell/PageStates';
 import type { Project } from '@/types';
-import { useTemplateRights } from './rights';
-import { RunLog } from './RunLog';
+import { useTemplateRights, type TemplateRights } from './rights';
+import { TemplateEditor } from './TemplateEditor';
 import { NEW_TEMPLATE, TemplateList } from './TemplateList';
 
 export interface TemplatesScreenProps {
@@ -120,22 +120,16 @@ function Templates({ project, templateId }: { project: Project; templateId: stri
     <div className="max-w-5xl min-w-0">
       {header}
       <div className="mt-4">
-        <TemplateDetail project={project} templateId={templateId} />
+        <TemplateDetail project={project} templateId={templateId} rights={rights} />
       </div>
     </div>
   );
 }
 
-/** One template: until the editor comes (task 16), its name and the log of its runs. */
-function TemplateDetail({ project, templateId }: { project: Project; templateId: string }) {
+/** One template in its editor, keyed by the template: a new one that was just saved starts afresh at its own address. */
+function TemplateDetail({ project, templateId, rights }: { project: Project; templateId: string; rights: TemplateRights }) {
   const templates = useTemplates(project.id);
-  if (templateId === NEW_TEMPLATE) {
-    return (
-      <h1 data-screen-heading="" tabIndex={-1} className="font-display text-xl font-bold tracking-title text-ink">
-        {t('templates.new')}
-      </h1>
-    );
-  }
+  if (templateId === NEW_TEMPLATE) return <TemplateEditor key={NEW_TEMPLATE} project={project} template={null} denied={rights.denied} ready={rights.ready} />;
   if (templates.isPending) return <ScreenSkeleton />;
   if (templates.isError && !templates.data) {
     return (
@@ -163,12 +157,5 @@ function TemplateDetail({ project, templateId }: { project: Project; templateId:
       />
     );
   }
-  return (
-    <div className="flex flex-col gap-4">
-      <h1 data-screen-heading="" tabIndex={-1} className="font-display text-xl font-bold tracking-title text-ink">
-        {template.name}
-      </h1>
-      <RunLog templateId={template.id} />
-    </div>
-  );
+  return <TemplateEditor key={template.id} project={project} template={template} denied={rights.denied} ready={rights.ready} />;
 }

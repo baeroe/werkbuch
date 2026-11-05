@@ -57,3 +57,49 @@ test('lists templates and deletes one with undo, keyboard only', async ({ page }
     await removeE2eProject(page, project.identifier);
   }
 });
+
+test('creates a template with the keyboard and runs it now', async ({ page }) => {
+  const project = await createE2eProject(page, projectName('template editor'), { types: ['Task'] });
+  try {
+    await page.goto(`/projects/${project.identifier}/templates`);
+    const create = page.getByRole('main').getByRole('button', { name: tr('en', 'templates.new'), exact: true }).first();
+    // locked while the rights load
+    await expect(create).not.toHaveAttribute('aria-disabled', 'true');
+    await tabTo(page, create, { max: 80 });
+    await page.keyboard.press('Enter');
+
+    // a new template starts with its name
+    await expect(page.getByRole('heading', { level: 1, name: tr('en', 'templates.new') })).toBeVisible();
+    const name = page.getByRole('textbox', { name: tr('en', 'templates.editor.name'), exact: true });
+    await expect(name).toBeFocused();
+    await page.keyboard.type('Weekly report');
+    const title = page.getByRole('textbox', { name: new RegExp(`^${tr('en', 'templates.editor.title')}`) });
+    await tabTo(page, title, { max: 20 });
+    await page.keyboard.type('E2E report {year}');
+    // the server fills the placeholder: without a schedule, as now
+    const preview = page.getByRole('region', { name: tr('en', 'templates.editor.preview.label') });
+    await expect(preview).toContainText(tr('en', 'templates.editor.preview.now'));
+    await expect(preview).toContainText(/E2E report \d{4}/);
+
+    // mod+enter creates it, leads to its address and gives its heading the focus
+    await pressMod(page, 'Enter');
+    await expect(page).toHaveURL(new RegExp(`/projects/${project.identifier}/templates/[0-9a-z]{26}$`));
+    await expect(page.getByRole('heading', { level: 1, name: 'Weekly report' })).toBeFocused();
+
+    // run it now: the item comes from the bot "Automation", the toast opens it in the preview
+    const run = page.getByRole('button', { name: tr('en', 'templates.editor.run') });
+    await expect(run).not.toHaveAttribute('aria-disabled', 'true');
+    await tabTo(page, run, { max: 20 });
+    await page.keyboard.press('Enter');
+    const toast = page.getByRole('status').filter({ hasText: tr('en', 'items.create.created', { key: `${project.identifier}-1` }) });
+    await tabTo(page, toast.getByRole('button', { name: tr('en', 'items.create.open'), exact: true }), { max: 80 });
+    await page.keyboard.press('Enter');
+    const peek = page.getByRole('complementary', { name: tr('en', 'items.peek.label') });
+    await expect(peek.getByRole('heading', { name: /^E2E report \d{4}$/ })).toBeVisible();
+    await expect(peek.getByRole('list', { name: tr('en', 'items.activity.list') })).toContainText('Automation');
+    // the log of the template shows the run by hand
+    await expect(page.getByRole('list', { name: tr('en', 'templates.runs.label') }).getByRole('listitem')).toHaveCount(1);
+  } finally {
+    await removeE2eProject(page, project.identifier);
+  }
+});
