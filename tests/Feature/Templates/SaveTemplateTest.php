@@ -1,6 +1,8 @@
 <?php
 
 use App\Access\ProjectRole;
+use App\Access\RoleAssignments;
+use App\Access\Visibility;
 use App\Actions\Templates\SaveTemplate;
 use App\Domain\Properties\FieldType;
 use App\Events\EventType;
@@ -367,6 +369,98 @@ it('lets an archived type the template already has stay, and no other', function
     expect(SaveTemplate::run(actor($mara), null, ['name' => 'B', 'payload' => ['type_id' => $bug->id, 'title' => 'A'], 'schedule' => null], $template)->name)->toBe('B')
         ->and(invalidOf(fn () => SaveTemplate::run(actor($mara), null, ['name' => 'B', 'payload' => ['type_id' => $bug->id, 'title' => 'A'], 'schedule' => null], $other)))
         ->toBe(['payload.type_id' => [__('field.type_id.archived')]]);
+});
+
+/** Pauses the template the way the editor does (A356): its own answer sent back with the schedule paused. */
+$pause = function (Template $template, User $actor): Template {
+    $answer = json_decode((string) json_encode((new TemplateResource($template->fresh()))->resolve(Request::create('/'))), true);
+    unset($answer['payload']['description']);
+    $answer['schedule']['paused'] = true;
+
+    return SaveTemplate::run(actor($actor), null, $answer, $template->fresh());
+};
+
+it('pausing a template keeps working after an option it has was archived (A356)', function () use ($world, $firstMonday, $task, $askFor, $pause) {
+    [$web, $mara] = $world();
+    $size = $askFor($task(), Property::factory()->dropdown(['S', 'M'])->create(['key' => 'size', 'label' => 'Größe']));
+    $small = $size->options()->where('label', 'S')->firstOrFail();
+    $template = SaveTemplate::run(actor($mara), $web, ['name' => 'A', 'payload' => ['title' => 'A', 'values' => ['size' => $small->id]], 'schedule' => $firstMonday()]);
+    $small->update(['archived_at' => now()]);
+
+    $paused = $pause($template, $mara);
+
+    expect($paused->schedule['paused'] ?? null)->toBeTrue()
+        ->and($paused->payload['values'])->toBe(['size' => $small->id])
+        // a new pick of the archived option stays refused
+        ->and(invalidOf(fn () => SaveTemplate::run(actor($mara), $web, ['name' => 'B', 'payload' => ['title' => 'B', 'values' => ['size' => $small->id]], 'schedule' => null])))
+        ->toBe(['payload.values.size' => [__('field.values.option', ['label' => 'Größe'])]]);
+});
+
+it('pausing a template keeps working after a person of a people value left the project (A356)', function () use ($world, $firstMonday, $task, $askFor, $pause) {
+    [$web, $mara] = $world();
+    $askFor($task(), Property::factory()->create(['key' => 'reviewer', 'label' => 'Review', 'field_type' => FieldType::Member]));
+    $kira = memberOf($web, ProjectRole::Member, ['name' => 'Kira', 'handle' => 'kira']);
+    $template = SaveTemplate::run(actor($mara), $web, ['name' => 'A', 'payload' => ['title' => 'A', 'values' => ['reviewer' => $kira->id]], 'schedule' => $firstMonday()]);
+    app(RoleAssignments::class)->removeFromProject($kira, $web);
+    Visibility::forget();
+
+    $paused = $pause($template, $mara);
+
+    expect($paused->schedule['paused'] ?? null)->toBeTrue()
+        ->and($paused->payload['values'])->toBe(['reviewer' => $kira->id])
+        ->and(invalidOf(fn () => SaveTemplate::run(actor($mara), $web, ['name' => 'B', 'payload' => ['title' => 'B', 'values' => ['reviewer' => $kira->id]], 'schedule' => null])))
+        ->toBe(['payload.values.reviewer' => [__('field.values.member', ['label' => 'Review'])]]);
+});
+
+it('pausing a template keeps working after its assignee left the project (A356)', function () use ($world, $firstMonday, $pause) {
+    [$web, $mara] = $world();
+    $kira = memberOf($web, ProjectRole::Member, ['name' => 'Kira', 'handle' => 'kira']);
+    $template = SaveTemplate::run(actor($mara), $web, ['name' => 'A', 'payload' => ['title' => 'A', 'assignee_id' => $kira->id], 'schedule' => $firstMonday()]);
+    app(RoleAssignments::class)->removeFromProject($kira, $web);
+    Visibility::forget();
+
+    $paused = $pause($template, $mara);
+
+    expect($paused->schedule['paused'] ?? null)->toBeTrue()
+        ->and($paused->payload['assignee_id'])->toBe($kira->id)
+        // naming her in a template that does not have her is a new pick
+        ->and(invalidOf(fn () => SaveTemplate::run(actor($mara), $web, ['name' => 'B', 'payload' => ['title' => 'B', 'assignee_id' => $kira->id], 'schedule' => null])))
+        ->toBe(['payload.assignee_id' => [__('field.assignee_id.invalid')]]);
+});
+
+it('pausing a template keeps working after a label it has was deleted, and drops the label (A356)', function () use ($world, $firstMonday, $pause) {
+    [$web, $mara] = $world();
+    [$ux, $bug] = [Label::factory()->create(['name' => 'UX']), Label::factory()->create(['name' => 'Bug'])];
+    $template = SaveTemplate::run(actor($mara), $web, ['name' => 'A', 'payload' => ['title' => 'A', 'label_ids' => [$ux->id, $bug->id]], 'schedule' => $firstMonday()]);
+    $ux->delete();
+
+    $paused = $pause($template, $mara);
+
+    expect($paused->schedule['paused'] ?? null)->toBeTrue()
+        ->and($paused->payload['label_ids'])->toBe([$bug->id])
+        // an unknown label the template never had stays refused
+        ->and(invalidOf(fn () => SaveTemplate::run(actor($mara), null, ['name' => 'A', 'payload' => ['title' => 'A', 'label_ids' => [strtoupper($ux->id), strtolower((string) Str::ulid())]], 'schedule' => null], $template->fresh())))
+        ->toBe(['payload.label_ids' => [__('field.label_ids.unknown')]]);
+});
+
+it('pausing a template keeps working after a property it has a value of was deleted or taken from the type, and drops the value (A356)', function () use ($world, $firstMonday, $task, $askFor, $pause) {
+    [$web, $mara] = $world();
+    $budget = $askFor($task(), Property::factory()->create(['key' => 'budget', 'label' => 'Budget', 'field_type' => FieldType::Number]));
+    $notes = $askFor($task(), Property::factory()->create(['key' => 'notes', 'label' => 'Notizen', 'field_type' => FieldType::RichText]));
+    $code = $askFor($task(), Property::factory()->create(['key' => 'code', 'label' => 'Code', 'field_type' => FieldType::Text]));
+    $template = SaveTemplate::run(actor($mara), $web, [
+        'name' => 'A', 'payload' => ['title' => 'A', 'values' => ['budget' => 2, 'notes' => 'Notiz', 'code' => 'X1']], 'schedule' => $firstMonday(),
+    ]);
+    $budget->delete();
+    $task()->typeProperties()->where('property_id', $notes->id)->delete();
+
+    $paused = $pause($template, $mara);
+
+    expect($paused->schedule['paused'] ?? null)->toBeTrue()
+        ->and($paused->payload['values'])->toBe(['code' => 'X1'])
+        // a key the template never had stays refused
+        ->and(invalidOf(fn () => SaveTemplate::run(actor($mara), null, ['name' => 'A', 'payload' => ['title' => 'A', 'values' => ['code' => 'X1', 'colour' => 'blau']], 'schedule' => null], $paused)))
+        ->toBe(['payload.values.colour' => [__('field.values.unknown', ['key' => 'colour', 'type' => 'Task'])]]);
 });
 
 it('refuses an archived project with 409', function () use ($world) {

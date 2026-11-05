@@ -138,7 +138,7 @@ final class ItemInput
      * The fields every new work item has, without an item and without the values of its properties: the type (the
      * default type of the project unless named; switched on and active, `$keepTypeId` may stay archived: a template that
      * already has it), the title (trimmed, 1–255 characters), the priority (`none` unless named), the labels (existing,
-     * each once), the assignee (`Assignable`) and the parent (an item of the project, by ULID or key, read again under a
+     * each once), the assignee (`Assignable`; `$keepAssigneeId` is no new pick and stays, A356) and the parent (an item of the project, by ULID or key, read again under a
      * shared lock after the caller's locks). Errors go to `$fail` at the name of the field; the caller says where they
      * stand (create() at the root, TemplateInput below `payload.`).
      *
@@ -146,14 +146,14 @@ final class ItemInput
      * @param  callable(string, string): void  $fail
      * @return array{type: ?WorkItemType, title: string, priority: Priority, label_ids: list<string>, assignee_id: ?string, parent: ?WorkItem}
      */
-    public static function fields(array $input, Project $project, User $reader, callable $fail, ?string $keepTypeId = null): array
+    public static function fields(array $input, Project $project, User $reader, callable $fail, ?string $keepTypeId = null, ?string $keepAssigneeId = null): array
     {
         return [
             'type' => self::type($input['type_id'] ?? $project->default_type_id, $project, $fail, $keepTypeId),
             'title' => self::title($input['title'] ?? null, $fail),
             'priority' => self::priority($input['priority'] ?? null, $fail),
             'label_ids' => self::labels($input['label_ids'] ?? null, $fail),
-            'assignee_id' => self::assignee($input['assignee_id'] ?? null, $project, $fail),
+            'assignee_id' => self::assignee($input['assignee_id'] ?? null, $project, $fail, $keepAssigneeId),
             'parent' => self::parent($input['parent_id'] ?? null, $project, $reader, $fail),
         ];
     }
@@ -377,10 +377,14 @@ final class ItemInput
     /**
      * @param  callable(string, string): void  $fail
      */
-    private static function assignee(mixed $id, Project $project, callable $fail): ?string
+    private static function assignee(mixed $id, Project $project, callable $fail, ?string $keep = null): ?string
     {
         if ($id === null) {
             return null;
+        }
+        // the assignee a template already has is no new pick (A356), like the one an item has in patch()
+        if (is_string($id) && $keep !== null && strtolower($id) === $keep) {
+            return $keep;
         }
 
         $user = is_string($id) && Str::isUlid($id) ? User::query()->find(strtolower($id)) : null;

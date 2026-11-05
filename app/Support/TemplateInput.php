@@ -7,9 +7,13 @@ use App\Domain\Schedule\Placeholders;
 use App\Domain\Schedule\Recurrence;
 use App\Domain\Schedule\Schedule;
 use App\Domain\WorkItems\Hierarchy;
+use App\Models\Label;
 use App\Models\Project;
+use App\Models\Property;
 use App\Models\Template;
+use App\Models\TypeProperty;
 use App\Models\User;
+use App\Models\WorkItemType;
 use App\RichText\Document;
 use App\RichText\RichTextInput;
 use DateTimeImmutable;
@@ -170,10 +174,15 @@ final class TemplateInput
     private static function payload(array $payload, Project $project, User $writer, ?Template $current, string $locale, callable $fail, array &$errors): ?array
     {
         $at = fn (string $field, string $message) => $fail("payload.{$field}", $message);
-        $keepType = $current?->payload['type_id'] ?? null;
-        $keepType = is_string($keepType) ? $keepType : null;
+        // what the template already has stays valid (A356): its archived type, its assignee, the archived options and
+        // people of its values; labels and values it has that are gone meanwhile fall away (A340)
+        $stored = $current === null ? [] : $current->payload;
+        $keepType = is_string($stored['type_id'] ?? null) ? $stored['type_id'] : null;
+        $keepAssignee = is_string($stored['assignee_id'] ?? null) ? $stored['assignee_id'] : null;
+        $storedValues = (array) ($stored['values'] ?? []);
+        $payload['label_ids'] = self::withoutGoneLabels($payload['label_ids'] ?? null, (array) ($stored['label_ids'] ?? []));
 
-        $fields = ItemInput::fields($payload, $project, $writer, $at, $keepType);
+        $fields = ItemInput::fields($payload, $project, $writer, $at, $keepType, $keepAssignee);
         $type = $fields['type'];
         $parent = $fields['parent'];
 
@@ -196,7 +205,8 @@ final class TemplateInput
         if ($type !== null) {
             try {
                 // no required values (A349): the editor marks them, a run fails without them
-                $values = ItemValues::check($project, $type, ItemInput::values($payload['values'] ?? [], $at), [], 'update');
+                $sent = self::withoutGoneKeys(ItemInput::values($payload['values'] ?? [], $at), $storedValues, $type);
+                $values = ItemValues::check($project, $type, $sent, [], 'update', $storedValues);
                 ksort($values);
             } catch (ValidationException $invalid) {
                 foreach (self::below('payload', $invalid->errors()) as $field => $messages) {
@@ -229,6 +239,49 @@ final class TemplateInput
             'start_offset_days' => $start,
             'due_offset_days' => $due,
         ];
+    }
+
+    /**
+     * The label ids sent without those the template has and that are gone meanwhile (A356, like a run, A340); an
+     * unknown label the template never had stays for ItemInput::fields() to refuse.
+     *
+     * @param  array<array-key, mixed>  $stored  the label ids the template has
+     */
+    private static function withoutGoneLabels(mixed $ids, array $stored): mixed
+    {
+        if (! is_array($ids) || ! array_is_list($ids)) {
+            return $ids;
+        }
+
+        $had = array_values(array_intersect(array_map(strtolower(...), array_filter($ids, is_string(...))), $stored));
+        if ($had === []) {
+            return $ids;
+        }
+
+        $gone = array_diff($had, Label::query()->whereKey($had)->pluck('id')->all());
+
+        return array_values(array_filter($ids, fn (mixed $id) => ! is_string($id) || ! in_array(strtolower($id), $gone, true)));
+    }
+
+    /**
+     * The values sent without those of keys the template has a value of and that the type has no (longer): the property
+     * was deleted or taken from the type (A356, like a run, A340). A key the template never had stays for
+     * ItemValues::check() to refuse.
+     *
+     * @param  array<array-key, mixed>  $sent
+     * @param  array<array-key, mixed>  $stored  the values the template has
+     * @return array<array-key, mixed>
+     */
+    private static function withoutGoneKeys(array $sent, array $stored, WorkItemType $type): array
+    {
+        $had = array_intersect_key($sent, $stored);
+        if ($had === []) {
+            return $sent;
+        }
+
+        $known = Property::query()->whereIn('id', TypeProperty::query()->where('type_id', $type->id)->select('property_id'))->pluck('key')->all();
+
+        return array_diff_key($sent, array_diff_key($had, array_flip($known)));
     }
 
     /**
