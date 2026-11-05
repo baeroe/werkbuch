@@ -26,6 +26,9 @@ arch('views translate into queries and write nothing')
 arch('search turns models into documents and writes nothing')
     ->expect('App\Search')->classes()->toBeFinal()
     ->not->toUse([EventRecorder::class, 'Illuminate\Support\Facades\DB', 'Illuminate\Support\Facades\Schema']);
+arch('webhooks build payloads and targets, record nothing and leave the database to actions')
+    ->expect('App\Webhooks')->classes()->toBeFinal()
+    ->not->toUse([EventRecorder::class, 'Illuminate\Support\Facades\DB', 'Illuminate\Support\Facades\Schema']);
 arch('the consumer of notifications hands every event to its action and computes nothing')
     ->expect('App\Notifications\NotificationConsumer')->toBeFinal()
     ->not->toUse([EventRecorder::class, 'Illuminate\Support\Facades\DB', 'App\Domain', 'App\Models\Notification']);
@@ -113,6 +116,16 @@ it('keeps App\Search free of writes', function () {
 
     expect(appFiles('app/Search'))->not->toBe([])
         ->and($hits)->toBe([]);
+});
+
+// App\Webhooks reads (payloads, targets) and hands every write to an action (phase plan 11, Global Constraints); the
+// folder comes with the payload and the consumer (tasks 4 to 6)
+it('keeps App\Webhooks free of writes', function () {
+    $hits = collect(appFiles('app/Webhooks'))
+        ->flatMap(fn (string $f) => [...modelWrites((string) file_get_contents(repo_path($f)), $f), ...inserts((string) file_get_contents(repo_path($f)), $f)])
+        ->all();
+
+    expect($hits)->toBe([]);
 });
 
 // App\Live only reads (who lost access) and broadcasts: no model write, no insert (phase plan 8, Global Constraints)

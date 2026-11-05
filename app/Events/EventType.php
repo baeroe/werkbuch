@@ -101,6 +101,14 @@ enum EventType: string
     case FavoriteAdded = 'favorite.added';
     case FavoriteRemoved = 'favorite.removed';
 
+    // the webhooks of the organization (spec 6.3): none is itself in the catalog (A62); `disabled` is the system
+    // switching a webhook off after 24 hours without success (A366)
+    case WebhookCreated = 'webhook.created';
+    case WebhookUpdated = 'webhook.updated';
+    case WebhookDeleted = 'webhook.deleted';
+    case WebhookSecretRotated = 'webhook.secret_rotated';
+    case WebhookDisabled = 'webhook.disabled';
+
     // the system page put failed jobs back into their queues (A287)
     case SystemFailedJobsRetried = 'system.failed_jobs_retried';
 

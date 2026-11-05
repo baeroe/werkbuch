@@ -21,6 +21,7 @@ use App\Models\Resolution;
 use App\Models\Template;
 use App\Models\User;
 use App\Models\View;
+use App\Models\Webhook;
 use App\Models\Workflow;
 use App\Models\WorkItem;
 use App\Models\WorkItemType;
@@ -82,6 +83,7 @@ class AppServiceProvider extends ServiceProvider
             'page' => Page::class,
             'template' => Template::class,
             'automation' => Automation::class,
+            'webhook' => Webhook::class,
         ]);
 
         Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);

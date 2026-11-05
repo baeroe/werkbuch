@@ -37,7 +37,20 @@ it('knows the events of this phase that have no webhook', function () {
         'view.created', 'view.updated', 'view.deleted',
         'system.failed_jobs_retried',
         'template.created', 'template.updated', 'template.deleted', 'automation.updated',
+        'webhook.created', 'webhook.updated', 'webhook.deleted', 'webhook.secret_rotated', 'webhook.disabled',
     ])->sort()->values()->all());
+});
+
+it('sends no webhook for the events of webhooks, but one for bot.assigned', function () {
+    foreach ([
+        EventType::WebhookCreated, EventType::WebhookUpdated, EventType::WebhookDeleted, EventType::WebhookSecretRotated,
+        EventType::WebhookDisabled,
+    ] as $type) {
+        expect($type->webhook())->toBeFalse()
+            ->and($type->group())->toBe('webhook');
+    }
+
+    expect(EventType::BotAssigned->webhook())->toBeTrue();
 });
 
 it('names every type as group.event', function () {

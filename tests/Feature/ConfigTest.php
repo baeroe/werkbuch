@@ -1,5 +1,6 @@
 <?php
 
+use App\Domain\Webhooks\Backoff;
 use App\Live\LiveConsumer;
 use App\Models\Attachment;
 use App\Models\Page;
@@ -9,6 +10,7 @@ use App\Models\WorkItem;
 use App\Notifications\NotificationConsumer;
 use App\Search\SearchConsumer;
 use Illuminate\Support\Env;
+use Spatie\WebhookServer\Signer\DefaultSigner;
 
 /**
  * Sets an environment variable the way the host would: .env values are loaded by Laravel itself (so the immutable
@@ -161,4 +163,33 @@ it('takes the one default of the attachment limit in both configs (T6-M6)', func
 
     expect((require base_path('config/werkbuch.php'))['attachments_max_mb'])->toBe(40)
         ->and((require base_path('config/media-library.php'))['max_file_size'])->toBe(40 * 1024 * 1024);
+});
+
+// every webhook job comes out of WebhookCall::create(), which reads this file; useJob() after create() would throw the
+// configured job away (K1), so the job, the queue and the retries stand here and not at the call
+it('configures the webhook job of spatie', function () {
+    expect(config('webhook-server'))->toBe([
+        'queue' => 'webhooks',
+        'connection' => null,
+        'http_verb' => 'post',
+        'proxy' => null,
+        'signer' => DefaultSigner::class,
+        'signature_header_name' => 'Signature',
+        'timestamp_header_name' => 'Timestamp',
+        'webhook_id_header_name' => null,
+        'headers' => ['Content-Type' => 'application/json'],
+        'timeout_in_seconds' => 10,
+        'tries' => Backoff::TRIES,
+        'backoff_strategy' => 'App\Webhooks\WebhookBackoff',
+        'retryable_status_codes' => null,
+        'respect_retry_after' => false,
+        'retry_with_jitter' => false,
+        'webhook_job' => 'App\Jobs\DeliverWebhook',
+        'verify_ssl' => true,
+        'throw_exception_on_failure' => false,
+        'tags' => [],
+    ])
+        // nothing of the package's file is left out: a new key of a later 4.x stands in ours too
+        ->and(array_keys(config('webhook-server')))
+        ->toEqualCanonicalizing(array_keys(require base_path('vendor/spatie/laravel-webhook-server/config/webhook-server.php')));
 });

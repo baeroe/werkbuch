@@ -10,6 +10,7 @@ use App\Models\Project;
 use App\Models\Template;
 use App\Models\User;
 use App\Models\View;
+use App\Models\Webhook;
 use App\Models\WorkItem;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
@@ -139,5 +140,11 @@ final class MatrixWorld
     public function view(): View
     {
         return View::factory()->create(['created_by' => $this->target->id]);
+    }
+
+    /** A fresh webhook of the organization (`work_item.*`), created by the org admin, through the factory: no events. */
+    public function webhook(): Webhook
+    {
+        return Webhook::factory()->create(['created_by' => $this->account('org_admin')->id]);
     }
 }

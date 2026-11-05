@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "c270fbc3492dcac92a2b5d439b28c4ff",
+    "content-hash": "7fbc6f8761a9d31fe48c3146c4f0225e",
     "packages": [
         {
             "name": "bacon/bacon-qr-code",
@@ -6199,6 +6199,85 @@
             ],
             "time": "2026-10-19T16:31:21+00:00",
             "published-time": "2026-10-19T16:31:52+00:00"
+        },
+        {
+            "name": "spatie/laravel-webhook-server",
+            "version": "4.0.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/spatie/laravel-webhook-server.git",
+                "reference": "1ff13d9e939795d9acea3be7d33119a3eab618f7"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/spatie/laravel-webhook-server/zipball/1ff13d9e939795d9acea3be7d33119a3eab618f7",
+                "reference": "1ff13d9e939795d9acea3be7d33119a3eab618f7",
+                "shasum": ""
+            },
+            "require": {
+                "ext-json": "*",
+                "guzzlehttp/guzzle": "^7.8.2|^8.0",
+                "illuminate/bus": "^13.0",
+                "illuminate/http": "^13.0",
+                "illuminate/queue": "^13.0",
+                "illuminate/support": "^13.0",
+                "php": "^8.4",
+                "spatie/laravel-package-tools": "^1.11"
+            },
+            "require-dev": {
+                "friendsofphp/php-cs-fixer": "^3.95",
+                "larastan/larastan": "^3.13",
+                "mockery/mockery": "^1.6.10",
+                "orchestra/testbench": "^11.0",
+                "pestphp/pest": "^5.0",
+                "pestphp/pest-plugin-laravel": "^5.0",
+                "phpstan/phpstan": "^2.3",
+                "spatie/test-time": "^1.2.2"
+            },
+            "type": "library",
+            "extra": {
+                "laravel": {
+                    "providers": [
+                        "Spatie\\WebhookServer\\WebhookServerServiceProvider"
+                    ]
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "Spatie\\WebhookServer\\": "src"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Freek Van der Herten",
+                    "email": "freek@spatie.be",
+                    "homepage": "https://spatie.be",
+                    "role": "Developer"
+                }
+            ],
+            "description": "Send webhooks in Laravel apps",
+            "homepage": "https://github.com/spatie/laravel-webhook-server",
+            "keywords": [
+                "laravel-webhook-server",
+                "server",
+                "spatie",
+                "webhook"
+            ],
+            "support": {
+                "source": "https://github.com/spatie/laravel-webhook-server/tree/4.0.0"
+            },
+            "funding": [
+                {
+                    "url": "https://spatie.be/open-source/support-us",
+                    "type": "custom"
+                }
+            ],
+            "time": "2026-10-20T07:11:14+00:00",
+            "published-time": "2026-10-20T07:11:22+00:00"
         },
         {
             "name": "spatie/shiki-php",
