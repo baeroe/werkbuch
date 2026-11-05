@@ -155,7 +155,7 @@ final class WebhookInput
     /**
      * The address a host names literally: a strict dotted quad or an IPv6 address in brackets; `null` for anything else.
      */
-    private static function literal(string $host): ?string
+    public static function literal(string $host): ?string
     {
         if (str_starts_with($host, '[') && str_ends_with($host, ']')) {
             $inner = substr($host, 1, -1);
@@ -170,7 +170,7 @@ final class WebhookInput
      * Whether the host (lower case, as Uri gives it) is a DNS name: labels of ASCII letters, digits, `-` and `_`, no
      * empty one, no trailing dot, and a last label that is no number (curl would read the host as an IPv4 address).
      */
-    private static function isName(string $host): bool
+    public static function isName(string $host): bool
     {
         if (preg_match('/^[a-z0-9_-]+(\.[a-z0-9_-]+)*\z/', $host) !== 1) {
             return false;

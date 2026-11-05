@@ -118,14 +118,14 @@ it('keeps App\Search free of writes', function () {
         ->and($hits)->toBe([]);
 });
 
-// App\Webhooks reads (payloads, targets) and hands every write to an action (phase plan 11, Global Constraints); the
-// folder comes with the payload and the consumer (tasks 4 to 6)
+// App\Webhooks reads (payloads, targets) and hands every write to an action (phase plan 11, Global Constraints)
 it('keeps App\Webhooks free of writes', function () {
     $hits = collect(appFiles('app/Webhooks'))
         ->flatMap(fn (string $f) => [...modelWrites((string) file_get_contents(repo_path($f)), $f), ...inserts((string) file_get_contents(repo_path($f)), $f)])
         ->all();
 
-    expect($hits)->toBe([]);
+    expect(appFiles('app/Webhooks'))->not->toBe([])
+        ->and($hits)->toBe([]);
 });
 
 // App\Live only reads (who lost access) and broadcasts: no model write, no insert (phase plan 8, Global Constraints)

@@ -27,6 +27,8 @@ use App\Models\WorkItem;
 use App\Models\WorkItemType;
 use App\Search\MeilisearchEngine;
 use App\Views\CatalogProperties;
+use App\Webhooks\DnsResolver;
+use App\Webhooks\Resolver;
 use GuzzleHttp\Client as GuzzleClient;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Foundation\Application;
@@ -53,6 +55,10 @@ class AppServiceProvider extends ServiceProvider
         $this->app->scoped(RoleIndex::class);
         // the properties as filters, sorts and displays look them up, read once per request and job
         $this->app->scoped(CatalogProperties::class, fn () => CatalogProperties::load());
+        // the addresses of a webhook's host, asked before every attempt (spec 6.3); RES_OPTIONS only counts before the
+        // first lookup of the process, so it is set here (K17)
+        DnsResolver::limitWaiting();
+        $this->app->scoped(Resolver::class, DnsResolver::class);
     }
 
     /**

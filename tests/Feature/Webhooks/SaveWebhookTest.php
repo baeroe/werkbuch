@@ -224,7 +224,10 @@ it('takes public addresses, names in capitals and a port', function (string $url
 it('takes a host name without asking DNS', function (string $url) use ($input) {
     // `localtest.me` resolves to 127.0.0.1 and `.invalid` never resolves (RFC 6761): saving checks only the form (A368),
     // the addresses are checked before every attempt
-    expect(SaveWebhook::run(actor(User::factory()->admin()->create()), $input(['url' => $url]))['webhook']->url)->toBe($url);
+    $dns = resolver(['localtest.me' => ['127.0.0.1']]);
+
+    expect(SaveWebhook::run(actor(User::factory()->admin()->create()), $input(['url' => $url]))['webhook']->url)->toBe($url)
+        ->and($dns->asked())->toBe([]);
 })->with([
     'a name of 127.0.0.1' => ['http://localtest.me/hook'],
     'a name without entry' => ['https://receiver.invalid/hook'],

@@ -12,6 +12,7 @@ use App\Models\Organization;
 use App\Models\Project;
 use App\Models\User;
 use App\Support\Actor;
+use App\Webhooks\Resolver;
 use Illuminate\Broadcasting\BroadcastManager;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
@@ -25,12 +26,17 @@ use Inertia\Inertia;
 use Laravel\Scout\EngineManager;
 use Symfony\Component\Finder\Finder;
 use Tests\Support\ArraySearchEngine;
+use Tests\Support\FakeResolver;
 use Tests\Support\RecordingBroadcaster;
 use Tests\TestCase;
 
 // Feature tests send no real HTTP (K11): an answer comes from Http::fake(), anything else throws. Unit tests boot no app,
 // tests/Integration talk to Mailpit and Meilisearch for real.
-pest()->extend(TestCase::class)->use(RefreshDatabase::class)->beforeEach(fn () => Http::preventStrayRequests())->in('Feature');
+// Feature tests never send HTTP and never ask DNS (K11): every request needs Http::fake, every name resolver([...])
+pest()->extend(TestCase::class)->use(RefreshDatabase::class)->beforeEach(function () {
+    Http::preventStrayRequests();
+    resolver([]);
+})->in('Feature');
 pest()->extend(TestCase::class)->use(DatabaseMigrations::class)->in('Integration');
 
 /**
@@ -275,6 +281,21 @@ function searchEngine(): ArraySearchEngine
     app(EngineManager::class)->forgetDrivers();
 
     return $engine;
+}
+
+/**
+ * DNS through a FakeResolver (plan "Global Constraints"): the names of the map resolve to their addresses, every other
+ * name to nothing. A plain binding (not an instance), so a queue worker that forgets the scoped instances between jobs
+ * (`queue:work --once` in a test) still gets this one.
+ *
+ * @param  array<string, list<string>>  $map  host → addresses
+ */
+function resolver(array $map): FakeResolver
+{
+    $resolver = new FakeResolver($map);
+    app()->bind(Resolver::class, fn () => $resolver);
+
+    return $resolver;
 }
 
 /**
