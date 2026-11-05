@@ -3,6 +3,7 @@
 namespace App\Actions\Projects;
 
 use App\Access\Authorize;
+use App\Actions\Automations\FollowWorkflow;
 use App\Actions\Workflows\ListStateUsage;
 use App\Actions\WorkItems\RemapStates;
 use App\Events\EventRecorder;
@@ -26,7 +27,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * old workflow → state of the new one. Every state of the old workflow that an item of the project stands in (archived
  * ones too) needs a target, else 422 at `mapping.<state_id>` with the states and their items in `extensions.states`; a
  * mapping of a state without items is taken without complaint. The items move in the same transaction (RemapStates,
- * `workflow_changed`), before the `project.updated`. Runs under the catalog lock, then the lock of the project row
+ * `workflow_changed`), and Auto-Close follows into a Canceled state of the new workflow (FollowWorkflow), both before
+ * the `project.updated`. Runs under the catalog lock, then the lock of the project row
  * (organization before project): the workflow cannot be deleted while the project gets it, two switches of one project
  * run one after the other, and every change of an item (which shares the catalog lock) waits for the switch and then
  * finds its item in the new workflow. The same workflow again changes nothing and records nothing.
@@ -89,6 +91,8 @@ final class AssignWorkflow
             /** @var array<string, string> $mapping keys and targets checked above */
             $mapping = $valid['mapping'] ?? [];
             RemapStates::run($actor, [$project->id], $mapping, RemapStates::WORKFLOW_CHANGED);
+            // Auto-Close follows into a Canceled state of the new workflow, or switches off (K11)
+            FollowWorkflow::run($actor, $project, $mapping, $new, RemapStates::WORKFLOW_CHANGED);
 
             $project->update(['workflow_id' => $new->id]);
             EventRecorder::record(EventType::ProjectUpdated, $actor, $project, $project, ['workflow_id' => ['old' => $old->id, 'new' => $new->id]]);

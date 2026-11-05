@@ -72,6 +72,8 @@ return [
     'draft an item from a template' => ['GET', '/api/v1/templates/{template}/draft', 'params' => fn (MatrixWorld $w) => ['template' => $w->template('project_admin')->id]],
     'run a template now' => ['POST', '/api/v1/templates/{template}/run', 'params' => fn (MatrixWorld $w) => ['template' => $w->template('project_admin')->id]],
     'list the runs of a template' => ['GET', '/api/v1/templates/{template}/runs', 'params' => fn (MatrixWorld $w) => ['template' => $w->template('project_admin')->id]],
+    'list the automations of a project' => ['GET', '/api/v1/projects/{project}/automations', 'params' => fn (MatrixWorld $w) => ['project' => $w->web->identifier]],
+    'switch an automation of a project' => ['PUT', '/api/v1/projects/{project}/automations/{key}', 'params' => fn (MatrixWorld $w) => ['project' => $w->web->identifier, 'key' => 'close_parent'], 'body' => ['enabled' => true]],
     'preview a schedule' => ['POST', '/api/v1/templates/preview', 'ability' => 'read', 'body' => ['schedule' => ['frequency' => 'daily', 'interval' => 1, 'time' => '09:00', 'starts_on' => '2026-11-01', 'ends' => ['type' => 'never']]]],
     'list workflows' => ['GET', '/api/v1/workflows'],
     'create a workflow' => ['POST', '/api/v1/workflows'],

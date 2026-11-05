@@ -13,6 +13,9 @@ use App\Actions\Attachments\PruneAttachments;
 use App\Actions\Attachments\PruneUnownedAttachments;
 use App\Actions\Attachments\ShowAttachment;
 use App\Actions\Attachments\UploadAttachment;
+use App\Actions\Automations\FollowWorkflow;
+use App\Actions\Automations\ListAutomations;
+use App\Actions\Automations\SaveAutomation;
 use App\Actions\Comments\AddComment;
 use App\Actions\Comments\AddReaction;
 use App\Actions\Comments\DeleteComment;
@@ -129,8 +132,11 @@ use App\Actions\WorkItems\UpdateWorkItem;
 use App\Actions\WorkItemTypes\DeleteWorkItemType;
 use App\Actions\WorkItemTypes\ListWorkItemTypes;
 use App\Actions\WorkItemTypes\SaveWorkItemType;
+use App\Domain\Automations\AutomationKey;
+use App\Domain\Workflow\StateCategory;
 use App\Events\EventType;
 use App\Models\Attachment;
+use App\Models\Automation;
 use App\Models\Comment;
 use App\Models\CommentReaction;
 use App\Models\Event;
@@ -969,6 +975,34 @@ return [
         'action' => PreviewSchedule::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => PreviewSchedule::run($a, ['schedule' => ['frequency' => 'daily', 'interval' => 1, 'time' => '09:00', 'starts_on' => '2026-11-01', 'ends' => ['type' => 'never']]]),
         'allowed' => $everyone,
+    ],
+    // the automations of a project: whoever sees it reads them, only its admins switch them (spec 4.3)
+    'ListAutomations' => [
+        'action' => ListAutomations::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListAutomations::run($a, $w->project($column)),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    'SaveAutomation' => [
+        'action' => SaveAutomation::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => SaveAutomation::run($a, $w->project($column), 'auto_archive', ['enabled' => true, 'settings' => ['days' => 30]]),
+        'allowed' => $projectAdmins,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::AutomationUpdated,
+    ],
+    // the work of AssignWorkflow and SaveWorkflow, which checked their rights and hold the locks: Auto-Close of the
+    // project follows into a workflow without a Canceled state and switches off
+    'FollowWorkflow' => [
+        'action' => FollowWorkflow::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $project = $w->project($column);
+            $state = $project->workflow()->firstOrFail()->states()->where('category', StateCategory::Canceled)->value('id');
+            Automation::factory()->for($project)->key(AutomationKey::AutoClose)->enabled(['state_id' => $state])->create();
+
+            FollowWorkflow::run($a, $project, [], Workflow::factory()->create(), RemapStates::WORKFLOW_CHANGED);
+        },
+        'event' => EventType::AutomationUpdated,
+        'system' => true,
     ],
     // the inbox is the own one: everybody lists, marks and deletes their own notifications (a bot has none); a
     // notification of a project the account does not see is passed over when marking and a 404 when deleting (K19)

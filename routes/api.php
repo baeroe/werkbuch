@@ -2,6 +2,7 @@
 
 use App\Exceptions\Problem;
 use App\Http\Controllers\Api\AttachmentsController;
+use App\Http\Controllers\Api\AutomationsController;
 use App\Http\Controllers\Api\BotsController;
 use App\Http\Controllers\Api\CommentsController;
 use App\Http\Controllers\Api\FavoritesController;
@@ -137,6 +138,10 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
     Route::get('templates/{template}/runs', [TemplatesController::class, 'runs']);
     // reads only, over a body: a read token may ask it (P15)
     Route::post('templates/preview', [TemplatesController::class, 'preview'])->defaults('token_ability', 'read');
+
+    // the four automations of a project (A346), switched by their key
+    Route::get('projects/{project}/automations', [AutomationsController::class, 'index']);
+    Route::put('projects/{project}/automations/{key}', [AutomationsController::class, 'update']);
 
     Route::get('workflows', [WorkflowsController::class, 'index']);
     Route::post('workflows', [WorkflowsController::class, 'store']);
