@@ -15,6 +15,7 @@ use App\Actions\Attachments\ShowAttachment;
 use App\Actions\Attachments\UploadAttachment;
 use App\Actions\Automations\FollowWorkflow;
 use App\Actions\Automations\ListAutomations;
+use App\Actions\Automations\RunDailyAutomations;
 use App\Actions\Automations\RunMoveAutomations;
 use App\Actions\Automations\SaveAutomation;
 use App\Actions\Comments\AddComment;
@@ -1020,6 +1021,19 @@ return [
             RunMoveAutomations::run($a, $child->load('project'), $from, $child->state()->firstOrFail());
         },
         'event' => EventType::WorkItemStateChanged,
+        'system' => true,
+    ],
+    'RunDailyAutomations' => [
+        'action' => RunDailyAutomations::class,
+        // the work of the hourly RunDailyAutomationsJob, forced to act: Auto-Archiv archives an item closed 40 days ago
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $project = $w->project($column);
+            Automation::factory()->for($project)->key(AutomationKey::AutoArchive)->enabled()->create();
+            WorkItem::factory()->for($project)->closed()->create(['closed_at' => now()->subDays(40)]);
+
+            return RunDailyAutomations::run($a, now()->utc()->startOfHour()->toImmutable(), true, $project->id);
+        },
+        'event' => EventType::WorkItemArchived,
         'system' => true,
     ],
     // the inbox is the own one: everybody lists, marks and deletes their own notifications (a bot has none); a

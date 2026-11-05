@@ -1,4 +1,6 @@
 {
+    "automations.auto_close.comment.one": "Closed automatically: no activity for :days day.",
+    "automations.auto_close.comment.other": "Closed automatically: no activity for :days days.",
     "bots.default.description": "The default bot: automations and template schedules act on its behalf.",
     "catalog.builtin.property.effort.help": "Estimated hours, to one decimal place.",
     "catalog.builtin.property.effort.label": "Effort (h)",

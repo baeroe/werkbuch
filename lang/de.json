@@ -1,4 +1,6 @@
 {
+    "automations.auto_close.comment.one": "Automatisch geschlossen: seit :days Tag keine Aktivität.",
+    "automations.auto_close.comment.other": "Automatisch geschlossen: seit :days Tagen keine Aktivität.",
     "bots.default.description": "Der Standard-Bot: Automatisierungen und Zeitpläne von Vorlagen handeln in seinem Namen.",
     "catalog.builtin.property.effort.help": "Geschätzte Stunden, auf eine Nachkommastelle.",
     "catalog.builtin.property.effort.label": "Aufwand (h)",
