@@ -64,6 +64,7 @@ function renderShell() {
     'GET /api/v1/projects': () => ({ body: list(projects) }),
     'GET /api/v1/workflows': () => ({ body: list([standard]) }),
     'GET /api/v1/work-item-types': () => ({ body: list(types) }),
+    'GET /api/v1/templates': () => ({ body: list([]) }),
     ...(searchRoute && { 'GET /api/v1/search': searchRoute }),
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -125,11 +126,12 @@ describe('CommandPalette', () => {
     pressModK();
     const dialog = await palette();
     await waitFor(() => expect(document.activeElement).toBe(input()));
-    await waitFor(() => expect(labels()).toContain('Neues Item'));
+    // "Neues Item" and "Vorlage anwenden …" wait for the rights, the latter for the templates as well
+    await waitFor(() => expect(labels()).toContain('Vorlage anwenden …'));
 
     expect(outline()).toEqual([
       ['Projekte', 'Neues Projekt'],
-      ['Aktionen', 'Neues Item', 'Theme wechseln …', 'Seitenleiste einklappen', 'Alle Tastaturkürzel'],
+      ['Aktionen', 'Neues Item', 'Vorlage anwenden …', 'Theme wechseln …', 'Seitenleiste einklappen', 'Alle Tastaturkürzel'],
       ['Navigation', 'Inbox öffnen', 'Meine Items öffnen', 'Alle Views öffnen', 'Alle Projekte öffnen'],
     ]);
     // with their shortcuts, and a chevron where a list opens

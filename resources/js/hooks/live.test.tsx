@@ -6,7 +6,7 @@ import type { ApiError } from '@/api/client';
 import type { LiveEvent } from '@/api/live';
 import { resetToasts } from '@/components/ui/toast';
 import { runWithUndo, undoLatest } from '@/lib/undo';
-import { useLiveGone, usePageGone } from '@/lib/liveGone';
+import { useLiveGone, usePageGone, useTemplateGone } from '@/lib/liveGone';
 import { useUiStore } from '@/store/ui';
 import { mockApi, type MockApi } from '@/test/api';
 import { project, webTree } from '@/test/fixtures';
@@ -47,7 +47,7 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 function send(overrides: Partial<LiveEvent>): void {
-  const event: LiveEvent = { event_id: 'ev_1', type: 'work_item.updated', project_id: 'p_web', page_id: null, item_id: 'wi_web_47', comment_id: null, actor_id: 'u_ida', ...overrides };
+  const event: LiveEvent = { event_id: 'ev_1', type: 'work_item.updated', project_id: 'p_web', page_id: null, template_id: null, item_id: 'wi_web_47', comment_id: null, actor_id: 'u_ida', ...overrides };
   act(() => bus.listeners.forEach((listener) => listener(event)));
 }
 
@@ -890,6 +890,75 @@ describe('useLiveSync', () => {
 
     expect(bus.listeners.size).toBe(0);
     expect(items.fetches()).toBe(1);
+  });
+});
+
+describe('templates and automations', () => {
+  it('refreshes the templates and their runs on a template event, the automations on an automation event, and both on an item a run made', async () => {
+    const templates = await shown(qk.templates.list({ project: 'p_app' }));
+    const runs = await shown(qk.templateRuns.list({ template: 'tpl_app_report' }));
+    const automations = await shown(qk.automations.list({ project: 'p_app' }));
+    const preview = await shown(qk.schedulePreview.list({ title: 'x' }));
+    renderHook(() => useLiveSync(), { wrapper });
+    const counts = () => [templates, runs, automations, preview].map((query) => query.fetches());
+
+    // a failed run is a template event: the log shows it (T14-I1)
+    send({ event_id: 'ev_1', type: 'template.run_failed', template_id: 'tpl_app_report', item_id: null });
+    await pass(LIVE_BURST_MS);
+    expect(counts()).toEqual([2, 2, 1, 1]);
+
+    send({ event_id: 'ev_2', type: 'automation.updated', item_id: null });
+    await pass(LIVE_BURST_MS);
+    expect(counts()).toEqual([2, 2, 2, 1]);
+
+    // an item made by hand leaves the templates alone
+    send({ event_id: 'ev_3', type: 'work_item.created' });
+    await pass(LIVE_BURST_MS);
+    expect(counts()).toEqual([2, 2, 2, 1]);
+
+    // a scheduled run ends in a new item: the log, the count and the next run of its template change with it
+    send({ event_id: 'ev_4', type: 'work_item.created', template_id: 'tpl_app_report' });
+    await pass(LIVE_BURST_MS);
+    expect(counts()).toEqual([3, 3, 2, 1]);
+
+    send({ event_id: 'ev_5', type: 'work_item.updated' });
+    await pass(LIVE_BURST_MS);
+    expect(counts()).toEqual([3, 3, 2, 1]);
+  });
+
+  it('never asks again for the runs of a template deleted elsewhere, and loads the items of its project (T14-I2, M3)', async () => {
+    const templates = await shown(qk.templates.list({ project: 'p_app' }));
+    const gone = await shown(qk.templateRuns.list({ template: 'tpl_app_report' }));
+    const other = await shown(qk.templateRuns.list({ template: 'tpl_app_other' }));
+    const items = await shown(qk.workItems.list({ project: 'p_app' }));
+    const { result } = renderHook(() => ({ gone: useTemplateGone('tpl_app_report'), other: useTemplateGone('tpl_app_other') }), { wrapper });
+    renderHook(() => useLiveSync(), { wrapper });
+
+    send({ event_id: 'ev_1', type: 'template.deleted', project_id: 'p_app', template_id: 'tpl_app_report', item_id: null });
+    await pass(LIVE_BURST_MS);
+
+    expect([templates, gone, other, items].map((query) => query.fetches())).toEqual([2, 1, 2, 2]);
+    expect(gone.stale()).toBe(false);
+    expect(result.current).toEqual({ gone: true, other: false });
+
+    send({ event_id: null, type: 'live.reconnected', project_id: null, item_id: null });
+    await pass(LIVE_BURST_MS);
+    expect(gone.fetches()).toBe(1);
+  });
+
+  it('loads them again once the channel of a project is held, and after the connection was gone', async () => {
+    const templates = await shown(qk.templates.list({ project: 'p_app' }));
+    const runs = await shown(qk.templateRuns.list({ template: 'tpl_app_report' }));
+    const automations = await shown(qk.automations.list({ project: 'p_app' }));
+    renderHook(() => useLiveSync(), { wrapper });
+
+    send({ event_id: null, type: 'live.subscribed', project_id: 'p_app', item_id: null });
+    await pass(LIVE_BURST_MS);
+    expect([templates, runs, automations].map((query) => query.fetches())).toEqual([2, 2, 2]);
+
+    send({ event_id: null, type: 'live.reconnected', project_id: null, item_id: null });
+    await pass(LIVE_BURST_MS);
+    expect([templates, runs, automations].map((query) => query.fetches())).toEqual([3, 3, 3]);
   });
 });
 

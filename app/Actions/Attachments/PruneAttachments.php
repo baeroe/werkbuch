@@ -19,9 +19,10 @@ use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 /**
  * The work of app:prune-attachments (spec 4.16, A239): pictures and files of texts (`inline` with an owner of
- * AttachmentTexts::OWNERS: an item, a comment, a wiki page) older than the minimum age that no current text of their
- * project names any more: neither the description nor a rich text value of an item, nor the text of a comment, nor the
- * text of a page or one of its kept versions (A314: they are shown and restored). A text that names another text's
+ * AttachmentTexts::OWNERS: an item, a comment, a wiki page, a template) older than the minimum age that no current text
+ * of their project names any more: neither the description nor a rich text value of an item, nor the text of a comment,
+ * nor the text of a page or one of its kept versions (A314: they are shown and restored), nor the description or a rich
+ * text value of a template. A text that names another text's
  * picture (copied from a comment into the description or a page) keeps it too. Texts in the history of items do not
  * count: an older version of a description may show a picture this removed (the operator's choice, the docs say so). Files of the file list (`file`) go only by hand, uploads
  * nobody owns with the hourly job (PruneUnownedAttachments). No event (A239).

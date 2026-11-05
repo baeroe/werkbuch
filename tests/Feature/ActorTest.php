@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Template;
 use App\Models\User;
 use App\Support\Actor;
 use Illuminate\Auth\AuthenticationException;
@@ -60,6 +61,41 @@ it('keeps token and socket when a reason is added', function () {
         ->and($api->meta())->toBe(['via' => 'api', 'reason' => 'state_removed', 'token_id' => $token->id])
         ->and($api->token)->toBe($token)
         ->and($api->user)->toBe($user);
+});
+
+it('acts for a template as the default bot via template', function () {
+    $actor = Actor::template(Template::factory()->create());
+
+    expect($actor->user->is(User::defaultBot()))->toBeTrue()
+        ->and($actor->via)->toBe(Actor::VIA_TEMPLATE)
+        ->and($actor->onBehalfOf)->toBeNull()
+        ->and($actor->meta())->toBe(['via' => 'template', 'reason' => 'template']);
+});
+
+it('notes on_behalf_of in the meta and keeps it with another reason', function () {
+    $person = User::factory()->create();
+    $token = $person->createToken('ci')->accessToken;
+
+    $actor = Actor::automation('assign_on_start')->onBehalfOf($person);
+    $api = (new Actor($person, Actor::VIA_API, null, $token, '1.2'))->onBehalfOf($person)->withReason('close_parent');
+
+    expect($actor->user->is(User::defaultBot()))->toBeTrue()
+        ->and($actor->onBehalfOf)->toBe($person->id)
+        ->and($actor->meta())->toBe(['via' => 'automation', 'reason' => 'assign_on_start', 'on_behalf_of' => $person->id])
+        ->and($actor->withReason('close_parent')->meta())->toBe(['via' => 'automation', 'reason' => 'close_parent', 'on_behalf_of' => $person->id])
+        ->and($api->meta())->toBe(['via' => 'api', 'reason' => 'close_parent', 'token_id' => $token->id, 'socket' => '1.2', 'on_behalf_of' => $person->id])
+        ->and($api->token)->toBe($token);
+});
+
+it('notes quiet in the meta only when quiet, and keeps it with another reason or person (A357)', function () {
+    $person = User::factory()->create();
+
+    $night = Actor::automation('auto_close')->quietly();
+
+    expect(Actor::automation('auto_close')->quiet)->toBeFalse()
+        ->and($night->meta())->toBe(['via' => 'automation', 'reason' => 'auto_close', 'quiet' => true])
+        ->and($night->withReason('close_parent')->meta())->toBe(['via' => 'automation', 'reason' => 'close_parent', 'quiet' => true])
+        ->and($night->onBehalfOf($person)->meta())->toBe(['via' => 'automation', 'reason' => 'auto_close', 'on_behalf_of' => $person->id, 'quiet' => true]);
 });
 
 it('acts through the api with the bearer token', function () {

@@ -13,6 +13,11 @@ use App\Actions\Attachments\PruneAttachments;
 use App\Actions\Attachments\PruneUnownedAttachments;
 use App\Actions\Attachments\ShowAttachment;
 use App\Actions\Attachments\UploadAttachment;
+use App\Actions\Automations\FollowWorkflow;
+use App\Actions\Automations\ListAutomations;
+use App\Actions\Automations\RunDailyAutomations;
+use App\Actions\Automations\RunMoveAutomations;
+use App\Actions\Automations\SaveAutomation;
 use App\Actions\Comments\AddComment;
 use App\Actions\Comments\AddReaction;
 use App\Actions\Comments\DeleteComment;
@@ -78,6 +83,18 @@ use App\Actions\Search\QuerySearch;
 use App\Actions\System\GetSystemStatus;
 use App\Actions\System\RetryFailedJobs;
 use App\Actions\System\SendTestMail;
+use App\Actions\Templates\DeleteTemplate;
+use App\Actions\Templates\DraftFromTemplate;
+use App\Actions\Templates\FailScheduledTemplate;
+use App\Actions\Templates\GetTemplate;
+use App\Actions\Templates\ListTemplateRuns;
+use App\Actions\Templates\ListTemplates;
+use App\Actions\Templates\PreviewSchedule;
+use App\Actions\Templates\RescheduleTemplates;
+use App\Actions\Templates\RunDueTemplates;
+use App\Actions\Templates\RunScheduledTemplate;
+use App\Actions\Templates\RunTemplate;
+use App\Actions\Templates\SaveTemplate;
 use App\Actions\Tokens\CreateToken;
 use App\Actions\Tokens\ListTokens;
 use App\Actions\Tokens\RevokeToken;
@@ -118,8 +135,11 @@ use App\Actions\WorkItems\UpdateWorkItem;
 use App\Actions\WorkItemTypes\DeleteWorkItemType;
 use App\Actions\WorkItemTypes\ListWorkItemTypes;
 use App\Actions\WorkItemTypes\SaveWorkItemType;
+use App\Domain\Automations\AutomationKey;
+use App\Domain\Workflow\StateCategory;
 use App\Events\EventType;
 use App\Models\Attachment;
+use App\Models\Automation;
 use App\Models\Comment;
 use App\Models\CommentReaction;
 use App\Models\Event;
@@ -132,6 +152,7 @@ use App\Models\RelationType;
 use App\Models\Resolution;
 use App\Models\User;
 use App\Models\Workflow;
+use App\Models\WorkItem;
 use App\Models\WorkItemRelation;
 use App\Models\WorkItemType;
 use App\Support\Actor;
@@ -886,6 +907,142 @@ return [
         'allowed' => $itemWriters,
         'hidden' => ['outsider_private'],
         'event' => EventType::PageUpdated,
+    ],
+    // templates: whoever sees the project reads them, managing them takes `template.manage` (members and admins of the
+    // project; the default bot is an org admin)
+    'ListTemplates' => [
+        'action' => ListTemplates::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListTemplates::run($a, $w->project($column), []),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    'GetTemplate' => [
+        'action' => GetTemplate::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetTemplate::run($a, $w->template($column)),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    'SaveTemplate' => [
+        'action' => SaveTemplate::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => SaveTemplate::run($a, null, ['name' => 'Matrix', 'payload' => ['title' => 'Matrix'], 'schedule' => null], $w->template($column)),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::TemplateUpdated,
+    ],
+    'DeleteTemplate' => [
+        'action' => DeleteTemplate::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => DeleteTemplate::run($a, $w->template($column)),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::TemplateDeleted,
+    ],
+    // the draft serves creating an item: who sees the template and may create items in its project
+    'DraftFromTemplate' => [
+        'action' => DraftFromTemplate::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => DraftFromTemplate::run($a, $w->template($column)),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+    ],
+    // running a template by hand manages it; the item is the default bot's (Actor::template), so the account records
+    // no event of its own
+    'RunTemplate' => [
+        'action' => RunTemplate::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => RunTemplate::run($a, $w->template($column)),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+    ],
+    'ListTemplateRuns' => [
+        'action' => ListTemplateRuns::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListTemplateRuns::run($a, $w->template($column), []),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    // the scheduler (RunTemplateJob, app:run-templates) and a new zone or a restored project: the bookkeeping of the
+    // schedules writes no event of its own (K23, A355), a run's item is the default bot's work_item.created
+    'RunScheduledTemplate' => [
+        'action' => RunScheduledTemplate::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => RunScheduledTemplate::run($a, $w->template($column)->id),
+        'system' => true,
+    ],
+    // the term of a run that kept crashing (RunTemplateJob::failed()): booked as failed, with template.run_failed when
+    // a term is due (none is in the world)
+    'FailScheduledTemplate' => [
+        'action' => FailScheduledTemplate::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => FailScheduledTemplate::run($a, $w->template($column)->id),
+        'system' => true,
+    ],
+    'RunDueTemplates' => [
+        'action' => RunDueTemplates::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => RunDueTemplates::run($a, true),
+        'system' => true,
+    ],
+    'RescheduleTemplates' => [
+        'action' => RescheduleTemplates::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => RescheduleTemplates::run($a, 'Europe/Berlin'),
+        'system' => true,
+    ],
+    // the preview of a schedule reads nothing of a project: every active account
+    'PreviewSchedule' => [
+        'action' => PreviewSchedule::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => PreviewSchedule::run($a, ['schedule' => ['frequency' => 'daily', 'interval' => 1, 'time' => '09:00', 'starts_on' => '2026-11-01', 'ends' => ['type' => 'never']]]),
+        'allowed' => $everyone,
+    ],
+    // the automations of a project: whoever sees it reads them, only its admins switch them (spec 4.3)
+    'ListAutomations' => [
+        'action' => ListAutomations::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListAutomations::run($a, $w->project($column)),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    'SaveAutomation' => [
+        'action' => SaveAutomation::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => SaveAutomation::run($a, $w->project($column), 'auto_archive', ['enabled' => true, 'settings' => ['days' => 30]]),
+        'allowed' => $projectAdmins,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::AutomationUpdated,
+    ],
+    // the work of AssignWorkflow and SaveWorkflow, which checked their rights and hold the locks: Auto-Close of the
+    // project follows into a workflow without a Canceled state and switches off
+    'FollowWorkflow' => [
+        'action' => FollowWorkflow::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $project = $w->project($column);
+            $state = $project->workflow()->firstOrFail()->states()->where('category', StateCategory::Canceled)->value('id');
+            Automation::factory()->for($project)->key(AutomationKey::AutoClose)->enabled(['state_id' => $state])->create();
+
+            FollowWorkflow::run($a, $project, [], Workflow::factory()->create(), RemapStates::WORKFLOW_CHANGED);
+        },
+        'event' => EventType::AutomationUpdated,
+        'system' => true,
+    ],
+    'RunMoveAutomations' => [
+        'action' => RunMoveAutomations::class,
+        // the work of a move (TransitionWorkItem::move()) in its transaction: the last child of an epic closed, and with
+        // Eltern schließen switched on the epic follows it into Done
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $project = $w->project($column);
+            Automation::factory()->for($project)->key(AutomationKey::CloseParent)->enabled()->create();
+            $epic = WorkItem::factory()->for($project)->epic()->create();
+            $child = WorkItem::factory()->childOf($epic)->closed()->create();
+            $from = $project->workflow()->firstOrFail()->states()->where('category', StateCategory::Backlog)->firstOrFail();
+
+            RunMoveAutomations::run($a, $child->load('project'), $from, $child->state()->firstOrFail());
+        },
+        'event' => EventType::WorkItemStateChanged,
+        'system' => true,
+    ],
+    'RunDailyAutomations' => [
+        'action' => RunDailyAutomations::class,
+        // the work of the hourly RunDailyAutomationsJob, forced to act: Auto-Archiv archives an item closed 40 days ago
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $project = $w->project($column);
+            Automation::factory()->for($project)->key(AutomationKey::AutoArchive)->enabled()->create();
+            WorkItem::factory()->for($project)->closed()->create(['closed_at' => now()->subDays(40)]);
+
+            return RunDailyAutomations::run($a, now()->utc()->startOfHour()->toImmutable(), true, $project->id);
+        },
+        'event' => EventType::WorkItemArchived,
+        'system' => true,
     ],
     // the inbox is the own one: everybody lists, marks and deletes their own notifications (a bot has none); a
     // notification of a project the account does not see is passed over when marking and a 404 when deleting (K19)

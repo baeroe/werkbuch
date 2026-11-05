@@ -10,8 +10,10 @@ namespace App\Domain\Notifications;
  *   `work_item.updated` (with a field other than the rank), `work_item.assigned` (all but the new assignee) and
  *   `work_item.relation_added|removed`.
  * - `item_created`: only the lead, for `work_item.created`.
+ * - `template_run_failed`: only the lead and the author of the template, for `template.run_failed` (phase 10).
  * The lead watches every item of the project unless they unsubscribed from it (A269); whoever unsubscribed only hears
- * of mentions and assignments (A113). The actor never hears of their own event. Every other event tells nobody (A270),
+ * of mentions and assignments (A113). The actor never hears of their own event, nor does the person an automation or a
+ * template run acted for (`causedBy`, A342, K12). Every other event tells nobody (A270),
  * `comment.updated` only the people mentioned anew.
  */
 final class Recipients
@@ -30,7 +32,7 @@ final class Recipients
         $kinds = [];
         $add = function (NotificationKind $kind, array $people) use (&$kinds, $facts): void {
             foreach ($people as $person) {
-                if ($person !== $facts->actorId && ! in_array($kind, $kinds[$person] ?? [], true)) {
+                if ($person !== $facts->actorId && $person !== $facts->causedBy && ! in_array($kind, $kinds[$person] ?? [], true)) {
                     $kinds[$person][] = $kind;
                 }
             }
@@ -65,6 +67,9 @@ final class Recipients
             case 'work_item.relation_added':
             case 'work_item.relation_removed':
                 $add(NotificationKind::ItemChanged, $watchers);
+                break;
+            case 'template.run_failed':
+                $add(NotificationKind::TemplateRunFailed, array_values(array_filter([$facts->leadId, $facts->templateAuthorId], 'is_string')));
                 break;
         }
 

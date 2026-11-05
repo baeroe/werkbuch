@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Attachment;
+use App\Models\Automation;
 use App\Models\Comment;
 use App\Models\Event;
 use App\Models\Invitation;
@@ -11,6 +12,7 @@ use App\Models\Project;
 use App\Models\Property;
 use App\Models\RelationType;
 use App\Models\Resolution;
+use App\Models\Template;
 use App\Models\User;
 use App\Models\View;
 use App\Models\Workflow;
@@ -76,3 +78,11 @@ it('maps the page to its short name', function () {
     expect(Relation::getMorphedModel('page'))->toBe(Page::class)
         ->and((new Page)->getMorphClass())->toBe('page');
 });
+
+it('maps the template and the automation to their short names', function (string $alias, string $model) {
+    expect(Relation::getMorphedModel($alias))->toBe($model)
+        ->and((new $model)->getMorphClass())->toBe($alias);
+})->with([
+    'template' => ['template', Template::class],
+    'automation' => ['automation', Automation::class],
+]);

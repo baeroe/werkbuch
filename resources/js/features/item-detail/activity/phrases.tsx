@@ -6,7 +6,8 @@
  *   name), older events without one from the current workflow, else "einen früheren Status".
  * - A property names itself by its label, a deleted one by its key.
  * - A related item the reader may not see is "verborgenes Item", without key (the server sends nothing of it, P19).
- * - The reason of a change (`meta.reason`) reads as `items.activity.reason.<code>`; a code without text as itself.
+ * - The reason of a change (`meta.reason`) reads as `items.activity.reason.<code>`; a code without text as itself. An
+ *   item made from a template names it instead ("Aus Vorlage „:name“", `lineReason`).
  * - A comment's edit reads "einen Kommentar bearbeitet" (its earlier version shows under the line, `earlierVersions`),
  *   its deletion names whose comment it was; several edits of one comment in one line read once. A file of the item's
  *   file list reads by its name: "die Datei „angebot.pdf“ angehängt".
@@ -57,6 +58,16 @@ export function joined(parts: readonly ReactNode[]): ReactNode {
 export function reasonText(code: string): string {
   const key = `items.activity.reason.${code}`;
   return hasTranslation(key) ? t(key) : code;
+}
+
+/**
+ * What stands under a line: the template an item was made from (`ItemEvent.template`, by a run or by hand), else the
+ * reason of the line; nothing without either.
+ */
+export function lineReason(line: { reason: string | null; events: readonly ItemEvent[] }): string | null {
+  const template = line.events.find((event) => event.template)?.template;
+  if (template) return t('items.activity.from_template', { name: template.name });
+  return line.reason ? reasonText(line.reason) : null;
 }
 
 /** A value in a history line. */

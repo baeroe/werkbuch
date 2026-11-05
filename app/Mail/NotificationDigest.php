@@ -4,6 +4,7 @@ namespace App\Mail;
 
 use App\Domain\Notifications\NotificationKind;
 use App\Models\Notification;
+use App\Models\Template;
 use App\Models\User;
 use App\Models\WorkItem;
 use App\RichText\Document;
@@ -24,6 +25,10 @@ use Illuminate\Support\Carbon;
  * A collection of reminders (`due:<day>`, A275) is about several items: its mail names each with key, title, link and
  * "due today" or "overdue since" (from `data.overdue`, the calendar of the person when it was written), the oldest due
  * date first, under a subject of its own (`reminders`).
+ *
+ * A collection of failed runs of a template (`template:<id>`, A348) is about the template: its mail names the project
+ * and the template in the subject, each failed run with its time and the sentence of its error (in the language of the
+ * organization, as the run log keeps it), and links to the template.
  */
 final class NotificationDigest extends Mailable
 {
@@ -39,18 +44,24 @@ final class NotificationDigest extends Mailable
         private readonly array $lines,
         private readonly RichTextNames $names,
         private readonly bool $reminders = false,
+        private readonly ?Template $template = null,
     ) {}
 
     public function envelope(): Envelope
     {
-        return new Envelope(subject: $this->reminders
-            ? __('mail.notifications.reminders.subject')
-            : __('mail.notifications.subject', ['key' => $this->item()->key, 'title' => $this->item()->title]));
+        return new Envelope(subject: match (true) {
+            $this->template !== null => $this->templateSubject(),
+            $this->reminders => __('mail.notifications.reminders.subject'),
+            default => __('mail.notifications.subject', ['key' => $this->item()->key, 'title' => $this->item()->title]),
+        });
     }
 
     public function content(): Content
     {
         $base = rtrim((string) config('app.url'), '/');
+        if ($this->template !== null) {
+            return $this->templateContent($this->template, $base);
+        }
         if ($this->reminders) {
             return $this->reminderContent($base);
         }
@@ -84,6 +95,28 @@ final class NotificationDigest extends Mailable
         ]);
     }
 
+    private function templateSubject(): string
+    {
+        /** @var Template $template */
+        $template = $this->template;
+
+        return __('mail.notifications.template.subject', ['identifier' => $template->project->identifier, 'name' => $template->name]);
+    }
+
+    /** The failed runs of a template: one entry per run, oldest first, with the link to the template. */
+    private function templateContent(Template $template, string $base): Content
+    {
+        return new Content(view: 'mail.notifications.template', text: 'mail.notifications.template-text', with: [
+            'subject' => $this->templateSubject(),
+            'templateUrl' => "{$base}/projects/".rawurlencode($template->project->identifier).'/templates/'.$template->id,
+            'settingsUrl' => "{$base}/me/notifications",
+            'entries' => array_map(fn (array $line) => [
+                'at' => $this->at($line['notification']),
+                'error' => (string) ($line['notification']->data['error'] ?? ''),
+            ], $this->lines),
+        ]);
+    }
+
     /** The item of the collection: every line is about it. */
     private function item(): WorkItem
     {
@@ -106,11 +139,17 @@ final class NotificationDigest extends Mailable
 
         return [
             'sentence' => $this->sentence($notification),
-            'at' => $notification->created_at?->copy()->setTimezone($this->person->effectiveTimezone())->settings(['locale' => app()->getLocale()])->isoFormat('LLL') ?? '',
+            'at' => $this->at($notification),
             'html' => $text === null || $cut ? null : $text->toMailHtml($this->names, $base),
             'text' => $cut ? mb_substr((string) $plain, 0, self::TEXT_MAX).'…' : $plain,
             'cut' => $cut,
         ];
+    }
+
+    /** When the line happened, in the time zone of the person and the language of the mail. */
+    private function at(Notification $notification): string
+    {
+        return $notification->created_at?->copy()->setTimezone($this->person->effectiveTimezone())->settings(['locale' => app()->getLocale()])->isoFormat('LLL') ?? '';
     }
 
     /** What the line says, in the language of the mail; a reminder that is overdue names the due date. */

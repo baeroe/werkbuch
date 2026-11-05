@@ -16,6 +16,7 @@ use App\Actions\WorkItemTypes\DeleteWorkItemType;
 use App\Domain\Notifications\NotificationKind;
 use App\Enums\AccountType;
 use App\Enums\Locale;
+use App\Models\Automation;
 use App\Models\Invitation;
 use App\Models\Label;
 use App\Models\Notification;
@@ -26,6 +27,7 @@ use App\Models\Project;
 use App\Models\Property;
 use App\Models\RelationType;
 use App\Models\Resolution;
+use App\Models\Template;
 use App\Models\User;
 use App\Models\View;
 use App\Models\Workflow;
@@ -41,7 +43,8 @@ use RuntimeException;
  * The demo data plus the accounts of the Playwright tests (e2e/), set back to their start state on every run, without
  * the open invitations, the projects (with their items, comments and files), the uploads nobody owns, the views and
  * the catalog entries earlier runs left behind, and with the inbox accounts empty. The organization speaks English
- * here (the specs read the English texts); the demo data alone keep German. Never for production.
+ * here (the specs read the English texts); the demo data alone keep German. The automations of the demo projects are
+ * off and their templates paused (K9). Never for production.
  */
 class E2eSeeder extends Seeder
 {
@@ -80,6 +83,15 @@ class E2eSeeder extends Seeder
         $this->call(DemoSeeder::class);
 
         Organization::current()->update(['locale' => Locale::En]);
+
+        // the DDEV scheduler runs templates and automations for real, on the database the specs share (K9): the demo
+        // projects keep their automations off and their templates paused without a next term (the log stays), so no
+        // night archives or cancels a demo item and no Monday adds one, also after something plans them anew (a zone
+        // change, a restored project: RescheduleTemplates, W2); `updated_at` stays (the mark of a template's version)
+        $demo = Project::query()->whereIn('identifier', ['WEB', 'APP', 'OPS'])->select('id');
+        Automation::query()->whereIn('project_id', $demo)->toBase()->update(['enabled' => false]);
+        Template::query()->whereIn('project_id', $demo)->toBase()->update(['next_run_at' => null]);
+        Template::query()->whereIn('project_id', $demo)->whereNotNull('schedule')->toBase()->update(['schedule->paused' => true]);
 
         // the invitations of earlier runs: the lists of the specs stay short, and a run never meets an old link
         Invitation::query()->whereNull('accepted_at')->where('email', 'like', '%@example.com')->delete();

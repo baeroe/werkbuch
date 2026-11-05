@@ -80,7 +80,10 @@ export const qk = {
   pageVersions: resource('page-versions'),
   templates: resource('templates'),
   templateRuns: resource('template-runs'),
-  automations: resource('automations'),
+  /** The next terms of a schedule while it is edited: apart from `templates`, so no template change reloads it. */
+  schedulePreview: resource('schedule-preview'),
+  /** `qk.automations.save(project, key)` is the mutation key of switching one automation. */
+  automations: { ...resource('automations'), save: (project: string, key: string) => ['automations', 'save', project, key] as const },
   webhooks: resource('webhooks'),
   deliveries: resource('deliveries'),
   system: resource('system'),

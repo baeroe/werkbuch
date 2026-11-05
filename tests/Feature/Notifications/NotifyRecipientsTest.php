@@ -2,11 +2,13 @@
 
 use App\Access\ProjectRole;
 use App\Access\RoleAssignments;
+use App\Actions\Automations\RunDailyAutomations;
 use App\Actions\Comments\AddComment;
 use App\Actions\Comments\EditComment;
 use App\Actions\Notifications\NotifyRecipients;
 use App\Actions\Projects\AddMember;
 use App\Actions\Projects\RemoveMember;
+use App\Actions\Templates\RunTemplate;
 use App\Actions\Users\DeactivateUser;
 use App\Actions\WorkItems\AddRelation;
 use App\Actions\WorkItems\CreateWorkItem;
@@ -14,22 +16,29 @@ use App\Actions\WorkItems\RemapStates;
 use App\Actions\WorkItems\SetSubscription;
 use App\Actions\WorkItems\TransitionWorkItem;
 use App\Actions\WorkItems\UpdateWorkItem;
+use App\Domain\Automations\AutomationKey;
 use App\Domain\Notifications\NotificationKind;
 use App\Domain\Properties\FieldType;
 use App\Domain\Ranking\Rank;
 use App\Events\EventType;
 use App\Events\Outbox;
 use App\Jobs\SendNotificationMailJob;
+use App\Models\Automation;
 use App\Models\Notification;
 use App\Models\NotificationMail;
 use App\Models\NotificationPreference;
 use App\Models\Project;
 use App\Models\Property;
 use App\Models\RelationType;
+use App\Models\Template;
+use App\Models\TemplateRun;
 use App\Models\User;
 use App\Models\WorkItem;
 use App\Models\WorkItemType;
 use App\Notifications\NotificationConsumer;
+use App\Support\Actor;
+use App\Support\NotificationFacts;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
@@ -390,6 +399,36 @@ it('tells nobody about a state a rebuilt workflow moved (ruling of T3-M4)', func
         ->and($kinds($w['tom']))->toBe(['state_changed']);
 })->with([RemapStates::WORKFLOW_CHANGED, RemapStates::STATE_REMOVED]);
 
+it('tells nobody about the night of auto-close: its move, its comment and the parent it closes (A357)', function () use ($world, $kinds, $watch, $mailServer, $mails) {
+    $mailServer();
+    $w = $world();
+    $workflow = $w['web']->workflow;
+    $canceled = (string) $workflow->states()->where('name', 'Cancelled')->value('id');
+    Automation::factory()->for($w['web'])->key(AutomationKey::AutoClose)->enabled(['state_id' => $canceled])->create();
+    Automation::factory()->for($w['web'])->key(AutomationKey::CloseParent)->enabled()->create();
+    $epic = WorkItem::factory()->for($w['web'])->epic()->inState('In Progress')->create(['created_by' => $w['tom']->id]);
+    WorkItem::factory()->childOf($epic)->closed()->create(['created_by' => $w['tom']->id]);
+    $stale = WorkItem::factory()->childOf($epic)->inState('Backlog')->create(['created_by' => $w['tom']->id]);
+    $watch($w['mara'], $stale);
+    $watch($w['jonas'], $epic);
+    WorkItem::query()->whereKey($stale->id)->toBase()->update(['updated_at' => now()->subDays(100)]);
+
+    expect(RunDailyAutomations::run(Actor::system(User::defaultBot(), 'daily_automations'), CarbonImmutable::now('UTC'), true))
+        ->toBe(['archived' => 0, 'closed' => 1, 'skipped' => 0]);
+
+    // the history shows all three, nobody hears of them: neither the watchers nor the lead, neither inbox nor mail
+    expect(eventsOf(EventType::WorkItemStateChanged, $stale))->toHaveCount(1)
+        ->and(eventsOf(EventType::CommentCreated, $stale))->toHaveCount(1)
+        ->and(eventsOf(EventType::WorkItemStateChanged, $epic)->sole()->meta['reason'])->toBe('close_parent')
+        ->and(Notification::query()->count())->toBe(0)
+        ->and(NotificationMail::query()->count())->toBe(0);
+
+    // a comment of a person on the same item tells the watcher as ever
+    AddComment::run(actor($w['ida']), $stale->refresh(), ['body' => 'Doch noch gebraucht.']);
+    expect($kinds($w['mara']))->toBe(['comment'])
+        ->and($mails($w['mara']))->toHaveCount(1);
+});
+
 it('takes the fields of the change, not the values', function () use ($world, $of) {
     $w = $world();
     $other = WorkItem::factory()->for($w['web'])->create(['created_by' => $w['tom']->id]);
@@ -458,4 +497,116 @@ it('asks the same number of queries for two watchers and for ten', function () u
     expect(Notification::query()->where('work_item_id', $few->id)->count())->toBe(3)
         ->and(Notification::query()->where('work_item_id', $many->id)->count())->toBe(11)
         ->and($ten)->toBe($two);
+});
+
+/** A template of the project by the author, whose runs fail: its assignee is nobody of the project. */
+$failingTemplate = function (Project $project, User $author): Template {
+    $template = Template::factory()->create(['project_id' => $project->id, 'created_by' => $author->id]);
+    $template->update(['payload' => [...$template->payload, 'assignee_id' => User::factory()->create()->id]]);
+
+    return $template;
+};
+
+it('tells the lead and the author of a template about a run that failed', function () use ($world, $of, $failingTemplate) {
+    $w = $world();
+    $template = $failingTemplate($w['web'], $w['mara']);
+
+    // Jonas presses "run now" (K12: he did it, he hears nothing)
+    ['run' => $run] = RunTemplate::run(actor($w['jonas']), $template);
+
+    $event = eventsOf(EventType::TemplateRunFailed, $template)->sole();
+    expect($run->status)->toBe(TemplateRun::FAILED);
+    foreach ([$w['tom'], $w['mara']] as $person) {
+        $notification = $of($person)->sole();
+        expect($notification->kind)->toBe(NotificationKind::TemplateRunFailed)
+            ->and($notification->inbox)->toBeTrue()
+            ->and([$notification->project_id, $notification->work_item_id, $notification->event_id, $notification->actor_id])
+            ->toBe([$w['web']->id, null, $event->id, User::defaultBot()->id])
+            ->and($notification->data)->toBe(['template_id' => $template->id, 'error' => $run->error])
+            ->and($notification->dedupe_key)->toBe("event:{$event->id}");
+    }
+    expect($run->error)->not->toBeEmpty()
+        ->and($of($w['jonas']))->toBeEmpty()
+        ->and($of($w['ida']))->toBeEmpty();
+});
+
+it('leaves out the person who ran the template now (K12)', function () use ($world, $of, $failingTemplate) {
+    $w = $world();
+    $template = $failingTemplate($w['web'], $w['mara']);
+
+    RunTemplate::run(actor($w['mara']), $template);
+    RunTemplate::run(actor($w['tom']), $template);
+
+    // each heard only of the run the other one pressed
+    expect($of($w['tom'])->sole()->event_id)->toBe(eventsOf(EventType::TemplateRunFailed, $template)->first()->id)
+        ->and($of($w['mara'])->sole()->event_id)->toBe(eventsOf(EventType::TemplateRunFailed, $template)->last()->id);
+});
+
+it('tells the lead who wrote the template once', function () use ($world, $of, $failingTemplate) {
+    $w = $world();
+    $template = $failingTemplate($w['web'], $w['tom']);
+
+    RunTemplate::run(actor($w['jonas']), $template);
+
+    expect($of($w['tom']))->toHaveCount(1)
+        ->and(Notification::query()->count())->toBe(1);
+});
+
+it('tells no lead and no author without access to the project', function () use ($world, $of, $failingTemplate) {
+    $w = $world();
+    $admin = User::factory()->admin()->create(['name' => 'Ada']);
+    // OPS is private: Ida wrote the template and left the project, Tom, its lead, was deactivated
+    $template = $failingTemplate($w['ops'], $w['ida']);
+    RemoveMember::run(actor($w['tom']), $w['ops'], $w['ida']);
+    DeactivateUser::run(actor($admin), $w['tom']);
+
+    ['run' => $run] = RunTemplate::run(actor($w['ole']), $template);
+
+    expect($run->status)->toBe(TemplateRun::FAILED)
+        ->and($of($w['ida']))->toBeEmpty()
+        ->and($of($w['tom']))->toBeEmpty()
+        ->and(Notification::query()->count())->toBe(0);
+});
+
+it('keeps to the choice of the person: no inbox, no failed-run notification (13c)', function () use ($world, $of, $choose, $failingTemplate) {
+    $w = $world();
+    $template = $failingTemplate($w['web'], $w['mara']);
+    $choose($w['tom'], ['template_run_failed', 'inbox', false]);
+
+    RunTemplate::run(actor($w['jonas']), $template);
+
+    expect($of($w['tom']))->toBeEmpty()
+        ->and($of($w['mara']))->toHaveCount(1);
+});
+
+it('collects the mail of a failed run per person and template', function () use ($world, $of, $choose, $mailServer, $mails, $failingTemplate) {
+    $mailServer();
+    $w = $world();
+    $template = $failingTemplate($w['web'], $w['mara']);
+    // mail is off by default for the kind (A348)
+    $choose($w['mara'], ['template_run_failed', 'mail', true]);
+
+    RunTemplate::run(actor($w['jonas']), $template);
+    RunTemplate::run(actor($w['jonas']), $template);
+
+    $collection = $mails($w['mara'])->sole();
+    expect($collection->scope)->toBe("template:{$template->id}")
+        ->and($of($w['mara'])->pluck('mail_id')->unique()->all())->toBe([$collection->id])
+        ->and($mails($w['tom']))->toBeEmpty()
+        ->and($of($w['tom']))->toHaveCount(2);
+    Queue::assertPushed(SendNotificationMailJob::class, 1);
+});
+
+it('tells nobody about a failed run of a project being deleted', function () use ($world, $failingTemplate) {
+    $w = $world();
+    $template = $failingTemplate($w['web'], $w['mara']);
+    consumers();
+    RunTemplate::run(actor($w['jonas']), $template);
+    $w['web']->update(['deleting_at' => now()]);
+
+    $event = eventsOf(EventType::TemplateRunFailed, $template)->sole();
+    // the facts already end there (K9), without reading anybody
+    expect(NotificationFacts::of($event))->toBeNull()
+        ->and(NotifyRecipients::run(Actor::system(User::defaultBot(), 'notifications'), $event))->toBe(0)
+        ->and(Notification::query()->count())->toBe(0);
 });

@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { allEntries, api, arrowTo, channelHeld, createE2eProject, createItem, PEOPLE, pressMod, removeCatalogEntries, removeE2eProject, runId, signedInContext, tabTo, tr, variant } from '../helpers';
+import { allEntries, api, arrowTo, channelHeld, createE2eProject, createE2eTemplate, createItem, PEOPLE, pngBytes, pressMod, removeCatalogEntries, removeE2eProject, runId, signedInContext, tabTo, tr, uploadViaApi, variant } from '../helpers';
 
 // The create dialog with the keyboard only, signed in as the e2e person (org admin) in English. Each test works in a
 // project of its own (`E2E …`, removed in `finally`); the dialog opens with `c` on a page of that project, which it
@@ -215,6 +215,78 @@ test('creates an item with a pasted image and a mention', async ({ page }) => {
     const record = await api(page, 'GET', `/api/v1/attachments/${attachment}`);
     expect(record.status(), await record.text()).toBe(200);
     expect(((await record.json()) as { data: { owner: { type: string } | null } }).data.owner?.type).toBe('work_item');
+  } finally {
+    await removeE2eProject(page, identifier);
+  }
+});
+
+test('applies a template in the dialog and creates the item with a copy of its image', async ({ page }) => {
+  const { id, identifier } = await createE2eProject(page, name('template'), { types: ['Task'] });
+  try {
+    // a template whose description shows a picture: it belongs to the template
+    const picture = await uploadViaApi(page, id, { name: 'checkliste.png', type: 'image/png', bytes: pngBytes(8, 8) });
+    await createE2eTemplate(page, id, {
+      name: 'E2E Release-Check',
+      title: 'E2E Release-Check {year}',
+      description_json: {
+        type: 'doc',
+        content: [
+          { type: 'paragraph', content: [{ type: 'text', text: 'Liste abhaken' }] },
+          { type: 'image', attrs: { attachmentId: picture.id, alt: 'checkliste.png' } },
+        ],
+      },
+    });
+    await openProject(page, identifier);
+    const { dialog, title } = await openDialog(page);
+
+    // the field before the title: the templates of the project
+    const template = dialog.getByRole('combobox', { name: new RegExp(`^${tr('en', 'items.create.template')}`) });
+    await expect(template).toContainText(tr('en', 'items.create.template_none'));
+    await tabTo(page, template, { backwards: true, max: 4 });
+    await page.keyboard.press('Enter');
+    await arrowTo(page, page.getByRole('option', { name: 'E2E Release-Check', exact: true }));
+    await page.keyboard.press('Enter');
+
+    const applied = dialog.getByText(tr('en', 'items.create.template_applied', { name: 'E2E Release-Check' }), { exact: true });
+    await expect(applied).toBeVisible();
+    await expect(title).toHaveValue(new RegExp(`^E2E Release-Check \\d{4}$`));
+    // its undo is a button in the dialog, the next stop after the field (I2): the draft from before comes back
+    await tabTo(page, dialog.getByRole('button', { name: tr('en', 'common.undo'), exact: true }), { max: 2 });
+    await page.keyboard.press('Enter');
+    await expect(title).toHaveValue('');
+    await expect(applied).toBeHidden();
+    await expect(template).toBeFocused();
+    await expect(template).toContainText(tr('en', 'items.create.template_none'));
+    // and once more, to create the item with it
+    await page.keyboard.press('Enter');
+    await arrowTo(page, page.getByRole('option', { name: 'E2E Release-Check', exact: true }));
+    await page.keyboard.press('Enter');
+    await expect(applied).toBeVisible();
+    // the server filled the placeholder of the title
+    await expect(title).toHaveValue(new RegExp(`^E2E Release-Check \\d{4}$`));
+    await expect(template).toContainText('E2E Release-Check');
+    await expect(dialog.getByRole('img', { name: 'checkliste.png' })).toBeVisible();
+
+    await pressMod(page, 'Enter');
+    await expect(created(page, `${identifier}-1`)).toBeVisible();
+    await expect(dialog).toBeHidden();
+
+    // the item owns a copy of the picture; the template keeps its own
+    const response = await api(page, 'GET', `/api/v1/work-items/${identifier}-1`);
+    expect(response.status(), await response.text()).toBe(200);
+    const { description, template_id } = ((await response.json()) as { data: { description: string; template_id: string | null } }).data;
+    expect(template_id).toBeTruthy();
+    expect(description).toMatch(/^Liste abhaken/);
+    const copy = /!\[checkliste\.png\]\(attachment:([0-9a-z]{26})\)/.exec(description)?.[1];
+    expect(copy).toBeTruthy();
+    expect(copy).not.toBe(picture.id);
+    const owner = async (attachment: string) => {
+      const record = await api(page, 'GET', `/api/v1/attachments/${attachment}`);
+      expect(record.status(), await record.text()).toBe(200);
+      return ((await record.json()) as { data: { owner: { type: string } | null } }).data.owner?.type;
+    };
+    expect(await owner(copy!)).toBe('work_item');
+    expect(await owner(picture.id)).toBe('template');
   } finally {
     await removeE2eProject(page, identifier);
   }

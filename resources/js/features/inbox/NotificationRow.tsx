@@ -78,12 +78,13 @@ const SYSTEM_ICONS: Partial<Record<Notification['event'], LucideIcon>> = {
 };
 
 /**
- * Where a notification leads: its item, the project of a failed template, the organisation's settings for a webhook
- * (until phases 10 and 11 bring the pages of templates and webhooks; the demo rows name neither).
+ * Where a notification leads: its item; a failed template to its page (one deleted since says there that it does not
+ * exist, without asking for it, T9-M5), without the template behind it (the demo rows) to the templates of its
+ * project; the organisation's settings for a webhook (until phase 11 brings the page of webhooks).
  */
 export function hrefOf(notification: Notification, project: Project | undefined): string {
   if (notification.work_item_id) return paths.item(notification.item?.key ?? notification.work_item_id);
-  if (notification.event === 'template_run_failed') return project ? paths.project(project.identifier) : paths.projects();
+  if (notification.event === 'template_run_failed') return project ? paths.templates(project.identifier, notification.data.template_id ?? undefined) : paths.projects();
   return paths.settings();
 }
 

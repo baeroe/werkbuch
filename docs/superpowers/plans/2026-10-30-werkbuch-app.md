@@ -249,7 +249,7 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 
 ## Phase 10: Vorlagen, Zeitpläne, Automatisierungen
 
-**Branch:** `feat/phase-10-templates` · **Phasenplan:** `…phase-10-templates.md`
+**Branch:** `feat/phase-10-automation` · **Phasenplan:** `2026-11-04-phase-10-automation.md`
 
 **Liefert:**
 - `app/Domain/Schedule` (Port von `src/domain/recurrence.ts`, `placeholders.ts`, `tz.ts`: Frequenzen, Wochentage 0 = Sonntag, Wochenintervalle ab Montag, „letzter“ und n-ter Wochentag, Ende nie/Datum/nach N Läufen, Nachholen nur des letzten Termins und höchstens bis N, Platzhalter zweistellig, `{month_name}` in der Sprache der Organisation) mit portierten Tests und Review Focus 4.
@@ -258,7 +258,7 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 - REST: `projects/{id}/templates`, `templates/{id}` (`run`, `runs`, `preview`), `projects/{id}/automations`.
 - UI-Port: Vorlagen-Bildschirm und Editor (geteilt, 13b; Wiederholschutz für ⌘⏎, 13c), Vorlage im Anlegen-Dialog und in der Palette, Projekteinstellungen Automatisierungen (kein doppeltes Speichern, 13c).
 
-**Tests:** Erfolgskriterium 3 mit gestellter Uhr: pünktlich, nach Ausfall genau einmal nachgeholt, parallele Läufe ohne Duplikat; ungültige Vorlage zur Laufzeit; jede Automatisierung mit erlaubtem und verbotenem Übergang; e2e: Flow 6 (Vorschau „Monatsbericht“ mit den fünf Terminen bei gestellter Uhr 28.10.2026).
+**Tests:** Erfolgskriterium 3 mit gestellter Uhr: pünktlich, nach Ausfall genau einmal nachgeholt, parallele Läufe ohne Duplikat; ungültige Vorlage zur Laufzeit; jede Automatisierung mit erlaubtem und verbotenem Übergang; die fünf Termine von „Monatsbericht“ bei gestellter Uhr 28.10.2026 in Pest; e2e: Flow 6 mit einem Zeitplan in der Zukunft (ab 2036, die Uhr des Servers lässt sich in e2e nicht stellen), erwartete Termine über `Intl.DateTimeFormat` in der Sprache der Person und der Zone der Organisation (A351, K22).
 
 **Doku:** `concepts/templates`, `concepts/automations`, en + de.
 
@@ -366,7 +366,7 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 - [x] Phase 7: Editor, Kommentare, Anhänge (PR #19)
 - [x] Phase 8: Benachrichtigungen, Mail, Live-Updates (PR #20)
 - [x] Phase 9: Wiki (PR #21)
-- [ ] Phase 10: Vorlagen, Zeitpläne, Automatisierungen
+- [x] Phase 10: Vorlagen, Zeitpläne, Automatisierungen (PR #22)
 - [ ] Phase 11: Webhooks
 - [ ] Phase 12: REST vollständig und OpenAPI
 - [ ] Phase 13: MCP

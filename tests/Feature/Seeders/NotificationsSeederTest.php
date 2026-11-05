@@ -6,6 +6,7 @@ use App\Models\Event;
 use App\Models\Notification;
 use App\Models\NotificationMail;
 use App\Models\Project;
+use App\Models\Template;
 use App\Models\User;
 use App\Models\WorkflowState;
 use Carbon\CarbonInterface;
@@ -132,9 +133,9 @@ it("seeds Mara's inbox like the clickdummy", function () use ($clickdummy, $comm
         // the state changes keep the states as the events of the moves do (`meta.states`)
         ->and($stored['seed:n_05']->data['from'])->toHaveKeys(['id', 'name', 'category'])
         ->and($stored['seed:n_05']->data['to']['category'])->toBe('completed')
-        // the organization notification has no project (K5), the template one its project and the error
+        // the organization notification has no project (K5), the template one its project, its template and the error
         ->and($stored['seed:n_10']->kind)->toBe(NotificationKind::WebhookDisabled)
-        ->and($stored['seed:n_14']->data)->toBe(['error' => 'Pflicht-Property Umgebung fehlt'])
+        ->and($stored['seed:n_14']->data)->toBe(['template_id' => Template::query()->where('name', 'Zertifikate prüfen')->value('id'), 'error' => 'Pflicht-Property Umgebung fehlt'])
         // n_14 is five seconds after the hour, like the clickdummy's
         ->and($stored['seed:n_14']->created_at?->second)->toBe(5);
 });

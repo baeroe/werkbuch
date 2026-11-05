@@ -3,6 +3,9 @@
  * 5.1): closing asks nothing; a toast offers to take it back ("Rückgängig", mod+z too), which opens the dialog with it
  * again. One draft is parked at a time, the newest.
  *
+ * A parked draft keeps the template it was filled from: "Rückgängig" brings it back with the text, and the item named
+ * it is made from it all the same.
+ *
  * Pictures and files in a parked description stay uploaded: they belong to nobody until the item is created (A232), so
  * "Rückgängig" brings them back with the text. A draft whose undo ran out deletes none of them: the hourly job removes
  * uploads nobody owns after 24 hours (A239, ruling T17-I4), as for a comment thrown away.
@@ -34,6 +37,8 @@ export interface Draft {
   dueDate: string | null;
   /** The values typed or chosen, by property key; a key that is missing takes the property's default on the server. */
   values: Record<string, PropertyValue>;
+  /** The template the draft was filled from: the item names it and gets copies of its pictures; null without one. */
+  templateId: string | null;
 }
 
 /** Whether the form holds something typed that closing it would throw away. */
@@ -41,9 +46,12 @@ export function hasContent(draft: Draft): boolean {
   return draft.title.trim() !== '' || !isEmptyDoc(draft.description) || Object.keys(draft.values).length > 0;
 }
 
-/** The draft of the next item after "Weitere anlegen": project, type, status and the fields stay; title, description and properties start empty. */
+/**
+ * The draft of the next item after "Weitere anlegen": project, type, status and the fields stay; title, description and
+ * properties start empty, and the template is let go of (what came from it is gone).
+ */
 export function nextDraft(draft: Draft): Draft {
-  return { ...draft, title: '', description: null, values: {} };
+  return { ...draft, title: '', description: null, values: {}, templateId: null };
 }
 
 /** The draft of a dialog that was closed with content, until it is taken back or another one is parked. */

@@ -13,16 +13,16 @@ werkbuch tells people about the work that concerns them: in the **inbox** of the
 | Other changes | The watchers of the item: title, description, priority, dates, labels, properties, type, parent item, relations, files, and an assignment to someone else | off |
 | Due or overdue | The person an item is assigned to, every morning (see [Reminders](#reminders)) | on |
 | New item in the project | Only the lead of the project | off |
-| Template failed | Comes with templates (a later phase) | off |
+| Template failed | The lead of the project and the author of the template, when a run on the schedule or with **Run now** fails (see [templates](/en/concepts/templates#errors-and-the-log)) | off |
 | Webhook switched off | Org admins; comes with webhooks (a later phase) | off |
 
 Who watches an item is explained under [Work items](/en/concepts/work-items#watching). On top of that:
 
 - **The lead** of a project counts as a watcher of every item of the project, unless they stopped watching that item.
 - **Whoever stopped watching** an item hears about it only when they are mentioned in it or it is assigned to them.
-- **Never the person who made the change**, not even through mentioning or assigning themselves. Never bots, deactivated accounts or accounts that no longer see the project.
+- **Never the person who made the change**, not even through mentioning or assigning themselves, nor the person whose move set off an [automation](/en/concepts/automations) or who pressed **Run now** on a template. Never bots, deactivated accounts or accounts that no longer see the project.
 - **One entry per person and change.** When several events meet (you are mentioned in a comment on an item you watch), you get the strongest one: mentioned, then assigned, then comment, state change, other changes, due, new item. When both channels of the strongest one are off for you, the next one counts.
-- **No notification** for archiving, restoring or deleting an item, for watching, reactions, a deleted comment or a change of the manual order. When a workflow change gives items another state, nobody is notified either; the history of the item shows the move. [Wiki pages](/en/concepts/wiki) notify nobody, also not a person mentioned in them.
+- **No notification** for archiving, restoring or deleting an item, for watching, reactions, a deleted comment or a change of the manual order. When a workflow change gives items another state, nobody is notified either; the history of the item shows the move. The same goes for the nightly automations (auto-archive, auto-close and its comment, also a parent auto-close closes through "close parent"). [Wiki pages](/en/concepts/wiki) notify nobody, also not a person mentioned in them.
 
 Access is checked three times: when the notification is written, when you read it and when a mail goes out. Whoever loses access to a project sees none of its notifications from then on, also not the old ones; they come back with the access. A notification goes with its item and its project when they are deleted.
 
@@ -46,7 +46,7 @@ An excerpt always comes from the current text: an edited comment shows its new w
 
 ## Mail
 
-- **Collected.** Notifications about one item are collected for `NOTIFICATION_MAIL_DELAY` minutes (5 by default) and then go out as one mail per person and item, the oldest first. Its subject is `[WEB-47] Title of the item`, the footer links to the notification settings.
+- **Collected.** Notifications about one item are collected for `NOTIFICATION_MAIL_DELAY` minutes (5 by default) and then go out as one mail per person and item, the oldest first. Its subject is `[WEB-47] Title of the item`, the footer links to the notification settings. Failed runs of a template are collected per template instead: the subject names the project and the template, the button leads to the template.
 - **In your language,** the language of your profile, else that of the organization; times are in your time zone.
 - **Comments and mentions** come with their current text. Links stay links, pictures and files appear as links to werkbuch; a mail never has attachments or embedded pictures. A long text is cut with **Read more**.
 - **Checked when sending.** Right before the mail goes out, werkbuch checks every line again: the account is active, it still sees the project, the item exists, the notification is still unread and mail is still on for that event. What you read in the inbox in the meantime is not mailed. When nothing is left, no mail goes out.
@@ -67,7 +67,7 @@ Read notifications are deleted after 90 days; unread ones stay. Collected mails 
 
 ## Live updates
 
-Lists, boards, tables and timelines, the item page and the preview (fields, comments, reactions, history), the projects you see already and their members, the wiki (tree and pages), and the inbox with its badge follow changes by others live. A message only says what changed (ids and the kind of change, never a title, a text or a value); the browser then loads the new state through the API, which checks your access. Changes to catalogs, views, accounts and favorites show the next time a page loads, and so does a project that is new or turns public while you are no member of it. When your org role changes, the page takes your new rights at once. An item page or a preview of an item that was deleted says so.
+Lists, boards, tables and timelines, the item page and the preview (fields, comments, reactions, history), the projects you see already and their members, the wiki (tree and pages), the templates of a project with their logs, the automations, and the inbox with its badge follow changes by others live. A message only says what changed (ids and the kind of change, never a title, a text or a value); the browser then loads the new state through the API, which checks your access. Changes to catalogs, views, accounts and favorites show the next time a page loads, and so does a project that is new or turns public while you are no member of it. When your org role changes, the page takes your new rights at once. An item page or a preview of an item that was deleted says so.
 
 - **Your own changes** are not applied twice: the tab that made a change does not get it back, your other tabs do.
 - **Losing access cuts the connection.** When you are removed from a project, a project turns private, your org role goes from admin to member or your account is deactivated, werkbuch closes your live connections. The browser connects again and asks for every channel anew; a project you no longer see is refused, and its lists and pages reload and show what you may still see.
@@ -117,7 +117,7 @@ curl -H "Authorization: Bearer <token>" \
 }
 ```
 
-`event` is one of `assigned`, `mentioned`, `comment`, `state_changed`, `item_changed`, `due`, `item_created`, `template_run_failed`, `webhook_disabled`. `data` holds only ids and names of fields: `{source, comment_id}` for a mention, `{comment_id}` for a comment, `{from, to}` (the states as they were called) for a state change, `{fields}` for other changes, `{due_date, overdue}` for a reminder. `mailed_at` is when the mail with this notification went out, `item` the item in the short form of lists.
+`event` is one of `assigned`, `mentioned`, `comment`, `state_changed`, `item_changed`, `due`, `item_created`, `template_run_failed`, `webhook_disabled`. `data` holds only ids and names of fields: `{source, comment_id}` for a mention, `{comment_id}` for a comment, `{from, to}` (the states as they were called) for a state change, `{fields}` for other changes, `{due_date, overdue}` for a reminder, `{template_id, error}` for a failed template (its `item` is `null`). `mailed_at` is when the mail with this notification went out, `item` the item in the short form of lists.
 
 Mark a notification as read, or all mentions at once:
 

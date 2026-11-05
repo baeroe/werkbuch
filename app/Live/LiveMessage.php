@@ -33,9 +33,12 @@ final class LiveMessage implements ShouldBroadcastNow
     ) {}
 
     /**
-     * What an event says on a channel: `{event_id, type, project_id, page_id, item_id, comment_id, actor_id}`, missing
-     * ones as `null`. The item is the subject of `work_item.*` and `comment.*` (A227), the comment stands in their meta,
-     * the page is the subject of `page.*` (A318). `page.deleted` adds `page_ids`, the whole subtree from `meta.page_ids`
+     * What an event says on a channel: `{event_id, type, project_id, page_id, template_id, item_id, comment_id,
+     * actor_id}`, missing ones as `null`. The item is the subject of `work_item.*` and `comment.*` (A227), the comment
+     * stands in their meta, the page is the subject of `page.*` (A318), the template the subject of `template.*` and the
+     * one a run made an item from (`meta.template.id` of its `work_item.created`, A352): the browser loads that
+     * template's log and next run again and leaves a deleted one alone (T14-I1/I2); `automation.updated` names only its
+     * project (A347). `page.deleted` adds `page_ids`, the whole subtree from `meta.page_ids`
      * (the root first); a subtree of more than PAGE_IDS_MAX pages is too large to name and comes as `null`, as does an
      * event that names none: the browser loads the tree again and takes what is no longer in it as gone.
      */
@@ -45,12 +48,18 @@ final class LiveMessage implements ShouldBroadcastNow
         $item = in_array($group, ['work_item', 'comment'], true) ? $event->subject_id : null;
         $comment = $event->meta['comment_id'] ?? null;
         $socket = $event->meta['socket'] ?? null;
+        $template = $group === 'template' ? $event->subject_id : null;
+        if ($event->type === EventType::WorkItemCreated) {
+            $named = $event->meta['template']['id'] ?? null;
+            $template = is_string($named) ? $named : null;
+        }
 
         $payload = [
             'event_id' => $event->id,
             'type' => $event->type->value,
             'project_id' => $event->project_id,
             'page_id' => $group === 'page' ? $event->subject_id : null,
+            'template_id' => $template,
             'item_id' => $item,
             'comment_id' => is_string($comment) ? $comment : null,
             'actor_id' => $event->actor_id,
@@ -75,6 +84,7 @@ final class LiveMessage implements ShouldBroadcastNow
             'type' => 'notifications.changed',
             'project_id' => null,
             'page_id' => null,
+            'template_id' => null,
             'item_id' => null,
             'comment_id' => null,
             'actor_id' => null,

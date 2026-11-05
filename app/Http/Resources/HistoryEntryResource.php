@@ -13,8 +13,9 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * the reader sees it) and, for a move, the two states as they were then (`states`, `{old, new}` with `id`, `name`,
  * `category` from `meta.states`; `null` for other events and for events recorded before the snapshot). An edit or
  * deletion of a comment names the comment and its author (`comment_id`, `comment_author_id` from `meta`); an edit
- * carries the old and new text in `changes.body` as Tiptap JSON, unless the comment was deleted later. It asks the
- * database nothing (K5).
+ * carries the old and new text in `changes.body` as Tiptap JSON, unless the comment was deleted later. An item made from
+ * a template names it in its `work_item.created` (`template`, `{id, name}` from `meta.template`, the name as it was then,
+ * A352). It asks the database nothing (K5).
  *
  * @mixin Event
  */
@@ -42,6 +43,8 @@ final class HistoryEntryResource extends JsonResource
             // a change of a comment (`comment.updated`, `comment.deleted`): which one and whose; null elsewhere
             'comment_id' => $event->meta['comment_id'] ?? null,
             'comment_author_id' => $event->meta['author_id'] ?? null,
+            // the template an item was made from (`work_item.created`); null elsewhere
+            'template' => $event->meta['template'] ?? null,
             'occurred_at' => $event->occurred_at->toJSON(),
         ];
     }

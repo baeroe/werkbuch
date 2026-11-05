@@ -39,7 +39,7 @@ Ein Workflow ist entweder frei oder hat eine Übergangsmatrix.
 - **Frei:** Jeder Status darf auf jeden anderen folgen. Der Standard-Workflow ist frei.
 - **Matrix:** Nur die Paare, die du erlaubst (von → nach), sind möglich. Der Editor zeigt ein Raster mit einer Zeile je „von“-Status und einer Spalte je „nach“-Status; jede Zelle ist ein Übergang. Schaltest du **Freie Übergänge** aus, beginnt die Matrix mit allen Paaren erlaubt, und du nimmst nur weg, was du nicht willst.
 
-Im selben Status bleiben ist immer erlaubt. Die Regel gilt überall gleich: in der Oberfläche und über die REST-API, mit den späteren Phasen auch in MCP, Automatisierungen und Vorlagen. Wer ein Item direkt in einem anderen Status anlegt, durchläuft dieselbe Prüfung wie ein Übergang vom Startstatus dorthin.
+Im selben Status bleiben ist immer erlaubt. Die Regel gilt überall gleich: in der Oberfläche und über die REST-API, für [Automatisierungen](/de/concepts/automations) und Läufe von [Vorlagen](/de/concepts/templates), mit einer späteren Phase auch in MCP. Wer ein Item direkt in einem anderen Status anlegt, durchläuft dieselbe Prüfung wie ein Übergang vom Startstatus dorthin.
 
 ## Der Standard-Workflow
 
@@ -55,7 +55,7 @@ Neue Status und neue Übergänge gelten sofort, in jedem Projekt, das den Workfl
 
 Projekt-Admins wechseln den Workflow ihres Projekts unter **Projekteinstellungen → Workflow**: neuen Workflow wählen, dann **Workflow wechseln …** und bestätigen.
 
-Ohne Items ist das eine einfache Bestätigung. Sonst nennt der Dialog jeden Status, der Items hat, mit ihrer Zahl und einem Vorschlag (der Status gleichen Namens, sonst der erste gleicher Kategorie), und sagt, was der Wechsel mit ihnen macht: Geschlossene Items, die in einem offenen Status landen, verlieren ihre Resolution, offene, die in einem geschlossenen landen, bekommen dessen Standard. Bestätigen kannst du, sobald jeder Status sein Ziel hat. Dieselbe Frage kommt, wenn du einen Workflow ohne einen Status speicherst, der noch Items hat (**Status ersetzen**): Ziele sind die bleibenden und die neuen Status. werkbuch schreibt die Items sofort um, bewusst ohne Übergangsregeln, und ihre History nennt die Person, die es ausgelöst hat.
+Ohne Items ist das eine einfache Bestätigung. Sonst nennt der Dialog jeden Status, der Items hat, mit ihrer Zahl und einem Vorschlag (der Status gleichen Namens, sonst der erste gleicher Kategorie), und sagt, was der Wechsel mit ihnen macht: Geschlossene Items, die in einem offenen Status landen, verlieren ihre Resolution, offene, die in einem geschlossenen landen, bekommen dessen Standard. Bestätigen kannst du, sobald jeder Status sein Ziel hat. Dieselbe Frage kommt, wenn du einen Workflow ohne einen Status speicherst, der noch Items hat (**Status ersetzen**): Ziele sind die bleibenden und die neuen Status. werkbuch schreibt die Items sofort um, bewusst ohne Übergangsregeln, und ihre History nennt die Person, die es ausgelöst hat. Benachrichtigt wird darüber niemand. Ist [Auto-Close](/de/concepts/automations#wenn-der-workflow-wechselt) an, sagt der Dialog auch, welchen Canceled-Status es danach nimmt oder dass es ausgeschaltet wird.
 
 ## Löschen
 

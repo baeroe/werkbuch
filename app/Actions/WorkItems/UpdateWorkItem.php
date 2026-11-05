@@ -207,7 +207,7 @@ final class UpdateWorkItem
         }
 
         if ($moving) {
-            $changed = TransitionWorkItem::move($actor, $locked, $state, $resolution, $reason) || $changed;
+            $changed = TransitionWorkItem::move($actor, $locked, $state, $resolution, $reason, assigneeNamed: array_key_exists('assignee_id', $fields)) || $changed;
         }
 
         return $changed;
@@ -253,9 +253,10 @@ final class UpdateWorkItem
 
     /**
      * The new assignee watches the item (reason `assigned`); an earlier unsubscription is lifted (spec 4.10). Bots get
-     * no notifications and watch nothing; a person who watches already keeps the reason they have.
+     * no notifications and watch nothing; a person who watches already keeps the reason they have. Also for an assignee
+     * an automation set (RunMoveAutomations).
      */
-    private static function watch(WorkItem $item, ?string $assigneeId): void
+    public static function watch(WorkItem $item, ?string $assigneeId): void
     {
         $assignee = $assigneeId === null ? null : User::query()->find($assigneeId);
         if ($assignee === null || ! $assignee->isPerson()) {

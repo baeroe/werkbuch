@@ -114,6 +114,12 @@ werkbuch works without a mouse. Press <kbd>?</kbd> on any screen to see the shor
 | <kbd>⌘ / Ctrl</kbd>+<kbd>↵</kbd> | Save the page now |
 | <kbd>⌘ / Ctrl</kbd>+<kbd>⌫</kbd> | Delete the page (asks first) |
 
+## Template
+
+| Keys | Action |
+| --- | --- |
+| <kbd>⌘ / Ctrl</kbd>+<kbd>↵</kbd> | Save the template |
+
 ## Command palette
 
 | Keys | Action |

@@ -53,6 +53,7 @@ describe('keyboard docs', () => {
       'Timeline',
       'Inbox',
       'Wiki',
+      'Template',
       'Command palette',
       'Table',
       'Group headers (list and table)',

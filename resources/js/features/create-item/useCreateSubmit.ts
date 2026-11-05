@@ -52,6 +52,7 @@ export function toInput(current: Draft, title: string, own: PropertyEntry[], { p
     // an epic stands at the top: the parent its field held while hidden does not count
     parent_id: canHaveParent(types.find((entry) => entry.id === current.typeId)) ? current.parentId : null,
     values: { ...Object.fromEntries(switches.map(({ property }) => [property.key, property.default_value ?? false])), ...current.values },
+    ...(current.templateId !== null && { template_id: current.templateId }),
   };
 }
 

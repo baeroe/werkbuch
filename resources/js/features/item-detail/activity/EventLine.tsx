@@ -2,7 +2,8 @@
  * One line of the history: who (a bot carries the word "Bot" beside the name and its square avatar), what (the
  * phrases of every event of the line, joined: "hat die Priorität … geändert und das Due-Date … verschoben."), when
  * (in the organisation's time zone, the full moment as tooltip) and, under it, why: the reason of a change made for
- * the person ("Workflow gewechselt", "Automatisierung: Assignee beim Start"). A comment's edit offers its earlier
+ * the person ("Workflow gewechselt", "Automatisierung: Eltern schließen"), and the template an item was made from ("Aus
+ * Vorlage „Monatsbericht“", its name as it was then; by a run or by hand in the create dialog). A comment's edit offers its earlier
  * version under the line, folded ("Frühere Fassung anzeigen"); a comment deleted since has none to show (K15).
  */
 
@@ -16,7 +17,7 @@ import { RichTextView } from '@/editor/RichTextView';
 import { useOrganization } from '@/hooks/organization';
 import { t } from '@/lib/i18n';
 import type { RichText, User } from '@/types';
-import { earlierVersions, joined, linePhrases, reasonText, tx, type PhraseContext } from './phrases';
+import { earlierVersions, joined, linePhrases, lineReason, tx, type PhraseContext } from './phrases';
 import type { EventsLine } from './timeline';
 import { formatMoment, formatWhen } from './when';
 
@@ -77,6 +78,7 @@ function EarlierVersion({ body }: { body: RichText }) {
 export function EventLine({ line, ctx, hidden = new Set() }: { line: EventsLine; ctx: PhraseContext; hidden?: ReadonlySet<string> }) {
   const actor = ctx.users.get(line.actorId);
   const phrases = linePhrases(line.events, ctx);
+  const why = lineReason(line);
   return (
     <li className="relative flex gap-2.5 text-ui">
       {actor ? <Avatar user={actor} size="sm" decorative /> : <span className="size-5 shrink-0 rounded-full bg-line" aria-hidden="true" />}
@@ -84,10 +86,10 @@ export function EventLine({ line, ctx, hidden = new Set() }: { line: EventsLine;
         <p className="text-pretty text-muted">
           {tx('items.activity.line', { actor: <Actor user={actor} />, phrases: joined(phrases) })} <When iso={line.at} />
         </p>
-        {line.reason && (
+        {why && (
           <p className="mt-0.5 flex items-center gap-1 text-sm text-muted">
             <Zap className="size-3.5 shrink-0" aria-hidden="true" />
-            {reasonText(line.reason)}
+            {why}
           </p>
         )}
         {earlierVersions(line.events)

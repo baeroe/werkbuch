@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Search\SearchIndexer;
 use Database\Seeders\Demo\ActivitySeeder;
 use Database\Seeders\Demo\AttachmentsSeeder;
+use Database\Seeders\Demo\AutomationsSeeder;
 use Database\Seeders\Demo\BotsSeeder;
 use Database\Seeders\Demo\CatalogSeeder;
 use Database\Seeders\Demo\CommentsSeeder;
@@ -15,6 +16,7 @@ use Database\Seeders\Demo\OrganizationSeeder;
 use Database\Seeders\Demo\PagesSeeder;
 use Database\Seeders\Demo\PeopleSeeder;
 use Database\Seeders\Demo\ProjectsSeeder;
+use Database\Seeders\Demo\TemplatesSeeder;
 use Database\Seeders\Demo\TokensSeeder;
 use Database\Seeders\Demo\ViewsSeeder;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
@@ -52,6 +54,9 @@ class DemoSeeder extends Seeder
             ActivitySeeder::class,
             CommentsSeeder::class,
             AttachmentsSeeder::class,
+            // after the items its runs made; before the inbox, whose failed run names its template (K20)
+            TemplatesSeeder::class,
+            AutomationsSeeder::class,
             NotificationsSeeder::class,
         ]);
 

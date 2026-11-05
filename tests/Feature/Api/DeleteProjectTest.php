@@ -7,10 +7,12 @@ use App\Actions\Projects\DeleteProject;
 use App\Actions\Projects\PurgeProject as PurgeProjectAction;
 use App\Actions\Projects\UpdateProject;
 use App\Actions\WorkItems\CreateWorkItem;
+use App\Domain\Automations\AutomationKey;
 use App\Events\EventType;
 use App\Exceptions\Problem;
 use App\Jobs\PurgeProject;
 use App\Models\Attachment;
+use App\Models\Automation;
 use App\Models\Comment;
 use App\Models\Event;
 use App\Models\Favorite;
@@ -21,6 +23,8 @@ use App\Models\Project;
 use App\Models\ProjectIdentifier;
 use App\Models\ProjectMember;
 use App\Models\ProjectType;
+use App\Models\Template;
+use App\Models\TemplateRun;
 use App\Models\User;
 use App\Models\WorkItem;
 use App\Models\WorkItemRelation;
@@ -242,6 +246,33 @@ it('purges a project whose pages form a chain of 20', function () {
     expect(Project::query()->find($web->id))->toBeNull()
         ->and(Page::query()->pluck('id')->all())->toBe([$other->id])
         ->and(PageVersion::query()->count())->toBe(0)
+        ->and(Attachment::query()->count())->toBe(0)
+        ->and(Storage::disk('local')->exists($file))->toBeFalse();
+});
+
+it('purges a project with templates, runs, automations and items made from them', function () {
+    [$web, $admin] = projectToDelete();
+    $other = Template::factory()->create();
+    // one cascade crosses itself: project → items → `set null` on the runs, project → templates → runs → `set null` on
+    // the items (K14)
+    $template = Template::factory()->create(['project_id' => $web->id, 'created_by' => $admin->id]);
+    $item = WorkItem::factory()->create(['project_id' => $web->id, 'template_id' => $template->id]);
+    TemplateRun::factory()->create(['template_id' => $template->id, 'work_item_id' => $item->id, 'scheduled_for' => '2026-11-02 08:00:00']);
+    TemplateRun::factory()->failed('Typ ist archiviert.')->create(['template_id' => $template->id]);
+    $picture = Attachment::factory()->stored('Inhalt', 'image/png', 'bild.png')->create([
+        'project_id' => $web->id, 'attachable_type' => $template->getMorphClass(), 'attachable_id' => $template->id, 'uploaded_by' => $admin->id,
+    ]);
+    $file = (string) $picture->getFirstMedia('file')?->getPathRelativeToRoot();
+    Automation::factory()->for($web)->key(AutomationKey::AutoArchive)->enabled()->create();
+    $web->update(['deleting_at' => now()]);
+
+    PurgeProjectAction::run(actor(User::defaultBot()), $web);
+
+    expect(Project::query()->find($web->id))->toBeNull()
+        ->and(Template::query()->pluck('id')->all())->toBe([$other->id])
+        ->and(TemplateRun::query()->count())->toBe(0)
+        ->and(Automation::query()->count())->toBe(0)
+        ->and(WorkItem::query()->where('project_id', $web->id)->count())->toBe(0)
         ->and(Attachment::query()->count())->toBe(0)
         ->and(Storage::disk('local')->exists($file))->toBeFalse();
 });

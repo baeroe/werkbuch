@@ -9,6 +9,7 @@
 import { queried } from './api';
 import type {
   Attachment,
+  Automation,
   Comment,
   Display,
   Filter,
@@ -28,9 +29,12 @@ import type {
   Property,
   RelationEntry,
   RelationType,
+  Schedule,
   SearchResults,
   Resolution,
   SystemStatus,
+  Template,
+  TemplateRun,
   User,
   View,
   Workflow,
@@ -403,6 +407,7 @@ export function itemEvent(overrides: Partial<ItemEvent> = {}): ItemEvent {
     via: 'ui',
     comment_id: null,
     comment_author_id: null,
+    template: null,
     occurred_at: '2026-10-20T09:30:00.000Z',
     ...overrides,
   };
@@ -778,3 +783,67 @@ export const webTree: PageNode[] = [
   ]),
   pageNode('pg_web_meetings', 'Meetings', '📅', null, 'a2', [pageNode('pg_web_kickoff', 'Kickoff-Notizen', '📝', 'pg_web_meetings', 'a0')]),
 ];
+
+/* ------------------------------------------------------------------- templates and automations */
+
+/** Every first Monday of the month at 09:00 (Europe/Berlin). */
+export const firstMonday: Schedule = {
+  frequency: 'monthly',
+  interval: 1,
+  nth_weekday: { n: 1, weekday: 1 },
+  time: '09:00',
+  starts_on: '2026-09-01',
+  ends: { type: 'never' },
+  paused: false,
+};
+
+/** A template as the API answers it (the clickdummy's "Monatsbericht" of APP, first Monday of the month); override what the test is about. */
+export function makeTemplate(overrides: Partial<Template> = {}): Template {
+  return {
+    id: 'tpl_app_report',
+    project_id: 'p_app',
+    name: 'Monatsbericht',
+    payload: {
+      type_id: 't_task',
+      title: 'Monatsbericht {month_name} {year}',
+      description: 'Kennzahlen des Monats zusammenstellen.',
+      description_json: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Kennzahlen des Monats zusammenstellen.' }] }] },
+      priority: 'medium',
+      assignee_id: 'u_theo',
+      label_ids: [],
+      values: {},
+      values_markdown: {},
+      parent_id: null,
+      start_offset_days: null,
+      due_offset_days: null,
+    },
+    schedule: firstMonday,
+    run_count: 2,
+    last_run_at: '2026-10-05T07:00:00.000Z',
+    next_run_at: '2026-11-02T08:00:00.000Z',
+    created_by: 'u_theo',
+    created_at: '2026-09-01T08:00:00.000Z',
+    updated_at: '2026-09-01T08:00:00.000Z',
+    ...overrides,
+  };
+}
+
+export const monatsbericht: Template = makeTemplate();
+
+export function makeTemplateRun(overrides: Partial<TemplateRun> = {}): TemplateRun {
+  return {
+    id: 'tr_1',
+    template_id: 'tpl_app_report',
+    scheduled_for: '2026-10-05T07:00:00.000Z',
+    ran_at: '2026-10-05T07:00:04.000Z',
+    work_item_id: 'wi_app_8',
+    status: 'created',
+    error: null,
+    triggered_by: null,
+    ...overrides,
+  };
+}
+
+export function makeAutomation(overrides: Partial<Automation> = {}): Automation {
+  return { id: 'au_1', project_id: 'p_web', key: 'auto_archive', enabled: true, settings: { days: 30 }, ...overrides };
+}

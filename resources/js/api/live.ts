@@ -48,6 +48,8 @@ export interface LiveEvent {
   project_id: string | null;
   /** The page of `page.*` (A318). */
   page_id: string | null;
+  /** The template of `template.*`, and the one a run made the item of a `work_item.created` from (T14-I1/I2). */
+  template_id: string | null;
   item_id: string | null;
   comment_id: string | null;
   actor_id: string | null;
@@ -113,7 +115,7 @@ function markGone(id: string): void {
 }
 
 function browserEvent(type: string): LiveEvent {
-  return { event_id: null, type, project_id: null, page_id: null, item_id: null, comment_id: null, actor_id: null };
+  return { event_id: null, type, project_id: null, page_id: null, template_id: null, item_id: null, comment_id: null, actor_id: null };
 }
 
 /**

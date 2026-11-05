@@ -13,16 +13,16 @@ werkbuch sagt Personen Bescheid, wenn sich etwas an ihrer Arbeit tut: in der **I
 | Sonstige Änderungen | Die Beobachter des Items: Titel, Beschreibung, Priorität, Daten, Labels, Properties, Typ, Eltern-Item, Relationen, Dateien und eine Zuweisung an jemand anderen | aus |
 | Fällig oder überfällig | Die Person, der ein Item zugewiesen ist, jeden Morgen (siehe [Erinnerungen](#erinnerungen)) | an |
 | Neues Item im Projekt | Nur der Lead des Projekts | aus |
-| Vorlage fehlgeschlagen | Kommt mit den Vorlagen (eine spätere Phase) | aus |
+| Vorlage fehlgeschlagen | Der Lead des Projekts und wer die Vorlage angelegt hat, wenn ein Lauf nach Zeitplan oder mit **Jetzt ausführen** scheitert (siehe [Vorlagen](/de/concepts/templates#fehler-und-protokoll)) | aus |
 | Webhook abgeschaltet | Org-Admins; kommt mit den Webhooks (eine spätere Phase) | aus |
 
 Wer ein Item beobachtet, steht unter [Work Items](/de/concepts/work-items#beobachten). Dazu gilt:
 
 - **Der Lead** eines Projekts zählt als Beobachter jedes Items des Projekts, außer er hat dieses Item abbestellt.
 - **Wer ein Item abbestellt hat,** erfährt davon nur, wenn er darin erwähnt wird oder es ihm zugewiesen wird.
-- **Nie die Person, die die Änderung gemacht hat**, auch nicht über eine Erwähnung oder Zuweisung an sich selbst. Nie Bots, deaktivierte Konten oder Konten, die das Projekt nicht mehr sehen.
+- **Nie die Person, die die Änderung gemacht hat**, auch nicht über eine Erwähnung oder Zuweisung an sich selbst, und nicht die Person, deren Statuswechsel eine [Automatisierung](/de/concepts/automations) auslöste oder die bei einer Vorlage **Jetzt ausführen** gedrückt hat. Nie Bots, deaktivierte Konten oder Konten, die das Projekt nicht mehr sehen.
 - **Ein Eintrag je Person und Änderung.** Treffen mehrere Ereignisse zusammen (du wirst in einem Kommentar zu einem Item erwähnt, das du beobachtest), bekommst du das stärkste: erwähnt, dann zugewiesen, dann Kommentar, Statuswechsel, sonstige Änderungen, fällig, neues Item. Sind für das stärkste bei dir beide Kanäle aus, zählt das nächste.
-- **Keine Benachrichtigung** für Archivieren, Wiederherstellen oder Löschen eines Items, für Beobachten, Reaktionen, einen gelöschten Kommentar oder eine Änderung der manuellen Reihenfolge. Bekommen Items durch einen Workflow-Wechsel einen anderen Status, wird auch niemand benachrichtigt; die History des Items zeigt den Zug. [Wiki-Seiten](/de/concepts/wiki) benachrichtigen niemanden, auch keine Person, die in ihnen erwähnt wird.
+- **Keine Benachrichtigung** für Archivieren, Wiederherstellen oder Löschen eines Items, für Beobachten, Reaktionen, einen gelöschten Kommentar oder eine Änderung der manuellen Reihenfolge. Bekommen Items durch einen Workflow-Wechsel einen anderen Status, wird auch niemand benachrichtigt; die History des Items zeigt den Zug. Ebenso bei den nächtlichen Automatisierungen (Auto-Archiv, Auto-Close und sein Kommentar, auch ein Eltern-Item, das Auto-Close über „Eltern schließen“ schließt). [Wiki-Seiten](/de/concepts/wiki) benachrichtigen niemanden, auch keine Person, die in ihnen erwähnt wird.
 
 Der Zugriff wird dreimal geprüft: wenn die Benachrichtigung entsteht, wenn du sie liest und wenn eine Mail rausgeht. Wer den Zugriff auf ein Projekt verliert, sieht ab dann keine seiner Benachrichtigungen mehr, auch die alten nicht; mit dem Zugriff kommen sie zurück. Eine Benachrichtigung geht mit ihrem Item und ihrem Projekt, wenn sie gelöscht werden.
 
@@ -46,7 +46,7 @@ Ein Auszug kommt immer aus dem aktuellen Text: ein bearbeiteter Kommentar zeigt 
 
 ## Mail
 
-- **Gesammelt.** Benachrichtigungen zu einem Item werden `NOTIFICATION_MAIL_DELAY` Minuten gesammelt (standardmäßig 5) und gehen dann als eine Mail je Person und Item raus, die älteste zuerst. Der Betreff ist `[WEB-47] Titel des Items`, der Fuß verlinkt die Einstellungen der Benachrichtigungen.
+- **Gesammelt.** Benachrichtigungen zu einem Item werden `NOTIFICATION_MAIL_DELAY` Minuten gesammelt (standardmäßig 5) und gehen dann als eine Mail je Person und Item raus, die älteste zuerst. Der Betreff ist `[WEB-47] Titel des Items`, der Fuß verlinkt die Einstellungen der Benachrichtigungen. Gescheiterte Läufe einer Vorlage werden stattdessen je Vorlage gesammelt: Der Betreff nennt Projekt und Vorlage, der Knopf führt zur Vorlage.
 - **In deiner Sprache,** der Sprache deines Profils, sonst der der Organisation; Zeiten in deiner Zeitzone.
 - **Kommentare und Erwähnungen** kommen mit ihrem aktuellen Text. Links bleiben Links, Bilder und Dateien erscheinen als Links zu werkbuch; eine Mail hat nie Anhänge oder eingebettete Bilder. Ein langer Text wird mit **Weiterlesen** gekürzt.
 - **Beim Senden geprüft.** Kurz bevor die Mail rausgeht, prüft werkbuch jede Zeile noch einmal: das Konto ist aktiv, es sieht das Projekt noch, das Item gibt es, die Benachrichtigung ist noch ungelesen und Mail ist für das Ereignis noch an. Was du inzwischen in der Inbox gelesen hast, wird nicht gemailt. Bleibt nichts übrig, geht keine Mail raus.
@@ -67,7 +67,7 @@ Gelesene Benachrichtigungen werden nach 90 Tagen gelöscht; ungelesene bleiben. 
 
 ## Live-Updates
 
-Listen, Boards, Tabellen und Timelines, die Item-Seite und die Vorschau (Felder, Kommentare, Reaktionen, History), die Projekte, die du schon siehst, und ihre Mitglieder, das Wiki (Baum und Seiten) sowie die Inbox mit ihrem Badge folgen den Änderungen anderer live. Eine Nachricht sagt nur, was sich geändert hat (IDs und die Art der Änderung, nie einen Titel, einen Text oder einen Wert); der Browser lädt den neuen Stand dann über die API, die deinen Zugriff prüft. Änderungen an Katalogen, Views, Konten und Favoriten erscheinen, wenn eine Seite das nächste Mal lädt, ebenso ein Projekt, das neu ist oder öffentlich wird, solange du kein Mitglied bist. Ändert sich deine Org-Rolle, übernimmt die Seite deine neuen Rechte sofort. Eine Item-Seite oder Vorschau eines gelöschten Items sagt, dass es gelöscht wurde.
+Listen, Boards, Tabellen und Timelines, die Item-Seite und die Vorschau (Felder, Kommentare, Reaktionen, History), die Projekte, die du schon siehst, und ihre Mitglieder, das Wiki (Baum und Seiten), die Vorlagen eines Projekts mit ihren Protokollen, die Automatisierungen sowie die Inbox mit ihrem Badge folgen den Änderungen anderer live. Eine Nachricht sagt nur, was sich geändert hat (IDs und die Art der Änderung, nie einen Titel, einen Text oder einen Wert); der Browser lädt den neuen Stand dann über die API, die deinen Zugriff prüft. Änderungen an Katalogen, Views, Konten und Favoriten erscheinen, wenn eine Seite das nächste Mal lädt, ebenso ein Projekt, das neu ist oder öffentlich wird, solange du kein Mitglied bist. Ändert sich deine Org-Rolle, übernimmt die Seite deine neuen Rechte sofort. Eine Item-Seite oder Vorschau eines gelöschten Items sagt, dass es gelöscht wurde.
 
 - **Eigene Änderungen** werden nicht doppelt angewendet: der Tab, der eine Änderung gemacht hat, bekommt sie nicht zurück, deine anderen Tabs schon.
 - **Zugriff verloren heißt getrennt.** Wirst du aus einem Projekt entfernt, wird ein Projekt privat, geht deine Org-Rolle von Admin zu Member oder wird dein Konto deaktiviert, schließt werkbuch deine Live-Verbindungen. Der Browser verbindet neu und fragt jeden Kanal neu an; ein Projekt, das du nicht mehr siehst, wird abgelehnt, und seine Listen und Seiten laden neu und zeigen, was du noch sehen darfst.
@@ -117,7 +117,7 @@ curl -H "Authorization: Bearer <token>" \
 }
 ```
 
-`event` ist eins von `assigned`, `mentioned`, `comment`, `state_changed`, `item_changed`, `due`, `item_created`, `template_run_failed`, `webhook_disabled`. `data` enthält nur IDs und Namen von Feldern: `{source, comment_id}` bei einer Erwähnung, `{comment_id}` bei einem Kommentar, `{from, to}` (die Status, wie sie damals hießen) bei einem Statuswechsel, `{fields}` bei sonstigen Änderungen, `{due_date, overdue}` bei einer Erinnerung. `mailed_at` ist der Zeitpunkt, zu dem die Mail mit dieser Benachrichtigung rausging, `item` das Item in der kurzen Form der Listen.
+`event` ist eins von `assigned`, `mentioned`, `comment`, `state_changed`, `item_changed`, `due`, `item_created`, `template_run_failed`, `webhook_disabled`. `data` enthält nur IDs und Namen von Feldern: `{source, comment_id}` bei einer Erwähnung, `{comment_id}` bei einem Kommentar, `{from, to}` (die Status, wie sie damals hießen) bei einem Statuswechsel, `{fields}` bei sonstigen Änderungen, `{due_date, overdue}` bei einer Erinnerung, `{template_id, error}` bei einer fehlgeschlagenen Vorlage (ihr `item` ist `null`). `mailed_at` ist der Zeitpunkt, zu dem die Mail mit dieser Benachrichtigung rausging, `item` das Item in der kurzen Form der Listen.
 
 Eine Benachrichtigung als gelesen markieren, oder alle Erwähnungen auf einmal:
 

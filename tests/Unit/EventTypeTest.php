@@ -36,6 +36,7 @@ it('knows the events of this phase that have no webhook', function () {
         'comment.reaction_added', 'comment.reaction_removed',
         'view.created', 'view.updated', 'view.deleted',
         'system.failed_jobs_retried',
+        'template.created', 'template.updated', 'template.deleted', 'automation.updated',
     ])->sort()->values()->all());
 });
 

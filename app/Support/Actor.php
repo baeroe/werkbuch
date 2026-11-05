@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\PersonalAccessToken;
+use App\Models\Template;
 use App\Models\User;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\Request;
@@ -35,6 +36,13 @@ final readonly class Actor
         public ?PersonalAccessToken $token = null,
         /** The live connection of the tab that acts (header `X-Socket-ID`, only from the interface): it does not hear its own change (A282). */
         public ?string $socket = null,
+        /** The person an automation acts for (A342): `meta.on_behalf_of`, so the person is not told of the result of their own move. */
+        public ?string $onBehalfOf = null,
+        /**
+         * Work nobody is told of (A357): the night of Auto-Close and what it sets off (`meta.quiet`). The history shows
+         * it, NotificationFacts passes it over.
+         */
+        public bool $quiet = false,
     ) {}
 
     /**
@@ -67,7 +75,22 @@ final readonly class Actor
      */
     public function withReason(string $reason): self
     {
-        return new self($this->user, $this->via, $reason, $this->token, $this->socket);
+        return new self($this->user, $this->via, $reason, $this->token, $this->socket, $this->onBehalfOf, $this->quiet);
+    }
+
+    /**
+     * The same actor acting for a person (A342): an automation a move of the person set off (Assignee beim Start, Eltern
+     * schließen) acts as the default bot and names the person in `meta.on_behalf_of`.
+     */
+    public function onBehalfOf(User $person): self
+    {
+        return new self($this->user, $this->via, $this->reason, $this->token, $this->socket, $person->id, $this->quiet);
+    }
+
+    /** The same actor doing work nobody is told of (A357): its events carry `meta.quiet`. */
+    public function quietly(): self
+    {
+        return new self($this->user, $this->via, $this->reason, $this->token, $this->socket, $this->onBehalfOf, true);
     }
 
     /**
@@ -76,6 +99,15 @@ final readonly class Actor
     public static function automation(string $reason): self
     {
         return new self(User::defaultBot(), self::VIA_AUTOMATION, $reason);
+    }
+
+    /**
+     * A template creating its item (A30): the default bot through `template`, with the reason `template`. The run itself
+     * names the template in the meta of its event (`meta.template`, A352).
+     */
+    public static function template(Template $template): self
+    {
+        return new self(User::defaultBot(), self::VIA_TEMPLATE, 'template');
     }
 
     /**
@@ -88,9 +120,10 @@ final readonly class Actor
 
     /**
      * What an event notes about the actor besides the account. The socket is for the live consumer alone: neither the
-     * history nor any resource shows it (and webhooks never send it, phase 11).
+     * history nor any resource shows it (and webhooks never send it, phase 11). `on_behalf_of` only when an automation
+     * acts for a person, `quiet` only for work nobody is told of (A357).
      *
-     * @return array{via: string, reason: string|null, token_id?: string, socket?: string}
+     * @return array{via: string, reason: string|null, token_id?: string, socket?: string, on_behalf_of?: string, quiet?: true}
      */
     public function meta(): array
     {
@@ -102,6 +135,14 @@ final readonly class Actor
 
         if ($this->socket !== null) {
             $meta['socket'] = $this->socket;
+        }
+
+        if ($this->onBehalfOf !== null) {
+            $meta['on_behalf_of'] = $this->onBehalfOf;
+        }
+
+        if ($this->quiet) {
+            $meta['quiet'] = true;
         }
 
         return $meta;

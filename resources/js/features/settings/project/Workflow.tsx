@@ -4,19 +4,22 @@
  * of the project are in (`StateMappingDialog`, counted by `useStateUsage` when the switch is asked, archived items
  * included; the button is pending meanwhile, a failed count is a toast with "Try again"); without items it
  * is a plain confirmation with an empty mapping. When items moved into another state meanwhile, the server's 422 at
- * `mapping.<id>` adds their rows to the open question.
+ * `mapping.<id>` adds their rows to the open question. With Auto-Close on, the question says which Canceled status it
+ * takes in the new workflow, or that it switches off there (A345, `autoCloseAfter`).
  */
 
 import { Link } from '@inertiajs/react';
 import { ArrowRightLeft } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { ApiError } from '@/api/client';
+import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
 import { Select } from '@/components/ui/Select';
 import { StatusIcon } from '@/components/ui/StatusIcon';
 import { toast } from '@/components/ui/toast';
 import { statesInOrder } from '@/domain/workflow';
+import { useAutomations } from '@/hooks/automations';
 import { useStateUsage } from '@/hooks/workItems';
 import { useAssignWorkflow, useWorkflows } from '@/hooks/workflows';
 import { notifyError } from '@/lib/errors';
@@ -28,6 +31,7 @@ import { mergeUsage, rowsFor } from '../catalog/mapping';
 import { markedPaths, refusedStates, StateMappingDialog } from '../catalog/StateMappingDialog';
 import { noticeOf } from '../frame/form';
 import { SettingsCard, SettingsError, SettingsSkeleton } from '../frame/parts';
+import { autoCloseAfter } from './automationRules';
 import type { ProjectSectionProps } from './sectionProps';
 
 const startOf = (workflow: WorkflowRecord) => workflow.states.find((state) => state.id === workflow.initial_state_id);
@@ -69,9 +73,23 @@ function WorkflowSummary({ workflow, headingRef }: { workflow: WorkflowRecord; h
   );
 }
 
+/** What Auto-Close does after the switch: the Canceled status it takes, or that it switches off. */
+function AutoCloseNote({ workflow, stateId, mapping }: { workflow: WorkflowRecord; stateId: string | null | undefined; mapping: Record<string, string> }) {
+  const state = autoCloseAfter(stateId, workflow, mapping);
+  return (
+    <Banner
+      role="status"
+      tone={state ? 'neutral' : 'danger'}
+      title={state ? t('settings.project.workflow.auto_close_follows', { state: state.name }) : t('settings.project.workflow.auto_close_off', { name: workflow.name })}
+    />
+  );
+}
+
 export function Workflow({ project, canManage }: ProjectSectionProps) {
   const workflows = useWorkflows();
   const assign = useAssignWorkflow();
+  // Auto-Close follows the switch: the question says where to (A345)
+  const autoClose = useAutomations(project.id).data?.items.find((entry) => entry.key === 'auto_close' && entry.enabled);
   // counted when the switch is asked, never before: the rows, the effects and the toast need the numbers of that moment
   const usage = useStateUsage({ project: project.id }, { enabled: false });
   const [counting, setCounting] = useState(false);
@@ -222,6 +240,7 @@ export function Workflow({ project, canManage }: ProjectSectionProps) {
           notice={noticeOf(refusal, markedPaths(refusal, 'mapping'))}
           finalFocus={returnTo}
           onConfirm={(mapping) => void confirm(asking.to, mapping)}
+          aside={(mapping) => autoClose && <AutoCloseNote workflow={asking.to} stateId={autoClose.settings.state_id} mapping={mapping} />}
         />
       )}
     </>

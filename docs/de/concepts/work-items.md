@@ -21,7 +21,7 @@ Wer ein Projekt sieht, liest seine Items. Member und Admins des Projekts legen s
 | Eltern-Item | Ein Epic desselben Projekts. Siehe unten. |
 | Properties | Die Felder des Typs, etwa „Kunde“ oder „Aufwand (h)“, manche davon Pflicht. |
 
-Dazu merkt sich werkbuch, wer das Item wann angelegt hat, wann es zuletzt geändert wurde, wann es zum ersten Mal begonnen wurde (der erste Eintritt in einen Status der Kategorie Started), wann es geschlossen wurde (Eintritt in Completed oder Canceled; beim Wiederöffnen geleert) und wann es archiviert wurde. Ein offenes Item, dessen Due-Date vorbei ist, zeigt sich als überfällig, gerechnet in der Zeitzone der Organisation.
+Dazu merkt sich werkbuch, wer das Item wann angelegt hat, wann es zuletzt geändert wurde, wann es zum ersten Mal begonnen wurde (der erste Eintritt in einen Status der Kategorie Started), wann es geschlossen wurde (Eintritt in Completed oder Canceled; beim Wiederöffnen geleert) und wann es archiviert wurde. Ein Item aus einer [Vorlage](/de/concepts/templates) merkt sie sich in `template_id`; wird die Vorlage gelöscht, bleibt das Item, und `template_id` wird `null`. Ein offenes Item, dessen Due-Date vorbei ist, zeigt sich als überfällig, gerechnet in der Zeitzone der Organisation.
 
 ## Key
 
@@ -93,7 +93,7 @@ Die Beschreibung ist geschützt: Die Oberfläche schickt die Version der Beschre
 
 ## History
 
-Jede Änderung ist ein Eintrag in der History des Items, mit wer, wann und wie (in der Oberfläche, über die API, durch eine Automatisierung). Eine Feldänderung zeigt den alten und den neuen Wert; ein Statuswechsel nennt beide Status so, wie sie damals hießen, auch wenn ein Status später umbenannt oder entfernt wurde. Die Oberfläche fasst die Änderungen einer Person innerhalb von fünf Minuten zusammen und zeigt die Kommentare in derselben Zeitleiste; der Filter wechselt zwischen allem, Kommentaren und Änderungen. Auch das Bearbeiten und Löschen eines Kommentars und das Anhängen und Entfernen einer Datei der Dateiliste sind Einträge. Beobachten, Reaktionen und die manuelle Reihenfolge der Items gehören nicht zur History.
+Jede Änderung ist ein Eintrag in der History des Items, mit wer, wann und wie (in der Oberfläche, über die API, durch eine [Automatisierung](/de/concepts/automations) oder eine Vorlage). Ein Item, das eine Vorlage anlegte, sagt „Aus Vorlage „…““ mit dem Namen, den die Vorlage damals hatte; ein Schritt einer Automatisierung nennt seinen Grund, etwa „Automatisierung: Eltern schließen“. Eine Feldänderung zeigt den alten und den neuen Wert; ein Statuswechsel nennt beide Status so, wie sie damals hießen, auch wenn ein Status später umbenannt oder entfernt wurde. Die Oberfläche fasst die Änderungen einer Person innerhalb von fünf Minuten zusammen und zeigt die Kommentare in derselben Zeitleiste; der Filter wechselt zwischen allem, Kommentaren und Änderungen. Auch das Bearbeiten und Löschen eines Kommentars und das Anhängen und Entfernen einer Datei der Dateiliste sind Einträge. Beobachten, Reaktionen und die manuelle Reihenfolge der Items gehören nicht zur History.
 
 ## REST
 
@@ -121,7 +121,7 @@ Ein Item, das das Konto des Tokens nicht sieht, ist ein `404`, wie eines, das es
 
 ### Ein Item anlegen
 
-`project_id` nimmt die Kennung oder die ULID des Projekts. Die Beschreibung kommt als Markdown in `description` oder als Tiptap-JSON in `description_json`, nicht beides; die Antwort hat beide Formen. HTML im Markdown bleibt Text, Links behalten nur `http`, `https` und `mailto`, und eine Beschreibung hat höchstens 256 KB. `values` hält die Properties unter ihrem Schlüssel; ein Dropdown nimmt die ULID einer Option.
+`project_id` nimmt die Kennung oder die ULID des Projekts. Die Beschreibung kommt als Markdown in `description` oder als Tiptap-JSON in `description_json`, nicht beides; die Antwort hat beide Formen. HTML im Markdown bleibt Text, Links behalten nur `http`, `https` und `mailto`, und eine Beschreibung hat höchstens 256 KB. `values` hält die Properties unter ihrem Schlüssel; ein Dropdown nimmt die ULID einer Option. `template_id` macht das Item aus einer Vorlage des Projekts und kopiert ihre Bilder (siehe [Vorlagen](/de/concepts/templates#eine-vorlage-per-api-anwenden)).
 
 ```bash
 curl -X POST https://werkbuch.example.com/api/v1/work-items \

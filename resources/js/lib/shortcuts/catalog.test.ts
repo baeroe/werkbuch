@@ -12,6 +12,8 @@ describe('shortcut catalog', () => {
    */
   const SHARED = [
     ['settings.save', 'wiki.save'],
+    ['settings.save', 'template.save'],
+    ['wiki.save', 'template.save'],
     ['item.remove', 'wiki.delete'],
   ];
 
@@ -43,6 +45,12 @@ describe('shortcut catalog', () => {
         expect(Object.keys(language)).toContain(entry.group);
       }
     }
+  });
+
+  it('saves a template with mod+enter in the detail scope, beside the settings and the wiki page (A324)', () => {
+    expect(SHORTCUTS['template.save']).toMatchObject({ keys: 'mod+enter', scope: 'detail', group: 'shortcuts.group.template' });
+    // a held key saves once (13c): the entry does not ask for repeats
+    expect('repeat' in SHORTCUTS['template.save']).toBe(false);
   });
 
   it('saves the settings form with mod+enter on the page, apart from the dialog that uses the same keys', () => {

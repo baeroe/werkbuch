@@ -47,6 +47,7 @@ use Laravel\Scout\Searchable;
  * @property Carbon|null $start_date
  * @property Carbon|null $due_date
  * @property string|null $parent_id
+ * @property string|null $template_id the template it was made from, null once the template is deleted
  * @property string $rank
  * @property string $created_by
  * @property Carbon|null $started_at
@@ -65,7 +66,7 @@ use Laravel\Scout\Searchable;
  */
 #[Fillable([
     'project_id', 'number', 'type_id', 'title', 'description', 'description_text', 'description_version', 'state_id',
-    'resolution_id', 'assignee_id', 'priority', 'start_date', 'due_date', 'parent_id', 'rank', 'created_by',
+    'resolution_id', 'assignee_id', 'priority', 'start_date', 'due_date', 'parent_id', 'template_id', 'rank', 'created_by',
     'started_at', 'closed_at', 'archived_at',
 ])]
 final class WorkItem extends Model
@@ -358,6 +359,16 @@ final class WorkItem extends Model
     public function parent(): BelongsTo
     {
         return $this->belongsTo(self::class, 'parent_id');
+    }
+
+    /**
+     * The template the item was made from (spec 4.12).
+     *
+     * @return BelongsTo<Template, $this>
+     */
+    public function template(): BelongsTo
+    {
+        return $this->belongsTo(Template::class);
     }
 
     /**

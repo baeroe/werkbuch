@@ -86,16 +86,19 @@ final class ItemValues
      * item, or a new type for an item with `$existing` the values it keeps), a property that neither the input nor
      * `$existing` names takes its default value, and every required property must have a value. People
      * picked anew must be able to take work in the project (`Assignable`); people the item has already only need to
-     * exist. ULIDs are written in lower case for dropdowns and people only, never in texts (K19).
+     * exist. ULIDs are written in lower case for dropdowns and people only, never in texts (K19). `$kept` names values
+     * that count as already had without being part of `$existing` (A356: what a template stores, whose input replaces it
+     * whole): an archived option or a person who left stays valid for a key whose `$existing` has none.
      *
      * @param  array<array-key, mixed>  $input  property key → value (rich text only as a Document from documents(), K9)
      * @param  array<string, mixed>  $existing  the values the item has (of())
      * @param  'create'|'update'  $mode
+     * @param  array<array-key, mixed>  $kept  property key → value already had, besides `$existing`
      * @return array<string, mixed>
      *
      * @throws ValidationException at `values.<key>`
      */
-    public static function check(Project $project, WorkItemType $type, array $input, array $existing, string $mode): array
+    public static function check(Project $project, WorkItemType $type, array $input, array $existing, string $mode, array $kept = []): array
     {
         /** @var Collection<string, TypeProperty> $entries */
         $entries = $type->typeProperties()->with('property.options')->get()->keyBy(fn (TypeProperty $entry) => $entry->property->key);
@@ -138,7 +141,7 @@ final class ItemValues
                 continue;
             }
 
-            $current = $existing[$key] ?? null;
+            $current = $existing[$key] ?? $kept[$key] ?? null;
             $normalized = ItemValue::normalize(self::shape($property), $value, $current);
             if (! $normalized->ok()) {
                 $errors["values.{$key}"] = [self::message((string) $normalized->error, $property)];

@@ -9,7 +9,7 @@
  */
 
 import { ArrowRight } from 'lucide-react';
-import { useState, type RefObject } from 'react';
+import { useState, type ReactNode, type RefObject } from 'react';
 import { ApiError } from '@/api/client';
 import { Banner } from '@/components/ui/Banner';
 import { FormDialog } from '@/components/ui/FormDialog';
@@ -100,9 +100,11 @@ export type StateMappingDialogProps = {
   /** A refusal without a row of its own. */
   notice?: string | null;
   finalFocus?: RefObject<HTMLElement | null>;
+  /** More the caller has to say about the mapping as it stands (the mapping of the rows with a target), below the effects. */
+  aside?: (mapping: Record<string, string>) => ReactNode;
 };
 
-export function StateMappingDialog({ open, onClose, title, description, submitLabel, usage, from, to, onConfirm, pending = false, refusal, field, notice, finalFocus }: StateMappingDialogProps) {
+export function StateMappingDialog({ open, onClose, title, description, submitLabel, usage, from, to, onConfirm, pending = false, refusal, field, notice, finalFocus, aside }: StateMappingDialogProps) {
   // only what the person chose; the rest follows the proposal
   const [chosen, setChosen] = useState<Record<string, string>>({});
   // rows whose target changed after the refusal: their mark is answered
@@ -179,6 +181,7 @@ export function StateMappingDialog({ open, onClose, title, description, submitLa
       {effects.map((effect) => (
         <Effect key={effect.kind} effect={effect} />
       ))}
+      {aside?.(mappingOf(rows))}
     </FormDialog>
   );
 }

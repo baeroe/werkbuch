@@ -345,6 +345,32 @@ describe('phrases', () => {
     ]);
   });
 
+  it('says which automation acted, and the template an item was made from', async () => {
+    const bot = { actor_id: 'u_automation', via: 'automation' };
+    const template = { id: 'tpl_web_report', name: 'Monatsbericht' };
+    renderActivity(() =>
+      historyPage([
+        // a template run (the default bot through `template`), and a person who applied a template by hand
+        event('ev_1', 0, { actor_id: 'u_automation', via: 'template', reason: 'template', type: 'work_item.created', changes: null, template }),
+        event('ev_2', 10, { type: 'work_item.created', changes: null, template }),
+        event('ev_3', 20, { ...bot, reason: 'close_parent', type: 'work_item.state_changed', changes: { state_id: { old: 'std_progress', new: 'std_done' } } }),
+        event('ev_4', 30, { ...bot, reason: 'auto_archive', type: 'work_item.archived', changes: { archived_at: { old: null, new: at(30) } } }),
+        event('ev_5', 40, { ...bot, reason: 'auto_close', type: 'work_item.state_changed', changes: { state_id: { old: 'std_todo', new: 'std_cancelled' } } }),
+        // an older run whose event names no template
+        event('ev_6', 50, { actor_id: 'u_automation', via: 'template', reason: 'template', type: 'work_item.created', changes: null }),
+      ]),
+    );
+
+    expect(await linesOf()).toEqual([
+      'Automation Bot hat das Item angelegt. heute 01:00 | Aus Vorlage „Monatsbericht“',
+      'Mara Lindqvist hat das Item angelegt. heute 01:10 | Aus Vorlage „Monatsbericht“',
+      'Automation Bot hat den Status von In Progress auf Done gesetzt. heute 01:20 | Automatisierung: Eltern schließen',
+      'Automation Bot hat das Item archiviert. heute 01:30 | Automatisierung: Auto-Archiv',
+      'Automation Bot hat den Status von Todo auf Cancelled gesetzt. heute 01:40 | Automatisierung: Auto-Close',
+      'Automation Bot hat das Item angelegt. heute 01:50 | Aus einer Vorlage',
+    ]);
+  });
+
   it('names a parent that could not be loaded "ein Item" instead of waiting for good', async () => {
     renderActivity(() => historyPage([event('ev_1', 0, { changes: { parent_id: { old: null, new: 'wi_web_28' } } })]), {
       routes: { 'GET /api/v1/work-items/wi_web_28': () => ({ status: 503, body: { type: 'about:blank', title: 'unavailable', status: 503, reason: 'service_unavailable' } }) },

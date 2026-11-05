@@ -11,6 +11,7 @@ use App\Domain\WorkItems\Priority;
 use App\Exceptions\Problem;
 use App\Models\Label;
 use App\Models\Project;
+use App\Models\Template;
 use App\Models\User;
 use App\Models\WorkItem;
 use App\Models\WorkItemType;
@@ -98,8 +99,8 @@ final class ItemInput
             $errors[$field] ??= [$message];
         };
 
-        $type = self::type($input['type_id'] ?? $project->default_type_id, $project, $fail);
-        $title = self::title($input['title'] ?? null, $fail);
+        $fields = self::fields($input, $project, $reader, $fail);
+        $type = $fields['type'];
         $start = self::day($input, 'start_date', $fail);
         $due = self::day($input, 'due_date', $fail);
         if (DateRange::startAfterDue($start, $due)) {
@@ -116,23 +117,46 @@ final class ItemInput
             }
         }
 
-        $fields = [
-            'title' => $title,
-            'description' => ($input['description'] ?? null) instanceof Document ? $input['description'] : null,
-            'priority' => self::priority($input['priority'] ?? null, $fail),
-            'label_ids' => self::labels($input['label_ids'] ?? null, $fail),
-            'start_date' => $start,
-            'due_date' => $due,
-            'assignee_id' => self::assignee($input['assignee_id'] ?? null, $project, $fail),
-            'parent' => self::parent($input['parent_id'] ?? null, $project, $reader, $fail),
-            'values' => $values,
-        ];
-
         if ($errors !== [] || $type === null) {
             throw ValidationException::withMessages($errors);
         }
 
-        return ['type' => $type, ...$fields];
+        return [
+            'type' => $type,
+            'title' => $fields['title'],
+            'description' => ($input['description'] ?? null) instanceof Document ? $input['description'] : null,
+            'priority' => $fields['priority'],
+            'label_ids' => $fields['label_ids'],
+            'start_date' => $start,
+            'due_date' => $due,
+            'assignee_id' => $fields['assignee_id'],
+            'parent' => $fields['parent'],
+            'values' => $values,
+        ];
+    }
+
+    /**
+     * The fields every new work item has, without an item and without the values of its properties: the type (the
+     * default type of the project unless named; switched on and active, `$keepTypeId` may stay archived: a template that
+     * already has it), the title (trimmed, 1–255 characters), the priority (`none` unless named), the labels (existing,
+     * each once), the assignee (`Assignable`; `$keepAssigneeId` is no new pick and stays, A356) and the parent (an item of the project, by ULID or key, read again under a
+     * shared lock after the caller's locks). Errors go to `$fail` at the name of the field; the caller says where they
+     * stand (create() at the root, TemplateInput below `payload.`).
+     *
+     * @param  array<array-key, mixed>  $input
+     * @param  callable(string, string): void  $fail
+     * @return array{type: ?WorkItemType, title: string, priority: Priority, label_ids: list<string>, assignee_id: ?string, parent: ?WorkItem}
+     */
+    public static function fields(array $input, Project $project, User $reader, callable $fail, ?string $keepTypeId = null, ?string $keepAssigneeId = null): array
+    {
+        return [
+            'type' => self::type($input['type_id'] ?? $project->default_type_id, $project, $fail, $keepTypeId),
+            'title' => self::title($input['title'] ?? null, $fail),
+            'priority' => self::priority($input['priority'] ?? null, $fail),
+            'label_ids' => self::labels($input['label_ids'] ?? null, $fail),
+            'assignee_id' => self::assignee($input['assignee_id'] ?? null, $project, $fail, $keepAssigneeId),
+            'parent' => self::parent($input['parent_id'] ?? null, $project, $reader, $fail),
+        ];
     }
 
     /**
@@ -254,24 +278,42 @@ final class ItemInput
     }
 
     /**
-     * A type for an item of the project (ChangeWorkItemType as well): switched on in the project and not archived.
+     * A type for an item of the project (ChangeWorkItemType as well): switched on in the project and not archived, unless
+     * it is `$keep` (the archived type a template already has may stay).
      *
      * @param  callable(string, string): void  $fail
      */
-    public static function type(mixed $id, Project $project, callable $fail): ?WorkItemType
+    public static function type(mixed $id, Project $project, callable $fail, ?string $keep = null): ?WorkItemType
     {
         $id = is_string($id) && Str::isUlid($id) ? strtolower($id) : null;
         $type = $id === null ? null : $project->types()->whereKey($id)->first();
 
         if ($type === null) {
             $fail('type_id', __('field.type_id.disabled'));
-        } elseif ($type->archived_at !== null) {
+        } elseif ($type->archived_at !== null && $type->id !== $keep) {
             $fail('type_id', __('field.type_id.archived'));
         } else {
             return $type;
         }
 
         return null;
+    }
+
+    /**
+     * The template an item is made from (spec 4.12): one of this project, by ULID in any case; anything else is the
+     * same `field.template_id.unknown` at `template_id` (a template of another project or none at all).
+     *
+     * @param  callable(string, string): void  $fail
+     */
+    public static function template(mixed $id, Project $project, callable $fail): ?Template
+    {
+        $id = is_string($id) && Str::isUlid($id) ? strtolower($id) : null;
+        $template = $id === null ? null : Template::query()->where('project_id', $project->id)->find($id);
+        if ($template === null) {
+            $fail('template_id', __('field.template_id.unknown'));
+        }
+
+        return $template;
     }
 
     /**
@@ -353,10 +395,14 @@ final class ItemInput
     /**
      * @param  callable(string, string): void  $fail
      */
-    private static function assignee(mixed $id, Project $project, callable $fail): ?string
+    private static function assignee(mixed $id, Project $project, callable $fail, ?string $keep = null): ?string
     {
         if ($id === null) {
             return null;
+        }
+        // the assignee a template already has is no new pick (A356), like the one an item has in patch()
+        if (is_string($id) && $keep !== null && strtolower($id) === $keep) {
+            return $keep;
         }
 
         $user = is_string($id) && Str::isUlid($id) ? User::query()->find(strtolower($id)) : null;

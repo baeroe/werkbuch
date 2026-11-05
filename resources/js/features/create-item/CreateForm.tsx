@@ -18,13 +18,28 @@
  *   an upload belongs to nobody until the item is created (A232). After a change of project, pictures and files of
  *   another project do not fit (the server refuses the description, A233): a notice says so and marks the
  *   description, and "Anlegen" waits until they are removed or the project is changed back.
+ * - "Vorlage" offers the templates of the chosen project (lean, K24). Choosing one asks the server for the fields of an
+ *   item made from it now (`templateDraft`, A335: the title with its placeholders filled, the dates from the offsets)
+ *   and fills type, title, description, the fields and the values with them; a toast says so. A failure says so with
+ *   "Erneut versuchen". The item names the template (`template_id`): its pictures are copied for it on the server. A
+ *   change of project lets go of the template (its pictures then belong to another project, A233); `defaults.template_id`
+ *   ("Vorlage anwenden …" in the palette) is applied once. Applying never loses what was typed: its toast offers
+ *   "Rückgängig" (mod+z too), which brings back the draft from before, with its template; an answer that comes after
+ *   the person kept writing fills nothing and says so (choosing the template again applies it). A type of the template
+ *   the project does not take is said at the type, the type stays. "Keine Vorlage" lets go of the template (its fields
+ *   stay), so does a template that left the list (deleted meanwhile, said at the field); a refusal of the server at
+ *   `template_id` shows there with the focus.
  */
+
+/** The value of "Keine Vorlage" in the field: no ULID is ever this. */
+const NO_TEMPLATE = 'none';
 
 import { usePage } from '@inertiajs/react';
 import { useQueries } from '@tanstack/react-query';
 import type { Editor } from '@tiptap/react';
-import { FileQuestionMark, RotateCw } from 'lucide-react';
+import { FileQuestionMark, RotateCw, Undo2 } from 'lucide-react';
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { templateDraft } from '@/api/templates';
 import type { CreateWorkItemInput } from '@/api/workItems';
 import { TypeGlyph } from '@/components/fields/TypeGlyph';
 import { Banner } from '@/components/ui/Banner';
@@ -35,19 +50,23 @@ import { ProjectBadge } from '@/components/ui/ProjectBadge';
 import { Select } from '@/components/ui/Select';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
 import { labelClass } from '@/components/ui/styles';
+import { toast } from '@/components/ui/toast';
 import { RichTextEditor } from '@/editor/RichTextEditor';
 import { UploadContext, useUploadCounter, useUploadsPending } from '@/editor/UploadContext';
 import { attachmentQuery } from '@/hooks/attachments';
+import { useSettle } from '@/hooks/mutation';
 import { useProjects } from '@/hooks/projects';
 import { useProperties } from '@/hooks/properties';
+import { useTemplateSummaries } from '@/hooks/templates';
 import { useWorkflows } from '@/hooks/workflows';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
+import { notifyError } from '@/lib/errors';
 import { t } from '@/lib/i18n';
 import { usePermissions } from '@/lib/permissions';
 import { attachmentIds } from '@/lib/richtext';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import type { CreateDefaults } from '@/store/ui';
-import type { Project, Property, PropertyValue, WorkItem, WorkItemType, Workflow } from '@/types';
+import type { Project, Property, PropertyValue, TemplateDraft, WorkItem, WorkItemType, Workflow } from '@/types';
 import { useUnsavedGuard } from '@/features/item-detail/shared';
 import { hasContent, park, parkedTaken, parkedToRestore, seenNames, type Draft } from './draft';
 import { ItemFields, type Errors } from './ItemFields';
@@ -170,7 +189,7 @@ type FormBodyProps = CreateFormProps & {
 };
 
 /** The paths of the fields this form shows an error at; any other refusal stands on top. */
-const FIELD_PATHS = new Set(['project_id', 'type_id', 'title', 'description_json', 'state_id', 'assignee_id', 'priority', 'label_ids', 'start_date', 'due_date', 'parent_id']);
+const FIELD_PATHS = new Set(['project_id', 'type_id', 'template_id', 'title', 'description_json', 'state_id', 'assignee_id', 'priority', 'label_ids', 'start_date', 'due_date', 'parent_id']);
 
 function FormBody({
   formId,
@@ -193,6 +212,7 @@ function FormBody({
   const form = useRef<HTMLFormElement>(null);
   const descriptionError = useId();
   const projectSelectId = `${formId}-project`;
+  const templateSelectId = `${formId}-template`;
   const fieldId = (key: string) => `${formId}-value-${key}`;
 
   const typesOf = (projectId: string) => {
@@ -243,6 +263,7 @@ function FormBody({
       startDate: null,
       dueDate: null,
       values: {},
+      templateId: null,
     };
   });
   // names of every project and type seen (also by the form of a parked draft), so the notice can name one that left
@@ -256,7 +277,7 @@ function FormBody({
     const projectId = projectGone ? projects[0].id : stored.projectId;
     const typeId = projectGone && typesOf(projectId).some((entry) => entry.id === stored.typeId) ? stored.typeId : defaultType(projectId);
     return projectGone
-      ? { ...stored, projectId, typeId, stateId: null, assigneeId: null, parentId: null, values: keptValues(stored.values, typeId) }
+      ? { ...stored, projectId, typeId, stateId: null, assigneeId: null, parentId: null, values: keptValues(stored.values, typeId), templateId: null }
       : { ...stored, typeId, values: keptValues(stored.values, typeId) };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the lists are what changes it
   }, [stored, projects, types, workflows, properties]);
@@ -267,6 +288,9 @@ function FormBody({
   const [unreadable, setUnreadable] = useState<Record<string, string>>({});
   const [attempted, setAttempted] = useState(false);
   const [blocked, setBlocked] = useState<string | null>(null);
+  /** What the form says at the type and at the template about the template applied last, or null. */
+  const [typeHint, setTypeHint] = useState<string | null>(null);
+  const [templateHint, setTemplateHint] = useState<string | null>(null);
   useEffect(() => {
     if (!projectGone && !typeGone) return;
     setGoneName(seenNames.get(projectGone ? stored.projectId : stored.typeId) ?? '');
@@ -360,13 +384,134 @@ function FormBody({
   const clearError = (...paths: string[]) =>
     setErrors((current) => (paths.some((path) => path in current) ? Object.fromEntries(Object.entries(current).filter(([key]) => !paths.includes(key))) : current));
 
+  // the templates of the project; choosing one fills the draft with what the server makes of it now
+  const templates = useTemplateSummaries(draft.projectId);
+  const templateList = templates.data?.items ?? [];
+  for (const entry of templateList) seenNames.set(entry.id, entry.name);
+  const settle = useSettle();
+  /** Counts the templates asked for: only the answer to the last one (and in the same project) fills the draft. */
+  const asked = useRef(0);
+  /** The draft as it is now, for answers that arrive later. */
+  const latest = useRef(draft);
+  useLayoutEffect(() => {
+    latest.current = draft;
+  });
+  /**
+   * The template applied last, with the draft from before and the one it made: the notice under the field and its
+   * "Rückgängig" stand in the dialog (reachable with Tab, I2) as long as the draft is the one the template made; the
+   * next change of the draft takes them away (an undo never throws away what was typed after the template).
+   */
+  const [applied, setApplied] = useState<{ name: string | undefined; before: Draft; after: Draft } | null>(null);
+  const shownApplied = applied !== null && applied.after === draft ? applied : null;
+  const [focusTemplate, setFocusTemplate] = useState(0);
+  useEffect(() => {
+    if (focusTemplate > 0) form.current?.querySelector<HTMLElement>(`[id="${templateSelectId}"]`)?.focus();
+  }, [focusTemplate, templateSelectId]);
+
+  function fromTemplate(current: Draft, filled: TemplateDraft): Draft {
+    const typeId = typesOf(current.projectId).some((entry) => entry.id === filled.type_id) ? filled.type_id : current.typeId;
+    return {
+      ...current,
+      templateId: filled.template_id,
+      typeId,
+      title: filled.title,
+      description: filled.description_json,
+      priority: filled.priority,
+      assigneeId: filled.assignee_id,
+      labelIds: [...filled.label_ids],
+      parentId: filled.parent_id,
+      startDate: filled.start_date,
+      dueDate: filled.due_date,
+      values: keptValues(filled.values, typeId),
+    };
+  }
+
+  /** What the form said about the draft before goes: it is about other fields now. */
+  function forgetNotices() {
+    setErrors({});
+    setBlocked(null);
+    setGoneName(null);
+    setTemplateHint(null);
+  }
+
+  function applyTemplate(templateId: string) {
+    const round = ++asked.current;
+    const chosen = JSON.stringify(latest.current);
+    settle(templateDraft(templateId), {
+      onSuccess: (filled) => {
+        if (round !== asked.current) return;
+        const before = latest.current;
+        const name = seenNames.get(templateId);
+        // written on while it loaded: what was typed wins, nothing is overwritten unasked
+        if (JSON.stringify(before) !== chosen) {
+          toast({ title: name ? t('items.create.template_late', { name }) : t('items.create.template_failed'), description: t('items.create.template_late_description') });
+          return;
+        }
+        const type = types.find((entry) => entry.id === filled.type_id);
+        const inactive = !typesOf(before.projectId).some((entry) => entry.id === filled.type_id);
+        const after = fromTemplate(before, filled);
+        setDraft(after);
+        forgetNotices();
+        setTypeHint(inactive ? t('items.create.template_type_inactive', { name: type?.name ?? filled.type_id }) : null);
+        setApplied({ name, before, after });
+      },
+      onError: (error) => {
+        if (round === asked.current) notifyError(t('items.create.template_failed'), error, () => applyTemplate(templateId));
+      },
+    });
+  }
+
+  /** "Rückgängig" of the notice: the draft from before the template comes back, with the template it had. */
+  function undoTemplate(before: Draft) {
+    asked.current += 1;
+    setApplied(null);
+    setDraft(before);
+    forgetNotices();
+    setTypeHint(null);
+    // the notice with the button goes: the focus goes to the field of the template
+    setFocusTemplate((count) => count + 1);
+  }
+
+  /** "Keine Vorlage": the item is made without it; what it filled in stays. */
+  function letGoOfTemplate() {
+    asked.current += 1;
+    update({ templateId: null });
+    clearError('template_id');
+    setTemplateHint(null);
+    setTypeHint(null);
+  }
+
+  // a template that left the list (deleted meanwhile): the item is made without it, and the field says so
+  const templateGone = templates.isSuccess && draft.templateId !== null && !templateList.some((entry) => entry.id === draft.templateId);
+  useEffect(() => {
+    if (!templateGone) return;
+    setDraft((current) => ({ ...current, templateId: null }));
+    clearError('template_id');
+    setTemplateHint(t('items.create.template_gone'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- when it goes
+  }, [templateGone]);
+
+  // a dialog opened with a template ("Vorlage anwenden …") applies it once, as soon as its name is known
+  const appliedDefault = useRef(false);
+  const defaultTemplate = defaults?.template_id;
+  useEffect(() => {
+    if (appliedDefault.current || !defaultTemplate || !templates.data) return;
+    appliedDefault.current = true;
+    if (templates.data.items.some((entry) => entry.id === defaultTemplate)) applyTemplate(defaultTemplate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, when the list is there
+  }, [defaultTemplate, templates.data]);
+
   function changeProject(projectId: string) {
     const typeId = typesOf(projectId).some((entry) => entry.id === draft.typeId) ? draft.typeId : defaultType(projectId);
     setErrors({});
     setBlocked(null);
     setGoneName(null);
-    // status, assignee and parent belong to the project
-    update({ projectId, typeId, stateId: null, assigneeId: null, parentId: null, values: keptValues(draft.values, typeId) });
+    setTypeHint(null);
+    setTemplateHint(null);
+    // a template still on its way fills nothing in the other project
+    asked.current += 1;
+    // status, assignee and parent belong to the project, and so does the template
+    update({ projectId, typeId, stateId: null, assigneeId: null, parentId: null, values: keptValues(draft.values, typeId), templateId: null });
   }
 
   function changeType(typeId: string) {
@@ -375,6 +520,7 @@ function FormBody({
     // the notice of a press is about the draft before, as after a change of the project (T15-M5)
     setBlocked(null);
     setGoneName(null);
+    setTypeHint(null);
     update({ typeId, values: keptValues(draft.values, typeId) });
   }
 
@@ -407,7 +553,7 @@ function FormBody({
           {blocked ?? formError}
         </Banner>
       )}
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-3">
         <Select
           label={t('items.create.project')}
           options={projects.map((entry) => ({ value: entry.id, label: entry.name, icon: <ProjectBadge project={entry} /> }))}
@@ -422,8 +568,47 @@ function FormBody({
           options={typesOf(draft.projectId).map((entry) => ({ value: entry.id, label: entry.name, icon: <TypeGlyph type={entry} /> }))}
           value={draft.typeId}
           onValueChange={(next) => next && changeType(next)}
+          hint={typeHint}
           error={errors.type_id}
         />
+        <Select
+          label={t('items.create.template')}
+          placeholder={t(
+            templates.isPending
+              ? 'items.create.template_loading'
+              : templateList.length > 0
+                ? 'items.create.template_none'
+                : templates.isError
+                  ? 'items.create.template_unavailable'
+                  : 'items.create.template_empty',
+          )}
+          disabled={templateList.length === 0 && draft.templateId === null && !errors.template_id}
+          options={[{ value: NO_TEMPLATE, label: t('items.create.template_none') }, ...templateList.map((entry) => ({ value: entry.id, label: entry.name }))]}
+          value={draft.templateId}
+          onValueChange={(next) => {
+            if (next === NO_TEMPLATE) letGoOfTemplate();
+            else if (next) applyTemplate(next);
+          }}
+          id={templateSelectId}
+          hint={templateHint}
+          error={errors.template_id}
+        />
+      </div>
+      {/* a live region that is there from the start: a notice mounted with its text is often not read (F21) */}
+      <div aria-live="polite">
+        {shownApplied && (
+          <Banner
+            tone="info"
+            title={shownApplied.name ? t('items.create.template_applied', { name: shownApplied.name }) : t('items.create.template_applied_unnamed')}
+            action={
+              <Button variant="secondary" size="sm" icon={Undo2} onClick={() => undoTemplate(shownApplied.before)}>
+                {t('common.undo')}
+              </Button>
+            }
+          >
+            {t('items.create.template_applied_description')}
+          </Banner>
+        )}
       </div>
       <Input
         ref={titleRef}

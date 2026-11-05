@@ -3,6 +3,7 @@
 namespace App\Actions\Workflows;
 
 use App\Access\Authorize;
+use App\Actions\Automations\FollowWorkflow;
 use App\Actions\WorkItems\RemapStates;
 use App\Enums\Catalog;
 use App\Events\EventRecorder;
@@ -30,7 +31,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * A state that goes while items stand in it (in any project of the workflow) needs a state that takes them over in
  * `state_mapping` (removed state → key of a state of the input, a new one with its local id too), else 409
  * `state_in_use` naming the states and their items, and nothing is written; the items move before their states go
- * (RemapStates, `state_removed`). Everything runs under the catalog lock, one change of the catalog at a time, each from
+ * (RemapStates, `state_removed`); Auto-Close of a project whose state goes or stops being canceled follows (FollowWorkflow,
+ * `state_removed`). Everything runs under the catalog lock, one change of the catalog at a time, each from
  * what the one before left, and every change of an item waits for it. Only what really changes is written and
  * recorded; the same input again writes nothing.
  */
@@ -176,6 +178,18 @@ final class SaveWorkflow
 
             // the relations as they are now, not as they were read before the writes
             $saved->load(['states', 'transitions']);
+
+            if ($current !== null) {
+                // Auto-Close of a project whose state went (or stopped being canceled) follows: to the state that takes
+                // the old one over when that is canceled, else to the first Canceled state, else off (K11)
+                /** @var array<string, string> $mapping removed state → key of the input, checked above */
+                $mapping = $valid['state_mapping'];
+                $taken = array_map(fn (string $key) => $ids[$key], $mapping);
+
+                foreach (FollowWorkflow::strayed($saved) as $project) {
+                    FollowWorkflow::run($actor, $project, $taken, $saved, RemapStates::STATE_REMOVED);
+                }
+            }
 
             if ($before === null) {
                 EventRecorder::record(EventType::WorkflowCreated, $actor, $saved, null, ['name' => ['old' => null, 'new' => $saved->name]]);

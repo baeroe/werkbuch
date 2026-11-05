@@ -1,7 +1,7 @@
 /*
  * The shell's own shortcuts and palette commands (start set of spec 5.3): the search (`/`), the shortcut help, undo,
- * new item, the `g` sequences to the main places and, in the palette, new item, the theme, the sidebar, the shortcut
- * help and the same places. Keys, labels and groups of the shortcuts come from the catalog (`lib/shortcuts/catalog.ts`);
+ * new item, the `g` sequences to the main places and, in the palette, new item, "Vorlage anwenden …"
+ * (`features/templates/applyTemplate.tsx`), the theme, the sidebar, the shortcut help and the same places. Keys, labels and groups of the shortcuts come from the catalog (`lib/shortcuts/catalog.ts`);
  * the palette's own key lives with it (`PaletteHost`). Screens register theirs while they are mounted.
  */
 
@@ -10,6 +10,7 @@ import type { LucideIcon } from 'lucide-react';
 import { FolderKanban, Inbox, Keyboard, Layers, Monitor, Moon, PanelLeft, SquarePen, Sun, SunMoon, UserRoundCheck } from 'lucide-react';
 import { useEffect } from 'react';
 import { toast } from '@/components/ui/toast';
+import { useApplyTemplateCommand } from '@/features/templates/applyTemplate';
 import { registerCommand, SHELL_COMMAND_GROUPS, useCommand } from '@/lib/commands';
 import { paths } from '@/lib/links';
 import { t, type TranslationKey } from '@/lib/i18n';
@@ -79,6 +80,7 @@ export function useShellBindings(): void {
     },
     [mayCreate],
   );
+  useApplyTemplateCommand();
   useCommand({
     id: 'shell.theme',
     label: t('commands.theme.label'),

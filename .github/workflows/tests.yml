@@ -17,7 +17,7 @@ jobs:
   # required check: the name must stay `tests`
   tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     services:
       mariadb:

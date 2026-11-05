@@ -24,7 +24,9 @@ use Spatie\MediaLibrary\MediaCollections\Models\Media;
  * (A26); the attachment rows go by cascade too (`attachments.project_id`). Its wiki pages go by cascade as well
  * (`pages.project_id`), and with them their versions; their tree is loosened first (`parent_id` null), so a tree of any
  * depth goes and no `set null` of a child depends on which index InnoDB checks the key of the project on (K1, T2-M1).
- * Its events stay (P10). Later phases add their data here (templates).
+ * Its templates go by cascade too (`templates.project_id`), and with them their runs, as do its automations; the cascade
+ * that crosses itself (items → `set null` on runs, templates → runs → `set null` on items) goes through (K14), and the
+ * pictures of the templates are attachments of the project above. Its events stay (P10).
  *
  * The one writing action without an event of its own: it only cleans up after `project.deleted` (P26).
  */

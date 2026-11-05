@@ -96,6 +96,9 @@ export const SHORTCUTS = {
   // while one is open), A324
   'wiki.save': { keys: 'mod+enter', scope: 'detail', label: 'shortcuts.wiki.save', group: 'shortcuts.group.wiki' },
   'wiki.delete': { keys: 'mod+backspace', scope: 'detail', label: 'shortcuts.wiki.delete', group: 'shortcuts.group.wiki' },
+  // the template editor (`features/templates/TemplateEditor.tsx`), for whoever may manage templates: saves on purpose
+  // only (A336), a held key once. Shares its keys with `settings.save` and `wiki.save` (other screens, A324)
+  'template.save': { keys: 'mod+enter', scope: 'detail', label: 'shortcuts.template.save', group: 'shortcuts.group.template' },
   // registered only while the preview is open (shell/PeekHost): the first Escape in a field leaves the field
   'peek.close': { keys: 'escape', scope: 'detail', label: 'shortcuts.peek.close', group: 'shortcuts.group.item' },
 } as const satisfies Record<string, CatalogEntry>;

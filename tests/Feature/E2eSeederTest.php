@@ -5,10 +5,13 @@ use App\Access\Visibility;
 use App\Actions\Favorites\ToggleFavorite;
 use App\Actions\Projects\CreateProject;
 use App\Actions\Projects\UpdateProject;
+use App\Actions\Templates\RescheduleTemplates;
+use App\Actions\Templates\RunDueTemplates;
 use App\Domain\Notifications\NotificationKind;
 use App\Enums\AccountType;
 use App\Events\EventType;
 use App\Models\Attachment;
+use App\Models\Automation;
 use App\Models\Favorite;
 use App\Models\Invitation;
 use App\Models\Label;
@@ -20,11 +23,13 @@ use App\Models\Project;
 use App\Models\Property;
 use App\Models\RelationType;
 use App\Models\Resolution;
+use App\Models\Template;
 use App\Models\User;
 use App\Models\View;
 use App\Models\Workflow;
 use App\Models\WorkItem;
 use App\Models\WorkItemType;
+use App\Support\Actor;
 use Database\Seeders\DemoSeeder;
 use Database\Seeders\E2eSeeder;
 use Illuminate\Support\Facades\DB;
@@ -289,4 +294,32 @@ it('fills the search index after the projects of earlier runs are gone', functio
         ->and($engine->documents('testing_work_items'))->toHaveCount(WorkItem::count())
         ->and(collect($engine->documents('testing_work_items'))->pluck('project_id')->unique())->not->toContain($left->id)
         ->and($engine->documents('testing_users'))->toHaveCount(User::count());
+});
+
+it('leaves the demo automations off and the demo schedules paused (K9)', function () {
+    // the demo data switch some on and plan their templates: the DDEV scheduler would run them on the shared database
+    $this->seed(DemoSeeder::class);
+    expect(Automation::query()->where('enabled', true)->count())->toBeGreaterThan(0)
+        ->and(Template::query()->whereNotNull('next_run_at')->count())->toBeGreaterThan(0);
+
+    $this->seed(E2eSeeder::class);
+
+    expect(Automation::query()->where('enabled', true)->count())->toBe(0)
+        ->and(Template::query()->whereNotNull('next_run_at')->count())->toBe(0)
+        // the templates and their logs stay, only their next term is gone
+        ->and(Template::query()->count())->toBe(3)
+        ->and(RunDueTemplates::run(Actor::system(User::defaultBot(), 'templates'), true))->toBe(0);
+
+    // the schedules are paused too (W2): whatever plans them anew (a zone change, a restored project) finds no term
+    $updated = Template::query()->orderBy('id')->pluck('updated_at', 'id')->map(fn ($at) => $at?->format('Y-m-d H:i:s.u'))->all();
+    expect(Template::query()->whereNotNull('schedule')->get()->every(fn (Template $template) => $template->schedule()?->paused === true))->toBeTrue()
+        ->and(RescheduleTemplates::run(Actor::system(User::defaultBot(), 'templates'), 'Pacific/Auckland'))->toBeGreaterThan(0)
+        ->and(Template::query()->whereNotNull('next_run_at')->count())->toBe(0)
+        ->and(Template::query()->orderBy('id')->pluck('updated_at', 'id')->map(fn ($at) => $at?->format('Y-m-d H:i:s.u'))->all())->toBe($updated);
+
+    // a second run changes nothing
+    $this->seed(E2eSeeder::class);
+    expect(Automation::query()->where('enabled', true)->count())->toBe(0)
+        ->and(Template::query()->whereNotNull('next_run_at')->count())->toBe(0)
+        ->and(Template::query()->whereNotNull('schedule')->get()->every(fn (Template $template) => $template->schedule()?->paused === true))->toBeTrue();
 });

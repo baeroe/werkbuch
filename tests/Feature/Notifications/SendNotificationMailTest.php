@@ -10,6 +10,8 @@ use App\Actions\Notifications\SaveNotificationPreferences;
 use App\Actions\Notifications\SendNotificationMail;
 use App\Actions\Projects\RemoveMember;
 use App\Actions\Projects\UpdateProject;
+use App\Actions\Templates\DeleteTemplate;
+use App\Actions\Templates\RunTemplate;
 use App\Actions\Users\DeactivateUser;
 use App\Actions\Users\UpdateUserRole;
 use App\Actions\WorkItems\SetSubscription;
@@ -26,6 +28,7 @@ use App\Models\Notification;
 use App\Models\NotificationMail;
 use App\Models\Organization;
 use App\Models\Project;
+use App\Models\Template;
 use App\Models\User;
 use App\Models\WorkItem;
 use App\Notifications\NotificationConsumer;
@@ -433,4 +436,74 @@ it('sends the collection from its job on the queue notifications, with five trie
         ->and($job->backoff)->toBe([60, 300, 900, 1800])
         ->and($collection($w['mara'], $w['item'])->outcome)->toBe(NotificationMail::SENT);
     Mail::assertSent(NotificationDigest::class, 1);
+});
+
+/** A template „Wöchentliche Wartung“ of WEB by Mara whose runs fail (its assignee is nobody of WEB); Tom and Mara want its mail. */
+$failingTemplate = function (array $w): Template {
+    $template = Template::factory()->create(['project_id' => $w['web']->id, 'created_by' => $w['mara']->id]);
+    $template->update(['payload' => [...$template->payload, 'assignee_id' => User::factory()->create()->id]]);
+    foreach ([$w['tom'], $w['mara']] as $person) {
+        SaveNotificationPreferences::run(actor($person), ['preferences' => [['event' => 'template_run_failed', 'channel' => 'mail', 'enabled' => true]]]);
+    }
+
+    return $template;
+};
+
+$templateMail = fn (User $user, Template $template) => NotificationMail::query()->where('user_id', $user->id)->where('scope', "template:{$template->id}")->sole();
+
+it('mails a failed run of a template with its error and the link to the template (A348)', function () use ($world, $send, $failingTemplate, $templateMail) {
+    $w = $world();
+    $w['mara']->update(['locale' => Locale::En, 'timezone' => 'America/New_York']);
+    $template = $failingTemplate($w);
+    $this->travelTo(Carbon::parse('2026-11-03 14:30:00', 'UTC'));
+
+    ['run' => $run] = RunTemplate::run(actor($w['jonas']), $template);
+    RunTemplate::run(actor($w['jonas']), $template);
+
+    expect($send($templateMail($w['mara'], $template)))->toBe(NotificationMail::SENT);
+    $digest = Mail::sent(NotificationDigest::class)->sole();
+    $link = "https://werkbuch.example.com/projects/WEB/templates/{$template->id}";
+    expect($digest->locale)->toBe('en')
+        ->and($digest->hasTo('mara@example.com'))->toBeTrue()
+        // the error is the sentence of the run, in the language of the organization
+        ->and($run->error)->toBe(__('field.assignee_id.invalid', [], 'de'));
+    $digest->assertHasSubject('[WEB] Template “Wöchentliche Wartung”: run failed')
+        ->assertSeeInOrderInHtml([$run->error, 'November 3, 2026 9:30 AM', $run->error])
+        ->assertSeeInHtml($link, false)
+        ->assertSeeInHtml('https://werkbuch.example.com/me/notifications', false)
+        ->assertSeeInText($run->error)->assertSeeInText($link)
+        ->assertDontSeeInText('<');
+
+    // Tom reads German
+    $send($templateMail($w['tom'], $template));
+    Mail::sent(NotificationDigest::class, fn (NotificationDigest $mail) => $mail->hasTo('tom@example.com'))->sole()
+        ->assertHasSubject('[WEB] Vorlage „Wöchentliche Wartung“: Lauf fehlgeschlagen')
+        ->assertSeeInHtml('Vorlage öffnen')->assertSeeInHtml('15:30');
+});
+
+it('skips the mail of a failed run once the template is deleted', function () use ($world, $send, $failingTemplate, $templateMail) {
+    $w = $world();
+    $template = $failingTemplate($w);
+    RunTemplate::run(actor($w['jonas']), $template);
+    $mail = $templateMail($w['mara'], $template);
+
+    DeleteTemplate::run(actor($w['mara']), $template);
+
+    expect($send($mail))->toBe(NotificationMail::SKIPPED)
+        ->and($mail->refresh()->outcome)->toBe(NotificationMail::SKIPPED);
+    Mail::assertNothingSent();
+});
+
+it('checks a line of a failed run like any line: read or mail off', function () use ($world, $send, $failingTemplate, $templateMail) {
+    $w = $world();
+    $template = $failingTemplate($w);
+    RunTemplate::run(actor($w['jonas']), $template);
+
+    // Mara read it, Tom switched the mail off again
+    MarkNotificationsRead::run(actor($w['mara']), ['all' => true]);
+    SaveNotificationPreferences::run(actor($w['tom']), ['preferences' => [['event' => 'template_run_failed', 'channel' => 'mail', 'enabled' => false]]]);
+
+    expect($send($templateMail($w['mara'], $template)))->toBe(NotificationMail::SKIPPED)
+        ->and($send($templateMail($w['tom'], $template)))->toBe(NotificationMail::SKIPPED);
+    Mail::assertNothingSent();
 });

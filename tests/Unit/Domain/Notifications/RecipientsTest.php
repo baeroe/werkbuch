@@ -203,3 +203,37 @@ it('tells somebody for exactly the events NotificationFacts reads (T5-M2)', func
         expect($recipients !== [])->toBe(in_array($type->value, $telling, true), $type->value);
     }
 });
+
+it('tells the lead and the author of a template about a failed run', function () use ($facts, $table, $mara, $tom) {
+    // a scheduled run: the default bot acts, no item, nobody watches
+    $failed = $facts('template.run_failed', ['actorId' => 'u_bot', 'itemId' => null, 'watchers' => [], 'templateAuthorId' => $tom]);
+
+    expect($table(Recipients::of($failed)))->toBe([$mara => ['template_run_failed'], $tom => ['template_run_failed']]);
+});
+
+it('tells nobody twice when the lead wrote the template', function () use ($facts, $table, $mara) {
+    $failed = $facts('template.run_failed', ['actorId' => 'u_bot', 'itemId' => null, 'watchers' => [], 'templateAuthorId' => $mara]);
+
+    expect($table(Recipients::of($failed)))->toBe([$mara => ['template_run_failed']]);
+});
+
+it('tells only the lead and the author about a failed run, whatever else the facts carry', function () use ($facts, $table, $mara, $tom) {
+    $failed = $facts('template.run_failed', ['actorId' => 'u_bot', 'mentioned' => ['u_x'], 'assignee' => 'u_y', 'changedFields' => ['title'], 'templateAuthorId' => $tom]);
+
+    expect($table(Recipients::of($failed)))->toBe([$mara => ['template_run_failed'], $tom => ['template_run_failed']])
+        ->and(Recipients::of($facts('template.run_failed', ['leadId' => null, 'templateAuthorId' => null])))->toBe([]);
+});
+
+it('leaves out who the automation acted for', function () use ($facts, $table, $lene, $mara, $noah) {
+    // "Assignee beim Start": the default bot assigns Noah, who started the item; Noah hears nothing of his own move
+    $assigned = $facts('work_item.assigned', ['actorId' => 'u_bot', 'assignee' => $noah, 'causedBy' => $noah]);
+
+    expect($table(Recipients::of($assigned)))->toBe([$lene => ['item_changed'], $mara => ['item_changed']]);
+});
+
+it('leaves out who ran the template now (K12)', function () use ($facts, $table, $tom) {
+    // Mara, lead of WEB, pressed "run now" on Tom's template: only Tom hears of it
+    $failed = $facts('template.run_failed', ['actorId' => 'u_bot', 'itemId' => null, 'watchers' => [], 'templateAuthorId' => $tom, 'causedBy' => 'u_mara']);
+
+    expect($table(Recipients::of($failed)))->toBe([$tom => ['template_run_failed']]);
+});
