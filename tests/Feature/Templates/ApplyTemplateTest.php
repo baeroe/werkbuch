@@ -228,3 +228,29 @@ it('creates the item without a text whose only picture of the template vanished'
         ->and($item->values()->count())->toBe(0)
         ->and(Attachment::query()->count())->toBe(1);
 });
+
+it('copies nothing when the input is already refused before the locks (T6-M2)', function () use ($world, $owned) {
+    [, $mara, $template] = $world();
+    $image = $owned($template, 'skizze.png', 'image/png');
+
+    $refused = rescue(fn () => CreateWorkItem::run(actor($mara), [
+        'project_id' => 'WEB', 'title' => 'Kaputt', 'template_id' => $template->id,
+        'description_json' => ['type' => 'nope'],
+        'values' => ['notes' => F::doc(F::image($image->id, 'Skizze'))],
+    ]), fn (ValidationException $e) => $e->errors(), false);
+
+    expect($refused)->toHaveKey('description_json')
+        ->and(Attachment::query()->whereNull('attachable_id')->count())->toBe(0)
+        ->and(Attachment::query()->count())->toBe(1);
+});
+
+it('makes a copy of a file of the template a file of the text, never of the file list (T6-M3)', function () use ($world) {
+    [, $mara, $template] = $world();
+    $file = Attachment::factory()->forTemplate($template)->stored('Inhalt', 'application/pdf', 'plan.pdf')->create(['kind' => 'file']);
+
+    $item = CreateWorkItem::run(actor($mara), ['project_id' => 'WEB', 'title' => 'Datei', 'template_id' => $template->id, 'description_json' => F::doc(F::p(F::file($file->id, 'plan.pdf')))]);
+    [$copy] = Document::fromJson((array) $item->description)->attachmentIds();
+
+    expect(Attachment::query()->findOrFail($copy)->kind)->toBe('inline')
+        ->and(Attachment::query()->where('attachable_id', $item->id)->where('kind', 'file')->count())->toBe(0);
+});

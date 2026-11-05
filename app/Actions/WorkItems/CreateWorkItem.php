@@ -75,7 +75,7 @@ final class CreateWorkItem
      * read through the rules of saving (ItemInput::documents(), it may take a second) and, with `template_id`, the
      * template of the project (otherwise `field.template_id.unknown`, reported with every other field error under the
      * locks) and copies of its pictures and files for the texts (TemplateAttachments::copy(), A337: files are never
-     * copied under the project lock).
+     * copied under the project lock), only for an input not refused yet (T6-M2).
      *
      * @param  array<array-key, mixed>  $input  as handle() takes it
      * @return array{project: Project, input: array<array-key, mixed>, refused: array<string, list<string>>, texts: array<string, Document>, template: ?Template}
@@ -102,7 +102,8 @@ final class CreateWorkItem
                 $refused[$field] ??= [$message];
             });
         }
-        if ($template !== null && $texts !== []) {
+        // an input already refused copies nothing: its copies would be left without owner for certain (T6-M2)
+        if ($template !== null && $texts !== [] && $refused === []) {
             $copied = TemplateAttachments::copy($template, $texts, $actor->user);
             $texts = [];
             foreach ($copied as $key => $text) {

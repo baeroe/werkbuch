@@ -17,14 +17,16 @@ use Spatie\MediaLibrary\MediaCollections\Filesystem;
  * Copies the pictures and files of a template into the texts of the item made from it (spec 4.12 „Anhänge werden beim
  * Anwenden kopiert“, A337), before any lock of the caller: copying files never runs under the project lock. Each picture
  * or file the template owns becomes a new attachment nobody owns yet, uploaded by the writer (the default bot for a
- * run), with the same kind, name, type and size and a copy of the file; the texts name the copies, and AttachmentLinks
+ * run), always `inline` (a file of the template never joins the file list of the item, T6-M3), with the same name,
+ * type and size and a copy of the file; the texts name the copies, and AttachmentLinks
  * then gives them to the item. Anything the template does not own stays as it is (another text's picture is shared,
  * A233). A text that names the same picture twice, or two texts that name it, get one copy.
  *
  * Each copy is made in a small transaction of its own under the project (shared, afresh): a project that went into
- * deletion meanwhile gets no copy (its texts stay as they were; the caller's lock refuses the project). A source whose
- * row or file vanished (the template was deleted meanwhile, K13) falls out of the text, like a dead node of the rules
- * of saving. A copy whose item is then refused keeps no owner and goes with the hourly prune after a day (A239).
+ * deletion meanwhile gets no copy (its texts stay as they were; the caller's lock refuses the project). The source is
+ * read again under that lock (T6-I1): one whose row or file vanished (the template was deleted meanwhile, K13) falls
+ * out of the text, like a dead node of the rules of saving; one handed over to another text meanwhile stays named as
+ * it is (shared, A233). A copy whose item is then refused keeps no owner and goes with the hourly prune after a day (A239).
  */
 final class TemplateAttachments
 {
@@ -52,7 +54,7 @@ final class TemplateAttachments
             if ($row === null) {
                 $copies[$id] = null;
             } elseif ($row->attachable_type === $template->getMorphClass() && $row->attachable_id === $template->id) {
-                $copy = self::copyOne($row, $template->project_id, $writer);
+                $copy = self::copyOne($row, $template, $writer);
                 if ($copy !== false) {
                     $copies[$id] = $copy;
                 }
@@ -75,28 +77,38 @@ final class TemplateAttachments
     }
 
     /**
-     * The id of the copy; null when the source has no file (any more): the node goes; false when the project went into
-     * deletion: the text stays as it is.
+     * The id of the copy; null when the source or its file is gone (any more): the node goes; false when the project
+     * went into deletion or the source has another owner by now (handed over to another text): the text stays as it is.
+     * The source is read again under the project (T6-I1): a deletion of the template holds the project `for update`
+     * and takes the source and, after its commit, the file; the copy waits for it and then finds them gone.
      */
-    private static function copyOne(Attachment $source, string $projectId, User $writer): string|false|null
+    private static function copyOne(Attachment $source, Template $template, User $writer): string|false|null
     {
-        $media = $source->getFirstMedia('file');
-        if ($media === null || ! Storage::disk($media->disk)->exists($media->getPathRelativeToRoot())) {
-            return null;
-        }
-
-        return DB::transaction(function () use ($source, $media, $projectId, $writer): string|false {
+        return DB::transaction(function () use ($source, $template, $writer): string|false|null {
             // afresh and shared, like an upload: a project that went into deletion meanwhile is no place for a copy
-            $project = Project::query()->sharedLock()->whereNull('deleting_at')->find($projectId);
+            $project = Project::query()->sharedLock()->whereNull('deleting_at')->find($template->project_id);
             if ($project === null) {
                 return false;
+            }
+
+            $source = Attachment::query()->sharedLock()->with('media')->find($source->id);
+            if ($source === null) {
+                return null;
+            }
+            if ($source->attachable_type !== $template->getMorphClass() || $source->attachable_id !== $template->id) {
+                return false;
+            }
+            $media = $source->getFirstMedia('file');
+            if ($media === null || ! Storage::disk($media->disk)->exists($media->getPathRelativeToRoot())) {
+                return null;
             }
 
             $copy = Attachment::query()->create([
                 'project_id' => $project->id,
                 'attachable_type' => null,
                 'attachable_id' => null,
-                'kind' => $source->kind,
+                // always a picture or file of the text: a file of the template never joins the file list of the item
+                'kind' => 'inline',
                 'uploaded_by' => $writer->id,
                 'filename' => $source->filename,
                 'mime' => $source->mime,
