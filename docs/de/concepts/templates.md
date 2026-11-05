@@ -47,7 +47,7 @@ Wird eine Vorlage gelöscht, geht ein Bild an einen anderen Text des Projekts, d
 
 ## Eine Vorlage anwenden
 
-- **Im Anlegen-Dialog** (<kbd>C</kbd>) füllt das Feld **Vorlage** Typ, Titel (mit den Platzhaltern von jetzt), Beschreibung, Felder und Daten. Vor dem Anlegen kannst du alles ändern. **Rückgängig** im Toast (oder <kbd>⌘ / Strg</kbd>+<kbd>Z</kbd>) bringt zurück, was vorher dastand; schreibst du weiter, während die Vorlage lädt, wird sie nicht angewendet, und der Toast sagt es. **Keine Vorlage** lässt sie los und behält die Felder.
+- **Im Anlegen-Dialog** (<kbd>C</kbd>) füllt das Feld **Vorlage** Typ, Titel (mit den Platzhaltern von jetzt), Beschreibung, Felder und Daten. Vor dem Anlegen kannst du alles ändern. Ein Hinweis unter den Feldern sagt es; sein Knopf **Rückgängig** (mit <kbd>Tab</kbd> der nächste Halt nach dem Feld) bringt zurück, was vorher dastand, bis du den Entwurf änderst. Schreibst du weiter, während die Vorlage lädt, wird sie nicht angewendet, und ein Toast sagt es. **Keine Vorlage** lässt sie los und behält die Felder.
 - **In der Befehlspalette** listet **Vorlage anwenden …** die Vorlagen der Projekte, in denen du Items anlegen darfst, und öffnet den Anlegen-Dialog mit der gewählten.
 
 Ein Item aus einer Vorlage merkt sich diese (`template_id`), und seine History sagt „Aus Vorlage „…““, mit dem Namen, den die Vorlage damals hatte. Von Hand angewendet legst du das Item selbst an.

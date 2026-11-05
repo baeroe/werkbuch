@@ -47,7 +47,7 @@ Deleting a template hands an image over to another text of the project that stil
 
 ## Applying a template
 
-- **In the create dialog** (<kbd>C</kbd>), the field **Template** fills type, title (with the placeholders filled now), description, fields and dates. You can change all of it before creating. **Undo** in the toast (or <kbd>⌘ / Ctrl</kbd>+<kbd>Z</kbd>) brings back what was there before; when you keep writing while the template loads, it is not applied and the toast says so. **No template** lets go of it and keeps the fields.
+- **In the create dialog** (<kbd>C</kbd>), the field **Template** fills type, title (with the placeholders filled now), description, fields and dates. You can change all of it before creating. A notice under the fields says so; its **Undo** button (the next stop after the field with <kbd>Tab</kbd>) brings back what was there before, until you change the draft. When you keep writing while the template loads, it is not applied and a toast says so. **No template** lets go of it and keeps the fields.
 - **In the command palette**, **Apply template …** lists the templates of the projects in which you may create items and opens the create dialog with the one you pick.
 
 An item made from a template remembers it (`template_id`) and its history says "From template "…"", with the name the template had then. Applied by hand, the item is created by you.

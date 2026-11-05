@@ -37,7 +37,7 @@ const NO_TEMPLATE = 'none';
 import { usePage } from '@inertiajs/react';
 import { useQueries } from '@tanstack/react-query';
 import type { Editor } from '@tiptap/react';
-import { FileQuestionMark, RotateCw } from 'lucide-react';
+import { FileQuestionMark, RotateCw, Undo2 } from 'lucide-react';
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { templateDraft } from '@/api/templates';
 import type { CreateWorkItemInput } from '@/api/workItems';
@@ -50,7 +50,7 @@ import { ProjectBadge } from '@/components/ui/ProjectBadge';
 import { Select } from '@/components/ui/Select';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
 import { labelClass } from '@/components/ui/styles';
-import { dismissToast, toast } from '@/components/ui/toast';
+import { toast } from '@/components/ui/toast';
 import { RichTextEditor } from '@/editor/RichTextEditor';
 import { UploadContext, useUploadCounter, useUploadsPending } from '@/editor/UploadContext';
 import { attachmentQuery } from '@/hooks/attachments';
@@ -63,7 +63,6 @@ import { useWorkItemTypes } from '@/hooks/workItemTypes';
 import { notifyError } from '@/lib/errors';
 import { t } from '@/lib/i18n';
 import { usePermissions } from '@/lib/permissions';
-import { undoLabel } from '@/lib/undo';
 import { attachmentIds } from '@/lib/richtext';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import type { CreateDefaults } from '@/store/ui';
@@ -213,6 +212,7 @@ function FormBody({
   const form = useRef<HTMLFormElement>(null);
   const descriptionError = useId();
   const projectSelectId = `${formId}-project`;
+  const templateSelectId = `${formId}-template`;
   const fieldId = (key: string) => `${formId}-value-${key}`;
 
   const typesOf = (projectId: string) => {
@@ -396,15 +396,17 @@ function FormBody({
   useLayoutEffect(() => {
     latest.current = draft;
   });
-  /** The toast of the template applied last: its "Rückgängig" belongs to this form and goes with it. */
-  const appliedToast = useRef<number | null>(null);
-  useEffect(
-    () => () => {
-      if (appliedToast.current !== null) dismissToast(appliedToast.current);
-      appliedToast.current = null;
-    },
-    [],
-  );
+  /**
+   * The template applied last, with the draft from before and the one it made: the notice under the field and its
+   * "Rückgängig" stand in the dialog (reachable with Tab, I2) as long as the draft is the one the template made; the
+   * next change of the draft takes them away (an undo never throws away what was typed after the template).
+   */
+  const [applied, setApplied] = useState<{ name: string | undefined; before: Draft; after: Draft } | null>(null);
+  const shownApplied = applied !== null && applied.after === draft ? applied : null;
+  const [focusTemplate, setFocusTemplate] = useState(0);
+  useEffect(() => {
+    if (focusTemplate > 0) form.current?.querySelector<HTMLElement>(`[id="${templateSelectId}"]`)?.focus();
+  }, [focusTemplate, templateSelectId]);
 
   function fromTemplate(current: Draft, filled: TemplateDraft): Draft {
     const typeId = typesOf(current.projectId).some((entry) => entry.id === filled.type_id) ? filled.type_id : current.typeId;
@@ -447,31 +449,27 @@ function FormBody({
         }
         const type = types.find((entry) => entry.id === filled.type_id);
         const inactive = !typesOf(before.projectId).some((entry) => entry.id === filled.type_id);
-        setDraft(fromTemplate(before, filled));
+        const after = fromTemplate(before, filled);
+        setDraft(after);
         forgetNotices();
         setTypeHint(inactive ? t('items.create.template_type_inactive', { name: type?.name ?? filled.type_id }) : null);
-        if (appliedToast.current !== null) dismissToast(appliedToast.current);
-        appliedToast.current = toast({
-          title: name ? t('items.create.template_applied', { name }) : t('items.create.template_applied_unnamed'),
-          description: t('items.create.template_applied_description'),
-          tone: 'success',
-          // the draft from before comes back, with the template it had
-          action: {
-            label: undoLabel(),
-            onClick: () => {
-              asked.current += 1;
-              appliedToast.current = null;
-              setDraft(before);
-              forgetNotices();
-              setTypeHint(null);
-            },
-          },
-        });
+        setApplied({ name, before, after });
       },
       onError: (error) => {
         if (round === asked.current) notifyError(t('items.create.template_failed'), error, () => applyTemplate(templateId));
       },
     });
+  }
+
+  /** "Rückgängig" of the notice: the draft from before the template comes back, with the template it had. */
+  function undoTemplate(before: Draft) {
+    asked.current += 1;
+    setApplied(null);
+    setDraft(before);
+    forgetNotices();
+    setTypeHint(null);
+    // the notice with the button goes: the focus goes to the field of the template
+    setFocusTemplate((count) => count + 1);
   }
 
   /** "Keine Vorlage": the item is made without it; what it filled in stays. */
@@ -591,9 +589,26 @@ function FormBody({
             if (next === NO_TEMPLATE) letGoOfTemplate();
             else if (next) applyTemplate(next);
           }}
+          id={templateSelectId}
           hint={templateHint}
           error={errors.template_id}
         />
+      </div>
+      {/* a live region that is there from the start: a notice mounted with its text is often not read (F21) */}
+      <div aria-live="polite">
+        {shownApplied && (
+          <Banner
+            tone="info"
+            title={shownApplied.name ? t('items.create.template_applied', { name: shownApplied.name }) : t('items.create.template_applied_unnamed')}
+            action={
+              <Button variant="secondary" size="sm" icon={Undo2} onClick={() => undoTemplate(shownApplied.before)}>
+                {t('common.undo')}
+              </Button>
+            }
+          >
+            {t('items.create.template_applied_description')}
+          </Banner>
+        )}
       </div>
       <Input
         ref={titleRef}

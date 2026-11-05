@@ -1127,6 +1127,8 @@ describe('CreateHost', () => {
 describe('templates in the create dialog', () => {
   const templateSelect = (dialog: HTMLElement) => within(dialog).getByRole('combobox', { name: /^Vorlage/ });
   const draftCalls = () => api!.calls.filter((call) => call.url === '/api/v1/templates/tpl_web_release/draft');
+  /** The notice of the applied template in the dialog (I2), or null. */
+  const applied = (dialog: HTMLElement, name = 'Release-Check') => within(dialog).queryByText(`Vorlage „${name}“ angewendet`, { exact: true });
 
   it('applies a template: its fields fill the form, and the item names it', async () => {
     const user = userEvent.setup();
@@ -1138,7 +1140,10 @@ describe('templates in the create dialog', () => {
     await choose(user, templateSelect(dialog), 'Release-Check');
 
     await waitFor(() => expect(title.value).toBe('Release-Check KW 45'));
-    expect(toastTitles()).toContain('Vorlage „Release-Check“ angewendet');
+    // the notice stands in the dialog, not in a toast (I2)
+    expect(applied(dialog)).toBeTruthy();
+    expect(within(dialog).getByText('Titel, Beschreibung und Felder kommen aus der Vorlage. Du kannst alles ändern.')).toBeTruthy();
+    expect(toastTitles()).not.toContain('Vorlage „Release-Check“ angewendet');
     expect(templateSelect(dialog).textContent).toContain('Release-Check');
     expect(within(dialog).getByRole('combobox', { name: /^Typ/ }).textContent).toContain('Bug');
     expect(within(dialog).getByRole('combobox', { name: 'Priorität: High' })).toBeTruthy();
@@ -1168,11 +1173,13 @@ describe('templates in the create dialog', () => {
   it('applies the template of the defaults once', async () => {
     const { dialog, title } = await openDialog({ project_id: 'p_web', template_id: 'tpl_web_release' });
     await waitFor(() => expect(title.value).toBe('Release-Check KW 45'));
-    expect(toastTitles().filter((entry) => entry === 'Vorlage „Release-Check“ angewendet')).toHaveLength(1);
+    expect(within(dialog).getAllByText('Vorlage „Release-Check“ angewendet')).toHaveLength(1);
     expect(templateSelect(dialog).textContent).toContain('Release-Check');
 
-    // something typed afterwards stays: the template is not applied again
+    // something typed afterwards stays: the template is not applied again, and its undo is gone (it would drop the text)
     await userEvent.setup().type(title, '!');
+    expect(applied(dialog)).toBeNull();
+    expect(within(dialog).queryByRole('button', { name: 'Rückgängig' })).toBeNull();
     await act(() => client.invalidateQueries());
     await waitFor(() => expect(title.value).toBe('Release-Check KW 45!'));
     expect(draftCalls()).toHaveLength(1);
@@ -1254,7 +1261,7 @@ describe('templates in the create dialog', () => {
     answerDraft = () => ({ body: { data: releaseDraft } });
     act(() => runToastAction(failure.id));
     await waitFor(() => expect(title.value).toBe('Release-Check KW 45'));
-    expect(toastTitles()).toContain('Vorlage „Release-Check“ angewendet');
+    expect(applied(dialog)).toBeTruthy();
   });
 
   /** Holds the answers of `GET /templates/<id>/draft` until `release`. */
@@ -1288,13 +1295,19 @@ describe('templates in the create dialog', () => {
 
     await choose(user, templateSelect(dialog), 'Release-Check');
     await waitFor(() => expect(title.value).toBe('Release-Check KW 45'));
-    const applied = currentToasts().find((entry) => entry.title === 'Vorlage „Release-Check“ angewendet')!;
-    expect(applied.action?.label).toBe('Rückgängig');
-    expect(canUndo()).toBe(true);
+    expect(applied(dialog)).toBeTruthy();
+    // no toast to reach past the dialog: the undo is a button in it, the next stop after the field (I2)
+    expect(canUndo()).toBe(false);
+    await waitFor(() => expect(document.activeElement).toBe(templateSelect(dialog)));
+    await user.tab();
+    const undo = within(dialog).getByRole('button', { name: 'Rückgängig' });
+    expect(document.activeElement).toBe(undo);
 
-    // mod+z presses it: the draft before comes back, without the template
-    act(() => void undoLatest());
+    // Enter presses it: the draft before comes back, without the template, and the focus is back at the field
+    await user.keyboard('{Enter}');
     await waitFor(() => expect(title.value).toBe('Mein eigener Titel'));
+    expect(applied(dialog)).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(templateSelect(dialog)));
     expect(within(dialog).getByRole('combobox', { name: 'Priorität: Low' })).toBeTruthy();
     expect(templateSelect(dialog).textContent).toContain('Keine Vorlage');
     await modEnter();
@@ -1313,7 +1326,7 @@ describe('templates in the create dialog', () => {
     await waitFor(() => expect(draftCalls()).toHaveLength(2));
     await waitFor(() => expect(title.value).toBe('Release-Check KW 45'));
 
-    act(() => void undoLatest());
+    await user.click(within(dialog).getByRole('button', { name: 'Rückgängig' }));
     await waitFor(() => expect(title.value).toBe('Release-Check KW 45 (geändert)'));
     expect(templateSelect(dialog).textContent).toContain('Release-Check');
     await modEnter();
@@ -1337,7 +1350,7 @@ describe('templates in the create dialog', () => {
     );
     expect(title.value).toBe('Schnell getippt');
     expect(templateSelect(dialog).textContent).toContain('Keine Vorlage');
-    expect(toastTitles()).not.toContain('Vorlage „Release-Check“ angewendet');
+    expect(applied(dialog)).toBeNull();
   });
 
   it('shows a refused template at its field and lets the person create without it (I2)', async () => {
@@ -1407,8 +1420,9 @@ describe('templates in the create dialog', () => {
     answerDraft = () => ({ body: { data: releaseDraft } });
     act(() => runToastAction(failure.id));
     await waitFor(() => expect(title.value).toBe('Release-Check KW 45'));
-    expect(toastTitles()).toContain('Vorlage „Release-Check“ angewendet');
-    expect(toastTitles()).not.toContain('Vorlage „“ angewendet');
+    // it applied under its name, and the field then says that it is gone from the list
+    expect(applied(dialog, '')).toBeNull();
+    await waitFor(() => expect(describing(templateSelect(dialog))).toContain('Die gewählte Vorlage gibt es nicht mehr.'));
   });
 
   it('says that the templates are loading', async () => {

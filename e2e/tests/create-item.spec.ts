@@ -247,7 +247,21 @@ test('applies a template in the dialog and creates the item with a copy of its i
     await arrowTo(page, page.getByRole('option', { name: 'E2E Release-Check', exact: true }));
     await page.keyboard.press('Enter');
 
-    await expect(page.getByText(tr('en', 'items.create.template_applied', { name: 'E2E Release-Check' }), { exact: true })).toBeVisible();
+    const applied = dialog.getByText(tr('en', 'items.create.template_applied', { name: 'E2E Release-Check' }), { exact: true });
+    await expect(applied).toBeVisible();
+    await expect(title).toHaveValue(new RegExp(`^E2E Release-Check \\d{4}$`));
+    // its undo is a button in the dialog, the next stop after the field (I2): the draft from before comes back
+    await tabTo(page, dialog.getByRole('button', { name: tr('en', 'common.undo'), exact: true }), { max: 2 });
+    await page.keyboard.press('Enter');
+    await expect(title).toHaveValue('');
+    await expect(applied).toBeHidden();
+    await expect(template).toBeFocused();
+    await expect(template).toContainText(tr('en', 'items.create.template_none'));
+    // and once more, to create the item with it
+    await page.keyboard.press('Enter');
+    await arrowTo(page, page.getByRole('option', { name: 'E2E Release-Check', exact: true }));
+    await page.keyboard.press('Enter');
+    await expect(applied).toBeVisible();
     // the server filled the placeholder of the title
     await expect(title).toHaveValue(new RegExp(`^E2E Release-Check \\d{4}$`));
     await expect(template).toContainText('E2E Release-Check');
