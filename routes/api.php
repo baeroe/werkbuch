@@ -31,6 +31,7 @@ use App\Http\Controllers\Api\TokensController;
 use App\Http\Controllers\Api\TwoFactorController;
 use App\Http\Controllers\Api\UsersController;
 use App\Http\Controllers\Api\ViewsController;
+use App\Http\Controllers\Api\WebhooksController;
 use App\Http\Controllers\Api\WorkflowsController;
 use App\Http\Controllers\Api\WorkItemsController;
 use App\Http\Controllers\Api\WorkItemTypesController;
@@ -46,6 +47,7 @@ use App\Models\PageVersion;
 use App\Models\Project;
 use App\Models\Template;
 use App\Models\View;
+use App\Models\Webhook;
 use App\Models\WorkItem;
 use App\Models\WorkItemRelation;
 use Illuminate\Support\Facades\Route;
@@ -78,6 +80,8 @@ Route::bind('pageVersion', fn (string $ref) => (Str::isUlid($ref) ? PageVersion:
 // a template by its ULID (any case; anything else is no template); whether the account sees its project, the action
 // decides. The web route of the templates names its parameter `{templateId}`, this binding is global
 Route::bind('template', fn (string $ref) => (Str::isUlid($ref) ? Template::query()->find(strtolower($ref)) : null) ?? throw Problem::notFound());
+// a webhook by its ULID (any case; anything else is no webhook); who may read it, the action decides
+Route::bind('webhook', fn (string $ref) => (Str::isUlid($ref) ? Webhook::query()->find(strtolower($ref)) : null) ?? throw Problem::notFound());
 
 // The REST API (prefix api/v1, see bootstrap/app.php): the session of the interface (with CSRF) or a bearer token whose
 // abilities fit the method. Every route has a row in tests/Feature/Api/routes.php.
@@ -240,6 +244,14 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
     Route::get('system', [SystemController::class, 'show']);
     Route::post('system/failed-jobs/retry', [SystemController::class, 'retry']);
     Route::post('system/test-mail', [SystemController::class, 'testMail'])->middleware('throttle:test-mail');
+
+    // the webhooks (spec 6.3, org admins); the secret is in the answers of creating and of rotate-secret only
+    Route::get('webhooks', [WebhooksController::class, 'index']);
+    Route::post('webhooks', [WebhooksController::class, 'store']);
+    Route::get('webhooks/{webhook}', [WebhooksController::class, 'show']);
+    Route::put('webhooks/{webhook}', [WebhooksController::class, 'update']);
+    Route::delete('webhooks/{webhook}', [WebhooksController::class, 'destroy']);
+    Route::post('webhooks/{webhook}/rotate-secret', [WebhooksController::class, 'rotateSecret']);
 
     Route::get('tokens', [TokensController::class, 'index']);
     Route::delete('tokens/{token}', [TokensController::class, 'destroy']);

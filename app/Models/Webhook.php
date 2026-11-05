@@ -51,6 +51,15 @@ final class Webhook extends Model
     protected $dateFormat = 'Y-m-d H:i:s.u';
 
     /**
+     * `created_at` and `updated_at` are whole seconds in the table: without cutting them here a saved model would
+     * answer with microseconds the next read no longer has.
+     */
+    public function freshTimestamp(): Carbon
+    {
+        return parent::freshTimestamp()->startOfSecond();
+    }
+
+    /**
      * A new secret (A369): `whsec_` and 32 random bytes as base64url without padding (43 characters).
      */
     public static function newSecret(): string

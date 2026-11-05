@@ -108,6 +108,11 @@ use App\Actions\Views\DeleteView;
 use App\Actions\Views\GetView;
 use App\Actions\Views\ListViews;
 use App\Actions\Views\SaveView;
+use App\Actions\Webhooks\DeleteWebhook;
+use App\Actions\Webhooks\GetWebhook;
+use App\Actions\Webhooks\ListWebhooks;
+use App\Actions\Webhooks\RotateWebhookSecret;
+use App\Actions\Webhooks\SaveWebhook;
 use App\Actions\Workflows\DeleteWorkflow;
 use App\Actions\Workflows\ListStateUsage;
 use App\Actions\Workflows\ListWorkflows;
@@ -1111,6 +1116,39 @@ return [
             return SendTestMail::run($a);
         },
         'allowed' => ['org_admin'],
+    ],
+    // the webhooks (spec 4.3, A372): accounts with `org.manage`, the org admins and the default bot over a token
+    'ListWebhooks' => [
+        'action' => ListWebhooks::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListWebhooks::run($a, []),
+        'allowed' => ['org_admin', 'default_bot'],
+    ],
+    'GetWebhook' => [
+        'action' => GetWebhook::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetWebhook::run($a, $w->webhook()),
+        'allowed' => ['org_admin', 'default_bot'],
+    ],
+    'SaveWebhook' => [
+        'action' => SaveWebhook::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $webhook = $w->webhook();
+
+            return SaveWebhook::run($a, [...$webhook->only(['url', 'project_id', 'events', 'bot_id', 'active']), 'name' => 'Matrix'], $webhook);
+        },
+        'allowed' => ['org_admin', 'default_bot'],
+        'event' => EventType::WebhookUpdated,
+    ],
+    'DeleteWebhook' => [
+        'action' => DeleteWebhook::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => DeleteWebhook::run($a, $w->webhook()),
+        'allowed' => ['org_admin', 'default_bot'],
+        'event' => EventType::WebhookDeleted,
+    ],
+    'RotateWebhookSecret' => [
+        'action' => RotateWebhookSecret::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => RotateWebhookSecret::run($a, $w->webhook()),
+        'allowed' => ['org_admin', 'default_bot'],
+        'event' => EventType::WebhookSecretRotated,
     ],
     // the work of the consumer `notifications` for an event of the outbox (here one of the migrations, which tells
     // nobody), without an event of its own

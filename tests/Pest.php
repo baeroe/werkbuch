@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Validation\ValidationException;
@@ -27,7 +28,9 @@ use Tests\Support\ArraySearchEngine;
 use Tests\Support\RecordingBroadcaster;
 use Tests\TestCase;
 
-pest()->extend(TestCase::class)->use(RefreshDatabase::class)->in('Feature');
+// Feature tests send no real HTTP (K11): an answer comes from Http::fake(), anything else throws. Unit tests boot no app,
+// tests/Integration talk to Mailpit and Meilisearch for real.
+pest()->extend(TestCase::class)->use(RefreshDatabase::class)->beforeEach(fn () => Http::preventStrayRequests())->in('Feature');
 pest()->extend(TestCase::class)->use(DatabaseMigrations::class)->in('Integration');
 
 /**

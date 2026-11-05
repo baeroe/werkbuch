@@ -10,6 +10,7 @@ use App\Models\WorkItem;
 use App\Notifications\NotificationConsumer;
 use App\Search\SearchConsumer;
 use Illuminate\Support\Env;
+use Illuminate\Support\Facades\Http;
 use Spatie\WebhookServer\Signer\DefaultSigner;
 
 /**
@@ -192,4 +193,11 @@ it('configures the webhook job of spatie', function () {
         // nothing of the package's file is left out: a new key of a later 4.x stands in ours too
         ->and(array_keys(config('webhook-server')))
         ->toEqualCanonicalizing(array_keys(require base_path('vendor/spatie/laravel-webhook-server/config/webhook-server.php')));
+});
+
+it('sends no real HTTP from a feature test (K11)', function () {
+    expect(fn () => Http::get('https://receiver.example.com/hook'))->toThrow(RuntimeException::class, 'receiver.example.com');
+
+    Http::fake(['receiver.example.com/*' => Http::response('ok')]);
+    expect(Http::get('https://receiver.example.com/hook')->body())->toBe('ok');
 });
