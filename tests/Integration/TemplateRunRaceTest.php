@@ -2,6 +2,7 @@
 
 use App\Access\ProjectRole;
 use App\Actions\Organization\UpdateOrganization;
+use App\Actions\Templates\RunDueTemplates;
 use App\Actions\Templates\RunTemplate;
 use App\Actions\Templates\SaveTemplate;
 use App\Actions\WorkItems\CreateWorkItem;
@@ -11,6 +12,7 @@ use App\Models\Template;
 use App\Models\TemplateRun;
 use App\Models\User;
 use App\Models\WorkItem;
+use App\Support\Actor;
 use Tests\Support\RaceConnections;
 
 /*
@@ -76,7 +78,10 @@ it('a unique violation reads as done, not as a 500', function () use ($world) {
     expect(RunTemplate::execute($template, $term, null))->toBeNull()
         ->and(WorkItem::query()->count())->toBe(0)
         ->and(TemplateRun::query()->count())->toBe(1)
-        ->and($template->fresh()?->run_count)->toBe(0);
+        ->and($template->fresh()?->run_count)->toBe(0)
+        // the term counts as done: the sweeper does not take the template again every minute (T7-M1)
+        ->and([$template->fresh()?->last_run_at?->toJSON(), $template->fresh()?->next_run_at?->toJSON()])->toBe(['2026-11-02T08:00:00.000000Z', '2026-11-03T08:00:00.000000Z'])
+        ->and(RunDueTemplates::run(Actor::system(User::defaultBot(), 'templates'), true))->toBe(0);
 });
 
 it('a template saved while a run prepares runs with the saved payload (K16)', function () use ($world) {

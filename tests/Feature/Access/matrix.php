@@ -84,6 +84,9 @@ use App\Actions\Templates\GetTemplate;
 use App\Actions\Templates\ListTemplateRuns;
 use App\Actions\Templates\ListTemplates;
 use App\Actions\Templates\PreviewSchedule;
+use App\Actions\Templates\RescheduleTemplates;
+use App\Actions\Templates\RunDueTemplates;
+use App\Actions\Templates\RunScheduledTemplate;
 use App\Actions\Templates\RunTemplate;
 use App\Actions\Templates\SaveTemplate;
 use App\Actions\Tokens\CreateToken;
@@ -943,6 +946,23 @@ return [
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListTemplateRuns::run($a, $w->template($column), []),
         'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
         'hidden' => ['outsider_private'],
+    ],
+    // the scheduler (RunTemplateJob, app:run-templates) and a new zone or a restored project: the bookkeeping of the
+    // schedules writes no event of its own (K23, A355), a run's item is the default bot's work_item.created
+    'RunScheduledTemplate' => [
+        'action' => RunScheduledTemplate::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => RunScheduledTemplate::run($a, $w->template($column)->id),
+        'system' => true,
+    ],
+    'RunDueTemplates' => [
+        'action' => RunDueTemplates::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => RunDueTemplates::run($a, true),
+        'system' => true,
+    ],
+    'RescheduleTemplates' => [
+        'action' => RescheduleTemplates::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => RescheduleTemplates::run($a, 'Europe/Berlin'),
+        'system' => true,
     ],
     // the preview of a schedule reads nothing of a project: every active account
     'PreviewSchedule' => [

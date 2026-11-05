@@ -83,6 +83,8 @@ final class RunTemplate
      */
     public static function execute(Template $template, ?DateTimeImmutable $scheduledFor, ?User $trigger): ?array
     {
+        // every term goes on in UTC: the columns hold the wall clock of the instant as given (T7-M2)
+        $scheduledFor = $scheduledFor?->setTimezone(new DateTimeZone('UTC'));
         $actor = Actor::template($template);
         $actor = $trigger === null ? $actor : $actor->onBehalfOf($trigger);
         $locale = App::getLocale();
@@ -166,7 +168,12 @@ final class RunTemplate
                     'triggered_by' => $trigger?->id,
                 ]);
             } catch (UniqueConstraintViolationException) {
-                // another run of the term was first
+                // another run of the term was first; should its bookkeeping be missing, the term is noted as done all
+                // the same, so the sweeper does not take the template again every minute (T7-M1)
+                if ($scheduledFor !== null) {
+                    self::note($current, ['last_run_at' => $scheduledFor, 'next_run_at' => TemplateSchedule::nextRunAt($current->schedule(), $scheduledFor, $current->run_count, $now, $zone)]);
+                }
+
                 return null;
             }
 

@@ -28,3 +28,7 @@ Schedule::job(new SendDueRemindersJob(now()->utc()->startOfHour()->toImmutable()
 
 // read notifications and sent collections after 90 days, rows only for mail once sent (A276)
 Schedule::job(new PruneNotificationsJob)->hourly()->withoutOverlapping(60);
+
+// the schedules of templates: each due template gets its job (unique per template, K15); as above, the lock expires
+// after 5 minutes
+Schedule::command('app:run-templates')->everyMinute()->withoutOverlapping(5);

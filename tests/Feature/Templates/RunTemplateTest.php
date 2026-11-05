@@ -278,6 +278,16 @@ describe('a term of the schedule', function () use ($world) {
             ->and(TemplateRun::query()->count())->toBe(1);
     });
 
+    it('stores a term given in another zone as UTC (T7-M2)', function () use ($scheduled) {
+        [, , $template] = $scheduled();
+
+        ['run' => $run] = RunTemplate::execute($template, new DateTimeImmutable('2026-11-02 09:00:00', new DateTimeZone('Europe/Berlin')), null) ?? [];
+
+        expect($run->scheduled_for?->toJSON())->toBe('2026-11-02T08:00:00.000000Z')
+            ->and(TemplateRun::query()->sole()->getRawOriginal('scheduled_for'))->toBe('2026-11-02 08:00:00')
+            ->and($template->fresh()?->last_run_at?->toJSON())->toBe('2026-11-02T08:00:00.000000Z');
+    });
+
     it('counts a failed term too', function () use ($scheduled, $term) {
         [, , $template] = $scheduled(['assignee_id' => User::factory()->create()->id]);
 

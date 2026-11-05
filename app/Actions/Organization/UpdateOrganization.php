@@ -3,6 +3,7 @@
 namespace App\Actions\Organization;
 
 use App\Access\Authorize;
+use App\Actions\Templates\RescheduleTemplates;
 use App\Enums\Locale;
 use App\Events\EventRecorder;
 use App\Events\EventType;
@@ -18,7 +19,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
 /**
  * Changes name, language, time zone, first day of the week and logo of the organization (org admins). Only the fields
  * the input names change; the event `organization.updated` lists what really changed, and nothing changed means no
- * event and no write.
+ * event and no write. A new time zone makes every schedule of a template count anew from now (RescheduleTemplates,
+ * in the same transaction: a run waiting on the shared lock of the organisation counts in the new zone, K3).
  */
 final class UpdateOrganization
 {
@@ -94,6 +96,10 @@ final class UpdateOrganization
 
             $organization->update(array_map(fn (array $change) => $change['new'], array_diff_key($changes, ['logo_url' => true])));
             EventRecorder::record(EventType::OrganizationUpdated, $actor, $organization, null, $changes);
+            if (isset($changes['timezone'])) {
+                // the schedules count anew on the new calendar, from now (A339)
+                RescheduleTemplates::run($actor, $changes['timezone']['new']);
+            }
 
             return true;
         });
