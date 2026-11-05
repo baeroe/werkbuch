@@ -17,6 +17,7 @@ import {
   saveTemplate,
   type SchedulePreviewInput,
 } from '@/api/templates';
+import { markLiveGone, useTemplateGone } from '@/lib/liveGone';
 import { qk } from './keys';
 import { useApiMutation } from './mutation';
 
@@ -30,12 +31,13 @@ export function useTemplates(projectId?: string) {
   return useQuery({ queryKey: qk.templates.list({ project: projectId }), queryFn: () => allPages((cursor) => listTemplates(projectId, { cursor })) });
 }
 
-/** The log of the runs of a template, newest first; nothing without a template. */
+/** The log of the runs of a template, newest first; nothing without a template or for one known to be deleted (404). */
 export function useTemplateRuns(templateId: string | null | undefined) {
+  const gone = useTemplateGone(templateId);
   return useQuery({
     queryKey: qk.templateRuns.list({ template: templateId }),
     queryFn: () => allPages((cursor) => listTemplateRuns(templateId!, { cursor })),
-    enabled: !!templateId,
+    enabled: !!templateId && !gone,
   });
 }
 
@@ -68,9 +70,18 @@ export function useSaveTemplate() {
   return useApiMutation(saveTemplate, TEMPLATE_KEYS);
 }
 
-/** Variable: the id of the template. */
+/**
+ * Variable: the id of the template. Once it is deleted, it counts as gone (`markLiveGone`, T14-I2) and the log of its
+ * runs leaves the cache before the rest is made stale: no open log asks for it again (404). This tab does not hear its
+ * own `template.deleted` (A282).
+ */
 export function useDeleteTemplate() {
-  return useApiMutation(deleteTemplate, TEMPLATE_KEYS);
+  const queryClient = useQueryClient();
+  return useApiMutation(async (id: string) => {
+    await deleteTemplate(id);
+    markLiveGone(id, 'template');
+    queryClient.removeQueries({ queryKey: qk.templateRuns.list({ template: id }) });
+  }, TEMPLATE_KEYS);
 }
 
 /** Variable: the id of the template; answers `{ run, item }`, `item` is `null` when the run failed. */

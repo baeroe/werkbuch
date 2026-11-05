@@ -54,8 +54,10 @@ function heldKeys(event: LiveEvent): readonly QueryKey[] {
 /**
  * The caches a message makes stale. Items and their history on `work_item.*` (also watching, on the person's own
  * channel), comments and the history on `comment.*`, projects and members on `project.*` (on `project.updated` the
- * items too: their keys carry the identifier), the templates on `template.*`, the automations on `automation.*`, the
- * log of the runs on `work_item.created` (a scheduled run ends in an item), the wiki on `page.*` (on `page.updated` and `page.moved` the references
+ * items too: their keys carry the identifier), the templates and their runs on `template.*` (a failed run is
+ * `template.run_failed`; on `template.deleted` the items too: their `template_id` goes, T14-M3), the automations on
+ * `automation.*`, the templates and their runs on a `work_item.created` a run made (it names its template, T14-I1:
+ * the log, the count and the next run change; an item made by hand leaves them alone), the wiki on `page.*` (on `page.updated` and `page.moved` the references
  * too: a reference shows the title of its page, K15; on `page.deleted` as well: a reference to a deleted page loads and
  * finds it missing, T18-M5), the projects on a new org role (K14: the channels follow the list; the
  * shell reloads the shared props `auth` for it, M2), the inbox on `notifications.changed`; everything after the connection was
@@ -72,10 +74,11 @@ function keysOf(event: LiveEvent): readonly QueryKey[] {
   if (event.type === 'live.refused') return [];
   if (event.type === 'notifications.changed') return [qk.notifications.all];
   if (event.type === 'user.role_changed') return [qk.projects.all];
-  // a scheduled run ends in a new item: the log of the runs shows it
-  if (event.type === 'work_item.created') return [qk.workItems.all, qk.activity.all, qk.templateRuns.all];
+  // a run ends in a new item that names its template: its log, its count and its next run change
+  if (event.type === 'work_item.created' && event.template_id !== null) return [qk.workItems.all, qk.activity.all, qk.templates.all, qk.templateRuns.all];
   if (group === 'work_item') return [qk.workItems.all, qk.activity.all];
-  if (group === 'template') return [qk.templates.all];
+  if (event.type === 'template.deleted') return [qk.templates.all, qk.templateRuns.all, qk.workItems.all];
+  if (group === 'template') return [qk.templates.all, qk.templateRuns.all];
   if (group === 'automation') return [qk.automations.all];
   if (group === 'comment') return [qk.comments.all, qk.activity.all];
   // a new identifier changes the keys of the items: the lists of the project load again (T14-M6)
@@ -87,13 +90,14 @@ function keysOf(event: LiveEvent): readonly QueryKey[] {
 }
 
 /**
- * What a message says is deleted: a project or an item. Its own queries would answer 404 now (which the browser
+ * What a message says is deleted: a project, an item or a template. Its own queries would answer 404 now (which the browser
  * reports as an error): live leaves them alone, the screen keeps what it shows until it is left (see `LiveRefresh`).
  * A refused channel (access lost, A281) is not gone: its queries load again and show that the person may not see it.
  */
 function goneOf(event: LiveEvent): string | null {
   if (event.type === 'project.deleted') return event.project_id;
   if (event.type === 'work_item.deleted') return event.item_id;
+  if (event.type === 'template.deleted') return event.template_id;
   return null;
 }
 
@@ -324,8 +328,8 @@ export function useLiveSync(): void {
       const gone = goneOf(event);
       if (gone !== null) {
         refresh.markGone(gone);
-        // the item page and the preview say so without asking (F36)
-        markLiveGone(gone);
+        // the item page and the preview say so without asking (F36), the log of a template's runs asks nothing more
+        markLiveGone(gone, event.type === 'template.deleted' ? 'template' : 'other');
       }
       if (event.type === 'page.deleted') {
         const { ids, complete } = deletedPages(event);

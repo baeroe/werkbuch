@@ -71,6 +71,21 @@ describe('templates', () => {
     }
   });
 
+  it('forgets the log of a template it deleted and never asks for it again (T14-I2)', async () => {
+    api = mockApi({
+      'GET /api/v1/templates/tpl_app_report/runs': () => ({ body: { data: [makeTemplateRun()], meta: { next_cursor: null, total: 1 } } }),
+      'DELETE /api/v1/templates/tpl_app_report': () => ({ status: 204 }),
+    });
+    const { result } = renderHook(() => ({ runs: useTemplateRuns('tpl_app_report'), remove: useDeleteTemplate() }), { wrapper });
+    await waitFor(() => expect(result.current.runs.data?.items).toHaveLength(1));
+
+    await act(async () => void (await result.current.remove.mutateAsync('tpl_app_report')));
+
+    expect(queryClient.getQueryData(qk.templateRuns.list({ template: 'tpl_app_report' }))).toBeUndefined();
+    expect(result.current.runs.fetchStatus).toBe('idle');
+    expect(api.calls.filter((call) => call.method === 'GET')).toHaveLength(1);
+  });
+
   it('asks nothing for no schedule, and once for what was typed after a pause, keeping the last terms meanwhile', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     api = mockApi({

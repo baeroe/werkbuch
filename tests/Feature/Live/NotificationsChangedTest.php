@@ -46,7 +46,7 @@ $world = function (): array {
 $changed = fn (User $user, ?string $socket = null) => [
     'channels' => ["presence-user.{$user->id}"],
     'event' => 'live',
-    'payload' => ['event_id' => null, 'type' => 'notifications.changed', 'project_id' => null, 'page_id' => null, 'item_id' => null, 'comment_id' => null, 'actor_id' => null, 'unread_changed' => true],
+    'payload' => ['event_id' => null, 'type' => 'notifications.changed', 'project_id' => null, 'page_id' => null, 'template_id' => null, 'item_id' => null, 'comment_id' => null, 'actor_id' => null, 'unread_changed' => true],
     'socket' => $socket,
 ];
 
