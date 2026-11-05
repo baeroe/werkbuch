@@ -8,6 +8,7 @@ use App\Models\PageVersion;
 use App\Models\Property;
 use App\Models\RelationType;
 use App\Models\Resolution;
+use App\Models\WebhookDelivery;
 use App\Models\Workflow;
 use App\Models\WorkItemRelation;
 use App\Models\WorkItemType;
@@ -166,6 +167,13 @@ return [
     'replace a webhook' => ['PUT', '/api/v1/webhooks/{webhook}', 'params' => fn (MatrixWorld $w) => ['webhook' => $w->webhook()->id]],
     'delete a webhook' => ['DELETE', '/api/v1/webhooks/{webhook}', 'params' => fn (MatrixWorld $w) => ['webhook' => $w->webhook()->id]],
     'renew the secret of a webhook' => ['POST', '/api/v1/webhooks/{webhook}/rotate-secret', 'params' => fn (MatrixWorld $w) => ['webhook' => $w->webhook()->id]],
+    'list the attempts of a webhook' => ['GET', '/api/v1/webhooks/{webhook}/deliveries', 'params' => fn (MatrixWorld $w) => ['webhook' => $w->webhook()->id]],
+    'ping a webhook' => ['POST', '/api/v1/webhooks/{webhook}/ping', 'params' => fn (MatrixWorld $w) => ['webhook' => $w->webhook()->id]],
+    'send a delivery again' => ['POST', '/api/v1/webhooks/{webhook}/deliveries/{delivery}/redeliver', 'params' => function (MatrixWorld $w) {
+        $webhook = $w->webhook();
+
+        return ['webhook' => $webhook->id, 'delivery' => WebhookDelivery::factory()->for($webhook)->create()->id];
+    }],
     'list tokens' => ['GET', '/api/v1/tokens'],
     'create a token' => ['POST', '/api/v1/tokens', 'session' => true],
     'revoke a token' => ['DELETE', '/api/v1/tokens/{token}', 'params' => fn (MatrixWorld $w) => ['token' => $w->bot->createToken('Matrix', ['read'])->accessToken->id]],

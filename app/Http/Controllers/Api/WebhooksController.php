@@ -4,13 +4,18 @@ namespace App\Http\Controllers\Api;
 
 use App\Actions\Webhooks\DeleteWebhook;
 use App\Actions\Webhooks\GetWebhook;
+use App\Actions\Webhooks\ListWebhookDeliveries;
 use App\Actions\Webhooks\ListWebhooks;
+use App\Actions\Webhooks\PingWebhook;
+use App\Actions\Webhooks\RedeliverWebhook;
 use App\Actions\Webhooks\RotateWebhookSecret;
 use App\Actions\Webhooks\SaveWebhook;
 use App\Http\Api\ApiList;
 use App\Http\Controllers\Controller;
+use App\Http\Resources\WebhookDeliveryResource;
 use App\Http\Resources\WebhookResource;
 use App\Models\Webhook;
+use App\Models\WebhookDelivery;
 use App\Support\Actor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -59,5 +64,23 @@ final class WebhooksController extends Controller
         $rotated = RotateWebhookSecret::run(Actor::fromRequest($request), $webhook);
 
         return (new WebhookResource($rotated['webhook']))->additional(['secret' => $rotated['secret']]);
+    }
+
+    /** `{data: WebhookDelivery}`: the attempt of a test ping, sent in this request. */
+    public function ping(Request $request, Webhook $webhook): WebhookDeliveryResource
+    {
+        return new WebhookDeliveryResource(PingWebhook::run(Actor::fromRequest($request), $webhook));
+    }
+
+    /** `{data: WebhookDelivery[], links, meta}`: the attempts of the webhook, the newest first. */
+    public function deliveries(Request $request, Webhook $webhook): JsonResponse
+    {
+        return ApiList::respond(ListWebhookDeliveries::run(Actor::fromRequest($request), $webhook, $request->query()), WebhookDeliveryResource::class);
+    }
+
+    /** `{data: WebhookDelivery}`: the attempt of sending a delivery again, made in this request. */
+    public function redeliver(Request $request, Webhook $webhook, WebhookDelivery $delivery): WebhookDeliveryResource
+    {
+        return new WebhookDeliveryResource(RedeliverWebhook::run(Actor::fromRequest($request), $webhook, $delivery));
     }
 }

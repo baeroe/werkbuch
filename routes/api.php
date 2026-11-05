@@ -48,6 +48,7 @@ use App\Models\Project;
 use App\Models\Template;
 use App\Models\View;
 use App\Models\Webhook;
+use App\Models\WebhookDelivery;
 use App\Models\WorkItem;
 use App\Models\WorkItemRelation;
 use Illuminate\Support\Facades\Route;
@@ -82,6 +83,10 @@ Route::bind('pageVersion', fn (string $ref) => (Str::isUlid($ref) ? PageVersion:
 Route::bind('template', fn (string $ref) => (Str::isUlid($ref) ? Template::query()->find(strtolower($ref)) : null) ?? throw Problem::notFound());
 // a webhook by its ULID (any case; anything else is no webhook); who may read it, the action decides
 Route::bind('webhook', fn (string $ref) => (Str::isUlid($ref) ? Webhook::query()->find(strtolower($ref)) : null) ?? throw Problem::notFound());
+
+// a delivery of a webhook by its ULID (any case; anything else is none); whether it belongs to the webhook of the route,
+// the action decides
+Route::bind('delivery', fn (string $ref) => (Str::isUlid($ref) ? WebhookDelivery::query()->find(strtolower($ref)) : null) ?? throw Problem::notFound());
 
 // The REST API (prefix api/v1, see bootstrap/app.php): the session of the interface (with CSRF) or a bearer token whose
 // abilities fit the method. Every route has a row in tests/Feature/Api/routes.php.
@@ -252,6 +257,10 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
     Route::put('webhooks/{webhook}', [WebhooksController::class, 'update']);
     Route::delete('webhooks/{webhook}', [WebhooksController::class, 'destroy']);
     Route::post('webhooks/{webhook}/rotate-secret', [WebhooksController::class, 'rotateSecret']);
+    // the log, the test ping and "send again" (the two senders make their one try in the request: six a minute per account)
+    Route::get('webhooks/{webhook}/deliveries', [WebhooksController::class, 'deliveries']);
+    Route::post('webhooks/{webhook}/ping', [WebhooksController::class, 'ping'])->middleware('throttle:webhook-send');
+    Route::post('webhooks/{webhook}/deliveries/{delivery}/redeliver', [WebhooksController::class, 'redeliver'])->middleware('throttle:webhook-send');
 
     Route::get('tokens', [TokensController::class, 'index']);
     Route::delete('tokens/{token}', [TokensController::class, 'destroy']);

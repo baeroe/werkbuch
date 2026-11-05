@@ -111,10 +111,13 @@ use App\Actions\Views\SaveView;
 use App\Actions\Webhooks\DeleteWebhook;
 use App\Actions\Webhooks\DisableWebhook;
 use App\Actions\Webhooks\GetWebhook;
+use App\Actions\Webhooks\ListWebhookDeliveries;
 use App\Actions\Webhooks\ListWebhooks;
+use App\Actions\Webhooks\PingWebhook;
 use App\Actions\Webhooks\PrepareWebhookAttempt;
 use App\Actions\Webhooks\QueueDeliveries;
 use App\Actions\Webhooks\RecordWebhookAttempt;
+use App\Actions\Webhooks\RedeliverWebhook;
 use App\Actions\Webhooks\RotateWebhookSecret;
 use App\Actions\Webhooks\SaveWebhook;
 use App\Actions\Workflows\DeleteWorkflow;
@@ -1157,6 +1160,26 @@ return [
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => RotateWebhookSecret::run($a, $w->webhook()),
         'allowed' => ['org_admin', 'default_bot'],
         'event' => EventType::WebhookSecretRotated,
+    ],
+    // the log, the test ping and "send again": one request to the receiver of the matrix's fake, no event (A367)
+    'ListWebhookDeliveries' => [
+        'action' => ListWebhookDeliveries::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListWebhookDeliveries::run($a, $w->webhook(), []),
+        'allowed' => ['org_admin', 'default_bot'],
+    ],
+    'PingWebhook' => [
+        'action' => PingWebhook::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => PingWebhook::run($a, $w->webhook()),
+        'allowed' => ['org_admin', 'default_bot'],
+    ],
+    'RedeliverWebhook' => [
+        'action' => RedeliverWebhook::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $webhook = $w->webhook();
+
+            return RedeliverWebhook::run($a, $webhook, WebhookDelivery::factory()->for($webhook)->create());
+        },
+        'allowed' => ['org_admin', 'default_bot'],
     ],
     // the work of the consumer `notifications` for an event of the outbox (here one of the migrations, which tells
     // nobody), without an event of its own

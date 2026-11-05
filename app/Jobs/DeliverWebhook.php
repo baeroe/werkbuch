@@ -56,15 +56,29 @@ final class DeliverWebhook extends CallWebhookJob
      */
     public static function enqueue(WebhookDelivery $delivery): void
     {
-        // create() reads config/webhook-server.php; a useJob() after it would throw those settings away (K1)
-        WebhookCall::create()
+        self::call($delivery, WebhookAttempt::SCHEDULED)->dispatch()->afterCommit();
+    }
+
+    /**
+     * One try now, in this process, with no further ones (a test ping or "send again", A367): the same job on the sync
+     * queue with a single try. Call it outside any transaction of your own: the request waits for the receiver.
+     *
+     * @param  WebhookAttempt::MANUAL|WebhookAttempt::PING  $kind
+     */
+    public static function sendNow(WebhookDelivery $delivery, string $kind): void
+    {
+        self::call($delivery, $kind)->maximumTries(1)->dispatchSync();
+    }
+
+    /** create() reads config/webhook-server.php; a useJob() after it would throw those settings away (K1). */
+    private static function call(WebhookDelivery $delivery, string $kind): WebhookCall
+    {
+        return WebhookCall::create()
             ->url(self::PLACEHOLDER_URL)
             ->sendRawBody('')
             ->uuid($delivery->id)
-            ->meta(['delivery_id' => $delivery->id, 'kind' => WebhookAttempt::SCHEDULED])
-            ->doNotSign()
-            ->dispatch()
-            ->afterCommit();
+            ->meta(['delivery_id' => $delivery->id, 'kind' => $kind])
+            ->doNotSign();
     }
 
     public function handle(): void

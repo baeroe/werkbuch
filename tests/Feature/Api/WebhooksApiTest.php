@@ -3,7 +3,10 @@
 use App\Events\EventType;
 use App\Models\User;
 use App\Models\Webhook;
+use App\Models\WebhookAttempt;
+use App\Models\WebhookDelivery;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 
 // The webhooks over REST (plan "REST"): org admins and the default bot over a token; the secret is in the answers of
 // creating and of `rotate-secret` only, never in a list, a webhook or a replacement.
@@ -144,4 +147,90 @@ it('asks the database as often for a list of 5 as for 50', function () {
     Webhook::factory()->count(45)->create(['created_by' => $admin->id]);
 
     expect($count())->toBe($five);
+});
+
+/** The shape of an attempt as `WebhookDelivery` (plan "REST"). */
+const ATTEMPT_SHAPE = ['id', 'delivery_id', 'webhook_id', 'event', 'attempt', 'kind', 'status_code', 'duration_ms',
+    'response_excerpt', 'error', 'created_at'];
+
+it('pings a webhook and answers the attempt', function () {
+    resolver(['receiver.example.com' => ['93.184.216.34']]);
+    Http::fake(['*' => Http::response('pong')]);
+    $webhook = Webhook::factory()->create();
+    $this->actingAs(User::factory()->admin()->create());
+
+    $response = $this->postJson("/api/v1/webhooks/{$webhook->id}/ping")->assertOk();
+
+    expect(array_keys($response->json('data')))->toBe(ATTEMPT_SHAPE)
+        ->and($response->json('data'))->toMatchArray(['event' => 'ping', 'kind' => 'ping', 'attempt' => 1, 'status_code' => 200, 'response_excerpt' => 'pong', 'webhook_id' => $webhook->id])
+        ->and($response->json('data.delivery_id'))->toBe(WebhookDelivery::query()->sole()->id);
+});
+
+it('lists the attempts of a webhook, the newest first, with the event of the delivery', function () {
+    $webhook = Webhook::factory()->create();
+    $delivery = WebhookDelivery::factory()->for($webhook)->create(['event' => 'work_item.created']);
+    $old = WebhookAttempt::factory()->for($delivery, 'delivery')->create(['attempted_at' => '2026-11-05 10:00:00.000000']);
+    $new = WebhookAttempt::factory()->for($delivery, 'delivery')->create(['attempt' => 2, 'attempted_at' => '2026-11-05 10:00:00.500000']);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $response = $this->getJson("/api/v1/webhooks/{$webhook->id}/deliveries")->assertOk()->assertJsonPath('meta.total', 2);
+
+    expect(array_keys($response->json('data.0')))->toBe(ATTEMPT_SHAPE)
+        ->and(array_column($response->json('data'), 'id'))->toBe([$new->id, $old->id])
+        ->and($response->json('data.0.event'))->toBe('work_item.created')
+        ->and($response->json('data.0.created_at'))->toBe($new->fresh()->attempted_at->toJSON())
+        ->and($response->json('meta.next_cursor'))->toBeNull();
+});
+
+it('sends a delivery again, to any ULID case, and 404s a delivery of another webhook', function () {
+    resolver(['receiver.example.com' => ['93.184.216.34']]);
+    Http::fake(['*' => Http::response('ok')]);
+    $webhook = Webhook::factory()->create();
+    $delivery = WebhookDelivery::factory()->for($webhook)->create();
+    $other = WebhookDelivery::factory()->create();
+    $this->actingAs(User::factory()->admin()->create());
+
+    $this->postJson("/api/v1/webhooks/{$webhook->id}/deliveries/".strtoupper($delivery->id).'/redeliver')
+        ->assertOk()->assertJsonPath('data.kind', 'manual')->assertJsonPath('data.delivery_id', $delivery->id);
+    $this->postJson("/api/v1/webhooks/{$webhook->id}/deliveries/{$other->id}/redeliver")->assertNotFound();
+    $this->postJson("/api/v1/webhooks/{$webhook->id}/deliveries/not-a-ulid/redeliver")->assertNotFound();
+    Http::assertSentCount(1);
+});
+
+it('lets a read token read the log but neither ping nor send again', function () {
+    $admin = User::factory()->admin()->create();
+    $webhook = Webhook::factory()->create();
+    $delivery = WebhookDelivery::factory()->for($webhook)->create();
+
+    $this->withToken(apiToken($admin, ['read']))->getJson("/api/v1/webhooks/{$webhook->id}/deliveries")->assertOk();
+    forgetApiAuth();
+    $this->withToken(apiToken($admin, ['read']))->postJson("/api/v1/webhooks/{$webhook->id}/ping")->assertForbidden();
+    forgetApiAuth();
+    $this->withToken(apiToken($admin, ['read']))->postJson("/api/v1/webhooks/{$webhook->id}/deliveries/{$delivery->id}/redeliver")->assertForbidden();
+});
+
+it('throttles the seventh send of a minute per account, ping and redelivery together', function () {
+    resolver(['receiver.example.com' => ['93.184.216.34']]);
+    Http::fake(['*' => Http::response('ok')]);
+    $webhook = Webhook::factory()->create();
+    $delivery = WebhookDelivery::factory()->for($webhook)->create();
+    $this->actingAs(User::factory()->admin()->create());
+
+    foreach (range(1, 3) as $ignored) {
+        $this->postJson("/api/v1/webhooks/{$webhook->id}/ping")->assertOk();
+        $this->postJson("/api/v1/webhooks/{$webhook->id}/deliveries/{$delivery->id}/redeliver")->assertOk();
+    }
+
+    $this->postJson("/api/v1/webhooks/{$webhook->id}/ping")->assertStatus(429)->assertJsonPath('reason', 'too_many_requests');
+    Http::assertSentCount(6);
+});
+
+it('refuses members the log, the ping and sending again with 403', function () {
+    $webhook = Webhook::factory()->create();
+    $delivery = WebhookDelivery::factory()->for($webhook)->create();
+    $this->actingAs(User::factory()->create());
+
+    $this->getJson("/api/v1/webhooks/{$webhook->id}/deliveries")->assertForbidden();
+    $this->postJson("/api/v1/webhooks/{$webhook->id}/ping")->assertForbidden();
+    $this->postJson("/api/v1/webhooks/{$webhook->id}/deliveries/{$delivery->id}/redeliver")->assertForbidden();
 });
