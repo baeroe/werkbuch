@@ -873,12 +873,68 @@ describe('a viewer', () => {
 
 /* --------------------------------------------------------------------- the schedule */
 
-describe('the schedule until it can be edited', () => {
+describe('the schedule', () => {
   it('says the stored schedule in words, and that a template without one runs by hand', async () => {
     renderEditor();
     await ready();
     expect(within(screen.getByRole('region', { name: 'Zeitplan' })).getByText('Jeden ersten Montag im Monat um 09:00')).toBeTruthy();
     expect(screen.getByText('Legt nach Zeitplan Items an, als Bot „Automation“. 2 Läufe bisher.')).toBeTruthy();
+  });
+
+  it('edits the schedule as part of the template and saves it with the rest, with the next terms of the server', async () => {
+    const user = userEvent.setup();
+    renderEditor('tpl_app_certs');
+    await ready();
+    const schedule = screen.getByRole('region', { name: 'Zeitplan' });
+    await user.click(within(schedule).getByRole('switch', { name: 'Nach Zeitplan anlegen' }));
+    await user.click(within(schedule).getByRole('button', { name: 'Monatlich' }));
+    await user.click(within(schedule).getByRole('button', { name: 'Wochentag im Monat' }));
+    const time = within(schedule).getByRole('textbox', { name: /^Uhrzeit/ });
+    await user.clear(time);
+    await user.type(time, '7');
+    expect(await within(schedule).findByRole('list', { name: 'Nächste Termine' })).toBeTruthy();
+    // the terms ask the same question as the title's preview
+    await waitFor(() => expect(calls('POST', '/api/v1/templates/preview').some((call) => JSON.stringify(call.body).includes('"time":"07:00"'))).toBe(true));
+    await user.click(saveButton());
+    await waitFor(() => expect(calls('PUT', '/api/v1/templates/tpl_app_certs')).toHaveLength(1));
+    expect((calls('PUT', '/api/v1/templates/tpl_app_certs')[0].body as { schedule: unknown }).schedule).toMatchObject({
+      frequency: 'monthly',
+      nth_weekday: { n: 1 },
+      time: '07:00',
+      ends: { type: 'never' },
+      paused: false,
+    });
+  });
+
+  it('does not save while the time shows a text it cannot read, and puts the focus there', async () => {
+    const user = userEvent.setup();
+    renderEditor();
+    await ready();
+    const time = screen.getByRole('textbox', { name: /^Uhrzeit/ });
+    await user.clear(time);
+    await user.type(time, '25');
+    await user.click(saveButton());
+    expect(await screen.findByText('Ein Feld enthält noch eine Eingabe, die nicht passt. Korrigiere sie oder leere das Feld.')).toBeTruthy();
+    expect(document.activeElement).toBe(time);
+    expect(puts()).toEqual([]);
+    // switched off, the field goes and with it what it could not read
+    await user.click(screen.getByRole('switch', { name: 'Nach Zeitplan anlegen' }));
+    await user.click(saveButton());
+    await waitFor(() => expect(puts()).toHaveLength(1));
+    expect((puts()[0].body as { schedule: unknown }).schedule).toBeNull();
+  });
+
+  it('takes a refusal of the schedule away once what it names changes', async () => {
+    const user = userEvent.setup();
+    overrides['PUT /api/v1/templates/tpl_app_report'] = () => refused({ 'schedule.frequency': ['Wähle täglich, wöchentlich, monatlich oder jährlich.'] });
+    renderEditor();
+    await user.type(await ready(), ' neu');
+    await user.click(saveButton());
+    const schedule = screen.getByRole('region', { name: 'Zeitplan' });
+    expect(await within(schedule).findByText('Wähle täglich, wöchentlich, monatlich oder jährlich.')).toBeTruthy();
+    await waitFor(() => expect(schedule.querySelector('[data-refused]')).toBe(document.activeElement));
+    await user.click(within(schedule).getByRole('button', { name: 'Täglich' }));
+    expect(within(schedule).queryByText('Wähle täglich, wöchentlich, monatlich oder jährlich.')).toBeNull();
   });
 
   it('says that a paused schedule plans no runs', async () => {
@@ -895,6 +951,6 @@ describe('the schedule until it can be edited', () => {
     expect(screen.getByText('Legt nach Zeitplan Items an, als Bot „Automation“. Ein Lauf bisher.')).toBeTruthy();
     rerender('tpl_app_certs');
     expect(await screen.findByText('Ohne Zeitplan: Die Vorlage wird von Hand angewendet.')).toBeTruthy();
-    expect(within(screen.getByRole('region', { name: 'Zeitplan' })).getByText('Ohne Zeitplan, nur von Hand')).toBeTruthy();
+    expect(within(screen.getByRole('region', { name: 'Zeitplan' })).getByText('Ohne Zeitplan wird die Vorlage von Hand angewendet: im Anlegen-Dialog oder mit „Jetzt ausführen“.')).toBeTruthy();
   });
 });

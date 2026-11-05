@@ -7,6 +7,8 @@
  *   keeps its Enter for itself). It waits a tick for fields that take their value on Enter, then sends once; a press
  *   while a call is on its way does nothing, and a held key repeats nothing (13c). Leaving with unsaved changes asks
  *   (`LeaveGuard`); two people editing at once: the last save wins (a whole `PUT`, A75).
+ * - The schedule (`ScheduleEditor`) is part of the draft: switched on, its settings, the next five terms as the server
+ *   counts them. Its typed fields (interval, time, count) report a text they cannot read like the other fields do.
  * - Before it sends: running uploads of the description, a field that still shows a text it cannot read (the focus goes
  *   there), a name and a title. Refusals of the server (422) stand at their fields (`payload.title`,
  *   `payload.values.<key>`, `schedule.<field>`) with the focus on the first; any other refusal on top; a failure without
@@ -49,11 +51,11 @@ import { isMac } from '@/lib/platform';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { runWithUndo } from '@/lib/undo';
 import { useUiStore } from '@/store/ui';
-import type { Project, Property, Template, WorkItemType } from '@/types';
+import type { Project, Property, Schedule, Template, WorkItemType } from '@/types';
 import { useTemplateTimes } from './format';
 import { hideTemplate, showTemplate } from './removed';
 import { RunLog } from './RunLog';
-import { describeSchedule } from './scheduleText';
+import { ScheduleEditor } from './ScheduleEditor';
 import { propertiesOf, TemplateFields, type Draft, type Errors } from './TemplateFields';
 
 export type TemplateEditorProps = {
@@ -269,6 +271,23 @@ function EditorBody({ project, template, denied, ready = true, types, properties
     clearError(...cleared);
   }
 
+  /** A field shows a text it cannot read (a message), or none any more (null). */
+  function reportUnreadable(path: string, message: string | null) {
+    setUnreadable(({ [path]: _old, ...others }) => (message ? { ...others, [path]: message } : others));
+    // something new was typed: an old refusal of the server no longer applies
+    clearError(path);
+    if (!message) setBlocked(null);
+  }
+
+  /** Another schedule: the refusals of what changed in it (and of the whole) no longer apply. */
+  function changeSchedule(schedule: Schedule | null) {
+    const before: Partial<Record<string, unknown>> = { ...latest.current.schedule };
+    const after: Partial<Record<string, unknown>> = { ...schedule };
+    const changed = [...new Set([...Object.keys(before), ...Object.keys(after)])].filter((key) => JSON.stringify(before[key]) !== JSON.stringify(after[key]));
+    change({ ...latest.current, schedule });
+    clearError('schedule', ...changed.map((key) => `schedule.${key}`));
+  }
+
   function changeType(typeId: string) {
     const keep = new Set(fieldsOf(typeId).map(({ property }) => property.key));
     const values = Object.fromEntries(Object.entries(latest.current.payload.values).filter(([key]) => keep.has(key)));
@@ -298,7 +317,12 @@ function EditorBody({ project, template, denied, ready = true, types, properties
     }
     setAttempted(true);
     // a text a field cannot read is no value: nothing is sent, the fix is at the field
-    const typed = ['payload.start_offset_days', 'payload.due_offset_days', ...fieldsOf(current.payload.type_id).map(({ property }) => `payload.values.${property.key}`)];
+    const typed = [
+      'payload.start_offset_days',
+      'payload.due_offset_days',
+      ...fieldsOf(current.payload.type_id).map(({ property }) => `payload.values.${property.key}`),
+      ...(current.schedule ? ['schedule.interval', 'schedule.time', 'schedule.ends'] : []),
+    ];
     const stuck = typed.find((path) => live.current.unreadable[path]);
     if (stuck) {
       setBlocked(t('items.create.blocked'));
@@ -442,7 +466,7 @@ function EditorBody({ project, template, denied, ready = true, types, properties
     (path === 'payload.parent_id' && canHaveParent(type)) ||
     fields.some(({ property }) => path === `payload.values.${property.key}`);
   const formError = [errors.form, ...Object.entries(errors).filter(([path]) => path !== 'form' && !shown(path)).map(([, message]) => message)].filter(Boolean).join(' ') || null;
-  const scheduleErrors = Object.entries(errors).filter(([path]) => isSchedulePath(path));
+  const scheduleErrors = Object.fromEntries(Object.entries(errors).filter(([path]) => isSchedulePath(path)));
 
   return (
     <div className="min-w-0">
@@ -517,32 +541,20 @@ function EditorBody({ project, template, denied, ready = true, types, properties
           onPayload={changePayload}
           onValue={(key, value) => changePayload({ values: { ...latest.current.payload.values, [key]: value } }, `payload.values.${key}`)}
           onType={changeType}
-          onUnreadable={(path, message) => {
-            setUnreadable(({ [path]: _old, ...others }) => (message ? { ...others, [path]: message } : others));
-            // something new was typed: an old refusal of the server no longer applies
-            clearError(path);
-            if (!message) setBlocked(null);
-          }}
+          onUnreadable={reportUnreadable}
         />
 
-        {/* the schedule as stored; task 17 brings its editor */}
-        <section aria-labelledby={`${formId}-schedule`} className="min-w-0 rounded-card border border-line bg-surface px-4 py-4 shadow-elev-1 md:px-5 md:py-5 lg:sticky lg:top-4 lg:col-start-2 lg:row-span-2 lg:row-start-1">
-          <h2 id={`${formId}-schedule`} className="font-display text-lg font-bold tracking-title text-ink">
-            {t('templates.editor.schedule')}
-          </h2>
-          <p className="mt-2 text-ui text-pretty text-ink">{draft.schedule ? describeSchedule(draft.schedule) : t('templates.no_schedule')}</p>
-          <div aria-live="polite">
-            {scheduleErrors.length > 0 && (
-              <div data-refused="" tabIndex={-1} className="mt-2 flex flex-col gap-1 rounded-ctl outline-none focus-visible:outline-2 focus-visible:outline-(--focus-ring)">
-                {scheduleErrors.map(([path, message]) => (
-                  <p key={path} className="text-sm font-medium text-pretty text-danger">
-                    {message}
-                  </p>
-                ))}
-              </div>
-            )}
-          </div>
-        </section>
+        <ScheduleEditor
+          schedule={draft.schedule}
+          onChange={changeSchedule}
+          readOnly={!canManage}
+          runCount={template?.run_count ?? 0}
+          title={draft.payload.title}
+          errors={scheduleErrors}
+          fieldId={fieldId}
+          onUnreadable={reportUnreadable}
+          className="lg:sticky lg:top-4 lg:col-start-2 lg:row-span-2 lg:row-start-1"
+        />
 
         {template && <RunLog templateId={template.id} className="min-w-0" />}
       </form>

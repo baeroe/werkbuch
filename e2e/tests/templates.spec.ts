@@ -1,5 +1,5 @@
 import { expect, test } from '../fixtures';
-import { api, createE2eProject, createE2eTemplate, pressMod, removeE2eProject, runId, tabTo, tr, variant } from '../helpers';
+import { api, arrowTo, createE2eProject, createE2eTemplate, PEOPLE, pressMod, removeE2eProject, runId, tabTo, tr, variant } from '../helpers';
 
 // The templates of a project, with the keyboard only, signed in as the e2e person (org admin, English). Every test
 // works in its own project `E2E <variant> <run> …` with its own templates, removed with the project in `finally`. A
@@ -99,6 +99,68 @@ test('creates a template with the keyboard and runs it now', async ({ page }) =>
     await expect(peek.getByRole('list', { name: tr('en', 'items.activity.list') })).toContainText('Automation');
     // the log of the template shows the run by hand
     await expect(page.getByRole('list', { name: tr('en', 'templates.runs.label') }).getByRole('listitem')).toHaveCount(1);
+  } finally {
+    await removeE2eProject(page, project.identifier);
+  }
+});
+
+test('shows the next five runs of a monthly schedule on the first Monday', async ({ page }) => {
+  const project = await createE2eProject(page, projectName('template schedule'), { types: ['Task'] });
+  try {
+    // weekly on Saturdays at 08:00 from 2036-11-01, a Saturday: far ahead, nothing comes due (A351)
+    const template = await createE2eTemplate(page, project.id, {
+      name: 'Monthly report',
+      title: 'Report {month_name}',
+      schedule: { frequency: 'weekly', interval: 1, weekdays: [6], time: '08:00', starts_on: '2036-11-01', ends: { type: 'never' }, paused: false },
+    });
+    await page.goto(`/projects/${project.identifier}/templates/${template.id}`);
+    const schedule = page.getByRole('region', { name: tr('en', 'templates.editor.schedule') });
+    await expect(schedule.getByRole('list', { name: tr('en', 'schedule.next.title') })).toBeVisible();
+
+    // monthly, on the first weekday of the month, Monday, at 9 o'clock: with the keyboard only
+    const frequency = schedule.getByRole('group', { name: tr('en', 'schedule.editor.frequency.label') });
+    // the group is one tab stop; the arrows move inside
+    await tabTo(page, frequency.locator('button[tabindex="0"]'), { max: 120 });
+    await arrowTo(page, frequency.getByRole('button', { name: tr('en', 'schedule.editor.frequency.monthly'), exact: true }), 'ArrowRight', 3);
+    await page.keyboard.press('Enter');
+    const mode = schedule.getByRole('group', { name: tr('en', 'schedule.editor.month_mode.label') });
+    await tabTo(page, mode.locator('button[tabindex="0"]'), { max: 20 });
+    await arrowTo(page, mode.getByRole('button', { name: tr('en', 'schedule.editor.month_mode.nth'), exact: true }), 'ArrowRight', 3);
+    await page.keyboard.press('Enter');
+    await expect(schedule.getByRole('combobox', { name: new RegExp(`^${tr('en', 'schedule.editor.week_of_month')}`) })).toContainText(tr('en', 'schedule.editor.ordinal.first'));
+    const weekday = schedule.getByRole('combobox', { name: new RegExp(`^${tr('en', 'schedule.editor.weekday')} `) });
+    await tabTo(page, weekday, { max: 20 });
+    await page.keyboard.press('Enter');
+    await arrowTo(page, page.getByRole('option', { name: 'Monday', exact: true }), 'ArrowUp', 8);
+    await page.keyboard.press('Enter');
+    await expect(weekday).toContainText('Monday');
+    const time = schedule.getByRole('textbox', { name: new RegExp(`^${tr('en', 'schedule.editor.time')}`) });
+    await tabTo(page, time, { max: 20 });
+    await page.keyboard.press('ControlOrMeta+a');
+    await page.keyboard.type('9');
+    await page.keyboard.press('Tab');
+    await expect(schedule).toContainText('Every first Monday of the month at 09:00');
+
+    // the terms the server counts, in the zone of the organisation and the language of the person (K22)
+    const zone = ((await (await api(page, 'GET', '/api/v1/organization')).json()) as { data: { timezone: string } }).data.timezone;
+    const users = ((await (await api(page, 'GET', '/api/v1/users?per_page=100')).json()) as { data: { email: string | null; locale: string }[] }).data;
+    const locale = users.find((user) => user.email === PEOPLE.e2e.email)!.locale === 'de' ? 'de-DE' : 'en-GB';
+    const dates = schedule.getByRole('list', { name: tr('en', 'schedule.next.title') }).locator('time');
+    await expect(dates).toHaveCount(5);
+    await expect
+      .poll(async () => {
+        const instants = await dates.evaluateAll((elements) => elements.map((element) => element.getAttribute('datetime')!));
+        return instants.map((instant) => new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: zone }).format(new Date(instant)));
+      })
+      .toEqual(['2036-11-03, 09:00', '2036-12-01, 09:00', '2037-01-05, 09:00', '2037-02-02, 09:00', '2037-03-02, 09:00']);
+    const instants = await dates.evaluateAll((elements) => elements.map((element) => element.getAttribute('datetime')!));
+    await expect(dates).toHaveText(instants.map((instant) => new Intl.DateTimeFormat(locale, { dateStyle: 'full', timeStyle: 'short', timeZone: zone }).format(new Date(instant))));
+
+    // saved with mod+enter, the template keeps it
+    await pressMod(page, 'Enter');
+    await expect(page.getByText(tr('en', 'templates.editor.saved', { name: 'Monthly report' }), { exact: true })).toBeVisible();
+    const saved = ((await (await api(page, 'GET', `/api/v1/projects/${project.id}/templates`)).json()) as { data: { schedule: Record<string, unknown> }[] }).data[0];
+    expect(saved.schedule).toMatchObject({ frequency: 'monthly', nth_weekday: { n: 1, weekday: 1 }, time: '09:00', starts_on: '2036-11-01' });
   } finally {
     await removeE2eProject(page, project.identifier);
   }
