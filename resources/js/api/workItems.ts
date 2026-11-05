@@ -153,6 +153,8 @@ export interface CreateWorkItemInput {
   due_date?: string | null;
   parent_id?: string | null;
   values?: Record<string, PropertyValue>;
+  /** The template of the project the item is made from: the texts get copies of its pictures, the item names it. */
+  template_id?: string;
 }
 
 export interface WorkItemPatch {

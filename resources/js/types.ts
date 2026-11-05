@@ -504,6 +504,9 @@ export interface Template {
   updated_at: string;
 }
 
+/** A template without its texts (`?lean=1`, K24): the palette and the create dialog choose by name, the draft comes from the server. */
+export type TemplateSummary = Omit<Template, 'payload'> & { payload: Omit<TemplatePayload, 'description' | 'description_json' | 'values_markdown'> };
+
 /** What a run of a template logs (A338): who pressed „Jetzt ausführen“, or `null` for the scheduler. */
 export interface TemplateRun {
   id: string;

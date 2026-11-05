@@ -1,5 +1,5 @@
 import { expect, test } from '../fixtures';
-import { createE2ePage, createE2eProject, createItem, pressMod, removeE2eProject, runId, searchToken, tabTo, tr, variant, waitForSearch } from '../helpers';
+import { createE2ePage, createE2eProject, createE2eTemplate, createItem, pressMod, removeE2eProject, runId, searchToken, tabTo, tr, variant, waitForSearch } from '../helpers';
 
 // The command palette with the keyboard only, signed in as the e2e person (playwright.config.ts), in English: its
 // commands and the search. Items a spec searches carry the search token of its run and variant (all variants share one
@@ -84,6 +84,44 @@ test('changes the theme from its list', async ({ page }) => {
   await page.keyboard.press('Enter');
   await expect(palette).toBeHidden();
   await expect(html).not.toHaveAttribute('data-theme', /.+/);
+});
+
+test('Vorlage anwenden … opens the dialog with the template', async ({ page }) => {
+  const projectName = `E2E palette template ${variant()} ${runId()}`;
+  const { id, identifier } = await createE2eProject(page, projectName, { types: ['Task'] });
+  try {
+    const name = `E2E Wochenrückblick ${variant()} ${runId()}`;
+    await createE2eTemplate(page, id, { name, title: 'E2E Wochenrückblick KW {week}' });
+    // the command reads the templates once the page is there: a fresh page knows the new one
+    await page.reload();
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(tr('en', 'items.my.title'));
+
+    const palette = await openPalette(page);
+    await page.keyboard.type(tr('en', 'templates.apply.label').replace(' …', ''));
+    await expect(palette.getByRole('option', { name: new RegExp(`^${tr('en', 'templates.apply.label')}`) })).toBeVisible();
+    await page.keyboard.press('Enter');
+    const templates = palette.getByRole('combobox', { name: tr('en', 'templates.apply.label') });
+    await expect(templates).toBeFocused();
+    await expect(templates).toHaveAttribute('placeholder', tr('en', 'templates.apply.placeholder'));
+    // each template with its project
+    const option = palette.getByRole('option', { name: new RegExp(name) });
+    await page.keyboard.type(name);
+    await expect(option).toHaveCount(1);
+    await expect(option).toContainText(projectName);
+    await page.keyboard.press('Enter');
+
+    // the dialog in the project of the template, with the template applied
+    await expect(palette).toBeHidden();
+    const dialog = page.getByRole('dialog', { name: tr('en', 'items.create.title') });
+    await expect(dialog.getByRole('combobox', { name: new RegExp(`^${tr('en', 'items.create.project')}`) })).toContainText(projectName);
+    await expect(dialog.getByRole('combobox', { name: new RegExp(`^${tr('en', 'items.create.template')}`) })).toContainText(name);
+    await expect(dialog.getByRole('textbox', { name: new RegExp(`^${tr('en', 'items.create.title_label')}`) })).toHaveValue(/^E2E Wochenrückblick KW \d+$/);
+    await expect(page.getByText(tr('en', 'items.create.template_applied', { name }), { exact: true })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+  } finally {
+    await removeE2eProject(page, identifier);
+  }
 });
 
 test('says when nothing matches', async ({ page }) => {

@@ -310,12 +310,26 @@ describe('the inbox', () => {
     expect(webhook.getAttribute('href')).toBe('/settings');
     const template = within(screen.getByRole('region', { name: 'Infrastruktur' })).getByRole('link', { name: /Eine Vorlage hat kein Item angelegt/ });
     expect(template.textContent).toContain('„Pflicht-Property Umgebung fehlt“');
-    expect(template.getAttribute('href')).toBe('/projects/OPS');
+    // without the template behind it (the demo row): the templates of its project
+    expect(template.getAttribute('href')).toBe('/projects/OPS/templates');
 
     // a plain click leads to its page: nothing to preview
     fireEvent.click(template);
-    expect(address.visit).toHaveBeenCalledWith('/projects/OPS');
+    expect(address.visit).toHaveBeenCalledWith('/projects/OPS/templates');
     expect(useUiStore.getState().peekItemId).toBeNull();
+  });
+
+  it('leads a failed run to its template (T9-M5)', async () => {
+    notifications = [
+      makeNotification({ id: 'n_tpl', event: 'template_run_failed', work_item_id: null, item: null, actor_id: null, project_id: 'p_ops', data: { template_id: 'tpl_ops_certs', error: 'kaputt' } }),
+    ];
+    renderInbox();
+
+    const row = await screen.findByRole('link', { name: /Eine Vorlage hat kein Item angelegt/ });
+    // a template deleted since: its page says it does not exist, without asking for it (no 404)
+    expect(row.getAttribute('href')).toBe('/projects/OPS/templates/tpl_ops_certs');
+    fireEvent.click(row);
+    expect(address.visit).toHaveBeenCalledWith('/projects/OPS/templates/tpl_ops_certs');
   });
 
   it('shows a card whose item is no longer available', async () => {

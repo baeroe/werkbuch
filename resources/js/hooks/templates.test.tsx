@@ -6,7 +6,7 @@ import { mockApi, type MockApi } from '@/test/api';
 import { firstMonday, list, makeAutomation, makeTemplate, makeTemplateRun, web47 } from '@/test/fixtures';
 import { useAutomations, useSaveAutomation } from './automations';
 import { qk } from './keys';
-import { useDeleteTemplate, useRunTemplateNow, useSaveTemplate, useSchedulePreview, useTemplateRuns, useTemplates } from './templates';
+import { useDeleteTemplate, useRunTemplateNow, useSaveTemplate, useSchedulePreview, useTemplateRuns, useTemplates, useTemplateSummaries } from './templates';
 
 let queryClient: QueryClient;
 let api: MockApi | undefined;
@@ -46,6 +46,20 @@ describe('templates', () => {
     expect(result.current.idle.fetchStatus).toBe('idle');
     expect(queryClient.getQueryData(qk.templates.list({ project: 'p_app' }))).toBeDefined();
     expect(queryClient.getQueryData(qk.templateRuns.list({ template: 'tpl_app_report' }))).toBeDefined();
+  });
+
+  it('reads the lean templates under a key of their own, and nothing while not enabled', async () => {
+    api = mockApi({
+      'GET /api/v1/projects/p_app/templates': () => ({ body: list([template]) }),
+      'GET /api/v1/templates': () => ({ body: list([template]) }),
+    });
+
+    const { result } = renderHook(() => ({ project: useTemplateSummaries('p_app'), idle: useTemplateSummaries(undefined, { enabled: false }) }), { wrapper });
+
+    await waitFor(() => expect(result.current.project.data?.items).toEqual([template]));
+    expect(result.current.idle.fetchStatus).toBe('idle');
+    expect(api.calls.map((call) => call.url)).toEqual(['/api/v1/projects/p_app/templates?lean=1']);
+    expect(queryClient.getQueryData(qk.templates.list({ project: 'p_app', lean: true }))).toBeDefined();
   });
 
   it('makes templates, runs, items, the history and the search stale after saving, deleting and running by hand', async () => {

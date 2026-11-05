@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { allEntries, api, createE2eProject, createItem, isPhone, PEOPLE, pressMod, removeE2eProject, runId, signedInContext, tr, variant } from '../helpers';
+import { allEntries, api, createE2eProject, createE2eTemplate, createItem, isPhone, PEOPLE, pressMod, removeE2eProject, runId, signedInContext, tr, variant, waitForNotification } from '../helpers';
 
 // The inbox (spec 4.14) of the inbox account of the variant (A289), in a context of its own. Its notifications come
 // from the e2e person (Erik Ende), who assigns, comments and mentions over the API in a project of the test's own
@@ -221,6 +221,43 @@ test('reads and deletes from the menu of a row on the phone, without opening it'
     await expect(inboxPage.getByText(tr('en', 'inbox.delete.done'))).toBeVisible();
     await expect(inboxPage).toHaveURL(/\/inbox$/);
     await expect.poll(async () => (await find((entry) => entry.id === template.id)) ?? null, { timeout: 15_000 }).toBeNull();
+  } finally {
+    await other.page.goto('/my-items');
+    await other.context.close();
+    await removeE2eProject(page, project.identifier);
+  }
+});
+
+test('leads the row of a failed template to the template', async ({ page, browser }) => {
+  const project = await createE2eProject(page, name('template'), { types: ['Task', 'Bug'] });
+  const inbox = PEOPLE.inbox[variant()]!;
+  const person = (await allEntries(page, 'users')).find((entry) => entry.email === inbox.email) as { id: string };
+  const types = await allEntries(page, 'work-item-types');
+  const typeId = (typeName: string) => (types.find((entry) => entry.name === typeName) as { id: string }).id;
+  const added = await api(page, 'POST', `/api/v1/projects/${project.id}/members`, { user_id: person.id, role: 'member' });
+  expect(added.status(), await added.text()).toBe(201);
+  // the inbox person leads the project: a failed run tells the lead and the author of the template
+  const led = await api(page, 'PATCH', `/api/v1/projects/${project.id}`, { lead_id: person.id });
+  expect(led.status(), await led.text()).toBe(200);
+  const other = await signedInContext(browser, inbox);
+  try {
+    const templateName = `E2E Inbox Wartung ${variant()} ${runId()}`;
+    const template = await createE2eTemplate(page, project.id, { name: templateName, title: 'E2E Inbox Wartung', type: typeId('Task') });
+    // its type is switched off in the project: the run cannot create its item
+    const switched = await api(page, 'PATCH', `/api/v1/projects/${project.id}`, { enabled_type_ids: [typeId('Bug')], default_type_id: typeId('Bug') });
+    expect(switched.status(), await switched.text()).toBe(200);
+    const run = await api(page, 'POST', `/api/v1/templates/${template.id}/run`);
+    expect(run.status(), await run.text()).toBe(200);
+    expect(((await run.json()) as { data: { run: { status: string } } }).data.run.status).toBe('failed');
+    await waitForNotification(other.page, (entry) => entry.event === 'template_run_failed' && entry.data.template_id === template.id);
+
+    await other.page.goto('/inbox');
+    const row = other.page.getByRole('region', { name: name('template') }).getByRole('link', { name: new RegExp(tr('en', 'inbox.kind.template_run_failed')) });
+    await expect(row).toHaveAttribute('href', `/projects/${project.identifier}/templates/${template.id}`);
+    await row.click();
+
+    await expect(other.page).toHaveURL(new RegExp(`/projects/${project.identifier}/templates/${template.id}$`));
+    await expect(other.page.getByRole('textbox', { name: tr('en', 'templates.editor.name'), exact: true })).toHaveValue(templateName);
   } finally {
     await other.page.goto('/my-items');
     await other.context.close();

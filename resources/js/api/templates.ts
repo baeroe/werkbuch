@@ -9,7 +9,7 @@
  * the next terms of a schedule.
  */
 
-import type { RichText, Schedule, SchedulePreview, Template, TemplateDraft, TemplatePayload, TemplateRun, WorkItem } from '@/types';
+import type { RichText, Schedule, SchedulePreview, Template, TemplateDraft, TemplatePayload, TemplateRun, TemplateSummary, WorkItem } from '@/types';
 import type { Page, PageArgs } from './client';
 import { del, get, getPage, one, post, put } from './http';
 
@@ -27,8 +27,13 @@ export interface TemplateInput {
   schedule: Schedule | null;
 }
 
-/** The templates of one project (ULID or identifier), or of every project the account sees. */
-export function listTemplates(project_id?: string, args: PageArgs = {}): Promise<Page<Template>> {
+/**
+ * The templates of one project (ULID or identifier), or of every project the account sees. With `lean` without their
+ * texts (K24): what the palette and the create dialog choose from.
+ */
+export function listTemplates(project_id: string | undefined, args: PageArgs & { lean: true }): Promise<Page<TemplateSummary>>;
+export function listTemplates(project_id?: string, args?: PageArgs): Promise<Page<Template>>;
+export function listTemplates(project_id?: string, args: PageArgs & { lean?: boolean } = {}): Promise<Page<Template | TemplateSummary>> {
   return getPage<Template>(project_id === undefined ? '/templates' : `/projects/${encodeURIComponent(project_id)}/templates`, { ...args });
 }
 

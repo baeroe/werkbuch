@@ -18,6 +18,12 @@
  *   an upload belongs to nobody until the item is created (A232). After a change of project, pictures and files of
  *   another project do not fit (the server refuses the description, A233): a notice says so and marks the
  *   description, and "Anlegen" waits until they are removed or the project is changed back.
+ * - "Vorlage" offers the templates of the chosen project (lean, K24). Choosing one asks the server for the fields of an
+ *   item made from it now (`templateDraft`, A335: the title with its placeholders filled, the dates from the offsets)
+ *   and fills type, title, description, the fields and the values with them; a toast says so. A failure says so with
+ *   "Erneut versuchen". The item names the template (`template_id`): its pictures are copied for it on the server. A
+ *   change of project lets go of the template (its pictures then belong to another project, A233); `defaults.template_id`
+ *   ("Vorlage anwenden …" in the palette) is applied once.
  */
 
 import { usePage } from '@inertiajs/react';
@@ -25,6 +31,7 @@ import { useQueries } from '@tanstack/react-query';
 import type { Editor } from '@tiptap/react';
 import { FileQuestionMark, RotateCw } from 'lucide-react';
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { templateDraft } from '@/api/templates';
 import type { CreateWorkItemInput } from '@/api/workItems';
 import { TypeGlyph } from '@/components/fields/TypeGlyph';
 import { Banner } from '@/components/ui/Banner';
@@ -35,19 +42,23 @@ import { ProjectBadge } from '@/components/ui/ProjectBadge';
 import { Select } from '@/components/ui/Select';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
 import { labelClass } from '@/components/ui/styles';
+import { toast } from '@/components/ui/toast';
 import { RichTextEditor } from '@/editor/RichTextEditor';
 import { UploadContext, useUploadCounter, useUploadsPending } from '@/editor/UploadContext';
 import { attachmentQuery } from '@/hooks/attachments';
+import { useSettle } from '@/hooks/mutation';
 import { useProjects } from '@/hooks/projects';
 import { useProperties } from '@/hooks/properties';
+import { useTemplateSummaries } from '@/hooks/templates';
 import { useWorkflows } from '@/hooks/workflows';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
+import { notifyError } from '@/lib/errors';
 import { t } from '@/lib/i18n';
 import { usePermissions } from '@/lib/permissions';
 import { attachmentIds } from '@/lib/richtext';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import type { CreateDefaults } from '@/store/ui';
-import type { Project, Property, PropertyValue, WorkItem, WorkItemType, Workflow } from '@/types';
+import type { Project, Property, PropertyValue, TemplateDraft, WorkItem, WorkItemType, Workflow } from '@/types';
 import { useUnsavedGuard } from '@/features/item-detail/shared';
 import { hasContent, park, parkedTaken, parkedToRestore, seenNames, type Draft } from './draft';
 import { ItemFields, type Errors } from './ItemFields';
@@ -243,6 +254,7 @@ function FormBody({
       startDate: null,
       dueDate: null,
       values: {},
+      templateId: null,
     };
   });
   // names of every project and type seen (also by the form of a parked draft), so the notice can name one that left
@@ -256,7 +268,7 @@ function FormBody({
     const projectId = projectGone ? projects[0].id : stored.projectId;
     const typeId = projectGone && typesOf(projectId).some((entry) => entry.id === stored.typeId) ? stored.typeId : defaultType(projectId);
     return projectGone
-      ? { ...stored, projectId, typeId, stateId: null, assigneeId: null, parentId: null, values: keptValues(stored.values, typeId) }
+      ? { ...stored, projectId, typeId, stateId: null, assigneeId: null, parentId: null, values: keptValues(stored.values, typeId), templateId: null }
       : { ...stored, typeId, values: keptValues(stored.values, typeId) };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the lists are what changes it
   }, [stored, projects, types, workflows, properties]);
@@ -360,13 +372,70 @@ function FormBody({
   const clearError = (...paths: string[]) =>
     setErrors((current) => (paths.some((path) => path in current) ? Object.fromEntries(Object.entries(current).filter(([key]) => !paths.includes(key))) : current));
 
+  // the templates of the project; choosing one fills the draft with what the server makes of it now
+  const templates = useTemplateSummaries(draft.projectId);
+  const templateList = templates.data?.items ?? [];
+  const settle = useSettle();
+  /** Counts the templates asked for: only the answer to the last one (and in the same project) fills the draft. */
+  const asked = useRef(0);
+
+  function fromTemplate(current: Draft, filled: TemplateDraft): Draft {
+    const typeId = typesOf(current.projectId).some((entry) => entry.id === filled.type_id) ? filled.type_id : current.typeId;
+    return {
+      ...current,
+      templateId: filled.template_id,
+      typeId,
+      title: filled.title,
+      description: filled.description_json,
+      priority: filled.priority,
+      assigneeId: filled.assignee_id,
+      labelIds: [...filled.label_ids],
+      parentId: filled.parent_id,
+      startDate: filled.start_date,
+      dueDate: filled.due_date,
+      values: keptValues(filled.values, typeId),
+    };
+  }
+
+  function applyTemplate(templateId: string) {
+    const round = ++asked.current;
+    const projectId = draft.projectId;
+    const name = templateList.find((entry) => entry.id === templateId)?.name ?? '';
+    settle(templateDraft(templateId), {
+      onSuccess: (filled) => {
+        if (round !== asked.current) return;
+        setDraft((current) => (current.projectId === projectId ? fromTemplate(current, filled) : current));
+        // what was said about the draft before is about other fields
+        setErrors({});
+        setBlocked(null);
+        setGoneName(null);
+        toast({ title: t('items.create.template_applied', { name }), description: t('items.create.template_applied_description'), tone: 'success' });
+      },
+      onError: (error) => {
+        if (round === asked.current) notifyError(t('items.create.template_failed'), error, () => applyTemplate(templateId));
+      },
+    });
+  }
+
+  // a dialog opened with a template ("Vorlage anwenden …") applies it once, as soon as its name is known
+  const appliedDefault = useRef(false);
+  const defaultTemplate = defaults?.template_id;
+  useEffect(() => {
+    if (appliedDefault.current || !defaultTemplate || !templates.data) return;
+    appliedDefault.current = true;
+    if (templates.data.items.some((entry) => entry.id === defaultTemplate)) applyTemplate(defaultTemplate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, when the list is there
+  }, [defaultTemplate, templates.data]);
+
   function changeProject(projectId: string) {
     const typeId = typesOf(projectId).some((entry) => entry.id === draft.typeId) ? draft.typeId : defaultType(projectId);
     setErrors({});
     setBlocked(null);
     setGoneName(null);
-    // status, assignee and parent belong to the project
-    update({ projectId, typeId, stateId: null, assigneeId: null, parentId: null, values: keptValues(draft.values, typeId) });
+    // a template still on its way fills nothing in the other project
+    asked.current += 1;
+    // status, assignee and parent belong to the project, and so does the template
+    update({ projectId, typeId, stateId: null, assigneeId: null, parentId: null, values: keptValues(draft.values, typeId), templateId: null });
   }
 
   function changeType(typeId: string) {
@@ -407,7 +476,7 @@ function FormBody({
           {blocked ?? formError}
         </Banner>
       )}
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-3">
         <Select
           label={t('items.create.project')}
           options={projects.map((entry) => ({ value: entry.id, label: entry.name, icon: <ProjectBadge project={entry} /> }))}
@@ -423,6 +492,22 @@ function FormBody({
           value={draft.typeId}
           onValueChange={(next) => next && changeType(next)}
           error={errors.type_id}
+        />
+        <Select
+          label={t('items.create.template')}
+          placeholder={t(
+            templates.isPending
+              ? 'items.create.template_loading'
+              : templateList.length > 0
+                ? 'items.create.template_none'
+                : templates.isError
+                  ? 'items.create.template_unavailable'
+                  : 'items.create.template_empty',
+          )}
+          disabled={templateList.length === 0}
+          options={templateList.map((entry) => ({ value: entry.id, label: entry.name }))}
+          value={draft.templateId}
+          onValueChange={(next) => next && applyTemplate(next)}
         />
       </div>
       <Input

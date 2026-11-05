@@ -31,6 +31,18 @@ export function useTemplates(projectId?: string) {
   return useQuery({ queryKey: qk.templates.list({ project: projectId }), queryFn: () => allPages((cursor) => listTemplates(projectId, { cursor })) });
 }
 
+/**
+ * The templates without their texts (K24), of a project or of every project the account sees: what the palette and the
+ * create dialog choose from. Nothing while `enabled` is false.
+ */
+export function useTemplateSummaries(projectId?: string, { enabled = true }: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: qk.templates.list({ project: projectId, lean: true }),
+    queryFn: () => allPages((cursor) => listTemplates(projectId, { cursor, lean: true })),
+    enabled,
+  });
+}
+
 /** The log of the runs of a template, newest first; nothing without a template or for one known to be deleted (404). */
 export function useTemplateRuns(templateId: string | null | undefined) {
   const gone = useTemplateGone(templateId);

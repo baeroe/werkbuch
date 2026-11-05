@@ -25,6 +25,14 @@ describe('templates', () => {
     expect(sent()).toEqual(['GET /api/v1/projects/p_app/templates?cursor=c1&per_page=20', 'GET /api/v1/templates']);
   });
 
+  it('asks for the lean templates without their texts (K24)', async () => {
+    const template = makeTemplate();
+    api = mockApi({ 'GET /api/v1/templates': () => ({ body: list([template]) }) });
+
+    await listTemplates(undefined, { lean: true });
+    expect(sent()).toEqual(['GET /api/v1/templates?lean=1']);
+  });
+
   it('creates a template in its project with the description as description_json, and replaces one without an id in the body', async () => {
     const template = makeTemplate();
     api = mockApi({

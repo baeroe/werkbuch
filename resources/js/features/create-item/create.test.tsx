@@ -22,9 +22,9 @@ import { canUndo, undoLatest } from '@/lib/undo';
 import { CreateHost } from '@/shell/CreateHost';
 import { useUiStore, type CreateDefaults } from '@/store/ui';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
-import { agency, ida, labels, lene, list, makeAttachment, makeWorkItem, mara, organization, project, properties, queryItems, standard, types, web30, web47, web48 } from '@/test/fixtures';
+import { agency, ida, labels, lene, list, makeAttachment, makeTemplate, makeWorkItem, mara, organization, project, properties, queryItems, standard, types, web30, web47, web48 } from '@/test/fixtures';
 import { FakeXhr, installFakeXhr, restoreFakeXhr } from '@/test/xhr';
-import type { Attachment, Project, Property, RichText, User, WorkItem } from '@/types';
+import type { Attachment, Project, Property, RichText, Template, TemplateDraft, User, WorkItem } from '@/types';
 import { CreateItemDialog } from './CreateItemDialog';
 
 const inertia = vi.hoisted(() => ({ url: '/my-items' }));
@@ -80,6 +80,34 @@ const problem = (status: number, reason: string, detail: string, errors?: Record
 });
 const invalid = (errors: Record<string, string[]>) => problem(422, 'validation_failed', 'Die Eingabe ist ungültig.', errors);
 
+/** A template of WEB (as the lean list names it) and the fields of an item made from it now (`/draft`, A335). */
+const release = makeTemplate({ id: 'tpl_web_release', project_id: 'p_web', name: 'Release-Check' });
+const templatePicture = makeAttachment({ id: 'att_tpl_1', owner: { type: 'template', id: 'tpl_web_release' }, filename: 'checkliste.png' });
+const releaseDraft: TemplateDraft = {
+  project_id: 'p_web',
+  template_id: 'tpl_web_release',
+  type_id: 't_bug',
+  title: 'Release-Check KW 45',
+  description: 'Liste abhaken',
+  description_json: {
+    type: 'doc',
+    content: [
+      { type: 'paragraph', content: [{ type: 'text', text: 'Liste abhaken' }] },
+      { type: 'image', attrs: { attachmentId: 'att_tpl_1', alt: 'checkliste.png' } },
+    ],
+  },
+  priority: 'high',
+  assignee_id: 'u_ida',
+  label_ids: ['lb_ux'],
+  values: { environment: 'opt_env_prod', effort: 3 },
+  parent_id: null,
+  start_date: '2026-11-05',
+  due_date: '2026-11-07',
+};
+let webTemplates: Template[] = [];
+/** What `GET /templates/<id>/draft` answers. */
+let answerDraft: MockRoute;
+
 let projects: Project[] = [];
 let failing: Set<string>;
 let number = 51;
@@ -114,6 +142,10 @@ function renderWith(node: ReactNode, routes: Record<string, MockRoute> = {}) {
     'POST /api/v1/work-items/query': fails('items', (body) => ({ body: list(queryItems([web30, web47, web48], body)) })),
     'GET /api/v1/work-items/wi_web_30': () => ({ body: { data: { ...web30, children: [], relations: [], type: wishTypes.find((type) => type.id === web30.type_id), workflow: standard, attachments: [] } } }),
     'POST /api/v1/work-items': (body, url) => answerCreate(body, url),
+    'GET /api/v1/projects/p_web/templates': () => ({ body: list(webTemplates) }),
+    'GET /api/v1/projects/p_app/templates': () => ({ body: list([]) }),
+    'GET /api/v1/templates/tpl_web_release/draft': (body, url) => answerDraft(body, url),
+    'GET /api/v1/attachments/att_tpl_1': () => ({ body: { data: templatePicture } }),
     ...routes,
   });
   client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
@@ -177,6 +209,8 @@ beforeEach(() => {
   failing = new Set();
   answerCreate = created;
   number = 51;
+  webTemplates = [release];
+  answerDraft = () => ({ body: { data: releaseDraft } });
 });
 
 afterEach(() => {
@@ -1086,6 +1120,157 @@ describe('CreateHost', () => {
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(document.activeElement).toBe(trigger);
+  });
+});
+
+
+describe('templates in the create dialog', () => {
+  const templateSelect = (dialog: HTMLElement) => within(dialog).getByRole('combobox', { name: /^Vorlage/ });
+  const draftCalls = () => api!.calls.filter((call) => call.url === '/api/v1/templates/tpl_web_release/draft');
+
+  it('applies a template: its fields fill the form, and the item names it', async () => {
+    const user = userEvent.setup();
+    const { dialog, title } = await openDialog({ project_id: 'p_web' });
+    // the lean templates of the project (K24): the draft comes from the server when one is chosen
+    await waitFor(() => expect(templateSelect(dialog).textContent).toContain('Keine Vorlage'));
+    expect(api!.calls.some((call) => call.url === '/api/v1/projects/p_web/templates?lean=1')).toBe(true);
+
+    await choose(user, templateSelect(dialog), 'Release-Check');
+
+    await waitFor(() => expect(title.value).toBe('Release-Check KW 45'));
+    expect(toastTitles()).toContain('Vorlage „Release-Check“ angewendet');
+    expect(templateSelect(dialog).textContent).toContain('Release-Check');
+    expect(within(dialog).getByRole('combobox', { name: /^Typ/ }).textContent).toContain('Bug');
+    expect(within(dialog).getByRole('combobox', { name: 'Priorität: High' })).toBeTruthy();
+    expect(within(dialog).getByRole('combobox', { name: 'Assignee: Ida Brenner' })).toBeTruthy();
+    expect(within(dialog).getByRole<HTMLInputElement>('textbox', { name: 'Aufwand (h)' }).value).toBe('3');
+    // the picture of the template stands in the description: the server copies it for the item
+    expect(await within(dialog).findByRole('img', { name: 'checkliste.png' })).toBeTruthy();
+
+    await modEnter();
+    await waitFor(() => expect(posts()).toHaveLength(1));
+    expect(posts()[0]).toMatchObject({
+      project_id: 'p_web',
+      template_id: 'tpl_web_release',
+      type_id: 't_bug',
+      title: 'Release-Check KW 45',
+      priority: 'high',
+      assignee_id: 'u_ida',
+      label_ids: ['lb_ux'],
+      start_date: '2026-11-05',
+      due_date: '2026-11-07',
+      values: { environment: 'opt_env_prod', effort: 3 },
+      description_json: releaseDraft.description_json,
+    });
+    expect(draftCalls()).toHaveLength(1);
+  });
+
+  it('applies the template of the defaults once', async () => {
+    const { dialog, title } = await openDialog({ project_id: 'p_web', template_id: 'tpl_web_release' });
+    await waitFor(() => expect(title.value).toBe('Release-Check KW 45'));
+    expect(toastTitles().filter((entry) => entry === 'Vorlage „Release-Check“ angewendet')).toHaveLength(1);
+    expect(templateSelect(dialog).textContent).toContain('Release-Check');
+
+    // something typed afterwards stays: the template is not applied again
+    await userEvent.setup().type(title, '!');
+    await act(() => client.invalidateQueries());
+    await waitFor(() => expect(title.value).toBe('Release-Check KW 45!'));
+    expect(draftCalls()).toHaveLength(1);
+  });
+
+  it('lets go of the template on a change of project, and for the next item', async () => {
+    const user = userEvent.setup();
+    const { dialog, title } = await openDialog({ project_id: 'p_web' });
+    await waitFor(() => expect(templateSelect(dialog).textContent).toContain('Keine Vorlage'));
+    await choose(user, templateSelect(dialog), 'Release-Check');
+    await waitFor(() => expect(title.value).toBe('Release-Check KW 45'));
+
+    await choose(user, within(dialog).getByRole('combobox', { name: /^Projekt/ }), 'Kunden-App');
+    // APP has no template: the field says so and cannot be opened
+    await waitFor(() => expect(templateSelect(dialog).textContent).toContain('Keine im Projekt'));
+    expect(templateSelect(dialog).hasAttribute('data-disabled') || templateSelect(dialog).hasAttribute('disabled')).toBe(true);
+    // back in WEB the template stays let go of: the item would be made without it (the picture of WEB fits again)
+    await choose(user, within(dialog).getByRole('combobox', { name: /^Projekt/ }), 'Website-Relaunch');
+    await waitFor(() => expect(templateSelect(dialog).textContent).toContain('Keine Vorlage'));
+    expect(title.value).toBe('Release-Check KW 45');
+
+    await modEnter();
+    await waitFor(() => expect(posts()).toHaveLength(1));
+    expect(posts()[0]).not.toHaveProperty('template_id');
+  });
+
+  it('starts the next item without the template', async () => {
+    const user = userEvent.setup();
+    const { dialog, title } = await openDialog({ project_id: 'p_web', template_id: 'tpl_web_release' });
+    await user.click(within(dialog).getByRole('switch', { name: 'Weitere anlegen' }));
+    await waitFor(() => expect(title.value).toBe('Release-Check KW 45'));
+    await modEnter();
+    await waitFor(() => expect(posts()).toHaveLength(1));
+    expect(posts()[0]).toMatchObject({ template_id: 'tpl_web_release' });
+
+    await waitFor(() => expect(title.value).toBe(''));
+    expect(templateSelect(dialog).textContent).toContain('Keine Vorlage');
+    await user.type(title, 'Zweiter Check');
+    await modEnter();
+    await waitFor(() => expect(posts()).toHaveLength(2));
+    expect(posts()[1]).not.toHaveProperty('template_id');
+  });
+
+  it('keeps the template of a parked draft for undo', async () => {
+    const user = userEvent.setup();
+    act(() => useUiStore.getState().openCreate({ project_id: 'p_web', template_id: 'tpl_web_release' }));
+    renderWith(<Host />);
+    const dialog = await screen.findByRole('dialog', { name: 'Neues Item' });
+    const title = await within(dialog).findByRole<HTMLInputElement>('textbox', { name: /^Titel/ });
+    await waitFor(() => expect(title.value).toBe('Release-Check KW 45'));
+    await user.click(within(dialog).getByRole('button', { name: 'Abbrechen' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(parkedToasts().map((entry) => entry.description)).toEqual(['Release-Check KW 45']);
+
+    act(() => void undoLatest());
+    const restored = await screen.findByRole('dialog', { name: 'Neues Item' });
+    expect((await within(restored).findByRole<HTMLInputElement>('textbox', { name: /^Titel/ })).value).toBe('Release-Check KW 45');
+    await waitFor(() => expect(templateSelect(restored).textContent).toContain('Release-Check'));
+    await modEnter();
+    await waitFor(() => expect(posts()).toHaveLength(1));
+    expect(posts()[0]).toMatchObject({ template_id: 'tpl_web_release', title: 'Release-Check KW 45' });
+    // the template was not applied a second time on the way back
+    expect(draftCalls()).toHaveLength(1);
+  });
+
+  it('says when the template cannot be read, and tries again', async () => {
+    answerDraft = () => problem(503, 'service_unavailable', 'Der Server ist gerade nicht erreichbar.');
+    const user = userEvent.setup();
+    const { dialog, title } = await openDialog({ project_id: 'p_web' });
+    await waitFor(() => expect(templateSelect(dialog).textContent).toContain('Keine Vorlage'));
+    await choose(user, templateSelect(dialog), 'Release-Check');
+
+    await waitFor(() => expect(toastTitles()).toContain('Vorlage nicht angewendet'));
+    const failure = currentToasts().find((entry) => entry.title === 'Vorlage nicht angewendet')!;
+    expect(failure).toMatchObject({ description: 'Der Server ist gerade nicht erreichbar.', action: { label: 'Erneut versuchen' } });
+    expect(title.value).toBe('');
+    expect(templateSelect(dialog).textContent).toContain('Keine Vorlage');
+
+    answerDraft = () => ({ body: { data: releaseDraft } });
+    act(() => runToastAction(failure.id));
+    await waitFor(() => expect(title.value).toBe('Release-Check KW 45'));
+    expect(toastTitles()).toContain('Vorlage „Release-Check“ angewendet');
+  });
+
+  it('says that the templates are loading', async () => {
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    renderWith(<CreateItemDialog open defaults={{ project_id: 'p_web' }} onOpenChange={vi.fn()} />);
+    // the form asks for the templates only once the catalogs are there: they wait at the gate
+    const answering = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      if (String(input).includes('/templates')) await gate;
+      return answering(input, init);
+    };
+    const dialog = await screen.findByRole('dialog', { name: 'Neues Item' });
+    await waitFor(() => expect(templateSelect(dialog).textContent).toContain('Lädt …'));
+    release();
+    await waitFor(() => expect(templateSelect(dialog).textContent).toContain('Keine Vorlage'));
   });
 });
 
