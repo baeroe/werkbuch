@@ -22,6 +22,12 @@ final class Components implements DocumentTransformer
         'AutomationResource' => ['settings' => 'automationSettings'],
     ];
 
+    /** Resource → the method of `WorkItemSchemas` that writes the schemas of several of its properties. */
+    private const ITEM_PATCHES = [
+        'WorkItemResource' => 'itemPatches',
+        'HistoryEntryResource' => 'historyPatches',
+    ];
+
     public function handle(OpenApi $document, OpenApiContext $context): void
     {
         $components = $document->components;
@@ -31,6 +37,9 @@ final class Components implements DocumentTransformer
             'RichTextDocument' => Schemas::richTextDocument(),
             'ListLinks' => Schemas::listLinks(),
             'ListMeta' => Schemas::listMeta(),
+            'Filter' => Schemas::filter(),
+            'SortSpec' => Schemas::sortSpec(),
+            'Display' => Schemas::display(),
         ] as $name => $schema) {
             $components->addSchema($name, Schema::fromType(new JsonSchema($schema)));
         }
@@ -42,6 +51,15 @@ final class Components implements DocumentTransformer
             if ($type instanceof ObjectType) {
                 foreach ($properties as $property => $method) {
                     $type->addProperty($property, new JsonSchema(CatalogSchemas::{$method}()));
+                }
+            }
+        }
+        foreach (self::ITEM_PATCHES as $name => $method) {
+            $type = ($components->schemas[$name] ?? null)?->type;
+
+            if ($type instanceof ObjectType) {
+                foreach (WorkItemSchemas::{$method}() as $property => $schema) {
+                    $type->addProperty($property, new JsonSchema($schema));
                 }
             }
         }

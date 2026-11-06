@@ -83,7 +83,7 @@ it('describes the problem shape', function () {
 
     expect($problem['type'])->toBe('object')
         ->and($problem['required'])->toBe(['type', 'title', 'status', 'reason'])
-        ->and(array_keys($problem['properties']))->toBe(['type', 'title', 'status', 'detail', 'reason', 'errors', 'states', 'projects', 'issues'])
+        ->and(array_keys($problem['properties']))->toBe(['type', 'title', 'status', 'detail', 'reason', 'errors', 'current', 'states', 'projects', 'issues'])
         ->and($problem['properties']['status']['type'])->toBe('integer')
         ->and($problem['properties']['errors']['type'])->toBe('object')
         ->and($problem['properties']['errors']['additionalProperties'])->toBe(['type' => 'array', 'items' => ['type' => 'string']])

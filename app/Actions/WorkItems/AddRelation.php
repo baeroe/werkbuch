@@ -40,6 +40,9 @@ final class AddRelation
 {
     use AsAction;
 
+    /** The keys of the body (the OpenAPI document names them, K15); others are passed over. */
+    public const FIELDS = ['type_id', 'target_id'];
+
     /**
      * @param  array<array-key, mixed>  $input  `type_id` (ULID), `target_id` (ULID or key)
      *

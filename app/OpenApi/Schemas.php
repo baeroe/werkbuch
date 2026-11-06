@@ -2,6 +2,15 @@
 
 namespace App\OpenApi;
 
+use App\Domain\Filter\CoreField;
+use App\Domain\Filter\Field;
+use App\Domain\Filter\FilterSchema;
+use App\Domain\Filter\Op;
+use App\Domain\Views\DisplaySchema;
+use App\Domain\Views\GroupBy;
+use App\Domain\Views\Layout;
+use App\Domain\Views\SortSpec;
+
 /**
  * The shared schemas of the document as plain JSON Schema (OpenAPI 3.1), stored under `components.schemas` by
  * `Components`. A schema with `x-werkbuch-open` keeps keys it does not name (the extensions of a problem, the nodes of
@@ -31,6 +40,11 @@ final class Schemas
                     'type' => 'object',
                     'description' => 'The messages per field (`title`, `values.effort`, `filter.conditions.0.op`).',
                     'additionalProperties' => ['type' => 'array', 'items' => ['type' => 'string']],
+                ],
+                'current' => [
+                    'description' => '`description_conflict` (409, changing the description of a work item on an old `base_description_version`): the work item as it is now; '
+                        .'`page_conflict` (409, saving a wiki page on an old `base_version`): the page as it is now. Both as the account reads them.',
+                    'anyOf' => [['$ref' => '#/components/schemas/WorkItemResource'], ['$ref' => '#/components/schemas/PageResource']],
                 ],
                 'states' => [
                     'type' => 'array',
@@ -127,6 +141,113 @@ final class Schemas
                 'total' => ['type' => 'integer', 'minimum' => 0, 'description' => 'The number of all matches.'],
             ],
             'required' => ['path', 'per_page', 'next_cursor', 'prev_cursor', 'total'],
+        ];
+    }
+
+    /**
+     * A filter of the work items (`App\Domain\Filter\FilterSchema`): the conditions all have to hold. The operators a
+     * field takes and the form of a value depend on the field; a condition that does not fit is 422 at
+     * `filter.conditions.<n>.field|op|value`.
+     *
+     * @return array<string, mixed>
+     */
+    public static function filter(): array
+    {
+        $scalar = ['type' => ['string', 'number', 'boolean']];
+        $relative = [
+            'type' => 'object',
+            'description' => 'Days or weeks from today, `+7d`, `-2w`, `0d` (date fields).',
+            'properties' => ['relative' => ['type' => 'string', 'pattern' => '^[+-]?\\d{1,5}[dw]$']],
+            'required' => ['relative'],
+        ];
+
+        return [
+            'type' => 'object',
+            'description' => 'A filter: every condition has to hold. Fields are the core fields or `property:<key>` of a property. '
+                .'Values: ULIDs (`me` for `assignee` and `created_by` and people properties), the words of the state categories and priorities, '
+                .'days `YYYY-MM-DD` or `today`, `this_week`, `this_month`, `{relative: "+7d"}`, `true`/`false`, a text of 1–'.FilterSchema::TEXT_MAX.' characters, a number. '
+                .'`in`/`not_in` take a list of 1–'.FilterSchema::MAX_VALUES.', `between` two values, `is_empty`, `is_not_empty` and `overdue` none.',
+            'properties' => [
+                'version' => ['type' => 'integer', 'const' => 1],
+                'conditions' => [
+                    'type' => 'array',
+                    'maxItems' => FilterSchema::MAX_CONDITIONS,
+                    'items' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'field' => [
+                                'description' => 'A core field or a property, `property:<key>`.',
+                                'anyOf' => [
+                                    ['type' => 'string', 'enum' => array_column(CoreField::cases(), 'value')],
+                                    ['type' => 'string', 'pattern' => '^'.Field::PROPERTY_PREFIX],
+                                ],
+                            ],
+                            'op' => ['type' => 'string', 'enum' => array_column(Op::cases(), 'value')],
+                            'value' => [
+                                'description' => 'Left out (or `null`) for an operator without a value.',
+                                'anyOf' => [
+                                    ['type' => ['string', 'number', 'boolean', 'null']],
+                                    $relative,
+                                    ['type' => 'array', 'maxItems' => FilterSchema::MAX_VALUES, 'items' => ['anyOf' => [$scalar, $relative]]],
+                                ],
+                            ],
+                        ],
+                        'required' => ['field', 'op'],
+                    ],
+                ],
+            ],
+            'required' => ['version', 'conditions'],
+        ];
+    }
+
+    /**
+     * The order of a list of work items: a core field or a property of the types number, date, text or address.
+     *
+     * @return array<string, mixed>
+     */
+    public static function sortSpec(): array
+    {
+        return [
+            'type' => 'object',
+            'description' => 'The order of a list. Items of equal value follow their manual order (`rank`); `rank` alone is the manual order.',
+            'properties' => [
+                'field' => [
+                    'anyOf' => [
+                        ['type' => 'string', 'enum' => SortSpec::CORE],
+                        ['type' => 'string', 'pattern' => '^'.Field::PROPERTY_PREFIX, 'description' => 'A property of the types number, date, text or address.'],
+                    ],
+                ],
+                'direction' => ['type' => 'string', 'enum' => ['asc', 'desc']],
+            ],
+            'required' => ['field', 'direction'],
+        ];
+    }
+
+    /**
+     * How a view shows its items (`App\Domain\Views\DisplaySchema`), all five keys required.
+     *
+     * @return array<string, mixed>
+     */
+    public static function display(): array
+    {
+        return [
+            'type' => 'object',
+            'description' => 'How a list shows its items: the layout, the grouping, the order, the fields of a row and whether sub-items show.',
+            'properties' => [
+                'layout' => ['type' => 'string', 'enum' => array_column(Layout::cases(), 'value')],
+                'group_by' => ['type' => 'string', 'enum' => array_column(GroupBy::cases(), 'value')],
+                'sort' => ['$ref' => '#/components/schemas/SortSpec'],
+                'fields' => [
+                    'type' => 'array',
+                    'maxItems' => DisplaySchema::MAX_FIELDS,
+                    'items' => ['anyOf' => [
+                        ['type' => 'string', 'enum' => DisplaySchema::FIELDS],
+                        ['type' => 'string', 'pattern' => '^'.Field::PROPERTY_PREFIX],
+                    ]],
+                ],
+                'show_sub_items' => ['type' => 'boolean'],
+            ],
+            'required' => ['layout', 'group_by', 'sort', 'fields', 'show_sub_items'],
         ];
     }
 }

@@ -16,10 +16,14 @@ use App\Actions\WorkItems\RestoreWorkItem;
 use App\Actions\WorkItems\TransitionWorkItem;
 use App\Actions\WorkItems\UpdateWorkItem;
 use App\Domain\Views\GroupBy;
+use App\Http\Api\Answer;
 use App\Http\Api\ApiList;
+use App\Http\Api\Body;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\WorkItemResource;
 use App\Models\WorkItem;
+use App\OpenApi\ItemQueryDocs;
+use App\OpenApi\WorkItemSchemas;
 use App\Support\Actor;
 use App\Views\GroupCount;
 use Illuminate\Http\JsonResponse;
@@ -35,12 +39,22 @@ use stdClass;
  */
 final class WorkItemsController extends Controller
 {
+    /**
+     * List work items.
+     *
+     * The items the account sees, filtered by a view and the short form `filter[<key>]` (the long form of a filter goes
+     * through `POST /work-items/query`). `include` is refused here (a list embeds nothing).
+     */
     public function index(Request $request): JsonResponse
     {
         return ApiList::respond(ListWorkItems::run(Actor::fromRequest($request), $request->query()), WorkItemResource::class);
     }
 
-    /** `?include=children,type,workflow` (comma-separated) embeds those as well. */
+    /**
+     * Get a work item.
+     *
+     * `include` (comma-separated) embeds its children, type, workflow, relations and file list as well.
+     */
     public function show(Request $request, WorkItem $item): WorkItemResource
     {
         $include = $request->query('include');
@@ -48,16 +62,26 @@ final class WorkItemsController extends Controller
         return new WorkItemResource(GetWorkItem::run(Actor::fromRequest($request), $item, is_string($include) ? explode(',', $include) : (array) $include));
     }
 
-    /** A read through a body (P15): a view, a filter, the short form, a sort; the same page format as the list. */
+    /**
+     * Query work items.
+     *
+     * A read through a body (P15): a view, a filter, the short form, a sort; the same page format as the list. A list
+     * read by `POST` leads on with `meta.next_cursor` as `cursor` in the same body.
+     */
+    #[Body(ItemQueryDocs::class, 'query')]
     public function query(Request $request): JsonResponse
     {
         return ApiList::respond(QueryWorkItems::run(Actor::fromRequest($request), $request->all()), WorkItemResource::class);
     }
 
     /**
+     * Group work items.
+     *
      * The groups of a query body and their numbers: `{data: {group_by, total, groups: [{key, count, item?}]}}`, `item`
      * (`{id, key, title, type_id}`, `null` for `none`) only for parent groups.
      */
+    #[Body(ItemQueryDocs::class, 'groups')]
+    #[Answer(200, WorkItemSchemas::class, 'groups', 'The groups and their numbers.')]
     public function groups(Request $request): JsonResponse
     {
         $groups = GroupWorkItems::run(Actor::fromRequest($request), $request->all());
@@ -79,7 +103,13 @@ final class WorkItemsController extends Controller
         ]]);
     }
 
-    /** The number of items of each named filter: `{data: {<name>: count}}` (an object, also for names like `0`). */
+    /**
+     * Count work items.
+     *
+     * The number of items of each named filter: `{data: {<name>: count}}` (an object, also for names like `0`).
+     */
+    #[Body(ItemQueryDocs::class, 'counts')]
+    #[Answer(200, WorkItemSchemas::class, 'counts', 'The number of items per filter.')]
     public function counts(Request $request): JsonResponse
     {
         $input = $request->all();
@@ -93,53 +123,90 @@ final class WorkItemsController extends Controller
         return response()->json(['data' => (object) CountWorkItems::run(Actor::fromRequest($request), $input)]);
     }
 
-    /** 201: the new item was just created. */
-    public function store(Request $request): WorkItemResource
+    /**
+     * Create a work item.
+     */
+    #[Body(WorkItemSchemas::class, 'create')]
+    public function store(Request $request): JsonResponse
     {
         $actor = Actor::fromRequest($request);
         $item = CreateWorkItem::run($actor, $request->all());
         WorkItem::loadForResource($item, $actor->user);
 
-        return new WorkItemResource($item);
+        return (new WorkItemResource($item))->response()->setStatusCode(201);
     }
 
-    /** `ids` and one `patch` for all of them: 200 `{updated, rejected}` without `data`, a refused item is a line of it. */
+    /**
+     * Change many work items.
+     *
+     * `ids` and one `patch` for all of them: 200 `{updated, rejected}` without `data`, a refused item is a line of it.
+     */
+    #[Body(WorkItemSchemas::class, 'bulk')]
+    #[Answer(200, WorkItemSchemas::class, 'bulkDone', 'Which items took the patch and which refused it.')]
     public function bulk(Request $request): JsonResponse
     {
         return response()->json(BulkUpdateWorkItems::run(Actor::fromRequest($request), $request->all()));
     }
 
-    /** Changes what the body sends; `base_description_version` guards the description (409 `description_conflict`). */
+    /**
+     * Change a work item.
+     *
+     * Changes what the body sends; `base_description_version` guards the description (409 `description_conflict` with
+     * `current`, the item as it is now).
+     */
+    #[Body(WorkItemSchemas::class, 'update')]
     public function update(Request $request, WorkItem $item): WorkItemResource
     {
         return new WorkItemResource(UpdateWorkItem::run(Actor::fromRequest($request), $item, $request->all()));
     }
 
-    /** `to_state_id` and, for a closed state, `resolution_id`: 409 `transition_not_allowed` when the workflow forbids it. */
+    /**
+     * Move a work item to another state.
+     *
+     * `to_state_id` and, for a closed state, `resolution_id`: 409 `transition_not_allowed` when the workflow forbids it.
+     */
+    #[Body(WorkItemSchemas::class, 'transition')]
     public function transition(Request $request, WorkItem $item): WorkItemResource
     {
         return new WorkItemResource(TransitionWorkItem::run(Actor::fromRequest($request), $item, $request->all()));
     }
 
-    /** `type_id` and the `values` the new type asks for. */
+    /**
+     * Change the type of a work item.
+     *
+     * `type_id` and the `values` the new type asks for.
+     */
+    #[Body(WorkItemSchemas::class, 'changeType')]
     public function changeType(Request $request, WorkItem $item): WorkItemResource
     {
         return new WorkItemResource(ChangeWorkItemType::run(Actor::fromRequest($request), $item, $request->all()));
     }
 
-    /** Only a closed item (409 `not_closed`). */
+    /**
+     * Archive a work item.
+     *
+     * Only a closed item (409 `not_closed`); an archived item is read-only.
+     */
     public function archive(Request $request, WorkItem $item): WorkItemResource
     {
         return new WorkItemResource(ArchiveWorkItem::run(Actor::fromRequest($request), $item));
     }
 
-    /** Only an archived item (409 `not_archived`). */
+    /**
+     * Restore an archived work item.
+     *
+     * Only an archived item (409 `not_archived`); its state stays.
+     */
     public function restore(Request $request, WorkItem $item): WorkItemResource
     {
         return new WorkItemResource(RestoreWorkItem::run(Actor::fromRequest($request), $item));
     }
 
-    /** 204: the item is gone, its children have no parent any more. */
+    /**
+     * Delete a work item.
+     *
+     * The admins of the project only. The item is gone, its children have no parent any more.
+     */
     public function destroy(Request $request, WorkItem $item): Response
     {
         DeleteWorkItem::run(Actor::fromRequest($request), $item);

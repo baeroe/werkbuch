@@ -18,7 +18,11 @@ use Illuminate\Http\Request;
  */
 final class HistoryController extends Controller
 {
-    /** A page of entries, oldest first, each event on its own (`cursor`, `per_page`). */
+    /**
+     * List the history of a work item.
+     *
+     * A page of entries, oldest first, each event on its own; a relation names the other end only when the account sees it.
+     */
     #[ListOf(ListHistory::class)]
     public function index(Request $request, WorkItem $item): JsonResponse
     {

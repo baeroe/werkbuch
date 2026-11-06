@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Api;
 use App\Actions\WorkItems\AddRelation;
 use App\Actions\WorkItems\ListRelations;
 use App\Actions\WorkItems\RemoveRelation;
+use App\Http\Api\Body;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\RelationEntryResource;
 use App\Models\WorkItem;
 use App\Models\WorkItemRelation;
+use App\OpenApi\WorkItemSchemas;
 use App\Support\Actor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -22,13 +24,22 @@ use Illuminate\Http\Response;
  */
 final class RelationsController extends Controller
 {
-    /** `{data: RelationEntry[]}`, without a page: by type, then by the key of the other end, hidden ends last. */
+    /**
+     * List the relations of a work item.
+     *
+     * `{data: RelationEntry[]}`, without a page: by type, then by the key of the other end, hidden ends last.
+     */
     public function index(Request $request, WorkItem $item): AnonymousResourceCollection
     {
         return RelationEntryResource::collection(ListRelations::run(Actor::fromRequest($request), $item));
     }
 
-    /** `type_id` and `target_id` (ULID or key): 201 `{data: RelationEntry}` as the item reads it (`outward`). */
+    /**
+     * Relate a work item to another one.
+     *
+     * `type_id` and `target_id` (ULID or key): 201 `{data: RelationEntry}` as the item reads it (`outward`).
+     */
+    #[Body(WorkItemSchemas::class, 'relation')]
     public function store(Request $request, WorkItem $item): JsonResponse
     {
         $actor = Actor::fromRequest($request);
@@ -37,7 +48,11 @@ final class RelationsController extends Controller
         return (new RelationEntryResource(ListRelations::entry($relation, $item, $actor->user)))->response()->setStatusCode(201);
     }
 
-    /** 204 from either end the account may change. */
+    /**
+     * Remove a relation.
+     *
+     * From either end the account may change, also when the other end is hidden to it.
+     */
     public function destroy(Request $request, WorkItemRelation $relation): Response
     {
         RemoveRelation::run(Actor::fromRequest($request), $relation);
