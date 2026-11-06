@@ -26,7 +26,7 @@ final class Rendering
         // that refuses the test mail are reported once, by QuerySearch and SendTestMail with their cause, not a second
         // time as the 503 that tells the client
         $exceptions->dontReportWhen(fn (Throwable $e): bool => $e instanceof Problem
-            && ($e->status < 500 || in_array($e->reason, ['search_unavailable', 'mail_failed'], true)));
+            && ($e->status < 500 || in_array($e->reason, ['search_unavailable', 'mail_failed', 'webhook_not_logged'], true)));
 
         // changing the own password: the limit shows at the current password, which it protects from guessing
         $exceptions->render(fn (ThrottleRequestsException $e, Request $request) => $request->is('api/v1/me/password')

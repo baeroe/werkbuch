@@ -29,7 +29,7 @@ final class PingWebhook
     /**
      * @return WebhookAttempt the attempt, with `delivery` loaded
      *
-     * @throws Problem 403
+     * @throws Problem 403, 503 `webhook_not_logged` when the try left no log line
      */
     public function handle(Actor $actor, Webhook $webhook): WebhookAttempt
     {
@@ -50,14 +50,15 @@ final class PingWebhook
             return $delivery;
         });
 
-        DeliverWebhook::sendNow($delivery, WebhookAttempt::PING);
-
-        $attempt = WebhookAttempt::query()->where('delivery_id', $delivery->id)->with('delivery')->first() ?? throw Problem::notFound();
-        // a ping has no further tries: what did not succeed is over
+        $attempt = DeliverWebhook::sendNow($delivery, WebhookAttempt::PING);
+        // a ping has no further tries: what did not succeed is over, also when the log lost its line
         WebhookDelivery::query()->whereKey($delivery->id)->where('status', WebhookDelivery::PENDING)
             ->update(['status' => WebhookDelivery::FAILED, 'updated_at' => now()]);
-        $attempt->delivery->status = $attempt->delivery->status === WebhookDelivery::PENDING ? WebhookDelivery::FAILED : $attempt->delivery->status;
+        if ($attempt === null) {
+            throw Problem::unavailable('webhook_not_logged');
+        }
 
-        return $attempt;
+        // fresh(): the row just created must not answer 201
+        return $attempt->fresh('delivery') ?? throw Problem::notFound();
     }
 }

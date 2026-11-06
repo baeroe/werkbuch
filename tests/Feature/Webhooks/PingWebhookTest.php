@@ -1,6 +1,7 @@
 <?php
 
 use App\Actions\Webhooks\PingWebhook;
+use App\Actions\Webhooks\RecordWebhookAttempt;
 use App\Models\User;
 use App\Models\Webhook;
 use App\Models\WebhookAttempt;
@@ -120,4 +121,16 @@ it('lets only accounts with org.manage ping', function () {
     expect(problemOf(fn () => PingWebhook::run(actor(User::factory()->create()), $webhook))->status)->toBe(403);
     Http::assertNothingSent();
     expect(WebhookDelivery::query()->count())->toBe(0);
+});
+
+it('answers 503 and not 404 when the log lost the line of the ping', function () use ($ping) {
+    Http::fake(['*' => Http::response('ok')]);
+    app()->bind(RecordWebhookAttempt::class, fn () => throw new RuntimeException('Deadlock found when trying to get lock'));
+
+    $problem = problemOf(fn () => $ping(Webhook::factory()->create()));
+
+    expect($problem->status)->toBe(503)
+        ->and($problem->reason)->toBe('webhook_not_logged')
+        ->and(WebhookDelivery::query()->sole()->status)->toBe(WebhookDelivery::FAILED);
+    Http::assertSentCount(1);
 });

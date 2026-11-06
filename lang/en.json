@@ -1515,6 +1515,7 @@
     "problem.reason.two_factor_not_pending": "No setup of two-factor authentication is in progress.",
     "problem.reason.unauthenticated": "You are not signed in.",
     "problem.reason.validation_failed": "The input is not valid.",
+    "problem.reason.webhook_not_logged": "The webhook was called, but the attempt could not be logged.",
     "problem.reason_unknown": "Refused (:reason).",
     "problem.title.bad_request": "Bad request",
     "problem.title.conflict": "Conflict",

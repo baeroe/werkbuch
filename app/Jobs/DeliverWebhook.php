@@ -51,6 +51,14 @@ final class DeliverWebhook extends CallWebhookJob
     private string $event = '';
 
     /**
+     * What the sync tries of this process recorded, per delivery and kind: sendNow() hands out its own attempt, never one
+     * a scheduled try of another process wrote meanwhile (M1).
+     *
+     * @var array<string, WebhookAttempt|null>
+     */
+    private static array $recorded = [];
+
+    /**
      * Queues the first try of the delivery after the commit of the transaction that wrote it. Not named `queue`: the
      * bus calls a method of that name on a job to push it itself.
      */
@@ -61,13 +69,20 @@ final class DeliverWebhook extends CallWebhookJob
 
     /**
      * One try now, in this process, with no further ones (a test ping or "send again", A367): the same job on the sync
-     * queue with a single try. Call it outside any transaction of your own: the request waits for the receiver.
+     * queue with a single try. Answers the attempt it recorded, `null` when nothing was sent or the log failed. Call it outside any transaction of your own: the request waits for the receiver.
      *
      * @param  WebhookAttempt::MANUAL|WebhookAttempt::PING  $kind
      */
-    public static function sendNow(WebhookDelivery $delivery, string $kind): void
+    public static function sendNow(WebhookDelivery $delivery, string $kind): ?WebhookAttempt
     {
+        $key = $delivery->id.':'.$kind;
+        unset(self::$recorded[$key]);
         self::call($delivery, $kind)->maximumTries(1)->dispatchSync();
+
+        $attempt = self::$recorded[$key] ?? null;
+        unset(self::$recorded[$key]);
+
+        return $attempt;
     }
 
     /** create() reads config/webhook-server.php; a useJob() after it would throw those settings away (K1). */
@@ -104,8 +119,11 @@ final class DeliverWebhook extends CallWebhookJob
         $durationMs = (int) round($seconds !== null ? $seconds * 1000 : (hrtime(true) - $started) / 1e6);
 
         try {
-            RecordWebhookAttempt::run($actor, $deliveryId, $this->response?->status(), $durationMs, $this->response?->body(),
+            $attempt = RecordWebhookAttempt::run($actor, $deliveryId, $this->response?->status(), $durationMs, $this->response?->body(),
                 $this->response === null ? $this->error() : null, $kind, $this->attempts() >= $this->tries);
+            if ($kind !== WebhookAttempt::SCHEDULED) {
+                self::$recorded[$deliveryId.':'.$kind] = $attempt;
+            }
         } catch (Throwable $exception) {
             // a lost log line is better than a second request (K2): the delivery stays pending, the pruning finishes it
             report($exception);

@@ -1515,6 +1515,7 @@
     "problem.reason.two_factor_not_pending": "Gerade wird keine Zwei-Faktor-Authentifizierung eingerichtet.",
     "problem.reason.unauthenticated": "Du bist nicht angemeldet.",
     "problem.reason.validation_failed": "Die Eingabe ist nicht gültig.",
+    "problem.reason.webhook_not_logged": "Der Webhook wurde aufgerufen, der Versuch ließ sich aber nicht protokollieren.",
     "problem.reason_unknown": "Abgelehnt (:reason).",
     "problem.title.bad_request": "Fehlerhafte Anfrage",
     "problem.title.conflict": "Konflikt",

@@ -26,7 +26,7 @@ final class RedeliverWebhook
     /**
      * @return WebhookAttempt the attempt, with `delivery` loaded
      *
-     * @throws Problem 403, and 404 for a delivery of another webhook
+     * @throws Problem 403, 404 for a delivery of another webhook, 503 `webhook_not_logged` when the try left no log line
      */
     public function handle(Actor $actor, Webhook $webhook, WebhookDelivery $delivery): WebhookAttempt
     {
@@ -35,10 +35,9 @@ final class RedeliverWebhook
             throw Problem::notFound();
         }
 
-        $before = (int) (WebhookDelivery::query()->whereKey($delivery->id)->value('attempts') ?? throw Problem::notFound());
-        DeliverWebhook::sendNow($delivery, WebhookAttempt::MANUAL);
+        $attempt = DeliverWebhook::sendNow($delivery, WebhookAttempt::MANUAL) ?? throw Problem::unavailable('webhook_not_logged');
 
-        return WebhookAttempt::query()->where('delivery_id', $delivery->id)->where('attempt', '>', $before)
-            ->with('delivery')->orderBy('attempt')->first() ?? throw Problem::notFound();
+        // fresh(): the row just created must not answer 201
+        return $attempt->fresh('delivery') ?? throw Problem::notFound();
     }
 }
