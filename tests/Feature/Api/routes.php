@@ -144,7 +144,7 @@ return [
     'search items, projects, people and views' => ['GET', '/api/v1/search'],
     'list who can be mentioned' => ['GET', '/api/v1/mentions', 'body' => ['project' => 'WEB']],
     'resolve references' => ['GET', '/api/v1/references', 'body' => ['items' => '01jbz7m0000000000000000000']],
-    'upload an attachment' => ['POST', '/api/v1/attachments', 'body' => ['project_id' => 'WEB', 'kind' => 'inline', 'file' => UploadedFile::fake()->createWithContent('matrix.txt', 'Matrix')]],
+    'upload an attachment' => ['POST', '/api/v1/attachments', 'multipart' => true, 'body' => ['project_id' => 'WEB', 'kind' => 'inline', 'file' => UploadedFile::fake()->createWithContent('matrix.txt', 'Matrix')]],
     'show an attachment' => ['GET', '/api/v1/attachments/{attachment}', 'params' => fn (MatrixWorld $w) => ['attachment' => Attachment::factory()->forItem($w->item('project_admin'))->create()->id]],
     'delete an attachment' => ['DELETE', '/api/v1/attachments/{attachment}', 'params' => fn (MatrixWorld $w) => ['attachment' => Attachment::factory()->forItem($w->item('project_admin'), 'file')->create()->id]],
     'list views' => ['GET', '/api/v1/views'],

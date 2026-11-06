@@ -28,11 +28,12 @@ final class Bodies extends OperationExtension
         if ($body !== null) {
             $schema = $body->schema();
 
-            // a body with nothing required may be left out (a PATCH that changes nothing)
+            // a body with nothing required may be left out (a PATCH that changes nothing); one that must name one of
+            // several keys (`oneOf`) is required
             $operation->addRequestBodyObject(
                 RequestBodyObject::make()
-                    ->required(($schema['required'] ?? []) !== [])
-                    ->setContent('application/json', Schema::fromType(new JsonSchema($schema))),
+                    ->required(($schema['required'] ?? []) !== [] || isset($schema['oneOf']))
+                    ->setContent($body->type, Schema::fromType(new JsonSchema($schema))),
             );
         }
 

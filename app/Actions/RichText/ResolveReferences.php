@@ -26,6 +26,9 @@ final class ResolveReferences
 {
     use AsAction;
 
+    /** The keys of the query (the OpenAPI document names them, K15); others are passed over. */
+    public const KEYS = ['items', 'pages'];
+
     /** The most IDs of one call, items and pages together. */
     public const MAX_ITEMS = 100;
 

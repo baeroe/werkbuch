@@ -27,6 +27,9 @@ final class AddReaction
 {
     use AsAction;
 
+    /** The keys of the body (the OpenAPI document names them, K15); others are passed over. */
+    public const FIELDS = ['emoji'];
+
     /**
      * @param  array<array-key, mixed>  $input  `emoji`
      *

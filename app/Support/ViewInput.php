@@ -33,7 +33,8 @@ final class ViewInput
     /** The column `views.icon`. */
     public const ICON_MAX_BYTES = 32;
 
-    private const REQUIRED = ['name', 'icon', 'filter', 'display'];
+    /** The keys of the body, all four required (the OpenAPI document names them, K15). */
+    public const FIELDS = ['name', 'icon', 'filter', 'display'];
 
     /**
      * @param  array<array-key, mixed>  $input  `name`, `icon`, `filter`, `display`
@@ -45,7 +46,7 @@ final class ViewInput
     {
         $errors = [];
 
-        foreach (self::REQUIRED as $field) {
+        foreach (self::FIELDS as $field) {
             if (! array_key_exists($field, $input)) {
                 $errors[$field] = __('field.required');
             }

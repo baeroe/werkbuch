@@ -30,6 +30,9 @@ final class UploadAttachment
 {
     use AsAction;
 
+    /** The parts of the multipart body (the OpenAPI document names them, K15); others are passed over. */
+    public const FIELDS = ['project_id', 'kind', 'work_item_id', 'file'];
+
     /** The name of a file whose name is empty after cleaning. */
     public const FALLBACK_NAME = 'datei';
 

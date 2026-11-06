@@ -63,6 +63,15 @@ final class Components implements DocumentTransformer
                 }
             }
         }
+        foreach (ContentSchemas::patches() as $name => $properties) {
+            $type = ($components->schemas[$name] ?? null)?->type;
+
+            if ($type instanceof ObjectType) {
+                foreach ($properties as $property => $schema) {
+                    $type->addProperty($property, new JsonSchema($schema));
+                }
+            }
+        }
 
         $components->addSecurityScheme('token', SecurityScheme::http('bearer', '<id>|wb_<secret>')->setDescription(
             'An API token (`Authorization: Bearer <id>|wb_<secret>`), created in the personal settings under “API & MCP”. '
