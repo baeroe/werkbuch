@@ -108,12 +108,21 @@ final class ContentDocs extends OperationExtension
      */
     private static function references(): array
     {
+        return self::parameters(self::referencesParameters());
+    }
+
+    /**
+     * The query of `GET /references` by name.
+     *
+     * @return array<string, array{schema: array<string, mixed>, description: string, required: bool}>
+     */
+    public static function referencesParameters(): array
+    {
         $ulids = ['type' => 'array', 'items' => ['type' => 'string', 'pattern' => PathParameters::ULID]];
 
         return [
-            self::parameter('items', $ulids, 'ULIDs of work items, separated by commas. Together with `pages` at least one and at most '.ResolveReferences::MAX_ITEMS.'.')
-                ->setStyle('form')->setExplode(false),
-            self::parameter('pages', $ulids, 'ULIDs of wiki pages, separated by commas. An ID counts only in its own list.')->setStyle('form')->setExplode(false),
+            'items' => ['schema' => $ulids, 'description' => 'ULIDs of work items, separated by commas. Together with `pages` at least one and at most '.ResolveReferences::MAX_ITEMS.'.', 'required' => false],
+            'pages' => ['schema' => $ulids, 'description' => 'ULIDs of wiki pages, separated by commas. An ID counts only in its own list.', 'required' => false],
         ];
     }
 

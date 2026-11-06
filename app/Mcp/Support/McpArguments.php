@@ -89,10 +89,12 @@ final readonly class McpArguments
     /**
      * The arguments named by `$keys` in the shape of a REST query, as the browser sends one (`toQueryString` in
      * resources/js/api/http.ts): a list as comma text, a boolean as `1`/`0`, a number as text, an object (`filter`)
-     * one level deep. A missing argument, `null` and an empty list stay out.
+     * one level deep. A missing argument, `null` and an empty list stay out. What a query cannot hold (an object in an
+     * object, a list of objects) goes to the action as it is, which refuses it with 422 like REST, never as text it
+     * would search for.
      *
      * @param  list<string>  $keys
-     * @return array<string, string|array<string, string>>
+     * @return array<string, mixed>
      */
     public function query(array $keys): array
     {
@@ -102,7 +104,7 @@ final readonly class McpArguments
             $value = $this->arguments[$key] ?? null;
 
             if (is_array($value) && ! array_is_list($value)) {
-                $nested = array_filter(array_map(self::text(...), $value), fn (?string $text): bool => $text !== null);
+                $nested = array_filter(array_map(self::value(...), $value), fn (mixed $text): bool => $text !== null);
                 if ($nested !== []) {
                     $query[$key] = $nested;
                 }
@@ -110,7 +112,7 @@ final readonly class McpArguments
                 continue;
             }
 
-            $text = self::text($value);
+            $text = self::value($value);
             if ($text !== null) {
                 $query[$key] = $text;
             }
@@ -120,27 +122,33 @@ final readonly class McpArguments
     }
 
     /**
-     * One value of a query as text; `null` for nothing to send.
+     * One value of a query: text, `null` for nothing to send, or what no query can hold as it is.
      */
-    private static function text(mixed $value): ?string
+    private static function value(mixed $value): mixed
     {
-        return match (true) {
-            $value === null => null,
-            is_bool($value) => $value ? '1' : '0',
-            is_string($value) => $value,
-            is_int($value), is_float($value) => (string) $value,
-            is_array($value) && array_is_list($value) => self::listText($value),
-            default => (string) json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-        };
+        if (is_bool($value)) {
+            return $value ? '1' : '0';
+        }
+        if (is_int($value) || is_float($value)) {
+            return (string) $value;
+        }
+
+        // text and null as they are, a list as comma text, an object as it is
+        return is_array($value) && array_is_list($value) ? self::listText($value) : $value;
     }
 
     /**
+     * A list as comma text; a list of anything but plain values as it is.
+     *
      * @param  list<mixed>  $values
      */
-    private static function listText(array $values): ?string
+    private static function listText(array $values): mixed
     {
-        $texts = array_filter(array_map(self::text(...), $values), fn (?string $text): bool => $text !== null);
+        $values = array_values(array_filter($values, fn (mixed $value): bool => $value !== null));
+        if (array_filter($values, fn (mixed $value): bool => is_array($value)) !== []) {
+            return $values;
+        }
 
-        return $texts === [] ? null : implode(',', $texts);
+        return $values === [] ? null : implode(',', array_map(fn (mixed $value): string => (string) self::value($value), $values));
     }
 }

@@ -66,6 +66,9 @@ final class Contract
 
     private static ?string $off = null;
 
+    /** @var array<string, array{tree: object, validator: Validator, tags: list<string>|null}> */
+    private static array $dropping = [];
+
     /**
      * Check the exchanges against a document of the test instead of the generated one (every tag strict unless
      * `$strictTags` names them); `reset()` returns to the generated document.
@@ -208,6 +211,67 @@ final class Contract
         if ($violations !== []) {
             throw new AssertionFailedError("The answers break the OpenAPI document:\n".implode("\n", $violations));
         }
+    }
+
+    /**
+     * The violations of a body against the answer `$status` of an operation (`$uri` as `Route::uri()` without
+     * `api/v1`), checked like an answer of the contract: on the JSON of objects (an empty object stays `{}`), every
+     * object closed. `$dropped` takes keys (patterns as `fnmatch` reads them: `links`, `*_json`, `values_markdown`) out
+     * of every `required`, for a body that leaves them out on purpose (the result of an MCP tool).
+     *
+     * @param  array<array-key, mixed>|stdClass  $body
+     * @param  list<string>  $dropped
+     * @return list<string>
+     */
+    public static function conforms(string $method, string $uri, int $status, array|stdClass $body, array $dropped = []): array
+    {
+        $contract = self::$dropping[implode('|', $dropped)] ??= self::prepare(self::withoutRequired(Document::get(), $dropped), null);
+        $at = '/paths/'.self::segment('/'.ltrim($uri, '/')).'/'.strtolower($method);
+        $operation = self::pointer($contract['tree'], $at);
+
+        if (! $operation instanceof stdClass) {
+            return ['the operation is not documented'];
+        }
+
+        $responses = $operation->responses ?? new stdClass;
+        if (! property_exists($responses, (string) $status)) {
+            return ["status {$status} is not documented"];
+        }
+
+        [, $where] = self::resolve($contract['tree'], $responses->{(string) $status}, "{$at}/responses/{$status}");
+
+        return self::validate($contract, $where, 'application/json', json_encode($body, JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION), '');
+    }
+
+    /**
+     * The document with the keys matching `$patterns` out of every `required` (a list of names; a property that is
+     * called `required` stays).
+     *
+     * @param  array<string, mixed>  $document
+     * @param  list<string>  $patterns
+     * @return array<string, mixed>
+     */
+    private static function withoutRequired(array $document, array $patterns): array
+    {
+        $strip = function (mixed $value) use (&$strip, $patterns): mixed {
+            if ($value instanceof stdClass) {
+                foreach (get_object_vars($value) as $key => $sub) {
+                    $value->{$key} = $key === 'required' && is_array($sub)
+                        ? array_values(array_filter($sub, fn (mixed $name): bool => ! is_string($name)
+                            || array_filter($patterns, fn (string $pattern): bool => fnmatch($pattern, $name)) === []))
+                        : $strip($sub);
+                }
+            } elseif (is_array($value)) {
+                $value = array_map($strip, $value);
+            }
+
+            return $value;
+        };
+
+        // as objects, so an empty schema stays `{}`
+        $copy = json_decode(json_encode($document, JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION), false, 512, JSON_THROW_ON_ERROR);
+
+        return (array) $strip($copy);
     }
 
     /**

@@ -52,6 +52,16 @@ abstract class WerkbuchTool extends Tool
         }
     }
 
+    /**
+     * The tool as `tools/list` names it, its input schema built from its actions (`ToolSchema::input`).
+     *
+     * @return array<string, mixed>
+     */
+    public function toArray(): array
+    {
+        return [...parent::toArray(), 'inputSchema' => ToolSchema::input($this->actions())];
+    }
+
     final public function shouldRegister(Request $http): bool
     {
         return $this->allows($http->user());

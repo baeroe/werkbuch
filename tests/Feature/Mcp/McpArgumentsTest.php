@@ -96,14 +96,27 @@ it('turns a list filter into the comma form of the query', function () use ($ech
         'limit' => 2.5,
     ]);
 
-    // a nested object stays JSON text, which the action refuses; null and an empty list stay out
+    // a nested object stays an object, which the action refuses; null and an empty list stay out
     expect($result['structuredContent']['query'])->toBe([
-        'filter' => ['type' => 'person,bot', 'disabled' => '0', 'nested' => '{"a":1}'],
+        'filter' => ['type' => 'person,bot', 'disabled' => '0', 'nested' => ['a' => 1]],
         'include' => 'children,relations',
         'lean' => '1',
         'per_page' => '10',
         'limit' => '2.5',
     ]);
+});
+
+it('refuses an object in a filter like REST, never searching its JSON', function () use ($echo) {
+    $mcp = $echo($this, User::factory()->admin()->create());
+
+    $object = $mcp->call('echo', ['action' => 'users', 'filter' => ['type' => ['kind' => 'person']]]);
+    $list = $mcp->call('echo', ['action' => 'users', 'filter' => ['type' => [['kind' => 'person']]]]);
+
+    foreach ([$object, $list] as $result) {
+        expect($result['isError'])->toBeTrue()
+            ->and($result['structuredContent']['status'])->toBe(422)
+            ->and(array_keys($result['structuredContent']['errors']))->toBe(['filter.type']);
+    }
 });
 
 it('hands a list filter to the action like REST', function () use ($echo) {

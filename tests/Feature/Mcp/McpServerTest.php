@@ -1,23 +1,43 @@
 <?php
 
+use App\Http\Middleware\EnsureTokenAbility;
 use App\Mcp\Servers\WerkbuchServer;
+use App\Mcp\Support\McpAction;
+use App\Mcp\Support\McpArguments;
+use App\Mcp\Support\McpResult;
 use App\Mcp\Support\ReadTool;
+use App\Mcp\Support\ToolSchema;
 use App\Mcp\Support\WerkbuchTool;
 use App\Mcp\Support\WriteTool;
 use App\Mcp\Tools\WhoamiTool;
 use App\Models\User;
+use App\OpenApi\ContentSchemas;
+use App\OpenApi\ItemQueryDocs;
+use App\Support\Actor;
 use Illuminate\Http\Request;
 use Laravel\Mcp\Request as McpRequest;
 use Laravel\Sanctum\TransientToken;
 use Tests\Support\Mcp\McpClient;
 use Tests\Support\Mcp\TestServer;
+use Tests\Support\Mcp\ToolRows;
+use Tests\Support\Mcp\TwinServer;
 
 /*
  * The tools of the MCP server (phase 13, task 3a; K2, K17): registered, named and annotated alike, and offered only to
- * a personal access token with their ability. The test server (`mcp/_t`) has a read and a write tool.
+ * a personal access token with their ability. The test server (`mcp/_t`) has a read and a write tool. Task 3b: each
+ * action has the ability of its REST twin (K9), and `tools/list` stays within a budget in the context of a model (K8):
+ * MCP_TOOL_BYTES of JSON a tool, MCP_LIST_BYTES the whole list. A tool over it gets smaller (its description, its
+ * actions), the budget does not grow.
  */
 
-beforeEach(fn () => TestServer::serve());
+const MCP_TOOL_BYTES = 12_288;
+
+const MCP_LIST_BYTES = 122_880;
+
+beforeEach(function () {
+    TestServer::serve();
+    TwinServer::serve();
+});
 
 /** @return list<class-string<WerkbuchTool>> */
 $registered = fn (string $server): array => (new ReflectionClass($server))->getDefaultProperties()['tools'];
@@ -69,6 +89,9 @@ it('annotates every tool', function () use ($registered) {
         if ($name !== 'manage-webhooks') {
             expect($annotations)->toHaveKey('openWorldHint', message: $name)
                 ->and($annotations['openWorldHint'])->toBeFalse($name);
+        } else {
+            // a missing hint reads as true (MCP)
+            expect($annotations['openWorldHint'] ?? true)->toBeTrue($name);
         }
     }
 
@@ -152,4 +175,48 @@ it('names the tool with a single action without an action argument', function ()
     // whatever `action` says, the one action runs, as the actor of the token over MCP
     expect(McpClient::for($this, $plain, path: '/'.TestServer::PATH)->call('manage-echo', ['action' => 'nope'])['structuredContent'])
         ->toBe(['written' => 'mcp']);
+});
+
+it('gives each action the ability of its twin', function (string $suite) {
+    $checked = [];
+
+    foreach (ToolRows::tools($suite) as $tool) {
+        foreach ($tool->actionNames() as $name) {
+            $action = $tool->actionNamed($name);
+            // a read through a body (POST work-items/query) reads; an action without a twin writes
+            $needed = $action->twin === null ? 'write' : EnsureTokenAbility::required(ToolRows::route($action), ToolRows::twin($action)[0]);
+            $checked["{$tool->name()}:{$name}"] = $tool->ability() === $needed ? $needed : "{$tool->ability()}, but its twin needs {$needed}";
+        }
+    }
+
+    // a line that is no ability names a mismatch
+    expect(array_filter($checked, fn (string $line) => ! in_array($line, ['read', 'write'], true)))->toBe([])
+        ->and($checked)->toMatchArray($suite === 'werkbuch' ? ['whoami:call' => 'read'] : [
+            'twins:list-users' => 'read', 'twins:members' => 'read', 'twins:query' => 'read', 'twins:groups' => 'read',
+            'manage-twins:create-view' => 'write', 'manage-twins:create-label' => 'write', 'manage-twins:delete-view' => 'write',
+        ]);
+})->with(array_keys(ToolRows::SUITES));
+
+it('keeps tools/list small', function (string $suite) {
+    $tools = McpClient::for($this, apiToken(User::factory()->create(), ['read', 'write', 'mcp']), path: ToolRows::path($suite))->tools();
+
+    expect(array_column($tools, 'name'))->toBe(array_map(fn ($tool) => $tool->name(), ToolRows::tools($suite)));
+    foreach ($tools as $tool) {
+        expect(strlen((string) json_encode($tool)))->toBeLessThanOrEqual(MCP_TOOL_BYTES, $tool['name']);
+    }
+    expect(strlen((string) json_encode($tools)))->toBeLessThanOrEqual(MCP_LIST_BYTES);
+})->with(array_keys(ToolRows::SUITES));
+
+it('keeps the heaviest inputs under the tool limit', function () {
+    $noop = fn (Actor $actor, McpArguments $args): McpResult => McpResult::done();
+    $schema = ToolSchema::input([
+        new McpAction('query', 'A page of work items by a body.', $noop, input: ItemQueryDocs::query()),
+        new McpAction('groups', 'The groups of a query.', $noop, input: ItemQueryDocs::groups(), required: ['input']),
+        new McpAction('counts', 'The numbers of named filters.', $noop, input: ItemQueryDocs::counts(), required: ['input']),
+        new McpAction('create-view', 'Creates a view.', $noop, input: ContentSchemas::view(), required: ['input']),
+    ]);
+
+    // the four bodies and the Filter, SortSpec and Display they name, each once
+    expect(array_keys($schema['$defs']))->toBe(['Display', 'Filter', 'SortSpec'])
+        ->and(strlen((string) json_encode($schema)))->toBeLessThanOrEqual(MCP_TOOL_BYTES);
 });
