@@ -52,7 +52,7 @@ final class ToggleFavorite
             'kind.required' => __('field.kind.unknown'),
             'kind.string' => __('field.kind.unknown'),
             'kind.in' => __('field.kind.unknown'),
-            'id.required' => __('field.id.invalid'),
+            'id.required' => __('field.id.required'),
             'id.string' => __('field.id.invalid'),
         ])->validate();
 

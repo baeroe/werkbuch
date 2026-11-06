@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Actions\RelationTypes\DeleteRelationType;
+use App\Actions\RelationTypes\GetRelationType;
 use App\Actions\RelationTypes\ListRelationTypes;
 use App\Actions\RelationTypes\SaveRelationType;
 use App\Http\Api\ApiList;
@@ -23,6 +24,11 @@ final class RelationTypesController extends Controller
     public function index(Request $request): JsonResponse
     {
         return ApiList::respond(ListRelationTypes::run(Actor::fromRequest($request), $request->query()), RelationTypeResource::class);
+    }
+
+    public function show(Request $request, RelationType $relationType): RelationTypeResource
+    {
+        return new RelationTypeResource(GetRelationType::run(Actor::fromRequest($request), $relationType));
     }
 
     /** 201: the new relation type was just created. */

@@ -11,7 +11,9 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * What the actions on the members of a project share: the lock on the project row, the role of the input and the
- * member as the REST resource wants it.
+ * member as the REST resource wants it. The lock is taken by other actions on a project too (UpdateProject,
+ * CreateWorkItem, templates); the class keeps its name, because the lock belongs to the members first (Phase 12 looked
+ * at renaming it and kept it).
  */
 final class MemberInput
 {

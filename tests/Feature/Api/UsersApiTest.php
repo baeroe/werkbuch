@@ -221,7 +221,8 @@ it('takes the own profile back as a whole and checks the rights only for what re
     $this->actingAs($lene);
     $profile = collect($this->getJson('/api/v1/users')->json('data'))->firstWhere('id', $lene->id);
 
-    $this->patchJson("/api/v1/users/{$lene->id}", [...array_diff_key($profile, ['locale' => true, 'timezone' => true]), 'name' => 'Lene Lind'])
+    // the inherited language and time zone come back as well and stay inherited (A391)
+    $this->patchJson("/api/v1/users/{$lene->id}", [...$profile, 'name' => 'Lene Lind'])
         ->assertOk()->assertJsonPath('data.name', 'Lene Lind');
     $this->patchJson("/api/v1/users/{$lene->id}", ['email' => 'LENE@example.com'])->assertOk();
     $this->patchJson("/api/v1/users/{$lene->id}", ['email' => 'lene.lind@example.com'])->assertForbidden()->assertJsonPath('reason', 'forbidden');

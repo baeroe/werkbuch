@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Actions\Workflows\DeleteWorkflow;
+use App\Actions\Workflows\GetWorkflow;
 use App\Actions\Workflows\ListWorkflows;
 use App\Actions\Workflows\SaveWorkflow;
 use App\Http\Api\ApiList;
@@ -24,6 +25,11 @@ final class WorkflowsController extends Controller
     public function index(Request $request): JsonResponse
     {
         return ApiList::respond(ListWorkflows::run(Actor::fromRequest($request), $request->query()), WorkflowResource::class);
+    }
+
+    public function show(Request $request, Workflow $workflow): WorkflowResource
+    {
+        return new WorkflowResource(GetWorkflow::run(Actor::fromRequest($request), $workflow));
     }
 
     /** 201: the new workflow was just created. */

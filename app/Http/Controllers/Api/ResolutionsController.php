@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Actions\Resolutions\DeleteResolution;
+use App\Actions\Resolutions\GetResolution;
 use App\Actions\Resolutions\ListResolutions;
 use App\Actions\Resolutions\SaveResolution;
 use App\Http\Api\ApiList;
@@ -23,6 +24,11 @@ final class ResolutionsController extends Controller
     public function index(Request $request): JsonResponse
     {
         return ApiList::respond(ListResolutions::run(Actor::fromRequest($request), $request->query()), ResolutionResource::class);
+    }
+
+    public function show(Request $request, Resolution $resolution): ResolutionResource
+    {
+        return new ResolutionResource(GetResolution::run(Actor::fromRequest($request), $resolution));
     }
 
     /** 201: the new resolution was just created. */

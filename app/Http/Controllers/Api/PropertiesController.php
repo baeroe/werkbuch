@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Actions\Properties\DeleteProperty;
+use App\Actions\Properties\GetProperty;
 use App\Actions\Properties\ListProperties;
 use App\Actions\Properties\SaveProperty;
 use App\Http\Api\ApiList;
@@ -23,6 +24,11 @@ final class PropertiesController extends Controller
     public function index(Request $request): JsonResponse
     {
         return ApiList::respond(ListProperties::run(Actor::fromRequest($request), $request->query()), PropertyResource::class);
+    }
+
+    public function show(Request $request, Property $property): PropertyResource
+    {
+        return new PropertyResource(GetProperty::run(Actor::fromRequest($request), $property));
     }
 
     /** 201: the new property was just created. */

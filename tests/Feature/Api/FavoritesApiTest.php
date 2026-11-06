@@ -78,10 +78,14 @@ it('refuses another kind', function (mixed $kind) {
     expect(Favorite::query()->count())->toBe(0);
 })->with(['unknown' => 'page', 'a type' => 'work_item', 'not named' => null, 'not a text' => [['project']]]);
 
-it('refuses an id that is not named or no text', function (mixed $id) {
-    $this->actingAs(User::factory()->create())->postJson('/api/v1/favorites/toggle', ['kind' => 'project', 'id' => $id])
-        ->assertUnprocessable()->assertJsonPath('errors.id.0', __('field.id.invalid'));
-})->with(['not named' => null, 'not a text' => [['x']]]);
+it('refuses an id that is not named or no text', function (array $body, string $key) {
+    $this->actingAs(User::factory()->create())->postJson('/api/v1/favorites/toggle', ['kind' => 'project', ...$body])
+        ->assertUnprocessable()->assertJsonPath('errors.id', [__($key)]);
+})->with([
+    'missing' => [[], 'field.id.required'],
+    'not named' => [['id' => null], 'field.id.required'],
+    'not a text' => [['id' => ['x']], 'field.id.invalid'],
+]);
 
 it('does not find a project that does not exist or that the account does not see', function () {
     $ops = Project::factory()->identifier('OPS')->private()->create();

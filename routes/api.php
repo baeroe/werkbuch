@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\FavoritesController;
 use App\Http\Controllers\Api\HistoryController;
 use App\Http\Controllers\Api\InvitationsController;
 use App\Http\Controllers\Api\LabelsController;
+use App\Http\Controllers\Api\MeController;
 use App\Http\Controllers\Api\MembersController;
 use App\Http\Controllers\Api\NotificationPreferencesController;
 use App\Http\Controllers\Api\NotificationsController;
@@ -94,7 +95,10 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
     Route::get('organization', [OrganizationController::class, 'show']);
     Route::patch('organization', [OrganizationController::class, 'update']);
 
+    // the own account (also of a read token, A392) and one account by its ULID
+    Route::get('me', [MeController::class, 'show']);
     Route::get('users', [UsersController::class, 'index']);
+    Route::get('users/{user}', [UsersController::class, 'show']);
     Route::patch('users/{user}', [UsersController::class, 'update']);
     Route::put('users/{user}/role', [UsersController::class, 'updateRole']);
     Route::post('users/{user}/deactivate', [UsersController::class, 'deactivate']);
@@ -154,32 +158,38 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
 
     Route::get('workflows', [WorkflowsController::class, 'index']);
     Route::post('workflows', [WorkflowsController::class, 'store']);
+    Route::get('workflows/{workflow}', [WorkflowsController::class, 'show']);
     Route::put('workflows/{workflow}', [WorkflowsController::class, 'update']);
     Route::delete('workflows/{workflow}', [WorkflowsController::class, 'destroy']);
     Route::get('state-usage', [StateUsageController::class, 'index']);
 
     Route::get('work-item-types', [WorkItemTypesController::class, 'index']);
     Route::post('work-item-types', [WorkItemTypesController::class, 'store']);
+    Route::get('work-item-types/{workItemType}', [WorkItemTypesController::class, 'show']);
     Route::put('work-item-types/{workItemType}', [WorkItemTypesController::class, 'update']);
     Route::delete('work-item-types/{workItemType}', [WorkItemTypesController::class, 'destroy']);
 
     Route::get('properties', [PropertiesController::class, 'index']);
     Route::post('properties', [PropertiesController::class, 'store']);
+    Route::get('properties/{property}', [PropertiesController::class, 'show']);
     Route::put('properties/{property}', [PropertiesController::class, 'update']);
     Route::delete('properties/{property}', [PropertiesController::class, 'destroy']);
 
     Route::get('labels', [LabelsController::class, 'index']);
     Route::post('labels', [LabelsController::class, 'store']);
+    Route::get('labels/{label}', [LabelsController::class, 'show']);
     Route::put('labels/{label}', [LabelsController::class, 'update']);
     Route::delete('labels/{label}', [LabelsController::class, 'destroy']);
 
     Route::get('relation-types', [RelationTypesController::class, 'index']);
     Route::post('relation-types', [RelationTypesController::class, 'store']);
+    Route::get('relation-types/{relationType}', [RelationTypesController::class, 'show']);
     Route::put('relation-types/{relationType}', [RelationTypesController::class, 'update']);
     Route::delete('relation-types/{relationType}', [RelationTypesController::class, 'destroy']);
 
     Route::get('resolutions', [ResolutionsController::class, 'index']);
     Route::post('resolutions', [ResolutionsController::class, 'store']);
+    Route::get('resolutions/{resolution}', [ResolutionsController::class, 'show']);
     Route::put('resolutions/{resolution}', [ResolutionsController::class, 'update']);
     Route::delete('resolutions/{resolution}', [ResolutionsController::class, 'destroy']);
 

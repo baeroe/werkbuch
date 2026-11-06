@@ -25,6 +25,7 @@ final class FortifyResetUserPassword implements ResetsUserPasswords
     {
         Validator::make($input, ['password' => ['string', 'confirmed']])->validate();
 
-        $this->setPassword->handle($user, (string) $input['password']);
+        // a deactivated account gets no password over a link (its links go when it is deactivated, DeactivateUser)
+        $this->setPassword->handle($user, (string) $input['password'], refuseDisabled: true);
     }
 }

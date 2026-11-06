@@ -9,9 +9,11 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * An account as `User` of resources/js/types.ts: language and time zone are the effective ones, the description only
- * comes with bots. The role in the organization comes from the RoleIndex (one query for all accounts per request); lists
- * load the avatars with the accounts (`with('media')`).
+ * An account as `User` of resources/js/types.ts (lists, `GET /users/{user}`; `GET /me` adds the rights, MeResource):
+ * language and time zone are the effective ones, the inherited setting of the organization when the account has none of
+ * its own, and sending them back changes nothing (A391); the description only comes with bots. The role in the
+ * organization comes from the RoleIndex (one query for all accounts per request); lists load the avatars with the
+ * accounts (`with('media')`).
  *
  * @mixin User
  */

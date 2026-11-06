@@ -25,6 +25,7 @@ use App\Views\GroupCount;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use stdClass;
 
 /**
  * The work items. `{item}` is bound by ULID or key (`WEB-12`, any case, also with a former identifier, routes/api.php);
@@ -81,7 +82,15 @@ final class WorkItemsController extends Controller
     /** The number of items of each named filter: `{data: {<name>: count}}` (an object, also for names like `0`). */
     public function counts(Request $request): JsonResponse
     {
-        return response()->json(['data' => (object) CountWorkItems::run(Actor::fromRequest($request), $request->all())]);
+        $input = $request->all();
+        // PHP decodes `{"0": …}` into a list; only the raw body tells an object of filters from a list (the values stay
+        // those of the input, trimmed like every other body, K17)
+        $raw = json_decode($request->getContent());
+        if ($raw instanceof stdClass && ($raw->filters ?? null) instanceof stdClass && is_array($input['filters'] ?? null)) {
+            $input['filters'] = (object) $input['filters'];
+        }
+
+        return response()->json(['data' => (object) CountWorkItems::run(Actor::fromRequest($request), $input)]);
     }
 
     /** 201: the new item was just created. */

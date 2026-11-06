@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Actions\Users\DeactivateUser;
+use App\Actions\Users\GetUser;
 use App\Actions\Users\ListUsers;
 use App\Actions\Users\ReactivateUser;
 use App\Actions\Users\UpdateUser;
@@ -24,6 +25,11 @@ final class UsersController extends Controller
         return ApiList::respond(ListUsers::run(Actor::fromRequest($request), $request->query()), UserResource::class);
     }
 
+    public function show(Request $request, User $user): UserResource
+    {
+        return new UserResource(GetUser::run(Actor::fromRequest($request), $user));
+    }
+
     public function update(Request $request, User $user): UserResource
     {
         return new UserResource(UpdateUser::run(Actor::fromRequest($request), $user, $request->all()));
@@ -31,10 +37,7 @@ final class UsersController extends Controller
 
     public function updateRole(Request $request, User $user): UserResource
     {
-        $role = $request->input('org_role');
-
-        // anything but a text is no role; the action names the field
-        return new UserResource(UpdateUserRole::run(Actor::fromRequest($request), $user, is_string($role) ? $role : ''));
+        return new UserResource(UpdateUserRole::run(Actor::fromRequest($request), $user, $request->input('org_role')));
     }
 
     public function deactivate(Request $request, User $user): UserResource

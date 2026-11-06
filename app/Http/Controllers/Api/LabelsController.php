@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Actions\Labels\DeleteLabel;
+use App\Actions\Labels\GetLabel;
 use App\Actions\Labels\ListLabels;
 use App\Actions\Labels\SaveLabel;
 use App\Http\Api\ApiList;
@@ -23,6 +24,11 @@ final class LabelsController extends Controller
     public function index(Request $request): JsonResponse
     {
         return ApiList::respond(ListLabels::run(Actor::fromRequest($request), $request->query()), LabelResource::class);
+    }
+
+    public function show(Request $request, Label $label): LabelResource
+    {
+        return new LabelResource(GetLabel::run(Actor::fromRequest($request), $label));
     }
 
     /** 201: the new label was just created. */

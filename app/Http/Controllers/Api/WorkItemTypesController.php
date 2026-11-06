@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Actions\WorkItemTypes\DeleteWorkItemType;
+use App\Actions\WorkItemTypes\GetWorkItemType;
 use App\Actions\WorkItemTypes\ListWorkItemTypes;
 use App\Actions\WorkItemTypes\SaveWorkItemType;
 use App\Http\Api\ApiList;
@@ -25,6 +26,11 @@ final class WorkItemTypesController extends Controller
     public function index(Request $request): JsonResponse
     {
         return ApiList::respond(ListWorkItemTypes::run(Actor::fromRequest($request), $request->query()), WorkItemTypeResource::class);
+    }
+
+    public function show(Request $request, WorkItemType $workItemType): WorkItemTypeResource
+    {
+        return new WorkItemTypeResource(GetWorkItemType::run(Actor::fromRequest($request), $workItemType));
     }
 
     /** 201: the new type was just created. */
