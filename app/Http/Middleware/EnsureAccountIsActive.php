@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Http\Api\ApiPaths;
 use App\Models\User;
 use Closure;
 use Illuminate\Auth\AuthenticationException;
@@ -11,14 +12,14 @@ use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Ends the session of an account that was disabled while it was signed in (P8, any session driver): the next request
- * signs it out. Pages go to the sign-in with a note why, the API answers 401.
+ * signs it out. Pages go to the sign-in with a note why, the API and MCP answer 401.
  */
 final class EnsureAccountIsActive
 {
     /**
      * @param  Closure(Request): Response  $next
      *
-     * @throws AuthenticationException under /api
+     * @throws AuthenticationException under /api and at /mcp
      */
     public function handle(Request $request, Closure $next): Response
     {
@@ -35,7 +36,7 @@ final class EnsureAccountIsActive
             $request->session()->regenerateToken();
         }
 
-        if ($request->is('api/*')) {
+        if (ApiPaths::problems($request)) {
             throw new AuthenticationException;
         }
 

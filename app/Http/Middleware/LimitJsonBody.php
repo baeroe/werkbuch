@@ -3,14 +3,15 @@
 namespace App\Http\Middleware;
 
 use App\Exceptions\Problem;
+use App\Http\Api\ApiPaths;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * At most MAX_BYTES of JSON (or any other body that is no form) under /api (A388, K8): a global middleware after the
- * CORS headers and before ValidatePostSize and TrimStrings, so a body above the limit is a 413 `payload_too_large` with
- * its own sentence before the app reads the input. 8 MiB: a picture as a data URL (2 MiB decoded, about 2.7 MiB in JSON)
+ * At most MAX_BYTES of JSON (or any other body that is no form) under /api and at /mcp (A388, K8): a global middleware
+ * after the CORS headers and before ValidatePostSize and TrimStrings, so a body above the limit is a 413
+ * `payload_too_large` with its own sentence before the app reads the input. 8 MiB: a picture as a data URL (2 MiB decoded, about 2.7 MiB in JSON)
  * and an item with a description and a dozen rich text values at their limit fit.
  *
  * `Content-Length` decides at once; without it (chunked) or when it lies, the body is read up to MAX_BYTES + 1 bytes,
@@ -26,7 +27,7 @@ final class LimitJsonBody
 
     public function handle(Request $request, Closure $next): Response
     {
-        if (! $request->is('api/*') || $this->isForm($request)) {
+        if (! ApiPaths::problems($request) || $this->isForm($request)) {
             return $next($request);
         }
 

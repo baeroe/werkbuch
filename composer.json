@@ -11,6 +11,7 @@
         "inertiajs/inertia-laravel": "^3.5",
         "laravel/fortify": "^1.41",
         "laravel/framework": "^13.39",
+        "laravel/mcp": "1.1.1",
         "laravel/reverb": "^1.12",
         "laravel/sanctum": "^4.3",
         "laravel/scout": "^11.9",

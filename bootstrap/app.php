@@ -3,6 +3,7 @@
 use App\Exceptions\Rendering;
 use App\Http\Middleware\ConvertEmptyStringsToNull;
 use App\Http\Middleware\EnsureAccountIsActive;
+use App\Http\Middleware\EnsureMcpToken;
 use App\Http\Middleware\EnsureSession;
 use App\Http\Middleware\EnsureTokenAbility;
 use App\Http\Middleware\GuardChannelAuthorization;
@@ -83,7 +84,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->trustHosts(at: fn (): array => TrustedRequests::hostPatterns(config('app.url')), subdomains: false);
         // Laravel's priority list with the rate limit moved before auth (requests that fail auth count as well), and the
         // language right after the session: the refusals of CSRF (419) and of the rate limit (429) speak it already; what a
-        // token may do is checked once it is known who sends it (the session check of /me/* goes before it, P28)
+        // token may do is checked once it is known who sends it (the session check of /me/* goes before it, P28); /mcp takes
+        // a personal access token with `mcp` once auth knows it (routes/ai.php)
         $middleware->priority([
             HandlePrecognitiveRequests::class,
             EncryptCookies::class,
@@ -96,6 +98,7 @@ return Application::configure(basePath: dirname(__DIR__))
             ThrottleRequests::class,
             ThrottleRequestsWithRedis::class,
             AuthenticatesRequests::class,
+            EnsureMcpToken::class,
             EnsureSession::class,
             EnsureTokenAbility::class,
             AuthenticatesSessions::class,

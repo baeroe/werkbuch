@@ -20,8 +20,9 @@ final class ProblemResponse
     /** Reason and title slug per HTTP status; every other status is http_error. */
     private const SLUGS = [
         400 => 'bad_request', 401 => 'unauthenticated', 403 => 'forbidden', 404 => 'not_found',
-        405 => 'method_not_allowed', 409 => 'conflict', 413 => 'payload_too_large', 419 => 'csrf_token_mismatch',
-        422 => 'validation_failed', 429 => 'too_many_requests', 500 => 'server_error', 503 => 'service_unavailable',
+        405 => 'method_not_allowed', 409 => 'conflict', 413 => 'payload_too_large', 415 => 'unsupported_media_type',
+        419 => 'csrf_token_mismatch', 422 => 'validation_failed', 429 => 'too_many_requests', 500 => 'server_error',
+        503 => 'service_unavailable',
     ];
 
     public static function from(Throwable $e, bool $debug): JsonResponse

@@ -21,7 +21,7 @@ final class Problem extends RuntimeException implements HttpExceptionInterface
         'lead_cannot_leave', 'session_required', 'two_factor_enabled', 'two_factor_not_pending', 'two_factor_disabled',
         'invalid_workflow', 'default_workflow', 'default_type', 'built_in', 'is_default', 'state_in_use', 'search_unavailable',
         'attachment_inline', 'mail_not_configured', 'mail_failed', 'template_changed',
-        'webhook_not_logged',
+        'webhook_not_logged', 'token_required', 'unsupported_media_type',
     ];
 
     /**
@@ -86,6 +86,12 @@ final class Problem extends RuntimeException implements HttpExceptionInterface
     public static function tooLarge(string $detail): self
     {
         return new self(413, 'payload_too_large', $detail);
+    }
+
+    /** A body that is no JSON where only JSON is taken (/mcp): 415, the text of the reason explains it. */
+    public static function unsupportedMediaType(): self
+    {
+        return new self(415, 'unsupported_media_type');
     }
 
     public static function locked(string $reason): self

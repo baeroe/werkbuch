@@ -42,6 +42,11 @@ arch('the live channels decide only through the policies')
     ->toOnlyUse([Authorize::class, Actor::class, 'App\Models\User', 'App\Models\Project', 'App\Models\WorkItem', Ulid::class]);
 arch('the OpenAPI layer is final and leaves the database and the events alone')
     ->expect('App\OpenApi')->classes()->toBeFinal()->not->toUse([EventRecorder::class, 'Illuminate\Support\Facades\DB']);
+arch('the MCP layer is final but for the abstract bases of its tools and references')
+    ->expect('App\Mcp')->classes()->toBeFinal()
+    ->ignoring(['App\Mcp\Support\WerkbuchTool', 'App\Mcp\Support\ReadTool', 'App\Mcp\Support\WriteTool', 'App\Mcp\Resources\DocReference']);
+arch('the MCP layer leaves the database, the schema and the events to actions')
+    ->expect('App\Mcp')->not->toUse([EventRecorder::class, 'Illuminate\Support\Facades\DB', 'Illuminate\Support\Facades\Schema']);
 arch('domain classes are final')->expect('App\Domain')->classes()->toBeFinal();
 arch('rich text is final and leaves actions, http and the database alone')
     ->expect('App\RichText')->classes()->toBeFinal()->not->toUse(['App\Actions', 'App\Http', 'Illuminate\Support\Facades\DB']);
@@ -90,9 +95,28 @@ it('detects model writes', function () {
     expect(modelWrites("<?php\n\$user->save();\n\$this->set->handle(\$u);\nUser::create([]);"))->toBe(['code:2', 'code:4']);
 });
 
-it('never writes models in controllers, middleware, commands, jobs or auth adapters', function () {
-    $hits = collect(['app/Http', 'app/Console', 'app/Jobs', 'app/Auth'])->flatMap(fn ($d) => appFiles($d))
+it('never writes models in controllers, middleware, commands, jobs, auth adapters or MCP', function () {
+    expect(appFiles('app/Mcp'))->not->toBe([]);
+
+    $hits = collect(['app/Http', 'app/Console', 'app/Jobs', 'app/Auth', 'app/Mcp'])->flatMap(fn ($d) => appFiles($d))
         ->flatMap(fn (string $f) => modelWrites((string) file_get_contents(repo_path($f)), $f))->all();
+    expect($hits)->toBe([]);
+});
+
+// the session has a TransientToken, whose can() says yes to everything: an ability is checked at the
+// PersonalAccessToken itself (`$token instanceof PersonalAccessToken && $token->can($x)`), never through tokenCan() (K2)
+$tokenCans = fn (string $code, string $file = 'code'): array => collect(explode("\n", $code))
+    ->filter(fn (string $line) => preg_match('/->tokenCan\s*\(/', $line) === 1)
+    ->keys()->map(fn (int $index) => $file.':'.($index + 1))->values()->all();
+
+it('detects tokenCan()', function () use ($tokenCans) {
+    expect($tokenCans("<?php\n\$user->tokenCan('mcp');\n\$token->can('mcp');\n\$request->user()?->tokenCan ('read');"))->toBe(['code:2', 'code:4']);
+});
+
+it('never asks tokenCan() in MCP and its door', function () use ($tokenCans) {
+    $files = [...appFiles('app/Mcp'), 'app/Http/Middleware/EnsureMcpToken.php'];
+    $hits = collect($files)->flatMap(fn (string $f) => $tokenCans((string) file_get_contents(repo_path($f)), $f))->all();
+
     expect($hits)->toBe([]);
 });
 

@@ -42,7 +42,8 @@ return [
         // /api/v1 per valid token, else per address (A387); the session of the web app per account (K9)
         'api' => (int) env('API_RATE_LIMIT', 600),
         'api_session' => (int) env('API_SESSION_RATE_LIMIT', 3000),
-        'mcp' => 300,
+        // /mcp per valid token, else per address, a quota of its own beside the API's (phase 13)
+        'mcp' => (int) env('MCP_RATE_LIMIT', 300),
         'login_per_ip' => 20,
         // requests for a reset link (POST /forgot-password), over all addresses
         'password_reset_per_ip' => 6,

@@ -2,6 +2,7 @@
 
 namespace App\Exceptions;
 
+use App\Http\Api\ApiPaths;
 use App\Http\Api\ProblemResponse;
 use App\Models\Attachment;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -15,8 +16,8 @@ use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Throwable;
 
 /**
- * How exceptions become answers: Problem Details under /api, Inertia error pages in the browser app. Lives in app/ so the
- * coverage (PCOV measures app/ only) sees it; bootstrap/app.php only calls register().
+ * How exceptions become answers: Problem Details under /api and at /mcp (ApiPaths), Inertia error pages in the browser
+ * app. Lives in app/ so the coverage (PCOV measures app/ only) sees it; bootstrap/app.php only calls register().
  */
 final class Rendering
 {
@@ -37,12 +38,12 @@ final class Rendering
 
         // a body above `post_max_size` (ValidatePostSize, before any route): the 413 of an upload above the limit, which
         // names the limit
-        $exceptions->render(fn (PostTooLargeException $e, Request $request) => $request->is('api/*')
+        $exceptions->render(fn (PostTooLargeException $e, Request $request) => ApiPaths::problems($request)
             ? ProblemResponse::from(Attachment::tooLarge(), false)
             : null);
 
         // every /api route answers with Problem Details; a response an exception already carries stays as it is
-        $exceptions->render(fn (Throwable $e, Request $request) => $request->is('api/*') && ! $e instanceof HttpResponseException
+        $exceptions->render(fn (Throwable $e, Request $request) => ApiPaths::problems($request) && ! $e instanceof HttpResponseException
             ? ProblemResponse::from($e, (bool) config('app.debug'))
             : null);
 
@@ -65,7 +66,7 @@ final class Rendering
         // an expired session (CSRF token mismatch; Laravel has already turned it into a 419) leads back with a message:
         // guests to the sign-in (the page they came from would send them there and lose the message), signed-in people
         // to the page they came from
-        $exceptions->render(fn (HttpExceptionInterface $e, Request $request) => $e->getStatusCode() === 419 && ! $request->is('api/*')
+        $exceptions->render(fn (HttpExceptionInterface $e, Request $request) => $e->getStatusCode() === 419 && ! ApiPaths::problems($request)
             ? ($request->user() === null ? redirect()->route('login', status: 303) : redirect()->back(303))->with('error', __('errors.page_expired'))
             : null);
 
@@ -78,7 +79,7 @@ final class Rendering
         $exceptions->respond(function (Response $response, Throwable $e, Request $request) {
             $status = $response->getStatusCode();
 
-            if ($request->is('api/*')
+            if (ApiPaths::problems($request)
                 || $request->expectsJson()
                 || ! in_array($status, [403, 404, 500, 503], true)
                 || ($status === 500 && config('app.debug'))
@@ -91,7 +92,7 @@ final class Rendering
         });
 
         $exceptions->shouldRenderJsonWhen(
-            fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
+            fn (Request $request) => ApiPaths::problems($request) || $request->expectsJson(),
         );
     }
 }

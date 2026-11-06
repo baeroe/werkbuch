@@ -14,6 +14,7 @@ use App\Webhooks\WebhookBackoff;
 use App\Webhooks\WebhookConsumer;
 use Illuminate\Support\Env;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 use Spatie\WebhookServer\Signer\DefaultSigner;
 
 /**
@@ -38,6 +39,7 @@ afterEach(function () {
     setEnv('WEBHOOKS_ALLOW_PRIVATE', 'false');
     setEnv('API_RATE_LIMIT', '600');
     setEnv('API_SESSION_RATE_LIMIT', '3000');
+    setEnv('MCP_RATE_LIMIT', '300');
 });
 
 it('has the documented defaults', function () {
@@ -68,8 +70,17 @@ it('has the documented defaults whatever .env says', function () {
         }
     }
 
-    expect(array_intersect_key($forced, array_flip(['ATTACHMENTS_MAX_MB', 'WEBHOOKS_ALLOW_PRIVATE', 'API_RATE_LIMIT', 'API_SESSION_RATE_LIMIT'])))
-        ->toBe(['ATTACHMENTS_MAX_MB' => '25', 'WEBHOOKS_ALLOW_PRIVATE' => 'false', 'API_RATE_LIMIT' => '600', 'API_SESSION_RATE_LIMIT' => '3000']);
+    expect(array_intersect_key($forced, array_flip(['ATTACHMENTS_MAX_MB', 'WEBHOOKS_ALLOW_PRIVATE', 'API_RATE_LIMIT', 'API_SESSION_RATE_LIMIT', 'MCP_RATE_LIMIT'])))
+        ->toBe(['ATTACHMENTS_MAX_MB' => '25', 'WEBHOOKS_ALLOW_PRIVATE' => 'false', 'API_RATE_LIMIT' => '600', 'API_SESSION_RATE_LIMIT' => '3000', 'MCP_RATE_LIMIT' => '300']);
+});
+
+it('keeps the limits of the environment of DDEV out of the tests', function () {
+    // DDEV's environment reaches $_SERVER, which Laravel reads before the values phpunit.xml forces (Tests\TestCase)
+    $case = (string) file_get_contents(repo_path('tests/TestCase.php'));
+
+    foreach (['API_RATE_LIMIT' => '600', 'API_SESSION_RATE_LIMIT' => '3000', 'MCP_RATE_LIMIT' => '300'] as $name => $value) {
+        expect($case)->toContain("\$_SERVER['{$name}'] = \$_ENV['{$name}'] ?? '{$value}';");
+    }
 });
 
 it('reads the environment', function () {
@@ -77,12 +88,14 @@ it('reads the environment', function () {
     setEnv('WEBHOOKS_ALLOW_PRIVATE', 'true');
     setEnv('API_RATE_LIMIT', '120');
     setEnv('API_SESSION_RATE_LIMIT', '900');
+    setEnv('MCP_RATE_LIMIT', '150');
     $this->refreshApplication();
 
     expect(config('werkbuch.attachments_max_mb'))->toBe(50)
         ->and(config('werkbuch.webhooks_allow_private'))->toBeTrue()
         ->and(config('werkbuch.rate_limits.api'))->toBe(120)
-        ->and(config('werkbuch.rate_limits.api_session'))->toBe(900);
+        ->and(config('werkbuch.rate_limits.api_session'))->toBe(900)
+        ->and(config('werkbuch.rate_limits.mcp'))->toBe(150);
 });
 
 it('lists the queues in the worker\'s order', function () {
@@ -133,6 +146,13 @@ it('keeps what lets /broadcasting/auth go without a CSRF token: SameSite lax and
     expect(config('session.same_site'))->toBe('lax')
         ->and(config('cors.paths'))->toBe(['api/*', 'sanctum/csrf-cookie'])
         ->and(config('cors.supports_credentials'))->toBeFalse();
+});
+
+it('gives /mcp no CORS: a browser of another site reads no answer of the MCP server (K15)', function () {
+    // HandleCors matches the paths like Request::is()
+    expect(Str::is(config('cors.paths'), 'api/v1/organization'))->toBeTrue()
+        ->and(Str::is(config('cors.paths'), 'mcp'))->toBeFalse()
+        ->and(Str::is(config('cors.paths'), 'mcp/_t'))->toBeFalse();
 });
 
 it('lets Reverb take client events from nobody and only the host of APP_URL', function () {
