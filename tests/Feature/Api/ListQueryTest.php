@@ -277,3 +277,23 @@ it('keeps the filters in links.next', function () use ($names) {
     $following = $this->getJson($next);
     expect($names($following))->toBe(['Alpha'])->and($following->json('links.next'))->toBeNull();
 });
+
+it('takes the text of a filter as it is, also true, false, 0 and 1', function () use ($names) {
+    Label::factory()->create(['name' => 'Backend']);
+    Label::factory()->create(['name' => 'true story']);
+    Label::factory()->create(['name' => '100% 1']);
+
+    foreach (['false', 'true', '0', '1'] as $text) {
+        $partial = $this->getJson('/api/v1/_t/labels?filter[name]='.$text)->assertOk();
+        expect($names($partial))->toBe(match ($text) {
+            'true' => ['true story'],
+            '1', '0' => ['100% 1'],
+            default => [],
+        });
+    }
+    // exact on a text column: the text only, never a number or a truth value
+    Label::factory()->create(['name' => 'x', 'color' => Tone::Sand]);
+    $this->getJson('/api/v1/_t/labels?filter[id]=false')->assertOk()->assertJsonPath('meta.total', 0);
+    $this->getJson('/api/v1/_t/labels?filter[id]=0')->assertOk()->assertJsonPath('meta.total', 0);
+    $this->getJson('/api/v1/_t/labels?filter[id]='.strtoupper((string) Label::query()->value('id')))->assertOk()->assertJsonPath('meta.total', 1);
+});

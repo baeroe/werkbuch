@@ -6,6 +6,7 @@ use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Spatie\QueryBuilder\AllowedFilter;
 use Spatie\QueryBuilder\AllowedSort;
@@ -56,7 +57,9 @@ final class ListQuery
         // a name given twice counts where it first stands
         $sorts = array_values(array_reduce($sorts, fn (array $kept, string $sort) => $kept + [ltrim($sort, '-') => $sort], []));
         $request = Request::create('/', 'GET', [
-            'filter' => array_map(fn (mixed $value) => is_bool($value) ? (int) $value : $value, $filters),
+            // the query builder reads 'true' and 'false' as booleans: it only learns that the filter is there, every
+            // filter applies the text it read itself (T4-I1)
+            'filter' => array_map(fn (mixed $value) => 1, $filters),
             'sort' => implode(',', $sorts),
             'include' => implode(',', $includes),
         ]);
@@ -202,9 +205,22 @@ final class ListQuery
     private static function allowed(ListFilter $filter, array $values): AllowedFilter
     {
         return match ($filter->kind) {
-            ListFilter::EXACT => AllowedFilter::exact($filter->name, $filter->column, false),
-            // a comma is part of the text (K11)
-            ListFilter::PARTIAL => AllowedFilter::partial($filter->name, $filter->column, false)->delimiter(''),
+            ListFilter::EXACT => AllowedFilter::callback($filter->name, function (Builder $query) use ($filter, $values) {
+                $column = $query->qualifyColumn($filter->column);
+                $wanted = explode(',', (string) $values[$filter->name]);
+                // a column of ids takes real ULIDs only: the collation would let look-alikes through (A96)
+                if ($filter->column === 'id' || str_ends_with($filter->column, '_id') || str_ends_with($filter->column, '.id')) {
+                    $wanted = array_map(fn (string $id) => Ids::normalize($id), $wanted);
+                    $wanted = array_values(array_filter($wanted, fn ($id) => Str::isUlid($id)));
+                }
+                $wanted === [] ? $query->whereRaw('0 = 1') : $query->whereIn($column, $wanted);
+            }),
+            // a comma is part of the text (K11); `\`, `%` and `_` are masked
+            ListFilter::PARTIAL => AllowedFilter::callback($filter->name, fn (Builder $query) => $query->where(
+                $query->qualifyColumn($filter->column),
+                'like',
+                '%'.addcslashes((string) $values[$filter->name], '\\%_').'%',
+            )),
             ListFilter::BOOLEAN => AllowedFilter::callback($filter->name, fn (Builder $query) => $query->where($query->qualifyColumn($filter->column), $values[$filter->name])),
             default => AllowedFilter::callback($filter->name, function (Builder $query) use ($filter, $values) {
                 /** @var Closure(Builder<*>, mixed): mixed $apply a scope always has its rule */
