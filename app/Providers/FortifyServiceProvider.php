@@ -6,6 +6,7 @@ use App\Actions\Auth\Authenticate;
 use App\Auth\FortifyResetUserPassword;
 use App\Auth\RedirectToTwoFactorChallenge;
 use App\Auth\TwoFactorCodes;
+use App\Http\Api\RateKey;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Cache\Repository;
 use Illuminate\Http\Request;
@@ -72,8 +73,10 @@ final class FortifyServiceProvider extends ServiceProvider
         RateLimiter::for('password-update', fn (Request $request) => Limit::perMinute((int) config('werkbuch.rate_limits.password_update_per_ip'))->by((string) $request->ip()));
         // the challenge after the password: five codes a minute per sign-in that was started (Fortify's `login.id`)
         RateLimiter::for('two-factor', fn (Request $request) => Limit::perMinute(5)->by((string) $request->session()->get('login.id')));
-        // changing the own password: six tries a minute per account (the current password is not to be guessed)
-        RateLimiter::for('password-change', fn (Request $request) => Limit::perMinute(6)->by((string) ($request->user()?->getAuthIdentifier() ?? $request->ip())));
+        // changing the own password: six tries a minute per account of the session (the current password is not to be
+        // guessed); the route takes only the session (EnsureSession), so a token counts by its address and never spends
+        // the tries of its owner. Throttles run before auth: the key comes from RateKey, never from `$request->user()`
+        RateLimiter::for('password-change', fn (Request $request) => Limit::perMinute(6)->by(RateKey::session($request)));
         RateLimiter::for('invitation', fn (Request $request) => Limit::perMinute((int) config('werkbuch.rate_limits.invitation_accept_per_ip'))->by((string) $request->ip()));
     }
 }

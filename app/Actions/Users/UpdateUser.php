@@ -67,6 +67,12 @@ final class UpdateUser
             unset($input['timezone']);
         }
 
+        // the responsible person the bot has, coming back unchanged, is no new choice (A75, as `bot_id` of a webhook): a
+        // person deactivated since does not refuse the bot's own answer, a new one still has to be an active person
+        if ($user->isBot() && array_key_exists('owner_id', $input) && $user->owner_id !== null && $input['owner_id'] === $user->owner_id) {
+            unset($input['owner_id']);
+        }
+
         $current = [
             'name' => $user->name,
             'handle' => $user->handle,

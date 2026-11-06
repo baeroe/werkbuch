@@ -17,7 +17,9 @@ use Illuminate\Support\Facades\Auth;
  *   flood of 401 never spends the quota of a valid token.
  *
  * `account()` is the key of the throttles of single routes (uploads, test ping, test mail): per account, whether it
- * sends a token or the session.
+ * sends a token or the session. `session()` is the key of a throttle in front of a route that takes only the session
+ * (`EnsureSession`, the own password): a token, refused there anyway, counts by its address and never spends the tries
+ * of the account.
  */
 final class RateKey
 {
@@ -49,7 +51,8 @@ final class RateKey
         return str_starts_with($key, self::USER);
     }
 
-    private static function session(Request $request): string
+    /** The account of the session of the web app (guard `web`), else the address; a token does not count. */
+    public static function session(Request $request): string
     {
         $user = Auth::guard('web')->user();
 
