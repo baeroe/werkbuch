@@ -731,4 +731,16 @@ describe('API & MCP', () => {
     expect(screen.getByText('REST-API').nextElementSibling!.textContent).toBe(`${origin}/api/v1`);
     expect(screen.getByText(new RegExp(`claude mcp add --transport http --scope user werkbuch ${origin}/mcp`))).toBeTruthy();
   });
+
+  it('links the api docs of the instance', () => {
+    renderSettings('api');
+
+    const origin = window.location.origin;
+    const docs = screen.getByRole('link', { name: 'API-Dokumentation' });
+    expect(docs.getAttribute('href')).toBe(`${origin}/api/docs`);
+    expect(docs.getAttribute('target')).toBe('_blank');
+    expect(docs.getAttribute('rel')).toBe('noopener');
+    expect(screen.getByText('OpenAPI-Beschreibung dieser Instanz')).toBeTruthy();
+    expect(screen.getByRole('link', { name: `${origin}/api/openapi.json` }).getAttribute('href')).toBe(`${origin}/api/openapi.json`);
+  });
 });
