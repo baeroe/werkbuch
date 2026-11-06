@@ -4,7 +4,10 @@ namespace App\Providers;
 
 use App\Http\Controllers\ApiDocsController;
 use App\OpenApi\Abilities;
+use App\OpenApi\ApiListReturnType;
+use App\OpenApi\ApiListSchema;
 use App\OpenApi\Components;
+use App\OpenApi\ListParameters;
 use App\OpenApi\PathParameters;
 use App\OpenApi\ProblemExceptionResponses;
 use App\OpenApi\ProblemResponses;
@@ -84,12 +87,15 @@ final class ApiServiceProvider extends ServiceProvider
 
         // registered after Scramble's own, so it wins: an exception is a problem, never Laravel's `{message}` (K1)
         Scramble::registerExtension(ProblemExceptionResponses::class);
+        // `ApiList::respond($result, X::class)` answers `{data: list<X>, links, meta}`
+        Scramble::registerExtensions([ApiListReturnType::class, ApiListSchema::class]);
 
         Scramble::configure()
             // routes a test registers under api/v1/_t/ are no part of the API (K3)
             ->routes(fn (Route $route) => str_starts_with($route->uri(), 'api/v1/') && ! str_contains($route->uri(), '_t/'))
-            // after Scramble's own operation extensions: how a route is called, what its placeholders take, its errors
-            ->withOperationTransformers([Abilities::class, PathParameters::class, ProblemResponses::class])
+            // after Scramble's own operation extensions: how a route is called, what its placeholders take, the query of
+            // a list (`#[ListOf]`), its errors
+            ->withOperationTransformers([Abilities::class, PathParameters::class, ListParameters::class, ProblemResponses::class])
             ->withDocumentTransformers([Components::class])
             ->expose(
                 // the page loads the document itself (`/api/openapi.json`) and so generates nothing of its own
