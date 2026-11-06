@@ -3,6 +3,11 @@
 namespace App\Providers;
 
 use App\Http\Controllers\ApiDocsController;
+use App\OpenApi\Abilities;
+use App\OpenApi\Components;
+use App\OpenApi\PathParameters;
+use App\OpenApi\ProblemExceptionResponses;
+use App\OpenApi\ProblemResponses;
 use Dedoc\Scramble\Scramble;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -77,9 +82,15 @@ final class ApiServiceProvider extends ServiceProvider
             Scramble::throwOnError();
         }
 
+        // registered after Scramble's own, so it wins: an exception is a problem, never Laravel's `{message}` (K1)
+        Scramble::registerExtension(ProblemExceptionResponses::class);
+
         Scramble::configure()
             // routes a test registers under api/v1/_t/ are no part of the API (K3)
             ->routes(fn (Route $route) => str_starts_with($route->uri(), 'api/v1/') && ! str_contains($route->uri(), '_t/'))
+            // after Scramble's own operation extensions: how a route is called, what its placeholders take, its errors
+            ->withOperationTransformers([Abilities::class, PathParameters::class, ProblemResponses::class])
+            ->withDocumentTransformers([Components::class])
             ->expose(
                 // the page loads the document itself (`/api/openapi.json`) and so generates nothing of its own
                 ui: fn (Router $router) => $router->get('api/docs', ApiDocsController::class)->name('api.docs'),
