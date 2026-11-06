@@ -207,7 +207,7 @@ Deliveries run on the queue `webhooks`. A worker has to listen on it; it waits u
 
 ## REST
 
-All endpoints need the rights of an org admin. Reading needs the ability `read`, everything else `write`.
+All endpoints need the rights of an org admin. Reading needs the ability `read`, everything else `write`. The lists take filters and sorts like every list of the [REST API](/en/api#lists): `filter[project_id]`, `filter[active]`, `filter[bot_id]` for the webhooks, `filter[event]`, `filter[kind]`, `filter[succeeded]` for the log.
 
 | Endpoint | Meaning |
 |---|---|

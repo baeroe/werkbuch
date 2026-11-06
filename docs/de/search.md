@@ -44,7 +44,7 @@ Alle Tasten der Palette stehen auf der Seite [Tastatur](/de/keyboard).
 
 ## REST
 
-`GET /api/v1/search` braucht ein Token mit `read` (oder die Sitzung der Oberfläche).
+`GET /api/v1/search` braucht ein Token mit `read` (oder die Sitzung der Oberfläche); Tokens, Fehler und Grenzen erklärt die Seite [REST-API](/de/api).
 
 | Parameter | Wert |
 |---|---|

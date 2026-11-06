@@ -1,6 +1,16 @@
 # werkbuch: Fachkonzept und App-Design
 
-Stand: 2026-11-06 · Status: freigegeben (die Änderungen vom 2026-10-31, vom 2026-11-02 (Phasen 5 und 6), vom 2026-11-03 (Phase 7), vom 2026-11-04 (Phasen 8 und 9), vom 2026-11-05 (Phase 10) und vom 2026-11-06 (Phase 11) warten auf Rafaels Bestätigung, außer der bestätigten Status-Zuordnung aus Phase 4)
+Stand: 2026-11-06 · Status: freigegeben (die Änderungen vom 2026-10-31, vom 2026-11-02 (Phasen 5 und 6), vom 2026-11-03 (Phase 7), vom 2026-11-04 (Phasen 8 und 9), vom 2026-11-05 (Phase 10) und vom 2026-11-06 (Phasen 11 und 12) warten auf Rafaels Bestätigung, außer der bestätigten Status-Zuordnung aus Phase 4)
+
+> **Änderungen vom 2026-11-06 (Phase 12):** Beim Umsetzen von Phase 12 (REST vollständig und OpenAPI) hat Claude als Controller Folgendes entschieden; es ändert oder präzisiert die Spec und **wartet auf Rafaels Bestätigung** (Begründung und „Falls falsch“ in `docs/superpowers/plans/2026-10-30-werkbuch-app-rulings.md`, A384 ff.):
+> - **Listen (6.1):** Feldfilter heißen `filter[<name>]`, Sortierung `sort`, Beziehungen `include`; die bisherigen eigenen Parameter (`type`, `user_id`, `unread_only`, `mentions_only`, `project` der Vorlagen) sind ersetzt und werden übergangen, Schalter für die ganze Liste (`include_archived`, `lean`) bleiben. Unbekannte Namen sind 422, ohne `sort` bleibt jede Liste in ihrer bisherigen Ordnung, ein Cursor gilt nur für seine Sortierung. Ein Filter auf etwas Unsichtbares ergibt eine leere Liste, auch bei den Vorlagen eines Projekts (`filter[project_id]`, bisher 404). In Listen gibt es `include` nur als `projects?include=members` (A386).
+> - **Rate-Limit (6.1, 7.5, 8.2):** 600/min je gültigem Token (`API_RATE_LIMIT`), die Sitzung der Oberfläche 3000/min je Konto (`API_SESSION_RATE_LIMIT`), alles andere 600/min je Adresse; Routen-Drosseln (Uploads, Test-Ping, Testmail, Passwort) zählen je Konto zusätzlich; jede Antwort trägt `X-RateLimit-Limit` und `-Remaining` der API, welche Drossel griff, sagt `Retry-After` (A387).
+> - **Body-Limit (6.1):** JSON-Bodies höchstens 8 MiB (ein Bild als Data-URL und Items mit mehreren Rich-Text-Werten passen), 413 `payload_too_large`; Uploads behalten `ATTACHMENTS_MAX_MB` (A388).
+> - **Doku der API (6.1, 10):** `/api/docs` und `/api/openapi.json` sind öffentlich mit einer eigenen Drossel (30/min je Adresse); Stoplight Elements liegt in der App, ohne CDN, mit CSP; `info.version` ist die Version der API, nicht der App (A389).
+> - **Stabilität (6.1):** keine ETags, kein `If-Match`, kein `Idempotency-Key` in v1; `/api/v1` ändert sich nur additiv, `reason` ist eine offene Liste (ein Client behandelt einen unbekannten Grund nach seinem Status); Brechendes wird `/api/v2` (A390).
+> - **Zurückgeschickt pinnt nicht (6.1):** `PATCH /users/{user}` mit der geerbten Sprache oder Zeitzone ändert nichts, solange das Konto keine eigene hat (A391).
+> - **Neue Lesepunkte (6.1):** `GET /me` (das eigene Konto samt Rechten der Org-Rolle, auch für Lese-Tokens und Bots), `GET /users/{user}`, `GET /<katalog>/{id}`; Einzel-GETs für Einladungen, Tokens, Mitglieder, Relationen und Benachrichtigungen gibt es nicht (A392).
+> - **E-Mail-Adressen (4.2, 6.1):** Die E-Mail-Adresse einer Person sieht jedes aktive Konto der Organisation, auch Bots und Lese-Tokens, wie bisher in der Personenliste (A393).
 
 > **Änderungen vom 2026-11-06 (Phase 11):** Beim Umsetzen von Phase 11 (Webhooks) hat Claude als Controller Folgendes entschieden; es ändert oder präzisiert die Spec und **wartet auf Rafaels Bestätigung** (Begründung und „Falls falsch“ in `docs/superpowers/plans/2026-10-30-werkbuch-app-rulings.md`, A361 ff.):
 > - **Zustellung und Protokoll (6.3, 7.4):** Eine Zustellung (Ereignis × Webhook bzw. Ping) und ihre Versuche stehen in zwei Tabellen (`webhook_deliveries`, `webhook_attempts`); `X-Werkbuch-Delivery` ist die ID der Zustellung und bleibt über alle Versuche und „erneut senden“ gleich (A361).
@@ -979,6 +989,8 @@ Die anderen Container starten ohne Migration.
 | `ATTACHMENTS_MAX_MB` | Dateigröße, Standard 25 |
 | `NOTIFICATION_MAIL_DELAY` | Sammelzeit der Mails, Standard 5 min |
 | `WEBHOOKS_ALLOW_PRIVATE` | interne Webhook-Ziele erlauben, Standard false |
+| `API_RATE_LIMIT` | Anfragen je Minute an `/api/v1` je Token bzw. Adresse, Standard 600 |
+| `API_SESSION_RATE_LIMIT` | Anfragen je Minute der Oberfläche je Konto, Standard 3000 |
 | `FILESYSTEM_DISK`, `AWS_*` | optional S3-kompatibler Speicher |
 
 ### 8.3 Lokale Entwicklung (DDEV)

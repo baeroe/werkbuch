@@ -240,7 +240,7 @@ Moves are saved after a short pause; `escape` while dragging puts the bar back. 
 
 ## REST
 
-Reading needs a token with `read`. The three requests below that read with `POST` (`query`, `groups`, `counts`) are reads too: a token with only `read` may send them. Creating, changing and deleting views needs `write`. Messages come in the language of the account.
+Reading needs a token with `read`. The three requests below that read with `POST` (`query`, `groups`, `counts`) are reads too: a token with only `read` may send them. Creating, changing and deleting views needs `write`. Messages come in the language of the account. Tokens, errors, pages and limits are explained on the page [REST API](/en/api); the list of views takes `filter[created_by]`, `filter[name]` and `sort` like every list there.
 
 | Request | Answer |
 |---|---|

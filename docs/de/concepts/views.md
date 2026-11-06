@@ -240,7 +240,7 @@ Züge werden nach einer kurzen Pause gespeichert; `escape` beim Ziehen setzt den
 
 ## REST
 
-Lesen braucht ein Token mit `read`. Die drei Anfragen unten, die mit `POST` lesen (`query`, `groups`, `counts`), sind ebenfalls Lesezugriffe: Ein Token mit nur `read` darf sie schicken. Views anlegen, ändern und löschen braucht `write`. Meldungen kommen in der Sprache des Kontos.
+Lesen braucht ein Token mit `read`. Die drei Anfragen unten, die mit `POST` lesen (`query`, `groups`, `counts`), sind ebenfalls Lesezugriffe: Ein Token mit nur `read` darf sie schicken. Views anlegen, ändern und löschen braucht `write`. Meldungen kommen in der Sprache des Kontos. Tokens, Fehler, Seiten und Grenzen erklärt die Seite [REST-API](/de/api); die Liste der Views nimmt `filter[created_by]`, `filter[name]` und `sort` wie jede Liste dort.
 
 | Anfrage | Antwort |
 |---|---|

@@ -31,7 +31,7 @@ Deactivating a bot deletes all its tokens. Activating it again does not bring th
 
 An agent learns about its work through a [webhook](/en/webhooks) that is set to **Only for one bot**. Such a webhook gets `bot.assigned` when someone else assigns an item to the bot (a bot that takes an item itself gets none), `bot.mentioned` when someone mentions it with `@handle`, and the changes and comments of items assigned to it, each with the item in `data`. It gets them only while the bot is active and sees the project: remove the bot from a private project, and its webhook hears nothing more from there. Like everything else, `data` is written for the bot, so it never names an item the bot may not see.
 
-The agent then works with a token of its bot over REST: it reads the item, comments and sets the state. MCP follows in a later phase.
+The agent then works with a token of its bot over the [REST API](/en/api): it reads the item, comments and sets the state. `GET /api/v1/me` tells it which account the token belongs to. MCP follows in a later phase.
 
 ## The default bot
 

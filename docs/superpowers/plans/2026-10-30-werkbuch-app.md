@@ -371,7 +371,7 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 - [x] Phase 9: Wiki (PR #21)
 - [x] Phase 10: Vorlagen, Zeitpläne, Automatisierungen (PR #22)
 - [x] Phase 11: Webhooks (PR #25)
-- [ ] Phase 12: REST vollständig und OpenAPI
+- [x] Phase 12: REST vollständig und OpenAPI (PR #26)
 - [ ] Phase 13: MCP
 - [ ] Phase 14: Docker und Release
 - [ ] Phase 15: Feinschliff
