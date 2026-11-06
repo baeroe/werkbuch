@@ -54,6 +54,7 @@ describe('paths', () => {
   it('name the editor of a workflow as a view of the workflows section', () => {
     expect(paths.workflow('01jbworkflow')).toBe('/settings/workflows?workflow=01jbworkflow');
     expect(paths.workflow('a&b')).toBe('/settings/workflows?workflow=a%26b');
+    expect(paths.webhookDeliveries('wh_1')).toBe('/settings/webhooks?deliveries=wh_1');
     expect(paths.newWorkflow()).toBe('/settings/workflows?workflow=new');
     expect(paths.newWorkflow('wf_agency')).toBe('/settings/workflows?workflow=new&from=wf_agency');
   });

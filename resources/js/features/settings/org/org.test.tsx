@@ -157,6 +157,7 @@ describe('OrgSettings', () => {
       ['Labels', '/settings/labels'],
       ['Relationstypen', '/settings/relation-types'],
       ['Resolutions', '/settings/resolutions'],
+      ['Webhooks', '/settings/webhooks'],
       ['System', '/settings/system'],
     ]);
     expect(screen.getByRole('heading', { level: 1, name: 'Einstellungen' })).toBeTruthy();

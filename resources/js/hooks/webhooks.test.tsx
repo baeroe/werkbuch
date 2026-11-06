@@ -65,7 +65,7 @@ describe('webhooks', () => {
     expect(stale()).toEqual([true, true, false]);
   });
 
-  it('makes deliveries stale after a ping, and deliveries and webhooks after sending again', async () => {
+  it('makes deliveries and webhooks stale after a ping and after sending again (a success sets last_success_at)', async () => {
     api = mockApi({
       'POST /api/v1/webhooks/wh_1/ping': () => ({ body: { data: makeDelivery({ kind: 'ping' }) } }),
       'POST /api/v1/webhooks/wh_1/deliveries/dl_1/redeliver': () => ({ body: { data: makeDelivery({ kind: 'manual' }) } }),
@@ -77,7 +77,7 @@ describe('webhooks', () => {
 
     fill();
     await act(() => result.current.ping.mutateAsync('wh_1'));
-    expect(stale()).toEqual([false, true]);
+    expect(stale()).toEqual([true, true]);
 
     fill();
     await act(() => result.current.again.mutateAsync({ webhook_id: 'wh_1', delivery_id: 'dl_1' }));

@@ -2,15 +2,15 @@
  * The sections of the organisation settings (spec 5.2). The slugs are the contract with the route and the other
  * screens: `/settings/{section}`. Phase 2 brings General, People and Bots (group "Organisation"), Phase 3 the catalogs
  * (workflows, types, properties, labels, relation types and resolutions), Phase 8 the system page in the group
- * "Betrieb" (webhooks follow there in Phase 11). Members read the catalogs, admins change them.
+ * "Betrieb", Phase 11 the webhooks before it. Members read the catalogs, admins change them.
  */
 
 import type { LucideIcon } from 'lucide-react';
-import { BadgeCheck, Bot, Building2, Link2, Server, Shapes, SlidersHorizontal, Tags, Users, Workflow } from 'lucide-react';
+import { BadgeCheck, Bot, Building2, Link2, Server, Shapes, SlidersHorizontal, Tags, Users, Webhook, Workflow } from 'lucide-react';
 import { t, type TranslationKey } from '@/lib/i18n';
 import type { OrgPermission } from '../frame/access';
 
-export type SectionSlug = 'general' | 'people' | 'bots' | 'workflows' | 'types' | 'properties' | 'labels' | 'relation-types' | 'resolutions' | 'system';
+export type SectionSlug = 'general' | 'people' | 'bots' | 'workflows' | 'types' | 'properties' | 'labels' | 'relation-types' | 'resolutions' | 'webhooks' | 'system';
 
 export type SectionGroup = 'organization' | 'catalogs' | 'operations';
 
@@ -42,6 +42,7 @@ export const SECTIONS: readonly SectionDef[] = [
   { slug: 'labels', labelKey: 'settings.org.section.labels', icon: Tags, group: 'catalogs', permission: 'org.manage_catalog', members: 'read' },
   { slug: 'relation-types', labelKey: 'settings.org.section.relation_types', icon: Link2, group: 'catalogs', permission: 'org.manage_catalog', members: 'read' },
   { slug: 'resolutions', labelKey: 'settings.org.section.resolutions', icon: BadgeCheck, group: 'catalogs', permission: 'org.manage_catalog', members: 'read' },
+  { slug: 'webhooks', labelKey: 'settings.org.section.webhooks', icon: Webhook, group: 'operations', permission: 'org.manage', members: 'blocked' },
   { slug: 'system', labelKey: 'settings.org.section.system', icon: Server, group: 'operations', permission: 'org.manage', members: 'blocked' },
 ];
 

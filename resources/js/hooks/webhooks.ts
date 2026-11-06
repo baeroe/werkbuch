@@ -28,9 +28,9 @@ export function useDeliveries(webhookId: string | null | undefined) {
   return useQuery({ queryKey: qk.deliveries.list({ webhook: webhookId }), queryFn: () => listDeliveries(webhookId!), enabled: !!webhookId });
 }
 
-/** Variable: the webhook id. */
+/** Variable: the webhook id. A ping that arrives sets `last_success_at` and ends `failing_since`, so webhooks reload too. */
 export function usePingWebhook() {
-  return useApiMutation(pingWebhook, [qk.deliveries.all]);
+  return useApiMutation(pingWebhook, [qk.deliveries.all, qk.webhooks.all]);
 }
 
 /** Variables: `{ webhook_id, delivery_id }`. A delivery that goes through again changes `failing_since`, so webhooks reload. */

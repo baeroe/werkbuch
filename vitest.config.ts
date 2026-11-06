@@ -40,6 +40,7 @@ export default defineConfig({
         'resources/js/features/settings/org/properties/**': { lines: 100 },
         'resources/js/features/settings/org/workflows/**': { lines: 100 },
         'resources/js/features/settings/org/system/**': { lines: 100 },
+        'resources/js/features/settings/org/webhooks/**': { lines: 100 },
         'resources/js/features/settings/org/*.{ts,tsx}': { lines: 100 },
         'resources/js/features/settings/project/**': { lines: 100 },
         'resources/js/features/projects/**': { lines: 100 },

@@ -28,6 +28,7 @@ import Properties from './properties/Properties';
 import { findSection, GROUP_NAMES, SECTIONS, sectionLabel, type SectionDef, type SectionProps, type SectionSlug } from './sections';
 import System from './system/System';
 import Types from './types/Types';
+import Webhooks from './webhooks/Webhooks';
 import Workflows from './workflows/Workflows';
 
 const COMPONENTS: Record<SectionSlug, ComponentType<SectionProps>> = {
@@ -40,6 +41,7 @@ const COMPONENTS: Record<SectionSlug, ComponentType<SectionProps>> = {
   labels: Labels,
   'relation-types': RelationTypes,
   resolutions: Resolutions,
+  webhooks: Webhooks,
   system: System,
 };
 
