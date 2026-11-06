@@ -1,5 +1,7 @@
 <?php
 
+use App\Domain\Webhooks\Backoff;
+use App\Jobs\DeliverWebhook;
 use App\Live\LiveConsumer;
 use App\Models\Attachment;
 use App\Models\Page;
@@ -8,7 +10,11 @@ use App\Models\User;
 use App\Models\WorkItem;
 use App\Notifications\NotificationConsumer;
 use App\Search\SearchConsumer;
+use App\Webhooks\WebhookBackoff;
+use App\Webhooks\WebhookConsumer;
 use Illuminate\Support\Env;
+use Illuminate\Support\Facades\Http;
+use Spatie\WebhookServer\Signer\DefaultSigner;
 
 /**
  * Sets an environment variable the way the host would: .env values are loaded by Laravel itself (so the immutable
@@ -39,7 +45,7 @@ it('has the documented defaults', function () {
         ->and(config('werkbuch.notification_mail_delay'))->toBe(5)
         ->and(config('werkbuch.webhooks_allow_private'))->toBeFalse()
         // the file's default: the tests switch the consumers off (Tests\TestCase)
-        ->and((require base_path('config/werkbuch.php'))['event_consumers'])->toBe([SearchConsumer::class, NotificationConsumer::class, LiveConsumer::class])
+        ->and((require base_path('config/werkbuch.php'))['event_consumers'])->toBe([SearchConsumer::class, NotificationConsumer::class, LiveConsumer::class, WebhookConsumer::class])
         ->and(config('werkbuch.event_consumers'))->toBe([])
         ->and(config('werkbuch.rate_limits.api'))->toBe(600)
         ->and(config('werkbuch.rate_limits.mcp'))->toBe(300)
@@ -76,17 +82,26 @@ it('lists the queues in the worker\'s order', function () {
     expect(config('werkbuch.queues'))->toBe(['default', 'live', 'notifications', 'webhooks', 'search', 'media', 'bulk']);
 });
 
-it('works every queue in DDEV and the CI, search and media in a worker of their own (they starved behind the events)', function () {
+it('works every queue in DDEV and the CI, search and media and webhooks in workers of their own (they starved behind the events, a hanging receiver holds a worker)', function () {
     $workers = function (string $file): array {
         preg_match_all('/queue:(?:listen|work) --queue=([a-z,]+)/', (string) file_get_contents(repo_path($file)), $matches);
 
         return array_map(fn (string $list): array => explode(',', $list), $matches[1]);
     };
 
-    expect($workers('.ddev/config.yaml'))->toBe([['default', 'live', 'notifications', 'webhooks', 'bulk'], ['search', 'media']])
-        // no webhooks yet in the CI (phase 11)
-        ->and($workers('.github/workflows/tests.yml'))->toBe([['default', 'live', 'notifications', 'bulk'], ['search', 'media']])
+    expect($workers('.ddev/config.yaml'))->toBe([['default', 'live', 'notifications', 'bulk'], ['search', 'media'], ['webhooks']])
+        // `webhooks` in a worker of its own (T16-M5): a receiver that hangs holds it up to 17 s per attempt
+        ->and($workers('.github/workflows/tests.yml'))->toBe([['default', 'live', 'notifications', 'bulk'], ['search', 'media'], ['webhooks']])
+        ->and(array_merge(...$workers('.github/workflows/tests.yml')))->toEqualCanonicalizing(config('werkbuch.queues'))
         ->and(array_merge(...$workers('.ddev/config.yaml')))->toEqualCanonicalizing(config('werkbuch.queues'));
+});
+
+it('allows private webhook targets in DDEV and the e2e run only (task 10, A373)', function () {
+    expect((string) file_get_contents(repo_path('.ddev/config.yaml')))->toContain('- WEBHOOKS_ALLOW_PRIVATE=true')
+        ->and((string) file_get_contents(repo_path('e2e/ci.env')))->toContain("\nWEBHOOKS_ALLOW_PRIVATE=true\n")
+        ->and((string) file_get_contents(repo_path('.github/workflows/tests.yml')))->toContain('E2E_WEBHOOK_HOST: 127.0.0.1')
+        // the tests force them off (phpunit.xml), whatever the environment says
+        ->and((string) file_get_contents(repo_path('phpunit.xml')))->toContain('<env name="WEBHOOKS_ALLOW_PRIVATE" value="false" force="true"/>');
 });
 
 it('gives SMTP a timeout below the lock wait of the database (T7-M6)', function () {
@@ -161,4 +176,40 @@ it('takes the one default of the attachment limit in both configs (T6-M6)', func
 
     expect((require base_path('config/werkbuch.php'))['attachments_max_mb'])->toBe(40)
         ->and((require base_path('config/media-library.php'))['max_file_size'])->toBe(40 * 1024 * 1024);
+});
+
+// every webhook job comes out of WebhookCall::create(), which reads this file; useJob() after create() would throw the
+// configured job away (K1), so the job, the queue and the retries stand here and not at the call
+it('configures the webhook job of spatie', function () {
+    expect(config('webhook-server'))->toBe([
+        'queue' => 'webhooks',
+        'connection' => null,
+        'http_verb' => 'post',
+        'proxy' => null,
+        'signer' => DefaultSigner::class,
+        'signature_header_name' => 'Signature',
+        'timestamp_header_name' => 'Timestamp',
+        'webhook_id_header_name' => null,
+        'headers' => ['Content-Type' => 'application/json'],
+        'timeout_in_seconds' => 10,
+        'tries' => Backoff::TRIES,
+        'backoff_strategy' => WebhookBackoff::class,
+        'retryable_status_codes' => null,
+        'respect_retry_after' => false,
+        'retry_with_jitter' => false,
+        'webhook_job' => DeliverWebhook::class,
+        'verify_ssl' => true,
+        'throw_exception_on_failure' => false,
+        'tags' => [],
+    ])
+        // nothing of the package's file is left out: a new key of a later 4.x stands in ours too
+        ->and(array_keys(config('webhook-server')))
+        ->toEqualCanonicalizing(array_keys(require base_path('vendor/spatie/laravel-webhook-server/config/webhook-server.php')));
+});
+
+it('sends no real HTTP from a feature test (K11)', function () {
+    expect(fn () => Http::get('https://receiver.example.com/hook'))->toThrow(RuntimeException::class, 'receiver.example.com');
+
+    Http::fake(['receiver.example.com/*' => Http::response('ok')]);
+    expect(Http::get('https://receiver.example.com/hook')->body())->toBe('ok');
 });

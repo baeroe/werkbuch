@@ -40,8 +40,9 @@ final class Event extends Model
     protected $dateFormat = 'Y-m-d H:i:s.u';
 
     /**
-     * Set by App\Actions\WorkItems\ListHistory, never stored: `changes` as the reader of the history may see them, the
-     * other end of a relation resolved for that reader (K5). HistoryEntryResource shows these, never the raw `changes`.
+     * Set by App\Support\RelationChanges (the history of an item, webhooks), never stored: `changes` as one reader may see
+     * them, the other end of a relation resolved for that reader (K5). HistoryEntryResource and the payload of a webhook
+     * show these, never the raw `changes`.
      *
      * @var array<string, array{old: mixed, new: mixed}>|null
      */

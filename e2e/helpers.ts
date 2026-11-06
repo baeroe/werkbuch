@@ -621,6 +621,36 @@ export async function removeE2eView(page: Page, id: string): Promise<void> {
 }
 
 /**
+ * Creates a webhook of the organization (or of a project, or of what a bot sees) per API for a spec: the name is
+ * `E2E <variant> <runId> <name>` (the seeder removes those webhooks before the next run) and the secret is in the answer
+ * of creating only, so it comes back with the id. Clean up with `removeE2eWebhook()` in a `finally`.
+ */
+export async function createE2eWebhook(
+  page: Page,
+  input: { name: string; url: string; events: readonly string[]; project_id?: string; bot_id?: string },
+): Promise<{ id: string; secret: string }> {
+  await ensureCsrfCookie(page);
+  const response = await api(page, 'POST', '/api/v1/webhooks', {
+    name: `E2E ${variant()} ${runId()} ${input.name}`.slice(0, 120),
+    url: input.url,
+    events: input.events,
+    project_id: input.project_id ?? null,
+    bot_id: input.bot_id ?? null,
+    active: true,
+  });
+  expect(response.status(), await response.text()).toBe(201);
+  const body = (await response.json()) as { data: { id: string }; secret: string };
+  return { id: body.data.id, secret: body.secret };
+}
+
+/** Deletes a webhook of a spec (cleanup in `finally`): 204, or 404 for one that is gone already. */
+export async function removeE2eWebhook(page: Page, id: string): Promise<void> {
+  await ensureCsrfCookie(page);
+  const response = await api(page, 'DELETE', `/api/v1/webhooks/${id}`);
+  expect([204, 404], await response.text()).toContain(response.status());
+}
+
+/**
  * Opens the drawer of the top bar on the phone, where the sidebar lives; on the desktop the sidebar is there already.
  * `backwards` tabs up to the menu from a place further down the page.
  */

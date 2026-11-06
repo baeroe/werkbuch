@@ -108,6 +108,19 @@ use App\Actions\Views\DeleteView;
 use App\Actions\Views\GetView;
 use App\Actions\Views\ListViews;
 use App\Actions\Views\SaveView;
+use App\Actions\Webhooks\DeleteWebhook;
+use App\Actions\Webhooks\DisableWebhook;
+use App\Actions\Webhooks\GetWebhook;
+use App\Actions\Webhooks\ListWebhookDeliveries;
+use App\Actions\Webhooks\ListWebhooks;
+use App\Actions\Webhooks\PingWebhook;
+use App\Actions\Webhooks\PrepareWebhookAttempt;
+use App\Actions\Webhooks\PruneWebhookDeliveries;
+use App\Actions\Webhooks\QueueDeliveries;
+use App\Actions\Webhooks\RecordWebhookAttempt;
+use App\Actions\Webhooks\RedeliverWebhook;
+use App\Actions\Webhooks\RotateWebhookSecret;
+use App\Actions\Webhooks\SaveWebhook;
 use App\Actions\Workflows\DeleteWorkflow;
 use App\Actions\Workflows\ListStateUsage;
 use App\Actions\Workflows\ListWorkflows;
@@ -151,6 +164,9 @@ use App\Models\Property;
 use App\Models\RelationType;
 use App\Models\Resolution;
 use App\Models\User;
+use App\Models\Webhook;
+use App\Models\WebhookAttempt;
+use App\Models\WebhookDelivery;
 use App\Models\Workflow;
 use App\Models\WorkItem;
 use App\Models\WorkItemRelation;
@@ -1112,12 +1128,94 @@ return [
         },
         'allowed' => ['org_admin'],
     ],
+    // the webhooks (spec 4.3, A372): accounts with `org.manage`, the org admins and the default bot over a token
+    'ListWebhooks' => [
+        'action' => ListWebhooks::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListWebhooks::run($a, []),
+        'allowed' => ['org_admin', 'default_bot'],
+    ],
+    'GetWebhook' => [
+        'action' => GetWebhook::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetWebhook::run($a, $w->webhook()),
+        'allowed' => ['org_admin', 'default_bot'],
+    ],
+    'SaveWebhook' => [
+        'action' => SaveWebhook::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $webhook = $w->webhook();
+
+            return SaveWebhook::run($a, [...$webhook->only(['url', 'project_id', 'events', 'bot_id', 'active']), 'name' => 'Matrix'], $webhook);
+        },
+        'allowed' => ['org_admin', 'default_bot'],
+        'event' => EventType::WebhookUpdated,
+    ],
+    'DeleteWebhook' => [
+        'action' => DeleteWebhook::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => DeleteWebhook::run($a, $w->webhook()),
+        'allowed' => ['org_admin', 'default_bot'],
+        'event' => EventType::WebhookDeleted,
+    ],
+    'RotateWebhookSecret' => [
+        'action' => RotateWebhookSecret::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => RotateWebhookSecret::run($a, $w->webhook()),
+        'allowed' => ['org_admin', 'default_bot'],
+        'event' => EventType::WebhookSecretRotated,
+    ],
+    // the log, the test ping and "send again": one request to the receiver of the matrix's fake, no event (A367)
+    'ListWebhookDeliveries' => [
+        'action' => ListWebhookDeliveries::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListWebhookDeliveries::run($a, $w->webhook(), []),
+        'allowed' => ['org_admin', 'default_bot'],
+    ],
+    'PingWebhook' => [
+        'action' => PingWebhook::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => PingWebhook::run($a, $w->webhook()),
+        'allowed' => ['org_admin', 'default_bot'],
+    ],
+    'RedeliverWebhook' => [
+        'action' => RedeliverWebhook::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $webhook = $w->webhook();
+
+            return RedeliverWebhook::run($a, $webhook, WebhookDelivery::factory()->for($webhook)->create());
+        },
+        'allowed' => ['org_admin', 'default_bot'],
+    ],
     // the work of the consumer `notifications` for an event of the outbox (here one of the migrations, which tells
     // nobody), without an event of its own
     'NotifyRecipients' => [
         'action' => NotifyRecipients::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => NotifyRecipients::run($a, Event::query()->where('type', EventType::BotCreated)->firstOrFail()),
         'system' => true,
+    ],
+    // the work of the consumer `webhooks` for an event of the outbox (here one of the migrations, which no webhook can
+    // take), without an event of its own
+    'QueueDeliveries' => [
+        'action' => QueueDeliveries::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => QueueDeliveries::run($a, Event::query()->where('type', EventType::BotCreated)->firstOrFail()),
+        'system' => true,
+    ],
+    // the check before a try of DeliverWebhook (a pending delivery of a fresh webhook: the checked target), without an
+    // event of its own
+    'PrepareWebhookAttempt' => [
+        'action' => PrepareWebhookAttempt::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => PrepareWebhookAttempt::run($a, WebhookDelivery::factory()->for($w->webhook())->create()->id, WebhookAttempt::SCHEDULED)
+            ?? throw new RuntimeException('Nothing to send.'),
+        'system' => true,
+    ],
+    // the log of a try of DeliverWebhook (here a success), bookkeeping without an event
+    'RecordWebhookAttempt' => [
+        'action' => RecordWebhookAttempt::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => RecordWebhookAttempt::run($a, WebhookDelivery::factory()->for($w->webhook())->create()->id, 200, 40, 'ok', null, WebhookAttempt::SCHEDULED)
+            ?? throw new RuntimeException('Nothing logged.'),
+        'system' => true,
+    ],
+    // the system switches a webhook off that failed for 24 hours (A366), from RecordWebhookAttempt under its lock
+    'DisableWebhook' => [
+        'action' => DisableWebhook::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => DB::transaction(fn () => DisableWebhook::run($a, Webhook::query()->lockForUpdate()->findOrFail($w->webhook()->id))),
+        'system' => true,
+        'event' => EventType::WebhookDisabled,
     ],
     // the work of SendNotificationMailJob for a collection that is due (here one without lines: it is skipped), without
     // an event of its own
@@ -1142,6 +1240,12 @@ return [
     'PruneNotifications' => [
         'action' => PruneNotifications::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => PruneNotifications::run($a),
+        'system' => true,
+    ],
+    // the hourly tidying up of the webhook log (PruneWebhookDeliveriesJob, K15), without an event
+    'PruneWebhookDeliveries' => [
+        'action' => PruneWebhookDeliveries::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => PruneWebhookDeliveries::run($a),
         'system' => true,
     ],
     'GetTwoFactor' => [

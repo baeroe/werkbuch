@@ -214,6 +214,7 @@ final class CreateWorkItem
             $noted = $template === null ? [] : ['template' => ['id' => $template->id, 'name' => $template->name]];
             EventRecorder::record(EventType::WorkItemCreated, $actor, $item, $project, ['title' => ['old' => null, 'new' => $item->title]], [...Mentions::meta($mentioned), ...$noted, ...$meta]);
             UpdateWorkItem::announceBots($actor, $item, $mentioned);
+            UpdateWorkItem::announceAssignedBot($actor, $item);
 
             // another state is a move from the initial one, after the creation: the history shows both (P32)
             if ($target->id !== $initial->id) {

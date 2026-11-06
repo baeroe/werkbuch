@@ -35,6 +35,8 @@ export const paths = {
   workflow: (id: string) => `/settings/workflows?workflow=${segment(id)}`,
   /** The editor with a new workflow, as a copy of `from` when given. */
   newWorkflow: (from?: string) => `/settings/workflows?workflow=new${from === undefined ? '' : `&from=${segment(from)}`}`,
+  /** The log of deliveries of a webhook, a view of the webhooks section. */
+  webhookDeliveries: (id: string) => `/settings/webhooks?deliveries=${segment(id)}`,
   me: (section?: string) => below('/me', section),
   login: () => '/login',
   logout: () => '/logout',

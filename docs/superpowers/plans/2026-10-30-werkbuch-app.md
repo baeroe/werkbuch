@@ -266,12 +266,12 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 
 ## Phase 11: Webhooks
 
-**Branch:** `feat/phase-11-webhooks` · **Phasenplan:** `…phase-11-webhooks.md`
+**Branch:** `feat/phase-11-webhooks` · **Phasenplan:** `2026-11-05-phase-11-webhooks.md`
 
 **Liefert:**
 - `webhooks`, `webhook_deliveries`; Konfiguration aus 6.3 (Geheimnis verschlüsselt, einmal angezeigt, erneuerbar; Organisation oder Projekt; Ereignisse mit `gruppe.*`; optional ein Bot); Konsument `webhooks` mit Payload aus 6.3 und `data` aus den Resources.
 - Zustellung über spatie/laravel-webhook-server: Header `X-Werkbuch-Event`, `X-Werkbuch-Delivery`, `X-Werkbuch-Timestamp`, `X-Werkbuch-Signature: sha256=<HMAC über "timestamp.body">`, 10 s Timeout, keine Weiterleitungen, 8 Versuche über etwa 24 Stunden, Protokoll mit Antwort gekürzt auf 2 KB und Löschen nach 30 Tagen, Abschalten nach 24 Stunden ohne Erfolg mit Benachrichtigung der Org-Admins, „erneut senden“, Test-Ping.
-- SSRF: Prüfung bei jedem Versand nach der DNS-Auflösung, Anfrage an die geprüfte IP, gesperrt sind private, Loopback-, Link-local- und Metadata-Netze außer `WEBHOOKS_ALLOW_PRIVATE=true`.
+- SSRF: Prüfung bei jedem Versand nach der DNS-Auflösung, Anfrage an die geprüfte IP, gesperrt sind private, Loopback-, Link-local- und Metadata-Netze; `WEBHOOKS_ALLOW_PRIVATE=true` erlaubt nur private Netze, CGNAT, Unique Local und Loopback (Positivliste `Addresses::PRIVATE`), ganz Link-local, die Metadaten-Adressen, `0/8`, Multicast und `240/4` bleiben gesperrt (A378); nie über einen ausgehenden Proxy (A368).
 - `bot.mentioned` und `bot.assigned`.
 - REST: `webhooks`, `webhooks/{id}/deliveries`, `…/redeliver`, `…/ping`, `…/rotate-secret`.
 - UI-Port: Einstellungen Webhooks mit Zustellungen.
@@ -325,6 +325,8 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 - Workflows `docker.yml` (Tag `vX.Y.Z` → Image `X.Y.Z`, `X.Y`, `latest` und GitHub-Release mit Notizen aus `docs/*/upgrading.md`), `dockerhub.yml` (README-Sync); Tests auf `upgrading.md`-Abschnitt und `version` in `config/werkbuch.php`.
 - CI: neuer Job `image` (Multi-Arch-Build ohne Push bei jedem PR); der Job `e2e` läuft ab jetzt gegen den Compose-Stack mit dem lokal gebauten Image.
 
+- Aus Phase 11: ein eigener Worker auf `webhooks` (ein hängender Empfänger hält einen geteilten Worker bis 10 s je Versuch auf; ist die Lieferzeit unter `queue:listen` lang, Reihenfolge der Queues oder eigenen Daemon prüfen), `PruneWebhookDeliveriesJob` im Scheduler-Container; musl (Alpine) liest `RES_OPTIONS` nicht (A381): glibc-Basis oder eigene DNS-Grenze, geprüft; `exception_ignore_args` an (keine Argumente in Stacktraces von Logs und `failed_jobs`); Betriebsdoku zu ausgehenden Verbindungen und `WEBHOOKS_ALLOW_PRIVATE`.
+
 **Doku:** `setup` (bindet die echte Compose-Datei ein), `reverse-proxy` (NPM mit „Websockets Support“, Traefik, Caddy), `upgrading`, `backup`, Mindestanforderungen (RAM für Meilisearch), en + de.
 
 **Abnahme:** Erfolgskriterium 1: `docker compose up -d` startet alles auf Port 7740, Admin und Standard-Bot existieren, Live-Updates laufen über denselben Port.
@@ -338,6 +340,7 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 - Restliche Punkte aus `2026-10-28-werkbuch-clickdummy-deferred.md`, die gegen den Code noch gelten (Einstellungen im Lese-Look statt ausgegraut, leere Zustände mit nächstem Schritt, Skelette nach etwa 300 ms, 422 auf ein nicht gezeigtes Feld, „Du liest nur mit.“ bei Org-Admins, Witwen in Seitentiteln, Galerie-Muster für Screenreader).
 - Barrierefreiheit über alle Seiten (axe in Playwright), Erfolgskriterium 6: jeder Ablauf nur mit der Tastatur.
 - Screenshots per Playwright aus Demo-Daten in beiden Sprachen (`docs/public/screenshots/{en,de}/`), Landingpage der Doku, README (Englisch) mit Screenshots, `docs.yml` für GitHub Pages unter `DOCS_BASE`, Doku-Durchsicht (Struktur, Links, Screenshots per Test).
+- Aus Phase 11: Last mit 50 Webhooks × Mehrfachbearbeitung von 100 Items, Payload-Größe bei großen Beschreibungen, Reihenfolge der Zustellungen je Item; die `exists`-Abfrage je Bot-Zuweisung (`announceAssignedBot`) in der Mehrfachbearbeitung bündeln.
 - Checkliste für die manuellen Tests (Spec 11.5) in `docs/superpowers/plans/2026-10-30-werkbuch-manual-tests.md` aus den Erfolgskriterien und Kapitel 4; `docs/history/`-Eintrag; `CLAUDE.md` final.
 
 **Abnahme:** alle Erfolgskriterien aus Spec 1 grün in CI; Doku baut in beiden Sprachen vollständig. Danach manuelle Tests durch Rafael; Release v0.1.0 erst nach seiner Freigabe.
@@ -367,7 +370,7 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 - [x] Phase 8: Benachrichtigungen, Mail, Live-Updates (PR #20)
 - [x] Phase 9: Wiki (PR #21)
 - [x] Phase 10: Vorlagen, Zeitpläne, Automatisierungen (PR #22)
-- [ ] Phase 11: Webhooks
+- [x] Phase 11: Webhooks (PR #25)
 - [ ] Phase 12: REST vollständig und OpenAPI
 - [ ] Phase 13: MCP
 - [ ] Phase 14: Docker und Release

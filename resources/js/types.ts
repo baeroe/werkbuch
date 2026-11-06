@@ -646,8 +646,9 @@ export interface NotificationData {
   /** `template_run_failed` (phase 10). */
   template_id?: string;
   error?: string;
-  /** `webhook_disabled` (phase 11). */
+  /** `webhook_disabled` (phase 11): the webhook and its name when it was switched off. */
   webhook_id?: string;
+  name?: string | null;
 }
 
 /** A notification of the own inbox, as `GET /api/v1/notifications` answers it (`NotificationResource`). */
@@ -693,15 +694,25 @@ export interface Webhook {
   active: boolean;
   /** Set when the webhook failed for 24 hours and was switched off. */
   disabled_at: string | null;
+  /** The first failure since the last success; the 24 hours until the shut-off count from here. */
+  failing_since: string | null;
+  last_success_at: string | null;
+  created_by: string;
   created_at: string;
+  updated_at: string;
 }
 
-/** The log entry of one delivery attempt. */
+/** How an attempt came about: the schedule, "send again" or the test ping. */
+export type WebhookAttemptKind = 'scheduled' | 'manual' | 'ping';
+
+/** The log entry of one delivery attempt (`id` the attempt, `delivery_id` the delivery with the header `X-Werkbuch-Delivery`). */
 export interface WebhookDelivery {
   id: string;
+  delivery_id: string;
   webhook_id: string;
   event: string;
   attempt: number;
+  kind: WebhookAttemptKind;
   /** Null: no response (timeout, connection error). */
   status_code: number | null;
   duration_ms: number;

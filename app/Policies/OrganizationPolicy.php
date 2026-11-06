@@ -29,6 +29,13 @@ final class OrganizationPolicy
             : Response::deny($catalog->deniedDetail());
     }
 
+    public function manageWebhooks(User $user): Response
+    {
+        return Visibility::can($user, Permission::OrgManage)
+            ? Response::allow()
+            : Response::deny(__('problem.detail.webhooks_admins_only'));
+    }
+
     public function viewSystem(User $user): Response
     {
         return $user->isPerson() && Visibility::can($user, Permission::OrgManage)

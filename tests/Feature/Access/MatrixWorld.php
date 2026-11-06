@@ -10,7 +10,9 @@ use App\Models\Project;
 use App\Models\Template;
 use App\Models\User;
 use App\Models\View;
+use App\Models\Webhook;
 use App\Models\WorkItem;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
@@ -139,5 +141,18 @@ final class MatrixWorld
     public function view(): View
     {
         return View::factory()->create(['created_by' => $this->target->id]);
+    }
+
+    /**
+     * A fresh webhook of the organization (`work_item.*`) at https://receiver.example.com/hook, created by the org admin,
+     * through the factory: no events. Its receiver resolves to a public address and answers every request with `ok`
+     * (K11): a ping or a redelivery of the matrix sends nothing out and asks no DNS.
+     */
+    public function webhook(): Webhook
+    {
+        resolver(['receiver.example.com' => ['93.184.216.34']]);
+        Http::fake(['*' => Http::response('ok')]);
+
+        return Webhook::factory()->create(['created_by' => $this->account('org_admin')->id, 'url' => 'https://receiver.example.com/hook']);
     }
 }

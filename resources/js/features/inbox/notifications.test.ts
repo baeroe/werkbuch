@@ -4,6 +4,7 @@ import { initI18n } from '@/lib/i18n';
 import { makeNotification } from '@/test/fixtures';
 import type { Notification } from '@/types';
 import { changedFields, groupNotifications, opensElsewhere, timeAgo } from './notifications';
+import { hrefOf } from './NotificationRow';
 
 // Ported from the clickdummy's features/inbox/notifications.test.ts; the texts come from lang/*.json.
 
@@ -151,5 +152,18 @@ describe('changedFields', () => {
     initI18n({ locale: 'en', translations: en });
 
     expect(changedFields(['title', 'due_date', 'values.customer'], propertyLabel)).toBe('Title, Due date and Kunde');
+  });
+});
+
+describe('hrefOf', () => {
+  it('leads a switched-off webhook to its log, without one to the webhooks of the settings', () => {
+    expect(hrefOf(notification('n1', { event: 'webhook_disabled', work_item_id: null, project_id: null, data: { webhook_id: 'wh_crm' } }), undefined)).toBe(
+      '/settings/webhooks?deliveries=wh_crm',
+    );
+    expect(hrefOf(notification('n2', { event: 'webhook_disabled', work_item_id: null, project_id: null, data: {} }), undefined)).toBe('/settings/webhooks');
+  });
+
+  it('leads a kind without an item it does not know to the settings, never to the webhooks (T14-M7)', () => {
+    expect(hrefOf(notification('n1', { event: 'item_changed', work_item_id: null, project_id: null, data: {} }), undefined)).toBe('/settings');
   });
 });

@@ -4,6 +4,7 @@ use App\Live\LiveConsumer;
 use App\Models\Attachment;
 use App\Notifications\NotificationConsumer;
 use App\Search\SearchConsumer;
+use App\Webhooks\WebhookConsumer;
 
 return [
 
@@ -28,12 +29,12 @@ return [
     'webhooks_allow_private' => (bool) env('WEBHOOKS_ALLOW_PRIVATE', false),
 
     // classes implementing App\Events\EventConsumer: each receives every domain event once, after the commit, in its own
-    // queue (App\Events\Outbox): the search index, the notifications and the live updates; later phases add webhooks and
-    // automations. Off in tests (Tests\TestCase), where consumers() switches them on.
-    'event_consumers' => [SearchConsumer::class, NotificationConsumer::class, LiveConsumer::class],
+    // queue (App\Events\Outbox): the search index, the notifications, the live updates and the webhooks (rows only, the
+    // HTTP in jobs of their own). Off in tests (Tests\TestCase), where consumers() switches them on.
+    'event_consumers' => [SearchConsumer::class, NotificationConsumer::class, LiveConsumer::class, WebhookConsumer::class],
 
-    // all queues of the app in the order the workers take them (A278): the DDEV daemons `queue` and `queue-index` split
-    // them (search and media apart, A301), so do the two workers of the CI, which leave out `webhooks` until phase 11
+    // all queues of the app in the order the workers take them (A278): the DDEV daemons `queue`, `queue-index` and
+    // `queue-webhooks` split them (search and media apart, A301; webhooks apart, T16-M5), so do the three workers of the CI
     'queues' => ['default', 'live', 'notifications', 'webhooks', 'search', 'media', 'bulk'],
 
     // requests per minute

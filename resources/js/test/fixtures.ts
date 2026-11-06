@@ -33,6 +33,8 @@ import type {
   SearchResults,
   Resolution,
   SystemStatus,
+  Webhook,
+  WebhookDelivery,
   Template,
   TemplateRun,
   User,
@@ -847,3 +849,70 @@ export function makeTemplateRun(overrides: Partial<TemplateRun> = {}): TemplateR
 export function makeAutomation(overrides: Partial<Automation> = {}): Automation {
   return { id: 'au_1', project_id: 'p_web', key: 'auto_archive', enabled: true, settings: { days: 30 }, ...overrides };
 }
+
+/* ------------------------------------------------------------------- webhooks */
+
+/** A webhook as the API answers it (never with a secret); override what the test is about. */
+export function makeWebhook(overrides: Partial<Webhook> = {}): Webhook {
+  return {
+    id: 'wh_1',
+    name: 'Deploy-Bot',
+    url: 'https://deploy.feldwerk.example.com/hooks/werkbuch',
+    project_id: null,
+    events: ['work_item.state_changed'],
+    bot_id: null,
+    active: true,
+    disabled_at: null,
+    failing_since: null,
+    last_success_at: '2026-10-27T15:20:00.000Z',
+    created_by: 'u_mara',
+    created_at: '2026-10-02T08:30:00.000Z',
+    updated_at: '2026-10-02T08:30:00.000Z',
+    ...overrides,
+  };
+}
+
+/** One attempt of the delivery log (`id` the attempt, `delivery_id` the delivery); a first, successful, scheduled one. */
+export function makeDelivery(overrides: Partial<WebhookDelivery> = {}): WebhookDelivery {
+  return {
+    id: 'at_1',
+    delivery_id: 'dl_1',
+    webhook_id: 'wh_1',
+    event: 'work_item.state_changed',
+    attempt: 1,
+    kind: 'scheduled',
+    status_code: 200,
+    duration_ms: 142,
+    response_excerpt: '{"ok":true}',
+    error: null,
+    created_at: '2026-10-27T15:20:00.000Z',
+    ...overrides,
+  };
+}
+
+/** The three webhooks of the demo data (`WebhooksSeeder`): "Deploy-Bot", "Kira" (only `bot.*`) and "Altes CRM" (switched off). */
+export const demoWebhooks: Webhook[] = [
+  makeWebhook(),
+  makeWebhook({
+    id: 'wh_kira',
+    name: 'Kira',
+    url: 'https://kira.feldwerk.example.com/werkbuch/webhook',
+    events: ['bot.*'],
+    bot_id: 'u_kira',
+    created_at: '2026-10-05T12:35:00.000Z',
+    updated_at: '2026-10-05T12:35:00.000Z',
+  }),
+  makeWebhook({
+    id: 'wh_crm',
+    name: 'Altes CRM',
+    url: 'https://crm.example.com/api/inbound/werkbuch',
+    project_id: 'p_app',
+    events: ['work_item.created', 'work_item.updated'],
+    active: false,
+    disabled_at: '2026-10-22T08:00:30.000Z',
+    failing_since: '2026-10-21T08:00:00.000Z',
+    last_success_at: null,
+    created_at: '2026-08-12T07:00:00.000Z',
+    updated_at: '2026-10-22T08:00:30.000Z',
+  }),
+];

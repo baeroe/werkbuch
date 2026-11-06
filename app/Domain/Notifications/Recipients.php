@@ -13,7 +13,8 @@ namespace App\Domain\Notifications;
  * - `template_run_failed`: only the lead and the author of the template, for `template.run_failed` (phase 10).
  * The lead watches every item of the project unless they unsubscribed from it (A269); whoever unsubscribed only hears
  * of mentions and assignments (A113). The actor never hears of their own event, nor does the person an automation or a
- * template run acted for (`causedBy`, A342, K12). Every other event tells nobody (A270),
+ * template run acted for (`causedBy`, A342, K12).
+ * `webhook_disabled`: every org admin, for `webhook.disabled` (the system switched a webhook off, phase 11). Every other event tells nobody (A270),
  * `comment.updated` only the people mentioned anew.
  */
 final class Recipients
@@ -70,6 +71,9 @@ final class Recipients
                 break;
             case 'template.run_failed':
                 $add(NotificationKind::TemplateRunFailed, array_values(array_filter([$facts->leadId, $facts->templateAuthorId], 'is_string')));
+                break;
+            case 'webhook.disabled':
+                $add(NotificationKind::WebhookDisabled, $facts->orgAdmins);
                 break;
         }
 

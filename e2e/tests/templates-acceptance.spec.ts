@@ -97,7 +97,8 @@ test('a template that fails at run time tells the lead live', async ({ page, bro
     makeTemplateDue(template.id);
     runTemplate(template.id);
     expect(await itemsOf(page, project.id)).toHaveLength(0);
-    const notification = await waitForNotification(lead.page, (each) => each.event === 'template_run_failed' && each.data.template_id === template.id);
+    // in the full run the queue notifications waits behind the other specs' jobs (queue:listen in DDEV): give it a minute
+    const notification = await waitForNotification(lead.page, (each) => each.event === 'template_run_failed' && each.data.template_id === template.id, 60_000);
     expect(notification.data.error).toBe(error);
 
     // live: the row and the badge, without loading the page again

@@ -14,7 +14,7 @@ werkbuch sagt Personen Bescheid, wenn sich etwas an ihrer Arbeit tut: in der **I
 | Fällig oder überfällig | Die Person, der ein Item zugewiesen ist, jeden Morgen (siehe [Erinnerungen](#erinnerungen)) | an |
 | Neues Item im Projekt | Nur der Lead des Projekts | aus |
 | Vorlage fehlgeschlagen | Der Lead des Projekts und wer die Vorlage angelegt hat, wenn ein Lauf nach Zeitplan oder mit **Jetzt ausführen** scheitert (siehe [Vorlagen](/de/concepts/templates#fehler-und-protokoll)) | aus |
-| Webhook abgeschaltet | Org-Admins; kommt mit den Webhooks (eine spätere Phase) | aus |
+| Webhook abgeschaltet | Jede aktive Person mit Org-Rolle Admin, wenn das System einen [Webhook](/de/webhooks#abgeschaltet-und-wieder-an) abschaltet, der 24 Stunden lang gescheitert ist | aus |
 
 Wer ein Item beobachtet, steht unter [Work Items](/de/concepts/work-items#beobachten). Dazu gilt:
 
@@ -46,7 +46,7 @@ Ein Auszug kommt immer aus dem aktuellen Text: ein bearbeiteter Kommentar zeigt 
 
 ## Mail
 
-- **Gesammelt.** Benachrichtigungen zu einem Item werden `NOTIFICATION_MAIL_DELAY` Minuten gesammelt (standardmäßig 5) und gehen dann als eine Mail je Person und Item raus, die älteste zuerst. Der Betreff ist `[WEB-47] Titel des Items`, der Fuß verlinkt die Einstellungen der Benachrichtigungen. Gescheiterte Läufe einer Vorlage werden stattdessen je Vorlage gesammelt: Der Betreff nennt Projekt und Vorlage, der Knopf führt zur Vorlage.
+- **Gesammelt.** Benachrichtigungen zu einem Item werden `NOTIFICATION_MAIL_DELAY` Minuten gesammelt (standardmäßig 5) und gehen dann als eine Mail je Person und Item raus, die älteste zuerst. Der Betreff ist `[WEB-47] Titel des Items`, der Fuß verlinkt die Einstellungen der Benachrichtigungen. Gescheiterte Läufe einer Vorlage werden stattdessen je Vorlage gesammelt: Der Betreff nennt Projekt und Vorlage, der Knopf führt zur Vorlage. Ein abgeschalteter Webhook hat eine eigene Mail (Betreff `Webhook „…“ abgeschaltet`), deren Knopf zu seinen Zustellungen führt; in der Inbox führt die Zeile ebenfalls dorthin.
 - **In deiner Sprache,** der Sprache deines Profils, sonst der der Organisation; Zeiten in deiner Zeitzone.
 - **Kommentare und Erwähnungen** kommen mit ihrem aktuellen Text. Links bleiben Links, Bilder und Dateien erscheinen als Links zu werkbuch; eine Mail hat nie Anhänge oder eingebettete Bilder. Ein langer Text wird mit **Weiterlesen** gekürzt.
 - **Beim Senden geprüft.** Kurz bevor die Mail rausgeht, prüft werkbuch jede Zeile noch einmal: das Konto ist aktiv, es sieht das Projekt noch, das Item gibt es, die Benachrichtigung ist noch ungelesen und Mail ist für das Ereignis noch an. Was du inzwischen in der Inbox gelesen hast, wird nicht gemailt. Bleibt nichts übrig, geht keine Mail raus.
@@ -73,7 +73,7 @@ Listen, Boards, Tabellen und Timelines, die Item-Seite und die Vorschau (Felder,
 - **Zugriff verloren heißt getrennt.** Wirst du aus einem Projekt entfernt, wird ein Projekt privat, geht deine Org-Rolle von Admin zu Member oder wird dein Konto deaktiviert, schließt werkbuch deine Live-Verbindungen. Der Browser verbindet neu und fragt jeden Kanal neu an; ein Projekt, das du nicht mehr siehst, wird abgelehnt, und seine Listen und Seiten laden neu und zeigen, was du noch sehen darfst.
 - **Keine Verbindung.** Hat der Browser 3 Sekunden lang keine Verbindung, sagt ein Banner „Live-Updates pausiert“ mit **Neu laden**. Kommt die Verbindung zurück, laden die Seiten, was sie verpasst haben.
 
-Live-Updates laufen über [Reverb](https://reverb.laravel.com) mit WebSockets. Der Browser verbindet sich mit `REVERB_HOST`, `REVERB_PORT` und `REVERB_SCHEME`, die er zur Laufzeit von der Seite bekommt; Reverb selbst hört auf `REVERB_SERVER_HOST` und `REVERB_SERVER_PORT`. Ein Reverse Proxy vor werkbuch muss WebSockets durchlassen (in Nginx Proxy Manager der Schalter „Websockets Support“), sonst bleibt das Banner. Ein Queue-Worker muss auf die Queue `live` hören. Erreicht eine Meldung Reverb nicht, schickt werkbuch 30 Sekunden lang keine und versucht es nicht erneut (das Log bekommt den Fehler höchstens alle 10 Minuten); die Browser laden nach, was sie verpasst haben, sobald sie wieder verbunden sind. Ohne Reverb (`BROADCAST_CONNECTION` nicht `reverb`) verbindet der Browser nicht und zeigt kein Banner; Seiten ziehen dann nach, wenn sie das nächste Mal laden. Live-Updates gehören zur Sitzung der Oberfläche; REST- und MCP-Clients erfahren von Änderungen über Webhooks (eine spätere Phase).
+Live-Updates laufen über [Reverb](https://reverb.laravel.com) mit WebSockets. Der Browser verbindet sich mit `REVERB_HOST`, `REVERB_PORT` und `REVERB_SCHEME`, die er zur Laufzeit von der Seite bekommt; Reverb selbst hört auf `REVERB_SERVER_HOST` und `REVERB_SERVER_PORT`. Ein Reverse Proxy vor werkbuch muss WebSockets durchlassen (in Nginx Proxy Manager der Schalter „Websockets Support“), sonst bleibt das Banner. Ein Queue-Worker muss auf die Queue `live` hören. Erreicht eine Meldung Reverb nicht, schickt werkbuch 30 Sekunden lang keine und versucht es nicht erneut (das Log bekommt den Fehler höchstens alle 10 Minuten); die Browser laden nach, was sie verpasst haben, sobald sie wieder verbunden sind. Ohne Reverb (`BROADCAST_CONNECTION` nicht `reverb`) verbindet der Browser nicht und zeigt kein Banner; Seiten ziehen dann nach, wenn sie das nächste Mal laden. Live-Updates gehören zur Sitzung der Oberfläche; REST- und MCP-Clients erfahren von Änderungen über [Webhooks](/de/webhooks).
 
 ## REST
 
@@ -117,7 +117,7 @@ curl -H "Authorization: Bearer <token>" \
 }
 ```
 
-`event` ist eins von `assigned`, `mentioned`, `comment`, `state_changed`, `item_changed`, `due`, `item_created`, `template_run_failed`, `webhook_disabled`. `data` enthält nur IDs und Namen von Feldern: `{source, comment_id}` bei einer Erwähnung, `{comment_id}` bei einem Kommentar, `{from, to}` (die Status, wie sie damals hießen) bei einem Statuswechsel, `{fields}` bei sonstigen Änderungen, `{due_date, overdue}` bei einer Erinnerung, `{template_id, error}` bei einer fehlgeschlagenen Vorlage (ihr `item` ist `null`). `mailed_at` ist der Zeitpunkt, zu dem die Mail mit dieser Benachrichtigung rausging, `item` das Item in der kurzen Form der Listen.
+`event` ist eins von `assigned`, `mentioned`, `comment`, `state_changed`, `item_changed`, `due`, `item_created`, `template_run_failed`, `webhook_disabled`. `data` enthält nur IDs und Namen von Feldern: `{source, comment_id}` bei einer Erwähnung, `{comment_id}` bei einem Kommentar, `{from, to}` (die Status, wie sie damals hießen) bei einem Statuswechsel, `{fields}` bei sonstigen Änderungen, `{due_date, overdue}` bei einer Erinnerung, `{template_id, error}` bei einer fehlgeschlagenen Vorlage (ihr `item` ist `null`), `{webhook_id, name}` bei einem abgeschalteten Webhook (ohne Projekt und Item). `mailed_at` ist der Zeitpunkt, zu dem die Mail mit dieser Benachrichtigung rausging, `item` das Item in der kurzen Form der Listen.
 
 Eine Benachrichtigung als gelesen markieren, oder alle Erwähnungen auf einmal:
 

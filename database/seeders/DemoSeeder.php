@@ -19,6 +19,7 @@ use Database\Seeders\Demo\ProjectsSeeder;
 use Database\Seeders\Demo\TemplatesSeeder;
 use Database\Seeders\Demo\TokensSeeder;
 use Database\Seeders\Demo\ViewsSeeder;
+use Database\Seeders\Demo\WebhooksSeeder;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use RuntimeException;
@@ -57,6 +58,8 @@ class DemoSeeder extends Seeder
             // after the items its runs made; before the inbox, whose failed run names its template (K20)
             TemplatesSeeder::class,
             AutomationsSeeder::class,
+            // before the inbox, whose switched-off webhook names its webhook
+            WebhooksSeeder::class,
             NotificationsSeeder::class,
         ]);
 

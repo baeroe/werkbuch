@@ -119,7 +119,7 @@ it('keeps the events of the deleted item', function () use ($web) {
     $deleted = eventsOf(EventType::WorkItemDeleted, $item)->sole();
     expect(eventsOf(EventType::WorkItemCreated, $item))->toHaveCount(1)
         ->and($deleted->changes)->toBeNull()
-        ->and($deleted->meta)->toMatchArray(['key' => 'WEB-1', 'title' => 'Formular prüfen'])
+        ->and($deleted->meta)->toMatchArray(['key' => 'WEB-1', 'title' => 'Formular prüfen', 'assignee_id' => null])
         ->and($deleted->project_id)->toBe($project->id)
         ->and($deleted->actor_id)->toBe($mara->id);
 });

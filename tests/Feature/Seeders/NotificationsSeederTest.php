@@ -8,6 +8,7 @@ use App\Models\NotificationMail;
 use App\Models\Project;
 use App\Models\Template;
 use App\Models\User;
+use App\Models\Webhook;
 use App\Models\WorkflowState;
 use Carbon\CarbonInterface;
 use Database\Seeders\Demo\ItemsSeeder;
@@ -135,6 +136,8 @@ it("seeds Mara's inbox like the clickdummy", function () use ($clickdummy, $comm
         ->and($stored['seed:n_05']->data['to']['category'])->toBe('completed')
         // the organization notification has no project (K5), the template one its project, its template and the error
         ->and($stored['seed:n_10']->kind)->toBe(NotificationKind::WebhookDisabled)
+        // it names the webhook "Altes CRM" (phase 11)
+        ->and($stored['seed:n_10']->data)->toBe(['webhook_id' => Webhook::query()->where('name', 'Altes CRM')->value('id'), 'name' => 'Altes CRM'])
         ->and($stored['seed:n_14']->data)->toBe(['template_id' => Template::query()->where('name', 'Zertifikate prüfen')->value('id'), 'error' => 'Pflicht-Property Umgebung fehlt'])
         // n_14 is five seconds after the hour, like the clickdummy's
         ->and($stored['seed:n_14']->created_at?->second)->toBe(5);

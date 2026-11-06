@@ -2,6 +2,7 @@
 
 use App\Jobs\PruneNotificationsJob;
 use App\Jobs\PruneUnownedAttachmentsJob;
+use App\Jobs\PruneWebhookDeliveriesJob;
 use App\Jobs\RunDailyAutomationsJob;
 use App\Jobs\SendDueRemindersJob;
 use Illuminate\Foundation\Inspiring;
@@ -37,3 +38,6 @@ Schedule::command('app:run-templates')->everyMinute()->withoutOverlapping(5);
 // the nightly automations (Auto-Archiv, Auto-Close): the job runs every hour and acts in the hour of 03:00 in the time
 // zone of the organisation, the hour it was planned in (as the reminders); the lock expires after an hour
 Schedule::job(new RunDailyAutomationsJob(now()->utc()->startOfHour()->toImmutable()))->hourly()->withoutOverlapping(60);
+
+// the webhook log after 30 days, and deliveries whose job got lost (K15); the lock expires after an hour
+Schedule::job(new PruneWebhookDeliveriesJob)->hourly()->withoutOverlapping(60);

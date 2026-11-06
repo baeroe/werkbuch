@@ -10,6 +10,7 @@ use App\Actions\Projects\AddMember;
 use App\Actions\Projects\RemoveMember;
 use App\Actions\Templates\RunTemplate;
 use App\Actions\Users\DeactivateUser;
+use App\Actions\Webhooks\DisableWebhook;
 use App\Actions\WorkItems\AddRelation;
 use App\Actions\WorkItems\CreateWorkItem;
 use App\Actions\WorkItems\RemapStates;
@@ -33,6 +34,7 @@ use App\Models\RelationType;
 use App\Models\Template;
 use App\Models\TemplateRun;
 use App\Models\User;
+use App\Models\Webhook;
 use App\Models\WorkItem;
 use App\Models\WorkItemType;
 use App\Notifications\NotificationConsumer;
@@ -609,4 +611,65 @@ it('tells nobody about a failed run of a project being deleted', function () use
     expect(NotificationFacts::of($event))->toBeNull()
         ->and(NotifyRecipients::run(Actor::system(User::defaultBot(), 'notifications'), $event))->toBe(0)
         ->and(Notification::query()->count())->toBe(0);
+});
+
+/** The system switches a webhook off, as RecordWebhookAttempt does after 24 hours of failing. */
+$switchOff = function (?Webhook $webhook = null): Webhook {
+    $webhook ??= Webhook::factory()->create(['name' => 'Build-Hook']);
+    DisableWebhook::run(Actor::system(User::defaultBot(), 'webhooks'), $webhook);
+
+    return $webhook;
+};
+
+it('writes one row per active admin person, no bot, no deactivated admin', function () use ($world, $of, $switchOff) {
+    $w = $world();
+    $ada = User::factory()->admin()->create(['name' => 'Ada']);
+    $lena = User::factory()->admin()->create(['name' => 'Lena']);
+    DeactivateUser::run(actor($ada), $lena);
+    // Tom leads the project, but is no org admin: he hears nothing, nor does a member
+    $webhook = $switchOff(Webhook::factory()->forProject($w['web'])->create(['name' => 'Build-Hook']));
+
+    $event = eventsOf(EventType::WebhookDisabled, $webhook)->sole();
+    $row = $of($ada)->sole();
+    expect($row->kind)->toBe(NotificationKind::WebhookDisabled)
+        ->and($row->inbox)->toBeTrue()
+        ->and([$row->project_id, $row->work_item_id, $row->event_id, $row->actor_id])->toBe([null, null, $event->id, User::defaultBot()->id])
+        ->and($row->data)->toBe(['webhook_id' => $webhook->id, 'name' => 'Build-Hook'])
+        // the default bot is an org admin, but no person
+        ->and(Notification::query()->where('user_id', User::defaultBot()->id)->count())->toBe(0)
+        ->and($of($lena))->toBeEmpty()
+        ->and($of($w['tom']))->toBeEmpty()
+        ->and($of($w['mara']))->toBeEmpty()
+        // the admin who created the webhook is an admin too: Ada and they, nobody else
+        ->and(Notification::query()->pluck('user_id')->sort()->values()->all())->toBe(collect([$ada->id, $webhook->created_by])->sort()->values()->all());
+    // a row without a project is the admins' to see (K5)
+    expect(Notification::query()->visibleTo($ada)->where('user_id', $ada->id)->count())->toBe(1)
+        ->and(Notification::query()->where('user_id', $ada->id)->visibleTo($w['mara'])->count())->toBe(0);
+});
+
+it('writes nothing twice for an event that comes twice', function () use ($world, $of, $switchOff) {
+    $w = $world();
+    $ada = User::factory()->admin()->create();
+    $webhook = $switchOff();
+    $event = eventsOf(EventType::WebhookDisabled, $webhook)->sole();
+
+    expect(NotifyRecipients::run(Actor::system(User::defaultBot(), 'notifications'), $event))->toBe(0)
+        ->and($of($ada))->toHaveCount(1)
+        ->and($w)->not->toBeEmpty();
+});
+
+it('sends a mail only to admins who switched it on', function () use ($of, $switchOff, $choose, $mailServer, $mails) {
+    $mailServer();
+    $ada = User::factory()->admin()->create();
+    $bea = User::factory()->admin()->create();
+    $choose($bea, ['webhook_disabled', 'mail', true]);
+
+    $webhook = $switchOff();
+
+    expect($mails($ada))->toBeEmpty()
+        ->and($of($ada)->sole()->mail_id)->toBeNull();
+    $collection = $mails($bea)["webhook:{$webhook->id}"];
+    expect($of($bea)->sole()->mail_id)->toBe($collection->id)
+        ->and($mails($bea))->toHaveCount(1);
+    Queue::assertPushed(SendNotificationMailJob::class, 1);
 });

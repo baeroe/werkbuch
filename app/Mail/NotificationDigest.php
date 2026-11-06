@@ -6,6 +6,7 @@ use App\Domain\Notifications\NotificationKind;
 use App\Models\Notification;
 use App\Models\Template;
 use App\Models\User;
+use App\Models\Webhook;
 use App\Models\WorkItem;
 use App\RichText\Document;
 use App\RichText\RichTextNames;
@@ -29,6 +30,9 @@ use Illuminate\Support\Carbon;
  * A collection of failed runs of a template (`template:<id>`, A348) is about the template: its mail names the project
  * and the template in the subject, each failed run with its time and the sentence of its error (in the language of the
  * organization, as the run log keeps it), and links to the template.
+ *
+ * A collection of switch-offs of a webhook (`webhook:<id>`, phase 11) is about the webhook: its mail names it in the
+ * subject, says when the system switched it off and links to its deliveries.
  */
 final class NotificationDigest extends Mailable
 {
@@ -45,12 +49,14 @@ final class NotificationDigest extends Mailable
         private readonly RichTextNames $names,
         private readonly bool $reminders = false,
         private readonly ?Template $template = null,
+        private readonly ?Webhook $webhook = null,
     ) {}
 
     public function envelope(): Envelope
     {
         return new Envelope(subject: match (true) {
             $this->template !== null => $this->templateSubject(),
+            $this->webhook !== null => $this->webhookSubject($this->webhook),
             $this->reminders => __('mail.notifications.reminders.subject'),
             default => __('mail.notifications.subject', ['key' => $this->item()->key, 'title' => $this->item()->title]),
         });
@@ -61,6 +67,9 @@ final class NotificationDigest extends Mailable
         $base = rtrim((string) config('app.url'), '/');
         if ($this->template !== null) {
             return $this->templateContent($this->template, $base);
+        }
+        if ($this->webhook !== null) {
+            return $this->webhookContent($this->webhook, $base);
         }
         if ($this->reminders) {
             return $this->reminderContent($base);
@@ -92,6 +101,22 @@ final class NotificationDigest extends Mailable
 
                 return ['key' => $item->key, 'title' => $item->title, 'url' => "{$base}/items/".rawurlencode($item->key), 'sentence' => $this->sentence($line)];
             }, $lines),
+        ]);
+    }
+
+    private function webhookSubject(Webhook $webhook): string
+    {
+        return __('mail.notifications.webhook.subject', ['name' => $webhook->name]);
+    }
+
+    /** The webhook the system switched off: one entry per notification (the time), the link to its deliveries. */
+    private function webhookContent(Webhook $webhook, string $base): Content
+    {
+        return new Content(view: 'mail.notifications.webhook', text: 'mail.notifications.webhook-text', with: [
+            'subject' => $this->webhookSubject($webhook),
+            'deliveriesUrl' => "{$base}/settings/webhooks?deliveries=".rawurlencode($webhook->id),
+            'settingsUrl' => "{$base}/me/notifications",
+            'entries' => array_map(fn (array $line) => ['at' => $this->at($line['notification'])], $this->lines),
         ]);
     }
 

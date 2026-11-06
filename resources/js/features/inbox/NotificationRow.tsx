@@ -80,11 +80,16 @@ const SYSTEM_ICONS: Partial<Record<Notification['event'], LucideIcon>> = {
 /**
  * Where a notification leads: its item; a failed template to its page (one deleted since says there that it does not
  * exist, without asking for it, T9-M5), without the template behind it (the demo rows) to the templates of its
- * project; the organisation's settings for a webhook (until phase 11 brings the page of webhooks).
+ * project; for a switched-off webhook the log of its deliveries (one deleted since says so there, with the way back), without
+ * the webhook behind it (the demo rows) the webhooks of the settings; any other kind without an item to the settings.
  */
 export function hrefOf(notification: Notification, project: Project | undefined): string {
   if (notification.work_item_id) return paths.item(notification.item?.key ?? notification.work_item_id);
   if (notification.event === 'template_run_failed') return project ? paths.templates(project.identifier, notification.data.template_id ?? undefined) : paths.projects();
+  if (notification.event === 'webhook_disabled') {
+    return notification.data.webhook_id ? paths.webhookDeliveries(notification.data.webhook_id) : paths.settings('webhooks');
+  }
+  // a kind without an item that comes later leads to the settings, never to the webhooks (T14-M7)
   return paths.settings();
 }
 
@@ -147,7 +152,7 @@ function sentenceOf(notification: Notification, ctx: RowContext): { sentence: Re
     case 'template_run_failed':
       return { sentence: t('inbox.kind.template_run_failed'), excerpt: data.error ?? null };
     case 'webhook_disabled':
-      return { sentence: t('inbox.kind.webhook_disabled'), excerpt: t('inbox.webhook_reason') };
+      return { sentence: data.name ? t('inbox.kind.webhook_disabled_named', { name: data.name }) : t('inbox.kind.webhook_disabled'), excerpt: t('inbox.webhook_reason') };
     default:
       // a kind of a later version (a tab older than the server): a neutral sentence, never a broken inbox (T16-M5)
       return { sentence: tx('inbox.kind.unknown', { actor }), excerpt: null };

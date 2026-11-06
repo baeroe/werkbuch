@@ -232,11 +232,13 @@ jobs:
       # queue `notifications`, the search consumer works in the queue `search`, previews of pictures are made in the
       # queue `media`, a deleted project is purged in the queue `bulk`) like the `queue` and `queue-index` daemons of
       # DDEV: search and media in a worker of their own, so the jobs every event makes for `default`, `live` and
-      # `notifications` never keep them waiting
+      # `notifications` never keep them waiting; the webhooks (the deliveries to the receiver the e2e specs start on the
+      # runner) have a worker of their own too, as a receiver that hangs holds its worker (T16-M5)
       - name: Queue workers
         run: |
           php artisan queue:work --queue=default,live,notifications,bulk --sleep=1 --tries=3 > queue.log 2>&1 &
           php artisan queue:work --queue=search,media --sleep=1 --tries=3 > queue-index.log 2>&1 &
+          php artisan queue:work --queue=webhooks --sleep=1 --tries=3 > queue-webhooks.log 2>&1 &
 
       - name: Playwright
         run: |
@@ -251,6 +253,7 @@ jobs:
           WERKBUCH_URL: http://127.0.0.1:8000
           MAILPIT_URL: http://127.0.0.1:8025
           E2E_ARTISAN: php artisan
+          E2E_WEBHOOK_HOST: 127.0.0.1
           E2E_EXEC: ''
 
       - uses: actions/upload-artifact@v4
@@ -268,6 +271,7 @@ jobs:
             serve.log
             queue.log
             queue-index.log
+            queue-webhooks.log
             reverb.log
             storage/logs
             e2e/test-results

@@ -2,6 +2,9 @@
 
 namespace App\Support;
 
+use App\Access\OrgRole;
+use App\Access\RoleIndex;
+use App\Access\Visibility;
 use App\Actions\WorkItems\RemapStates;
 use App\Domain\Notifications\EventFacts;
 use App\Domain\Notifications\NotificationKind;
@@ -28,7 +31,7 @@ final class NotificationFacts
     public const TELLING = [
         EventType::WorkItemCreated, EventType::WorkItemUpdated, EventType::WorkItemStateChanged, EventType::WorkItemAssigned,
         EventType::WorkItemRelationAdded, EventType::WorkItemRelationRemoved, EventType::CommentCreated, EventType::CommentUpdated,
-        EventType::TemplateRunFailed,
+        EventType::TemplateRunFailed, EventType::WebhookDisabled,
     ];
 
     /**
@@ -57,6 +60,9 @@ final class NotificationFacts
         if ($event->type === EventType::TemplateRunFailed) {
             return self::ofTemplateRun($event);
         }
+        if ($event->type === EventType::WebhookDisabled) {
+            return self::ofWebhook($event);
+        }
 
         // the events of a comment hang on its item (A227): the subject is always the item
         $item = WorkItem::query()->with('project')->find($event->subject_id);
@@ -84,6 +90,33 @@ final class NotificationFacts
             leadId: $item->project->lead_id,
             stateSnapshot: is_array($meta['states'] ?? null) ? $meta['states'] : null,
             causedBy: self::id($meta['on_behalf_of'] ?? null),
+        );
+    }
+
+    /**
+     * The facts of a webhook the system switched off: no item and no project (the row is the org admins', K5, even for
+     * the webhook of one project), the people who hear of it are the active people with the org role admin (the role
+     * index read afresh, one query for the people). The default bot is an admin, but no person.
+     */
+    private static function ofWebhook(Event $event): EventFacts
+    {
+        Visibility::forget();
+        $admins = array_keys(array_filter(app(RoleIndex::class)->orgRoles(), fn (OrgRole $role) => $role === OrgRole::Admin));
+        $people = $admins === [] ? [] : User::query()->whereKey($admins)->where('type', AccountType::Person)->whereNull('disabled_at')->pluck('id')->all();
+
+        return new EventFacts(
+            type: $event->type->value,
+            actorId: $event->actor_id,
+            projectId: null,
+            itemId: null,
+            changedFields: [],
+            mentioned: [],
+            assignee: null,
+            watchers: [],
+            optedOut: [],
+            leadId: null,
+            stateSnapshot: null,
+            orgAdmins: array_values($people),
         );
     }
 
@@ -131,6 +164,7 @@ final class NotificationFacts
             NotificationKind::StateChanged => ['from' => $event->meta['states']['old'] ?? null, 'to' => $event->meta['states']['new'] ?? null],
             NotificationKind::ItemChanged => ['fields' => EventFacts::fieldsOf($event->type->value, $event->changes)],
             NotificationKind::TemplateRunFailed => ['template_id' => $event->subject_id, 'error' => $event->meta['error'] ?? null],
+            NotificationKind::WebhookDisabled => ['webhook_id' => $event->subject_id, 'name' => $event->meta['name'] ?? null],
             default => [],
         };
     }

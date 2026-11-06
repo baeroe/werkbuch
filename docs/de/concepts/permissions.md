@@ -27,7 +27,7 @@ werkbuch kennt zwei Arten von Rollen. Eine **Organisationsrolle** gilt überall,
 | Projekteinstellungen, Mitglieder, Workflow, Typen, Automatisierungen | ✓ | – | – |
 | Projekt archivieren und löschen | ✓ | – | – |
 
-Webhooks gehören zu einer späteren Phase der Roadmap. Das Recht steht schon hier, damit sich die Rollen nicht ändern, wenn sie kommen.
+[Webhooks](/de/webhooks) lesen und verwalten nur Org-Admins, samt Zustellprotokoll und Test-Ping; ein Token des Standard-Bots darf es auch, denn der Standard-Bot ist Org-Admin. Ein Member bekommt `403`, nicht `404`: den Bereich der Einstellungen gibt es für jeden.
 
 Im [Wiki](/de/concepts/wiki) lesen Viewer und Außenstehende eines öffentlichen Projekts die Seiten und ihre Versionen; Member und Admins legen Seiten an, bearbeiten, verschieben und löschen sie und stellen Versionen wieder her. In einem archivierten Projekt ist das Wiki für alle schreibgeschützt.
 

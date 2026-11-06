@@ -21,11 +21,14 @@ use App\Models\Resolution;
 use App\Models\Template;
 use App\Models\User;
 use App\Models\View;
+use App\Models\Webhook;
 use App\Models\Workflow;
 use App\Models\WorkItem;
 use App\Models\WorkItemType;
 use App\Search\MeilisearchEngine;
 use App\Views\CatalogProperties;
+use App\Webhooks\DnsResolver;
+use App\Webhooks\Resolver;
 use GuzzleHttp\Client as GuzzleClient;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Foundation\Application;
@@ -52,6 +55,10 @@ class AppServiceProvider extends ServiceProvider
         $this->app->scoped(RoleIndex::class);
         // the properties as filters, sorts and displays look them up, read once per request and job
         $this->app->scoped(CatalogProperties::class, fn () => CatalogProperties::load());
+        // the addresses of a webhook's host, asked before every attempt (spec 6.3); RES_OPTIONS only counts before the
+        // first lookup of the process, so it is set here (K17)
+        DnsResolver::limitWaiting();
+        $this->app->scoped(Resolver::class, DnsResolver::class);
     }
 
     /**
@@ -82,6 +89,7 @@ class AppServiceProvider extends ServiceProvider
             'page' => Page::class,
             'template' => Template::class,
             'automation' => Automation::class,
+            'webhook' => Webhook::class,
         ]);
 
         Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);
@@ -91,6 +99,8 @@ class AppServiceProvider extends ServiceProvider
 
         // uploads (A234): 60 per minute and account, the routes behind `auth:sanctum` always know the account
         RateLimiter::for('attachments', fn (Request $request) => Limit::perMinute(60)->by((string) $request->user()?->getAuthIdentifier()));
+        // the test ping and "send again" of webhooks: one request to a stranger each, six a minute per account (A367)
+        RateLimiter::for('webhook-send', fn (Request $request) => Limit::perMinute(6)->by((string) $request->user()?->getAuthIdentifier()));
         // the test mail of the system page: six a minute per account, a mail server is not to be flooded from it (T11-M4)
         RateLimiter::for('test-mail', fn (Request $request) => Limit::perMinute(6)->by((string) $request->user()?->getAuthIdentifier()));
 

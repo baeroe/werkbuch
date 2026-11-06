@@ -27,7 +27,7 @@ werkbuch has two kinds of roles. An **organization role** applies everywhere, a 
 | Project settings, members, workflow, types, automations | ✓ | – | – |
 | Archive and delete the project | ✓ | – | – |
 
-Webhooks belong to a later phase of the roadmap. The right is listed here so the roles do not change when they arrive.
+[Webhooks](/en/webhooks) are read and managed by org admins only, their delivery log and the test ping included; a token of the default bot may do it too, since the default bot is an org admin. A member gets `403`, not `404`: the settings section exists for everyone.
 
 In the [wiki](/en/concepts/wiki), viewers and people outside a public project read the pages and their versions; members and admins create, edit, move and delete pages and restore versions. In an archived project, the wiki is read-only for everyone.
 

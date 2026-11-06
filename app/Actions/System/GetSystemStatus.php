@@ -7,6 +7,8 @@ use App\Models\Organization;
 use App\Search\ReportsStatus;
 use App\Support\Actor;
 use App\Support\MailSetup;
+use App\Support\QueuedJobs;
+use App\Support\Redact;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Carbon;
@@ -21,7 +23,7 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * queues of the table it does not know) the jobs that are due and not being worked (`pending`, also one whose
  * reservation ran out: its worker died) and since when the oldest of them is due (`oldest_at`), `queued_jobs` their
  * sum; jobs due later (mail collections, `delayed_jobs`) are no backlog. The newest FAILED_SHOWN failed jobs with the
- * first line of their error (at most ERROR_MAX characters) and how many there are; Meilisearch over the engine
+ * first sentence of their error through Redact (URLs without user and query, at most ERROR_MAX characters) and how many there are; Meilisearch over the engine
  * (ReportsStatus, `down` for an engine that cannot say, K15); whether mail can go out (MailSetup); and Reverb: `off`
  * when it is not the broadcaster, else whether its `/up` answers within 2 s. It reads the tables of the database queue
  * (`queue.connections.database`) and of the failed jobs (`queue.failed`, driver `database-uuids`).
@@ -32,7 +34,7 @@ final class GetSystemStatus
 
     public const FAILED_SHOWN = 50;
 
-    public const ERROR_MAX = 300;
+    public const ERROR_MAX = Redact::MAX;
 
     /**
      * @return array{
@@ -92,16 +94,11 @@ final class GetSystemStatus
     }
 
     /**
-     * The jobs of the database queue that no worker holds: never reserved, or reserved longer ago than `retry_after`
-     * (its worker is gone, the next one takes it again).
+     * The jobs of the database queue that no worker holds (QueuedJobs).
      */
     private function jobs(): Builder
     {
-        $expired = now()->getTimestamp() - (int) config('queue.connections.database.retry_after');
-
-        return DB::connection(config('queue.connections.database.connection'))
-            ->table(config('queue.connections.database.table'))
-            ->where(fn (Builder $free) => $free->whereNull('reserved_at')->orWhere('reserved_at', '<=', $expired));
+        return QueuedJobs::free();
     }
 
     /**
@@ -116,7 +113,7 @@ final class GetSystemStatus
                 'id' => (string) $job->uuid,
                 'queue' => (string) $job->queue,
                 'job' => (string) (json_decode((string) $job->payload, true)['displayName'] ?? ''),
-                'error' => mb_substr(Str::before((string) $job->exception, "\n"), 0, self::ERROR_MAX),
+                'error' => Redact::text(Str::before((string) $job->exception, "\n")),
                 'failed_at' => Carbon::parse((string) $job->failed_at, 'UTC'),
             ])->all());
     }
