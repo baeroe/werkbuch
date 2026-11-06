@@ -33,10 +33,14 @@ final class InvitationResource extends JsonResource
             'email' => $invitation->email,
             'org_role' => $invitation->org_role->value,
             'projects' => $invitation->projects,
+            /** @format uri */
             'link' => $user instanceof User && $user->tokenCan('write') ? InvitationLinks::for($invitation) : null,
             'state' => CheckInvitation::run($invitation)->value,
             'created_by' => $invitation->invited_by,
+            /** @format date-time */
             'created_at' => $invitation->created_at?->toJSON(),
+            /** @var string */
+            /** @format date-time */
             'expires_at' => $invitation->expires_at->toJSON(),
         ];
     }

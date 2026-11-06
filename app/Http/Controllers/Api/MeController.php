@@ -13,6 +13,9 @@ use Illuminate\Http\Request;
  */
 final class MeController extends Controller
 {
+    /**
+     * The own account and the rights of its role in the organization.
+     */
     public function show(Request $request): MeResource
     {
         return new MeResource(GetMe::run(Actor::fromRequest($request)));

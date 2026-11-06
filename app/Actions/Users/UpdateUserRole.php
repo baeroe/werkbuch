@@ -25,6 +25,9 @@ final class UpdateUserRole
 {
     use AsAction;
 
+    /** The keys of the input the action reads (the document names exactly these, K15). */
+    public const FIELDS = ['org_role'];
+
     public function __construct(private readonly RoleAssignments $roles) {}
 
     /**

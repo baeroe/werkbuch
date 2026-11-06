@@ -78,3 +78,16 @@ it('describes the token and the session as security schemes', function () {
         ->and($schemes['session']['name'])->toBe(config('session.cookie'))
         ->and($schemes['session']['description'])->toContain('X-XSRF-TOKEN');
 });
+
+it('says in the text of an operation that the action itself wants the session (A55)', function () {
+    /** @var array<int, array{0: string, 1: string, session?: bool|'action'}> $rows */
+    $rows = require base_path('tests/Feature/Api/routes.php');
+
+    foreach (array_filter($rows, fn ($row) => ($row['session'] ?? false) === 'action') as $row) {
+        $operation = Document::operation($row[0], substr($row[1], strlen('/api/v1')));
+
+        // the route takes a token, so the document cannot mark it session only; the text says which input does not
+        expect($operation)->not->toHaveKey('x-werkbuch-session-only')
+            ->and($operation['description'] ?? '')->toContain('session');
+    }
+});

@@ -37,7 +37,9 @@ final class UserResource extends JsonResource
             'is_default_bot' => $user->is_default_bot,
             'owner_id' => $user->owner_id,
             'description' => $this->when($user->isBot(), fn () => (string) $user->description),
+            /** @format date-time */
             'disabled_at' => $user->disabled_at?->toJSON(),
+            /** @format uri */
             'avatar_url' => ImageInput::url($user, 'avatar'),
             'locale' => $user->effectiveLocale()->value,
             'timezone' => $user->effectiveTimezone(),

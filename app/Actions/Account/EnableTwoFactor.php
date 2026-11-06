@@ -44,7 +44,7 @@ final class EnableTwoFactor
         });
 
         return [
-            'secret' => Fortify::currentEncrypter()->decrypt((string) $user->two_factor_secret),
+            'secret' => (string) Fortify::currentEncrypter()->decrypt((string) $user->two_factor_secret),
             'otpauth_url' => $user->twoFactorQrCodeUrl(),
             'qr_svg' => 'data:image/svg+xml;base64,'.base64_encode($user->twoFactorQrCodeSvg()),
         ];

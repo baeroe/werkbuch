@@ -32,6 +32,9 @@ final class UpdateUser
 {
     use AsAction;
 
+    /** The keys of the input the action reads (the document names exactly these, K15); the rest is ignored. */
+    public const FIELDS = ['name', 'handle', 'email', 'locale', 'timezone', 'avatar_url', 'description', 'owner_id'];
+
     /**
      * @param  array<string, mixed>  $input
      *

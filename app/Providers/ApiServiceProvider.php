@@ -7,6 +7,7 @@ use App\Http\Controllers\ApiDocsController;
 use App\OpenApi\Abilities;
 use App\OpenApi\ApiListReturnType;
 use App\OpenApi\ApiListSchema;
+use App\OpenApi\Bodies;
 use App\OpenApi\Components;
 use App\OpenApi\ListParameters;
 use App\OpenApi\PathParameters;
@@ -96,7 +97,7 @@ final class ApiServiceProvider extends ServiceProvider
             ->routes(fn (Route $route) => str_starts_with($route->uri(), 'api/v1/') && ! str_contains($route->uri(), '_t/'))
             // after Scramble's own operation extensions: how a route is called, what its placeholders take, the query of
             // a list (`#[ListOf]`), its errors
-            ->withOperationTransformers([Abilities::class, PathParameters::class, ListParameters::class, ProblemResponses::class])
+            ->withOperationTransformers([Abilities::class, PathParameters::class, ListParameters::class, Bodies::class, ProblemResponses::class])
             ->withDocumentTransformers([Components::class])
             ->expose(
                 // the page loads the document itself (`/api/openapi.json`) and so generates nothing of its own

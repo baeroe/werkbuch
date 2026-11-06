@@ -36,6 +36,9 @@ final class InviteUser
 {
     use AsAction;
 
+    /** The keys of the input the action reads (the document names exactly these, K15); the rest is ignored. */
+    public const FIELDS = ['email', 'org_role', 'projects'];
+
     /**
      * @param  array<string, mixed>  $input  `email`, `org_role`, `projects` (list of `{project_id, role}`)
      *

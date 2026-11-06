@@ -288,8 +288,24 @@ it('counts only the operations of the strict tags', function () use ($document, 
         ->and(Contract::violations()[0])->toStartWith('GET /strict 200: ');
 });
 
-it('starts with no strict tag on the real document', function () {
-    expect(Contract::STRICT_TAGS)->toBe([]);
+it('is strict for the account areas of the real document (Task 8)', function () {
+    expect(Contract::STRICT_TAGS)->toContain('Organization', 'Users', 'Bots', 'Invitations', 'Tokens', 'Me', 'Password', 'TwoFactor');
+});
+
+it('keeps which keys the successful requests of an operation sent (K15)', function () use ($document, $exchange) {
+    Contract::using($document([]));
+
+    $exchange('PATCH', 'things/{thing}', 200, null, ['name' => 'a']);
+    $exchange('PATCH', 'things/{thing}', 200, null, ['email' => 'b', 'name' => 'c']);
+    // a refused request, a list, text and a request without a body tell nothing about what a client may send
+    $exchange('PATCH', 'things/{thing}', 422, null, ['bogus' => 1]);
+    $exchange('POST', 'things', 201, null, [['a' => 1]]);
+    $exchange('POST', 'things', 201, null, 'name=a', 'application/json', 'text/plain');
+    $exchange('POST', 'things', 201);
+
+    expect(Contract::sentKeys('PATCH', '/things/{thing}'))->toBe(['name', 'email'])
+        ->and(Contract::sentKeys('POST', '/things'))->toBe([])
+        ->and(Contract::sentKeys('GET', '/nothing'))->toBe([]);
 });
 
 it('lets a test switch it off with a reason', function () use ($document, $exchange) {

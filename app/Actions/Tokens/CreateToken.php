@@ -27,6 +27,9 @@ final class CreateToken
 
     public const ABILITIES = ['read', 'write', 'mcp'];
 
+    /** The keys of the input the action reads (the document names exactly these, K15); the rest is ignored. */
+    public const FIELDS = ['user_id', 'name', 'abilities', 'expires_at'];
+
     public const NAME_MAX = 120;
 
     /**

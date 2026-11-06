@@ -36,7 +36,7 @@ final class Contract
      *
      * @var list<string>
      */
-    public const STRICT_TAGS = [];
+    public const STRICT_TAGS = ['Organization', 'Users', 'Bots', 'Invitations', 'Tokens', 'Me', 'Password', 'TwoFactor'];
 
     private const ID = 'https://werkbuch.invalid/openapi.json';
 
@@ -62,6 +62,9 @@ final class Contract
 
     /** @var list<string> */
     private static array $recorded = [];
+
+    /** @var array<string, list<string>> */
+    private static array $sent = [];
 
     /** @var list<string> */
     private static array $violations = [];
@@ -100,6 +103,7 @@ final class Contract
     {
         self::$pending = [];
         self::$recorded = [];
+        self::$sent = [];
         self::$violations = [];
         self::$test = null;
         self::$off = null;
@@ -124,6 +128,7 @@ final class Contract
         $body = self::isJson($type) ? $response->getContent() : null;
 
         self::$recorded[] = "{$method} {$uri} {$response->getStatusCode()}";
+        self::noteSentKeys($method, $uri, $response->getStatusCode(), $request, $sentType);
         self::$pending[] = [
             'method' => $method,
             'uri' => $uri,
@@ -136,6 +141,17 @@ final class Contract
     }
 
     /**
+     * The top-level keys the successful requests (2xx) of an operation sent as a JSON object since the last `reset()`
+     * (K15): a test that sends a full body proves with this that every key the document names is one a client can send.
+     *
+     * @return list<string>
+     */
+    public static function sentKeys(string $method, string $uri): array
+    {
+        return self::$sent[$method.' '.$uri] ?? [];
+    }
+
+    /**
      * What was recorded since the last `reset()`, `"<METHOD> <uri> <status>"`.
      *
      * @return list<string>
@@ -143,6 +159,20 @@ final class Contract
     public static function recorded(): array
     {
         return self::$recorded;
+    }
+
+    private static function noteSentKeys(string $method, string $uri, int $status, Request $request, string $sentType): void
+    {
+        if ($status < 200 || $status >= 300 || ! self::isJson($sentType)) {
+            return;
+        }
+
+        $body = json_decode($request->getContent(), true);
+
+        if (is_array($body) && ! array_is_list($body)) {
+            $key = $method.' '.$uri;
+            self::$sent[$key] = array_values(array_unique([...(self::$sent[$key] ?? []), ...array_map('strval', array_keys($body))]));
+        }
     }
 
     /**
