@@ -6,6 +6,7 @@ use App\Actions\RelationTypes\DeleteRelationType;
 use App\Actions\RelationTypes\ListRelationTypes;
 use App\Actions\RelationTypes\SaveRelationType;
 use App\Http\Api\ApiList;
+use App\Http\Api\ListOf;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\RelationTypeResource;
 use App\Models\RelationType;
@@ -18,6 +19,7 @@ use Illuminate\Http\Request;
  */
 final class RelationTypesController extends Controller
 {
+    #[ListOf(ListRelationTypes::class)]
     public function index(Request $request): JsonResponse
     {
         return ApiList::respond(ListRelationTypes::run(Actor::fromRequest($request), $request->query()), RelationTypeResource::class);

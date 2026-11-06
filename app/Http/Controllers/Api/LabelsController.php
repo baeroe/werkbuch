@@ -6,6 +6,7 @@ use App\Actions\Labels\DeleteLabel;
 use App\Actions\Labels\ListLabels;
 use App\Actions\Labels\SaveLabel;
 use App\Http\Api\ApiList;
+use App\Http\Api\ListOf;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\LabelResource;
 use App\Models\Label;
@@ -18,6 +19,7 @@ use Illuminate\Http\Request;
  */
 final class LabelsController extends Controller
 {
+    #[ListOf(ListLabels::class)]
     public function index(Request $request): JsonResponse
     {
         return ApiList::respond(ListLabels::run(Actor::fromRequest($request), $request->query()), LabelResource::class);

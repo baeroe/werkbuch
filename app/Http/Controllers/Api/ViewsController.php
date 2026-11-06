@@ -7,6 +7,7 @@ use App\Actions\Views\GetView;
 use App\Actions\Views\ListViews;
 use App\Actions\Views\SaveView;
 use App\Http\Api\ApiList;
+use App\Http\Api\ListOf;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ViewResource;
 use App\Models\View;
@@ -20,6 +21,7 @@ use Illuminate\Http\Response;
  */
 final class ViewsController extends Controller
 {
+    #[ListOf(ListViews::class)]
     public function index(Request $request): JsonResponse
     {
         return ApiList::respond(ListViews::run(Actor::fromRequest($request), $request->query()), ViewResource::class);

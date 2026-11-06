@@ -32,7 +32,7 @@ describe('tokens', () => {
     await expect(revokeToken('tok_1')).resolves.toBeUndefined();
 
     expect(api.calls).toEqual([
-      { method: 'GET', url: '/api/v1/tokens?user_id=u_kira', body: undefined },
+      { method: 'GET', url: '/api/v1/tokens?filter%5Buser_id%5D=u_kira', body: undefined },
       { method: 'POST', url: '/api/v1/tokens', body: input },
       { method: 'DELETE', url: '/api/v1/tokens/tok_1', body: undefined },
     ]);

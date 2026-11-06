@@ -355,7 +355,7 @@ it('ignores events that change no document', function () use ($world) {
     AddRelation::run(actor($mara), $item, ['type_id' => RelationType::query()->where('built_in', 'relates')->value('id'), 'target_id' => $other->id]);
     SetSubscription::run(actor($mara), $item, true);
     ToggleFavorite::run(actor($mara), ['kind' => 'project', 'id' => $web->id]);
-    CreateToken::run(actor($mara), $mara, ['name' => 'Laptop', 'abilities' => ['read']]);
+    CreateToken::run(actor($mara), ['name' => 'Laptop', 'abilities' => ['read']]);
     AddMember::run(actor($mara), $web, ['user_id' => User::factory()->create()->id, 'role' => 'member']);
 
     expect($catalog)->not->toBeEmpty()

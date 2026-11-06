@@ -7,6 +7,7 @@ use App\Actions\Notifications\ListNotifications;
 use App\Actions\Notifications\MarkNotificationsRead;
 use App\Actions\Notifications\MarkNotificationsUnread;
 use App\Http\Api\ApiList;
+use App\Http\Api\ListOf;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\NotificationResource;
 use App\Models\Notification;
@@ -21,7 +22,8 @@ use Illuminate\Http\Response;
  */
 final class NotificationsController extends Controller
 {
-    /** A page of the inbox, newest first (`unread_only`, `mentions_only`, `cursor`, `per_page`). */
+    /** A page of the inbox, newest first (`filter[unread]`, `filter[event]`, `cursor`, `per_page`). */
+    #[ListOf(ListNotifications::class)]
     public function index(Request $request): JsonResponse
     {
         return ApiList::respond(ListNotifications::run(Actor::fromRequest($request), $request->query()), NotificationResource::class);

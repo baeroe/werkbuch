@@ -175,7 +175,7 @@ describe('Inbox badge', () => {
     await act(() => client.invalidateQueries({ queryKey: ['notifications'] }));
     expect(await within(sidebar()).findByRole('link', { name: 'Inbox, 4 ungelesen' })).toBe(within(sidebar()).getByRole('link', { name: /^Inbox/ }));
     expect(within(header).getByRole('link', { name: 'Inbox, 4 ungelesen' }).textContent).toBe('4');
-    expect(api!.calls.filter((call) => call.url.startsWith('/api/v1/notifications')).map((call) => call.url)).toContain('/api/v1/notifications?unread_only=1&per_page=1');
+    expect(api!.calls.filter((call) => call.url.startsWith('/api/v1/notifications')).map((call) => call.url)).toContain('/api/v1/notifications?per_page=1&filter%5Bunread%5D=1');
   });
 
   it('hides the badge at zero and says 99+ above 99', async () => {

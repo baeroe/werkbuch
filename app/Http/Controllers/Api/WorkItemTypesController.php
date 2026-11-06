@@ -6,6 +6,7 @@ use App\Actions\WorkItemTypes\DeleteWorkItemType;
 use App\Actions\WorkItemTypes\ListWorkItemTypes;
 use App\Actions\WorkItemTypes\SaveWorkItemType;
 use App\Http\Api\ApiList;
+use App\Http\Api\ListOf;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\WorkItemTypeResource;
 use App\Models\WorkItemType;
@@ -20,6 +21,7 @@ use Illuminate\Http\Request;
  */
 final class WorkItemTypesController extends Controller
 {
+    #[ListOf(ListWorkItemTypes::class)]
     public function index(Request $request): JsonResponse
     {
         return ApiList::respond(ListWorkItemTypes::run(Actor::fromRequest($request), $request->query()), WorkItemTypeResource::class);

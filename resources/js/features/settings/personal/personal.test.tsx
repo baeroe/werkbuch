@@ -675,7 +675,7 @@ describe('API & MCP', () => {
     expect(rows[1]!.textContent).toContain('Läuft ab am 01.01.2099');
     expect(rows[2]!.textContent).toContain('Angelegt am 05.10.2026, noch nie benutzt');
     expect(rows[2]!.textContent).not.toContain('Läuft ab');
-    expect(lastCall('GET', '/api/v1/tokens')!.url).toBe('/api/v1/tokens?user_id=u_mara');
+    expect(lastCall('GET', '/api/v1/tokens')!.url).toBe('/api/v1/tokens?filter%5Buser_id%5D=u_mara');
   });
 
   it('shows the cause and "Erneut versuchen" when the tokens cannot be loaded', async () => {

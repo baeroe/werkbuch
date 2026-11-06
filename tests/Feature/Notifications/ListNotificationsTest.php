@@ -51,8 +51,8 @@ it('lists my notifications newest first and pages them without losing one in the
     // someone else's
     Notification::factory()->forItem($w['item'])->create(['user_id' => $w['ida']->id, 'created_at' => $at('2026-11-03 12:00:00')]);
 
-    // the same microsecond: the higher ULID first
-    [$first, $second] = strcmp($sameA->id, $sameB->id) > 0 ? [$sameA, $sameB] : [$sameB, $sameA];
+    // the same microsecond: the lower ULID first (every list ends on the ULID ascending, A386)
+    [$first, $second] = strcmp($sameA->id, $sameB->id) < 0 ? [$sameA, $sameB] : [$sameB, $sameA];
     $expected = [$newest->id, $within->id, $first->id, $second->id, $older->id];
 
     $seen = [];
@@ -123,19 +123,16 @@ it('filters unread and mentions', function () use ($world, $ids) {
     $list = fn (array $query) => $ids(ListNotifications::run(actor($w['mara']), $query));
 
     expect($list([]))->toBe([$unreadMention->id, $readMention->id, $unreadChange->id, $readChange->id])
-        ->and($list(['unread_only' => '1']))->toBe([$unreadMention->id, $unreadChange->id])
-        ->and($list(['mentions_only' => true]))->toBe([$unreadMention->id, $readMention->id])
-        ->and($list(['unread_only' => 1, 'mentions_only' => '1']))->toBe([$unreadMention->id])
-        ->and($list(['unread_only' => '0', 'mentions_only' => false]))->toHaveCount(4);
+        ->and($list(['filter' => ['unread' => '1']]))->toBe([$unreadMention->id, $unreadChange->id])
+        ->and($list(['filter' => ['event' => 'mentioned']]))->toBe([$unreadMention->id, $readMention->id])
+        ->and($list(['filter' => ['unread' => 1, 'event' => 'mentioned']]))->toBe([$unreadMention->id])
+        ->and($list(['filter' => ['unread' => '0']]))->toBe([$readMention->id, $readChange->id]);
 
     try {
-        ListNotifications::run(actor($w['mara']), ['unread_only' => 'ja', 'mentions_only' => ['x']]);
+        ListNotifications::run(actor($w['mara']), ['filter' => ['unread' => 'ja', 'event' => ['x']]]);
         $this->fail('expected a 422');
     } catch (ValidationException $invalid) {
-        expect($invalid->errors())->toBe([
-            'unread_only' => [__('field.boolean')],
-            'mentions_only' => [__('field.boolean')],
-        ]);
+        expect(array_keys($invalid->errors()))->toBe(['filter.unread', 'filter.event']);
     }
 });
 

@@ -44,7 +44,7 @@ beforeEach(() => {
   resetToasts();
   api = mockApi({
     'GET /api/v1/notifications': (_, url) => {
-      const unreadOnly = url.searchParams.get('unread_only') === '1';
+      const unreadOnly = url.searchParams.get('filter[unread]') === '1';
       const perPage = Number(url.searchParams.get('per_page') ?? 100);
       const matching = notifications.filter((entry) => !unreadOnly || entry.read_at === null);
       return { body: list(matching.slice(0, perPage), matching.length) };
@@ -106,7 +106,7 @@ async function renderInbox() {
 
 const byId = (stored: Notification[], id: string) => stored.find((entry) => entry.id === id)!;
 const isListRead = (url: string, method: string) => method === 'GET' && url.includes('per_page=50');
-const isCount = (url: string, method: string) => method === 'GET' && url.includes('unread_only=1');
+const isCount = (url: string, method: string) => method === 'GET' && url.includes('filter%5Bunread%5D=1');
 const isMark = (path: string) => (url: string, method: string) => method === 'POST' && url.endsWith(path);
 
 describe('the read marks', () => {
@@ -126,7 +126,7 @@ describe('the read marks', () => {
 
     await act(async () => releaseMark());
     // the server's count has loaded again (2), the list still holds n_01 unread: counted once
-    await waitFor(() => expect(api.calls.filter((call) => call.url.includes('unread_only=1'))).toHaveLength(2));
+    await waitFor(() => expect(api.calls.filter((call) => call.url.includes('filter%5Bunread%5D=1'))).toHaveLength(2));
     await waitFor(() => expect(client.getQueryData<{ total: number }>(qk.notifications.list(COUNT))!.total).toBe(2));
     expect(result.current.count).toBe(2);
     expect(result.current.shownRead('n_01')).toBe(true);

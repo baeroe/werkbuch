@@ -333,7 +333,7 @@ it('sends nothing for catalog, view and token events', function () use ($world) 
 
     SaveLabel::run(actor($w['tom']), null, ['name' => 'Prüfung', 'color' => 'moss']);
     DeleteView::run(actor($w['tom']), View::factory()->create(['created_by' => $w['tom']->id]));
-    CreateToken::run(actor($w['tom']), $w['tom'], ['name' => 'Laptop', 'abilities' => ['read']]);
+    CreateToken::run(actor($w['tom']), ['name' => 'Laptop', 'abilities' => ['read']]);
 
     // all three were taken by the consumer, none went anywhere
     expect(EventConsumption::query()->where('consumer', 'live')->count())->toBe(3)

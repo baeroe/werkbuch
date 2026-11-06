@@ -6,6 +6,7 @@ use App\Actions\Pages\GetPageVersion;
 use App\Actions\Pages\ListPageVersions;
 use App\Actions\Pages\RestorePageVersion;
 use App\Http\Api\ApiList;
+use App\Http\Api\ListOf;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\PageResource;
 use App\Http\Resources\PageVersionResource;
@@ -22,6 +23,7 @@ use Illuminate\Http\Request;
 final class PageVersionsController extends Controller
 {
     /** Newest first, without text, a page at a time (A315). */
+    #[ListOf(ListPageVersions::class)]
     public function index(Request $request, Page $page): JsonResponse
     {
         return ApiList::respond(ListPageVersions::run(Actor::fromRequest($request), $page, $request->query()), PageVersionResource::class);

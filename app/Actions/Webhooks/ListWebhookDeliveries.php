@@ -7,8 +7,12 @@ use App\Models\Organization;
 use App\Models\Webhook;
 use App\Models\WebhookAttempt;
 use App\Support\Actor;
+use App\Support\ListFilter;
+use App\Support\ListQuery;
 use App\Support\ListResult;
+use App\Support\ListSpec;
 use App\Support\PageArgs;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Validation\ValidationException;
 use Lorisleiva\Actions\Concerns\AsAction;
 
@@ -21,8 +25,25 @@ final class ListWebhookDeliveries
 {
     use AsAction;
 
+    /** The rules of the list (A386, K11): the rows are attempts; `event` is the one of their delivery, `succeeded` an answer of 2xx. */
+    public static function spec(): ListSpec
+    {
+        return new ListSpec(
+            filters: [
+                ListFilter::scope('event', 'string', fn (Builder $query, mixed $event) => $query->whereHas('delivery', fn (Builder $delivery) => $delivery->where('event', $event))),
+                ListFilter::exact('kind', 'webhook_attempts.kind', WebhookAttempt::KINDS),
+                ListFilter::scope('succeeded', 'boolean', fn (Builder $query, mixed $succeeded) => $succeeded
+                    ? $query->whereBetween('webhook_attempts.status_code', [200, 299])
+                    : $query->where(fn (Builder $failed) => $failed->whereNull('webhook_attempts.status_code')->orWhereNotBetween('webhook_attempts.status_code', [200, 299]))),
+            ],
+            // the stamp as the database has it, with its microseconds, as the alias `attempted_cursor`
+            sorts: ['attempted_at' => 'attempted_cursor'],
+            default: ['-attempted_at'],
+        );
+    }
+
     /**
-     * @param  array<array-key, mixed>  $query  `cursor`, `per_page`
+     * @param  array<array-key, mixed>  $query  `filter`, `sort`, `cursor`, `per_page`
      * @return ListResult<WebhookAttempt>
      *
      * @throws ValidationException
@@ -31,13 +52,15 @@ final class ListWebhookDeliveries
     {
         Authorize::check($actor, 'manageWebhooks', Organization::class);
 
-        return ListResult::of(
+        [$attempts, $signature] = ListQuery::apply(
             WebhookAttempt::query()->with('delivery:id,event')
                 // the stamp as the database has it: the cast would lose the microseconds in the cursor
                 ->select('webhook_attempts.*')->addSelect('webhook_attempts.attempted_at as attempted_cursor')
-                ->where('webhook_id', $webhook->id)
-                ->orderByDesc('attempted_cursor')->orderByDesc('id'),
-            PageArgs::from($query),
+                ->where('webhook_id', $webhook->id),
+            $query,
+            self::spec(),
         );
+
+        return ListResult::of($attempts, PageArgs::from($query), $signature);
     }
 }

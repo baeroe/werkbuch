@@ -4,7 +4,10 @@ namespace App\Actions\Workflows;
 
 use App\Models\Workflow;
 use App\Support\Actor;
+use App\Support\ListFilter;
+use App\Support\ListQuery;
 use App\Support\ListResult;
+use App\Support\ListSpec;
 use App\Support\PageArgs;
 use Illuminate\Validation\ValidationException;
 use Lorisleiva\Actions\Concerns\AsAction;
@@ -17,14 +20,28 @@ final class ListWorkflows
 {
     use AsAction;
 
+    /** The rules of the list (A386, K7). */
+    public static function spec(): ListSpec
+    {
+        return new ListSpec(
+            filters: [
+                ListFilter::partial('name', 'workflows.name'),
+            ],
+            sorts: ['name' => 'workflows.name', 'created_at' => 'workflows.id'],
+            default: [],
+        );
+    }
+
     /**
-     * @param  array<array-key, mixed>  $input  `cursor`, `per_page`
+     * @param  array<array-key, mixed>  $input  `filter`, `sort`, `cursor`, `per_page`
      * @return ListResult<Workflow>
      *
      * @throws ValidationException
      */
     public function handle(Actor $actor, array $input): ListResult
     {
-        return ListResult::of(Workflow::query()->with(['states', 'transitions'])->orderBy('id'), PageArgs::from($input));
+        [$query, $signature] = ListQuery::apply(Workflow::query()->with(['states', 'transitions']), $input, self::spec());
+
+        return ListResult::of($query, PageArgs::from($input), $signature);
     }
 }

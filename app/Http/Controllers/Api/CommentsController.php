@@ -10,6 +10,7 @@ use App\Actions\Comments\GetComment;
 use App\Actions\Comments\ListComments;
 use App\Actions\Comments\RemoveReaction;
 use App\Http\Api\ApiList;
+use App\Http\Api\ListOf;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\CommentResource;
 use App\Models\Comment;
@@ -26,6 +27,7 @@ use Illuminate\Http\Response;
 final class CommentsController extends Controller
 {
     /** A page of comments, oldest first (`cursor`, `per_page`). */
+    #[ListOf(ListComments::class)]
     public function index(Request $request, WorkItem $item): JsonResponse
     {
         return ApiList::respond(ListComments::run(Actor::fromRequest($request), $item, $request->query()), CommentResource::class);

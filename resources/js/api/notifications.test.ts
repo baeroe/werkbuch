@@ -29,7 +29,7 @@ describe('the inbox', () => {
     expect(api.calls.map((call) => call.url)).toEqual([
       '/api/v1/notifications',
       // Laravel's `boolean` takes 1 and 0, never "true"
-      '/api/v1/notifications?unread_only=1&mentions_only=0&cursor=c2&per_page=1',
+      '/api/v1/notifications?cursor=c2&per_page=1&filter%5Bunread%5D=1',
     ]);
   });
 

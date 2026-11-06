@@ -16,9 +16,12 @@ export interface ListNotificationsArgs extends PageArgs {
 /** How many ids one call to mark takes (`MarkNotificationsRead::MAX_IDS`); more go in blocks of this size. */
 export const MARK_MAX = 100;
 
-/** A page of the own inbox; the filters go as `1`/`0` (Laravel's `boolean` takes no "true"). */
+/** A page of the own inbox; `unread_only` is `filter[unread]=1`, `mentions_only` `filter[event]=mentioned` (booleans go as `1`/`0`). */
 export function listNotifications(args: ListNotificationsArgs = {}): Promise<Page<Notification>> {
-  return getPage<Notification>('/notifications', { ...args });
+  const { unread_only, mentions_only, ...page } = args;
+  const filter = { ...(unread_only && { unread: true }), ...(mentions_only && { event: 'mentioned' }) };
+
+  return getPage<Notification>('/notifications', { ...page, ...(Object.keys(filter).length > 0 && { filter }) });
 }
 
 /** Marks by id in blocks of MARK_MAX, one after the other; no ids ask nothing. Answers how many changed in all. */

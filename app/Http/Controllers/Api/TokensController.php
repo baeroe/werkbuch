@@ -6,25 +6,24 @@ use App\Actions\Tokens\CreateToken;
 use App\Actions\Tokens\ListTokens;
 use App\Actions\Tokens\RevokeToken;
 use App\Http\Api\ApiList;
+use App\Http\Api\ListOf;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\TokenResource;
 use App\Models\PersonalAccessToken;
-use App\Models\User;
 use App\Support\Actor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
 /**
- * The API tokens of an account: `user_id` names it (in the query to list, in the body to create), without it the own one.
+ * The API tokens of an account: `filter[user_id]` names it (in the query to list), `user_id` (in the body to create), without it the own one.
  */
 final class TokensController extends Controller
 {
+    #[ListOf(ListTokens::class)]
     public function index(Request $request): JsonResponse
     {
-        $actor = Actor::fromRequest($request);
-
-        return ApiList::respond(ListTokens::run($actor, self::owner($request->query('user_id'), $actor), $request->query()), TokenResource::class);
+        return ApiList::respond(ListTokens::run(Actor::fromRequest($request), $request->query()), TokenResource::class);
     }
 
     /**
@@ -32,8 +31,7 @@ final class TokensController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        $actor = Actor::fromRequest($request);
-        $token = CreateToken::run($actor, self::owner($request->input('user_id'), $actor), $request->all());
+        $token = CreateToken::run(Actor::fromRequest($request), $request->all());
 
         return response()->json([
             'token' => (new TokenResource($token->accessToken))->resolve($request),
@@ -46,11 +44,5 @@ final class TokensController extends Controller
         RevokeToken::run(Actor::fromRequest($request), $token);
 
         return response()->noContent();
-    }
-
-    /** The account a `user_id` names (404 for an unknown one, anything but a text is unknown), else the actor's own. */
-    private static function owner(mixed $id, Actor $actor): User
-    {
-        return $id === null ? $actor->user : User::query()->findOrFail(is_string($id) ? $id : '');
     }
 }

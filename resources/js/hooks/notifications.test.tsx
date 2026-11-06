@@ -42,7 +42,7 @@ describe('the inbox', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual({ items: maraInbox, next_cursor: null, total: 14 });
-    expect(api.calls.map((call) => call.url)).toEqual(['/api/v1/notifications?mentions_only=1']);
+    expect(api.calls.map((call) => call.url)).toEqual(['/api/v1/notifications?filter%5Bevent%5D=mentioned']);
   });
 
   it('counts the unread from the total of one row', async () => {
@@ -52,7 +52,7 @@ describe('the inbox', () => {
     // nothing is known before the answer
     expect(result.current).toBe(0);
     await waitFor(() => expect(result.current).toBe(3));
-    expect(api.calls.map((call) => call.url)).toEqual(['/api/v1/notifications?unread_only=1&per_page=1']);
+    expect(api.calls.map((call) => call.url)).toEqual(['/api/v1/notifications?per_page=1&filter%5Bunread%5D=1']);
   });
 
   it('makes the notifications stale after a mark', async () => {

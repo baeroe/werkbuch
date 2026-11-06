@@ -110,7 +110,7 @@ const inboxLink = (page: Page) => page.getByRole('link', { name: /^Inbox(, \d+ u
 
 /** The unread notifications of the signed-in person of `page`, as the server counts them. */
 async function unreadCount(page: Page): Promise<number> {
-  const response = await api(page, 'GET', '/api/v1/notifications?unread_only=1&per_page=1');
+  const response = await api(page, 'GET', '/api/v1/notifications?filter[unread]=1&per_page=1');
   expect(response.status(), await response.text()).toBe(200);
   return ((await response.json()) as { meta: { total: number } }).meta.total;
 }

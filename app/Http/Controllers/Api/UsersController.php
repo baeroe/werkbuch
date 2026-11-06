@@ -8,6 +8,7 @@ use App\Actions\Users\ReactivateUser;
 use App\Actions\Users\UpdateUser;
 use App\Actions\Users\UpdateUserRole;
 use App\Http\Api\ApiList;
+use App\Http\Api\ListOf;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UserResource;
 use App\Models\User;
@@ -17,6 +18,7 @@ use Illuminate\Http\Request;
 
 final class UsersController extends Controller
 {
+    #[ListOf(ListUsers::class)]
     public function index(Request $request): JsonResponse
     {
         return ApiList::respond(ListUsers::run(Actor::fromRequest($request), $request->query()), UserResource::class);

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Actions\Invitations\InviteUser;
 use App\Actions\Invitations\ListInvitations;
 use App\Http\Api\ApiList;
+use App\Http\Api\ListOf;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\InvitationResource;
 use App\Support\Actor;
@@ -14,6 +15,7 @@ use Illuminate\Http\Request;
 
 final class InvitationsController extends Controller
 {
+    #[ListOf(ListInvitations::class)]
     public function index(Request $request): JsonResponse
     {
         return ApiList::respond(ListInvitations::run(Actor::fromRequest($request), $request->query()), InvitationResource::class);

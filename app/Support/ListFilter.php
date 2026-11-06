@@ -4,6 +4,7 @@ namespace App\Support;
 
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Str;
 
 /**
  * One filter of a list (`filter[<name>]`, A386), part of its `ListSpec`.
@@ -60,6 +61,19 @@ final readonly class ListFilter
     public static function boolean(string $name, ?string $column = null): self
     {
         return new self($name, self::BOOLEAN, $column ?? $name, null, 'boolean', null);
+    }
+
+    /**
+     * The column equals this ULID, in any case; a text that is no ULID matches nothing (the collation would let a
+     * look-alike through, A96).
+     */
+    public static function ulid(string $name, ?string $column = null): self
+    {
+        $column ??= $name;
+
+        return new self($name, self::SCOPE, $column, null, 'string', fn (Builder $query, mixed $id) => is_string($id) && Str::isUlid($id = Ids::normalize($id))
+            ? $query->where($query->qualifyColumn($column), $id)
+            : $query->whereRaw('0 = 1'));
     }
 
     /**

@@ -6,6 +6,7 @@ use App\Actions\Workflows\DeleteWorkflow;
 use App\Actions\Workflows\ListWorkflows;
 use App\Actions\Workflows\SaveWorkflow;
 use App\Http\Api\ApiList;
+use App\Http\Api\ListOf;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\WorkflowResource;
 use App\Models\Workflow;
@@ -19,6 +20,7 @@ use Illuminate\Http\Response;
  */
 final class WorkflowsController extends Controller
 {
+    #[ListOf(ListWorkflows::class)]
     public function index(Request $request): JsonResponse
     {
         return ApiList::respond(ListWorkflows::run(Actor::fromRequest($request), $request->query()), WorkflowResource::class);

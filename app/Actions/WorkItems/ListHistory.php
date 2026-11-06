@@ -10,7 +10,9 @@ use App\Models\Event;
 use App\Models\User;
 use App\Models\WorkItem;
 use App\Support\Actor;
+use App\Support\ListQuery;
 use App\Support\ListResult;
+use App\Support\ListSpec;
 use App\Support\PageArgs;
 use App\Support\RelationChanges;
 use Illuminate\Validation\ValidationException;
@@ -41,6 +43,12 @@ final class ListHistory
     /** The events of the comments of an item that are history, besides `work_item.*`. */
     private const COMMENTS = [EventType::CommentUpdated, EventType::CommentDeleted];
 
+    /** A fixed list (A386, K12): no filter, sort or include; it keeps the order it has. */
+    public static function spec(): ListSpec
+    {
+        return ListSpec::fixed();
+    }
+
     /**
      * @param  array<array-key, mixed>  $query  `cursor`, `per_page`
      * @return ListResult<Event>
@@ -64,7 +72,8 @@ final class ListHistory
                 ->whereJsonLength('changes', 1)->whereJsonContainsKey('changes->rank'))
             ->orderBy('occurred_cursor')->orderBy('id');
 
-        $result = ListResult::of($events, $args);
+        [$events, $signature] = ListQuery::apply($events, $query, self::spec());
+        $result = ListResult::of($events, $args, $signature);
         self::resolve($result->page->items(), $actor->user);
 
         return $result;

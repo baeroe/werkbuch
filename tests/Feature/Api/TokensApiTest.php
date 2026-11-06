@@ -98,12 +98,12 @@ it('lets people manage only their own tokens', function () {
     $token = $ida->createToken('Idas', ['read'])->accessToken;
     $this->actingAs($lene);
 
-    $this->getJson("/api/v1/tokens?user_id={$ida->id}")->assertForbidden()->assertJsonPath('detail', __('problem.detail.tokens_own_or_bots'));
+    $this->getJson("/api/v1/tokens?filter[user_id]={$ida->id}")->assertForbidden()->assertJsonPath('detail', __('problem.detail.tokens_own_or_bots'));
     $this->postJson('/api/v1/tokens', ['user_id' => $ida->id, 'name' => 'CI', 'abilities' => ['read']])->assertForbidden();
     // a token of somebody else's account is none the actor may see
     $this->deleteJson("/api/v1/tokens/{$token->id}")->assertNotFound()->assertJsonMissingPath('detail');
     // the bots are an admin's, even the one a person runs
-    $this->getJson('/api/v1/tokens?user_id='.User::factory()->bot($lene)->create()->id)->assertForbidden();
+    $this->getJson('/api/v1/tokens?filter[user_id]='.User::factory()->bot($lene)->create()->id)->assertForbidden();
 
     expect($ida->tokens()->count())->toBe(1);
 });
@@ -116,12 +116,12 @@ it('lets org admins manage the tokens of bots and of the default bot, not those 
     foreach ([$kira, User::defaultBot()] as $bot) {
         $id = $this->postJson('/api/v1/tokens', ['user_id' => $bot->id, 'name' => 'Bot', 'abilities' => ['read', 'mcp']])
             ->assertCreated()->assertJsonPath('token.user_id', $bot->id)->json('token.id');
-        $this->getJson("/api/v1/tokens?user_id={$bot->id}")->assertOk()->assertJsonPath('data.0.id', $id);
+        $this->getJson("/api/v1/tokens?filter[user_id]={$bot->id}")->assertOk()->assertJsonPath('data.0.id', $id);
         $this->deleteJson("/api/v1/tokens/{$id}")->assertNoContent();
     }
 
     $lene = User::factory()->create();
-    $this->getJson("/api/v1/tokens?user_id={$lene->id}")->assertForbidden();
+    $this->getJson("/api/v1/tokens?filter[user_id]={$lene->id}")->assertForbidden();
     $this->postJson('/api/v1/tokens', ['user_id' => $lene->id, 'name' => 'CI', 'abilities' => ['read']])->assertForbidden();
 });
 
@@ -131,12 +131,12 @@ it('lists only the tokens of one account, oldest first', function () {
     $second = $lene->createToken('Zwei', ['write'])->accessToken;
     User::factory()->create()->createToken('Fremd', ['read']);
 
-    $this->actingAs($lene)->getJson("/api/v1/tokens?user_id={$lene->id}")->assertOk()
+    $this->actingAs($lene)->getJson("/api/v1/tokens?filter[user_id]={$lene->id}")->assertOk()
         ->assertJsonPath('meta.total', 2)->assertJsonPath('data.0.id', $first->id)->assertJsonPath('data.1.id', $second->id);
 });
 
 it('answers 404 for an unknown account', function (mixed $id) {
-    $this->actingAs(User::factory()->create())->getJson('/api/v1/tokens?'.http_build_query(['user_id' => $id]))->assertNotFound();
+    $this->actingAs(User::factory()->create())->getJson('/api/v1/tokens?'.http_build_query(['filter' => ['user_id' => $id]]))->assertNotFound();
     $this->postJson('/api/v1/tokens', ['user_id' => $id, 'name' => 'CI', 'abilities' => ['read']])->assertNotFound();
 })->with(['unknown' => '01JAAAAAAAAAAAAAAAAAAAAAAA', 'a list' => [['x']]]);
 
@@ -198,7 +198,7 @@ it('lists and revokes tokens with a token that may read and write', function () 
 it('passes the abilities to Sanctum explicitly', function () {
     $lene = User::factory()->create();
 
-    $token = CreateToken::run(actor($lene), $lene, ['name' => 'CI', 'abilities' => ['write']])->accessToken;
+    $token = CreateToken::run(actor($lene), ['name' => 'CI', 'abilities' => ['write']])->accessToken;
 
     expect($token->abilities)->toBe(['write'])->and($token->can('read'))->toBeFalse()->and($token->can('*'))->toBeFalse();
 });

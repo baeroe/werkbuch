@@ -25,11 +25,11 @@ const invitation: Invitation = {
 
 describe('users', () => {
   it('lists accounts as a page, filtered by type when asked', async () => {
-    api = mockApi({ 'GET /api/v1/users': (_body, url) => ({ body: list(url.searchParams.get('type') === 'bot' ? [kira] : [mara, ida, kira]) }) });
+    api = mockApi({ 'GET /api/v1/users': (_body, url) => ({ body: list(url.searchParams.get('filter[type]') === 'bot' ? [kira] : [mara, ida, kira]) }) });
 
     expect(await listUsers()).toEqual({ items: [mara, ida, kira], next_cursor: null, total: 3 });
     expect(await listUsers({ type: 'bot' })).toEqual({ items: [kira], next_cursor: null, total: 1 });
-    expect(api.calls.map((call) => call.url)).toEqual(['/api/v1/users', '/api/v1/users?type=bot']);
+    expect(api.calls.map((call) => call.url)).toEqual(['/api/v1/users', '/api/v1/users?filter%5Btype%5D=bot']);
   });
 
   it('invites with the link as it comes (no data wrapper) and lists the invitations', async () => {

@@ -11,6 +11,7 @@ use App\Actions\Templates\PreviewSchedule;
 use App\Actions\Templates\RunTemplate;
 use App\Actions\Templates\SaveTemplate;
 use App\Http\Api\ApiList;
+use App\Http\Api\ListOf;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\TemplateDraftResource;
 use App\Http\Resources\TemplateResource;
@@ -29,14 +30,14 @@ use Illuminate\Http\Response;
  */
 final class TemplatesController extends Controller
 {
-    /** Every project the account sees, or the one `?project=` names. */
+    /** Every project the account sees; `filter[project_id]` narrows it to one. */
+    #[ListOf(ListTemplates::class)]
     public function index(Request $request): JsonResponse
     {
-        $project = $request->query('project');
-
-        return ApiList::respond(ListTemplates::run(Actor::fromRequest($request), is_string($project) && $project !== '' ? $project : null, $request->query()), TemplateResource::class);
+        return ApiList::respond(ListTemplates::run(Actor::fromRequest($request), null, $request->query()), TemplateResource::class);
     }
 
+    #[ListOf(ListTemplates::class, 'projectSpec')]
     public function projectIndex(Request $request, Project $project): JsonResponse
     {
         return ApiList::respond(ListTemplates::run(Actor::fromRequest($request), $project, $request->query()), TemplateResource::class);
@@ -84,6 +85,7 @@ final class TemplatesController extends Controller
     }
 
     /** The log of its runs, newest first. */
+    #[ListOf(ListTemplateRuns::class)]
     public function runs(Request $request, Template $template): JsonResponse
     {
         return ApiList::respond(ListTemplateRuns::run(Actor::fromRequest($request), $template, $request->query()), TemplateRunResource::class);

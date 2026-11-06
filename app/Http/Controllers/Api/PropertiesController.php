@@ -6,6 +6,7 @@ use App\Actions\Properties\DeleteProperty;
 use App\Actions\Properties\ListProperties;
 use App\Actions\Properties\SaveProperty;
 use App\Http\Api\ApiList;
+use App\Http\Api\ListOf;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\PropertyResource;
 use App\Models\Property;
@@ -18,6 +19,7 @@ use Illuminate\Http\Request;
  */
 final class PropertiesController extends Controller
 {
+    #[ListOf(ListProperties::class)]
     public function index(Request $request): JsonResponse
     {
         return ApiList::respond(ListProperties::run(Actor::fromRequest($request), $request->query()), PropertyResource::class);

@@ -220,7 +220,7 @@ test('counts a new notification up live', async ({ page, browser }) => {
   try {
     /** The unread notifications of the inbox person, as the server holds them. */
     const unread = async () => {
-      const response = await api(other.page, 'GET', '/api/v1/notifications?unread_only=1&per_page=100');
+      const response = await api(other.page, 'GET', '/api/v1/notifications?filter[unread]=1&per_page=100');
       expect(response.status(), await response.text()).toBe(200);
       return (await response.json()) as { data: { work_item_id: string | null; event: string }[]; meta: { total: number } };
     };

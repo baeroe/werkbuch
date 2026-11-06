@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Actions\Favorites\ListFavorites;
 use App\Actions\Favorites\ToggleFavorite;
 use App\Http\Api\ApiList;
+use App\Http\Api\ListOf;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\FavoriteResource;
 use App\Support\Actor;
@@ -16,6 +17,7 @@ use Illuminate\Http\Request;
  */
 final class FavoritesController extends Controller
 {
+    #[ListOf(ListFavorites::class)]
     public function index(Request $request): JsonResponse
     {
         return ApiList::respond(ListFavorites::run(Actor::fromRequest($request), $request->query()), FavoriteResource::class);

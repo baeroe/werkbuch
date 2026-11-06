@@ -114,7 +114,7 @@ Lesen braucht ein Token mit `read`, Ändern eins mit `write`. Projekte nennst du
 
 | Anfrage | Antwort |
 |---|---|
-| `GET /api/v1/templates` | Die Vorlagen aller Projekte, die das Konto sieht, nach Name; `?project=` grenzt auf eins ein, `?lean=1` lässt die Texte weg. Mit `cursor` und `per_page`. |
+| `GET /api/v1/templates` | Die Vorlagen aller Projekte, die das Konto sieht, nach Name; `filter[project_id]=<id>` grenzt auf eins ein (ein Projekt, das du nicht siehst, ergibt eine leere Liste), `filter[scheduled]=1` behält die mit Zeitplan, `?lean=1` lässt die Texte weg. Mit `cursor` und `per_page`. |
 | `GET /api/v1/projects/{project}/templates` | Die Vorlagen eines Projekts. |
 | `POST /api/v1/projects/{project}/templates` | `201` mit der neuen Vorlage: `name`, `payload`, `schedule` (alle Pflicht, `schedule` darf `null` sein). |
 | `GET /api/v1/templates/{template}` | Eine Vorlage. |

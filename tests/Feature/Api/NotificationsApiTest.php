@@ -67,9 +67,8 @@ it('lists the inbox in the shape of the clickdummy, with a lean item', function 
         ->assertJsonPath('data.0.mailed_at', null)->assertJsonPath('data.0.excerpt', null);
     expect($this->getJson($response->json('links.next'))->getContent())->toContain('"data":{}');
 
-    $this->getJson('/api/v1/notifications?unread_only=1')->assertJsonPath('meta.total', 1);
-    $this->getJson('/api/v1/notifications?mentions_only=yes')->assertUnprocessable()
-        ->assertJsonPath('errors', ['mentions_only' => [__('field.boolean')]]);
+    $this->getJson('/api/v1/notifications?filter[unread]=1')->assertJsonPath('meta.total', 1);
+    $this->getJson('/api/v1/notifications?filter[unread]=yes')->assertUnprocessable()->assertJsonValidationErrors(['filter.unread']);
 });
 
 it('gives a notification without item no item', function () {

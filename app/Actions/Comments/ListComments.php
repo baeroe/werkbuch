@@ -7,7 +7,9 @@ use App\Exceptions\Problem;
 use App\Models\Comment;
 use App\Models\WorkItem;
 use App\Support\Actor;
+use App\Support\ListQuery;
 use App\Support\ListResult;
+use App\Support\ListSpec;
 use App\Support\PageArgs;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Validation\ValidationException;
@@ -21,6 +23,12 @@ use Lorisleiva\Actions\Concerns\AsAction;
 final class ListComments
 {
     use AsAction;
+
+    /** A fixed list (A386, K12): no filter, sort or include; it keeps the order it has. */
+    public static function spec(): ListSpec
+    {
+        return ListSpec::fixed();
+    }
 
     /**
      * @param  array<array-key, mixed>  $query  `cursor`, `per_page`
@@ -41,7 +49,8 @@ final class ListComments
             ->where('work_item_id', $item->id)
             ->orderBy('created_cursor')->orderBy('id');
 
-        $result = ListResult::of($comments, $args);
+        [$comments, $signature] = ListQuery::apply($comments, $query, self::spec());
+        $result = ListResult::of($comments, $args, $signature);
         Comment::loadForResource(new Collection($result->page->items()), $actor->user);
 
         return $result;

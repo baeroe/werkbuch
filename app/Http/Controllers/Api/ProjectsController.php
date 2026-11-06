@@ -10,6 +10,7 @@ use App\Actions\Projects\GetProject;
 use App\Actions\Projects\ListProjects;
 use App\Actions\Projects\UpdateProject;
 use App\Http\Api\ApiList;
+use App\Http\Api\ListOf;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ProjectResource;
 use App\Models\Project;
@@ -24,6 +25,7 @@ use Illuminate\Http\Response;
  */
 final class ProjectsController extends Controller
 {
+    #[ListOf(ListProjects::class)]
     public function index(Request $request): JsonResponse
     {
         return ApiList::respond(ListProjects::run(Actor::fromRequest($request), $request->query()), ProjectResource::class);

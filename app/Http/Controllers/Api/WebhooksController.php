@@ -11,6 +11,7 @@ use App\Actions\Webhooks\RedeliverWebhook;
 use App\Actions\Webhooks\RotateWebhookSecret;
 use App\Actions\Webhooks\SaveWebhook;
 use App\Http\Api\ApiList;
+use App\Http\Api\ListOf;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\WebhookDeliveryResource;
 use App\Http\Resources\WebhookResource;
@@ -27,6 +28,7 @@ use Illuminate\Http\Response;
  */
 final class WebhooksController extends Controller
 {
+    #[ListOf(ListWebhooks::class)]
     public function index(Request $request): JsonResponse
     {
         return ApiList::respond(ListWebhooks::run(Actor::fromRequest($request), $request->query()), WebhookResource::class);
@@ -73,6 +75,7 @@ final class WebhooksController extends Controller
     }
 
     /** `{data: WebhookDelivery[], links, meta}`: the attempts of the webhook, the newest first. */
+    #[ListOf(ListWebhookDeliveries::class)]
     public function deliveries(Request $request, Webhook $webhook): JsonResponse
     {
         return ApiList::respond(ListWebhookDeliveries::run(Actor::fromRequest($request), $webhook, $request->query()), WebhookDeliveryResource::class);

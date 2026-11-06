@@ -81,8 +81,9 @@ it('lists the templates of all projects or one, and lean ones without their text
     $this->actingAs($lene)->getJson('/api/v1/templates')->assertOk()
         ->assertJsonPath('meta.total', 1)
         ->assertJsonPath('data.0.name', 'Wartung');
-    $this->actingAs($lene)->getJson('/api/v1/templates?project=WEB')->assertOk()->assertJsonPath('meta.total', 1);
-    $this->actingAs($lene)->getJson('/api/v1/templates?project=OPS')->assertNotFound();
+    $this->actingAs($lene)->getJson("/api/v1/templates?filter[project_id]={$web->id}")->assertOk()->assertJsonPath('meta.total', 1);
+    // a project the reader does not see answers like an unknown one: nothing (K11)
+    $this->actingAs($lene)->getJson("/api/v1/templates?filter[project_id]={$ops->id}")->assertOk()->assertJsonPath('meta.total', 0);
     $this->actingAs($lene)->getJson('/api/v1/projects/web/templates')->assertOk()->assertJsonPath('data.0.name', 'Wartung');
     $this->actingAs($lene)->getJson('/api/v1/projects/OPS/templates')->assertNotFound()->assertJsonMissingPath('detail');
 

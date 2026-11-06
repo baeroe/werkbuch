@@ -23,7 +23,7 @@ async function asSam(browser: Browser, run: (page: Page) => Promise<void>): Prom
 
 /** Changes Sam's profile over the API, as Sam. */
 async function updateSam(page: Page, patch: Record<string, string>): Promise<void> {
-  const people = (await (await api(page, 'GET', '/api/v1/users?type=person')).json()) as { data: { id: string; email: string }[] };
+  const people = (await (await api(page, 'GET', '/api/v1/users?filter[type]=person')).json()) as { data: { id: string; email: string }[] };
   const sam = people.data.find((account) => account.email === person().email);
   expect(sam, 'Sam on the first page of people').toBeDefined();
   const response = await api(page, 'PATCH', `/api/v1/users/${sam!.id}`, patch);

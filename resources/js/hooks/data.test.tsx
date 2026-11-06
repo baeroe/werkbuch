@@ -204,8 +204,8 @@ describe('reading', () => {
       '/api/v1/invitations',
       '/api/v1/projects/WEB/members',
       '/api/v1/projects?include_archived=1',
-      '/api/v1/tokens?user_id=u_mara',
-      '/api/v1/users?type=person',
+      '/api/v1/tokens?filter%5Buser_id%5D=u_mara',
+      '/api/v1/users?filter%5Btype%5D=person',
     ]);
   });
 
@@ -216,7 +216,7 @@ describe('reading', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual({ items: [mara, ida, ida], next_cursor: null, total: 3 });
-    expect(api.calls.map((call) => call.url)).toEqual(['/api/v1/users?type=person', '/api/v1/users?type=person&cursor=c2']);
+    expect(api.calls.map((call) => call.url)).toEqual(['/api/v1/users?filter%5Btype%5D=person', '/api/v1/users?cursor=c2&filter%5Btype%5D=person']);
   });
 
   it('useProjects and useInvitations follow the cursor through every page as well', async () => {

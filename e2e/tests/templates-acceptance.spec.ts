@@ -105,7 +105,7 @@ test('a template that fails at run time tells the lead live', async ({ page, bro
     const row = lead.page.getByRole('link').filter({ hasText: tr('en', 'inbox.kind.template_run_failed') }).filter({ hasText: error });
     await expect(row).toBeVisible(LIVE);
     await expect(async () => {
-      const response = await api(lead.page, 'GET', '/api/v1/notifications?unread_only=1&per_page=1');
+      const response = await api(lead.page, 'GET', '/api/v1/notifications?filter[unread]=1&per_page=1');
       const count = ((await response.json()) as { meta: { total: number } }).meta.total;
       expect(count).toBeGreaterThan(0);
       const link = lead.page.getByRole('link', { name: /^Inbox(, \d+ unread)?$/ }).filter({ visible: true });

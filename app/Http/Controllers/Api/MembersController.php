@@ -8,6 +8,7 @@ use App\Actions\Projects\ListMembers;
 use App\Actions\Projects\RemoveMember;
 use App\Actions\Projects\UpdateMemberRole;
 use App\Http\Api\ApiList;
+use App\Http\Api\ListOf;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ProjectMemberResource;
 use App\Models\Project;
@@ -23,6 +24,7 @@ use Illuminate\Http\Response;
  */
 final class MembersController extends Controller
 {
+    #[ListOf(ListMembers::class)]
     public function index(Request $request, Project $project): JsonResponse
     {
         return ApiList::respond(ListMembers::run(Actor::fromRequest($request), $project, $request->query()), ProjectMemberResource::class);

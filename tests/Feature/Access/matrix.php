@@ -825,12 +825,12 @@ return [
     'ListTokens' => [
         'action' => ListTokens::class,
         // the tokens of a bot: org admins only (spec 4.2), even the person who runs it may not
-        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListTokens::run($a, $w->bot, []),
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListTokens::run($a, ['filter' => ['user_id' => $w->bot->id]]),
         'allowed' => ['org_admin', 'default_bot'],
     ],
     'CreateToken' => [
         'action' => CreateToken::class,
-        'run' => fn (Actor $a, MatrixWorld $w, string $column) => CreateToken::run($a, $w->bot, ['name' => 'Matrix', 'abilities' => ['read']]),
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => CreateToken::run($a, ['user_id' => $w->bot->id, 'name' => 'Matrix', 'abilities' => ['read']]),
         'allowed' => ['org_admin', 'default_bot'],
         'event' => EventType::TokenCreated,
     ],
