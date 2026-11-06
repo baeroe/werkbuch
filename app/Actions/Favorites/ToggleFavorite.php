@@ -33,6 +33,9 @@ final class ToggleFavorite
 {
     use AsAction;
 
+    /** The keys of the input the action reads (the OpenAPI document holds its body against them). */
+    public const FIELDS = ['kind', 'id'];
+
     private const KINDS = ['project', 'view'];
 
     /**

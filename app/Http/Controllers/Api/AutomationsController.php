@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Api;
 
 use App\Actions\Automations\ListAutomations;
 use App\Actions\Automations\SaveAutomation;
+use App\Http\Api\Body;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\AutomationResource;
 use App\Models\Project;
+use App\OpenApi\CatalogSchemas;
 use App\Support\Actor;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -22,6 +24,10 @@ final class AutomationsController extends Controller
         return AutomationResource::collection(ListAutomations::run(Actor::fromRequest($request), $project));
     }
 
+    /**
+     * Switch an automation of a project and set its settings (the admins of the project).
+     */
+    #[Body(CatalogSchemas::class, 'automation')]
     public function update(Request $request, Project $project, string $key): AutomationResource
     {
         return new AutomationResource(SaveAutomation::run(Actor::fromRequest($request), $project, $key, $request->all()));

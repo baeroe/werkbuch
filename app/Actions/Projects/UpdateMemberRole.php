@@ -26,6 +26,9 @@ final class UpdateMemberRole
 {
     use AsAction;
 
+    /** The keys of the input the action reads (the OpenAPI document holds its body against them). */
+    public const FIELDS = ['role'];
+
     public function __construct(private readonly RoleAssignments $roles) {}
 
     /**

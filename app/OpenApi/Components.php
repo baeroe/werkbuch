@@ -7,6 +7,7 @@ use Dedoc\Scramble\OpenApiContext;
 use Dedoc\Scramble\Support\Generator\OpenApi;
 use Dedoc\Scramble\Support\Generator\Schema;
 use Dedoc\Scramble\Support\Generator\SecurityScheme;
+use Dedoc\Scramble\Support\Generator\Types\ObjectType;
 
 /**
  * The shared parts of the document: the schemas of `Schemas` under `components.schemas` and the two ways to sign in
@@ -15,6 +16,12 @@ use Dedoc\Scramble\Support\Generator\SecurityScheme;
  */
 final class Components implements DocumentTransformer
 {
+    /** Resource → property → the method of `CatalogSchemas` that writes its schema. */
+    private const PATCHES = [
+        'PropertyResource' => ['settings' => 'propertySettings', 'default_value' => 'defaultValue'],
+        'AutomationResource' => ['settings' => 'automationSettings'],
+    ];
+
     public function handle(OpenApi $document, OpenApiContext $context): void
     {
         $components = $document->components;
@@ -26,6 +33,17 @@ final class Components implements DocumentTransformer
             'ListMeta' => Schemas::listMeta(),
         ] as $name => $schema) {
             $components->addSchema($name, Schema::fromType(new JsonSchema($schema)));
+        }
+
+        // the parts of a resource that Scramble cannot read from its code (a cast to an object, a mixed value)
+        foreach (self::PATCHES as $name => $properties) {
+            $type = ($components->schemas[$name] ?? null)?->type;
+
+            if ($type instanceof ObjectType) {
+                foreach ($properties as $property => $method) {
+                    $type->addProperty($property, new JsonSchema(CatalogSchemas::{$method}()));
+                }
+            }
         }
 
         $components->addSecurityScheme('token', SecurityScheme::http('bearer', '<id>|wb_<secret>')->setDescription(

@@ -40,6 +40,9 @@ final class SaveWorkflow
 {
     use AsAction;
 
+    /** The keys of the input the action reads (the OpenAPI document holds its body against them). */
+    public const FIELDS = ['name', 'description', 'is_default', 'is_free', 'initial_state_id', 'states', 'transitions', 'state_mapping'];
+
     /**
      * @param  array<array-key, mixed>  $input  `name`, `description`, `is_default`, `is_free`, `initial_state_id`, `states`, `transitions`, `state_mapping`
      *

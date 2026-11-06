@@ -6,11 +6,14 @@ use App\Actions\Labels\DeleteLabel;
 use App\Actions\Labels\GetLabel;
 use App\Actions\Labels\ListLabels;
 use App\Actions\Labels\SaveLabel;
+use App\Http\Api\Answer;
 use App\Http\Api\ApiList;
+use App\Http\Api\Body;
 use App\Http\Api\ListOf;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\LabelResource;
 use App\Models\Label;
+use App\OpenApi\CatalogSchemas;
 use App\Support\Actor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -31,18 +34,28 @@ final class LabelsController extends Controller
         return new LabelResource(GetLabel::run(Actor::fromRequest($request), $label));
     }
 
-    /** 201: the new label was just created. */
-    public function store(Request $request): LabelResource
+    /**
+     * Create a label (org admins).
+     */
+    #[Body(CatalogSchemas::class, 'label')]
+    public function store(Request $request): JsonResponse
     {
-        return new LabelResource(SaveLabel::run(Actor::fromRequest($request), null, $request->all()));
+        return (new LabelResource(SaveLabel::run(Actor::fromRequest($request), null, $request->all())))->response()->setStatusCode(201);
     }
 
+    /**
+     * Replace a label as a whole (org admins).
+     */
+    #[Body(CatalogSchemas::class, 'label')]
     public function update(Request $request, Label $label): LabelResource
     {
         return new LabelResource(SaveLabel::run(Actor::fromRequest($request), $label, $request->all()));
     }
 
-    /** 200 with the number of items that had the label (without `data`). */
+    /**
+     * Delete a label; it goes from the items that carried it.
+     */
+    #[Answer(200, CatalogSchemas::class, 'affectedItems', 'How many items had the label.')]
     public function destroy(Request $request, Label $label): JsonResponse
     {
         return response()->json(['affected_items' => DeleteLabel::run(Actor::fromRequest($request), $label)]);

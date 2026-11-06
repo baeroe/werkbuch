@@ -4,10 +4,13 @@ namespace App\Http\Controllers\Api;
 
 use App\Actions\Favorites\ListFavorites;
 use App\Actions\Favorites\ToggleFavorite;
+use App\Http\Api\Answer;
 use App\Http\Api\ApiList;
+use App\Http\Api\Body;
 use App\Http\Api\ListOf;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\FavoriteResource;
+use App\OpenApi\CatalogSchemas;
 use App\Support\Actor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -23,7 +26,13 @@ final class FavoritesController extends Controller
         return ApiList::respond(ListFavorites::run(Actor::fromRequest($request), $request->query()), FavoriteResource::class);
     }
 
-    /** Answers the new state `{kind, id, favorite}`, without `data` (it is no resource). */
+    /**
+     * Toggle a favorite: a project or a view of the own account.
+     *
+     * Answers the new state `{kind, id, favorite}`, without `data` (it is no resource).
+     */
+    #[Body(CatalogSchemas::class, 'favoriteToggle')]
+    #[Answer(200, CatalogSchemas::class, 'favoriteToggled', 'The new state of the favorite.')]
     public function toggle(Request $request): JsonResponse
     {
         return response()->json(ToggleFavorite::run(Actor::fromRequest($request), $request->all()));

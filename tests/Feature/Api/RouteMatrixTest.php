@@ -45,7 +45,9 @@ it('opens each route only to tokens with the right ability', function (array $ro
     $uri = routeMatrixUri($path, isset($row['params']) ? ($row['params'])($w) : []);
     $client = $token === 'none' ? $this : $this->withToken(apiToken($w->account('org_admin'), ROUTE_MATRIX_TOKENS[$token]));
 
-    $response = $client->json($method, $uri, $row['body'] ?? []);
+    // a GET asks with its query, never with a body (the document says so)
+    $reads = in_array($method, ['GET', 'HEAD'], true);
+    $response = $client->json($method, $reads && isset($row['body']) ? $uri.'?'.http_build_query($row['body']) : $uri, $reads ? [] : ($row['body'] ?? []));
     $context = "{$method} {$uri} with {$token}: {$response->getContent()}";
     $needed = $row['ability'] ?? (in_array($method, ['GET', 'HEAD'], true) ? 'read' : 'write');
 

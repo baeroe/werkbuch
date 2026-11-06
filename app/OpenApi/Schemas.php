@@ -32,6 +32,39 @@ final class Schemas
                     'description' => 'The messages per field (`title`, `values.effort`, `filter.conditions.0.op`).',
                     'additionalProperties' => ['type' => 'array', 'items' => ['type' => 'string']],
                 ],
+                'states' => [
+                    'type' => 'array',
+                    'description' => '`state_in_use` (409, saving a workflow) and `validation_failed` at `mapping.<state_id>` (422, switching the workflow of a project): the states that hold items and have no target yet.',
+                    'items' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'state_id' => ['type' => 'string'],
+                            'name' => ['type' => 'string'],
+                            'items' => ['type' => 'integer', 'minimum' => 1],
+                        ],
+                        'required' => ['state_id', 'name', 'items'],
+                    ],
+                    'examples' => [[['state_id' => '01J9ZQ3W8F5V6T4N2M7K1H0RAB', 'name' => 'In Review', 'items' => 4]]],
+                ],
+                'projects' => [
+                    'type' => 'array',
+                    'description' => '`in_use` (409, deleting a workflow) and `default_type` (409, archiving or deleting a type): the identifiers of the projects that hold it (a project in deletion is marked).',
+                    'items' => ['type' => 'string'],
+                    'examples' => [['WEB', 'OPS']],
+                ],
+                'issues' => [
+                    'type' => 'array',
+                    'description' => '`invalid_workflow` (422): what is wrong with the graph of the workflow, by the ids of the input.',
+                    'items' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'code' => ['type' => 'string', 'enum' => ['no_initial_state', 'no_completed_state', 'unreachable_state']],
+                            'state_id' => ['type' => 'string', 'description' => 'Only for `unreachable_state`.'],
+                        ],
+                        'required' => ['code'],
+                    ],
+                    'examples' => [[['code' => 'unreachable_state', 'state_id' => 'st_review']]],
+                ],
             ],
             'required' => ['type', 'title', 'status', 'reason'],
             'x-werkbuch-open' => true,

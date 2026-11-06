@@ -6,11 +6,14 @@ use App\Actions\Resolutions\DeleteResolution;
 use App\Actions\Resolutions\GetResolution;
 use App\Actions\Resolutions\ListResolutions;
 use App\Actions\Resolutions\SaveResolution;
+use App\Http\Api\Answer;
 use App\Http\Api\ApiList;
+use App\Http\Api\Body;
 use App\Http\Api\ListOf;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ResolutionResource;
 use App\Models\Resolution;
+use App\OpenApi\CatalogSchemas;
 use App\Support\Actor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -31,18 +34,28 @@ final class ResolutionsController extends Controller
         return new ResolutionResource(GetResolution::run(Actor::fromRequest($request), $resolution));
     }
 
-    /** 201: the new resolution was just created. */
-    public function store(Request $request): ResolutionResource
+    /**
+     * Create a resolution (org admins).
+     */
+    #[Body(CatalogSchemas::class, 'resolution')]
+    public function store(Request $request): JsonResponse
     {
-        return new ResolutionResource(SaveResolution::run(Actor::fromRequest($request), null, $request->all()));
+        return (new ResolutionResource(SaveResolution::run(Actor::fromRequest($request), null, $request->all())))->response()->setStatusCode(201);
     }
 
+    /**
+     * Replace a resolution as a whole (org admins).
+     */
+    #[Body(CatalogSchemas::class, 'resolution')]
     public function update(Request $request, Resolution $resolution): ResolutionResource
     {
         return new ResolutionResource(SaveResolution::run(Actor::fromRequest($request), $resolution, $request->all()));
     }
 
-    /** 200 with what became of the resolution (without `data`): `deleted` (Phase 4: `archived` when items carry it). */
+    /**
+     * Delete a resolution, or archive it when items carry it. A default is 409 `is_default`.
+     */
+    #[Answer(200, CatalogSchemas::class, 'deleteOutcome', 'What became of the resolution.')]
     public function destroy(Request $request, Resolution $resolution): JsonResponse
     {
         return response()->json(DeleteResolution::run(Actor::fromRequest($request), $resolution));

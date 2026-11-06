@@ -31,6 +31,9 @@ final class SaveWorkItemType
 {
     use AsAction;
 
+    /** The keys of the input the action reads (the OpenAPI document holds its body against them). */
+    public const FIELDS = ['name', 'icon', 'tone', 'description', 'is_epic', 'properties', 'archived_at'];
+
     /**
      * @param  array<array-key, mixed>  $input  `name`, `icon`, `tone`, `description`, `is_epic`, `properties`, `archived_at`
      *

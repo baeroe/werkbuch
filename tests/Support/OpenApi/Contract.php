@@ -36,7 +36,7 @@ final class Contract
      *
      * @var list<string>
      */
-    public const STRICT_TAGS = ['Organization', 'Users', 'Bots', 'Invitations', 'Tokens', 'Me', 'Password', 'TwoFactor'];
+    public const STRICT_TAGS = ['Organization', 'Users', 'Bots', 'Invitations', 'Tokens', 'Me', 'Password', 'TwoFactor', 'Projects', 'Members', 'Favorites', 'Automations', 'Workflows', 'StateUsage', 'WorkItemTypes', 'Properties', 'Labels', 'RelationTypes', 'Resolutions'];
 
     private const ID = 'https://werkbuch.invalid/openapi.json';
 

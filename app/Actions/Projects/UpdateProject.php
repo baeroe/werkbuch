@@ -38,6 +38,9 @@ final class UpdateProject
 {
     use AsAction;
 
+    /** The keys of the input the action reads (the OpenAPI document holds its body against them). */
+    public const FIELDS = ['name', 'identifier', 'description', 'image_url', 'visibility', 'lead_id', 'workflow_id', 'enabled_type_ids', 'default_type_id'];
+
     /**
      * @param  array<string, mixed>  $input
      *

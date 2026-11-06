@@ -8,11 +8,13 @@ use App\Actions\Projects\ListMembers;
 use App\Actions\Projects\RemoveMember;
 use App\Actions\Projects\UpdateMemberRole;
 use App\Http\Api\ApiList;
+use App\Http\Api\Body;
 use App\Http\Api\ListOf;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ProjectMemberResource;
 use App\Models\Project;
 use App\Models\User;
+use App\OpenApi\CatalogSchemas;
 use App\Support\Actor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -30,6 +32,10 @@ final class MembersController extends Controller
         return ApiList::respond(ListMembers::run(Actor::fromRequest($request), $project, $request->query()), ProjectMemberResource::class);
     }
 
+    /**
+     * Add an account to a project (its admins).
+     */
+    #[Body(CatalogSchemas::class, 'memberAdd')]
     public function store(Request $request, Project $project): JsonResponse
     {
         return (new ProjectMemberResource(AddMember::run(Actor::fromRequest($request), $project, $request->all())))
@@ -42,6 +48,10 @@ final class MembersController extends Controller
             ->response()->setStatusCode(201);
     }
 
+    /**
+     * Change the role of a member (the admins of the project).
+     */
+    #[Body(CatalogSchemas::class, 'memberRole')]
     public function update(Request $request, Project $project, User $user): ProjectMemberResource
     {
         $role = $request->input('role');
