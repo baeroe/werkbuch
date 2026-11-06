@@ -207,7 +207,26 @@ it('takes them with webhooks_allow_private', function (string $url) use ($input)
     'loopback' => ['http://127.0.0.1/hook'],
     'IPv6 loopback' => ['http://[::1]/hook'],
     'localhost' => ['http://localhost:8080/hook'],
+    'a private network' => ['https://10.0.0.5/hook'],
+    'carrier-grade NAT' => ['http://100.64.0.1/hook'],
+    'unique local' => ['http://[fd00::1]/hook'],
+    'v4-mapped private' => ['http://[::ffff:10.0.0.1]/hook'],
+]);
+
+it('keeps link-local, metadata and the like refused with webhooks_allow_private (A378)', function (string $url) use ($input, $errorsOf) {
+    config(['werkbuch.webhooks_allow_private' => true]);
+
+    expect($errorsOf($input(['url' => $url])))->toBe(['url' => [__('field.url.private')]]);
+})->with([
     'metadata' => ['http://169.254.169.254/latest/meta-data'],
+    'link-local' => ['http://169.254.1.1/hook'],
+    'IPv6 link-local' => ['http://[fe80::1]/hook'],
+    'Alibaba metadata' => ['http://100.100.100.200/latest/meta-data'],
+    'AWS metadata over IPv6' => ['http://[fd00:ec2::254]/latest/meta-data'],
+    'this network' => ['http://0.0.0.0:8080/hook'],
+    'multicast' => ['http://224.0.0.1/hook'],
+    'reserved' => ['http://240.0.0.1/hook'],
+    'v4-mapped metadata' => ['http://[::ffff:169.254.169.254]/hook'],
 ]);
 
 it('takes public addresses, names in capitals and a port', function (string $url) use ($input) {

@@ -136,3 +136,46 @@ it('knows an address literal', function (string $host) {
     'IPv6 loopback' => ['::1'],
     'IPv6 in capitals' => ['::FFFF:127.0.0.1'],
 ]);
+
+it('spares only the private networks with webhooks_allow_private (A378)', function (string $ip, bool $blocked) {
+    expect(Addresses::isBlocked($ip, true))->toBe($blocked)
+        ->and(Addresses::isBlocked($ip))->toBeTrue();
+})->with([
+    // spared: private, loopback, carrier-grade NAT, unique local
+    '10/8' => ['10.1.2.3', false], '10/8 last' => ['10.255.255.255', false],
+    '172.16/12' => ['172.16.0.1', false], '172.16/12 last' => ['172.31.255.255', false],
+    '192.168/16' => ['192.168.5.2', false],
+    '127/8' => ['127.0.0.1', false], '127/8 last' => ['127.255.255.255', false],
+    '100.64/10' => ['100.64.0.1', false], '100.64/10 last' => ['100.127.255.255', false],
+    '::1' => ['::1', false],
+    'fc00::/7' => ['fc00::1', false], 'fd00::1' => ['fd00::1', false],
+    'v4-mapped private' => ['::ffff:10.0.0.1', false],
+    'v4-mapped loopback' => ['::ffff:127.0.0.1', false],
+    // kept: metadata, the whole link-local networks, this network, multicast, reserved, documentation, benchmark
+    'Alibaba metadata in 100.64/10' => ['100.100.100.200', true],
+    'AWS metadata over IPv6 in fc00::/7' => ['fd00:ec2::254', true],
+    'metadata' => ['169.254.169.254', true], '169.254/16' => ['169.254.0.1', true], '169.254/16 last' => ['169.254.255.255', true],
+    'fe80::/10' => ['fe80::1', true],
+    '0.0.0.0' => ['0.0.0.0', true], '0/8 last' => ['0.255.255.255', true],
+    '::' => ['::', true],
+    '224/4' => ['224.0.0.1', true], 'ff00::/8' => ['ff02::1', true],
+    '240/4' => ['240.0.0.1', true], 'broadcast' => ['255.255.255.255', true],
+    '192.0.0/24' => ['192.0.0.8', true], '192.0.2/24' => ['192.0.2.1', true], '198.18/15' => ['198.18.0.1', true],
+    '2001:db8::/32' => ['2001:db8::1', true], 'Teredo' => ['2001::1', true], 'fec0::/10' => ['fec0::1', true],
+    'local NAT64' => ['64:ff9b:1::a00:1', true],
+    'v4-mapped metadata' => ['::ffff:169.254.169.254', true],
+    'NAT64 metadata' => ['64:ff9b::a9fe:a9fe', true],
+    '6to4 metadata' => ['2002:a9fe:a9fe::', true],
+    'v4-mapped this network' => ['::ffff:0.0.0.0', true],
+]);
+
+it('blocks what is no address literal with webhooks_allow_private', function () {
+    expect(Addresses::isBlocked('127.1', true))->toBeTrue()
+        ->and(Addresses::isBlocked('localhost', true))->toBeTrue();
+});
+
+it('never reads an IPv4 address in an IPv6 network of PRIVATE', function () {
+    // 252.0.0.1 starts with the bits of fc00::/7, but lies in 240/4
+    expect(Addresses::isBlocked('252.0.0.1', true))->toBeTrue()
+        ->and(Addresses::isBlocked('253.255.0.1', true))->toBeTrue();
+});

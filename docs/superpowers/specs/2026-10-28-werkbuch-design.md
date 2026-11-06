@@ -11,7 +11,7 @@ Stand: 2026-11-06 · Status: freigegeben (die Änderungen vom 2026-10-31, vom 20
 > - **Test-Ping und „erneut senden“ (6.1, 6.3):** Beide senden in der Anfrage (bis etwa 10 s plus die Auflösung des Namens), antworten mit dem Versuch, auch einem gescheiterten, gehen auch an einen abgeschalteten Webhook und sind auf sechs je Minute und Konto begrenzt; „erneut senden“ schickt denselben Body mit derselben Delivery-ID, nie an einem Bot vorbei, der das Projekt nicht mehr sieht (A367).
 > - **Projekt-Webhooks (4.4, 6.3):** Sie gehen mit ihrem Projekt; Ereignisse eines Projekts in Löschung erreichen keinen Projekt-Webhook, `project.deleted` bekommen nur Webhooks der Organisation (A370).
 > - **`bot.assigned` (4.2):** entsteht, wenn jemand anderes einem Bot ein Item zuweist (Anlegen, Ändern, Mehrfachbearbeitung, Vorlage); ein Bot, der sich selbst zuweist, bekommt keins (A371).
-> - **Metadaten bleiben gesperrt (6.3, 8.2):** `WEBHOOKS_ALLOW_PRIVATE=true` erlaubt private Netze und Loopback, aber nie Metadaten-Adressen von Clouds (`169.254.169.254`, `fd00:ec2::254`, `100.100.100.200`), `0.0.0.0/8`, Multicast und `240.0.0.0/4`; Webhooks gehen nie über einen ausgehenden Proxy (A368, A378).
+> - **Link-local und Metadaten bleiben gesperrt (6.3, 8.2):** `WEBHOOKS_ALLOW_PRIVATE=true` erlaubt nur private Netze, CGNAT, Unique Local und Loopback, aber nie Link-local (`169.254.0.0/16` samt `169.254.169.254`, `fe80::/10`), die Metadaten-Adressen `fd00:ec2::254` und `100.100.100.200`, `0.0.0.0/8`, Multicast und `240.0.0.0/4`; Webhooks gehen nie über einen ausgehenden Proxy (A368, A378).
 > - **Nächtliche Automatisierungen gehen an Webhooks (4.13, 6.3):** Still sind Auto-Close und Auto-Archiv nur für Benachrichtigungen; Webhooks bekommen jede dieser Änderungen (A379).
 
 > **Änderungen vom 2026-11-05 (Phase 10):** Beim Umsetzen von Phase 10 (Vorlagen, Zeitpläne, Automatisierungen) hat Claude als Controller Folgendes entschieden; es ändert oder präzisiert die Spec und **wartet auf Rafaels Bestätigung** (Begründung und „Falls falsch“ in `docs/superpowers/plans/2026-10-30-werkbuch-app-rulings.md`, A335 ff.):
@@ -847,7 +847,7 @@ Gemeinsam haben alle Stufen: `/`-Menü, Markdown-Kürzel beim Tippen, Code-Blöc
 - schlägt ein Webhook 24 Stunden lang ohne Erfolg fehl, wird er abgeschaltet, und die Org-Admins werden benachrichtigt
 
 **SSRF:**
-- Ziele in privaten, Loopback-, Link-local- und Metadata-Netzen sind gesperrt, außer `WEBHOOKS_ALLOW_PRIVATE=true`.
+- Ziele in privaten, Loopback-, Link-local- und Metadata-Netzen sind gesperrt, außer `WEBHOOKS_ALLOW_PRIVATE=true` (gibt nur private Netze, CGNAT, Unique Local und Loopback frei; Link-local und Metadaten bleiben gesperrt, A378).
 - Geprüft wird bei jedem Versand nach der DNS-Auflösung; die Anfrage geht an die geprüfte IP.
 
 ## 7. Architektur

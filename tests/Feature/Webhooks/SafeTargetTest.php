@@ -104,6 +104,41 @@ it('takes private addresses when allowed', function () {
         ->and($target->curlResolve())->toBe('receiver.test:8025:127.0.0.1,[::1]');
 });
 
+it('spares only the private networks when private addresses are allowed (A378)', function (string $address, ?string $reason) use ($refusal) {
+    config(['werkbuch.webhooks_allow_private' => true]);
+    resolver(['receiver.test' => ['10.1.2.3', $address]]);
+
+    if ($reason === null) {
+        expect(SafeTarget::check('http://receiver.test/hook')->addresses)->toBe(['10.1.2.3', $address]);
+
+        return;
+    }
+
+    expect($refusal('http://receiver.test/hook')->reason)->toBe($reason);
+})->with([
+    'loopback' => ['127.0.0.1', null],
+    'a private network' => ['10.1.2.4', null],
+    'carrier-grade NAT' => ['100.64.0.1', null],
+    'unique local' => ['fd00::1', null],
+    'cloud metadata' => ['169.254.169.254', 'private_address'],
+    'link-local' => ['169.254.10.1', 'private_address'],
+    'IPv6 link-local' => ['fe80::1', 'private_address'],
+    'Alibaba metadata' => ['100.100.100.200', 'private_address'],
+    'AWS metadata over IPv6' => ['fd00:ec2::254', 'private_address'],
+    'this network' => ['0.0.0.0', 'private_address'],
+    'multicast' => ['224.0.0.1', 'private_address'],
+    'reserved' => ['240.0.0.1', 'private_address'],
+    'v4-mapped metadata' => ['::ffff:169.254.169.254', 'private_address'],
+    'NAT64 of the metadata' => ['64:ff9b::a9fe:a9fe', 'private_address'],
+]);
+
+it('refuses an address literal outside the private networks when private addresses are allowed', function () use ($refusal) {
+    config(['werkbuch.webhooks_allow_private' => true]);
+
+    expect($refusal('http://169.254.169.254/latest/meta-data')->reason)->toBe('private_address')
+        ->and($refusal('http://[fe80::1]/hook')->reason)->toBe('private_address');
+});
+
 it('still resolves when private addresses are allowed', function () use ($refusal) {
     config(['werkbuch.webhooks_allow_private' => true]);
 

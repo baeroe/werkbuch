@@ -10,8 +10,8 @@ use InvalidArgumentException;
 /**
  * The check before every attempt (spec 6.3, A368, K5): the URL read the way Guzzle sends it (`Psr7\Uri`, host in lower
  * case), `http` or `https`, no user, a host in the one form curl and Guzzle read alike (WebhookInput), then **every**
- * address of the name: one in a blocked network refuses the target while `webhooks_allow_private` is off; that switch
- * never spares the lookup. An address literal is checked as it is, without DNS.
+ * address of the name: one in a blocked network refuses the target; `webhooks_allow_private` spares only the private
+ * networks (A378) and never the lookup. An address literal is checked as it is, without DNS.
  */
 final class SafeTarget
 {
@@ -50,11 +50,10 @@ final class SafeTarget
         if ($addresses === []) {
             throw new UnsafeTarget(UnsafeTarget::UNRESOLVABLE, $host);
         }
-        if (! config('werkbuch.webhooks_allow_private')) {
-            foreach ($addresses as $address) {
-                if (Addresses::isBlocked($address)) {
-                    throw new UnsafeTarget(UnsafeTarget::PRIVATE_ADDRESS, $host);
-                }
+        $allowPrivate = (bool) config('werkbuch.webhooks_allow_private');
+        foreach ($addresses as $address) {
+            if (Addresses::isBlocked($address, $allowPrivate)) {
+                throw new UnsafeTarget(UnsafeTarget::PRIVATE_ADDRESS, $host);
             }
         }
 

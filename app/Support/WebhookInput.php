@@ -144,8 +144,9 @@ final class WebhookInput
             return 'field.url.invalid';
         }
 
+        $allowPrivate = (bool) config('werkbuch.webhooks_allow_private');
         $local = $host === 'localhost' || str_ends_with($host, '.localhost');
-        if (! config('werkbuch.webhooks_allow_private') && ($local || ($ip !== null && Addresses::isBlocked($ip)))) {
+        if (($local && ! $allowPrivate) || ($ip !== null && Addresses::isBlocked($ip, $allowPrivate))) {
             return 'field.url.private';
         }
 

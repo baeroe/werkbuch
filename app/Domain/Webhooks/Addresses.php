@@ -10,6 +10,11 @@ namespace App\Domain\Webhooks;
  * checked by that IPv4 address; the local NAT64 prefix `64:ff9b:1::/48` is blocked whole (it embeds the IPv4 address
  * around the u octet, K4).
  *
+ * `webhooks_allow_private` spares only the networks of PRIVATE (A378): private IPv4 networks, loopback, carrier-grade
+ * NAT, IPv6 loopback and unique local, without the metadata addresses of KEPT. Everything else stays blocked with it:
+ * the whole link-local networks (`169.254.0.0/16`, `fe80::/10`), `0.0.0.0/8`, `::`, multicast, reserved, documentation
+ * and benchmark networks, Teredo, the local NAT64 prefix; an embedded IPv4 address follows the same rule.
+ *
  * Only strict literals count as addresses (`inet_pton`): `127.1`, `0x7f.1`, `2130706433` or `[::1]` are none, though
  * curl reads some of them as 127.0.0.1 (K5), so they are blocked like anything that is no literal; so is a host with a
  * NUL byte (inet_pton would throw, T1-I1).
@@ -34,6 +39,22 @@ final class Addresses
     ];
 
     /**
+     * The networks `webhooks_allow_private` spares (A378), each also in IPV4 or IPV6.
+     *
+     * @var list<string>
+     */
+    public const PRIVATE = [
+        '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '127.0.0.0/8', '100.64.0.0/10', '::1/128', 'fc00::/7',
+    ];
+
+    /**
+     * The metadata addresses of clouds inside PRIVATE that stay blocked with `webhooks_allow_private` (A378).
+     *
+     * @var list<string>
+     */
+    public const KEPT = ['100.100.100.200/32', 'fd00:ec2::254/128'];
+
+    /**
      * The IPv6 networks that carry an IPv4 address, with the offset of its four bytes.
      *
      * @var array<string, int>
@@ -47,27 +68,32 @@ final class Addresses
     ];
 
     /**
-     * Whether a webhook must not reach the address; anything that is no address literal is blocked.
+     * Whether a webhook must not reach the address; anything that is no address literal is blocked. With
+     * `$allowPrivate` (the switch `webhooks_allow_private`) an address of PRIVATE outside KEPT is reached.
      */
-    public static function isBlocked(string $ip): bool
+    public static function isBlocked(string $ip, bool $allowPrivate = false): bool
     {
         $bytes = self::bytes($ip);
         if ($bytes === false) {
             return true;
         }
-        if (strlen($bytes) === 4) {
-            return self::inAny($bytes, self::IPV4);
-        }
-        if (self::inAny($bytes, self::IPV6)) {
-            return true;
-        }
-        foreach (self::EMBEDDING as $network => $offset) {
-            if (self::in($bytes, $network)) {
-                return self::inAny(substr($bytes, $offset, 4), self::IPV4);
+        if (strlen($bytes) === 16 && ! self::inAny($bytes, self::IPV6)) {
+            foreach (self::EMBEDDING as $network => $offset) {
+                if (self::in($bytes, $network)) {
+                    $bytes = substr($bytes, $offset, 4);
+                    break;
+                }
+            }
+            if (strlen($bytes) === 16) {
+                return false;
             }
         }
+        $networks = strlen($bytes) === 4 ? self::IPV4 : self::IPV6;
+        if (! self::inAny($bytes, $networks)) {
+            return false;
+        }
 
-        return false;
+        return ! $allowPrivate || ! self::inAny($bytes, self::PRIVATE) || self::inAny($bytes, self::KEPT);
     }
 
     /**
@@ -101,12 +127,15 @@ final class Addresses
     }
 
     /**
-     * Whether the address (bytes of `inet_pton`) lies in the network (`prefix/bits` of the same family).
+     * Whether the address (bytes of `inet_pton`) lies in the network (`prefix/bits`); never in one of the other family.
      */
     private static function in(string $bytes, string $network): bool
     {
         [$prefix, $bits] = explode('/', $network);
         $net = (string) inet_pton($prefix);
+        if (strlen($net) !== strlen($bytes)) {
+            return false;
+        }
         $whole = intdiv((int) $bits, 8);
         if (strncmp($bytes, $net, $whole) !== 0) {
             return false;

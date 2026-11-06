@@ -271,7 +271,7 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 **Liefert:**
 - `webhooks`, `webhook_deliveries`; Konfiguration aus 6.3 (Geheimnis verschlüsselt, einmal angezeigt, erneuerbar; Organisation oder Projekt; Ereignisse mit `gruppe.*`; optional ein Bot); Konsument `webhooks` mit Payload aus 6.3 und `data` aus den Resources.
 - Zustellung über spatie/laravel-webhook-server: Header `X-Werkbuch-Event`, `X-Werkbuch-Delivery`, `X-Werkbuch-Timestamp`, `X-Werkbuch-Signature: sha256=<HMAC über "timestamp.body">`, 10 s Timeout, keine Weiterleitungen, 8 Versuche über etwa 24 Stunden, Protokoll mit Antwort gekürzt auf 2 KB und Löschen nach 30 Tagen, Abschalten nach 24 Stunden ohne Erfolg mit Benachrichtigung der Org-Admins, „erneut senden“, Test-Ping.
-- SSRF: Prüfung bei jedem Versand nach der DNS-Auflösung, Anfrage an die geprüfte IP, gesperrt sind private, Loopback-, Link-local- und Metadata-Netze; `WEBHOOKS_ALLOW_PRIVATE=true` erlaubt private Netze und Loopback, Metadaten-Adressen bleiben gesperrt (A378); nie über einen ausgehenden Proxy (A368).
+- SSRF: Prüfung bei jedem Versand nach der DNS-Auflösung, Anfrage an die geprüfte IP, gesperrt sind private, Loopback-, Link-local- und Metadata-Netze; `WEBHOOKS_ALLOW_PRIVATE=true` erlaubt nur private Netze, CGNAT, Unique Local und Loopback (Positivliste `Addresses::PRIVATE`), ganz Link-local, die Metadaten-Adressen, `0/8`, Multicast und `240/4` bleiben gesperrt (A378); nie über einen ausgehenden Proxy (A368).
 - `bot.mentioned` und `bot.assigned`.
 - REST: `webhooks`, `webhooks/{id}/deliveries`, `…/redeliver`, `…/ping`, `…/rotate-secret`.
 - UI-Port: Einstellungen Webhooks mit Zustellungen.
