@@ -97,7 +97,8 @@ class WebhooksSeeder extends Seeder
             'name' => $row['name'],
             'url' => $row['url'],
             'secret' => Webhook::newSecret(),
-            'project_id' => $row['project'] === null ? null : Project::query()->where('identifier', $row['project'])->value('id'),
+            'project_id' => $row['project'] === null ? null
+                : (Project::query()->where('identifier', $row['project'])->value('id') ?? throw new RuntimeException("No project {$row['project']}.")),
             'events' => $row['events'],
             'bot_id' => $bot,
             'active' => $row['disabled'] === null,

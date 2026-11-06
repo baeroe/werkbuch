@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Event;
+use App\Models\Project;
 use App\Models\User;
 use App\Models\Webhook;
 use App\Models\WebhookAttempt;
@@ -164,3 +165,11 @@ it('fails clearly when the account of a webhook is missing', function () {
 
     $this->seed(WebhooksSeeder::class);
 })->throws(RuntimeException::class, 'No account @kira.');
+
+it('fails clearly when the project of a webhook is missing instead of making it an organization webhook (T11-M2)', function () {
+    $this->seed(DemoSeeder::class);
+    Webhook::query()->delete();
+    Project::query()->where('identifier', 'APP')->update(['identifier' => 'APX']);
+
+    $this->seed(WebhooksSeeder::class);
+})->throws(RuntimeException::class, 'No project APP.');
