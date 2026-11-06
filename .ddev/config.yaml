@@ -23,15 +23,19 @@ web_extra_exposed_ports:
   - { name: clickdummy, container_port: 5176, http_port: 5177, https_port: 5176 }
   - { name: reverb, container_port: 6001, http_port: 6002, https_port: 6001 }
 # each daemon waits until composer install and .env exist, so a fresh clone starts cleanly
-# two queue workers: `queue:listen` boots PHP for every job and takes the queues strictly in their order, and every
+# three queue workers: `queue:listen` boots PHP for every job and takes the queues strictly in their order, and every
 # event makes jobs for `default`, `live` and `notifications`; search and media in one worker after those starved
-# (search results and previews came minutes late), so they have a worker of their own
+# (search results and previews came minutes late), so they have a worker of their own; so do the webhooks, for a
+# receiver that hangs holds its worker up to 17 s per attempt (T16-M5)
 web_extra_daemons:
   - name: queue
-    command: bash -c 'until [ -f vendor/autoload.php ] && [ -f .env ]; do sleep 5; done; exec php artisan queue:listen --queue=default,live,notifications,webhooks,bulk --sleep=1 --tries=3'
+    command: bash -c 'until [ -f vendor/autoload.php ] && [ -f .env ]; do sleep 5; done; exec php artisan queue:listen --queue=default,live,notifications,bulk --sleep=1 --tries=3'
     directory: /var/www/html
   - name: queue-index
     command: bash -c 'until [ -f vendor/autoload.php ] && [ -f .env ]; do sleep 5; done; exec php artisan queue:listen --queue=search,media --sleep=1 --tries=3'
+    directory: /var/www/html
+  - name: queue-webhooks
+    command: bash -c 'until [ -f vendor/autoload.php ] && [ -f .env ]; do sleep 5; done; exec php artisan queue:listen --queue=webhooks --sleep=1 --tries=3'
     directory: /var/www/html
   - name: scheduler
     command: bash -c 'until [ -f vendor/autoload.php ] && [ -f .env ]; do sleep 5; done; exec php artisan schedule:work'

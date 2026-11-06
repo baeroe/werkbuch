@@ -33,8 +33,8 @@ return [
     // HTTP in jobs of their own). Off in tests (Tests\TestCase), where consumers() switches them on.
     'event_consumers' => [SearchConsumer::class, NotificationConsumer::class, LiveConsumer::class, WebhookConsumer::class],
 
-    // all queues of the app in the order the workers take them (A278): the DDEV daemons `queue` and `queue-index` split
-    // them (search and media apart, A301), so do the two workers of the CI, which leave out `webhooks` until phase 11
+    // all queues of the app in the order the workers take them (A278): the DDEV daemons `queue`, `queue-index` and
+    // `queue-webhooks` split them (search and media apart, A301; webhooks apart, T16-M5), so do the three workers of the CI
     'queues' => ['default', 'live', 'notifications', 'webhooks', 'search', 'media', 'bulk'],
 
     // requests per minute

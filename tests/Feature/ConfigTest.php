@@ -82,16 +82,17 @@ it('lists the queues in the worker\'s order', function () {
     expect(config('werkbuch.queues'))->toBe(['default', 'live', 'notifications', 'webhooks', 'search', 'media', 'bulk']);
 });
 
-it('works every queue in DDEV and the CI, search and media in a worker of their own (they starved behind the events)', function () {
+it('works every queue in DDEV and the CI, search and media and webhooks in workers of their own (they starved behind the events, a hanging receiver holds a worker)', function () {
     $workers = function (string $file): array {
         preg_match_all('/queue:(?:listen|work) --queue=([a-z,]+)/', (string) file_get_contents(repo_path($file)), $matches);
 
         return array_map(fn (string $list): array => explode(',', $list), $matches[1]);
     };
 
-    expect($workers('.ddev/config.yaml'))->toBe([['default', 'live', 'notifications', 'webhooks', 'bulk'], ['search', 'media']])
-        // the first worker of the CI hears `webhooks` as well (task 10), the other one stays with search and media
-        ->and($workers('.github/workflows/tests.yml'))->toBe([['default', 'live', 'notifications', 'webhooks', 'bulk'], ['search', 'media']])
+    expect($workers('.ddev/config.yaml'))->toBe([['default', 'live', 'notifications', 'bulk'], ['search', 'media'], ['webhooks']])
+        // `webhooks` in a worker of its own (T16-M5): a receiver that hangs holds it up to 17 s per attempt
+        ->and($workers('.github/workflows/tests.yml'))->toBe([['default', 'live', 'notifications', 'bulk'], ['search', 'media'], ['webhooks']])
+        ->and(array_merge(...$workers('.github/workflows/tests.yml')))->toEqualCanonicalizing(config('werkbuch.queues'))
         ->and(array_merge(...$workers('.ddev/config.yaml')))->toEqualCanonicalizing(config('werkbuch.queues'));
 });
 

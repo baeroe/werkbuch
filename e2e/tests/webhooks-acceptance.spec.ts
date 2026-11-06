@@ -10,9 +10,10 @@ import { startReceiver, type ReceivedRequest } from '../webhookReceiver';
 // its own with a webhook of that project (`E2E …`, removed in `finally`). Deliveries run through the queue: the spec waits
 // on the receiver and on the log, never on a fixed pause (K18).
 
-// longer than LIVE (K18 had 30 s): locally the queue `webhooks` comes last in `queue:listen` (behind default, live and
-// notifications, one PHP process per job), and after specs that make many events (items, inbox) its backlog of consumer
-// jobs held a delivery for more than 30 s; in CI (`queue:work`) it arrives within a second or two
+// longer than LIVE (K18 had 30 s): locally `queue:listen` starts PHP for every job, and after specs that make many events
+// (items, inbox) the backlog of consumer jobs in the queue `webhooks` (its own worker `queue-webhooks` since T16-M5;
+// before, it came last behind default, live and notifications) held a delivery for more than 30 s; in CI
+// (`queue:work`) it arrives within a second or two
 const WEBHOOK = 90_000;
 const name = (what: string) => `E2E webhook ${what} ${variant()} ${runId()}`;
 
