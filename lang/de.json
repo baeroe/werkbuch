@@ -1742,6 +1742,7 @@
     "settings.api.created_used": "Angelegt am :created, zuletzt benutzt am :used",
     "settings.api.docs.hint": "OpenAPI-Beschreibung dieser Instanz",
     "settings.api.docs.link": "API-Dokumentation",
+    "settings.api.docs.new_tab": "(öffnet in neuem Tab)",
     "settings.api.empty.create": "Ersten Token anlegen",
     "settings.api.empty.description": "Leg einen an, um einen MCP-Client oder ein Skript zu verbinden.",
     "settings.api.empty.title": "Noch keine Tokens",

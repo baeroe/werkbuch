@@ -217,12 +217,12 @@ test('asks before leaving an unsaved profile', async ({ browser }) => {
 test('links the api docs from api and mcp', async ({ browser }) => {
   await asSam(browser, async (page) => {
     await openSection(page, 'api');
-    const docs = page.getByRole('link', { name: tr('en', 'settings.api.docs.link') });
+    const docs = page.getByRole('link', { name: /\/api\/docs \(opens in a new tab\)$/ });
     await tabTo(page, docs);
     await expect(docs).toBeFocused();
     await expect(docs).toHaveAttribute('target', '_blank');
     await expect(docs).toHaveAttribute('rel', 'noopener');
-    const spec = page.getByRole('link', { name: /\/api\/openapi\.json$/ });
+    const spec = page.getByRole('link', { name: /\/api\/openapi\.json \(opens in a new tab\)$/ });
     for (const link of [docs, spec]) {
       const response = await page.request.get((await link.getAttribute('href'))!);
       expect(response.status()).toBe(200);

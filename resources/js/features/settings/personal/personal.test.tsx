@@ -736,11 +736,11 @@ describe('API & MCP', () => {
     renderSettings('api');
 
     const origin = window.location.origin;
-    const docs = screen.getByRole('link', { name: 'API-Dokumentation' });
+    const docs = screen.getByRole('link', { name: `${window.location.origin}/api/docs (öffnet in neuem Tab)` });
     expect(docs.getAttribute('href')).toBe(`${origin}/api/docs`);
     expect(docs.getAttribute('target')).toBe('_blank');
     expect(docs.getAttribute('rel')).toBe('noopener');
     expect(screen.getByText('OpenAPI-Beschreibung dieser Instanz')).toBeTruthy();
-    expect(screen.getByRole('link', { name: `${origin}/api/openapi.json` }).getAttribute('href')).toBe(`${origin}/api/openapi.json`);
+    expect(screen.getByRole('link', { name: `${origin}/api/openapi.json (öffnet in neuem Tab)` }).getAttribute('href')).toBe(`${origin}/api/openapi.json`);
   });
 });
