@@ -213,6 +213,16 @@ it('cuts the answer to 2 KB without breaking a character', function () use ($del
         ->and(mb_check_encoding($excerpt, 'UTF-8'))->toBeTrue();
 });
 
+it('logs a packed answer as its encoding and size, not as its bytes (T8-M1)', function () use ($deliver, $work, $attempts) {
+    $packed = (string) gzencode(str_repeat('{"ok":true}', 500));
+    Http::fake(['*' => Http::response($packed, 200, ['Content-Encoding' => 'gzip'])]);
+    $delivery = $deliver();
+
+    $work();
+
+    expect($attempts($delivery)->sole()->response_excerpt)->toBe('(gzip, '.strlen($packed).' bytes)');
+});
+
 it('never logs or stores the secret', function () use ($deliver, $work, $jobs) {
     $logged = [];
     Events::listen(MessageLogged::class, function (MessageLogged $message) use (&$logged) {

@@ -37,10 +37,11 @@ final class RecordWebhookAttempt
      * @param  string|null  $error  why there is no answer (`timeout: …`), ignored with one
      * @param  WebhookAttempt::SCHEDULED|WebhookAttempt::MANUAL|WebhookAttempt::PING  $kind
      * @param  bool  $final  whether it was the last try of the schedule
+     * @param  string|null  $encoding  the `Content-Encoding` of the answer: a packed one is logged by name and size
      */
-    public function handle(Actor $actor, string $deliveryId, ?int $status, int $durationMs, ?string $body, ?string $error, string $kind, bool $final = false): ?WebhookAttempt
+    public function handle(Actor $actor, string $deliveryId, ?int $status, int $durationMs, ?string $body, ?string $error, string $kind, bool $final = false, ?string $encoding = null): ?WebhookAttempt
     {
-        return DB::transaction(function () use ($actor, $deliveryId, $status, $durationMs, $body, $error, $kind, $final): ?WebhookAttempt {
+        return DB::transaction(function () use ($actor, $deliveryId, $status, $durationMs, $body, $error, $kind, $final, $encoding): ?WebhookAttempt {
             $webhookId = WebhookDelivery::query()->whereKey($deliveryId)->value('webhook_id');
             $webhook = is_string($webhookId) ? Webhook::query()->lockForUpdate()->find($webhookId) : null;
             $delivery = $webhook === null ? null : WebhookDelivery::query()->lockForUpdate()->find($deliveryId);
@@ -61,7 +62,7 @@ final class RecordWebhookAttempt
                 'kind' => $kind,
                 'status_code' => $status,
                 'duration_ms' => max(0, $durationMs),
-                'response_excerpt' => $status === null ? null : ResponseExcerpt::of($body),
+                'response_excerpt' => $status === null ? null : ResponseExcerpt::of($body, $encoding),
                 'error' => $status === null && $error !== null ? mb_substr($error, 0, self::ERROR_MAX) : null,
                 'attempted_at' => $now,
             ]);

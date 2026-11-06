@@ -170,7 +170,7 @@ When a webhook has failed for 24 hours (a scheduled attempt fails, and the first
 
 ## Delivery log
 
-**Deliveries** on a webhook shows every attempt, newest first: event, time, attempt number, the status code or "No answer", duration and the first 2 KB of the answer (cut at a whole character; a compressed answer is kept as it came). Without an answer, the reason shows instead:
+**Deliveries** on a webhook shows every attempt, newest first: event, time, attempt number, the status code or "No answer", duration and the first 2 KB of the answer (cut at a whole character; a compressed answer shows as its encoding and size, such as `(gzip, 50914 bytes)`). Without an answer, the reason shows instead:
 
 | Reason | Meaning |
 |---|---|

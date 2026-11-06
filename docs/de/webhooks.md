@@ -170,7 +170,7 @@ Ist ein Webhook 24 Stunden lang gescheitert (ein geplanter Versuch scheitert, un
 
 ## Zustellprotokoll
 
-**Zustellungen** an einem Webhook zeigt jeden Versuch, neueste zuerst: Ereignis, Zeit, Nummer des Versuchs, den Status-Code oder „Keine Antwort“, Dauer und die ersten 2 KB der Antwort (an einem ganzen Zeichen gekürzt; eine gepackte Antwort steht, wie sie kam). Ohne Antwort steht stattdessen der Grund:
+**Zustellungen** an einem Webhook zeigt jeden Versuch, neueste zuerst: Ereignis, Zeit, Nummer des Versuchs, den Status-Code oder „Keine Antwort“, Dauer und die ersten 2 KB der Antwort (an einem ganzen Zeichen gekürzt; eine gepackte Antwort steht als Verfahren und Größe, etwa `(gzip, 50914 bytes)`). Ohne Antwort steht stattdessen der Grund:
 
 | Grund | Bedeutung |
 |---|---|

@@ -121,7 +121,7 @@ final class DeliverWebhook extends CallWebhookJob
 
         try {
             $attempt = RecordWebhookAttempt::run($actor, $deliveryId, $this->response?->status(), $durationMs, $this->response?->body(),
-                $this->response === null ? $this->error() : null, $kind, $this->attempts() >= $this->tries);
+                $this->response === null ? $this->error() : null, $kind, $this->attempts() >= $this->tries, $this->response?->header('Content-Encoding'));
             if ($kind !== WebhookAttempt::SCHEDULED) {
                 self::$recorded[$deliveryId.':'.$kind] = $attempt;
             }
