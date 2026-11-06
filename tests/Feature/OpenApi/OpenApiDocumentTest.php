@@ -1,6 +1,7 @@
 <?php
 
 use App\Domain\Automations\AutomationKey;
+use App\Exceptions\Problem;
 use App\OpenApi\JsonSchema;
 use App\OpenApi\ProblemExceptionResponses;
 use App\OpenApi\Schemas;
@@ -262,4 +263,52 @@ it('has no empty schema', function () {
         ->and(Contract::emptySchemas($probe, null))->toContain('#/paths/~1loose/get/responses/200/content/application~1json/schema: empty schema')
         // the areas become strict task by task (Tasks 8–12); the strict ones have no empty schema
         ->and(Contract::emptySchemas(Document::get(), Contract::STRICT_TAGS))->toBe([]);
+});
+
+it('documents every reason the server can answer', function () {
+    $translations = json_decode((string) file_get_contents(base_path('lang/en.json')), true, flags: JSON_THROW_ON_ERROR);
+    $reasons = [];
+    foreach (array_keys($translations) as $key) {
+        if (str_starts_with($key, 'problem.reason.')) {
+            $reasons[] = substr($key, strlen('problem.reason.'));
+        }
+    }
+
+    $schema = Document::get()['components']['schemas']['Problem']['properties']['reason'];
+
+    expect($reasons)->not->toBeEmpty()
+        ->and($schema['enum'])->toBe($reasons)
+        ->and($schema['description'])->toContain('additively')
+        // the reasons a Problem can carry are exactly the translated ones
+        ->and($reasons)->toEqualCanonicalizing(Problem::REASONS)
+        ->and(Schemas::problemReasons())->toBe($reasons);
+});
+
+it('documents every extension of a problem', function () {
+    $found = [];
+    $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(base_path('app'), FilesystemIterator::SKIP_DOTS));
+
+    foreach ($files as $file) {
+        $path = str_replace(base_path('app').'/', '', $file->getPathname());
+        if ($file->getExtension() !== 'php' || str_starts_with($path, 'OpenApi/') || $path === 'Exceptions/Problem.php') {
+            continue;
+        }
+
+        $code = (string) file_get_contents($file->getPathname());
+        // Problem::conflict($reason, [extensions, ...]) and Problem::unprocessable($reason, $errors, [extensions, ...])
+        preg_match_all('/Problem::conflict\(\s*[\'"][a-z_]+[\'"],\s*\[\s*[\'"](\w+)[\'"]\s*=>/s', $code, $conflicts);
+        preg_match_all('/Problem::unprocessable\(\s*[\'"][a-z_]+[\'"],\s*\$\w+,\s*\[\s*[\'"](\w+)[\'"]\s*=>/s', $code, $unprocessable);
+        foreach ([...$conflicts[1], ...$unprocessable[1]] as $key) {
+            $found[$key] = $path;
+        }
+    }
+
+    $properties = Document::get()['components']['schemas']['Problem']['properties'];
+
+    // the scan reads the three extensions of this phase; a new one is found here before it is undocumented
+    expect(array_keys($found))->toEqualCanonicalizing(['current', 'projects', 'states', 'issues']);
+    foreach ($found as $key => $path) {
+        expect($properties)->toHaveKey($key);
+        expect($properties[$key]['description'])->not->toBeEmpty();
+    }
 });

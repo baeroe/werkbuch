@@ -19,6 +19,26 @@ use App\Domain\Views\SortSpec;
 final class Schemas
 {
     /**
+     * Every reason the server answers: the keys `problem.reason.*` of `lang/en.json` (the translated codes, which
+     * `Problem::REASONS` mirrors).
+     *
+     * @return list<string>
+     */
+    public static function problemReasons(): array
+    {
+        $translations = json_decode((string) file_get_contents(base_path('lang/en.json')), true, flags: JSON_THROW_ON_ERROR);
+        $reasons = [];
+
+        foreach (array_keys($translations) as $key) {
+            if (str_starts_with((string) $key, 'problem.reason.')) {
+                $reasons[] = substr((string) $key, strlen('problem.reason.'));
+            }
+        }
+
+        return $reasons;
+    }
+
+    /**
      * A Problem Details object (RFC 9457) as `App\Http\Api\ProblemResponse` writes it: the extensions of a `Problem`
      * (`current`, `states`, `projects`, `issues`, …) stand next to the fields.
      *
@@ -35,7 +55,12 @@ final class Schemas
                 'title' => ['type' => 'string', 'description' => 'The kind of problem, in the language of the account.'],
                 'status' => ['type' => 'integer', 'minimum' => 400, 'maximum' => 599, 'description' => 'The HTTP status.'],
                 'detail' => ['type' => 'string', 'description' => 'What went wrong, in the language of the account; a 404 never has one.'],
-                'reason' => ['type' => 'string', 'pattern' => '^[a-z0-9_]+$', 'description' => 'The stable code of the problem (`validation_failed`, `session_required`, …).'],
+                'reason' => [
+                    'type' => 'string',
+                    'enum' => self::problemReasons(),
+                    'description' => 'The stable code of the problem (`validation_failed`, `session_required`, …). Branch on it, not on `title` or `detail`. '
+                        .'New reasons are added additively: a client treats a code it does not know like the `status` it came with.',
+                ],
                 'errors' => [
                     'type' => 'object',
                     'description' => 'The messages per field (`title`, `values.effort`, `filter.conditions.0.op`).',
