@@ -26,6 +26,7 @@ use App\Models\Resolution;
 use App\Models\Template;
 use App\Models\User;
 use App\Models\View;
+use App\Models\Webhook;
 use App\Models\Workflow;
 use App\Models\WorkItem;
 use App\Models\WorkItemType;
@@ -322,4 +323,46 @@ it('leaves the demo automations off and the demo schedules paused (K9)', functio
     expect(Automation::query()->where('enabled', true)->count())->toBe(0)
         ->and(Template::query()->whereNotNull('next_run_at')->count())->toBe(0)
         ->and(Template::query()->whereNotNull('schedule')->get()->every(fn (Template $template) => $template->schedule()?->paused === true))->toBeTrue();
+});
+
+it('switches the demo webhooks off and drops notifications of gone webhooks (K8)', function () {
+    $this->seed(DemoSeeder::class);
+    $deploy = Webhook::query()->where('name', 'Deploy-Bot')->sole();
+    $mara = User::query()->where('handle', 'mara')->sole();
+    $gone = (new Notification)->forceFill([
+        'user_id' => $mara->id, 'kind' => NotificationKind::WebhookDisabled, 'data' => ['webhook_id' => 'gone', 'name' => 'E2E hook'],
+        'inbox' => true, 'dedupe_key' => 'e2e:gone', 'created_at' => now(), 'updated_at' => now(),
+    ]);
+    $gone->save();
+    $kept = (new Notification)->forceFill([
+        'user_id' => $mara->id, 'kind' => NotificationKind::WebhookDisabled, 'data' => ['webhook_id' => $deploy->id, 'name' => 'Deploy-Bot'],
+        'inbox' => true, 'dedupe_key' => 'e2e:kept', 'created_at' => now(), 'updated_at' => now(),
+    ]);
+    $kept->save();
+    $crm = Webhook::query()->where('name', 'Altes CRM')->sole();
+
+    $this->seed(E2eSeeder::class);
+
+    expect(Webhook::query()->where('active', true)->count())->toBe(0)
+        ->and(Webhook::query()->count())->toBe(3)
+        // the switch of the admins only: the system's mark stays as it was
+        ->and(Webhook::query()->whereKey($crm->id)->sole()->disabled_at?->toIso8601String())->toBe($crm->disabled_at?->toIso8601String())
+        ->and(Webhook::query()->whereKey($deploy->id)->sole()->disabled_at)->toBeNull()
+        ->and(Notification::query()->whereKey($gone->id)->exists())->toBeFalse()
+        ->and(Notification::query()->whereKey($kept->id)->exists())->toBeTrue()
+        // the seeded n_10 names the CRM, which is still there
+        ->and(Notification::query()->where('dedupe_key', 'seed:n_10')->exists())->toBeTrue();
+});
+
+it('removes the webhooks of earlier runs through the delete action', function () {
+    $this->seed(DemoSeeder::class);
+    $erik = User::factory()->admin()->create();
+    Webhook::factory()->create(['name' => 'E2E Empfänger', 'created_by' => $erik->id]);
+    Webhook::factory()->create(['name' => 'Other', 'created_by' => $erik->id]);
+
+    $this->seed(E2eSeeder::class);
+
+    expect(Webhook::query()->where('name', 'like', 'E2E %')->count())->toBe(0)
+        ->and(Webhook::query()->where('name', 'Other')->count())->toBe(1)
+        ->and(eventsOf(EventType::WebhookDeleted)->map(fn ($e) => $e->meta['name'])->all())->toBe(['E2E Empfänger']);
 });

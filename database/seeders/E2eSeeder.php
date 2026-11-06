@@ -11,6 +11,7 @@ use App\Actions\Properties\DeleteProperty;
 use App\Actions\RelationTypes\DeleteRelationType;
 use App\Actions\Resolutions\DeleteResolution;
 use App\Actions\Views\DeleteView;
+use App\Actions\Webhooks\DeleteWebhook;
 use App\Actions\Workflows\DeleteWorkflow;
 use App\Actions\WorkItemTypes\DeleteWorkItemType;
 use App\Domain\Notifications\NotificationKind;
@@ -30,6 +31,7 @@ use App\Models\Resolution;
 use App\Models\Template;
 use App\Models\User;
 use App\Models\View;
+use App\Models\Webhook;
 use App\Models\Workflow;
 use App\Models\WorkItemType;
 use App\Search\SearchIndexer;
@@ -41,8 +43,8 @@ use RuntimeException;
 
 /**
  * The demo data plus the accounts of the Playwright tests (e2e/), set back to their start state on every run, without
- * the open invitations, the projects (with their items, comments and files), the uploads nobody owns, the views and
- * the catalog entries earlier runs left behind, and with the inbox accounts empty. The organization speaks English
+ * the open invitations, the projects (with their items, comments and files), the uploads nobody owns, the views, the
+ * webhooks and the catalog entries earlier runs left behind, and with the inbox accounts empty. The organization speaks English
  * here (the specs read the English texts); the demo data alone keep German. The automations of the demo projects are
  * off and their templates paused (K9). Never for production.
  */
@@ -95,6 +97,20 @@ class E2eSeeder extends Seeder
 
         // the invitations of earlier runs: the lists of the specs stay short, and a run never meets an old link
         Invitation::query()->whereNull('accepted_at')->where('email', 'like', '%@example.com')->delete();
+
+        // the webhooks earlier runs created (all named "E2E …"), through the delete action: before their projects go
+        Webhook::query()->where('name', 'like', self::PROJECT_PREFIX.'%')->each(fn (Webhook $webhook) => DeleteWebhook::run(Actor::automation('e2e_reset'), $webhook));
+
+        // the demo webhooks stay off here (K8): the queue of DDEV would send every state change of every spec to hosts
+        // that do not exist, and the system would switch "Deploy-Bot" off after a day and tell the org admins; only the
+        // switch of the admins moves (`disabled_at` is the system's mark), `migrate:fresh` brings them back
+        Webhook::query()->where('name', 'not like', self::PROJECT_PREFIX.'%')->toBase()->update(['active' => false]);
+        // what the system told about a webhook that is gone since (the specs switch their own off every run)
+        Notification::query()->where('kind', NotificationKind::WebhookDisabled)->each(function (Notification $notification): void {
+            if (! Webhook::query()->whereKey($notification->data['webhook_id'] ?? null)->exists()) {
+                $notification->delete();
+            }
+        });
 
         // the projects earlier runs created (all named "E2E …"), with their identifiers: the suggestions of the dialog
         // start from the same free identifiers in every run
