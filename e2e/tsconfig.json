@@ -9,6 +9,8 @@
     "noEmit": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
+    // the snippets of the docs (docs/snippets) are JavaScript with JSDoc types; the acceptance imports them
+    "allowJs": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "types": ["node"]

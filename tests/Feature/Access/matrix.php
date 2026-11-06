@@ -178,7 +178,6 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Laravel\Fortify\Actions\EnableTwoFactorAuthentication;
 use PragmaRX\Google2FA\Google2FA;
-use RuntimeException;
 use Tests\Feature\Access\MatrixWorld;
 use Tests\Support\WorkflowFixtures;
 
