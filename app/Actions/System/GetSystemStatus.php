@@ -7,6 +7,7 @@ use App\Models\Organization;
 use App\Search\ReportsStatus;
 use App\Support\Actor;
 use App\Support\MailSetup;
+use App\Support\QueuedJobs;
 use App\Support\Redact;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Client\ConnectionException;
@@ -93,16 +94,11 @@ final class GetSystemStatus
     }
 
     /**
-     * The jobs of the database queue that no worker holds: never reserved, or reserved longer ago than `retry_after`
-     * (its worker is gone, the next one takes it again).
+     * The jobs of the database queue that no worker holds (QueuedJobs).
      */
     private function jobs(): Builder
     {
-        $expired = now()->getTimestamp() - (int) config('queue.connections.database.retry_after');
-
-        return DB::connection(config('queue.connections.database.connection'))
-            ->table(config('queue.connections.database.table'))
-            ->where(fn (Builder $free) => $free->whereNull('reserved_at')->orWhere('reserved_at', '<=', $expired));
+        return QueuedJobs::free();
     }
 
     /**

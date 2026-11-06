@@ -183,7 +183,7 @@ Ist ein Webhook 24 Stunden lang gescheitert (ein geplanter Versuch scheitert, un
 | `timeout` | Keine Antwort binnen 10 Sekunden |
 | `connection` | Die Verbindung ist gescheitert |
 
-Ein Fehlertext maskiert Benutzer, Passwort und Query jeder URL darin, aber nicht den Pfad: ein Empfänger, der sein Token im Pfad trägt wie Slack und Discord, zeigt es Org-Admins im Protokoll. Zustellungen und ihre Versuche werden 30 Tage nach ihrer letzten Änderung gelöscht. Eine Zustellung, die nach 48 Stunden noch wartet (ihr Job ging verloren, ein Worker ist ausgefallen), wird `failed`.
+Ein Fehlertext maskiert Benutzer, Passwort und Query jeder URL darin, aber nicht den Pfad: ein Empfänger, der sein Token im Pfad trägt wie Slack und Discord, zeigt es Org-Admins im Protokoll. Zustellungen und ihre Versuche werden 30 Tage nach ihrer letzten Änderung gelöscht. Eine Zustellung, die 36 Stunden nach ihrem letzten Versuch noch wartet (ihr Job ging verloren), wird `failed`, aber nie, solange die Queue `webhooks` noch fällige Jobs hält: nach einem Ausfall des Workers gehen ihre wartenden Versuche noch raus.
 
 ## Test-Ping und erneut senden
 
