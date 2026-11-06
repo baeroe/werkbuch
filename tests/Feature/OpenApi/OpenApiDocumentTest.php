@@ -276,9 +276,14 @@ it('documents every reason the server can answer', function () {
 
     $schema = Document::get()['components']['schemas']['Problem']['properties']['reason'];
 
+    // the known reasons as an enum, and any other string beside it: a reason added later never breaks a generated client
     expect($reasons)->not->toBeEmpty()
-        ->and($schema['enum'])->toBe($reasons)
+        ->and(array_keys($schema))->toBe(['description', 'anyOf'])
         ->and($schema['description'])->toContain('additively')
+        ->and($schema['anyOf'])->toHaveCount(2)
+        ->and($schema['anyOf'][0])->toBe(['type' => 'string', 'enum' => $reasons])
+        ->and(array_keys($schema['anyOf'][1]))->toBe(['type', 'description'])
+        ->and($schema['anyOf'][1]['type'])->toBe('string')
         // the reasons a Problem can carry are exactly the translated ones
         ->and($reasons)->toEqualCanonicalizing(Problem::REASONS)
         ->and(Schemas::problemReasons())->toBe($reasons);

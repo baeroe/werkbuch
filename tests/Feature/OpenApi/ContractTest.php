@@ -292,6 +292,18 @@ it('is strict for the account areas of the real document (Task 8)', function () 
     expect(Contract::STRICT_TAGS)->toContain('Organization', 'Users', 'Bots', 'Invitations', 'Tokens', 'Me', 'Password', 'TwoFactor');
 });
 
+it('takes a problem with a reason the document does not know yet', function () use ($exchange) {
+    // `reason` names the known reasons and takes any other string (a reason added later); it is still a string
+    $problem = fn (string $reason) => ['type' => "urn:werkbuch:problem:{$reason}", 'title' => 'Not Found', 'status' => 404];
+    $exchange('GET', 'organization', 404, [...$problem('a_reason_from_the_future'), 'reason' => 'a_reason_from_the_future'], null, 'application/problem+json');
+    $exchange('GET', 'organization', 404, [...$problem('not_found'), 'reason' => 'not_found'], null, 'application/problem+json');
+    expect(Contract::violations())->toBe([]);
+
+    $exchange('GET', 'organization', 404, [...$problem('not_found'), 'reason' => 404], null, 'application/problem+json');
+    expect(Contract::violations())->toHaveCount(1)
+        ->and(Contract::violations()[0])->toStartWith('GET /organization 404: /reason: ');
+});
+
 it('keeps which keys the successful requests of an operation sent (K15)', function () use ($document, $exchange) {
     Contract::using($document([]));
 

@@ -56,10 +56,13 @@ final class Schemas
                 'status' => ['type' => 'integer', 'minimum' => 400, 'maximum' => 599, 'description' => 'The HTTP status.'],
                 'detail' => ['type' => 'string', 'description' => 'What went wrong, in the language of the account; a 404 never has one.'],
                 'reason' => [
-                    'type' => 'string',
-                    'enum' => self::problemReasons(),
                     'description' => 'The stable code of the problem (`validation_failed`, `session_required`, …). Branch on it, not on `title` or `detail`. '
-                        .'New reasons are added additively: a client treats a code it does not know like the `status` it came with.',
+                        .'New reasons are added additively: a client treats a code it does not know like the `type`, `title` and `status` it came with.',
+                    // the known reasons, and any other string: a reason added later never breaks a client generated from this version
+                    'anyOf' => [
+                        ['type' => 'string', 'enum' => self::problemReasons()],
+                        ['type' => 'string', 'description' => 'A reason added after this version of the document.'],
+                    ],
                 ],
                 'errors' => [
                     'type' => 'object',
