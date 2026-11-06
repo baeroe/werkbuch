@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Actions\Webhooks\PrepareWebhookAttempt;
 use App\Actions\Webhooks\RecordWebhookAttempt;
 use App\Domain\Webhooks\Addresses;
+use App\Domain\Webhooks\Backoff;
 use App\Domain\Webhooks\Signature;
 use App\Models\User;
 use App\Models\WebhookAttempt;
@@ -128,6 +129,17 @@ final class DeliverWebhook extends CallWebhookJob
             // a lost log line is better than a second request (K2): the delivery stays pending, the pruning finishes it
             report($exception);
         }
+    }
+
+    /**
+     * The pauses of the worker after a try that threw before it was sent (T7-M5: the database, a secret it cannot
+     * decrypt): the same as after a failed request (spatie releases those itself with WebhookBackoff), not at once.
+     *
+     * @return list<int>
+     */
+    public function backoff(): array
+    {
+        return array_map(fn (int $attempt): int => Backoff::delayAfter($attempt), range(1, 7));
     }
 
     public function getWebhookUrl(): string

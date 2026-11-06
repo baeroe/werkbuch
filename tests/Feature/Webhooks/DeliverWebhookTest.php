@@ -452,3 +452,9 @@ it('refuses an answer from an address it did not check (K5)', function () {
 
     expect(fn () => $onStats($stats('10.0.0.7')))->toThrow(PinnedAddressNotUsed::class, 'pinned address not used');
 });
+
+it('pauses as the back-off after a try that threw before it sent (T7-M5)', function () {
+    // an exception out of PrepareWebhookAttempt (the database, a secret it cannot decrypt) leaves the job to the worker,
+    // which waits as backoff() says instead of using up the eight tries at once
+    expect((new DeliverWebhook)->backoff())->toBe(array_map(fn (int $attempt) => Backoff::delayAfter($attempt), range(1, 7)));
+});
