@@ -11,7 +11,7 @@ const description = 'Open, self-hosted project management: work items with your 
 // every page exists in docs/en and docs/de under the same path (tests/Unit/DocsTest.php); later phases add theirs
 const groups: { title: string; pages: string[] }[] = [
     { title: 'guide', pages: ['development', 'keyboard'] },
-    { title: 'concepts', pages: ['concepts/permissions', 'concepts/projects', 'concepts/workflows', 'concepts/types-and-properties', 'concepts/work-items', 'concepts/rich-text', 'concepts/wiki', 'concepts/views', 'concepts/templates', 'concepts/automations', 'concepts/notifications', 'search', 'bots'] },
+    { title: 'concepts', pages: ['concepts/permissions', 'concepts/projects', 'concepts/workflows', 'concepts/types-and-properties', 'concepts/work-items', 'concepts/rich-text', 'concepts/wiki', 'concepts/views', 'concepts/templates', 'concepts/automations', 'concepts/notifications', 'search', 'bots', 'webhooks'] },
 ];
 
 const sidebar = (prefix: string, t: Record<string, string>): DefaultTheme.SidebarItem[] =>
@@ -35,6 +35,7 @@ const en: Record<string, string> = {
     'concepts/notifications': 'Notifications',
     search: 'Search',
     bots: 'Bots',
+    webhooks: 'Webhooks',
 };
 
 const de: Record<string, string> = {
@@ -55,6 +56,7 @@ const de: Record<string, string> = {
     'concepts/notifications': 'Benachrichtigungen',
     search: 'Suche',
     bots: 'Bots',
+    webhooks: 'Webhooks',
 };
 
 export default defineConfig({

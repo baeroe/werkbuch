@@ -14,7 +14,7 @@ werkbuch tells people about the work that concerns them: in the **inbox** of the
 | Due or overdue | The person an item is assigned to, every morning (see [Reminders](#reminders)) | on |
 | New item in the project | Only the lead of the project | off |
 | Template failed | The lead of the project and the author of the template, when a run on the schedule or with **Run now** fails (see [templates](/en/concepts/templates#errors-and-the-log)) | off |
-| Webhook switched off | Org admins; comes with webhooks (a later phase) | off |
+| Webhook switched off | Every active org admin, when the system switches off a [webhook](/en/webhooks#switched-off-and-on-again) that failed for 24 hours | off |
 
 Who watches an item is explained under [Work items](/en/concepts/work-items#watching). On top of that:
 
@@ -46,7 +46,7 @@ An excerpt always comes from the current text: an edited comment shows its new w
 
 ## Mail
 
-- **Collected.** Notifications about one item are collected for `NOTIFICATION_MAIL_DELAY` minutes (5 by default) and then go out as one mail per person and item, the oldest first. Its subject is `[WEB-47] Title of the item`, the footer links to the notification settings. Failed runs of a template are collected per template instead: the subject names the project and the template, the button leads to the template.
+- **Collected.** Notifications about one item are collected for `NOTIFICATION_MAIL_DELAY` minutes (5 by default) and then go out as one mail per person and item, the oldest first. Its subject is `[WEB-47] Title of the item`, the footer links to the notification settings. Failed runs of a template are collected per template instead: the subject names the project and the template, the button leads to the template. A webhook switched off has a mail of its own (subject `Webhook “…” switched off`), whose button leads to its deliveries; in the inbox, the row leads there too.
 - **In your language,** the language of your profile, else that of the organization; times are in your time zone.
 - **Comments and mentions** come with their current text. Links stay links, pictures and files appear as links to werkbuch; a mail never has attachments or embedded pictures. A long text is cut with **Read more**.
 - **Checked when sending.** Right before the mail goes out, werkbuch checks every line again: the account is active, it still sees the project, the item exists, the notification is still unread and mail is still on for that event. What you read in the inbox in the meantime is not mailed. When nothing is left, no mail goes out.
@@ -73,7 +73,7 @@ Lists, boards, tables and timelines, the item page and the preview (fields, comm
 - **Losing access cuts the connection.** When you are removed from a project, a project turns private, your org role goes from admin to member or your account is deactivated, werkbuch closes your live connections. The browser connects again and asks for every channel anew; a project you no longer see is refused, and its lists and pages reload and show what you may still see.
 - **No connection.** When the browser has had no connection for 3 seconds, a banner says "Live updates paused" with **Reload**. When the connection comes back, the pages load what they missed.
 
-Live updates run over [Reverb](https://reverb.laravel.com) with WebSockets. The browser connects to `REVERB_HOST`, `REVERB_PORT` and `REVERB_SCHEME`, which it gets from the page at runtime; Reverb itself listens on `REVERB_SERVER_HOST` and `REVERB_SERVER_PORT`. A reverse proxy in front of werkbuch has to pass WebSockets through (in Nginx Proxy Manager the switch "Websockets Support"); otherwise the banner stays. A queue worker has to listen on the queue `live`. When a message does not reach Reverb, werkbuch sends none for 30 seconds and does not try again (the log gets the error at most every 10 minutes); the browsers load what they missed when they connect again. Without Reverb (`BROADCAST_CONNECTION` other than `reverb`), the browser does not connect and shows no banner; pages then update when they load next. Live updates belong to the session of the interface; REST and MCP clients hear about changes through webhooks (a later phase).
+Live updates run over [Reverb](https://reverb.laravel.com) with WebSockets. The browser connects to `REVERB_HOST`, `REVERB_PORT` and `REVERB_SCHEME`, which it gets from the page at runtime; Reverb itself listens on `REVERB_SERVER_HOST` and `REVERB_SERVER_PORT`. A reverse proxy in front of werkbuch has to pass WebSockets through (in Nginx Proxy Manager the switch "Websockets Support"); otherwise the banner stays. A queue worker has to listen on the queue `live`. When a message does not reach Reverb, werkbuch sends none for 30 seconds and does not try again (the log gets the error at most every 10 minutes); the browsers load what they missed when they connect again. Without Reverb (`BROADCAST_CONNECTION` other than `reverb`), the browser does not connect and shows no banner; pages then update when they load next. Live updates belong to the session of the interface; REST and MCP clients hear about changes through [webhooks](/en/webhooks).
 
 ## REST
 
@@ -117,7 +117,7 @@ curl -H "Authorization: Bearer <token>" \
 }
 ```
 
-`event` is one of `assigned`, `mentioned`, `comment`, `state_changed`, `item_changed`, `due`, `item_created`, `template_run_failed`, `webhook_disabled`. `data` holds only ids and names of fields: `{source, comment_id}` for a mention, `{comment_id}` for a comment, `{from, to}` (the states as they were called) for a state change, `{fields}` for other changes, `{due_date, overdue}` for a reminder, `{template_id, error}` for a failed template (its `item` is `null`). `mailed_at` is when the mail with this notification went out, `item` the item in the short form of lists.
+`event` is one of `assigned`, `mentioned`, `comment`, `state_changed`, `item_changed`, `due`, `item_created`, `template_run_failed`, `webhook_disabled`. `data` holds only ids and names of fields: `{source, comment_id}` for a mention, `{comment_id}` for a comment, `{from, to}` (the states as they were called) for a state change, `{fields}` for other changes, `{due_date, overdue}` for a reminder, `{template_id, error}` for a failed template (its `item` is `null`), `{webhook_id, name}` for a webhook switched off (without project and item). `mailed_at` is when the mail with this notification went out, `item` the item in the short form of lists.
 
 Mark a notification as read, or all mentions at once:
 

@@ -55,6 +55,8 @@ Reverb serves the live updates on port 6001 (`REVERB_*` in `.env`; the browser g
 
 Uploaded files land on the private disk `local` (`storage/app/private`), never in `public/`. One file may be at most `ATTACHMENTS_MAX_MB` (25 MB by default). PHP has its own limits in front of that, `upload_max_filesize` and `post_max_size`; they must be above `ATTACHMENTS_MAX_MB`, otherwise PHP drops a large file before werkbuch can name the limit. DDEV allows 100 MB, the CI sets 30 MB and 32 MB. A file over either limit is a `413` with `reason: payload_too_large`. More under [rich text](/en/concepts/rich-text#images-and-files).
 
+Webhooks go out on the queue `webhooks` of the worker `queue`. `.ddev/config.yaml` sets `WEBHOOKS_ALLOW_PRIVATE=true` (`web_environment`), so a webhook may point at a receiver in the private network or on your machine. DDEV hands that to PHP as a real environment variable, which `.env` never overrides: to try the block of private networks, change the line in `.ddev/config.yaml` and run `ddev restart`; the tests force it off themselves. A receiver on your Mac that listens on `127.0.0.1` is reached from the container as `http://host.docker.internal:<port>/` (checked with `ddev exec curl http://host.docker.internal:<port>/hook`); listen on the loopback, not on `0.0.0.0`, or the macOS firewall asks and the port is open to the network. The e2e specs start such a receiver themselves (`e2e/webhookReceiver.ts`, `E2E_WEBHOOK_HOST`). The demo webhooks of the `DemoSeeder` fire in DDEV too, at hosts that do not exist; after a day with events the system switches "Deploy-Bot" off and tells the org admins, as in the clickable prototype. `ddev artisan migrate:fresh --seed --seeder=DemoSeeder` brings them back, and the e2e seeder switches them off. More under [webhooks](/en/webhooks).
+
 ## Tests and checks
 
 Every check runs inside DDEV, so the versions match the CI.
@@ -83,7 +85,7 @@ pnpm --dir e2e test                          # seeds the e2e data, then runs the
 ddev exec pnpm coverage:merge                # Vitest and Playwright together: 100 % lines over resources/js
 ```
 
-The CI job `e2e` runs the same suite against `php artisan serve` with MariaDB, Meilisearch and Mailpit as services, Reverb on port 8080 (`e2e/ci.env`) and two workers, one on `default,live,notifications,bulk` and one on `search,media`. Live specs need Reverb and the queue `live`; without them, the banner "Live updates paused" shows and the specs wait in vain.
+The CI job `e2e` runs the same suite against `php artisan serve` with MariaDB, Meilisearch and Mailpit as services, Reverb on port 8080 (`e2e/ci.env`) and two workers, one on `default,live,notifications,webhooks,bulk` and one on `search,media`. Live specs need Reverb and the queue `live`; without them, the banner "Live updates paused" shows and the specs wait in vain.
 
 The frontend must be covered to 100 % lines by Vitest and Playwright together. After the Playwright run, `coverage:merge` fails below that. Run `ddev exec pnpm build` afterwards to leave an uninstrumented build behind.
 

@@ -2,7 +2,7 @@
 
 A bot is an account for a script or an AI agent. It has no login and no password. It works through tokens, over the REST API and, later, over MCP. Otherwise it behaves like a person: it can be a member of projects, get items assigned and appears in the history under its own name. The interface calls every bot "Bot", even when it belongs to a person.
 
-This page covers the basics. How to run an agent with a bot comes with the MCP server, in a later phase.
+This page covers the basics and how a [webhook](/en/webhooks#agents) wakes an agent. Working through MCP comes with the MCP server, in a later phase.
 
 ## Create a bot
 
@@ -13,7 +13,7 @@ Only org admins create bots: **Settings → Bots → Create bot**.
 - **Description** says what the bot is for, so others know why it exists.
 - **Responsible person** is the person to turn to when the bot does something unexpected. By default that is you.
 
-Bots have no e-mail address, and they get no notifications. A bot cannot be the lead of a project; the lead is always a person.
+Bots have no e-mail address, and they get no notifications; mentioning a bot or assigning it an item sends the webhook events `bot.mentioned` and `bot.assigned` instead (see below). A bot cannot be the lead of a project; the lead is always a person.
 
 ## Give it access
 
@@ -26,6 +26,12 @@ A bot works with a token. Only org admins create tokens for bots: open the bot i
 The abilities are `read`, `write` and `mcp`; see [roles and permissions](/en/concepts/permissions#tokens). Give a bot only what its job needs, and one token per script, so you can revoke them one by one. Tokens can only be created from the interface, not with another token.
 
 Deactivating a bot deletes all its tokens. Activating it again does not bring them back.
+
+## Wake an agent
+
+An agent learns about its work through a [webhook](/en/webhooks) that is set to **Only for one bot**. Such a webhook gets `bot.assigned` when someone else assigns an item to the bot (a bot that takes an item itself gets none), `bot.mentioned` when someone mentions it with `@handle`, and the changes and comments of items assigned to it, each with the item in `data`. It gets them only while the bot is active and sees the project: remove the bot from a private project, and its webhook hears nothing more from there. Like everything else, `data` is written for the bot, so it never names an item the bot may not see.
+
+The agent then works with a token of its bot over REST: it reads the item, comments and sets the state. MCP follows in a later phase.
 
 ## The default bot
 
