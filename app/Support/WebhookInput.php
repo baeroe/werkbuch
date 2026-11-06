@@ -23,8 +23,9 @@ use InvalidArgumentException;
  * one form curl and Guzzle read alike (K5): a DNS name of ASCII letters, digits, `-` and `_` without a trailing dot, a
  * strict dotted quad or an IPv6 literal in brackets. A host whose last label is a number (`127.1`, `2130706433`,
  * `0x7f.1`) is no dotted quad, a host with a non-ASCII letter is refused (not converted to punycode), a backslash
- * anywhere is refused. An address literal in a blocked network and `localhost` with the names below it are refused
- * while `webhooks_allow_private` is off; a name is never resolved here, the addresses are checked before every attempt.
+ * anywhere is refused. An address literal in a blocked network and `localhost` with the names below it are refused;
+ * `webhooks_allow_private` spares only the private networks (A378, `Addresses::isBlocked`), link-local, metadata and the
+ * other blocked networks stay refused. A name is never resolved here, the addresses are checked before every attempt.
  */
 final class WebhookInput
 {
