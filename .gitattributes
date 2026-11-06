@@ -9,3 +9,6 @@
 /.github export-ignore
 CHANGELOG.md export-ignore
 .styleci.yml export-ignore
+
+# checked in third-party builds (Stoplight Elements): byte for byte as published, never normalised or diffed
+/public/vendor/** -text -diff
