@@ -288,8 +288,18 @@ it('counts only the operations of the strict tags', function () use ($document, 
         ->and(Contract::violations()[0])->toStartWith('GET /strict 200: ');
 });
 
-it('is strict for the account areas of the real document (Task 8)', function () {
-    expect(Contract::STRICT_TAGS)->toContain('Organization', 'Users', 'Bots', 'Invitations', 'Tokens', 'Me', 'Password', 'TwoFactor');
+it('holds every operation of the real document, without a list of strict tags (Task 14)', function () use ($exchange) {
+    // Tasks 8–12 made the areas strict one by one; since Task 14 the generated document has no loose operation
+    expect((new ReflectionClass(Contract::class))->hasConstant('STRICT_TAGS'))->toBeFalse();
+
+    $exchange('GET', 'organization', 418);
+    $exchange('GET', 'organization', 200, ['data' => ['id' => 'x']]);
+
+    expect(Contract::violations())->toHaveCount(2)
+        ->sequence(
+            fn ($line) => $line->toBe('GET /organization 418: status is not documented'),
+            fn ($line) => $line->toStartWith('GET /organization 200: /data: '),
+        );
 });
 
 it('takes a problem with a reason the document does not know yet', function () use ($exchange) {

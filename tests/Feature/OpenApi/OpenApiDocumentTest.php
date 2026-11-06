@@ -214,12 +214,12 @@ it('turns the exceptions Scramble infers into problems, not into Laravel shapes'
         ->and(array_keys($registry->responses))->toBe(['Problem401', 'Problem403', 'Problem404', 'Problem422']);
 });
 
-it('names only tags of the document as strict', function () {
-    // a strict tag the document does not have makes no operation strict (Scramble names a tag after its controller)
-    $tags = collect(Document::operations())->flatMap(fn (array $operation) => $operation['tags'] ?? [])->unique()->values()->all();
+it('gives every operation a tag', function () {
+    // Scramble names a tag after the controller; the documentation groups the operations by it
+    $untagged = collect(Document::operations())->filter(fn (array $operation) => ($operation['tags'] ?? []) === [])->keys()->all();
 
-    expect($tags)->toContain('Labels', 'WorkItems')
-        ->and(array_values(array_diff(Contract::STRICT_TAGS, $tags)))->toBe([]);
+    expect($untagged)->toBe([])
+        ->and(collect(Document::operations())->flatMap(fn (array $operation) => $operation['tags'])->unique()->values()->all())->toContain('Labels', 'WorkItems');
 });
 
 it('has no empty schema', function () {
@@ -261,8 +261,8 @@ it('has no empty schema', function () {
         '#/paths/~1things/post/requestBody/content/application~1json/schema: object without properties',
     ])
         ->and(Contract::emptySchemas($probe, null))->toContain('#/paths/~1loose/get/responses/200/content/application~1json/schema: empty schema')
-        // the areas become strict task by task (Tasks 8–12); the strict ones have no empty schema
-        ->and(Contract::emptySchemas(Document::get(), Contract::STRICT_TAGS))->toBe([]);
+        // every operation of the document is strict (Task 14), none has an empty schema
+        ->and(Contract::emptySchemas(Document::get(), null))->toBe([]);
 });
 
 it('documents every reason the server can answer', function () {

@@ -43,7 +43,7 @@ use Tests\Support\ScriptedTransport;
  *      answer back as read-only (A75); the schedule alone is closed, its parser refuses an unknown key,
  *  (d) a client can send every key the document names (a full request per operation, `Contract::sentKeys`, K15),
  *  (e) the descriptions say what the server does: the conflict, the secret shown once, the limit of sending.
- * The answers themselves are held against the document by the contract of every test (STRICT_TAGS).
+ * The answers themselves are held against the document by the contract of every test.
  */
 
 $tags = ['Pages', 'PageVersions', 'Templates', 'Notifications', 'NotificationPreferences', 'System', 'Webhooks'];

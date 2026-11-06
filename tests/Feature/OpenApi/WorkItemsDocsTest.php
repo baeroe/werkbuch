@@ -38,7 +38,7 @@ use Tests\Support\OpenApi\Document;
  *  (a) every operation, its success status and its tag are the ones the server answers,
  *  (b) the resources say what they hold: a lean item without its texts, the free keys of `values`, the embeds of
  *      `include`, a relation entry and a history entry; a full and a lean item with `null` in every nullable field keep
- *      the contract (the contract of every test checks the answers, STRICT_TAGS),
+ *      the contract (the contract of every test checks the answers),
  *  (c) the keys of a body and of the short form are the ones the server reads (BODY_KEYS, GroupWorkItems::KEYS,
  *      CountWorkItems::KEYS, PATCH_KEYS, Shorthand::KEYS, the FIELDS of the actions); a body is closed only where the
  *      action refuses unknown keys (K2); `Filter`, `Display` and `SortSpec` name what the schemas take (Op, CoreField),

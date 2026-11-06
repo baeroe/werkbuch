@@ -22,7 +22,7 @@ use Tests\Support\OpenApi\Document;
  *  (b) the keys of a body are the ones the action reads (`FIELDS` of the action), the required ones are what it requires,
  *  (c) a client can send every key the document names (a full body per operation, `Contract::sentKeys`, K15),
  *  (d) the answers that are not `{data}` say what they are and what is shown only once.
- * The answers themselves are held against the document by the contract of every test (STRICT_TAGS).
+ * The answers themselves are held against the document by the contract of every test.
  */
 
 const ACCOUNT_TAGS = ['Organization', 'Users', 'Bots', 'Invitations', 'Tokens', 'Me', 'Password', 'TwoFactor'];

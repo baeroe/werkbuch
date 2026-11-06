@@ -27,17 +27,12 @@ use Symfony\Component\HttpFoundation\Response;
  * resource and `additional()` takes the keys of both. A schema with `x-werkbuch-open` stays open with everything
  * under it (the extensions of a problem, the nodes of a Tiptap document, the free keys of `values`).
  *
- * Only operations with a tag of `STRICT_TAGS` report; an operation the document does not have always does.
+ * Every operation of the generated document reports (Task 14: the areas became strict one by one in Tasks 8–12, now
+ * there is no loose one); a document of a test may name its strict tags (`using`). An operation the document does not
+ * have always reports.
  */
 final class Contract
 {
-    /**
-     * The tags whose operations must keep the contract; Tasks 8–12 add theirs (Task 12: the wiki, the templates, the notifications, the system page and the webhooks), Task 14 makes it all of them.
-     *
-     * @var list<string>
-     */
-    public const STRICT_TAGS = ['Organization', 'Users', 'Bots', 'Invitations', 'Tokens', 'Me', 'Password', 'TwoFactor', 'Projects', 'Members', 'Favorites', 'Automations', 'Workflows', 'StateUsage', 'WorkItemTypes', 'Properties', 'Labels', 'RelationTypes', 'Resolutions', 'WorkItems', 'Relations', 'Subscribers', 'History', 'Comments', 'Attachments', 'RichText', 'Search', 'Views', 'Pages', 'PageVersions', 'Templates', 'Notifications', 'NotificationPreferences', 'System', 'Webhooks'];
-
     private const ID = 'https://werkbuch.invalid/openapi.json';
 
     /** The keywords whose values are maps of schemas at places of data (a key of an object). */
@@ -190,7 +185,7 @@ final class Contract
         self::$pending = [];
 
         if ($pending !== []) {
-            $contract = self::$test ?? self::$real ??= self::prepare(Document::get(), self::STRICT_TAGS);
+            $contract = self::$test ?? self::$real ??= self::prepare(Document::get(), null);
 
             foreach ($pending as $exchange) {
                 foreach (self::check($contract, $exchange) as $violation) {

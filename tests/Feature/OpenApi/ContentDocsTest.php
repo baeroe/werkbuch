@@ -38,7 +38,7 @@ use Tests\Support\RichTextFixtures as F;
  *      no action refuses unknown keys (K2); the upload is `multipart/form-data`,
  *  (d) a client can send every key the document names (a full request per operation, `Contract::sentKeys`, K15),
  *  (e) the descriptions say what the server does: the limit of an upload, where the file is, how to react.
- * The answers themselves are held against the document by the contract of every test (STRICT_TAGS).
+ * The answers themselves are held against the document by the contract of every test.
  */
 
 beforeEach(function () {
