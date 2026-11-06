@@ -8,6 +8,7 @@ use PHPUnit\Framework\AssertionFailedError;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\Response;
 use Tests\Support\OpenApi\Contract;
+use Tests\TestCase;
 
 // The contract checks what the feature tests send and get under /api/v1 against the OpenAPI document (A385, K2, K3).
 // These tests give it a small document of their own; afterEach forgets what they recorded on purpose.
@@ -313,6 +314,15 @@ it('fails with the list of its violations and forgets them', function () use ($d
 
     expect(Contract::violations())->toBe([]);
     Contract::assertClean();
+});
+
+it('fails the test whose answers break the document when the test ends', function () use ($document, $exchange) {
+    Contract::using($document([]));
+    $exchange('GET', 'nowhere', 200);
+
+    // the end of this test, run early (T3-M5): `TestCase::tearDown` itself, past the afterEach of this file, which
+    // forgets; Pest's own tearDown afterwards finds the contract clean and no app to tear down
+    expect(fn () => (new ReflectionMethod(TestCase::class, 'tearDown'))->invoke($this))->toThrow(AssertionFailedError::class, 'GET /nowhere 200: the operation is not documented');
 });
 
 it('records the api answers of a feature test, not test routes and not the web app', function () {

@@ -213,6 +213,14 @@ it('turns the exceptions Scramble infers into problems, not into Laravel shapes'
         ->and(array_keys($registry->responses))->toBe(['Problem401', 'Problem403', 'Problem404', 'Problem422']);
 });
 
+it('names only tags of the document as strict', function () {
+    // a strict tag the document does not have makes no operation strict (Scramble names a tag after its controller)
+    $tags = collect(Document::operations())->flatMap(fn (array $operation) => $operation['tags'] ?? [])->unique()->values()->all();
+
+    expect($tags)->toContain('Labels', 'WorkItems')
+        ->and(array_values(array_diff(Contract::STRICT_TAGS, $tags)))->toBe([]);
+});
+
 it('has no empty schema', function () {
     // `{}` or an object without keys lets every answer through (Review Focus 1); a place with free keys says so with
     // `x-werkbuch-open`, which also opens everything under it
@@ -223,6 +231,8 @@ it('has no empty schema', function () {
         'open' => ['type' => 'object', 'x-werkbuch-open' => true, 'properties' => ['nodes' => ['type' => 'array', 'items' => ['type' => 'object']]]],
         'list' => ['type' => 'array', 'items' => ['anyOf' => [['$ref' => '#/components/schemas/Thing'], ['type' => 'null']]]],
         'again' => ['$ref' => '#/components/schemas/Thing'],
+        // Scramble gives an empty schema as an object, not as an array (T3-I1)
+        'blank' => new stdClass,
     ]];
     $probe = [
         'openapi' => '3.1.0',
@@ -245,6 +255,7 @@ it('has no empty schema', function () {
         "{$at}/any: empty schema",
         "{$at}/bare: object without properties",
         '#/components/schemas/Thing/properties/meta/additionalProperties: empty schema',
+        "{$at}/blank: empty schema",
         '#/components/responses/Problem422/content/application~1problem+json/schema: object without properties',
         '#/paths/~1things/post/requestBody/content/application~1json/schema: object without properties',
     ])

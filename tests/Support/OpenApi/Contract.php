@@ -196,6 +196,9 @@ final class Contract
      */
     public static function emptySchemas(array $document, ?array $tags): array
     {
+        // Scramble's document holds an empty schema as an object (`stdClass`): as arrays it reads `[]` (T3-I1)
+        /** @var array<string, mixed> $document */
+        $document = json_decode((string) json_encode($document), true);
         $found = [];
         $seen = [];
 
