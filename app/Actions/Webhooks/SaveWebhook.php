@@ -17,10 +17,11 @@ use Lorisleiva\Actions\Concerns\AsAction;
 
 /**
  * Creates a webhook (accounts with `org.manage`, spec 4.3) or replaces one as a whole (A75). Creating makes the secret
- * (A369): it is in the answer of this call only, never taken from the input, never in an event. A change reads the row
- * afresh under `lockForUpdate` (a deletion or another change at the same time waits, and this one compares with what
- * that one left); only what really changes is written and recorded, the same input again writes nothing. Switching a
- * webhook on again clears `disabled_at` and `failing_since` (A366): it starts afresh, nothing is sent again.
+ * (A369): it is in the answer of this call only, never taken from the input, never in an event. A change takes the
+ * project it is sent with a shared lock first (T3-M1), then reads the row afresh under `lockForUpdate` (a deletion or
+ * another change at the same time waits, and this one compares with what that one left); only what really changes is
+ * written and recorded, the same input again writes nothing. Switching a webhook on again clears `disabled_at` and
+ * `failing_since` (A366): it starts afresh, nothing is sent again.
  */
 final class SaveWebhook
 {
@@ -51,6 +52,8 @@ final class SaveWebhook
         }
 
         return DB::transaction(function () use ($actor, $input, $webhook): array {
+            // project before webhook, the order of PurgeProject (T3-M1)
+            WebhookInput::lockProject($input);
             $current = Webhook::query()->lockForUpdate()->find($webhook->id) ?? throw Problem::notFound();
             $valid = WebhookInput::validate($input, $current);
 

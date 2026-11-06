@@ -182,6 +182,17 @@ final class WebhookInput
     }
 
     /**
+     * Takes the project the input names with a shared lock before the webhook is locked (T3-M1): the order is always
+     * project, then webhook, as PurgeProject goes (the project row, then the webhooks through the cascade).
+     *
+     * @param  array<array-key, mixed>  $input
+     */
+    public static function lockProject(array $input): void
+    {
+        self::lockedProject($input['project_id'] ?? null);
+    }
+
+    /**
      * @param  array<string, mixed>  $errors
      */
     private static function project(mixed $id, array &$errors): ?string
@@ -190,10 +201,7 @@ final class WebhookInput
             return null;
         }
 
-        $id = Ids::normalize($id);
-        $project = is_string($id) && Str::isUlid($id)
-            ? Project::query()->whereNull('deleting_at')->sharedLock()->find($id)
-            : null;
+        $project = self::lockedProject($id);
 
         if ($project === null) {
             $errors['project_id'] = __('field.project_id.unknown');
@@ -202,6 +210,18 @@ final class WebhookInput
         }
 
         return $project->id;
+    }
+
+    /**
+     * The project of an id in any spelling, read with a shared lock; `null` for anything else or one being deleted.
+     */
+    private static function lockedProject(mixed $id): ?Project
+    {
+        $id = Ids::normalize($id);
+
+        return is_string($id) && Str::isUlid($id)
+            ? Project::query()->whereNull('deleting_at')->sharedLock()->find($id)
+            : null;
     }
 
     /**
