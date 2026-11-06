@@ -172,3 +172,15 @@ it('answers 503 when the log lost the line of the redelivery', function () use (
     expect($problem->status)->toBe(503)
         ->and($problem->reason)->toBe('webhook_not_logged');
 });
+
+it('answers 404 and calls nobody for a delivery deleted meanwhile', function () use ($redeliver) {
+    Http::fake(['*' => Http::response('ok')]);
+    $delivery = WebhookDelivery::factory()->for(Webhook::factory()->create())->create();
+    $delivery->webhook; // bound before the row went, as the route binds it
+    WebhookDelivery::query()->whereKey($delivery->id)->delete();
+
+    $problem = problemOf(fn () => $redeliver($delivery));
+
+    expect($problem->status)->toBe(404);
+    Http::assertNothingSent();
+});
