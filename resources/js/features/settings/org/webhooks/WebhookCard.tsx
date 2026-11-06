@@ -5,33 +5,15 @@
  */
 
 import { Link } from '@inertiajs/react';
-import { CircleCheck, CirclePause, Pencil, PowerOff, ScrollText, Trash2 } from 'lucide-react';
+import { Pencil, ScrollText, Send, Trash2 } from 'lucide-react';
 import { Button, buttonClass } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
 import { t } from '@/lib/i18n';
 import { paths } from '@/lib/links';
 import type { Project, User, Webhook } from '@/types';
 import { formatDateTime, useOrgZone } from '../../frame/format';
-import { Badge } from '../../frame/parts';
 import { eventLabel } from './catalog';
-
-export type WebhookState = 'active' | 'off' | 'disabled';
-
-/** `disabled`: the system shut it down. `off`: somebody switched it off. */
-export const stateOf = (webhook: Webhook): WebhookState => (webhook.disabled_at !== null ? 'disabled' : webhook.active ? 'active' : 'off');
-
-export function StateBadge({ webhook }: { webhook: Webhook }) {
-  const state = stateOf(webhook);
-  if (state === 'disabled') {
-    return (
-      <Badge tone="danger" icon={PowerOff}>
-        {t('settings.webhooks.state.disabled')}
-      </Badge>
-    );
-  }
-  if (state === 'off') return <Badge icon={CirclePause}>{t('settings.webhooks.state.off')}</Badge>;
-  return <Badge icon={CircleCheck}>{t('settings.webhooks.state.active')}</Badge>;
-}
+import { DisabledNotice, StateBadge, usePingAction } from './webhookParts';
 
 /** "Gesamte Organisation", or the project by identifier and name; a project the list does not know is "Ein Projekt". */
 export function scopeOf(webhook: Webhook, projects: Project[]): string {
@@ -52,6 +34,7 @@ type WebhookCardProps = {
 
 export function WebhookCard({ webhook, projects, bots, onEdit, onDelete }: WebhookCardProps) {
   const zone = useOrgZone();
+  const ping = usePingAction(webhook);
   const bot = bots.find((entry) => entry.id === webhook.bot_id);
   const shown = webhook.events.slice(0, SHOWN_EVENTS);
   const titleId = `webhook-${webhook.id}`;
@@ -75,6 +58,9 @@ export function WebhookCard({ webhook, projects, bots, onEdit, onDelete }: Webho
             <ScrollText className="size-4 text-muted" aria-hidden="true" />
             {t('settings.webhooks.deliveries')}
           </Link>
+          <Button variant="secondary" icon={Send} pending={ping.pending} aria-label={t('settings.webhooks.ping_named', { name: webhook.name })} onClick={ping.run}>
+            {t('settings.webhooks.ping')}
+          </Button>
           <Button variant="ghost" icon={Pencil} aria-label={t('settings.webhooks.edit_named', { name: webhook.name })} onClick={onEdit}>
             {t('settings.webhooks.edit')}
           </Button>
@@ -83,6 +69,8 @@ export function WebhookCard({ webhook, projects, bots, onEdit, onDelete }: Webho
           </Button>
         </div>
       </div>
+
+      <DisabledNotice webhook={webhook} />
 
       <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-ui">
         <dt className="text-muted">{t('settings.webhooks.scope')}</dt>

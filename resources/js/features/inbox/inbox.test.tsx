@@ -300,6 +300,16 @@ describe('the inbox', () => {
     expect(screen.getByRole('link', { name: /Lene Vogt hat kommentiert/ })).toBeTruthy();
   });
 
+  it('names the webhook that was switched off and leads to its log of deliveries', async () => {
+    notifications = notifications.map((entry) => (entry.event === 'webhook_disabled' ? { ...entry, data: { webhook_id: 'wh_crm', name: 'Altes CRM' } } : entry));
+    renderInbox();
+    await loaded();
+
+    const organisation = screen.getByRole('region', { name: 'Organisation' });
+    const webhook = within(organisation).getByRole('link', { name: /Der Webhook „Altes CRM“ wurde abgeschaltet/ });
+    expect(webhook.getAttribute('href')).toBe('/settings/webhooks?deliveries=wh_crm');
+  });
+
   it('shows what belongs to no item without the template or the webhook behind it', async () => {
     renderInbox();
     await loaded();
@@ -307,7 +317,8 @@ describe('the inbox', () => {
     const organisation = screen.getByRole('region', { name: 'Organisation' });
     const webhook = within(organisation).getByRole('link', { name: /Ein Webhook wurde abgeschaltet/ });
     expect(webhook.textContent).toContain('Er war 24');
-    expect(webhook.getAttribute('href')).toBe('/settings');
+    // the demo row has no webhook behind it: the webhooks of the settings
+    expect(webhook.getAttribute('href')).toBe('/settings/webhooks');
     const template = within(screen.getByRole('region', { name: 'Infrastruktur' })).getByRole('link', { name: /Eine Vorlage hat kein Item angelegt/ });
     expect(template.textContent).toContain('„Pflicht-Property Umgebung fehlt“');
     // without the template behind it (the demo row): the templates of its project

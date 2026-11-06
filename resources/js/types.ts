@@ -646,8 +646,9 @@ export interface NotificationData {
   /** `template_run_failed` (phase 10). */
   template_id?: string;
   error?: string;
-  /** `webhook_disabled` (phase 11). */
+  /** `webhook_disabled` (phase 11): the webhook and its name when it was switched off. */
   webhook_id?: string;
+  name?: string | null;
 }
 
 /** A notification of the own inbox, as `GET /api/v1/notifications` answers it (`NotificationResource`). */
