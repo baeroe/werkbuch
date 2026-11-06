@@ -1,7 +1,25 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from './client';
 import { FakeXhr, installFakeXhr, restoreFakeXhr } from '@/test/xhr';
-import { API_BASE, del, get, getPage, one, patch, post, put, setSignedIn, setSocketId, toQueryString, upload, UPLOAD_TIMEOUT_MS, webPost } from './http';
+import {
+  API_BASE,
+  del,
+  get,
+  getPage,
+  one,
+  patch,
+  post,
+  postPage,
+  put,
+  readPost,
+  RETRY_AFTER_MAX_MS,
+  setSignedIn,
+  setSocketId,
+  toQueryString,
+  upload,
+  UPLOAD_TIMEOUT_MS,
+  webPost,
+} from './http';
 
 const fetchMock = vi.fn();
 const reload = vi.fn();
@@ -289,6 +307,109 @@ describe('CSRF', () => {
     expect(error.status).toBe(419);
     expect(error.reason).toBe('csrf_token_mismatch');
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('429', () => {
+  const tooMany = (retryAfter: string | null) =>
+    new Response(JSON.stringify({ type: 'urn:werkbuch:problem:too_many_requests', title: 'x', status: 429, reason: 'too_many_requests' }), {
+      status: 429,
+      headers: { 'Content-Type': 'application/problem+json', ...(retryAfter === null ? {} : { 'Retry-After': retryAfter }) },
+    });
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('waits once after a 429 with Retry-After and asks again', async () => {
+    fetchMock.mockResolvedValueOnce(tooMany('3')).mockResolvedValueOnce(json(200, { id: 'x' }));
+
+    const call = get('/organization');
+    await vi.advanceTimersByTimeAsync(2999);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+
+    await expect(call).resolves.toEqual({ id: 'x' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('waits at most ten seconds, and a second 429 is the error', async () => {
+    fetchMock.mockResolvedValueOnce(tooMany('60')).mockResolvedValueOnce(tooMany('59'));
+
+    const call = failure(get('/organization'));
+    await vi.advanceTimersByTimeAsync(RETRY_AFTER_MAX_MS - 1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+
+    const error = await call;
+    expect(RETRY_AFTER_MAX_MS).toBe(10_000);
+    expect(error.status).toBe(429);
+    expect(error.reason).toBe('too_many_requests');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('waits a second without a readable Retry-After', async (context) => {
+    for (const header of [null, 'soon']) {
+      fetchMock.mockReset();
+      fetchMock.mockResolvedValueOnce(tooMany(header)).mockResolvedValueOnce(json(200, { data: [], links: {}, meta: { next_cursor: null, total: 0 } }));
+
+      const call = getPage('/favorites');
+      await vi.advanceTimersByTimeAsync(999);
+      expect(fetchMock, `${context.task.name}: ${String(header)}`).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+
+      await expect(call).resolves.toMatchObject({ total: 0 });
+    }
+  });
+
+  it('asks again for a read POST, never for one that writes', async () => {
+    fetchMock.mockResolvedValueOnce(tooMany('1')).mockResolvedValueOnce(json(200, { data: { total: 3 } }));
+    const read = readPost<{ data: { total: number } }>('/work-items/counts', { filters: {} });
+    await vi.advanceTimersByTimeAsync(1000);
+    await expect(read).resolves.toEqual({ data: { total: 3 } });
+    expect(fetchMock.mock.calls[1]![1]).toMatchObject({ method: 'POST', body: '{"filters":{}}' });
+
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValueOnce(tooMany('1')).mockResolvedValueOnce(json(200, { data: [], links: {}, meta: { next_cursor: null, total: 0 } }));
+    const page = postPage('/work-items/query', {});
+    await vi.advanceTimersByTimeAsync(1000);
+    await expect(page).resolves.toMatchObject({ total: 0 });
+
+    for (const write of [() => post('/work-items', {}), () => patch('/work-items/x', {}), () => put('/views/x', {}), () => del('/views/x')]) {
+      fetchMock.mockReset();
+      fetchMock.mockResolvedValueOnce(tooMany('1'));
+      expect((await failure(write())).reason).toBe('too_many_requests');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('stops waiting when the call is aborted', async () => {
+    const controller = new AbortController();
+    fetchMock.mockResolvedValueOnce(tooMany('5'));
+
+    const call = get('/organization', {}, { signal: controller.signal }).catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(10);
+    controller.abort(new DOMException('gone', 'AbortError'));
+
+    expect(await call).toMatchObject({ name: 'AbortError' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('does not wait at all for a call aborted before its 429 came', async () => {
+    const controller = new AbortController();
+    fetchMock.mockImplementationOnce(() => {
+      controller.abort(new DOMException('gone', 'AbortError'));
+
+      return Promise.resolve(tooMany('5'));
+    });
+
+    await expect(get('/organization', {}, { signal: controller.signal })).rejects.toMatchObject({ name: 'AbortError' });
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
 

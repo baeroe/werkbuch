@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Http\Api\RateKey;
 use App\Http\Controllers\ApiDocsController;
 use App\OpenApi\Abilities;
 use App\OpenApi\ApiListReturnType;
@@ -103,6 +104,14 @@ final class ApiServiceProvider extends ServiceProvider
                 document: fn (Router $router, mixed $action) => $router->get('api/openapi.json', $action)->name('api.openapi'),
             );
 
+        // the API (A387, K9): per valid token `rate_limits.api` (600), the session of the web app per account a limit of its
+        // own (`rate_limits.api_session`, 3000: a live burst reloads every query of the screen), everything else per address
+        RateLimiter::for('api', function (Request $request) {
+            $key = RateKey::for($request);
+
+            return Limit::perMinute((int) config(RateKey::isSession($key) ? 'werkbuch.rate_limits.api_session' : 'werkbuch.rate_limits.api'))->by($key);
+        });
+        // the docs per address, a token or not: generating the document is the costly part (K5)
         RateLimiter::for('api-docs', fn (Request $request) => Limit::perMinute(self::DOCS_PER_MINUTE)->by((string) $request->ip()));
     }
 }

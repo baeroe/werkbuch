@@ -1448,6 +1448,7 @@
     "problem.detail.item_archived": ":key ist archiviert und schreibgeschützt. Stelle es zuerst wieder her.",
     "problem.detail.items_delete_admins_only": "Items löschen dürfen nur Admins des Projekts.",
     "problem.detail.items_members_only": "Items anlegen und ändern dürfen nur Member und Admins des Projekts.",
+    "problem.detail.json_too_large": "Ein JSON-Body darf höchstens :max MB groß sein.",
     "problem.detail.labels_admins_only": "Labels ändern nur Org-Admins.",
     "problem.detail.last_admin": "Das ist der letzte aktive Admin. Mache zuerst jemand anderen zum Admin.",
     "problem.detail.members_admins_only": "Mitglieder verwalten nur Admins des Projekts.",

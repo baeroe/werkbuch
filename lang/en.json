@@ -1448,6 +1448,7 @@
     "problem.detail.item_archived": ":key is archived and read-only. Restore it first.",
     "problem.detail.items_delete_admins_only": "Only admins of the project delete items.",
     "problem.detail.items_members_only": "Only members and admins of the project create and change items.",
+    "problem.detail.json_too_large": "A JSON body can be at most :max MB.",
     "problem.detail.labels_admins_only": "Only org admins change labels.",
     "problem.detail.last_admin": "This is the last active admin. Make someone else an admin first.",
     "problem.detail.members_admins_only": "Only admins of the project manage its members.",

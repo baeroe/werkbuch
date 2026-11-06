@@ -27,7 +27,7 @@ import type {
   Workflow,
 } from '@/types';
 import type { Page, PageArgs } from './client';
-import { del, get, getPage, one, patch as sendPatch, post, postPage, put } from './http';
+import { del, get, getPage, one, patch as sendPatch, post, postPage, put, readPost } from './http';
 
 /** The path of an item; a key from an address may hold anything, so it is escaped. */
 const itemPath = (id: string) => `/work-items/${encodeURIComponent(id)}`;
@@ -86,12 +86,12 @@ export type GroupWorkItemsArgs = Omit<ListWorkItemsArgs, 'group' | 'cursor' | 'p
 /** The groups of a list in their order with their counts, and the grouping the server applied (P14). */
 export function groupWorkItems(args: GroupWorkItemsArgs): Promise<ItemGroups> {
   const { q, ...rest } = args;
-  return one(post<{ data: ItemGroups }>('/work-items/groups', { ...queryBody(rest), ...(q === undefined ? {} : { q }) }));
+  return one(readPost<{ data: ItemGroups }>('/work-items/groups', { ...queryBody(rest), ...(q === undefined ? {} : { q }) }));
 }
 
 /** How many items each named filter matches, in the projects the account sees (at most 50 filters). */
 export function countWorkItems(filters: Record<string, Filter>, options: { include_archived?: boolean } = {}): Promise<Record<string, number>> {
-  return one(post<{ data: Record<string, number> }>('/work-items/counts', { filters, ...options }));
+  return one(readPost<{ data: Record<string, number> }>('/work-items/counts', { filters, ...options }));
 }
 
 /** The answer of `GET /work-items/{id}` with everything `include` embeds. */

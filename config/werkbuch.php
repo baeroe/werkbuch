@@ -39,7 +39,9 @@ return [
 
     // requests per minute
     'rate_limits' => [
-        'api' => 600,
+        // /api/v1 per valid token, else per address (A387); the session of the web app per account (K9)
+        'api' => (int) env('API_RATE_LIMIT', 600),
+        'api_session' => (int) env('API_SESSION_RATE_LIMIT', 3000),
         'mcp' => 300,
         'login_per_ip' => 20,
         // requests for a reset link (POST /forgot-password), over all addresses
