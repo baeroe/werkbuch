@@ -41,6 +41,9 @@ final class SaveTemplate
 {
     use AsAction;
 
+    /** The keys the body reads, all required (A75); others (the answer sent back) are passed over. */
+    public const FIELDS = TemplateInput::FIELDS;
+
     /**
      * @param  array<array-key, mixed>  $input  `name`, `payload`, `schedule`
      *

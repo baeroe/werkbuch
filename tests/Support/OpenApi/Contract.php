@@ -32,11 +32,11 @@ use Symfony\Component\HttpFoundation\Response;
 final class Contract
 {
     /**
-     * The tags whose operations must keep the contract; Tasks 8–12 add theirs, Task 14 makes it all of them.
+     * The tags whose operations must keep the contract; Tasks 8–12 add theirs (Task 12: the wiki, the templates, the notifications, the system page and the webhooks), Task 14 makes it all of them.
      *
      * @var list<string>
      */
-    public const STRICT_TAGS = ['Organization', 'Users', 'Bots', 'Invitations', 'Tokens', 'Me', 'Password', 'TwoFactor', 'Projects', 'Members', 'Favorites', 'Automations', 'Workflows', 'StateUsage', 'WorkItemTypes', 'Properties', 'Labels', 'RelationTypes', 'Resolutions', 'WorkItems', 'Relations', 'Subscribers', 'History', 'Comments', 'Attachments', 'RichText', 'Search', 'Views'];
+    public const STRICT_TAGS = ['Organization', 'Users', 'Bots', 'Invitations', 'Tokens', 'Me', 'Password', 'TwoFactor', 'Projects', 'Members', 'Favorites', 'Automations', 'Workflows', 'StateUsage', 'WorkItemTypes', 'Properties', 'Labels', 'RelationTypes', 'Resolutions', 'WorkItems', 'Relations', 'Subscribers', 'History', 'Comments', 'Attachments', 'RichText', 'Search', 'Views', 'Pages', 'PageVersions', 'Templates', 'Notifications', 'NotificationPreferences', 'System', 'Webhooks'];
 
     private const ID = 'https://werkbuch.invalid/openapi.json';
 

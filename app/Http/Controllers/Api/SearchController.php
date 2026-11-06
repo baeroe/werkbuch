@@ -24,6 +24,6 @@ final class SearchController extends Controller
      */
     public function __invoke(Request $request): array
     {
-        return ['data' => new SearchResultsResource(QuerySearch::run(Actor::fromRequest($request), $request->query()))];
+        return ['data' => new SearchResultsResource(QuerySearch::run(Actor::fromRequest($request), $request->only(QuerySearch::KEYS)))];
     }
 }

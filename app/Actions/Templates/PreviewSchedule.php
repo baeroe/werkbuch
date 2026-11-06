@@ -27,6 +27,9 @@ final class PreviewSchedule
 {
     use AsAction;
 
+    /** The keys the body reads; only `schedule` is required. */
+    public const FIELDS = ['schedule', 'title', 'run_count'];
+
     /** How many terms the preview shows (spec 4.12). */
     public const RUNS = 5;
 

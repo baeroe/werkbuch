@@ -26,6 +26,9 @@ final class RetryFailedJobs
 {
     use AsAction;
 
+    /** The key the body reads; without it all failed jobs go back. */
+    public const FIELDS = ['ids'];
+
     public const MAX_IDS = 100;
 
     /** How many failed jobs one transaction puts back when all of them go. */

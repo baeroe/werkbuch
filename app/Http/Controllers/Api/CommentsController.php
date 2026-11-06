@@ -88,6 +88,7 @@ final class CommentsController extends Controller
      * React to a comment.
      *
      * 200 `{data: Comment}` with its reactions; the same emoji twice changes nothing.
+     * `emoji` may also come as the query `?emoji=`.
      */
     #[Body(ContentSchemas::class, 'reaction')]
     public function react(Request $request, Comment $comment): CommentResource

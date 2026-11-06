@@ -40,6 +40,7 @@ final class Components implements DocumentTransformer
             'Filter' => Schemas::filter(),
             'SortSpec' => Schemas::sortSpec(),
             'Display' => Schemas::display(),
+            'Schedule' => OperationsSchemas::schedule(),
         ] as $name => $schema) {
             $components->addSchema($name, Schema::fromType(new JsonSchema($schema)));
         }
@@ -63,7 +64,7 @@ final class Components implements DocumentTransformer
                 }
             }
         }
-        foreach (ContentSchemas::patches() as $name => $properties) {
+        foreach ([...ContentSchemas::patches(), ...OperationsSchemas::patches()] as $name => $properties) {
             $type = ($components->schemas[$name] ?? null)?->type;
 
             if ($type instanceof ObjectType) {

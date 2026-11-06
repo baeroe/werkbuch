@@ -17,7 +17,7 @@ use Dedoc\Scramble\Support\RouteInfo;
 /**
  * The query strings that no `ListSpec` describes: the search (`GET /search`: `q`, `types`, `limit`, `include_archived`),
  * the people to mention (`GET /mentions`) and the references of a text (`GET /references`), and the `emoji` that
- * `DELETE /comments/{comment}/reactions` also takes in the query (the browser sends it there). Each key is one of
+ * `PUT` and `DELETE /comments/{comment}/reactions` also take in the query (the browser sends it there). Each key is one of
  * `QuerySearch::KEYS`, `ListMentionables::KEYS`, `ResolveReferences::KEYS`.
  */
 final class ContentDocs extends OperationExtension
@@ -31,6 +31,7 @@ final class ContentDocs extends OperationExtension
             SearchController::class.'@__invoke' => self::search(),
             RichTextController::class.'@mentions' => self::mentions(),
             RichTextController::class.'@references' => self::references(),
+            CommentsController::class.'@react' => [self::parameter('emoji', ['type' => 'string'], 'The emoji, instead of `emoji` in the body.')],
             CommentsController::class.'@unreact' => [self::parameter('emoji', ['type' => 'string'], 'The emoji to take back, instead of `emoji` in the body.')],
             default => [],
         };

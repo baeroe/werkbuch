@@ -115,6 +115,7 @@ it('describes an attachment with its owner and addresses that are relative', fun
     $attachment = $schema('AttachmentResource')['properties'];
 
     expect($attachment['owner']['type'])->toBe(['object', 'null'])
+        ->and($attachment['owner']['description'])->toContain('template')
         ->and($attachment['owner']['required'])->toBe(['type', 'id'])
         ->and($attachment['owner']['properties']['type']['enum'])->toBe(AttachmentTexts::OWNERS)
         ->and($attachment['kind']['enum'])->toBe(Attachment::KINDS)
@@ -169,7 +170,7 @@ it('documents the keys the server reads and keeps every body open', function () 
         $content = array_keys(Document::operation($method, $path)['requestBody']['content']);
 
         expect($content)->toBe([$type], $key)
-            ->and(array_keys($schema['properties']))->toEqualCanonicalizing($keys, $key)
+            ->and(array_keys(array_filter($schema['properties'], fn (array $property) => ! ($property['readOnly'] ?? false))))->toEqualCanonicalizing($keys, $key)
             // K2: no action refuses a key it does not know, so none of these bodies is closed
             ->and($schema['x-werkbuch-open'])->toBeTrue($key);
     }
@@ -194,6 +195,19 @@ it('says what a body requires', function () use ($body) {
         ->and($body('POST', '/views')['properties']['name']['maxLength'])->toBe(ViewInput::NAME_MAX)
         ->and($body('POST', '/views')['properties']['icon']['anyOf'][0]['enum'])->toBe(ViewInput::ICONS)
         ->and($body('PUT', '/comments/{comment}/reactions')['properties']['emoji']['maxLength'])->toBe(Emoji::MAX_BYTES);
+});
+
+it('takes the keys of its own answer back in the body of a view as read-only (A75, K2)', function () use ($body) {
+    foreach ([['POST', '/views'], ['PUT', '/views/{view}']] as [$method, $path]) {
+        $properties = $body($method, $path)['properties'];
+
+        foreach (['id', 'created_by', 'created_at', 'updated_at'] as $key) {
+            expect($properties[$key]['readOnly'])->toBeTrue("{$method} {$key}")
+                ->and($properties[$key]['description'])->toContain('sent back, ignored');
+        }
+        expect($body($method, $path)['x-werkbuch-open'])->toBeTrue()
+            ->and($body($method, $path)['required'])->toBe(ViewInput::FIELDS);
+    }
 });
 
 it('documents the upload as a multipart body with the file as binary and the limit of the server', function () use ($body) {
@@ -242,8 +256,10 @@ it('documents the query of the search, the mentions and the references with thei
         ->and($references['items']['description'])->toContain((string) ResolveReferences::MAX_ITEMS)
         ->and($references['pages']['explode'])->toBeFalse();
 
-    $emoji = collect(Document::operation('DELETE', '/comments/{comment}/reactions')['parameters'])->firstWhere('name', 'emoji');
-    expect($emoji['in'])->toBe('query');
+    foreach (['PUT', 'DELETE'] as $method) {
+        $emoji = collect(Document::operation($method, '/comments/{comment}/reactions')['parameters'])->firstWhere('name', 'emoji');
+        expect($emoji['in'])->toBe('query', $method);
+    }
 
     $views = collect(Document::operation('GET', '/views')['parameters'])->pluck('name')->all();
     expect($views)->toEqualCanonicalizing(['cursor', 'per_page', 'sort', ...array_map(fn ($filter) => "filter[{$filter->name}]", array_values(ListViews::spec()->filters))]);
@@ -298,7 +314,8 @@ it('lets a client send and read everything the document names', function () use 
             continue;
         }
         [$method, $path] = explode(' ', $key, 2);
-        $missing = array_diff(array_keys($body($method, $path)['properties']), Contract::sentKeys($method, $path));
+        $writable = array_keys(array_filter($body($method, $path)['properties'], fn (array $property) => ! ($property['readOnly'] ?? false)));
+        $missing = array_diff($writable, Contract::sentKeys($method, $path));
 
         expect($missing)->toBe([], "{$key} was never sent with: ".implode(', ', $missing));
     }

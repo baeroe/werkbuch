@@ -68,7 +68,7 @@ final class ContentSchemas
     public static function reaction(): array
     {
         return self::object(
-            'The reaction: one emoji (one grapheme of at most '.Emoji::MAX_BYTES.' bytes; 👍 and 👍🏽 are two). Anyone who may comment can react; '
+            'The reaction (`emoji` may also come as the query `?emoji=`): one emoji (one grapheme of at most '.Emoji::MAX_BYTES.' bytes; 👍 and 👍🏽 are two). Anyone who may comment can react; '
                 .'the same emoji twice changes nothing, and only the own one is taken back.',
             ['emoji' => ['type' => 'string', 'minLength' => 1, 'maxLength' => Emoji::MAX_BYTES, 'description' => 'The emoji.']],
             ['emoji'],
@@ -131,6 +131,10 @@ final class ContentSchemas
                 ],
                 'filter' => [...self::ref('Filter'), 'description' => 'Which items the view shows.'],
                 'display' => [...self::ref('Display'), 'description' => 'How it shows them.'],
+                ...array_map(
+                    fn (string|array $type) => ['type' => $type, 'readOnly' => true, 'description' => 'Part of the answer; sent back, ignored.'],
+                    ['id' => 'string', 'created_by' => 'string', 'created_at' => 'string', 'updated_at' => 'string'],
+                ),
             ],
             ViewInput::FIELDS,
         );
@@ -167,7 +171,7 @@ final class ContentSchemas
             'AttachmentResource' => [
                 'owner' => [
                     'type' => ['object', 'null'],
-                    'description' => 'What names it: the item (file list, or a text), a comment or a page; `null` while nobody does.',
+                    'description' => 'What names it: the item (file list, or a text), a comment, a page or a template; `null` while nobody does.',
                     'properties' => [
                         'type' => ['type' => 'string', 'enum' => AttachmentTexts::OWNERS],
                         'id' => ['type' => 'string'],
@@ -185,10 +189,6 @@ final class ContentSchemas
                 'display' => self::ref('Display'),
                 'created_at' => $time,
                 'updated_at' => $time,
-            ],
-            // the rest of the page is the wiki's, Task 12; its text is reachable from the search and the references
-            'PageResource' => [
-                'content_json' => ['anyOf' => [self::ref('RichTextDocument'), ['type' => 'null']], 'description' => 'The text as Tiptap JSON; `null` for a page without text. Not in a lean page.'],
             ],
             'SearchResultsResource' => [
                 'key_match' => ['type' => ['string', 'null'], 'pattern' => PathParameters::ULID, 'description' => 'The ULID of the item a typed key names (also a former key), when the account sees it; it also stands first in `items`.'],

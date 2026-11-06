@@ -24,6 +24,9 @@ final class SaveNotificationPreferences
 {
     use AsAction;
 
+    /** The key the body reads. */
+    public const FIELDS = ['preferences'];
+
     /** The most rows one call takes. */
     public const MAX_ROWS = 100;
 
