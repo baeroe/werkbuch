@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Routing\Route;
 use Illuminate\Support\Facades\Route as Router;
 use Illuminate\Validation\ValidationException;
+use Tests\Support\OpenApi\Contract;
 use Tests\Support\OpenApi\Document;
 
 it('documents every route under api/v1 and nothing else', function () {
@@ -210,4 +211,44 @@ it('turns the exceptions Scramble infers into problems, not into Laravel shapes'
         ->and($extension->toResponse(new ObjectType(RuntimeException::class)))->toBeNull()
         ->and($extension->reference(new ObjectType(RuntimeException::class)))->toBeNull()
         ->and(array_keys($registry->responses))->toBe(['Problem401', 'Problem403', 'Problem404', 'Problem422']);
+});
+
+it('has no empty schema', function () {
+    // `{}` or an object without keys lets every answer through (Review Focus 1); a place with free keys says so with
+    // `x-werkbuch-open`, which also opens everything under it
+    $schema = ['type' => 'object', 'properties' => [
+        'any' => [],
+        'bare' => ['type' => 'object'],
+        'map' => ['type' => 'object', 'additionalProperties' => ['type' => 'string']],
+        'open' => ['type' => 'object', 'x-werkbuch-open' => true, 'properties' => ['nodes' => ['type' => 'array', 'items' => ['type' => 'object']]]],
+        'list' => ['type' => 'array', 'items' => ['anyOf' => [['$ref' => '#/components/schemas/Thing'], ['type' => 'null']]]],
+        'again' => ['$ref' => '#/components/schemas/Thing'],
+    ]];
+    $probe = [
+        'openapi' => '3.1.0',
+        'paths' => [
+            '/things' => ['post' => [
+                'tags' => ['Things'],
+                'requestBody' => ['content' => ['application/json' => ['schema' => ['type' => ['object', 'null']]]]],
+                'responses' => ['200' => ['content' => ['application/json' => ['schema' => $schema]]], '422' => ['$ref' => '#/components/responses/Problem422']],
+            ]],
+            '/loose' => ['get' => ['tags' => ['Loose'], 'responses' => ['200' => ['content' => ['application/json' => ['schema' => []]]]]]],
+        ],
+        'components' => [
+            'schemas' => ['Thing' => ['type' => 'object', 'properties' => ['meta' => ['type' => 'object', 'additionalProperties' => []]]]],
+            'responses' => ['Problem422' => ['content' => ['application/problem+json' => ['schema' => ['type' => 'object']]]]],
+        ],
+    ];
+    $at = '#/paths/~1things/post/responses/200/content/application~1json/schema/properties';
+
+    expect(Contract::emptySchemas($probe, ['Things']))->toBe([
+        "{$at}/any: empty schema",
+        "{$at}/bare: object without properties",
+        '#/components/schemas/Thing/properties/meta/additionalProperties: empty schema',
+        '#/components/responses/Problem422/content/application~1problem+json/schema: object without properties',
+        '#/paths/~1things/post/requestBody/content/application~1json/schema: object without properties',
+    ])
+        ->and(Contract::emptySchemas($probe, null))->toContain('#/paths/~1loose/get/responses/200/content/application~1json/schema: empty schema')
+        // the areas become strict task by task (Tasks 8–12); the strict ones have no empty schema
+        ->and(Contract::emptySchemas(Document::get(), Contract::STRICT_TAGS))->toBe([]);
 });

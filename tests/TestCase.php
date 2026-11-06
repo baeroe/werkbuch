@@ -2,8 +2,12 @@
 
 namespace Tests;
 
+use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Foundation\Application;
+use Illuminate\Foundation\Http\Kernel as HttpKernel;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
+use Tests\Support\OpenApi\Contract;
+use Tests\Support\OpenApi\RecordContract;
 
 abstract class TestCase extends BaseTestCase
 {
@@ -29,5 +33,21 @@ abstract class TestCase extends BaseTestCase
         parent::setUp();
 
         $this->withoutVite();
+
+        // every answer under /api/v1 is checked against the OpenAPI document after the test (A385, K3)
+        Contract::reset();
+        $kernel = $this->app->make(Kernel::class);
+        assert($kernel instanceof HttpKernel);
+        $kernel->prependMiddleware(RecordContract::class);
+    }
+
+    protected function tearDown(): void
+    {
+        try {
+            // before the app goes: the first check of a process generates the document
+            Contract::assertClean();
+        } finally {
+            parent::tearDown();
+        }
     }
 }
