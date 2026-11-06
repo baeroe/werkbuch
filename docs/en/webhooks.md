@@ -154,7 +154,7 @@ A delivery counts as done with any `2xx` answer. Everything else is a failure: o
 | 7 | 20 hours 36 minutes |
 | 8 | 24 hours |
 
-The pauses are counted from each failure, so the real times drift by how long the attempts take. When all eight fail, the delivery is `failed`. Before every attempt werkbuch reads the webhook afresh: the current URL and secret count, and a webhook that was switched off or whose bot lost access to the project sends nothing more (`cancelled`).
+The pauses are counted from each failure, so the real times drift by how long the attempts take. When all eight fail, the delivery is `failed`. Before every attempt werkbuch reads the webhook afresh: the current URL and secret count, and a webhook that was switched off or whose bot lost access to the project sends nothing more (`cancelled`). Giving a webhook another bot or project cancels its waiting deliveries as well, since their bodies were made for the bot and project before.
 
 What a receiver should know:
 

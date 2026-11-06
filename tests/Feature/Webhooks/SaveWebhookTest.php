@@ -5,6 +5,7 @@ use App\Events\EventType;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\Webhook;
+use App\Models\WebhookDelivery;
 use App\Support\WebhookInput;
 use Illuminate\Support\Facades\DB;
 
@@ -455,4 +456,31 @@ it('never puts the secret into an event', function () use ($input) {
     expect(DB::table('events')->where('changes', 'like', '%whsec_%')->orWhere('meta', 'like', '%whsec_%')->count())->toBe(0)
         ->and(DB::table('events')->where('changes', 'like', '%'.substr($created['secret'], 6).'%')->count())->toBe(0)
         ->and(eventsOf(EventType::WebhookUpdated, $created['webhook'])->sole()->changes)->not->toHaveKey('secret');
+});
+
+it('cancels the waiting deliveries when the bot or the project changes, their bodies were made for the old reader (N1)', function (string $field) use ($input) {
+    $admin = User::factory()->admin()->create();
+    $project = Project::factory()->create();
+    $bot = User::factory()->bot()->create();
+    $webhook = Webhook::factory()->create(['name' => 'Agent', 'events' => ['work_item.*']]);
+    $waiting = WebhookDelivery::factory()->for($webhook)->create();
+    $done = WebhookDelivery::factory()->for($webhook)->create(['status' => WebhookDelivery::SUCCEEDED]);
+    $other = WebhookDelivery::factory()->create();
+
+    SaveWebhook::run(actor($admin), $input(['events' => ['work_item.*'], $field => $field === 'bot_id' ? $bot->id : $project->id]), $webhook);
+
+    expect($waiting->fresh()->status)->toBe(WebhookDelivery::CANCELLED)
+        ->and($done->fresh()->status)->toBe(WebhookDelivery::SUCCEEDED)
+        ->and($other->fresh()->status)->toBe(WebhookDelivery::PENDING);
+})->with(['bot_id', 'project_id']);
+
+it('keeps the waiting deliveries for any other change (they read the URL afresh)', function () use ($input) {
+    $webhook = Webhook::factory()->create(['name' => 'Agent', 'events' => ['work_item.*']]);
+    $waiting = WebhookDelivery::factory()->for($webhook)->create();
+
+    SaveWebhook::run(actor(User::factory()->admin()->create()), $input([
+        'name' => 'Agent 2', 'url' => 'https://elsewhere.example.com/hook', 'events' => ['work_item.*', 'comment.*'],
+    ]), $webhook);
+
+    expect($waiting->fresh()->status)->toBe(WebhookDelivery::PENDING);
 });

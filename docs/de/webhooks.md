@@ -154,7 +154,7 @@ Eine Zustellung ist mit jeder `2xx`-Antwort erledigt. Alles andere ist ein Fehls
 | 7 | 20 Stunden 36 Minuten |
 | 8 | 24 Stunden |
 
-Die Pausen zählen ab jedem Fehlschlag, die echten Zeiten verschieben sich also um die Dauer der Versuche. Scheitern alle acht, ist die Zustellung `failed`. Vor jedem Versuch liest werkbuch den Webhook neu: es gelten die aktuelle URL und das aktuelle Geheimnis, und ein Webhook, der ausgeschaltet wurde oder dessen Bot das Projekt nicht mehr sieht, schickt nichts mehr (`cancelled`).
+Die Pausen zählen ab jedem Fehlschlag, die echten Zeiten verschieben sich also um die Dauer der Versuche. Scheitern alle acht, ist die Zustellung `failed`. Vor jedem Versuch liest werkbuch den Webhook neu: es gelten die aktuelle URL und das aktuelle Geheimnis, und ein Webhook, der ausgeschaltet wurde oder dessen Bot das Projekt nicht mehr sieht, schickt nichts mehr (`cancelled`). Bekommt ein Webhook einen anderen Bot oder ein anderes Projekt, werden seine wartenden Zustellungen ebenso abgebrochen, denn ihre Bodies entstanden für den Bot und das Projekt davor.
 
 Was ein Empfänger wissen sollte:
 

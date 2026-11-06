@@ -8,6 +8,7 @@ use App\Events\EventType;
 use App\Exceptions\Problem;
 use App\Models\Organization;
 use App\Models\Webhook;
+use App\Models\WebhookDelivery;
 use App\Support\Actor;
 use App\Support\CatalogInput;
 use App\Support\WebhookInput;
@@ -21,7 +22,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * project it is sent with a shared lock first (T3-M1), then reads the row afresh under `lockForUpdate` (a deletion or
  * another change at the same time waits, and this one compares with what that one left); only what really changes is
  * written and recorded, the same input again writes nothing. Switching a webhook on again clears `disabled_at` and
- * `failing_since` (A366): it starts afresh, nothing is sent again.
+ * `failing_since` (A366): it starts afresh, nothing is sent again. Another bot or project cancels the deliveries that
+ * still wait (N1): their bodies were made for the reader and scope before; a new URL or new events leave them.
  */
 final class SaveWebhook
 {
@@ -70,6 +72,12 @@ final class SaveWebhook
                 $current->fill(['disabled_at' => null, 'failing_since' => null]);
             }
             $current->save();
+
+            // a waiting body was made for the reader and the scope before (N1): with another bot or project it never goes
+            if (array_key_exists('bot_id', $changes) || array_key_exists('project_id', $changes)) {
+                WebhookDelivery::query()->where('webhook_id', $current->id)->where('status', WebhookDelivery::PENDING)
+                    ->update(['status' => WebhookDelivery::CANCELLED, 'updated_at' => now()]);
+            }
 
             EventRecorder::record(EventType::WebhookUpdated, $actor, $current, $current->project, $changes);
 
