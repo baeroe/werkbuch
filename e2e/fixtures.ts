@@ -131,6 +131,8 @@ export const test = base.extend<{ allowedErrors: RegExp[]; pageErrors: string[];
 
       for (const page of context.pages()) {
         if (!baseURL || !page.url().startsWith(baseURL)) continue;
+        // pages under /api/ (the docs, the openapi document) are not the app: they carry no bundle to cover
+        if (new URL(page.url()).pathname.startsWith('/api/')) continue;
         const { coverage, left } = await coverageOf(page);
         if (!coverage) throw new Error(`${page.url()} has no window.__coverage__: run \`ddev exec pnpm build:coverage\` first.`);
         write(coverage);
