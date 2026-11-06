@@ -3,8 +3,9 @@
 Stand: 2026-11-06 · Status: freigegeben (die Änderungen vom 2026-10-31, vom 2026-11-02 (Phasen 5 und 6), vom 2026-11-03 (Phase 7), vom 2026-11-04 (Phasen 8 und 9), vom 2026-11-05 (Phase 10) und vom 2026-11-06 (Phasen 11 und 12) warten auf Rafaels Bestätigung, außer der bestätigten Status-Zuordnung aus Phase 4)
 
 > **Änderungen vom 2026-11-06 (Phase 12):** Beim Umsetzen von Phase 12 (REST vollständig und OpenAPI) hat Claude als Controller Folgendes entschieden; es ändert oder präzisiert die Spec und **wartet auf Rafaels Bestätigung** (Begründung und „Falls falsch“ in `docs/superpowers/plans/2026-10-30-werkbuch-app-rulings.md`, A384 ff.):
+> - **Parameter der Listen im Dokument (6.1):** keine Community-Erweiterung für den Query Builder: die Regeln einer Liste (Filter, Sortierungen, Beziehungen) stehen einmal in ihrer `ListSpec` und speisen Abfrage und Dokument über eigene Scramble-Extensions (A384).
 > - **Listen (6.1):** Feldfilter heißen `filter[<name>]`, Sortierung `sort`, Beziehungen `include`; die bisherigen eigenen Parameter (`type`, `user_id`, `unread_only`, `mentions_only`, `project` der Vorlagen) sind ersetzt und werden übergangen, Schalter für die ganze Liste (`include_archived`, `lean`) bleiben. Unbekannte Namen sind 422, ohne `sort` bleibt jede Liste in ihrer bisherigen Ordnung, ein Cursor gilt nur für seine Sortierung. Ein Filter auf etwas Unsichtbares ergibt eine leere Liste, auch bei den Vorlagen eines Projekts (`filter[project_id]`, bisher 404). In Listen gibt es `include` nur als `projects?include=members` (A386).
-> - **Rate-Limit (6.1, 7.5, 8.2):** 600/min je gültigem Token (`API_RATE_LIMIT`), die Sitzung der Oberfläche 3000/min je Konto (`API_SESSION_RATE_LIMIT`), alles andere 600/min je Adresse; Routen-Drosseln (Uploads, Test-Ping, Testmail, Passwort) zählen je Konto zusätzlich; jede Antwort trägt `X-RateLimit-Limit` und `-Remaining` der API, welche Drossel griff, sagt `Retry-After` (A387).
+> - **Rate-Limit (6.1, 7.5, 8.2):** 600/min je gültigem Token (`API_RATE_LIMIT`), die Sitzung der Oberfläche 3000/min je Konto (`API_SESSION_RATE_LIMIT`), alles andere 600/min je Adresse; Routen-Drosseln (Uploads, Test-Ping, Testmail, Passwort) zählen je Konto zusätzlich; jede Antwort trägt `X-RateLimit-Limit` und `-Remaining` der API (außer einem 413 für einen zu großen Body, der vor der Drossel abgelehnt wird), welche Drossel griff, sagt `Retry-After` (A387).
 > - **Body-Limit (6.1):** JSON-Bodies höchstens 8 MiB (ein Bild als Data-URL und Items mit mehreren Rich-Text-Werten passen), 413 `payload_too_large`; Uploads behalten `ATTACHMENTS_MAX_MB` (A388).
 > - **Doku der API (6.1, 10):** `/api/docs` und `/api/openapi.json` sind öffentlich mit einer eigenen Drossel (30/min je Adresse); Stoplight Elements liegt in der App, ohne CDN, mit CSP; `info.version` ist die Version der API, nicht der App (A389).
 > - **Stabilität (6.1):** keine ETags, kein `If-Match`, kein `Idempotency-Key` in v1; `/api/v1` ändert sich nur additiv, `reason` ist eine offene Liste (ein Client behandelt einen unbekannten Grund nach seinem Status); Brechendes wird `/api/v2` (A390).
@@ -807,7 +808,7 @@ Gemeinsam haben alle Stufen: `/`-Menü, Markdown-Kürzel beim Tippen, Code-Blöc
 
 **OpenAPI:**
 - erzeugt von Scramble: UI unter `/api/docs`, JSON unter `/api/openapi.json`
-- die Parameter des Query Builders kommen über eine Community-Erweiterung (z. B. lokiwich/scramble-spatie-query-builder) oder eine kleine eigene Extension; das klärt der Plan
+- die Parameter der Listen kommen über eigene Scramble-Extensions aus der `ListSpec` der List-Action, die auch die Abfrage baut (`#[ListOf]`, `App\OpenApi\ListParameters`; A384); keine Community-Erweiterung
 - ein Test prüft, dass jede API-Route dokumentiert ist
 
 ### 6.2 MCP

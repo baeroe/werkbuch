@@ -23,12 +23,18 @@ use Illuminate\Http\Request;
  */
 final class PropertiesController extends Controller
 {
+    /**
+     * List the properties with their options.
+     */
     #[ListOf(ListProperties::class)]
     public function index(Request $request): JsonResponse
     {
         return ApiList::respond(ListProperties::run(Actor::fromRequest($request), $request->query()), PropertyResource::class);
     }
 
+    /**
+     * Read a property.
+     */
     public function show(Request $request, Property $property): PropertyResource
     {
         return new PropertyResource(GetProperty::run(Actor::fromRequest($request), $property));

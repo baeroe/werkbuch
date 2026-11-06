@@ -25,12 +25,18 @@ use Illuminate\Http\Request;
  */
 final class WorkItemTypesController extends Controller
 {
+    /**
+     * List the work item types, archived ones too.
+     */
     #[ListOf(ListWorkItemTypes::class)]
     public function index(Request $request): JsonResponse
     {
         return ApiList::respond(ListWorkItemTypes::run(Actor::fromRequest($request), $request->query()), WorkItemTypeResource::class);
     }
 
+    /**
+     * Read a work item type, also an archived one.
+     */
     public function show(Request $request, WorkItemType $workItemType): WorkItemTypeResource
     {
         return new WorkItemTypeResource(GetWorkItemType::run(Actor::fromRequest($request), $workItemType));

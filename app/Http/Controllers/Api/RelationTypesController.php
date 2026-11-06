@@ -23,12 +23,18 @@ use Illuminate\Http\Request;
  */
 final class RelationTypesController extends Controller
 {
+    /**
+     * List the relation types.
+     */
     #[ListOf(ListRelationTypes::class)]
     public function index(Request $request): JsonResponse
     {
         return ApiList::respond(ListRelationTypes::run(Actor::fromRequest($request), $request->query()), RelationTypeResource::class);
     }
 
+    /**
+     * Read a relation type.
+     */
     public function show(Request $request, RelationType $relationType): RelationTypeResource
     {
         return new RelationTypeResource(GetRelationType::run(Actor::fromRequest($request), $relationType));

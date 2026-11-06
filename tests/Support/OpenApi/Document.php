@@ -114,7 +114,7 @@ final class Document
     public static function documents(Route $route): bool
     {
         return str_starts_with($route->uri(), 'api/v1/')
-            && ! str_contains($route->uri(), '_t/')
+            && ! str_starts_with($route->uri(), 'api/v1/_t/')
             && str_starts_with((string) $route->getControllerClass(), 'App\\Http\\Controllers\\');
     }
 

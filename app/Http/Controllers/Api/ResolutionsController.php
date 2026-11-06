@@ -23,12 +23,18 @@ use Illuminate\Http\Request;
  */
 final class ResolutionsController extends Controller
 {
+    /**
+     * List the resolutions by position, archived ones too.
+     */
     #[ListOf(ListResolutions::class)]
     public function index(Request $request): JsonResponse
     {
         return ApiList::respond(ListResolutions::run(Actor::fromRequest($request), $request->query()), ResolutionResource::class);
     }
 
+    /**
+     * Read a resolution, also an archived one.
+     */
     public function show(Request $request, Resolution $resolution): ResolutionResource
     {
         return new ResolutionResource(GetResolution::run(Actor::fromRequest($request), $resolution));

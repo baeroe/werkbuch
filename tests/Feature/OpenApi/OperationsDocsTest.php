@@ -174,7 +174,7 @@ it('describes the schedule with the keys its parser reads and nothing else', fun
         ->and($schedule['properties']['ends']['properties']['count']['maximum'])->toBe(9999)
         // the parser refuses a key it does not know (`field.schedule.shape`) at the schedule, at `ends` and at `nth_weekday`
         // (the harness opens the whole subtree of a body marked `x-werkbuch-open`, so this is documentation only there)
-        ->and($schedule)->not->toHaveKey('x-werkbuch-open')
+        ->and($schedule['description'])->toContain('A key that is not listed is `field.schedule.shape`.')
         ->and($schedule['additionalProperties'])->toBeFalse()
         ->and($schedule['properties']['ends']['additionalProperties'])->toBeFalse()
         ->and($schedule['properties']['nth_weekday']['additionalProperties'])->toBeFalse();

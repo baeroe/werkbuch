@@ -20,6 +20,9 @@ use Illuminate\Http\Request;
  */
 final class FavoritesController extends Controller
 {
+    /**
+     * List the own favorites: projects and views in one order.
+     */
     #[ListOf(ListFavorites::class)]
     public function index(Request $request): JsonResponse
     {

@@ -226,7 +226,7 @@ final class OperationsSchemas
     public static function template(): array
     {
         return self::object(
-            'All three keys are required, also on `PUT`, which replaces the template as a whole; the keys of an answer sent back (`id`, the counters, `values_markdown`) are passed over; to send an answer back leave out `payload.description` (the Markdown), as it comes with `description_json` and both are 422. Then a `PUT` changes nothing. '
+            'All three keys are required, also on `PUT`, which replaces the template as a whole; the keys of an answer sent back (`id`, the counters, `values_markdown`) are passed over; to send an answer back leave out `payload.description` (the Markdown), as it comes with `description_json` and both are 422. Then a `PUT` of a full answer changes nothing; a lean one (`lean=1`) has no description, and sent back it clears the description. '
                 .'Members and admins of the project may write; an archived project is 409. Every error comes in one 422, the ones of the payload at `payload.<field>`, the ones of the schedule at `schedule.<field>`. '
                 .'A new or a changed schedule (a pause or a resume included) counts from now: a term before that is never caught up.',
             [

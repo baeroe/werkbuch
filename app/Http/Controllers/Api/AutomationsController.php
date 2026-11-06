@@ -19,6 +19,9 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
  */
 final class AutomationsController extends Controller
 {
+    /**
+     * List the four automations of a project, also those never saved.
+     */
     public function index(Request $request, Project $project): AnonymousResourceCollection
     {
         return AutomationResource::collection(ListAutomations::run(Actor::fromRequest($request), $project));

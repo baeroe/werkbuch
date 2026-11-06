@@ -23,12 +23,18 @@ use Illuminate\Http\Request;
  */
 final class LabelsController extends Controller
 {
+    /**
+     * List the labels.
+     */
     #[ListOf(ListLabels::class)]
     public function index(Request $request): JsonResponse
     {
         return ApiList::respond(ListLabels::run(Actor::fromRequest($request), $request->query()), LabelResource::class);
     }
 
+    /**
+     * Read a label.
+     */
     public function show(Request $request, Label $label): LabelResource
     {
         return new LabelResource(GetLabel::run(Actor::fromRequest($request), $label));

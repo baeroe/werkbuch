@@ -23,12 +23,18 @@ use Illuminate\Http\Response;
  */
 final class WorkflowsController extends Controller
 {
+    /**
+     * List the workflows with their states and transitions.
+     */
     #[ListOf(ListWorkflows::class)]
     public function index(Request $request): JsonResponse
     {
         return ApiList::respond(ListWorkflows::run(Actor::fromRequest($request), $request->query()), WorkflowResource::class);
     }
 
+    /**
+     * Read a workflow.
+     */
     public function show(Request $request, Workflow $workflow): WorkflowResource
     {
         return new WorkflowResource(GetWorkflow::run(Actor::fromRequest($request), $workflow));

@@ -79,8 +79,8 @@ final class Components implements DocumentTransformer
             .'It reads with the ability `read` and writes with `write` (`x-werkbuch-ability` of each operation).'
         ));
         $components->addSecurityScheme('session', SecurityScheme::apiKey('cookie', (string) config('session.cookie'))->setDescription(
-            'The session of the web app. Writing requests also send the header `X-XSRF-TOKEN` with the value of the '
-            .'cookie `XSRF-TOKEN`; without it they get 419. Some operations take only the session (`x-werkbuch-session-only`).'
+            'The session of the web app. Every request but `GET` and `HEAD` (the read-only `POST`s too) also sends the header '
+            .'`X-XSRF-TOKEN` with the value of the cookie `XSRF-TOKEN`; without it it gets 419. Some operations take only the session (`x-werkbuch-session-only`).'
         ));
     }
 }

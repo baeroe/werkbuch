@@ -41,7 +41,7 @@ test('sends the CSRF token of the session to this origin only', async ({ page })
     await route.fulfill({ status: 200, body: '{}', headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'content-type': 'application/json' } });
   };
   await page.route(own, reply);
-  await page.route(/other\.example\.test|\/other-port\//, reply);
+  await page.route(/other\.example\.test/, reply);
   await page.route(`${otherPort}/**`, reply);
   await page.addScriptTag({ url: '/api-docs.js' });
 

@@ -27,6 +27,11 @@ use Illuminate\Http\Response;
  */
 final class ProjectsController extends Controller
 {
+    /**
+     * List the projects the account sees.
+     *
+     * Ordered by name; archived ones only with `include_archived=1`.
+     */
     #[ListOf(ListProjects::class)]
     public function index(Request $request): JsonResponse
     {
@@ -42,6 +47,11 @@ final class ProjectsController extends Controller
         return (new ProjectResource(CreateProject::run(Actor::fromRequest($request), $request->all())))->response()->setStatusCode(201);
     }
 
+    /**
+     * Read a project.
+     *
+     * By ULID, identifier or a former identifier; one the account does not see is 404.
+     */
     public function show(Request $request, Project $project): ProjectResource
     {
         return new ProjectResource(GetProject::run(Actor::fromRequest($request), $project));
@@ -65,11 +75,19 @@ final class ProjectsController extends Controller
         return new ProjectResource(AssignWorkflow::run(Actor::fromRequest($request), $project, $request->all()));
     }
 
+    /**
+     * Archive a project (`project.archive`).
+     *
+     * Its items are read-only until it is restored; its admins can still change its settings.
+     */
     public function archive(Request $request, Project $project): ProjectResource
     {
         return new ProjectResource(ArchiveProject::run(Actor::fromRequest($request), $project));
     }
 
+    /**
+     * Restore an archived project (`project.archive`).
+     */
     public function restore(Request $request, Project $project): ProjectResource
     {
         return new ProjectResource(ArchiveProject::run(Actor::fromRequest($request), $project, false));

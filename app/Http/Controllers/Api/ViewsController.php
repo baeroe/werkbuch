@@ -37,7 +37,7 @@ final class ViewsController extends Controller
     /**
      * Create a view.
      *
-     * Every org member may. 201.
+     * Every active account may (`view.create` belongs to both org roles, bots included). 201.
      */
     #[Body(ContentSchemas::class, 'view')]
     public function store(Request $request): JsonResponse

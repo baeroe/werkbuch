@@ -42,7 +42,8 @@ final class CommentsController extends Controller
     /**
      * Comment on a work item.
      *
-     * Everyone who sees the item may comment (also viewers); the writer starts to watch it and those mentioned do too.
+     * Everyone who sees the item may comment (also viewers); a person who writes starts to watch it, and so does every
+     * person mentioned (bots never watch).
      * 201 `{data: Comment}`. An archived project or item is 409.
      */
     #[Body(ContentSchemas::class, 'comment')]

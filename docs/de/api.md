@@ -170,7 +170,7 @@ Jede andere Änderung wirkt auf den Stand, den sie vorfindet, nach dessen Regeln
 ## Grenzen
 
 - **Anfragen:** 600 je Minute und gültigem Token (`API_RATE_LIMIT`); ohne Token hat die Sitzung der Oberfläche 3000 je Minute und Konto (`API_SESSION_RATE_LIMIT`), alles andere 600 je Adresse. Gezählt wird vor der Anmeldung, darum verbraucht eine Flut von `401` nie das Kontingent eines gültigen Tokens, und zwei Tokens eines Kontos zählen getrennt.
-- Jede Antwort trägt `X-RateLimit-Limit` und `X-RateLimit-Remaining`. Über der Grenze ist die Antwort `429` mit dem Grund `too_many_requests` und `Retry-After` in Sekunden.
+- Jede Antwort trägt `X-RateLimit-Limit` und `X-RateLimit-Remaining`, außer einem `413` für einen zu großen Body (JSON über 8 MB oder ein Body über `post_max_size` von PHP): er wird abgelehnt, bevor die Anfrage zählt. Über der Grenze ist die Antwort `429` mit dem Grund `too_many_requests` und `Retry-After` in Sekunden.
 - Manche Anfragen haben eine kleinere eigene Grenze, je Konto: Uploads 60 je Minute, Test-Ping und **Erneut senden** eines Webhooks zusammen 6, die Testmail 6, das eigene Passwort ändern 6. Ihr `429` sieht gleich aus; `X-RateLimit-*` nennen immer die Grenze der API, nur `Retry-After` sagt, wie lange du warten musst.
 - **JSON-Bodies** dürfen höchstens 8 MB groß sein, sonst `413` mit dem Grund `payload_too_large` (ein `Content-Length` darüber wird sofort abgelehnt). Das lässt Platz für ein Bild als Data-URL und für ein Item mit mehreren Rich-Text-Werten an ihrer Größengrenze.
 - **Uploads** (`POST /attachments`, Multipart) haben ihre eigene Grenze, `ATTACHMENTS_MAX_MB` (Standard 25 MB), ebenfalls ein `413`.

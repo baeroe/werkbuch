@@ -60,7 +60,7 @@ final class ListParameters extends OperationExtension
         return match ($filter->type) {
             'boolean' => self::parameter($name, ['type' => 'integer', 'enum' => [1, 0]], 'Only rows where it is true (`1`) or false (`0`).'),
             'string' => self::parameter($name, ['type' => 'string'], $filter->kind === ListFilter::PARTIAL
-                ? 'Only rows whose '.str_replace('_', ' ', $filter->column).' contains the text (any case; a comma is part of the text).'
+                ? 'Only rows whose `'.$filter->name.'` contains the text (any case; a comma is part of the text).'
                 : 'Only rows that match the text.'),
             default => self::parameter($name, self::listOf($filter->values), 'Only rows with one of the values, separated by commas.')
                 ->setStyle('form')->setExplode(false),

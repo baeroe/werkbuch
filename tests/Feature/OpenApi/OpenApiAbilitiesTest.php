@@ -76,7 +76,7 @@ it('describes the token and the session as security schemes', function () {
         ->and($schemes['session']['type'])->toBe('apiKey')
         ->and($schemes['session']['in'])->toBe('cookie')
         ->and($schemes['session']['name'])->toBe(config('session.cookie'))
-        ->and($schemes['session']['description'])->toContain('X-XSRF-TOKEN');
+        ->and($schemes['session']['description'])->toContain('X-XSRF-TOKEN', 'Every request but `GET` and `HEAD` (the read-only `POST`s too)');
 });
 
 it('says in the text of an operation that the action itself wants the session (A55)', function () {

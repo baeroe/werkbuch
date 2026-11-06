@@ -2,6 +2,7 @@
 
 use App\Domain\Automations\AutomationKey;
 use App\Exceptions\Problem;
+use App\Http\Controllers\Api\ProjectsController;
 use App\OpenApi\JsonSchema;
 use App\OpenApi\ProblemExceptionResponses;
 use App\OpenApi\Schemas;
@@ -51,10 +52,14 @@ it('documents every route under api/v1 and nothing else', function () {
 it('keeps routes a test registers under api/v1/_t out of the contract', function () {
     Router::middleware('api')->prefix('api/v1')->get('_t/probe', fn () => ['ok' => true]);
     $probe = collect(Router::getRoutes()->getRoutes())->first(fn (Route $route) => $route->uri() === 'api/v1/_t/probe');
+    // only the prefix api/v1/_t/ is out: a path that merely holds `_t/` further on would be a route of the API
+    $deeper = new Route(['GET'], 'api/v1/report_t/probe', ['uses' => ProjectsController::class.'@index']);
 
     expect($probe)->not->toBeNull()
         ->and(Document::documents($probe))->toBeFalse()
         ->and((Scramble::getGeneratorConfig(Scramble::DEFAULT_API)->routes())($probe))->toBeFalse()
+        ->and(Document::documents($deeper))->toBeTrue()
+        ->and((Scramble::getGeneratorConfig(Scramble::DEFAULT_API)->routes())($deeper))->toBeTrue()
         ->and(array_keys(Document::operations()))->not->toContain('GET /_t/probe');
 });
 
@@ -71,8 +76,6 @@ it('generates without an analysis error', function () {
 
 it('generates the document in under 30 s and under 512 MB', function () {
     $stats = Document::stats();
-
-    fwrite(STDERR, sprintf("\nOpenAPI document generated in %.1f s, %d MB at its peak\n", $stats['seconds'], $stats['bytes'] / 1048576));
 
     expect($stats['seconds'])->toBeLessThan(30.0)
         ->and($stats['bytes'])->toBeLessThan(512 * 1048576);
@@ -220,6 +223,15 @@ it('gives every operation a tag', function () {
 
     expect($untagged)->toBe([])
         ->and(collect(Document::operations())->flatMap(fn (array $operation) => $operation['tags'])->unique()->values()->all())->toContain('Labels', 'WorkItems');
+});
+
+it('gives every operation a summary', function () {
+    // Stoplight names an operation by its summary (the first line of the controller method's doc block); without one it
+    // shows only the path
+    $without = collect(Document::operations())->filter(fn (array $operation) => trim((string) ($operation['summary'] ?? '')) === '')->keys()->all();
+
+    expect($without)->toBe([])
+        ->and(Document::operation('GET', '/projects')['summary'])->toBe('List the projects the account sees');
 });
 
 it('has no empty schema', function () {
