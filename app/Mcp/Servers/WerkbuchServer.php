@@ -2,6 +2,14 @@
 
 namespace App\Mcp\Servers;
 
+use App\Http\Middleware\EnsureAccountIsActive;
+use App\Http\Middleware\EnsureMcpToken;
+use App\Http\Middleware\GuardMcpRequest;
+use App\Http\Middleware\SetLocale;
+use App\Http\Middleware\ThrottleApi;
+use App\Mcp\Tools\WhoamiTool;
+use Illuminate\Support\Facades\Route;
+use Laravel\Mcp\Facades\Mcp;
 use Laravel\Mcp\Server;
 
 /**
@@ -19,6 +27,12 @@ use Laravel\Mcp\Server;
  */
 final class WerkbuchServer extends Server
 {
+    /**
+     * The door in front of the package's middleware (K1): the throttle `mcp` before everything, then the language of the
+     * account, a bearer token, an active account and a personal access token with `mcp`.
+     */
+    public const DOOR = [ThrottleApi::class.':mcp', SetLocale::class.':'.SetLocale::API, 'auth:sanctum', EnsureAccountIsActive::class, EnsureMcpToken::class];
+
     protected string $name = 'werkbuch';
 
     protected string $instructions = <<<'MARKDOWN'
@@ -31,13 +45,27 @@ final class WerkbuchServer extends Server
         self::CAPABILITY_RESOURCES => ['listChanged' => false],
     ];
 
-    protected array $tools = [];
+    protected array $tools = [
+        WhoamiTool::class,
+    ];
 
     protected array $resources = [];
 
     public int $defaultPaginationLength = 50;
 
     public int $maxPaginationLength = 50;
+
+    /**
+     * Serves an MCP server at `$path` behind the door: this one at /mcp (routes/ai.php), a test server at `mcp/_t`. The
+     * door is a group around the route, so it runs before the package's middleware; GuardMcpRequest (a foreign Origin,
+     * a body that is no JSON) hangs on the POST route alone, GET and DELETE answer 405.
+     *
+     * @param  class-string<Server>  $server
+     */
+    public static function serve(string $path, string $server = self::class): void
+    {
+        Route::middleware(self::DOOR)->group(fn () => Mcp::web($path, $server)->middleware(GuardMcpRequest::class));
+    }
 
     protected function boot(): void
     {

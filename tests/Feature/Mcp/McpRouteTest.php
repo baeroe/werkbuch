@@ -31,8 +31,8 @@ it('answers server/discover with the server and its version', function () use ($
         // no prompts (P4)
         ->and(array_keys($result['capabilities']))->toBe(['tools', 'resources'])
         ->and(trim((string) $result['instructions']))->not->toBe('')
-        // nothing registered yet (tasks 3a onwards)
-        ->and($mcp->tools())->toBe([])
+        // the read tools of a token with read (whoami since task 3a), no resources yet (task 11)
+        ->and(array_column($mcp->tools(), 'name'))->toBe(['whoami'])
         ->and($mcp->resources())->toBe([]);
 });
 
@@ -58,10 +58,10 @@ it('refuses a call whose Mcp-Name does not match its body', function () use ($to
     $mcp->rpc('tools/call', ['name' => 'whoami', 'arguments' => (object) []], ['Mcp-Name' => 'search'])
         ->assertStatus(400)
         ->assertJsonPath('error.code', -32020);
-    // the same call with the right header reaches the server (no tool of that name yet)
+    // the same call with the right header reaches the tool
     $mcp->rpc('tools/call', ['name' => 'whoami', 'arguments' => (object) []])
-        ->assertStatus(400)
-        ->assertJsonPath('error.code', -32602);
+        ->assertOk()
+        ->assertJsonPath('result.isError', false);
 });
 
 it('refuses a request without a token', function () use ($problem) {

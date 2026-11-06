@@ -280,6 +280,7 @@
     "field.mapping.required": "“:name” has no status in the new workflow.",
     "field.mapping.target": "This status does not exist in the new workflow.",
     "field.mapping.unknown_state": "This status does not exist here.",
+    "field.mcp.action": "There is no such action. Actions: :allowed.",
     "field.name.invalid": "The name must be text.",
     "field.name.max": "The name may have at most :max characters.",
     "field.name.required": "The name must not be empty.",

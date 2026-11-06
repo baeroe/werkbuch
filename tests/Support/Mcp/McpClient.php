@@ -30,11 +30,12 @@ final class McpClient
 
     private ?string $negotiated = null;
 
-    private function __construct(private readonly TestCase $test, private readonly string $token, private readonly string $mode) {}
+    private function __construct(private readonly TestCase $test, private readonly string $token, private readonly string $mode, private readonly string $path) {}
 
-    public static function for(TestCase $t, string $token, string $mode = self::CURRENT): self
+    /** A client of the server at `$path`: /mcp, or the test server at `TestServer::PATH`. */
+    public static function for(TestCase $t, string $token, string $mode = self::CURRENT, string $path = '/mcp'): self
     {
-        return new self($t, $token, $mode);
+        return new self($t, $token, $mode, $path);
     }
 
     /**
@@ -137,7 +138,7 @@ final class McpClient
     {
         app('auth')->forgetGuards();
 
-        return $this->test->postJson('/mcp', $body, [
+        return $this->test->postJson($this->path, $body, [
             'Authorization' => 'Bearer '.$this->token,
             'Accept' => 'application/json, text/event-stream',
             ...$this->headers($method, $params),
