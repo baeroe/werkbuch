@@ -189,7 +189,7 @@ An error text masks user, password and query of every URL in it, but not the pat
 
 **Test ping** sends the event `ping` right away, also to a webhook that is switched off, and tells you what the receiver answered. Its body is `{id, event: "ping", occurred_at, actor, project, data: {webhook: {id, name}}, changes: null}`, signed like every delivery. A failed ping is not tried again.
 
-**Send again** in the log sends the same body once more, with the same `X-Werkbuch-Delivery`, a new timestamp and the next attempt number, also to a webhook that is switched off, but never past a bot that lost access to the project. A success finishes the delivery; a failure leaves its remaining scheduled attempts in place. The log has no **Send again** for a ping: send a new one.
+**Send again** in the log sends the same body once more, with the same `X-Werkbuch-Delivery`, a new timestamp and the next attempt number, also to a webhook that is switched off, but never past a bot that lost access to the project. A success finishes the delivery, and a scheduled attempt that was already under way and fails afterwards neither undoes that nor counts towards switching the webhook off; a failure leaves its remaining scheduled attempts in place. The log has no **Send again** for a ping: send a new one.
 
 Both wait for the receiver in the request, up to about 10 seconds plus the name lookup, and both are limited to six a minute per account (`429` beyond).
 

@@ -208,3 +208,46 @@ it('leaves a cancelled delivery cancelled when its last scheduled try fails (T7-
 
     expect($delivery->fresh()->only(['status', 'attempts']))->toBe(['status' => WebhookDelivery::CANCELLED, 'attempts' => 1]);
 });
+
+it('lets a success stand when a scheduled try already under way fails afterwards (T8-M2)', function () use ($record) {
+    $webhook = Webhook::factory()->failingSince(now()->subHours(23))->create();
+    $delivery = WebhookDelivery::factory()->for($webhook)->create();
+
+    // "send again" answers while the last scheduled try still waits for the receiver
+    $record($delivery, 200, WebhookAttempt::MANUAL);
+    $this->travel(2)->hours();
+    $record($delivery, 500, final: true);
+
+    $fresh = $webhook->fresh();
+    expect($delivery->fresh()->only(['status', 'attempts']))->toBe(['status' => WebhookDelivery::SUCCEEDED, 'attempts' => 2])
+        ->and($fresh->failing_since)->toBeNull()
+        ->and($fresh->active)->toBeTrue()
+        ->and(eventsOf(EventType::WebhookDisabled))->toHaveCount(0);
+});
+
+it('counts a late failure of a finished delivery neither for the clock nor for switching off (T8-M2)', function () use ($record) {
+    $webhook = Webhook::factory()->failingSince(now()->subDays(2))->create();
+    $done = WebhookDelivery::factory()->for($webhook)->create(['status' => WebhookDelivery::SUCCEEDED]);
+    $calm = Webhook::factory()->create();
+    $finished = WebhookDelivery::factory()->for($calm)->create(['status' => WebhookDelivery::FAILED]);
+
+    $record($done, 500);
+    $record($finished, null);
+
+    expect($done->fresh()->status)->toBe(WebhookDelivery::SUCCEEDED)
+        ->and($webhook->fresh()->active)->toBeTrue()
+        ->and($finished->fresh()->status)->toBe(WebhookDelivery::FAILED)
+        ->and($calm->fresh()->failing_since)->toBeNull()
+        ->and(eventsOf(EventType::WebhookDisabled))->toHaveCount(0);
+});
+
+it('finishes a failed delivery when "send again" succeeds afterwards', function () use ($record) {
+    $webhook = Webhook::factory()->failingSince(now()->subHours(2))->create();
+    $delivery = WebhookDelivery::factory()->for($webhook)->create();
+
+    $record($delivery, 500, final: true);
+    $record($delivery, 200, WebhookAttempt::MANUAL);
+
+    expect($delivery->fresh()->status)->toBe(WebhookDelivery::SUCCEEDED)
+        ->and($webhook->fresh()->failing_since)->toBeNull();
+});

@@ -17,10 +17,12 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * the delivery; the answer cut to 2 KB, an error only without an answer, at most 300 characters).
  *
  * - The delivery: a success (2xx) of any kind finishes it as `succeeded`; a failed scheduled try makes it `failed`
- *   only at the last try (never a cancelled one); a failed "send again" or ping leaves it as it was (its scheduled tries go on, K6).
- * - The webhook: a success of any kind clears `failing_since` and sets `last_success_at`; a failed scheduled try sets
- *   `failing_since` if it is empty and switches the webhook off once it is 24 hours old (DisableRule, DisableWebhook).
- *   A failed ping or "send again" never counts. Bookkeeping: no event, and the webhook keeps its `updated_at`.
+ *   only at the last try and only from `pending` (never a cancelled or succeeded one, T8-M2); a failed "send again" or
+ *   ping leaves it as it was (its scheduled tries go on, K6).
+ * - The webhook: a success of any kind clears `failing_since` and sets `last_success_at`; a failed scheduled try of a
+ *   delivery that is still `pending` under the lock sets `failing_since` if it is empty and switches the webhook off
+ *   once it is 24 hours old (DisableRule, DisableWebhook). A failed ping or "send again", and a scheduled try of a
+ *   delivery that is no longer pending, never count. Bookkeeping: no event, and the webhook keeps its `updated_at`.
  *
  * Work of a job without an event of its own; `null` for a delivery that is gone (its webhook deleted).
  */
@@ -48,7 +50,9 @@ final class RecordWebhookAttempt
 
             $now = now();
             $succeeded = $status !== null && $status >= 200 && $status < 300;
-            $scheduled = $kind === WebhookAttempt::SCHEDULED;
+            // a scheduled try counts only while its delivery is open: one already under way when "send again" finished
+            // the delivery (or switching off cancelled it) never fails it nor starts the clock (T8-M2)
+            $scheduled = $kind === WebhookAttempt::SCHEDULED && $delivery->status === WebhookDelivery::PENDING;
 
             $attempt = WebhookAttempt::query()->create([
                 'delivery_id' => $delivery->id,
@@ -66,7 +70,7 @@ final class RecordWebhookAttempt
                 'attempts' => $delivery->attempts + 1,
                 'status' => match (true) {
                     $succeeded => WebhookDelivery::SUCCEEDED,
-                    $scheduled && $final && $delivery->status !== WebhookDelivery::CANCELLED => WebhookDelivery::FAILED,
+                    $scheduled && $final => WebhookDelivery::FAILED,
                     default => $delivery->status,
                 },
             ]);

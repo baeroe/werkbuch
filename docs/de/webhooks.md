@@ -189,7 +189,7 @@ Ein Fehlertext maskiert Benutzer, Passwort und Query jeder URL darin, aber nicht
 
 **Test-Ping** schickt das Ereignis `ping` sofort, auch an einen abgeschalteten Webhook, und sagt dir, was der Empfänger geantwortet hat. Sein Body ist `{id, event: "ping", occurred_at, actor, project, data: {webhook: {id, name}}, changes: null}`, signiert wie jede Zustellung. Ein gescheiterter Ping wird nicht wiederholt.
 
-**Erneut senden** im Protokoll schickt denselben Body noch einmal, mit derselben `X-Werkbuch-Delivery`, neuem Zeitstempel und der nächsten Nummer, auch an einen abgeschalteten Webhook, aber nie an einem Bot vorbei, der das Projekt nicht mehr sieht. Ein Erfolg erledigt die Zustellung; ein Fehlschlag lässt ihre restlichen geplanten Versuche stehen. Für einen Ping hat das Protokoll kein **Erneut senden**: schick einen neuen.
+**Erneut senden** im Protokoll schickt denselben Body noch einmal, mit derselben `X-Werkbuch-Delivery`, neuem Zeitstempel und der nächsten Nummer, auch an einen abgeschalteten Webhook, aber nie an einem Bot vorbei, der das Projekt nicht mehr sieht. Ein Erfolg erledigt die Zustellung, und ein geplanter Versuch, der da schon lief und danach scheitert, macht das weder rückgängig noch zählt er fürs Abschalten; ein Fehlschlag lässt ihre restlichen geplanten Versuche stehen. Für einen Ping hat das Protokoll kein **Erneut senden**: schick einen neuen.
 
 Beide warten in der Anfrage auf den Empfänger, bis etwa 10 Sekunden plus die Auflösung des Namens, und beide sind auf sechs je Minute und Konto begrenzt (darüber `429`).
 
