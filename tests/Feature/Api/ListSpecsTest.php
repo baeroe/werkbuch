@@ -2,6 +2,7 @@
 
 use App\Access\ProjectRole;
 use App\Access\RoleAssignments;
+use App\Access\Visibility;
 use App\Actions\Favorites\ListFavorites;
 use App\Actions\Invitations\ListInvitations;
 use App\Actions\Labels\ListLabels;
@@ -349,7 +350,9 @@ it('filters the webhooks and their deliveries', function () use ($names) {
         ->and($ids('filter[kind]=manual,ping'))->toBe([$silent->id, $failed->id])
         ->and($ids('filter[succeeded]=1'))->toBe([$ok->id])
         ->and($ids('filter[succeeded]=0'))->toBe([$silent->id, $failed->id])
-        ->and($ids('sort=attempted_at'))->toBe([$ok->id, $failed->id, $silent->id]);
+        ->and($ids(''))->toBe([$silent->id, $failed->id, $ok->id]);
+    // a fixed order: `sort` is unknown here
+    $this->getJson("/api/v1/webhooks/{$project->id}/deliveries?sort=attempted_at")->assertUnprocessable()->assertJsonValidationErrors(['sort']);
     $this->getJson("/api/v1/webhooks/{$project->id}/deliveries?filter[kind]=nope")->assertUnprocessable()->assertJsonValidationErrors(['filter.kind']);
 });
 
@@ -418,4 +421,44 @@ it('leaves no client, spec or doc with a parameter the lists passed over (K10)',
     }
 
     expect($found)->toBe([]);
+});
+
+it('reads the memberships of the page for include=members only', function () {
+    $lene = User::factory()->create();
+    Project::factory()->count(3)->public()->create();
+    $this->actingAs($lene);
+    $memberQueries = function (string $query) {
+        Visibility::forget(); // a request of its own: nothing read yet
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $this->getJson('/api/v1/projects'.$query)->assertOk();
+        $log = collect(DB::getQueryLog())->pluck('query');
+        DB::disableQueryLog();
+
+        // the members of all projects of the page: the roles query that names the teams of several projects
+        return $log->filter(fn (string $sql) => str_contains($sql, '`roles`.`name` in (?, ?, ?)') && str_contains($sql, '`model_has_roles`.`team_id` in'))->count();
+    };
+
+    expect($memberQueries('?include=members'))->toBeGreaterThan(0)
+        ->and($memberQueries(''))->toBe(0);
+});
+
+it('asks as often for 5 projects as for 50 without include', function () {
+    $this->actingAs(User::factory()->create());
+    $count = function () {
+        Visibility::forget();
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $this->getJson('/api/v1/projects')->assertOk();
+        $queries = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        return $queries;
+    };
+    Project::factory()->count(5)->public()->create();
+    $count();
+    $five = $count();
+    Project::factory()->count(45)->public()->create();
+
+    expect($count())->toBe($five);
 });

@@ -1,6 +1,7 @@
 <?php
 
 use App\Actions\Tokens\CreateToken;
+use App\Actions\Tokens\ListTokens;
 use App\Events\EventType;
 use App\Models\Event;
 use App\Models\PersonalAccessToken;
@@ -201,4 +202,14 @@ it('passes the abilities to Sanctum explicitly', function () {
     $token = CreateToken::run(actor($lene), ['name' => 'CI', 'abilities' => ['write']])->accessToken;
 
     expect($token->abilities)->toBe(['write'])->and($token->can('read'))->toBeFalse()->and($token->can('*'))->toBeFalse();
+});
+
+it('reads an empty filter[user_id] as no condition: the own tokens', function () {
+    $lene = User::factory()->create();
+    $id = $lene->createToken('Mine', ['read'])->accessToken->id;
+
+    // the action itself (over HTTP an empty value arrives as null)
+    $result = ListTokens::run(actor($lene), ['filter' => ['user_id' => '']]);
+
+    expect(collect($result->page->items())->pluck('id')->all())->toBe([$id]);
 });

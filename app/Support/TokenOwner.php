@@ -18,7 +18,8 @@ final class TokenOwner
      */
     public static function of(mixed $id, Actor $actor): User
     {
-        if ($id === null) {
+        // an empty value is no condition
+        if ($id === null || $id === '') {
             return $actor->user;
         }
 

@@ -44,7 +44,7 @@ final class ListQuery
     {
         $errors = [];
         $filters = self::filters($input['filter'] ?? null, $spec, $errors);
-        $sorts = self::names($input, 'sort', array_keys($spec->sorts), fn (string $sort) => ltrim($sort, '-'), $errors);
+        $sorts = self::names($input, 'sort', $spec->sortable ? array_keys($spec->sorts) : [], fn (string $sort) => ltrim($sort, '-'), $errors);
         $includes = self::names($input, 'include', $spec->includes, fn (string $include) => $include, $errors);
         if ($errors !== []) {
             throw ValidationException::withMessages($errors);
@@ -71,11 +71,11 @@ final class ListQuery
             ->defaultSort(...array_map($sort, $spec->default))
             ->allowedSorts(...array_map($sort, array_keys($spec->sorts)))
             ->allowedIncludes(...$spec->includes);
-        $query->orderBy($query->qualifyColumn($query->getModel()->getKeyName()));
+        $query->orderBy($query->qualifyColumn($query->getModel()->getKeyName()), $spec->tiebreak);
 
         $signature = implode(',', [
             ...array_map(fn (string $sort) => ltrim($sort, '-').':'.(str_starts_with($sort, '-') ? 'desc' : 'asc'), $sorts === [] ? $spec->default : $sorts),
-            'id:asc',
+            'id:'.$spec->tiebreak,
         ]);
         if ($query->getQuery()->columns === null) {
             $query->select($query->qualifyColumn('*'));

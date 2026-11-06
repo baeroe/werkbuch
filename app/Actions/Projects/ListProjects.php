@@ -72,8 +72,10 @@ final class ListProjects
         [$query, $signature] = ListQuery::apply($query, $input, self::spec($actor->user));
 
         $result = ListResult::of($query, PageArgs::from($input), $signature);
-        // the roles of all members of the page in one query, so the resource asks nothing per project
-        Visibility::loadMembers($result->page->items());
+        // the roles of all members of the page in one query, only for `include=members` (the resource asks nothing per project)
+        if (in_array('members', explode(',', (string) ($input['include'] ?? '')), true)) {
+            Visibility::loadMembers($result->page->items());
+        }
 
         return $result;
     }

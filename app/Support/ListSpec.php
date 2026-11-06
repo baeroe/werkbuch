@@ -12,6 +12,10 @@ namespace App\Support;
  * - `default`: the sort without `sort` in the query (`-type`, `name`), names of `sorts`;
  * - `includes`: the relations `include` may load.
  *
+ * - `sortable`: whether `sort` is a parameter of the list; a list that is not (the inbox, the log) keeps its `default`
+ *   order, `sort` is unknown there as on a fixed list;
+ * - `tiebreak`: the direction of the ULID that ends the order (`desc` where the newest of equal stamps comes first).
+ *
  * A fixed list (`fixed()`: the comments, the history, the notifications …) takes no filter, sort or include and keeps
  * the order its action gives it, with no second one (K12).
  */
@@ -32,6 +36,9 @@ final readonly class ListSpec
         public array $default = [],
         public array $includes = [],
         public bool $fixed = false,
+        public bool $sortable = true,
+        /** @var 'asc'|'desc' */
+        public string $tiebreak = 'asc',
     ) {
         $byName = [];
         foreach ($filters as $filter) {

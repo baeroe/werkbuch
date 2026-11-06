@@ -37,6 +37,9 @@ final class ListNotifications
             // the stamp as the database has it, with its microseconds, as the alias `created_cursor`
             sorts: ['created_at' => 'created_cursor'],
             default: ['-created_at'],
+            // a fixed order: newest first, of equal stamps the higher (newer) ULID first
+            sortable: false,
+            tiebreak: 'desc',
         );
     }
 

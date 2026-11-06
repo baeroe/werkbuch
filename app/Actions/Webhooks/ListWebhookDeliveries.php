@@ -39,6 +39,9 @@ final class ListWebhookDeliveries
             // the stamp as the database has it, with its microseconds, as the alias `attempted_cursor`
             sorts: ['attempted_at' => 'attempted_cursor'],
             default: ['-attempted_at'],
+            // a fixed order: newest first, of equal stamps the higher (newer) ULID first
+            sortable: false,
+            tiebreak: 'desc',
         );
     }
 

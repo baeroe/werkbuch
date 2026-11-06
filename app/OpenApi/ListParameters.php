@@ -41,7 +41,7 @@ final class ListParameters extends OperationExtension
             foreach ($spec->filters as $filter) {
                 $parameters[] = self::filter($filter);
             }
-            if ($spec->sorts !== []) {
+            if ($spec->sortable && $spec->sorts !== []) {
                 $parameters[] = self::parameter('sort', ['type' => 'string'], self::sortDescription($spec));
             }
             if ($spec->includes !== []) {

@@ -51,8 +51,8 @@ it('lists my notifications newest first and pages them without losing one in the
     // someone else's
     Notification::factory()->forItem($w['item'])->create(['user_id' => $w['ida']->id, 'created_at' => $at('2026-11-03 12:00:00')]);
 
-    // the same microsecond: the lower ULID first (every list ends on the ULID ascending, A386)
-    [$first, $second] = strcmp($sameA->id, $sameB->id) < 0 ? [$sameA, $sameB] : [$sameB, $sameA];
+    // the same microsecond: the higher ULID first, the newer one (the inbox is a fixed list, A386/K12)
+    [$first, $second] = strcmp($sameA->id, $sameB->id) > 0 ? [$sameA, $sameB] : [$sameB, $sameA];
     $expected = [$newest->id, $within->id, $first->id, $second->id, $older->id];
 
     $seen = [];
@@ -65,6 +65,12 @@ it('lists my notifications newest first and pages them without losing one in the
     } while ($cursor !== null);
 
     expect($seen)->toBe($expected);
+});
+
+it('takes no sort: the inbox is ordered newest first', function () use ($world) {
+    $w = $world();
+
+    expect(fn () => ListNotifications::run(actor($w['mara']), ['sort' => 'created_at']))->toThrow(ValidationException::class);
 });
 
 it('hides the notifications of a project I lost, and shows them again when I am back', function () use ($world, $ids) {
