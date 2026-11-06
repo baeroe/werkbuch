@@ -145,7 +145,7 @@ it('takes the query of its REST twin', function (string $suite) use ($actions) {
         $checked++;
     }
 
-    expect($checked)->toBe($suite === 'twins' ? 2 : 1);
+    expect($checked)->toBe(2);
 })->with(array_keys(ToolRows::SUITES));
 
 it('names an existing twin', function (string $suite) use ($actions) {

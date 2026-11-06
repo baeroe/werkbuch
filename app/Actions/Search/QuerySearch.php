@@ -5,6 +5,7 @@ namespace App\Actions\Search;
 use App\Access\Authorize;
 use App\Access\Visibility;
 use App\Domain\Filter\Filter;
+use App\Domain\Workflow\StateCategory;
 use App\Domain\WorkItems\ItemKey;
 use App\Exceptions\Problem;
 use App\Models\Page;
@@ -35,6 +36,9 @@ use Psr\Http\Client\ClientExceptionInterface;
  *   come from the database by every word of their name (P6).
  * - A `q` in the form of a key (`web-47`, also with a former identifier) names its item in `keyMatch` and puts it first,
  *   archived or not, but only when the account sees it: the key of a hidden item reads like an unknown one (P4, A139).
+ * - `type_id`, `state_category`, `assignee_id` and `label_id` narrow the items (phase 13, K13): in the engine before it
+ *   cuts at the limit, an item with any of the labels for `label_id`, `none` (alone) for items without an assignee.
+ *   Their values are checked before the engine is asked, and the key match counts only when its item passes them.
  * - When the engine fails, the search answers 503 `search_unavailable` and reports the cause (P12).
  */
 final class QuerySearch
@@ -48,7 +52,13 @@ final class QuerySearch
     use AsAction;
 
     /** The keys of the query (the OpenAPI document names them, K15); others are passed over. */
-    public const KEYS = ['q', 'types', 'limit', 'include_archived'];
+    public const KEYS = ['q', 'types', 'limit', 'include_archived', 'type_id', 'state_category', 'assignee_id', 'label_id'];
+
+    /** The filters of items (phase 13, K13), each a list or comma text. */
+    public const FILTERS = ['type_id', 'state_category', 'assignee_id', 'label_id'];
+
+    /** `assignee_id`: the items without an assignee; only alone (the engine joins the filters of its fields with AND). */
+    public const UNASSIGNED = 'none';
 
     /** @var list<string> */
     public const TYPES = ['items', 'pages', 'projects', 'people', 'views'];
@@ -60,14 +70,15 @@ final class QuerySearch
     public const Q_MAX = 255;
 
     /**
-     * @param  array<array-key, mixed>  $query  `q`, `types` (comma-separated or a list), `limit` (per kind), `include_archived`
+     * @param  array<array-key, mixed>  $query  `q`, `types` (comma-separated or a list), `limit` (per kind), `include_archived`,
+     *                                          the filters of items `type_id`, `state_category`, `assignee_id`, `label_id`
      *
      * @throws ValidationException
      * @throws Problem 503 when the search engine does not answer
      */
     public function handle(Actor $actor, array $query): SearchResults
     {
-        [$q, $types, $limit, $includeArchived] = self::input($query);
+        [$q, $types, $limit, $includeArchived, $filters] = self::input($query);
         $user = $actor->user;
 
         /** @var list<string> $visible */
@@ -75,10 +86,10 @@ final class QuerySearch
         /** @var list<string> $scope */
         $scope = $includeArchived ? $visible : Project::query()->whereKey($visible)->whereNull('archived_at')->pluck('id')->all();
 
-        $keyMatch = in_array('items', $types, true) ? self::keyMatch($actor, $q) : null;
+        $keyMatch = in_array('items', $types, true) ? self::keyMatch($actor, $q, $filters) : null;
 
         try {
-            $items = in_array('items', $types, true) ? self::items($actor, $q, $scope, $limit, $includeArchived, $keyMatch) : (new WorkItem)->newCollection();
+            $items = in_array('items', $types, true) ? self::items($actor, $q, $scope, $limit, $includeArchived, $keyMatch, $filters) : (new WorkItem)->newCollection();
             $pages = in_array('pages', $types, true) ? self::pages($user, $q, $scope, $limit) : (new Page)->newCollection();
             $projects = in_array('projects', $types, true) ? self::projects($user, $q, $scope, $limit) : (new Project)->newCollection();
             $people = in_array('people', $types, true) ? self::people($q, $limit) : (new User)->newCollection();
@@ -99,7 +110,7 @@ final class QuerySearch
      * The checked query: all field errors in one answer, other keys passed over.
      *
      * @param  array<array-key, mixed>  $query
-     * @return array{string, list<string>, int, bool}
+     * @return array{string, list<string>, int, bool, array<string, list<string>>}
      *
      * @throws ValidationException
      */
@@ -128,15 +139,18 @@ final class QuerySearch
 
         $flags = ItemQueryInput::flags(array_filter(['include_archived' => $query['include_archived'] ?? null], fn (mixed $value) => $value !== null), ['include_archived'], $errors);
 
+        $filters = self::filters($query, $errors);
+
         if ($errors !== []) {
             throw ValidationException::withMessages($errors);
         }
 
-        return [$q, $types, $limit, $flags['include_archived'] ?? false];
+        return [$q, $types, $limit, $flags['include_archived'] ?? false, $filters];
     }
 
     /**
-     * The kinds asked for (`items,views` or a list), all without `types`; blank names are passed over.
+     * The kinds asked for (`items,views` or a list), all without `types`; blank names are passed over, but a `types`
+     * that names no kind at all (`[]`, `,`) is refused: it would read as every kind.
      *
      * @param  array<array-key, mixed>  $errors
      * @return list<string>
@@ -152,7 +166,7 @@ final class QuerySearch
 
         foreach ($names as $name) {
             $name = is_string($name) ? trim($name) : $name;
-            if ($name === '') {
+            if ($name === '' || $name === null) {
                 continue;
             }
             if (! is_string($name) || ! in_array($name, self::TYPES, true)) {
@@ -166,30 +180,155 @@ final class QuerySearch
             $asked[] = $name;
         }
 
-        return $asked === [] ? self::TYPES : array_values(array_intersect(self::TYPES, $asked));
-    }
+        if ($asked === []) {
+            $errors['types'] = __('field.types.empty', ['allowed' => implode(', ', self::TYPES)]);
 
-    /** The item a key-shaped `q` names, when the account sees it (its project not being deleted); archived or not. */
-    private static function keyMatch(Actor $actor, string $q): ?WorkItem
-    {
-        $item = ItemKey::parse($q) === null ? null : WorkItem::findByReference($q);
+            return self::TYPES;
+        }
 
-        return $item !== null && Authorize::allows($actor, 'view', $item) ? $item : null;
+        return array_values(array_intersect(self::TYPES, $asked));
     }
 
     /**
-     * The hits of the index within the scope, read again through ItemQuery, behind the key match (once), lean.
+     * The filters of items that were given, checked before the engine sees them: the engine writes them into the filter
+     * string of Meilisearch, so a value is an ULID (any case, lower case on), a category or `none`, never other text.
+     * A list or comma text; blank values are passed over, a filter without values is none.
+     *
+     * @param  array<array-key, mixed>  $query
+     * @param  array<array-key, mixed>  $errors
+     * @return array<string, list<string>>
+     */
+    private static function filters(array $query, array &$errors): array
+    {
+        $categories = array_map(fn (StateCategory $category) => $category->value, StateCategory::ORDER);
+        $filters = [];
+
+        foreach (self::FILTERS as $key) {
+            $values = self::values($query[$key] ?? null);
+            if ($values === []) {
+                continue;
+            }
+
+            if ($values === null || ! self::valid($key, $values, $categories)) {
+                $errors[$key] = match ($key) {
+                    'type_id' => __('field.type_id.invalid'),
+                    'state_category' => __('field.state_category.invalid', ['allowed' => implode(', ', $categories)]),
+                    'assignee_id' => __('field.assignee_id.invalid'),
+                    default => __('field.label_id.invalid'),
+                };
+
+                continue;
+            }
+
+            $filters[$key] = $key === 'state_category' ? $values : array_map(fn (string $value) => $value === self::UNASSIGNED ? $value : Str::lower($value), $values);
+        }
+
+        return $filters;
+    }
+
+    /**
+     * Whether the values of a filter can go into the filter string of the engine: categories, ULIDs, or `none` alone
+     * for the assignee (the engine cannot ask for „nobody or this account“, K13).
+     *
+     * @param  list<string>  $values
+     * @param  list<string>  $categories
+     */
+    private static function valid(string $key, array $values, array $categories): bool
+    {
+        return match ($key) {
+            'state_category' => array_all($values, fn (string $value) => in_array($value, $categories, true)),
+            'assignee_id' => $values === [self::UNASSIGNED] || array_all($values, fn (string $value) => Str::isUlid($value)),
+            default => array_all($values, fn (string $value) => Str::isUlid($value)),
+        };
+    }
+
+    /**
+     * The values of a filter, trimmed, without blank ones and doubles; `null` when it holds anything but text.
+     *
+     * @return list<string>|null
+     */
+    private static function values(mixed $given): ?array
+    {
+        $values = is_string($given) ? explode(',', $given) : (is_array($given) && array_is_list($given) ? $given : ($given === null ? [] : null));
+        if ($values === null) {
+            return null;
+        }
+
+        $texts = [];
+        foreach ($values as $value) {
+            if ($value === null) {
+                continue;
+            }
+            if (! is_string($value)) {
+                return null;
+            }
+            if (($value = trim($value)) !== '') {
+                $texts[] = $value;
+            }
+        }
+
+        return array_values(array_unique($texts));
+    }
+
+    /**
+     * The item a key-shaped `q` names, when the account sees it (its project not being deleted), archived or not, and
+     * when it passes the filters of items: it comes past the engine, which would leave it out otherwise (K13).
+     *
+     * @param  array<string, list<string>>  $filters
+     */
+    private static function keyMatch(Actor $actor, string $q, array $filters): ?WorkItem
+    {
+        $item = ItemKey::parse($q) === null ? null : WorkItem::findByReference($q);
+
+        return $item !== null && Authorize::allows($actor, 'view', $item) && self::passes($item, $filters) ? $item : null;
+    }
+
+    /**
+     * Whether an item passes the filters as the engine reads them: its type, the category of its state, its assignee
+     * (none for `none`), any of its labels.
+     *
+     * @param  array<string, list<string>>  $filters
+     */
+    private static function passes(WorkItem $item, array $filters): bool
+    {
+        foreach ($filters as $key => $values) {
+            $passes = match ($key) {
+                'type_id' => in_array($item->type_id, $values, true),
+                'state_category' => in_array($item->state->category->value, $values, true),
+                'assignee_id' => $values === [self::UNASSIGNED] ? $item->assignee_id === null : in_array($item->assignee_id, $values, true),
+                default => array_intersect($item->labels->modelKeys(), $values) !== [],
+            };
+            if (! $passes) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * The hits of the index within the scope and the filters, read again through ItemQuery, behind the key match
+     * (once), lean. The filters stand in the engine, before `take()`.
      *
      * @param  list<string>  $scope
+     * @param  array<string, list<string>>  $filters
      * @return EloquentCollection<int, WorkItem>
      */
-    private static function items(Actor $actor, string $q, array $scope, int $limit, bool $includeArchived, ?WorkItem $keyMatch): EloquentCollection
+    private static function items(Actor $actor, string $q, array $scope, int $limit, bool $includeArchived, ?WorkItem $keyMatch, array $filters): EloquentCollection
     {
         $ids = [];
         if ($scope !== []) {
             $search = WorkItem::search($q)->options(self::OPTIONS)->whereIn('project_id', $scope);
             if (! $includeArchived) {
                 $search->where('archived', false);
+            }
+            foreach ($filters as $key => $values) {
+                match (true) {
+                    $key === 'assignee_id' && $values === [self::UNASSIGNED] => $search->where('assignee_id', null),
+                    // the document holds the labels as a list: any of them
+                    $key === 'label_id' => $search->whereIn('label_ids', $values),
+                    default => $search->whereIn($key, $values),
+                };
             }
             $ids = self::keys($search->take($limit));
         }

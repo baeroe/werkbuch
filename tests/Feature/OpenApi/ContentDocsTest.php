@@ -19,6 +19,7 @@ use App\Models\User;
 use App\Models\View;
 use App\Models\WorkItem;
 use App\OpenApi\ContentDocs;
+use App\OpenApi\PathParameters;
 use App\Search\SearchIndexer;
 use App\Support\AttachmentTexts;
 use App\Support\ViewInput;
@@ -248,6 +249,14 @@ it('documents the query of the search, the mentions and the references with thei
         ->and($search['limit']['schema']['maximum'])->toBe(QuerySearch::MAX_LIMIT)
         ->and($search['limit']['schema']['default'])->toBe(QuerySearch::DEFAULT_LIMIT)
         ->and($search['include_archived']['schema']['enum'])->toBe([1, 0])
+        // the filters of items, each a list in one parameter
+        ->and($search['type_id']['schema']['items']['pattern'])->toBe(PathParameters::ULID)
+        ->and($search['label_id']['schema']['items']['pattern'])->toBe(PathParameters::ULID)
+        ->and($search['state_category']['schema']['items']['enum'])->toBe(['backlog', 'unstarted', 'started', 'completed', 'canceled'])
+        ->and($search['assignee_id']['schema']['items']['anyOf'])->toBe([['type' => 'string', 'pattern' => PathParameters::ULID], ['type' => 'string', 'enum' => ['none']]])
+        ->and($search['assignee_id']['description'])->toContain('`none`')
+        ->and($search['types']['description'])->toContain('422')
+        ->and(collect(['type_id', 'state_category', 'assignee_id', 'label_id'])->map(fn (string $name) => $search[$name]['explode']))->each->toBeFalse()
         ->and($mentions->keys()->all())->toEqualCanonicalizing(ListMentionables::KEYS)
         ->and($mentions['project']['required'])->toBeTrue()
         ->and($mentions['q']['schema']['maxLength'])->toBe(ListMentionables::Q_MAX)

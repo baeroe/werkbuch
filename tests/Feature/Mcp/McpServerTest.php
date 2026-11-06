@@ -106,9 +106,9 @@ it('lists only the tools a token may use', function (array $abilities, array $te
         ->and(array_column(McpClient::for($this, $plain)->tools(), 'name'))->toBe($real);
 })->with([
     'mcp' => [['mcp'], [], []],
-    'read and mcp' => [['read', 'mcp'], ['echo'], ['whoami']],
+    'read and mcp' => [['read', 'mcp'], ['echo'], ['whoami', 'search']],
     'write and mcp' => [['write', 'mcp'], ['manage-echo'], []],
-    'all three' => [['read', 'write', 'mcp'], ['echo', 'manage-echo'], ['whoami']],
+    'all three' => [['read', 'write', 'mcp'], ['echo', 'manage-echo'], ['whoami', 'search']],
 ]);
 
 it('keeps every tool from a transient token', function () {

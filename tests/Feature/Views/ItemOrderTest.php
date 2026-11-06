@@ -183,6 +183,29 @@ it('sorts by creation and change time', function () use ($sort) {
         ->and(($this->titles)($sort('updated_at')))->toBe(['new', 'old']);
 });
 
+it('pages items without a creation stamp exactly once', function () use ($sort, $forward, $backward) {
+    // the columns may be null (a row written without Eloquent); such items stand last in both directions (T5-M1)
+    foreach ([null, '2026-10-01 08:00:00', null, '2026-10-15 12:30:00', '2026-10-01 08:00:00'] as $i => $stamp) {
+        $item = WorkItem::factory()->create(['project_id' => $this->web->id, 'title' => "item {$i}"]);
+        DB::table('work_items')->where('id', $item->id)->update(['created_at' => $stamp, 'updated_at' => $stamp]);
+    }
+
+    foreach (['created_at', 'updated_at'] as $field) {
+        expect(($this->titles)($sort($field)))->toBe(['item 1', 'item 4', 'item 3', 'item 0', 'item 2'], $field)
+            ->and(($this->titles)($sort($field, 'desc')))->toBe(['item 3', 'item 1', 'item 4', 'item 0', 'item 2'], $field);
+
+        foreach (['asc', 'desc'] as $direction) {
+            $order = $sort($field, $direction);
+            $all = ItemOrder::apply(WorkItem::query(), $order)->get()->pluck('id')->all();
+            foreach ([1, 2] as $perPage) {
+                $pages = $forward($order, $perPage);
+                expect(array_merge(...array_column($pages, 'ids')))->toBe($all, "{$field} {$direction}, {$perPage} per page")
+                    ->and($backward($order, end($pages)['page'], $perPage))->toBe(array_reverse(array_column(array_slice($pages, 0, -1), 'ids')), "{$field} {$direction} back");
+            }
+        }
+    }
+});
+
 it('sorts number, date and text properties', function () use ($sort, $properties) {
     $properties();
     ($this->catalog)();
@@ -489,6 +512,7 @@ it('refuses a cursor it cannot read', function () use ($sort, $refused, $tampere
         ['due_date', fn (array $p) => [...$p, 'sort_0' => 2]],
         ['due_date', fn (array $p) => [...$p, 'sort_1' => '2026-11-01 or 1']],
         ['created_at', fn (array $p) => [...$p, 'sort_0' => '2026-11-01']],
+        ['updated_at', fn (array $p) => [...$p, 'sort_1' => '2026-11-01']],
         ['property:effort', fn (array $p) => [...$p, 'sort_1' => '1e3']],
     ];
     foreach ($cases as [$field, $change]) {

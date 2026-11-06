@@ -9,11 +9,13 @@ use App\Actions\Search\QuerySearch;
 use App\Actions\Users\DeactivateUser;
 use App\Actions\WorkItems\DeleteWorkItem;
 use App\Jobs\PurgeProject;
+use App\Models\Label;
 use App\Models\Page;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\View;
 use App\Models\WorkItem;
+use App\Models\WorkItemType;
 use App\Search\SearchIndexer;
 use App\Search\SearchResults;
 use GuzzleHttp\Psr7\Response;
@@ -22,6 +24,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
 use Meilisearch\Exceptions\CommunicationException;
 use Meilisearch\Exceptions\InvalidResponseBodyException;
 use Psr\Http\Client\ClientExceptionInterface;
@@ -551,4 +554,171 @@ it('asks the database a fixed number of times', function () use ($world, $item, 
 
     expect($this->actingAs($mara)->getJson('/api/v1/search?q=kontakt&limit=50')->json('data.items'))->toHaveCount(20)
         ->and($count())->toBe($few);
+});
+
+// the filters of items (phase 13, K13)
+
+/**
+ * Four items „Kontakt …“ in WEB, in this order in the index: A a task of Mara with the label UX, B a bug without an
+ * assignee with SEO and completed, C a task without an assignee or label, D a bug of Erik with Design.
+ */
+$filtered = function () use ($world, $item, $rebuild): array {
+    [$mara, $web] = $world();
+    $erik = User::factory()->create(['name' => 'Erik Ende']);
+    $type = fn (string $name): string => WorkItemType::query()->where('name', $name)->sole()->id;
+    $label = fn (string $name): Label => Label::factory()->create(['name' => $name]);
+    [$ux, $seo, $design] = [$label('UX'), $label('SEO'), $label('Design')];
+
+    $a = $item($web, 'Kontakt A', ['type_id' => $type('Task'), 'assignee_id' => $mara->id]);
+    $b = WorkItem::factory()->for($web)->closed()->create(['title' => 'Kontakt B', 'type_id' => $type('Bug')]);
+    $c = $item($web, 'Kontakt C', ['type_id' => $type('Task')]);
+    $d = $item($web, 'Kontakt D', ['type_id' => $type('Bug'), 'assignee_id' => $erik->id]);
+    $a->labels()->attach($ux->id);
+    $b->labels()->attach($seo->id);
+    $d->labels()->attach($design->id);
+    $rebuild();
+
+    return compact('mara', 'erik', 'web', 'ux', 'seo', 'design', 'a', 'b', 'c', 'd') + ['task' => $type('Task'), 'bug' => $type('Bug')];
+};
+
+it('refuses types that name no kind', function () use ($world, $refusal, $search) {
+    $engine = searchEngine();
+    [$mara] = $world();
+    $empty = ['types' => [__('field.types.empty', ['allowed' => 'items, pages, projects, people, views'])]];
+
+    foreach ([[], [''], [null], ',', ' , ', ''] as $types) {
+        expect($refusal($mara, ['q' => 'x', 'types' => $types]))->toBe($empty, (string) json_encode($types));
+    }
+    expect($engine->searched())->toBe([]);
+
+    // without types, every kind is searched
+    $search($mara, ['q' => 'x']);
+    $search($mara, ['q' => 'x', 'types' => null]);
+    expect($engine->searched())->toBe([...$index = ['testing_work_items', 'testing_pages', 'testing_projects', 'testing_users'], ...$index]);
+});
+
+it('narrows items by type, category, assignee and label', function () use ($filtered, $search, $ids) {
+    $engine = searchEngine();
+    ['mara' => $mara, 'erik' => $erik, 'ux' => $ux, 'seo' => $seo, 'a' => $a, 'b' => $b, 'c' => $c, 'd' => $d, 'task' => $task, 'bug' => $bug] = $filtered();
+    $items = fn (array $query): array => $ids($search($mara, ['q' => 'kontakt', 'types' => 'items', ...$query])->items);
+
+    expect($items([]))->toBe([$a->id, $b->id, $c->id, $d->id])
+        ->and($items(['type_id' => $bug]))->toBe([$b->id, $d->id])
+        // a list or comma text, any case
+        ->and($items(['type_id' => [Str::upper($task), $bug]]))->toBe([$a->id, $b->id, $c->id, $d->id])
+        ->and($items(['type_id' => Str::upper($task).','.$bug]))->toBe([$a->id, $b->id, $c->id, $d->id])
+        ->and($items(['state_category' => 'completed']))->toBe([$b->id])
+        ->and($items(['state_category' => ['backlog', 'canceled']]))->toBe([$a->id, $c->id, $d->id])
+        ->and($items(['assignee_id' => $mara->id]))->toBe([$a->id])
+        ->and($items(['assignee_id' => [$mara->id, Str::upper($erik->id)]]))->toBe([$a->id, $d->id])
+        ->and($items(['assignee_id' => 'none']))->toBe([$b->id, $c->id])
+        ->and($items(['assignee_id' => ['none']]))->toBe([$b->id, $c->id])
+        // an item with any of the labels
+        ->and($items(['label_id' => [$ux->id, $seo->id]]))->toBe([$a->id, $b->id])
+        ->and($items(['label_id' => $seo->id]))->toBe([$b->id])
+        // all filters at once
+        ->and($items(['type_id' => $task, 'assignee_id' => 'none', 'state_category' => 'backlog']))->toBe([$c->id])
+        // a list of no values is no condition, like an empty filter of a list
+        ->and($items(['type_id' => ',', 'label_id' => []]))->toBe([$a->id, $b->id, $c->id, $d->id]);
+
+    // the engine filters before it cuts at the limit: the first bug, not the first item
+    expect($items(['type_id' => $bug, 'limit' => 1]))->toBe([$b->id])
+        ->and($items(['assignee_id' => 'none', 'limit' => 1]))->toBe([$b->id]);
+});
+
+it('narrows only the items', function () use ($filtered, $search, $ids) {
+    searchEngine();
+    ['mara' => $mara, 'web' => $web] = $filtered();
+    $web->update(['name' => 'Kontakt Website']);
+    app(SearchIndexer::class)->upsertProject($web->id);
+    $person = User::factory()->create(['name' => 'Kontakt Lenz']);
+    app(SearchIndexer::class)->upsertUser($person->id);
+
+    $results = $search($mara, ['q' => 'kontakt', 'type_id' => (string) Str::ulid(), 'state_category' => 'started']);
+
+    expect($ids($results->items))->toBe([])
+        ->and($ids($results->projects))->toBe([$web->id])
+        ->and($ids($results->people))->toBe([$person->id]);
+});
+
+it('finds nothing for an unknown value', function () use ($filtered, $search, $ids) {
+    searchEngine();
+    ['mara' => $mara] = $filtered();
+    $unknown = (string) Str::ulid();
+
+    foreach (['type_id', 'assignee_id', 'label_id'] as $key) {
+        expect($ids($search($mara, ['q' => 'kontakt', $key => $unknown])->items))->toBe([], $key);
+    }
+    expect($ids($search($mara, ['q' => 'kontakt', 'state_category' => 'started'])->items))->toBe([]);
+});
+
+it('refuses a malformed filter value', function () use ($refusal) {
+    $engine = searchEngine();
+    $mara = User::factory()->create();
+    $ulid = (string) Str::ulid();
+    $errors = fn (string $categories = 'backlog, unstarted, started, completed, canceled'): array => [
+        'type_id' => [__('field.type_id.invalid')],
+        'state_category' => [__('field.state_category.invalid', ['allowed' => $categories])],
+        'assignee_id' => [__('field.assignee_id.invalid')],
+        'label_id' => [__('field.label_id.invalid')],
+    ];
+
+    // all in one answer, the other fields too
+    expect($refusal($mara, ['q' => ' ', 'type_id' => 'web', 'state_category' => 'done', 'assignee_id' => 'mara', 'label_id' => 'UX']))
+        ->toBe(['q' => [__('field.q.required')], ...$errors()]);
+
+    $malformed = [
+        // a quote would break the filter string of Meilisearch
+        ['type_id' => $ulid.'"', 'state_category' => 'started" OR archived = true', 'assignee_id' => '"'.$ulid, 'label_id' => [$ulid, 'x"']],
+        // no text in a list, and no text or list at all
+        ['type_id' => [7], 'state_category' => ['started', ['completed']], 'assignee_id' => [true], 'label_id' => [$ulid, null, 3]],
+        ['type_id' => 7, 'state_category' => true, 'assignee_id' => ['id' => $ulid], 'label_id' => 1.5],
+        // an ULID that is one character short, a category in upper case
+        ['type_id' => substr($ulid, 1), 'state_category' => 'STARTED', 'assignee_id' => 'None', 'label_id' => $ulid.'0'],
+    ];
+    foreach ($malformed as $query) {
+        expect($refusal($mara, ['q' => 'x', ...$query]))->toBe($errors(), (string) json_encode($query));
+    }
+
+    // the engine was never asked
+    expect($engine->searched())->toBe([]);
+});
+
+it('refuses none together with an account', function () use ($filtered, $refusal) {
+    $engine = searchEngine();
+    ['mara' => $mara] = $filtered();
+
+    foreach ([['none', $mara->id], "{$mara->id},none"] as $assignee) {
+        expect($refusal($mara, ['q' => 'kontakt', 'assignee_id' => $assignee]))->toBe(['assignee_id' => [__('field.assignee_id.invalid')]], (string) json_encode($assignee));
+    }
+    expect($engine->searched())->toBe([]);
+});
+
+it('puts the key match first only when it passes the filters', function () use ($filtered, $search, $ids) {
+    searchEngine();
+    ['mara' => $mara, 'web' => $web, 'ux' => $ux, 'seo' => $seo, 'a' => $a, 'task' => $task, 'bug' => $bug] = $filtered();
+    $other = WorkItem::factory()->for($web)->create(['title' => 'Folgefehler zu web-1', 'type_id' => $bug]);
+    app(SearchIndexer::class)->rebuild();
+    expect($a->fresh()?->key)->toBe('WEB-1');
+    $jump = fn (array $filters) => $search($mara, ['q' => 'web-1', 'types' => 'items', ...$filters]);
+
+    // A (WEB-1) is a task of Mara in the backlog with UX
+    foreach ([[], ['type_id' => $task], ['state_category' => 'backlog'], ['assignee_id' => $mara->id], ['label_id' => [$seo->id, $ux->id]]] as $passes) {
+        $results = $jump($passes);
+        expect($results->keyMatch)->toBe($a->id, (string) json_encode($passes))
+            ->and($ids($results->items)[0])->toBe($a->id, (string) json_encode($passes));
+    }
+
+    // a filter A misses: no key match, and A is not in front; the engine leaves it out as any other item
+    $misses = [
+        [['type_id' => $bug], [$other->id]],
+        [['state_category' => 'started'], []],
+        [['assignee_id' => 'none'], [$other->id]],
+        [['label_id' => $seo->id], []],
+    ];
+    foreach ($misses as [$filters, $found]) {
+        $results = $jump($filters);
+        expect($results->keyMatch)->toBeNull((string) json_encode($filters))
+            ->and($ids($results->items))->toBe($found, (string) json_encode($filters));
+    }
 });

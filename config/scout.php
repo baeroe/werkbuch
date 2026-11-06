@@ -158,6 +158,8 @@ return [
         'index-settings' => [
             WorkItem::class => [
                 'searchableAttributes' => ['key', 'title', 'description', 'comments'],
+                // type_id, state_category, assignee_id (also IS NULL) and label_ids filter the items of the search
+                // (`QuerySearch::FILTERS`, phase 13); filterable since phase 6 (A206), no new settings to sync
                 'filterableAttributes' => ['project_id', 'archived', 'type_id', 'state_category', 'assignee_id', 'label_ids'],
                 'rankingRules' => ['words', 'typo', 'proximity', 'attribute', 'sort', 'exactness', 'updated_at:desc'],
                 'typoTolerance' => ['disableOnAttributes' => ['key']],

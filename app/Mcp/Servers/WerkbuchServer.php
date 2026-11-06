@@ -7,6 +7,7 @@ use App\Http\Middleware\EnsureMcpToken;
 use App\Http\Middleware\GuardMcpRequest;
 use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\ThrottleApi;
+use App\Mcp\Tools\SearchTool;
 use App\Mcp\Tools\WhoamiTool;
 use Illuminate\Support\Facades\Route;
 use Laravel\Mcp\Facades\Mcp;
@@ -47,6 +48,7 @@ final class WerkbuchServer extends Server
 
     protected array $tools = [
         WhoamiTool::class,
+        SearchTool::class,
     ];
 
     protected array $resources = [];

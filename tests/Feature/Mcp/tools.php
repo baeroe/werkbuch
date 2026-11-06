@@ -13,4 +13,9 @@ use Tests\Feature\Access\MatrixWorld;
 
 return [
     'whoami:call' => [],
+    // the key of an item of the world: a key match also without an index (feature tests search no engine)
+    'search:call' => ['arguments' => fn (MatrixWorld $w) => [
+        'q' => $w->item('project_admin')->key, 'types' => ['items', 'projects'], 'limit' => 5, 'include_archived' => 1,
+        'state_category' => ['backlog', 'started'], 'assignee_id' => ['none'],
+    ]],
 ];
