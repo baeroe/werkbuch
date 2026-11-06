@@ -126,7 +126,8 @@ final class OperationsSchemas
         return self::object(
             'Only the keys that are sent change; nothing changing is a no-op (the version stays, no event) also on an outdated `base_version`. '
                 .'With `base_version` that is not the current version of the page the answer is 409 `page_conflict` (`current` holds the page as it is now) and nothing is written; '
-                .'without it the save goes through and the state it replaces is kept as a version. A state of someone else, one that rested ten minutes and one the writer asks for with `keep_current` are kept as a version.',
+                .'without it the save goes through and the state it replaces is kept as a version. A state of someone else, one that rested ten minutes and one the writer asks for with `keep_current` are kept as a version. '
+                .'To send an answer back leave out `content` (the Markdown), as it comes with `content_json` and both are 422 (`field.rich_text.both`). Then a `PATCH` changes nothing.',
             [
                 'title' => ['type' => 'string', 'minLength' => 1, 'maxLength' => PageInput::TITLE_MAX, 'description' => 'Trimmed; cannot be emptied.'],
                 'emoji' => ['type' => ['string', 'null'], 'description' => 'One emoji; `null` or `""` removes it.'],
@@ -194,6 +195,7 @@ final class OperationsSchemas
                         'weekday' => ['type' => 'integer', 'minimum' => 0, 'maximum' => 6],
                     ],
                     'required' => ['n', 'weekday'],
+                    'additionalProperties' => false,
                 ],
                 'yearly_date' => ['type' => ['string', 'null'], 'pattern' => '^\d{2}-\d{2}$', 'description' => 'Yearly: `MM-DD`; `null` is the day of `starts_on`. 02-29 runs on 02-28 in years that are not leap years.'],
                 'time' => ['type' => 'string', 'pattern' => '^([01]\d|2[0-3]):[0-5]\d$', 'description' => '`HH:MM` on the clock of the organisation.'],
@@ -207,10 +209,12 @@ final class OperationsSchemas
                         'count' => ['type' => 'integer', 'minimum' => 1, 'maximum' => Schedule::MAX_COUNT, 'description' => 'With `count`.'],
                     ],
                     'required' => ['type'],
+                    'additionalProperties' => false,
                 ],
                 'paused' => ['type' => 'boolean', 'description' => 'A paused schedule makes nothing; left out is not paused.'],
             ],
             'required' => ['frequency', 'interval', 'time', 'starts_on', 'ends'],
+            'additionalProperties' => false,
         ];
     }
 

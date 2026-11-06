@@ -184,8 +184,8 @@ it('says what a body requires', function () use ($body) {
         ->and($comment['oneOf'])->toBe([['required' => ['body']], ['required' => ['body_json']]])
         ->and($body('PATCH', '/comments/{comment}')['oneOf'])->toBe($comment['oneOf'])
         ->and(Document::operation('POST', '/work-items/{item}/comments')['requestBody']['required'])->toBeTrue()
-        ->and($body('PUT', '/comments/{comment}/reactions')['required'])->toBe(['emoji'])
-        // the emoji of a DELETE may come as the query `?emoji=`, so the body is optional there
+        // the emoji of a PUT and of a DELETE may come as the query `?emoji=`, so the body is optional there
+        ->and($body('PUT', '/comments/{comment}/reactions'))->not->toHaveKey('required')
         ->and($body('DELETE', '/comments/{comment}/reactions'))->not->toHaveKey('required')
         ->and($body('POST', '/attachments', 'multipart/form-data')['required'])->toBe(['project_id', 'kind', 'file'])
         ->and($body('POST', '/views')['required'])->toBe(ViewInput::FIELDS)

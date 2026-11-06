@@ -68,10 +68,9 @@ final class ContentSchemas
     public static function reaction(): array
     {
         return self::object(
-            'The reaction (`emoji` may also come as the query `?emoji=`): one emoji (one grapheme of at most '.Emoji::MAX_BYTES.' bytes; 👍 and 👍🏽 are two). Anyone who may comment can react; '
+            'The reaction (`emoji` in the body or in the query `?emoji=`, one of them is required, else 422 at `emoji`): one emoji (one grapheme of at most '.Emoji::MAX_BYTES.' bytes; 👍 and 👍🏽 are two). Anyone who may comment can react; '
                 .'the same emoji twice changes nothing, and only the own one is taken back.',
             ['emoji' => ['type' => 'string', 'minLength' => 1, 'maxLength' => Emoji::MAX_BYTES, 'description' => 'The emoji.']],
-            ['emoji'],
         );
     }
 

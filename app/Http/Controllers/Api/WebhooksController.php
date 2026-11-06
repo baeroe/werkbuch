@@ -124,7 +124,7 @@ final class WebhooksController extends Controller
     /**
      * Send a delivery again.
      *
-     * `{data: WebhookDelivery}`: the attempt of sending a delivery again, made in this request with the same body and delivery ID but a new timestamp. At most 6 a minute per account, shared with the test ping (429 `too_many_requests`); 404 for a delivery of another webhook.
+     * `{data: WebhookDelivery}`: the attempt of sending a delivery again, made in this request with the same body and delivery ID but a new timestamp. At most 6 a minute per account, shared with the test ping (429 `too_many_requests`); 404 for a delivery of another webhook; 503 `webhook_not_logged` when the attempt left no log line.
      */
     public function redeliver(Request $request, Webhook $webhook, WebhookDelivery $delivery): WebhookDeliveryResource
     {

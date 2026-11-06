@@ -172,8 +172,12 @@ it('describes the schedule with the keys its parser reads and nothing else', fun
         ->and($schedule['properties']['interval']['maximum'])->toBe(999)
         ->and($schedule['properties']['nth_weekday']['properties']['n']['enum'])->toBe([1, 2, 3, 4, -1])
         ->and($schedule['properties']['ends']['properties']['count']['maximum'])->toBe(9999)
-        // the parser refuses a key it does not know (`field.schedule.shape`): this is the one closed object
-        ->and($schedule)->not->toHaveKey('x-werkbuch-open');
+        // the parser refuses a key it does not know (`field.schedule.shape`) at the schedule, at `ends` and at `nth_weekday`
+        // (the harness opens the whole subtree of a body marked `x-werkbuch-open`, so this is documentation only there)
+        ->and($schedule)->not->toHaveKey('x-werkbuch-open')
+        ->and($schedule['additionalProperties'])->toBeFalse()
+        ->and($schedule['properties']['ends']['additionalProperties'])->toBeFalse()
+        ->and($schedule['properties']['nth_weekday']['additionalProperties'])->toBeFalse();
 });
 
 it('describes a notification with its data, its times and its excerpt', function () use ($schema) {
@@ -310,6 +314,9 @@ it('says what the server does in the descriptions', function () use ($body) {
         ->and(Document::operation('POST', '/webhooks/{webhook}/rotate-secret')['description'])->toContain('shown once')
         ->and($ping['description'])->toContain('6 a minute')
         ->and($again['description'])->toContain('6 a minute')
+        ->and($ping['description'])->toContain('503 `webhook_not_logged`')
+        ->and($again['description'])->toContain('503 `webhook_not_logged`')
+        ->and($body('PATCH', '/pages/{page}')['description'])->toContain('leave out `content`')
         ->and(array_key_exists('429', $ping['responses']))->toBeTrue()
         ->and(array_key_exists('429', $again['responses']))->toBeTrue()
         ->and(Document::operation('POST', '/system/test-mail')['description'])->toContain('6 a minute')
@@ -355,6 +362,10 @@ it('lets a client send and read everything the document names', function () use 
     $this->getJson('/api/v1/templates?lean=1')->assertOk();
     $this->getJson("/api/v1/templates/{$template['id']}/draft")->assertOk();
     $this->postJson('/api/v1/templates/preview', ['schedule' => $schedule, 'title' => 'Bericht {month_name}', 'run_count' => 1])->assertOk();
+    // the parser refuses a key it does not know, at the schedule, at `ends` and at `nth_weekday`
+    $this->postJson('/api/v1/templates/preview', ['schedule' => [...$schedule, 'extra' => 1]])->assertUnprocessable()->assertJsonPath('reason', 'validation_failed');
+    $this->postJson('/api/v1/templates/preview', ['schedule' => [...$schedule, 'ends' => ['type' => 'never', 'extra' => 1]]])->assertUnprocessable();
+    $this->postJson('/api/v1/templates/preview', ['schedule' => [...$schedule, 'nth_weekday' => ['n' => 1, 'weekday' => 1, 'extra' => 1]]])->assertUnprocessable();
     $this->postJson("/api/v1/templates/{$template['id']}/run")->assertOk()->assertJsonPath('data.run.status', 'created');
     $this->getJson("/api/v1/templates/{$template['id']}/runs")->assertOk()->assertJsonCount(1, 'data');
     $this->deleteJson("/api/v1/templates/{$template['id']}")->assertNoContent();
