@@ -81,7 +81,7 @@ Inbox und Einstellungen gehören dem Konto des Tokens: Lesen braucht `read`, all
 
 | Endpunkt | Bedeutung |
 |---|---|
-| `GET /api/v1/notifications` | Die Inbox, die neuesten zuerst, in Seiten (`cursor`, `per_page` 1–100). `unread_only=1` und `mentions_only=1` filtern. |
+| `GET /api/v1/notifications` | Die Inbox, die neuesten zuerst, in Seiten (`cursor`, `per_page` 1–100). `filter[unread]=1` behält die ungelesenen, `filter[event]=mentioned` die Erwähnungen (mehrere Arten mit Komma getrennt). |
 | `POST /api/v1/notifications/read` | `{"ids": [...]}` (1 bis 100) oder `{"all": true}`, mit `"mentions_only": true` nur die Erwähnungen. Antwortet `{"updated": n}`. |
 | `POST /api/v1/notifications/unread` | `{"ids": [...]}`; antwortet `{"updated": n}`. |
 | `DELETE /api/v1/notifications/{id}` | Löscht eine Benachrichtigung; `204`. |
@@ -90,7 +90,7 @@ Inbox und Einstellungen gehören dem Konto des Tokens: Lesen braucht `read`, all
 
 ```bash
 curl -H "Authorization: Bearer <token>" \
-  "https://werkbuch.example.com/api/v1/notifications?unread_only=1&per_page=20"
+  "https://werkbuch.example.com/api/v1/notifications?filter[unread]=1&per_page=20"
 ```
 
 ```json

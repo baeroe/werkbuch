@@ -55,11 +55,11 @@ it('mentions Mara over REST: her inbox has it, a read mention mails nothing, the
         ->assertJsonPath('data.0.read_at', null)
         ->assertJsonPath('data.0.mailed_at', null)
         ->assertJsonPath('data.0.item.key', $key);
-    $this->getJson('/api/v1/notifications?mentions_only=1&unread_only=1')->assertJsonPath('meta.total', 1);
+    $this->getJson('/api/v1/notifications?filter[event]=mentioned&filter[unread]=1')->assertJsonPath('meta.total', 1);
 
     // read over the API before the mail went: the collection is skipped, no mail
     $this->postJson('/api/v1/notifications/read', ['ids' => [$inbox->json('data.0.id')]])->assertOk()->assertExactJson(['updated' => 1]);
-    $this->getJson('/api/v1/notifications?unread_only=1')->assertJsonPath('meta.total', 0);
+    $this->getJson('/api/v1/notifications?filter[unread]=1')->assertJsonPath('meta.total', 0);
 
     $this->artisan('app:send-notification-mails', ['--now' => true])->assertSuccessful();
     Mail::assertNothingSent();
@@ -69,7 +69,7 @@ it('mentions Mara over REST: her inbox has it, a read mention mails nothing, the
     forgetApiAuth();
     $this->withToken($ida)->postJson("/api/v1/work-items/{$key}/comments", ['body' => '@mara und der Footer?'])->assertCreated();
     forgetApiAuth();
-    $this->withToken($mara)->getJson('/api/v1/notifications?unread_only=1')->assertJsonPath('meta.total', 1)
+    $this->withToken($mara)->getJson('/api/v1/notifications?filter[unread]=1')->assertJsonPath('meta.total', 1)
         ->assertJsonPath('data.0.event', 'mentioned');
 
     $this->artisan('app:send-notification-mails', ['--now' => true])->assertSuccessful();
@@ -84,7 +84,7 @@ it('mentions Mara over REST: her inbox has it, a read mention mails nothing, the
         ->assertSeeInHtml(url("/items/{$key}"), false)
         ->assertSeeInHtml(url('/me/notifications'), false);
 
-    $this->getJson('/api/v1/notifications?unread_only=1')->assertJsonPath('data.0.mailed_at', fn (?string $at) => $at !== null);
+    $this->getJson('/api/v1/notifications?filter[unread]=1')->assertJsonPath('data.0.mailed_at', fn (?string $at) => $at !== null);
     // the sent collection is not sent again
     $this->artisan('app:send-notification-mails', ['--now' => true])->assertSuccessful();
     Mail::assertSent(NotificationDigest::class, 1);

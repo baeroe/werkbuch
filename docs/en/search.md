@@ -44,7 +44,7 @@ All keys of the palette are on the [keyboard page](/en/keyboard).
 
 ## REST
 
-`GET /api/v1/search` needs a token with `read` (or the session of the interface).
+`GET /api/v1/search` needs a token with `read` (or the session of the interface); tokens, errors and limits are explained on the page [REST API](/en/api).
 
 | Parameter | Value |
 |---|---|

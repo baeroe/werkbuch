@@ -78,3 +78,15 @@ it('refuses a cursor of another list at cursor', function () {
     $this->getJson('/api/v1/_t/people?per_page=1&cursor='.$foreign)->assertUnprocessable()
         ->assertJsonPath('reason', 'validation_failed')->assertJsonPath('errors.cursor.0', __('field.cursor.invalid'));
 });
+
+it('refuses a cursor that does not read or carries a signature this list has not', function (string $cursor) {
+    User::factory()->count(2)->create();
+
+    // before Phase 12 a cursor that did not read was the first page
+    $this->getJson('/api/v1/_t/people?per_page=1&cursor='.urlencode($cursor))->assertUnprocessable()
+        ->assertJsonPath('errors.cursor.0', __('field.cursor.invalid'));
+})->with([
+    'no cursor' => 'abc',
+    'no object' => rtrim(strtr(base64_encode('"x"'), '+/', '-_'), '='),
+    'signed' => (new Cursor(['id' => '01', '_sig' => 'id:asc'], true))->encode(),
+]);

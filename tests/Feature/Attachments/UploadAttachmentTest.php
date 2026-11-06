@@ -22,7 +22,12 @@ beforeEach(function () {
 
 $png = fn (string $name = 'skizze.png') => UploadedFile::fake()->createWithContent($name, (string) base64_decode(explode(',', imageDataUrl())[1]));
 
-$upload = fn (User $user, array $input, ?UploadedFile $file) => test()->actingAs($user)->post('/api/v1/attachments', [...$input, ...($file === null ? [] : ['file' => $file])], ['Accept' => 'application/json']);
+// the session by its guard, every call with only its account: the throttle keys the session by the guard `web` (RateKey)
+$upload = function (User $user, array $input, ?UploadedFile $file) {
+    forgetApiAuth();
+
+    return test()->actingAs($user, 'web')->post('/api/v1/attachments', [...$input, ...($file === null ? [] : ['file' => $file])], ['Accept' => 'application/json']);
+};
 
 it('stores an image for a text without owner and records nothing', function () use ($png, $upload) {
     $project = Project::factory()->identifier('WEB')->create();

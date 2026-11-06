@@ -23,12 +23,17 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * e-mail address of a person and the description and responsible person of a bot only org admins (bots have no
  * address, people neither description nor responsible person), a new e-mail address only from the session of the
  * interface (P6: a token could otherwise take an account over through "forgot password"). The rights are checked only
- * for the fields that really change, so a client may send the whole object back. Only the fields the input names
- * change; the event `user.updated` lists what really changed, and nothing changed means no event and no write.
+ * for the fields that really change, so a client may send the whole object back: the inherited language and time zone
+ * it shows stay inherited (A391). Only the fields the input names change; a bot keeps a responsible person (`null` is
+ * refused, as CreateBot never leaves one out). The event `user.updated` lists what really changed, and nothing changed
+ * means no event and no write.
  */
 final class UpdateUser
 {
     use AsAction;
+
+    /** The keys of the input the action reads (the document names exactly these, K15); the rest is ignored. */
+    public const FIELDS = ['name', 'handle', 'email', 'locale', 'timezone', 'avatar_url', 'description', 'owner_id'];
 
     /**
      * @param  array<string, mixed>  $input
@@ -50,6 +55,22 @@ final class UpdateUser
 
         if (is_string($input['email'] ?? null)) {
             $input['email'] = Str::lower($input['email']);
+        }
+
+        // what UserResource shows is the effective language and time zone: the inherited one coming back is no
+        // setting of the account's own (A391), so it keeps following the organization
+        if (array_key_exists('locale', $input) && $user->locale === null && $input['locale'] === $user->effectiveLocale()->value) {
+            unset($input['locale']);
+        }
+
+        if (array_key_exists('timezone', $input) && $user->timezone === null && $input['timezone'] === $user->effectiveTimezone()) {
+            unset($input['timezone']);
+        }
+
+        // the responsible person the bot has, coming back unchanged, is no new choice (A75, as `bot_id` of a webhook): a
+        // person deactivated since does not refuse the bot's own answer, a new one still has to be an active person
+        if ($user->isBot() && array_key_exists('owner_id', $input) && $user->owner_id !== null && $input['owner_id'] === $user->owner_id) {
+            unset($input['owner_id']);
         }
 
         $current = [
@@ -88,7 +109,11 @@ final class UpdateUser
             'timezone' => ['sometimes', 'required', 'string', 'timezone:all'],
             'avatar_url' => ['sometimes', ...ImageInput::rules($avatar)],
             'description' => $user->isBot() ? ['sometimes', 'nullable', 'string', 'max:'.AccountInput::DESCRIPTION_MAX] : ['prohibited'],
-            'owner_id' => $user->isBot() ? ['sometimes', 'nullable', 'bail', 'string', 'ulid', AccountInput::owner()] : ['prohibited'],
+            // a bot keeps a responsible person, as CreateBot gives it one: not named stays, `null` is refused (only the
+            // default bot has none, and its own answer may come back)
+            'owner_id' => $user->isBot()
+                ? ['sometimes', 'bail', $user->owner_id === null ? 'nullable' : 'required', 'string', 'ulid', AccountInput::owner()]
+                : ['prohibited'],
         ], [...AccountInput::messages(), ...ImageInput::messages('avatar_url')])->validate();
 
         $changes = [];

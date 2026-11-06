@@ -27,6 +27,9 @@ final class SaveLabel
 {
     use AsAction;
 
+    /** The keys of the input the action reads (the OpenAPI document holds its body against them). */
+    public const FIELDS = ['name', 'color'];
+
     /**
      * @param  array<array-key, mixed>  $input  `name`, `color`
      *

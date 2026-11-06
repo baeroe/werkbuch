@@ -4,10 +4,12 @@ namespace App\Http\Controllers\Api;
 
 use App\Actions\Users\CreateBot;
 use App\Actions\Users\ListUsers;
-use App\Enums\AccountType;
 use App\Http\Api\ApiList;
+use App\Http\Api\Body;
+use App\Http\Api\ListOf;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UserResource;
+use App\OpenApi\AccountSchemas;
 use App\Support\Actor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -17,16 +19,23 @@ use Illuminate\Http\Request;
  */
 final class BotsController extends Controller
 {
+    /**
+     * The bots.
+     */
+    #[ListOf(ListUsers::class, 'botSpec')]
     public function index(Request $request): JsonResponse
     {
-        return ApiList::respond(
-            ListUsers::run(Actor::fromRequest($request), ['type' => AccountType::Bot->value] + $request->query()),
-            UserResource::class,
-        );
+        return ApiList::respond(ListUsers::run(Actor::fromRequest($request), $request->query(), bots: true), UserResource::class);
     }
 
-    public function store(Request $request): UserResource
+    /**
+     * Create a bot (org admins).
+     *
+     * The bot answers to an active person: the one named in `owner_id`, by default the account that creates it.
+     */
+    #[Body(AccountSchemas::class, 'bot')]
+    public function store(Request $request): JsonResponse
     {
-        return new UserResource(CreateBot::run(Actor::fromRequest($request), $request->all()));
+        return (new UserResource(CreateBot::run(Actor::fromRequest($request), $request->all())))->response()->setStatusCode(201);
     }
 }

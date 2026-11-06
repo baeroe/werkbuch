@@ -30,6 +30,7 @@ use App\Actions\Favorites\ToggleFavorite;
 use App\Actions\Invitations\InviteUser;
 use App\Actions\Invitations\ListInvitations;
 use App\Actions\Labels\DeleteLabel;
+use App\Actions\Labels\GetLabel;
 use App\Actions\Labels\ListLabels;
 use App\Actions\Labels\SaveLabel;
 use App\Actions\Media\ShowMedia;
@@ -69,12 +70,15 @@ use App\Actions\Projects\RemoveMember;
 use App\Actions\Projects\UpdateMemberRole;
 use App\Actions\Projects\UpdateProject;
 use App\Actions\Properties\DeleteProperty;
+use App\Actions\Properties\GetProperty;
 use App\Actions\Properties\ListProperties;
 use App\Actions\Properties\SaveProperty;
 use App\Actions\RelationTypes\DeleteRelationType;
+use App\Actions\RelationTypes\GetRelationType;
 use App\Actions\RelationTypes\ListRelationTypes;
 use App\Actions\RelationTypes\SaveRelationType;
 use App\Actions\Resolutions\DeleteResolution;
+use App\Actions\Resolutions\GetResolution;
 use App\Actions\Resolutions\ListResolutions;
 use App\Actions\Resolutions\SaveResolution;
 use App\Actions\RichText\ListMentionables;
@@ -100,6 +104,8 @@ use App\Actions\Tokens\ListTokens;
 use App\Actions\Tokens\RevokeToken;
 use App\Actions\Users\CreateBot;
 use App\Actions\Users\DeactivateUser;
+use App\Actions\Users\GetMe;
+use App\Actions\Users\GetUser;
 use App\Actions\Users\ListUsers;
 use App\Actions\Users\ReactivateUser;
 use App\Actions\Users\UpdateUser;
@@ -122,6 +128,7 @@ use App\Actions\Webhooks\RedeliverWebhook;
 use App\Actions\Webhooks\RotateWebhookSecret;
 use App\Actions\Webhooks\SaveWebhook;
 use App\Actions\Workflows\DeleteWorkflow;
+use App\Actions\Workflows\GetWorkflow;
 use App\Actions\Workflows\ListStateUsage;
 use App\Actions\Workflows\ListWorkflows;
 use App\Actions\Workflows\SaveWorkflow;
@@ -146,6 +153,7 @@ use App\Actions\WorkItems\SetSubscription;
 use App\Actions\WorkItems\TransitionWorkItem;
 use App\Actions\WorkItems\UpdateWorkItem;
 use App\Actions\WorkItemTypes\DeleteWorkItemType;
+use App\Actions\WorkItemTypes\GetWorkItemType;
 use App\Actions\WorkItemTypes\ListWorkItemTypes;
 use App\Actions\WorkItemTypes\SaveWorkItemType;
 use App\Domain\Automations\AutomationKey;
@@ -610,6 +618,11 @@ return [
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListWorkflows::run($a, []),
         'allowed' => $everyone,
     ],
+    'GetWorkflow' => [
+        'action' => GetWorkflow::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetWorkflow::run($a, Workflow::default()),
+        'allowed' => $everyone,
+    ],
     'SaveWorkflow' => [
         'action' => SaveWorkflow::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => SaveWorkflow::run($a, null, WorkflowFixtures::standardInput('Matrix')),
@@ -633,6 +646,11 @@ return [
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListWorkItemTypes::run($a, []),
         'allowed' => $everyone,
     ],
+    'GetWorkItemType' => [
+        'action' => GetWorkItemType::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetWorkItemType::run($a, WorkItemType::factory()->create()),
+        'allowed' => $everyone,
+    ],
     'SaveWorkItemType' => [
         'action' => SaveWorkItemType::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => SaveWorkItemType::run($a, null, [
@@ -652,6 +670,11 @@ return [
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListProperties::run($a, []),
         'allowed' => $everyone,
     ],
+    'GetProperty' => [
+        'action' => GetProperty::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetProperty::run($a, Property::factory()->create()),
+        'allowed' => $everyone,
+    ],
     'SaveProperty' => [
         'action' => SaveProperty::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => SaveProperty::run($a, null, ['key' => 'matrix', 'label' => 'Matrix', 'field_type' => 'text']),
@@ -667,6 +690,11 @@ return [
     'ListLabels' => [
         'action' => ListLabels::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListLabels::run($a, []),
+        'allowed' => $everyone,
+    ],
+    'GetLabel' => [
+        'action' => GetLabel::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetLabel::run($a, Label::factory()->create()),
         'allowed' => $everyone,
     ],
     'SaveLabel' => [
@@ -686,6 +714,11 @@ return [
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListRelationTypes::run($a, []),
         'allowed' => $everyone,
     ],
+    'GetRelationType' => [
+        'action' => GetRelationType::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetRelationType::run($a, RelationType::factory()->create()),
+        'allowed' => $everyone,
+    ],
     'SaveRelationType' => [
         'action' => SaveRelationType::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => SaveRelationType::run($a, null, ['name' => 'Matrix', 'outward_label' => 'tests']),
@@ -701,6 +734,11 @@ return [
     'ListResolutions' => [
         'action' => ListResolutions::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListResolutions::run($a, []),
+        'allowed' => $everyone,
+    ],
+    'GetResolution' => [
+        'action' => GetResolution::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetResolution::run($a, Resolution::factory()->create()),
         'allowed' => $everyone,
     ],
     'SaveResolution' => [
@@ -776,6 +814,17 @@ return [
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListUsers::run($a, []),
         'allowed' => $everyone,
     ],
+    // every account reads every account, as the list (A392)
+    'GetUser' => [
+        'action' => GetUser::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetUser::run($a, $w->target),
+        'allowed' => $everyone,
+    ],
+    'GetMe' => [
+        'action' => GetMe::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetMe::run($a),
+        'allowed' => $everyone,
+    ],
     'UpdateUser' => [
         'action' => UpdateUser::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => UpdateUser::run($a, $w->target, ['name' => 'Neu']),
@@ -825,12 +874,12 @@ return [
     'ListTokens' => [
         'action' => ListTokens::class,
         // the tokens of a bot: org admins only (spec 4.2), even the person who runs it may not
-        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListTokens::run($a, $w->bot, []),
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListTokens::run($a, ['filter' => ['user_id' => $w->bot->id]]),
         'allowed' => ['org_admin', 'default_bot'],
     ],
     'CreateToken' => [
         'action' => CreateToken::class,
-        'run' => fn (Actor $a, MatrixWorld $w, string $column) => CreateToken::run($a, $w->bot, ['name' => 'Matrix', 'abilities' => ['read']]),
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => CreateToken::run($a, ['user_id' => $w->bot->id, 'name' => 'Matrix', 'abilities' => ['read']]),
         'allowed' => ['org_admin', 'default_bot'],
         'event' => EventType::TokenCreated,
     ],

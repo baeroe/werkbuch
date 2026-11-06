@@ -15,7 +15,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
 final class OrganizationResource extends JsonResource
 {
     /**
-     * @return array{id: string, name: string, locale: string, timezone: string, week_start: int, logo_url: string|null}
+     * @return array<string, mixed>
      */
     public function toArray(Request $request): array
     {
@@ -28,6 +28,7 @@ final class OrganizationResource extends JsonResource
             'locale' => $organization->locale->value,
             'timezone' => $organization->timezone,
             'week_start' => $organization->week_start,
+            /** @format uri */
             'logo_url' => ImageInput::url($organization, 'logo'),
         ];
     }

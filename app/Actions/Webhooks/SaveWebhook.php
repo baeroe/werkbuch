@@ -29,6 +29,9 @@ final class SaveWebhook
 {
     use AsAction;
 
+    /** The keys the body reads, all required (A75); others (the answer sent back) are passed over. */
+    public const FIELDS = WebhookInput::FIELDS;
+
     /**
      * @param  array<array-key, mixed>  $input  `name`, `url`, `project_id`, `events`, `bot_id`, `active`
      * @return array{webhook: Webhook, secret: ?string} the secret only for a new webhook

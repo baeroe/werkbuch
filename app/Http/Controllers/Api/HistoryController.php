@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Actions\WorkItems\ListHistory;
 use App\Http\Api\ApiList;
+use App\Http\Api\ListOf;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\HistoryEntryResource;
 use App\Models\WorkItem;
@@ -17,7 +18,12 @@ use Illuminate\Http\Request;
  */
 final class HistoryController extends Controller
 {
-    /** A page of entries, oldest first, each event on its own (`cursor`, `per_page`). */
+    /**
+     * List the history of a work item.
+     *
+     * A page of entries, oldest first, each event on its own; a relation names the other end only when the account sees it.
+     */
+    #[ListOf(ListHistory::class)]
     public function index(Request $request, WorkItem $item): JsonResponse
     {
         return ApiList::respond(ListHistory::run(Actor::fromRequest($request), $item, $request->query()), HistoryEntryResource::class);

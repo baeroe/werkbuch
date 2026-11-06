@@ -31,6 +31,9 @@ final class SaveProperty
 {
     use AsAction;
 
+    /** The keys of the input the action reads (the OpenAPI document holds its body against them). */
+    public const FIELDS = ['key', 'label', 'field_type', 'help', 'settings', 'options', 'default_value'];
+
     /**
      * @param  array<array-key, mixed>  $input  `key`, `label`, `field_type`, `help`, `settings`, `options`, `default_value`
      *

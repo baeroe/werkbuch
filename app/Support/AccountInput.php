@@ -79,7 +79,7 @@ final class AccountInput
             'description.string' => __('field.description.invalid'),
             'description.max' => __('field.description.max'),
             'owner_id.prohibited' => __('field.owner_id.people'),
-            'owner_id.required' => __('field.owner_id.invalid'),
+            'owner_id.required' => __('field.owner_id.required'),
             'owner_id.string' => __('field.owner_id.invalid'),
             'owner_id.ulid' => __('field.owner_id.invalid'),
             'owner_id.exists' => __('field.owner_id.invalid'),

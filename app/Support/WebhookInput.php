@@ -34,7 +34,8 @@ final class WebhookInput
     /** The column `webhooks.url`. */
     public const URL_MAX = 2048;
 
-    private const REQUIRED = ['name', 'url', 'project_id', 'events', 'bot_id', 'active'];
+    /** The keys of a webhook, all required (A75). */
+    public const FIELDS = ['name', 'url', 'project_id', 'events', 'bot_id', 'active'];
 
     /** The values of Laravel's `boolean` rule. */
     private const BOOLEANS = [[true, true], [false, false], [1, true], [0, false], ['1', true], ['0', false]];
@@ -53,7 +54,7 @@ final class WebhookInput
     {
         $errors = [];
 
-        foreach (self::REQUIRED as $field) {
+        foreach (self::FIELDS as $field) {
             if (! array_key_exists($field, $input)) {
                 $errors[$field] = __('field.required');
             }

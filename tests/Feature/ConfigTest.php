@@ -36,6 +36,8 @@ function setEnv(string $name, ?string $value): void
 afterEach(function () {
     setEnv('ATTACHMENTS_MAX_MB', '25');
     setEnv('WEBHOOKS_ALLOW_PRIVATE', 'false');
+    setEnv('API_RATE_LIMIT', '600');
+    setEnv('API_SESSION_RATE_LIMIT', '3000');
 });
 
 it('has the documented defaults', function () {
@@ -48,6 +50,7 @@ it('has the documented defaults', function () {
         ->and((require base_path('config/werkbuch.php'))['event_consumers'])->toBe([SearchConsumer::class, NotificationConsumer::class, LiveConsumer::class, WebhookConsumer::class])
         ->and(config('werkbuch.event_consumers'))->toBe([])
         ->and(config('werkbuch.rate_limits.api'))->toBe(600)
+        ->and(config('werkbuch.rate_limits.api_session'))->toBe(3000)
         ->and(config('werkbuch.rate_limits.mcp'))->toBe(300)
         ->and(config('werkbuch.rate_limits.login_per_ip'))->toBe(20)
         ->and(config('werkbuch.rate_limits.password_reset_per_ip'))->toBe(6)
@@ -65,17 +68,21 @@ it('has the documented defaults whatever .env says', function () {
         }
     }
 
-    expect(array_intersect_key($forced, array_flip(['ATTACHMENTS_MAX_MB', 'WEBHOOKS_ALLOW_PRIVATE'])))
-        ->toBe(['ATTACHMENTS_MAX_MB' => '25', 'WEBHOOKS_ALLOW_PRIVATE' => 'false']);
+    expect(array_intersect_key($forced, array_flip(['ATTACHMENTS_MAX_MB', 'WEBHOOKS_ALLOW_PRIVATE', 'API_RATE_LIMIT', 'API_SESSION_RATE_LIMIT'])))
+        ->toBe(['ATTACHMENTS_MAX_MB' => '25', 'WEBHOOKS_ALLOW_PRIVATE' => 'false', 'API_RATE_LIMIT' => '600', 'API_SESSION_RATE_LIMIT' => '3000']);
 });
 
 it('reads the environment', function () {
     setEnv('ATTACHMENTS_MAX_MB', '50');
     setEnv('WEBHOOKS_ALLOW_PRIVATE', 'true');
+    setEnv('API_RATE_LIMIT', '120');
+    setEnv('API_SESSION_RATE_LIMIT', '900');
     $this->refreshApplication();
 
     expect(config('werkbuch.attachments_max_mb'))->toBe(50)
-        ->and(config('werkbuch.webhooks_allow_private'))->toBeTrue();
+        ->and(config('werkbuch.webhooks_allow_private'))->toBeTrue()
+        ->and(config('werkbuch.rate_limits.api'))->toBe(120)
+        ->and(config('werkbuch.rate_limits.api_session'))->toBe(900);
 });
 
 it('lists the queues in the worker\'s order', function () {
@@ -102,6 +109,14 @@ it('allows private webhook targets in DDEV and the e2e run only (task 10, A373)'
         ->and((string) file_get_contents(repo_path('.github/workflows/tests.yml')))->toContain('E2E_WEBHOOK_HOST: 127.0.0.1')
         // the tests force them off (phpunit.xml), whatever the environment says
         ->and((string) file_get_contents(repo_path('phpunit.xml')))->toContain('<env name="WEBHOOKS_ALLOW_PRIVATE" value="false" force="true"/>');
+});
+
+it('keeps the limits of the API out of the way of e2e in DDEV and the CI (K9)', function () {
+    foreach (['.ddev/config.yaml' => ['- API_RATE_LIMIT=6000', '- API_SESSION_RATE_LIMIT=60000'], 'e2e/ci.env' => ["\nAPI_RATE_LIMIT=6000\n", "\nAPI_SESSION_RATE_LIMIT=60000\n"]] as $file => $lines) {
+        foreach ($lines as $line) {
+            expect((string) file_get_contents(repo_path($file)))->toContain($line);
+        }
+    }
 });
 
 it('gives SMTP a timeout below the lock wait of the database (T7-M6)', function () {

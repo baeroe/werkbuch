@@ -37,7 +37,8 @@ final class TemplateInput
 
     public const OFFSET_MAX = 3650;
 
-    private const REQUIRED = ['name', 'payload', 'schedule'];
+    /** The keys of a template, all required (A75). */
+    public const FIELDS = ['name', 'payload', 'schedule'];
 
     /**
      * The input with the rich text of its payload read, before any lock: `payload.description` (Markdown) or
@@ -120,7 +121,7 @@ final class TemplateInput
             $errors[$field] ??= [$message];
         };
 
-        foreach (self::REQUIRED as $field) {
+        foreach (self::FIELDS as $field) {
             if (! array_key_exists($field, $input)) {
                 $fail($field, __('field.required'));
             }

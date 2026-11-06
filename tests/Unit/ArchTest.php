@@ -40,6 +40,8 @@ arch('in App\Live only NotificationsChanged speaks to the database, to wait for 
 arch('the live channels decide only through the policies')
     ->expect('App\Broadcasting')->classes()->toBeFinal()->toHaveMethod('join')
     ->toOnlyUse([Authorize::class, Actor::class, 'App\Models\User', 'App\Models\Project', 'App\Models\WorkItem', Ulid::class]);
+arch('the OpenAPI layer is final and leaves the database and the events alone')
+    ->expect('App\OpenApi')->classes()->toBeFinal()->not->toUse([EventRecorder::class, 'Illuminate\Support\Facades\DB']);
 arch('domain classes are final')->expect('App\Domain')->classes()->toBeFinal();
 arch('rich text is final and leaves actions, http and the database alone')
     ->expect('App\RichText')->classes()->toBeFinal()->not->toUse(['App\Actions', 'App\Http', 'Illuminate\Support\Facades\DB']);
@@ -192,4 +194,55 @@ it('runs every action that records events in a transaction', function () {
         ->values()->all();
 
     expect($offenders)->toBe([]);
+});
+
+// App\OpenApi describes actions and never runs them: from App\Actions it reads class constants (`GroupWorkItems::KEYS`)
+// and calls `spec()` (the rules of a list), nothing else (K16)
+$actionUses = function (string $code, string $file = 'code'): array {
+    preg_match_all('/^use (App\\\\Actions\\\\[\\w\\\\]+?)(?: as (\\w+))?;$/m', $code, $imports, PREG_SET_ORDER);
+    $names = array_map(fn (array $import) => $import[2] ?? substr((string) strrchr('\\'.$import[1], '\\'), 1), $imports);
+    $names[] = '\\\\?App\\\\Actions\\\\[\\w\\\\]+';
+    $hits = [];
+
+    foreach (explode("\n", $code) as $index => $line) {
+        if (str_starts_with(ltrim($line), 'use ')) {
+            continue;
+        }
+
+        foreach ($names as $name) {
+            if (preg_match('/(?<![\\w\\\\])'.$name.'::(?!spec\\s*\\(|[A-Z][A-Z0-9_]*\\b(?!\\s*\\()|class\\b)/', $line) === 1
+                || preg_match('/(?:new\\s+|app\\(\\s*|resolve\\(\\s*)'.$name.'\\b/', $line) === 1) {
+                $hits[] = $file.':'.($index + 1);
+                break;
+            }
+        }
+    }
+
+    return $hits;
+};
+
+it('detects uses of actions beyond their constants and spec()', function () use ($actionUses) {
+    $code = <<<'PHP'
+        <?php
+        use App\Actions\WorkItems\GroupWorkItems;
+        use App\Actions\Users\ListUsers as Users;
+        $keys = GroupWorkItems::KEYS;
+        $spec = Users::spec();
+        #[ListOf(Users::class)]
+        GroupWorkItems::run($actor, []);
+        app(GroupWorkItems::class)->handle($actor, []);
+        Users::make()->handle($actor);
+        \App\Actions\Users\ListUsers::run($actor);
+        new GroupWorkItems();
+        $x = \App\Actions\Users\ListUsers::FILTERS;
+        PHP;
+
+    expect($actionUses($code))->toBe(['code:7', 'code:8', 'code:9', 'code:10', 'code:11']);
+});
+
+it('keeps App\OpenApi to the constants and spec() of actions', function () use ($actionUses) {
+    $hits = collect(appFiles('app/OpenApi'))
+        ->flatMap(fn (string $f) => $actionUses((string) file_get_contents(repo_path($f)), $f))->all();
+
+    expect($hits)->toBe([]);
 });

@@ -52,6 +52,10 @@ class ResetPasswordCommand extends Command
 
         $this->info("New password set for {$email}; all sessions ended.");
 
+        if ($user->disabled_at !== null) {
+            $this->warn('The account is deactivated; the password is set, the sign-in stays blocked until it is reactivated.');
+        }
+
         return self::SUCCESS;
     }
 

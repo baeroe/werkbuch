@@ -18,19 +18,31 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
  */
 final class SubscribersController extends Controller
 {
-    /** `{data: User[]}`, by name, without a page: an item has few watchers. */
+    /**
+     * List who watches a work item.
+     *
+     * `{data: User[]}`, by name, without a page: an item has few watchers.
+     */
     public function index(Request $request, WorkItem $item): AnonymousResourceCollection
     {
         return UserResource::collection(ListSubscribers::run(Actor::fromRequest($request), $item));
     }
 
-    /** Starts watching. */
+    /**
+     * Watch a work item.
+     *
+     * People only (a bot is 403); answers the item with `subscribed`.
+     */
     public function store(Request $request, WorkItem $item): WorkItemResource
     {
         return new WorkItemResource(SetSubscription::run(Actor::fromRequest($request), $item, true));
     }
 
-    /** Stops watching. */
+    /**
+     * Stop watching a work item.
+     *
+     * Answers the item with `subscribed`; only a new assignment watches again on its own.
+     */
     public function destroy(Request $request, WorkItem $item): WorkItemResource
     {
         return new WorkItemResource(SetSubscription::run(Actor::fromRequest($request), $item, false));

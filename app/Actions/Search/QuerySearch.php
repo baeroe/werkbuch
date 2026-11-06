@@ -47,6 +47,9 @@ final class QuerySearch
 
     use AsAction;
 
+    /** The keys of the query (the OpenAPI document names them, K15); others are passed over. */
+    public const KEYS = ['q', 'types', 'limit', 'include_archived'];
+
     /** @var list<string> */
     public const TYPES = ['items', 'pages', 'projects', 'people', 'views'];
 

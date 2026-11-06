@@ -40,6 +40,9 @@ final class TransitionWorkItem
 {
     use AsAction;
 
+    /** The keys of the body (the OpenAPI document names them, K15); others are passed over. */
+    public const FIELDS = ['to_state_id', 'resolution_id'];
+
     /**
      * @param  array<array-key, mixed>  $input  `to_state_id`, `resolution_id` (optional; only for a closed state)
      *

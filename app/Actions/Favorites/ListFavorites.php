@@ -6,7 +6,9 @@ use App\Access\Visibility;
 use App\Models\Favorite;
 use App\Models\View;
 use App\Support\Actor;
+use App\Support\ListQuery;
 use App\Support\ListResult;
+use App\Support\ListSpec;
 use App\Support\PageArgs;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Validation\ValidationException;
@@ -20,6 +22,12 @@ use Lorisleiva\Actions\Concerns\AsAction;
 final class ListFavorites
 {
     use AsAction;
+
+    /** A fixed list (A386, K12): no filter, sort or include; it keeps the order it has. */
+    public static function spec(): ListSpec
+    {
+        return ListSpec::fixed();
+    }
 
     /**
      * @param  array<array-key, mixed>  $input  `cursor`, `per_page`
@@ -37,6 +45,8 @@ final class ListFavorites
             ->orderBy('position')
             ->orderBy('id');
 
-        return ListResult::of($query, PageArgs::from($input));
+        [$query, $signature] = ListQuery::apply($query, $input, self::spec());
+
+        return ListResult::of($query, PageArgs::from($input), $signature);
     }
 }

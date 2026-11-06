@@ -35,6 +35,9 @@ final class SaveAutomation
 {
     use AsAction;
 
+    /** The keys of the input the action reads (the OpenAPI document holds its body against them). */
+    public const FIELDS = ['enabled', 'settings'];
+
     /**
      * @param  array<array-key, mixed>  $input  `enabled`, `settings`
      *

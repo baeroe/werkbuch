@@ -47,15 +47,15 @@ it('lists only bots or only people', function (string $type, int $count) {
     User::factory()->count(2)->create();
     User::factory()->bot()->create();
 
-    $response = $this->actingAs(User::factory()->create())->getJson("/api/v1/users?type={$type}")->assertOk()->assertJsonPath('meta.total', $count);
+    $response = $this->actingAs(User::factory()->create())->getJson("/api/v1/users?filter[type]={$type}")->assertOk()->assertJsonPath('meta.total', $count);
 
     expect(collect($response->json('data'))->pluck('type')->unique()->all())->toBe([$type]);
 })->with([['bot', 2], ['person', 3]]);
 
 it('refuses a type of account that does not exist', function (string $query) {
     $this->actingAs(User::factory()->create())->getJson("/api/v1/users?{$query}")
-        ->assertUnprocessable()->assertJsonPath('errors.type.0', __('field.type.unknown'));
-})->with(['type=robot', 'type[]=bot']);
+        ->assertUnprocessable()->assertJsonValidationErrors(['filter.type']);
+})->with(['filter[type]=robot', 'filter[type][]=bot']);
 
 it('pages through the accounts with every one exactly once, people before bots', function () {
     User::factory()->count(3)->create();
@@ -221,7 +221,8 @@ it('takes the own profile back as a whole and checks the rights only for what re
     $this->actingAs($lene);
     $profile = collect($this->getJson('/api/v1/users')->json('data'))->firstWhere('id', $lene->id);
 
-    $this->patchJson("/api/v1/users/{$lene->id}", [...array_diff_key($profile, ['locale' => true, 'timezone' => true]), 'name' => 'Lene Lind'])
+    // the inherited language and time zone come back as well and stay inherited (A391)
+    $this->patchJson("/api/v1/users/{$lene->id}", [...$profile, 'name' => 'Lene Lind'])
         ->assertOk()->assertJsonPath('data.name', 'Lene Lind');
     $this->patchJson("/api/v1/users/{$lene->id}", ['email' => 'LENE@example.com'])->assertOk();
     $this->patchJson("/api/v1/users/{$lene->id}", ['email' => 'lene.lind@example.com'])->assertForbidden()->assertJsonPath('reason', 'forbidden');

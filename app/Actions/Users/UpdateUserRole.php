@@ -25,18 +25,25 @@ final class UpdateUserRole
 {
     use AsAction;
 
+    /** The keys of the input the action reads (the document names exactly these, K15). */
+    public const FIELDS = ['org_role'];
+
     public function __construct(private readonly RoleAssignments $roles) {}
 
     /**
+     * @param  mixed  $role  the role or its name as the input sent it; anything but a known name is no role
+     *
      * @throws ValidationException at `org_role` for a role that does not exist
      * @throws Problem 409 `default_bot` or `last_admin`
      */
-    public function handle(Actor $actor, User $user, OrgRole|string $role): User
+    public function handle(Actor $actor, User $user, mixed $role): User
     {
         Authorize::check($actor, 'changeRole', $user);
 
-        $role = $role instanceof OrgRole ? $role
-            : OrgRole::tryFrom($role) ?? throw ValidationException::withMessages(['org_role' => __('field.org_role.unknown')]);
+        if (! $role instanceof OrgRole) {
+            $role = (is_string($role) ? OrgRole::tryFrom($role) : null)
+                ?? throw ValidationException::withMessages(['org_role' => __('field.org_role.unknown')]);
+        }
 
         if ($user->is_default_bot) {
             throw Problem::conflict('default_bot', detail: __('problem.detail.default_bot_role'));

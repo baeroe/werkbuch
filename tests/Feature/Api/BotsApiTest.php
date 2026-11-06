@@ -133,6 +133,25 @@ it('lets a bot send its description and responsible person back unchanged', func
     expect(Event::query()->where('type', EventType::UserUpdated)->sole()->changes)->toBe(['name' => ['old' => 'Kira', 'new' => 'Kira 2']]);
 });
 
+it('takes the own answer of a bot back whose responsible person was deactivated since (A75)', function () {
+    $owner = User::factory()->create();
+    $kira = User::factory()->bot($owner)->create(['name' => 'Kira']);
+    $owner->update(['disabled_at' => now()]);
+    $this->withToken(apiToken($kira, ['read', 'write']));
+
+    // the person it has is no new choice: the answer comes back as it went out, only the name changed
+    $this->patchJson("/api/v1/users/{$kira->id}", [...$this->getJson("/api/v1/users/{$kira->id}")->json('data'), 'name' => 'Kira 2'])
+        ->assertOk()->assertJsonPath('data.name', 'Kira 2')->assertJsonPath('data.owner_id', $owner->id);
+
+    expect(Event::query()->where('type', EventType::UserUpdated)->sole()->changes)->toBe(['name' => ['old' => 'Kira', 'new' => 'Kira 2']]);
+
+    // a new choice still has to be an active person
+    $other = User::factory()->create(['disabled_at' => now()]);
+    forgetApiAuth();
+    $this->actingAs(User::factory()->admin()->create(), 'web')->patchJson("/api/v1/users/{$kira->id}", ['owner_id' => $other->id])
+        ->assertUnprocessable()->assertJsonPath('errors.owner_id', [__('field.owner_id.invalid')]);
+});
+
 it('gives bots no e-mail address', function () {
     $kira = User::factory()->bot()->create();
 

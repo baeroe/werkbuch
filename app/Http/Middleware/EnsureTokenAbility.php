@@ -27,13 +27,23 @@ final class EnsureTokenAbility
         $user = $request->user();
         $token = $user instanceof User ? $user->currentAccessToken() : null;
         $route = $request->route();
-        $declared = $route instanceof Route ? ($route->defaults['token_ability'] ?? null) : null;
-        $ability = is_string($declared) ? $declared : (in_array($request->getMethod(), ['GET', 'HEAD'], true) ? 'read' : 'write');
+        $ability = self::required($route instanceof Route ? $route : null, $request->getMethod());
 
         if ($token instanceof PersonalAccessToken && ! $token->can($ability)) {
             throw Problem::forbidden(__('problem.detail.token_ability', ['ability' => $ability]));
         }
 
         return $next($request);
+    }
+
+    /**
+     * The ability a token needs for a route and method: the route's default `token_ability`, else `read` for `GET` and
+     * `HEAD` and `write` for everything else. The OpenAPI document says the same (`x-werkbuch-ability`).
+     */
+    public static function required(?Route $route, string $method): string
+    {
+        $declared = $route?->defaults['token_ability'] ?? null;
+
+        return is_string($declared) ? $declared : (in_array(strtoupper($method), ['GET', 'HEAD'], true) ? 'read' : 'write');
     }
 }

@@ -24,6 +24,9 @@ final class CreateBot
 {
     use AsAction;
 
+    /** The keys of the input the action reads (the document names exactly these, K15); the rest is ignored. */
+    public const FIELDS = ['name', 'handle', 'description', 'owner_id'];
+
     public function __construct(private readonly RoleAssignments $roles) {}
 
     /**

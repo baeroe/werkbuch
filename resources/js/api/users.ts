@@ -13,7 +13,9 @@ export interface ListUsersArgs extends PageArgs {
 
 /** All accounts, deactivated ones included (history and old assignments still point to them). People come first. */
 export function listUsers(args: ListUsersArgs = {}): Promise<Page<User>> {
-  return getPage<User>('/users', { ...args });
+  const { type, ...page } = args;
+
+  return getPage<User>('/users', { ...page, ...(type !== undefined && { filter: { type } }) });
 }
 
 export interface InviteUserInput {

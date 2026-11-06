@@ -15,7 +15,7 @@ use Tests\Feature\Access\MatrixWorld;
 const ROUTE_MATRIX_TOKENS = ['none' => [], 'read' => ['read'], 'write' => ['write'], 'read+write' => ['read', 'write']];
 
 /**
- * @return array<string, array{0: string, 1: string, params?: Closure(MatrixWorld): array<string, string>, body?: array<string, mixed>, session?: bool|'action', ability?: 'read'|'write'}>
+ * @return array<string, array{0: string, 1: string, params?: Closure(MatrixWorld): array<string, string>, body?: array<string, mixed>, multipart?: bool, session?: bool|'action', ability?: 'read'|'write'}>
  */
 function routeMatrixRows(): array
 {
@@ -45,7 +45,12 @@ it('opens each route only to tokens with the right ability', function (array $ro
     $uri = routeMatrixUri($path, isset($row['params']) ? ($row['params'])($w) : []);
     $client = $token === 'none' ? $this : $this->withToken(apiToken($w->account('org_admin'), ROUTE_MATRIX_TOKENS[$token]));
 
-    $response = $client->json($method, $uri, $row['body'] ?? []);
+    // a GET asks with its query, never with a body (the document says so)
+    $reads = in_array($method, ['GET', 'HEAD'], true);
+    // an upload is a form (the document says `multipart/form-data`), every other body is JSON
+    $response = ($row['multipart'] ?? false) === true
+        ? $client->post($uri, $row['body'] ?? [], ['Accept' => 'application/json'])
+        : $client->json($method, $reads && isset($row['body']) ? $uri.'?'.http_build_query($row['body']) : $uri, $reads ? [] : ($row['body'] ?? []));
     $context = "{$method} {$uri} with {$token}: {$response->getContent()}";
     $needed = $row['ability'] ?? (in_array($method, ['GET', 'HEAD'], true) ? 'read' : 'write');
 

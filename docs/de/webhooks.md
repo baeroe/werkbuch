@@ -207,7 +207,7 @@ Zustellungen laufen über die Queue `webhooks`. Ein Worker muss auf sie hören; 
 
 ## REST
 
-Alle Endpunkte brauchen die Rechte eines Org-Admins. Lesen braucht die Fähigkeit `read`, alles andere `write`.
+Alle Endpunkte brauchen die Rechte eines Org-Admins. Lesen braucht die Fähigkeit `read`, alles andere `write`. Die Listen nehmen Filter und Sortierungen wie jede Liste der [REST-API](/de/api#listen): `filter[project_id]`, `filter[active]`, `filter[bot_id]` bei den Webhooks, `filter[event]`, `filter[kind]`, `filter[succeeded]` beim Protokoll.
 
 | Endpunkt | Bedeutung |
 |---|---|

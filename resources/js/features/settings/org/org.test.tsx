@@ -73,7 +73,7 @@ const token = (id: string, changes: Partial<Token> = {}): Token => ({
 /** The accounts endpoint with its type filter, all on one page. */
 const accounts =
   (all: User[]): MockRoute =>
-  (_body, url) => ({ body: list(all.filter((user) => !url.searchParams.get('type') || user.type === url.searchParams.get('type'))) });
+  (_body, url) => ({ body: list(all.filter((user) => !url.searchParams.get('filter[type]') || user.type === url.searchParams.get('filter[type]'))) });
 
 const problem = (status: number, reason: string, extra: Record<string, unknown> = {}) => ({ status, body: { type: 'about:blank', title: reason, status, reason, ...extra } });
 const unavailable = () => problem(503, 'service_unavailable', { detail: 'Der Server ist gerade nicht erreichbar.' });
@@ -90,7 +90,7 @@ function routes(overrides: Record<string, MockRoute> = {}): Record<string, MockR
     'GET /api/v1/invitations': () => ({ body: list([invitation()]) }),
     'GET /api/v1/tokens': (_body, url) => ({
       body: list(
-        url.searchParams.get('user_id') === 'u_kira'
+        url.searchParams.get('filter[user_id]') === 'u_kira'
           ? [
               token('t_old', { name: 'CI-Skript', expires_at: '2026-09-30T21:59:00.000Z', last_used_at: '2026-09-29T20:15:00.000Z' }),
               token('t_mcp', { name: 'MCP', abilities: ['read', 'write', 'mcp'], expires_at: '2099-01-01T12:00:00.000Z' }),
@@ -373,7 +373,7 @@ describe('People', () => {
 
     expect(await screen.findByRole('combobox', { name: 'Rolle von Lene Vogt' })).toBeTruthy();
     expect(within(screen.getByRole('list', { name: 'Personen' })).getAllByRole('listitem')).toHaveLength(101);
-    expect(api!.calls.filter((call) => call.url.startsWith('/api/v1/users')).map((call) => call.url)).toEqual(['/api/v1/users?type=person', '/api/v1/users?type=person&cursor=next']);
+    expect(api!.calls.filter((call) => call.url.startsWith('/api/v1/users')).map((call) => call.url)).toEqual(['/api/v1/users?filter%5Btype%5D=person', '/api/v1/users?cursor=next&filter%5Btype%5D=person']);
   });
 
   it('says when the people could not be loaded, and when there is nobody yet', async () => {
@@ -634,7 +634,7 @@ describe('Bots', () => {
 
     await screen.findAllByRole('article');
     const asked = api!.calls.filter((call) => call.url.startsWith('/api/v1/users')).map((call) => call.url);
-    expect(asked.sort()).toEqual(['/api/v1/users?type=bot', '/api/v1/users?type=person']);
+    expect(asked.sort()).toEqual(['/api/v1/users?filter%5Btype%5D=bot', '/api/v1/users?filter%5Btype%5D=person']);
   });
 
   it('keeps a responsible person who was deactivated as a choice of the bot, but offers no other deactivated one', async () => {

@@ -39,6 +39,9 @@ final class UpdatePage
 {
     use AsAction;
 
+    /** The keys the body reads (`content` or `content_json`, not both); others are passed over. */
+    public const FIELDS = ['title', 'emoji', 'content', 'content_json', 'base_version', 'keep_current'];
+
     /**
      * @param  array<array-key, mixed>  $input  `title`, `emoji`, `content` (Markdown) or `content_json` (Tiptap JSON), `base_version`, `keep_current`
      *

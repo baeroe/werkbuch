@@ -28,6 +28,9 @@ final class SaveRelationType
 {
     use AsAction;
 
+    /** The keys of the input the action reads (the OpenAPI document holds its body against them). */
+    public const FIELDS = ['name', 'outward_label', 'inward_label'];
+
     public const LABEL_MAX = 60;
 
     /**

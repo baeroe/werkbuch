@@ -15,6 +15,9 @@ final class MarkNotificationsUnread
 {
     use AsAction;
 
+    /** The key the body reads. */
+    public const FIELDS = ['ids'];
+
     /**
      * @param  array<array-key, mixed>  $input  `ids`
      * @return int the number of notifications marked unread

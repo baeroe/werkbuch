@@ -7,7 +7,9 @@ use App\Exceptions\Problem;
 use App\Models\Page;
 use App\Models\PageVersion;
 use App\Support\Actor;
+use App\Support\ListQuery;
 use App\Support\ListResult;
+use App\Support\ListSpec;
 use App\Support\PageArgs;
 use Illuminate\Validation\ValidationException;
 use Lorisleiva\Actions\Concerns\AsAction;
@@ -23,6 +25,12 @@ final class ListPageVersions
 
     /** The columns of a listed version: everything but the text. */
     private const COLUMNS = ['id', 'page_id', 'version', 'title', 'author_id', 'created_at'];
+
+    /** A fixed list (A386, K12): no filter, sort or include; it keeps the order it has. */
+    public static function spec(): ListSpec
+    {
+        return ListSpec::fixed();
+    }
 
     /**
      * @param  array<array-key, mixed>  $query  `cursor`, `per_page`
@@ -40,6 +48,8 @@ final class ListPageVersions
             ->select(array_map(fn (string $column) => "page_versions.{$column}", self::COLUMNS))
             ->orderByDesc('version')->orderBy('id');
 
-        return ListResult::of($versions, $args);
+        [$versions, $signature] = ListQuery::apply($versions, $query, self::spec());
+
+        return ListResult::of($versions, $args, $signature);
     }
 }

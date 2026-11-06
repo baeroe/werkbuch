@@ -81,7 +81,7 @@ The inbox and the settings belong to the account of the token: reading needs `re
 
 | Endpoint | Meaning |
 |---|---|
-| `GET /api/v1/notifications` | The inbox, newest first, in pages (`cursor`, `per_page` 1–100). `unread_only=1` and `mentions_only=1` filter. |
+| `GET /api/v1/notifications` | The inbox, newest first, in pages (`cursor`, `per_page` 1–100). `filter[unread]=1` keeps the unread, `filter[event]=mentioned` the mentions (several events separated by commas). |
 | `POST /api/v1/notifications/read` | `{"ids": [...]}` (1 to 100) or `{"all": true}`, with `"mentions_only": true` only the mentions. Answers `{"updated": n}`. |
 | `POST /api/v1/notifications/unread` | `{"ids": [...]}`; answers `{"updated": n}`. |
 | `DELETE /api/v1/notifications/{id}` | Deletes one notification; `204`. |
@@ -90,7 +90,7 @@ The inbox and the settings belong to the account of the token: reading needs `re
 
 ```bash
 curl -H "Authorization: Bearer <token>" \
-  "https://werkbuch.example.com/api/v1/notifications?unread_only=1&per_page=20"
+  "https://werkbuch.example.com/api/v1/notifications?filter[unread]=1&per_page=20"
 ```
 
 ```json

@@ -11,7 +11,7 @@
 
 import type { RichText, Schedule, SchedulePreview, Template, TemplateDraft, TemplatePayload, TemplateRun, TemplateSummary, WorkItem } from '@/types';
 import type { Page, PageArgs } from './client';
-import { del, get, getPage, one, post, put } from './http';
+import { del, get, getPage, one, post, put, readPost } from './http';
 
 const templatePath = (id: string) => `/templates/${encodeURIComponent(id)}`;
 
@@ -71,5 +71,5 @@ export interface SchedulePreviewInput {
 
 /** The next terms of a schedule as the scheduler will run them (a reading `POST`, nothing is saved). */
 export function previewSchedule(input: SchedulePreviewInput): Promise<SchedulePreview> {
-  return one(post<{ data: SchedulePreview }>('/templates/preview', input));
+  return one(readPost<{ data: SchedulePreview }>('/templates/preview', input));
 }

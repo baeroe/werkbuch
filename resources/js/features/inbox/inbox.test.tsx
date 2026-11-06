@@ -97,8 +97,8 @@ const unavailable = { status: 503, body: { type: 'about:blank', title: 'down', s
 
 /** The inbox as `ListNotifications` answers it: newest first (the list is kept so), the filters, a page of `per_page`. */
 const listRoute: MockRoute = (_, url) => {
-  const unreadOnly = url.searchParams.get('unread_only') === '1';
-  const mentionsOnly = url.searchParams.get('mentions_only') === '1';
+  const unreadOnly = url.searchParams.get('filter[unread]') === '1';
+  const mentionsOnly = url.searchParams.get('filter[event]') === 'mentioned';
   const perPage = Number(url.searchParams.get('per_page') ?? 100);
   const matching = notifications.filter((entry) => (!unreadOnly || entry.read_at === null) && (!mentionsOnly || entry.event === 'mentioned'));
   return { body: list(matching.slice(0, perPage), matching.length) };
@@ -422,7 +422,7 @@ describe('the inbox', () => {
     expect(rows()).toHaveLength(1);
     expect(screen.getByRole('button', { name: 'Ungelesen' }).getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByRole('button', { name: 'Erwähnungen' }).getAttribute('aria-pressed')).toBe('true');
-    expect(api.calls.some((call) => call.url === '/api/v1/notifications?per_page=50&unread_only=1&mentions_only=1')).toBe(true);
+    expect(api.calls.some((call) => call.url === '/api/v1/notifications?per_page=50&filter%5Bunread%5D=1&filter%5Bevent%5D=mentioned')).toBe(true);
 
     // the filter goes into the address, without a visit to the server
     await user.click(screen.getByRole('button', { name: 'Ungelesen' }));

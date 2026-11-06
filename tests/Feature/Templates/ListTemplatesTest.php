@@ -38,10 +38,10 @@ it('lists the templates of every project the reader sees', function () use ($wor
 
     expect($ids($all))->toBe(['Bericht', 'Wartung'])
         ->and($all->total)->toBe(2)
-        ->and($ids(ListTemplates::run(actor($mara), 'web', [])))->toBe(['Wartung'])
+        ->and($ids(ListTemplates::run(actor($mara), null, ['filter' => ['project_id' => strtoupper($app->id)]])))->toBe(['Bericht'])
         ->and($ids(ListTemplates::run(actor($mara), $app, [])))->toBe(['Bericht'])
-        ->and(problemOf(fn () => ListTemplates::run(actor($mara), 'OPS', []))->status)->toBe(404)
-        ->and(problemOf(fn () => ListTemplates::run(actor($mara), 'NOPE', []))->status)->toBe(404)
+        // a project the reader does not see is an empty list (K11), not a 404
+        ->and($ids(ListTemplates::run(actor($mara), null, ['filter' => ['project_id' => $ops->id]])))->toBe([])
         ->and(problemOf(fn () => ListTemplates::run(actor($mara), $gone, []))->status)->toBe(404)
         ->and($ids(ListTemplates::run(actor(User::factory()->admin()->create()), null, [])))->toBe(['Bericht', 'Geheim', 'Wartung']);
 });

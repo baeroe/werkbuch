@@ -7,7 +7,9 @@ use App\Exceptions\Problem;
 use App\Models\Template;
 use App\Models\TemplateRun;
 use App\Support\Actor;
+use App\Support\ListQuery;
 use App\Support\ListResult;
+use App\Support\ListSpec;
 use App\Support\PageArgs;
 use Illuminate\Validation\ValidationException;
 use Lorisleiva\Actions\Concerns\AsAction;
@@ -20,6 +22,12 @@ use Lorisleiva\Actions\Concerns\AsAction;
 final class ListTemplateRuns
 {
     use AsAction;
+
+    /** A fixed list (A386, K12): no filter, sort or include; it keeps the order it has. */
+    public static function spec(): ListSpec
+    {
+        return ListSpec::fixed();
+    }
 
     /**
      * @param  array<array-key, mixed>  $query  `cursor`, `per_page`
@@ -38,6 +46,8 @@ final class ListTemplateRuns
             ->where('template_id', $template->id)
             ->orderByDesc('ran_cursor')->orderByDesc('id');
 
-        return ListResult::of($runs, PageArgs::from($query));
+        [$runs, $signature] = ListQuery::apply($runs, $query, self::spec());
+
+        return ListResult::of($runs, PageArgs::from($query), $signature);
     }
 }

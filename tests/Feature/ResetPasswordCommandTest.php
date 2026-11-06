@@ -68,6 +68,26 @@ it('fails for an empty or missing STDIN and for unknown accounts', function () {
     expect(Hash::check('old-password', (string) $user->fresh()?->password))->toBeTrue();
 });
 
+it('sets the password of a deactivated account and says that the sign-in stays blocked', function () {
+    $user = User::factory()->disabled()->create(['password' => 'old-password']);
+    passwordOnStdin("piped-password\n");
+
+    $this->artisan('app:reset-password', ['email' => $user->email, '--no-interaction' => true])
+        ->expectsOutputToContain('account is deactivated; the password is set, the sign-in stays blocked')
+        ->assertSuccessful();
+
+    expect(Hash::check('piped-password', (string) $user->fresh()?->password))->toBeTrue();
+});
+
+it('says nothing of a block for an active account', function () {
+    $user = User::factory()->create(['password' => 'old-password']);
+    passwordOnStdin("piped-password\n");
+
+    $this->artisan('app:reset-password', ['email' => $user->email, '--no-interaction' => true])
+        ->doesntExpectOutputToContain('deactivated')
+        ->assertSuccessful();
+});
+
 it('takes no password argument', function () {
     $definition = $this->app->make(ResetPasswordCommand::class)->getDefinition();
 

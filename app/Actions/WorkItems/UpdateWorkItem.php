@@ -43,6 +43,9 @@ final class UpdateWorkItem
 {
     use AsAction;
 
+    /** The keys of the body (the OpenAPI document names them, K15); others are passed over. */
+    public const FIELDS = ['title', 'description', 'description_json', 'base_description_version', 'priority', 'label_ids', 'start_date', 'due_date', 'assignee_id', 'parent_id', 'values', 'rank', 'state_id', 'resolution_id'];
+
     /**
      * @param  array<array-key, mixed>  $input  `title`, `description` or `description_json`, `base_description_version`, `priority`, `label_ids`, `start_date`, `due_date`, `parent_id` (ULID or key), `values` (property key → value; only the keys sent), `rank`, `assignee_id`, `state_id` and `resolution_id` (a move, TransitionWorkItem)
      *

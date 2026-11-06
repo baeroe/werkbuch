@@ -15,7 +15,7 @@ async function resetOrganizationName(page: Page): Promise<void> {
 
 /** Makes Lene a member again over the API (a spec below signs in as her, a member). */
 async function resetLeneToMember(page: Page): Promise<void> {
-  const people = (await (await api(page, 'GET', '/api/v1/users?type=person')).json()) as { data: { id: string; email: string }[]; meta: { next_cursor: string | null } };
+  const people = (await (await api(page, 'GET', '/api/v1/users?filter[type]=person')).json()) as { data: { id: string; email: string }[]; meta: { next_cursor: string | null } };
   const lene = people.data.find((person) => person.email === PEOPLE.lene.email);
   expect(lene, 'Lene on the first page of people').toBeDefined();
   const response = await api(page, 'PUT', `/api/v1/users/${lene!.id}/role`, { org_role: 'member' });

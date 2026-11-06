@@ -35,6 +35,9 @@ final class AddComment
 {
     use AsAction;
 
+    /** The keys of the body (the OpenAPI document names them, K15); others are passed over. */
+    public const FIELDS = ['body', 'body_json'];
+
     /**
      * @param  array<array-key, mixed>  $input  `body` (Markdown) or `body_json` (Tiptap JSON)
      *

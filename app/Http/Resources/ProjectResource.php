@@ -44,6 +44,8 @@ final class ProjectResource extends JsonResource
             // org admins are admins everywhere and a public project reads as a viewer: whether the account is a member
             // (and so has nothing to join) the role alone does not say
             'is_member' => $user instanceof User && Visibility::isMember($user, $project),
+            // only with `include=members` (K13)
+            'members' => $this->when($project->relationLoaded('members'), fn () => ProjectMemberResource::collection($project->members)),
         ];
     }
 }

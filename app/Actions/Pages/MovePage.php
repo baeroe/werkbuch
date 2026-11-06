@@ -36,6 +36,9 @@ final class MovePage
 {
     use AsAction;
 
+    /** Both keys are required (`null` is the top level / the end). */
+    public const FIELDS = ['parent_id', 'before_id'];
+
     /**
      * @param  array<array-key, mixed>  $input  `parent_id`, `before_id`
      *

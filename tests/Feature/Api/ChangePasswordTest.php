@@ -119,7 +119,24 @@ it('limits the tries to six a minute per account and names the wait at the curre
         ->assertJsonPath('errors.current_password', [__('auth.throttle', ['seconds' => 60])]);
     expect(Hash::check('old-password', (string) $lene->fresh()?->password))->toBeTrue();
 
-    // another account has its own tries
-    $this->actingAs(User::factory()->create(['password' => 'other-password']))
+    // another account has its own tries (the guard web: the throttle reads the session before auth)
+    forgetApiAuth();
+    $this->actingAs(User::factory()->create(['password' => 'other-password']), 'web')
         ->putJson('/api/v1/me/password', [...$wrong, 'current_password' => 'other-password'])->assertNoContent();
+});
+
+it('counts a token at the session-only route by its address, never against the tries of the account', function () {
+    $this->freezeTime();
+    $lene = User::factory()->create(['password' => 'old-password']);
+    $change = ['current_password' => 'old-password', 'password' => 'new-password', 'password_confirmation' => 'new-password'];
+
+    // a token gets 403 session_required here and counts by its address; however often it knocks, the six tries of the
+    // owner's session stay (T6-M4: RateKey, never $request->user(), which before Auth may be the token or nobody)
+    $this->withToken(apiToken($lene, ['read', 'write']));
+    foreach (range(1, 8) as $i) {
+        $this->putJson('/api/v1/me/password', $change)->assertStatus($i <= 6 ? 403 : 429);
+    }
+
+    forgetApiAuth();
+    $this->withoutToken()->actingAs($lene, 'web')->putJson('/api/v1/me/password', $change)->assertNoContent();
 });

@@ -63,7 +63,7 @@ function renderWebhooks(overrides: Record<string, MockRoute> = {}, webhooks: Web
   api = mockApi({
     'GET /api/v1/projects': () => ({ body: list([web, app]) }),
     'GET /api/v1/organization': () => ({ body: { data: organization } }),
-    'GET /api/v1/users': (_body, url) => ({ body: list([mara, lene, kira, rex].filter((user) => !url.searchParams.get('type') || user.type === url.searchParams.get('type'))) }),
+    'GET /api/v1/users': (_body, url) => ({ body: list([mara, lene, kira, rex].filter((user) => !url.searchParams.get('filter[type]') || user.type === url.searchParams.get('filter[type]'))) }),
     'GET /api/v1/webhooks': () => ({ body: list(stored) }),
     'POST /api/v1/webhooks': (body) => ({ status: 201, body: { data: save(body, 'wh_new'), secret: `whsec_neu_${++secrets}` } }),
     ...Object.fromEntries(

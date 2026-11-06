@@ -14,6 +14,10 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * The links of a `GET` list keep its query (filter, sort, `per_page`), so that following `links.next` gives the next
  * page of the same list. A list read by `POST` (`/work-items/query`) has no address to follow: its `links.next` and
  * `links.prev` are `null`, the same request with `meta.next_cursor` as `cursor` leads on.
+ *
+ * The cursors of a list with a `ListSpec` carry the signature of its sort (`_sig`, `ListQuery`, `ListResult`). In the
+ * document `ApiList::respond($result, X::class)` is `{data: list<X>, links: ListLinks, meta: ListMeta}`
+ * (`App\OpenApi\ApiListReturnType`, `ApiListSchema`); the query of the list comes from `#[ListOf]` (`ListParameters`).
  */
 final class ApiList
 {

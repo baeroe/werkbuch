@@ -21,6 +21,9 @@ final class ChangePassword
 {
     use AsAction;
 
+    /** The keys of the input the action reads (the document names exactly these, K15); the rest is ignored. */
+    public const FIELDS = ['current_password', 'password', 'password_confirmation'];
+
     /**
      * @param  array<string, mixed>  $input  `current_password`, `password`, `password_confirmation`
      *

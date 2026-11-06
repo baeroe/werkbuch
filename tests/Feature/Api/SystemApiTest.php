@@ -77,8 +77,9 @@ it('sends at most six test mails a minute per account (T11-M4)', function () {
     $this->postJson('/api/v1/system/test-mail')->assertStatus(429)->assertJsonPath('reason', 'too_many_requests');
 
     expect($server->count())->toBe(6);
-    // another admin has their own six
-    $this->actingAs(User::factory()->admin()->create())->postJson('/api/v1/system/test-mail')->assertOk();
+    // another admin has their own six (the session by its guard: the throttle keys it by `web`, RateKey)
+    forgetApiAuth();
+    $this->actingAs(User::factory()->admin()->create(), 'web')->postJson('/api/v1/system/test-mail')->assertOk();
 });
 
 it('refuses members with 403 and the reason', function (string $method, string $path) {

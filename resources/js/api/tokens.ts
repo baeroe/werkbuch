@@ -9,7 +9,7 @@ import type { Page } from './client';
 import { del, getPage, post } from './http';
 
 export function listTokens(user_id: string): Promise<Page<Token>> {
-  return getPage<Token>('/tokens', { user_id });
+  return getPage<Token>('/tokens', { filter: { user_id } });
 }
 
 export interface CreateTokenInput {

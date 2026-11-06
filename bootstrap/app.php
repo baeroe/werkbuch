@@ -7,7 +7,9 @@ use App\Http\Middleware\EnsureSession;
 use App\Http\Middleware\EnsureTokenAbility;
 use App\Http\Middleware\GuardChannelAuthorization;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\LimitJsonBody;
 use App\Http\Middleware\SetLocale;
+use App\Http\Middleware\ThrottleApi;
 use App\Http\Middleware\TrustProxies;
 use App\RichText\RichTextInput;
 use App\Support\TrustedRequests;
@@ -21,8 +23,15 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull as FrameworkConvertEmptyStringsToNull;
 use Illuminate\Foundation\Http\Middleware\HandlePrecognitiveRequests;
+use Illuminate\Foundation\Http\Middleware\InvokeDeferredCallbacks;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
+use Illuminate\Foundation\Http\Middleware\PreventRequestsDuringMaintenance;
+use Illuminate\Foundation\Http\Middleware\TrimStrings;
+use Illuminate\Http\Middleware\HandleCors;
+use Illuminate\Http\Middleware\TrustHosts;
 use Illuminate\Http\Middleware\TrustProxies as FrameworkTrustProxies;
+use Illuminate\Http\Middleware\ValidatePathEncoding;
+use Illuminate\Http\Middleware\ValidatePostSize;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Routing\Middleware\ThrottleRequestsWithRedis;
@@ -41,6 +50,20 @@ return Application::configure(basePath: dirname(__DIR__))
     // the channels (routes/channels.php) authorize through /broadcasting/auth: a signed-in, active account (spec 7.2)
     ->withBroadcasting(__DIR__.'/../routes/channels.php', ['middleware' => ['web', 'auth', EnsureAccountIsActive::class, GuardChannelAuthorization::class]])
     ->withMiddleware(function (Middleware $middleware): void {
+        // Laravel's global stack with the limit of a JSON body under /api after the CORS headers (a client of another
+        // origin reads the 413) and before PHP's limit and the trimming of the input (A388, K8)
+        $middleware->use([
+            ValidatePathEncoding::class,
+            InvokeDeferredCallbacks::class,
+            TrustHosts::class,
+            FrameworkTrustProxies::class,
+            HandleCors::class,
+            PreventRequestsDuringMaintenance::class,
+            LimitJsonBody::class,
+            ValidatePostSize::class,
+            TrimStrings::class,
+            FrameworkConvertEmptyStringsToNull::class,
+        ]);
         // reverse proxy in front: X-Forwarded-* only from TRUSTED_PROXIES (default: localhost and private networks);
         // the Host header must be the host of APP_URL (outside local and tests)
         $middleware->replace(FrameworkTrustProxies::class, TrustProxies::class);
@@ -53,8 +76,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // a session ends on its next request when the password changed (AuthenticateSession compares the hash, any session
         // driver) or the account was disabled (EnsureAccountIsActive)
         $middleware->web(append: [SetLocale::class, HandleInertiaRequests::class, AuthenticateSession::class, EnsureAccountIsActive::class]);
-        // the API speaks the language of the account (session or token), else the organization's (A151)
-        $middleware->api(append: [SetLocale::class.':'.SetLocale::API]);
+        // the API speaks the language of the account (session or token), else the organization's (A151); its throttle
+        // (limiter `api`, per token, else account of the session, else address, A387) runs before auth (priority below)
+        $middleware->api(append: [SetLocale::class.':'.SetLocale::API, ThrottleApi::class.':api']);
         $middleware->encryptCookies(except: [SetLocale::COOKIE]);
         $middleware->trustHosts(at: fn (): array => TrustedRequests::hostPatterns(config('app.url')), subdomains: false);
         // Laravel's priority list with the rate limit moved before auth (requests that fail auth count as well), and the

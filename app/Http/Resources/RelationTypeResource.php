@@ -26,6 +26,7 @@ final class RelationTypeResource extends JsonResource
             'name' => $type->name,
             'outward_label' => $type->outward_label,
             'inward_label' => $type->inward_label,
+            /** @var string|null */
             'built_in' => $type->built_in,
         ];
     }

@@ -57,6 +57,9 @@ final class CreateWorkItem
 {
     use AsAction;
 
+    /** The keys of the body (the OpenAPI document names them, K15); others are passed over. */
+    public const FIELDS = ['project_id', 'type_id', 'title', 'description', 'description_json', 'priority', 'label_ids', 'start_date', 'due_date', 'assignee_id', 'parent_id', 'values', 'state_id', 'template_id'];
+
     /**
      * @param  array<array-key, mixed>  $input  `project_id` (ULID, identifier or former identifier), `type_id`, `title`, `description` or `description_json`, `assignee_id`, `priority`, `label_ids`, `start_date`, `due_date`, `parent_id` (ULID or key), `values` (property key → value), `state_id` (the initial state unless named), `template_id` (a template of the project the item is made from)
      *

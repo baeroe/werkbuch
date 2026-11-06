@@ -5,7 +5,10 @@ namespace App\Actions\Views;
 use App\Access\Authorize;
 use App\Models\View;
 use App\Support\Actor;
+use App\Support\ListFilter;
+use App\Support\ListQuery;
 use App\Support\ListResult;
+use App\Support\ListSpec;
 use App\Support\PageArgs;
 use Illuminate\Validation\ValidationException;
 use Lorisleiva\Actions\Concerns\AsAction;
@@ -17,8 +20,21 @@ final class ListViews
 {
     use AsAction;
 
+    /** The rules of the list (A386, K7). */
+    public static function spec(): ListSpec
+    {
+        return new ListSpec(
+            filters: [
+                ListFilter::ulid('created_by', 'views.created_by'),
+                ListFilter::partial('name', 'views.name'),
+            ],
+            sorts: ['name' => 'views.name', 'created_at' => 'views.id'],
+            default: ['name'],
+        );
+    }
+
     /**
-     * @param  array<array-key, mixed>  $input  `cursor`, `per_page`
+     * @param  array<array-key, mixed>  $input  `filter`, `sort`, `cursor`, `per_page`
      * @return ListResult<View>
      *
      * @throws ValidationException
@@ -27,6 +43,8 @@ final class ListViews
     {
         Authorize::check($actor, 'viewAny', View::class);
 
-        return ListResult::of(View::query()->orderBy('name')->orderBy('id'), PageArgs::from($input));
+        [$query, $signature] = ListQuery::apply(View::query(), $input, self::spec());
+
+        return ListResult::of($query, PageArgs::from($input), $signature);
     }
 }

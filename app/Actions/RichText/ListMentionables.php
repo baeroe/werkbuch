@@ -23,6 +23,9 @@ final class ListMentionables
 {
     use AsAction;
 
+    /** The keys of the query (the OpenAPI document names them, K15); others are passed over. */
+    public const KEYS = ['project', 'q', 'limit'];
+
     public const DEFAULT_LIMIT = 20;
 
     public const MAX_LIMIT = 50;

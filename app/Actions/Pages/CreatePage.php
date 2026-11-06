@@ -30,6 +30,9 @@ final class CreatePage
 {
     use AsAction;
 
+    /** The keys the body reads (`content` or `content_json`, not both); others are passed over. */
+    public const FIELDS = ['title', 'emoji', 'parent_id', 'content', 'content_json'];
+
     /**
      * @param  array<array-key, mixed>  $input  `title`, `emoji`, `parent_id`, `content` (Markdown) or `content_json` (Tiptap JSON)
      *

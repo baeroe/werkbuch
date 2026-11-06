@@ -156,7 +156,8 @@ it('changes the role of a member and records old and new', function () {
         ]]);
 });
 
-it('lets the lead have any role: the lead has no rights of its own', function () {
+// the lead has no rights of their own (spec 4.3): ProjectRightsTableTest shows a lead with the role member
+it('lets the lead have any role', function () {
     [$web, $mara] = projectWithPeople();
     $lene = memberOf($web, ProjectRole::Admin);
     $web->update(['lead_id' => $lene->id]);

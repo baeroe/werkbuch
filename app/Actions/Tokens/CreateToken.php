@@ -6,8 +6,8 @@ use App\Access\Authorize;
 use App\Events\EventRecorder;
 use App\Events\EventType;
 use App\Exceptions\Problem;
-use App\Models\User;
 use App\Support\Actor;
+use App\Support\TokenOwner;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -27,16 +27,20 @@ final class CreateToken
 
     public const ABILITIES = ['read', 'write', 'mcp'];
 
+    /** The keys of the input the action reads (the document names exactly these, K15); the rest is ignored. */
+    public const FIELDS = ['user_id', 'name', 'abilities', 'expires_at'];
+
     public const NAME_MAX = 120;
 
     /**
-     * @param  array<string, mixed>  $input  `name`, `abilities`, `expires_at`
+     * @param  array<string, mixed>  $input  `user_id` (the owner; without it the own account), `name`, `abilities`, `expires_at`
      *
-     * @throws Problem 403 for a deactivated account
+     * @throws Problem 403 for a deactivated account, 404 for an owner that is no ULID or unknown
      * @throws ValidationException
      */
-    public function handle(Actor $actor, User $owner, array $input): NewAccessToken
+    public function handle(Actor $actor, array $input): NewAccessToken
     {
+        $owner = TokenOwner::of($input['user_id'] ?? null, $actor);
         Authorize::check($actor, 'manageTokens', $owner);
 
         if ($owner->isDisabled()) {

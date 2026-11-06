@@ -44,6 +44,7 @@ final class WorkflowResource extends JsonResource
                 'category' => $state->category->value,
                 'position' => $state->position,
             ])->values()->all(),
+            /** @var list<list<string>> */
             'transitions' => $transitions,
         ];
     }

@@ -3,10 +3,14 @@
 namespace App\Actions\Invitations;
 
 use App\Access\Authorize;
+use App\Access\OrgRole;
 use App\Models\Invitation;
 use App\Models\User;
 use App\Support\Actor;
+use App\Support\ListFilter;
+use App\Support\ListQuery;
 use App\Support\ListResult;
+use App\Support\ListSpec;
 use App\Support\PageArgs;
 use Illuminate\Validation\ValidationException;
 use Lorisleiva\Actions\Concerns\AsAction;
@@ -20,8 +24,17 @@ final class ListInvitations
 {
     use AsAction;
 
+    /** The rules of the list (A386, K7: the oldest first stays the default; `created_at` is the ULID). */
+    public static function spec(): ListSpec
+    {
+        return new ListSpec(
+            filters: [ListFilter::exact('org_role', 'invitations.org_role', array_column(OrgRole::cases(), 'value'))],
+            sorts: ['expires_at' => 'invitations.expires_at', 'created_at' => 'invitations.id'],
+        );
+    }
+
     /**
-     * @param  array<array-key, mixed>  $input  `cursor`, `per_page`
+     * @param  array<array-key, mixed>  $input  `filter`, `sort`, `cursor`, `per_page`
      * @return ListResult<Invitation>
      *
      * @throws ValidationException
@@ -30,6 +43,8 @@ final class ListInvitations
     {
         Authorize::check($actor, 'viewInvitations', User::class);
 
-        return ListResult::of(Invitation::query()->open()->with('inviter')->orderBy('id'), PageArgs::from($input));
+        [$query, $signature] = ListQuery::apply(Invitation::query()->open()->with('inviter'), $input, self::spec());
+
+        return ListResult::of($query, PageArgs::from($input), $signature);
     }
 }

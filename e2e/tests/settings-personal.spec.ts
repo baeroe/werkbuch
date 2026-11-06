@@ -23,7 +23,7 @@ async function asSam(browser: Browser, run: (page: Page) => Promise<void>): Prom
 
 /** Changes Sam's profile over the API, as Sam. */
 async function updateSam(page: Page, patch: Record<string, string>): Promise<void> {
-  const people = (await (await api(page, 'GET', '/api/v1/users?type=person')).json()) as { data: { id: string; email: string }[] };
+  const people = (await (await api(page, 'GET', '/api/v1/users?filter[type]=person')).json()) as { data: { id: string; email: string }[] };
   const sam = people.data.find((account) => account.email === person().email);
   expect(sam, 'Sam on the first page of people').toBeDefined();
   const response = await api(page, 'PATCH', `/api/v1/users/${sam!.id}`, patch);
@@ -211,6 +211,22 @@ test('asks before leaving an unsaved profile', async ({ browser }) => {
     await tabTo(page, question.getByRole('button', { name: tr('en', 'settings.frame.leave_confirm') }));
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/\/projects$/);
+  });
+});
+
+test('links the api docs from api and mcp', async ({ browser }) => {
+  await asSam(browser, async (page) => {
+    await openSection(page, 'api');
+    const docs = page.getByRole('link', { name: /\/api\/docs \(opens in a new tab\)$/ });
+    await tabTo(page, docs);
+    await expect(docs).toBeFocused();
+    await expect(docs).toHaveAttribute('target', '_blank');
+    await expect(docs).toHaveAttribute('rel', 'noopener');
+    const spec = page.getByRole('link', { name: /\/api\/openapi\.json \(opens in a new tab\)$/ });
+    for (const link of [docs, spec]) {
+      const response = await page.request.get((await link.getAttribute('href'))!);
+      expect(response.status()).toBe(200);
+    }
   });
 });
 

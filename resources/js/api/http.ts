@@ -6,6 +6,10 @@
  * A single resource comes wrapped in `{data}` like a list (P27): the API functions unwrap it with `one()`, a list
  * becomes a `Page` with `getPage()`. Answers that are no resource (`{token, plain_text}`, 204) pass through as they are.
  * While the tab has a live connection, every call names its socket (`X-Socket-ID`, `setSocketId`).
+ *
+ * A read (`GET`, `readPost`) that the rate limit refuses (429) waits once, as long as `Retry-After` says but at most
+ * `RETRY_AFTER_MAX_MS`, and asks again (K9): a burst of live updates reloads every query of a screen at once. A call that
+ * writes never goes twice by itself.
  */
 
 import { ApiError, type Page } from './client';
@@ -13,6 +17,12 @@ import { ApiError, type Page } from './client';
 export const API_BASE = '/api/v1';
 
 const CSRF_COOKIE_URL = '/sanctum/csrf-cookie';
+
+/** The longest a read waits after a 429 before it asks once more; a longer `Retry-After` is cut to this. */
+export const RETRY_AFTER_MAX_MS = 10_000;
+
+/** The wait after a 429 whose `Retry-After` is missing or no number of seconds. */
+const RETRY_AFTER_FALLBACK_MS = 1000;
 
 /** The members of a problem document that `ApiError` has fields for; every other member is an extension. */
 const PROBLEM_MEMBERS = ['type', 'title', 'status', 'detail', 'reason', 'errors'];
@@ -30,6 +40,7 @@ interface Raw {
   status: number;
   contentType: string;
   text: string;
+  retryAfter?: string | null;
 }
 
 function scalarText(value: string | number | boolean): string {
@@ -155,12 +166,46 @@ function settle<T>(raw: Raw): T {
   }
 }
 
-/** Sends the call; after a 419 (token or session out of date) it fetches a fresh token cookie and sends it once more. */
-async function send<T>(attempt: () => Promise<Raw>, options: RequestOptions): Promise<T> {
+/** How long to wait after a 429: the seconds of `Retry-After`, at most `RETRY_AFTER_MAX_MS`. */
+function retryDelay(header: string | null | undefined): number {
+  const seconds = header === null || header === undefined || header.trim() === '' ? Number.NaN : Number(header);
+
+  return Number.isFinite(seconds) && seconds >= 0 ? Math.min(seconds * 1000, RETRY_AFTER_MAX_MS) : RETRY_AFTER_FALLBACK_MS;
+}
+
+/** Waits `ms`; an abort of the call ends the wait with the abort's reason, like `fetch` would. */
+function pause(ms: number, signal: AbortSignal | undefined): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason);
+      return;
+    }
+
+    const stop = () => {
+      clearTimeout(timer);
+      reject(signal?.reason);
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', stop);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', stop, { once: true });
+  });
+}
+
+/**
+ * Sends the call; after a 419 (token or session out of date) it fetches a fresh token cookie and sends it once more, and
+ * a read refused by the rate limit (429) waits once and asks again.
+ */
+async function send<T>(attempt: () => Promise<Raw>, options: RequestOptions, read = false): Promise<T> {
   let raw = await attempt();
 
   if (raw.status === 419) {
     await fetch(CSRF_COOKIE_URL, { credentials: 'same-origin', headers: { Accept: 'application/json' }, signal: options.signal });
+    raw = await attempt();
+  }
+  if (raw.status === 429 && read) {
+    await pause(retryDelay(raw.retryAfter), options.signal);
     raw = await attempt();
   }
 
@@ -176,15 +221,20 @@ async function viaFetch(method: string, url: string, body: unknown, options: Req
     signal: options.signal,
   });
 
-  return { status: response.status, contentType: response.headers.get('Content-Type') ?? '', text: await response.text() };
+  return {
+    status: response.status,
+    contentType: response.headers.get('Content-Type') ?? '',
+    text: await response.text(),
+    retryAfter: response.headers.get('Retry-After'),
+  };
 }
 
-function request<T>(method: string, path: string, body: unknown, options: RequestOptions): Promise<T> {
-  return send<T>(() => viaFetch(method, `${API_BASE}${path}`, body, options), options);
+function request<T>(method: string, path: string, body: unknown, options: RequestOptions, read = false): Promise<T> {
+  return send<T>(() => viaFetch(method, `${API_BASE}${path}`, body, options), options, read);
 }
 
 export function get<T>(path: string, query: Query = {}, options: RequestOptions = {}): Promise<T> {
-  return request<T>('GET', `${path}${toQueryString(query)}`, undefined, options);
+  return request<T>('GET', `${path}${toQueryString(query)}`, undefined, options, true);
 }
 
 /** The resource of an answer wrapped in `{data}`: every API function with a single resource unwraps it here. */
@@ -214,13 +264,21 @@ export async function getPage<T>(path: string, query: Query = {}, options: Reque
 
 /** A list the API answers to a read `POST` (a query body instead of a query string), as a `Page`. */
 export async function postPage<T>(path: string, body: unknown, options: RequestOptions = {}): Promise<Page<T>> {
-  const { data, meta } = await post<ListAnswer<T>>(path, body, options);
+  const { data, meta } = await readPost<ListAnswer<T>>(path, body, options);
 
   return { items: data, next_cursor: meta.next_cursor ?? null, total: meta.total ?? data.length };
 }
 
 export function post<T>(path: string, body?: unknown, options: RequestOptions = {}): Promise<T> {
   return request<T>('POST', path, body, options);
+}
+
+/**
+ * A `POST` that only reads (a query body instead of a query string; the routes with `token_ability` `read`): it waits
+ * once after a 429 like a `GET`.
+ */
+export function readPost<T>(path: string, body?: unknown, options: RequestOptions = {}): Promise<T> {
+  return request<T>('POST', path, body, options, true);
 }
 
 /**

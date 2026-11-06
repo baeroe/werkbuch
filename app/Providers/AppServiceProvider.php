@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Access\RoleIndex;
 use App\Access\Visibility;
+use App\Http\Api\RateKey;
 use App\Models\Attachment;
 use App\Models\Automation;
 use App\Models\Comment;
@@ -97,12 +98,13 @@ class AppServiceProvider extends ServiceProvider
         // roles and visible projects read inside a transaction that rolls back would otherwise outlive it and grant access
         Events::listen(TransactionRolledBack::class, fn () => Visibility::forget());
 
-        // uploads (A234): 60 per minute and account, the routes behind `auth:sanctum` always know the account
-        RateLimiter::for('attachments', fn (Request $request) => Limit::perMinute(60)->by((string) $request->user()?->getAuthIdentifier()));
+        // uploads (A234): 60 per minute and account; the throttles run before auth, the key finds the account of a token
+        // as well as of the session (RateKey::account, without it every token shared one quota)
+        RateLimiter::for('attachments', fn (Request $request) => Limit::perMinute(60)->by(RateKey::account($request)));
         // the test ping and "send again" of webhooks: one request to a stranger each, six a minute per account (A367)
-        RateLimiter::for('webhook-send', fn (Request $request) => Limit::perMinute(6)->by((string) $request->user()?->getAuthIdentifier()));
+        RateLimiter::for('webhook-send', fn (Request $request) => Limit::perMinute(6)->by(RateKey::account($request)));
         // the test mail of the system page: six a minute per account, a mail server is not to be flooded from it (T11-M4)
-        RateLimiter::for('test-mail', fn (Request $request) => Limit::perMinute(6)->by((string) $request->user()?->getAuthIdentifier()));
+        RateLimiter::for('test-mail', fn (Request $request) => Limit::perMinute(6)->by(RateKey::account($request)));
 
         // the index is written by the search consumer only, never when a model is saved (P1)
         WorkItem::disableSearchSyncing();

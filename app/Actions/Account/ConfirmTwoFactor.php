@@ -21,6 +21,9 @@ final class ConfirmTwoFactor
 {
     use AsAction;
 
+    /** The keys of the input the action reads (the document names exactly these, K15). */
+    public const FIELDS = ['code'];
+
     public function __construct(private readonly ConfirmTwoFactorAuthentication $confirm) {}
 
     /**

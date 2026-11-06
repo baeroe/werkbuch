@@ -31,7 +31,7 @@ Deaktivierst du einen Bot, werden alle seine Tokens gelöscht. Beim erneuten Akt
 
 Ein Agent erfährt von seiner Arbeit über einen [Webhook](/de/webhooks) mit **Nur für einen Bot**. So ein Webhook bekommt `bot.assigned`, wenn jemand anderes dem Bot ein Item zuweist (ein Bot, der sich ein Item selbst nimmt, bekommt keins), `bot.mentioned`, wenn jemand ihn mit `@handle` erwähnt, und die Änderungen und Kommentare der Items, die ihm zugewiesen sind, jeweils mit dem Item in `data`. Er bekommt sie nur, solange der Bot aktiv ist und das Projekt sieht: entfernst du den Bot aus einem privaten Projekt, hört sein Webhook von dort nichts mehr. Wie alles andere ist `data` für den Bot geschrieben und nennt also nie ein Item, das der Bot nicht sehen darf.
 
-Der Agent arbeitet dann mit einem Token seines Bots über REST: er liest das Item, kommentiert und setzt den Status. MCP folgt in einer späteren Phase.
+Der Agent arbeitet dann mit einem Token seines Bots über die [REST-API](/de/api): er liest das Item, kommentiert und setzt den Status. `GET /api/v1/me` sagt ihm, zu welchem Konto das Token gehört. MCP folgt in einer späteren Phase.
 
 ## Der Standard-Bot
 

@@ -26,6 +26,9 @@ final class UpdateOrganization
 {
     use AsAction;
 
+    /** The keys of the input the action reads (the document names exactly these, K15); the rest is ignored. */
+    public const FIELDS = ['name', 'locale', 'timezone', 'week_start', 'logo_url'];
+
     /**
      * @param  array<string, mixed>  $input
      *

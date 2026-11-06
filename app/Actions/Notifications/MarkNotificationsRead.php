@@ -24,6 +24,9 @@ final class MarkNotificationsRead
 {
     use AsAction;
 
+    /** The keys the body reads: `ids`, or `all` with `mentions_only`. */
+    public const FIELDS = ['ids', 'all', 'mentions_only'];
+
     /** The most notifications one call names. */
     public const MAX_IDS = 100;
 

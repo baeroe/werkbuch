@@ -675,7 +675,7 @@ describe('API & MCP', () => {
     expect(rows[1]!.textContent).toContain('Läuft ab am 01.01.2099');
     expect(rows[2]!.textContent).toContain('Angelegt am 05.10.2026, noch nie benutzt');
     expect(rows[2]!.textContent).not.toContain('Läuft ab');
-    expect(lastCall('GET', '/api/v1/tokens')!.url).toBe('/api/v1/tokens?user_id=u_mara');
+    expect(lastCall('GET', '/api/v1/tokens')!.url).toBe('/api/v1/tokens?filter%5Buser_id%5D=u_mara');
   });
 
   it('shows the cause and "Erneut versuchen" when the tokens cannot be loaded', async () => {
@@ -730,5 +730,17 @@ describe('API & MCP', () => {
     expect(screen.getByText('MCP-Server').nextElementSibling!.textContent).toBe(`${origin}/mcp`);
     expect(screen.getByText('REST-API').nextElementSibling!.textContent).toBe(`${origin}/api/v1`);
     expect(screen.getByText(new RegExp(`claude mcp add --transport http --scope user werkbuch ${origin}/mcp`))).toBeTruthy();
+  });
+
+  it('links the api docs of the instance', () => {
+    renderSettings('api');
+
+    const origin = window.location.origin;
+    const docs = screen.getByRole('link', { name: `${window.location.origin}/api/docs (öffnet in neuem Tab)` });
+    expect(docs.getAttribute('href')).toBe(`${origin}/api/docs`);
+    expect(docs.getAttribute('target')).toBe('_blank');
+    expect(docs.getAttribute('rel')).toBe('noopener');
+    expect(screen.getByText('OpenAPI-Beschreibung dieser Instanz')).toBeTruthy();
+    expect(screen.getByRole('link', { name: `${origin}/api/openapi.json (öffnet in neuem Tab)` }).getAttribute('href')).toBe(`${origin}/api/openapi.json`);
   });
 });

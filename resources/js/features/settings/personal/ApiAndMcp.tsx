@@ -126,6 +126,24 @@ export function ApiAndMcp({ user }: { user: User }) {
         </dl>
         <SetupSnippets />
       </SettingsCard>
+      <SettingsCard title={t('settings.api.docs.link')} description={t('settings.api.docs.hint')}>
+        <ul role="list" className="flex flex-col gap-1 text-ui">
+          {[`${origin}/api/docs`, `${origin}/api/openapi.json`].map((href) => (
+            <li key={href}>
+              <a
+                href={href}
+                target="_blank"
+                rel="noopener"
+                translate="no"
+                className="font-medium [overflow-wrap:anywhere] text-ink underline underline-offset-2 hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2"
+              >
+                {href}{' '}
+                <span className="sr-only">{t('settings.api.docs.new_tab')}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </SettingsCard>
       {creating && <TokenDialog owner={user} onClose={() => setCreating(false)} />}
     </>
   );

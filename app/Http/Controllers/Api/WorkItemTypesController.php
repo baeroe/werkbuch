@@ -3,12 +3,17 @@
 namespace App\Http\Controllers\Api;
 
 use App\Actions\WorkItemTypes\DeleteWorkItemType;
+use App\Actions\WorkItemTypes\GetWorkItemType;
 use App\Actions\WorkItemTypes\ListWorkItemTypes;
 use App\Actions\WorkItemTypes\SaveWorkItemType;
+use App\Http\Api\Answer;
 use App\Http\Api\ApiList;
+use App\Http\Api\Body;
+use App\Http\Api\ListOf;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\WorkItemTypeResource;
 use App\Models\WorkItemType;
+use App\OpenApi\CatalogSchemas;
 use App\Support\Actor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,23 +25,45 @@ use Illuminate\Http\Request;
  */
 final class WorkItemTypesController extends Controller
 {
+    /**
+     * List the work item types, archived ones too.
+     */
+    #[ListOf(ListWorkItemTypes::class)]
     public function index(Request $request): JsonResponse
     {
         return ApiList::respond(ListWorkItemTypes::run(Actor::fromRequest($request), $request->query()), WorkItemTypeResource::class);
     }
 
-    /** 201: the new type was just created. */
-    public function store(Request $request): WorkItemTypeResource
+    /**
+     * Read a work item type, also an archived one.
+     */
+    public function show(Request $request, WorkItemType $workItemType): WorkItemTypeResource
     {
-        return new WorkItemTypeResource(SaveWorkItemType::run(Actor::fromRequest($request), null, $request->all()));
+        return new WorkItemTypeResource(GetWorkItemType::run(Actor::fromRequest($request), $workItemType));
     }
 
+    /**
+     * Create a work item type (org admins).
+     */
+    #[Body(CatalogSchemas::class, 'workItemType')]
+    public function store(Request $request): JsonResponse
+    {
+        return (new WorkItemTypeResource(SaveWorkItemType::run(Actor::fromRequest($request), null, $request->all())))->response()->setStatusCode(201);
+    }
+
+    /**
+     * Replace a work item type as a whole (org admins).
+     */
+    #[Body(CatalogSchemas::class, 'workItemType')]
     public function update(Request $request, WorkItemType $workItemType): WorkItemTypeResource
     {
         return new WorkItemTypeResource(SaveWorkItemType::run(Actor::fromRequest($request), $workItemType, $request->all()));
     }
 
-    /** 200 with what became of the type (without `data`): `deleted` (Phase 4: `archived` when items carry it). */
+    /**
+     * Delete a work item type, or archive it when items carry it.
+     */
+    #[Answer(200, CatalogSchemas::class, 'deleteOutcome', 'What became of the type.')]
     public function destroy(Request $request, WorkItemType $workItemType): JsonResponse
     {
         return response()->json(DeleteWorkItemType::run(Actor::fromRequest($request), $workItemType));

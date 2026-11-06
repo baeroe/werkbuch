@@ -114,7 +114,7 @@ Reading needs a token with `read`, changing one with `write`. Projects are addre
 
 | Request | Answer |
 |---|---|
-| `GET /api/v1/templates` | The templates of every project the account sees, by name; `?project=` narrows to one, `?lean=1` leaves out the texts. With `cursor` and `per_page`. |
+| `GET /api/v1/templates` | The templates of every project the account sees, by name; `filter[project_id]=<id>` narrows to one (a project you do not see gives an empty list), `filter[scheduled]=1` keeps the scheduled, `?lean=1` leaves out the texts. With `cursor` and `per_page`. |
 | `GET /api/v1/projects/{project}/templates` | The templates of one project. |
 | `POST /api/v1/projects/{project}/templates` | `201` with the new template: `name`, `payload`, `schedule` (all required, `schedule` may be `null`). |
 | `GET /api/v1/templates/{template}` | One template. |

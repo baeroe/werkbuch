@@ -37,6 +37,9 @@ final class AssignWorkflow
 {
     use AsAction;
 
+    /** The keys of the input the action reads (the OpenAPI document holds its body against them). */
+    public const FIELDS = ['workflow_id', 'mapping'];
+
     /**
      * @param  array<array-key, mixed>  $input  `workflow_id`, `mapping`
      *

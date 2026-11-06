@@ -6,6 +6,7 @@ use App\Models\Webhook;
 use App\Models\WebhookAttempt;
 use App\Models\WebhookDelivery;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 // The log of a webhook (task 9): its attempts, the newest first, two in one second apart by their microseconds.
 
@@ -38,6 +39,17 @@ it('orders two attempts of one second by their microseconds and pages them witho
 
     expect(collect($first->page->items())->pluck('id')->all())->toBe([$c->id, $b->id])
         ->and(collect($second->page->items())->pluck('id')->all())->toBe([$a->id]);
+});
+
+it('puts the higher ULID first at the same microsecond and takes no sort', function () use ($list) {
+    $webhook = Webhook::factory()->create();
+    $delivery = WebhookDelivery::factory()->for($webhook)->create();
+    $a = WebhookAttempt::factory()->for($delivery, 'delivery')->create(['attempt' => 1, 'attempted_at' => '2026-11-05 10:00:00.500000']);
+    $b = WebhookAttempt::factory()->for($delivery, 'delivery')->create(['attempt' => 2, 'attempted_at' => '2026-11-05 10:00:00.500000']);
+    $expected = strcmp($a->id, $b->id) > 0 ? [$a->id, $b->id] : [$b->id, $a->id];
+
+    expect(collect($list($webhook)->page->items())->pluck('id')->all())->toBe($expected)
+        ->and(fn () => $list($webhook, ['sort' => 'attempted_at']))->toThrow(ValidationException::class);
 });
 
 it('asks the database as often for 5 attempts as for 50', function () use ($list) {

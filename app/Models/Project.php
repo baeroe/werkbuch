@@ -177,6 +177,17 @@ final class Project extends Model implements HasMedia
     }
 
     /**
+     * The memberships in the order they joined, each with this project: what `include=members` of the project list
+     * loads (K13).
+     *
+     * @return HasMany<ProjectMember, $this>
+     */
+    public function members(): HasMany
+    {
+        return $this->hasMany(ProjectMember::class)->orderBy('project_members.id')->chaperone('project');
+    }
+
+    /**
      * @return array<string, string>
      */
     protected function casts(): array

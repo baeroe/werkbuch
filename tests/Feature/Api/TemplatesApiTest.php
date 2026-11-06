@@ -8,6 +8,7 @@ use App\Models\Property;
 use App\Models\Template;
 use App\Models\User;
 use App\Models\WorkItemType;
+use Tests\Support\OpenApi\Document;
 
 /*
  * Templates over REST (Task 4): `GET /api/v1/templates` (every visible project, `?project=` narrows), `GET`/`POST
@@ -81,14 +82,31 @@ it('lists the templates of all projects or one, and lean ones without their text
     $this->actingAs($lene)->getJson('/api/v1/templates')->assertOk()
         ->assertJsonPath('meta.total', 1)
         ->assertJsonPath('data.0.name', 'Wartung');
-    $this->actingAs($lene)->getJson('/api/v1/templates?project=WEB')->assertOk()->assertJsonPath('meta.total', 1);
-    $this->actingAs($lene)->getJson('/api/v1/templates?project=OPS')->assertNotFound();
+    $this->actingAs($lene)->getJson("/api/v1/templates?filter[project_id]={$web->id}")->assertOk()->assertJsonPath('meta.total', 1);
+    // a project the reader does not see answers like an unknown one: nothing (K11)
+    $this->actingAs($lene)->getJson("/api/v1/templates?filter[project_id]={$ops->id}")->assertOk()->assertJsonPath('meta.total', 0);
     $this->actingAs($lene)->getJson('/api/v1/projects/web/templates')->assertOk()->assertJsonPath('data.0.name', 'Wartung');
     $this->actingAs($lene)->getJson('/api/v1/projects/OPS/templates')->assertNotFound()->assertJsonMissingPath('detail');
 
     $lean = $this->actingAs($lene)->getJson('/api/v1/templates?lean=1')->assertOk();
-    expect(array_keys($lean->json('data.0.payload')))->not->toContain('description', 'description_json', 'values_markdown')
+    expect(array_values(array_intersect(array_keys($lean->json('data.0.payload')), ['description', 'description_json', 'values_markdown'])))->toBe([])
         ->and(array_keys($lean->json('data.0.payload')))->toContain('values');
+});
+
+it('clears the description of a lean template sent back, as the document says', function () use ($world, $input) {
+    [, $mara] = $world();
+    $this->actingAs($mara)->postJson('/api/v1/projects/WEB/templates', $input())->assertCreated();
+
+    $full = $this->actingAs($mara)->getJson('/api/v1/templates')->json('data.0');
+    // the full answer goes back with the description in one form (K5)
+    $this->actingAs($mara)->putJson("/api/v1/templates/{$full['id']}", [...$full, 'payload' => array_diff_key($full['payload'], ['description' => true])])
+        ->assertOk()->assertJsonPath('data.payload.description_json', $full['payload']['description_json']);
+
+    $lean = $this->actingAs($mara)->getJson('/api/v1/templates?lean=1')->json('data.0');
+    $this->actingAs($mara)->putJson("/api/v1/templates/{$lean['id']}", $lean)
+        ->assertOk()->assertJsonPath('data.payload.description_json', null)->assertJsonPath('data.payload.description', null);
+    expect(Document::operation('PUT', '/templates/{template}')['requestBody']['content']['application/json']['schema']['description'])
+        ->toContain('a lean one (`lean=1`) has no description, and sent back it clears the description');
 });
 
 it('knows a template by nothing but its ULID, in either case', function () use ($world) {

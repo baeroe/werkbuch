@@ -13,7 +13,8 @@ use Illuminate\Support\Facades\DB;
 
 /*
  * Deactivating instead of deleting (spec 4.2): tokens and sessions are revoked, the account stays. Review focus: a
- * deactivated account reaches nothing any more, neither with a token nor with a session.
+ * deactivated account reaches nothing any more, neither with a token nor with a session. Its open links of "forgot
+ * password" go as well (ApiGapsTest).
  */
 
 it('revokes the tokens of the account', function (Closure $account) {
@@ -121,7 +122,8 @@ it('lets the account see nothing at once, and everything again after reactivatin
     $admin = User::factory()->admin()->create();
     $web = Project::factory()->public()->create();
     $user = memberOf($web, ProjectRole::Member);
-    expect(Visibility::projectIds($user)->all())->toBe([$web->id]);       // kept for the request
+    // read once and kept for the request: deactivating has to forget it, or the account would see WEB until the next one
+    expect(Visibility::projectIds($user)->all())->toBe([$web->id]);
 
     DeactivateUser::run(actor($admin), $user);
     expect(Visibility::projectIds($user)->all())->toBe([]);
