@@ -14,8 +14,9 @@ use App\Support\PasswordRules;
 /**
  * The hand-written bodies and answers of the account side of the API (`#[Body]`, `#[Answer]`): the organization, the
  * accounts and bots, invitations, tokens, the password and the second factor. Plain JSON Schema (OpenAPI 3.1). A body
- * that takes the answer back (`PATCH`) is open and names the keys of the answer the action ignores as `readOnly`, so a
- * client can send its own answer back (A75); every other body is closed. `AccountsDocsTest` holds the keys against the
+ * is open (`x-werkbuch-open`, K2): no action here refuses unknown keys, they pass over what they do not read. A body that
+ * takes the answer back (`PATCH`) names the keys of the answer the action ignores as `readOnly`, so a client can send
+ * its own answer back (A75). `AccountsDocsTest` holds the keys against the
  * `FIELDS` of the actions.
  */
 final class AccountSchemas
@@ -117,6 +118,7 @@ final class AccountSchemas
     {
         return [
             'type' => 'object',
+            'x-werkbuch-open' => true,
             'properties' => ['org_role' => ['type' => 'string', 'enum' => array_column(OrgRole::cases(), 'value'), 'description' => 'The role in the organization.']],
             'required' => ['org_role'],
         ];
@@ -131,6 +133,7 @@ final class AccountSchemas
     {
         return [
             'type' => 'object',
+            'x-werkbuch-open' => true,
             'properties' => [
                 'name' => ['type' => 'string', 'minLength' => 1, 'maxLength' => AccountInput::NAME_MAX],
                 'handle' => ['type' => 'string', 'pattern' => self::handlePattern(), 'description' => 'The @mention name, 3 to 32 characters of `a-z`, `0-9` and `-`; unique.'],
@@ -150,6 +153,7 @@ final class AccountSchemas
     {
         return [
             'type' => 'object',
+            'x-werkbuch-open' => true,
             'properties' => [
                 'email' => ['type' => 'string', 'maxLength' => 255, 'description' => 'An e-mail address (trimmed, stored in lower case) without an account; a new invitation to it replaces the open one, whose link then closes.'],
                 'org_role' => ['type' => 'string', 'enum' => array_column(OrgRole::cases(), 'value')],
@@ -179,6 +183,7 @@ final class AccountSchemas
     {
         return [
             'type' => 'object',
+            'x-werkbuch-open' => true,
             'description' => 'Only from the session of the web app: no token mints tokens.',
             'properties' => [
                 'user_id' => self::ulid('The owner: the own account, or a bot (org admins); without it the own account.', true),
@@ -203,6 +208,7 @@ final class AccountSchemas
     {
         return [
             'type' => 'object',
+            'x-werkbuch-open' => true,
             'properties' => [
                 'current_password' => ['type' => 'string', 'description' => 'The password now.'],
                 'password' => ['type' => 'string', 'minLength' => PasswordRules::MIN_LENGTH, 'description' => 'The new password; the other sessions of the account end.'],
@@ -221,6 +227,7 @@ final class AccountSchemas
     {
         return [
             'type' => 'object',
+            'x-werkbuch-open' => true,
             'properties' => ['code' => ['type' => 'string', 'description' => 'The current code of the authenticator app.']],
             'required' => ['code'],
         ];

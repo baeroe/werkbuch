@@ -110,8 +110,11 @@ it('describes a work item, its free values and what a lean one leaves out', func
     $properties = $item['properties'];
 
     // a lean item (P17, A174) comes without its texts: they are never required
-    expect($item['required'])->not->toContain('description', 'description_json', 'values_markdown', 'children', 'type', 'workflow', 'relations', 'attachments')
-        ->and($item['required'])->toContain('values', 'label_ids', 'children_progress', 'subscribed')
+    foreach (['description', 'description_json', 'values_markdown', 'children', 'type', 'workflow', 'relations', 'attachments'] as $key) {
+        expect(in_array($key, $item['required'], true))->toBeFalse($key);
+    }
+
+    expect($item['required'])->toContain('values', 'label_ids', 'children_progress', 'subscribed')
         ->and($properties['values']['type'])->toBe('object')
         ->and(array_column($properties['values']['additionalProperties']['anyOf'], '$ref'))->toContain('#/components/schemas/RichTextDocument')
         ->and($properties['values_markdown']['additionalProperties'])->toBe(['type' => 'string'])
@@ -326,8 +329,17 @@ it('keeps the contract for a full and a lean item with null in every nullable fi
     expect($full)->toHaveKeys(['description', 'description_json', 'values_markdown', 'children', 'type', 'workflow', 'relations', 'attachments'])
         ->and($full['description_json'])->toBeNull()
         ->and($full['children_progress'])->toBeNull()
-        ->and($lean)->not->toHaveKeys(['description', 'description_json', 'values_markdown'])
+        ->and(array_intersect(array_keys($lean), ['description', 'description_json', 'values_markdown']))->toBe([])
         ->and(Contract::violations())->toBe([]);
+});
+
+it('does not promise that a template fills the fields of a new item', function () use ($body) {
+    // CreateWorkItem reads the template only to copy its images (A337) and names it in the event (A352)
+    $description = $body('POST', '/work-items')['properties']['template_id']['description'];
+
+    expect($description)->not->toContain('leaves out')
+        ->and($description)->toContain('images')
+        ->and($description)->toContain('title');
 });
 
 it('describes the answers without the item wrapper', function () use ($answer) {

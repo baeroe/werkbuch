@@ -134,7 +134,7 @@ it('documents the errors of every operation', function () {
         if ($method === 'GET' && str_contains($path, '{item}')) {
             expect($operation['responses']['301']['headers']['Location']['schema']['type'] ?? null)->toBe('string', $key);
         } else {
-            expect($operation['responses'])->not->toHaveKey('301', $key);
+            expect(array_key_exists('301', $operation['responses']))->toBeFalse($key);
         }
     }
 });

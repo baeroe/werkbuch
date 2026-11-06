@@ -127,7 +127,7 @@ final class WorkItemSchemas
                 'parent_id' => ['type' => ['string', 'null'], 'description' => 'The epic of the same project it belongs to: ULID or key. An epic has no parent (two levels).'],
                 'values' => self::values('The values of the properties of the type, property key → value; a property left out takes its default.', true),
                 'state_id' => self::ulid('The state it starts in: by default the initial state of the workflow; another one is a move from there (409 `transition_not_allowed` when the workflow forbids it).', true),
-                'template_id' => self::ulid('A template of the project the item is made from: its fields fill what the body leaves out.', true),
+                'template_id' => self::ulid('A template of the project the item is made from. It fills no field (the title stays required): the server only copies the images of its texts, and the item keeps the template and the event names it.', true),
             ],
             ['project_id', 'title'],
         );

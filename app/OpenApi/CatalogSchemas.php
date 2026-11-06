@@ -103,7 +103,7 @@ final class CatalogSchemas
     {
         return self::object(
             'A new project. The account that creates it becomes its admin; the lead becomes a member.',
-            self::projectFields(),
+            self::projectFields(true),
             ['name', 'identifier'],
             true,
         );
@@ -119,14 +119,17 @@ final class CatalogSchemas
         return self::object(
             'Only the keys that are named change; the answer of the project may come back as it is. '
             .'`workflow_id` of the project itself passes, another one is 422 (`PUT /projects/{project}/workflow` switches it).',
-            self::projectFields(),
+            self::projectFields(false),
             [],
             true,
         );
     }
 
-    /** @return array<string, array<string, mixed>> */
-    private static function projectFields(): array
+    /**
+     * @param  bool  $create  on create `null` means "not given" for lead, workflow and types; a change never clears them
+     * @return array<string, array<string, mixed>>
+     */
+    private static function projectFields(bool $create): array
     {
         return [
             'id' => self::echoed('string'),
@@ -145,13 +148,13 @@ final class CatalogSchemas
                 'description' => 'The project picture: a data URL (`data:image/png;base64,…`; PNG, JPEG, WebP or GIF, never SVG; at most 2 MB and 4096 px per side) replaces it, `null` removes it, the address that came back leaves it as it is.',
             ],
             'visibility' => ['type' => 'string', 'enum' => array_column(ProjectVisibility::cases(), 'value'), 'description' => 'Who sees the project: everybody (`public`) or its members and the org admins (`private`). Public by default.'],
-            'lead_id' => self::ulid('The lead: an active person (not a bot). On create the account that creates the project by default; on update a member of the project.'),
-            'workflow_id' => self::ulid('The workflow. On create the default workflow by default; on update only the project\'s own passes.'),
+            'lead_id' => self::ulid('The lead: an active person (not a bot). On create the account that creates the project by default (`null` or left out); on update a member of the project.', $create),
+            'workflow_id' => self::ulid('The workflow. On create the default workflow by default (`null` or left out); on update only the project\'s own passes.', $create),
             'enabled_type_ids' => [
-                'type' => 'array', 'minItems' => 1, 'uniqueItems' => true, 'items' => ['type' => 'string', 'pattern' => self::ULID],
-                'description' => 'The switched-on work item types. On create every active type by default; a newly switched-on one must be active.',
+                'type' => $create ? ['array', 'null'] : 'array', 'minItems' => 1, 'uniqueItems' => true, 'items' => ['type' => 'string', 'pattern' => self::ULID],
+                'description' => 'The switched-on work item types. On create every active type by default (`null` or left out); a newly switched-on one must be active.',
             ],
-            'default_type_id' => self::ulid('The type new items get: one of the switched-on active types. On create the first of them by default.'),
+            'default_type_id' => self::ulid('The type new items get: one of the switched-on active types. On create the first of them by default (`null` or left out).', $create),
         ];
     }
 
@@ -170,6 +173,7 @@ final class CatalogSchemas
                 'mapping' => self::map('Old state (ULID) to the state of the new workflow (ULID) that takes over its items. States without items need none.', self::ULID),
             ],
             ['workflow_id'],
+            true,
         );
     }
 
@@ -231,6 +235,7 @@ final class CatalogSchemas
                 'id' => ['type' => 'string', 'description' => 'The project (ULID, identifier or former identifier) or the view (ULID).'],
             ],
             ['kind', 'id'],
+            true,
         );
     }
 

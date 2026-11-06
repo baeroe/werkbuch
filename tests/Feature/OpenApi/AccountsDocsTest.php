@@ -182,8 +182,9 @@ it('documents the keys an action reads, no more and no fewer', function () use (
         expect($read)->toEqualCanonicalizing($action::FIELDS, $key)
             ->and($echo)->toEqualCanonicalizing($echoed, $key)
             ->and($schema['required'] ?? [])->toBe($required, $key)
-            // a body that takes its own answer back keeps other keys too; the others close the object (A385, K2)
-            ->and($schema['x-werkbuch-open'] ?? false)->toBe($echoed !== [], $key);
+            // K2: a body is closed only where the action refuses unknown keys with a 422; none of these does (they pass
+            // over what they do not read), so every body stays open
+            ->and($schema['x-werkbuch-open'] ?? false)->toBeTrue($key);
     }
 });
 
@@ -258,6 +259,6 @@ it('has no body for the operations that take none', function () {
     ] as $key) {
         [$method, $path] = explode(' ', $key, 2);
 
-        expect(Document::operation($method, $path))->not->toHaveKey('requestBody', $key);
+        expect(array_key_exists('requestBody', Document::operation($method, $path)))->toBeFalse($key);
     }
 });

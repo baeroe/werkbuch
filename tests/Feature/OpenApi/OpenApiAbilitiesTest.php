@@ -44,7 +44,7 @@ it('says the ability of every route like the route matrix', function () use ($ma
         if ($expected['session']) {
             expect($operation['x-werkbuch-session-only'] ?? null)->toBeTrue($key);
         } else {
-            expect($operation)->not->toHaveKey('x-werkbuch-session-only', $key);
+            expect(array_key_exists('x-werkbuch-session-only', $operation))->toBeFalse($key);
         }
     }
 
