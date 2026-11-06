@@ -1,9 +1,12 @@
 <?php
 
+use App\OpenApi\ListParameters;
+use App\Support\ListFilter;
 use Dedoc\Scramble\Generator;
 use Dedoc\Scramble\Scramble;
 use Illuminate\Routing\Route as RoutingRoute;
 use Illuminate\Support\Facades\Route;
+use Tests\Support\OpenApi\ListOfAction;
 use Tests\Support\OpenApi\ListOfController;
 
 /*
@@ -84,4 +87,21 @@ it('documents the list shape for ApiList::respond', function () use ($generate) 
         ->and($response['description'])->toBe('A page of `LabelResource`.')
         ->and($document['components']['schemas']['ListMeta']['required'])->toContain('total')
         ->and($document['components']['schemas'])->toHaveKey('LabelResource');
+});
+
+it('gives the schema of a filter value', function () use ($generate, $parameters) {
+    $full = $parameters($generate(), '/_t/list/full');
+    $spec = ListOfAction::spec();
+
+    expect(ListParameters::filterSchema(ListFilter::exact('type', values: ['person', 'bot'])))
+        ->toBe(['type' => 'array', 'items' => ['type' => 'string', 'enum' => ['person', 'bot']]])
+        ->and(ListParameters::filterSchema(ListFilter::partial('name')))->toBe(['type' => 'string'])
+        ->and(ListParameters::filterSchema(ListFilter::boolean('disabled')))->toBe(['type' => 'integer', 'enum' => [1, 0]]);
+
+    // the same schema and description the document shows, and the sort as it describes it
+    foreach ($spec->filters as $filter) {
+        expect(ListParameters::filterSchema($filter))->toBe($full['filter['.$filter->name.']']['schema'], $filter->name)
+            ->and(ListParameters::filterDescription($filter))->toBe($full['filter['.$filter->name.']']['description'], $filter->name);
+    }
+    expect(ListParameters::sortDescription($spec))->toBe($full['sort']['description']);
 });

@@ -14,6 +14,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 beforeEach(function () {
@@ -121,6 +122,39 @@ it('refuses the file list to a viewer with 403 and checks the item', function ()
         ->toBe([__('field.work_item_id.project')])
         ->and(errorsAt($upload($mara, ['project_id' => 'WEB', 'kind' => 'file'], $png())->assertUnprocessable(), 'work_item_id'))
         ->toBe([__('field.required')])
+        ->and(Attachment::query()->count())->toBe(0);
+});
+
+it('checks the target before the file', function () {
+    $web = Project::factory()->identifier('WEB')->public()->create();
+    Project::factory()->identifier('OPS')->private()->create();
+    $item = WorkItem::factory()->state(['project_id' => $web->id])->create();
+    $mara = memberOf($web, ProjectRole::Member);
+    $viewer = memberOf($web, ProjectRole::Viewer);
+    $ida = User::factory()->create();
+    $refusal = function (Closure $call): Throwable {
+        try {
+            $call();
+        } catch (Problem|ValidationException $e) {
+            return $e;
+        }
+        throw new RuntimeException('no refusal');
+    };
+
+    // the project, the kind and the item, as the upload checks them, without any file
+    [$project, $kind, $target] = UploadAttachment::target(actor($mara), ['project_id' => 'web', 'kind' => 'inline']);
+    expect($project->id)->toBe($web->id)->and($kind)->toBe('inline')->and($target)->toBeNull();
+    [$project, $kind, $target] = UploadAttachment::target(actor($mara), ['project_id' => $web->id, 'kind' => 'file', 'work_item_id' => strtolower($item->key)]);
+    expect($project->id)->toBe($web->id)->and($kind)->toBe('file')->and($target?->id)->toBe($item->id);
+
+    $unknown = $refusal(fn () => UploadAttachment::target(actor($ida), ['project_id' => 'OPS', 'kind' => 'other']));
+    $kindless = $refusal(fn () => UploadAttachment::target(actor($mara), ['project_id' => 'WEB', 'kind' => 'image']));
+    $denied = $refusal(fn () => UploadAttachment::target(actor($viewer), ['project_id' => 'WEB', 'kind' => 'file', 'work_item_id' => $item->key]));
+
+    expect($unknown)->toBeInstanceOf(Problem::class)->and($unknown->status)->toBe(404)
+        ->and($kindless)->toBeInstanceOf(ValidationException::class)->and($kindless->errors())->toBe(['kind' => [__('field.kind.attachment')]])
+        ->and($denied)->toBeInstanceOf(Problem::class)->and($denied->status)->toBe(403)
+        ->and($denied->detail)->toBe(__('problem.detail.items_members_only'))
         ->and(Attachment::query()->count())->toBe(0);
 });
 

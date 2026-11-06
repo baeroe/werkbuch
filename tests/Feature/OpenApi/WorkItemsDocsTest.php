@@ -25,6 +25,7 @@ use App\Models\Template;
 use App\Models\User;
 use App\Models\WorkItem;
 use App\Models\WorkItemType;
+use App\OpenApi\ItemQueryDocs;
 use App\Views\ItemQueryInput;
 use App\Views\Shorthand;
 use Tests\Support\OpenApi\Contract;
@@ -194,6 +195,17 @@ it('documents the query string of GET /work-items with the short form', function
     $include = collect(Document::operation('GET', '/work-items/{item}')['parameters'])->firstWhere('name', 'include');
     expect($include['schema']['items']['enum'])->toBe(GetWorkItem::INCLUDES)
         ->and($include['explode'])->toBeFalse();
+});
+
+it('gives the query parameters the document shows', function () {
+    $shown = collect(Document::operation('GET', '/work-items')['parameters'])->keyBy('name');
+    $given = ItemQueryDocs::queryParameters();
+
+    expect(array_keys($given))->toBe($shown->keys()->all());
+    foreach ($given as $name => $parameter) {
+        expect($parameter['schema'])->toBe($shown[$name]['schema'], $name)
+            ->and($parameter['description'])->toBe($shown[$name]['description'], $name);
+    }
 });
 
 /** Per operation with a JSON body: the keys the server reads, the required ones, and whether it refuses others. */

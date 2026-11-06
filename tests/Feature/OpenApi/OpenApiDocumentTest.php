@@ -3,6 +3,7 @@
 use App\Domain\Automations\AutomationKey;
 use App\Exceptions\Problem;
 use App\Http\Controllers\Api\ProjectsController;
+use App\OpenApi\Components;
 use App\OpenApi\JsonSchema;
 use App\OpenApi\ProblemExceptionResponses;
 use App\OpenApi\Schemas;
@@ -108,6 +109,18 @@ it('describes the problem shape', function () {
         // a plain schema serializes as it was given, in 3.1 and 3.2
         ->and((new JsonSchema(Schemas::problem()))->serializeAs31())->toBe(Schemas::problem())
         ->and((new JsonSchema(Schemas::problem()))->serializeAs32())->toBe(Schemas::problem());
+});
+
+it('puts the shared schemas under components as they are given', function () {
+    $schemas = Document::get()['components']['schemas'];
+
+    expect(array_keys(Components::schemas()))->toBe(['Problem', 'RichTextDocument', 'ListLinks', 'ListMeta', 'Filter', 'SortSpec', 'Display', 'Schedule']);
+    foreach (Components::schemas() as $name => $schema) {
+        // through a JSON round trip (the document holds `{}` as stdClass); Scramble adds the name as `title`
+        $shown = json_decode((string) json_encode($schemas[$name]), true);
+        unset($shown['title']);
+        expect($shown)->toBe(json_decode((string) json_encode($schema), true), $name);
+    }
 });
 
 it('documents the errors of every operation', function () {

@@ -55,19 +55,41 @@ final class ListParameters extends OperationExtension
 
     private static function filter(ListFilter $filter): Parameter
     {
-        $name = 'filter['.$filter->name.']';
+        $parameter = self::parameter('filter['.$filter->name.']', self::filterSchema($filter), self::filterDescription($filter));
 
+        // a list goes in one parameter, separated by commas
+        return in_array($filter->type, ['boolean', 'string'], true) ? $parameter : $parameter->setStyle('form')->setExplode(false);
+    }
+
+    /**
+     * The JSON Schema of the value of a filter: a boolean as `1` or `0`, a text, or a list of values (in a query string
+     * separated by commas).
+     *
+     * @return array<string, mixed>
+     */
+    public static function filterSchema(ListFilter $filter): array
+    {
         return match ($filter->type) {
-            'boolean' => self::parameter($name, ['type' => 'integer', 'enum' => [1, 0]], 'Only rows where it is true (`1`) or false (`0`).'),
-            'string' => self::parameter($name, ['type' => 'string'], $filter->kind === ListFilter::PARTIAL
-                ? 'Only rows whose `'.$filter->name.'` contains the text (any case; a comma is part of the text).'
-                : 'Only rows that match the text.'),
-            default => self::parameter($name, self::listOf($filter->values), 'Only rows with one of the values, separated by commas.')
-                ->setStyle('form')->setExplode(false),
+            'boolean' => ['type' => 'integer', 'enum' => [1, 0]],
+            'string' => ['type' => 'string'],
+            default => self::listOf($filter->values),
         };
     }
 
-    private static function sortDescription(ListSpec $spec): string
+    /** What the value of a filter does. */
+    public static function filterDescription(ListFilter $filter): string
+    {
+        return match ($filter->type) {
+            'boolean' => 'Only rows where it is true (`1`) or false (`0`).',
+            'string' => $filter->kind === ListFilter::PARTIAL
+                ? 'Only rows whose `'.$filter->name.'` contains the text (any case; a comma is part of the text).'
+                : 'Only rows that match the text.',
+            default => 'Only rows with one of the values, separated by commas.',
+        };
+    }
+
+    /** What `sort` takes: the names of the spec, `-` for descending, and the default order. */
+    public static function sortDescription(ListSpec $spec): string
     {
         $names = implode(', ', array_map(fn (string $name) => '`'.$name.'`', array_keys($spec->sorts)));
         $default = $spec->default === [] ? 'the ULID' : implode(', ', array_map(fn (string $name) => '`'.$name.'`', $spec->default));

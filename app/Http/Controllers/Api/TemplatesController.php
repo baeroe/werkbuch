@@ -18,7 +18,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\TemplateDraftResource;
 use App\Http\Resources\TemplateResource;
 use App\Http\Resources\TemplateRunResource;
-use App\Http\Resources\WorkItemResource;
+use App\Http\Resources\TemplateRunResultResource;
 use App\Models\Project;
 use App\Models\Template;
 use App\OpenApi\OperationsSchemas;
@@ -113,12 +113,7 @@ final class TemplatesController extends Controller
     #[Answer(200, OperationsSchemas::class, 'ran', 'The run and its item.')]
     public function run(Request $request, Template $template): JsonResponse
     {
-        ['run' => $run, 'item' => $item] = RunTemplate::run(Actor::fromRequest($request), $template);
-
-        return response()->json(['data' => [
-            'run' => (new TemplateRunResource($run))->resolve($request),
-            'item' => $item === null ? null : (new WorkItemResource($item))->resolve($request),
-        ]]);
+        return response()->json(['data' => (new TemplateRunResultResource(RunTemplate::run(Actor::fromRequest($request), $template)))->resolve($request)]);
     }
 
     /**

@@ -77,22 +77,37 @@ final class ItemQueryDocs extends OperationExtension
      */
     private static function listParameters(): array
     {
-        $parameters = [self::parameter('view', ['type' => 'string', 'pattern' => PathParameters::ULID], 'A view by its ULID: its filter, sort and sub-items apply, the rest narrows them.')];
+        $parameters = [];
+        foreach (self::queryParameters() as $name => ['schema' => $schema, 'description' => $description]) {
+            $parameters[] = self::parameter($name, $schema, $description);
+        }
+
+        return $parameters;
+    }
+
+    /**
+     * The query of `GET /work-items` by name: its schema and what it does.
+     *
+     * @return array<string, array{schema: array<string, mixed>, description: string}>
+     */
+    public static function queryParameters(): array
+    {
+        $parameters = ['view' => ['schema' => ['type' => 'string', 'pattern' => PathParameters::ULID], 'description' => 'A view by its ULID: its filter, sort and sub-items apply, the rest narrows them.']];
 
         foreach (Shorthand::KEYS as $key) {
             $schema = $key === 'archived' ? ['type' => 'string', 'enum' => ['true', 'false']] : ['type' => 'string'];
-            $parameters[] = self::parameter("filter[{$key}]", $schema, self::SHORT[$key].' An empty value is no condition.');
+            $parameters["filter[{$key}]"] = ['schema' => $schema, 'description' => self::SHORT[$key].' An empty value is no condition.'];
         }
 
         return [
             ...$parameters,
-            self::parameter('sort', ['type' => 'string'], 'The order: '.implode(', ', array_map(fn (string $field) => "`{$field}`", SortSpec::CORE))
-                .' or `property:<key>` (number, date, text, address); `-` before it sorts descending (`-due_date`). Default: the sort of the view, else `rank`.'),
-            self::parameter('show_sub_items', self::QUERY_FLAG, 'Whether items with a parent show (`1`) or not (`0`); by default as the view says, else `1`.'),
-            self::parameter('include_archived', self::QUERY_FLAG, 'Archived items and items of archived projects too (`1`).'),
-            self::parameter('lean', self::QUERY_FLAG, 'Lean items (`1`): without `description`, `description_json` and `values_markdown`.'),
-            self::parameter('cursor', ['type' => 'string'], 'The cursor of the page: `meta.next_cursor` or `meta.prev_cursor` of the page before. It belongs to its sort; another one is 422 at `cursor`.'),
-            self::parameter('per_page', ['type' => 'integer', 'default' => PageArgs::MAX_PER_PAGE, 'minimum' => 1, 'maximum' => PageArgs::MAX_PER_PAGE], 'The items per page.'),
+            'sort' => ['schema' => ['type' => 'string'], 'description' => 'The order: '.implode(', ', array_map(fn (string $field) => "`{$field}`", SortSpec::CORE))
+                .' or `property:<key>` (number, date, text, address); `-` before it sorts descending (`-due_date`). Default: the sort of the view, else `rank`.'],
+            'show_sub_items' => ['schema' => self::QUERY_FLAG, 'description' => 'Whether items with a parent show (`1`) or not (`0`); by default as the view says, else `1`.'],
+            'include_archived' => ['schema' => self::QUERY_FLAG, 'description' => 'Archived items and items of archived projects too (`1`).'],
+            'lean' => ['schema' => self::QUERY_FLAG, 'description' => 'Lean items (`1`): without `description`, `description_json` and `values_markdown`.'],
+            'cursor' => ['schema' => ['type' => 'string'], 'description' => 'The cursor of the page: `meta.next_cursor` or `meta.prev_cursor` of the page before. It belongs to its sort; another one is 422 at `cursor`.'],
+            'per_page' => ['schema' => ['type' => 'integer', 'default' => PageArgs::MAX_PER_PAGE, 'minimum' => 1, 'maximum' => PageArgs::MAX_PER_PAGE], 'description' => 'The items per page.'],
         ];
     }
 

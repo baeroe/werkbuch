@@ -18,6 +18,7 @@ use App\Models\Project;
 use App\Models\User;
 use App\Models\View;
 use App\Models\WorkItem;
+use App\OpenApi\ContentDocs;
 use App\Search\SearchIndexer;
 use App\Support\AttachmentTexts;
 use App\Support\ViewInput;
@@ -263,6 +264,19 @@ it('documents the query of the search, the mentions and the references with thei
 
     $views = collect(Document::operation('GET', '/views')['parameters'])->pluck('name')->all();
     expect($views)->toEqualCanonicalizing(['cursor', 'per_page', 'sort', ...array_map(fn ($filter) => "filter[{$filter->name}]", array_values(ListViews::spec()->filters))]);
+});
+
+it('gives the query parameters the document shows', function () {
+    foreach (['/search' => ContentDocs::searchParameters(), '/mentions' => ContentDocs::mentionsParameters()] as $path => $given) {
+        $shown = collect(Document::operation('GET', $path)['parameters'])->keyBy('name');
+
+        expect(array_keys($given))->toEqualCanonicalizing($shown->keys()->all(), $path);
+        foreach ($given as $name => $parameter) {
+            expect($parameter['schema'])->toBe($shown[$name]['schema'], "{$path} {$name}")
+                ->and($parameter['description'])->toBe($shown[$name]['description'], "{$path} {$name}")
+                ->and($parameter['required'])->toBe($shown[$name]['required'] ?? false, "{$path} {$name}");
+        }
+    }
 });
 
 it('lets a client send and read everything the document names', function () use ($bodies, $body) {
