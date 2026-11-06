@@ -5,7 +5,7 @@
  */
 
 import { Plus, Webhook as WebhookIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useProjects } from '@/hooks/projects';
@@ -31,20 +31,22 @@ export function WebhookList() {
   const projectList = projects.data?.items ?? [];
   const botList = bots.data?.items ?? [];
 
-  const create = (
-    <Button variant="primary" icon={Plus} onClick={() => dialog.show()}>
+  // the button in the header stays when the list changes; the one of the empty state goes with it
+  const create = useRef<HTMLButtonElement>(null);
+  const createButton = (ref?: typeof create) => (
+    <Button ref={ref} variant="primary" icon={Plus} onClick={() => dialog.show()}>
       {t('settings.webhooks.create')}
     </Button>
   );
 
   return (
     <div className="flex flex-col gap-4">
-      <SectionHeader title={t('settings.org.section.webhooks')} description={t('settings.webhooks.description')} actions={create} />
+      <SectionHeader title={t('settings.org.section.webhooks')} description={t('settings.webhooks.description')} actions={createButton(create)} />
       <Loaded queries={[webhooks, projects, bots]} failure={t('settings.webhooks.load_failed')} skeleton={<RowsSkeleton rows={3} label={t('settings.webhooks.loading')} />}>
         {() => {
           const shown = (webhooks.data?.items ?? []).filter((webhook) => !hidden.has(webhook.id));
           if (shown.length === 0) {
-            return <EmptyState icon={WebhookIcon} title={t('settings.webhooks.empty.title')} description={t('settings.webhooks.empty.description')} actions={create} />;
+            return <EmptyState icon={WebhookIcon} title={t('settings.webhooks.empty.title')} description={t('settings.webhooks.empty.description')} actions={createButton()} />;
           }
           return (
             <ul className="flex flex-col gap-3">
@@ -61,6 +63,7 @@ export function WebhookList() {
                         label: t('settings.webhooks.deleted', { name: webhook.name }),
                         failureTitle: t('settings.webhooks.not_deleted', { name: webhook.name }),
                         run: () => remove.mutateAsync(webhook.id),
+                        fallback: create.current,
                       })
                     }
                   />
@@ -70,8 +73,8 @@ export function WebhookList() {
           );
         }}
       </Loaded>
-      <WebhookDialog key={dialog.round} open={dialog.open} onOpenChange={dialog.setOpen} webhook={dialog.target} projects={projectList} bots={botList} onCreated={setSecret} />
-      <SecretDialog secret={secret} onClose={() => setSecret(null)} />
+      <WebhookDialog key={dialog.round} open={dialog.open} onOpenChange={dialog.setOpen} webhook={dialog.target} projects={projectList} bots={botList} onCreated={setSecret} finalFocus={dialog.returnFocus(create)} />
+      <SecretDialog secret={secret} onClose={() => setSecret(null)} finalFocus={dialog.returnFocus(create)} />
     </div>
   );
 }

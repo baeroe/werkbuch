@@ -5,7 +5,7 @@
  * be closed by accident: a click outside does nothing and Escape asks first; "Fertig" closes it.
  */
 
-import { useState } from 'react';
+import { useState, type RefObject } from 'react';
 import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
 import { CopyField } from '@/components/ui/CopyField';
@@ -20,7 +20,14 @@ export interface Secret {
   value: string;
 }
 
-export function SecretDialog({ secret, onClose }: { secret: Secret | null; onClose: () => void }) {
+type SecretDialogProps = {
+  secret: Secret | null;
+  onClose: () => void;
+  /** Where the focus goes when it closes: the button that led here may be gone by then (the empty state's). */
+  finalFocus?: RefObject<HTMLElement | null>;
+};
+
+export function SecretDialog({ secret, onClose, finalFocus }: SecretDialogProps) {
   // while the dialog fades out the screen has already let go of the secret; the last one is shown until it is gone,
   // and then let go of here as well
   const [shown, setShown] = useState<Secret | null>(null);
@@ -32,6 +39,7 @@ export function SecretDialog({ secret, onClose }: { secret: Secret | null; onClo
     <Dialog
       open={secret !== null}
       onOpenChange={(open) => !open && onClose()}
+      finalFocus={finalFocus}
       onOpenChangeComplete={(open) => !open && setShown(null)}
       confirmClose={{ title: t('settings.webhooks.secret.close_title'), description: t('settings.webhooks.secret.once') }}
       title={current.kind === 'created' ? t('settings.webhooks.secret.created_title') : t('settings.webhooks.secret.rotated_title')}

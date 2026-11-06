@@ -10,7 +10,7 @@
  */
 
 import { RefreshCw } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { AlertDialog } from '@/components/ui/AlertDialog';
 import { Button } from '@/components/ui/Button';
 import { FormDialog } from '@/components/ui/FormDialog';
@@ -31,7 +31,8 @@ import { SecretDialog, type Secret } from './SecretDialog';
 const ORG_SCOPE = 'organization';
 const ANY_BOT = 'any';
 /** The fields of the form; a refusal of any other path shows as a notice on top. */
-const PLACED = ['name', 'url', 'project_id', 'events', 'bot_id', 'active'];
+// `active` is a switch with no place for a message: a refusal of it shows as the notice on top
+const PLACED = ['name', 'url', 'project_id', 'events', 'bot_id'];
 
 type WebhookDialogProps = {
   open: boolean;
@@ -43,9 +44,11 @@ type WebhookDialogProps = {
   bots: User[];
   /** A new webhook and its secret, to be shown once. */
   onCreated: (secret: Secret) => void;
+  /** Where the focus goes when the form or the new secret closes. */
+  finalFocus?: RefObject<HTMLElement | null>;
 };
 
-export function WebhookDialog({ open, onOpenChange, webhook, projects, bots, onCreated }: WebhookDialogProps) {
+export function WebhookDialog({ open, onOpenChange, webhook, projects, bots, onCreated, finalFocus }: WebhookDialogProps) {
   const settle = useSettle();
   const save = useSaveWebhook();
   const rotate = useRotateWebhookSecret();
@@ -58,6 +61,9 @@ export function WebhookDialog({ open, onOpenChange, webhook, projects, bots, onC
   const [attempted, setAttempted] = useState(false);
   const [asking, setAsking] = useState(false);
   const [secret, setSecret] = useState<Secret | null>(null);
+  const renewButton = useRef<HTMLButtonElement>(null);
+  // "Try again" of a toast sends the form as it is by then, not as it was when the toast came up
+  const latest = useRef<() => void>(() => {});
 
   // a refusal that is no answer of the server (5xx, none at all) is a toast to try again, not a notice in the form
   const refusal = save.error && !isTransient(save.error) ? save.error : null;
@@ -85,10 +91,14 @@ export function WebhookDialog({ open, onOpenChange, webhook, projects, bots, onC
         else toast({ title: t('settings.webhooks.dialog.saved', { name: saved.name }), tone: 'success' });
       },
       onError: (error) => {
-        if (isTransient(error)) notifyError(t('settings.webhooks.dialog.not_saved'), error, submit);
+        if (isTransient(error)) notifyError(t('settings.webhooks.dialog.not_saved'), error, () => latest.current());
       },
     });
   }
+
+  useEffect(() => {
+    latest.current = submit;
+  });
 
   function renew(target: Webhook) {
     settle(rotate.mutateAsync(target.id), {
@@ -114,6 +124,7 @@ export function WebhookDialog({ open, onOpenChange, webhook, projects, bots, onC
       submitLabel={webhook ? t('settings.frame.save') : t('settings.webhooks.dialog.submit_create')}
       pending={save.isPending}
       notice={noticeOf(refusal, PLACED)}
+      finalFocus={finalFocus}
       onSubmit={submit}
     >
       <div className="grid gap-4 sm:grid-cols-2">
@@ -159,7 +170,7 @@ export function WebhookDialog({ open, onOpenChange, webhook, projects, bots, onC
       {webhook && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-ctl border border-line bg-sunken px-3 py-2.5">
           <p className="max-w-[46ch] text-sm text-pretty text-muted">{t('settings.webhooks.dialog.secret_note')}</p>
-          <Button variant="secondary" icon={RefreshCw} pending={rotate.isPending} onClick={() => setAsking(true)}>
+          <Button ref={renewButton} variant="secondary" icon={RefreshCw} pending={rotate.isPending} onClick={() => setAsking(true)}>
             {t('settings.webhooks.rotate.button')}
           </Button>
         </div>
@@ -173,7 +184,7 @@ export function WebhookDialog({ open, onOpenChange, webhook, projects, bots, onC
         pending={rotate.isPending}
         onConfirm={() => webhook && renew(webhook)}
       />
-      <SecretDialog secret={secret} onClose={() => setSecret(null)} />
+      <SecretDialog secret={secret} onClose={() => setSecret(null)} finalFocus={renewButton} />
     </FormDialog>
   );
 }

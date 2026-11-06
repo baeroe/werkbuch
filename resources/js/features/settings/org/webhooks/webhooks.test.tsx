@@ -428,6 +428,80 @@ describe('Webhooks', () => {
   });
 });
 
+describe('Webhooks: focus and retry (T13 findings)', () => {
+  it('gives the focus to "Webhook anlegen" in the header after the first webhook of the empty state was made', async () => {
+    const user = userEvent.setup();
+    renderWebhooks({}, []);
+    await screen.findByText('Noch kein Webhook');
+    const buttons = screen.getAllByRole('button', { name: 'Webhook anlegen' });
+    await user.click(buttons[buttons.length - 1]);
+    const form = await screen.findByRole('dialog', { name: 'Webhook anlegen' });
+    await user.type(within(form).getByRole('textbox', { name: 'Name' }), 'Chat');
+    await user.type(within(form).getByRole('textbox', { name: 'URL' }), 'https://chat.example.com/hook');
+    await user.click(within(form).getByRole('checkbox', { name: /^Bots/ }));
+    await user.click(within(form).getByRole('button', { name: 'Anlegen' }));
+
+    const result = await screen.findByRole('dialog', { name: 'Webhook ist angelegt' });
+    await user.click(within(result).getByRole('button', { name: 'Fertig' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(screen.getAllByRole('button', { name: 'Webhook anlegen' })[0]));
+  });
+
+  it('gives the focus back to "Neues Geheimnis erzeugen" after the new secret, and to the opener after the form', async () => {
+    const user = userEvent.setup();
+    renderWebhooks();
+    const edit = within(await cardOf('Deploy-Bot')).getByRole('button', { name: 'Webhook „Deploy-Bot“ bearbeiten' });
+    await user.click(edit);
+    const form = await screen.findByRole('dialog', { name: 'Webhook „Deploy-Bot“ bearbeiten' });
+    await user.click(within(form).getByRole('button', { name: 'Neues Geheimnis erzeugen' }));
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Neues Geheimnis erzeugen' }));
+    const result = await screen.findByRole('dialog', { name: 'Neues Geheimnis ist erzeugt' });
+    await user.click(within(result).getByRole('button', { name: 'Fertig' }));
+    await waitFor(() => expect(result.isConnected).toBe(false));
+    await waitFor(() => expect(document.activeElement).toBe(within(form).getByRole('button', { name: 'Neues Geheimnis erzeugen' })));
+
+    await user.click(within(form).getByRole('button', { name: 'Abbrechen' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(edit));
+  });
+
+  it('moves the focus to "Webhook anlegen" after the last webhook was removed', async () => {
+    const user = userEvent.setup();
+    renderWebhooks({}, [demoWebhooks[0]]);
+    await user.click(within(await cardOf('Deploy-Bot')).getByRole('button', { name: 'Webhook „Deploy-Bot“ löschen' }));
+    await screen.findByText('Noch kein Webhook');
+    await waitFor(() => expect(document.activeElement).toBe(screen.getAllByRole('button', { name: 'Webhook anlegen' })[0]));
+  });
+
+  it('sends the form as it is by then when the toast says "Erneut versuchen"', async () => {
+    const user = userEvent.setup();
+    let answer: () => ReturnType<MockRoute> = unavailable;
+    renderWebhooks({ 'POST /api/v1/webhooks': () => answer() });
+    await user.click(await screen.findByRole('button', { name: 'Webhook anlegen' }));
+    const form = await screen.findByRole('dialog', { name: 'Webhook anlegen' });
+    await user.type(within(form).getByRole('textbox', { name: 'Name' }), 'Chat');
+    await user.type(within(form).getByRole('textbox', { name: 'URL' }), 'https://chat.example.com/hook');
+    await user.click(within(form).getByRole('checkbox', { name: /^Bots/ }));
+    await user.click(within(form).getByRole('button', { name: 'Anlegen' }));
+    await waitFor(() => expect(toastNamed('Webhook nicht gespeichert')).toBeDefined());
+
+    await user.type(within(form).getByRole('textbox', { name: 'Name' }), ' neu');
+    answer = () => ({ status: 201, body: { data: makeWebhook({ id: 'wh_new', name: 'Chat neu' }), secret: 'whsec_x' } });
+    act(() => runToastAction(toastNamed('Webhook nicht gespeichert')!.id));
+    await screen.findByRole('dialog', { name: 'Webhook ist angelegt' });
+    expect((calls('POST', '/api/v1/webhooks')[1].body as WebhookInput).name).toBe('Chat neu');
+  });
+
+  it('shows a refusal of the switch in the notice on top of the form', async () => {
+    const user = userEvent.setup();
+    renderWebhooks({ 'PUT /api/v1/webhooks/wh_1': () => invalid({ active: ['Der Webhook lässt sich nicht aktivieren.'] }) });
+    await user.click(within(await cardOf('Deploy-Bot')).getByRole('button', { name: 'Webhook „Deploy-Bot“ bearbeiten' }));
+    const form = await screen.findByRole('dialog', { name: 'Webhook „Deploy-Bot“ bearbeiten' });
+    await user.click(within(form).getByRole('button', { name: 'Speichern' }));
+    expect(await within(form).findByText('Der Webhook lässt sich nicht aktivieren.')).toBeTruthy();
+  });
+});
+
 describe('EventTree', () => {
   it('stores single events by name, a full group as its wildcard, and shows a mixed group open with a dash', async () => {
     const user = userEvent.setup();
