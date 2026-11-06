@@ -197,16 +197,109 @@ describe('WebhookDeliveries', () => {
     const user = userEvent.setup();
     let refuse = true;
     renderLog({
-      'POST /api/v1/webhooks/wh_1/ping': () => (refuse ? problem(503, 'webhook_not_logged', { detail: 'Der Webhook wurde aufgerufen, der Versuch ließ sich aber nicht protokollieren.' }) : { body: { data: makeDelivery({ kind: 'ping', event: 'ping' }) } }),
+      'POST /api/v1/webhooks/wh_1/ping': () => (refuse ? problem(503, 'service_unavailable', { detail: 'Der Server ist gerade nicht erreichbar.' }) : { body: { data: makeDelivery({ kind: 'ping', event: 'ping' }) } }),
     });
     await waitFor(() => expect(rows()).toHaveLength(3));
 
     await user.click(screen.getByRole('button', { name: 'Test-Ping' }));
     await waitFor(() => expect(toastNamed('Test-Ping nicht gesendet')).toBeDefined());
-    expect(toastNamed('Test-Ping nicht gesendet')?.description).toContain('nicht protokollieren');
+    expect(toastNamed('Test-Ping nicht gesendet')?.description).toBe('Der Server ist gerade nicht erreichbar.');
     refuse = false;
     act(() => toastNamed('Test-Ping nicht gesendet')!.action!.onClick());
     await waitFor(() => expect(toastNamed('Test-Ping an „Deploy-Bot“ angekommen')).toBeDefined());
+  });
+
+  it('offers no second try when the receiver was called but the attempt is not in the log (503 webhook_not_logged)', async () => {
+    const user = userEvent.setup();
+    const notLogged = () => problem(503, 'webhook_not_logged', { detail: 'Der Webhook wurde aufgerufen, der Versuch ließ sich aber nicht protokollieren.' });
+    renderLog({ 'POST /api/v1/webhooks/wh_1/ping': notLogged, 'POST /api/v1/webhooks/wh_1/deliveries/dl_2/redeliver': notLogged });
+    await waitFor(() => expect(rows()).toHaveLength(3));
+
+    await user.click(screen.getByRole('button', { name: 'Test-Ping' }));
+    await waitFor(() => expect(toastNamed('Test-Ping nicht gesendet')).toBeDefined());
+    expect(toastNamed('Test-Ping nicht gesendet')?.description).toContain('nicht protokollieren');
+    expect(toastNamed('Test-Ping nicht gesendet')?.action).toBeUndefined();
+
+    await user.click(screen.getByRole('button', { name: 'Erneut senden (Kommentar geschrieben, Versuch 2)' }));
+    await waitFor(() => expect(toastNamed('Zustellung nicht gesendet')).toBeDefined());
+    expect(toastNamed('Zustellung nicht gesendet')?.action).toBeUndefined();
+  });
+
+  it('keeps every "Erneut senden" busy until its own answer is here, while another one runs', async () => {
+    const user = userEvent.setup();
+    const releases: Record<string, () => void> = {};
+    const held: Record<string, Promise<void>> = {
+      dl_1: new Promise<void>((resolve) => (releases.dl_1 = resolve)),
+      dl_2: new Promise<void>((resolve) => (releases.dl_2 = resolve)),
+    };
+    renderLog({ 'POST /api/v1/webhooks/wh_1/deliveries/dl_1/redeliver': () => ({ body: { data: makeDelivery({ id: 'at_m1', delivery_id: 'dl_1', kind: 'manual' }) } }) });
+    const send = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      const id = /deliveries\/(dl_\d)\/redeliver$/.exec(String(input))?.[1];
+      if (id) await held[id];
+      return send(input, init);
+    };
+    await waitFor(() => expect(rows()).toHaveLength(3));
+
+    const a = screen.getByRole('button', { name: 'Erneut senden (Status geändert, Versuch 1)' });
+    const b = screen.getByRole('button', { name: 'Erneut senden (Kommentar geschrieben, Versuch 2)' });
+    await user.click(a);
+    await waitFor(() => expect(a.getAttribute('aria-busy')).toBe('true'));
+    await user.click(b);
+    await waitFor(() => expect(b.getAttribute('aria-busy')).toBe('true'));
+    // the first call still runs: its button stays busy and a second press sends nothing
+    expect(a.getAttribute('aria-busy')).toBe('true');
+    await user.click(a);
+
+    releases.dl_2();
+    await waitFor(() => expect(toastNamed('Zustellung an „Deploy-Bot“ angekommen')).toBeDefined());
+    expect(a.isConnected).toBe(true);
+    expect(a.getAttribute('aria-busy')).toBe('true');
+    releases.dl_1();
+    await waitFor(() => expect(a.getAttribute('aria-busy')).not.toBe('true'));
+    expect(calls('POST', '/api/v1/webhooks/wh_1/deliveries/dl_1/redeliver')).toHaveLength(1);
+    globalThis.fetch = send;
+  });
+
+  it('reads the reason of an attempt without an answer and shows the rest as its detail', async () => {
+    const refused = makeDelivery({ id: 'at_r', delivery_id: 'dl_r', status_code: null, duration_ms: 0, response_excerpt: null, error: 'private_address: Webhook target hooks.example.com refused: private_address' });
+    const slow = makeDelivery({ id: 'at_s', delivery_id: 'dl_s', status_code: null, duration_ms: 10000, response_excerpt: null, error: 'timeout: cURL error 28: Operation timed out after 10001 milliseconds' });
+    const bot = makeDelivery({ id: 'at_b', delivery_id: 'dl_b', status_code: null, duration_ms: 0, response_excerpt: null, error: 'bot_access: Webhook target refused: bot_access' });
+    renderLog({}, [refused, slow, bot]);
+
+    const [first, second, third] = await waitFor(() => {
+      const found = rows();
+      expect(found).toHaveLength(3);
+      return found;
+    });
+    expect(within(first).getByText('Die Adresse zeigt in ein privates oder gesperrtes Netz.')).toBeTruthy();
+    const detail = within(first).getByText('Webhook target hooks.example.com refused: private_address');
+    expect(detail.getAttribute('translate')).toBe('no');
+    expect(within(first).queryByText(/^private_address:/)).toBeNull();
+    expect(within(second).getByText('Der Empfänger hat nicht rechtzeitig geantwortet.')).toBeTruthy();
+    expect(within(second).getByText('cURL error 28: Operation timed out after 10001 milliseconds')).toBeTruthy();
+    expect(within(third).getByText('Der Bot dieses Webhooks sieht das Projekt nicht mehr.')).toBeTruthy();
+  });
+
+  it('says why a test ping got no answer', async () => {
+    const user = userEvent.setup();
+    renderLog({
+      'POST /api/v1/webhooks/wh_1/ping': () => ({ body: { data: makeDelivery({ kind: 'ping', event: 'ping', status_code: null, duration_ms: 0, response_excerpt: null, error: 'private_address: Webhook target hooks.example.com refused: private_address' }) } }),
+    });
+    await waitFor(() => expect(rows()).toHaveLength(3));
+
+    await user.click(screen.getByRole('button', { name: 'Test-Ping' }));
+    await waitFor(() => expect(toastNamed('Test-Ping an „Deploy-Bot“ fehlgeschlagen')).toBeDefined());
+    expect(toastNamed('Test-Ping an „Deploy-Bot“ fehlgeschlagen')?.description).toBe('Keine Antwort nach 0\u00a0ms. Die Adresse zeigt in ein privates oder gesperrtes Netz.');
+  });
+
+  it('rules the note off across the whole log, not at the measure of its text (13c)', async () => {
+    renderLog();
+    const note = await screen.findByText(/Jeder Versuch wird 30 Tage aufbewahrt/);
+    expect(note.className).toMatch(/max-w-\[65ch\]/);
+    const ruled = note.closest('.border-b') as HTMLElement | null;
+    expect(ruled).not.toBeNull();
+    expect(ruled!.className).not.toMatch(/max-w-/);
   });
 
   it('says why a delivery could not be sent again', async () => {
@@ -231,7 +324,7 @@ describe('WebhookDeliveries', () => {
     expect(calls('GET', '/api/v1/webhooks/wh_1/deliveries').map((call) => call.url)).toEqual(['/api/v1/webhooks/wh_1/deliveries', '/api/v1/webhooks/wh_1/deliveries?cursor=c2']);
   });
 
-  it('offers a test ping in the empty log', async () => {
+  it('offers a test ping in the empty log and gives the focus to the log when the empty state goes', async () => {
     const user = userEvent.setup();
     renderLog({}, [], demoWebhooks);
 
@@ -239,6 +332,29 @@ describe('WebhookDeliveries', () => {
     await user.click(screen.getByRole('button', { name: 'Test-Ping senden' }));
     await waitFor(() => expect(toastNamed('Test-Ping an „Deploy-Bot“ angekommen')).toBeDefined());
     expect(await screen.findByRole('list', { name: 'Zustellungen' })).toBeTruthy();
+    const heading = screen.getByRole('heading', { level: 2, name: 'Zustellungen von Deploy-Bot' });
+    await waitFor(() => expect(document.activeElement).toBe(heading));
+  });
+
+  it('shares one test ping between the header and the empty log', async () => {
+    const user = userEvent.setup();
+    let release: (() => void) | undefined;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    renderLog({}, [], demoWebhooks);
+    const send = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      if (String(input).endsWith('/webhooks/wh_1/ping')) await held;
+      return send(input, init);
+    };
+
+    await user.click(await screen.findByRole('button', { name: 'Test-Ping senden' }));
+    const header = screen.getByRole('button', { name: 'Test-Ping' });
+    await waitFor(() => expect(header.getAttribute('aria-busy')).toBe('true'));
+    await user.click(header);
+    release!();
+    await waitFor(() => expect(toastNamed('Test-Ping an „Deploy-Bot“ angekommen')).toBeDefined());
+    expect(calls('POST', '/api/v1/webhooks/wh_1/ping')).toHaveLength(1);
+    globalThis.fetch = send;
   });
 
   it('says an unknown webhook does not exist and leads back to the list', async () => {
@@ -248,6 +364,7 @@ describe('WebhookDeliveries', () => {
     const links = screen.getAllByRole('link', { name: 'Alle Webhooks' });
     expect(links.every((link) => link.getAttribute('href') === '/settings/webhooks')).toBe(true);
     expect(screen.queryByRole('button', { name: 'Test-Ping' })).toBeNull();
+    expect(calls('GET', '/api/v1/webhooks/wh_gone/deliveries')).toHaveLength(0);
   });
 
   it('says when the log could not be loaded, and loads it again', async () => {
@@ -273,6 +390,8 @@ describe('WebhookDeliveries', () => {
     await waitFor(() => expect(toastNamed('Webhook „Altes CRM“ ist wieder aktiv')).toBeDefined());
     expect(calls('PUT', '/api/v1/webhooks/wh_crm')[0].body).toEqual({ name: 'Altes CRM', url: crm.url, project_id: 'p_app', events: crm.events, bot_id: null, active: true });
     await waitFor(() => expect(noticeOf()).toBeNull());
+    // the button went with the notice: the focus goes to the heading of the log, not to the page
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { level: 2, name: 'Zustellungen von Altes CRM' })));
   });
 
   it('shows no notice for a webhook somebody switched off', async () => {
@@ -306,5 +425,7 @@ describe('WebhookCard', () => {
     await user.click(within(old).getByRole('button', { name: 'Wieder aktivieren' }));
     await waitFor(() => expect(toastNamed('Webhook „Altes CRM“ ist wieder aktiv')).toBeDefined());
     await waitFor(() => expect(within(old).queryByRole('status')).toBeNull());
+    // the button went with the notice: the focus goes to the name of the card, not to the page
+    await waitFor(() => expect(document.activeElement).toBe(within(old).getByRole('heading', { level: 3, name: 'Altes CRM' })));
   });
 });

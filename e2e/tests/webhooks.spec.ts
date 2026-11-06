@@ -186,6 +186,8 @@ test('shows a switched-off webhook in the inbox and turns it on again', async ({
     await page.keyboard.press('Enter');
     await expect(page.getByText(label('settings.webhooks.reenable.done', { name: title }))).toBeVisible();
     await expect(page.getByText(label('settings.webhooks.reenable.title'))).toHaveCount(0);
+    // the button went with the notice: the heading of the log takes the focus, not the page
+    await expect(page.getByRole('heading', { name: label('settings.webhooks.deliveries_of', { name: title }) })).toBeFocused();
   } finally {
     await removeE2eWebhook(page, hook.id);
     await removeE2eProject(page, project.identifier);

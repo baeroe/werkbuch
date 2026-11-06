@@ -44,7 +44,7 @@ export function WebhookCard({ webhook, projects, bots, onEdit, onDelete }: Webho
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <div className="min-w-0 flex-1 basis-64">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 id={titleId} className="font-display text-lg font-bold tracking-title break-words text-ink">
+            <h3 id={titleId} tabIndex={-1} data-focus-ring="none" className="font-display text-lg font-bold tracking-title break-words text-ink outline-none">
               {webhook.name}
             </h3>
             <StateBadge webhook={webhook} />
@@ -70,7 +70,7 @@ export function WebhookCard({ webhook, projects, bots, onEdit, onDelete }: Webho
         </div>
       </div>
 
-      <DisabledNotice webhook={webhook} />
+      <DisabledNotice webhook={webhook} focusAfter={() => document.getElementById(titleId)} />
 
       <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-ui">
         <dt className="text-muted">{t('settings.webhooks.scope')}</dt>

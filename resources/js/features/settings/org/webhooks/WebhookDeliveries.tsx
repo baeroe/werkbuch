@@ -2,12 +2,15 @@
  * The log of a webhook (spec 6.3, `?deliveries=<id>`): every attempt with its event, time, status, duration and the
  * answer, cut to 2 KB, newest first, a page at a time. A delivery can be sent again, and a test ping sends a harmless
  * event to see whether the receiver answers. Both end as a new entry at the top of the log and a toast that says what
- * the receiver answered; their buttons stay busy until the answer is here (K17). A webhook the system shut down shows
- * its notice here too, with the way to turn it on again.
+ * the receiver answered; each button stays busy until the answer of its own call is here (K17), the header and the empty
+ * log share one ping. An attempt without an answer says why in words, with the rest of the error as its detail. A
+ * webhook the system shut down shows its notice here too, with the way to turn it on again. When the button that had
+ * the focus goes with the answer (the empty log, the notice), the heading of the log takes it.
  */
 
 import { Link } from '@inertiajs/react';
 import { ArrowLeft, Check, CircleAlert, RefreshCw, Send, X } from 'lucide-react';
+import { useState } from 'react';
 import { Button, buttonClass } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useSettle } from '@/hooks/mutation';
@@ -20,7 +23,11 @@ import type { Webhook, WebhookDelivery } from '@/types';
 import { formatDateTime, useOrgZone } from '../../frame/format';
 import { Badge, Loaded, Panel, Row, Rows, RowsSkeleton, SectionHeader } from '../../frame/parts';
 import { eventLabel } from './catalog';
-import { arrived, DisabledNotice, formatDuration, toastDelivery, usePingAction } from './webhookParts';
+import { arrived, DisabledNotice, errorOf, formatDuration, retryUnlessCalled, toastDelivery, usePingAction } from './webhookParts';
+
+/** The heading of the log: it takes the focus when the button that had it goes with an answer. */
+const TITLE_ID = 'webhook-log-title';
+const heading = () => document.getElementById(TITLE_ID);
 
 function StatusBadge({ delivery }: { delivery: WebhookDelivery }) {
   if (delivery.status_code === null) {
@@ -45,17 +52,48 @@ const BackLink = ({ variant = 'ghost' }: { variant?: 'ghost' | 'secondary' }) =>
   </Link>
 );
 
-function Attempts({ webhook }: { webhook: Webhook }) {
+/** What the answer of an attempt says: the excerpt of the answer, why there was none, or that the log has nothing. */
+function Answer({ delivery }: { delivery: WebhookDelivery }) {
+  const why = delivery.error ? errorOf(delivery.error) : null;
+  return (
+    <div className="min-w-0 flex-1 basis-48">
+      {delivery.response_excerpt !== null ? (
+        <p className="line-clamp-2 text-sm break-words text-ink" title={delivery.response_excerpt} translate="no">
+          {delivery.response_excerpt}
+        </p>
+      ) : (
+        !why && <p className="text-sm text-ink">{t('settings.webhooks.log.no_excerpt')}</p>
+      )}
+      {why && <p className={delivery.response_excerpt !== null ? 'text-sm text-danger' : 'text-sm break-words text-ink'}>{why.reason}</p>}
+      {why?.detail && (
+        <p className="line-clamp-2 text-sm break-words text-muted" title={why.detail} translate="no">
+          {why.detail}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function Attempts({ webhook, ping }: { webhook: Webhook; ping: { run: () => void; pending: boolean } }) {
   const settle = useSettle();
   const zone = useOrgZone();
   const deliveries = useInfiniteDeliveries(webhook.id);
-  const ping = usePingAction(webhook);
   const redeliver = useRedeliver();
+  // the deliveries sent again right now: every row shares the one mutation, each button holds for its own call
+  const [running, setRunning] = useState<ReadonlySet<string>>(() => new Set());
 
   function runRedeliver(delivery: WebhookDelivery) {
-    settle(redeliver.mutateAsync({ webhook_id: webhook.id, delivery_id: delivery.delivery_id }), {
+    const id = delivery.delivery_id;
+    setRunning((now) => new Set(now).add(id));
+    settle(redeliver.mutateAsync({ webhook_id: webhook.id, delivery_id: id }), {
       onSuccess: (sent) => toastDelivery(t('settings.webhooks.log.subject_delivery'), webhook, sent),
-      onError: (error) => notifyError(t('settings.webhooks.log.redeliver_failed'), error, () => runRedeliver(delivery)),
+      onError: (error) => notifyError(t('settings.webhooks.log.redeliver_failed'), error, retryUnlessCalled(error, () => runRedeliver(delivery))),
+      onSettled: () =>
+        setRunning((now) => {
+          const next = new Set(now);
+          next.delete(id);
+          return next;
+        }),
     });
   }
 
@@ -79,7 +117,10 @@ function Attempts({ webhook }: { webhook: Webhook }) {
         }
         return (
           <Panel>
-            <p className="max-w-[65ch] border-b border-line px-4 py-3 text-sm text-pretty text-muted">{t('settings.webhooks.log.note')}</p>
+            {/* the line runs across the whole log, only the text keeps its measure (13c) */}
+            <div className="border-b border-line px-4 py-3">
+              <p className="max-w-[65ch] text-sm text-pretty text-muted">{t('settings.webhooks.log.note')}</p>
+            </div>
             <Rows label={t('settings.webhooks.deliveries')}>
               {items.map((delivery) => (
                 <Row key={delivery.id}>
@@ -100,12 +141,7 @@ function Attempts({ webhook }: { webhook: Webhook }) {
                     <StatusBadge delivery={delivery} />
                     <span className="text-sm text-muted tabular-nums">{formatDuration(delivery.duration_ms)}</span>
                   </div>
-                  <div className="min-w-0 flex-1 basis-48">
-                    <p className="line-clamp-2 text-sm break-words text-ink" title={delivery.response_excerpt ?? delivery.error ?? undefined} translate="no">
-                      {delivery.response_excerpt ?? delivery.error ?? t('settings.webhooks.log.no_excerpt')}
-                    </p>
-                    {delivery.response_excerpt && delivery.error && <p className="text-sm text-danger">{delivery.error}</p>}
-                  </div>
+                  <Answer delivery={delivery} />
                   {delivery.kind === 'ping' ? (
                     <p className="max-w-48 text-sm text-pretty text-muted">{t('settings.webhooks.log.ping_no_resend')}</p>
                   ) : (
@@ -113,7 +149,7 @@ function Attempts({ webhook }: { webhook: Webhook }) {
                       variant="secondary"
                       size="sm"
                       icon={RefreshCw}
-                      pending={redeliver.isPending && redeliver.variables?.delivery_id === delivery.delivery_id}
+                      pending={running.has(delivery.delivery_id)}
                       aria-label={t('settings.webhooks.log.resend_named', { event: eventLabel(delivery.event), n: delivery.attempt })}
                       onClick={() => runRedeliver(delivery)}
                     >
@@ -141,13 +177,14 @@ function Attempts({ webhook }: { webhook: Webhook }) {
 export function WebhookDeliveries({ webhookId }: { webhookId: string }) {
   const webhooks = useWebhooks();
   const webhook = webhooks.data?.items.find((entry) => entry.id === webhookId);
-  const ping = usePingAction(webhook);
+  const ping = usePingAction(webhook, heading);
   useDocumentTitle(t('settings.org.document_title', { section: `${webhook ? t('settings.webhooks.deliveries_of', { name: webhook.name }) : t('settings.webhooks.deliveries')} – ${t('settings.org.section.webhooks')}` }));
 
   return (
     <div className="flex flex-col gap-4">
       <SectionHeader
         back={<BackLink />}
+        titleId={TITLE_ID}
         title={webhook ? t('settings.webhooks.deliveries_of', { name: webhook.name }) : t('settings.webhooks.deliveries')}
         description={webhook ? <span translate="no" className="break-all">{webhook.url}</span> : undefined}
         actions={
@@ -162,8 +199,8 @@ export function WebhookDeliveries({ webhookId }: { webhookId: string }) {
         {() =>
           webhook ? (
             <>
-              <DisabledNotice webhook={webhook} />
-              <Attempts webhook={webhook} />
+              <DisabledNotice webhook={webhook} focusAfter={heading} />
+              <Attempts webhook={webhook} ping={ping} />
             </>
           ) : (
             <EmptyState icon={CircleAlert} title={t('settings.webhooks.log.missing.title')} description={t('settings.webhooks.log.missing.description')} actions={<BackLink variant="secondary" />} />
