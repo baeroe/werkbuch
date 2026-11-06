@@ -81,13 +81,16 @@ const SYSTEM_ICONS: Partial<Record<Notification['event'], LucideIcon>> = {
  * Where a notification leads: its item; a failed template to its page (one deleted since says there that it does not
  * exist, without asking for it, T9-M5), without the template behind it (the demo rows) to the templates of its
  * project; for a switched-off webhook the log of its deliveries (one deleted since says so there, with the way back), without
- * the webhook behind it (the demo rows) the webhooks of the settings.
+ * the webhook behind it (the demo rows) the webhooks of the settings; any other kind without an item to the settings.
  */
 export function hrefOf(notification: Notification, project: Project | undefined): string {
   if (notification.work_item_id) return paths.item(notification.item?.key ?? notification.work_item_id);
   if (notification.event === 'template_run_failed') return project ? paths.templates(project.identifier, notification.data.template_id ?? undefined) : paths.projects();
-  // what is left has neither an item nor a template: a switched-off webhook
-  return notification.data.webhook_id ? paths.webhookDeliveries(notification.data.webhook_id) : paths.settings('webhooks');
+  if (notification.event === 'webhook_disabled') {
+    return notification.data.webhook_id ? paths.webhookDeliveries(notification.data.webhook_id) : paths.settings('webhooks');
+  }
+  // a kind without an item that comes later leads to the settings, never to the webhooks (T14-M7)
+  return paths.settings();
 }
 
 /** Who did it: the name, a bot with the word "Bot" beside it. */
