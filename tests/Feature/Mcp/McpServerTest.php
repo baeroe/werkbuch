@@ -108,9 +108,9 @@ it('lists only the tools a token may use', function (array $abilities, array $te
         ->and(array_column(McpClient::for($this, $plain)->tools(), 'name'))->toBe($real);
 })->with([
     'mcp' => [['mcp'], [], []],
-    'read and mcp' => [['read', 'mcp'], ['echo'], ['whoami', 'search', 'organization', 'people', 'projects', 'automations']],
-    'write and mcp' => [['write', 'mcp'], ['manage-echo'], ['manage-organization', 'manage-people', 'manage-projects', 'manage-automations']],
-    'all three' => [['read', 'write', 'mcp'], ['echo', 'manage-echo'], ['whoami', 'search', 'organization', 'manage-organization', 'people', 'manage-people', 'projects', 'manage-projects', 'automations', 'manage-automations']],
+    'read and mcp' => [['read', 'mcp'], ['echo'], ['whoami', 'search', 'organization', 'people', 'projects', 'automations', 'work-items']],
+    'write and mcp' => [['write', 'mcp'], ['manage-echo'], ['manage-organization', 'manage-people', 'manage-projects', 'manage-automations', 'manage-work-items']],
+    'all three' => [['read', 'write', 'mcp'], ['echo', 'manage-echo'], ['whoami', 'search', 'organization', 'manage-organization', 'people', 'manage-people', 'projects', 'manage-projects', 'automations', 'manage-automations', 'work-items', 'manage-work-items']],
 ]);
 
 it('keeps every tool from a transient token', function () {
@@ -220,6 +220,21 @@ it('has no twin that only the session of the browser may call', function (string
         ->and($sessionOnly($route('GET', 'tokens')))->toBeFalse()
         ->and(count($twins))->toBeGreaterThan(0)
         ->and(array_keys(array_filter($twins)))->toBe([]);
+})->with(array_keys(ToolRows::SUITES));
+
+it('names the required arguments of an action once', function (string $suite) {
+    $summaries = [];
+    foreach (ToolRows::tools($suite) as $tool) {
+        foreach ($tool->actionNames() as $name) {
+            $summaries["{$tool->name()}:{$name}"] = $tool->actionNamed($name)?->summary;
+        }
+    }
+
+    // ToolSchema::line adds "Needs …" from `required`; a summary that says it too says it twice
+    foreach ($summaries as $key => $summary) {
+        expect(str_contains((string) $summary, 'Needs '))->toBeFalse("{$key}: {$summary}");
+    }
+    expect(count($summaries))->toBeGreaterThan(1);
 })->with(array_keys(ToolRows::SUITES));
 
 it('keeps tools/list small', function (string $suite) {

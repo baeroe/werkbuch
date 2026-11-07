@@ -33,6 +33,9 @@ final class ItemQueryDocs extends OperationExtension
     /** A flag of a body: `true`, `false`, `1`, `0`, `"1"`, `"0"` or `null` (left out). */
     private const FLAG = ['type' => ['boolean', 'integer', 'string', 'null'], 'enum' => [true, false, 1, 0, '1', '0', null]];
 
+    /** The keys of the short form that take one value; every other one but `archived` takes a list. */
+    private const SINGLE = ['project', 'parent', 'q'];
+
     /** What the keys of the short form take. */
     private const SHORT = [
         'project' => 'The project: ULID, identifier or a former identifier (one the account does not see is 404).',
@@ -56,9 +59,7 @@ final class ItemQueryDocs extends OperationExtension
 
         $parameters = match ($routeInfo->methodName()) {
             'index' => self::listParameters(),
-            'show' => [self::parameter('include', ['type' => 'array', 'items' => ['type' => 'string', 'enum' => GetWorkItem::INCLUDES]],
-                'What to embed, separated by commas: '.implode(', ', array_map(fn (string $name) => "`{$name}`", GetWorkItem::INCLUDES)).'.')
-                ->setStyle('form')->setExplode(false)],
+            'show' => [self::parameter('include', self::includeParameter()['schema'], self::includeParameter()['description'])->setStyle('form')->setExplode(false)],
             default => [],
         };
         if ($parameters === []) {
@@ -79,14 +80,17 @@ final class ItemQueryDocs extends OperationExtension
     {
         $parameters = [];
         foreach (self::queryParameters() as $name => ['schema' => $schema, 'description' => $description]) {
-            $parameters[] = self::parameter($name, $schema, $description);
+            $parameter = self::parameter($name, $schema, $description);
+            // a list goes in one parameter, separated by commas (as ListParameters says it)
+            $parameters[] = $schema['type'] === 'array' ? $parameter->setStyle('form')->setExplode(false) : $parameter;
         }
 
         return $parameters;
     }
 
     /**
-     * The query of `GET /work-items` by name: its schema and what it does.
+     * The query of `GET /work-items` by name: its schema and what it does. A key of the short form that takes several
+     * values is a list (in a query string separated by commas); the page is that of every list (`ListParameters`).
      *
      * @return array<string, array{schema: array<string, mixed>, description: string}>
      */
@@ -95,9 +99,14 @@ final class ItemQueryDocs extends OperationExtension
         $parameters = ['view' => ['schema' => ['type' => 'string', 'pattern' => PathParameters::ULID], 'description' => 'A view by its ULID: its filter, sort and sub-items apply, the rest narrows them.']];
 
         foreach (Shorthand::KEYS as $key) {
-            $schema = $key === 'archived' ? ['type' => 'string', 'enum' => ['true', 'false']] : ['type' => 'string'];
+            $schema = match (true) {
+                $key === 'archived' => ['type' => 'string', 'enum' => ['true', 'false']],
+                in_array($key, self::SINGLE, true) => ['type' => 'string'],
+                default => ['type' => 'array', 'items' => ['type' => 'string']],
+            };
             $parameters["filter[{$key}]"] = ['schema' => $schema, 'description' => self::SHORT[$key].' An empty value is no condition.'];
         }
+        $page = ListParameters::query(null);
 
         return [
             ...$parameters,
@@ -106,8 +115,21 @@ final class ItemQueryDocs extends OperationExtension
             'show_sub_items' => ['schema' => self::QUERY_FLAG, 'description' => 'Whether items with a parent show (`1`) or not (`0`); by default as the view says, else `1`.'],
             'include_archived' => ['schema' => self::QUERY_FLAG, 'description' => 'Archived items and items of archived projects too (`1`).'],
             'lean' => ['schema' => self::QUERY_FLAG, 'description' => 'Lean items (`1`): without `description`, `description_json` and `values_markdown`.'],
-            'cursor' => ['schema' => ['type' => 'string'], 'description' => 'The cursor of the page: `meta.next_cursor` or `meta.prev_cursor` of the page before. It belongs to its sort; another one is 422 at `cursor`.'],
-            'per_page' => ['schema' => ['type' => 'integer', 'default' => PageArgs::MAX_PER_PAGE, 'minimum' => 1, 'maximum' => PageArgs::MAX_PER_PAGE], 'description' => 'The items per page.'],
+            'cursor' => $page['cursor'],
+            'per_page' => $page['per_page'],
+        ];
+    }
+
+    /**
+     * `include` of `GET /work-items/{item}`: its schema and what it does.
+     *
+     * @return array{schema: array<string, mixed>, description: string}
+     */
+    public static function includeParameter(): array
+    {
+        return [
+            'schema' => ['type' => 'array', 'items' => ['type' => 'string', 'enum' => GetWorkItem::INCLUDES]],
+            'description' => 'What to embed, separated by commas: '.implode(', ', array_map(fn (string $name) => "`{$name}`", GetWorkItem::INCLUDES)).'.',
         ];
     }
 

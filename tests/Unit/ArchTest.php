@@ -94,7 +94,7 @@ it('writes the database raw only inside app/Actions', function () {
 });
 
 it('detects model writes', function () {
-    expect(modelWrites("<?php\n\$user->save();\n\$this->set->handle(\$u);\nUser::create([]);"))->toBe(['code:2', 'code:4']);
+    expect(modelWrites("<?php\n\$user->save();\n\$this->set->handle(\$u);\nUser::create([]);\nWorkItemSchemas::create();\nWorkItem::create([]);"))->toBe(['code:2', 'code:4', 'code:6']);
 });
 
 it('never writes models in controllers, middleware, commands, jobs, auth adapters or MCP', function () {

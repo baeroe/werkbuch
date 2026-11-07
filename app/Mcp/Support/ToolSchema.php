@@ -105,10 +105,23 @@ final class ToolSchema
      */
     public static function list(ListSpec $spec): array
     {
+        return self::query(ListParameters::query($spec));
+    }
+
+    /**
+     * The arguments of a query as the document gives it by name (`ListParameters::query`, `ItemQueryDocs::queryParameters`):
+     * the parameters `filter[<name>]` as the object `filter`, every other one an argument of its own, `per_page` with the
+     * default of MCP (K8).
+     *
+     * @param  array<string, array{schema: array<string, mixed>, description: string}>  $query
+     * @return array<string, array<string, mixed>>
+     */
+    public static function query(array $query): array
+    {
         $arguments = [];
         $filters = [];
 
-        foreach (ListParameters::query($spec) as $name => ['schema' => $schema, 'description' => $description]) {
+        foreach ($query as $name => ['schema' => $schema, 'description' => $description]) {
             if (preg_match('/^filter\[(.+)]$/', $name, $match) === 1) {
                 $filters[$match[1]] = [...$schema, 'description' => $description];
 

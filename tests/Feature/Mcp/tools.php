@@ -96,4 +96,30 @@ return [
     'manage-projects:toggle-favorite' => ['arguments' => fn (MatrixWorld $w) => ['input' => ['kind' => 'project', 'id' => $w->web->id]]],
     'automations:list' => ['arguments' => fn (MatrixWorld $w) => ['project' => $w->web->identifier]],
     'manage-automations:update' => ['arguments' => fn (MatrixWorld $w) => ['project' => $w->web->identifier, 'key' => 'close_parent', 'input' => ['enabled' => true]]],
+    'work-items:list' => ['arguments' => fn (MatrixWorld $w) => [
+        'filter' => ['project' => $w->item('project_admin')->project->identifier, 'priority' => ['none', 'high']], 'sort' => '-due_date', 'lean' => 1, 'per_page' => 5,
+    ]],
+    'work-items:query' => ['arguments' => fn (MatrixWorld $w) => ['input' => [
+        'filter' => ['version' => 1, 'conditions' => [['field' => 'project', 'op' => 'is', 'value' => $w->item('project_admin')->project_id]]], 'lean' => true, 'per_page' => 5,
+    ]]],
+    'work-items:groups' => ['arguments' => fn (MatrixWorld $w) => ['input' => ['q' => $w->item('project_admin')->title, 'group_by' => 'state']]],
+    'work-items:counts' => ['arguments' => fn (MatrixWorld $w) => ['input' => ['filters' => ['all' => ['version' => 1, 'conditions' => []], 'mine' => ['version' => 1, 'conditions' => [['field' => 'assignee', 'op' => 'is', 'value' => 'me']]]]]]],
+    'work-items:get' => ['arguments' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key, 'include' => ['children', 'type', 'workflow', 'relations', 'attachments']]],
+    'work-items:history' => ['arguments' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key, 'per_page' => 5]],
+    'work-items:subscribers' => ['arguments' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key]],
+    'manage-work-items:create' => ['arguments' => fn (MatrixWorld $w) => ['input' => ['project_id' => $w->web->identifier, 'title' => 'Matrix']]],
+    'manage-work-items:update' => ['arguments' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key, 'input' => ['title' => 'Matrix', 'description' => '**Matrix**']]],
+    'manage-work-items:transition' => ['arguments' => function (MatrixWorld $w) {
+        $item = $w->item('project_admin');
+
+        // the standard workflow is free: any other state of it
+        return ['item' => $item->key, 'input' => ['to_state_id' => $item->project->workflow->states->firstWhere('id', '!=', $item->state_id)?->id]];
+    }],
+    'manage-work-items:change-type' => ['arguments' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key, 'input' => ['type_id' => WorkItemType::query()->where('name', 'Bug')->value('id')]]],
+    'manage-work-items:archive' => ['arguments' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin', 'closed')->key]],
+    'manage-work-items:restore' => ['arguments' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin', 'archived')->key]],
+    'manage-work-items:delete' => ['arguments' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key]],
+    'manage-work-items:bulk-update' => ['arguments' => fn (MatrixWorld $w) => ['input' => ['ids' => [$w->item('project_admin')->key], 'patch' => ['priority' => 'high']]]],
+    'manage-work-items:subscribe' => ['arguments' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key]],
+    'manage-work-items:unsubscribe' => ['arguments' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key]],
 ];

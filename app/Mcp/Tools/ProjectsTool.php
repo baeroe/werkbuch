@@ -53,7 +53,7 @@ final class ProjectsTool extends ReadTool
             ),
             new McpAction(
                 name: 'get',
-                summary: 'One project. Needs `project`.',
+                summary: 'One project.',
                 run: fn (Actor $actor, McpArguments $args): McpResult => McpResult::resource(new ProjectResource(GetProject::run($actor, References::project($args->reference('project'))))),
                 parameters: ['project' => ToolSchema::reference('project')],
                 required: ['project'],
@@ -61,7 +61,7 @@ final class ProjectsTool extends ReadTool
             ),
             new McpAction(
                 name: 'members',
-                summary: 'The members of a project, people and bots with their role. Needs `project`.',
+                summary: 'The members of a project, people and bots with their role.',
                 run: fn (Actor $actor, McpArguments $args): McpResult => McpResult::list(ListMembers::run($actor, References::project($args->reference('project')), $args->query(array_keys($members))), ProjectMemberResource::class),
                 parameters: ['project' => ToolSchema::reference('project'), ...$members],
                 required: ['project'],

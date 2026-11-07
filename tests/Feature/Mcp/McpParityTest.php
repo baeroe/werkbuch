@@ -22,6 +22,9 @@ use Tests\TestCase;
 beforeEach(fn () => TwinServer::serve());
 
 it('reads what REST reads', function (string $suite, string $key) {
+    // both calls see the same second: each request stamps `last_used_at` of its token (to the second), and
+    // `people:list-tokens` names it, so two calls on either side of a second boundary would read two stamps
+    $this->freezeSecond();
     $w = MatrixWorld::build();
     [$tool, $action] = ToolRows::action($suite, $key);
     expect($action->twin)->toBeString("{$key} reads without a REST twin");

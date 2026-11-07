@@ -190,7 +190,14 @@ it('documents the query string of GET /work-items with the short form', function
         ->and($parameters['sort']['description'])->toContain('-due_date')
         ->and($parameters['per_page']['schema']['maximum'])->toBe(100)
         ->and($parameters['lean']['schema']['enum'])->toBe([1, 0])
-        ->and($parameters['filter[archived]']['schema']['enum'])->toBe(['true', 'false']);
+        ->and($parameters['filter[archived]']['schema']['enum'])->toBe(['true', 'false'])
+        // a key that takes several values is a list, in the query string separated by commas
+        ->and($parameters['filter[state]']['schema'])->toBe(['type' => 'array', 'items' => ['type' => 'string']])
+        ->and($parameters['filter[state]']['style'])->toBe('form')
+        ->and($parameters['filter[state]']['explode'])->toBeFalse()
+        ->and($parameters['filter[project]']['schema'])->toBe(['type' => 'string'])
+        ->and(collect($parameters)->filter(fn (array $p) => $p['schema']['type'] === 'array')->keys()->all())
+        ->toEqualCanonicalizing(['filter[assignee]', 'filter[created_by]', 'filter[type]', 'filter[state]', 'filter[state_category]', 'filter[priority]', 'filter[label]']);
 
     $include = collect(Document::operation('GET', '/work-items/{item}')['parameters'])->firstWhere('name', 'include');
     expect($include['schema']['items']['enum'])->toBe(GetWorkItem::INCLUDES)

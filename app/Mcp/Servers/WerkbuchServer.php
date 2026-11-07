@@ -12,11 +12,13 @@ use App\Mcp\Tools\ManageAutomationsTool;
 use App\Mcp\Tools\ManageOrganizationTool;
 use App\Mcp\Tools\ManagePeopleTool;
 use App\Mcp\Tools\ManageProjectsTool;
+use App\Mcp\Tools\ManageWorkItemsTool;
 use App\Mcp\Tools\OrganizationTool;
 use App\Mcp\Tools\PeopleTool;
 use App\Mcp\Tools\ProjectsTool;
 use App\Mcp\Tools\SearchTool;
 use App\Mcp\Tools\WhoamiTool;
+use App\Mcp\Tools\WorkItemsTool;
 use Illuminate\Support\Facades\Route;
 use Laravel\Mcp\Facades\Mcp;
 use Laravel\Mcp\Server;
@@ -65,6 +67,8 @@ final class WerkbuchServer extends Server
         ManageProjectsTool::class,
         AutomationsTool::class,
         ManageAutomationsTool::class,
+        WorkItemsTool::class,
+        ManageWorkItemsTool::class,
     ];
 
     protected array $resources = [];

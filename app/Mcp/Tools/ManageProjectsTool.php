@@ -124,7 +124,7 @@ final class ManageProjectsTool extends WriteTool
             ),
             new McpAction(
                 name: 'update-member',
-                summary: 'Changes the role of a member. Needs `user`.',
+                summary: 'Changes the role of a member.',
                 run: fn (Actor $actor, McpArguments $args): McpResult => McpResult::resource(new ProjectMemberResource(UpdateMemberRole::run($actor, self::project($args), self::user($args), is_string($args->input()['role'] ?? null) ? $args->input()['role'] : ''))),
                 parameters: $member,
                 input: CatalogSchemas::memberRole(),
@@ -133,7 +133,7 @@ final class ManageProjectsTool extends WriteTool
             ),
             new McpAction(
                 name: 'remove-member',
-                summary: 'Removes a member; the lead stays. Needs `user`.',
+                summary: 'Removes a member; the lead stays.',
                 run: function (Actor $actor, McpArguments $args): McpResult {
                     RemoveMember::run($actor, self::project($args), self::user($args));
 

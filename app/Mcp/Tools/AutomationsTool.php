@@ -31,7 +31,7 @@ final class AutomationsTool extends ReadTool
     {
         return [new McpAction(
             name: 'list',
-            summary: 'The automations of a project. Needs `project`.',
+            summary: 'The automations of a project.',
             run: fn (Actor $actor, McpArguments $args): McpResult => McpResult::resource(AutomationResource::collection(ListAutomations::run($actor, References::project($args->reference('project'))))),
             parameters: ['project' => ToolSchema::reference('project')],
             required: ['project'],
