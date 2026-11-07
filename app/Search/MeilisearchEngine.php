@@ -10,6 +10,7 @@ use InvalidArgumentException;
 use Laravel\Scout\Engines\MeilisearchEngine as ScoutMeilisearchEngine;
 use Meilisearch\Client;
 use Meilisearch\Contracts\TasksQuery;
+use Meilisearch\Exceptions\ApiException;
 use Meilisearch\Exceptions\ExceptionInterface;
 use Psr\Http\Client\ClientExceptionInterface;
 
@@ -19,7 +20,7 @@ use Psr\Http\Client\ClientExceptionInterface;
  * short timeouts (`$statusClient`, 2 s), so a Meilisearch that hangs never holds the system page; it counts only the
  * tasks of the indexes of this instance (the models of `scout.meilisearch.index-settings` with `scout.prefix`).
  */
-final class MeilisearchEngine extends ScoutMeilisearchEngine implements RemovesWhere, ReportsStatus
+final class MeilisearchEngine extends ScoutMeilisearchEngine implements CountsDocuments, RemovesWhere, ReportsStatus
 {
     public function __construct(Client $meilisearch, bool $softDelete, private readonly Client $statusClient)
     {
@@ -34,6 +35,24 @@ final class MeilisearchEngine extends ScoutMeilisearchEngine implements RemovesW
 
         $this->meilisearch->index($index)
             ->deleteDocuments(['filter' => sprintf('%s = "%s"', $field, addcslashes($value, '"\\'))]);
+    }
+
+    public function documentStats(string $index): array
+    {
+        try {
+            $stats = $this->meilisearch->index($index)->stats();
+        } catch (ApiException $e) {
+            if ($e->errorCode === 'index_not_found') {
+                return ['documents' => 0, 'fields' => []];
+            }
+
+            throw $e;
+        }
+
+        /** @var array<string, int> $fields */
+        $fields = array_map(intval(...), (array) ($stats['fieldDistribution'] ?? []));
+
+        return ['documents' => (int) $stats['numberOfDocuments'], 'fields' => $fields];
     }
 
     public function status(): array

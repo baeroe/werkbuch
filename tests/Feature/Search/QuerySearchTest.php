@@ -415,7 +415,7 @@ it('searches only the types asked for', function () use ($world, $item, $rebuild
     $shop = Project::factory()->identifier('SHOP')->create(['name' => 'Webshop']);
     $inWeb = $item($web, 'Web-Formular');
     View::factory()->create(['name' => 'Web-Bugs', 'created_by' => $mara->id]);
-    User::factory()->create(['name' => 'Webster']);
+    $webster = User::factory()->create(['name' => 'Webster']);
     $rebuild();
 
     $projects = $search($mara, ['q' => 'web', 'types' => 'projects']);
@@ -433,7 +433,9 @@ it('searches only the types asked for', function () use ($world, $item, $rebuild
         ->and($some->views)->toHaveCount(1)
         ->and($engine->searched())->toBe(['testing_projects', 'testing_work_items'])
         ->and($ids($search($mara, ['q' => 'web', 'types' => 'projects,people', 'limit' => 1])->projects))->toBe([$web->id])
-        ->and($search($mara, ['q' => 'web'])->people)->toHaveCount(1)
+        // Webster is a hit; any other person the factories named with "web" (Faker's "Weber") must match too
+        ->and($search($mara, ['q' => 'web'])->people->modelKeys())->toContain($webster->id)
+        ->and($search($mara, ['q' => 'web'])->people->every(fn (User $user): bool => str_contains(mb_strtolower($user->name.' '.$user->handle), 'web')))->toBeTrue()
         // only the ids come back from Meilisearch, never the documents with their texts (T12-M2)
         ->and(collect($engine->options())->pluck('attributesToRetrieve')->unique()->values()->all())->toBe([['id']]);
 });

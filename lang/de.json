@@ -163,6 +163,7 @@
     "favorites.loading": "Favoriten werden geladen …",
     "favorites.not_changed": "Favorit nicht geändert",
     "field.abilities.required": "Wähle mindestens eine Fähigkeit.",
+    "field.admin_password.placeholder": "ADMIN_PASSWORD ist noch der Platzhalter change-me: wähle vor dem ersten Start ein eigenes Passwort.",
     "field.archived_at.default": "Ein Standard lässt sich nicht archivieren.",
     "field.archived_at.invalid": "archived_at ist ein Zeitstempel oder null.",
     "field.assignee_id.filter": "Nur ULIDs von Konten oder none allein (Items ohne Assignee).",

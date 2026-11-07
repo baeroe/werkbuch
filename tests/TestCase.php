@@ -27,6 +27,9 @@ abstract class TestCase extends BaseTestCase
         $_SERVER['API_SESSION_RATE_LIMIT'] = $_ENV['API_SESSION_RATE_LIMIT'] ?? '3000';
         $_SERVER['MCP_RATE_LIMIT'] = $_ENV['MCP_RATE_LIMIT'] ?? '300';
 
+        // DDEV points the browser at Reverb's port 6001 (REVERB_PUBLIC_PORT); the tests take the port of APP_URL
+        $_SERVER['REVERB_PUBLIC_PORT'] = $_ENV['REVERB_PUBLIC_PORT'] ?? '';
+
         $app = parent::createApplication();
         $app['config']->set('werkbuch.event_consumers', []);
 

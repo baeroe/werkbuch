@@ -319,7 +319,7 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 **Branch:** `feat/phase-14-docker` · **Phasenplan:** `…phase-14-docker.md`
 
 **Liefert:**
-- `Dockerfile` (Node-Stage mit pnpm, `serversideup/php:8.4-fpm-nginx` per Digest, Code schreibgeschützt, beschreibbar nur `storage/` und `bootstrap/cache`, amd64 und arm64), nginx leitet `/app` und `/apps` an Reverb weiter.
+- `Dockerfile` (Node-Stage mit pnpm, `serversideup/php:8.4-fpm-nginx` per Digest, Code schreibgeschützt, beschreibbar nur `storage/` und `bootstrap/cache`, amd64 und arm64), nginx leitet `/app` an Reverb weiter (`/apps` bleibt intern, A419).
 - `docker/entrypoint.d/` (Ordner im Volume, `APP_KEY` und Reverb-Schlüssel aus der Env oder erzeugt und im Volume gespeichert, auf die Datenbank warten, migrieren, `app:ensure-admin`, `app:search-sync`, `optimize`); Queue, Scheduler und Reverb starten ohne Migration. `app:search-sync` läuft bei jedem Start, also auch nach jedem Update (Vormerkung aus Phase 9: ohne ihn antwortet nach dem Update auf Phase 9 jede Suche ohne `types` mit 503, weil der Index `pages` fehlt); nach einem Update, das einen Index oder Felder hinzufügt (Phase 7: Kommentare, Phase 9: Seiten), einmal `app:search-import`.
 - `docker-compose.yml` und `docker-compose.standalone.yml` (Dienste aus 8.1, Port `${WERKBUCH_BIND:-0.0.0.0}:${WERKBUCH_PORT:-7740}`, Volumes `werkbuch-data`, `mariadb-data`, `meili-data`, alle Images per Digest), Test auf Gleichschritt; `.env.docker.example`, `.dockerignore`, Healthcheck `/up`.
 - Workflows `docker.yml` (Tag `vX.Y.Z` → Image `X.Y.Z`, `X.Y`, `latest` und GitHub-Release mit Notizen aus `docs/*/upgrading.md`), `dockerhub.yml` (README-Sync); Tests auf `upgrading.md`-Abschnitt und `version` in `config/werkbuch.php`.
@@ -330,6 +330,8 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 **Doku:** `setup` (bindet die echte Compose-Datei ein), `reverse-proxy` (NPM mit „Websockets Support“, Traefik, Caddy), `upgrading`, `backup`, Mindestanforderungen (RAM für Meilisearch), en + de.
 
 **Abnahme:** Erfolgskriterium 1: `docker compose up -d` startet alles auf Port 7740, Admin und Standard-Bot existieren, Live-Updates laufen über denselben Port.
+
+**Abweichungen in der Umsetzung** (Rulings A414–A432): drei Queue-Dienste wie DDEV statt eines (`queue`, `queue-index`, `queue-webhooks`; A418); der Job `e2e` bleibt auf `php artisan serve`, Erfolgskriterium 1 prüft ein Smoke gegen den Compose-Stack im Job `image` je Architektur und vor jedem Release (A420); kein S3-Speicher in v0.1.0 (A424); die Route-Bindungen stehen im `RouteBindingServiceProvider`, weil `optimize` die Routen cacht (A430); ein Update stoppt den Stack vor dem Start (`pull`, `down`, `up -d`; A431). Dazu: Basis v5.0.4 statt v5.0.2 (A414), kein HSTS vom Container (A419), getrennte Live-Adresse des Browsers (A415), Doku zusätzlich `operations` (Betrieb).
 
 ## Phase 15: Feinschliff
 
@@ -373,5 +375,5 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 - [x] Phase 11: Webhooks (PR #25)
 - [x] Phase 12: REST vollständig und OpenAPI (PR #26)
 - [x] Phase 13: MCP (PR #28)
-- [ ] Phase 14: Docker und Release
+- [x] Phase 14: Docker und Release (PR #30)
 - [ ] Phase 15: Feinschliff

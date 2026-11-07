@@ -19,6 +19,8 @@ web_environment:
   # e2e never tests the limits of the API (Pest does): the specs poll and share Erik, the four variants one cache (K9)
   - API_RATE_LIMIT=6000
   - API_SESSION_RATE_LIMIT=60000
+  # the browser reaches Reverb on its own port, not under APP_URL (LiveAddress)
+  - REVERB_PUBLIC_PORT=6001
 # https://werkbuch.ddev.site:<https_port> → container port
 web_extra_exposed_ports:
   - { name: vite, container_port: 5173, http_port: 5172, https_port: 5173 }

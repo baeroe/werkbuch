@@ -24,11 +24,13 @@ it('shares the live settings when Reverb is the broadcaster', function () {
     config([
         'broadcasting.default' => 'reverb',
         'broadcasting.connections.reverb.key' => 'live-key',
-        'broadcasting.connections.reverb.options' => ['host' => 'live.example.com', 'port' => '6001', 'scheme' => 'https'],
+        // where the server sends to (inside the stack) is not where the browser connects
+        'broadcasting.connections.reverb.options' => ['host' => 'reverb', 'port' => 6001, 'scheme' => 'http'],
+        'werkbuch.live' => ['host' => 'pm.example.com', 'port' => 443, 'scheme' => 'https'],
     ]);
 
     $this->get(inertiaProbe())->assertInertia(fn (Assert $page) => $page
-        ->where('features.live', ['key' => 'live-key', 'host' => 'live.example.com', 'port' => 6001, 'scheme' => 'https']));
+        ->where('features.live', ['key' => 'live-key', 'host' => 'pm.example.com', 'port' => 443, 'scheme' => 'https']));
 });
 
 it('shares no live settings for the log broadcaster', function () {
@@ -41,7 +43,8 @@ it('shares no live settings while the key or the host of Reverb is missing (T2-M
     config([
         'broadcasting.default' => 'reverb',
         'broadcasting.connections.reverb.key' => 'live-key',
-        'broadcasting.connections.reverb.options' => ['host' => 'live.example.com', 'port' => '6001', 'scheme' => 'https'],
+        'broadcasting.connections.reverb.options' => ['host' => 'reverb', 'port' => 6001, 'scheme' => 'http'],
+        'werkbuch.live' => ['host' => 'pm.example.com', 'port' => 443, 'scheme' => 'https'],
         ...$missing,
     ]);
 
@@ -49,7 +52,7 @@ it('shares no live settings while the key or the host of Reverb is missing (T2-M
 })->with([
     'no key' => [['broadcasting.connections.reverb.key' => null]],
     'an empty key' => [['broadcasting.connections.reverb.key' => '']],
-    'no host' => [['broadcasting.connections.reverb.options.host' => null]],
+    'no host' => [['werkbuch.live.host' => null]],
 ]);
 
 it('shares exactly the fields of the signed-in account', function () {

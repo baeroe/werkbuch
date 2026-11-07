@@ -1,6 +1,8 @@
 # Weekly update PRs, grouped. Docker images are left out on purpose: they are pinned by digest.
 version: 2
 updates:
+  # Every action is pinned by commit with a `# vX.Y.Z` comment (tests/Unit/WorkflowsTest.php); Dependabot raises the
+  # SHA together with the comment. A new major is an own PR with an own decision (the group `actions` stays).
   - package-ecosystem: github-actions
     directory: /
     schedule:

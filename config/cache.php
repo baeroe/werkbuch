@@ -39,8 +39,9 @@ return [
             'serialize' => false,
         ],
 
+        // Laravel's store `database` that tries a statement again after a deadlock (App\Support\RetryingDatabaseStore)
         'database' => [
-            'driver' => 'database',
+            'driver' => 'retrying-database',
             'connection' => env('DB_CACHE_CONNECTION'),
             'table' => env('DB_CACHE_TABLE', 'cache'),
             'lock_connection' => env('DB_CACHE_LOCK_CONNECTION'),

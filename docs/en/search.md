@@ -124,7 +124,7 @@ A token without `read` gets a `403`, a request without an account a `401`. Messa
 
 ## Operation
 
-werkbuch searches with [Meilisearch](https://www.meilisearch.com) through Laravel Scout. Locally, DDEV runs it as the service `meilisearch` (see [Development](/en/development)); the Docker image of werkbuch comes with phase 14.
+werkbuch searches with [Meilisearch](https://www.meilisearch.com) through Laravel Scout. Locally, DDEV runs it as the service `meilisearch` (see [Development](/en/development)); in the Docker Compose stack it is the service `meilisearch` (see [Setup](/en/setup)).
 
 | Variable | Meaning |
 |---|---|
@@ -148,4 +148,6 @@ php artisan app:search-import    # empties the four indexes and fills them again
 
 **When Meilisearch is down,** the search answers `503` and the palette says "The search did not answer" with **Try again**; jumping to a typed key keeps working. Nothing is lost on the way: the consumer tries every event up to 8 times, with pauses of 10 seconds, 1, 5 and 15 minutes and then one hour, about 3 hours 20 minutes in all. After that, the job lands in `failed_jobs` and werkbuch reports which event the search gave up on. Run `app:search-import` once Meilisearch is back, and the index is complete again.
 
-Meilisearch keeps its indexes in memory-mapped files and wants memory to spare; the minimum for a production installation is stated with the Docker image in phase 14.
+In the Docker Compose stack, every start of `werkbuch` runs `app:search-sync` and imports when an index is empty or lacks fields of the new version, so an update needs nothing by hand ([Operations](/en/operations#search)).
+
+Meilisearch keeps its indexes in memory-mapped files and wants memory to spare: it takes up to two thirds of the RAM while it indexes. The minimum requirements of the stack and how to cap the memory of Meilisearch are under [Setup](/en/setup#requirements).

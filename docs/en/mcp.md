@@ -69,7 +69,7 @@ Beyond that, a tool sees exactly what its account sees over REST. Something the 
 
 ## Limits
 
-- **Requests:** 300 a minute per valid token (`MCP_RATE_LIMIT`), without a valid token 300 per address. This is a quota of its own beside the 600 of the REST API: an agent that uses both does not slow down the other. Requests are counted before signing in. Every answer carries `X-RateLimit-Limit` and `X-RateLimit-Remaining`; over the limit the answer is `429` with `Retry-After`.
+- **Requests:** 300 a minute per valid token (`MCP_RATE_LIMIT`), without a valid token 300 per address. This is a quota of its own beside the 600 of the REST API: an agent that uses both does not slow down the other. Requests are counted before signing in. Every answer carries `X-RateLimit-Limit` and `X-RateLimit-Remaining`; over the limit the answer is `429` with `Retry-After`. Behind a reverse proxy, the count per address needs the proxy in `TRUSTED_PROXIES` ([Operations](/en/operations#rate-limits-and-proxies)).
 - **Shared with REST:** a test ping and `redeliver` of a webhook count in the same 6 a minute per account as over REST, uploads through `get-upload-url` in the same 60 a minute per account. A tool over such a limit answers an error `429 too_many_requests` with `retry_after` in seconds.
 - **Bodies:** a JSON body over 8 MiB (8 388 608 bytes) is a `413`; uploads have their own limit, `ATTACHMENTS_MAX_MB`.
 - **Pages:** `per_page` is 1 to 100, 25 when left out.

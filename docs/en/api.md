@@ -169,11 +169,11 @@ Every other change takes effect on the state it finds, under the rules of that s
 
 ## Limits
 
-- **Requests:** 600 a minute per valid token (`API_RATE_LIMIT`); without a token, the session of the interface has 3000 a minute per account (`API_SESSION_RATE_LIMIT`), and everything else 600 per address. Requests are counted before signing in, so a flood of `401` never uses up the quota of a valid token, and two tokens of one account count separately.
+- **Requests:** 600 a minute per valid token (`API_RATE_LIMIT`); without a token, the session of the interface has 3000 a minute per account (`API_SESSION_RATE_LIMIT`), and everything else 600 per address. Requests are counted before signing in, so a flood of `401` never uses up the quota of a valid token, and two tokens of one account count separately. Behind a reverse proxy, the count per address needs the proxy in `TRUSTED_PROXIES` ([Operations](/en/operations#rate-limits-and-proxies)).
 - Every answer carries `X-RateLimit-Limit` and `X-RateLimit-Remaining`, except a `413` for a body that is too large (JSON over 8 MiB, or a body over PHP's `post_max_size`): it is refused before the request is counted. Over the limit the answer is `429` with the reason `too_many_requests` and `Retry-After` in seconds.
 - Some requests have a smaller limit of their own, per account: uploads 60 a minute, a test ping and **Send again** of a webhook together 6, the test mail 6, changing your password 6. Their `429` looks the same; `X-RateLimit-*` always name the limit of the API, only `Retry-After` tells how long to wait.
 - **JSON bodies** can be at most 8 MiB (8 388 608 bytes), a `413` with the reason `payload_too_large` (a `Content-Length` over it is refused at once). That leaves room for an image as a data URL and for an item with several rich-text values at their size limit.
-- **Uploads** (`POST /attachments`, multipart) have their own limit, `ATTACHMENTS_MAX_MB` (25 MB by default), also a `413`.
+- **Uploads** (`POST /attachments`, multipart) have their own limit, `ATTACHMENTS_MAX_MB` (25 MB by default), also a `413`. Raising it in the Docker image: [Operations](/en/operations#uploads).
 
 ## Stability
 

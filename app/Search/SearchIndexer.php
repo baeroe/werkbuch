@@ -165,6 +165,61 @@ final class SearchIndexer
     }
 
     /**
+     * Whether a start has to import: an index whose table has searchable rows but whose documents are missing (a new
+     * Meilisearch volume, a new index) or hold other fields than the model writes today (an update gave
+     * toSearchableArray() a field, or took one). Every field has to occur in every document: a document the consumer
+     * wrote after the update has the new field, the older ones lack it. Rows of a project being deleted count as none
+     * (they have no document). An engine that cannot describe its documents never asks for an import.
+     */
+    public function needsImport(): bool
+    {
+        $engine = $this->engines->engine();
+        if (! $engine instanceof CountsDocuments) {
+            return false;
+        }
+
+        foreach (self::MODELS as $class) {
+            $model = $this->firstSearchable($class);
+            if ($model === null) {
+                continue;
+            }
+
+            ['documents' => $documents, 'fields' => $fields] = $engine->documentStats($model->indexableAs());
+            $written = array_fill_keys(array_keys([
+                ...$model->toSearchableArray(), ...$model->scoutMetadata(), $model->getScoutKeyName() => null,
+            ]), $documents);
+            ksort($written);
+            ksort($fields);
+
+            if ($documents === 0 || $fields !== $written) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * The first row of the model that gets a document: never one of a project being deleted (items leave those out in
+     * their query already).
+     *
+     * @param  class-string<WorkItem|Page|Project|User>  $class
+     */
+    private function firstSearchable(string $class): WorkItem|Page|Project|User|null
+    {
+        $query = $this->query($class);
+
+        if ($class === Project::class) {
+            $query->whereNull('projects.deleting_at');
+        }
+        if ($class === Page::class) {
+            $query->whereIn('pages.project_id', Project::query()->whereNull('deleting_at')->select('id'));
+        }
+
+        return $query->first();
+    }
+
+    /**
      * Builds every index from scratch (P18): the settings, then each index emptied and filled from the database.
      *
      * @return array{work_items: int, pages: int, projects: int, users: int} the documents written to each index

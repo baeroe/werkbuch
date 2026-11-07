@@ -20,14 +20,15 @@ use Lorisleiva\Actions\Concerns\AsAction;
 
 /**
  * Creates the first account from ADMIN_EMAIL and ADMIN_PASSWORD, and only while no person exists yet (bots, the
- * default bot among them, do not count). Decides in this order: values missing, account (this one or another) present,
- * else create: an org admin with the checked password, noted as `user.created` by the system (A4, P25).
+ * default bot among them, do not count). Decides in this order: a person present (this email or another; the values
+ * do not matter then, they are read on the first start only), values missing, else create: an org admin with the
+ * checked password, noted as `user.created` by the system (A4, P25).
  */
 final class EnsureAdmin
 {
     use AsAction;
 
-    private const PLACEHOLDER_PASSWORD = 'change-me';
+    public const PLACEHOLDER = 'change-me';
 
     public function __construct(private readonly RoleAssignments $roles) {}
 
@@ -36,18 +37,16 @@ final class EnsureAdmin
      */
     public function handle(?string $email, #[\SensitiveParameter] ?string $password): EnsureAdminOutcome
     {
-        if (blank($email) || blank($password)) {
-            return EnsureAdminOutcome::NotConfigured;
-        }
-
-        $email = Str::lower(trim($email));
-
-        if (User::query()->where('email', $email)->exists()) {
-            return EnsureAdminOutcome::Exists;
-        }
+        $email = blank($email) ? null : Str::lower(trim($email));
 
         if (User::query()->where('type', AccountType::Person)->exists()) {
-            return EnsureAdminOutcome::AccountsExist;
+            return $email !== null && User::query()->where('email', $email)->exists()
+                ? EnsureAdminOutcome::Exists
+                : EnsureAdminOutcome::AccountsExist;
+        }
+
+        if ($email === null || blank($password)) {
+            return EnsureAdminOutcome::NotConfigured;
         }
 
         $this->validate($email, $password);
@@ -76,8 +75,8 @@ final class EnsureAdmin
             ['email' => ['email', 'max:255'], 'password' => PasswordRules::rules()],
         )->validate();
 
-        if ($password === self::PLACEHOLDER_PASSWORD) {
-            throw ValidationException::withMessages(['password' => 'ADMIN_PASSWORD still is the placeholder "'.self::PLACEHOLDER_PASSWORD.'"; set a real password.']);
+        if ($password === self::PLACEHOLDER) {
+            throw ValidationException::withMessages(['password' => __('field.admin_password.placeholder')]);
         }
     }
 }

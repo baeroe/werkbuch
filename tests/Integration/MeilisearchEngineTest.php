@@ -1,10 +1,14 @@
 <?php
 
 use App\Models\Label;
+use App\Models\Page;
 use App\Models\Project;
+use App\Models\User;
 use App\Models\WorkItem;
 use App\Search\MeilisearchEngine;
+use App\Search\SearchIndexer;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Str;
 use Laravel\Scout\EngineManager;
 use Meilisearch\Client;
 use Tests\Support\Meili;
@@ -57,4 +61,32 @@ it('refuses to remove documents of a model without an index', function () {
 
 it('talks to Meilisearch through the installed HTTP client', function () {
     expect(app(Client::class)->health())->toBe(['status' => 'available']);
+});
+
+it('describes the documents of an index by their fields, a field that is null as well', function () {
+    $engine = app(EngineManager::class)->engine();
+    assert($engine instanceof MeilisearchEngine);
+
+    expect($engine->documentStats('testing_users'))->toBe(['documents' => 0, 'fields' => []]);
+
+    $project = Project::factory()->create();
+    WorkItem::factory()->for($project)->create(['assignee_id' => null]);
+    Page::factory()->for($project)->create();
+    app(SearchIndexer::class)->rebuild();
+    Meili::settle();
+
+    $users = $engine->documentStats('testing_users');
+    ksort($users['fields']);
+    expect($users)->toBe(['documents' => User::count(), 'fields' => array_fill_keys(['disabled', 'handle', 'id', 'name', 'type'], User::count())])
+        ->and($engine->documentStats('testing_work_items')['fields']['assignee_id'] ?? null)->toBe(1)
+        ->and(app(SearchIndexer::class)->needsImport())->toBeFalse();
+});
+
+it('needs an import once a document in Meilisearch lacks a field of its model', function () {
+    app(SearchIndexer::class)->rebuild();
+    Meili::settle();
+    app(Client::class)->index('testing_users')->addDocuments([['id' => strtolower((string) Str::ulid()), 'name' => 'Ohne Handle']]);
+    Meili::settle();
+
+    expect(app(SearchIndexer::class)->needsImport())->toBeTrue();
 });

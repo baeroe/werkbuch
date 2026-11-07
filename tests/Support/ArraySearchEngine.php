@@ -2,8 +2,10 @@
 
 namespace Tests\Support;
 
+use App\Search\CountsDocuments;
 use App\Search\RemovesWhere;
 use App\Search\ReportsStatus;
+use Closure;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
@@ -23,7 +25,7 @@ use Throwable;
  * `$builder->callback` and `$builder->options` speak to Meilisearch and are passed over. Its status (ReportsStatus) is
  * `ok` without tasks, `down` after failWith(). Real Meilisearch runs in tests/Integration (Tests\Support\Meili).
  */
-final class ArraySearchEngine extends Engine implements RemovesWhere, ReportsStatus, UpdatesIndexSettings
+final class ArraySearchEngine extends Engine implements CountsDocuments, RemovesWhere, ReportsStatus, UpdatesIndexSettings
 {
     /** @var array<string, array<string, array<string, mixed>>> the documents of each index by key, in the order they came in */
     private array $indexes = [];
@@ -87,10 +89,35 @@ final class ArraySearchEngine extends Engine implements RemovesWhere, ReportsSta
         return $this->options;
     }
 
+    /**
+     * Changes every document of an index in place, as an index written by an older version would hold it (a field
+     * missing, a field more). Counts as no write.
+     *
+     * @param  Closure(array<string, mixed>, string): array<string, mixed>  $change  gets the document and its key
+     */
+    public function rewrite(string $index, Closure $change): void
+    {
+        foreach ($this->documents($index) as $key => $document) {
+            $this->indexes[$index][$key] = $change($document, (string) $key);
+        }
+    }
+
     /** Lets every search and every write throw this error from now on (`null` lets them work again). */
     public function failWith(?Throwable $error): void
     {
         $this->error = $error;
+    }
+
+    public function documentStats(string $index): array
+    {
+        $fields = [];
+        foreach ($this->documents($index) as $document) {
+            foreach (array_keys($document) as $field) {
+                $fields[$field] = ($fields[$field] ?? 0) + 1;
+            }
+        }
+
+        return ['documents' => count($this->documents($index)), 'fields' => $fields];
     }
 
     public function status(): array

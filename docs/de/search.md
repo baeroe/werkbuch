@@ -124,7 +124,7 @@ Ein Token ohne `read` bekommt ein `403`, eine Anfrage ohne Konto ein `401`. Meld
 
 ## Betrieb
 
-werkbuch sucht mit [Meilisearch](https://www.meilisearch.com) über Laravel Scout. Lokal läuft es in DDEV als Dienst `meilisearch` (siehe [Entwicklung](/de/development)); das Docker-Image von werkbuch kommt mit Phase 14.
+werkbuch sucht mit [Meilisearch](https://www.meilisearch.com) über Laravel Scout. Lokal läuft es in DDEV als Dienst `meilisearch` (siehe [Entwicklung](/de/development)); im Docker-Compose-Stack ist es der Dienst `meilisearch` (siehe [Einrichtung](/de/setup)).
 
 | Variable | Bedeutung |
 |---|---|
@@ -148,4 +148,6 @@ php artisan app:search-import    # leert die vier Indizes und füllt sie neu aus
 
 **Fällt Meilisearch aus,** antwortet die Suche mit `503`, und die Palette sagt „Die Suche hat nicht geantwortet“ mit **Erneut versuchen**; der Sprung zu einem getippten Key funktioniert weiter. Unterwegs geht nichts verloren: Der Konsument versucht jedes Event bis zu 8-mal, mit Pausen von 10 Sekunden, 1, 5 und 15 Minuten und dann je einer Stunde, insgesamt rund 3 Stunden 20 Minuten. Danach landet der Job in `failed_jobs`, und werkbuch meldet, bei welchem Event die Suche aufgegeben hat. Läuft Meilisearch wieder, ruf `app:search-import` auf, und der Index ist wieder vollständig.
 
-Meilisearch hält seine Indizes in Dateien, die es in den Speicher abbildet, und braucht freien Arbeitsspeicher; das Minimum für eine Installation im Betrieb steht mit dem Docker-Image in Phase 14.
+Im Docker-Compose-Stack ruft jeder Start von `werkbuch` `app:search-sync` und importiert, wenn ein Index leer ist oder ihm Felder der neuen Version fehlen; ein Update braucht also nichts von Hand ([Betrieb](/de/operations#suche)).
+
+Meilisearch hält seine Indizes in Dateien, die es in den Speicher abbildet, und braucht freien Arbeitsspeicher: Beim Indexieren nimmt es bis zu zwei Drittel des RAM. Die Mindestanforderungen des Stacks und wie man den Speicher von Meilisearch begrenzt, stehen unter [Einrichtung](/de/setup#voraussetzungen).
