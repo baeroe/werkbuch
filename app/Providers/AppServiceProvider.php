@@ -27,12 +27,15 @@ use App\Models\Workflow;
 use App\Models\WorkItem;
 use App\Models\WorkItemType;
 use App\Search\MeilisearchEngine;
+use App\Support\RetryingDatabaseStore;
 use App\Views\CatalogProperties;
 use App\Webhooks\DnsResolver;
 use App\Webhooks\Resolver;
 use GuzzleHttp\Client as GuzzleClient;
+use Illuminate\Cache\CacheManager;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Database\DatabaseManager;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Events\TransactionRolledBack;
 use Illuminate\Http\Request;
@@ -60,6 +63,27 @@ class AppServiceProvider extends ServiceProvider
         // first lookup of the process, so it is set here (K17)
         DnsResolver::limitWaiting();
         $this->app->scoped(Resolver::class, DnsResolver::class);
+        // the store `database`, which tries a statement again after a deadlock (the throttles count in it); here, before
+        // any provider asks RateLimiter for its store
+        $this->callAfterResolving('cache', function (CacheManager $cache): void {
+            $cache->extend(RetryingDatabaseStore::DRIVER, function (Application $app, array $config) {
+                $db = $app->make(DatabaseManager::class);
+                $store = new RetryingDatabaseStore(
+                    $db->connection($config['connection'] ?? null),
+                    $config['table'],
+                    $this->getPrefix($config),
+                    $config['lock_table'] ?? 'cache_locks',
+                    $config['lock_lottery'] ?? [2, 100],
+                    $config['lock_timeout'] ?? 86400,
+                    $this->getSerializableClasses($config),
+                );
+
+                return $this->repository(
+                    $store->setLockConnection($db->connection($config['lock_connection'] ?? $config['connection'] ?? null)),
+                    $config,
+                );
+            });
+        });
     }
 
     /**

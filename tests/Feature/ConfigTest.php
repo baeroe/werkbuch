@@ -10,9 +10,11 @@ use App\Models\User;
 use App\Models\WorkItem;
 use App\Notifications\NotificationConsumer;
 use App\Search\SearchConsumer;
+use App\Support\RetryingDatabaseStore;
 use App\Webhooks\WebhookBackoff;
 use App\Webhooks\WebhookConsumer;
 use Illuminate\Support\Env;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Spatie\WebhookServer\Signer\DefaultSigner;
@@ -201,6 +203,12 @@ it('lets Reverb take client events from nobody and only the host of APP_URL', fu
     // the host alone, as a literal (T2-M1): never the scheme, the port or a path
     expect($app['accept_client_events_from'])->toBe('none')
         ->and($app['allowed_origins'])->toBe(['werkbuch.example.com']);
+});
+
+it('counts the throttles in a database store that tries a statement again after a deadlock', function () {
+    expect(config('cache.stores.database.driver'))->toBe(RetryingDatabaseStore::DRIVER)
+        ->and(config('cache.limiter'))->toBeNull()
+        ->and(Cache::store('database')->getStore())->toBeInstanceOf(RetryingDatabaseStore::class);
 });
 
 it('gives the Reverb connection short timeouts, so a broadcast never hangs a request (K1)', function () {
