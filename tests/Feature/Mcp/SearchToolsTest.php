@@ -91,5 +91,5 @@ it('takes a list of labels as a list', function () use ($world) {
     // none next to an account is refused as over REST
     $refused = $mcp->call('search', ['q' => 'kontakt', 'assignee_id' => ['none', $mara->id]]);
     expect($refused['isError'])->toBeTrue()
-        ->and($refused['structuredContent']['errors'])->toBe(['assignee_id' => [__('field.assignee_id.invalid')]]);
+        ->and($refused['structuredContent']['errors'])->toBe(['assignee_id' => [__('field.assignee_id.filter')]]);
 });

@@ -39,7 +39,7 @@ Ein Workflow ist entweder frei oder hat eine Übergangsmatrix.
 - **Frei:** Jeder Status darf auf jeden anderen folgen. Der Standard-Workflow ist frei.
 - **Matrix:** Nur die Paare, die du erlaubst (von → nach), sind möglich. Der Editor zeigt ein Raster mit einer Zeile je „von“-Status und einer Spalte je „nach“-Status; jede Zelle ist ein Übergang. Schaltest du **Freie Übergänge** aus, beginnt die Matrix mit allen Paaren erlaubt, und du nimmst nur weg, was du nicht willst.
 
-Im selben Status bleiben ist immer erlaubt. Die Regel gilt überall gleich: in der Oberfläche und über die REST-API, für [Automatisierungen](/de/concepts/automations) und Läufe von [Vorlagen](/de/concepts/templates), mit einer späteren Phase auch in MCP. Wer ein Item direkt in einem anderen Status anlegt, durchläuft dieselbe Prüfung wie ein Übergang vom Startstatus dorthin.
+Im selben Status bleiben ist immer erlaubt. Die Regel gilt überall gleich: in der Oberfläche und über die REST-API, für [Automatisierungen](/de/concepts/automations) und Läufe von [Vorlagen](/de/concepts/templates), auch über [MCP](/de/mcp). Wer ein Item direkt in einem anderen Status anlegt, durchläuft dieselbe Prüfung wie ein Übergang vom Startstatus dorthin.
 
 ## Der Standard-Workflow
 

@@ -165,6 +165,7 @@
     "field.abilities.required": "Wähle mindestens eine Fähigkeit.",
     "field.archived_at.default": "Ein Standard lässt sich nicht archivieren.",
     "field.archived_at.invalid": "archived_at ist ein Zeitstempel oder null.",
+    "field.assignee_id.filter": "Nur ULIDs von Konten, durch Kommas getrennt, oder none allein (Items ohne Assignee).",
     "field.assignee_id.invalid": "Nur aktive Mitglieder des Projekts und Org-Admins können Items übernehmen.",
     "field.base_description_version.invalid": "Die Version der Beschreibung ist ungültig.",
     "field.base_version.invalid": "Die Version der Seite ist ungültig.",

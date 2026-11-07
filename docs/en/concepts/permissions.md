@@ -63,9 +63,9 @@ A token acts with the rights of its account, never with more. It also carries ab
 
 | Ability | What it allows |
 |---|---|
-| `read` | `GET` and `HEAD` requests: see items, projects and everything else, over REST and MCP |
-| `write` | all other requests: create, change, comment and delete |
-| `mcp` | use the MCP server from an MCP client; its tools check `read` and `write` as well |
+| `read` | `GET` and `HEAD` requests and the reads that take their question in a body: see items, projects and everything else; over MCP the tools that read |
+| `write` | all other requests: create, change, comment and delete; over MCP the tools `manage-…` and `get-upload-url` |
+| `mcp` | use the [MCP server](/en/mcp) from an MCP client; without `read` or `write` it sees no tool, only the references. A session of the interface never reaches the MCP server |
 
 A token without the ability a request needs gets `403`. Create one token per device or script and give it only what it needs.
 

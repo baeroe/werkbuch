@@ -39,7 +39,7 @@ A workflow is either free or has a transition matrix.
 - **Free:** every state can follow every other state. The default workflow is free.
 - **Matrix:** only the pairs you allow (from → to) are possible. The editor shows a grid with one row per "from" state and one column per "to" state; each cell is one transition. When you switch **Free transitions** off, the matrix starts with every pair allowed, so you only take away what you do not want.
 
-Staying in the same state is always allowed. The rule applies everywhere alike: in the interface and over the REST API, for [automations](/en/concepts/automations) and runs of [templates](/en/concepts/templates), and with a later phase in MCP. An item created directly in another state goes through the same check as a transition from the start status.
+Staying in the same state is always allowed. The rule applies everywhere alike: in the interface and over the REST API, for [automations](/en/concepts/automations) and runs of [templates](/en/concepts/templates), and over [MCP](/en/mcp). An item created directly in another state goes through the same check as a transition from the start status.
 
 ## The default workflow
 

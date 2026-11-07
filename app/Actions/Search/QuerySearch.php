@@ -213,7 +213,7 @@ final class QuerySearch
                 $errors[$key] = match ($key) {
                     'type_id' => __('field.type_id.invalid'),
                     'state_category' => __('field.state_category.invalid', ['allowed' => implode(', ', $categories)]),
-                    'assignee_id' => __('field.assignee_id.invalid'),
+                    'assignee_id' => __('field.assignee_id.filter'),
                     default => __('field.label_id.invalid'),
                 };
 

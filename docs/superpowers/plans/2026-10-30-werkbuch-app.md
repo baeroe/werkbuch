@@ -372,6 +372,6 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 - [x] Phase 10: Vorlagen, Zeitpläne, Automatisierungen (PR #22)
 - [x] Phase 11: Webhooks (PR #25)
 - [x] Phase 12: REST vollständig und OpenAPI (PR #26)
-- [ ] Phase 13: MCP
+- [x] Phase 13: MCP (PR #27)
 - [ ] Phase 14: Docker und Release
 - [ ] Phase 15: Feinschliff

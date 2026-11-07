@@ -49,11 +49,15 @@ All keys of the palette are on the [keyboard page](/en/keyboard).
 | Parameter | Value |
 |---|---|
 | `q` | Required. What to search for, 1 to 255 characters after trimming. |
-| `types` | The kinds to search: `items`, `pages`, `projects`, `people`, `views`, separated by commas (`types=items,projects`) or as a list (`types[]=items`). All five by default. |
+| `types` | The kinds to search: `items`, `pages`, `projects`, `people`, `views`, separated by commas (`types=items,projects`) or as a list (`types[]=items`). All five when left out; a list without any kind (`types=,`) is a `422`. |
 | `limit` | Hits per kind, 1 to 50; 20 by default. |
 | `include_archived` | `1` or `true` also searches archived items and archived projects with their items and pages. |
+| `type_id` | Only items of these types (ULIDs). |
+| `state_category` | Only items whose state is in one of these categories: `backlog`, `unstarted`, `started`, `completed`, `canceled`. |
+| `assignee_id` | Only items assigned to one of these accounts (ULIDs), or `none` alone: items without an assignee. |
+| `label_id` | Only items with one of these labels (ULIDs). |
 
-Any other parameter is ignored. There are no pages: ask for a larger `limit` or a narrower `q`.
+The last four narrow the items only, never pages, projects, people or views. Each takes one value, several separated by commas or a list; several values of one parameter mean any of them, several parameters must all hold. Any other parameter is ignored. There are no pages: ask for a larger `limit` or a narrower `q`. Over [MCP](/en/mcp) the tool `search` takes the same parameters, lists as JSON lists.
 
 ```bash
 curl -H "Authorization: Bearer <token>" \
@@ -84,11 +88,11 @@ The answer always has all six keys; kinds you did not ask for are empty lists. I
 }
 ```
 
-`key_match` is the ULID of the item a key-shaped `q` names, when you see it, else `null`. It is only set when `types` includes `items`, and that item then stands first in `items`.
+`key_match` is the ULID of the item a key-shaped `q` names, when you see it and it passes the filters of items, else `null`. It is only set when `types` includes `items`, and that item then stands first in `items`.
 
 ### Errors
 
-A query that does not fit is a `422` with every problem at once, at `q`, `types`, `limit` or `include_archived`:
+A query that does not fit is a `422` with every problem at once, at `q`, `types`, `limit`, `include_archived` or one of the filters (a value that is no ULID, an unknown category, `none` next to an account):
 
 ```json
 {

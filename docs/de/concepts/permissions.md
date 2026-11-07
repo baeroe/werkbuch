@@ -63,9 +63,9 @@ Ein Token handelt mit den Rechten seines Kontos, nie mit mehr. Dazu trägt es F�
 
 | Fähigkeit | Was sie erlaubt |
 |---|---|
-| `read` | `GET`- und `HEAD`-Anfragen: Items, Projekte und alles andere sehen, über REST und MCP |
-| `write` | alle anderen Anfragen: anlegen, ändern, kommentieren und löschen |
-| `mcp` | den MCP-Server aus einem MCP-Client nutzen; seine Werkzeuge prüfen auch `read` und `write` |
+| `read` | `GET`- und `HEAD`-Anfragen und die Lesezugriffe, die ihre Frage im Body stellen: Items, Projekte und alles andere sehen; über MCP die lesenden Tools |
+| `write` | alle anderen Anfragen: anlegen, ändern, kommentieren und löschen; über MCP die Tools `manage-…` und `get-upload-url` |
+| `mcp` | den [MCP-Server](/de/mcp) aus einem MCP-Client nutzen; ohne `read` oder `write` sieht er kein Tool, nur die Referenzen. Eine Sitzung der Oberfläche erreicht den MCP-Server nie |
 
 Ein Token ohne die Fähigkeit, die eine Anfrage braucht, bekommt `403`. Lege ein Token je Gerät oder Skript an und gib ihm nur, was es braucht.
 

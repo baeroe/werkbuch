@@ -209,6 +209,8 @@ Zustellungen laufen über die Queue `webhooks`. Ein Worker muss auf sie hören; 
 
 Alle Endpunkte brauchen die Rechte eines Org-Admins. Lesen braucht die Fähigkeit `read`, alles andere `write`. Die Listen nehmen Filter und Sortierungen wie jede Liste der [REST-API](/de/api#listen): `filter[project_id]`, `filter[active]`, `filter[bot_id]` bei den Webhooks, `filter[event]`, `filter[kind]`, `filter[succeeded]` beim Protokoll.
 
+Über [MCP](/de/mcp) tun die Tools `webhooks` und `manage-webhooks` dasselbe mit denselben Rechten; ein Test-Ping und `manage-webhooks:redeliver` zählen in denselben 6 je Minute. Das Geheimnis, das `manage-webhooks:create` und `manage-webhooks:rotate-secret` antworten, und die Adresse eines Webhooks samt Query landen im Verlauf des Agenten: Lege Webhooks über REST oder in der Oberfläche an, wenn das zählt.
+
 | Endpunkt | Bedeutung |
 |---|---|
 | `GET /api/v1/webhooks` | Die Webhooks, nach Name, in Seiten (`cursor`, `per_page`) |
@@ -261,4 +263,4 @@ Ein Webhook mit Bot ist der Weg, einen KI-Agenten zu wecken. Er bekommt:
 - `work_item.*` und `comment.*` von Items, denen der Bot beim Versenden zugewiesen ist (auch die Änderung, die ihm das Item wegnahm, und das Löschen eines Items, das er hatte),
 - und das alles nur, solange der Bot aktiv ist und das Projekt sieht: geprüft beim Versenden und noch einmal vor jedem Versuch. Ein Agent, der aus einem privaten Projekt entfernt wurde, hört nichts mehr davon.
 
-Projekt-, Seiten- und Vorlagen-Ereignisse gehen nie an einen Webhook mit Bot. `bot.assigned` kommt, wenn jemand anderes dem Bot ein Item zuweist (beim Anlegen, Ändern, in der Mehrfachbearbeitung oder aus einer Vorlage); ein Bot, der sich ein Item selbst nimmt, bekommt keins. Das Szenario: weise dem Bot ein Item zu, der Webhook `bot.assigned` erreicht den Agenten mit `data.item`, der Agent arbeitet es über REST ab (MCP folgt in einer späteren Phase), kommentiert und setzt den Status. Gib dem Agenten ein [Token seines Bots](/de/bots#tokens) und eine Mitgliedschaft im Projekt, nie ein Token des Standard-Bots.
+Projekt-, Seiten- und Vorlagen-Ereignisse gehen nie an einen Webhook mit Bot. `bot.assigned` kommt, wenn jemand anderes dem Bot ein Item zuweist (beim Anlegen, Ändern, in der Mehrfachbearbeitung oder aus einer Vorlage); ein Bot, der sich ein Item selbst nimmt, bekommt keins. Das Szenario: weise dem Bot ein Item zu, der Webhook `bot.assigned` erreicht den Agenten mit `data.item`, und der Agent arbeitet es mit einem Token seines Bots über [MCP](/de/mcp#agent-szenario) ab: `whoami`, `work-items:get`, dann `manage-comments:add` und `manage-work-items:transition`. Über die [REST-API](/de/api) gehen dieselben Schritte für ein Skript ohne MCP-Client. Gib dem Agenten ein [Token seines Bots](/de/bots#tokens) und eine Mitgliedschaft im Projekt, nie ein Token des Standard-Bots.

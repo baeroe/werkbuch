@@ -77,7 +77,7 @@ it('filters items by the query and refuses types naming no kind', function () us
     }
 
     $response = $this->withToken($token)->getJson('/api/v1/search?q=kontakt&assignee_id=none,'.$mara->id.'&type_id=x')->assertUnprocessable();
-    expect(errorsAt($response, 'assignee_id'))->toBe([trans('field.assignee_id.invalid', [], 'de')])
+    expect(errorsAt($response, 'assignee_id'))->toBe([trans('field.assignee_id.filter', [], 'de')])
         ->and(errorsAt($response, 'type_id'))->toBe([trans('field.type_id.invalid', [], 'de')]);
 });
 

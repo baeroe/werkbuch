@@ -209,6 +209,8 @@ Deliveries run on the queue `webhooks`. A worker has to listen on it; it waits u
 
 All endpoints need the rights of an org admin. Reading needs the ability `read`, everything else `write`. The lists take filters and sorts like every list of the [REST API](/en/api#lists): `filter[project_id]`, `filter[active]`, `filter[bot_id]` for the webhooks, `filter[event]`, `filter[kind]`, `filter[succeeded]` for the log.
 
+Over [MCP](/en/mcp) the tools `webhooks` and `manage-webhooks` do the same with the same rights; a test ping and `manage-webhooks:redeliver` count in the same 6 a minute. The secret that `manage-webhooks:create` and `manage-webhooks:rotate-secret` answer, and the address of a webhook with its query, end up in the history of the agent: create webhooks over REST or in the interface when that matters.
+
 | Endpoint | Meaning |
 |---|---|
 | `GET /api/v1/webhooks` | The webhooks, by name, in pages (`cursor`, `per_page`) |
@@ -261,4 +263,4 @@ A webhook with a bot is the way to wake an AI agent. It gets:
 - `work_item.*` and `comment.*` of items the bot is assigned to when the event is sent (also the change that took the item away from it, and the deletion of an item it had),
 - and all of that only while the bot is active and sees the project: checked when the event is sent and again before every attempt. An agent removed from a private project hears nothing more of it.
 
-Project, page and template events never go to a webhook with a bot. `bot.assigned` comes when someone else assigns an item to the bot (when creating, changing, in a bulk edit or from a template); a bot that takes an item itself gets none. The scenario: assign an item to the bot, the webhook `bot.assigned` reaches the agent with `data.item`, the agent works on it over REST (MCP follows in a later phase), comments and sets the state. Give the agent a [token of its bot](/en/bots#tokens) and a project membership, never a token of the default bot.
+Project, page and template events never go to a webhook with a bot. `bot.assigned` comes when someone else assigns an item to the bot (when creating, changing, in a bulk edit or from a template); a bot that takes an item itself gets none. The scenario: assign an item to the bot, the webhook `bot.assigned` reaches the agent with `data.item`, and the agent works on it over [MCP](/en/mcp#agent-scenario) with a token of its bot: `whoami`, `work-items:get`, then `manage-comments:add` and `manage-work-items:transition`. Over the [REST API](/en/api) the same steps work for a script without an MCP client. Give the agent a [token of its bot](/en/bots#tokens) and a project membership, never a token of the default bot.

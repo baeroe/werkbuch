@@ -1,6 +1,15 @@
 # werkbuch: Fachkonzept und App-Design
 
-Stand: 2026-11-06 · Status: freigegeben (die Änderungen vom 2026-10-31, vom 2026-11-02 (Phasen 5 und 6), vom 2026-11-03 (Phase 7), vom 2026-11-04 (Phasen 8 und 9), vom 2026-11-05 (Phase 10) und vom 2026-11-06 (Phasen 11 und 12) warten auf Rafaels Bestätigung, außer der bestätigten Status-Zuordnung aus Phase 4)
+Stand: 2026-11-07 · Status: freigegeben (die Änderungen vom 2026-10-31, vom 2026-11-02 (Phasen 5 und 6), vom 2026-11-03 (Phase 7), vom 2026-11-04 (Phasen 8 und 9), vom 2026-11-05 (Phase 10), vom 2026-11-06 (Phasen 11 und 12) und vom 2026-11-07 (Phase 13) warten auf Rafaels Bestätigung, außer der bestätigten Status-Zuordnung aus Phase 4)
+
+> **Änderungen vom 2026-11-07 (Phase 13):** Beim Umsetzen von Phase 13 (MCP) hat Claude als Controller Folgendes entschieden; es ändert oder präzisiert die Spec und **wartet auf Rafaels Bestätigung** (Begründung und „Falls falsch“ in `docs/superpowers/plans/2026-10-30-werkbuch-app-rulings.md`, A396 ff.):
+> - **Werkzeugschnitt (6.2):** 29 Tools: je Ressource ein Lese- und ein Schreib-Tool, dazu `whoami`, `search` und `get-upload-url`. Organisation und die sechs Kataloge sind **ein** Paar `organization`/`manage-organization` (6.2 nennt sie als eine Ressource), Favoriten stehen bei den Projekten, Tokens (Liste, Widerruf) und Erwähnbare bei den Personen; `attachments`/`manage-attachments` kommen aus 4.16 dazu (Datei lesen, aus der Liste nehmen). Nicht über MCP: was nur die Sitzung darf (Tokens anlegen, Passwort, zweiter Faktor), die System-Seite und `GET /references`; Dateien nie als Argument (A397).
+> - **Argumente (6.2):** `action`, die Platzhalter der REST-Route in `snake_case`, bei `GET`-Zwillingen deren Query (`filter` als Objekt, Listen als JSON-Listen) und `input` = der Body des REST-Zwillings mit demselben Schema; Texte werden wie über REST getrimmt (A398).
+> - **Ergebnisse (6.2):** der Body der REST-Antwort ohne `links`, Rich Text nur als Markdown, leere Antworten `{done: true}`, `meta.path` = Pfad des Zwillings; MCP liest 25 je Seite (REST 100), Item- und Vorlagenlisten sind ohne Angabe schlank (A399).
+> - **Nur Tokens an `/mcp` (6.2):** ein persönliches Token mit `mcp`, Lese-Tools dazu `read`, Schreib-Tools `write`; die Sitzung der Oberfläche erreicht `/mcp` nie (A401).
+> - **Drossel (6.2, 8.2):** 300/min je gültigem Token (`MCP_RATE_LIMIT`), sonst je Adresse, ein eigenes Kontingent neben dem der API; Test-Ping, „erneut senden“ und Uploads zählen in denselben Kontingenten je Konto wie über REST (A402).
+> - **Upload-URL (4.16, 6.2):** `get-upload-url` gibt eine signierte Adresse für `curl -F`, höchstens 15 Minuten und nie länger als das Token, mehrfach nutzbar; beim Hochladen gelten Token und Rechte erneut (A403).
+> - **Suche (6.1, 6.2):** `types` ohne Art ist 422 statt „alle Arten“ (A404); `type_id`, `state_category`, `assignee_id` (`none` nur allein) und `label_id` engen die Item-Treffer ein, ein Key-Treffer zählt nur, wenn das Item die Filter erfüllt (A405).
 
 > **Änderungen vom 2026-11-06 (Phase 12):** Beim Umsetzen von Phase 12 (REST vollständig und OpenAPI) hat Claude als Controller Folgendes entschieden; es ändert oder präzisiert die Spec und **wartet auf Rafaels Bestätigung** (Begründung und „Falls falsch“ in `docs/superpowers/plans/2026-10-30-werkbuch-app-rulings.md`, A384 ff.):
 > - **Parameter der Listen im Dokument (6.1):** keine Community-Erweiterung für den Query Builder: die Regeln einer Liste (Filter, Sortierungen, Beziehungen) stehen einmal in ihrer `ListSpec` und speisen Abfrage und Dokument über eigene Scramble-Extensions (A384).
@@ -992,6 +1001,7 @@ Die anderen Container starten ohne Migration.
 | `WEBHOOKS_ALLOW_PRIVATE` | interne Webhook-Ziele erlauben, Standard false |
 | `API_RATE_LIMIT` | Anfragen je Minute an `/api/v1` je Token bzw. Adresse, Standard 600 |
 | `API_SESSION_RATE_LIMIT` | Anfragen je Minute der Oberfläche je Konto, Standard 3000 |
+| `MCP_RATE_LIMIT` | Anfragen je Minute an `/mcp` je Token bzw. Adresse, Standard 300 |
 | `FILESYSTEM_DISK`, `AWS_*` | optional S3-kompatibler Speicher |
 
 ### 8.3 Lokale Entwicklung (DDEV)

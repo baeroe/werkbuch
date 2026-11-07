@@ -7,7 +7,7 @@ Every instance describes its API itself:
 - `/api/docs` shows the reference in the browser, with every endpoint, parameter, body and answer, and lets you try requests.
 - `/api/openapi.json` is the same as an OpenAPI 3.1 document, for code generators and clients.
 
-Both are public: they hold no data of the instance, only the shape of the API, so an integration can be built before it has a token. Generating the document is costly, so both allow 30 requests a minute per address. The reference page loads its scripts from the instance itself, not from a CDN. This page explains what the reference cannot: how to sign in, errors, lists, limits and how the API changes.
+Both are public: they hold no data of the instance, only the shape of the API, so an integration can be built before it has a token. Generating the document is costly, so both allow 30 requests a minute per address. The reference page loads its scripts from the instance itself, not from a CDN. This page explains what the reference cannot: how to sign in, errors, lists, limits and how the API changes. AI agents reach the same operations through the [MCP server](/en/mcp).
 
 ## Authentication
 
@@ -25,7 +25,7 @@ A token also carries abilities that narrow it further ([roles and permissions](/
 |---|---|
 | `read` | `GET` and `HEAD`, and the four reads that take their question in a body: `POST /work-items/query`, `/work-items/groups`, `/work-items/counts` and `/templates/preview` |
 | `write` | Every other request |
-| `mcp` | The MCP server; its tools check `read` and `write` as well |
+| `mcp` | The [MCP server](/en/mcp) at `/mcp`; its tools need `read` to read and `write` to change, as well |
 
 A token without the ability a request needs gets `403`. The reference names the ability of every operation (`x-werkbuch-ability`).
 

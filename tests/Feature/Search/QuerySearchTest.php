@@ -659,7 +659,7 @@ it('refuses a malformed filter value', function () use ($refusal) {
     $errors = fn (string $categories = 'backlog, unstarted, started, completed, canceled'): array => [
         'type_id' => [__('field.type_id.invalid')],
         'state_category' => [__('field.state_category.invalid', ['allowed' => $categories])],
-        'assignee_id' => [__('field.assignee_id.invalid')],
+        'assignee_id' => [__('field.assignee_id.filter')],
         'label_id' => [__('field.label_id.invalid')],
     ];
 
@@ -689,7 +689,7 @@ it('refuses none together with an account', function () use ($filtered, $refusal
     ['mara' => $mara] = $filtered();
 
     foreach ([['none', $mara->id], "{$mara->id},none"] as $assignee) {
-        expect($refusal($mara, ['q' => 'kontakt', 'assignee_id' => $assignee]))->toBe(['assignee_id' => [__('field.assignee_id.invalid')]], (string) json_encode($assignee));
+        expect($refusal($mara, ['q' => 'kontakt', 'assignee_id' => $assignee]))->toBe(['assignee_id' => [__('field.assignee_id.filter')]], (string) json_encode($assignee));
     }
     expect($engine->searched())->toBe([]);
 });

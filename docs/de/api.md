@@ -7,7 +7,7 @@ Jede Instanz beschreibt ihre API selbst:
 - `/api/docs` zeigt die Referenz im Browser, mit jedem Endpunkt, Parameter, Body und jeder Antwort, und lässt dich Anfragen ausprobieren.
 - `/api/openapi.json` ist dasselbe als OpenAPI-3.1-Dokument, für Code-Generatoren und Clients.
 
-Beide sind öffentlich: Sie enthalten keine Daten der Instanz, nur die Form der API, damit eine Integration schon vor dem ersten Token entstehen kann. Das Dokument zu erzeugen ist aufwendig, darum erlauben beide 30 Anfragen je Minute und Adresse. Die Referenz lädt ihre Skripte von der Instanz selbst, nicht von einem CDN. Diese Seite erklärt, was die Referenz nicht sagt: Anmeldung, Fehler, Listen, Grenzen und wie sich die API ändert.
+Beide sind öffentlich: Sie enthalten keine Daten der Instanz, nur die Form der API, damit eine Integration schon vor dem ersten Token entstehen kann. Das Dokument zu erzeugen ist aufwendig, darum erlauben beide 30 Anfragen je Minute und Adresse. Die Referenz lädt ihre Skripte von der Instanz selbst, nicht von einem CDN. Diese Seite erklärt, was die Referenz nicht sagt: Anmeldung, Fehler, Listen, Grenzen und wie sich die API ändert. KI-Agenten erreichen dieselben Operationen über den [MCP-Server](/de/mcp).
 
 ## Anmeldung
 
@@ -25,7 +25,7 @@ Ein Token trägt dazu Fähigkeiten, die es weiter einschränken ([Rollen und Rec
 |---|---|
 | `read` | `GET` und `HEAD` und die vier Lesezugriffe, die ihre Frage im Body stellen: `POST /work-items/query`, `/work-items/groups`, `/work-items/counts` und `/templates/preview` |
 | `write` | Jede andere Anfrage |
-| `mcp` | Den MCP-Server; seine Tools prüfen zusätzlich `read` und `write` |
+| `mcp` | Den [MCP-Server](/de/mcp) unter `/mcp`; seine Tools brauchen dazu `read` zum Lesen und `write` zum Ändern |
 
 Ein Token ohne die Fähigkeit, die eine Anfrage braucht, bekommt `403`. Die Referenz nennt die Fähigkeit jeder Operation (`x-werkbuch-ability`).
 
