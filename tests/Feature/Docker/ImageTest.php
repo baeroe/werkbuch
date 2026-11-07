@@ -465,6 +465,14 @@ $webKeys = function (string $dir) use ($keyFiles): void {
     }
 };
 
+it('has a smoke script a shell accepts', function () {
+    $process = new Process(['bash', '-n', repo_path('scripts/compose-smoke.sh')]);
+    $process->run();
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and(is_executable(repo_path('scripts/compose-smoke.sh')))->toBeTrue('scripts/compose-smoke.sh is not executable');
+});
+
 it('is a script a POSIX shell accepts', function () {
     $process = new Process(['sh', '-n', repo_path('docker/entrypoint.d/99-werkbuch.sh')]);
     $process->run();
