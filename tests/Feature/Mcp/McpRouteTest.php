@@ -31,8 +31,8 @@ it('answers server/discover with the server and its version', function () use ($
         // no prompts (P4)
         ->and(array_keys($result['capabilities']))->toBe(['tools', 'resources'])
         ->and(trim((string) $result['instructions']))->not->toBe('')
-        // the read tools of a token with read (whoami since task 3a, search since task 4, organization since task 5a), no resources yet (task 11)
-        ->and(array_column($mcp->tools(), 'name'))->toBe(['whoami', 'search', 'organization'])
+        // the read tools of a token with read (whoami since task 3a, search since task 4, organization since task 5a, people since task 5b), no resources yet (task 11)
+        ->and(array_column($mcp->tools(), 'name'))->toBe(['whoami', 'search', 'organization', 'people'])
         ->and($mcp->resources())->toBe([]);
 });
 
