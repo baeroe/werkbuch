@@ -79,11 +79,12 @@ COPY routes ./routes
 COPY docs/en/concepts/views.md docs/en/concepts/rich-text.md docs/en/concepts/types-and-properties.md ./docs/en/concepts/
 COPY --from=assets /app/public/build ./public/build
 
-# The code belongs to root and is read-only for PHP (www-data): a write bug in the app can't turn into code execution.
-# The base gives /var/www to www-data: whoever writes there could swap the code folder (A429). What COPY puts into a
-# folder the base created keeps its owner www-data, so every code folder is chowned. The debug files of the base
-# (read by PHP and FPM at start) belong to root as well; /etc/nginx stays writable, the base writes its templates there.
-# Only storage/ (the data volume is storage/app) and bootstrap/cache (config, routes, events, views) are writable.
+# Code, vendor, configuration and scripts belong to root and are read-only for PHP (www-data); only storage/ (the data
+# volume is storage/app; compiled views) and bootstrap/cache (config, routes, events) stay writable, and Laravel's
+# compiled PHP lives there. The base gives /var/www to www-data: whoever writes there could swap the code folder (A429).
+# What COPY puts into a folder the base created keeps its owner www-data, so every code folder is chowned. The debug
+# files of the base (read by PHP and FPM at start) and server-opts.d (our server config) belong to root as well;
+# the rest of /etc/nginx stays writable, the base writes its templates there.
 # package:discover boots the app; the channels resolve the broadcaster, and Reverb's keys exist only at start (3b).
 RUN mkdir -p storage/app/private storage/app/public storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs bootstrap/cache \
     && BROADCAST_CONNECTION=null composer dump-autoload --no-dev --optimize --no-interaction \
@@ -92,6 +93,7 @@ RUN mkdir -p storage/app/private storage/app/public storage/framework/cache/data
     && chmod -R a+rX,go-w artisan LICENSE app bootstrap config database docs lang public resources routes vendor \
     && chown root:root "$PHP_INI_DIR/conf.d/zzz-serversideup-docker-php-debug.ini" /usr/local/etc/php-fpm.d/zzz-docker-php-serversideup-fpm-debug.conf /usr/local/etc/php-fpm.conf \
     && chmod 644 "$PHP_INI_DIR/conf.d/zzz-serversideup-docker-php-debug.ini" /usr/local/etc/php-fpm.d/zzz-docker-php-serversideup-fpm-debug.conf /usr/local/etc/php-fpm.conf \
+    && chown root:root /etc/nginx/server-opts.d && chmod 755 /etc/nginx/server-opts.d \
     && chown -R www-data:www-data storage bootstrap/cache
 
 USER www-data

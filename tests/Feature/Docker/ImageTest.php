@@ -66,6 +66,20 @@ $ignored = function (string $path) use ($ignoreLines): bool {
     return $result;
 };
 
+/** The entries of the map that writes the logged path, in order: [source pattern, value], quotes kept. */
+$loggedUriMap = function (): array {
+    $http = RepoFiles::text('docker/nginx/conf.d/00-werkbuch.conf');
+    expect(preg_match('/^map \$request_uri \$werkbuch_logged_uri \{\n(.*?)\n\}$/ms', $http, $map))->toBe(1);
+    $entries = [];
+
+    foreach (array_filter(array_map('trim', explode("\n", $map[1]))) as $line) {
+        expect(preg_match('/^("[^"]*"|\S+)\s+("[^"]*"|\S+);$/', $line, $entry))->toBe(1, "unreadable map line: {$line}");
+        $entries[] = [$entry[1], $entry[2]];
+    }
+
+    return $entries;
+};
+
 /** The files below docker/nginx, as paths relative to the repository. */
 $nginxFiles = function (): array {
     $root = repo_path('docker/nginx');
@@ -244,6 +258,9 @@ it('keeps the code read-only for PHP, only storage and bootstrap/cache writable'
     expect($steps)->toBe(array_values(array_unique($steps)));
     expect($steps)->toBe(collect($steps)->sort()->values()->all());
     expect($commands[array_key_last($commands)])->toBe('chown -R www-data:www-data storage bootstrap/cache');
+    // our server config belongs to root: www-data could otherwise swap security.conf or add a location
+    expect($commands)->toContain('chown root:root /etc/nginx/server-opts.d')
+        ->and($commands)->toContain('chmod 755 /etc/nginx/server-opts.d');
 
     foreach ([$steps[2], $steps[3]] as $step) {
         $words = preg_split('/\s+/', $commands[$step]);
@@ -275,7 +292,7 @@ it('hides the arguments in stack traces and keeps the session upload progress of
     expect($instructions('app'))->toContain('COPY --chmod=644 docker/php/zz-werkbuch.ini /usr/local/etc/php/conf.d/zz-werkbuch.ini');
 });
 
-it('logs no query string, no referer, no reset token and no health check of its own, but the forwarded address', function () {
+it('logs no query string, no referer, no reset token and no health check of its own, but the forwarded address', function () use ($loggedUriMap) {
     $http = RepoFiles::text('docker/nginx/conf.d/00-werkbuch.conf');
     $server = RepoFiles::text('docker/nginx/server-opts.d/werkbuch.conf');
 
@@ -288,9 +305,13 @@ it('logs no query string, no referer, no reset token and no health check of its 
     expect($format)->toContain('$werkbuch_logged_uri');
     expect($format)->toContain('$http_x_forwarded_for');
 
-    expect(preg_match('/map \$request_uri \$werkbuch_logged_uri \{([^}]*)\}/', $http, $uris))->toBe(1);
-    expect($uris[1])->toMatch('#~\^/reset-password/\s+/reset-password/\.\.\.;#');
-    expect($uris[1])->toMatch('#~\^/api/mcp/uploads/\s+/api/mcp/uploads/\.\.\.;#');
+    // the whole map, line by line: a catch-all that let the query or a decoded path through would leak signatures
+    expect($loggedUriMap())->toBe([
+        ['~*^/reset-password/', '/reset-password/...'],
+        ['~*^/api/mcp/uploads/', '/api/mcp/uploads/...'],
+        ['"~^(?<werkbuch_path>[^?%]*)%"', '"${werkbuch_path}%..."'],
+        ['"~^(?<werkbuch_path>[^?]*)"', '$werkbuch_path'],
+    ]);
 
     expect(preg_match('/map "\$remote_addr \$request_uri" \$werkbuch_loggable \{([^}]*)\}/', $http, $loggable))->toBe(1);
     expect($loggable[1])->toContain('127\.0\.0\.1');
@@ -301,6 +322,32 @@ it('logs no query string, no referer, no reset token and no health check of its 
     expect($server)->toMatch('#^access_log /dev/stdout werkbuch if=\$werkbuch_loggable;$#m');
 });
 
+it('masks the log by what the regexes of the map leave of each path', function () use ($loggedUriMap) {
+    $rules = $loggedUriMap();
+    expect($rules)->toHaveCount(4);
+
+    // nginx's map: the first regex that matches wins, its captures fill the value
+    $logged = function (string $uri) use ($rules): string {
+        foreach ($rules as [$pattern, $value]) {
+            expect(preg_match('/^(~\*?)(.+)$/', trim($pattern, '"'), $regex))->toBe(1, "{$pattern} is no regex");
+            if (preg_match('#'.$regex[2].'#'.($regex[1] === '~*' ? 'i' : ''), $uri, $match) === 1) {
+                return strtr(trim($value, '"'), ['${werkbuch_path}' => $match['werkbuch_path'] ?? '', '$werkbuch_path' => $match['werkbuch_path'] ?? '']);
+            }
+        }
+
+        return $uri;
+    };
+
+    expect($logged('/invitations/01abc?expires=1&signature=SIG'))->toBe('/invitations/01abc')
+        ->and($logged('/reset-password/TOKEN?email=x'))->toBe('/reset-password/...')
+        ->and($logged('/Reset-Password/TOKEN'))->toBe('/reset-password/...')
+        ->and($logged('/%72eset-password/TOKEN'))->toBe('/%...')
+        ->and($logged('/api/mcp/%75ploads/TOKEN'))->toBe('/api/mcp/%...')
+        ->and($logged('/api/mcp/uploads/TOKEN'))->toBe('/api/mcp/uploads/...')
+        ->and($logged('/items/WEB-47'))->toBe('/items/WEB-47')
+        ->and($logged('/up'))->toBe('/up');
+});
+
 it('passes /app/ on to Reverb, resolved at request time, and never Reverb\'s HTTP API', function () use ($nginxFiles) {
     $server = RepoFiles::text('docker/nginx/server-opts.d/werkbuch.conf');
 
@@ -309,6 +356,7 @@ it('passes /app/ on to Reverb, resolved at request time, and never Reverb\'s HTT
     expect($server)->toContain('proxy_set_header Connection "upgrade";');
     expect($server)->toMatch('/^resolver 127\.0\.0\.11\b/m');
     expect($server)->toContain('proxy_pass $werkbuch_reverb;');
+    expect($server)->toMatch('/^resolver_timeout [1-5]s;$/m');
 
     foreach ($nginxFiles() as $file) {
         expect(RepoFiles::text($file))->not->toContain('proxy_pass http://reverb');
@@ -326,3 +374,4 @@ it('leaves HSTS to the TLS proxy', function () use ($instructions, $nginxFiles) 
     expect($security)->toContain('location ~ /\.');
     expect($instructions('app'))->toContain('COPY --chmod=644 docker/nginx/server-opts.d/ /etc/nginx/server-opts.d/');
 });
+
