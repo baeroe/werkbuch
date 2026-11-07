@@ -167,7 +167,7 @@ final class ManageOrganizationTool extends WriteTool
      *
      * @param  array{name: string, ...}  $catalog
      */
-    private static function noun(array $catalog): string
+    public static function noun(array $catalog): string
     {
         return $catalog['name'] === 'type' ? 'work item type' : str_replace('-', ' ', $catalog['name']);
     }

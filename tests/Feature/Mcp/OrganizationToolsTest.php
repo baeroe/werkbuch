@@ -113,7 +113,8 @@ it('counts the items per state of a workflow and refuses project and workflow to
     expect($workflow['isError'])->toBeFalse((string) json_encode($workflow))
         ->and(array_sum(array_column($workflow['structuredContent']['data'], 'items')))->toBe(2)
         ->and($both['isError'])->toBeTrue()
-        ->and($both['structuredContent']['status'])->toBe(422);
+        ->and($both['structuredContent']['status'])->toBe(422)
+        ->and(array_keys($both['structuredContent']['errors']))->toBe(['workflow']);
 });
 
 it('archives a work item type and a resolution that items still carry', function () {

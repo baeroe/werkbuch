@@ -5,6 +5,7 @@ use App\Models\Invitation;
 use App\Models\PersonalAccessToken;
 use App\Models\Project;
 use App\Models\User;
+use App\Support\InvitationLinks;
 use Tests\Support\Mcp\McpClient;
 
 /*
@@ -83,7 +84,7 @@ it('lists and revokes the own tokens, and offers no way to create one', function
     expect($revoked['isError'])->toBeFalse((string) json_encode($revoked))
         ->and(PersonalAccessToken::query()->whereKey($own->id)->exists())->toBeFalse();
 
-    // no tool names a way to mint a token (session only, P6)
+    // no tool names a way to mint a token (session only, P6); the guard in McpServerTest keeps every tool from a twin behind EnsureSession
     $names = array_column($mcp->tools(), 'name');
     expect($names)->toContain('people')->toContain('manage-people')
         ->and(str_contains(json_encode($mcp->tools()), 'create-token'))->toBeFalse();
@@ -111,4 +112,22 @@ it('refuses a member who changes accounts and still reads who can be mentioned',
     $found = $mcp->call('people', ['action' => 'mentionable', 'project' => $web->identifier, 'q' => $mara->handle]);
     expect($found['isError'])->toBeFalse((string) json_encode($found))
         ->and(array_column($found['structuredContent']['data'], 'id'))->toContain($mara->id);
+});
+
+it('gives no invitation link to a read token, and a read token cannot invite at all', function () {
+    $admin = User::factory()->admin()->create();
+    $invitation = Invitation::factory()->create(['invited_by' => $admin->id]);
+    $reading = McpClient::for($this, apiToken($admin, ['read', 'mcp']));
+    $writing = McpClient::for($this, apiToken($admin, ['read', 'write', 'mcp']));
+
+    $read = $reading->call('people', ['action' => 'list-invitations']);
+    $write = $writing->call('people', ['action' => 'list-invitations']);
+
+    expect($read['isError'])->toBeFalse((string) json_encode($read))
+        ->and(array_column($read['structuredContent']['data'], 'id'))->toContain($invitation->id)
+        ->and(array_column($read['structuredContent']['data'], 'link'))->toBe([null])
+        ->and(array_column($write['structuredContent']['data'], 'link'))->toBe([InvitationLinks::for($invitation)])
+        // `invite` is a tool of `write`: a token without it does not know it
+        ->and(array_column($reading->tools(), 'name'))->not->toContain('manage-people')
+        ->and(array_column($writing->tools(), 'name'))->toContain('manage-people');
 });

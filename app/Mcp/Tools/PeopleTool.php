@@ -83,7 +83,7 @@ final class PeopleTool extends ReadTool
             ),
             new McpAction(
                 name: 'mentionable',
-                summary: 'Who can be mentioned in a project. Needs `project`.',
+                summary: 'Who can be mentioned in a project.',
                 run: fn (Actor $actor, McpArguments $args): McpResult => McpResult::resource(UserResource::collection(ListMentionables::run($actor, $args->query(ListMentionables::KEYS)))),
                 parameters: [
                     'project' => ['type' => 'string', 'description' => 'The project: ULID, identifier or a former identifier. One the account does not see is 404.'],

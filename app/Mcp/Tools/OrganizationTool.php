@@ -150,7 +150,7 @@ final class OrganizationTool extends ReadTool
     {
         return new McpAction(
             name: 'get-'.$catalog['name'],
-            summary: 'One '.($catalog['name'] === 'type' ? 'work item type' : str_replace('-', ' ', $catalog['name'])).'.',
+            summary: 'One '.ManageOrganizationTool::noun($catalog).'.',
             run: fn (Actor $actor, McpArguments $args): McpResult => ($catalog['get'])($actor, $args->reference('id')),
             parameters: ['id' => ToolSchema::reference($catalog['placeholder'])],
             required: ['id'],
