@@ -20,8 +20,9 @@ use Lorisleiva\Actions\Concerns\AsAction;
 
 /**
  * Creates the first account from ADMIN_EMAIL and ADMIN_PASSWORD, and only while no person exists yet (bots, the
- * default bot among them, do not count). Decides in this order: values missing, account (this one or another) present,
- * else create: an org admin with the checked password, noted as `user.created` by the system (A4, P25).
+ * default bot among them, do not count). Decides in this order: a person present (this email or another; the values
+ * do not matter then, they are read on the first start only), values missing, else create: an org admin with the
+ * checked password, noted as `user.created` by the system (A4, P25).
  */
 final class EnsureAdmin
 {
@@ -36,18 +37,16 @@ final class EnsureAdmin
      */
     public function handle(?string $email, #[\SensitiveParameter] ?string $password): EnsureAdminOutcome
     {
-        if (blank($email) || blank($password)) {
-            return EnsureAdminOutcome::NotConfigured;
-        }
-
-        $email = Str::lower(trim($email));
-
-        if (User::query()->where('email', $email)->exists()) {
-            return EnsureAdminOutcome::Exists;
-        }
+        $email = blank($email) ? null : Str::lower(trim($email));
 
         if (User::query()->where('type', AccountType::Person)->exists()) {
-            return EnsureAdminOutcome::AccountsExist;
+            return $email !== null && User::query()->where('email', $email)->exists()
+                ? EnsureAdminOutcome::Exists
+                : EnsureAdminOutcome::AccountsExist;
+        }
+
+        if ($email === null || blank($password)) {
+            return EnsureAdminOutcome::NotConfigured;
         }
 
         $this->validate($email, $password);

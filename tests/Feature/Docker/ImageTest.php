@@ -1,5 +1,6 @@
 <?php
 
+use App\Console\Commands\EnsureAdminCommand;
 use App\Mcp\Resources\DocReference;
 use App\Models\Attachment;
 use Illuminate\Filesystem\Filesystem;
@@ -491,43 +492,47 @@ it('stops before anything else while DB_PASSWORD or MEILISEARCH_KEY is the place
 })->with(['DB_PASSWORD', 'MEILISEARCH_KEY']);
 
 it('runs the web start in order', function () use ($entrypoint, $artisanCalls) {
-    $process = $entrypoint(['FAKE_ENSURE_ADMIN' => 'Accounts exist already; ADMIN_EMAIL is only used on the first start.']);
+    $process = $entrypoint(['FAKE_ENSURE_ADMIN' => 'Already set up: ADMIN_EMAIL and ADMIN_PASSWORD are only used on the first start.']);
 
     expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
         ->and($artisanCalls($process))->toBe([
             'artisan config:clear --no-interaction',
             'artisan migrate --force --no-interaction',
-            'artisan app:ensure-admin --no-interaction',
+            'artisan app:ensure-admin --require-account --no-interaction',
             'artisan app:search-sync --no-interaction',
             'artisan app:search-import --if-empty --no-interaction',
             'artisan optimize --no-interaction',
             'artisan scramble:cache --no-interaction',
         ])
-        ->and($process->getOutput())->toContain('Accounts exist already; ADMIN_EMAIL is only used on the first start.')
+        ->and($process->getOutput())->toContain('Already set up: ADMIN_EMAIL and ADMIN_PASSWORD are only used on the first start.')
         ->and($process->getOutput())->toEndWith("werkbuch: ready\n");
 });
 
-it('says how to get the first account when there is none', function () use ($entrypoint) {
-    $none = $entrypoint(['FAKE_ENSURE_ADMIN' => 'ADMIN_EMAIL/ADMIN_PASSWORD are not set; no account created. Without any account nobody can sign in.']);
-    $some = $entrypoint(['FAKE_ENSURE_ADMIN' => 'Accounts exist already; ADMIN_EMAIL is only used on the first start.']);
+it('says how to get the first account by the exit code of app:ensure-admin, never by its words', function () use ($entrypoint, $artisanCalls) {
+    // NO_ACCOUNT with any words; the English sentence of the warning with exit 0 (accounts exist) says nothing
+    $none = $entrypoint(['FAKE_ENSURE_ADMIN' => 'Noch kein Konto.', 'FAKE_ENSURE_ADMIN_EXIT' => (string) EnsureAdminCommand::NO_ACCOUNT]);
+    $some = $entrypoint(['FAKE_ENSURE_ADMIN' => 'ADMIN_EMAIL/ADMIN_PASSWORD are not set; no account created.']);
 
     expect($none->getExitCode())->toBe(0, $none->getErrorOutput())
-        ->and($none->getOutput())->toContain('ADMIN_EMAIL/ADMIN_PASSWORD are not set; no account created.')
+        ->and($none->getOutput())->toContain('Noch kein Konto.')
         ->and($none->getOutput())->toContain('werkbuch: no account yet, set ADMIN_EMAIL and ADMIN_PASSWORD and restart')
+        ->and($none->getOutput())->toEndWith("werkbuch: ready\n")
+        ->and($artisanCalls($none))->toContain('artisan app:search-sync --no-interaction')
         ->and($some->getExitCode())->toBe(0, $some->getErrorOutput())
-        ->and($some->getOutput())->toContain('Accounts exist already')
-        ->and($some->getOutput())->not->toContain('werkbuch: no account yet');
+        ->and($some->getOutput())->toContain('ADMIN_EMAIL/ADMIN_PASSWORD are not set')
+        ->and($some->getOutput())->toEndWith("werkbuch: ready\n")
+        ->and(str_contains($some->getOutput(), 'werkbuch: no account yet'))->toBeFalse('the entrypoint read the words of app:ensure-admin');
 });
 
 it('stops with the exit code of app:ensure-admin, after its words', function () use ($entrypoint, $artisanCalls) {
-    $process = $entrypoint(['FAKE_ENSURE_ADMIN' => 'ADMIN_PASSWORD is the placeholder of the compose file.', 'FAKE_ENSURE_ADMIN_EXIT' => '3']);
+    $process = $entrypoint(['FAKE_ENSURE_ADMIN' => 'ADMIN_PASSWORD is the placeholder of the compose file.', 'FAKE_ENSURE_ADMIN_EXIT' => '1']);
 
-    expect($process->getExitCode())->toBe(3)
+    expect($process->getExitCode())->toBe(1)
         ->and($process->getOutput())->toContain('ADMIN_PASSWORD is the placeholder of the compose file.')
         ->and($artisanCalls($process))->toBe([
             'artisan config:clear --no-interaction',
             'artisan migrate --force --no-interaction',
-            'artisan app:ensure-admin --no-interaction',
+            'artisan app:ensure-admin --require-account --no-interaction',
         ]);
 });
 

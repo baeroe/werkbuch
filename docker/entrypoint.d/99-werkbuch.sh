@@ -88,17 +88,14 @@ if [ "$role" = web ]; then
     # schema, the first account (only while there is none), the search settings and, on an empty or outdated
     # index, the import
     php artisan migrate --force --no-interaction
+    # exit 3 (EnsureAdminCommand::NO_ACCOUNT): no person and no ADMIN_EMAIL/ADMIN_PASSWORD; the start goes on
     status=0
-    out=$(php artisan app:ensure-admin --no-interaction) || status=$?
-    if [ -n "$out" ]; then
-        printf '%s\n' "$out"
-    fi
-    if [ "$status" -ne 0 ]; then
+    php artisan app:ensure-admin --require-account --no-interaction || status=$?
+    if [ "$status" -eq 3 ]; then
+        log "no account yet, set ADMIN_EMAIL and ADMIN_PASSWORD and restart"
+    elif [ "$status" -ne 0 ]; then
         exit "$status"
     fi
-    case "$out" in
-        *"ADMIN_EMAIL/ADMIN_PASSWORD are not set"*) log "no account yet, set ADMIN_EMAIL and ADMIN_PASSWORD and restart" ;;
-    esac
     php artisan app:search-sync --no-interaction
     php artisan app:search-import --if-empty --no-interaction
 fi

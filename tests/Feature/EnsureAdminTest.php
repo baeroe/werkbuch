@@ -3,6 +3,7 @@
 use App\Access\OrgRole;
 use App\Access\Visibility;
 use App\Actions\Auth\EnsureAdmin;
+use App\Console\Commands\EnsureAdminCommand;
 use App\Enums\AccountType;
 use App\Events\EventType;
 use App\Models\Event;
@@ -63,7 +64,7 @@ it('changes nothing on the next start', function () {
 it('creates no second admin once people exist', function () {
     User::factory()->create(['email' => 'mara@example.com']);
 
-    $this->artisan('app:ensure-admin')->expectsOutputToContain('only used on the first start')->assertSuccessful();
+    $this->artisan('app:ensure-admin')->expectsOutputToContain('Already set up')->assertSuccessful();
 
     expect(User::query()->where('is_default_bot', false)->count())->toBe(1);
 });
@@ -76,20 +77,64 @@ it('is not stopped by bots, which cannot sign in', function () {
     expect(User::query()->where('is_default_bot', false)->count())->toBe(2);
 });
 
-it('warns without failing when the values are missing', function (?string $email, ?string $password, bool $person) {
+it('warns without failing when the values are missing and nobody can sign in', function (?string $email, ?string $password) {
     config(['werkbuch.admin.email' => $email, 'werkbuch.admin.password' => $password]);
-    $person && User::factory()->create();
 
     $this->artisan('app:ensure-admin')->expectsOutputToContain('are not set')->assertSuccessful();
 
-    expect(User::query()->where('is_default_bot', false)->count())->toBe($person ? 1 : 0);
+    expect(User::query()->where('is_default_bot', false)->count())->toBe(0);
 })->with([
-    'nothing set' => [null, null, false],
-    'no password' => ['owner@example.com', null, false],
-    'no email' => [null, 'secret-pass', false],
-    'empty strings' => ['', '', false],
-    'nothing set, a person exists' => [null, null, true],
+    'nothing set' => [null, null],
+    'no password' => ['owner@example.com', null],
+    'no email' => [null, 'secret-pass'],
+    'empty strings' => ['', ''],
 ]);
+
+it('says it is set up when people exist, whatever the values', function (?string $email, ?string $password) {
+    User::factory()->create(['email' => 'mara@example.com']);
+    config(['werkbuch.admin.email' => $email, 'werkbuch.admin.password' => $password]);
+
+    $this->artisan('app:ensure-admin')
+        ->expectsOutputToContain('Already set up: ADMIN_EMAIL and ADMIN_PASSWORD are only used on the first start.')
+        ->assertSuccessful();
+
+    expect(User::query()->where('is_default_bot', false)->count())->toBe(1);
+})->with([
+    'nothing set (ADMIN_PASSWORD removed after the first sign-in)' => [null, null],
+    'empty strings' => ['', ''],
+    'no password' => ['owner@example.com', null],
+    'the placeholder of the standalone file' => ['owner@example.com', EnsureAdmin::PLACEHOLDER],
+]);
+
+it('tells the existing admin that the values are only read on the first start', function () {
+    $this->artisan('app:ensure-admin')->assertSuccessful();
+    config(['werkbuch.admin.password' => null]);
+
+    $this->artisan('app:ensure-admin')
+        ->expectsOutputToContain('owner@example.com already exists; nothing changed. ADMIN_EMAIL and ADMIN_PASSWORD are only used on the first start.')
+        ->assertSuccessful();
+});
+
+it('exits with NO_ACCOUNT under --require-account only while no person exists', function (bool $person) {
+    config(['werkbuch.admin.email' => 'owner@example.com', 'werkbuch.admin.password' => null]);
+    $person && User::factory()->create();
+
+    $this->artisan('app:ensure-admin', ['--require-account' => true])->assertExitCode($person ? 0 : EnsureAdminCommand::NO_ACCOUNT);
+    // without the option the missing values stay a warning
+    $this->artisan('app:ensure-admin')->assertSuccessful();
+})->with([
+    'no person' => [false],
+    'a person exists' => [true],
+]);
+
+it('keeps NO_ACCOUNT apart from the failure of invalid values', function () {
+    config(['werkbuch.admin.password' => 'short']);
+
+    $this->artisan('app:ensure-admin', ['--require-account' => true])->assertExitCode(1);
+
+    // docker/entrypoint.d/99-werkbuch.sh compares with this number (ImageTest runs the script with it)
+    expect(EnsureAdminCommand::NO_ACCOUNT)->toBe(3);
+});
 
 it('fails and creates nothing for invalid values', function (string $email, string $password, string $message) {
     config(['werkbuch.admin.email' => $email, 'werkbuch.admin.password' => $password]);
