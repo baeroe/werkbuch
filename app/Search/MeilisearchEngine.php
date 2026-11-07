@@ -37,17 +37,22 @@ final class MeilisearchEngine extends ScoutMeilisearchEngine implements CountsDo
             ->deleteDocuments(['filter' => sprintf('%s = "%s"', $field, addcslashes($value, '"\\'))]);
     }
 
-    public function documentCount(string $index): int
+    public function documentStats(string $index): array
     {
         try {
-            return (int) $this->meilisearch->index($index)->stats()['numberOfDocuments'];
+            $stats = $this->meilisearch->index($index)->stats();
         } catch (ApiException $e) {
             if ($e->errorCode === 'index_not_found') {
-                return 0;
+                return ['documents' => 0, 'fields' => []];
             }
 
             throw $e;
         }
+
+        /** @var array<string, int> $fields */
+        $fields = array_map(intval(...), (array) ($stats['fieldDistribution'] ?? []));
+
+        return ['documents' => (int) $stats['numberOfDocuments'], 'fields' => $fields];
     }
 
     public function status(): array

@@ -5,6 +5,7 @@ namespace Tests\Support;
 use App\Search\CountsDocuments;
 use App\Search\RemovesWhere;
 use App\Search\ReportsStatus;
+use Closure;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
@@ -88,15 +89,35 @@ final class ArraySearchEngine extends Engine implements CountsDocuments, Removes
         return $this->options;
     }
 
+    /**
+     * Changes every document of an index in place, as an index written by an older version would hold it (a field
+     * missing, a field more). Counts as no write.
+     *
+     * @param  Closure(array<string, mixed>, string): array<string, mixed>  $change  gets the document and its key
+     */
+    public function rewrite(string $index, Closure $change): void
+    {
+        foreach ($this->documents($index) as $key => $document) {
+            $this->indexes[$index][$key] = $change($document, (string) $key);
+        }
+    }
+
     /** Lets every search and every write throw this error from now on (`null` lets them work again). */
     public function failWith(?Throwable $error): void
     {
         $this->error = $error;
     }
 
-    public function documentCount(string $index): int
+    public function documentStats(string $index): array
     {
-        return count($this->indexes[$index] ?? []);
+        $fields = [];
+        foreach ($this->documents($index) as $document) {
+            foreach (array_keys($document) as $field) {
+                $fields[$field] = ($fields[$field] ?? 0) + 1;
+            }
+        }
+
+        return ['documents' => count($this->documents($index)), 'fields' => $fields];
     }
 
     public function status(): array

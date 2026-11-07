@@ -8,6 +8,7 @@ use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
 use App\Search\SearchIndexer;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Laravel\Scout\EngineManager;
 use Laravel\Scout\Engines\NullEngine;
@@ -239,9 +240,15 @@ it('needs an import while an index has no documents but its table has rows', fun
     expect(app(SearchIndexer::class)->needsImport())->toBeTrue();
 });
 
-it('needs none once every index with rows has documents', function () {
-    searchEngine();
+it('needs none once every index with rows has documents with the fields of today', function () use ($world) {
+    $engine = searchEngine();
+    [$web] = $world();
+    Page::factory()->for($web)->create();
     app(SearchIndexer::class)->rebuild();
+
+    foreach (['testing_work_items', 'testing_pages', 'testing_projects', 'testing_users'] as $index) {
+        expect($engine->documents($index))->not->toBeEmpty("{$index} has no documents");
+    }
 
     expect(app(SearchIndexer::class)->needsImport())->toBeFalse();
 });
@@ -252,6 +259,34 @@ it('needs none for an empty table', function () {
     Project::query()->delete();
     Page::query()->delete();
     WorkItem::query()->delete();
+
+    expect(app(SearchIndexer::class)->needsImport())->toBeFalse();
+});
+
+it('needs an import while a document of an index lacks a field its model writes today', function () {
+    $engine = searchEngine();
+    app(SearchIndexer::class)->rebuild();
+    $first = array_key_first($engine->documents('testing_users'));
+    $engine->rewrite('testing_users', fn (array $document, string $key) => $key === $first ? Arr::except($document, 'handle') : $document);
+
+    expect(app(SearchIndexer::class)->needsImport())->toBeTrue();
+});
+
+it('needs an import while the documents of an index hold a field their model writes no more', function () use ($world) {
+    $engine = searchEngine();
+    $world();
+    app(SearchIndexer::class)->rebuild();
+    $engine->rewrite('testing_work_items', fn (array $document) => [...$document, 'estimate' => 3]);
+
+    expect(app(SearchIndexer::class)->needsImport())->toBeTrue();
+});
+
+it('needs none while the only projects and pages are being deleted', function () {
+    searchEngine();
+    $project = Project::factory()->create(['deleting_at' => now()]);
+    Page::factory()->for($project)->create();
+    WorkItem::factory()->for($project)->create();
+    app(SearchIndexer::class)->rebuild();
 
     expect(app(SearchIndexer::class)->needsImport())->toBeFalse();
 });

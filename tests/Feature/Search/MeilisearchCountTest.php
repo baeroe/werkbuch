@@ -15,16 +15,16 @@ $engineAnswering = function (Response ...$responses): MeilisearchEngine {
     return new MeilisearchEngine(new Client('http://meili.test', null, $http), false, new Client('http://meili.test', null, $http));
 };
 
-it('counts the documents of an index from its stats', function () use ($engineAnswering) {
-    $engine = $engineAnswering(new Response(200, ['Content-Type' => 'application/json'], '{"numberOfDocuments": 7, "isIndexing": false, "fieldDistribution": {}}'));
+it('describes the documents of an index from its stats: how many, and how many hold each field', function () use ($engineAnswering) {
+    $engine = $engineAnswering(new Response(200, ['Content-Type' => 'application/json'], '{"numberOfDocuments": 7, "isIndexing": false, "fieldDistribution": {"id": 7, "name": 5}}'));
 
-    expect($engine->documentCount('work_items'))->toBe(7);
+    expect($engine->documentStats('work_items'))->toBe(['documents' => 7, 'fields' => ['id' => 7, 'name' => 5]]);
 });
 
-it('counts 0 for a missing index and lets every other error fly', function () use ($engineAnswering) {
+it('describes a missing index as empty and lets every other error fly', function () use ($engineAnswering) {
     $missing = $engineAnswering(new Response(404, ['Content-Type' => 'application/json'], '{"message": "Index not found", "code": "index_not_found", "type": "invalid_request", "link": ""}'));
     $broken = $engineAnswering(new Response(500, ['Content-Type' => 'application/json'], '{"message": "boom", "code": "internal", "type": "internal", "link": ""}'));
 
-    expect($missing->documentCount('work_items'))->toBe(0)
-        ->and(fn () => $broken->documentCount('work_items'))->toThrow(ApiException::class);
+    expect($missing->documentStats('work_items'))->toBe(['documents' => 0, 'fields' => []])
+        ->and(fn () => $broken->documentStats('work_items'))->toThrow(ApiException::class);
 });

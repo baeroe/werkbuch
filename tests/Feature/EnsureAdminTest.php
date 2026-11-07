@@ -116,4 +116,6 @@ it('does not mind the placeholder once accounts exist', function () {
     config(['werkbuch.admin.password' => EnsureAdmin::PLACEHOLDER]);
 
     $this->artisan('app:ensure-admin')->assertSuccessful();
+
+    expect(User::query()->where('is_default_bot', false)->count())->toBe(1);
 });

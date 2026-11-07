@@ -7,11 +7,12 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Str;
 
 /**
- * Builds the search indexes from scratch: the first start, and the repair when the search consumer lost something.
+ * Builds the search indexes from scratch: the first start, the start after an update that changed the documents
+ * (--if-empty decides) and the repair when the search consumer lost something.
  */
 class SearchImportCommand extends Command
 {
-    protected $signature = 'app:search-import {--if-empty : Import only when an index has no documents although its table has rows}';
+    protected $signature = 'app:search-import {--if-empty : Import only when an index lacks documents of its table or their fields differ from today\'s}';
 
     protected $description = 'Build the search indexes from scratch, with their settings';
 
