@@ -28,11 +28,14 @@ final class Components implements DocumentTransformer
         'HistoryEntryResource' => 'historyPatches',
     ];
 
-    public function handle(OpenApi $document, OpenApiContext $context): void
+    /**
+     * The shared schemas by name (`components.schemas`), as plain JSON Schema; an MCP tool takes the ones it names.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public static function schemas(): array
     {
-        $components = $document->components;
-
-        foreach ([
+        return [
             'Problem' => Schemas::problem(),
             'RichTextDocument' => Schemas::richTextDocument(),
             'ListLinks' => Schemas::listLinks(),
@@ -41,7 +44,14 @@ final class Components implements DocumentTransformer
             'SortSpec' => Schemas::sortSpec(),
             'Display' => Schemas::display(),
             'Schedule' => OperationsSchemas::schedule(),
-        ] as $name => $schema) {
+        ];
+    }
+
+    public function handle(OpenApi $document, OpenApiContext $context): void
+    {
+        $components = $document->components;
+
+        foreach (self::schemas() as $name => $schema) {
             $components->addSchema($name, Schema::fromType(new JsonSchema($schema)));
         }
 

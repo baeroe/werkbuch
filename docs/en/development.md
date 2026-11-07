@@ -101,6 +101,18 @@ Without a terminal it reads the first line of STDIN instead.
 
 Lost the authenticator app and the recovery codes? `ddev artisan app:reset-two-factor you@example.com` turns the second factor of the account off and ends its sessions; afterwards the password alone signs in, and the second factor can be set up again in the settings.
 
+## MCP locally
+
+The MCP server runs at `https://werkbuch.ddev.site/mcp`. Create a token with `mcp`, `read` and `write` under **Personal settings → API & MCP** and try it with `curl`, without an MCP client:
+
+```bash
+curl https://werkbuch.ddev.site/mcp \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}'
+```
+
+`tools/call` works the same way (`"params": {"name": "whoami", "arguments": {}}`). The snippet for Claude Code from the token dialog connects a real client. Do not use `php artisan mcp:inspector`: it starts the inspector through `npx`, and this project uses pnpm only. Requests count against `MCP_RATE_LIMIT` (300 a minute per token in `.env.example`). More under [MCP](/en/mcp).
+
 ## Maintenance commands
 
 ```bash

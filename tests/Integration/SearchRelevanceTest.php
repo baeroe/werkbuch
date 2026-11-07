@@ -2,6 +2,7 @@
 
 use App\Actions\Search\QuerySearch;
 use App\Models\Comment;
+use App\Models\Label;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
@@ -10,6 +11,7 @@ use App\Search\SearchResults;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Str;
 use Tests\Support\Meili;
 
 /*
@@ -135,4 +137,33 @@ it('filters by project and archive in Meilisearch, not only in the database', fu
         ->and(Meili::ids('testing_work_items', 'kontakt', 'archived = false'))->toEqualCanonicalizing([$open->id, $other->id])
         ->and(Meili::ids('testing_work_items', 'kontakt', "project_id IN ['{$web->id}'] AND archived = false"))->toBe([$open->id])
         ->and(Meili::ids('testing_projects', 'website', "id IN ['{$ops->id}']"))->toBe([]);
+});
+
+it('filters items by label and category', function () use ($item, $index, $search, $ids) {
+    $web = Project::factory()->identifier('WEB')->create(['name' => 'Website']);
+    [$ux, $seo, $design] = [Label::factory()->create(['name' => 'UX']), Label::factory()->create(['name' => 'SEO']), Label::factory()->create(['name' => 'Design'])];
+    $both = $item($web, 'Kontaktformular Felder');
+    $uxOnly = WorkItem::factory()->for($web)->closed()->create(['title' => 'Kontaktformular Abschluss']);
+    $none = $item($web, 'Kontaktformular Texte');
+    $both->labels()->attach([$ux->id, $seo->id]);
+    $uxOnly->labels()->attach($ux->id);
+    $none->labels()->attach($design->id);
+    $index();
+
+    // any of the labels, over the list label_ids of the document
+    expect($ids($search('kontaktformular', ['types' => 'items', 'label_id' => [$seo->id, $ux->id]])->items))->toEqualCanonicalizing([$both->id, $uxOnly->id])
+        ->and($ids($search('kontaktformular', ['types' => 'items', 'label_id' => $seo->id])->items))->toBe([$both->id])
+        ->and($ids($search('kontaktformular', ['types' => 'items', 'state_category' => 'completed'])->items))->toBe([$uxOnly->id])
+        ->and($ids($search('kontaktformular', ['types' => 'items', 'state_category' => 'backlog', 'label_id' => $ux->id, 'limit' => 1])->items))->toBe([$both->id]);
+});
+
+it('finds items without an assignee', function () use ($item, $index, $search, $ids) {
+    $web = Project::factory()->identifier('WEB')->create(['name' => 'Website']);
+    $mara = User::factory()->create();
+    $taken = $item($web, 'Kontaktformular prüfen', ['assignee_id' => $mara->id]);
+    $free = $item($web, 'Kontaktformular sichern');
+    $index();
+
+    expect($ids($search('kontaktformular', ['types' => 'items', 'assignee_id' => 'none'])->items))->toBe([$free->id])
+        ->and($ids($search('kontaktformular', ['types' => 'items', 'assignee_id' => Str::upper($mara->id)])->items))->toBe([$taken->id]);
 });

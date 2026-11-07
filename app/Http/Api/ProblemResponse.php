@@ -20,11 +20,25 @@ final class ProblemResponse
     /** Reason and title slug per HTTP status; every other status is http_error. */
     private const SLUGS = [
         400 => 'bad_request', 401 => 'unauthenticated', 403 => 'forbidden', 404 => 'not_found',
-        405 => 'method_not_allowed', 409 => 'conflict', 413 => 'payload_too_large', 419 => 'csrf_token_mismatch',
-        422 => 'validation_failed', 429 => 'too_many_requests', 500 => 'server_error', 503 => 'service_unavailable',
+        405 => 'method_not_allowed', 409 => 'conflict', 413 => 'payload_too_large', 415 => 'unsupported_media_type',
+        419 => 'csrf_token_mismatch', 422 => 'validation_failed', 429 => 'too_many_requests', 500 => 'server_error',
+        503 => 'service_unavailable',
     ];
 
     public static function from(Throwable $e, bool $debug): JsonResponse
+    {
+        [$status, $body, $headers] = self::body($e, $debug);
+
+        return new JsonResponse($body, $status, $headers, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
+     * The problem as status, body and headers (the headers of an HTTP exception, then `Content-Type`), for the response
+     * of an /api route and the result of an MCP tool.
+     *
+     * @return array{0: int, 1: array<string, mixed>, 2: array<string, string>}
+     */
+    public static function body(Throwable $e, bool $debug): array
     {
         $headers = [];
         $errors = [];
@@ -69,11 +83,6 @@ final class ProblemResponse
             $body['errors'] = $errors;
         }
 
-        return new JsonResponse(
-            $body + $extensions,
-            $status,
-            [...$headers, 'Content-Type' => 'application/problem+json'],
-            JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
-        );
+        return [$status, $body + $extensions, [...$headers, 'Content-Type' => 'application/problem+json']];
     }
 }

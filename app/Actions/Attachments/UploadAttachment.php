@@ -11,6 +11,7 @@ use App\Models\Project;
 use App\Models\WorkItem;
 use App\Support\Actor;
 use App\Support\ItemLock;
+use App\Support\References;
 use finfo;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -47,21 +48,7 @@ final class UploadAttachment
      */
     public function handle(Actor $actor, array $input, ?UploadedFile $file): Attachment
     {
-        $reference = $input['project_id'] ?? null;
-        if (! is_string($reference)) {
-            throw ValidationException::withMessages(['project_id' => __('field.required')]);
-        }
-
-        $project = Project::findByReference($reference) ?? throw Problem::notFound();
-        // whoever sees the project may put a file into a text; nobody else learns that the project exists
-        Authorize::check($actor, 'uploadInline', Attachment::class, $project);
-
-        $kind = $input['kind'] ?? null;
-        if (! in_array($kind, Attachment::KINDS, true)) {
-            throw ValidationException::withMessages(['kind' => __('field.kind.attachment')]);
-        }
-
-        $item = $kind === 'file' ? self::item($actor, $project, $input['work_item_id'] ?? null) : null;
+        [$project, $kind, $item] = self::target($actor, $input);
         $file = self::checked($file);
 
         $filename = self::cleanName($file->getClientOriginalName());
@@ -110,6 +97,36 @@ final class UploadAttachment
     }
 
     /**
+     * Where an upload goes, checked before its file (also for an upload address of MCP, which has no file yet): the
+     * project (`project_id`: ULID, identifier or former identifier) whoever sees it may put a file into a text, nobody
+     * else learns that it exists; the kind; with `file` the item of the file list.
+     *
+     * @param  array<array-key, mixed>  $input
+     * @return array{0: Project, 1: string, 2: ?WorkItem}
+     *
+     * @throws ValidationException
+     * @throws Problem
+     */
+    public static function target(Actor $actor, array $input): array
+    {
+        $reference = $input['project_id'] ?? null;
+        if (! is_string($reference)) {
+            throw ValidationException::withMessages(['project_id' => __('field.required')]);
+        }
+
+        $project = References::project($reference);
+        // whoever sees the project may put a file into a text; nobody else learns that the project exists
+        Authorize::check($actor, 'uploadInline', Attachment::class, $project);
+
+        $kind = $input['kind'] ?? null;
+        if (! in_array($kind, Attachment::KINDS, true)) {
+            throw ValidationException::withMessages(['kind' => __('field.kind.attachment')]);
+        }
+
+        return [$project, $kind, $kind === 'file' ? self::item($actor, $project, $input['work_item_id'] ?? null) : null];
+    }
+
+    /**
      * The item of the file list: one of this project the account may change. An item it does not see is unknown (404);
      * one of another project it sees is a field error.
      *
@@ -122,7 +139,7 @@ final class UploadAttachment
             throw ValidationException::withMessages(['work_item_id' => __('field.required')]);
         }
 
-        $item = WorkItem::findByReference($reference) ?? throw Problem::notFound();
+        $item = References::item($reference);
         Authorize::check($actor, 'view', $item);
 
         if ($item->project_id !== $project->id) {

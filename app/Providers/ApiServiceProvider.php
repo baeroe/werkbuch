@@ -118,6 +118,9 @@ final class ApiServiceProvider extends ServiceProvider
 
             return Limit::perMinute((int) config(RateKey::isSession($key) ? 'werkbuch.rate_limits.api_session' : 'werkbuch.rate_limits.api'))->by($key);
         });
+        // MCP (phase 13): per valid token `rate_limits.mcp` (300), everything else per address; a quota of its own beside the
+        // API's (Laravel hashes the key with the name of the limiter), run before the middleware of the package (K1)
+        RateLimiter::for('mcp', fn (Request $request) => Limit::perMinute((int) config('werkbuch.rate_limits.mcp'))->by(RateKey::for($request)));
         // the docs per address, a token or not: generating the document is the costly part (K5)
         RateLimiter::for('api-docs', fn (Request $request) => Limit::perMinute(self::DOCS_PER_MINUTE)->by((string) $request->ip()));
     }

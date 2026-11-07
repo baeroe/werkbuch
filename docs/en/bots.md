@@ -1,8 +1,8 @@
 # Bots
 
-A bot is an account for a script or an AI agent. It has no login and no password. It works through tokens, over the REST API and, later, over MCP. Otherwise it behaves like a person: it can be a member of projects, get items assigned and appears in the history under its own name. The interface calls every bot "Bot", even when it belongs to a person.
+A bot is an account for a script or an AI agent. It has no login and no password. It works through tokens, over the [MCP server](/en/mcp) and the REST API. Otherwise it behaves like a person: it can be a member of projects, get items assigned and appears in the history under its own name. The interface calls every bot "Bot", even when it belongs to a person.
 
-This page covers the basics and how a [webhook](/en/webhooks#agents) wakes an agent. Working through MCP comes with the MCP server, in a later phase.
+This page covers the basics, how a [webhook](/en/webhooks#agents) wakes an agent and how the agent then works over [MCP](/en/mcp).
 
 ## Create a bot
 
@@ -31,7 +31,7 @@ Deactivating a bot deletes all its tokens. Activating it again does not bring th
 
 An agent learns about its work through a [webhook](/en/webhooks) that is set to **Only for one bot**. Such a webhook gets `bot.assigned` when someone else assigns an item to the bot (a bot that takes an item itself gets none), `bot.mentioned` when someone mentions it with `@handle`, and the changes and comments of items assigned to it, each with the item in `data`. It gets them only while the bot is active and sees the project: remove the bot from a private project, and its webhook hears nothing more from there. Like everything else, `data` is written for the bot, so it never names an item the bot may not see.
 
-The agent then works with a token of its bot over the [REST API](/en/api): it reads the item, comments and sets the state. `GET /api/v1/me` tells it which account the token belongs to. MCP follows in a later phase.
+The agent then works with a token of its bot over [MCP](/en/mcp#agent-scenario); the token needs `mcp`, `read` and, to change anything, `write`. `whoami` tells it which account the token belongs to, `work-items:get` reads the item (the description as Markdown), `manage-comments:add` reports what it did and `manage-work-items:transition` moves the item on. Every change shows up in the history under the name of the bot, with `via: mcp`. A script without an MCP client does the same over the [REST API](/en/api): `GET /api/v1/me`, `GET /api/v1/work-items/{item}`, a comment and a transition.
 
 ## The default bot
 

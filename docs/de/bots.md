@@ -1,8 +1,8 @@
 # Bots
 
-Ein Bot ist ein Konto für ein Skript oder einen KI-Agenten. Er hat keine Anmeldung und kein Passwort. Er arbeitet über Tokens, über die REST-API und später über MCP. Sonst verhält er sich wie eine Person: Er kann Mitglied von Projekten sein, bekommt Items zugewiesen und steht in der History unter seinem Namen. Die Oberfläche nennt jeden Bot „Bot“, auch wenn er einer Person gehört.
+Ein Bot ist ein Konto für ein Skript oder einen KI-Agenten. Er hat keine Anmeldung und kein Passwort. Er arbeitet über Tokens, über den [MCP-Server](/de/mcp) und die REST-API. Sonst verhält er sich wie eine Person: Er kann Mitglied von Projekten sein, bekommt Items zugewiesen und steht in der History unter seinem Namen. Die Oberfläche nennt jeden Bot „Bot“, auch wenn er einer Person gehört.
 
-Diese Seite behandelt die Grundlagen und wie ein [Webhook](/de/webhooks#agenten) einen Agenten weckt. Die Arbeit über MCP kommt mit dem MCP-Server in einer späteren Phase.
+Diese Seite behandelt die Grundlagen, wie ein [Webhook](/de/webhooks#agenten) einen Agenten weckt und wie der Agent dann über [MCP](/de/mcp) arbeitet.
 
 ## Bot anlegen
 
@@ -31,7 +31,7 @@ Deaktivierst du einen Bot, werden alle seine Tokens gelöscht. Beim erneuten Akt
 
 Ein Agent erfährt von seiner Arbeit über einen [Webhook](/de/webhooks) mit **Nur für einen Bot**. So ein Webhook bekommt `bot.assigned`, wenn jemand anderes dem Bot ein Item zuweist (ein Bot, der sich ein Item selbst nimmt, bekommt keins), `bot.mentioned`, wenn jemand ihn mit `@handle` erwähnt, und die Änderungen und Kommentare der Items, die ihm zugewiesen sind, jeweils mit dem Item in `data`. Er bekommt sie nur, solange der Bot aktiv ist und das Projekt sieht: entfernst du den Bot aus einem privaten Projekt, hört sein Webhook von dort nichts mehr. Wie alles andere ist `data` für den Bot geschrieben und nennt also nie ein Item, das der Bot nicht sehen darf.
 
-Der Agent arbeitet dann mit einem Token seines Bots über die [REST-API](/de/api): er liest das Item, kommentiert und setzt den Status. `GET /api/v1/me` sagt ihm, zu welchem Konto das Token gehört. MCP folgt in einer späteren Phase.
+Der Agent arbeitet dann mit einem Token seines Bots über [MCP](/de/mcp#agent-szenario); das Token braucht `mcp`, `read` und, um etwas zu ändern, `write`. `whoami` sagt ihm, zu welchem Konto das Token gehört, `work-items:get` liest das Item (die Beschreibung als Markdown), `manage-comments:add` meldet, was er getan hat, und `manage-work-items:transition` zieht das Item weiter. Jede Änderung steht in der History unter dem Namen des Bots, mit `via: mcp`. Ein Skript ohne MCP-Client macht dasselbe über die [REST-API](/de/api): `GET /api/v1/me`, `GET /api/v1/work-items/{item}`, ein Kommentar und ein Statuswechsel.
 
 ## Der Standard-Bot
 

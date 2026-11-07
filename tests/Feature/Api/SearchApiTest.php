@@ -2,6 +2,7 @@
 
 use App\Access\ProjectRole;
 use App\Enums\Locale;
+use App\Models\Label;
 use App\Models\Page;
 use App\Models\Project;
 use App\Models\User;
@@ -9,6 +10,7 @@ use App\Models\View;
 use App\Models\WorkItem;
 use App\Search\SearchIndexer;
 use Illuminate\Support\Facades\Exceptions;
+use Illuminate\Support\Str;
 use Meilisearch\Exceptions\CommunicationException;
 
 /** Mara (German), member of WEB „Website“ with WEB-1 „Kontaktformular prüfen“ and a view „Kontakt offen“, all indexed. */
@@ -50,6 +52,33 @@ it('searches with a read token', function () use ($world) {
         ->and($key->json('data.projects'))->toBe([])
         ->and($key->json('data.people'))->toBe([])
         ->and($key->json('data.views'))->toBe([]);
+});
+
+it('filters items by the query and refuses types naming no kind', function () use ($world) {
+    searchEngine();
+    [$mara, $web, $item] = $world();
+    $label = Label::factory()->create(['name' => 'UX']);
+    $item->labels()->attach($label->id);
+    $assigned = WorkItem::factory()->for($web)->create(['title' => 'Kontaktformular senden', 'assignee_id' => $mara->id]);
+    app(SearchIndexer::class)->rebuild();
+    $token = apiToken($mara, ['read']);
+
+    $hits = fn (string $query): array => $this->withToken($token)->getJson("/api/v1/search?q=kontakt&types=items&{$query}")->assertOk()->json('data.items.*.id');
+
+    expect($hits('assignee_id=none'))->toBe([$item->id])
+        ->and($hits('assignee_id='.$mara->id))->toBe([$assigned->id])
+        ->and($hits('label_id='.$label->id.','.Str::ulid()))->toBe([$item->id])
+        ->and($hits('label_id[]='.$label->id))->toBe([$item->id])
+        ->and($hits('state_category=backlog,started'))->toBe([$item->id, $assigned->id]);
+
+    foreach (['types=,', 'types[]=', 'types[]=%20'] as $query) {
+        $response = $this->withToken($token)->getJson("/api/v1/search?q=kontakt&{$query}")->assertUnprocessable();
+        expect(errorsAt($response, 'types'))->toBe([trans('field.types.empty', ['allowed' => 'items, pages, projects, people, views'], 'de')], $query);
+    }
+
+    $response = $this->withToken($token)->getJson('/api/v1/search?q=kontakt&assignee_id=none,'.$mara->id.'&type_id=x')->assertUnprocessable();
+    expect(errorsAt($response, 'assignee_id'))->toBe([trans('field.assignee_id.filter', [], 'de')])
+        ->and(errorsAt($response, 'type_id'))->toBe([trans('field.type_id.invalid', [], 'de')]);
 });
 
 it('answers 422 in the language of the account', function () use ($world) {

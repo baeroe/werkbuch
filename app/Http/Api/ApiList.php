@@ -5,6 +5,7 @@ namespace App\Http\Api;
 use App\Support\ListResult;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
@@ -27,20 +28,36 @@ final class ApiList
      */
     public static function respond(ListResult $result, string $resource): JsonResponse
     {
-        $get = request()->isMethodSafe();
+        return response()->json(self::payload($result, $resource, request()));
+    }
+
+    /**
+     * The body of a list answer, for the response of an /api route and the result of an MCP tool. The rows and the
+     * values in them keep the shape their JSON has: an empty object (`values: {}`) stays one.
+     *
+     * @param  ListResult<covariant Model>  $result
+     * @param  class-string<JsonResource>  $resource
+     * @return array{data: list<array<string, mixed>>, links: array<string, mixed>, meta: array<string, mixed>}
+     */
+    public static function payload(ListResult $result, string $resource, Request $request): array
+    {
+        $get = $request->isMethodSafe();
         if ($get) {
-            $result->page->withQueryString();
+            $result->page->appends($request->query());
         }
-        $response = $resource::collection($result->page)->additional(['meta' => ['total' => $result->total]])->response();
+        $response = $resource::collection($result->page)->additional(['meta' => ['total' => $result->total]])->toResponse($request);
+        // as objects: an empty object stays one
+        /** @var \stdClass&object{data: list<\stdClass>, links: \stdClass, meta: \stdClass} $body */
+        $body = $response->getData();
         if (! $get) {
-            // as objects: an empty object (`values: {}`) stays one
-            /** @var \stdClass&object{links: \stdClass} $body */
-            $body = $response->getData();
             $body->links->next = null;
             $body->links->prev = null;
-            $response->setData($body);
         }
 
-        return $response;
+        return [
+            'data' => array_map(fn (\stdClass $row): array => (array) $row, $body->data),
+            'links' => (array) $body->links,
+            'meta' => (array) $body->meta,
+        ];
     }
 }

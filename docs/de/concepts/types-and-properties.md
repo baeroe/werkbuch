@@ -34,6 +34,7 @@ Eine Property ist ein Feld, das Typen ihren Items über die Kernfelder hinaus ge
 
 Der Schlüssel nennt die Property in der API und später in MCP und Filtern. Er ist `snake_case`: Kleinbuchstaben, Ziffern und `_`, vorn ein Buchstabe, höchstens 40 Zeichen. Er ist eindeutig und **lässt sich nicht ändern**, sobald die Property gespeichert ist. Er darf nicht der Name eines Kernfelds sein: `id`, `key`, `project`, `type`, `title`, `description`, `state`, `state_category`, `resolution`, `assignee`, `priority`, `label`, `labels`, `start_date`, `due_date`, `parent`, `created_by`, `created_at`, `updated_at`, `started_at`, `closed_at`, `archived`, `archived_at` und `rank` sind vergeben.
 
+<!-- reference:start -->
 ### Feldtypen
 
 Auch der Feldtyp ist fest. Erlaubt ist nur der Wechsel von Einfach- auf Mehrfachauswahl (bei Dropdowns und der Personenauswahl), nie zurück, denn Items verlören sonst alle Werte bis auf einen.
@@ -52,6 +53,8 @@ Auch der Feldtyp ist fest. Erlaubt ist nur der Wechsel von Einfach- auf Mehrfach
 ### Optionen
 
 Ein Dropdown hat mindestens eine aktive Option. Eine Option hat ein Label (bis 60 Zeichen), einen Ton (in der API das Feld `color`) und einen Platz in der Reihenfolge; ein Dropdown hat höchstens 100. Eine Option, die du nicht mehr anbieten willst, lässt sich **archivieren**: Für neue Werte steht sie nicht mehr zur Wahl, und du kannst sie wiederherstellen. Eine gespeicherte Option lässt sich auch **entfernen** (in der Oberfläche mit dem Kreuz daneben, über die API, indem sie in einem `PUT` fehlt): Sie wird gelöscht, es sei denn, Items tragen sie: Dann wird sie stattdessen archiviert, und die Oberfläche sagt es nach dem Speichern.
+
+<!-- reference:end -->
 
 ### Pflichtwerte und Standardwerte
 

@@ -15,6 +15,15 @@ beforeEach(function () {
         ListResult::of(User::query()->where('is_default_bot', false)->orderBy('id'), PageArgs::from($request->query())),
         UserResource::class,
     ));
+    // the payload of the same list next to the response the list sends
+    Route::middleware('api')->prefix('api/v1')->match(['GET', 'POST'], '_t/people-payload', function (Request $request) {
+        $list = fn () => ListResult::of(User::query()->where('is_default_bot', false)->orderBy('id'), PageArgs::from($request->query()));
+
+        return response()->json([
+            'payload' => json_encode(ApiList::payload($list(), UserResource::class, $request)),
+            'response' => ApiList::respond($list(), UserResource::class)->getContent(),
+        ]);
+    });
 });
 
 it('pages with a cursor and counts every match', function () {
@@ -90,3 +99,22 @@ it('refuses a cursor that does not read or carries a signature this list has not
     'no object' => rtrim(strtr(base64_encode('"x"'), '+/', '-_'), '='),
     'signed' => (new Cursor(['id' => '01', '_sig' => 'id:asc'], true))->encode(),
 ]);
+
+it('gives the payload the response sends', function (string $method) {
+    User::factory()->count(3)->create();
+
+    $answer = $this->json($method, '/api/v1/_t/people-payload?per_page=2&keep=me')->assertOk();
+    $payload = json_decode($answer->json('payload'), true);
+
+    expect($answer->json('payload'))->toBe($answer->json('response'))
+        ->and(array_keys($payload))->toBe(['data', 'links', 'meta'])
+        ->and($payload['data'])->toHaveCount(2)
+        ->and($payload['meta']['total'])->toBe(3);
+
+    // a GET list keeps its query in the links, a list read by POST has none to follow
+    if ($method === 'GET') {
+        expect($payload['links']['next'])->toContain('keep=me');
+    } else {
+        expect($payload['links']['next'])->toBeNull()->and($payload['links']['prev'])->toBeNull();
+    }
+})->with(['GET', 'POST']);

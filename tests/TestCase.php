@@ -22,9 +22,10 @@ abstract class TestCase extends BaseTestCase
         // (a test that sets it itself, ConfigTest::setEnv, sets $_ENV too)
         $_SERVER['WEBHOOKS_ALLOW_PRIVATE'] = ($_ENV['WEBHOOKS_ALLOW_PRIVATE'] ?? '') === 'true' ? 'true' : 'false';
 
-        // the same for the limits of the API that DDEV raises for e2e (K9): the tests run with those of phpunit.xml
+        // the same for the limits of the API that DDEV raises for e2e (K9) and of MCP: the tests run with those of phpunit.xml
         $_SERVER['API_RATE_LIMIT'] = $_ENV['API_RATE_LIMIT'] ?? '600';
         $_SERVER['API_SESSION_RATE_LIMIT'] = $_ENV['API_SESSION_RATE_LIMIT'] ?? '3000';
+        $_SERVER['MCP_RATE_LIMIT'] = $_ENV['MCP_RATE_LIMIT'] ?? '300';
 
         $app = parent::createApplication();
         $app['config']->set('werkbuch.event_consumers', []);

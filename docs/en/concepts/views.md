@@ -88,6 +88,7 @@ Grouping by status works only while all items found share one workflow; otherwis
 
 Items without a value come last in both directions; equal values keep the manual order. Texts are compared without regard to case and accents.
 
+<!-- reference:start -->
 ## Filters
 
 A filter is a list of conditions that all must hold. Each condition has a field, an operator and, for most operators, a value. In the interface, `f` or **Filter** adds a condition and `/` searches in the title; over the API, a filter is JSON in the same form everywhere:
@@ -174,6 +175,8 @@ A condition on a property (`property:<key>`) only ever matches items whose type 
 ### Archived items
 
 Archived items stay out of every list, unless a condition on `archived` asks for them or the request sets `include_archived`. Items of an archived project show up only where a `project` condition with `is` or `in` names the project: the list of an archived project shows its open items, read-only.
+
+<!-- reference:end -->
 
 ## State in the address
 

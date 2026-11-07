@@ -22,6 +22,9 @@ return [
     // the one default lives in Attachment::DEFAULT_MAX_MB; config/media-library.php reads the same
     'attachments_max_mb' => (int) env('ATTACHMENTS_MAX_MB', Attachment::DEFAULT_MAX_MB),
 
+    // the docs the MCP references are read from (docs/en/…); tests point it elsewhere
+    'docs_path' => base_path('docs'),
+
     // minutes a notification waits before its mail goes out (a read in between cancels it)
     'notification_mail_delay' => (int) env('NOTIFICATION_MAIL_DELAY', 5),
 
@@ -42,7 +45,8 @@ return [
         // /api/v1 per valid token, else per address (A387); the session of the web app per account (K9)
         'api' => (int) env('API_RATE_LIMIT', 600),
         'api_session' => (int) env('API_SESSION_RATE_LIMIT', 3000),
-        'mcp' => 300,
+        // /mcp per valid token, else per address, a quota of its own beside the API's (phase 13)
+        'mcp' => (int) env('MCP_RATE_LIMIT', 300),
         'login_per_ip' => 20,
         // requests for a reset link (POST /forgot-password), over all addresses
         'password_reset_per_ip' => 6,

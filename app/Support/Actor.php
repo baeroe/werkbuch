@@ -71,6 +71,24 @@ final readonly class Actor
     }
 
     /**
+     * The account of a tool call over MCP: always a personal access token (A401); `EnsureMcpToken` has refused everything
+     * else at the door already, a TransientToken of a session included (K2).
+     *
+     * @throws AuthenticationException without an account or without a personal access token
+     */
+    public static function fromMcp(Request $r): self
+    {
+        $user = $r->user();
+        $token = $user instanceof User ? $user->currentAccessToken() : null;
+
+        if (! $user instanceof User || ! $token instanceof PersonalAccessToken) {
+            throw new AuthenticationException;
+        }
+
+        return new self($user, self::VIA_MCP, token: $token);
+    }
+
+    /**
      * The same actor with another reason (work an action does on the side, such as the children of a deleted item).
      */
     public function withReason(string $reason): self

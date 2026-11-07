@@ -7,7 +7,7 @@ Jede Instanz beschreibt ihre API selbst:
 - `/api/docs` zeigt die Referenz im Browser, mit jedem Endpunkt, Parameter, Body und jeder Antwort, und lässt dich Anfragen ausprobieren.
 - `/api/openapi.json` ist dasselbe als OpenAPI-3.1-Dokument, für Code-Generatoren und Clients.
 
-Beide sind öffentlich: Sie enthalten keine Daten der Instanz, nur die Form der API, damit eine Integration schon vor dem ersten Token entstehen kann. Das Dokument zu erzeugen ist aufwendig, darum erlauben beide 30 Anfragen je Minute und Adresse. Die Referenz lädt ihre Skripte von der Instanz selbst, nicht von einem CDN. Diese Seite erklärt, was die Referenz nicht sagt: Anmeldung, Fehler, Listen, Grenzen und wie sich die API ändert.
+Beide sind öffentlich: Sie enthalten keine Daten der Instanz, nur die Form der API, damit eine Integration schon vor dem ersten Token entstehen kann. Das Dokument zu erzeugen ist aufwendig, darum erlauben beide 30 Anfragen je Minute und Adresse. Die Referenz lädt ihre Skripte von der Instanz selbst, nicht von einem CDN. Diese Seite erklärt, was die Referenz nicht sagt: Anmeldung, Fehler, Listen, Grenzen und wie sich die API ändert. KI-Agenten erreichen dieselben Operationen über den [MCP-Server](/de/mcp).
 
 ## Anmeldung
 
@@ -25,7 +25,7 @@ Ein Token trägt dazu Fähigkeiten, die es weiter einschränken ([Rollen und Rec
 |---|---|
 | `read` | `GET` und `HEAD` und die vier Lesezugriffe, die ihre Frage im Body stellen: `POST /work-items/query`, `/work-items/groups`, `/work-items/counts` und `/templates/preview` |
 | `write` | Jede andere Anfrage |
-| `mcp` | Den MCP-Server; seine Tools prüfen zusätzlich `read` und `write` |
+| `mcp` | Den [MCP-Server](/de/mcp) unter `/mcp`; seine Tools brauchen dazu `read` zum Lesen und `write` zum Ändern |
 
 Ein Token ohne die Fähigkeit, die eine Anfrage braucht, bekommt `403`. Die Referenz nennt die Fähigkeit jeder Operation (`x-werkbuch-ability`).
 
@@ -170,9 +170,9 @@ Jede andere Änderung wirkt auf den Stand, den sie vorfindet, nach dessen Regeln
 ## Grenzen
 
 - **Anfragen:** 600 je Minute und gültigem Token (`API_RATE_LIMIT`); ohne Token hat die Sitzung der Oberfläche 3000 je Minute und Konto (`API_SESSION_RATE_LIMIT`), alles andere 600 je Adresse. Gezählt wird vor der Anmeldung, darum verbraucht eine Flut von `401` nie das Kontingent eines gültigen Tokens, und zwei Tokens eines Kontos zählen getrennt.
-- Jede Antwort trägt `X-RateLimit-Limit` und `X-RateLimit-Remaining`, außer einem `413` für einen zu großen Body (JSON über 8 MB oder ein Body über `post_max_size` von PHP): er wird abgelehnt, bevor die Anfrage zählt. Über der Grenze ist die Antwort `429` mit dem Grund `too_many_requests` und `Retry-After` in Sekunden.
+- Jede Antwort trägt `X-RateLimit-Limit` und `X-RateLimit-Remaining`, außer einem `413` für einen zu großen Body (JSON über 8 MiB oder ein Body über `post_max_size` von PHP): er wird abgelehnt, bevor die Anfrage zählt. Über der Grenze ist die Antwort `429` mit dem Grund `too_many_requests` und `Retry-After` in Sekunden.
 - Manche Anfragen haben eine kleinere eigene Grenze, je Konto: Uploads 60 je Minute, Test-Ping und **Erneut senden** eines Webhooks zusammen 6, die Testmail 6, das eigene Passwort ändern 6. Ihr `429` sieht gleich aus; `X-RateLimit-*` nennen immer die Grenze der API, nur `Retry-After` sagt, wie lange du warten musst.
-- **JSON-Bodies** dürfen höchstens 8 MB groß sein, sonst `413` mit dem Grund `payload_too_large` (ein `Content-Length` darüber wird sofort abgelehnt). Das lässt Platz für ein Bild als Data-URL und für ein Item mit mehreren Rich-Text-Werten an ihrer Größengrenze.
+- **JSON-Bodies** dürfen höchstens 8 MiB (8 388 608 Bytes) groß sein, sonst `413` mit dem Grund `payload_too_large` (ein `Content-Length` darüber wird sofort abgelehnt). Das lässt Platz für ein Bild als Data-URL und für ein Item mit mehreren Rich-Text-Werten an ihrer Größengrenze.
 - **Uploads** (`POST /attachments`, Multipart) haben ihre eigene Grenze, `ATTACHMENTS_MAX_MB` (Standard 25 MB), ebenfalls ein `413`.
 
 ## Stabilität

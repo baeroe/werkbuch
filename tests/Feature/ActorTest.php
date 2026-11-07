@@ -6,6 +6,7 @@ use App\Support\Actor;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use Laravel\Sanctum\TransientToken;
 
 beforeEach(function () {
     Route::middleware('auth:sanctum')->get('_t/actor', function (Request $request) {
@@ -114,6 +115,33 @@ it('acts through the api with the bearer token', function () {
 it('needs an account', function () {
     Actor::fromRequest(Request::create('/'));
 })->throws(AuthenticationException::class);
+
+it('acts through MCP with the personal access token', function () {
+    $user = User::factory()->create();
+    $token = $user->createToken('agent', ['read', 'mcp']);
+    $user->withAccessToken($token->accessToken);
+    $request = Request::create('/mcp', 'POST');
+    $request->setUserResolver(fn () => $user);
+
+    $actor = Actor::fromMcp($request);
+
+    expect($actor->user->is($user))->toBeTrue()
+        ->and($actor->via)->toBe(Actor::VIA_MCP)
+        ->and($actor->token?->id)->toBe($token->accessToken->id)
+        ->and($actor->socket)->toBeNull()
+        ->and($actor->meta())->toBe(['via' => 'mcp', 'reason' => null, 'token_id' => $token->accessToken->id]);
+});
+
+it('acts through MCP only with a personal access token', function (Closure $user) {
+    $request = Request::create('/mcp', 'POST');
+    $request->setUserResolver($user);
+
+    Actor::fromMcp($request);
+})->with([
+    'no account' => fn () => fn () => null,
+    // a guard that knows the person hands Sanctum a TransientToken (K2)
+    'the session' => fn () => fn () => User::factory()->create()->withAccessToken(new TransientToken),
+])->throws(AuthenticationException::class);
 
 it('lets automations act as the default bot', function () {
     $bot = User::query()->where('handle', 'automation')->sole();

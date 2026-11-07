@@ -102,8 +102,9 @@ function modelWrites(string $code, string $file = 'code'): array
 {
     return codeMatches($code, $file, [
         '/->(?:save|update|delete|forceFill|fill|forceDelete|restore|increment|decrement)\(/',
-        // spatie's WebhookCall::create() builds a job, it writes no row
-        '/(?<!WebhookCall)::(?:create|insert|destroy|updateOrCreate|firstOrCreate)\(/',
+        // spatie's WebhookCall::create() builds a job, it writes no row; `<X>Schemas::create()` is the OpenAPI body of a
+        // create (App\OpenApi, which writes nothing either), as an MCP tool names it
+        '/(?<!WebhookCall)(?<!Schemas)::(?:create|insert|destroy|updateOrCreate|firstOrCreate)\(/',
     ]);
 }
 

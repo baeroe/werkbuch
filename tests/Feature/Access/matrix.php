@@ -9,6 +9,7 @@ use App\Actions\Account\GetTwoFactor;
 use App\Actions\Account\RegenerateRecoveryCodes;
 use App\Actions\Attachments\DeleteAttachment;
 use App\Actions\Attachments\GetAttachment;
+use App\Actions\Attachments\IssueUploadUrl;
 use App\Actions\Attachments\PruneAttachments;
 use App\Actions\Attachments\PruneUnownedAttachments;
 use App\Actions\Attachments\ShowAttachment;
@@ -256,6 +257,17 @@ return [
         'allowed' => $itemWriters,
         'hidden' => ['outsider_private'],
         'event' => EventType::WorkItemUpdated,
+    ],
+    // an upload address of MCP for a file of the file list, as the upload: who may change the item (`file`); it needs a
+    // personal access token with `mcp` and `write` (McpUploadTest) and records nothing
+    'IssueUploadUrl' => [
+        'action' => IssueUploadUrl::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => IssueUploadUrl::run(
+            new Actor($a->user, Actor::VIA_MCP, token: $a->user->createToken('matrix', ['write', 'mcp'])->accessToken),
+            ['project_id' => $w->project($column)->id, 'kind' => 'file', 'work_item_id' => $w->item($column)->id],
+        ),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
     ],
     // a file of the file list (`item.edit`); an unowned upload (its uploader) and a picture of a text (409 for all) are
     // DeleteAttachmentTest's

@@ -58,6 +58,7 @@ Ein Upload gehört niemandem, bis der Text gespeichert ist, der ihn nennt; dann 
 
 Bilder und Dateien, die aus einem Text verschwinden, bleiben erhalten, damit History und Rückgängig funktionieren. Das [Aufräumen](#aufraumen) entfernt sie später.
 
+<!-- reference:start -->
 ## Markdown
 
 Über die API kommt jeder Rich Text in zwei Formen: Markdown (`description`, `body`, `content`, `values_markdown`) und Tiptap-JSON (`description_json`, `body_json`, `content_json`, `values`). Geschrieben wird eine der beiden, nie beide. Markdown liest werkbuch als GitHub-Markdown; HTML darin bleibt Text. werkbuch schreibt jeden Knoten in genau einer Form, ein gelesener und unverändert zurückgeschickter Text bleibt also derselbe.
@@ -90,6 +91,8 @@ Für Markdown und JSON gelten dieselben Regeln, geprüft für das Konto, das sch
 | `attachment:<ulid>` eines anderen Projekts oder eines fremden Uploads ohne Text | `422` am Feld, das den Text schickte; nichts wird gespeichert. |
 
 In Code-Blöcken, Code im Text, Linktexten und Alternativtexten wird nichts als Erwähnung oder Verweis gelesen: `` `@mara` `` und `[WEB-123](https://example.com)` bleiben, wie sie sind. Ein Backslash hält Text davon ab, eins zu werden: `\@mara`, `WEB\-123`. Schreibt werkbuch Markdown, setzt es diesen Backslash vor Text, der auf dem Rückweg sonst zur Erwähnung oder zum Verweis würde.
+
+<!-- reference:end -->
 
 ## REST
 

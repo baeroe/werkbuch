@@ -15,17 +15,16 @@ use App\Actions\WorkItems\QueryWorkItems;
 use App\Actions\WorkItems\RestoreWorkItem;
 use App\Actions\WorkItems\TransitionWorkItem;
 use App\Actions\WorkItems\UpdateWorkItem;
-use App\Domain\Views\GroupBy;
 use App\Http\Api\Answer;
 use App\Http\Api\ApiList;
 use App\Http\Api\Body;
 use App\Http\Controllers\Controller;
+use App\Http\Resources\ItemGroupsResource;
 use App\Http\Resources\WorkItemResource;
 use App\Models\WorkItem;
 use App\OpenApi\ItemQueryDocs;
 use App\OpenApi\WorkItemSchemas;
 use App\Support\Actor;
-use App\Views\GroupCount;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -43,7 +42,8 @@ final class WorkItemsController extends Controller
      * List work items.
      *
      * The items the account sees, filtered by a view and the short form `filter[<key>]` (the long form of a filter goes
-     * through `POST /work-items/query`). `include` is refused here (a list embeds nothing).
+     * through `POST /work-items/query`); an empty value of a filter is no condition. `include` is refused here (a list
+     * embeds nothing).
      */
     public function index(Request $request): JsonResponse
     {
@@ -84,23 +84,7 @@ final class WorkItemsController extends Controller
     #[Answer(200, WorkItemSchemas::class, 'groups', 'The groups and their numbers.')]
     public function groups(Request $request): JsonResponse
     {
-        $groups = GroupWorkItems::run(Actor::fromRequest($request), $request->all());
-        $parents = $groups->groupBy === GroupBy::Parent;
-
-        return response()->json(['data' => [
-            'group_by' => $groups->groupBy->value,
-            'total' => $groups->total,
-            'groups' => array_map(fn (GroupCount $group): array => [
-                'key' => $group->key,
-                'count' => $group->count,
-                ...($parents ? ['item' => $group->item === null ? null : [
-                    'id' => $group->item->id,
-                    'key' => $group->item->key,
-                    'title' => $group->item->title,
-                    'type_id' => $group->item->type_id,
-                ]] : []),
-            ], $groups->groups),
-        ]]);
+        return response()->json(['data' => (new ItemGroupsResource(GroupWorkItems::run(Actor::fromRequest($request), $request->all())))->resolve($request)]);
     }
 
     /**

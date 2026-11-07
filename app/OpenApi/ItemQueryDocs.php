@@ -33,18 +33,24 @@ final class ItemQueryDocs extends OperationExtension
     /** A flag of a body: `true`, `false`, `1`, `0`, `"1"`, `"0"` or `null` (left out). */
     private const FLAG = ['type' => ['boolean', 'integer', 'string', 'null'], 'enum' => [true, false, 1, 0, '1', '0', null]];
 
-    /** What the keys of the short form take. */
+    /** The keys of the short form that take one value; every other one but `archived` takes a list. */
+    private const SINGLE = ['project', 'parent', 'q'];
+
+    /**
+     * What the keys of the short form take. Never "separated by commas": in `GET /work-items` a key of several values is a
+     * list (its parameter style says how a query string writes it), in the body's `shorthand` one text (its object says so).
+     */
     private const SHORT = [
         'project' => 'The project: ULID, identifier or a former identifier (one the account does not see is 404).',
         'parent' => 'The parent: ULID or key (one the account does not see is 404).',
         'q' => 'Words of the title, or the key of an item the account sees.',
-        'assignee' => '`me`, `none` or ULIDs separated by commas.',
-        'created_by' => '`me`, `none` or ULIDs separated by commas.',
-        'type' => 'Type ULIDs separated by commas.',
-        'state' => 'State ULIDs separated by commas.',
-        'state_category' => 'State categories separated by commas (`backlog`, `unstarted`, `started`, `completed`, `canceled`).',
-        'priority' => 'Priorities separated by commas (`urgent`, `high`, `medium`, `low`, `none`).',
-        'label' => 'Label ULIDs separated by commas.',
+        'assignee' => '`me`, `none` or ULIDs.',
+        'created_by' => '`me`, `none` or ULIDs.',
+        'type' => 'Type ULIDs.',
+        'state' => 'State ULIDs.',
+        'state_category' => 'State categories (`backlog`, `unstarted`, `started`, `completed`, `canceled`).',
+        'priority' => 'Priorities (`urgent`, `high`, `medium`, `low`, `none`).',
+        'label' => 'Label ULIDs.',
         'archived' => 'Only archived (`true`) or only not archived (`false`) items.',
     ];
 
@@ -56,9 +62,7 @@ final class ItemQueryDocs extends OperationExtension
 
         $parameters = match ($routeInfo->methodName()) {
             'index' => self::listParameters(),
-            'show' => [self::parameter('include', ['type' => 'array', 'items' => ['type' => 'string', 'enum' => GetWorkItem::INCLUDES]],
-                'What to embed, separated by commas: '.implode(', ', array_map(fn (string $name) => "`{$name}`", GetWorkItem::INCLUDES)).'.')
-                ->setStyle('form')->setExplode(false)],
+            'show' => [self::parameter('include', self::includeParameter()['schema'], self::includeParameter()['description'])->setStyle('form')->setExplode(false)],
             default => [],
         };
         if ($parameters === []) {
@@ -77,22 +81,58 @@ final class ItemQueryDocs extends OperationExtension
      */
     private static function listParameters(): array
     {
-        $parameters = [self::parameter('view', ['type' => 'string', 'pattern' => PathParameters::ULID], 'A view by its ULID: its filter, sort and sub-items apply, the rest narrows them.')];
+        $parameters = [];
+        foreach (self::queryParameters() as $name => ['schema' => $schema, 'description' => $description]) {
+            $parameter = self::parameter($name, $schema, $description);
+            // a list goes in one parameter, separated by commas (as ListParameters says it)
+            $parameters[] = $schema['type'] === 'array' ? $parameter->setStyle('form')->setExplode(false) : $parameter;
+        }
+
+        return $parameters;
+    }
+
+    /**
+     * The query of `GET /work-items` by name: its schema and what it does. A key of the short form that takes several
+     * values is a list (in a query string separated by commas); the page is that of every list (`ListParameters`).
+     *
+     * @return array<string, array{schema: array<string, mixed>, description: string}>
+     */
+    public static function queryParameters(): array
+    {
+        $parameters = ['view' => ['schema' => ['type' => 'string', 'pattern' => PathParameters::ULID], 'description' => 'A view by its ULID: its filter, sort and sub-items apply, the rest narrows them.']];
 
         foreach (Shorthand::KEYS as $key) {
-            $schema = $key === 'archived' ? ['type' => 'string', 'enum' => ['true', 'false']] : ['type' => 'string'];
-            $parameters[] = self::parameter("filter[{$key}]", $schema, self::SHORT[$key].' An empty value is no condition.');
+            $schema = match (true) {
+                $key === 'archived' => ['type' => 'string', 'enum' => ['true', 'false']],
+                in_array($key, self::SINGLE, true) => ['type' => 'string'],
+                default => ['type' => 'array', 'items' => ['type' => 'string']],
+            };
+            $parameters["filter[{$key}]"] = ['schema' => $schema, 'description' => self::SHORT[$key]];
         }
+        $page = ListParameters::query(null);
 
         return [
             ...$parameters,
-            self::parameter('sort', ['type' => 'string'], 'The order: '.implode(', ', array_map(fn (string $field) => "`{$field}`", SortSpec::CORE))
-                .' or `property:<key>` (number, date, text, address); `-` before it sorts descending (`-due_date`). Default: the sort of the view, else `rank`.'),
-            self::parameter('show_sub_items', self::QUERY_FLAG, 'Whether items with a parent show (`1`) or not (`0`); by default as the view says, else `1`.'),
-            self::parameter('include_archived', self::QUERY_FLAG, 'Archived items and items of archived projects too (`1`).'),
-            self::parameter('lean', self::QUERY_FLAG, 'Lean items (`1`): without `description`, `description_json` and `values_markdown`.'),
-            self::parameter('cursor', ['type' => 'string'], 'The cursor of the page: `meta.next_cursor` or `meta.prev_cursor` of the page before. It belongs to its sort; another one is 422 at `cursor`.'),
-            self::parameter('per_page', ['type' => 'integer', 'default' => PageArgs::MAX_PER_PAGE, 'minimum' => 1, 'maximum' => PageArgs::MAX_PER_PAGE], 'The items per page.'),
+            'sort' => ['schema' => ['type' => 'string'], 'description' => 'The order: '.implode(', ', array_map(fn (string $field) => "`{$field}`", SortSpec::CORE))
+                .' or `property:<key>` (number, date, text, address); `-` before it sorts descending (`-due_date`). Default: the sort of the view, else `rank`.'],
+            'show_sub_items' => ['schema' => self::QUERY_FLAG, 'description' => 'Whether items with a parent show (`1`) or not (`0`); by default as the view says, else `1`.'],
+            'include_archived' => ['schema' => self::QUERY_FLAG, 'description' => 'Archived items and items of archived projects too (`1`).'],
+            'lean' => ['schema' => self::QUERY_FLAG, 'description' => 'Lean items (`1`): without `description`, `description_json` and `values_markdown`.'],
+            'cursor' => $page['cursor'],
+            'per_page' => $page['per_page'],
+        ];
+    }
+
+    /**
+     * `include` of `GET /work-items/{item}`: its schema and what it does.
+     *
+     * @return array{schema: array<string, mixed>, description: string}
+     */
+    public static function includeParameter(): array
+    {
+        return [
+            'schema' => ['type' => 'array', 'items' => ['type' => 'string', 'enum' => GetWorkItem::INCLUDES]],
+            'description' => 'What to embed: '.implode(', ', array_map(fn (string $name) => "`{$name}`", GetWorkItem::INCLUDES)).'.',
         ];
     }
 
@@ -162,7 +202,7 @@ final class ItemQueryDocs extends OperationExtension
             'filter' => $nullable(['$ref' => '#/components/schemas/Filter']),
             'shorthand' => [
                 'type' => ['object', 'null'],
-                'description' => 'The short form of `filter[…]` of `GET /work-items` as an object of texts.',
+                'description' => 'The short form of `filter[…]` of `GET /work-items` as an object of texts: several values are one text separated by commas, never a list.',
                 'properties' => array_map(fn (string $text) => ['type' => ['string', 'null'], 'description' => $text], self::SHORT),
             ],
             'q' => ['type' => ['string', 'null'], 'description' => 'Words of the title, or a key (not together with `shorthand.q`).'],

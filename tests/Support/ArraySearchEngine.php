@@ -18,7 +18,8 @@ use Throwable;
  * The search engine of the feature tests (P10): it keeps the documents per index in memory, as Meilisearch would get
  * them, and searches them roughly as the index settings of config/scout.php ask: a hit holds every word of the query
  * (lower case, also as part of a word) in one of the `searchableAttributes` of its index. `wheres` compare equal (a bool
- * as stored), `whereIns` with in_array(…, true); hits come in the order the documents came in, `take()` cuts them.
+ * as stored, `null` hits a field that is `null` like `IS NULL`), `whereIns` with in_array(…, true), on a list field
+ * (`label_ids`) when any element is one of the values; hits come in the order the documents came in, `take()` cuts them.
  * `$builder->callback` and `$builder->options` speak to Meilisearch and are passed over. Its status (ReportsStatus) is
  * `ok` without tasks, `down` after failWith(). Real Meilisearch runs in tests/Integration (Tests\Support\Meili).
  */
@@ -304,7 +305,12 @@ final class ArraySearchEngine extends Engine implements RemovesWhere, ReportsSta
         }
 
         foreach ($builder->whereIns as $field => $values) {
-            if (! in_array($document[$field] ?? null, $values, true)) {
+            // a list (`label_ids`) matches as Meilisearch matches it: when any of its elements is one of the values
+            $held = $document[$field] ?? null;
+            $matches = is_array($held)
+                ? array_any($held, fn (mixed $element) => in_array($element, $values, true))
+                : in_array($held, $values, true);
+            if (! $matches) {
                 return false;
             }
         }

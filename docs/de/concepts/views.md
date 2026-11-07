@@ -88,6 +88,7 @@ Nach Status gruppieren geht nur, solange alle gefundenen Items einen Workflow te
 
 Items ohne Wert stehen in beiden Richtungen am Ende; gleiche Werte behalten die manuelle Reihenfolge. Texte werden ohne Rücksicht auf Groß- und Kleinschreibung und Akzente verglichen.
 
+<!-- reference:start -->
 ## Filter
 
 Ein Filter ist eine Liste von Bedingungen, die alle gelten müssen. Jede Bedingung hat ein Feld, einen Operator und bei den meisten Operatoren einen Wert. In der Oberfläche fügt `f` oder **Filter** eine Bedingung hinzu, und `/` sucht im Titel; über die API ist ein Filter überall JSON in derselben Form:
@@ -174,6 +175,8 @@ Eine Bedingung auf eine Property (`property:<key>`) trifft nur Items, deren Typ 
 ### Archivierte Items
 
 Archivierte Items bleiben aus jeder Liste draußen, außer eine Bedingung auf `archived` fragt nach ihnen oder die Anfrage setzt `include_archived`. Items eines archivierten Projekts erscheinen nur, wo eine `project`-Bedingung mit `is` oder `in` das Projekt nennt: Die Liste eines archivierten Projekts zeigt seine offenen Items, schreibgeschützt.
+
+<!-- reference:end -->
 
 ## Zustand in der Adresse
 

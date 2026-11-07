@@ -29,45 +29,77 @@ final class ListParameters extends OperationExtension
             return;
         }
 
-        $parameters = [
-            self::parameter('cursor', ['type' => 'string'], 'The cursor of the page: `meta.next_cursor` or `meta.prev_cursor` of the page before. '
-                .'It belongs to its list and its sort; another one is 422 at `cursor`.'),
-            self::parameter('per_page', ['type' => 'integer', 'default' => PageArgs::MAX_PER_PAGE, 'minimum' => 1, 'maximum' => PageArgs::MAX_PER_PAGE],
-                'The rows per page.'),
-        ];
-
-        $spec = $listOf->spec();
-        if ($spec !== null && ! $spec->fixed) {
-            foreach ($spec->filters as $filter) {
-                $parameters[] = self::filter($filter);
-            }
-            if ($spec->sortable && $spec->sorts !== []) {
-                $parameters[] = self::parameter('sort', ['type' => 'string'], self::sortDescription($spec));
-            }
-            if ($spec->includes !== []) {
-                $parameters[] = self::parameter('include', self::listOf($spec->includes), 'Relations to load with each row, separated by commas.')
-                    ->setStyle('form')->setExplode(false);
-            }
+        $parameters = [];
+        foreach (self::query($listOf->spec()) as $name => ['schema' => $schema, 'description' => $description]) {
+            $parameter = Parameter::make($name, 'query')->setSchema(Schema::fromType(new JsonSchema($schema)))->description($description);
+            // a list goes in one parameter, separated by commas
+            $parameters[] = $schema['type'] === 'array' ? $parameter->setStyle('form')->setExplode(false) : $parameter;
         }
 
         $operation->addParameters($parameters);
     }
 
-    private static function filter(ListFilter $filter): Parameter
+    /**
+     * The query of a list by name: the page and, unless the list is fixed (or has no spec), `filter[<name>]` per filter,
+     * `sort` and `include`; the same for the document and for an MCP tool (`ToolSchema::list`).
+     *
+     * @return array<string, array{schema: array<string, mixed>, description: string}>
+     */
+    public static function query(?ListSpec $spec): array
     {
-        $name = 'filter['.$filter->name.']';
+        $query = [
+            'cursor' => ['schema' => ['type' => 'string'], 'description' => 'The cursor of the page: `meta.next_cursor` or `meta.prev_cursor` of the page before. '
+                .'It belongs to its list and its sort; another one is 422 at `cursor`.'],
+            'per_page' => ['schema' => ['type' => 'integer', 'default' => PageArgs::MAX_PER_PAGE, 'minimum' => 1, 'maximum' => PageArgs::MAX_PER_PAGE],
+                'description' => 'The rows per page.'],
+        ];
 
+        if ($spec === null || $spec->fixed) {
+            return $query;
+        }
+
+        foreach ($spec->filters as $filter) {
+            $query['filter['.$filter->name.']'] = ['schema' => self::filterSchema($filter), 'description' => self::filterDescription($filter)];
+        }
+        if ($spec->sortable && $spec->sorts !== []) {
+            $query['sort'] = ['schema' => ['type' => 'string'], 'description' => self::sortDescription($spec)];
+        }
+        if ($spec->includes !== []) {
+            $query['include'] = ['schema' => self::listOf($spec->includes), 'description' => 'Relations to load with each row.'];
+        }
+
+        return $query;
+    }
+
+    /**
+     * The JSON Schema of the value of a filter: a boolean as `1` or `0`, a text, or a list of values (in a query string
+     * separated by commas).
+     *
+     * @return array<string, mixed>
+     */
+    public static function filterSchema(ListFilter $filter): array
+    {
         return match ($filter->type) {
-            'boolean' => self::parameter($name, ['type' => 'integer', 'enum' => [1, 0]], 'Only rows where it is true (`1`) or false (`0`).'),
-            'string' => self::parameter($name, ['type' => 'string'], $filter->kind === ListFilter::PARTIAL
-                ? 'Only rows whose `'.$filter->name.'` contains the text (any case; a comma is part of the text).'
-                : 'Only rows that match the text.'),
-            default => self::parameter($name, self::listOf($filter->values), 'Only rows with one of the values, separated by commas.')
-                ->setStyle('form')->setExplode(false),
+            'boolean' => ['type' => 'integer', 'enum' => [1, 0]],
+            'string' => ['type' => 'string'],
+            default => self::listOf($filter->values),
         };
     }
 
-    private static function sortDescription(ListSpec $spec): string
+    /** What the value of a filter does. */
+    public static function filterDescription(ListFilter $filter): string
+    {
+        return match ($filter->type) {
+            'boolean' => 'Only rows where it is true (`1`) or false (`0`).',
+            'string' => $filter->kind === ListFilter::PARTIAL
+                ? 'Only rows whose `'.$filter->name.'` contains the text (any case; a comma is part of the text).'
+                : 'Only rows that match the text.',
+            default => 'Only rows with one of the values.',
+        };
+    }
+
+    /** What `sort` takes: the names of the spec, `-` for descending, and the default order. */
+    public static function sortDescription(ListSpec $spec): string
     {
         $names = implode(', ', array_map(fn (string $name) => '`'.$name.'`', array_keys($spec->sorts)));
         $default = $spec->default === [] ? 'the ULID' : implode(', ', array_map(fn (string $name) => '`'.$name.'`', $spec->default));
@@ -83,13 +115,5 @@ final class ListParameters extends OperationExtension
     private static function listOf(?array $values): array
     {
         return ['type' => 'array', 'items' => $values === null ? ['type' => 'string'] : ['type' => 'string', 'enum' => $values]];
-    }
-
-    /**
-     * @param  array<string, mixed>  $schema
-     */
-    private static function parameter(string $name, array $schema, string $description): Parameter
-    {
-        return Parameter::make($name, 'query')->setSchema(Schema::fromType(new JsonSchema($schema)))->description($description);
     }
 }

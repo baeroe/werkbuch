@@ -195,12 +195,23 @@ it('has the factories of the contract', function () {
         ->and(Problem::notFound()->status)->toBe(404)->and(Problem::notFound()->detail)->toBeNull()
         ->and(Problem::locked('archived')->status)->toBe(409)->and(Problem::locked('archived')->reason)->toBe('archived')
         ->and(Problem::invalid(['title' => ['required']])->reason)->toBe('validation_failed')
-        ->and(Problem::invalid(['title' => ['required']])->errors)->toBe(['title' => ['required']]);
+        ->and(Problem::invalid(['title' => ['required']])->errors)->toBe(['title' => ['required']])
+        // a body that is no JSON where only JSON is taken (/mcp): the text of the reason explains it
+        ->and(Problem::unsupportedMediaType()->status)->toBe(415)->and(Problem::unsupportedMediaType()->reason)->toBe('unsupported_media_type')
+        ->and(Problem::unsupportedMediaType()->detail)->toBeNull();
+});
+
+it('knows the reasons of MCP', function () {
+    // the constructor refuses an unknown reason; MCP refuses a guard without a personal access token and a body of no JSON
+    expect(Problem::REASONS)->toContain('token_required')
+        ->and(Problem::REASONS)->toContain('unsupported_media_type')
+        ->and(Problem::forbidden('x', 'token_required')->reason)->toBe('token_required');
 });
 
 it('translates every reason and title in both languages', function () {
     $slugs = ['bad_request', 'unauthenticated', 'forbidden', 'not_found', 'method_not_allowed', 'conflict', 'payload_too_large',
-        'csrf_token_mismatch', 'validation_failed', 'too_many_requests', 'server_error', 'service_unavailable', 'http_error'];
+        'csrf_token_mismatch', 'validation_failed', 'too_many_requests', 'server_error', 'service_unavailable', 'http_error',
+        'unsupported_media_type'];
     $keys = [...array_map(fn (string $r) => 'problem.reason.'.$r, Problem::REASONS), ...array_map(fn (string $s) => 'problem.title.'.$s, $slugs)];
 
     foreach (['en', 'de'] as $locale) {

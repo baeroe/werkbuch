@@ -7,7 +7,6 @@ use Dedoc\Scramble\Extensions\OperationExtension;
 use Dedoc\Scramble\Support\Generator\Operation;
 use Dedoc\Scramble\Support\Generator\Parameter;
 use Dedoc\Scramble\Support\Generator\Schema;
-use Dedoc\Scramble\Support\Generator\Types\StringType;
 use Dedoc\Scramble\Support\RouteInfo;
 use Illuminate\Support\Str;
 
@@ -21,6 +20,9 @@ final class PathParameters extends OperationExtension
     /** An ULID in any case (Crockford's base 32, the first character at most 7). */
     public const ULID = '^[0-7][0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{25}$';
 
+    /** What `{item}` takes, without the closing bracket: REST adds its redirect, MCP has none (A408). */
+    private const ITEM = 'The work item: its ULID (any case) or its key (`WEB-12`, any case, also with a former identifier of its project';
+
     public function handle(Operation $operation, RouteInfo $routeInfo): void
     {
         foreach ($operation->parameters as $parameter) {
@@ -28,22 +30,26 @@ final class PathParameters extends OperationExtension
                 continue;
             }
 
-            $type = new StringType;
-            $parameter->description(match ($parameter->name) {
-                'item' => 'The work item: its ULID (any case) or its key (`WEB-12`, any case, also with a former identifier '
-                    .'of its project; a `GET` by a former key answers 301 to the current one).',
-                'project' => 'The project: its ULID (any case), its identifier (`WEB`) or a former identifier.',
-                'key' => 'The automation.',
-                default => 'The ULID of the '.Str::snake($parameter->name, ' ').' (any case).',
-            });
-
-            match ($parameter->name) {
-                'item', 'project' => null,
-                'key' => $type->enum(array_column(AutomationKey::cases(), 'value')),
-                default => $type->pattern(self::ULID),
-            };
-
-            $parameter->setSchema(Schema::fromType($type));
+            $schema = self::schema($parameter->name);
+            $parameter->description($parameter->name === 'item' ? self::ITEM.'; a `GET` by a former key answers 301 to the current one).' : $schema['description']);
+            unset($schema['description']);
+            $parameter->setSchema(Schema::fromType(new JsonSchema($schema)));
         }
+    }
+
+    /**
+     * What a placeholder takes, as JSON Schema with its description: the same for the document and for the argument of
+     * an MCP tool that names it (`ToolSchema::reference`); only the document adds the redirect of a former key.
+     *
+     * @return array{type: string, description: string, pattern?: string, enum?: list<string>}
+     */
+    public static function schema(string $name): array
+    {
+        return match ($name) {
+            'item' => ['type' => 'string', 'description' => self::ITEM.').'],
+            'project' => ['type' => 'string', 'description' => 'The project: its ULID (any case), its identifier (`WEB`) or a former identifier.'],
+            'key' => ['type' => 'string', 'description' => 'The automation.', 'enum' => array_column(AutomationKey::cases(), 'value')],
+            default => ['type' => 'string', 'description' => 'The ULID of the '.Str::snake($name, ' ').' (any case).', 'pattern' => self::ULID],
+        };
     }
 }

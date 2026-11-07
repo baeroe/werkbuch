@@ -82,7 +82,7 @@ final class AccountSchemas
     {
         return [
             'type' => 'object',
-            'description' => 'Only the keys that are named change; the answer of the account may come back as it is. '
+            'description' => 'Only the keys that are named change; the answer of the account may be sent back as it is, its read-only keys are ignored. '
                 .'`locale` and `timezone` of the answer are the effective ones: sent back unchanged they stay inherited from the organization.',
             'x-werkbuch-open' => true,
             'properties' => [

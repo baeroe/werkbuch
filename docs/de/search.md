@@ -49,11 +49,15 @@ Alle Tasten der Palette stehen auf der Seite [Tastatur](/de/keyboard).
 | Parameter | Wert |
 |---|---|
 | `q` | Pflicht. Wonach gesucht wird, 1 bis 255 Zeichen nach dem Trimmen. |
-| `types` | Die Arten, in denen gesucht wird: `items`, `pages`, `projects`, `people`, `views`, durch Komma getrennt (`types=items,projects`) oder als Liste (`types[]=items`). Standard: alle fünf. |
+| `types` | Die Arten, in denen gesucht wird: `items`, `pages`, `projects`, `people`, `views`, durch Komma getrennt (`types=items,projects`) oder als Liste (`types[]=items`). Weggelassen alle fünf; eine Liste ohne jede Art (`types=,`) ist ein `422`. |
 | `limit` | Treffer je Art, 1 bis 50; Standard 20. |
 | `include_archived` | `1` oder `true` durchsucht auch archivierte Items und archivierte Projekte samt ihren Items und Seiten. |
+| `type_id` | Nur Items dieser Typen (ULIDs). |
+| `state_category` | Nur Items, deren Status in einer dieser Kategorien liegt: `backlog`, `unstarted`, `started`, `completed`, `canceled`. |
+| `assignee_id` | Nur Items, die einem dieser Konten zugewiesen sind (ULIDs), oder `none` allein: Items ohne Assignee. |
+| `label_id` | Nur Items mit einem dieser Labels (ULIDs). |
 
-Jeder andere Parameter wird übergangen. Seiten gibt es nicht: Frag nach einem größeren `limit` oder einem engeren `q`.
+Die letzten vier engen nur die Items ein, nie Seiten, Projekte, Personen oder Views. Jeder nimmt einen Wert, mehrere durch Komma oder eine Liste; mehrere Werte eines Parameters heißen „einer davon“, mehrere Parameter müssen alle gelten. Jeder andere Parameter wird übergangen. Seiten gibt es nicht: Frag nach einem größeren `limit` oder einem engeren `q`. Über [MCP](/de/mcp) nimmt das Tool `search` dieselben Parameter, Listen als JSON-Listen.
 
 ```bash
 curl -H "Authorization: Bearer <Token>" \
@@ -84,11 +88,11 @@ Die Antwort hat immer alle sechs Schlüssel; Arten, nach denen du nicht gefragt 
 }
 ```
 
-`key_match` ist die ULID des Items, das ein `q` in Key-Form nennt, wenn du es siehst, sonst `null`. Gesetzt wird es nur, wenn `types` auch `items` enthält, und das Item steht dann vorn in `items`.
+`key_match` ist die ULID des Items, das ein `q` in Key-Form nennt, wenn du es siehst und es die Filter der Items erfüllt, sonst `null`. Gesetzt wird es nur, wenn `types` auch `items` enthält, und das Item steht dann vorn in `items`.
 
 ### Fehler
 
-Eine Anfrage, die nicht passt, ist ein `422` mit allen Problemen auf einmal, an `q`, `types`, `limit` oder `include_archived`:
+Eine Anfrage, die nicht passt, ist ein `422` mit allen Problemen auf einmal, an `q`, `types`, `limit`, `include_archived` oder einem der Filter (ein Wert, der keine ULID ist, eine unbekannte Kategorie, `none` neben einem Konto):
 
 ```json
 {

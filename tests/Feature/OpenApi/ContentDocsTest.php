@@ -18,6 +18,8 @@ use App\Models\Project;
 use App\Models\User;
 use App\Models\View;
 use App\Models\WorkItem;
+use App\OpenApi\ContentDocs;
+use App\OpenApi\PathParameters;
 use App\Search\SearchIndexer;
 use App\Support\AttachmentTexts;
 use App\Support\ViewInput;
@@ -247,6 +249,14 @@ it('documents the query of the search, the mentions and the references with thei
         ->and($search['limit']['schema']['maximum'])->toBe(QuerySearch::MAX_LIMIT)
         ->and($search['limit']['schema']['default'])->toBe(QuerySearch::DEFAULT_LIMIT)
         ->and($search['include_archived']['schema']['enum'])->toBe([1, 0])
+        // the filters of items, each a list in one parameter
+        ->and($search['type_id']['schema']['items']['pattern'])->toBe(PathParameters::ULID)
+        ->and($search['label_id']['schema']['items']['pattern'])->toBe(PathParameters::ULID)
+        ->and($search['state_category']['schema']['items']['enum'])->toBe(['backlog', 'unstarted', 'started', 'completed', 'canceled'])
+        ->and($search['assignee_id']['schema']['items']['anyOf'])->toBe([['type' => 'string', 'pattern' => PathParameters::ULID], ['type' => 'string', 'enum' => ['none']]])
+        ->and($search['assignee_id']['description'])->toContain('`none`')
+        ->and($search['types']['description'])->toContain('422')
+        ->and(collect(['type_id', 'state_category', 'assignee_id', 'label_id'])->map(fn (string $name) => $search[$name]['explode']))->each->toBeFalse()
         ->and($mentions->keys()->all())->toEqualCanonicalizing(ListMentionables::KEYS)
         ->and($mentions['project']['required'])->toBeTrue()
         ->and($mentions['q']['schema']['maxLength'])->toBe(ListMentionables::Q_MAX)
@@ -263,6 +273,19 @@ it('documents the query of the search, the mentions and the references with thei
 
     $views = collect(Document::operation('GET', '/views')['parameters'])->pluck('name')->all();
     expect($views)->toEqualCanonicalizing(['cursor', 'per_page', 'sort', ...array_map(fn ($filter) => "filter[{$filter->name}]", array_values(ListViews::spec()->filters))]);
+});
+
+it('gives the query parameters the document shows', function () {
+    foreach (['/search' => ContentDocs::searchParameters(), '/mentions' => ContentDocs::mentionsParameters()] as $path => $given) {
+        $shown = collect(Document::operation('GET', $path)['parameters'])->keyBy('name');
+
+        expect(array_keys($given))->toEqualCanonicalizing($shown->keys()->all(), $path);
+        foreach ($given as $name => $parameter) {
+            expect($parameter['schema'])->toBe($shown[$name]['schema'], "{$path} {$name}")
+                ->and($parameter['description'])->toBe($shown[$name]['description'], "{$path} {$name}")
+                ->and($parameter['required'])->toBe($shown[$name]['required'] ?? false, "{$path} {$name}");
+        }
+    }
 });
 
 it('lets a client send and read everything the document names', function () use ($bodies, $body) {

@@ -25,6 +25,7 @@ use App\Models\Template;
 use App\Models\User;
 use App\Models\WorkItem;
 use App\Models\WorkItemType;
+use App\OpenApi\ItemQueryDocs;
 use App\Views\ItemQueryInput;
 use App\Views\Shorthand;
 use Tests\Support\OpenApi\Contract;
@@ -189,11 +190,29 @@ it('documents the query string of GET /work-items with the short form', function
         ->and($parameters['sort']['description'])->toContain('-due_date')
         ->and($parameters['per_page']['schema']['maximum'])->toBe(100)
         ->and($parameters['lean']['schema']['enum'])->toBe([1, 0])
-        ->and($parameters['filter[archived]']['schema']['enum'])->toBe(['true', 'false']);
+        ->and($parameters['filter[archived]']['schema']['enum'])->toBe(['true', 'false'])
+        // a key that takes several values is a list, in the query string separated by commas
+        ->and($parameters['filter[state]']['schema'])->toBe(['type' => 'array', 'items' => ['type' => 'string']])
+        ->and($parameters['filter[state]']['style'])->toBe('form')
+        ->and($parameters['filter[state]']['explode'])->toBeFalse()
+        ->and($parameters['filter[project]']['schema'])->toBe(['type' => 'string'])
+        ->and(collect($parameters)->filter(fn (array $p) => $p['schema']['type'] === 'array')->keys()->all())
+        ->toEqualCanonicalizing(['filter[assignee]', 'filter[created_by]', 'filter[type]', 'filter[state]', 'filter[state_category]', 'filter[priority]', 'filter[label]']);
 
     $include = collect(Document::operation('GET', '/work-items/{item}')['parameters'])->firstWhere('name', 'include');
     expect($include['schema']['items']['enum'])->toBe(GetWorkItem::INCLUDES)
         ->and($include['explode'])->toBeFalse();
+});
+
+it('gives the query parameters the document shows', function () {
+    $shown = collect(Document::operation('GET', '/work-items')['parameters'])->keyBy('name');
+    $given = ItemQueryDocs::queryParameters();
+
+    expect(array_keys($given))->toBe($shown->keys()->all());
+    foreach ($given as $name => $parameter) {
+        expect($parameter['schema'])->toBe($shown[$name]['schema'], $name)
+            ->and($parameter['description'])->toBe($shown[$name]['description'], $name);
+    }
 });
 
 /** Per operation with a JSON body: the keys the server reads, the required ones, and whether it refuses others. */

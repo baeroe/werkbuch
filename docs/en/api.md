@@ -7,7 +7,7 @@ Every instance describes its API itself:
 - `/api/docs` shows the reference in the browser, with every endpoint, parameter, body and answer, and lets you try requests.
 - `/api/openapi.json` is the same as an OpenAPI 3.1 document, for code generators and clients.
 
-Both are public: they hold no data of the instance, only the shape of the API, so an integration can be built before it has a token. Generating the document is costly, so both allow 30 requests a minute per address. The reference page loads its scripts from the instance itself, not from a CDN. This page explains what the reference cannot: how to sign in, errors, lists, limits and how the API changes.
+Both are public: they hold no data of the instance, only the shape of the API, so an integration can be built before it has a token. Generating the document is costly, so both allow 30 requests a minute per address. The reference page loads its scripts from the instance itself, not from a CDN. This page explains what the reference cannot: how to sign in, errors, lists, limits and how the API changes. AI agents reach the same operations through the [MCP server](/en/mcp).
 
 ## Authentication
 
@@ -25,7 +25,7 @@ A token also carries abilities that narrow it further ([roles and permissions](/
 |---|---|
 | `read` | `GET` and `HEAD`, and the four reads that take their question in a body: `POST /work-items/query`, `/work-items/groups`, `/work-items/counts` and `/templates/preview` |
 | `write` | Every other request |
-| `mcp` | The MCP server; its tools check `read` and `write` as well |
+| `mcp` | The [MCP server](/en/mcp) at `/mcp`; its tools need `read` to read and `write` to change, as well |
 
 A token without the ability a request needs gets `403`. The reference names the ability of every operation (`x-werkbuch-ability`).
 
@@ -170,9 +170,9 @@ Every other change takes effect on the state it finds, under the rules of that s
 ## Limits
 
 - **Requests:** 600 a minute per valid token (`API_RATE_LIMIT`); without a token, the session of the interface has 3000 a minute per account (`API_SESSION_RATE_LIMIT`), and everything else 600 per address. Requests are counted before signing in, so a flood of `401` never uses up the quota of a valid token, and two tokens of one account count separately.
-- Every answer carries `X-RateLimit-Limit` and `X-RateLimit-Remaining`, except a `413` for a body that is too large (JSON over 8 MB, or a body over PHP's `post_max_size`): it is refused before the request is counted. Over the limit the answer is `429` with the reason `too_many_requests` and `Retry-After` in seconds.
+- Every answer carries `X-RateLimit-Limit` and `X-RateLimit-Remaining`, except a `413` for a body that is too large (JSON over 8 MiB, or a body over PHP's `post_max_size`): it is refused before the request is counted. Over the limit the answer is `429` with the reason `too_many_requests` and `Retry-After` in seconds.
 - Some requests have a smaller limit of their own, per account: uploads 60 a minute, a test ping and **Send again** of a webhook together 6, the test mail 6, changing your password 6. Their `429` looks the same; `X-RateLimit-*` always name the limit of the API, only `Retry-After` tells how long to wait.
-- **JSON bodies** can be at most 8 MB, a `413` with the reason `payload_too_large` (a `Content-Length` over it is refused at once). That leaves room for an image as a data URL and for an item with several rich-text values at their size limit.
+- **JSON bodies** can be at most 8 MiB (8 388 608 bytes), a `413` with the reason `payload_too_large` (a `Content-Length` over it is refused at once). That leaves room for an image as a data URL and for an item with several rich-text values at their size limit.
 - **Uploads** (`POST /attachments`, multipart) have their own limit, `ATTACHMENTS_MAX_MB` (25 MB by default), also a `413`.
 
 ## Stability
