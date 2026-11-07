@@ -3,13 +3,18 @@
 namespace App\Providers;
 
 use App\Actions\Auth\Authenticate;
+use App\Auth\AccountLoginRateLimiter;
 use App\Auth\FortifyResetUserPassword;
+use App\Auth\KnownDevice;
+use App\Auth\LoginLockoutResponse;
 use App\Auth\RedirectToTwoFactorChallenge;
 use App\Auth\TwoFactorCodes;
 use App\Http\Api\RateKey;
+use Illuminate\Auth\Events\Login;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Cache\Repository;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Inertia\Inertia;
@@ -17,8 +22,10 @@ use Laravel\Fortify\Actions\AttemptToAuthenticate;
 use Laravel\Fortify\Actions\CanonicalizeUsername;
 use Laravel\Fortify\Actions\EnsureLoginIsNotThrottled;
 use Laravel\Fortify\Actions\PrepareAuthenticatedSession;
+use Laravel\Fortify\Contracts\LockoutResponse;
 use Laravel\Fortify\Contracts\TwoFactorAuthenticationProvider;
 use Laravel\Fortify\Fortify;
+use Laravel\Fortify\LoginRateLimiter;
 use PragmaRX\Google2FA\Google2FA;
 
 /**
@@ -36,6 +43,12 @@ final class FortifyServiceProvider extends ServiceProvider
 
         // TOTP codes count once per account, not once for everybody (Fortify's own provider remembers them per code)
         $this->app->singleton(TwoFactorAuthenticationProvider::class, fn ($app) => new TwoFactorCodes($app->make(Google2FA::class), $app->make(Repository::class)));
+
+        // the cap per account (A434) sits in the limiter Fortify's steps and its lockout answer take by constructor: one
+        // binding reaches all of them, the pipeline stays (A445); the lockout names a long wait in minutes
+        $this->app->singleton(AccountLoginRateLimiter::class);
+        $this->app->singleton(LoginRateLimiter::class, fn ($app) => $app->make(AccountLoginRateLimiter::class));
+        $this->app->singleton(LockoutResponse::class, LoginLockoutResponse::class);
     }
 
     public function boot(): void
@@ -53,7 +66,10 @@ final class FortifyServiceProvider extends ServiceProvider
         ));
 
         // Fortify's own pipeline drops the lock per lower(email)|IP as soon as a named limiter is configured: keep it,
-        // before the address is lowered (the lock key lowers it itself). The second factor comes before the session: with
+        // before the address is lowered (the lock key lowers it itself). The lock is the bound AccountLoginRateLimiter:
+        // besides email|IP it holds an address after `login_per_account` failures from any IP, unless the browser is a
+        // known device of that address (A434); it runs before the password is checked, so a locked address does not get
+        // in with the right password on an unknown device either. The second factor comes before the session: with
         // the right password and a confirmed second factor, RedirectToTwoFactorChallenge (Fortify's step plus a stamp of the
         // password) leads to the challenge instead (a wrong password or an unknown address fails there exactly as without
         // it); everybody else goes on.
@@ -66,6 +82,9 @@ final class FortifyServiceProvider extends ServiceProvider
         ]);
 
         Fortify::resetUserPasswordsUsing(FortifyResetUserPassword::class);
+
+        // every sign-in (password, second factor, remember cookie) makes the browser a known device of the address
+        Event::listen(Login::class, [KnownDevice::class, 'remember']);
 
         // the limits per IP over all addresses (each its own budget); App\Exceptions\Rendering shows their 429 as an error at the email field (accepting an invitation: at the invitation)
         RateLimiter::for('login', fn (Request $request) => Limit::perMinute((int) config('werkbuch.rate_limits.login_per_ip'))->by((string) $request->ip()));

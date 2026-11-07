@@ -55,6 +55,9 @@ return [
         // /mcp per valid token, else per address, a quota of its own beside the API's (phase 13)
         'mcp' => (int) env('MCP_RATE_LIMIT', 300),
         'login_per_ip' => 20,
+        // failed sign-ins per address over all IPs within `login_account_decay` seconds; a known device is not held (A434)
+        'login_per_account' => 50,
+        'login_account_decay' => 3600,
         // requests for a reset link (POST /forgot-password), over all addresses
         'password_reset_per_ip' => 6,
         // new passwords from a reset link (POST /reset-password), over all addresses
