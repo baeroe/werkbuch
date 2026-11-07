@@ -3,10 +3,13 @@
 use App\Models\Attachment;
 use App\Models\Comment;
 use App\Models\Label;
+use App\Models\Notification;
 use App\Models\PageVersion;
 use App\Models\Property;
 use App\Models\RelationType;
 use App\Models\Resolution;
+use App\Models\WebhookAttempt;
+use App\Models\WebhookDelivery;
 use App\Models\Workflow;
 use App\Models\WorkItemRelation;
 use App\Models\WorkItemType;
@@ -209,4 +212,40 @@ return [
         'display' => ['layout' => 'board', 'group_by' => 'state', 'sort' => ['field' => 'due_date', 'direction' => 'desc'], 'fields' => ['key', 'title'], 'show_sub_items' => false],
     ]]],
     'manage-views:delete' => ['arguments' => fn (MatrixWorld $w) => ['view' => $w->view()->id]],
+    'notifications:list' => ['arguments' => function (MatrixWorld $w) {
+        Notification::factory()->forItem($w->item('project_admin'))->create(['user_id' => $w->account('org_admin')->id]);
+
+        return ['filter' => ['unread' => 1], 'per_page' => 5];
+    }],
+    'notifications:preferences' => [],
+    'manage-notifications:read' => ['arguments' => fn (MatrixWorld $w) => ['input' => ['all' => true]]],
+    'manage-notifications:unread' => ['arguments' => fn (MatrixWorld $w) => ['input' => ['ids' => [Notification::factory()->forItem($w->item('project_admin'))->read()->create(['user_id' => $w->account('org_admin')->id])->id]]]],
+    'manage-notifications:delete' => ['arguments' => fn (MatrixWorld $w) => ['notification' => Notification::factory()->forItem($w->item('project_admin'))->create(['user_id' => $w->account('org_admin')->id])->id]],
+    'manage-notifications:save-preferences' => ['arguments' => fn (MatrixWorld $w) => ['input' => ['preferences' => [['event' => 'comment', 'channel' => 'mail', 'enabled' => false]]]]],
+    'webhooks:list' => ['arguments' => function (MatrixWorld $w) {
+        $w->webhook();
+
+        return ['filter' => ['active' => 1], 'sort' => 'name', 'per_page' => 5];
+    }],
+    'webhooks:get' => ['arguments' => fn (MatrixWorld $w) => ['webhook' => $w->webhook()->id]],
+    'webhooks:deliveries' => ['arguments' => function (MatrixWorld $w) {
+        $webhook = $w->webhook();
+        WebhookAttempt::factory()->create(['delivery_id' => WebhookDelivery::factory()->for($webhook)->create()->id, 'webhook_id' => $webhook->id]);
+
+        return ['webhook' => $webhook->id, 'per_page' => 5];
+    }],
+    'manage-webhooks:create' => ['arguments' => fn (MatrixWorld $w) => ['input' => [
+        'name' => 'Matrix', 'url' => 'https://receiver.example.com/hook', 'project_id' => null, 'events' => ['work_item.*'], 'bot_id' => null, 'active' => true,
+    ]]],
+    'manage-webhooks:update' => ['arguments' => fn (MatrixWorld $w) => ['webhook' => $w->webhook()->id, 'input' => [
+        'name' => 'Matrix', 'url' => 'https://receiver.example.com/hook', 'project_id' => null, 'events' => ['work_item.*'], 'bot_id' => null, 'active' => true,
+    ]]],
+    'manage-webhooks:delete' => ['arguments' => fn (MatrixWorld $w) => ['webhook' => $w->webhook()->id]],
+    'manage-webhooks:rotate-secret' => ['arguments' => fn (MatrixWorld $w) => ['webhook' => $w->webhook()->id]],
+    'manage-webhooks:ping' => ['arguments' => fn (MatrixWorld $w) => ['webhook' => $w->webhook()->id]],
+    'manage-webhooks:redeliver' => ['arguments' => function (MatrixWorld $w) {
+        $webhook = $w->webhook();
+
+        return ['webhook' => $webhook->id, 'delivery' => WebhookDelivery::factory()->for($webhook)->create()->id];
+    }],
 ];

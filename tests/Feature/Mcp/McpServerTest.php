@@ -108,9 +108,9 @@ it('lists only the tools a token may use', function (array $abilities, array $te
         ->and(array_column(McpClient::for($this, $plain)->tools(), 'name'))->toBe($real);
 })->with([
     'mcp' => [['mcp'], [], []],
-    'read and mcp' => [['read', 'mcp'], ['echo'], ['whoami', 'search', 'organization', 'people', 'projects', 'automations', 'work-items', 'relations', 'comments', 'attachments', 'pages', 'templates', 'views']],
-    'write and mcp' => [['write', 'mcp'], ['manage-echo'], ['get-upload-url', 'manage-organization', 'manage-people', 'manage-projects', 'manage-automations', 'manage-work-items', 'manage-relations', 'manage-comments', 'manage-attachments', 'manage-pages', 'manage-templates', 'manage-views']],
-    'all three' => [['read', 'write', 'mcp'], ['echo', 'manage-echo'], ['whoami', 'search', 'get-upload-url', 'organization', 'manage-organization', 'people', 'manage-people', 'projects', 'manage-projects', 'automations', 'manage-automations', 'work-items', 'manage-work-items', 'relations', 'manage-relations', 'comments', 'manage-comments', 'attachments', 'manage-attachments', 'pages', 'manage-pages', 'templates', 'manage-templates', 'views', 'manage-views']],
+    'read and mcp' => [['read', 'mcp'], ['echo'], ['whoami', 'search', 'organization', 'people', 'projects', 'automations', 'work-items', 'relations', 'comments', 'attachments', 'pages', 'templates', 'views', 'notifications', 'webhooks']],
+    'write and mcp' => [['write', 'mcp'], ['manage-echo'], ['get-upload-url', 'manage-organization', 'manage-people', 'manage-projects', 'manage-automations', 'manage-work-items', 'manage-relations', 'manage-comments', 'manage-attachments', 'manage-pages', 'manage-templates', 'manage-views', 'manage-notifications', 'manage-webhooks']],
+    'all three' => [['read', 'write', 'mcp'], ['echo', 'manage-echo'], ['whoami', 'search', 'get-upload-url', 'organization', 'manage-organization', 'people', 'manage-people', 'projects', 'manage-projects', 'automations', 'manage-automations', 'work-items', 'manage-work-items', 'relations', 'manage-relations', 'comments', 'manage-comments', 'attachments', 'manage-attachments', 'pages', 'manage-pages', 'templates', 'manage-templates', 'views', 'manage-views', 'notifications', 'manage-notifications', 'webhooks', 'manage-webhooks']],
 ]);
 
 it('keeps every tool from a transient token', function () {
