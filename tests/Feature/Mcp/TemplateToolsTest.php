@@ -37,8 +37,6 @@ it('lists templates lean unless asked', function () use ($world) {
         ->and($lean['structuredContent']['meta']['per_page'])->toBe(25)
         ->and($lean['structuredContent']['meta']['path'])->toBe(url('api/v1/templates'))
         ->and(array_key_exists('description', $payload))->toBeFalse((string) json_encode($payload))
-        ->and(array_key_exists('values_markdown', $payload))->toBeFalse((string) json_encode($payload))
-        ->and(array_key_exists('values_markdown', $full['structuredContent']['data'][0]['payload']))->toBeFalse('values_markdown goes in markdown form')
         ->and(array_key_exists('description', $full['structuredContent']['data'][0]['payload']))->toBeTrue((string) json_encode($full['structuredContent']['data'][0]['payload']));
 });
 

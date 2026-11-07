@@ -36,18 +36,21 @@ final class ItemQueryDocs extends OperationExtension
     /** The keys of the short form that take one value; every other one but `archived` takes a list. */
     private const SINGLE = ['project', 'parent', 'q'];
 
-    /** What the keys of the short form take. */
+    /**
+     * What the keys of the short form take. Never "separated by commas": in `GET /work-items` a key of several values is a
+     * list (its parameter style says how a query string writes it), in the body's `shorthand` one text (its object says so).
+     */
     private const SHORT = [
         'project' => 'The project: ULID, identifier or a former identifier (one the account does not see is 404).',
         'parent' => 'The parent: ULID or key (one the account does not see is 404).',
         'q' => 'Words of the title, or the key of an item the account sees.',
-        'assignee' => '`me`, `none` or ULIDs separated by commas.',
-        'created_by' => '`me`, `none` or ULIDs separated by commas.',
-        'type' => 'Type ULIDs separated by commas.',
-        'state' => 'State ULIDs separated by commas.',
-        'state_category' => 'State categories separated by commas (`backlog`, `unstarted`, `started`, `completed`, `canceled`).',
-        'priority' => 'Priorities separated by commas (`urgent`, `high`, `medium`, `low`, `none`).',
-        'label' => 'Label ULIDs separated by commas.',
+        'assignee' => '`me`, `none` or ULIDs.',
+        'created_by' => '`me`, `none` or ULIDs.',
+        'type' => 'Type ULIDs.',
+        'state' => 'State ULIDs.',
+        'state_category' => 'State categories (`backlog`, `unstarted`, `started`, `completed`, `canceled`).',
+        'priority' => 'Priorities (`urgent`, `high`, `medium`, `low`, `none`).',
+        'label' => 'Label ULIDs.',
         'archived' => 'Only archived (`true`) or only not archived (`false`) items.',
     ];
 
@@ -129,7 +132,7 @@ final class ItemQueryDocs extends OperationExtension
     {
         return [
             'schema' => ['type' => 'array', 'items' => ['type' => 'string', 'enum' => GetWorkItem::INCLUDES]],
-            'description' => 'What to embed, separated by commas: '.implode(', ', array_map(fn (string $name) => "`{$name}`", GetWorkItem::INCLUDES)).'.',
+            'description' => 'What to embed: '.implode(', ', array_map(fn (string $name) => "`{$name}`", GetWorkItem::INCLUDES)).'.',
         ];
     }
 

@@ -44,14 +44,18 @@ it('lists the inbox with the filters of REST', function () use ($world) {
 });
 
 it('reads a bot\'s inbox as empty', function () use ($world) {
-    $world();
+    // no notification is ever written for a bot (NotifyRecipients takes persons only): its inbox is empty, and it never
+    // shows the rows of another account; Mara's three are there and Mara reads them
+    [$mara] = $world();
     $bot = User::factory()->bot()->create();
-    $mcp = McpClient::for($this, apiToken($bot, ['read', 'mcp']));
 
-    $list = $mcp->call('notifications', ['action' => 'list']);
+    $list = McpClient::for($this, apiToken($bot, ['read', 'mcp']))->call('notifications', ['action' => 'list']);
+    $hers = McpClient::for($this, apiToken($mara, ['read', 'mcp']))->call('notifications', ['action' => 'list']);
 
     expect($list['isError'])->toBeFalse((string) json_encode($list))
-        ->and($list['structuredContent']['data'])->toBe([]);
+        ->and($list['structuredContent']['data'])->toBe([])
+        ->and($list['structuredContent']['meta']['total'])->toBe(0)
+        ->and($hers['structuredContent']['meta']['total'])->toBe(3);
 });
 
 it('marks read by ids and by all and tells the other tabs without a socket', function () use ($world) {

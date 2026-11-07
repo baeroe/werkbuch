@@ -1,6 +1,8 @@
 <?php
 
 use App\Access\ProjectRole;
+use App\Access\RoleAssignments;
+use App\Access\Visibility;
 use App\Actions\Attachments\IssueUploadUrl;
 use App\Enums\Locale;
 use App\Events\EventType;
@@ -56,12 +58,12 @@ $issue = function (TestCase $t, string $plain, array $input): array {
 };
 
 /** Posts a file to the address as curl's form does: multipart, no bearer token, no session. */
-$send = function (TestCase $t, string $url, ?UploadedFile $file = null): TestResponse {
+$send = function (TestCase $t, string $url, ?UploadedFile $file = null, array $fields = []): TestResponse {
     forgetApiAuth();
     // a fresh request starts with the default guard `web`; the MCP call before left `sanctum` as the default of the test app
     Auth::shouldUse('web');
 
-    return $t->post($url, ['file' => $file ?? UploadedFile::fake()->image('a.png')]);
+    return $t->post($url, [...$fields, 'file' => $file ?? UploadedFile::fake()->image('a.png')]);
 };
 
 it('issues a url and takes a file with curl\'s form', function () use ($world, $issue, $send) {
@@ -170,6 +172,51 @@ it('refuses a url whose project, kind, item or token was changed', function () u
         ->and(Storage::disk('local')->allFiles())->toBe([]);
     // the untouched address still works
     $send($this, $url)->assertCreated();
+});
+
+it('takes the project, kind and item from the signed address, never from the form', function () use ($world, $issue, $send) {
+    [$web, , , , $mara] = $world();
+    // a second project Mara may upload into, with an item she may change: the form names it, the address does not
+    $app = Project::factory()->identifier('APP')->member($mara, ProjectRole::Member)->create();
+    $appItem = WorkItem::factory()->for($app)->create();
+    $url = $issue($this, apiToken($mara, ['write', 'mcp']), ['project_id' => 'WEB', 'kind' => 'inline'])['structuredContent']['data']['url'];
+
+    $send($this, $url, null, ['project_id' => $app->id, 'kind' => 'file', 'work_item_id' => $appItem->id])->assertCreated();
+    $attachment = Attachment::query()->sole();
+
+    expect($attachment->project_id)->toBe($web->id)
+        ->and($attachment->kind)->toBe('inline')
+        ->and($attachment->attachable_id)->toBeNull()
+        ->and(eventsOf(EventType::WorkItemUpdated, $appItem))->toHaveCount(0);
+});
+
+it('checks the rights when the address is used, not when it was issued', function () use ($world, $issue, $send) {
+    [$web, , $item, , $mara] = $world();
+    $roles = app(RoleAssignments::class);
+    $plain = apiToken($mara, ['write', 'mcp']);
+    $file = $issue($this, $plain, ['project_id' => 'WEB', 'kind' => 'file', 'work_item_id' => $item->id])['structuredContent']['data']['url'];
+    // a private project she belongs to when the address is issued
+    $lab = Project::factory()->identifier('LAB')->private()->member($mara, ProjectRole::Member)->create();
+    $inline = $issue($this, $plain, ['project_id' => 'LAB', 'kind' => 'inline'])['structuredContent']['data']['url'];
+
+    // a viewer now: the list of an item is closed to her
+    $roles->setProjectRole($mara, $web, ProjectRole::Viewer);
+    Visibility::forget();
+    $send($this, $file)->assertForbidden()->assertJsonPath('detail', __('problem.detail.items_members_only'));
+
+    // out of the private project: it is unknown to her
+    $roles->removeFromProject($mara, $lab);
+    Visibility::forget();
+    $send($this, $inline)->assertNotFound()->assertJsonPath('reason', 'not_found');
+
+    expect(Attachment::query()->count())->toBe(0)
+        ->and(Storage::disk('local')->allFiles())->toBe([]);
+
+    // back as a member, the same address takes the file
+    $roles->setProjectRole($mara, $web, ProjectRole::Member);
+    Visibility::forget();
+    $send($this, $file)->assertCreated();
+    expect(Attachment::query()->sole()->attachable_id)->toBe($item->id);
 });
 
 it('refuses after the token was revoked or the account deactivated', function (Closure $end) use ($world, $issue, $send) {

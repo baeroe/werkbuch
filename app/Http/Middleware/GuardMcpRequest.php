@@ -35,13 +35,17 @@ final class GuardMcpRequest
         return $next($request);
     }
 
-    /** `scheme://host[:port]` of APP_URL, the form a browser sends in `Origin`. */
+    /**
+     * `scheme://host[:port]` of APP_URL, the form a browser sends in `Origin`: the default port of the scheme (80 for
+     * http, 443 for https) is no part of it, a browser never names it.
+     */
     private static function ownOrigin(): string
     {
         $url = parse_url((string) config('app.url'));
         $scheme = strtolower((string) ($url['scheme'] ?? ''));
         $host = strtolower((string) ($url['host'] ?? ''));
-        $port = isset($url['port']) ? ':'.$url['port'] : '';
+        $default = ['http' => 80, 'https' => 443][$scheme] ?? null;
+        $port = isset($url['port']) && $url['port'] !== $default ? ':'.$url['port'] : '';
 
         return $scheme.'://'.$host.$port;
     }

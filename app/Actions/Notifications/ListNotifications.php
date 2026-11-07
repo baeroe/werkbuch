@@ -18,8 +18,9 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * The inbox of the account (spec 4.14): its own notifications shown in the inbox (`inbox`, A271), only those it still
  * sees (Notification::visibleTo, K5: checked when read, never when written, Review Focus 3), newest first (`created_at`
  * to the microsecond, then the ULID, so a page never loses one of the same second). `filter[unread]` keeps the unread or
- * the read ones, `filter[event]` the kinds named. A bot gets none, its inbox is empty. Each notification comes with its lean item and its
- * excerpt for the reader (Notification::loadForResource).
+ * the read ones, `filter[event]` the kinds named. A bot has an empty inbox: no notification is ever written for a bot
+ * (NotifyRecipients and SendDueReminders take persons only). Each notification comes with its lean item and its excerpt
+ * for the reader (Notification::loadForResource).
  */
 final class ListNotifications
 {

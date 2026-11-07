@@ -47,7 +47,10 @@ it('shows a hidden end as hidden', function () use ($world) {
 
     // who sees OPS reads the other end
     expect($seen['structuredContent']['data'][0]['hidden'])->toBeFalse()
-        ->and($seen['structuredContent']['data'][0]['other']['key'])->toBe('OPS-1');
+        ->and($seen['structuredContent']['data'][0]['other']['key'])->toBe('OPS-1')
+        // and finds both in the text of the result, where Theo finds neither
+        ->and($seen['content'][0]['text'])->toContain($opsItem->id)
+        ->and($seen['content'][0]['text'])->toContain('OPS-1');
 });
 
 it('refuses a relation to itself', function () use ($world, $relates) {

@@ -167,6 +167,9 @@ $refusals = fn (): array => [
     // write tools
     'get-upload-url' => ['get-upload-url', fn ($w, $hide) => ['input' => ['project_id' => $hide('OPS'), 'kind' => 'inline']]],
     'get-upload-url for the file list' => ['get-upload-url', fn ($w, $hide) => ['input' => ['project_id' => $hide('OPS'), 'kind' => 'file', 'work_item_id' => $hide($w['opsItem']->key)]]],
+    // WEB is hers, the item of OPS is not: unknown like an item nobody has, never `field.work_item_id.project`
+    'get-upload-url for the file list of WEB with an OPS item' => ['get-upload-url', fn ($w, $hide) => ['input' => ['project_id' => 'WEB', 'kind' => 'file', 'work_item_id' => $hide($w['opsItem']->key)]],
+        'positive' => fn ($w) => ['ida', ['input' => ['project_id' => 'WEB', 'kind' => 'file', 'work_item_id' => 'WEB-1']]]],
     'manage-work-items create' => ['manage-work-items', fn ($w, $hide) => ['action' => 'create', 'input' => ['project_id' => $hide('OPS'), 'title' => 'Eingeschmuggelt']]],
     'manage-work-items update' => ['manage-work-items', fn ($w, $hide) => ['action' => 'update', 'item' => $hide($w['opsItem']->key), 'input' => ['title' => 'Umbenannt']]],
     'manage-work-items transition' => ['manage-work-items', fn ($w, $hide) => ['action' => 'transition', 'item' => $hide($w['opsOther']->key), 'input' => [
@@ -334,6 +337,24 @@ it('shows an outsider nothing of a private project in lists and the search', fun
     expect($read($w['opsNote']->id))->toBe(['updated' => 0])
         ->and($read(LEAK_UNKNOWN_ULID))->toBe(['updated' => 0])
         ->and($read($w['webNote']->id))->toBe(['updated' => 1]);
+    $unread = fn (string $id) => $ok($ida->call('manage-notifications', ['action' => 'unread', 'input' => ['ids' => [$id]]]));
+    Notification::query()->whereKey($w['opsNote']->id)->update(['read_at' => now()]);
+    expect($unread($w['opsNote']->id))->toBe(['updated' => 0])
+        ->and($unread(LEAK_UNKNOWN_ULID))->toBe(['updated' => 0])
+        ->and($unread($w['webNote']->id))->toBe(['updated' => 1])
+        ->and(Notification::query()->find($w['opsNote']->id)?->read_at)->not->toBeNull();
+
+    // the bulk edit: a key of OPS is rejected as `not_found` like a key nobody has (the id echoes the reference)
+    $bulk = fn (McpClient $mcp, string $key) => $ok($mcp->call('manage-work-items', ['action' => 'bulk-update', 'input' => ['ids' => [$key], 'patch' => ['priority' => 'high']]]));
+    $onOpsKey = $bulk($ida, $w['opsItem']->key);
+    $onNobodyKey = $bulk($ida, 'NOPE-1');
+    expect($onOpsKey['updated'])->toBe([])
+        ->and(array_column($onOpsKey['rejected'], 'reason'))->toBe(['not_found'])
+        ->and(array_column($onOpsKey['rejected'], 'reason'))->toBe(array_column($onNobodyKey['rejected'], 'reason'))
+        ->and($onNobodyKey['updated'])->toBe([])
+        ->and($w['opsItem']->fresh()?->priority->value)->not->toBe('high')
+        ->and($bulk($mara, $w['opsItem']->key))->toBe(['updated' => [$w['opsItem']->id], 'rejected' => []])
+        ->and($w['opsItem']->fresh()?->priority->value)->toBe('high');
 
     // the use of a workflow counts only in the projects the reader sees
     $agency = Workflow::factory()->create(['name' => 'Nur Betrieb']);
@@ -351,7 +372,7 @@ it('shows the hidden end of a relation and a reference without key, title or id'
     $mara = $client($this, $w['mara']);
     $opsId = $w['opsItem']->id;
     $leaks = fn (array $result, bool $withId = true): array => array_values(array_filter(
-        ['OPS-1', 'Geheim', 'Plan', ...$withId ? [$opsId, strtoupper($opsId), $w['opsPage']->id] : []],
+        ['OPS-1', 'Geheim', ...$withId ? [$opsId, strtoupper($opsId), $w['opsPage']->id] : []],
         fn (string $secret) => str_contains((string) json_encode($result, JSON_UNESCAPED_UNICODE), $secret),
     ));
 

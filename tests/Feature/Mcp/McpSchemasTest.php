@@ -355,7 +355,7 @@ it('takes the query of a list from its spec', function () {
         ->and($users['sort'])->toBe(['type' => 'string', 'description' => ListParameters::sortDescription(ListUsers::spec())])
         ->and($users['cursor'])->toBe([...$rest['cursor']['schema'], 'description' => $rest['cursor']['description']])
         ->and($users['per_page'])->toBe([...$rest['per_page']['schema'], 'description' => 'The rows per page.', 'default' => McpAction::PER_PAGE])
-        ->and($projects['include'])->toBe([...ListParameters::query(ListProjects::spec())['include']['schema'], 'description' => 'Relations to load with each row, separated by commas.'])
+        ->and($projects['include'])->toBe([...ListParameters::query(ListProjects::spec())['include']['schema'], 'description' => 'Relations to load with each row.'])
         ->and($projects['include']['items']['enum'])->toBe(['members'])
         // a fixed list pages, nothing else
         ->and(array_keys(ToolSchema::list(ListSpec::fixed())))->toBe(['cursor', 'per_page']);

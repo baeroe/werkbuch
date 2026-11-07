@@ -70,15 +70,15 @@ final class ContentDocs extends OperationExtension
             'q' => ['schema' => ['type' => 'string', 'minLength' => 1, 'maxLength' => QuerySearch::Q_MAX], 'description' => 'The words to find; every word has to hit (the last one as a prefix). '
                 .'Trimmed. A key (`web-47`, also a former one) puts that item first and names it in `key_match`.', 'required' => true],
             'types' => ['schema' => ['type' => 'array', 'items' => ['type' => 'string', 'enum' => QuerySearch::TYPES]],
-                'description' => 'The kinds to search, separated by commas; by default all. An unknown name, and a `types` that names no kind (`,`), is 422 at `types`.', 'required' => false],
+                'description' => 'The kinds to search; by default all. An unknown name, and a `types` that names no kind (`,`), is 422 at `types`.', 'required' => false],
             'limit' => ['schema' => ['type' => 'integer', 'minimum' => 1, 'maximum' => QuerySearch::MAX_LIMIT, 'default' => QuerySearch::DEFAULT_LIMIT], 'description' => 'The most hits of each kind.', 'required' => false],
             'include_archived' => ['schema' => self::QUERY_FLAG, 'description' => 'Archived items and projects, and items and pages of archived projects too (`1`).', 'required' => false],
-            'type_id' => ['schema' => $ulids, 'description' => 'Only items of these types (ULIDs, separated by commas).', 'required' => false],
+            'type_id' => ['schema' => $ulids, 'description' => 'Only items of these types (ULIDs).', 'required' => false],
             'state_category' => ['schema' => ['type' => 'array', 'items' => ['type' => 'string', 'enum' => array_map(fn (StateCategory $category) => $category->value, StateCategory::ORDER)]],
-                'description' => 'Only items whose status is of one of these categories, separated by commas.', 'required' => false],
+                'description' => 'Only items whose status is of one of these categories.', 'required' => false],
             'assignee_id' => ['schema' => ['type' => 'array', 'items' => ['anyOf' => [$ulid, ['type' => 'string', 'enum' => [QuerySearch::UNASSIGNED]]]]],
-                'description' => 'Only items assigned to one of these accounts (ULIDs, separated by commas), or `none` alone for items without an assignee; `none` next to an account is 422.', 'required' => false],
-            'label_id' => ['schema' => $ulids, 'description' => 'Only items with any of these labels (ULIDs, separated by commas).', 'required' => false],
+                'description' => 'Only items assigned to one of these accounts (ULIDs), or `none` alone for items without an assignee; `none` next to an account is 422.', 'required' => false],
+            'label_id' => ['schema' => $ulids, 'description' => 'Only items with any of these labels (ULIDs).', 'required' => false],
         ];
     }
 

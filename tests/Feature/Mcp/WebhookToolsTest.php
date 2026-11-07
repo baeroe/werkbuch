@@ -1,6 +1,7 @@
 <?php
 
 use App\Access\ProjectRole;
+use App\Events\EventType;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\Webhook;
@@ -43,31 +44,41 @@ it('shows the secret only in the answer of create and rotate', function () use (
     $renewed = $rotated['structuredContent']['secret'];
     $updated = $mcp->call('manage-webhooks', ['action' => 'update', 'webhook' => $id, 'input' => $input(['name' => 'Agent 2'])]);
     $refused = $mcp->call('manage-webhooks', ['action' => 'update', 'webhook' => $id, 'input' => $input(['name' => '', 'secret' => 'whsec_CANARY'])]);
+    // a line through the same logger: the listener hears what the app logs (control for the check below)
+    logger()->warning('webhook tools test control');
 
     $show = fn (array $result): string => (string) json_encode($result);
     $get = $mcp->call('webhooks', ['action' => 'get', 'webhook' => $id]);
     $list = $mcp->call('webhooks', ['action' => 'list']);
     $deliveries = $mcp->call('webhooks', ['action' => 'deliveries', 'webhook' => $id]);
 
-    expect($secret)->toMatch('/^whsec_[A-Za-z0-9_-]{43}\z/')
-        ->and($renewed)->toMatch('/^whsec_[A-Za-z0-9_-]{43}\z/')
+    // preg_match, never toMatch: a failing toMatch prints the secret into the log of the run
+    $shaped = fn (mixed $value): bool => is_string($value) && preg_match('/^whsec_[A-Za-z0-9_-]{43}\z/', $value) === 1;
+    expect($shaped($secret))->toBeTrue('create answered no secret of the form whsec_…')
+        ->and($shaped($renewed))->toBeTrue('rotate-secret answered no secret of the form whsec_…')
         ->and($renewed === $secret)->toBeFalse('rotate-secret made no new secret')
         ->and(array_keys($created['structuredContent']))->toBe(['data', 'secret'])
         ->and(array_keys($rotated['structuredContent']))->toBe(['data', 'secret'])
         ->and(array_key_exists('secret', $updated['structuredContent']))->toBeFalse('update answered a secret')
         ->and($updated['structuredContent']['data']['name'])->toBe('Agent 2')
         ->and($refused['isError'])->toBeTrue()
+        ->and($refused['structuredContent']['status'])->toBe(422)
+        ->and($refused['structuredContent']['errors'])->toBe(['name' => [__('field.name.required')]])
         ->and(array_key_exists('secret', $get['structuredContent']))->toBeFalse('get answered a secret')
         ->and(array_key_exists('secret', $get['structuredContent']['data']))->toBeFalse('get data holds a secret');
 
     foreach ([$show($updated), $show($refused), $show($get), $show($list), $show($deliveries)] as $text) {
         expect(str_contains($text, 'whsec_'))->toBeFalse('an answer other than create and rotate-secret holds a secret');
     }
-    foreach (['events.changes', 'events.meta', 'jobs.payload', 'failed_jobs.payload'] as $column) {
-        [$table, $name] = explode('.', $column);
-        expect(DB::table($table)->where($name, 'like', '%whsec_%')->count())->toBe(0, "{$table}.{$name} holds a secret");
+    // the events of the three writes are there, their changes and meta hold no secret
+    expect(eventsOf(EventType::WebhookCreated)->count())->toBe(1)
+        ->and(eventsOf(EventType::WebhookSecretRotated)->count())->toBe(1)
+        ->and(eventsOf(EventType::WebhookUpdated)->count())->toBe(1);
+    foreach (['changes', 'meta'] as $column) {
+        expect(DB::table('events')->where($column, 'like', '%whsec_%')->count())->toBe(0, "events.{$column} holds a secret");
     }
-    expect(collect($logged)->contains(fn (string $line) => str_contains($line, 'whsec_')))->toBeFalse('the log holds a secret');
+    expect(collect($logged)->contains(fn (string $line) => str_contains($line, 'webhook tools test control')))->toBeTrue('the listener heard nothing')
+        ->and(collect($logged)->contains(fn (string $line) => str_contains($line, 'whsec_')))->toBeFalse('the log holds a secret');
 });
 
 it('shares the six pings a minute with REST', function () {

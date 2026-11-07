@@ -79,13 +79,20 @@ it('answers a real session cookie with 401', function () use ($problem) {
     $session = (string) $login->getCookie(config('session.cookie'))?->getValue();
     expect($session)->not->toBe('');
     // the next request comes in a fresh process: no guard and no session store keep the account of the sign-in
-    forgetApiAuth();
-    app()->forgetInstance('session.store');
-    app('session')->forgetDrivers();
+    $fresh = function () {
+        forgetApiAuth();
+        app()->forgetInstance('session.store');
+        app('session')->forgetDrivers();
+    };
+    $withCookie = fn () => $this->withCredentials()->withCookie(config('session.cookie'), $session)->withHeader('Referer', config('app.url'));
+
+    // the control: the same cookie signs Lene in at the API of the interface
+    $fresh();
+    $withCookie()->getJson('/api/v1/me')->assertOk()->assertJsonPath('data.email', 'lene@example.com');
 
     // without the group web, neither EncryptCookies nor StartSession runs: the cookie signs nobody in
-    $response = $this->withCookie(config('session.cookie'), $session)->withHeader('Referer', config('app.url'))
-        ->postJson('/mcp', ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'ping'], ['Accept' => 'application/json, text/event-stream']);
+    $fresh();
+    $response = $withCookie()->postJson('/mcp', ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'ping'], ['Accept' => 'application/json, text/event-stream']);
 
     $problem($response, 401, 'unauthenticated');
 });
@@ -161,8 +168,22 @@ it('refuses a foreign Origin', function () use ($token, $problem) {
     // the scheme and the port belong to the origin
     $problem($mcp->rpc('ping', [], ['Origin' => 'http://'.$url['host'].':8443']), 403, 'forbidden');
 
+    // an opaque origin (a sandboxed frame, a file) is no origin of werkbuch
+    $problem($mcp->rpc('ping', [], ['Origin' => 'null']), 403, 'forbidden');
+
     $mcp->rpc('ping', [], ['Origin' => $own])->assertOk();
     $mcp->rpc('ping')->assertOk();
+});
+
+it('takes the origin of an APP_URL that names the default port of its scheme', function () use ($token, $problem) {
+    $mcp = McpClient::for($this, $token());
+    $url = parse_url((string) config('app.url'));
+    $default = ['http' => 80, 'https' => 443][$url['scheme']];
+    config(['app.url' => $url['scheme'].'://'.$url['host'].':'.$default]);
+
+    // a browser never names the default port in Origin
+    $mcp->rpc('ping', [], ['Origin' => $url['scheme'].'://'.$url['host']])->assertOk();
+    $problem($mcp->rpc('ping', [], ['Origin' => $url['scheme'].'://'.$url['host'].':8443']), 403, 'forbidden');
 });
 
 it('throttles per token and keeps the quotas apart', function () use ($problem) {

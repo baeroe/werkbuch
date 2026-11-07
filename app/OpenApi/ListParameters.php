@@ -65,7 +65,7 @@ final class ListParameters extends OperationExtension
             $query['sort'] = ['schema' => ['type' => 'string'], 'description' => self::sortDescription($spec)];
         }
         if ($spec->includes !== []) {
-            $query['include'] = ['schema' => self::listOf($spec->includes), 'description' => 'Relations to load with each row, separated by commas.'];
+            $query['include'] = ['schema' => self::listOf($spec->includes), 'description' => 'Relations to load with each row.'];
         }
 
         return $query;
@@ -94,7 +94,7 @@ final class ListParameters extends OperationExtension
             'string' => $filter->kind === ListFilter::PARTIAL
                 ? 'Only rows whose `'.$filter->name.'` contains the text (any case; a comma is part of the text).'
                 : 'Only rows that match the text.',
-            default => 'Only rows with one of the values, separated by commas.',
+            default => 'Only rows with one of the values.',
         };
     }
 

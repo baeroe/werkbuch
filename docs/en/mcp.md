@@ -71,7 +71,7 @@ Beyond that, a tool sees exactly what its account sees over REST. Something the 
 
 - **Requests:** 300 a minute per valid token (`MCP_RATE_LIMIT`), without a valid token 300 per address. This is a quota of its own beside the 600 of the REST API: an agent that uses both does not slow down the other. Requests are counted before signing in. Every answer carries `X-RateLimit-Limit` and `X-RateLimit-Remaining`; over the limit the answer is `429` with `Retry-After`.
 - **Shared with REST:** a test ping and `redeliver` of a webhook count in the same 6 a minute per account as over REST, uploads through `get-upload-url` in the same 60 a minute per account. A tool over such a limit answers an error `429 too_many_requests` with `retry_after` in seconds.
-- **Bodies:** a JSON body over 8 MB is a `413`; uploads have their own limit, `ATTACHMENTS_MAX_MB`.
+- **Bodies:** a JSON body over 8 MiB (8 388 608 bytes) is a `413`; uploads have their own limit, `ATTACHMENTS_MAX_MB`.
 - **Pages:** `per_page` is 1 to 100, 25 when left out.
 
 ## Tools
@@ -421,7 +421,7 @@ Writes webhooks; org admins only. `create` and `rotate-secret` answer the secret
 
 ## Arguments
 
-- **References** in the path of the twin are arguments in `snake_case`: `item` (ULID or key, also a former key: the item is read with its current key, there is no redirect), `project` (ULID, identifier or a former identifier), `page`, `page_version`, `comment`, `template`, `view`, `webhook` and so on (ULIDs in any case), `id` for an entry of a catalog, an account or a token.
+- **References** in the path of the twin are arguments in `snake_case`: `item` (ULID or key, also a former key: the item is read with its current key, there is no redirect), `project` (ULID, identifier or a former identifier), `page`, `page_version`, `comment`, `template`, `view`, `webhook` and so on (ULIDs in any case), `id` for an entry of a catalog, an account or a token, except where the route names the account as `{user}` next to a project: `manage-projects` takes the member as `user` in `update-member` and `remove-member`.
 - **`input`** is the body of the REST twin, with the same keys and the same schema as in `/api/docs`. Rich text goes in as Markdown (`description`, `body`, `content`), or as Tiptap JSON under the `_json` key, as over REST.
 - **Queries** of a `GET` twin are arguments of their own: `filter` is an object (`{"assignee": ["me"]}`), lists are JSON lists (`["person", "bot"]`), flags `true` and `false` or `1` and `0`. Strings are trimmed like over REST, with Unicode whitespace.
 - **Pages:** `cursor` is the `meta.next_cursor` of the page before, `per_page` 25 when left out (REST: 100). Lists of items are lean when `lean` is left out (`work-items:list`, `work-items:query`, `views:items`, `templates:list`): no description and no Markdown of rich-text values; pass `lean: false` for them, or read the item with `work-items:get`. Set both and a tool answers like REST.

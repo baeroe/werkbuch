@@ -2,6 +2,7 @@
 
 use App\Access\ProjectRole;
 use App\Models\Project;
+use App\Models\Template;
 use App\Models\User;
 use App\Models\Workflow;
 use App\Models\WorkItem;
@@ -143,7 +144,8 @@ it('lists items lean unless asked', function () use ($web) {
     $mcp = McpClient::for($this, apiToken($mara, ['read', 'mcp']));
 
     $lean = $mcp->call('work-items', ['action' => 'list', 'filter' => ['project' => 'WEB']]);
-    $full = $mcp->call('work-items', ['action' => 'list', 'filter' => ['project' => 'WEB'], 'lean' => false]);
+    // `lean` as the schema of the list offers it (1 or 0, as a query string reads it)
+    $full = $mcp->call('work-items', ['action' => 'list', 'filter' => ['project' => 'WEB'], 'lean' => 0]);
     $query = $mcp->call('work-items', ['action' => 'query', 'input' => ['shorthand' => ['project' => 'WEB']]]);
     $queryFull = $mcp->call('work-items', ['action' => 'query', 'input' => ['shorthand' => ['project' => 'WEB'], 'lean' => false]]);
 
@@ -198,11 +200,31 @@ it('deletes an item as done and watches it on and off', function () use ($web) {
     $refused = McpClient::for($this, apiToken($theo, ['read', 'write', 'mcp']))->call('manage-work-items', ['action' => 'delete', 'item' => 'WEB-1']);
     expect($refused['isError'])->toBeTrue()
         ->and($refused['structuredContent']['status'])->toBe(403)
+        ->and($refused['structuredContent']['detail'])->toBe(__('problem.detail.items_delete_admins_only'))
         ->and($item->fresh())->not->toBeNull();
 
     $deleted = $mcp->call('manage-work-items', ['action' => 'delete', 'item' => 'WEB-1']);
     expect($deleted['structuredContent'])->toBe(['done' => true])
         ->and($item->fresh())->toBeNull();
+});
+
+it('creates an item from a template of its project', function () use ($web) {
+    [$project, , $theo] = $web();
+    $template = Template::factory()->create(['project_id' => $project->id, 'name' => 'Wartung', 'created_by' => $theo->id]);
+    $elsewhere = Template::factory()->create(['project_id' => Project::factory()->identifier('APP')->create()->id, 'name' => 'Fremd', 'created_by' => $theo->id]);
+    $mcp = McpClient::for($this, apiToken($theo, ['read', 'write', 'mcp']));
+
+    $created = $mcp->call('manage-work-items', ['action' => 'create', 'input' => ['project_id' => 'WEB', 'title' => 'Wartung KW 45', 'template_id' => strtoupper($template->id)]]);
+    $history = $mcp->call('work-items', ['action' => 'history', 'item' => 'WEB-1']);
+    // a template of another project is unknown here, as over REST
+    $refused = $mcp->call('manage-work-items', ['action' => 'create', 'input' => ['project_id' => 'WEB', 'title' => 'Fremd', 'template_id' => $elsewhere->id]]);
+
+    expect($created['isError'])->toBeFalse((string) json_encode($created))
+        ->and($created['structuredContent']['data']['template_id'])->toBe($template->id)
+        ->and(collect($history['structuredContent']['data'])->firstWhere('type', 'work_item.created')['template'])->toBe(['id' => $template->id, 'name' => 'Wartung'])
+        ->and($refused['structuredContent']['status'])->toBe(422)
+        ->and($refused['structuredContent']['errors'])->toBe(['template_id' => [__('field.template_id.unknown')]])
+        ->and(WorkItem::query()->where('project_id', $project->id)->count())->toBe(1);
 });
 
 it('says once that an empty filter is no condition and that the short form of a body takes texts', function () {

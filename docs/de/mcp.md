@@ -71,7 +71,7 @@ Darüber hinaus sieht ein Tool genau, was sein Konto über REST sieht. Was das K
 
 - **Anfragen:** 300 je Minute je gültigem Token (`MCP_RATE_LIMIT`), ohne gültiges Token 300 je Adresse. Das ist ein eigenes Kontingent neben den 600 der REST-API: Ein Agent, der beides nutzt, bremst das andere nicht. Gezählt wird vor der Anmeldung. Jede Antwort trägt `X-RateLimit-Limit` und `X-RateLimit-Remaining`; über der Grenze ist die Antwort `429` mit `Retry-After`.
 - **Geteilt mit REST:** Ein Test-Ping und `redeliver` eines Webhooks zählen in denselben 6 je Minute und Konto wie über REST, Uploads über `get-upload-url` in denselben 60 je Minute und Konto. Ein Tool über einer solchen Grenze antwortet mit dem Fehler `429 too_many_requests` und `retry_after` in Sekunden.
-- **Bodies:** Ein JSON-Body über 8 MB ist ein `413`; Uploads haben ihre eigene Grenze, `ATTACHMENTS_MAX_MB`.
+- **Bodies:** Ein JSON-Body über 8 MiB (8 388 608 Bytes) ist ein `413`; Uploads haben ihre eigene Grenze, `ATTACHMENTS_MAX_MB`.
 - **Seiten:** `per_page` ist 1 bis 100, weggelassen 25.
 
 ## Tools
@@ -421,7 +421,7 @@ Schreibt Webhooks; nur Org-Admins. `create` und `rotate-secret` nennen das Gehei
 
 ## Argumente
 
-- **Referenzen** im Pfad des Zwillings sind Argumente in `snake_case`: `item` (ULID oder Key, auch ein früherer: das Item kommt mit seinem aktuellen Key, eine Umleitung gibt es nicht), `project` (ULID, Kennung oder frühere Kennung), `page`, `page_version`, `comment`, `template`, `view`, `webhook` usw. (ULIDs in jeder Schreibweise), `id` für einen Eintrag eines Katalogs, ein Konto oder ein Token.
+- **Referenzen** im Pfad des Zwillings sind Argumente in `snake_case`: `item` (ULID oder Key, auch ein früherer: das Item kommt mit seinem aktuellen Key, eine Umleitung gibt es nicht), `project` (ULID, Kennung oder frühere Kennung), `page`, `page_version`, `comment`, `template`, `view`, `webhook` usw. (ULIDs in jeder Schreibweise), `id` für einen Eintrag eines Katalogs, ein Konto oder ein Token, außer wo die Route das Konto neben einem Projekt als `{user}` nennt: `manage-projects` nimmt das Mitglied in `update-member` und `remove-member` als `user`.
 - **`input`** ist der Body des REST-Zwillings, mit denselben Schlüsseln und demselben Schema wie unter `/api/docs`. Rich Text geht als Markdown hinein (`description`, `body`, `content`) oder als Tiptap-JSON unter dem Schlüssel mit `_json`, wie über REST.
 - **Queries** eines `GET`-Zwillings sind eigene Argumente: `filter` ist ein Objekt (`{"assignee": ["me"]}`), Listen sind JSON-Listen (`["person", "bot"]`), Flags `true` und `false` oder `1` und `0`. Texte werden wie über REST getrimmt, auch Unicode-Leerraum.
 - **Seiten:** `cursor` ist das `meta.next_cursor` der Seite davor, `per_page` weggelassen 25 (REST: 100). Listen von Items sind schlank, wenn `lean` fehlt (`work-items:list`, `work-items:query`, `views:items`, `templates:list`): ohne Beschreibung und ohne Markdown der Rich-Text-Werte; mit `lean: false` kommen sie mit, oder das Item über `work-items:get`. Wer beides setzt, bekommt dieselbe Antwort wie über REST.
