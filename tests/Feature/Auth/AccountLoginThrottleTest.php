@@ -2,6 +2,7 @@
 
 use App\Auth\AccountLoginRateLimiter;
 use App\Auth\KnownDevice;
+use App\Auth\TwoFactorDay;
 use App\Models\User;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Http\Request;
@@ -206,7 +207,7 @@ it('clears the account and the day of codes with a new password', function () us
     $mara = User::query()->where('email', 'mara@example.com')->sole();
     $lockMara();
     foreach (range(1, 4) as $i) {
-        RateLimiter::hit('two-factor-day:'.$mara->id, 86400);
+        RateLimiter::hit(TwoFactorDay::cacheKey($mara->id), 86400);
     }
     $from('10.0.0.4')->post('/login', ['email' => 'mara@example.com', 'password' => 'secret-pass'])->assertSessionHasErrors($locked());
 
@@ -214,7 +215,7 @@ it('clears the account and the day of codes with a new password', function () us
         ->assertSessionHasNoErrors();
 
     expect(RateLimiter::attempts('login-account:mara@example.com'))->toBe(0)
-        ->and(RateLimiter::attempts('two-factor-day:'.$mara->id))->toBe(0);
+        ->and(RateLimiter::attempts(TwoFactorDay::cacheKey($mara->id)))->toBe(0);
     $from('10.0.0.5')->post('/login', ['email' => 'mara@example.com', 'password' => 'new-password'])->assertRedirect('/my-items');
     $this->assertAuthenticatedAs($mara);
 });

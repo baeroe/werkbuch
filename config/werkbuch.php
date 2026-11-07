@@ -58,6 +58,8 @@ return [
         // failed sign-ins per address over all IPs within `login_account_decay` seconds; a known device is not held (A434)
         'login_per_account' => 50,
         'login_account_decay' => 3600,
+        // attempts at the second factor per account within 24 hours, codes and recovery codes together (A435)
+        'two_factor_per_day' => 30,
         // requests for a reset link (POST /forgot-password), over all addresses
         'password_reset_per_ip' => 6,
         // new passwords from a reset link (POST /reset-password), over all addresses

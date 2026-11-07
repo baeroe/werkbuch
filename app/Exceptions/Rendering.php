@@ -32,6 +32,14 @@ final class Rendering
             : __('auth.throttle', ['seconds' => $seconds]);
     }
 
+    /** The wait at the second factor: a minute's limit names seconds, the limit of the day names hours (A435). */
+    public static function twoFactorMessage(int $seconds): string
+    {
+        return $seconds > 60
+            ? __('two_factor_challenge.locked', ['hours' => max(1, (int) ceil($seconds / 3600))])
+            : self::throttleMessage($seconds);
+    }
+
     public static function register(Exceptions $exceptions): void
     {
         // refusals below 500 are expected answers, not errors; a search engine that does not answer and a mail server
@@ -66,7 +74,7 @@ final class Rendering
 
         // the two-factor challenge: the limit shows at the field in use, like a wrong code
         $exceptions->render(fn (ThrottleRequestsException $e, Request $request) => $request->routeIs('two-factor.login.store')
-            ? back()->withErrors([$request->filled('recovery_code') ? 'recovery_code' : 'code' => self::throttleMessage((int) ($e->getHeaders()['Retry-After'] ?? 60))])
+            ? back()->withErrors([$request->filled('recovery_code') ? 'recovery_code' : 'code' => self::twoFactorMessage((int) ($e->getHeaders()['Retry-After'] ?? 60))])
             : null);
 
         // accepting an invitation: the limit shows at the page's own error, which also names a link that no longer works

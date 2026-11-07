@@ -2,6 +2,7 @@
 
 use App\Access\Authorize;
 use App\Access\RoleAssignments;
+use App\Auth\TwoFactorDay;
 use App\Domain\Ulid;
 use App\Events\EventRecorder;
 use App\Exceptions\Problem;
@@ -11,7 +12,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 arch('php preset')->preset()->php();
-arch('security preset')->preset()->security();
+// TwoFactorDay rebuilds the md5 cache key of Laravel's throttle middleware, which is no security use of md5
+arch('security preset')->preset()->security()->ignoring(TwoFactorDay::class);
 arch('no debugging leftovers')->expect(['dd', 'ddd'])->not->toBeUsed(); // the php preset forbids dump, ray, var_dump, print_r, die
 arch('models are Eloquent models')->expect('App\Models')->toExtend(Model::class);
 arch('enums are string backed')->expect('App\Enums')->toBeStringBackedEnums();

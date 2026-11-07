@@ -3,6 +3,7 @@
 namespace App\Actions\Auth;
 
 use App\Auth\AccountLoginRateLimiter;
+use App\Auth\TwoFactorDay;
 use App\Events\EventRecorder;
 use App\Events\EventType;
 use App\Models\User;
@@ -51,7 +52,7 @@ final class SetPassword
             // per account of the sign-in nor by the day of codes of the second factor (A434, A435); after the commit
             DB::afterCommit(function () use ($user): void {
                 app(AccountLoginRateLimiter::class)->clearAccount((string) $user->email);
-                RateLimiter::clear('two-factor-day:'.$user->id);
+                RateLimiter::clear(TwoFactorDay::cacheKey((string) $user->id));
             });
         });
     }
