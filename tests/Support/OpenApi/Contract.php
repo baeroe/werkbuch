@@ -216,7 +216,7 @@ final class Contract
     /**
      * The violations of a body against the answer `$status` of an operation (`$uri` as `Route::uri()` without
      * `api/v1`), checked like an answer of the contract: on the JSON of objects (an empty object stays `{}`), every
-     * object closed. `$dropped` takes keys (patterns as `fnmatch` reads them: `links`, `*_json`, `values_markdown`) out
+     * object closed, a status from 400 on as `application/problem+json`. `$dropped` takes keys (patterns as `fnmatch` reads them: `links`, `*_json`, `values_markdown`) out
      * of every `required`, for a body that leaves them out on purpose (the result of an MCP tool).
      *
      * @param  array<array-key, mixed>|stdClass  $body
@@ -240,7 +240,8 @@ final class Contract
 
         [, $where] = self::resolve($contract['tree'], $responses->{(string) $status}, "{$at}/responses/{$status}");
 
-        return self::validate($contract, $where, 'application/json', json_encode($body, JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION), '');
+        // a refusal is a problem, which the document names as such
+        return self::validate($contract, $where, $status >= 400 ? 'application/problem+json' : 'application/json', json_encode($body, JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION), '');
     }
 
     /**

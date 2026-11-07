@@ -111,7 +111,7 @@ it('describes every input like the body of its REST twin', function (string $sui
 })->with(array_keys(ToolRows::SUITES));
 
 it('takes the query of its REST twin', function (string $suite) use ($actions) {
-    $checked = 0;
+    $checked = [];
 
     foreach ($actions($suite) as [$tool, $action]) {
         if ($action->twin === null || ! str_starts_with($action->twin, 'GET ')) {
@@ -138,14 +138,36 @@ it('takes the query of its REST twin', function (string $suite) use ($actions) {
 
         expect($arguments)->toBe($query, $where)
             ->and(array_keys($action->parameters['filter']['properties'] ?? []))->toEqualCanonicalizing($filters, $where);
-        foreach ($path as $placeholder => $argument) {
-            expect($action->parameters[$argument] ?? null)->toBe(ToolSchema::reference($placeholder), "{$where} describes {$argument} as its twin")
-                ->and($action->required)->toContain($argument);
-        }
-        $checked++;
+        $checked[] = $where;
     }
 
-    expect($checked)->toBe(2);
+    // every GET twin is checked, these at least (the areas bring more)
+    expect($checked)->toContain(...($suite === 'twins' ? ['twins:list-users', 'twins:members'] : ['whoami:call', 'search:call']));
+})->with(array_keys(ToolRows::SUITES));
+
+it('takes the placeholders of its REST twin as required references', function (string $suite) use ($actions) {
+    $twins = [];
+    $checked = [];
+
+    foreach ($actions($suite) as [$tool, $action]) {
+        if ($action->twin === null) {
+            continue;
+        }
+        $twins[] = "{$tool}:{$action->name}";
+
+        foreach (ToolRows::pathArguments($action) as $placeholder => $argument) {
+            $where = "{$tool}:{$action->name} {$argument}";
+            expect($action->parameters[$argument] ?? null)->toBe(ToolSchema::reference($placeholder), "{$where} is described as the placeholder of its twin")
+                ->and($action->required)->toContain($argument);
+            $checked[] = $where;
+        }
+    }
+
+    // every twin is looked at, of every method; of the twin server a GET and a DELETE twin have placeholders
+    expect($twins)->toContain(...($suite === 'twins' ? ['twins:members', 'twins:query', 'manage-twins:delete-view'] : ['whoami:call', 'search:call']));
+    if ($suite === 'twins') {
+        expect($checked)->toBe(['twins:members project', 'manage-twins:delete-view view']);
+    }
 })->with(array_keys(ToolRows::SUITES));
 
 it('names an existing twin', function (string $suite) use ($actions) {
@@ -188,11 +210,21 @@ it('makes every tool schema valid JSON Schema', function (string $suite) use ($n
 it('drops the extensions and examples', function (string $suite) {
     $json = (string) json_encode(McpClient::for($this, apiToken(User::factory()->create(), ['read', 'write', 'mcp']), path: ToolRows::path($suite))->tools());
 
-    // the bodies of the twin server carry both in the document
-    expect((string) json_encode([ContentSchemas::view(), Components::schemas()['Problem']]))->toContain('x-werkbuch-open')->toContain('"examples"')
-        ->and($json)->not->toContain('x-werkbuch-')
-        ->and($json)->not->toContain('"examples"');
+    // the body of `create-view` of the twin server carries the extension in the document
+    expect((string) json_encode(ContentSchemas::view()))->toContain('x-werkbuch-open')
+        ->and($json)->not->toContain('x-werkbuch-');
 })->with(array_keys(ToolRows::SUITES));
+
+it('drops the examples of a body an input reaches', function () use ($noop) {
+    // no body of a tool carries examples yet; Problem does, on the lists of its extensions
+    $problem = Components::schemas()['Problem']['properties'];
+    $body = ['type' => 'object', 'properties' => ['states' => $problem['states'], 'projects' => $problem['projects']]];
+    $input = ToolSchema::input([new McpAction('call', 'Takes a body.', $noop, input: $body)]);
+
+    expect((string) json_encode($body))->toContain('"examples"')
+        ->and($input['properties']['input']['anyOf'][0]['properties'])->toHaveKeys(['states', 'projects'])
+        ->and((string) json_encode($input))->not->toContain('"examples"');
+});
 
 it('builds the input of a tool from its actions', function () use ($noop) {
     $page = ['type' => 'integer', 'minimum' => 1];

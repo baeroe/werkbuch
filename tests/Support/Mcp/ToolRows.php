@@ -13,12 +13,15 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 use ReflectionClass;
+use stdClass;
 use Tests\Feature\Access\MatrixWorld;
 
 /**
  * The rows of the tool matrix, in two suites: `werkbuch`, the tools of /mcp with tests/Feature/Mcp/tools.php, and
  * `twins`, the tools of the twin server with tests/Support/Mcp/twins.php (they run the whole harness before the areas
- * bring their tools). A row is `"tool:action" => ['arguments' => fn (MatrixWorld $w) => [...]]`.
+ * bring their tools). A row is `"tool:action" => ['arguments' => fn (MatrixWorld $w) => [...]]`; a row whose call the
+ * action refuses on purpose names the refusal, `'refuses' => ['status' => 409, 'reason' => 'in_use']`. Every other row
+ * has to succeed: a row with wrong arguments would otherwise only ever check the shape of a problem.
  */
 final class ToolRows
 {
@@ -28,7 +31,7 @@ final class ToolRows
     ];
 
     /**
-     * @return array<string, array{arguments?: Closure(MatrixWorld): array<string, mixed>}>
+     * @return array<string, array{arguments?: Closure(MatrixWorld): array<string, mixed>, refuses?: array{status: int, reason: string}}>
      */
     public static function rows(string $suite): array
     {
@@ -125,6 +128,33 @@ final class ToolRows
         $arguments = isset($row['arguments']) ? ($row['arguments'])($w) : [];
 
         return count($tool->actionNames()) > 1 ? ['action' => Str::after($key, ':'), ...$arguments] : $arguments;
+    }
+
+    /**
+     * The refusal a row names, `null` for a row that has to succeed.
+     *
+     * @return array{status: int, reason: string}|null
+     */
+    public static function refusal(string $suite, string $key): ?array
+    {
+        return self::rows($suite)[$key]['refuses'] ?? null;
+    }
+
+    /**
+     * The result of a call is what its row says: a success, or exactly the refusal the row names (status and reason).
+     *
+     * @param  array{status: int, reason: string}|null  $refuses
+     */
+    public static function expectOutcome(stdClass $result, ?array $refuses, string $context): void
+    {
+        if ($refuses === null) {
+            expect($result->isError)->toBeFalse("{$context} has to succeed: ".json_encode($result->structuredContent ?? null));
+
+            return;
+        }
+
+        expect($result->isError)->toBeTrue("{$context} has to be refused")
+            ->and([$result->structuredContent->status ?? null, $result->structuredContent->reason ?? null])->toBe([$refuses['status'], $refuses['reason']], $context);
     }
 
     /**

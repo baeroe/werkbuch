@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureSession;
 use App\Http\Middleware\EnsureTokenAbility;
 use App\Mcp\Servers\WerkbuchServer;
 use App\Mcp\Support\McpAction;
@@ -15,6 +16,7 @@ use App\OpenApi\ContentSchemas;
 use App\OpenApi\ItemQueryDocs;
 use App\Support\Actor;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Route as RoutingRoute;
 use Laravel\Mcp\Request as McpRequest;
 use Laravel\Sanctum\TransientToken;
 use Tests\Support\Mcp\McpClient;
@@ -191,10 +193,33 @@ it('gives each action the ability of its twin', function (string $suite) {
 
     // a line that is no ability names a mismatch
     expect(array_filter($checked, fn (string $line) => ! in_array($line, ['read', 'write'], true)))->toBe([])
-        ->and($checked)->toMatchArray($suite === 'werkbuch' ? ['whoami:call' => 'read'] : [
+        ->and($checked)->toMatchArray($suite === 'werkbuch' ? ['whoami:call' => 'read', 'search:call' => 'read'] : [
             'twins:list-users' => 'read', 'twins:members' => 'read', 'twins:query' => 'read', 'twins:groups' => 'read',
             'manage-twins:create-view' => 'write', 'manage-twins:create-label' => 'write', 'manage-twins:delete-view' => 'write',
         ]);
+})->with(array_keys(ToolRows::SUITES));
+
+it('has no twin that only the session of the browser may call', function (string $suite) {
+    // REST refuses every token there in a middleware, not in the action: a tool would call the action past it
+    $sessionOnly = fn (RoutingRoute $route): bool => in_array(EnsureSession::class, $route->gatherMiddleware(), true);
+    $twins = [];
+
+    foreach (ToolRows::tools($suite) as $tool) {
+        foreach ($tool->actionNames() as $name) {
+            $action = $tool->actionNamed($name);
+            if ($action?->twin !== null) {
+                $twins["{$tool->name()}:{$name}"] = $sessionOnly(ToolRows::route($action));
+            }
+        }
+    }
+
+    // the check sees the middleware where it stands: on creating a token and on the own account
+    $route = fn (string $method, string $uri): RoutingRoute => ToolRows::route(new McpAction('x', 'x', fn () => McpResult::done(), twin: "{$method} {$uri}"));
+    expect($sessionOnly($route('POST', 'tokens')))->toBeTrue()
+        ->and($sessionOnly($route('PUT', 'me/password')))->toBeTrue()
+        ->and($sessionOnly($route('GET', 'tokens')))->toBeFalse()
+        ->and(count($twins))->toBeGreaterThan(0)
+        ->and(array_keys(array_filter($twins)))->toBe([]);
 })->with(array_keys(ToolRows::SUITES));
 
 it('keeps tools/list small', function (string $suite) {
