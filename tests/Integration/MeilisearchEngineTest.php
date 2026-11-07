@@ -2,8 +2,10 @@
 
 use App\Models\Label;
 use App\Models\Project;
+use App\Models\User;
 use App\Models\WorkItem;
 use App\Search\MeilisearchEngine;
+use App\Search\SearchIndexer;
 use Illuminate\Support\Facades\Artisan;
 use Laravel\Scout\EngineManager;
 use Meilisearch\Client;
@@ -57,4 +59,16 @@ it('refuses to remove documents of a model without an index', function () {
 
 it('talks to Meilisearch through the installed HTTP client', function () {
     expect(app(Client::class)->health())->toBe(['status' => 'available']);
+});
+
+it('counts the documents of an index and 0 for a missing one', function () {
+    $engine = app(EngineManager::class)->engine();
+    assert($engine instanceof MeilisearchEngine);
+
+    expect($engine->documentCount('testing_users'))->toBe(0);
+
+    app(SearchIndexer::class)->rebuild();
+    Meili::settle();
+
+    expect($engine->documentCount('testing_users'))->toBe(User::count());
 });

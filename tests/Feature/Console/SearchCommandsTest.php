@@ -40,3 +40,18 @@ it('imports everything and says how much', function () {
         ->and($engine->documents('testing_users'))->toHaveCount($accounts)
         ->and($engine->updatedSettings('testing_work_items'))->not->toBeNull();
 });
+
+it('imports with --if-empty only when an index lacks its documents', function () {
+    $engine = searchEngine();
+    Project::factory()->identifier('WEB')->create();
+
+    $this->artisan('app:search-import', ['--if-empty' => true])->expectsOutputToContain('Indexed')->assertExitCode(0);
+    $written = $engine->writes();
+
+    expect($engine->documents('testing_projects'))->toHaveCount(1);
+
+    $this->artisan('app:search-import', ['--if-empty' => true])
+        ->expectsOutput('The search indexes have their documents; nothing imported.')->assertExitCode(0);
+
+    expect($engine->writes())->toBe($written);
+});

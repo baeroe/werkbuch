@@ -2,6 +2,7 @@
 
 namespace Tests\Support;
 
+use App\Search\CountsDocuments;
 use App\Search\RemovesWhere;
 use App\Search\ReportsStatus;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
@@ -23,7 +24,7 @@ use Throwable;
  * `$builder->callback` and `$builder->options` speak to Meilisearch and are passed over. Its status (ReportsStatus) is
  * `ok` without tasks, `down` after failWith(). Real Meilisearch runs in tests/Integration (Tests\Support\Meili).
  */
-final class ArraySearchEngine extends Engine implements RemovesWhere, ReportsStatus, UpdatesIndexSettings
+final class ArraySearchEngine extends Engine implements CountsDocuments, RemovesWhere, ReportsStatus, UpdatesIndexSettings
 {
     /** @var array<string, array<string, array<string, mixed>>> the documents of each index by key, in the order they came in */
     private array $indexes = [];
@@ -91,6 +92,11 @@ final class ArraySearchEngine extends Engine implements RemovesWhere, ReportsSta
     public function failWith(?Throwable $error): void
     {
         $this->error = $error;
+    }
+
+    public function documentCount(string $index): int
+    {
+        return count($this->indexes[$index] ?? []);
     }
 
     public function status(): array

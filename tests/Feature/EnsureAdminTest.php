@@ -2,6 +2,7 @@
 
 use App\Access\OrgRole;
 use App\Access\Visibility;
+use App\Actions\Auth\EnsureAdmin;
 use App\Enums\AccountType;
 use App\Events\EventType;
 use App\Models\Event;
@@ -101,3 +102,18 @@ it('fails and creates nothing for invalid values', function (string $email, stri
     'short password' => ['owner@example.com', 'short', 'at least 8'],
     'placeholder password' => ['owner@example.com', 'change-me', 'placeholder'],
 ]);
+
+it('names the placeholder with the sentence of lang', function () {
+    config(['werkbuch.admin.password' => EnsureAdmin::PLACEHOLDER]);
+
+    $this->artisan('app:ensure-admin')->expectsOutputToContain(__('field.admin_password.placeholder'))->assertFailed();
+
+    expect(User::query()->where('is_default_bot', false)->count())->toBe(0);
+});
+
+it('does not mind the placeholder once accounts exist', function () {
+    User::factory()->create();
+    config(['werkbuch.admin.password' => EnsureAdmin::PLACEHOLDER]);
+
+    $this->artisan('app:ensure-admin')->assertSuccessful();
+});

@@ -165,6 +165,26 @@ final class SearchIndexer
     }
 
     /**
+     * Whether the first start has to import: an index without documents although its table has rows (a new Meilisearch
+     * volume). An engine that cannot count its documents never asks for it.
+     */
+    public function needsImport(): bool
+    {
+        $engine = $this->engines->engine();
+        if (! $engine instanceof CountsDocuments) {
+            return false;
+        }
+
+        foreach (self::MODELS as $class) {
+            if ($engine->documentCount((new $class)->indexableAs()) === 0 && $this->query($class)->exists()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Builds every index from scratch (P18): the settings, then each index emptied and filled from the database.
      *
      * @return array{work_items: int, pages: int, projects: int, users: int} the documents written to each index

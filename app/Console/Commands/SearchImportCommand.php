@@ -11,12 +11,18 @@ use Illuminate\Support\Str;
  */
 class SearchImportCommand extends Command
 {
-    protected $signature = 'app:search-import';
+    protected $signature = 'app:search-import {--if-empty : Import only when an index has no documents although its table has rows}';
 
     protected $description = 'Build the search indexes from scratch, with their settings';
 
     public function handle(SearchIndexer $indexer): int
     {
+        if ($this->option('if-empty') && ! $indexer->needsImport()) {
+            $this->info('The search indexes have their documents; nothing imported.');
+
+            return self::SUCCESS;
+        }
+
         ['work_items' => $items, 'pages' => $pages, 'projects' => $projects, 'users' => $users] = $indexer->rebuild();
 
         $this->info(sprintf(

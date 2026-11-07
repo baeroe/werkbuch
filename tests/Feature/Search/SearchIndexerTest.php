@@ -232,3 +232,33 @@ it('skips settings for an engine without them', function () {
 
     expect(app(EngineManager::class)->engine())->toBeInstanceOf(NullEngine::class);
 });
+
+it('needs an import while an index has no documents but its table has rows', function () {
+    searchEngine();
+
+    expect(app(SearchIndexer::class)->needsImport())->toBeTrue();
+});
+
+it('needs none once every index with rows has documents', function () {
+    searchEngine();
+    app(SearchIndexer::class)->rebuild();
+
+    expect(app(SearchIndexer::class)->needsImport())->toBeFalse();
+});
+
+it('needs none for an empty table', function () {
+    searchEngine();
+    app(SearchIndexer::class)->rebuild();
+    Project::query()->delete();
+    Page::query()->delete();
+    WorkItem::query()->delete();
+
+    expect(app(SearchIndexer::class)->needsImport())->toBeFalse();
+});
+
+it('needs none without an engine that counts', function () {
+    config(['scout.driver' => 'null']);
+    app(EngineManager::class)->forgetDrivers();
+
+    expect(app(SearchIndexer::class)->needsImport())->toBeFalse();
+});

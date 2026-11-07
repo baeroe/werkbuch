@@ -27,7 +27,7 @@ final class EnsureAdmin
 {
     use AsAction;
 
-    private const PLACEHOLDER_PASSWORD = 'change-me';
+    public const PLACEHOLDER = 'change-me';
 
     public function __construct(private readonly RoleAssignments $roles) {}
 
@@ -76,8 +76,8 @@ final class EnsureAdmin
             ['email' => ['email', 'max:255'], 'password' => PasswordRules::rules()],
         )->validate();
 
-        if ($password === self::PLACEHOLDER_PASSWORD) {
-            throw ValidationException::withMessages(['password' => 'ADMIN_PASSWORD still is the placeholder "'.self::PLACEHOLDER_PASSWORD.'"; set a real password.']);
+        if ($password === self::PLACEHOLDER) {
+            throw ValidationException::withMessages(['password' => __('field.admin_password.placeholder')]);
         }
     }
 }

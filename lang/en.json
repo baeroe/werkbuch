@@ -163,6 +163,7 @@
     "favorites.loading": "Loading favorites …",
     "favorites.not_changed": "Favorite not changed",
     "field.abilities.required": "Choose at least one ability.",
+    "field.admin_password.placeholder": "ADMIN_PASSWORD is still the placeholder change-me: choose your own password before the first start.",
     "field.archived_at.default": "A default cannot be archived.",
     "field.archived_at.invalid": "archived_at is a timestamp or null.",
     "field.assignee_id.filter": "Only ULIDs of accounts, or none alone (items without an assignee).",
