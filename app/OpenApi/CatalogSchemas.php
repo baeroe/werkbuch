@@ -232,7 +232,7 @@ final class CatalogSchemas
             'Puts a project or a view into the favorites of the account, or takes it out when it is in already.',
             [
                 'kind' => ['type' => 'string', 'enum' => ['project', 'view'], 'description' => 'What is toggled.'],
-                'id' => ['type' => 'string', 'description' => 'The project (ULID, identifier or former identifier) or the view (ULID).'],
+                'id' => ['type' => 'string', 'description' => 'The ULID of the project or of the view (an identifier is 404).'],
             ],
             ['kind', 'id'],
             true,

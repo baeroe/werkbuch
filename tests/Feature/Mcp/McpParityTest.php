@@ -72,7 +72,8 @@ $answersLikeTwin = function (TestCase $t, MatrixWorld $w, string $suite, string 
         ? $result->structuredContent->status
         : (int) collect(array_keys(Document::operation($method, $uri)['responses']))->first(fn (int|string $status) => Str::startsWith((string) $status, '2'));
 
-    if ($status === 204) {
+    // an answer the twin documents without a body (204, and the 202 of `DELETE projects/{project}`) is `{done: true}`
+    if (! $result->isError && ! isset(Document::operation($method, $uri)['responses'][$status]['content'])) {
         expect($result->structuredContent)->toEqual((object) ['done' => true]);
 
         return;

@@ -7,10 +7,14 @@ use App\Http\Middleware\EnsureMcpToken;
 use App\Http\Middleware\GuardMcpRequest;
 use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\ThrottleApi;
+use App\Mcp\Tools\AutomationsTool;
+use App\Mcp\Tools\ManageAutomationsTool;
 use App\Mcp\Tools\ManageOrganizationTool;
 use App\Mcp\Tools\ManagePeopleTool;
+use App\Mcp\Tools\ManageProjectsTool;
 use App\Mcp\Tools\OrganizationTool;
 use App\Mcp\Tools\PeopleTool;
+use App\Mcp\Tools\ProjectsTool;
 use App\Mcp\Tools\SearchTool;
 use App\Mcp\Tools\WhoamiTool;
 use Illuminate\Support\Facades\Route;
@@ -57,6 +61,10 @@ final class WerkbuchServer extends Server
         ManageOrganizationTool::class,
         PeopleTool::class,
         ManagePeopleTool::class,
+        ProjectsTool::class,
+        ManageProjectsTool::class,
+        AutomationsTool::class,
+        ManageAutomationsTool::class,
     ];
 
     protected array $resources = [];
