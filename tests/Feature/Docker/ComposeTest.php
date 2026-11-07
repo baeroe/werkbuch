@@ -322,6 +322,14 @@ it('runs the standalone stack like docker-compose.yml', function () use ($compos
         ->and($file['services']['mariadb']['environment']['MARIADB_ROOT_HOST'])->toBe('localhost')
         ->and($file['services']['mariadb']['environment']['MARIADB_DATABASE'])->toBe('werkbuch');
 
+    foreach (['mariadb' => ['MARIADB_USER', 'MARIADB_AUTO_UPGRADE'], 'meilisearch' => ['MEILI_ENV', 'MEILI_NO_ANALYTICS']] as $name => $keys) {
+        foreach ($keys as $key) {
+            expect(array_key_exists($key, $file['services'][$name]['environment']))->toBeTrue("{$name} sets no {$key}");
+            expect((string) $file['services'][$name]['environment'][$key])
+                ->toBe((string) $stack['services'][$name]['environment'][$key], "{$name} {$key} differs from docker-compose.yml");
+        }
+    }
+
     foreach ($appServices as $name) {
         expect($file['services'][$name]['image'])->toBe('baeroe/werkbuch:latest');
 

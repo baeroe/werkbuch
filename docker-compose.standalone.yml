@@ -7,7 +7,8 @@
 x-werkbuch:
   APP_URL: &app-url https://pm.example.com
   ADMIN_EMAIL: &admin-email admin@example.com
-  # needed at the first start only; remove it once the admin exists
+  # read only while there is no account yet: after the first start change-me does nothing here, keep the line
+  # (the services refer to it)
   ADMIN_PASSWORD: &admin-password change-me
   DB_PASSWORD: &db-password change-me
   MEILISEARCH_KEY: &meili-key change-me
