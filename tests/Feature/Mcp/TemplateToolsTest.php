@@ -92,7 +92,7 @@ it('answers a failed run with its sentence', function () use ($world) {
 
     expect($ran['isError'])->toBeFalse((string) json_encode($ran))
         ->and($ran['structuredContent']['data']['run']['status'])->toBe('failed')
-        ->and($ran['structuredContent']['data']['run']['error'])->toBeString()
+        ->and($ran['structuredContent']['data']['run']['error'])->toBe(__('field.assignee_id.invalid'))
         ->and($ran['structuredContent']['data']['item'])->toBeNull()
         ->and(WorkItem::query()->count())->toBe(0);
 });

@@ -56,23 +56,43 @@ it('answers a stale save with page_conflict and the current page in markdown', f
         ->and(eventsOf(EventType::PageUpdated, $page))->toHaveCount(0);
 });
 
-it('keeps the stored state as a version when asked to keep the current one', function () use ($world) {
+it('keeps the stored state as a version only when asked to keep the current one', function () use ($world) {
     [, $page, , $theo] = $world();
     $mcp = McpClient::for($this, apiToken($theo, ['read', 'write', 'mcp']));
+    // the stored state is the writer's own and fresh (within the pause), so only `keep_current` can make a version
+    $page->forceFill(['updated_by' => $theo->id, 'updated_at' => now()])->save();
 
-    $saved = $mcp->call('manage-pages', ['action' => 'update', 'page' => $page->id, 'input' => ['content' => 'Fassung von Theo', 'base_version' => 1, 'keep_current' => true]]);
+    $plain = $mcp->call('manage-pages', ['action' => 'update', 'page' => $page->id, 'input' => ['content' => 'Zweite Fassung', 'base_version' => 1]]);
+    expect($plain['isError'])->toBeFalse((string) json_encode($plain))
+        ->and($plain['structuredContent']['data']['version'])->toBe(2)
+        ->and(PageVersion::query()->count())->toBe(0);
+
+    $saved = $mcp->call('manage-pages', ['action' => 'update', 'page' => $page->id, 'input' => ['content' => 'Fassung von Theo', 'base_version' => 2, 'keep_current' => true]]);
     $version = PageVersion::query()->sole();
 
     expect($saved['isError'])->toBeFalse((string) json_encode($saved))
         ->and($saved['structuredContent']['data']['content'])->toBe('Fassung von Theo')
-        ->and($saved['structuredContent']['data']['version'])->toBe(2)
-        ->and([$version->page_id, $version->version])->toBe([$page->id, 1]);
+        ->and($saved['structuredContent']['data']['version'])->toBe(3)
+        ->and([$version->page_id, $version->version])->toBe([$page->id, 2]);
 
     $versions = $mcp->call('pages', ['action' => 'versions', 'page' => $page->id]);
     $read = $mcp->call('pages', ['action' => 'version', 'page' => $page->id, 'page_version' => $version->id]);
     expect(array_column($versions['structuredContent']['data'], 'id'))->toBe([$version->id])
         ->and($versions['structuredContent']['meta']['per_page'])->toBe(25)
-        ->and($read['structuredContent']['data']['content'])->toBe('Erste Fassung');
+        ->and($read['structuredContent']['data']['content'])->toBe('Zweite Fassung');
+});
+
+it('refuses to move a page into its own subtree', function () use ($world) {
+    [$web, $page, , $theo] = $world();
+    $child = Page::factory()->for($web)->childOf($page)->create(['title' => 'Unterseite']);
+    $mcp = McpClient::for($this, apiToken($theo, ['read', 'write', 'mcp']));
+
+    $moved = $mcp->call('manage-pages', ['action' => 'move', 'page' => $page->id, 'input' => ['parent_id' => $child->id, 'before_id' => null]]);
+
+    expect($moved['isError'])->toBeTrue()
+        ->and($moved['structuredContent']['status'])->toBe(422)
+        ->and($moved['structuredContent']['errors']['parent_id'])->toBe([__('field.parent_page.cycle')])
+        ->and($page->fresh()?->parent_id)->toBeNull();
 });
 
 it('moves, restores and deletes a subtree', function () use ($world) {
