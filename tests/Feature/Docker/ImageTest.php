@@ -474,6 +474,62 @@ it('has a smoke script a shell accepts', function () {
         ->and(is_executable(repo_path('scripts/compose-smoke.sh')))->toBeTrue('scripts/compose-smoke.sh is not executable');
 });
 
+/**
+ * Runs scripts/compose-smoke.sh with a fake `docker` first on the PATH: it writes its arguments to $dir/docker.log, lists
+ * $FAKE_CONTAINERS for `docker ps` and $FAKE_VOLUMES for `docker volume ls`, and fails every `docker compose` call.
+ */
+$smokeRun = function (array $env) use ($entrypointDir): Process {
+    $dir = $entrypointDir();
+    file_put_contents($dir.'/bin/docker', <<<'SH'
+        #!/bin/sh
+        echo "$*" >> "$DOCKER_LOG"
+        case "$1" in
+            ps) [ -z "$FAKE_CONTAINERS" ] || echo "$FAKE_CONTAINERS" ;;
+            volume) [ -z "$FAKE_VOLUMES" ] || echo "$FAKE_VOLUMES" ;;
+            compose) exit 1 ;;
+        esac
+        exit 0
+        SH);
+    chmod($dir.'/bin/docker', 0755);
+
+    $process = new Process(['bash', repo_path('scripts/compose-smoke.sh')], $dir, [
+        'PATH' => $dir.'/bin:'.getenv('PATH'),
+        'DOCKER_LOG' => $dir.'/docker.log',
+        'WERKBUCH_IMAGE' => 'werkbuch:local',
+        'SMOKE_PROJECT' => 'werkbuch-smoke-test',
+        'FAKE_CONTAINERS' => '',
+        'FAKE_VOLUMES' => '',
+        'SMOKE_KEEP' => false,
+        ...$env,
+    ]);
+    $process->run();
+
+    return $process;
+};
+
+it('stops the smoke before anything when its compose project exists already', function (string $variable) use ($smokeRun) {
+    $process = $smokeRun([$variable => 'f00ba4']);
+    $calls = file($process->getWorkingDirectory().'/docker.log', FILE_IGNORE_NEW_LINES);
+
+    expect($process->getExitCode())->toBe(1)
+        ->and($process->getErrorOutput())->toContain('smoke: the compose project werkbuch-smoke-test exists already')
+        ->and($calls)->toBe([
+            'ps -aq --filter label=com.docker.compose.project=werkbuch-smoke-test',
+            'volume ls -q --filter label=com.docker.compose.project=werkbuch-smoke-test',
+        ]);
+})->with(['a container' => 'FAKE_CONTAINERS', 'a volume' => 'FAKE_VOLUMES']);
+
+it('starts the smoke on a compose project that does not exist yet', function () use ($smokeRun) {
+    $process = $smokeRun([]);
+    $calls = file($process->getWorkingDirectory().'/docker.log', FILE_IGNORE_NEW_LINES);
+    $compose = array_values(array_filter($calls, fn (string $call) => str_starts_with($call, 'compose -p werkbuch-smoke-test ')));
+
+    // the fake fails `up`: the trap shows the logs and removes the project it started
+    expect($process->getExitCode())->toBe(1)
+        ->and($compose[0])->toEndWith('/docker-compose.yml up -d --wait --wait-timeout 300')
+        ->and(end($compose))->toEndWith('/docker-compose.yml down -v --remove-orphans');
+});
+
 it('is a script a POSIX shell accepts', function () {
     $process = new Process(['sh', '-n', repo_path('docker/entrypoint.d/99-werkbuch.sh')]);
     $process->run();
@@ -515,7 +571,7 @@ it('says how to get the first account by the exit code of app:ensure-admin, neve
 
     expect($none->getExitCode())->toBe(0, $none->getErrorOutput())
         ->and($none->getOutput())->toContain('Noch kein Konto.')
-        ->and($none->getOutput())->toContain('werkbuch: no account yet, set ADMIN_EMAIL and ADMIN_PASSWORD and restart')
+        ->and($none->getOutput())->toContain('werkbuch: no account yet, set ADMIN_EMAIL and ADMIN_PASSWORD and run docker compose up -d')
         ->and($none->getOutput())->toEndWith("werkbuch: ready\n")
         ->and($artisanCalls($none))->toContain('artisan app:search-sync --no-interaction')
         ->and($some->getExitCode())->toBe(0, $some->getErrorOutput())
@@ -603,6 +659,29 @@ it('takes keys from the environment and writes no file', function () use ($entry
     foreach ($keyFiles($dir) as $name => $file) {
         expect(is_file($file))->toBeFalse("{$name} came from the environment and still went to {$file}");
     }
+});
+
+it('warns when APP_KEY of the environment differs from the key in the volume, and starts with it', function () use ($entrypoint, $entrypointDir, $webKeys) {
+    $other = 'base64:'.base64_encode(str_repeat('o', 32));
+    $differs = $entrypointDir();
+    $webKeys($differs);
+    $same = $entrypointDir();
+    $webKeys($same);
+    $stored = (string) file_get_contents($same.'/storage/app/.app-key');
+
+    $warned = $entrypoint(['APP_KEY' => $other], 'true', $differs);
+    $quiet = $entrypoint(['APP_KEY' => $stored], 'true', $same);
+    $warning = 'werkbuch: APP_KEY of the environment differs from storage/app/.app-key';
+
+    expect($warned->getExitCode())->toBe(0, $warned->getErrorOutput())
+        ->and($warned->getErrorOutput())->toContain($warning)
+        ->and($warned->getErrorOutput())->toContain('second factors and webhook secrets')
+        ->and($warned->getOutput())->toEndWith("werkbuch: ready\n")
+        ->and(explode('|', file($differs.'/keys.log', FILE_IGNORE_NEW_LINES)[0])[0])->toBe($other)
+        ->and((string) file_get_contents($differs.'/storage/app/.app-key'))->toBe('base64:'.base64_encode(str_repeat('k', 32)), 'the start changed the key in the volume')
+        ->and($quiet->getExitCode())->toBe(0, $quiet->getErrorOutput())
+        ->and($quiet->getOutput())->toEndWith("werkbuch: ready\n")
+        ->and(str_contains($quiet->getErrorOutput(), $warning))->toBeFalse('the entrypoint warned about the key it has in the volume');
 });
 
 it('refuses to start a worker without the keys of the web service', function () use ($entrypoint) {

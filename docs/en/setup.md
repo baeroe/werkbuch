@@ -117,7 +117,7 @@ On every start the web service:
 
 A step that fails stops the container with a message, so a half-migrated instance never serves requests. Meilisearch has to be healthy before the web service starts. The workers, the scheduler and Reverb start once the web service is healthy, read the keys from the data volume, build only their caches and log `werkbuch: ready: php artisan …`; they never migrate.
 
-`werkbuch: no account yet, set ADMIN_EMAIL and ADMIN_PASSWORD and restart` means: there is no account yet, and none was created because `ADMIN_PASSWORD` is empty. Set it in `.env` and run `docker compose up -d` again. Once an account exists, every start leaves the accounts alone and ends its line with `ADMIN_EMAIL and ADMIN_PASSWORD are only used on the first start.`, with or without `ADMIN_PASSWORD`.
+`werkbuch: no account yet, set ADMIN_EMAIL and ADMIN_PASSWORD and run docker compose up -d` means: there is no account yet, and none was created because `ADMIN_PASSWORD` is empty. Set it in `.env` and run `docker compose up -d` again. Once an account exists, every start leaves the accounts alone and ends its line with `ADMIN_EMAIL and ADMIN_PASSWORD are only used on the first start.`, with or without `ADMIN_PASSWORD`.
 
 ## Passwords
 
@@ -168,7 +168,7 @@ All werkbuch containers run as `www-data` with `no-new-privileges`; the code in 
 
 Containers can be recreated at any time, the volumes stay. `docker compose down -v` deletes them, and with them the database, every upload and the keys.
 
-`.app-key` belongs in every backup and must never get lost. `APP_KEY` encrypts the secrets of the webhooks and the second factors with their recovery codes: with another key, everyone with a second factor is locked out, and every webhook needs a new secret. Never change `APP_KEY` later. If you set it in `.env`, set it before the first start; on an instance that already has `.app-key`, leave it empty. The Reverb keys are less critical: new ones only need a reload of the open tabs.
+`.app-key` belongs in every backup and must never get lost. `APP_KEY` encrypts the secrets of the webhooks and the second factors with their recovery codes: with another key, everyone with a second factor is locked out, and every webhook needs a new secret. Never change `APP_KEY` later. If you set it in `.env`, set it before the first start; on an instance that already has `.app-key`, leave it empty. An `APP_KEY` in `.env` wins over `.app-key`; when the two differ, every start warns with `werkbuch: APP_KEY of the environment differs from storage/app/.app-key`. The Reverb keys are less critical: new ones only need a reload of the open tabs.
 
 ## Your own MariaDB
 

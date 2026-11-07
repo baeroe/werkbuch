@@ -11,6 +11,12 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 : "${WERKBUCH_IMAGE:?WERKBUCH_IMAGE missing (for example werkbuch:local)}"
 PROJECT=${SMOKE_PROJECT:-werkbuch-smoke}
 PORT=${SMOKE_PORT:-7740}
+# the end of the smoke runs `down -v` on this project: never on one that has containers or volumes already
+existing=$(docker ps -aq --filter "label=com.docker.compose.project=$PROJECT"; docker volume ls -q --filter "label=com.docker.compose.project=$PROJECT")
+if [ -n "$existing" ]; then
+    echo "smoke: the compose project $PROJECT exists already (containers or volumes); remove it or set SMOKE_PROJECT to another name" >&2
+    exit 1
+fi
 if [ -z "${SMOKE_PROBE:-}" ]; then
     # a fixed amount of random bytes: `tr < /dev/urandom | head` ends tr with SIGPIPE, which pipefail turns into a failure
     SMOKE_PROBE=$(head -c 4096 /dev/urandom | LC_ALL=C tr -dc '[:lower:]' | cut -c 1-12)

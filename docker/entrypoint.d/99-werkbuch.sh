@@ -56,6 +56,11 @@ app_key() { echo "base64:$(head -c 32 /dev/urandom | base64)"; }
 hex20() { od -An -tx1 -N10 /dev/urandom | tr -d ' \n'; }
 hex64() { od -An -tx1 -N32 /dev/urandom | tr -d ' \n'; }
 
+# an APP_KEY in the environment wins over .app-key; another one than in the volume cannot read what the volume's key
+# encrypted, so the start says it (it goes on: the environment may be the key that is right)
+if [ -n "${APP_KEY:-}" ] && [ -s storage/app/.app-key ] && [ "$APP_KEY" != "$(cat storage/app/.app-key)" ]; then
+    log "APP_KEY of the environment differs from storage/app/.app-key (data volume): werkbuch uses the environment, and second factors and webhook secrets encrypted with the other key can no longer be read" >&2
+fi
 key APP_KEY storage/app/.app-key app_key
 key REVERB_APP_KEY storage/app/.reverb-app-key hex20
 key REVERB_APP_SECRET storage/app/.reverb-app-secret hex64
@@ -92,7 +97,7 @@ if [ "$role" = web ]; then
     status=0
     php artisan app:ensure-admin --require-account --no-interaction || status=$?
     if [ "$status" -eq 3 ]; then
-        log "no account yet, set ADMIN_EMAIL and ADMIN_PASSWORD and restart"
+        log "no account yet, set ADMIN_EMAIL and ADMIN_PASSWORD and run docker compose up -d"
     elif [ "$status" -ne 0 ]; then
         exit "$status"
     fi

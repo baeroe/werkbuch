@@ -117,7 +117,7 @@ Bei jedem Start macht der Web-Dienst:
 
 Scheitert ein Schritt, stoppt der Container mit einer Meldung, so bedient eine halb migrierte Instanz nie Anfragen. Meilisearch muss gesund sein, bevor der Web-Dienst startet. Die Worker, der Scheduler und Reverb starten, sobald der Web-Dienst gesund ist, lesen die Schlüssel aus dem Daten-Volume, bauen nur ihre Caches und schreiben `werkbuch: ready: php artisan …`; sie migrieren nie.
 
-`werkbuch: no account yet, set ADMIN_EMAIL and ADMIN_PASSWORD and restart` heißt: Es gibt noch kein Konto, und keins ist entstanden, weil `ADMIN_PASSWORD` leer ist. Das Passwort in der `.env` setzen und `docker compose up -d` erneut ausführen. Sobald es ein Konto gibt, lässt jeder Start die Konten in Ruhe und endet seine Zeile mit `ADMIN_EMAIL and ADMIN_PASSWORD are only used on the first start.`, mit oder ohne `ADMIN_PASSWORD`.
+`werkbuch: no account yet, set ADMIN_EMAIL and ADMIN_PASSWORD and run docker compose up -d` heißt: Es gibt noch kein Konto, und keins ist entstanden, weil `ADMIN_PASSWORD` leer ist. Das Passwort in der `.env` setzen und `docker compose up -d` erneut ausführen. Sobald es ein Konto gibt, lässt jeder Start die Konten in Ruhe und endet seine Zeile mit `ADMIN_EMAIL and ADMIN_PASSWORD are only used on the first start.`, mit oder ohne `ADMIN_PASSWORD`.
 
 ## Passwörter
 
@@ -168,7 +168,7 @@ Alle werkbuch-Container laufen als `www-data` mit `no-new-privileges`; der Code 
 
 Container lassen sich jederzeit neu erzeugen, die Volumes bleiben. `docker compose down -v` löscht sie, und mit ihnen die Datenbank, jeden Upload und die Schlüssel.
 
-`.app-key` gehört in jedes Backup und darf nie verloren gehen. `APP_KEY` verschlüsselt die Geheimnisse der Webhooks und die zweiten Faktoren samt Recovery-Codes: Mit einem anderen Schlüssel ist jede Person mit zweitem Faktor ausgesperrt, und jeder Webhook braucht ein neues Geheimnis. `APP_KEY` nie nachträglich ändern. Wer ihn in der `.env` setzt, setzt ihn vor dem ersten Start; bei einer Instanz, die schon `.app-key` hat, bleibt er leer. Die Reverb-Schlüssel sind weniger heikel: Neue verlangen nur ein Neuladen der offenen Tabs.
+`.app-key` gehört in jedes Backup und darf nie verloren gehen. `APP_KEY` verschlüsselt die Geheimnisse der Webhooks und die zweiten Faktoren samt Recovery-Codes: Mit einem anderen Schlüssel ist jede Person mit zweitem Faktor ausgesperrt, und jeder Webhook braucht ein neues Geheimnis. `APP_KEY` nie nachträglich ändern. Wer ihn in der `.env` setzt, setzt ihn vor dem ersten Start; bei einer Instanz, die schon `.app-key` hat, bleibt er leer. Ein `APP_KEY` in der `.env` gewinnt vor `.app-key`; weichen die beiden ab, warnt jeder Start mit `werkbuch: APP_KEY of the environment differs from storage/app/.app-key`. Die Reverb-Schlüssel sind weniger heikel: Neue verlangen nur ein Neuladen der offenen Tabs.
 
 ## Eigene MariaDB
 
