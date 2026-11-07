@@ -11,9 +11,9 @@ use Laravel\Fortify\LoginRateLimiter;
  * Fortify's lock per lower(email)|IP plus a cap per address over all IPs (A434): behind a forgeable X-Forwarded-For
  * every limit per IP is moot, so at most `rate_limits.login_per_account` failures count per address within
  * `rate_limits.login_account_decay` seconds. The cap does not hold a device that once signed in to exactly this address
- * (KnownDevice), so whoever knows only the address never locks the owner out on her own browser. Bound as Fortify's
- * LoginRateLimiter, it reaches the lock, the counting, the second factor, the session and the lockout answer of the
- * pipeline (A445).
+ * with its current password (KnownDevice), so whoever knows only the address never locks the owner out on her own
+ * browser. Bound as Fortify's LoginRateLimiter, it reaches the lock, the counting, the second factor, the session and the
+ * lockout answer of the pipeline (A445).
  */
 final class AccountLoginRateLimiter extends LoginRateLimiter
 {
@@ -82,7 +82,7 @@ final class AccountLoginRateLimiter extends LoginRateLimiter
 
         return $address !== null
             && $this->limiter->tooManyAttempts(self::PREFIX.$address, (int) config('werkbuch.rate_limits.login_per_account'))
-            && ! KnownDevice::matches($request, $address);
+            && ! KnownDevice::matches($request);
     }
 
     /**

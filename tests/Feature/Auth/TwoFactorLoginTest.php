@@ -189,13 +189,15 @@ it('starts again after a new password', function () {
 });
 
 it('burdens no account without a challenge', function () {
-    maraWithTwoFactor();
+    $mara = maraWithTwoFactor();
 
     foreach (range(1, 3) as $i) {
         $this->post('/two-factor-challenge', ['code' => '000000'])->assertRedirect('/login');
     }
 
-    expect(RateLimiter::attempts(TwoFactorDay::cacheKey((string) User::query()->where('email', 'mara@example.com')->value('id'))))->toBe(0);
+    // the requests count, under the key without an account; Mara's day stays whole
+    expect(RateLimiter::attempts(TwoFactorDay::cacheKey('')))->toBe(3)
+        ->and(RateLimiter::attempts(TwoFactorDay::cacheKey($mara->id)))->toBe(0);
 });
 
 it('counts the tries per account that signs in', function () {

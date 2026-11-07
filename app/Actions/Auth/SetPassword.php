@@ -3,6 +3,7 @@
 namespace App\Actions\Auth;
 
 use App\Auth\AccountLoginRateLimiter;
+use App\Auth\KnownDevice;
 use App\Auth\TwoFactorDay;
 use App\Events\EventRecorder;
 use App\Events\EventType;
@@ -49,10 +50,15 @@ final class SetPassword
             $actor = $actor === null ? Actor::system($user, $reason) : $actor->withReason($reason);
             EventRecorder::record(EventType::UserPasswordChanged, $actor, $user, null);
             // whoever sets a new password (through the mailed link: the mailbox is proven) is no longer held by the cap
-            // per account of the sign-in nor by the day of codes of the second factor (A434, A435); after the commit
-            DB::afterCommit(function () use ($user): void {
+            // per account of the sign-in nor by the day of codes of the second factor (A434, A435); the new password
+            // revokes every known device, the own browser of a change in the session stays one; after the commit
+            DB::afterCommit(function () use ($user, $keepSession): void {
                 app(AccountLoginRateLimiter::class)->clearAccount((string) $user->email);
                 RateLimiter::clear(TwoFactorDay::cacheKey((string) $user->id));
+
+                if ($keepSession) {
+                    KnownDevice::renew($user);
+                }
             });
         });
     }

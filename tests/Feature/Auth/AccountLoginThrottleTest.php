@@ -1,5 +1,6 @@
 <?php
 
+use App\Actions\Auth\FindChallengedUser;
 use App\Auth\AccountLoginRateLimiter;
 use App\Auth\KnownDevice;
 use App\Auth\TwoFactorDay;
@@ -7,6 +8,7 @@ use App\Models\User;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Password;
@@ -18,7 +20,8 @@ use PragmaRX\Google2FA\Google2FA;
 /*
  * The cap per account over all addresses (A434): behind a forgeable X-Forwarded-For every IP limit is moot, so at most
  * `login_per_account` failures an hour count per address. A device that once signed in to exactly this address (cookie
- * `werkbuch_device`) is not held by the cap; a sign-in, also after the second factor, and a new password clear it.
+ * `werkbuch_device`, bound to the current password) is not held by the cap; a sign-in, also after the second factor,
+ * and a new password clear it.
  */
 
 beforeEach(function () {
@@ -57,6 +60,9 @@ $withTwoFactor = function (User $user): User {
 };
 
 $code = fn (User $user): string => app(Google2FA::class)->getCurrentOtp(decrypt((string) $user->two_factor_secret));
+
+/** The device value of Mara's address and her current password under a key. */
+$tokenOfMara = fn (string $key): string => hash_hmac('sha256', 'mara@example.com|'.FindChallengedUser::passwordStamp(User::query()->where('email', 'mara@example.com')->sole()), $key);
 
 $locked = fn (int $minutes = 60) => ['email' => __('auth.throttle_minutes', ['minutes' => $minutes])];
 
@@ -153,15 +159,16 @@ it('ignores the device cookie of another address', function () use ($from, $lock
     $this->assertGuest();
 });
 
-it('ignores a device cookie that was not issued by this instance', function (Closure $send) use ($from, $lockMara, $locked) {
+it('ignores a device cookie that was not issued by this instance', function (Closure $send) use ($from, $lockMara, $locked, $tokenOfMara) {
     $lockMara();
 
-    $send($from('10.0.0.5'))->post('/login', ['email' => 'mara@example.com', 'password' => 'secret-pass'])->assertSessionHasErrors($locked());
+    $send($from('10.0.0.5'), $tokenOfMara)->post('/login', ['email' => 'mara@example.com', 'password' => 'secret-pass'])->assertSessionHasErrors($locked());
     $this->assertGuest();
 })->with([
-    'signed with another key' => [fn ($test) => $test->withCookie(KnownDevice::NAME, hash_hmac('sha256', 'mara@example.com', 'another-key'))],
-    'the right value, not encrypted' => [fn ($test) => $test->withUnencryptedCookie(KnownDevice::NAME, hash_hmac('sha256', 'mara@example.com', (string) config('app.key')))],
+    'signed with another key' => [fn ($test, $token) => $test->withCookie(KnownDevice::NAME, $token('another-key'))],
+    'the right value, not encrypted' => [fn ($test, $token) => $test->withUnencryptedCookie(KnownDevice::NAME, $token((string) config('app.key')))],
     'the address itself' => [fn ($test) => $test->withCookie(KnownDevice::NAME, 'mara@example.com')],
+    'the address without the password' => [fn ($test) => $test->withCookie(KnownDevice::NAME, hash_hmac('sha256', 'mara@example.com', (string) config('app.key')))],
 ]);
 
 it('sets the device cookie for a year, only readable by the server', function () {
@@ -179,7 +186,7 @@ it('sets no device cookie for an account without an address', function () {
     expect(Cookie::hasQueued(KnownDevice::NAME))->toBeFalse();
 });
 
-it('sets the device cookie after the second factor', function () use ($withTwoFactor, $code) {
+it('sets the device cookie after the second factor', function () use ($withTwoFactor, $code, $tokenOfMara) {
     $mara = $withTwoFactor(User::query()->where('email', 'mara@example.com')->sole());
 
     $this->post('/login', ['email' => 'mara@example.com', 'password' => 'secret-pass'])
@@ -188,7 +195,7 @@ it('sets the device cookie after the second factor', function () use ($withTwoFa
     $device = $this->post('/two-factor-challenge', ['code' => $code($mara)])->assertRedirect('/my-items')
         ->getCookie(KnownDevice::NAME)?->getValue();
 
-    expect($device)->toBe(hash_hmac('sha256', 'mara@example.com', (string) config('app.key')));
+    expect($device)->toBe($tokenOfMara((string) config('app.key')));
 });
 
 it('clears the account after the second factor', function () use ($from, $lockMara, $withTwoFactor, $code) {
@@ -218,6 +225,50 @@ it('clears the account and the day of codes with a new password', function () us
         ->and(RateLimiter::attempts(TwoFactorDay::cacheKey($mara->id)))->toBe(0);
     $from('10.0.0.5')->post('/login', ['email' => 'mara@example.com', 'password' => 'new-password'])->assertRedirect('/my-items');
     $this->assertAuthenticatedAs($mara);
+});
+
+it('forgets the known devices with a new password', function () use ($from, $lockMara, $deviceOfMara, $locked) {
+    $mara = User::query()->where('email', 'mara@example.com')->sole();
+    $old = $deviceOfMara();
+    $this->post('/reset-password', ['token' => Password::createToken($mara), 'email' => 'mara@example.com', 'password' => 'new-password', 'password_confirmation' => 'new-password'])
+        ->assertSessionHasNoErrors();
+    $new = (string) $from('10.1.1.2')->post('/login', ['email' => 'mara@example.com', 'password' => 'new-password'])
+        ->assertRedirect('/my-items')->getCookie(KnownDevice::NAME)?->getValue();
+    $this->post('/logout');
+    $lockMara();
+
+    $from('10.0.0.5')->withCookie(KnownDevice::NAME, $old)
+        ->post('/login', ['email' => 'mara@example.com', 'password' => 'new-password'])->assertSessionHasErrors($locked());
+    $this->assertGuest();
+
+    $from('10.0.0.6')->withCookie(KnownDevice::NAME, $new)
+        ->post('/login', ['email' => 'mara@example.com', 'password' => 'new-password'])->assertRedirect('/my-items');
+    $this->assertAuthenticatedAs($mara);
+});
+
+it('sets the device cookie of the own browser anew with a changed password', function () use ($from, $lockMara, $locked, $tokenOfMara) {
+    $login = $this->post('/login', ['email' => 'mara@example.com', 'password' => 'secret-pass'])->assertRedirect('/my-items');
+    $old = (string) $login->getCookie(KnownDevice::NAME)?->getValue();
+    $session = (string) $login->getCookie(config('session.cookie'))?->getValue();
+    Auth::forgetGuards();
+
+    // the settings page: the session cookie of the page (Sanctum stateful)
+    $new = $this->withCredentials()->withCookie(config('session.cookie'), $session)->withHeader('Referer', config('app.url'))
+        ->putJson('/api/v1/me/password', ['current_password' => 'secret-pass', 'password' => 'new-password', 'password_confirmation' => 'new-password'])
+        ->assertNoContent()->getCookie(KnownDevice::NAME)?->getValue();
+
+    expect($new)->toBe($tokenOfMara((string) config('app.key')))
+        ->and($new)->not->toBe($old);
+
+    $this->post('/logout');
+    Auth::forgetGuards();
+    $lockMara();
+    $from('10.0.0.5')->withCookie(KnownDevice::NAME, $old)
+        ->post('/login', ['email' => 'mara@example.com', 'password' => 'new-password'])->assertSessionHasErrors($locked());
+    $this->assertGuest();
+    $from('10.0.0.6')->withCookie(KnownDevice::NAME, (string) $new)
+        ->post('/login', ['email' => 'mara@example.com', 'password' => 'new-password'])->assertRedirect('/my-items');
+    $this->assertAuthenticated();
 });
 
 it('leaves other accounts alone', function () use ($from, $lockMara) {
