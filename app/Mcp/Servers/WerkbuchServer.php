@@ -7,9 +7,13 @@ use App\Http\Middleware\EnsureMcpToken;
 use App\Http\Middleware\GuardMcpRequest;
 use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\ThrottleApi;
+use App\Mcp\Tools\AttachmentsTool;
 use App\Mcp\Tools\AutomationsTool;
+use App\Mcp\Tools\CommentsTool;
 use App\Mcp\Tools\GetUploadUrlTool;
+use App\Mcp\Tools\ManageAttachmentsTool;
 use App\Mcp\Tools\ManageAutomationsTool;
+use App\Mcp\Tools\ManageCommentsTool;
 use App\Mcp\Tools\ManageOrganizationTool;
 use App\Mcp\Tools\ManagePeopleTool;
 use App\Mcp\Tools\ManageProjectsTool;
@@ -77,6 +81,10 @@ final class WerkbuchServer extends Server
         ManageWorkItemsTool::class,
         RelationsTool::class,
         ManageRelationsTool::class,
+        CommentsTool::class,
+        ManageCommentsTool::class,
+        AttachmentsTool::class,
+        ManageAttachmentsTool::class,
         ViewsTool::class,
         ManageViewsTool::class,
     ];

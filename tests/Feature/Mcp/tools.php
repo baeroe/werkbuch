@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\Attachment;
+use App\Models\Comment;
 use App\Models\Label;
 use App\Models\Property;
 use App\Models\RelationType;
@@ -137,6 +139,24 @@ return [
     'manage-relations:remove' => ['arguments' => fn (MatrixWorld $w) => ['relation' => WorkItemRelation::factory()->create([
         'source_id' => $w->item('project_admin')->id, 'target_id' => $w->item('project_admin')->id,
     ])->id]],
+    'comments:list' => ['arguments' => function (MatrixWorld $w) {
+        $item = $w->item('project_admin');
+        Comment::factory()->for($item, 'workItem')->create();
+
+        return ['item' => $item->key, 'per_page' => 5];
+    }],
+    'comments:get' => ['arguments' => fn (MatrixWorld $w) => ['comment' => Comment::factory()->for($w->item('project_admin'), 'workItem')->create()->id]],
+    'manage-comments:add' => ['arguments' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key, 'input' => ['body' => 'Matrix']]],
+    // the tokens are the org admin's: their own comment
+    'manage-comments:edit' => ['arguments' => fn (MatrixWorld $w) => [
+        'comment' => Comment::factory()->for($w->item('project_admin'), 'workItem')->create(['author_id' => $w->account('org_admin')->id])->id,
+        'input' => ['body' => 'Matrix'],
+    ]],
+    'manage-comments:delete' => ['arguments' => fn (MatrixWorld $w) => ['comment' => Comment::factory()->for($w->item('project_admin'), 'workItem')->create()->id]],
+    'manage-comments:react' => ['arguments' => fn (MatrixWorld $w) => ['comment' => Comment::factory()->for($w->item('project_admin'), 'workItem')->create()->id, 'input' => ['emoji' => '👍']]],
+    'manage-comments:unreact' => ['arguments' => fn (MatrixWorld $w) => ['comment' => Comment::factory()->for($w->item('project_admin'), 'workItem')->create()->id, 'input' => ['emoji' => '👍']]],
+    'attachments:get' => ['arguments' => fn (MatrixWorld $w) => ['attachment' => Attachment::factory()->forItem($w->item('project_admin'))->create()->id]],
+    'manage-attachments:delete' => ['arguments' => fn (MatrixWorld $w) => ['attachment' => Attachment::factory()->forItem($w->item('project_admin'), 'file')->create()->id]],
     'views:list' => ['arguments' => fn (MatrixWorld $w) => ['filter' => ['created_by' => $w->view()->created_by], 'sort' => '-created_at', 'per_page' => 5]],
     'views:get' => ['arguments' => fn (MatrixWorld $w) => ['view' => $w->view()->id]],
     'views:items' => ['arguments' => function (MatrixWorld $w) {
