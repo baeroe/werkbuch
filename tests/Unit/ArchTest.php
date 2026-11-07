@@ -287,3 +287,11 @@ it('keeps App\OpenApi to the constants and spec() of actions', function () use (
 
     expect($hits)->toBe([]);
 });
+
+it('binds route parameters in a provider, never in a route file', function () {
+    $hits = collect(glob(repo_path('routes/*.php')))
+        ->filter(fn (string $file) => preg_match('/Route::(bind|model|pattern)\(/', (string) file_get_contents($file)) === 1)
+        ->map(fn (string $file) => basename($file))->values()->all();
+
+    expect($hits)->toBe([]);
+});
