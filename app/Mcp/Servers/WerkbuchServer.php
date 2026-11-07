@@ -12,11 +12,15 @@ use App\Mcp\Tools\ManageAutomationsTool;
 use App\Mcp\Tools\ManageOrganizationTool;
 use App\Mcp\Tools\ManagePeopleTool;
 use App\Mcp\Tools\ManageProjectsTool;
+use App\Mcp\Tools\ManageRelationsTool;
+use App\Mcp\Tools\ManageViewsTool;
 use App\Mcp\Tools\ManageWorkItemsTool;
 use App\Mcp\Tools\OrganizationTool;
 use App\Mcp\Tools\PeopleTool;
 use App\Mcp\Tools\ProjectsTool;
+use App\Mcp\Tools\RelationsTool;
 use App\Mcp\Tools\SearchTool;
+use App\Mcp\Tools\ViewsTool;
 use App\Mcp\Tools\WhoamiTool;
 use App\Mcp\Tools\WorkItemsTool;
 use Illuminate\Support\Facades\Route;
@@ -69,6 +73,10 @@ final class WerkbuchServer extends Server
         ManageAutomationsTool::class,
         WorkItemsTool::class,
         ManageWorkItemsTool::class,
+        RelationsTool::class,
+        ManageRelationsTool::class,
+        ViewsTool::class,
+        ManageViewsTool::class,
     ];
 
     protected array $resources = [];

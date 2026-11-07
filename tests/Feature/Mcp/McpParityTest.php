@@ -37,7 +37,7 @@ it('reads what REST reads', function (string $suite, string $key) {
 
     $rest = $method === 'GET'
         ? $this->getJson($url.'?'.http_build_query($args->query(array_values(array_diff(array_keys($action->parameters), ToolRows::pathArguments($action))))), ['Authorization' => 'Bearer '.$plain])
-        : $this->json($method, $url, $args->input(), ['Authorization' => 'Bearer '.$plain]);
+        : $this->json($method, $url, $action->twinBody($args), ['Authorization' => 'Bearer '.$plain]);
     $rest->assertSuccessful();
     $body = json_decode((string) $rest->getContent(), true);
     unset($body['links']);

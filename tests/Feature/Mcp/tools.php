@@ -5,6 +5,7 @@ use App\Models\Property;
 use App\Models\RelationType;
 use App\Models\Resolution;
 use App\Models\Workflow;
+use App\Models\WorkItemRelation;
 use App\Models\WorkItemType;
 use Tests\Feature\Access\MatrixWorld;
 use Tests\Support\WorkflowFixtures;
@@ -122,4 +123,33 @@ return [
     'manage-work-items:bulk-update' => ['arguments' => fn (MatrixWorld $w) => ['input' => ['ids' => [$w->item('project_admin')->key], 'patch' => ['priority' => 'high']]]],
     'manage-work-items:subscribe' => ['arguments' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key]],
     'manage-work-items:unsubscribe' => ['arguments' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key]],
+    'relations:list' => ['arguments' => function (MatrixWorld $w) {
+        $item = $w->item('project_admin');
+        WorkItemRelation::factory()->create(['source_id' => $item->id, 'target_id' => $w->item('project_admin')->id]);
+
+        return ['item' => $item->key];
+    }],
+    'manage-relations:add' => ['arguments' => fn (MatrixWorld $w) => [
+        'item' => $w->item('project_admin')->key,
+        'input' => ['type_id' => RelationType::query()->where('built_in', 'relates')->value('id'), 'target_id' => $w->item('project_admin')->key],
+    ]],
+    'manage-relations:remove' => ['arguments' => fn (MatrixWorld $w) => ['relation' => WorkItemRelation::factory()->create([
+        'source_id' => $w->item('project_admin')->id, 'target_id' => $w->item('project_admin')->id,
+    ])->id]],
+    'views:list' => ['arguments' => fn (MatrixWorld $w) => ['filter' => ['created_by' => $w->view()->created_by], 'sort' => '-created_at', 'per_page' => 5]],
+    'views:get' => ['arguments' => fn (MatrixWorld $w) => ['view' => $w->view()->id]],
+    'views:items' => ['arguments' => function (MatrixWorld $w) {
+        $w->item('project_admin');
+
+        return ['view' => $w->view()->id, 'sort' => ['field' => 'key', 'direction' => 'desc'], 'show_sub_items' => true, 'lean' => true, 'per_page' => 5];
+    }],
+    'manage-views:create' => ['arguments' => fn (MatrixWorld $w) => ['input' => [
+        'name' => 'Matrix', 'icon' => 'layers', 'filter' => ['version' => 1, 'conditions' => []],
+        'display' => ['layout' => 'list', 'group_by' => 'none', 'sort' => ['field' => 'rank', 'direction' => 'asc'], 'fields' => ['key', 'title'], 'show_sub_items' => true],
+    ]]],
+    'manage-views:update' => ['arguments' => fn (MatrixWorld $w) => ['view' => $w->view()->id, 'input' => [
+        'name' => 'Matrix', 'icon' => 'list-todo', 'filter' => ['version' => 1, 'conditions' => [['field' => 'priority', 'op' => 'is', 'value' => 'high']]],
+        'display' => ['layout' => 'board', 'group_by' => 'state', 'sort' => ['field' => 'due_date', 'direction' => 'desc'], 'fields' => ['key', 'title'], 'show_sub_items' => false],
+    ]]],
+    'manage-views:delete' => ['arguments' => fn (MatrixWorld $w) => ['view' => $w->view()->id]],
 ];

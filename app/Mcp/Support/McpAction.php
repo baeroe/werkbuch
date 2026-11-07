@@ -18,7 +18,10 @@ use Illuminate\Support\Str;
  * - `$twin`: the REST operation, method and URI as `Route::uri()` has it without `api/v1` (`POST work-items/{item}/transition`);
  * - `$path`: placeholder → argument, by default the placeholder in snake_case (`{pageVersion}` → `page_version`);
  * - `$defaults`: argument → value for an argument the call leaves out. An action with the argument `per_page` reads
- *   `PER_PAGE` items a page unless `$defaults` says otherwise (K8: a smaller page than REST's 100 in the context of a model).
+ *   `PER_PAGE` items a page unless `$defaults` says otherwise (K8: a smaller page than REST's 100 in the context of a model);
+ * - `$body`: `fn (McpArguments): array`, the body of the twin built from arguments of their own, for an action that
+ *   reads through a body without `input` (`views:items` → `POST work-items/query` with `view_id`); `$run` builds its
+ *   call with it too, so the action and the body REST would get are one (`twinBody()`).
  */
 final readonly class McpAction
 {
@@ -31,6 +34,7 @@ final readonly class McpAction
      * @param  list<string>  $required
      * @param  array<string, string>  $path
      * @param  array<string, mixed>  $defaults
+     * @param  (Closure(McpArguments): array<string, mixed>)|null  $body
      */
     public function __construct(
         public string $name,
@@ -42,7 +46,18 @@ final readonly class McpAction
         public ?string $twin = null,
         public array $path = [],
         public array $defaults = [],
+        public ?Closure $body = null,
     ) {}
+
+    /**
+     * The body the twin gets for these arguments: what `$body` builds, else `input`.
+     *
+     * @return array<string, mixed>
+     */
+    public function twinBody(McpArguments $args): array
+    {
+        return $this->body === null ? $args->input() : ($this->body)($args);
+    }
 
     /**
      * The values an argument the call leaves out takes: `$defaults`, and `per_page` for an action that has it.
