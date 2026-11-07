@@ -10,6 +10,7 @@ const description = 'Open, self-hosted project management: work items with your 
 
 // every page exists in docs/en and docs/de under the same path (tests/Unit/DocsTest.php); later phases add theirs
 const groups: { title: string; pages: string[] }[] = [
+    { title: 'selfhosting', pages: ['setup', 'reverse-proxy'] },
     { title: 'guide', pages: ['development', 'keyboard'] },
     { title: 'concepts', pages: ['concepts/permissions', 'concepts/projects', 'concepts/workflows', 'concepts/types-and-properties', 'concepts/work-items', 'concepts/rich-text', 'concepts/wiki', 'concepts/views', 'concepts/templates', 'concepts/automations', 'concepts/notifications', 'search', 'bots', 'api', 'mcp', 'webhooks'] },
 ];
@@ -18,6 +19,9 @@ const sidebar = (prefix: string, t: Record<string, string>): DefaultTheme.Sideba
     groups.map((g) => ({ text: t[g.title], items: g.pages.map((p) => ({ text: t[p], link: `${prefix}/${p}` })) }));
 
 const en: Record<string, string> = {
+    selfhosting: 'Self-hosting',
+    setup: 'Setup',
+    'reverse-proxy': 'Reverse proxy',
     guide: 'Guide',
     concepts: 'Concepts',
     development: 'Development',
@@ -41,6 +45,9 @@ const en: Record<string, string> = {
 };
 
 const de: Record<string, string> = {
+    selfhosting: 'Betrieb',
+    setup: 'Einrichtung',
+    'reverse-proxy': 'Reverse Proxy',
     guide: 'Anleitung',
     concepts: 'Konzepte',
     development: 'Entwicklung',
