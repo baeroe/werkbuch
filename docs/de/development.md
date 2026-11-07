@@ -132,6 +132,17 @@ Auch `app:send-notification-mails` läuft jede Minute: es gibt fällige Sammelma
 
 Bilder und Dateien, die in einen Text eingefügt wurden, bleiben erhalten, wenn der Text sie verliert, damit History und Rückgängig funktionieren. `app:prune-attachments` entfernt die, die kein aktueller Text ihres Projekts mehr nennt (die Beschreibung oder ein Rich-Text-Wert eines Items, der Text eines Kommentars) und die älter als `--min-age` Tage sind (Standard 30); `--dry-run` listet sie nur auf, je mit Projekt, ID, Dateiname und Größe, und zählt sie zusammen. Auch Bilder, die nur eine ältere Fassung eines Texts in der History zeigt, gehen dabei; wähle das Mindestalter danach. Dateien aus der Dateiliste eines Items räumt der Befehl nie ab, die löschst du dort. Außerdem entfernt er Ordner auf der Medien-Disk, deren Medien-Zeile fehlt (eine Vorschau, die entstand, während ihr Bild gelöscht wurde), wenn alle ihre Dateien älter als das Mindestalter sind. Ein Projekt mit einem Text, der sich nicht lesen lässt, überspringt er (`skipped WEB: unreadable text of …`, auch im Log) und entfernt dort nichts; die übrigen Projekte kommen trotzdem dran. Uploads, die nie ein Text übernommen hat (ein Bild in einem Kommentar, der nie abgeschickt wurde), gehen von selbst: ein Job des Schedulers entfernt sie stündlich, sobald sie älter als 24 Stunden sind. Wer ein Item löscht, löscht die Dateien des Items und seiner Kommentare mit, wer einen Kommentar löscht, dessen Dateien, wer ein Projekt löscht, alle Dateien des Projekts. Ein Bild, das ein anderer Text des Projekts noch zeigt (aus einem Text in einen anderen kopiert), bleibt: es gehört dann diesem Text.
 
+## Docker-Image
+
+Das Image der [Einrichtung](/de/setup) entsteht aus dem `Dockerfile` im Wurzelordner des Repositorys: das Frontend mit Vite in einer Node-Stufe, dann PHP-FPM und nginx auf `serversideup/php`. Wer eine Änderung am Image, an den Compose-Dateien oder am Entrypoint ausprobieren will, baut es und lässt den Smoke-Test dagegen laufen, auf dem eigenen Rechner mit Docker (etwa Colima) und nie, während die Playwright-Suite läuft:
+
+```bash
+docker buildx build --load -t werkbuch:local .
+WERKBUCH_IMAGE=werkbuch:local scripts/compose-smoke.sh
+```
+
+`scripts/compose-smoke.sh` startet `docker-compose.yml` mit einer frischen `.env` in einem temporären Ordner, meldet sich an, prüft die Live-Updates über den einen Port, die Suche, die Grenzen, die Rechte in den Containern und das Access-Log, startet dieselben Volumes ein zweites Mal und entfernt den Stack am Ende samt Volumes; die letzte Zeile ist `smoke: ok`. `SMOKE_KEEP=1` behält den Stack, `SMOKE_PORT` setzt den Port auf `127.0.0.1` (Standard `7740`). Der CI-Job `image` macht dasselbe auf `amd64` und `arm64`.
+
 ## Dokumentation
 
 Diese Doku liegt in `docs/` (VitePress) auf Englisch (`docs/en/`) und Deutsch (`docs/de/`). Jede Seite gibt es in beiden Sprachen unter demselben Dateinamen und mit denselben Überschriften; `tests/Unit/DocsTest.php` prüft das. Die Specs und Pläne in `docs/superpowers/` gehören nicht zur Seite.

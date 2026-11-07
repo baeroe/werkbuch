@@ -35,7 +35,7 @@ Der Container schickt keinen Header `Strict-Transport-Security`: Über HSTS ents
 ```txt
 pm.example.com {
     header Strict-Transport-Security "max-age=31536000"
-    reverse_proxy localhost:7740
+    reverse_proxy 127.0.0.1:7740
 }
 ```
 
@@ -80,8 +80,17 @@ map $http_upgrade $connection_upgrade {
 }
 
 server {
+    listen 80;
+    server_name pm.example.com;
+    return 301 https://$host$request_uri;
+}
+
+server {
     listen 443 ssl;
     server_name pm.example.com;
+    # das eigene Zertifikat, etwa von certbot
+    ssl_certificate     /etc/letsencrypt/live/pm.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/pm.example.com/privkey.pem;
     # Uploads bringen bis zu 32 MB (ATTACHMENTS_MAX_MB, Standard 25)
     client_max_body_size 32m;
     add_header Strict-Transport-Security "max-age=31536000" always;

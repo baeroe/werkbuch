@@ -69,7 +69,7 @@ Darüber hinaus sieht ein Tool genau, was sein Konto über REST sieht. Was das K
 
 ## Grenzen
 
-- **Anfragen:** 300 je Minute je gültigem Token (`MCP_RATE_LIMIT`), ohne gültiges Token 300 je Adresse. Das ist ein eigenes Kontingent neben den 600 der REST-API: Ein Agent, der beides nutzt, bremst das andere nicht. Gezählt wird vor der Anmeldung. Jede Antwort trägt `X-RateLimit-Limit` und `X-RateLimit-Remaining`; über der Grenze ist die Antwort `429` mit `Retry-After`.
+- **Anfragen:** 300 je Minute je gültigem Token (`MCP_RATE_LIMIT`), ohne gültiges Token 300 je Adresse. Das ist ein eigenes Kontingent neben den 600 der REST-API: Ein Agent, der beides nutzt, bremst das andere nicht. Gezählt wird vor der Anmeldung. Jede Antwort trägt `X-RateLimit-Limit` und `X-RateLimit-Remaining`; über der Grenze ist die Antwort `429` mit `Retry-After`. Hinter einem Reverse Proxy braucht die Zählung je Adresse den Proxy in `TRUSTED_PROXIES` ([Betrieb](/de/operations#drosseln-und-proxys)).
 - **Geteilt mit REST:** Ein Test-Ping und `redeliver` eines Webhooks zählen in denselben 6 je Minute und Konto wie über REST, Uploads über `get-upload-url` in denselben 60 je Minute und Konto. Ein Tool über einer solchen Grenze antwortet mit dem Fehler `429 too_many_requests` und `retry_after` in Sekunden.
 - **Bodies:** Ein JSON-Body über 8 MiB (8 388 608 Bytes) ist ein `413`; Uploads haben ihre eigene Grenze, `ATTACHMENTS_MAX_MB`.
 - **Seiten:** `per_page` ist 1 bis 100, weggelassen 25.

@@ -203,7 +203,7 @@ Zwei Grenzen: ein NAT64-Präfix des eigenen Netzes (außer `64:ff9b::/96`) läss
 
 ## Betrieb
 
-Zustellungen laufen über die Queue `webhooks`. Ein Worker muss auf sie hören; er wartet bei einem langsamen Empfänger bis zu 10 Sekunden je Versuch, gib `webhooks` also einen eigenen Worker, wenn sich sonst mehrere Queues einen teilen, sonst hält ein hängender Empfänger Live-Updates und Benachrichtigungen auf. werkbuch begrenzt jede Namensauflösung des Prozesses auf 2 Sekunden und einen Versuch (`RES_OPTIONS=timeout:2 attempts:1`, wenn die Umgebung keins setzt), das gilt für alle Auflösungen von PHP, nicht nur für Webhooks. Das Protokoll räumt der Scheduler stündlich auf.
+Zustellungen laufen über die Queue `webhooks`. Ein Worker muss auf sie hören; er wartet bei einem langsamen Empfänger bis zu 10 Sekunden je Versuch, gib `webhooks` also einen eigenen Worker, wenn sich sonst mehrere Queues einen teilen, sonst hält ein hängender Empfänger Live-Updates und Benachrichtigungen auf. werkbuch begrenzt jede Namensauflösung des Prozesses auf 2 Sekunden und einen Versuch (`RES_OPTIONS=timeout:2 attempts:1`, wenn die Umgebung keins setzt), das gilt für alle Auflösungen von PHP, nicht nur für Webhooks. Das Protokoll räumt der Scheduler stündlich auf. Im Docker-Compose-Stack ist dieser Worker der Dienst `queue-webhooks`; welche Verbindungen den Stack verlassen und was `WEBHOOKS_ALLOW_PRIVATE` dort öffnet, steht unter [Betrieb](/de/operations#ausgehende-verbindungen).
 
 ## REST
 

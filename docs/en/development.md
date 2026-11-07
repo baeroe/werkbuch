@@ -132,6 +132,17 @@ ddev artisan app:prune-attachments --dry-run --min-age=30   # lists pictures and
 
 Pictures and files pasted into a text stay when the text loses them, so that the history and undo keep working. `app:prune-attachments` removes those that no current text of their project names any more (the description or a rich text value of an item, the text of a comment) and that are older than `--min-age` days (default 30); `--dry-run` only lists them, each with project, id, file name and size, and sums them up. Pictures that only an older version of a text in the history shows go too, so pick the minimum age with that in mind. Files of the file list of an item are never pruned; they are deleted there. The command also removes folders on the media disk whose media row is gone (a preview made while its picture was being deleted), when all their files are older than the minimum age. A project with a text that cannot be read is skipped (`skipped WEB: unreadable text of …`, also in the log) and nothing of it is removed; the other projects still get their turn. Uploads that no text ever took (a picture pasted into a comment that was never sent) go by themselves: a job of the scheduler removes them every hour once they are older than 24 hours. Deleting an item removes the files of the item and of its comments, deleting a comment its files, deleting a project all files of the project. A picture that another text of the project still shows (copied from one text into another) stays: it then belongs to that text.
 
+## Docker image
+
+The image of [Setup](/en/setup) is built from the `Dockerfile` in the root of the repository: the frontend with Vite in a Node stage, then PHP-FPM and nginx on `serversideup/php`. To try a change of the image, the compose files or the entrypoint, build it and run the smoke test against it, on your machine with Docker (Colima, for example) and never while the Playwright suite runs:
+
+```bash
+docker buildx build --load -t werkbuch:local .
+WERKBUCH_IMAGE=werkbuch:local scripts/compose-smoke.sh
+```
+
+`scripts/compose-smoke.sh` starts `docker-compose.yml` with a fresh `.env` in a temporary folder, signs in, checks the live updates over the one port, the search, the limits, the rights inside the containers and the access log, starts the same volumes a second time and removes the stack with its volumes at the end; the last line is `smoke: ok`. `SMOKE_KEEP=1` keeps the stack, `SMOKE_PORT` sets the port on `127.0.0.1` (default `7740`). The CI job `image` runs the same on `amd64` and `arm64`.
+
 ## Documentation
 
 These docs live in `docs/` (VitePress) in English (`docs/en/`) and German (`docs/de/`). Every page exists in both languages under the same file name and with the same headings; `tests/Unit/DocsTest.php` checks that. The specs and plans in `docs/superpowers/` are not part of the site.

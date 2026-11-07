@@ -203,7 +203,7 @@ Two limits: a NAT64 prefix of your own network (other than `64:ff9b::/96`) canno
 
 ## Operation
 
-Deliveries run on the queue `webhooks`. A worker has to listen on it; it waits up to 10 seconds per attempt for a slow receiver, so give `webhooks` a worker of its own when other queues share one, or a hanging receiver holds up live updates and notifications. werkbuch limits every name lookup of the process to 2 seconds and one attempt (`RES_OPTIONS=timeout:2 attempts:1`, unless the environment sets it), which applies to all lookups of PHP, not only webhooks. The log is pruned every hour by the scheduler.
+Deliveries run on the queue `webhooks`. A worker has to listen on it; it waits up to 10 seconds per attempt for a slow receiver, so give `webhooks` a worker of its own when other queues share one, or a hanging receiver holds up live updates and notifications. werkbuch limits every name lookup of the process to 2 seconds and one attempt (`RES_OPTIONS=timeout:2 attempts:1`, unless the environment sets it), which applies to all lookups of PHP, not only webhooks. The log is pruned every hour by the scheduler. In the Docker Compose stack, that worker is the service `queue-webhooks`; which connections leave the stack and what `WEBHOOKS_ALLOW_PRIVATE` opens there is under [Operations](/en/operations#outbound-connections).
 
 ## REST
 

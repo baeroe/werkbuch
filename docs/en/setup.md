@@ -2,6 +2,17 @@
 
 werkbuch runs as a Docker Compose stack of eight services. Six of them come from one image, `baeroe/werkbuch` (for `linux/amd64` and `linux/arm64`): the web service, Reverb for the live updates, three queue workers and the scheduler. The other two are MariaDB 11.4 and Meilisearch 1.56. Everything is reachable over one port; HTTPS comes from a reverse proxy in front of it (see [Reverse proxy](/en/reverse-proxy)).
 
+::: warning Before the first release
+The image `baeroe/werkbuch` with its tags (`latest`, `0.1.0`) and the files under `raw.githubusercontent.com/baeroe/werkbuch/main` come with the first release, and so does the digest that `docker buildx imagetools inspect` shows in [Versions](#versions). Until then, build the image from a clone of the repository:
+
+```bash
+git clone https://github.com/baeroe/werkbuch.git && cd werkbuch
+docker buildx build --load -t werkbuch:local .
+```
+
+Then take `docker-compose.yml` and `.env.docker.example` from the clone instead of downloading them, and set `WERKBUCH_IMAGE=werkbuch:local` in `.env` (in the standalone file: `image: werkbuch:local`).
+:::
+
 ## Requirements
 
 - Docker Engine with Compose v2.20 or newer: the services start in the order of their health checks (`depends_on` with `condition: service_healthy`).
@@ -33,7 +44,7 @@ One compose file with everything in it, no `.env`:
 2. Change the five values at the top: `APP_URL` (the https address of your reverse proxy), `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `DB_PASSWORD` and `MEILISEARCH_KEY`. Choose long random values, for example with `openssl rand -hex 24`; the key of Meilisearch needs at least 16 characters.
 3. Deploy (Dockge, Portainer) or run `docker compose up -d`. Wait for `werkbuch: ready` in the logs of `werkbuch`, then open `APP_URL` and sign in with `ADMIN_EMAIL` and `ADMIN_PASSWORD`.
 
-werkbuch refuses to start while one of the three is still `change-me`: the web service stops on each of them (on the admin password only as long as there is no account), MariaDB on the database password, Meilisearch on its key. It listens on port `7740` of the server: point your reverse proxy at `http://<server>:7740`.
+werkbuch refuses to start while one of the three is still `change-me`: the web service stops on each of them (on the admin password only as long as there is no account), MariaDB on the database password, Meilisearch on its key. It listens on port `7740` on every address of the server (`0.0.0.0`): point your reverse proxy at `http://<server>:7740`. With the proxy on the same host, write the port line as `"127.0.0.1:7740:8080"` so that only the proxy reaches it, see [What werkbuch trusts](/en/reverse-proxy#what-werkbuch-trusts).
 
 The first admin is created on the first start. After that the admin password at the top is no longer read: put `change-me` back there, so your password is not left in the file. Keep the line itself, the services refer to it. Keep `DB_PASSWORD` as it is: MariaDB stores it on the first start. Nobody can log in to MariaDB as root in this file (its password hash matches no password); backups use the user `werkbuch`.
 
@@ -72,7 +83,7 @@ Fill in `.env` before the first start. The passwords are empty in the template o
 | `MAIL_HOST`, `MAIL_PORT` | with `smtp` | Mail server and port (default `587`). |
 | `MAIL_USERNAME`, `MAIL_PASSWORD` | with `smtp` | Login at the mail server, if it needs one. |
 | `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME` | no | Sender of every mail, default `werkbuch@example.com` and `werkbuch`. |
-| `ATTACHMENTS_MAX_MB` | no | Largest upload in MB, default `25`. PHP and nginx in the image take 30 and 32 MB: a larger value has no effect beyond that, the upload ends in `413` first (the log of the web service warns at the start). |
+| `ATTACHMENTS_MAX_MB` | no | Largest upload in MB, default `25`. PHP and nginx in the image take 30 and 32 MB: a larger value has no effect beyond that, the upload ends in `413` first (the log of the web service warns at the start). Larger uploads need those limits raised too, see [Operations](/en/operations#uploads). |
 | `NOTIFICATION_MAIL_DELAY` | no | Minutes until the notifications of a work item go out in one mail, default `5`. |
 | `WEBHOOKS_ALLOW_PRIVATE` | no | `true` lets webhooks reach private networks (`10.x`, `172.16.x`, `192.168.x`, localhost and the like); addresses of cloud metadata services and link-local stay blocked. Default `false`. See [Webhooks](/en/webhooks). |
 | `API_RATE_LIMIT` | no | Requests a minute of the REST API per token or, without a token, per IP address. Default `600`. |
@@ -106,7 +117,7 @@ On every start the web service:
 
 A step that fails stops the container with a message, so a half-migrated instance never serves requests. Meilisearch has to be healthy before the web service starts. The workers, the scheduler and Reverb start once the web service is healthy, read the keys from the data volume, build only their caches and log `werkbuch: ready: php artisan …`; they never migrate.
 
-`werkbuch: no account yet, set ADMIN_EMAIL and ADMIN_PASSWORD and restart` means: no admin was created because `ADMIN_PASSWORD` is empty. On a new instance, set it in `.env` and run `docker compose up -d` again. The same line appears on every start once you have removed `ADMIN_PASSWORD` after the first sign-in; as long as you can sign in, it changes nothing.
+`werkbuch: no account yet, set ADMIN_EMAIL and ADMIN_PASSWORD and restart` means: there is no account yet, and none was created because `ADMIN_PASSWORD` is empty. Set it in `.env` and run `docker compose up -d` again. Once an account exists, every start leaves the accounts alone and ends its line with `ADMIN_EMAIL and ADMIN_PASSWORD are only used on the first start.`, with or without `ADMIN_PASSWORD`.
 
 ## Passwords
 
