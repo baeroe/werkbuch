@@ -1,6 +1,6 @@
 # Sicherung
 
-Eine Sicherung hat drei Teile: die Datenbank (Volume `mariadb-data`), die Dateien (Volume `werkbuch-data`: Anhänge mit ihren Vorschauen, die Bilder von Organisation, Konten und Projekten und die Schlüssel `.app-key`, `.reverb-app-key`, `.reverb-app-secret`) und die `.env`. Der Suchindex (Volume `meili-data`) braucht keine Sicherung: werkbuch baut ihn beim nächsten Start aus der Datenbank.
+Eine Sicherung hat drei Teile: die Datenbank (Volume `mariadb-data`), die Dateien (Volume `werkbuch-data`: Anhänge mit ihren Vorschauen, die Bilder von Organisation, Konten und Projekten und die Schlüssel `.app-key`, `.reverb-app-key`, `.reverb-app-secret`) und die Konfiguration: die `.env` und, falls vorhanden, die `docker-compose.override.yml`. Der Suchindex (Volume `meili-data`) braucht keine Sicherung: werkbuch baut ihn beim nächsten Start aus der Datenbank.
 
 `.app-key` ist der `APP_KEY` der Instanz. Er verschlüsselt die Geheimnisse der Webhooks und die zweiten Faktoren samt Recovery-Codes: Ohne ihn ist jede Person mit zweitem Faktor ausgesperrt, und jeder Webhook braucht ein neues Geheimnis. Er liegt im Daten-Volume, die Sicherung der Dateien unten enthält ihn also. Steht `APP_KEY` stattdessen in der `.env`, hält ihn die `.env` in der Sicherung.
 
@@ -18,11 +18,13 @@ docker compose exec -T mariadb sh -c 'exec mariadb-dump -uwerkbuch -p"$MARIADB_P
 docker compose exec -T werkbuch tar czf - -C /var/www/html/storage/app . > werkbuch-data-$(date +%F).tar.gz
 ```
 
-Beide Dateien und eine Kopie der `.env` an einem anderen Ort als dem Server aufbewahren. Für eine nächtliche Sicherung beide Befehle in ein Skript schreiben und per cron ausführen.
+Zwischen Dump und `tar` liegen Sekunden. Ein Anhang, der dazwischen gelöscht wird, steht im Dump, aber seine Datei fehlt im Archiv; eine Datei, die dazwischen dazukommt, belegt nur Platz. Die Sicherung zu einer ruhigen Zeit laufen lassen, etwa nachts. `tar` endet mit Exitcode 1 und `file changed as we read it`, wenn sich eine Datei ändert, während es sie liest (eine Vorschau, die gerade entsteht): Die Sicherung dann wiederholen.
+
+Beide Dateien und eine Kopie der `.env` und der `docker-compose.override.yml` an einem anderen Ort als dem Server aufbewahren. Für eine nächtliche Sicherung beide Befehle in ein Skript schreiben und per cron ausführen.
 
 ## Wiederherstellen
 
-Eine Wiederherstellung ersetzt alles. Auf einem neuen Server: zuerst `docker-compose.yml` und `.env` dorthin kopieren. Auf dem bestehenden Server die alten Daten entfernen (das löscht sie!):
+Eine Wiederherstellung ersetzt alles. Auf einem neuen Server: zuerst `docker-compose.yml`, `.env` und, falls vorhanden, `docker-compose.override.yml` dorthin kopieren. Auf dem bestehenden Server die alten Daten entfernen (das löscht sie!):
 
 ```bash
 docker compose down -v
@@ -75,5 +77,5 @@ Dann den Rettungs-Container im zweiten Terminal mit `docker stop werkbuch-db-res
 ## Hinweise
 
 - `docker compose down -v` löscht alle drei Volumes. Ohne `-v` behält `down` sie.
-- Ein Umzug auf einen neuen Server ist eine Sicherung auf dem alten und eine Wiederherstellung auf dem neuen, mit derselben `.env`. Das Daten-Volume nimmt `.app-key` mit; den neuen Server nie mit einem anderen `APP_KEY` starten.
+- Ein Umzug auf einen neuen Server ist eine Sicherung auf dem alten und eine Wiederherstellung auf dem neuen, mit derselben `.env` und `docker-compose.override.yml`. Das Daten-Volume nimmt `.app-key` mit; den neuen Server nie mit einem anderen `APP_KEY` starten.
 - `app:prune-attachments` löscht Bilder und Dateien endgültig: nach einer Sicherung ausführen.

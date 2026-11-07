@@ -83,7 +83,7 @@ Auf die Platte wird nichts geschrieben: `docker compose logs <dienst>` zeigt, wa
 - **Die App** schreibt nach stderr ab der Stufe `info` (`LOG_LEVEL`). Stacktraces tragen keine Werte von Argumenten (`zend.exception_ignore_args`), so landet weder ein Passwort noch das Geheimnis eines Webhooks in einem Trace, auch nicht in `failed_jobs`.
 - **nginx** in `werkbuch` schreibt je Anfrage eine Zeile nach stdout: Adresse des Clients, Zeit, Methode, Pfad, Status, Größe, Dauer, User-Agent und `X-Forwarded-For` (der Client hinter dem Proxy). Der Pfad kommt ohne Query-String, der die Signaturen von Einladungs- und Upload-Links trägt; das Token eines Links zum Zurücksetzen des Passworts und einer MCP-Upload-Adresse ist maskiert (`/reset-password/...`), und ein Pfad endet an seinem ersten `%`. Der Referer fehlt, ebenso der Healthcheck, den Compose alle 15 Sekunden aus dem Container schickt.
 
-`LOG_LEVEL` auf `info` lassen. Mit `debug` und `MAIL_MAILER=log` steht ein angefordertes Zurücksetzen des Passworts als Mail im Log, samt Link.
+`LOG_LEVEL` ist keine Variable der `.env`: Sie ändert sich nur im `environment` eines Dienstes, in der `docker-compose.override.yml` oder der Standalone-Datei. Dort auf `info` lassen. Mit `debug` und `MAIL_MAILER=log` steht ein angefordertes Zurücksetzen des Passworts als Mail im Log, samt Link.
 
 Was trotzdem im Log stehen kann:
 
@@ -100,7 +100,7 @@ Nie `php artisan config:clear` oder `php artisan optimize:clear` per `docker com
 
 ## Leere Variablen
 
-Nie eine Variable, die mit `PHP_`, `NGINX_`, `SSL_`, `LOG_` oder `TRUSTED_PROXY` beginnt, auf einen leeren Wert setzen, weder in der `.env` noch in einem `environment`-Block: Das Startskript des Basis-Images stoppt dann den Web-Dienst (ein `LOG_LEVEL=` in der `.env` genügt). Eine Variable weglassen, um ihren Standard zu behalten.
+Nie eine Variable, die mit `PHP_`, `NGINX_`, `SSL_`, `LOG_` oder `TRUSTED_PROXY` beginnt, in einem `environment`-Block (in der `docker-compose.override.yml` oder in der Standalone-Datei) auf einen leeren Wert setzen: Das Startskript des Basis-Images stoppt dann den Web-Dienst (`LOG_LEVEL: ""` genügt). Eine Variable weglassen, um ihren Standard zu behalten. Über die `.env` passiert das nicht: `docker-compose.yml` reicht nur die Variablen aus `.env.docker.example` weiter, die einzige davon mit einem solchen Präfix ist `TRUSTED_PROXIES`, und ein leeres `TRUSTED_PROXIES=` fällt auf seinen Standard zurück.
 
 ## Suche
 

@@ -1,6 +1,6 @@
 # Backup
 
-A backup has three parts: the database (volume `mariadb-data`), the files (volume `werkbuch-data`: attachments with their previews, the pictures of the organization, accounts and projects, and the keys `.app-key`, `.reverb-app-key`, `.reverb-app-secret`) and your `.env`. The search index (volume `meili-data`) needs no backup: werkbuch builds it from the database on the next start.
+A backup has three parts: the database (volume `mariadb-data`), the files (volume `werkbuch-data`: attachments with their previews, the pictures of the organization, accounts and projects, and the keys `.app-key`, `.reverb-app-key`, `.reverb-app-secret`) and your configuration: `.env` and, if you have one, `docker-compose.override.yml`. The search index (volume `meili-data`) needs no backup: werkbuch builds it from the database on the next start.
 
 `.app-key` is the `APP_KEY` of the instance. It encrypts the secrets of the webhooks and the second factors with their recovery codes: without it, everyone with a second factor is locked out and every webhook needs a new secret. It is in the data volume, so the backup of the files below holds it. If you set `APP_KEY` in `.env` instead, the `.env` in the backup is what holds it.
 
@@ -18,11 +18,13 @@ docker compose exec -T mariadb sh -c 'exec mariadb-dump -uwerkbuch -p"$MARIADB_P
 docker compose exec -T werkbuch tar czf - -C /var/www/html/storage/app . > werkbuch-data-$(date +%F).tar.gz
 ```
 
-Keep both files and a copy of `.env` somewhere else than the server. For a nightly backup put both commands into a script and run it from cron.
+The dump and `tar` are seconds apart. An attachment that is deleted in between is in the dump, but its file is missing from the archive; a file that is added in between only takes up space. Run the backup at a quiet time, at night for example. `tar` ends with exit code 1 and `file changed as we read it` when a file changes while it is read (a preview being written): run the backup again then.
+
+Keep both files and a copy of `.env` and `docker-compose.override.yml` somewhere else than the server. For a nightly backup put both commands into a script and run it from cron.
 
 ## Restore
 
-A restore replaces everything. On a new server: copy `docker-compose.yml` and `.env` there first. On the existing server, remove the old data (this deletes it!):
+A restore replaces everything. On a new server: copy `docker-compose.yml`, `.env` and, if you have one, `docker-compose.override.yml` there first. On the existing server, remove the old data (this deletes it!):
 
 ```bash
 docker compose down -v
@@ -75,5 +77,5 @@ Then stop the rescue container in the second terminal with `docker stop werkbuch
 ## Notes
 
 - `docker compose down -v` deletes all three volumes. Without `-v`, `down` keeps them.
-- Moving to a new server is a backup on the old one plus a restore on the new one, with the same `.env`. The data volume carries `.app-key` along; never start the new server with another `APP_KEY`.
+- Moving to a new server is a backup on the old one plus a restore on the new one, with the same `.env` and `docker-compose.override.yml`. The data volume carries `.app-key` along; never start the new server with another `APP_KEY`.
 - `app:prune-attachments` deletes pictures and files for good: run it after a backup.

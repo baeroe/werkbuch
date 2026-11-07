@@ -83,7 +83,7 @@ Nothing is written to disk: `docker compose logs <service>` shows what each cont
 - **The app** logs to stderr from level `info` (`LOG_LEVEL`). Stack traces carry no argument values (`zend.exception_ignore_args`), so neither a password nor the secret of a webhook ends up in a trace, also not in `failed_jobs`.
 - **nginx** in `werkbuch` writes one line per request to stdout: client address, time, method, path, status, size, duration, user agent and `X-Forwarded-For` (the client behind your proxy). The path comes without its query string, which holds the signatures of invitation and upload links; the token of a password reset link and of an MCP upload address is masked (`/reset-password/...`), and a path is cut off at its first `%`. The referer is left out, and so is the health check that Compose sends from inside the container every 15 seconds.
 
-Keep `LOG_LEVEL` at `info`. With `debug` and `MAIL_MAILER=log`, a password reset that someone requests is written to the log as a mail, link included.
+`LOG_LEVEL` is not one of the variables of `.env`: it only changes in the `environment` of a service, in `docker-compose.override.yml` or the standalone file. Keep it at `info` there. With `debug` and `MAIL_MAILER=log`, a password reset that someone requests is written to the log as a mail, link included.
 
 What the log can still hold:
 
@@ -100,7 +100,7 @@ Never run `php artisan config:clear` or `php artisan optimize:clear` through `do
 
 ## Empty variables
 
-Never set a variable that starts with `PHP_`, `NGINX_`, `SSL_`, `LOG_` or `TRUSTED_PROXY` to an empty value, neither in `.env` nor in an `environment` block: the start script of the base image stops the web service then (a `LOG_LEVEL=` in `.env` is enough). Leave a variable out to keep its default.
+Never set a variable that starts with `PHP_`, `NGINX_`, `SSL_`, `LOG_` or `TRUSTED_PROXY` to an empty value in an `environment` block (in `docker-compose.override.yml` or in the standalone file): the start script of the base image stops the web service then (`LOG_LEVEL: ""` is enough). Leave a variable out to keep its default. `.env` cannot do this: `docker-compose.yml` passes on only the variables of `.env.docker.example`, the only one of them with such a prefix is `TRUSTED_PROXIES`, and an empty `TRUSTED_PROXIES=` falls back to its default.
 
 ## Search
 

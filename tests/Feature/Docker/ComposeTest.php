@@ -226,7 +226,8 @@ it('documents every variable of the compose file in .env.docker.example', functi
 
     expect($example)->not->toContain('FILESYSTEM_DISK')
         ->and($example)->not->toContain('AWS_')
-        ->and($example)->toContain('Never set a variable starting with PHP_, NGINX_, SSL_, LOG_ or TRUSTED_PROXY')
+        ->and($example)->toContain('# Only the variables of this file reach the containers.')
+        ->and($example)->toContain('never set a variable starting with PHP_, NGINX_, SSL_, LOG_ or TRUSTED_PROXY to an')
         ->and($example)->toContain('.app-key')
         ->and($compose()['services'])->not->toBeEmpty();
 });
