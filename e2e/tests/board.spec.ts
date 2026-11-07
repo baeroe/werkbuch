@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { allEntries, createE2eProject, createItem, removeE2eProject, runId, tabTo, tr, variant } from '../helpers';
+import { allEntries, createE2eProject, createItem, isPhone, removeE2eProject, runId, tabTo, tr, variant } from '../helpers';
 
 // The board of a project with the agency workflow (Agentur-Freigabe: Backlog → Todo → In Progress → Review →
 // Kundenfreigabe → Done), signed in as the e2e person (playwright.config.ts), in English. Each test works in a project
@@ -201,4 +201,46 @@ test('creates an item with the quick add of a column', async ({ page }) => {
   } finally {
     await removeE2eProject(page, identifier);
   }
+});
+
+test.describe('the wheel over a column', () => {
+  /** A project with the standard workflow (six columns, wider than the screen) and 14 items in Backlog. */
+  async function wideBoard(page: Page, what: string) {
+    const project = await createE2eProject(page, name(what));
+    for (let i = 1; i <= 14; i++) await createItem(page, { project_id: project.id, title: `Wheel item ${i}` });
+    await page.goto(`/projects/${project.identifier}?layout=board`);
+    const board = page.getByRole('group', { name: tr('en', 'items.board.label') });
+    await expect(column(page, 'Backlog').getByRole('article').first()).toBeVisible();
+    expect(await board.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
+    const list = column(page, 'Backlog').locator('[data-board-list]');
+    const box = (await list.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    return { identifier: project.identifier, board, list };
+  }
+
+  test('scrolls the board sideways with the wheel over a column', async ({ page }) => {
+    test.skip(isPhone(page), 'a phone is swiped, there is no wheel');
+    await page.goto('/my-items');
+    const { identifier, board } = await wideBoard(page, 'wheel x');
+    try {
+      await page.mouse.wheel(300, 0);
+      await expect.poll(() => board.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
+    } finally {
+      await removeE2eProject(page, identifier);
+    }
+  });
+
+  test('keeps the vertical wheel in the column', async ({ page }) => {
+    test.skip(isPhone(page), 'a phone is swiped, there is no wheel');
+    await page.goto('/my-items');
+    const { identifier, board, list } = await wideBoard(page, 'wheel y');
+    try {
+      const before = await board.evaluate((el) => el.scrollLeft);
+      await page.mouse.wheel(0, 300);
+      await expect.poll(() => list.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+      expect(await board.evaluate((el) => el.scrollLeft)).toBe(before);
+    } finally {
+      await removeE2eProject(page, identifier);
+    }
+  });
 });

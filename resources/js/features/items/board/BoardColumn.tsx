@@ -151,7 +151,7 @@ export function BoardColumn({ column, groupBy, keepIndex, sortable, drag, reveal
         ref={box}
         data-board-list=""
         className={cx(
-          'min-h-0 flex-1 overflow-y-auto overscroll-contain rounded-card px-1.5 pb-4 transition-[opacity,background-color] duration-160',
+          'min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain rounded-card px-1.5 pb-4 transition-[opacity,background-color] duration-160',
           dim && 'opacity-40',
           drag.active && drag.over && !dim && 'bg-hover',
         )}
