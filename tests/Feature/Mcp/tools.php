@@ -3,6 +3,7 @@
 use App\Models\Attachment;
 use App\Models\Comment;
 use App\Models\Label;
+use App\Models\PageVersion;
 use App\Models\Property;
 use App\Models\RelationType;
 use App\Models\Resolution;
@@ -157,6 +158,41 @@ return [
     'manage-comments:unreact' => ['arguments' => fn (MatrixWorld $w) => ['comment' => Comment::factory()->for($w->item('project_admin'), 'workItem')->create()->id, 'input' => ['emoji' => '👍']]],
     'attachments:get' => ['arguments' => fn (MatrixWorld $w) => ['attachment' => Attachment::factory()->forItem($w->item('project_admin'))->create()->id]],
     'manage-attachments:delete' => ['arguments' => fn (MatrixWorld $w) => ['attachment' => Attachment::factory()->forItem($w->item('project_admin'), 'file')->create()->id]],
+    'pages:tree' => ['arguments' => function (MatrixWorld $w) {
+        $w->page('project_admin');
+
+        return ['project' => $w->web->identifier];
+    }],
+    'pages:get' => ['arguments' => fn (MatrixWorld $w) => ['page' => $w->page('project_admin')->id]],
+    'pages:versions' => ['arguments' => function (MatrixWorld $w) {
+        $page = $w->page('project_admin');
+        PageVersion::factory()->create(['page_id' => $page->id]);
+
+        return ['page' => $page->id, 'per_page' => 5];
+    }],
+    'pages:version' => ['arguments' => fn (MatrixWorld $w) => [
+        'page' => ($page = $w->page('project_admin'))->id, 'page_version' => PageVersion::factory()->create(['page_id' => $page->id])->id,
+    ]],
+    'manage-pages:create' => ['arguments' => fn (MatrixWorld $w) => ['project' => $w->web->identifier, 'input' => ['title' => 'Matrix']]],
+    'manage-pages:update' => ['arguments' => fn (MatrixWorld $w) => ['page' => $w->page('project_admin')->id, 'input' => ['title' => 'Matrix']]],
+    'manage-pages:move' => ['arguments' => fn (MatrixWorld $w) => ['page' => $w->page('project_admin')->id, 'input' => ['parent_id' => null, 'before_id' => null]]],
+    'manage-pages:delete' => ['arguments' => fn (MatrixWorld $w) => ['page' => $w->page('project_admin')->id]],
+    'manage-pages:restore-version' => ['arguments' => fn (MatrixWorld $w) => [
+        'page' => ($page = $w->page('project_admin'))->id, 'page_version' => PageVersion::factory()->create(['page_id' => $page->id])->id,
+    ]],
+    'templates:list' => ['arguments' => function (MatrixWorld $w) {
+        $w->template('project_admin');
+
+        return ['filter' => ['scheduled' => 0], 'sort' => 'name', 'lean' => 1, 'per_page' => 5];
+    }],
+    'templates:get' => ['arguments' => fn (MatrixWorld $w) => ['template' => $w->template('project_admin')->id]],
+    'templates:runs' => ['arguments' => fn (MatrixWorld $w) => ['template' => $w->template('project_admin')->id, 'per_page' => 5]],
+    'templates:draft' => ['arguments' => fn (MatrixWorld $w) => ['template' => $w->template('project_admin')->id]],
+    'templates:preview' => ['arguments' => fn (MatrixWorld $w) => ['input' => ['schedule' => ['frequency' => 'daily', 'interval' => 1, 'time' => '09:00', 'starts_on' => '2026-11-01', 'ends' => ['type' => 'never']]]]],
+    'manage-templates:create' => ['arguments' => fn (MatrixWorld $w) => ['project' => $w->web->identifier, 'input' => ['name' => 'Matrix', 'payload' => ['title' => 'Matrix'], 'schedule' => null]]],
+    'manage-templates:update' => ['arguments' => fn (MatrixWorld $w) => ['template' => $w->template('project_admin')->id, 'input' => ['name' => 'Matrix', 'payload' => ['title' => 'Matrix'], 'schedule' => null]]],
+    'manage-templates:delete' => ['arguments' => fn (MatrixWorld $w) => ['template' => $w->template('project_admin')->id]],
+    'manage-templates:run' => ['arguments' => fn (MatrixWorld $w) => ['template' => $w->template('project_admin')->id]],
     'views:list' => ['arguments' => fn (MatrixWorld $w) => ['filter' => ['created_by' => $w->view()->created_by], 'sort' => '-created_at', 'per_page' => 5]],
     'views:get' => ['arguments' => fn (MatrixWorld $w) => ['view' => $w->view()->id]],
     'views:items' => ['arguments' => function (MatrixWorld $w) {

@@ -3,7 +3,9 @@
 use App\Access\ProjectRole;
 use App\Models\Attachment;
 use App\Models\Comment;
+use App\Models\Page;
 use App\Models\Project;
+use App\Models\Template;
 use App\Models\User;
 use App\Models\WorkItem;
 use Illuminate\Database\Events\QueryExecuted;
@@ -94,4 +96,37 @@ it('deletes an item, a comment and a file at read committed', function () use ($
         ->and($ofItem->fresh()?->only(['attachable_type', 'attachable_id', 'kind']))->toBe(['attachable_type' => 'work_item', 'attachable_id' => $kept->id, 'kind' => 'inline'])
         ->and($ofComment->fresh()?->only(['attachable_type', 'attachable_id', 'kind']))->toBe(['attachable_type' => 'work_item', 'attachable_id' => $kept->id, 'kind' => 'inline'])
         ->and(Attachment::query()->find($file->id))->toBeNull();
+});
+
+it('deletes a page and a template at read committed', function () use ($statements, $first) {
+    Storage::fake('local');
+    $mara = User::factory()->create();
+    $web = Project::factory()->member($mara, ProjectRole::Admin)->create(['lead_id' => $mara->id]);
+    $page = Page::factory()->for($web)->create(['created_by' => $mara->id]);
+    $template = Template::factory()->create(['project_id' => $web->id, 'created_by' => $mara->id]);
+    $mcp = McpClient::for($this, apiToken($mara, ['write', 'mcp']));
+    $sql = $statements();
+
+    $calls = [
+        'pages' => fn () => $mcp->call('manage-pages', ['action' => 'delete', 'page' => $page->id]),
+        'templates' => fn () => $mcp->call('manage-templates', ['action' => 'delete', 'template' => $template->id]),
+    ];
+
+    foreach ($calls as $table => $call) {
+        $sql->exchangeArray([]);
+
+        $result = $call();
+
+        $delete = $first($sql, "/^delete from `{$table}` where/");
+        $set = $first($sql, '/^set session transaction isolation level read committed$/');
+        $back = $first($sql, '/^set session transaction isolation level repeatable read$/i');
+        expect($result['isError'])->toBeFalse((string) json_encode($result))
+            ->and($set)->toBeGreaterThan(-1, $table)
+            ->and($delete)->toBeGreaterThan($set, $table)
+            ->and($back)->toBeGreaterThan($delete, $table)
+            ->and(DB::scalar('select @@session.transaction_isolation'))->toBe('REPEATABLE-READ', $table);
+    }
+
+    expect(Page::query()->find($page->id))->toBeNull()
+        ->and(Template::query()->find($template->id))->toBeNull();
 });

@@ -15,16 +15,20 @@ use App\Mcp\Tools\ManageAttachmentsTool;
 use App\Mcp\Tools\ManageAutomationsTool;
 use App\Mcp\Tools\ManageCommentsTool;
 use App\Mcp\Tools\ManageOrganizationTool;
+use App\Mcp\Tools\ManagePagesTool;
 use App\Mcp\Tools\ManagePeopleTool;
 use App\Mcp\Tools\ManageProjectsTool;
 use App\Mcp\Tools\ManageRelationsTool;
+use App\Mcp\Tools\ManageTemplatesTool;
 use App\Mcp\Tools\ManageViewsTool;
 use App\Mcp\Tools\ManageWorkItemsTool;
 use App\Mcp\Tools\OrganizationTool;
+use App\Mcp\Tools\PagesTool;
 use App\Mcp\Tools\PeopleTool;
 use App\Mcp\Tools\ProjectsTool;
 use App\Mcp\Tools\RelationsTool;
 use App\Mcp\Tools\SearchTool;
+use App\Mcp\Tools\TemplatesTool;
 use App\Mcp\Tools\ViewsTool;
 use App\Mcp\Tools\WhoamiTool;
 use App\Mcp\Tools\WorkItemsTool;
@@ -85,6 +89,10 @@ final class WerkbuchServer extends Server
         ManageCommentsTool::class,
         AttachmentsTool::class,
         ManageAttachmentsTool::class,
+        PagesTool::class,
+        ManagePagesTool::class,
+        TemplatesTool::class,
+        ManageTemplatesTool::class,
         ViewsTool::class,
         ManageViewsTool::class,
     ];

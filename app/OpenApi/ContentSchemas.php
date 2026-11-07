@@ -68,7 +68,7 @@ final class ContentSchemas
     public static function reaction(): array
     {
         return self::object(
-            'The reaction (`emoji` in the body or in the query `?emoji=`, one of them is required, else 422 at `emoji`): one emoji (one grapheme of at most '.Emoji::MAX_BYTES.' bytes; 👍 and 👍🏽 are two). Anyone who may comment can react; '
+            'The reaction (`emoji` is required, else 422 at `emoji`): one emoji (one grapheme of at most '.Emoji::MAX_BYTES.' bytes; 👍 and 👍🏽 are two). Anyone who may comment can react; '
                 .'the same emoji twice changes nothing, and only the own one is taken back.',
             ['emoji' => ['type' => 'string', 'minLength' => 1, 'maxLength' => Emoji::MAX_BYTES, 'description' => 'The emoji.']],
         );
@@ -83,7 +83,7 @@ final class ContentSchemas
     {
         $schema = self::reaction();
         unset($schema['required']);
-        $schema['description'] = 'Takes back the own reaction: `emoji` in the body or in the query (`?emoji=`), one emoji of at most '
+        $schema['description'] = 'Takes back the own reaction: `emoji`: one emoji of at most '
             .Emoji::MAX_BYTES.' bytes. One that is not there changes nothing.';
 
         return $schema;

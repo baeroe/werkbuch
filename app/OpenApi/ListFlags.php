@@ -17,16 +17,17 @@ use Dedoc\Scramble\Support\RouteInfo;
  */
 final class ListFlags extends OperationExtension
 {
-    private const QUERY_FLAG = ['type' => 'integer', 'enum' => [1, 0]];
+    public const QUERY_FLAG = ['type' => 'integer', 'enum' => [1, 0]];
+
+    /** The flag `lean` of the template lists. */
+    public const LEAN = 'Leave the texts out (`1`): no `description`, `description_json` and `values_markdown` in `payload`, '
+        .'the rest as usual (the list of a command palette).';
 
     public function handle(Operation $operation, RouteInfo $routeInfo): void
     {
-        $lean = 'Leave the texts out (`1`): no `description`, `description_json` and `values_markdown` in `payload`, '
-            .'the rest as usual (the list of a command palette).';
-
         $parameters = match ($routeInfo->className().'@'.$routeInfo->methodName()) {
             ProjectsController::class.'@index' => [self::flag('include_archived', 'Archived projects too (`1`); without it only the active ones.')],
-            TemplatesController::class.'@index', TemplatesController::class.'@projectIndex' => [self::flag('lean', $lean)],
+            TemplatesController::class.'@index', TemplatesController::class.'@projectIndex' => [self::flag('lean', self::LEAN)],
             default => [],
         };
 

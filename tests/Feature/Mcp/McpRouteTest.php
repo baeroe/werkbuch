@@ -32,7 +32,7 @@ it('answers server/discover with the server and its version', function () use ($
         ->and(array_keys($result['capabilities']))->toBe(['tools', 'resources'])
         ->and(trim((string) $result['instructions']))->not->toBe('')
         // the read tools of a token with read (whoami since task 3a, search since task 4, organization since task 5a, people since task 5b, projects and automations since task 6, work-items since task 7a, relations and views since task 7b, comments and attachments since task 8b), no resources yet (task 11)
-        ->and(array_column($mcp->tools(), 'name'))->toBe(['whoami', 'search', 'organization', 'people', 'projects', 'automations', 'work-items', 'relations', 'comments', 'attachments', 'views'])
+        ->and(array_column($mcp->tools(), 'name'))->toBe(['whoami', 'search', 'organization', 'people', 'projects', 'automations', 'work-items', 'relations', 'comments', 'attachments', 'pages', 'templates', 'views'])
         ->and($mcp->resources())->toBe([]);
 });
 

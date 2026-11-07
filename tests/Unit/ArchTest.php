@@ -48,7 +48,7 @@ arch('the MCP layer is final but for the abstract bases of its tools and referen
 arch('the bases of the MCP tools are abstract')
     ->expect(['App\Mcp\Support\WerkbuchTool', 'App\Mcp\Support\ReadTool', 'App\Mcp\Support\WriteTool'])->toBeAbstract();
 arch('the MCP layer leaves the database, the schema and the events to actions')
-    ->expect('App\Mcp')->not->toUse([EventRecorder::class, 'Illuminate\Support\Facades\DB', 'Illuminate\Support\Facades\Schema']);
+    ->expect('App\Mcp')->not->toUse([EventRecorder::class, 'Illuminate\Support\Facades\DB', 'Illuminate\Support\Facades\Schema', 'Illuminate\Database\ConnectionInterface']);
 arch('domain classes are final')->expect('App\Domain')->classes()->toBeFinal();
 arch('rich text is final and leaves actions, http and the database alone')
     ->expect('App\RichText')->classes()->toBeFinal()->not->toUse(['App\Actions', 'App\Http', 'Illuminate\Support\Facades\DB']);
@@ -102,6 +102,21 @@ it('never writes models in controllers, middleware, commands, jobs, auth adapter
 
     $hits = collect(['app/Http', 'app/Console', 'app/Jobs', 'app/Auth', 'app/Mcp'])->flatMap(fn ($d) => appFiles($d))
         ->flatMap(fn (string $f) => modelWrites((string) file_get_contents(repo_path($f)), $f))->all();
+    expect($hits)->toBe([]);
+});
+
+// a tool opens no transaction around an action: the deletions set READ COMMITTED themselves, and only outside a transaction (T8b-I2)
+$transactions = fn (string $code, string $file = 'code'): array => collect(explode("\n", $code))
+    ->filter(fn (string $line) => preg_match('/transaction\s*\(|beginTransaction|->getConnection\s*\(/i', $line) === 1)
+    ->keys()->map(fn (int $index) => $file.':'.($index + 1))->values()->all();
+
+it('detects transactions', function () use ($transactions) {
+    expect($transactions("<?php\n\$x->transaction(fn () => 1);\n\$y->beginTransaction();\n\$m->getConnection();\n\$ok->run();"))->toBe(['code:2', 'code:3', 'code:4']);
+});
+
+it('never opens a transaction or takes a connection in MCP', function () use ($transactions) {
+    $hits = collect(appFiles('app/Mcp'))->flatMap(fn (string $f) => $transactions((string) file_get_contents(repo_path($f)), $f))->all();
+
     expect($hits)->toBe([]);
 });
 
