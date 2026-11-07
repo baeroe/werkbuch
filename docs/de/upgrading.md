@@ -23,9 +23,10 @@ Beim Start migriert die neue Version die Datenbank, schickt die Einstellungen de
   docker compose rm -sf meilisearch
   docker volume rm werkbuch_meili-data     # <projekt>_meili-data, siehe docker volume ls
   docker compose up -d
+  docker compose restart werkbuch
   ```
 
-  Der Start findet den Index leer und importiert alles; bis dahin ist die Suche leer. Zurück zum älteren Meilisearch geht es danach nur mit denselben Schritten.
+  Der Start von `werkbuch` findet den Index leer und importiert alles; bis dahin ist die Suche leer. `up -d` allein startet ein `werkbuch` nicht neu, das noch läuft (etwa beim Weg zurück zum älteren Meilisearch), darum das `restart`. Zurück zum älteren Meilisearch geht es danach nur mit denselben Schritten.
 - **Zurück:** Migrationen werden nicht zurückgerollt. Die Sicherung wiederherstellen und die alte Version festlegen.
 
 Alle Versionen und ihre Änderungen: https://github.com/baeroe/werkbuch/releases

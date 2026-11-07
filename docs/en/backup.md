@@ -70,7 +70,7 @@ FLUSH PRIVILEGES;
 ALTER USER 'werkbuch'@'%' IDENTIFIED BY 'the DB_PASSWORD of the compose file';
 ```
 
-Then stop the rescue container with `Ctrl+C` in the first terminal and start the stack with `docker compose up -d`.
+Then stop the rescue container in the second terminal with `docker stop werkbuch-db-rescue` (MariaDB ignores the `Ctrl+C` of the first terminal; `docker stop` shuts it down cleanly, and `--rm` removes the container) and start the stack with `docker compose up -d`.
 
 ## Notes
 
