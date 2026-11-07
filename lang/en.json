@@ -165,7 +165,7 @@
     "field.abilities.required": "Choose at least one ability.",
     "field.archived_at.default": "A default cannot be archived.",
     "field.archived_at.invalid": "archived_at is a timestamp or null.",
-    "field.assignee_id.filter": "Only ULIDs of accounts, separated by commas, or none alone (items without an assignee).",
+    "field.assignee_id.filter": "Only ULIDs of accounts, or none alone (items without an assignee).",
     "field.assignee_id.invalid": "Only active members of the project and org admins can take items.",
     "field.base_description_version.invalid": "The version of the description is invalid.",
     "field.base_version.invalid": "The version of the page is invalid.",
