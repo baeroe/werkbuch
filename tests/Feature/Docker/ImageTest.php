@@ -1,0 +1,328 @@
+<?php
+
+use App\Mcp\Resources\DocReference;
+use App\Models\Attachment;
+use Tests\Support\RepoFiles;
+
+// what serversideup v5.0.4 (php 8.4.27-fpm-nginx-trixie) brings without install-php-extensions (`php -m` of the base)
+$baseExtensions = ['opcache', 'pcntl', 'pdo_mysql', 'pdo_pgsql', 'redis', 'zip'];
+
+$baseImages = [
+    'node:24.22.0-trixie-slim@sha256:a6155384446670e9719bdc4fd0ebe4d4b29fb32a8d6aa523da3547a6cfbcf22c',
+    'serversideup/php:8.4.27-fpm-nginx-trixie-v5.0.4@sha256:c91d4ff3cb30582078050735b42e873a196d60a406a68cff14bda79e3b5fff56',
+];
+
+/** The instructions of the Dockerfile, continuation lines joined and comments dropped, optionally of one stage only. */
+$instructions = function (?string $stage = null): array {
+    $joined = (string) preg_replace('/\\\\\r?\n\s*/', ' ', RepoFiles::text('Dockerfile'));
+    $all = [];
+    $current = null;
+
+    foreach (explode("\n", $joined) as $line) {
+        $line = trim($line);
+
+        if ($line === '' || str_starts_with($line, '#')) {
+            continue;
+        }
+        if (preg_match('/^FROM\s.*\sAS\s+(\S+)$/i', $line, $match) === 1) {
+            $current = $match[1];
+        }
+        if ($stage === null || $current === $stage) {
+            $all[] = $line;
+        }
+    }
+
+    expect($all)->not->toBeEmpty('the Dockerfile has no stage '.($stage ?? ''));
+
+    return $all;
+};
+
+/** The non-comment lines of .dockerignore. */
+$ignoreLines = function (): array {
+    return array_values(array_filter(
+        array_map('trim', explode("\n", RepoFiles::text('.dockerignore'))),
+        fn (string $line) => $line !== '' && ! str_starts_with($line, '#'),
+    ));
+};
+
+/** Whether Docker leaves a path of the repository out of the build context: the last pattern that matches it or a parent wins. */
+$ignored = function (string $path) use ($ignoreLines): bool {
+    $result = false;
+    $parts = explode('/', $path);
+
+    foreach ($ignoreLines() as $line) {
+        $negated = str_starts_with($line, '!');
+        $pattern = ltrim($negated ? substr($line, 1) : $line, '/');
+        $regex = '#^'.strtr(preg_quote($pattern, '#'), ['\*\*/' => '(?:.*/)?', '\*\*' => '.*', '\*' => '[^/]*', '\?' => '[^/]']).'$#';
+
+        for ($i = count($parts); $i >= 1; $i--) {
+            if (preg_match($regex, implode('/', array_slice($parts, 0, $i))) === 1) {
+                $result = ! $negated;
+                break;
+            }
+        }
+    }
+
+    return $result;
+};
+
+/** The files below docker/nginx, as paths relative to the repository. */
+$nginxFiles = function (): array {
+    $root = repo_path('docker/nginx');
+    expect(is_dir($root))->toBeTrue('docker/nginx is missing');
+    $files = [];
+
+    foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS)) as $file) {
+        $files[] = 'docker/nginx/'.substr($file->getPathname(), strlen($root) + 1);
+    }
+
+    expect($files)->not->toBeEmpty();
+
+    return $files;
+};
+
+it('pins both base images by version and digest, on glibc', function () use ($instructions, $baseImages) {
+    $froms = array_values(array_filter($instructions(), fn (string $line) => preg_match('/^FROM\s/i', $line) === 1));
+    $refs = array_map(fn (string $line) => preg_replace('/^FROM\s+(?:--platform=\S+\s+)?(\S+).*$/i', '$1', $line), $froms);
+
+    expect($refs)->toHaveCount(2);
+    foreach ($refs as $ref) {
+        expect($ref)->toMatch('/^[a-z0-9\/._-]+:[\w.-]+@sha256:[0-9a-f]{64}$/');
+        expect($ref)->not->toContain('alpine');
+    }
+    expect($refs)->toBe($baseImages);
+});
+
+it('builds the assets with pnpm from corepack, never npm', function () use ($instructions) {
+    $assets = $instructions('assets');
+    $installs = array_values(array_filter($assets, fn (string $line) => str_contains($line, 'pnpm install')));
+
+    expect(implode("\n", $assets))->toContain('corepack enable');
+    expect($installs)->toHaveCount(1);
+    expect($installs[0])->toContain('pnpm install --frozen-lockfile');
+    expect($installs[0])->not->toContain('--filter');
+    expect($assets)->toContain('RUN pnpm build');
+
+    foreach ($instructions() as $line) {
+        expect($line)->not->toMatch('/(?<![\w-])npm\b/');
+        expect($line)->not->toMatch('/(?<![\w-])npx\b/');
+    }
+});
+
+it('installs the PHP extensions the code needs and checks the platform', function () use ($instructions) {
+    $app = $instructions('app');
+    $composer = array_values(array_filter($app, fn (string $line) => str_contains($line, 'composer install')));
+
+    expect($app)->toContain('RUN install-php-extensions intl bcmath gd exif');
+    expect($composer)->toHaveCount(1);
+
+    $check = strpos($composer[0], 'composer check-platform-reqs --no-dev');
+    $install = strpos($composer[0], 'composer install');
+    expect($check)->toBeInt();
+    expect($check)->toBeLessThan($install);
+});
+
+it('has every extension the CI tests with', function () use ($instructions, $baseExtensions) {
+    $line = collect($instructions('app'))->first(fn (string $l) => str_starts_with($l, 'RUN install-php-extensions '));
+    $installed = [...preg_split('/\s+/', trim(substr((string) $line, strlen('RUN install-php-extensions ')))), ...$baseExtensions];
+
+    $ci = [];
+    foreach (RepoFiles::yaml('.github/workflows/tests.yml')['jobs'] as $job) {
+        foreach ($job['steps'] ?? [] as $step) {
+            if (str_contains($step['uses'] ?? '', 'shivammathur/setup-php')) {
+                $ci = [...$ci, ...array_map('trim', explode(',', $step['with']['extensions']))];
+            }
+        }
+    }
+
+    expect($ci)->not->toBeEmpty('tests.yml sets up PHP without a list of extensions');
+    foreach (array_unique($ci) as $extension) {
+        expect($installed)->toContain($extension);
+    }
+    // spatie/image reads the orientation of a photo
+    expect($installed)->toContain('exif');
+});
+
+it('lets uploads up to ATTACHMENTS_MAX_MB through PHP and nginx and gives PHP 512 MB', function () {
+    $upload = RepoFiles::bytes(RepoFiles::dockerfileEnv('PHP_UPLOAD_MAX_FILE_SIZE'));
+    $post = RepoFiles::bytes(RepoFiles::dockerfileEnv('PHP_POST_MAX_SIZE'));
+
+    expect($upload)->toBeGreaterThanOrEqual(Attachment::DEFAULT_MAX_MB * 1024 ** 2);
+    expect($post)->toBeGreaterThan($upload);
+    expect(RepoFiles::bytes(RepoFiles::dockerfileEnv('NGINX_CLIENT_MAX_BODY_SIZE')))->toBeGreaterThanOrEqual($post);
+    expect(RepoFiles::bytes(RepoFiles::dockerfileEnv('PHP_MEMORY_LIMIT')))->toBe(512 * 1024 ** 2);
+    expect(RepoFiles::dockerfileEnv('APP_ENV'))->toBe('production');
+    expect(RepoFiles::dockerfileEnv('APP_DEBUG'))->toBe('false');
+    expect(RepoFiles::dockerfileEnv('TRUSTED_PROXY'))->toBe('off');
+    expect(RepoFiles::dockerfileEnv('AUTORUN_ENABLED'))->toBe('false');
+});
+
+it('sends to Reverb inside the stack and works the queues of the database', function () {
+    expect(RepoFiles::dockerfileEnv('REVERB_HOST'))->toBe('reverb');
+    expect(RepoFiles::dockerfileEnv('REVERB_PORT'))->toBe('6001');
+    expect(RepoFiles::dockerfileEnv('REVERB_SERVER_PORT'))->toBe('6001');
+    expect(RepoFiles::dockerfileEnv('REVERB_SCHEME'))->toBe('http');
+    expect(RepoFiles::dockerfileEnv('QUEUE_CONNECTION'))->toBe('database');
+    expect(RepoFiles::dockerfileEnv('BROADCAST_CONNECTION'))->toBe('reverb');
+    expect(RepoFiles::dockerfileEnv('SCOUT_DRIVER'))->toBe('meilisearch');
+    expect(RepoFiles::dockerfileEnv('MEILISEARCH_HOST'))->toBe('http://meilisearch:7700');
+    expect(RepoFiles::dockerfileEnv('LOG_CHANNEL'))->toBe('stderr');
+    expect(RepoFiles::dockerfileEnv('APP_NAME'))->toBe('werkbuch');
+});
+
+it('ships the docs the MCP references read', function () use ($instructions, $ignoreLines, $ignored) {
+    $pages = [];
+    foreach (glob(repo_path('app/Mcp/Resources/*.php')) ?: [] as $file) {
+        $class = 'App\\Mcp\\Resources\\'.basename($file, '.php');
+        $reflection = new ReflectionClass($class);
+
+        if ($reflection->isSubclassOf(DocReference::class) && ! $reflection->isAbstract()) {
+            $pages[] = (string) $reflection->getMethod('page')->invoke($reflection->newInstance());
+        }
+    }
+
+    expect($pages)->not->toBeEmpty();
+    $copies = array_values(array_filter($instructions('app'), fn (string $line) => str_starts_with($line, 'COPY ')));
+
+    foreach (array_unique($pages) as $page) {
+        expect($ignoreLines())->toContain("!docs/en/{$page}");
+        expect($ignored("docs/en/{$page}"))->toBeFalse("docs/en/{$page} stays out of the build context");
+        expect(collect($copies)->contains(fn (string $copy) => in_array("docs/en/{$page}", preg_split('/\s+/', $copy), true)))
+            ->toBeTrue("the Dockerfile copies no docs/en/{$page}");
+    }
+});
+
+it('ships Stoplight with its license', function () use ($instructions, $ignored) {
+    expect(is_file(repo_path('public/vendor/stoplight-elements/8.4.2/LICENSE')))->toBeTrue();
+    expect($ignored('public/vendor/stoplight-elements/8.4.2/LICENSE'))->toBeFalse();
+    expect($ignored('public/vendor/stoplight-elements/8.4.2/web-components.min.js'))->toBeFalse();
+    expect($instructions('app'))->toContain('COPY public ./public');
+});
+
+it('keeps secrets, dependencies and local files out of the build context', function () use ($ignoreLines, $ignored) {
+    foreach (['.env', '.env.*', '**/node_modules', 'vendor', 'storage', 'bootstrap/cache/*.php', '.git', '.ddev', '.superpowers', '.claude', 'e2e', 'tests', 'coverage', 'prototypes/*/*'] as $line) {
+        expect($ignoreLines())->toContain($line);
+    }
+
+    foreach (['.env', '.env.docker', 'node_modules/vite/package.json', 'prototypes/clickdummy/node_modules/react/index.js', 'docs/node_modules/vitepress/package.json',
+        'vendor/autoload.php', 'storage/app/.app-key', 'bootstrap/cache/config.php', '.git/HEAD', '.ddev/config.yaml', '.superpowers/sdd/x.md',
+        '.claude/settings.json', 'e2e/helpers.ts', 'tests/Pest.php', 'coverage/index.html', 'prototypes/clickdummy/src/main.tsx', 'docs/en/setup.md'] as $path) {
+        expect($ignored($path))->toBeTrue("{$path} reaches the build context");
+    }
+    foreach (['prototypes/clickdummy/package.json', 'docs/package.json', 'package.json', 'pnpm-lock.yaml', 'composer.lock', 'app/Models/User.php', 'resources/js/app.tsx'] as $path) {
+        expect($ignored($path))->toBeFalse("{$path} is missing in the build context");
+    }
+});
+
+it('keeps the code read-only for PHP, only storage and bootstrap/cache writable', function () use ($instructions) {
+    $app = $instructions('app');
+    foreach ($app as $line) {
+        expect($line)->not->toContain('--chown');
+    }
+
+    $users = array_keys(array_filter($app, fn (string $line) => str_starts_with($line, 'USER ')));
+    $last = end($users);
+    expect($app[$last])->toBe('USER www-data');
+    expect($app[$last - 1])->toStartWith('RUN ');
+
+    $commands = array_map('trim', explode('&&', substr($app[$last - 1], 4)));
+    $index = fn (string $start) => collect($commands)->search(fn (string $c) => str_starts_with($c, $start));
+    $debug = ['"$PHP_INI_DIR/conf.d/zzz-serversideup-docker-php-debug.ini"', '/usr/local/etc/php-fpm.d/zzz-docker-php-serversideup-fpm-debug.conf', '/usr/local/etc/php-fpm.conf'];
+
+    $steps = [
+        $index('chown root:root /var/www .'),
+        $index('chmod 755 /var/www .'),
+        $index('chown -R root:root '),
+        $index('chmod -R a+rX,go-w '),
+        $index('chown root:root "$PHP_INI_DIR'),
+        $index('chmod 644 "$PHP_INI_DIR'),
+        $index('chown -R www-data:www-data '),
+    ];
+    foreach ($steps as $step) {
+        expect($step)->toBeInt();
+    }
+    expect($steps)->toBe(array_values(array_unique($steps)));
+    expect($steps)->toBe(collect($steps)->sort()->values()->all());
+    expect($commands[array_key_last($commands)])->toBe('chown -R www-data:www-data storage bootstrap/cache');
+
+    foreach ([$steps[2], $steps[3]] as $step) {
+        $words = preg_split('/\s+/', $commands[$step]);
+        foreach (['app', 'vendor', 'public', 'config', 'routes'] as $folder) {
+            expect($words)->toContain($folder);
+        }
+    }
+    foreach ([$steps[4], $steps[5]] as $step) {
+        $words = preg_split('/\s+/', $commands[$step]);
+        foreach ($debug as $file) {
+            expect($words)->toContain($file);
+        }
+    }
+});
+
+it('keeps the Composer cache out of the image', function () use ($instructions) {
+    $composer = collect($instructions('app'))->first(fn (string $line) => str_contains($line, 'composer install'));
+
+    expect($composer)->toStartWith('RUN --mount=type=cache,target=/composer/cache ');
+});
+
+it('hides the arguments in stack traces and keeps the session upload progress off', function () use ($instructions) {
+    $ini = parse_ini_string(RepoFiles::text('docker/php/zz-werkbuch.ini'), false, INI_SCANNER_RAW);
+
+    expect($ini)->toBeArray();
+    expect($ini['zend.exception_ignore_args'] ?? null)->toBe('On');
+    expect($ini['session.upload_progress.enabled'] ?? null)->toBe('Off');
+    expect($ini['expose_php'] ?? null)->toBe('Off');
+    expect($instructions('app'))->toContain('COPY --chmod=644 docker/php/zz-werkbuch.ini /usr/local/etc/php/conf.d/zz-werkbuch.ini');
+});
+
+it('logs no query string, no referer, no reset token and no health check of its own, but the forwarded address', function () {
+    $http = RepoFiles::text('docker/nginx/conf.d/00-werkbuch.conf');
+    $server = RepoFiles::text('docker/nginx/server-opts.d/werkbuch.conf');
+
+    expect(preg_match("/log_format\s+werkbuch\s+'([^;]*)';/", $http, $match))->toBe(1);
+    $format = $match[1];
+    expect($format)->not->toMatch('/\$request(?!_)/');
+    expect($format)->not->toContain('$args');
+    expect($format)->not->toContain('$query_string');
+    expect($format)->not->toContain('$http_referer');
+    expect($format)->toContain('$werkbuch_logged_uri');
+    expect($format)->toContain('$http_x_forwarded_for');
+
+    expect(preg_match('/map \$request_uri \$werkbuch_logged_uri \{([^}]*)\}/', $http, $uris))->toBe(1);
+    expect($uris[1])->toMatch('#~\^/reset-password/\s+/reset-password/\.\.\.;#');
+    expect($uris[1])->toMatch('#~\^/api/mcp/uploads/\s+/api/mcp/uploads/\.\.\.;#');
+
+    expect(preg_match('/map "\$remote_addr \$request_uri" \$werkbuch_loggable \{([^}]*)\}/', $http, $loggable))->toBe(1);
+    expect($loggable[1])->toContain('127\.0\.0\.1');
+    expect($loggable[1])->toContain('::1');
+    expect($loggable[1])->toContain(' /up');
+    expect($loggable[1])->toMatch('/default\s+\$loggable;/');
+
+    expect($server)->toMatch('#^access_log /dev/stdout werkbuch if=\$werkbuch_loggable;$#m');
+});
+
+it('passes /app/ on to Reverb, resolved at request time, and never Reverb\'s HTTP API', function () use ($nginxFiles) {
+    $server = RepoFiles::text('docker/nginx/server-opts.d/werkbuch.conf');
+
+    expect($server)->toContain('location ^~ /app/ {');
+    expect($server)->toContain('proxy_set_header Upgrade $http_upgrade;');
+    expect($server)->toContain('proxy_set_header Connection "upgrade";');
+    expect($server)->toMatch('/^resolver 127\.0\.0\.11\b/m');
+    expect($server)->toContain('proxy_pass $werkbuch_reverb;');
+
+    foreach ($nginxFiles() as $file) {
+        expect(RepoFiles::text($file))->not->toContain('proxy_pass http://reverb');
+        expect(RepoFiles::text($file))->not->toMatch('#^\s*location\b[^{]*/apps#m');
+    }
+});
+
+it('leaves HSTS to the TLS proxy', function () use ($instructions, $nginxFiles) {
+    foreach ($nginxFiles() as $file) {
+        expect(RepoFiles::text($file))->not->toContain('Strict-Transport-Security');
+    }
+
+    $security = RepoFiles::text('docker/nginx/server-opts.d/security.conf');
+    expect($security)->toContain('add_header X-Content-Type-Options');
+    expect($security)->toContain('location ~ /\.');
+    expect($instructions('app'))->toContain('COPY --chmod=644 docker/nginx/server-opts.d/ /etc/nginx/server-opts.d/');
+});
