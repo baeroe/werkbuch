@@ -1,0 +1,216 @@
+# werkbuch stack: the web service, Reverb, three queue workers, the scheduler, MariaDB and Meilisearch.
+# Docs: docs/en/setup.md. Put a `.env` next to this file (start from .env.docker.example).
+# The named volumes survive `docker compose down`; `docker compose down -v` deletes them (database, uploads, keys).
+
+x-werkbuch-environment: &werkbuch-environment
+  APP_URL: "${APP_URL:?APP_URL missing (public address, see .env.docker.example)}"
+  # the organization takes its language from this when it is created (first start)
+  APP_LOCALE: "${APP_LOCALE:-en}"
+  APP_KEY: "${APP_KEY:-}"
+  REVERB_APP_KEY: "${REVERB_APP_KEY:-}"
+  REVERB_APP_SECRET: "${REVERB_APP_SECRET:-}"
+  DB_PASSWORD: "${DB_PASSWORD:?DB_PASSWORD missing (see .env.docker.example)}"
+  MEILISEARCH_KEY: "${MEILISEARCH_KEY:?MEILISEARCH_KEY missing (see .env.docker.example)}"
+  # never empty: the base image's start script stops the web service on an empty TRUSTED_PROXY* variable
+  TRUSTED_PROXIES: "${TRUSTED_PROXIES:-127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7}"
+  MAIL_MAILER: "${MAIL_MAILER:-log}"
+  MAIL_SCHEME: "${MAIL_SCHEME:-}"
+  MAIL_HOST: "${MAIL_HOST:-}"
+  MAIL_PORT: "${MAIL_PORT:-587}"
+  MAIL_USERNAME: "${MAIL_USERNAME:-}"
+  MAIL_PASSWORD: "${MAIL_PASSWORD:-}"
+  MAIL_FROM_ADDRESS: "${MAIL_FROM_ADDRESS:-werkbuch@example.com}"
+  MAIL_FROM_NAME: "${MAIL_FROM_NAME:-werkbuch}"
+  ATTACHMENTS_MAX_MB: "${ATTACHMENTS_MAX_MB:-25}"
+  NOTIFICATION_MAIL_DELAY: "${NOTIFICATION_MAIL_DELAY:-5}"
+  WEBHOOKS_ALLOW_PRIVATE: "${WEBHOOKS_ALLOW_PRIVATE:-false}"
+  API_RATE_LIMIT: "${API_RATE_LIMIT:-600}"
+  API_SESSION_RATE_LIMIT: "${API_SESSION_RATE_LIMIT:-3000}"
+  MCP_RATE_LIMIT: "${MCP_RATE_LIMIT:-300}"
+
+x-werkbuch-service: &werkbuch-service
+  image: ${WERKBUCH_IMAGE:-baeroe/werkbuch:latest}
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+  networks:
+    - default
+    - backend
+
+services:
+  werkbuch:
+    <<: *werkbuch-service
+    ports:
+      - "${WERKBUCH_BIND:-0.0.0.0}:${WERKBUCH_PORT:-7740}:8080"
+    environment:
+      <<: *werkbuch-environment
+      ADMIN_EMAIL: "${ADMIN_EMAIL:?ADMIN_EMAIL missing (see .env.docker.example)}"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"
+    volumes:
+      - werkbuch-data:/var/www/html/storage/app
+    healthcheck:
+      # the request carries the host of APP_URL (the app answers only to it); nginx does not log this request.
+      # start_period is generous: the first start migrates and imports the search before nginx runs, and the workers
+      # and the scheduler wait for this check (depends_on: service_healthy) because they do not migrate themselves.
+      # Meilisearch must be healthy first: an unreachable index stops the whole start.
+      test: ["CMD", "sh", "-c", "h=$${APP_URL#*://}; h=$${h%%/*}; curl -fsS -o /dev/null -H \"Host: $${h%%:*}\" http://localhost:8080/up"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 300s
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+
+  reverb:
+    <<: *werkbuch-service
+    # only the internal network: nginx in the web service forwards /app/ to it
+    networks:
+      - backend
+    command: php artisan reverb:start --host=0.0.0.0 --port=6001
+    environment: *werkbuch-environment
+    volumes:
+      - werkbuch-data:/var/www/html/storage/app:ro
+    stop_signal: SIGTERM
+    # without ext-uv or ev, stream_select ends at 1024 connections anyway (docs)
+    ulimits:
+      nofile:
+        soft: 10000
+        hard: 10000
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:6001/up"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      werkbuch:
+        condition: service_healthy
+
+  queue:
+    <<: *werkbuch-service
+    command: php artisan queue:work --queue=default,live,notifications,bulk --sleep=1 --tries=3 --max-time=3600 --memory=384
+    environment: *werkbuch-environment
+    volumes:
+      - werkbuch-data:/var/www/html/storage/app
+    stop_signal: SIGTERM
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD", "healthcheck-queue"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      werkbuch:
+        condition: service_healthy
+
+  # search and previews of pictures in a worker of their own: they starved behind the events (T4-M2).
+  # Exactly one container, never scale it.
+  queue-index:
+    <<: *werkbuch-service
+    command: php artisan queue:work --queue=search,media --sleep=1 --tries=3 --max-time=3600 --memory=384
+    environment: *werkbuch-environment
+    volumes:
+      - werkbuch-data:/var/www/html/storage/app
+    stop_signal: SIGTERM
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD", "healthcheck-queue"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      werkbuch:
+        condition: service_healthy
+
+  # a receiver that hangs holds its worker up to 17 s per attempt (T16-M5), so webhooks get one of their own
+  queue-webhooks:
+    <<: *werkbuch-service
+    command: php artisan queue:work --queue=webhooks --sleep=1 --tries=3 --max-time=3600 --memory=384
+    environment: *werkbuch-environment
+    volumes:
+      - werkbuch-data:/var/www/html/storage/app
+    stop_signal: SIGTERM
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD", "healthcheck-queue"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      werkbuch:
+        condition: service_healthy
+
+  scheduler:
+    <<: *werkbuch-service
+    command: php artisan schedule:work
+    environment: *werkbuch-environment
+    volumes:
+      - werkbuch-data:/var/www/html/storage/app
+    stop_signal: SIGTERM
+    healthcheck:
+      test: ["CMD", "healthcheck-schedule"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      werkbuch:
+        condition: service_healthy
+
+  mariadb:
+    image: mariadb:11.4.13@sha256:1292844148b311e4ed4300022a996d39083f415a963e970cf47cad1b3b18e3a6
+    restart: unless-stopped
+    # like DDEV, large enough for the bulk insert of the webhook deliveries (QueueDeliveries: one row per webhook,
+    # a body of up to 1 MiB each), a multiple of the 16 MiB default
+    command: ["--max-allowed-packet=64M"]
+    environment:
+      MARIADB_DATABASE: werkbuch
+      MARIADB_USER: werkbuch
+      MARIADB_PASSWORD: "${DB_PASSWORD:?DB_PASSWORD missing (see .env.docker.example)}"
+      MARIADB_ROOT_PASSWORD: "${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD missing (see .env.docker.example)}"
+      MARIADB_ROOT_HOST: localhost
+      MARIADB_AUTO_UPGRADE: "1"
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.56.0@sha256:1f578fa865f8251894b3bf38d6668d6209a3f451f8f65ab953e129d4c1db5ef4
+    restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: "${MEILISEARCH_KEY:?MEILISEARCH_KEY missing (see .env.docker.example)}"
+      MEILI_ENV: production
+      MEILI_NO_ANALYTICS: "true"
+    volumes:
+      - meili-data:/meili_data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:7700/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+networks:
+  default:
+  backend:
+    internal: true
+
+volumes:
+  werkbuch-data:
+  mariadb-data:
+  meili-data:
