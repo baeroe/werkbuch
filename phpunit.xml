@@ -40,6 +40,7 @@
         <env name="API_RATE_LIMIT" value="600" force="true"/>
         <env name="API_SESSION_RATE_LIMIT" value="3000" force="true"/>
         <env name="MCP_RATE_LIMIT" value="300" force="true"/>
+        <env name="REVERB_PUBLIC_PORT" value="" force="true"/>
         <env name="SCOUT_DRIVER" value="null"/>
         <env name="SCOUT_PREFIX" value="testing_" force="true"/>
         <env name="PULSE_ENABLED" value="false"/>

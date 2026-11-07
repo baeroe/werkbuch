@@ -40,6 +40,8 @@ afterEach(function () {
     setEnv('API_RATE_LIMIT', '600');
     setEnv('API_SESSION_RATE_LIMIT', '3000');
     setEnv('MCP_RATE_LIMIT', '300');
+    setEnv('REVERB_PUBLIC_PORT', '');
+    setEnv('SESSION_SECURE_COOKIE', null);
 });
 
 it('has the documented defaults', function () {
@@ -78,7 +80,7 @@ it('keeps the limits of the environment of DDEV out of the tests', function () {
     // DDEV's environment reaches $_SERVER, which Laravel reads before the values phpunit.xml forces (Tests\TestCase)
     $case = (string) file_get_contents(repo_path('tests/TestCase.php'));
 
-    foreach (['API_RATE_LIMIT' => '600', 'API_SESSION_RATE_LIMIT' => '3000', 'MCP_RATE_LIMIT' => '300'] as $name => $value) {
+    foreach (['API_RATE_LIMIT' => '600', 'API_SESSION_RATE_LIMIT' => '3000', 'MCP_RATE_LIMIT' => '300', 'REVERB_PUBLIC_PORT' => ''] as $name => $value) {
         expect($case)->toContain("\$_SERVER['{$name}'] = \$_ENV['{$name}'] ?? '{$value}';");
     }
 });
@@ -89,13 +91,46 @@ it('reads the environment', function () {
     setEnv('API_RATE_LIMIT', '120');
     setEnv('API_SESSION_RATE_LIMIT', '900');
     setEnv('MCP_RATE_LIMIT', '150');
+    setEnv('REVERB_PUBLIC_PORT', '7000');
     $this->refreshApplication();
 
     expect(config('werkbuch.attachments_max_mb'))->toBe(50)
         ->and(config('werkbuch.webhooks_allow_private'))->toBeTrue()
         ->and(config('werkbuch.rate_limits.api'))->toBe(120)
         ->and(config('werkbuch.rate_limits.api_session'))->toBe(900)
-        ->and(config('werkbuch.rate_limits.mcp'))->toBe(150);
+        ->and(config('werkbuch.rate_limits.mcp'))->toBe(150)
+        ->and(config('werkbuch.live.port'))->toBe(7000);
+});
+
+it('takes secure cookies from the scheme of APP_URL unless SESSION_SECURE_COOKIE says otherwise', function () {
+    $previous = env('APP_URL');
+    $secure = function (string $url, ?string $override) {
+        setEnv('APP_URL', $url);
+        setEnv('SESSION_SECURE_COOKIE', $override);
+
+        return (require base_path('config/session.php'))['secure'];
+    };
+
+    try {
+        expect($secure('https://pm.example.com', null))->toBeTrue()
+            ->and($secure('http://localhost:7740', null))->toBeFalse()
+            ->and($secure('https://pm.example.com', 'false'))->toBeFalse();
+    } finally {
+        setEnv('APP_URL', is_string($previous) ? $previous : null);
+    }
+});
+
+it('points the browser at Reverb\'s own port in DDEV and the CI', function () {
+    expect((string) file_get_contents(repo_path('.ddev/config.yaml')))->toContain('- REVERB_PUBLIC_PORT=6001')
+        ->and((string) file_get_contents(repo_path('.env.example')))->toContain("\nREVERB_PUBLIC_PORT=6001\n")
+        ->and((string) file_get_contents(repo_path('e2e/ci.env')))->toContain("\nREVERB_PUBLIC_PORT=8080\n");
+});
+
+it('takes the port of APP_URL in the tests, whatever DDEV sets', function () {
+    $parts = parse_url((string) config('app.url'));
+    $expected = $parts['port'] ?? (($parts['scheme'] ?? 'https') === 'http' ? 80 : 443);
+
+    expect(config('werkbuch.live.port'))->toBe($expected);
 });
 
 it('lists the queues in the worker\'s order', function () {

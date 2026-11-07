@@ -4,6 +4,7 @@ use App\Live\LiveConsumer;
 use App\Models\Attachment;
 use App\Notifications\NotificationConsumer;
 use App\Search\SearchConsumer;
+use App\Support\LiveAddress;
 use App\Webhooks\WebhookConsumer;
 
 return [
@@ -38,6 +39,11 @@ return [
 
     // all queues of the app in the order the workers take them (A278): the DDEV daemons `queue`, `queue-index` and
     // `queue-webhooks` split them (search and media apart, A301; webhooks apart, T16-M5), so do the three workers of the CI
+    // where the browser opens the WebSocket of the live updates (in Docker APP_URL, nginx forwards /app/ to Reverb);
+    // apart from broadcasting.connections.reverb.options, where the server sends to (in Docker http://reverb:6001
+    // inside the stack; the system page checks that same internal address)
+    'live' => LiveAddress::from(env('APP_URL'), env('REVERB_PUBLIC_HOST'), env('REVERB_PUBLIC_PORT'), env('REVERB_PUBLIC_SCHEME')),
+
     'queues' => ['default', 'live', 'notifications', 'webhooks', 'search', 'media', 'bulk'],
 
     // requests per minute

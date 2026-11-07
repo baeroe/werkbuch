@@ -43,14 +43,14 @@ class HandleInertiaRequests extends Middleware
             'organization' => (new OrganizationResource(Organization::current()))->resolve($request),
             'features' => [
                 'mail' => MailSetup::configured(),
-                // what the browser needs to open the WebSocket; null without Reverb (A285) and while its key or host is
+                // what the browser needs to open the WebSocket (werkbuch.live, not the address the server sends to); null without Reverb (A285) and while its key or host is
                 // missing from the environment (T2-M3: the browser would connect nowhere)
                 'live' => config('broadcasting.default') === 'reverb' && filled(config('broadcasting.connections.reverb.key'))
-                    && filled(config('broadcasting.connections.reverb.options.host')) ? [
+                    && filled(config('werkbuch.live.host')) ? [
                         'key' => config('broadcasting.connections.reverb.key'),
-                        'host' => config('broadcasting.connections.reverb.options.host'),
-                        'port' => (int) config('broadcasting.connections.reverb.options.port'),
-                        'scheme' => config('broadcasting.connections.reverb.options.scheme'),
+                        'host' => config('werkbuch.live.host'),
+                        'port' => (int) config('werkbuch.live.port'),
+                        'scheme' => config('werkbuch.live.scheme'),
                     ] : null,
                 // the browser refuses a larger file before it sends it (F29)
                 'attachments_max_mb' => Attachment::maxMegabytes(),
