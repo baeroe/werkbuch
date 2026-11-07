@@ -91,7 +91,7 @@ services:
 
   queue:
     <<: *werkbuch-service
-    command: php artisan queue:work --queue=default,live,notifications,bulk --sleep=1 --tries=3 --max-time=3600 --memory=384
+    command: php artisan queue:work --queue=mail,default,live,notifications,bulk --sleep=1 --tries=3 --max-time=3600 --memory=384
     environment: *werkbuch-environment
     volumes:
       - werkbuch-data:/var/www/html/storage/app

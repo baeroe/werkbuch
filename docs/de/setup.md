@@ -143,7 +143,7 @@ docker compose exec werkbuch php artisan app:reset-two-factor admin@example.com
 |---|---|---|---|
 | `werkbuch` | nginx und PHP-FPM auf Port `8080`, veröffentlicht als `7740`; migriert beim Start, reicht `/app/` (den WebSocket) an Reverb weiter | `default`, `backend` | `/up` für den Host aus `APP_URL` |
 | `reverb` | der WebSocket-Server der Live-Updates auf Port `6001` | `backend` | `/up` auf Port `6001` |
-| `queue` | Worker für die Queues `default`, `live`, `notifications`, `bulk`: Events, Live-Updates, Benachrichtigungs-Mails, Löschen von Projekten | `default`, `backend` | der Worker-Prozess läuft |
+| `queue` | Worker für die Queues `mail`, `default`, `live`, `notifications`, `bulk`: Events, Live-Updates, Benachrichtigungs-Mails, Löschen von Projekten | `default`, `backend` | der Worker-Prozess läuft |
 | `queue-index` | Worker für `search` und `media`: der Suchindex und die Vorschauen von Bildern | `default`, `backend` | der Worker-Prozess läuft |
 | `queue-webhooks` | Worker für `webhooks`: die Zustellungen | `default`, `backend` | der Worker-Prozess läuft |
 | `scheduler` | startet die geplante Arbeit: Benachrichtigungs-Mails, Erinnerungen, Vorlagen, die nächtlichen Automatisierungen, Aufräumen | `default`, `backend` | der Scheduler-Prozess läuft |

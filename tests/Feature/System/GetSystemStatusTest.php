@@ -53,6 +53,7 @@ it('shows version, backlog per queue and delayed jobs apart', function () use ($
         ->and($status['delayed_jobs'])->toBe(2)
         ->and(array_column($status['queues'], 'queue'))->toBe(config('werkbuch.queues'))
         ->and(collect($status['queues'])->keyBy('queue')->map(fn (array $q) => [$q['pending'], $q['oldest_at']?->toJSON()])->all())->toBe([
+            'mail' => [0, null],
             'default' => [1, '2026-11-03T09:59:30.000000Z'],
             'live' => [0, null],
             'notifications' => [3, '2026-11-03T09:50:00.000000Z'],

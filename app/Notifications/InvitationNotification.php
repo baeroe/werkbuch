@@ -10,7 +10,7 @@ use Illuminate\Notifications\Notification;
 
 /**
  * The mail with the invitation link, in the texts of the app and the language of the organization (the invited person
- * has no account yet). It goes out from the queue `notifications` after the commit; the link is made when the invitation
+ * has no account yet). It goes out from the queue `mail` after the commit; the link is made when the invitation
  * is created (always behind APP_URL), so the job needs nothing but these texts.
  */
 final class InvitationNotification extends Notification implements ShouldQueue
@@ -19,7 +19,7 @@ final class InvitationNotification extends Notification implements ShouldQueue
 
     public function __construct(private readonly string $link, private readonly string $organization, private readonly string $inviter)
     {
-        $this->onQueue('notifications')->afterCommit();
+        $this->onQueue('mail')->afterCommit();
     }
 
     /**

@@ -8,11 +8,11 @@ Alle Arbeit im Hintergrund läuft über Queues in der Datenbank. Drei Worker-Die
 
 | Dienst | Queues, in dieser Reihenfolge | Tut |
 |---|---|---|
-| `queue` | `default`, `live`, `notifications`, `bulk` | gibt jedes Event an seine Konsumenten, schickt die Live-Updates an Reverb, schreibt die Inbox und sendet Mails (Benachrichtigungen, Einladungen, Passwort zurücksetzen), löscht Projekte, führt Vorlagen und die nächtlichen Automatisierungen aus |
+| `queue` | `mail`, `default`, `live`, `notifications`, `bulk` | gibt jedes Event an seine Konsumenten, schickt die Live-Updates an Reverb, schreibt die Inbox und sendet Mails (zuerst die Anmelde-Mails: Einladungen und Passwort zurücksetzen auf der Queue `mail`, dann Benachrichtigungen), löscht Projekte, führt Vorlagen und die nächtlichen Automatisierungen aus |
 | `queue-index` | `search`, `media` | hält den Suchindex mit jeder Änderung Schritt, erzeugt die Vorschauen hochgeladener Bilder |
 | `queue-webhooks` | `webhooks` | stellt Webhooks zu |
 
-Ein Worker nimmt die erste Queue seiner Liste, die einen Job hat. Suche und Vorschauen haben einen eigenen Worker, weil jedes Event Jobs für `default`, `live` und `notifications` macht; Webhooks haben einen, weil ein hängender Empfänger seinen Worker bis zu 17 Sekunden je Versuch hält. Jeder Worker endet nach einer Stunde (`--max-time=3600`), und Docker startet ihn neu (`restart: unless-stopped`); ein scheiternder Job wird bis zu dreimal versucht, wenn er keine eigene Zahl von Versuchen setzt.
+Ein Worker nimmt die erste Queue seiner Liste, die einen Job hat. Suche und Vorschauen haben einen eigenen Worker, weil jedes Event Jobs für `default`, `live` und `notifications` macht; die Queue `mail` steht davor, ein Reset-Link oder eine Einladung wartet also nie dahinter; Webhooks haben einen, weil ein hängender Empfänger seinen Worker bis zu 17 Sekunden je Versuch hält. Jeder Worker endet nach einer Stunde (`--max-time=3600`), und Docker startet ihn neu (`restart: unless-stopped`); ein scheiternder Job wird bis zu dreimal versucht, wenn er keine eigene Zahl von Versuchen setzt.
 
 Genau ein `queue-index` laufen lassen, nie skalieren: Zwei Worker auf `search` können beim Neuaufbau eine ältere Fassung eines Dokuments über eine neuere schreiben, und die Suche zeigt den älteren Text, bis sich das Item wieder ändert.
 

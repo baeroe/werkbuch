@@ -192,7 +192,7 @@ it('mails the link when mail is configured, and only then', function () {
 
         return $notifiable->routes['mail'] === 'lea@example.com'
             && $channels === ['mail']
-            && $notification->queue === 'notifications' && $notification->afterCommit === true && $notification->locale === 'de'
+            && $notification->queue === 'mail' && $notification->afterCommit === true && $notification->locale === 'de'
             && $mail->actionUrl === InvitationLinks::for($invitation);
     });
     Notification::assertSentOnDemandTimes(InvitationNotification::class, 1);

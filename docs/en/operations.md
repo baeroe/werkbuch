@@ -8,11 +8,11 @@ All work in the background goes through queues in the database. Three worker ser
 
 | Service | Queues, in this order | Does |
 |---|---|---|
-| `queue` | `default`, `live`, `notifications`, `bulk` | hands every event to its consumers, sends the live updates to Reverb, writes the inbox and sends mails (notifications, invitations, password reset), deletes projects, runs templates and the nightly automations |
+| `queue` | `mail`, `default`, `live`, `notifications`, `bulk` | hands every event to its consumers, sends the live updates to Reverb, writes the inbox and sends mails (sign-in mails first: invitations and password reset on the queue `mail`, then notifications), deletes projects, runs templates and the nightly automations |
 | `queue-index` | `search`, `media` | keeps the search index in step with every change, makes the previews of uploaded pictures |
 | `queue-webhooks` | `webhooks` | delivers webhooks |
 
-A worker takes the first queue of its list that has a job. Search and previews have a worker of their own because every event makes jobs for `default`, `live` and `notifications`; webhooks have one because a receiver that hangs holds its worker for up to 17 seconds per attempt. Every worker ends after an hour (`--max-time=3600`) and Docker starts it again (`restart: unless-stopped`); a job that fails is tried up to three times unless it sets its own number of attempts.
+A worker takes the first queue of its list that has a job. Search and previews have a worker of their own because every event makes jobs for `default`, `live` and `notifications`; the queue `mail` comes first, so a reset link or an invitation never waits behind them; webhooks have one because a receiver that hangs holds its worker for up to 17 seconds per attempt. Every worker ends after an hour (`--max-time=3600`) and Docker starts it again (`restart: unless-stopped`); a job that fails is tried up to three times unless it sets its own number of attempts.
 
 Run exactly one `queue-index`, never scale it: two workers on `search` can write an older version of a document over a newer one while they rebuild, and the search shows the older text until the item changes again.
 

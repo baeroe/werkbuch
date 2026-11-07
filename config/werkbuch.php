@@ -45,7 +45,7 @@ return [
     // all queues of the app in the order the workers take them (A278): the DDEV daemons `queue`, `queue-index` and
     // `queue-webhooks` split them (search and media apart, A301; webhooks apart, T16-M5), so do the three workers of the CI
     // and the three queue services of docker-compose.yml
-    'queues' => ['default', 'live', 'notifications', 'webhooks', 'search', 'media', 'bulk'],
+    'queues' => ['mail', 'default', 'live', 'notifications', 'webhooks', 'search', 'media', 'bulk'],
 
     // requests per minute
     'rate_limits' => [

@@ -90,7 +90,7 @@ it('answers a known address like the others', function () {
     Notification::assertSentTimes(ResetPasswordNotification::class, 1);
 });
 
-it('answers at once with the same response and leaves the link to a job on the notifications queue', function (Closure $make, string $email) {
+it('answers at once with the same response and leaves the link to a job on the mail queue', function (Closure $make, string $email) {
     $make();
     $tokens = DB::table('password_reset_tokens')->count();
     Queue::fake();
@@ -99,7 +99,7 @@ it('answers at once with the same response and leaves the link to a job on the n
     $response = $this->from('/forgot-password')->post('/forgot-password', ['email' => $email]);
 
     $response->assertRedirect('/forgot-password')->assertSessionHas('status', __('passwords.sent'))->assertSessionHasNoErrors();
-    SendPasswordResetLink::assertPushedOn('notifications', 1, fn ($action, array $parameters) => $parameters === [strtolower($email)]);
+    SendPasswordResetLink::assertPushedOn('mail', 1, fn ($action, array $parameters) => $parameters === [strtolower($email)]);
     // no broker in the request: no token written, no mail sent
     expect(DB::table('password_reset_tokens')->count())->toBe($tokens);
     Notification::assertNothingSent();
@@ -132,11 +132,11 @@ it('mails the link from the job only to an existing, active person', function ()
     Notification::assertSentTo($lene, ResetPasswordNotification::class);
 });
 
-// the queue as outside tests (the sync queue retries nothing), and one worker run of the queue `notifications`
+// the queue as outside tests (the sync queue retries nothing), and one worker run of the queue `mail`
 $work = function (): void {
-    Artisan::call('queue:work', ['--once' => true, '--queue' => 'notifications', '--sleep' => 0]);
+    Artisan::call('queue:work', ['--once' => true, '--queue' => 'mail', '--sleep' => 0]);
 };
-$queued = fn () => DB::table('jobs')->where('queue', 'notifications')->orderBy('id')->get()
+$queued = fn () => DB::table('jobs')->where('queue', 'mail')->orderBy('id')->get()
     ->map(fn (object $job): array => json_decode($job->payload, true))->all();
 // a mail server that refuses the first `$refuse` mails and takes every later one; it keeps each attempt
 $mailServer = function (int $refuse = 0): ArrayObject {
@@ -194,7 +194,7 @@ it('keeps the link out of the queued mail in plain text', function () use ($work
     User::factory()->create(['email' => 'lene@example.com']);
     $this->post('/forgot-password', ['email' => 'lene@example.com']);
     $work();
-    $job = DB::table('jobs')->where('queue', 'notifications')->sole();
+    $job = DB::table('jobs')->where('queue', 'mail')->sole();
 
     $notification = unserialize(decrypt(json_decode($job->payload, true)['data']['command']))->notification;
 

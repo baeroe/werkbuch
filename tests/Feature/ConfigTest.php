@@ -136,20 +136,20 @@ it('takes the port of APP_URL in the tests, whatever DDEV sets', function () {
 });
 
 it('lists the queues in the worker\'s order', function () {
-    expect(config('werkbuch.queues'))->toBe(['default', 'live', 'notifications', 'webhooks', 'search', 'media', 'bulk']);
+    expect(config('werkbuch.queues'))->toBe(['mail', 'default', 'live', 'notifications', 'webhooks', 'search', 'media', 'bulk']);
 });
 
-it('works every queue in DDEV, the CI and Compose, search and media and webhooks in workers of their own (they starved behind the events, a hanging receiver holds a worker)', function () {
+it('lists mail first in the worker of DDEV, CI and Compose, and works every queue in DDEV, the CI and Compose, search and media and webhooks in workers of their own (they starved behind the events, a hanging receiver holds a worker)', function () {
     $workers = function (string $file): array {
         preg_match_all('/queue:(?:listen|work) --queue=([a-z,]+)/', (string) file_get_contents(repo_path($file)), $matches);
 
         return array_map(fn (string $list): array => explode(',', $list), $matches[1]);
     };
 
-    expect($workers('.ddev/config.yaml'))->toBe([['default', 'live', 'notifications', 'bulk'], ['search', 'media'], ['webhooks']])
+    expect($workers('.ddev/config.yaml'))->toBe([['mail', 'default', 'live', 'notifications', 'bulk'], ['search', 'media'], ['webhooks']])
         // `webhooks` in a worker of its own (T16-M5): a receiver that hangs holds it up to 17 s per attempt
-        ->and($workers('.github/workflows/tests.yml'))->toBe([['default', 'live', 'notifications', 'bulk'], ['search', 'media'], ['webhooks']])
-        ->and($workers('docker-compose.yml'))->toBe([['default', 'live', 'notifications', 'bulk'], ['search', 'media'], ['webhooks']])
+        ->and($workers('.github/workflows/tests.yml'))->toBe([['mail', 'default', 'live', 'notifications', 'bulk'], ['search', 'media'], ['webhooks']])
+        ->and($workers('docker-compose.yml'))->toBe([['mail', 'default', 'live', 'notifications', 'bulk'], ['search', 'media'], ['webhooks']])
         ->and(array_merge(...$workers('docker-compose.yml')))->toEqualCanonicalizing(config('werkbuch.queues'))
         ->and(array_merge(...$workers('.github/workflows/tests.yml')))->toEqualCanonicalizing(config('werkbuch.queues'))
         ->and(array_merge(...$workers('.ddev/config.yaml')))->toEqualCanonicalizing(config('werkbuch.queues'));

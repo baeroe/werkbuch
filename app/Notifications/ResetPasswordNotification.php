@@ -13,7 +13,7 @@ use Illuminate\Notifications\Messages\MailMessage;
 /**
  * The mail with the reset link, in the texts of the app. It goes out from a queued job, so nothing in it depends on a
  * request: the link always points to APP_URL, never to the host of a request (a forged Host header must not lead the
- * mail elsewhere). It is a job of its own on the queue `notifications`, after the commit: a mail server that fails is
+ * mail elsewhere). It is a job of its own on the queue `mail`, after the commit: a mail server that fails is
  * tried again with the same token (the link of App\Actions\Auth\SendPasswordResetLink runs once), but only while the
  * token lives (retryUntil): no attempt sends a dead link. Every attempt asks again whether the account is still an
  * active person (shouldSend). The token travels encrypted, in `jobs` and in `failed_jobs`.
@@ -33,7 +33,7 @@ final class ResetPasswordNotification extends ResetPassword implements ShouldBeE
         parent::__construct($token);
 
         $this->expiresAt = now()->addMinutes((int) config('auth.passwords.'.config('auth.defaults.passwords').'.expire'));
-        $this->onQueue('notifications')->afterCommit();
+        $this->onQueue('mail')->afterCommit();
     }
 
     /**
