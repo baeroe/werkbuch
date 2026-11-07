@@ -47,13 +47,108 @@ it('builds both platforms on every pull request without pushing', function () {
     expect($arches)->toContain('arm64');
     expect(array_column($job['strategy']['matrix']['include'], 'runner'))->toBe(['ubuntu-24.04', 'ubuntu-24.04-arm']);
 
-    foreach ($job['steps'] as $step) {
-        expect($step['with']['push'] ?? false)->not->toBeTrue('the job image pushes');
-    }
+    expect(collect($job['steps'])->first(fn (array $step): bool => str_contains((string) ($step['uses'] ?? ''), 'docker/build-push-action'))['with'])
+        ->toMatchArray(['push' => false, 'load' => true]);
 
     expect($text)->not->toContain('docker/login-action');
     expect($workflow['permissions']['contents'])->toBe('read');
     expect($workflow['on'])->toHaveKey('pull_request');
+});
+
+/**
+ * Whether a step pushes an image or logs in to push one: a `push` that is not false, `push=true` in the outputs of a
+ * build, `docker push`, `--push` or `imagetools create` in a script, or docker/login-action.
+ */
+$pushes = function (array $step): bool {
+    $with = $step['with'] ?? [];
+    $run = (string) ($step['run'] ?? '');
+
+    return (array_key_exists('push', $with) && $with['push'] !== false && $with['push'] !== 'false')
+        || str_contains((string) ($with['outputs'] ?? '').','.(string) ($with['output'] ?? ''), 'push=true')
+        || preg_match('/\bdocker\s+push\b|--push\b|imagetools\s+create\b/', $run) === 1
+        || str_contains((string) ($step['uses'] ?? ''), 'docker/login-action');
+};
+
+/** @return list<string> "<job>: <step>" of every pushing step whose step or job lacks the condition of a version tag */
+$unguardedPushes = function (array $workflow) use ($pushes): array {
+    $unguarded = [];
+
+    foreach ($workflow['jobs'] as $name => $job) {
+        foreach ($job['steps'] ?? [] as $index => $step) {
+            $guarded = in_array("startsWith(github.ref, 'refs/tags/v')", [$step['if'] ?? null, $job['if'] ?? null], true);
+
+            if ($pushes($step) && ! $guarded) {
+                $unguarded[] = $name.': '.($step['name'] ?? $step['uses'] ?? $index);
+            }
+        }
+    }
+
+    return $unguarded;
+};
+
+it('recognizes every way a step pushes an image', function () use ($pushes) {
+    $pushing = [
+        ['uses' => 'docker/build-push-action@x', 'with' => ['push' => true]],
+        ['uses' => 'docker/build-push-action@x', 'with' => ['push' => '${{ github.event_name != \'pull_request\' }}']],
+        ['uses' => 'docker/build-push-action@x', 'with' => ['outputs' => 'type=image,name=baeroe/werkbuch,push=true']],
+        ['uses' => 'docker/bake-action@x', 'with' => ['push' => 'true']],
+        ['run' => 'docker push baeroe/werkbuch:latest'],
+        ['run' => "docker buildx build \\\n  --push ."],
+        ['run' => 'docker buildx imagetools create -t baeroe/werkbuch:1 x'],
+        ['uses' => 'docker/login-action@x'],
+    ];
+
+    foreach ($pushing as $index => $step) {
+        expect($pushes($step))->toBeTrue("step {$index} pushes and was not recognized");
+    }
+
+    expect($pushes(['uses' => 'docker/build-push-action@x', 'with' => ['push' => false, 'load' => true]]))->toBeFalse()
+        ->and($pushes(['run' => 'docker buildx imagetools inspect baeroe/werkbuch:1']))->toBeFalse()
+        ->and($pushes(['run' => 'scripts/compose-smoke.sh']))->toBeFalse();
+});
+
+it('pushes only in steps or jobs that run for version tags', function () use ($workflowFiles, $pushes, $unguardedPushes) {
+    foreach ($workflowFiles() as $file) {
+        expect($unguardedPushes(RepoFiles::yaml($file)))->toBe([], "{$file} pushes outside a version tag");
+    }
+
+    $docker = RepoFiles::yaml('.github/workflows/docker.yml');
+    $pushing = [];
+    foreach ($docker['jobs'] as $name => $job) {
+        foreach ($job['steps'] as $step) {
+            if ($pushes($step)) {
+                $pushing[] = $name.': '.($step['name'] ?? explode('@', (string) $step['uses'])[0]);
+            }
+        }
+    }
+    expect($pushing)->toBe([
+        'build: Docker Hub login',
+        'build: Push the image by digest',
+        'merge: docker/login-action',
+        'merge: Create the manifest',
+    ]);
+
+    // the guard sees a job without the condition: the merge job only pushes because its job runs for tags
+    $mutated = $docker;
+    unset($mutated['jobs']['merge']['if']);
+    expect($unguardedPushes($mutated))->toBe(['merge: Create the manifest']);
+});
+
+it('passes expressions to scripts through the environment', function () {
+    foreach (['.github/workflows/docker.yml', '.github/workflows/dockerhub.yml'] as $file) {
+        $runs = 0;
+
+        foreach (RepoFiles::yaml($file)['jobs'] as $name => $job) {
+            foreach ($job['steps'] ?? [] as $index => $step) {
+                if (isset($step['run'])) {
+                    $runs++;
+                    expect(str_contains($step['run'], '${{'))->toBeFalse("{$file} {$name} step {$index} puts an expression into its script");
+                }
+            }
+        }
+
+        expect($runs)->toBeGreaterThan(0, "{$file} has no script");
+    }
 });
 
 /** @return list<array<string, mixed>> the steps of a job, in order */
@@ -132,5 +227,6 @@ it('syncs the description only while the repository exists', function () use ($s
     expect($sync['if'])->toBe("steps.hub.outputs.exists == 'true'");
     expect($sync['with']['repository'])->toBe('baeroe/werkbuch');
     expect(strlen($sync['with']['short-description']))->toBeLessThanOrEqual(100);
-    expect($workflow['jobs']['sync']['if'])->toContain("github.event.workflow_run.event == 'push'");
+    expect($workflow['jobs']['sync']['if'])->toContain("github.event.workflow_run.event == 'push'")
+        ->and($workflow['jobs']['sync']['if'])->toContain("(github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')");
 });
