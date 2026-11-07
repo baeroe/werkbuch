@@ -8,6 +8,7 @@ use App\Http\Middleware\GuardMcpRequest;
 use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\ThrottleApi;
 use App\Mcp\Tools\AutomationsTool;
+use App\Mcp\Tools\GetUploadUrlTool;
 use App\Mcp\Tools\ManageAutomationsTool;
 use App\Mcp\Tools\ManageOrganizationTool;
 use App\Mcp\Tools\ManagePeopleTool;
@@ -63,6 +64,7 @@ final class WerkbuchServer extends Server
     protected array $tools = [
         WhoamiTool::class,
         SearchTool::class,
+        GetUploadUrlTool::class,
         OrganizationTool::class,
         ManageOrganizationTool::class,
         PeopleTool::class,

@@ -17,9 +17,9 @@ use Illuminate\Support\Facades\Auth;
  *   flood of 401 never spends the quota of a valid token.
  *
  * `account()` is the key of the throttles of single routes (uploads, test ping, test mail): per account, whether it
- * sends a token or the session. `session()` is the key of a throttle in front of a route that takes only the session
- * (`EnsureSession`, the own password): a token, refused there anyway, counts by its address and never spends the tries
- * of the account.
+ * sends a token or the session, or posts to an upload address of MCP (the token the address names, K11). `session()` is
+ * the key of a throttle in front of a route that takes only the session (`EnsureSession`, the own password): a token,
+ * refused there anyway, counts by its address and never spends the tries of the account.
  */
 final class RateKey
 {
@@ -59,12 +59,15 @@ final class RateKey
         return $user === null ? self::IP.$request->ip() : self::USER.$user->getAuthIdentifier();
     }
 
-    /** The token of the request, looked up once per request (the throttle of the group and of the route both ask). */
+    /**
+     * The token of the request, looked up once per request (the throttle of the group and of the route both ask). On an
+     * upload address of MCP (`mcp.upload`) it is the token the address names by its ID, whatever header comes along: the
+     * throttle runs after `signed` there, so only an address the app signed gets this far (K11).
+     */
     private static function token(Request $request): ?PersonalAccessToken
     {
         if (! $request->attributes->has(self::FOUND)) {
-            $plain = $request->bearerToken();
-            $token = $plain === null ? null : PersonalAccessToken::findToken($plain);
+            $token = $request->routeIs('mcp.upload') ? self::uploadToken($request) : self::bearer($request);
             $valid = $token instanceof PersonalAccessToken && ($token->expires_at === null || ! $token->expires_at->isPast());
             $request->attributes->set(self::FOUND, $valid ? $token : null);
         }
@@ -72,5 +75,19 @@ final class RateKey
         $found = $request->attributes->get(self::FOUND);
 
         return $found instanceof PersonalAccessToken ? $found : null;
+    }
+
+    private static function bearer(Request $request): ?PersonalAccessToken
+    {
+        $plain = $request->bearerToken();
+
+        return $plain === null ? null : PersonalAccessToken::findToken($plain);
+    }
+
+    private static function uploadToken(Request $request): ?PersonalAccessToken
+    {
+        $id = $request->route('token');
+
+        return is_string($id) ? PersonalAccessToken::query()->find($id) : null;
     }
 }

@@ -26,6 +26,7 @@ return [
         'q' => $w->item('project_admin')->key, 'types' => ['items', 'projects'], 'limit' => 5, 'include_archived' => 1,
         'state_category' => ['backlog', 'started'], 'assignee_id' => ['none'],
     ]],
+    'get-upload-url:call' => ['arguments' => fn (MatrixWorld $w) => ['input' => ['project_id' => $w->web->identifier, 'kind' => 'inline']]],
     'organization:get' => [],
     'organization:state-usage' => ['arguments' => fn (MatrixWorld $w) => ['project' => $w->web->identifier]],
     'organization:list-workflows' => ['arguments' => fn (MatrixWorld $w) => ['filter' => ['name' => 'a'], 'sort' => 'name', 'per_page' => 5]],
