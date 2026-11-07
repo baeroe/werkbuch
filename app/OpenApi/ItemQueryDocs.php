@@ -104,7 +104,7 @@ final class ItemQueryDocs extends OperationExtension
                 in_array($key, self::SINGLE, true) => ['type' => 'string'],
                 default => ['type' => 'array', 'items' => ['type' => 'string']],
             };
-            $parameters["filter[{$key}]"] = ['schema' => $schema, 'description' => self::SHORT[$key].' An empty value is no condition.'];
+            $parameters["filter[{$key}]"] = ['schema' => $schema, 'description' => self::SHORT[$key]];
         }
         $page = ListParameters::query(null);
 
@@ -199,7 +199,7 @@ final class ItemQueryDocs extends OperationExtension
             'filter' => $nullable(['$ref' => '#/components/schemas/Filter']),
             'shorthand' => [
                 'type' => ['object', 'null'],
-                'description' => 'The short form of `filter[…]` of `GET /work-items` as an object of texts.',
+                'description' => 'The short form of `filter[…]` of `GET /work-items` as an object of texts: several values are one text separated by commas, never a list.',
                 'properties' => array_map(fn (string $text) => ['type' => ['string', 'null'], 'description' => $text], self::SHORT),
             ],
             'q' => ['type' => ['string', 'null'], 'description' => 'Words of the title, or a key (not together with `shorthand.q`).'],

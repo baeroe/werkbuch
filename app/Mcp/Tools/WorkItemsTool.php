@@ -61,9 +61,9 @@ final class WorkItemsTool extends ReadTool
             ),
             new McpAction(
                 name: 'query',
-                summary: 'A page of items by a filter in `input` (`lean` true and `per_page` 25 unless given).',
+                summary: 'A page of items by a filter in `input`.',
                 run: fn (Actor $actor, McpArguments $args): McpResult => McpResult::list(QueryWorkItems::run($actor, self::page($args->input())), WorkItemResource::class),
-                input: ItemQueryDocs::query(),
+                input: ToolSchema::paged(ItemQueryDocs::query()),
                 twin: 'POST work-items/query',
             ),
             new McpAction(

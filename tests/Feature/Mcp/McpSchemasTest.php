@@ -81,7 +81,23 @@ $actions = function (string $suite): array {
     return $all;
 };
 
-it('describes every input like the body of its REST twin', function (string $suite) use ($actions, $canonical, $named) {
+/**
+ * A body schema without the defaults of `per_page` and `lean`, the page a tool reads unless the call says otherwise.
+ *
+ * @param  array<string, mixed>  $schema
+ * @return array<string, mixed>
+ */
+$withoutPage = function (array $schema): array {
+    foreach (['per_page', 'lean'] as $key) {
+        if (isset($schema['properties'][$key])) {
+            unset($schema['properties'][$key]['default']);
+        }
+    }
+
+    return $schema;
+};
+
+it('describes every input like the body of its REST twin', function (string $suite) use ($actions, $canonical, $named, $withoutPage) {
     $checked = 0;
     $inputs = 0;
 
@@ -102,7 +118,8 @@ it('describes every input like the body of its REST twin', function (string $sui
         $names = $named($branch, $defs);
         $mine = [...$branch, ...$names === [] ? [] : ['$defs' => array_intersect_key($defs, array_flip($names))]];
 
-        expect($canonical($mine))->toBe($canonical(ToolSchema::compact($body)), "{$tool}:{$action->name}");
+        // only the page of MCP is its own (K8, ToolSchema::paged): the defaults of `per_page` and `lean` of a body
+        expect($canonical($withoutPage($mine)))->toBe($canonical($withoutPage(ToolSchema::compact($body))), "{$tool}:{$action->name}");
         $checked++;
     }
 
@@ -237,6 +254,22 @@ it('drops the examples of a body an input reaches', function () use ($noop) {
     expect((string) json_encode($body))->toContain('"examples"')
         ->and($input['properties']['input']['anyOf'][0]['properties'])->toHaveKeys(['states', 'projects'])
         ->and((string) json_encode($input))->not->toContain('"examples"');
+});
+
+it('gives a list read by a body the page of MCP as its defaults', function () {
+    $paged = ToolSchema::paged(ItemQueryDocs::query());
+    $schema = collect(ToolRows::tools('werkbuch'))->first(fn ($tool) => $tool->name() === 'work-items')->toArray()['inputSchema'];
+    $query = collect($schema['properties']['input']['anyOf'])->firstWhere('title', 'query');
+
+    // the document says 100 and nothing for `lean`; the tool reads 25 lean items (K8) and its schema says so
+    expect(ItemQueryDocs::query()['properties']['per_page']['default'])->toBe(100)
+        ->and(ItemQueryDocs::query()['properties']['lean'])->not->toHaveKey('default')
+        ->and($paged['properties']['per_page']['default'])->toBe(McpAction::PER_PAGE)
+        ->and($paged['properties']['lean']['default'])->toBeTrue()
+        ->and($query['properties']['per_page']['default'])->toBe(McpAction::PER_PAGE)
+        ->and($query['properties']['lean']['default'])->toBeTrue()
+        // a body without them stays as it is
+        ->and(ToolSchema::paged(ItemQueryDocs::counts()))->toBe(ItemQueryDocs::counts());
 });
 
 it('builds the input of a tool from its actions', function () use ($noop) {

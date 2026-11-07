@@ -42,7 +42,8 @@ final class WorkItemsController extends Controller
      * List work items.
      *
      * The items the account sees, filtered by a view and the short form `filter[<key>]` (the long form of a filter goes
-     * through `POST /work-items/query`). `include` is refused here (a list embeds nothing).
+     * through `POST /work-items/query`); an empty value of a filter is no condition. `include` is refused here (a list
+     * embeds nothing).
      */
     public function index(Request $request): JsonResponse
     {

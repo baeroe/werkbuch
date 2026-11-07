@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Models\Workflow;
 use App\Models\WorkItem;
 use Tests\Support\Mcp\McpClient;
+use Tests\Support\OpenApi\Document;
 
 /*
  * The pair `work-items` / `manage-work-items` (phase 13, task 7a; K6, K7, K8, K12): work items over MCP. That every
@@ -202,4 +203,19 @@ it('deletes an item as done and watches it on and off', function () use ($web) {
     $deleted = $mcp->call('manage-work-items', ['action' => 'delete', 'item' => 'WEB-1']);
     expect($deleted['structuredContent'])->toBe(['done' => true])
         ->and($item->fresh())->toBeNull();
+});
+
+it('says once that an empty filter is no condition and that the short form of a body takes texts', function () {
+    $tool = collect(McpClient::for($this, apiToken(User::factory()->create(), ['read', 'mcp']))->tools())->firstWhere('name', 'work-items');
+    $json = (string) json_encode($tool);
+    $query = collect($tool['inputSchema']['properties']['input']['anyOf'])->firstWhere('title', 'query');
+
+    // on the object `filter`, not on each of its keys; the document says it in the description of GET work-items
+    expect(substr_count(strtolower($json), 'an empty value is no condition'))->toBe(1)
+        ->and($tool['inputSchema']['properties']['filter']['description'])->toContain('an empty value is no condition')
+        ->and(Document::operation('GET', 'work-items')['description'])->toContain('an empty value of a filter is no condition')
+        // `filter.state` of `list` is a list, `input.shorthand.state` of `query` a text
+        ->and($tool['inputSchema']['properties']['filter']['properties']['state']['type'])->toBe('array')
+        ->and($query['properties']['shorthand']['properties']['state']['type'])->toBe(['string', 'null'])
+        ->and($query['properties']['shorthand']['description'])->toContain('several values are one text separated by commas, never a list');
 });

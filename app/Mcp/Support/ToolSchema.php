@@ -134,9 +134,28 @@ final class ToolSchema
         $arguments['per_page']['default'] = McpAction::PER_PAGE;
 
         return $filters === [] ? $arguments : [
-            'filter' => ['type' => 'object', 'description' => 'Only rows that match every filter given; a list takes any of its values.', 'properties' => $filters],
+            'filter' => ['type' => 'object', 'description' => 'Only rows that match every filter given; a list takes any of its values, an empty value is no condition.', 'properties' => $filters],
             ...$arguments,
         ];
+    }
+
+    /**
+     * The body of a list read through a `POST` (`POST work-items/query`) with the page of MCP as its defaults (K8):
+     * `per_page` 25 and `lean` true, the keys of the body that has them; the tool reads its page so when the call leaves
+     * them out.
+     *
+     * @param  array<string, mixed>  $body
+     * @return array<string, mixed>
+     */
+    public static function paged(array $body): array
+    {
+        foreach (['per_page' => McpAction::PER_PAGE, 'lean' => true] as $key => $default) {
+            if (is_array($body['properties'][$key] ?? null)) {
+                $body['properties'][$key]['default'] = $default;
+            }
+        }
+
+        return $body;
     }
 
     /**
