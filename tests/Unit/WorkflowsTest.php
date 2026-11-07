@@ -55,3 +55,82 @@ it('builds both platforms on every pull request without pushing', function () {
     expect($workflow['permissions']['contents'])->toBe('read');
     expect($workflow['on'])->toHaveKey('pull_request');
 });
+
+/** @return list<array<string, mixed>> the steps of a job, in order */
+$steps = fn (array $workflow, string $job): array => $workflow['jobs'][$job]['steps'];
+
+it('pushes images only for version tags, after the smoke', function () {
+    $workflow = RepoFiles::yaml('.github/workflows/docker.yml');
+    $on = $workflow['on'];
+
+    expect(array_keys($on))->toEqualCanonicalizing(['push', 'workflow_dispatch']);
+    expect($on['push'])->toBe(['tags' => ['v*']]);
+
+    $onlyTags = "startsWith(github.ref, 'refs/tags/v')";
+    $smoke = null;
+    $firstPush = null;
+
+    foreach ($workflow['jobs'] as $name => $job) {
+        foreach ($job['steps'] as $index => $step) {
+            $pushes = str_contains((string) ($step['uses'] ?? ''), 'docker/login-action')
+                || str_contains((string) ($step['with']['outputs'] ?? ''), 'push=true');
+
+            if ($pushes) {
+                expect($step['if'] ?? '')->toBe($onlyTags, "{$name} step {$index} pushes without the tag condition");
+            }
+
+            if ($name === 'build' && str_contains((string) ($step['run'] ?? ''), 'compose-smoke.sh')) {
+                $smoke = $index;
+            }
+
+            if ($name === 'build' && $pushes && str_contains((string) ($step['with']['outputs'] ?? ''), 'push=true')) {
+                $firstPush ??= $index;
+            }
+        }
+    }
+
+    expect($smoke)->not->toBeNull('the job build has no smoke step');
+    expect($firstPush)->not->toBeNull('the job build has no pushing build');
+    expect($smoke)->toBeLessThan($firstPush);
+
+    expect($workflow['permissions'])->toBe(['contents' => 'read']);
+    expect($workflow['jobs']['release']['permissions'])->toBe(['contents' => 'write']);
+    expect($workflow['jobs']['build'])->not->toHaveKey('permissions');
+    expect($workflow['jobs']['merge'])->not->toHaveKey('permissions');
+    expect($workflow['jobs']['merge']['if'])->toBe($onlyTags);
+    expect($workflow['jobs']['release']['if'])->toBe($onlyTags);
+    expect($workflow['jobs']['merge']['needs'])->toBe('build');
+    expect($workflow['jobs']['release']['needs'])->toBe('merge');
+});
+
+it('checks version and notes before anything is built', function () use ($steps) {
+    $workflow = RepoFiles::yaml('.github/workflows/docker.yml');
+    $runs = array_values(array_filter($steps($workflow, 'build'), fn (array $step): bool => isset($step['run'])));
+
+    expect($runs[0]['run'])->toContain('scripts/release-version.sh "${GITHUB_REF_NAME#v}"');
+    expect($runs[1]['run'])->toContain('scripts/release-notes.sh "${GITHUB_REF_NAME#v}" > /dev/null');
+
+    foreach ([0, 1] as $i) {
+        expect($runs[$i]['if'])->toBe("startsWith(github.ref, 'refs/tags/v')");
+    }
+
+    $uses = array_map(fn (array $step): string => explode('@', (string) ($step['uses'] ?? ''))[0], $steps($workflow, 'build'));
+    // checkout, the two checks, buildx: the first build comes after them
+    expect(array_search('docker/build-push-action', $uses, true))->toBeGreaterThan(3);
+});
+
+it('syncs the description only while the repository exists', function () use ($steps) {
+    $workflow = RepoFiles::yaml('.github/workflows/dockerhub.yml');
+    $text = RepoFiles::text('.github/workflows/dockerhub.yml');
+
+    expect(array_keys($workflow['on']))->toEqualCanonicalizing(['push', 'workflow_run', 'workflow_dispatch']);
+    expect($workflow['on']['workflow_run']['workflows'])->toBe(['Docker image']);
+    expect($text)->toContain('https://hub.docker.com/v2/repositories/baeroe/werkbuch/');
+    expect($text)->toContain('::notice::');
+
+    $sync = collect($steps($workflow, 'sync'))->first(fn (array $step): bool => str_contains((string) ($step['uses'] ?? ''), 'peter-evans/dockerhub-description'));
+    expect($sync['if'])->toBe("steps.hub.outputs.exists == 'true'");
+    expect($sync['with']['repository'])->toBe('baeroe/werkbuch');
+    expect(strlen($sync['with']['short-description']))->toBeLessThanOrEqual(100);
+    expect($workflow['jobs']['sync']['if'])->toContain("github.event.workflow_run.event == 'push'");
+});

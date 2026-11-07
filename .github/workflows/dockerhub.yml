@@ -1,0 +1,42 @@
+name: Docker Hub description
+
+on:
+  push:
+    branches: [main]
+    paths: ['README.md', '.github/workflows/dockerhub.yml']
+  # after a release: the repository on Docker Hub only exists once the first image is pushed
+  workflow_run:
+    workflows: ['Docker image']
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Repository on Docker Hub
+        id: hub
+        run: |
+          if curl -fsS -o /dev/null https://hub.docker.com/v2/repositories/baeroe/werkbuch/; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::baeroe/werkbuch is not on Docker Hub yet (no release pushed), nothing to sync"
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # needs a Docker Hub token with read/write/delete scope; pinned by commit because it sees that token
+      - if: steps.hub.outputs.exists == 'true'
+        uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa # v5.0.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: baeroe/werkbuch
+          short-description: 'Self-hosted project management: custom types, workflows, views, wiki, REST API, MCP, webhooks'
+          enable-url-completion: true
