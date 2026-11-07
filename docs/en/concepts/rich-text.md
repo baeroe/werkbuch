@@ -58,6 +58,7 @@ An upload belongs to nobody until the text that names it is saved; then it belon
 
 Images and files removed from a text stay, so that the history and undo keep working. [Cleaning up](#clean-up) removes them later.
 
+<!-- reference:start -->
 ## Markdown
 
 Over the API every rich text comes in two forms: Markdown (`description`, `body`, `content`, `values_markdown`) and Tiptap JSON (`description_json`, `body_json`, `content_json`, `values`). You write one of the two, never both. Markdown is read as GitHub-flavoured Markdown; HTML in it stays text. werkbuch writes each node in exactly one form, so a text you read and send back unchanged stays the same.
@@ -90,6 +91,8 @@ The same rules apply to Markdown and JSON, checked for the account that writes:
 | `attachment:<ulid>` of another project, or of someone else's upload no text owns | `422` at the field that sent the text, nothing is saved. |
 
 Nothing inside code blocks, inline code, link texts or alternative texts is read as a mention or reference: `` `@mara` `` and `[WEB-123](https://example.com)` stay as they are. A backslash keeps text from becoming one: `\@mara`, `WEB\-123`. When werkbuch writes Markdown, it puts that backslash in front of text that would otherwise turn into a mention or reference on the way back.
+
+<!-- reference:end -->
 
 ## REST
 

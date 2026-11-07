@@ -46,7 +46,7 @@ arch('the MCP layer is final but for the abstract bases of its tools and referen
     ->expect('App\Mcp')->classes()->toBeFinal()
     ->ignoring(['App\Mcp\Support\WerkbuchTool', 'App\Mcp\Support\ReadTool', 'App\Mcp\Support\WriteTool', 'App\Mcp\Resources\DocReference']);
 arch('the bases of the MCP tools are abstract')
-    ->expect(['App\Mcp\Support\WerkbuchTool', 'App\Mcp\Support\ReadTool', 'App\Mcp\Support\WriteTool'])->toBeAbstract();
+    ->expect(['App\Mcp\Support\WerkbuchTool', 'App\Mcp\Support\ReadTool', 'App\Mcp\Support\WriteTool', 'App\Mcp\Resources\DocReference'])->toBeAbstract();
 arch('the MCP layer leaves the database, the schema and the events to actions')
     ->expect('App\Mcp')->not->toUse([EventRecorder::class, 'Illuminate\Support\Facades\DB', 'Illuminate\Support\Facades\Schema', 'Illuminate\Database\ConnectionInterface']);
 arch('domain classes are final')->expect('App\Domain')->classes()->toBeFinal();

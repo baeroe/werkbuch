@@ -22,6 +22,9 @@ return [
     // the one default lives in Attachment::DEFAULT_MAX_MB; config/media-library.php reads the same
     'attachments_max_mb' => (int) env('ATTACHMENTS_MAX_MB', Attachment::DEFAULT_MAX_MB),
 
+    // the docs the MCP references are read from (docs/en/…); tests point it elsewhere
+    'docs_path' => base_path('docs'),
+
     // minutes a notification waits before its mail goes out (a read in between cancels it)
     'notification_mail_delay' => (int) env('NOTIFICATION_MAIL_DELAY', 5),
 

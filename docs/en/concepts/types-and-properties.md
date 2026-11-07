@@ -34,6 +34,7 @@ A property is a field that types add to their items, beyond the core fields ever
 
 The key names the property in the API and, later, in MCP and filters. It is `snake_case`: lowercase letters, digits and `_`, starting with a letter, at most 40 characters. It is unique and **cannot be changed** once the property is saved. It must not be the name of a core field: `id`, `key`, `project`, `type`, `title`, `description`, `state`, `state_category`, `resolution`, `assignee`, `priority`, `label`, `labels`, `start_date`, `due_date`, `parent`, `created_by`, `created_at`, `updated_at`, `started_at`, `closed_at`, `archived`, `archived_at` and `rank` are taken.
 
+<!-- reference:start -->
 ### Field types
 
 The field type is fixed as well. The only change allowed is from single to multiple choice (for dropdowns and the people picker), never back, because items would lose all their values but one.
@@ -52,6 +53,8 @@ The field type is fixed as well. The only change allowed is from single to multi
 ### Options
 
 A dropdown has at least one active option. An option has a label (up to 60 characters), a tone (the field `color` in the API) and a place in the order; a dropdown has at most 100. An option you no longer want to offer can be **archived**: it is not offered for new values any more, and you can restore it. A saved option can also be **removed** (in the interface the cross next to it, over the API by leaving it out of a `PUT`): it is deleted, unless items carry it: then it is archived instead, and the interface says so after saving.
+
+<!-- reference:end -->
 
 ### Required values and defaults
 

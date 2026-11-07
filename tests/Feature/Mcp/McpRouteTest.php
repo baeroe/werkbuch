@@ -31,9 +31,9 @@ it('answers server/discover with the server and its version', function () use ($
         // no prompts (P4)
         ->and(array_keys($result['capabilities']))->toBe(['tools', 'resources'])
         ->and(trim((string) $result['instructions']))->not->toBe('')
-        // the read tools of a token with read (whoami since task 3a, search since task 4, organization since task 5a, people since task 5b, projects and automations since task 6, work-items since task 7a, relations and views since task 7b, comments and attachments since task 8b), no resources yet (task 11)
+        // the read tools of a token with read (whoami since task 3a, search since task 4, organization since task 5a, people since task 5b, projects and automations since task 6, work-items since task 7a, relations and views since task 7b, comments and attachments since task 8b), the three references since task 11
         ->and(array_column($mcp->tools(), 'name'))->toBe(['whoami', 'search', 'organization', 'people', 'projects', 'automations', 'work-items', 'relations', 'comments', 'attachments', 'pages', 'templates', 'views', 'notifications', 'webhooks'])
-        ->and($mcp->resources())->toBe([]);
+        ->and(array_column($mcp->resources(), 'uri'))->toBe(['werkbuch://reference/filters', 'werkbuch://reference/markdown', 'werkbuch://reference/field-types']);
 });
 
 it('answers initialize in the legacy handshake', function () use ($token) {
