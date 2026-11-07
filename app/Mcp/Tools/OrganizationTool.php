@@ -69,7 +69,7 @@ final class OrganizationTool extends ReadTool
             new McpAction(
                 name: 'state-usage',
                 summary: 'The items per state of a project or of a workflow, archived ones included (`project` or `workflow`).',
-                run: fn (Actor $actor, McpArguments $args): McpResult => McpResult::body(['data' => ListStateUsage::run($actor, $args->only(['project', 'workflow']))]),
+                run: fn (Actor $actor, McpArguments $args): McpResult => McpResult::body(['data' => ListStateUsage::run($actor, $args->query(['project', 'workflow']))]),
                 parameters: [
                     'project' => ['type' => 'string', 'description' => 'A project (ULID, identifier or former identifier). Either `project` or `workflow`.'],
                     'workflow' => ['type' => 'string', 'description' => 'A workflow (ULID): counts in the projects of the workflow that the account sees. Either `project` or `workflow`.'],
@@ -150,7 +150,7 @@ final class OrganizationTool extends ReadTool
     {
         return new McpAction(
             name: 'get-'.$catalog['name'],
-            summary: "One {$catalog['name']}.",
+            summary: 'One '.($catalog['name'] === 'type' ? 'work item type' : str_replace('-', ' ', $catalog['name'])).'.',
             run: fn (Actor $actor, McpArguments $args): McpResult => ($catalog['get'])($actor, $args->reference('id')),
             parameters: ['id' => ToolSchema::reference($catalog['placeholder'])],
             required: ['id'],

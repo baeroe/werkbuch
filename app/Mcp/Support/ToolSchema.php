@@ -158,20 +158,27 @@ final class ToolSchema
     {
         /** @var array<string, array<string, array<string, mixed>>> $schemas */
         $schemas = [];
+        /** @var array<string, array<string, list<string>>> $titles */
+        $titles = [];
+        /** @var array<string, array<string, string|null>> $placeholders */
+        $placeholders = [];
         /** @var array<string, list<mixed>> $defaults */
         $defaults = [];
 
         foreach ($actions as $action) {
             $given = $action->defaultArguments();
             foreach ($action->parameters as $name => $schema) {
-                $schemas[$name][(string) json_encode($schema)] = $schema;
+                $key = (string) json_encode($schema);
+                $schemas[$name][$key] = $schema;
+                $titles[$name][$key][] = $action->name;
+                $placeholders[$name][$key] = array_search($name, $action->path, true) ?: null;
                 $defaults[$name][] = array_key_exists($name, $given) ? ['value' => $given[$name]] : null;
             }
         }
 
         $arguments = [];
         foreach ($schemas as $name => $distinct) {
-            $argument = count($distinct) === 1 ? array_values($distinct)[0] : (self::sameReference(array_values($distinct)) ?? ['anyOf' => array_values($distinct)]);
+            $argument = count($distinct) === 1 ? array_values($distinct)[0] : (self::sameReference($distinct, $placeholders[$name]) ?? ['anyOf' => self::titled($distinct, $titles[$name])]);
             $same = array_values(array_unique(array_map(fn (?array $default): string => (string) json_encode($default), $defaults[$name])));
             if (count($same) === 1 && $defaults[$name][0] !== null) {
                 $argument['default'] = $defaults[$name][0]['value'];
@@ -183,20 +190,36 @@ final class ToolSchema
     }
 
     /**
-     * One schema for arguments that are ULIDs of different kinds (`ToolSchema::reference` of several placeholders, each
-     * with its own description): same type and pattern, so the model needs the pattern once. `null` if they differ.
+     * One schema for arguments that are the ULIDs of different kinds: each is the placeholder of the twin
+     * (`PathParameters::schema` of a placeholder the action's `path` names), so the model needs the pattern once. `null`
+     * if one is anything else: a ULID argument that is no placeholder keeps its own sentence.
      *
-     * @param  list<array<string, mixed>>  $schemas
+     * @param  array<string, array<string, mixed>>  $schemas
+     * @param  array<string, string|null>  $placeholders
      * @return array<string, mixed>|null
      */
-    private static function sameReference(array $schemas): ?array
+    private static function sameReference(array $schemas, array $placeholders): ?array
     {
-        $shapes = array_unique(array_map(fn (array $schema): string => (string) json_encode(['type' => $schema['type'] ?? null, 'pattern' => $schema['pattern'] ?? null]), $schemas));
-        $ulids = array_filter($schemas, fn (array $schema): bool => ($schema['pattern'] ?? null) === PathParameters::ULID && count($schema) === 3);
+        foreach ($schemas as $key => $schema) {
+            $placeholder = $placeholders[$key] ?? null;
+            if ($placeholder === null || $schema !== PathParameters::schema($placeholder) || ($schema['pattern'] ?? null) !== PathParameters::ULID) {
+                return null;
+            }
+        }
 
-        return count($shapes) === 1 && count($ulids) === count($schemas)
-            ? ['type' => 'string', 'description' => 'The ULID of the entry the action names (any case).', 'pattern' => PathParameters::ULID]
-            : null;
+        return ['type' => 'string', 'description' => 'The ULID of the entry the action names (any case).', 'pattern' => PathParameters::ULID];
+    }
+
+    /**
+     * The branches of an argument that differs, each titled with the actions that take it (as the bodies are).
+     *
+     * @param  array<string, array<string, mixed>>  $schemas
+     * @param  array<string, list<string>>  $titles
+     * @return list<array<string, mixed>>
+     */
+    private static function titled(array $schemas, array $titles): array
+    {
+        return array_map(fn (string $key): array => ['title' => implode(', ', $titles[$key]), ...$schemas[$key]], array_keys($schemas));
     }
 
     /**
@@ -222,8 +245,8 @@ final class ToolSchema
     }
 
     /**
-     * One schema reduced: its components named under `$defs` (collected in `$named`), without `x-werkbuch-*` and
-     * `examples`, an empty map or schema as an object.
+     * One schema reduced: its components named under `$defs` (collected in `$named`), without `x-werkbuch-*`, `examples` and
+     * the properties that are `readOnly`, an empty map or schema as an object.
      *
      * @param  array<string, true>  $named
      */
@@ -249,6 +272,10 @@ final class ToolSchema
                 // a map or list of schemas; an empty map is an object
                 $subs = [];
                 foreach ($value as $name => $sub) {
+                    // the echoes of the answer ("sent back, ignored", A75) say nothing to a model that writes a body
+                    if ($key === 'properties' && is_array($sub) && ($sub['readOnly'] ?? false) === true) {
+                        continue;
+                    }
                     $subs[$name] = self::reduce($sub, $named);
                 }
                 $reduced[$key] = $subs === [] && in_array($key, self::MAPS, true) ? new stdClass : $subs;

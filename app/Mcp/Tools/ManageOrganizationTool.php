@@ -136,7 +136,7 @@ final class ManageOrganizationTool extends WriteTool
 
         return new McpAction(
             name: "{$verb}-{$catalog['name']}",
-            summary: $update ? "Replaces a {$catalog['name']} as a whole." : "Creates a {$catalog['name']}.",
+            summary: ($update ? 'Replaces a ' : 'Creates a ').self::noun($catalog).'.',
             run: fn (Actor $actor, McpArguments $args): McpResult => ($catalog['save'])($actor, $update ? $args->reference('id') : null, $args->input()),
             parameters: $update ? ['id' => ToolSchema::reference($catalog['placeholder'])] : [],
             input: $catalog['body'],
@@ -153,12 +153,22 @@ final class ManageOrganizationTool extends WriteTool
     {
         return new McpAction(
             name: 'delete-'.$catalog['name'],
-            summary: "Deletes a {$catalog['name']}.",
+            summary: 'Deletes a '.self::noun($catalog).'.',
             run: fn (Actor $actor, McpArguments $args): McpResult => ($catalog['delete'])($actor, $args->reference('id')),
             parameters: ['id' => ToolSchema::reference($catalog['placeholder'])],
             required: ['id'],
             twin: "DELETE {$catalog['uri']}/{{$catalog['placeholder']}}",
             path: [$catalog['placeholder'] => 'id'],
         );
+    }
+
+    /**
+     * How the summaries call a catalog entry: `relation type`, `work item type`.
+     *
+     * @param  array{name: string, ...}  $catalog
+     */
+    private static function noun(array $catalog): string
+    {
+        return $catalog['name'] === 'type' ? 'work item type' : str_replace('-', ' ', $catalog['name']);
     }
 }

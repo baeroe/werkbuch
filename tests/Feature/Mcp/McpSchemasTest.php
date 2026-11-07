@@ -255,7 +255,7 @@ it('builds the input of a tool from its actions', function () use ($noop) {
             ."- `query`: Asks a body. Needs `input`.\n- `again`: Asks the same body.\n- `view`: Creates a view. Needs `input`.")
         // the same schema once with the default all actions have; different ones as anyOf; a default only some have goes
         ->and($schema['properties']['per_page'])->toBe([...$page, 'default' => McpAction::PER_PAGE])
-        ->and($schema['properties']['q'])->toBe(['anyOf' => [['type' => 'string'], ['type' => 'integer']]])
+        ->and($schema['properties']['q'])->toBe(['anyOf' => [['title' => 'list', 'type' => 'string'], ['title' => 'other', 'type' => 'integer']]])
         ->and($schema['properties']['lean'])->toBe(['type' => 'boolean'])
         // the bodies: one branch each, titled with the actions that take it
         ->and(array_column($schema['properties']['input']['anyOf'], 'title'))->toBe(['query, again', 'view'])
@@ -341,11 +341,41 @@ it('describes a reference like the placeholder of the document', function () {
 });
 
 it('names ULIDs of several kinds by one schema', function () {
-    $reference = fn (string $placeholder) => new McpAction('x', 'x', fn () => McpResult::done(), parameters: ['id' => ToolSchema::reference($placeholder)]);
+    $reference = fn (string $placeholder) => new McpAction($placeholder, 'x', fn () => McpResult::done(), parameters: ['id' => ToolSchema::reference($placeholder)], path: [$placeholder => 'id']);
     $schema = ToolSchema::input([$reference('workflow'), $reference('label')]);
     $other = ToolSchema::input([$reference('workflow'), $reference('project')]);
 
     expect($schema['properties']['id'])->toBe(['type' => 'string', 'description' => 'The ULID of the entry the action names (any case).', 'pattern' => PathParameters::ULID])
         // a reference that is no plain ULID keeps its own schema
         ->and(array_keys($other['properties']['id']))->toBe(['anyOf']);
+});
+
+it('names only the ULIDs of placeholders by one schema', function () {
+    $ulid = fn (string $text) => ['type' => 'string', 'description' => $text, 'pattern' => PathParameters::ULID];
+    // `bot_id` is no placeholder of the twin: its two meanings stay two
+    $action = fn (string $name, string $text) => new McpAction($name, 'x', fn () => McpResult::done(), parameters: ['bot_id' => $ulid($text)]);
+    $schema = ToolSchema::input([$action('a', 'The bot that answers.'), $action('b', 'The bot that is invited.')]);
+
+    expect(array_keys($schema['properties']['bot_id']))->toBe(['anyOf'])
+        ->and(array_column($schema['properties']['bot_id']['anyOf'], 'description'))->toBe(['The bot that answers.', 'The bot that is invited.']);
+});
+
+it('titles the branches of an argument that differs with the actions that take them', function () {
+    $action = fn (string $name, string $text) => new McpAction($name, 'x', fn () => McpResult::done(), parameters: ['sort' => ['type' => 'string', 'description' => $text]]);
+    $schema = ToolSchema::input([$action('list-a', 'By name.'), $action('list-b', 'By label.'), $action('list-c', 'By name.')]);
+
+    expect($schema['properties']['sort']['anyOf'])->toBe([
+        ['title' => 'list-a, list-c', 'type' => 'string', 'description' => 'By name.'],
+        ['title' => 'list-b', 'type' => 'string', 'description' => 'By label.'],
+    ]);
+});
+
+it('leaves the echoes of the answer out of a body', function () {
+    $tools = (string) json_encode(McpClient::for($this, apiToken(User::factory()->create(), ['read', 'write', 'mcp']))->tools());
+    $document = (string) json_encode(Document::operation('PATCH', 'organization')['requestBody']);
+
+    // the document keeps them (the body stays open, a client may send them back); the tool schemas do not
+    expect($document)->toContain('"readOnly":true')
+        ->and($tools)->toContain('manage-organization')
+        ->and(str_contains($tools, '"readOnly":'))->toBeFalse();
 });

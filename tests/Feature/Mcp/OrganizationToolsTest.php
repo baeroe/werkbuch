@@ -5,6 +5,7 @@ use App\Actions\WorkItems\UpdateWorkItem;
 use App\Models\Label;
 use App\Models\Project;
 use App\Models\Property;
+use App\Models\Resolution;
 use App\Models\User;
 use App\Models\WorkItem;
 use App\Models\WorkItemType;
@@ -98,4 +99,49 @@ it('counts the items per state of a project', function () {
         // neither project nor workflow: 422 as over REST
         ->and($none['isError'])->toBeTrue()
         ->and($none['structuredContent']['status'])->toBe(422);
+});
+
+it('counts the items per state of a workflow and refuses project and workflow together', function () {
+    $mara = User::factory()->create();
+    $web = Project::factory()->identifier('WEB')->member($mara, ProjectRole::Member)->create();
+    WorkItem::factory()->for($web)->count(2)->create();
+    $mcp = McpClient::for($this, apiToken($mara, ['read', 'mcp']));
+
+    $workflow = $mcp->call('organization', ['action' => 'state-usage', 'workflow' => $web->workflow_id]);
+    $both = $mcp->call('organization', ['action' => 'state-usage', 'workflow' => $web->workflow_id, 'project' => 'web']);
+
+    expect($workflow['isError'])->toBeFalse((string) json_encode($workflow))
+        ->and(array_sum(array_column($workflow['structuredContent']['data'], 'items')))->toBe(2)
+        ->and($both['isError'])->toBeTrue()
+        ->and($both['structuredContent']['status'])->toBe(422);
+});
+
+it('archives a work item type and a resolution that items still carry', function () {
+    $admin = User::factory()->admin()->create();
+    $project = Project::factory()->identifier('WEB')->member($admin, ProjectRole::Admin)->create(['lead_id' => $admin->id]);
+    $type = WorkItemType::factory()->create();
+    $project->types()->attach($type);
+    WorkItem::factory()->for($project)->create(['type_id' => $type->id]);
+    $resolution = Resolution::factory()->create();
+    WorkItem::factory()->for($project)->closed()->create(['resolution_id' => $resolution->id]);
+    $mcp = McpClient::for($this, apiToken($admin, ['read', 'write', 'mcp']));
+
+    $archivedType = $mcp->call('manage-organization', ['action' => 'delete-type', 'id' => $type->id]);
+    $archivedResolution = $mcp->call('manage-organization', ['action' => 'delete-resolution', 'id' => $resolution->id]);
+
+    expect($archivedType['isError'])->toBeFalse((string) json_encode($archivedType))
+        ->and($archivedType['structuredContent'])->toBe(['outcome' => 'archived'])
+        ->and($archivedResolution['isError'])->toBeFalse((string) json_encode($archivedResolution))
+        ->and($archivedResolution['structuredContent'])->toBe(['outcome' => 'archived'])
+        ->and($type->refresh()->archived_at)->not->toBeNull()
+        ->and($resolution->refresh()->archived_at)->not->toBeNull();
+});
+
+it('names the kind of a catalog in the summaries of its actions', function () {
+    $mcp = McpClient::for($this, apiToken(User::factory()->admin()->create(), ['read', 'write', 'mcp']));
+    $description = collect($mcp->tools())->firstWhere('name', 'manage-organization')['inputSchema']['properties']['action']['description'];
+
+    expect($description)->toContain('Creates a work item type.')
+        ->toContain('Creates a relation type.')
+        ->toContain('Replaces a label.');
 });
