@@ -30,6 +30,9 @@ final class ToolRows
         'twins' => ['server' => TwinServer::class, 'path' => '/'.TwinServer::PATH, 'rows' => __DIR__.'/twins.php'],
     ];
 
+    /** The statuses a row may name as its refusal. */
+    public const REFUSALS = [409, 422];
+
     /**
      * @return array<string, array{arguments?: Closure(MatrixWorld): array<string, mixed>, refuses?: array{status: int, reason: string}}>
      */
@@ -137,7 +140,23 @@ final class ToolRows
      */
     public static function refusal(string $suite, string $key): ?array
     {
-        return self::rows($suite)[$key]['refuses'] ?? null;
+        return self::allowed($key, self::rows($suite)[$key]['refuses'] ?? null);
+    }
+
+    /**
+     * A refusal a row names, if its status may be named.
+     *
+     * @param  array{status: int, reason: string}|null  $refuses
+     * @return array{status: int, reason: string}|null
+     */
+    public static function allowed(string $key, ?array $refuses): ?array
+    {
+        // a refusal of rights or a server error would hide a wrong row: rights show in the token columns of the matrix
+        if ($refuses !== null && ! in_array($refuses['status'], self::REFUSALS, true)) {
+            throw new InvalidArgumentException("The row [{$key}] refuses with {$refuses['status']}; only ".implode(' and ', self::REFUSALS).' may be named.');
+        }
+
+        return $refuses;
     }
 
     /**

@@ -7,6 +7,8 @@ use App\Http\Middleware\EnsureMcpToken;
 use App\Http\Middleware\GuardMcpRequest;
 use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\ThrottleApi;
+use App\Mcp\Tools\ManageOrganizationTool;
+use App\Mcp\Tools\OrganizationTool;
 use App\Mcp\Tools\SearchTool;
 use App\Mcp\Tools\WhoamiTool;
 use Illuminate\Support\Facades\Route;
@@ -49,6 +51,8 @@ final class WerkbuchServer extends Server
     protected array $tools = [
         WhoamiTool::class,
         SearchTool::class,
+        OrganizationTool::class,
+        ManageOrganizationTool::class,
     ];
 
     protected array $resources = [];

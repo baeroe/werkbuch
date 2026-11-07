@@ -108,9 +108,9 @@ it('lists only the tools a token may use', function (array $abilities, array $te
         ->and(array_column(McpClient::for($this, $plain)->tools(), 'name'))->toBe($real);
 })->with([
     'mcp' => [['mcp'], [], []],
-    'read and mcp' => [['read', 'mcp'], ['echo'], ['whoami', 'search']],
-    'write and mcp' => [['write', 'mcp'], ['manage-echo'], []],
-    'all three' => [['read', 'write', 'mcp'], ['echo', 'manage-echo'], ['whoami', 'search']],
+    'read and mcp' => [['read', 'mcp'], ['echo'], ['whoami', 'search', 'organization']],
+    'write and mcp' => [['write', 'mcp'], ['manage-echo'], ['manage-organization']],
+    'all three' => [['read', 'write', 'mcp'], ['echo', 'manage-echo'], ['whoami', 'search', 'organization', 'manage-organization']],
 ]);
 
 it('keeps every tool from a transient token', function () {
@@ -193,7 +193,7 @@ it('gives each action the ability of its twin', function (string $suite) {
 
     // a line that is no ability names a mismatch
     expect(array_filter($checked, fn (string $line) => ! in_array($line, ['read', 'write'], true)))->toBe([])
-        ->and($checked)->toMatchArray($suite === 'werkbuch' ? ['whoami:call' => 'read', 'search:call' => 'read'] : [
+        ->and($checked)->toMatchArray($suite === 'werkbuch' ? ['whoami:call' => 'read', 'search:call' => 'read', 'organization:get' => 'read', 'organization:state-usage' => 'read', 'manage-organization:update' => 'write', 'manage-organization:delete-workflow' => 'write'] : [
             'twins:list-users' => 'read', 'twins:members' => 'read', 'twins:query' => 'read', 'twins:groups' => 'read',
             'manage-twins:create-view' => 'write', 'manage-twins:create-label' => 'write', 'manage-twins:delete-view' => 'write',
         ]);

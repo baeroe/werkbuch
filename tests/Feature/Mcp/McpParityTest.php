@@ -105,3 +105,14 @@ it('fails a write row whose call is refused unless the row names the refusal', f
     // the good arguments of the row succeed in the shape of the twin
     $answersLikeTwin($this, $w, 'twins', 'manage-twins:create-label', [...$good, 'input' => ['name' => 'Matrix 2', 'color' => 'sky']], null);
 });
+
+it('lets a row name only a 409 or a 422 as its refusal', function () {
+    $conflict = ['status' => 409, 'reason' => 'in_use'];
+
+    expect(ToolRows::allowed('x:y', $conflict))->toBe($conflict)
+        ->and(ToolRows::allowed('x:y', ['status' => 422, 'reason' => 'validation_failed']))->toBe(['status' => 422, 'reason' => 'validation_failed'])
+        ->and(ToolRows::allowed('x:y', null))->toBeNull();
+    foreach ([403, 404, 500, 503] as $status) {
+        expect(fn () => ToolRows::allowed('x:y', ['status' => $status, 'reason' => 'forbidden']))->toThrow(InvalidArgumentException::class, "The row [x:y] refuses with {$status}");
+    }
+});

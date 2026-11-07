@@ -110,7 +110,7 @@ final class ToolSchema
 
         foreach (ListParameters::query($spec) as $name => ['schema' => $schema, 'description' => $description]) {
             if (preg_match('/^filter\[(.+)]$/', $name, $match) === 1) {
-                $filters[$match[1]] = $schema;
+                $filters[$match[1]] = [...$schema, 'description' => $description];
 
                 continue;
             }
@@ -171,7 +171,7 @@ final class ToolSchema
 
         $arguments = [];
         foreach ($schemas as $name => $distinct) {
-            $argument = count($distinct) === 1 ? array_values($distinct)[0] : ['anyOf' => array_values($distinct)];
+            $argument = count($distinct) === 1 ? array_values($distinct)[0] : (self::sameReference(array_values($distinct)) ?? ['anyOf' => array_values($distinct)]);
             $same = array_values(array_unique(array_map(fn (?array $default): string => (string) json_encode($default), $defaults[$name])));
             if (count($same) === 1 && $defaults[$name][0] !== null) {
                 $argument['default'] = $defaults[$name][0]['value'];
@@ -180,6 +180,23 @@ final class ToolSchema
         }
 
         return $arguments;
+    }
+
+    /**
+     * One schema for arguments that are ULIDs of different kinds (`ToolSchema::reference` of several placeholders, each
+     * with its own description): same type and pattern, so the model needs the pattern once. `null` if they differ.
+     *
+     * @param  list<array<string, mixed>>  $schemas
+     * @return array<string, mixed>|null
+     */
+    private static function sameReference(array $schemas): ?array
+    {
+        $shapes = array_unique(array_map(fn (array $schema): string => (string) json_encode(['type' => $schema['type'] ?? null, 'pattern' => $schema['pattern'] ?? null]), $schemas));
+        $ulids = array_filter($schemas, fn (array $schema): bool => ($schema['pattern'] ?? null) === PathParameters::ULID && count($schema) === 3);
+
+        return count($shapes) === 1 && count($ulids) === count($schemas)
+            ? ['type' => 'string', 'description' => 'The ULID of the entry the action names (any case).', 'pattern' => PathParameters::ULID]
+            : null;
     }
 
     /**

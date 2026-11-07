@@ -121,9 +121,11 @@ it('takes the query of its REST twin', function (string $suite) use ($actions) {
         [$method, $uri] = ToolRows::twin($action);
         $query = [];
         $filters = [];
+        $documented = [];
         foreach (Document::operation($method, $uri)['parameters'] ?? [] as $parameter) {
             if ($parameter['in'] === 'query') {
                 preg_match('/^filter\[(.+)]$/', $parameter['name'], $filter) === 1 ? $filters[] = $filter[1] : $query[] = $parameter['name'];
+                $documented[$parameter['name']] = [...$parameter['schema'], 'description' => $parameter['description'] ?? null];
             }
         }
         if ($filters !== []) {
@@ -138,6 +140,17 @@ it('takes the query of its REST twin', function (string $suite) use ($actions) {
 
         expect($arguments)->toBe($query, $where)
             ->and(array_keys($action->parameters['filter']['properties'] ?? []))->toEqualCanonicalizing($filters, $where);
+
+        // type, enum and description of each argument are those of the document; only the default page size is MCP's own
+        $without = fn (array $schema): array => array_diff_key($schema, ['default' => true]);
+        foreach ($action->parameters as $name => $schema) {
+            if (! in_array($name, $path, true) && $name !== 'filter') {
+                expect($without($schema))->toEqual($without($documented[$name]), "{$where} {$name}");
+            }
+        }
+        foreach ($action->parameters['filter']['properties'] ?? [] as $name => $schema) {
+            expect($without($schema))->toEqual($without($documented["filter[{$name}]"]), "{$where} filter[{$name}]");
+        }
         $checked[] = $where;
     }
 
@@ -302,7 +315,10 @@ it('takes the query of a list from its spec', function () {
 
     expect(array_keys($users))->toBe(['filter', 'cursor', 'per_page', 'sort'])
         // filters by name with the schema of the document: a list as an array, a flag as 1 or 0
-        ->and($users['filter']['properties'])->toBe(['type' => $rest['filter[type]']['schema'], 'disabled' => ['type' => 'integer', 'enum' => [1, 0]]])
+        ->and($users['filter']['properties'])->toBe([
+            'type' => [...$rest['filter[type]']['schema'], 'description' => $rest['filter[type]']['description']],
+            'disabled' => ['type' => 'integer', 'enum' => [1, 0], 'description' => $rest['filter[disabled]']['description']],
+        ])
         ->and($users['sort'])->toBe(['type' => 'string', 'description' => ListParameters::sortDescription(ListUsers::spec())])
         ->and($users['cursor'])->toBe([...$rest['cursor']['schema'], 'description' => $rest['cursor']['description']])
         ->and($users['per_page'])->toBe([...$rest['per_page']['schema'], 'description' => 'The rows per page.', 'default' => McpAction::PER_PAGE])
@@ -322,4 +338,14 @@ it('describes a reference like the placeholder of the document', function () {
     expect($parameter('projects/{project}', 'project')['description'])->toBe(ToolSchema::reference('project')['description'])
         ->and($parameter('work-items/{item}', 'item')['description'])->toBe(substr(ToolSchema::reference('item')['description'], 0, -2)
             .'; a `GET` by a former key answers 301 to the current one).');
+});
+
+it('names ULIDs of several kinds by one schema', function () {
+    $reference = fn (string $placeholder) => new McpAction('x', 'x', fn () => McpResult::done(), parameters: ['id' => ToolSchema::reference($placeholder)]);
+    $schema = ToolSchema::input([$reference('workflow'), $reference('label')]);
+    $other = ToolSchema::input([$reference('workflow'), $reference('project')]);
+
+    expect($schema['properties']['id'])->toBe(['type' => 'string', 'description' => 'The ULID of the entry the action names (any case).', 'pattern' => PathParameters::ULID])
+        // a reference that is no plain ULID keeps its own schema
+        ->and(array_keys($other['properties']['id']))->toBe(['anyOf']);
 });
