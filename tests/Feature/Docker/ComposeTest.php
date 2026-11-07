@@ -1,5 +1,6 @@
 <?php
 
+use App\Actions\Auth\EnsureAdmin;
 use App\Support\TrustedRequests;
 use Tests\Support\RepoFiles;
 
@@ -246,4 +247,121 @@ it('runs the workers with the commands of DDEV, one container per queue list', f
         ->and($services['queue-index']['command'])->toContain('--queue=search,media')
         ->and($services['queue-webhooks']['command'])->toContain('--queue=webhooks')
         ->and($services['scheduler']['command'])->toBe('php artisan schedule:work');
+});
+
+/*
+ * The standalone file (phase 14, task 4b): the same stack for Dockge and Portainer, which have no .env next to the file.
+ * Every value a person edits stands at the top, and the databases refuse to store the placeholder.
+ */
+
+$standalone = fn (): array => RepoFiles::yaml('docker-compose.standalone.yml');
+
+/** The values at the top of the standalone file, by the variable they replace. */
+const STANDALONE_EDITED = ['APP_URL', 'ADMIN_EMAIL', 'ADMIN_PASSWORD', 'DB_PASSWORD', 'MEILISEARCH_KEY'];
+
+it('keeps the standalone file free of .env references and puts every edited value at the top', function () use ($standalone) {
+    $text = RepoFiles::text('docker-compose.standalone.yml');
+    $file = $standalone();
+    $services = $file['services'];
+
+    expect(preg_match('/(?<!\$)\$\{/', $text))->toBe(0)
+        ->and(strpos($text, 'x-werkbuch:'))->toBeLessThan(strpos($text, "\nservices:"))
+        ->and($file['x-werkbuch'])->toBe([
+            'APP_URL' => 'https://pm.example.com',
+            'ADMIN_EMAIL' => 'admin@example.com',
+            'ADMIN_PASSWORD' => 'change-me',
+            'DB_PASSWORD' => 'change-me',
+            'MEILISEARCH_KEY' => 'change-me',
+        ])
+        ->and($text)->toContain('werkbuch refuses to start while a value is still change-me')
+        ->and(EnsureAdmin::PLACEHOLDER)->toBe('change-me')
+        ->and($services['werkbuch']['environment']['DB_PASSWORD'])->toBe($file['x-werkbuch']['DB_PASSWORD'])
+        ->and($services['mariadb']['environment']['MARIADB_PASSWORD'])->toBe($file['x-werkbuch']['DB_PASSWORD'])
+        ->and($services['meilisearch']['environment']['MEILI_MASTER_KEY'])->toBe($file['x-werkbuch']['MEILISEARCH_KEY']);
+
+    // an anchor, not a copy: the three services read the very same line (editing the top changes all)
+    expect($text)->toMatch('/DB_PASSWORD: &db-password change-me/')
+        ->and($text)->toMatch('/MEILISEARCH_KEY: &meili-key change-me/')
+        ->and(substr_count($text, '*db-password'))->toBeGreaterThanOrEqual(2)
+        ->and(substr_count($text, '*meili-key'))->toBeGreaterThanOrEqual(2);
+});
+
+it('runs the standalone stack like docker-compose.yml', function () use ($compose, $standalone, $default, $appServices) {
+    $stack = $compose();
+    $file = $standalone();
+    $edited = $file['x-werkbuch'];
+
+    expect(array_keys($file['services']))->toBe(array_keys($stack['services']))
+        ->and($file['networks'])->toBe($stack['networks'])
+        ->and($file['volumes'])->toBe($stack['volumes']);
+
+    foreach ($stack['services'] as $name => $service) {
+        $mine = $file['services'][$name];
+
+        foreach (['restart', 'healthcheck', 'networks', 'volumes', 'depends_on', 'command', 'stop_signal', 'stop_grace_period', 'security_opt', 'ulimits'] as $key) {
+            expect($mine[$key] ?? null)->toBe($service[$key] ?? null, "{$name}.{$key} differs from docker-compose.yml");
+        }
+    }
+
+    foreach ($appServices as $name) {
+        $theirs = $stack['services'][$name]['environment'];
+        $mine = $file['services'][$name]['environment'];
+
+        expect(array_keys($mine))->toEqualCanonicalizing(array_keys($theirs), "{$name} sets other variables");
+
+        foreach ($theirs as $key => $value) {
+            $expected = in_array($key, STANDALONE_EDITED, true) ? $edited[$key] : $default($value);
+            expect((string) $mine[$key])->toBe((string) $expected, "{$name} {$key}");
+        }
+    }
+
+    expect($file['services']['werkbuch']['image'])->toBe('baeroe/werkbuch:latest')
+        ->and($file['services']['werkbuch']['ports'])->toBe(['7740:8080'])
+        ->and($file['services']['mariadb']['image'])->toBe($stack['services']['mariadb']['image'])
+        ->and($file['services']['meilisearch']['image'])->toBe($stack['services']['meilisearch']['image'])
+        ->and($file['services']['mariadb']['environment']['MARIADB_ROOT_HOST'])->toBe('localhost')
+        ->and($file['services']['mariadb']['environment']['MARIADB_DATABASE'])->toBe('werkbuch');
+
+    foreach ($appServices as $name) {
+        expect($file['services'][$name]['image'])->toBe('baeroe/werkbuch:latest');
+
+        if ($name !== 'werkbuch') {
+            expect($file['services'][$name])->not->toHaveKey('ports');
+        }
+    }
+});
+
+it('starts MariaDB with a command wherever its entrypoint is replaced', function () use ($compose, $standalone) {
+    foreach ([$compose(), $standalone()] as $file) {
+        foreach ($file['services'] as $name => $service) {
+            if (isset($service['entrypoint']) && $name === 'mariadb') {
+                expect($service['command'] ?? null)->not->toBeNull('mariadb replaces the entrypoint without a command');
+            }
+        }
+    }
+
+    // a compose entrypoint drops the CMD of the image, so mariadb would start nothing and restart in a loop
+    expect($standalone()['services']['mariadb']['command'])->toBe(['--max-allowed-packet=64M'])
+        ->and($standalone()['services']['mariadb']['command'])->toBe($compose()['services']['mariadb']['command'])
+        ->and(RepoFiles::text('docker-compose.standalone.yml'))->toContain('docker-entrypoint.sh');
+});
+
+it('refuses the placeholder in MariaDB and Meilisearch of the standalone file before they store it', function () use ($standalone) {
+    $services = $standalone()['services'];
+    $mariadb = $services['mariadb'];
+    $meili = $services['meilisearch'];
+
+    expect($mariadb['entrypoint'][0])->toBe('sh')
+        ->and($mariadb['entrypoint'][1])->toBe('-c')
+        ->and($mariadb['entrypoint'][2])->toContain('[ "$$MARIADB_PASSWORD" = change-me ]')
+        ->and($mariadb['entrypoint'][2])->toContain('exit 1')
+        ->and($mariadb['entrypoint'][2])->toContain('exec docker-entrypoint.sh "$$@"')
+        ->and($mariadb['entrypoint'][3])->toBe('docker-entrypoint.sh')
+        ->and($mariadb['environment']['MARIADB_ROOT_PASSWORD_HASH'])->toBe('*'.str_repeat('0', 40))
+        ->and($mariadb['environment'])->not->toHaveKey('MARIADB_RANDOM_ROOT_PASSWORD')
+        ->and($mariadb['environment'])->not->toHaveKey('MARIADB_ROOT_PASSWORD')
+        ->and($meili['entrypoint'][2])->toContain('[ "$$MEILI_MASTER_KEY" = change-me ]')
+        ->and($meili['entrypoint'][2])->toContain('exit 1')
+        ->and($meili['entrypoint'][2])->toContain('exec tini -- /bin/sh -c /bin/meilisearch')
+        ->and($meili)->not->toHaveKey('command');
 });
