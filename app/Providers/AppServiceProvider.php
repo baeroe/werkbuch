@@ -27,6 +27,7 @@ use App\Models\Workflow;
 use App\Models\WorkItem;
 use App\Models\WorkItemType;
 use App\Search\MeilisearchEngine;
+use App\Support\ReadCommitted;
 use App\Support\RetryingDatabaseStore;
 use App\Views\CatalogProperties;
 use App\Webhooks\DnsResolver;
@@ -37,6 +38,7 @@ use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Database\DatabaseManager;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Database\Events\ConnectionEstablished;
 use Illuminate\Database\Events\TransactionRolledBack;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event as Events;
@@ -121,6 +123,8 @@ class AppServiceProvider extends ServiceProvider
 
         // roles and visible projects read inside a transaction that rolls back would otherwise outlive it and grant access
         Events::listen(TransactionRolledBack::class, fn () => Visibility::forget());
+        // a session made while a read-committed run is open (a reconnect inside the caller's BEGIN) gets the level again (K4)
+        Events::listen(ConnectionEstablished::class, [ReadCommitted::class, 'established']);
 
         // uploads (A234): 60 per minute and account; the throttles run before auth, the key finds the account of a token
         // as well as of the session (RateKey::account, without it every token shared one quota)
