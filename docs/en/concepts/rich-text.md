@@ -32,7 +32,7 @@ Type `/` at the start of a line or after a space to open the block menu (right a
 
 ## Editing tables
 
-While the cursor is in a table, the **Table** button sits on its top edge at the right; `alt+F10` opens its menu straight from the text. There you insert rows above or below and columns to the left or right, delete the row or column of the cursor or the whole table, and turn the **Header row** and the **Header column** on and off. The last row and the last column stay; delete the table instead. After every command and on `esc` the focus goes back to the same place in the text. The same commands are in the `/` menu while the cursor is in a table (group "Table"). The editor offers neither merged cells nor single header cells: Markdown carries neither (see [Tables](#tables) under Markdown).
+While the cursor is in a table, the **Table** button sits on its top edge at the right; `alt+F10` opens its menu straight from the text. There you insert rows above or below and columns to the left or right, delete the row or column of the cursor or the whole table, and turn the **Header row** and the **Header column** on and off. The header row and the header column stay the first row and the first column, also when you insert something before them. A table of one row has no header column. The last row and the last column stay; delete the table instead. After every command and on `esc` the focus goes back to the same place in the text. The same commands are in the `/` menu while the cursor is in a table (group "Table"). The editor offers neither merged cells nor single header cells: Markdown carries neither (see [Tables](#tables) under Markdown).
 
 ## Mentions
 

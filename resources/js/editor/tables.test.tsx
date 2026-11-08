@@ -5,7 +5,6 @@ import { createRef } from 'react';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { RichText } from '@/types';
 import { preloadEditor, RichTextEditor } from './RichTextEditor';
-import { RichTextView } from './RichTextView';
 
 // jsdom has no layout: ProseMirror measures the selection to scroll it into view (as in editor.test.tsx)
 beforeAll(async () => {
@@ -56,6 +55,9 @@ function setup(value: RichText = devices, props: { readOnly?: boolean; preset?: 
   return { ...utils, onChange, editor: () => editorRef.current!, textbox: screen.getByRole('textbox') };
 }
 
+/** What the editor's live region says. */
+const said = () => document.querySelector('[data-editor-announcer]')!.textContent;
+
 const menuButton = () => screen.queryByRole('button', { name: 'Tabelle bearbeiten' });
 
 /** Opens the menu with its button and waits until it has the focus (Base UI sets it a frame later). */
@@ -92,14 +94,18 @@ describe('TableMenu', () => {
   });
 
   it('shows no menu read-only', () => {
-    const { editor, unmount } = setup(devices, { readOnly: true });
-    act(() => void editor().commands.setTextSelection(editor().state.doc.content.size - 4));
-    expect(editor().isActive('table')).toBe(true);
+    const onChange = vi.fn();
+    const editorRef = createRef<Editor | null>() as { current: Editor | null };
+    const view = (readOnly: boolean) => <RichTextEditor value={devices} onChange={onChange} preset="page" readOnly={readOnly} editorRef={editorRef} />;
+    const { rerender } = render(view(true));
+    act(() => void editorRef.current!.commands.setTextSelection(editorRef.current!.state.doc.content.size - 4));
+    expect(editorRef.current!.isActive('table')).toBe(true);
     expect(menuButton()).toBeNull();
-    unmount();
 
-    render(<RichTextView value={devices} preset="page" />);
-    expect(document.querySelector('table')).not.toBeNull();
+    // the same editor with the same selection, now editable: the tab comes, so it was the read-only state that hid it
+    rerender(view(false));
+    expect(menuButton()).not.toBeNull();
+    rerender(view(true));
     expect(menuButton()).toBeNull();
   });
 
@@ -109,6 +115,7 @@ describe('TableMenu', () => {
     const at = cursorAt(editor(), 'Pixel 9');
 
     await take(user, 'Zeile darunter einfügen', textbox);
+    expect(said()).toBe('Zeile eingefügt');
     expect(layout(lastDoc(onChange))).toEqual([
       ['tableHeader', 'tableHeader'],
       ['tableCell', 'tableCell'],
@@ -121,12 +128,15 @@ describe('TableMenu', () => {
     expect(layout(lastDoc(onChange))).toHaveLength(4);
 
     await take(user, 'Spalte rechts einfügen', textbox);
+    expect(said()).toBe('Spalte eingefügt');
     expect(layout(lastDoc(onChange)).map((cells) => cells.length)).toEqual([3, 3, 3, 3]);
     await take(user, 'Spalte links einfügen', textbox);
     expect(layout(lastDoc(onChange)).map((cells) => cells.length)).toEqual([4, 4, 4, 4]);
 
     await take(user, 'Spalte löschen', textbox);
+    expect(said()).toBe('Spalte gelöscht');
     await take(user, 'Zeile löschen', textbox);
+    expect(said()).toBe('Zeile gelöscht');
     const after = lastDoc(onChange);
     expect(layout(after).map((cells) => cells.length)).toEqual([3, 3, 3]);
     // the row and the column of the cursor went, the cells of "Gerät" and "Pixel 9" with them
@@ -135,6 +145,7 @@ describe('TableMenu', () => {
     expect(JSON.stringify(after)).toContain('Stand');
 
     await take(user, 'Tabelle löschen', textbox);
+    expect(said()).toBe('Tabelle gelöscht');
     expect(lastDoc(onChange).content!.map((node) => node.type)).not.toContain('table');
     expect(menuButton()).toBeNull();
   });
@@ -149,6 +160,7 @@ describe('TableMenu', () => {
     expect(within(menu).getByRole('menuitemcheckbox', { name: 'Kopfspalte' }).getAttribute('aria-checked')).toBe('false');
     await user.click(within(menu).getByRole('menuitemcheckbox', { name: 'Kopfspalte' }));
     await waitFor(() => expect(document.activeElement).toBe(textbox));
+    expect(said()).toBe('Kopfspalte an');
     expect(layout(lastDoc(onChange))).toEqual([
       ['tableHeader', 'tableHeader'],
       ['tableHeader', 'tableCell'],
@@ -158,6 +170,7 @@ describe('TableMenu', () => {
     expect(within(menu).getByRole('menuitemcheckbox', { name: 'Kopfspalte' }).getAttribute('aria-checked')).toBe('true');
     await user.click(within(menu).getByRole('menuitemcheckbox', { name: 'Kopfzeile' }));
     await waitFor(() => expect(document.activeElement).toBe(textbox));
+    expect(said()).toBe('Kopfzeile aus');
     // the corner stays a header cell: it belongs to the header column as well (as TableLayout keeps it, A455)
     expect(layout(lastDoc(onChange))).toEqual([
       ['tableHeader', 'tableCell'],
@@ -213,9 +226,18 @@ describe('TableMenu', () => {
     expect(screen.queryByRole('menu')).toBeNull();
 
     const at = cursorAt(editor(), 'Pixel 9');
+    // where the focus goes: from the cell straight to the first entry, never over the tab
+    const focused: Element[] = [];
+    const track = (event: FocusEvent) => focused.push(event.target as Element);
+    document.addEventListener('focusin', track);
     expect(fireEvent.keyDown(textbox, { key: 'F10', code: 'F10', altKey: true })).toBe(false);
     const menu = await screen.findByRole('menu', { name: 'Tabelle bearbeiten' });
-    await waitFor(() => expect(within(menu).getAllByRole('menuitem')[0]).toBe(document.activeElement));
+    const first = within(menu).getAllByRole('menuitem')[0];
+    await waitFor(() => expect(document.activeElement).toBe(first));
+    expect(first.hasAttribute('data-highlighted')).toBe(true);
+    document.removeEventListener('focusin', track);
+    expect(focused).not.toContain(menuButton());
+    expect(focused.at(-1)).toBe(first);
 
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
@@ -225,6 +247,18 @@ describe('TableMenu', () => {
     // with another modifier it is not the menu's key
     expect(fireEvent.keyDown(textbox, { key: 'F10', code: 'F10', altKey: true, shiftKey: true })).toBe(true);
     expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('opens the menu with Alt+F10 while the tab is not placed yet', async () => {
+    const { editor, textbox } = setup();
+    // the table's element cannot be measured: the tab stays invisible, unplaced
+    vi.spyOn(editor().view, 'nodeDOM').mockReturnValue(null);
+    cursorAt(editor(), 'Pixel 9');
+    expect(menuButton()!.classList.contains('invisible')).toBe(true);
+
+    expect(fireEvent.keyDown(textbox, { key: 'F10', code: 'F10', altKey: true })).toBe(false);
+    const menu = await screen.findByRole('menu', { name: 'Tabelle bearbeiten' });
+    await waitFor(() => expect(within(menu).getAllByRole('menuitem')[0]).toBe(document.activeElement));
   });
 
   it('offers the table commands in the slash menu inside a table only', async () => {
@@ -289,4 +323,158 @@ describe('TableMenu', () => {
       ['tableCell', 'tableCell'],
     ]);
   });
+  it('keeps the header row in the first row when a row goes in above it', async () => {
+    const user = userEvent.setup();
+    const { editor, onChange, textbox } = setup();
+    cursorAt(editor(), 'Gerät');
+
+    await take(user, 'Zeile darüber einfügen', textbox);
+    expect(layout(lastDoc(onChange))).toEqual([
+      ['tableHeader', 'tableHeader'],
+      ['tableCell', 'tableCell'],
+      ['tableCell', 'tableCell'],
+    ]);
+    // the old header row moved down with its text and reads as a plain row now
+    expect(tableOf(lastDoc(onChange)).content![1].content![0]).toMatchObject(cell('tableCell', 'Gerät'));
+    const menu = await openMenu(user);
+    expect(within(menu).getByRole('menuitemcheckbox', { name: 'Kopfzeile' }).getAttribute('aria-checked')).toBe('true');
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+
+    // below it: the header row stays where it is
+    cursorAt(editor(), 'Gerät');
+    await take(user, 'Zeile darunter einfügen', textbox);
+    expect(layout(lastDoc(onChange))).toEqual([
+      ['tableHeader', 'tableHeader'],
+      ['tableCell', 'tableCell'],
+      ['tableCell', 'tableCell'],
+      ['tableCell', 'tableCell'],
+    ]);
+  });
+
+  it('keeps the header column in the first column when a column goes in left of it', async () => {
+    const user = userEvent.setup();
+    const both = withTable(row(cell('tableHeader', 'Gerät'), cell('tableHeader', 'Stand')), row(cell('tableHeader', 'Pixel'), cell('tableCell', 'offen')));
+    const { editor, onChange, textbox } = setup(both);
+    cursorAt(editor(), 'Pixel');
+
+    await take(user, 'Spalte links einfügen', textbox);
+    expect(layout(lastDoc(onChange))).toEqual([
+      ['tableHeader', 'tableHeader', 'tableHeader'],
+      ['tableHeader', 'tableCell', 'tableCell'],
+    ]);
+    expect(tableOf(lastDoc(onChange)).content![1].content![1]).toMatchObject(cell('tableCell', 'Pixel'));
+    const menu = await openMenu(user);
+    expect(within(menu).getByRole('menuitemcheckbox', { name: 'Kopfzeile' }).getAttribute('aria-checked')).toBe('true');
+    expect(within(menu).getByRole('menuitemcheckbox', { name: 'Kopfspalte' }).getAttribute('aria-checked')).toBe('true');
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+
+    // right of it: the header column stays where it is
+    cursorAt(editor(), 'Pixel');
+    await take(user, 'Spalte rechts einfügen', textbox);
+    expect(layout(lastDoc(onChange))).toEqual([
+      ['tableHeader', 'tableHeader', 'tableHeader', 'tableHeader'],
+      ['tableHeader', 'tableCell', 'tableCell', 'tableCell'],
+    ]);
+  });
+
+  it('keeps a header column without a header row when a column goes in left of it', async () => {
+    const user = userEvent.setup();
+    const column = withTable(row(cell('tableHeader', 'Gerät'), cell('tableCell', 'Pixel')), row(cell('tableHeader', 'Stand'), cell('tableCell', 'offen')));
+    const { editor, onChange, textbox } = setup(column);
+    cursorAt(editor(), 'Stand');
+
+    await take(user, 'Spalte links einfügen', textbox);
+    expect(layout(lastDoc(onChange))).toEqual([
+      ['tableHeader', 'tableCell', 'tableCell'],
+      ['tableHeader', 'tableCell', 'tableCell'],
+    ]);
+    await take(user, 'Zeile darüber einfügen', textbox);
+    expect(layout(lastDoc(onChange))).toEqual([
+      ['tableHeader', 'tableCell', 'tableCell'],
+      ['tableHeader', 'tableCell', 'tableCell'],
+      ['tableHeader', 'tableCell', 'tableCell'],
+    ]);
+  });
+
+  it('says why a table of one row has no header column', async () => {
+    const user = userEvent.setup();
+    const { editor, onChange, textbox } = setup(withTable(row(cell('tableCell', 'eins'), cell('tableCell', 'zwei'))));
+    cursorAt(editor(), 'eins');
+
+    const menu = await openMenu(user);
+    const column = within(menu).getByRole('menuitemcheckbox', { name: /^Kopfspalte/ });
+    expect(column.getAttribute('aria-disabled')).toBe('true');
+    expect(column.getAttribute('aria-checked')).toBe('false');
+    expect(column.textContent).toContain('Eine Kopfspalte braucht eine zweite Zeile.');
+    // the header row can be switched in one row
+    expect(within(menu).getByRole('menuitemcheckbox', { name: 'Kopfzeile' }).getAttribute('aria-disabled')).toBeNull();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+
+    // the slash menu does not offer it either; with a second row it does
+    await user.keyboard(' /kopf');
+    let options = within(await screen.findByRole('listbox', { name: 'Blöcke' })).getAllByRole('option');
+    expect(options.map((option) => option.textContent)).toEqual(['Kopfzeile einschalten']);
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
+    await take(user, 'Zeile darunter einfügen', textbox);
+    expect(layout(lastDoc(onChange))).toHaveLength(2);
+    await user.keyboard(' /kopf');
+    options = within(await screen.findByRole('listbox', { name: 'Blöcke' })).getAllByRole('option');
+    expect(options.map((option) => option.textContent)).toEqual(['Kopfzeile einschalten', 'Kopfspalte einschalten']);
+  });
+
+  it('asks whether a row or a column may go only when the menu opens', async () => {
+    const user = userEvent.setup();
+    const { editor } = setup();
+    cursorAt(editor(), 'offen');
+    // the dry runs read the raw commands of the extensions; typing goes through the command manager, built once
+    const raw = vi.spyOn(editor().extensionManager, 'commands', 'get');
+
+    await user.keyboard('xyz');
+    expect(JSON.stringify(editor().getJSON())).toContain('offenxyz');
+    expect(menuButton()).not.toBeNull();
+    expect(raw).not.toHaveBeenCalled();
+
+    await openMenu(user);
+    expect(raw).toHaveBeenCalled();
+  });
+
+  it('places the tab anew when the table moves without a change of the text', () => {
+    const observers: { callback: ResizeObserverCallback; targets: Element[] }[] = [];
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        entry: { callback: ResizeObserverCallback; targets: Element[] };
+        constructor(callback: ResizeObserverCallback) {
+          this.entry = { callback, targets: [] };
+          observers.push(this.entry);
+        }
+        observe(target: Element) {
+          this.entry.targets.push(target);
+        }
+        disconnect() {
+          this.entry.targets = [];
+        }
+      },
+    );
+    try {
+      const { editor } = setup();
+      cursorAt(editor(), 'Pixel 9');
+      const wrapper = document.querySelector('.tableWrapper')!;
+      const watched = observers.filter((entry) => entry.targets.includes(wrapper));
+      expect(watched).toHaveLength(1);
+      expect(menuButton()!.style.top).toBe('0px');
+
+      // an image above finished loading: the table is 120 px lower, the text the same
+      wrapper.getBoundingClientRect = () => ({ x: 0, y: 120, top: 120, left: 0, right: 0, bottom: 120, width: 0, height: 0, toJSON: () => ({}) }) as DOMRect;
+      act(() => watched[0].callback([], {} as ResizeObserver));
+      expect(menuButton()!.style.top).toBe('120px');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
 });

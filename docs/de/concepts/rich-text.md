@@ -32,7 +32,7 @@ Ein `/` am Zeilenanfang oder nach einem Leerzeichen öffnet das Blockmenü (dire
 
 ## Tabellen bearbeiten
 
-Steht der Cursor in einer Tabelle, sitzt an ihrer oberen Kante rechts der Knopf **Tabelle**; `alt+F10` öffnet sein Menü auch direkt aus dem Text. Darin fügst du Zeilen darüber oder darunter und Spalten links oder rechts ein, löschst die Zeile oder Spalte des Cursors oder die ganze Tabelle und schaltest **Kopfzeile** und **Kopfspalte** an und aus. Die letzte Zeile und die letzte Spalte bleiben; lösche dann die Tabelle. Nach jedem Befehl und mit `esc` geht der Fokus an dieselbe Stelle im Text zurück. Dieselben Befehle stehen im `/`-Menü, solange der Cursor in einer Tabelle steht (Gruppe „Tabelle“). Zellen verbinden und einzelne Kopfzellen bietet der Editor nicht an: Markdown trägt beides nicht (siehe [Tabellen](#tabellen) unter Markdown).
+Steht der Cursor in einer Tabelle, sitzt an ihrer oberen Kante rechts der Knopf **Tabelle**; `alt+F10` öffnet sein Menü auch direkt aus dem Text. Darin fügst du Zeilen darüber oder darunter und Spalten links oder rechts ein, löschst die Zeile oder Spalte des Cursors oder die ganze Tabelle und schaltest **Kopfzeile** und **Kopfspalte** an und aus. Kopfzeile und Kopfspalte bleiben die erste Zeile und die erste Spalte, auch wenn du davor etwas einfügst. Eine Tabelle aus einer Zeile hat keine Kopfspalte. Die letzte Zeile und die letzte Spalte bleiben; lösche dann die Tabelle. Nach jedem Befehl und mit `esc` geht der Fokus an dieselbe Stelle im Text zurück. Dieselben Befehle stehen im `/`-Menü, solange der Cursor in einer Tabelle steht (Gruppe „Tabelle“). Zellen verbinden und einzelne Kopfzellen bietet der Editor nicht an: Markdown trägt beides nicht (siehe [Tabellen](#tabellen) unter Markdown).
 
 ## Erwähnungen
 
