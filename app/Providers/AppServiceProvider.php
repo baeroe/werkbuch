@@ -33,7 +33,6 @@ use App\Support\RetryingDatabaseStore;
 use App\Views\CatalogProperties;
 use App\Webhooks\DnsResolver;
 use App\Webhooks\Resolver;
-use GuzzleHttp\Client as GuzzleClient;
 use Illuminate\Cache\CacheManager;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Foundation\Application;
@@ -144,15 +143,12 @@ class AppServiceProvider extends ServiceProvider
         User::disableSearchSyncing();
 
         // Scout's engine, able to remove the documents of a project's items by filter (RemovesWhere) and to say how
-        // Meilisearch is (ReportsStatus) over a client of its own that gives up after 2 s (K15)
+        // Meilisearch is (PoolsStatus, requests of 2 s, K15)
         resolve(EngineManager::class)->extend('meilisearch', fn (Application $app) => new MeilisearchEngine(
             $app->make(Client::class),
             (bool) config('scout.soft_delete'),
-            new Client(
-                (string) config('scout.meilisearch.host'),
-                config('scout.meilisearch.key'),
-                new GuzzleClient(['connect_timeout' => 2, 'timeout' => 2]),
-            ),
+            (string) config('scout.meilisearch.host'),
+            config('scout.meilisearch.key'),
         ));
     }
 }

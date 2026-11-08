@@ -8,23 +8,28 @@ use App\Models\User;
 use App\Models\WorkItem;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\Pool;
+use Illuminate\Http\Client\Response;
+use Illuminate\Support\Facades\Http;
 use InvalidArgumentException;
 use Laravel\Scout\Engines\MeilisearchEngine as ScoutMeilisearchEngine;
 use Meilisearch\Client;
 use Meilisearch\Contracts\TasksQuery;
 use Meilisearch\Exceptions\ApiException;
-use Meilisearch\Exceptions\ExceptionInterface;
-use Psr\Http\Client\ClientExceptionInterface;
 
 /**
  * Scout's Meilisearch engine, which can also remove documents by a filter (RemovesWhere), say how Meilisearch is
- * (ReportsStatus) and fill an index beside the live one to swap them (SwapsIndexes; only indexes with `scout.prefix`). AppServiceProvider sets it as the driver `meilisearch`. The status asks over its own client with
- * short timeouts (`$statusClient`, 2 s), so a Meilisearch that hangs never holds the system page; it counts only the
- * tasks of the indexes of this instance (the models of `scout.meilisearch.index-settings` with `scout.prefix`).
+ * (ReportsStatus) and fill an index beside the live one to swap them (SwapsIndexes; only indexes with `scout.prefix`). AppServiceProvider sets it as the driver `meilisearch`. The status (PoolsStatus) asks with plain
+ * HTTP requests of 2 s, which the system page sends in one pool together with the Reverb probe (K21), so a Meilisearch
+ * that hangs never holds it for long; it counts only the tasks of the indexes of this instance (the models of `scout.meilisearch.index-settings` with `scout.prefix`).
  */
-final class MeilisearchEngine extends ScoutMeilisearchEngine implements CountsDocuments, RemovesWhere, ReportsStatus, SwapsIndexes
+final class MeilisearchEngine extends ScoutMeilisearchEngine implements CountsDocuments, PoolsStatus, RemovesWhere, SwapsIndexes
 {
-    public function __construct(Client $meilisearch, bool $softDelete, private readonly Client $statusClient)
+    /** The keys of the status requests in the pool, so they do not meet those of another caller. */
+    public const STATUS_PREFIX = 'search.';
+
+    public function __construct(Client $meilisearch, bool $softDelete, private readonly string $host, private readonly ?string $key)
     {
         parent::__construct($meilisearch, $softDelete);
     }
@@ -110,30 +115,45 @@ final class MeilisearchEngine extends ScoutMeilisearchEngine implements CountsDo
 
     public function status(): array
     {
-        try {
-            $this->statusClient->health();
+        $responses = Http::pool(fn (Pool $pool) => $this->statusRequests($pool));
 
-            return ['search' => 'ok', 'search_tasks' => [
-                'enqueued' => $this->countTasks(['enqueued']),
-                'processing' => $this->countTasks(['processing']),
-                'failed_last_day' => $this->countTasks(['failed'], afterFinished: true),
-            ]];
-        } catch (ExceptionInterface|ClientExceptionInterface) {
-            return ['search' => 'down', 'search_tasks' => null];
+        return $this->statusFrom($responses);
+    }
+
+    public function statusRequests(Pool $pool): void
+    {
+        $this->statusRequest($pool, 'health')->get($this->host.'/health');
+        foreach (['enqueued' => false, 'processing' => false, 'failed' => true] as $status => $afterFinished) {
+            $query = (new TasksQuery)->setStatuses([$status])->setIndexUids($this->indexes())->setLimit(1);
+            if ($afterFinished) {
+                $query->setAfterFinishedAt(now()->subDay()->toDateTimeImmutable());
+            }
+            $this->statusRequest($pool, $status)->get($this->host.'/tasks', $query->toArray());
         }
     }
 
-    /**
-     * @param  list<string>  $statuses
-     */
-    private function countTasks(array $statuses, bool $afterFinished = false): int
+    public function statusFrom(array $responses): array
     {
-        $query = (new TasksQuery)->setStatuses($statuses)->setIndexUids($this->indexes())->setLimit(1);
-        if ($afterFinished) {
-            $query->setAfterFinishedAt(now()->subDay()->toDateTimeImmutable());
+        $counts = [];
+        foreach (['health', 'enqueued', 'processing', 'failed'] as $name) {
+            $response = $responses[self::STATUS_PREFIX.$name] ?? null;
+            if (! $response instanceof Response || ! $response->successful()) {
+                return ['search' => 'down', 'search_tasks' => null];
+            }
+            $counts[$name] = (int) $response->json('total');
         }
 
-        return $this->statusClient->getTasks($query)->getTotal();
+        return ['search' => 'ok', 'search_tasks' => [
+            'enqueued' => $counts['enqueued'],
+            'processing' => $counts['processing'],
+            'failed_last_day' => $counts['failed'],
+        ]];
+    }
+
+    private function statusRequest(Pool $pool, string $name): PendingRequest
+    {
+        return $pool->as(self::STATUS_PREFIX.$name)->connectTimeout(2)->timeout(2)->acceptJson()
+            ->when($this->key !== null && $this->key !== '', fn (PendingRequest $request) => $request->withToken((string) $this->key));
     }
 
     /**
