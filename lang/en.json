@@ -718,6 +718,7 @@
     "items.board.reason.no_room": "There is no room left here. Move the card to another place.",
     "items.board.reason.not_member": ":name is not a member of project :project and cannot take the item.",
     "items.board.reason.not_reloaded": "The new order has not loaded yet. Move the card again in a moment.",
+    "items.board.reason.order_changed": "The order has changed meanwhile. Move the card again.",
     "items.board.reason.single_column": "Without grouping there is only one column.",
     "items.board.reason.start_category": "New items start in “:initial”. In the workflow “:workflow” no transition leads from there to :column.",
     "items.board.reason.start_transition": "New items start in “:initial”. From there to “:to” is not allowed in the workflow “:workflow”.",
