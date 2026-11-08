@@ -315,7 +315,7 @@ function usePagedLists(lists: readonly PagedList[], all: boolean): Record<string
     () =>
       queryClient.getQueryCache().subscribe((event) => {
         if (event.type !== 'updated' || event.action.type !== 'invalidate') return;
-        const list = layoutRef.current.find((entry) => entry.cursors.length > 1 && event.query.queryHash === hashKey(pageKey(entry.args, null)));
+        const list = layoutRef.current.find((entry) => entry.cursors.length > 1 && event.query.queryHash === entry.hash);
         if (!list) return;
         const rebuild = rebuildsOf(queryClient).get(list.hash);
         if (rebuild) rebuild.depth = list.cursors.length;

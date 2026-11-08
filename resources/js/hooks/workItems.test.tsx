@@ -1,7 +1,7 @@
-import { QueryClient, QueryClientProvider, type QueryKey } from '@tanstack/react-query';
+import { hashKey, QueryClient, QueryClientProvider, type QueryKey } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Page } from '@/api/client';
 import { currentToasts, resetToasts, runToastAction } from '@/components/ui/toast';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
@@ -30,6 +30,12 @@ import {
   useWorkItemGroups,
   useWorkItems,
 } from './workItems';
+
+// a spy on the query hashes the hooks compute: the cache of TanStack hashes with its own copy and is not counted
+vi.mock('@tanstack/react-query', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@tanstack/react-query')>();
+  return { ...actual, hashKey: vi.fn(actual.hashKey) };
+});
 
 let queryClient: QueryClient;
 let api: MockApi | undefined;
@@ -550,6 +556,28 @@ describe('pages of a list', () => {
     expect(result.current.list.hasMore).toBe(false);
     // the first page and the two after it along the cursors the new pages answered; no old cursor (a2, a4) is sent again
     expect(bodies().slice(before)).toEqual([{}, { cursor: 'a1' }, { cursor: 'a3' }]);
+  });
+
+  it('hashes no list again when a query of the cache is invalidated (T9-M3)', async () => {
+    const items = ranked('abcdef');
+    api = mockApi({ 'POST /api/v1/work-items/query': keysetServer(() => items) });
+    const { result } = renderHook(() => ({ one: useInfiniteWorkItems({ q: 'eins' }, { all: true }), two: useInfiniteWorkItems({ q: 'zwei' }, { all: true }) }), {
+      wrapper,
+    });
+    await waitFor(() => expect(titles(result.current.one.data)).toHaveLength(6));
+    await waitFor(() => expect(titles(result.current.two.data)).toHaveLength(6));
+    // 50 other queries of the cache, as a live update invalidates them
+    for (let n = 0; n < 50; n++) queryClient.setQueryData(['andere', n], n);
+
+    vi.mocked(hashKey).mockClear();
+    for (let n = 0; n < 50; n++) await act(() => queryClient.invalidateQueries({ queryKey: ['andere', n] }));
+
+    // both lists of three pages heard every invalidation: they compare the hash they have, they compute none
+    expect(vi.mocked(hashKey)).not.toHaveBeenCalled();
+    // and a list whose first page is invalidated still notices: it rebuilds
+    const before = bodies().length;
+    await act(() => queryClient.invalidateQueries({ queryKey: qk.workItems.list({ q: 'eins' }) }));
+    await waitFor(() => expect(bodies().length).toBeGreaterThan(before));
   });
 
   it('rebuilds a list that comes back after a change while it was away, along the new cursors', async () => {
