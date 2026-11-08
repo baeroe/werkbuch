@@ -37,7 +37,9 @@ use Throwable;
  * `due:<item>:<day>`, `data` `{due_date, overdue}` by the calendar of the person), as the preferences say; mail counts
  * as off without a mail server (K9). The lines with mail on join the collection `due:<day>` of their person: one mail
  * per person and day with all of them. A run that comes again (the job twice in the hour) writes nothing and opens no
- * mail: only people who got a new line join one. A fixed number of queries per zone, however many people and items.
+ * mail: only people who got a new line join one. A fixed number of queries per zone and block, however many people and
+ * items: every statement takes at most NotifyRecipients::BLOCK people, items or rows, so thousands of reminders of a zone
+ * stay below the 65 535 placeholders MariaDB takes in one statement.
  * The zones go one after another; one that fails is no reason to leave out the others (the first failure is thrown
  * at the end, later ones are reported). Work of a job without an event of its own. After the commit, every person with a new reminder in the inbox hears
  * `notifications.changed` on their live channel (NotificationsChanged, K10).
@@ -84,7 +86,10 @@ final class SendDueReminders
     {
         $people = self::active()->where(fn ($query) => $query->where('timezone', $zone)->when($organization, fn ($or) => $or->orWhereNull('timezone')))
             ->get()->keyBy('id');
-        $items = $this->dueItems($people, $day);
+        $items = [];
+        foreach ($people->chunk(NotifyRecipients::BLOCK) as $block) {
+            array_push($items, ...$this->dueItems($block, $day));
+        }
         $stored = NotificationPreference::storedFor(array_values($people->keys()->all()));
         $mail = MailSetup::configured();
         $now = now()->format('Y-m-d H:i:s.u');
@@ -122,8 +127,11 @@ final class SendDueReminders
         }
 
         // a reminder the person already has stays as it is, and only a new one joins (or opens) a mail
-        $written = Notification::query()->whereIn('user_id', $people->keys())->whereIn('dedupe_key', array_column($rows, 'dedupe_key'))
-            ->get(['user_id', 'dedupe_key'])->map(fn (Notification $n) => "{$n->user_id}:{$n->dedupe_key}")->all();
+        $written = [];
+        foreach (array_chunk($rows, NotifyRecipients::BLOCK) as $block) {
+            array_push($written, ...Notification::query()->whereIn('user_id', array_unique(array_column($block, 'user_id')))->whereIn('dedupe_key', array_column($block, 'dedupe_key'))
+                ->get(['user_id', 'dedupe_key'])->map(fn (Notification $n) => "{$n->user_id}:{$n->dedupe_key}")->all());
+        }
         $rows = array_diff_key($rows, array_flip($written));
         $mailing = array_values(array_unique(array_intersect_key($mailing, $rows)));
         $inboxing = array_values(array_unique(array_intersect_key($inboxing, $rows)));
@@ -132,10 +140,12 @@ final class SendDueReminders
             $mails = NotifyRecipients::collect($mailing, "due:{$day}");
             NotificationsChanged::dispatchFor($inboxing, null);
 
-            return Notification::query()->insertOrIgnore(array_values(array_map(
-                fn (array $row) => [...$row, 'mail_id' => $mails[$row['user_id']] ?? null],
-                $rows,
-            )));
+            $written = 0;
+            foreach (array_chunk($rows, NotifyRecipients::BLOCK) as $block) {
+                $written += Notification::query()->insertOrIgnore(array_map(fn (array $row) => [...$row, 'mail_id' => $mails[$row['user_id']] ?? null], $block));
+            }
+
+            return $written;
         }, 3);
     }
 
