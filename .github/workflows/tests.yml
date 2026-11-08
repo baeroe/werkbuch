@@ -121,6 +121,87 @@ jobs:
       - name: Pest with coverage
         run: php artisan test --coverage --min=100
 
+  # The load suite (tests/Load, phpunit.load.xml): the API against 50 000 items, each answer within 1.5 s as the median
+  # of three runs, the queries as against 100 items (A187, K10). No required check; the table of every row is the
+  # artifact `load-budget`.
+  load:
+    name: load (50 000 items)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    services:
+      mariadb:
+        image: mariadb:11.4.13@sha256:1292844148b311e4ed4300022a996d39083f415a963e970cf47cad1b3b18e3a6
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          # `load` is a reserved word in MariaDB; the image quotes the name it creates
+          MARIADB_DATABASE: load
+          MARIADB_USER: db
+          MARIADB_PASSWORD: db
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+      meilisearch:
+        image: getmeili/meilisearch:v1.56.0@sha256:1f578fa865f8251894b3bf38d6668d6209a3f451f8f65ab953e129d4c1db5ef4
+        env:
+          MEILI_MASTER_KEY: ci-werkbuch-master-key
+          MEILI_NO_ANALYTICS: 'true'
+        ports:
+          - 7700:7700
+
+    env:
+      DB_CONNECTION: mariadb
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: load
+      DB_USERNAME: db
+      DB_PASSWORD: db
+      MEILISEARCH_HOST: http://127.0.0.1:7700
+      MEILISEARCH_KEY: ci-werkbuch-master-key
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: '8.4'
+          extensions: intl, zip, bcmath, pdo_mysql, gd
+          coverage: none
+
+      - name: Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
+
+      - name: Composer
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Environment
+        run: cp .env.example .env && php artisan key:generate
+
+      - name: Meilisearch
+        run: curl -fsS --retry 30 --retry-delay 1 --retry-all-errors http://127.0.0.1:7700/health
+
+      # Pest directly: `php artisan test` puts --configuration=phpunit.xml in front and ends with exit code 1
+      - name: Load suite
+        run: vendor/bin/pest --configuration=phpunit.load.xml
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: load-budget
+          path: storage/logs/load-budget.md
+          if-no-files-found: warn
+
   # The Playwright suite in three steps (A438), none of them a required check. `e2e-build` builds the instrumented
   # frontend once and runs Vitest for its half of the merged coverage; `e2e` runs the suite once per Playwright project,
   # in parallel, each against a database, a search, a mailbox, a Reverb and workers of its own; `e2e-coverage` merges

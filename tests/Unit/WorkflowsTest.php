@@ -349,3 +349,28 @@ it('names the e2e jobs for what they do and none of them like the required check
         }
     }
 });
+
+it('runs the load suite outside the required job', function () use ($stepUsing, $runs) {
+    $jobs = RepoFiles::yaml('.github/workflows/tests.yml')['jobs'];
+    $load = $jobs['load'];
+
+    // Pest directly: `php artisan test` puts --configuration=phpunit.xml in front and ends with exit code 1 (K10)
+    expect($runs($load))->toContain('vendor/bin/pest --configuration=phpunit.load.xml')
+        ->and($load['timeout-minutes'])->toBe(40)
+        ->and($load)->not->toHaveKey('needs')
+        ->and($load['name'] ?? 'load')->not->toBe('tests');
+
+    // a database `load` and a real Meilisearch of its own
+    expect(array_keys($load['services']))->toEqualCanonicalizing(['mariadb', 'meilisearch'])
+        ->and($load['services']['mariadb']['env']['MARIADB_DATABASE'])->toBe('load')
+        ->and($load['services']['mariadb']['image'])->toBe($jobs['tests']['services']['mariadb']['image'])
+        ->and($load['services']['meilisearch']['image'])->toBe($jobs['tests']['services']['meilisearch']['image']);
+
+    // the table of the measurements, also when a row fails
+    $upload = $stepUsing($load, 'actions/upload-artifact', ['name' => 'load-budget']);
+    expect($upload['with']['path'])->toBe('storage/logs/load-budget.md')
+        ->and($upload['if'])->toBe('always()');
+
+    // the required job never runs the load suite
+    expect(str_contains(implode("\n", $runs($jobs['tests'])), 'phpunit.load.xml'))->toBeFalse('the job tests runs the load suite');
+});
