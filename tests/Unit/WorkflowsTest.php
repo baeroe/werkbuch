@@ -328,7 +328,7 @@ it('builds the coverage build once', function () use ($stepUsing, $runs) {
 
     foreach ($jobs as $name => $job) {
         if ($name !== 'e2e-build') {
-            expect(implode("\n", $runs($job)))->not->toContain('build:coverage', "{$name} builds the coverage build again");
+            expect(str_contains(implode("\n", $runs($job)), 'build:coverage'))->toBeFalse("{$name} builds the coverage build again");
         }
     }
 
