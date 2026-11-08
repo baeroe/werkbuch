@@ -8,10 +8,12 @@ import type { UseQueryResult } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
 import { CircleAlert, Lock } from 'lucide-react';
 import { useId, type ReactNode } from 'react';
+import { ReadOnlyTrigger } from '@/components/fields/Picker';
 import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
 import { cx } from '@/components/ui/cx';
 import { ErrorState } from '@/components/ui/ErrorState';
+import { Field, fieldIds } from '@/components/ui/Field';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
 import { labelClass } from '@/components/ui/styles';
 import { t } from '@/lib/i18n';
@@ -176,6 +178,39 @@ export function Badge({ tone = 'neutral', icon: Icon, children, className }: { t
  * white ground, which `fieldClass` sets in the same layer.
  */
 export const readOnlyField = 'bg-sunken! shadow-none!';
+
+type ReadOnlyValueProps = {
+  label: string;
+  /** The value in words: "Ida Brenner", "Öffentlich". */
+  value: string;
+  /** 16 px before the value (an avatar); decorative, the value says it. */
+  icon?: ReactNode;
+  /** Why the person may only read it (from `usePermissions`). */
+  reason: string;
+  hint?: ReactNode;
+  className?: string;
+};
+
+/**
+ * A choice the person may read but not make (a lead, a visibility): the label, and the value on the sunken ground of
+ * `readOnlyField` instead of a greyed-out select. It keeps its tab stop, its name is "Label: value", and the reason and
+ * the hint describe it.
+ */
+export function ReadOnlyValue({ label, value, icon, reason, hint, className }: ReadOnlyValueProps) {
+  const id = useId();
+  return (
+    <Field id={id} label={label} hint={hint} className={className}>
+      <ReadOnlyTrigger look="form" id={id} name={t('items.fields.picker.name', { label, value })} reason={reason} describedBy={hint ? fieldIds(id).hint : undefined}>
+        {icon && (
+          <span className="inline-flex shrink-0" aria-hidden="true">
+            {icon}
+          </span>
+        )}
+        <span className="min-w-0 flex-1 truncate">{value}</span>
+      </ReadOnlyTrigger>
+    </Field>
+  );
+}
 
 /* ------------------------------------------------------------------ field groups */
 

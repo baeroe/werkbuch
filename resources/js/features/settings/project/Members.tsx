@@ -11,6 +11,7 @@ import { AlertDialog } from '@/components/ui/AlertDialog';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
+import { ReadOnlyTrigger } from '@/components/fields/Picker';
 import { Combobox } from '@/components/ui/Combobox';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { IconButton } from '@/components/ui/IconButton';
@@ -31,7 +32,7 @@ const ROLE_RANK: Record<ProjectRole, number> = { admin: 0, member: 1, viewer: 2 
 const roleLabel = (role: ProjectRole): string => t(`roles.project.${role}`);
 const roleOptions = () => ROLE_VALUES.map((role) => ({ value: role, label: roleLabel(role) }));
 
-function MemberList({ project, canManage, members, users }: ProjectSectionProps & { members: ProjectMember[]; users: User[] }) {
+function MemberList({ project, canManage, readOnlyReason, members, users }: ProjectSectionProps & { members: ProjectMember[]; users: User[] }) {
   const me = useCurrentUser();
   const add = useAddMember();
   const setRole = useUpdateMemberRole();
@@ -142,14 +143,26 @@ function MemberList({ project, canManage, members, users }: ProjectSectionProps 
                     </p>
                     <p className="truncate text-sm text-muted">{`@${user.handle}`}</p>
                   </div>
-                  <Select
-                    aria-label={t('settings.project.members.role_of', { name: user.name })}
-                    className="w-32"
-                    disabled={!canManage}
-                    value={chosen[user.id] ?? role}
-                    options={roleOptions()}
-                    onValueChange={(next) => next && chooseRole(user, role, next as ProjectRole)}
-                  />
+                  {readOnlyReason !== null ? (
+                    // the role to read, not a greyed-out select: focusable, "Role of Lene: Member", the reason as description
+                    <div className="w-32">
+                      <ReadOnlyTrigger
+                        look="form"
+                        name={t('items.fields.picker.name', { label: t('settings.project.members.role_of', { name: user.name }), value: roleLabel(role) })}
+                        reason={readOnlyReason}
+                      >
+                        <span className="min-w-0 flex-1 truncate">{roleLabel(role)}</span>
+                      </ReadOnlyTrigger>
+                    </div>
+                  ) : (
+                    <Select
+                      aria-label={t('settings.project.members.role_of', { name: user.name })}
+                      className="w-32"
+                      value={chosen[user.id] ?? role}
+                      options={roleOptions()}
+                      onValueChange={(next) => next && chooseRole(user, role, next as ProjectRole)}
+                    />
+                  )}
                   {canManage && (
                     <IconButton
                       icon={UserMinus}
@@ -185,7 +198,7 @@ function MemberList({ project, canManage, members, users }: ProjectSectionProps 
   );
 }
 
-export function Members({ project, canManage }: ProjectSectionProps) {
+export function Members({ project, canManage, readOnlyReason }: ProjectSectionProps) {
   const members = useMembers(project.id);
   const users = useAllUsers();
   return (
@@ -194,7 +207,7 @@ export function Members({ project, canManage }: ProjectSectionProps) {
       failure={t('settings.project.members.load_failed')}
       skeleton={<SettingsSkeleton rows={4} label={t('settings.project.members.loading')} />}
     >
-      {() => <MemberList project={project} canManage={canManage} members={members.data!.items} users={users.data!.items} />}
+      {() => <MemberList project={project} canManage={canManage} readOnlyReason={readOnlyReason} members={members.data!.items} users={users.data!.items} />}
     </Loaded>
   );
 }

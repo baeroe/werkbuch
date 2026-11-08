@@ -23,7 +23,7 @@ import { useAutomations } from '@/hooks/automations';
 import { useStateUsage } from '@/hooks/workItems';
 import { useAssignWorkflow, useWorkflows } from '@/hooks/workflows';
 import { notifyError } from '@/lib/errors';
-import { t, tn } from '@/lib/i18n';
+import { intlLocale, t, tn } from '@/lib/i18n';
 import { paths } from '@/lib/links';
 import { usePermissions } from '@/lib/permissions';
 import type { StateUsage, Workflow as WorkflowRecord } from '@/types';
@@ -200,17 +200,25 @@ export function Workflow({ project, canManage }: ProjectSectionProps) {
           <p className="text-ui text-pretty text-muted">{t('settings.project.workflow.no_other')}</p>
         ) : (
           <>
-            <Select
-              label={t('settings.project.workflow.new_workflow')}
-              placeholder={t('settings.project.workflow.placeholder')}
-              disabled={!canManage}
-              value={next ? target : null}
-              options={others.map((workflow) => ({
-                value: workflow.id,
-                label: workflow.is_default ? t('settings.project.workflow.default_option', { name: workflow.name }) : workflow.name,
-              }))}
-              onValueChange={setTarget}
-            />
+            {canManage ? (
+              <Select
+                label={t('settings.project.workflow.new_workflow')}
+                placeholder={t('settings.project.workflow.placeholder')}
+                value={next ? target : null}
+                options={others.map((workflow) => ({
+                  value: workflow.id,
+                  label: workflow.is_default ? t('settings.project.workflow.default_option', { name: workflow.name }) : workflow.name,
+                }))}
+                onValueChange={setTarget}
+              />
+            ) : (
+              // a list nobody may open says nothing: the workflows to choose from, in words
+              <p className="max-w-[65ch] text-ui text-pretty text-ink">
+                {t('settings.project.workflow.others', {
+                  names: new Intl.ListFormat(intlLocale(), { style: 'long', type: 'conjunction' }).format(others.map((workflow) => workflow.name)),
+                })}
+              </p>
+            )}
             {next && (
               <div className="rounded-ctl bg-sunken p-3">
                 <WorkflowSummary workflow={next} />

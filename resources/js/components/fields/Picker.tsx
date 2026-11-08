@@ -103,12 +103,14 @@ type ReadOnlyTriggerProps = {
   id?: string;
   /** Props that follow the focus across a swap between this trigger and the picker's own. */
   swap?: SwapProps;
+  /** More descriptions after the reason, by id (the hint of a field). */
+  describedBy?: string;
 };
 
 type SwapProps = { 'data-picker-trigger': string; onFocus: () => void; onBlur: () => void };
 
 /** The value as a trigger that does nothing but say why (tooltip and description). */
-export function ReadOnlyTrigger({ look, className, name, reason, children, tabIndex, id, swap }: ReadOnlyTriggerProps) {
+export function ReadOnlyTrigger({ look, className, name, reason, children, tabIndex, id, swap, describedBy }: ReadOnlyTriggerProps) {
   const reasonId = useId();
   return withTooltip(
     <button
@@ -116,7 +118,7 @@ export function ReadOnlyTrigger({ look, className, name, reason, children, tabIn
       id={id}
       aria-label={name}
       aria-disabled="true"
-      aria-describedby={reasonId}
+      aria-describedby={describedBy ? `${reasonId} ${describedBy}` : reasonId}
       {...swap}
       tabIndex={tabIndex}
       className={triggerClass(look, { readOnly: true, className })}

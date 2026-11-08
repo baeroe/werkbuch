@@ -5,7 +5,7 @@
  * type is the number of items the project has of it (A61).
  */
 
-import { CircleAlert } from 'lucide-react';
+import { Check, CircleAlert } from 'lucide-react';
 import { useId, useMemo, useRef, type FormEvent } from 'react';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { Chip } from '@/components/ui/Chip';
@@ -19,7 +19,7 @@ import { t } from '@/lib/i18n';
 import type { WorkItemType } from '@/types';
 import { fieldErrors, useDraft, useFieldErrors, useSaveShortcut } from '../frame/form';
 import { LeaveGuard } from '../frame/LeaveGuard';
-import { FormActions, RuledList, RuledRow, SettingsCard, SettingsError, SettingsSkeleton } from '../frame/parts';
+import { Badge, FormActions, RuledList, RuledRow, SettingsCard, SettingsError, SettingsSkeleton } from '../frame/parts';
 import { UsageCount, useGroupUsage, type Usage } from '../catalog/usage';
 import type { ProjectSectionProps } from './sectionProps';
 
@@ -41,12 +41,20 @@ type RowProps = {
 function TypeRow({ type, on, group, isDefault, onDefault, last, canManage, onToggle, usage }: RowProps) {
   const reasonId = useId();
   const archived = type.archived_at !== null;
-  // an archived type that is on stays on, but it cannot be the default: the radio says why
-  const reason = on && archived ? t('settings.project.types.archived_default') : null;
-  const choosable = canManage && on && !archived;
+  // an archived type that is on stays on, but it cannot be the default: the radio says why (only to those who choose)
+  const reason = canManage && on && archived ? t('settings.project.types.archived_default') : null;
+  const choosable = on && !archived;
   return (
     <RuledRow className="flex flex-wrap items-center gap-x-4 gap-y-3">
-      <Checkbox aria-label={t('settings.project.types.use', { name: type.name })} checked={on} disabled={!canManage || last} onCheckedChange={onToggle} />
+      {canManage && (
+        <Checkbox
+          aria-label={t('settings.project.types.use', { name: type.name })}
+          checked={on}
+          // the last active type stays on: blocked with the reason, not greyed out, so the keyboard still reaches it
+          disabledReason={last ? t('settings.project.types.last') : null}
+          onCheckedChange={onToggle}
+        />
+      )}
       <div className="min-w-0 flex-1 basis-56">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <TypeTab tone={type.tone} icon={type.icon} label={type.name} />
@@ -65,20 +73,27 @@ function TypeRow({ type, on, group, isDefault, onDefault, last, canManage, onTog
           </p>
         )}
       </div>
-      <label className={cx('flex min-h-11 items-center gap-2 text-ui text-ink md:min-h-8', choosable ? 'cursor-pointer' : 'cursor-not-allowed opacity-50')}>
-        <input
-          type="radio"
-          name={group}
-          value={type.id}
-          checked={isDefault}
-          disabled={!choosable}
-          onChange={onDefault}
-          aria-label={t('settings.project.types.as_default', { name: type.name })}
-          aria-describedby={reason ? reasonId : undefined}
-          className="size-4 shrink-0 cursor-[inherit] appearance-none rounded-full border border-line-input bg-surface transition-colors duration-120 checked:border-accent checked:[box-shadow:inset_0_0_0_3px_var(--color-surface),inset_0_0_0_8px_var(--color-accent)]"
-        />
-        {t('settings.project.types.default')}
-      </label>
+      {canManage ? (
+        <label className={cx('flex min-h-11 items-center gap-2 text-ui text-ink md:min-h-8', choosable ? 'cursor-pointer' : 'cursor-not-allowed opacity-50')}>
+          <input
+            type="radio"
+            name={group}
+            value={type.id}
+            checked={isDefault}
+            disabled={!choosable}
+            onChange={onDefault}
+            aria-label={t('settings.project.types.as_default', { name: type.name })}
+            aria-describedby={reason ? reasonId : undefined}
+            className="size-4 shrink-0 cursor-[inherit] appearance-none rounded-full border border-line-input bg-surface transition-colors duration-120 checked:border-accent checked:[box-shadow:inset_0_0_0_3px_var(--color-surface),inset_0_0_0_8px_var(--color-accent)]"
+          />
+          {t('settings.project.types.default')}
+        </label>
+      ) : (
+        // to read: what the project does with the type, in a word, instead of boxes nobody may tick
+        <Badge tone={isDefault ? 'accent' : on ? 'neutral' : 'quiet'} icon={on ? Check : undefined}>
+          {isDefault ? t('settings.project.types.default') : on ? t('settings.project.types.used') : t('settings.project.types.unused')}
+        </Badge>
+      )}
     </RuledRow>
   );
 }
@@ -163,9 +178,10 @@ export function Types({ project, canManage }: ProjectSectionProps) {
         {/* Native radios in a plain group: Base UI's RadioGroup is a composite widget and would take the tab stop away
             from the checkboxes in its rows. Tab reaches the chosen radio, the arrows move the choice. */}
         <div
-          // a group, not a radiogroup: it holds the list with the checkboxes too; the shared name groups the radios
-          role="group"
-          aria-label={t('settings.project.types.default_group')}
+          // a group, not a radiogroup: it holds the list with the checkboxes too; the shared name groups the radios (a
+          // reader gets no radios, so no group of them either)
+          role={canManage ? 'group' : undefined}
+          aria-label={canManage ? t('settings.project.types.default_group') : undefined}
           // the server refused the choice: the group takes the focus, so the person lands on what needs fixing
           aria-invalid={problem ? true : undefined}
           tabIndex={problem ? -1 : undefined}
@@ -193,7 +209,7 @@ export function Types({ project, canManage }: ProjectSectionProps) {
             })}
           </RuledList>
         </div>
-        {activeOn.length === 1 && <p className="text-ui text-pretty text-muted">{t('settings.project.types.last')}</p>}
+        {canManage && activeOn.length === 1 && <p className="text-ui text-pretty text-muted">{t('settings.project.types.last')}</p>}
         {problem && (
           <p role="alert" className="flex items-start gap-1.5 text-sm font-medium text-danger">
             <CircleAlert className="mt-px size-3.5 shrink-0" aria-hidden="true" />

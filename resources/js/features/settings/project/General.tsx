@@ -23,7 +23,7 @@ import type { Project, User } from '@/types';
 import { fieldErrors, useDraft, useFieldErrors, useSaveShortcut } from '../frame/form';
 import { ImageField } from '../frame/ImageField';
 import { LeaveGuard } from '../frame/LeaveGuard';
-import { FormActions, Loaded, readOnlyField, SettingsCard, SettingsSkeleton } from '../frame/parts';
+import { FieldGroup, FormActions, Loaded, readOnlyField, ReadOnlyValue, SettingsCard, SettingsSkeleton } from '../frame/parts';
 import { DangerZone } from './DangerZone';
 import type { ProjectSectionProps } from './sectionProps';
 
@@ -54,7 +54,7 @@ function leadOptions(project: Project, memberIds: Set<string>, users: User[]) {
     .map((user) => ({ value: user.id, label: user.name, icon: <Avatar user={user} size="sm" decorative /> }));
 }
 
-function GeneralForm({ project, canManage, people }: ProjectSectionProps & { people: ReturnType<typeof leadOptions> }) {
+function GeneralForm({ project, canManage, readOnlyReason, people }: ProjectSectionProps & { people: ReturnType<typeof leadOptions> }) {
   const form = useRef<HTMLFormElement>(null);
   // set by the danger zone when the deletion sends the person to the list: the guard lets that departure pass (a new
   // identifier moves the address only once the saved edits are no longer unsaved)
@@ -66,6 +66,7 @@ function GeneralForm({ project, canManage, people }: ProjectSectionProps & { peo
   const number = new Intl.NumberFormat(intlLocale());
 
   const { value } = draft;
+  const lead = people.find((person) => person.value === project.lead_id);
   const next = value.identifier.trim().toUpperCase();
   const renamed = next !== '' && next !== project.identifier;
 
@@ -160,40 +161,68 @@ function GeneralForm({ project, canManage, people }: ProjectSectionProps & { peo
             error={problems.errors.description}
             onChange={(event) => edit({ description: event.target.value })}
           />
-          <ImageField
-            label={t('settings.project.general.image')}
-            preview={<ProjectBadge project={{ identifier: next || project.identifier, image_url: value.image_url }} size="md" />}
-            hasImage={value.image_url !== null}
-            disabled={!canManage}
-            hint={t('settings.project.general.image_hint')}
-            error={problems.errors.image_url}
-            onChange={(image) => edit({ image_url: image })}
-          />
-          <div className="grid items-start gap-4 md:grid-cols-2">
-            <Select
-              label={t('settings.project.general.lead')}
-              hint={t('settings.project.general.lead_hint')}
-              disabled={!canManage}
-              value={value.lead_id}
-              error={problems.errors.lead_id}
-              options={people}
-              onValueChange={(lead) => lead && edit({ lead_id: lead })}
+          {readOnlyReason !== null ? (
+            // what the picture is, in words as well: the badge itself is decorative
+            <FieldGroup legend={t('settings.project.general.image')}>
+              <p className="flex items-center gap-3 text-ui text-ink">
+                <ProjectBadge project={project} size="md" />
+                {project.image_url !== null ? t('settings.project.general.image_own') : t('settings.project.general.image_none')}
+              </p>
+            </FieldGroup>
+          ) : (
+            <ImageField
+              label={t('settings.project.general.image')}
+              preview={<ProjectBadge project={{ identifier: next || project.identifier, image_url: value.image_url }} size="md" />}
+              hasImage={value.image_url !== null}
+              hint={t('settings.project.general.image_hint')}
+              error={problems.errors.image_url}
+              onChange={(image) => edit({ image_url: image })}
             />
-            <div className="flex min-w-0 flex-col">
-              <p className={`${labelClass} mb-1.5`}>{t('settings.project.general.visibility')}</p>
-              <div>
-                <SegmentedControl
-                  label={t('settings.project.general.visibility')}
-                  value={value.visibility}
-                  onValueChange={(visibility) => edit({ visibility })}
-                  options={[
-                    { value: 'public', label: t('projects.public'), disabled: !canManage },
-                    { value: 'private', label: t('projects.private'), disabled: !canManage },
-                  ]}
+          )}
+          <div className="grid items-start gap-4 md:grid-cols-2">
+            {readOnlyReason !== null ? (
+              <>
+                <ReadOnlyValue
+                  label={t('settings.project.general.lead')}
+                  hint={t('settings.project.general.lead_hint')}
+                  value={lead?.label ?? t('items.someone')}
+                  icon={lead?.icon}
+                  reason={readOnlyReason}
                 />
-              </div>
-              <p className="mt-1.5 text-sm text-pretty text-muted">{t(`settings.project.general.visibility_${value.visibility}`)}</p>
-            </div>
+                <ReadOnlyValue
+                  label={t('settings.project.general.visibility')}
+                  hint={t(`settings.project.general.visibility_${project.visibility}`)}
+                  value={project.visibility === 'public' ? t('projects.public') : t('projects.private')}
+                  reason={readOnlyReason}
+                />
+              </>
+            ) : (
+              <>
+                <Select
+                  label={t('settings.project.general.lead')}
+                  hint={t('settings.project.general.lead_hint')}
+                  value={value.lead_id}
+                  error={problems.errors.lead_id}
+                  options={people}
+                  onValueChange={(chosen) => chosen && edit({ lead_id: chosen })}
+                />
+                <div className="flex min-w-0 flex-col">
+                  <p className={`${labelClass} mb-1.5`}>{t('settings.project.general.visibility')}</p>
+                  <div>
+                    <SegmentedControl
+                      label={t('settings.project.general.visibility')}
+                      value={value.visibility}
+                      onValueChange={(visibility) => edit({ visibility })}
+                      options={[
+                        { value: 'public', label: t('projects.public') },
+                        { value: 'private', label: t('projects.private') },
+                      ]}
+                    />
+                  </div>
+                  <p className="mt-1.5 text-sm text-pretty text-muted">{t(`settings.project.general.visibility_${value.visibility}`)}</p>
+                </div>
+              </>
+            )}
           </div>
         </SettingsCard>
       </form>
@@ -202,7 +231,7 @@ function GeneralForm({ project, canManage, people }: ProjectSectionProps & { peo
   );
 }
 
-export function General({ project, canManage }: ProjectSectionProps) {
+export function General({ project, canManage, readOnlyReason }: ProjectSectionProps) {
   const members = useMembers(project.id);
   const users = useAllUsers();
   return (
@@ -211,6 +240,7 @@ export function General({ project, canManage }: ProjectSectionProps) {
         <GeneralForm
           project={project}
           canManage={canManage}
+          readOnlyReason={readOnlyReason}
           people={leadOptions(project, new Set(members.data!.items.map((member) => member.user_id)), users.data!.items)}
         />
       )}

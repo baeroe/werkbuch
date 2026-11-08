@@ -93,7 +93,7 @@ export function ProjectSettings({ identifier, section }: { identifier: string; s
 
   const denied = reason('project.manage', known.id);
   const canManage = denied === null;
-  const props = { project: known, canManage };
+  const props = { project: known, canManage, readOnlyReason: denied };
   const items = SECTIONS.map((slug) => ({ slug, label: sectionLabel(slug) }));
 
   return (
