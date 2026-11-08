@@ -84,6 +84,10 @@ return [
             'engine' => null,
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 Mysql::ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+                // an ORDER BY compares only the first max_sort_length bytes (1024 by default, about 512 characters of
+                // utf8mb4_unicode_ci), the keyset of the next page the whole value: two long texts with the same
+                // beginning would be skipped or come twice (21g-M3). Laravel sets names, zone and mode after this.
+                Mysql::ATTR_INIT_COMMAND => 'SET SESSION max_sort_length = 65536',
             ]) : [],
         ],
 

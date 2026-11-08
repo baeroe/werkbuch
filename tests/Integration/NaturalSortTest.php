@@ -8,8 +8,10 @@ use App\Models\Property;
 use App\Models\WorkItem;
 use App\Models\WorkItemType;
 use App\Support\ItemValues;
+use App\Support\PageArgs;
 use App\Views\CatalogProperties;
 use App\Views\ItemOrder;
+use Illuminate\Support\Facades\DB;
 
 /*
  * The natural order of texts and identifiers (Phase 15, Task 21g, A450) against the MariaDB of the app: the list of
@@ -49,3 +51,52 @@ it('orders identifiers like the browser', function () use ($fixtures) {
     expect($identifiers)->toHaveCount(6)
         ->and(ItemOrder::apply(WorkItem::query(), new SortSpec('key', false))->pluck('title')->all())->toBe($identifiers);
 });
+
+it('sorts with the whole of a long value on every connection, in UTC', function () {
+    $copy = config('database.connections.mariadb');
+    config(['database.connections.mariadb_copy' => $copy]);
+    $sessions = [DB::connection('mariadb'), DB::connection('mariadb_copy')];
+
+    // MariaDB compares only the first `max_sort_length` bytes in an ORDER BY (1024 by default, about 512 characters
+    // under utf8mb4_unicode_ci), a comparison in WHERE the whole value: the keyset of a page then skips or repeats
+    foreach ($sessions as $session) {
+        expect((int) $session->scalar('select @@session.max_sort_length'))->toBe(65536)
+            ->and($session->scalar('select @@session.time_zone'))->toBe('+00:00');
+    }
+    DB::purge('mariadb_copy');
+});
+
+it('pages through texts that share a long beginning, each exactly once, forth and back', function (FieldType $type) {
+    $note = Property::factory()->create(['key' => 'note', 'label' => 'Notiz', 'field_type' => $type, 'settings' => []]);
+    $task = WorkItemType::query()->where('name', 'Task')->sole();
+    $task->typeProperties()->create(['property_id' => $note->id, 'required' => false, 'position' => 0]);
+    app()->instance(CatalogProperties::class, CatalogProperties::load());
+    $project = Project::factory()->identifier('WEB')->create();
+    $common = 'https://example.com/'.str_repeat('x', 600);
+
+    // the rank puts …b first: an ORDER BY that compares only the beginning falls back on it
+    foreach (['b' => 'a0', 'a' => 'a1', 'c' => 'a2'] as $end => $rank) {
+        $item = WorkItem::factory()->create(['project_id' => $project->id, 'type_id' => $task->id, 'title' => $end, 'rank' => $rank]);
+        ItemValues::store($item, ['note' => $common.$end], []);
+    }
+    $order = new SortSpec('property:note', false);
+
+    $forth = [];
+    $cursor = null;
+    do {
+        $page = ItemOrder::page(WorkItem::query(), $order, new PageArgs($cursor, 1));
+        array_push($forth, ...$page->getCollection()->pluck('title')->all());
+        $cursor = $page->nextCursor()?->encode();
+    } while ($cursor !== null && count($forth) < 6);
+
+    $back = [];
+    $cursor = $page->previousCursor()?->encode();
+    while ($cursor !== null && count($back) < 6) {
+        $page = ItemOrder::page(WorkItem::query(), $order, new PageArgs($cursor, 1));
+        array_unshift($back, ...$page->getCollection()->pluck('title')->all());
+        $cursor = $page->previousCursor()?->encode();
+    }
+
+    expect($forth)->toBe(['a', 'b', 'c'])
+        ->and($back)->toBe(['a', 'b']);
+})->with([FieldType::Text, FieldType::Url]);
