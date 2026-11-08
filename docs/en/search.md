@@ -139,10 +139,10 @@ werkbuch searches with [Meilisearch](https://www.meilisearch.com) through Larave
 
 ```bash
 php artisan app:search-sync      # sends the settings of the indexes to Meilisearch (after an update changed them)
-php artisan app:search-import    # empties the four indexes and fills them again from the database
+php artisan app:search-import    # builds the four indexes again from the database and swaps them in
 ```
 
-`app:search-import` is the first start and the repair: it sends the settings, empties the indexes and reads everything again; during that, the search is briefly empty. In DDEV, prefix both with `ddev artisan`.
+`app:search-import` is the first start and the repair: it builds each index again from the database beside the one the search reads (`work_items_next` next to `work_items`, with the settings), then swaps the two and deletes the old one. The search keeps answering from the old documents meanwhile; if the build fails, the old index stays and the new one is deleted. A change made while an index is being built goes into the old index and can be missing after the swap until the item, page or project changes again; run the import when little is happening, or once more. It only touches indexes that start with `SCOUT_PREFIX`; other indexes on the same Meilisearch stay. In DDEV, prefix both with `ddev artisan`.
 
 **After an update** that changes what the index holds, run `app:search-sync` once: without it, Meilisearch does not search the new fields. The update that made comments searchable is one of them; run `app:search-import` after it as well, so that the comments written before the update get into the index. The update that brought the wiki adds the index `pages`: until `app:search-sync` has created it, every search without `types` answers `503`, and `app:search-import` puts the existing pages into it.
 

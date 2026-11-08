@@ -10,13 +10,16 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Laravel\Scout\Contracts\UpdatesIndexSettings;
 use Laravel\Scout\EngineManager;
+use LogicException;
+use Throwable;
 
 /**
  * Writes the search index: one document at a time (the search consumer), the items of some projects (ReindexWorkItems)
  * or everything from scratch (app:search-import, the seeders). It reads the rows fresh, with what the documents need
  * (makeAllSearchableQuery()), and writes only through Scout: the synchronous paths of searchable() and unsearchable()
- * (it runs on the queue `search` already), flush, the index settings and removeWhere (K5). Who may see a document is
- * never stored here: the search filters when it asks (P2).
+ * (it runs on the queue `search` already), flush, the index settings and removeWhere (K5); a rebuild writes beside the
+ * live index and swaps it in (SwapsIndexes). Who may see a document is never stored here: the search filters when it
+ * asks (P2).
  */
 final class SearchIndexer
 {
@@ -245,15 +248,26 @@ final class SearchIndexer
     }
 
     /**
-     * Builds every index from scratch (P18): the settings, then each index emptied and filled from the database.
+     * Builds every index from scratch (P18). On an engine that swaps (Meilisearch), each index is built beside the live
+     * one and swapped in (buildNext(), swapIn()), so the search keeps answering from the old documents meanwhile; on
+     * any other engine it sends the settings, empties each index and fills it in place.
      *
      * @return array{work_items: int, pages: int, projects: int, users: int} the documents written to each index
      */
     public function rebuild(): array
     {
-        $this->syncSettings();
-
         $counts = [];
+
+        if ($this->engines->engine() instanceof SwapsIndexes) {
+            foreach (self::MODELS as $table => $class) {
+                $counts[$table] = $this->buildNext($class);
+                $this->swapIn($class);
+            }
+
+            return $counts;
+        }
+
+        $this->syncSettings();
         foreach (self::MODELS as $table => $class) {
             $this->engines->engine()->flush(new $class);
             $counts[$table] = $this->import($class);
@@ -263,18 +277,83 @@ final class SearchIndexer
     }
 
     /**
-     * Writes every searchable row of the model, as Scout's makeAllSearchable() does, and counts the documents.
+     * Builds the index of the model anew beside the live one, in `<index>_next`: dropped first (what an earlier rebuild
+     * left there goes), the settings of config/scout.php, then every searchable row. When anything fails, the live
+     * index stays as it was and `<index>_next` is dropped again; the error of the build is the one that comes out.
+     *
+     * @param  class-string<WorkItem|Page|Project|User>  $class
+     * @return int the documents written
+     */
+    public function buildNext(string $class): int
+    {
+        $engine = $this->swapping();
+        $next = self::nextOf($class);
+
+        try {
+            $engine->dropIndex($next);
+            if ($engine instanceof UpdatesIndexSettings) {
+                /** @var array<string, mixed> $settings */
+                $settings = config('scout.meilisearch.index-settings')[$class] ?? [];
+                $engine->updateIndexSettings($next, $settings);
+            }
+
+            return $this->import($class, $engine, $next);
+        } catch (Throwable $e) {
+            try {
+                $engine->dropIndex($next);
+            } catch (Throwable $dropped) {
+                report($dropped);
+            }
+
+            throw $e;
+        }
+    }
+
+    /**
+     * Swaps the index the model's buildNext() filled in for the live one, then drops the old documents (now in
+     * `<index>_next`). The engine runs both after the writes of the build.
      *
      * @param  class-string<WorkItem|Page|Project|User>  $class
      */
-    private function import(string $class): int
+    public function swapIn(string $class): void
+    {
+        $engine = $this->swapping();
+
+        $engine->swap((new $class)->indexableAs(), self::nextOf($class));
+        $engine->dropIndex(self::nextOf($class));
+    }
+
+    private function swapping(): SwapsIndexes
+    {
+        $engine = $this->engines->engine();
+
+        return $engine instanceof SwapsIndexes ? $engine : throw new LogicException('The search engine cannot swap indexes.');
+    }
+
+    /**
+     * The index a rebuild fills beside the model's own.
+     *
+     * @param  class-string<WorkItem|Page|Project|User>  $class
+     */
+    private static function nextOf(string $class): string
+    {
+        return (new $class)->indexableAs().'_next';
+    }
+
+    /**
+     * Writes every searchable row of the model, as Scout's makeAllSearchable() does, and counts the documents: into
+     * the model's own index, or with `$engine` into the index `$into`.
+     *
+     * @param  class-string<WorkItem|Page|Project|User>  $class
+     */
+    private function import(string $class, ?SwapsIndexes $engine = null, string $into = ''): int
     {
         $count = 0;
         $model = new $class;
 
-        $this->query($class)->chunkById(self::CHUNK, function (Collection $chunk) use ($model, &$count): void {
+        $this->query($class)->chunkById(self::CHUNK, function (Collection $chunk) use ($model, $engine, $into, &$count): void {
             $searchable = $chunk->filter(fn (WorkItem|Page|Project|User $found) => $found->shouldBeSearchable());
-            $model->syncMakeSearchable($searchable);
+            $engine === null ? $model->syncMakeSearchable($searchable) : $engine->updateIn($into, $searchable);
             $count += $searchable->count();
         }, $model->qualifyColumn('id'), 'id');
 

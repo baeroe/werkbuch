@@ -116,7 +116,7 @@ Die Indizes von Hand neu aufbauen, wenn die Suche Änderungen verpasst hat, etwa
 docker compose exec werkbuch php artisan app:search-import
 ```
 
-Während des Imports ist die Suche kurz leer. Wie sich die Suche verhält, solange Meilisearch weg ist, steht unter [Suche](/de/search#betrieb).
+Während des Imports antwortet die Suche weiter aus dem alten Index, den der neue am Ende ersetzt. Wie sich die Suche verhält, solange Meilisearch weg ist, steht unter [Suche](/de/search#betrieb).
 
 ## Mail
 

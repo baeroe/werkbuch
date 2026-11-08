@@ -2,9 +2,11 @@
 
 namespace App\Search;
 
+use App\Models\Page;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use InvalidArgumentException;
 use Laravel\Scout\Engines\MeilisearchEngine as ScoutMeilisearchEngine;
@@ -15,12 +17,12 @@ use Meilisearch\Exceptions\ExceptionInterface;
 use Psr\Http\Client\ClientExceptionInterface;
 
 /**
- * Scout's Meilisearch engine, which can also remove documents by a filter (RemovesWhere) and say how Meilisearch is
- * (ReportsStatus). AppServiceProvider sets it as the driver `meilisearch`. The status asks over its own client with
+ * Scout's Meilisearch engine, which can also remove documents by a filter (RemovesWhere), say how Meilisearch is
+ * (ReportsStatus) and fill an index beside the live one to swap them (SwapsIndexes; only indexes with `scout.prefix`). AppServiceProvider sets it as the driver `meilisearch`. The status asks over its own client with
  * short timeouts (`$statusClient`, 2 s), so a Meilisearch that hangs never holds the system page; it counts only the
  * tasks of the indexes of this instance (the models of `scout.meilisearch.index-settings` with `scout.prefix`).
  */
-final class MeilisearchEngine extends ScoutMeilisearchEngine implements CountsDocuments, RemovesWhere, ReportsStatus
+final class MeilisearchEngine extends ScoutMeilisearchEngine implements CountsDocuments, RemovesWhere, ReportsStatus, SwapsIndexes
 {
     public function __construct(Client $meilisearch, bool $softDelete, private readonly Client $statusClient)
     {
@@ -35,6 +37,45 @@ final class MeilisearchEngine extends ScoutMeilisearchEngine implements CountsDo
 
         $this->meilisearch->index($index)
             ->deleteDocuments(['filter' => sprintf('%s = "%s"', $field, addcslashes($value, '"\\'))]);
+    }
+
+    /**
+     * Writes the documents as Scout's update() does, into another index (soft deletes, embeddings and models without a
+     * document, which werkbuch does not have, left out).
+     *
+     * @param  Collection<int, covariant WorkItem|Page|Project|User>  $models
+     */
+    public function updateIn(string $index, Collection $models): void
+    {
+        $this->ownIndex($index);
+
+        if ($models->isEmpty()) {
+            return;
+        }
+
+        $this->meilisearch->index($index)->addDocuments($models->map(fn (WorkItem|Page|Project|User $model) => [
+            ...$model->toSearchableArray(), ...$model->scoutMetadata(), $model->getScoutKeyName() => $model->getScoutKey(),
+        ])->values()->all(), $models->first()->getScoutKeyName());
+    }
+
+    /**
+     * Meilisearch swaps only indexes that exist: `$a` (the live index) is created first when it is missing (a new
+     * installation). Its tasks run in the order they came in, so the swap waits for the documents written before.
+     */
+    public function swap(string $a, string $b): void
+    {
+        $this->ownIndex($a);
+        $this->ownIndex($b);
+
+        $this->createIndex($a);
+        $this->meilisearch->swapIndexes([[$a, $b]]);
+    }
+
+    public function dropIndex(string $index): void
+    {
+        $this->ownIndex($index);
+
+        $this->meilisearch->deleteIndex($index);
     }
 
     public function documentStats(string $index): array
@@ -94,5 +135,14 @@ final class MeilisearchEngine extends ScoutMeilisearchEngine implements CountsDo
         $settings = config('scout.meilisearch.index-settings');
 
         return array_map(fn (string $class): string => (new $class)->searchableAs(), array_keys($settings));
+    }
+
+    /** Only an index of this installation (with `scout.prefix`) may be written beside, swapped or dropped (K14). */
+    private function ownIndex(string $index): void
+    {
+        $prefix = (string) config('scout.prefix');
+        if (! str_starts_with($index, $prefix)) {
+            throw new InvalidArgumentException("The index {$index} does not start with {$prefix}.");
+        }
     }
 }

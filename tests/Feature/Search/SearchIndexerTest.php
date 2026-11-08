@@ -12,6 +12,7 @@ use App\Search\SearchIndexer;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Exceptions;
 use Laravel\Scout\EngineManager;
 use Laravel\Scout\Engines\NullEngine;
 
@@ -326,4 +327,88 @@ it('needs none without an engine that counts', function () {
     app(EngineManager::class)->forgetDrivers();
 
     expect(app(SearchIndexer::class)->needsImport())->toBeFalse();
+});
+
+it('builds the next index beside the live one and swaps it in', function () use ($world, $titles) {
+    $engine = searchEngine();
+    [, , [$item]] = $world();
+    $indexer = app(SearchIndexer::class);
+    $indexer->rebuild();
+    $before = $titles($engine);
+    DB::table('work_items')->where('id', $item->id)->update(['title' => 'Impressum ergänzen']);
+
+    expect($indexer->buildNext(WorkItem::class))->toBe(3)
+        ->and($titles($engine))->toBe($before)
+        ->and($engine->documents('testing_work_items_next')[$item->id]['title'])->toBe('Impressum ergänzen')
+        ->and($engine->updatedSettings('testing_work_items_next'))->toBe(config('scout.meilisearch.index-settings')[WorkItem::class]);
+
+    $indexer->swapIn(WorkItem::class);
+
+    expect($titles($engine)[$item->id])->toBe('Impressum ergänzen')
+        ->and(count($titles($engine)))->toBe(3)
+        ->and($engine->indexNames())->toBe(['testing_pages', 'testing_projects', 'testing_users', 'testing_work_items']);
+});
+
+it('starts the next index empty, without what an earlier rebuild left in it', function () use ($world) {
+    $engine = searchEngine();
+    [, , [$item, $other], $inOps] = $world();
+    $engine->updateIn('testing_work_items_next', WorkItem::query()->whereKey($item->id)->get());
+    DB::table('work_items')->where('id', $item->id)->delete();
+
+    expect(array_keys($engine->documents('testing_work_items_next')))->toBe([$item->id])
+        ->and(app(SearchIndexer::class)->buildNext(WorkItem::class))->toBe(2)
+        ->and(array_keys($engine->documents('testing_work_items_next')))->toEqualCanonicalizing([$other->id, $inOps->id]);
+});
+
+it('leaves the old index and removes the next one when filling fails', function () use ($world, $titles) {
+    $engine = searchEngine();
+    $world();
+    $indexer = app(SearchIndexer::class);
+    $indexer->rebuild();
+    $before = $titles($engine);
+    DB::listen(function (QueryExecuted $query): void {
+        if (str_contains($query->sql, 'from `work_items`')) {
+            throw new RuntimeException('The database went away.');
+        }
+    });
+
+    expect(fn () => $indexer->buildNext(WorkItem::class))->toThrow(RuntimeException::class, 'The database went away.')
+        ->and($titles($engine))->toBe($before)
+        ->and($engine->indexNames())->toBe(['testing_pages', 'testing_projects', 'testing_users', 'testing_work_items']);
+});
+
+it('keeps the error of the fill when the next index cannot be removed either', function () use ($world) {
+    Exceptions::fake();
+    $engine = searchEngine();
+    $world();
+    $down = new RuntimeException('Meilisearch is down.');
+    DB::listen(function (QueryExecuted $query) use ($engine, $down): void {
+        if (str_contains($query->sql, 'from `work_items`')) {
+            $engine->failWith($down);
+
+            throw new RuntimeException('The database went away.');
+        }
+    });
+
+    expect(fn () => app(SearchIndexer::class)->buildNext(WorkItem::class))->toThrow(RuntimeException::class, 'The database went away.');
+
+    Exceptions::assertReported(fn (RuntimeException $reported) => $reported === $down);
+});
+
+it('rebuilds in place on an engine that cannot swap', function () use ($world) {
+    config(['scout.driver' => 'null']);
+    app(EngineManager::class)->forgetDrivers();
+    $world();
+
+    expect(app(SearchIndexer::class)->rebuild())->toBe(['work_items' => 3, 'pages' => 0, 'projects' => 2, 'users' => User::count()]);
+});
+
+it('needs an engine that swaps to build the next index', function () {
+    config(['scout.driver' => 'null']);
+    app(EngineManager::class)->forgetDrivers();
+
+    expect(fn () => app(SearchIndexer::class)->buildNext(WorkItem::class))
+        ->toThrow(LogicException::class, 'The search engine cannot swap indexes.')
+        ->and(fn () => app(SearchIndexer::class)->swapIn(WorkItem::class))
+        ->toThrow(LogicException::class, 'The search engine cannot swap indexes.');
 });

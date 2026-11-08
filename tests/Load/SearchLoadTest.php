@@ -21,8 +21,9 @@ use Tests\Load\Support\Budget;
  * The search against 50 000 items (plan, Task 11b; K9). The palette asks 150 ms after the last key, so an answer has its
  * own budget of 0.5 s (median of three runs after a warm-up, Budget::measure, in the table of the suite): one, two and
  * three words, all kinds and only items, for the org admin, who sees the 20 projects, and for a person who sees one.
- * Then the document of the item with 40 comments, and a rebuild of every index at the end (it empties the indexes on
- * the way, so it runs last): within five minutes until Meilisearch has every document, with at most 512 MB of PHP.
+ * Then the document of the item with 40 comments, and a rebuild of every index at the end (beside the live indexes,
+ * swapped in at the end of each; it runs last): within five minutes until Meilisearch has every document, with at most
+ * 512 MB of PHP.
  * Meilisearch takes up to two thirds of the RAM while it indexes (A428) and shares the VM in DDEV: the suite runs alone.
  */
 

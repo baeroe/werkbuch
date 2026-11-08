@@ -15,17 +15,28 @@ use RuntimeException;
  */
 final class Meili
 {
-    /** @var list<string> */
-    public const INDEXES = ['testing_work_items', 'testing_pages', 'testing_projects', 'testing_users'];
+    /** The four indexes of the tests and the indexes a rebuild fills beside them (SearchIndexer::buildNext()). */
+    public const INDEXES = [
+        'testing_work_items', 'testing_pages', 'testing_projects', 'testing_users',
+        'testing_work_items_next', 'testing_pages_next', 'testing_projects_next', 'testing_users_next',
+    ];
+
+    /** The prefix of the indexes of the tests (phpunit.xml): use() refuses to delete indexes under any other (K14). */
+    public const PREFIX = 'testing_';
 
     /** The uid of the newest failed task of the test indexes that settle() has looked at already (or found before use()). */
     private static int $checked = -1;
 
     /**
-     * Switches Scout to Meilisearch and starts from empty indexes.
+     * Switches Scout to Meilisearch and starts from empty indexes; only under the prefix of the tests, so it never
+     * deletes the indexes of the app (K14).
      */
     public static function use(): Client
     {
+        if (config('scout.prefix') !== self::PREFIX) {
+            throw new RuntimeException(sprintf('Meili::use() needs the prefix %s, not "%s".', self::PREFIX, config('scout.prefix')));
+        }
+
         config(['scout.driver' => 'meilisearch']);
         app(EngineManager::class)->forgetDrivers();
 
@@ -64,9 +75,10 @@ final class Meili
     private static function wait(): void
     {
         $query = (new TasksQuery)->setStatuses(['enqueued', 'processing'])->setIndexUids(self::INDEXES);
+        $swaps = (new TasksQuery)->setStatuses(['enqueued', 'processing'])->setTypes(['indexSwap']);
         $until = microtime(true) + 10;
 
-        while (($open = app(Client::class)->getTasks($query)->getResults()) !== []) {
+        while (($open = [...app(Client::class)->getTasks($query)->getResults(), ...app(Client::class)->getTasks($swaps)->getResults()]) !== []) {
             if (microtime(true) > $until) {
                 throw new RuntimeException('Meilisearch did not settle within 10 s: '.json_encode($open));
             }
@@ -83,9 +95,19 @@ final class Meili
     private static function failedTasks(): array
     {
         $query = (new TasksQuery)->setStatuses(['failed'])->setIndexUids(self::INDEXES)->setLimit(100);
+        // a swap names its indexes only in its details (indexUid null): Meilisearch never finds it by indexUids
+        $swaps = (new TasksQuery)->setStatuses(['failed'])->setTypes(['indexSwap'])->setLimit(100);
 
-        /** @var list<array{uid: int, indexUid: string, type: string, error: array{code: string, message: string}}> */
-        return app(Client::class)->getTasks($query)->getResults();
+        /** @var list<array{uid: int, indexUid: string, type: string, error: array{code: string, message: string}, details?: array{swaps?: list<array{indexes: list<string>}>}}> $tasks */
+        $tasks = [
+            ...app(Client::class)->getTasks($query)->getResults(),
+            ...array_filter(app(Client::class)->getTasks($swaps)->getResults(), fn (array $task) => array_intersect(
+                array_merge(...array_column($task['details']['swaps'] ?? [], 'indexes')), self::INDEXES,
+            ) !== []),
+        ];
+        usort($tasks, fn (array $a, array $b) => $b['uid'] <=> $a['uid']);
+
+        return array_values(array_map(fn (array $task) => [...$task, 'indexUid' => $task['indexUid'] ?? 'swap'], $tasks));
     }
 
     /**

@@ -20,8 +20,11 @@ use Throwable;
  */
 final class LoadWorld
 {
-    /** The search indexes of the load data (the tables, with the prefix `load_`). */
-    public const INDEXES = ['load_work_items', 'load_pages', 'load_projects', 'load_users'];
+    /** The search indexes of the load data (the tables, with the prefix `load_`) and those a rebuild fills beside them. */
+    public const INDEXES = [
+        'load_work_items', 'load_pages', 'load_projects', 'load_users',
+        'load_work_items_next', 'load_pages_next', 'load_projects_next', 'load_users_next',
+    ];
 
     /** How long settle() waits for Meilisearch: a full import of 50 000 items with their comments takes minutes. */
     public const SETTLE_SECONDS = 900;
@@ -70,8 +73,13 @@ final class LoadWorld
             usleep(250_000);
         }
 
+        // a swap (SearchIndexer::swapIn()) names its indexes only in its details: Meilisearch never finds it by indexUids
+        $swaps = array_filter(
+            $client->getTasks((new TasksQuery)->setStatuses(['failed'])->setTypes(['indexSwap'])->setLimit(100))->getResults(),
+            fn (array $task) => array_intersect(array_merge(...array_column($task['details']['swaps'] ?? [], 'indexes')), self::INDEXES) !== [],
+        );
         $failed = array_filter(
-            $client->getTasks((new TasksQuery)->setStatuses(['failed'])->setIndexUids(self::INDEXES)->setLimit(100))->getResults(),
+            [...$client->getTasks((new TasksQuery)->setStatuses(['failed'])->setIndexUids(self::INDEXES)->setLimit(100))->getResults(), ...$swaps],
             fn (array $task) => $task['uid'] > $since && ! ($task['type'] === 'indexDeletion' && $task['error']['code'] === 'index_not_found'),
         );
 

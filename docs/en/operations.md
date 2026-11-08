@@ -116,7 +116,7 @@ Rebuild the indexes by hand when the search missed changes, for example after Me
 docker compose exec werkbuch php artisan app:search-import
 ```
 
-During the import the search is briefly empty. How the search behaves while Meilisearch is down is under [Search](/en/search#operation).
+During the import the search keeps answering from the old index, which the new one replaces at the end. How the search behaves while Meilisearch is down is under [Search](/en/search#operation).
 
 ## Mail
 

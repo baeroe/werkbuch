@@ -2,9 +2,14 @@
 
 namespace Tests\Support;
 
+use App\Models\Page;
+use App\Models\Project;
+use App\Models\User;
+use App\Models\WorkItem;
 use App\Search\CountsDocuments;
 use App\Search\RemovesWhere;
 use App\Search\ReportsStatus;
+use App\Search\SwapsIndexes;
 use Closure;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
@@ -23,9 +28,10 @@ use Throwable;
  * as stored, `null` hits a field that is `null` like `IS NULL`), `whereIns` with in_array(…, true), on a list field
  * (`label_ids`) when any element is one of the values; hits come in the order the documents came in, `take()` cuts them.
  * `$builder->callback` and `$builder->options` speak to Meilisearch and are passed over. Its status (ReportsStatus) is
- * `ok` without tasks, `down` after failWith(). Real Meilisearch runs in tests/Integration (Tests\Support\Meili).
+ * `ok` without tasks, `down` after failWith(). It swaps indexes (SwapsIndexes) as Meilisearch does, documents and
+ * settings together, so a rebuild in the feature tests goes through the index beside the live one. Real Meilisearch runs in tests/Integration (Tests\Support\Meili).
  */
-final class ArraySearchEngine extends Engine implements CountsDocuments, RemovesWhere, ReportsStatus, UpdatesIndexSettings
+final class ArraySearchEngine extends Engine implements CountsDocuments, RemovesWhere, ReportsStatus, SwapsIndexes, UpdatesIndexSettings
 {
     /** @var array<string, array<string, array<string, mixed>>> the documents of each index by key, in the order they came in */
     private array $indexes = [];
@@ -61,6 +67,19 @@ final class ArraySearchEngine extends Engine implements CountsDocuments, Removes
     public function updatedSettings(string $index): ?array
     {
         return $this->settings[$index] ?? null;
+    }
+
+    /**
+     * The indexes that exist (hold documents or settings), by name.
+     *
+     * @return list<string>
+     */
+    public function indexNames(): array
+    {
+        $names = array_keys([...$this->indexes, ...$this->settings]);
+        sort($names);
+
+        return $names;
     }
 
     /** How often the index was written (`update`, `delete`, `flush`, `removeWhere`); a write that threw does not count. */
@@ -166,6 +185,37 @@ final class ArraySearchEngine extends Engine implements CountsDocuments, Removes
         foreach ($models as $model) {
             unset($this->indexes[$model->indexableAs()][(string) $model->getScoutKey()]);
         }
+    }
+
+    /**
+     * @param  EloquentCollection<int, covariant WorkItem|Page|Project|User>  $models
+     */
+    public function updateIn(string $index, EloquentCollection $models): void
+    {
+        $this->write();
+
+        foreach ($models as $model) {
+            $this->indexes[$index][(string) $model->getScoutKey()] = [
+                ...$model->toSearchableArray(),
+                ...$model->scoutMetadata(),
+                $model->getScoutKeyName() => $model->getScoutKey(),
+            ];
+        }
+    }
+
+    public function swap(string $a, string $b): void
+    {
+        $this->write();
+
+        [$this->indexes[$a], $this->indexes[$b]] = [$this->indexes[$b] ?? [], $this->indexes[$a] ?? []];
+        [$this->settings[$a], $this->settings[$b]] = [$this->settings[$b] ?? [], $this->settings[$a] ?? []];
+    }
+
+    public function dropIndex(string $index): void
+    {
+        $this->write();
+
+        unset($this->indexes[$index], $this->settings[$index]);
     }
 
     public function removeWhere(Model $model, string $field, string $value): void

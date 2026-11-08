@@ -139,10 +139,10 @@ werkbuch sucht mit [Meilisearch](https://www.meilisearch.com) über Laravel Scou
 
 ```bash
 php artisan app:search-sync      # schickt die Einstellungen der Indizes an Meilisearch (nach einem Update, das sie geändert hat)
-php artisan app:search-import    # leert die vier Indizes und füllt sie neu aus der Datenbank
+php artisan app:search-import    # baut die vier Indizes neu aus der Datenbank auf und tauscht sie ein
 ```
 
-`app:search-import` ist der erste Start und die Reparatur: Es schickt die Einstellungen, leert die Indizes und liest alles neu ein; währenddessen ist die Suche kurz leer. In DDEV stellst du beiden `ddev artisan` voran.
+`app:search-import` ist der erste Start und die Reparatur: Es baut jeden Index neu aus der Datenbank auf, neben dem, den die Suche liest (`work_items_next` neben `work_items`, mit den Einstellungen), tauscht dann die beiden und löscht den alten. Die Suche antwortet währenddessen weiter aus den alten Dokumenten; scheitert der Aufbau, bleibt der alte Index und der neue wird gelöscht. Eine Änderung, die kommt, während ein Index aufgebaut wird, landet im alten Index und kann nach dem Tausch fehlen, bis sich Item, Seite oder Projekt wieder ändert; starte den Import, wenn wenig los ist, oder ein zweites Mal. Er fasst nur Indizes an, die mit `SCOUT_PREFIX` beginnen; andere Indizes auf demselben Meilisearch bleiben. In DDEV stellst du beiden `ddev artisan` voran.
 
 **Nach einem Update**, das ändert, was der Index enthält, führst du einmal `app:search-sync` aus: Ohne das durchsucht Meilisearch die neuen Felder nicht. Das Update, mit dem Kommentare durchsuchbar wurden, ist so eins; führe danach auch `app:search-import` aus, damit die Kommentare von vor dem Update in den Index kommen. Das Update mit dem Wiki bringt den Index `pages`: Bis `app:search-sync` ihn angelegt hat, antwortet jede Suche ohne `types` mit `503`, und `app:search-import` bringt die vorhandenen Seiten hinein.
 

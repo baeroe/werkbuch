@@ -157,7 +157,7 @@ ddev artisan app:sync-roles            # compares the roles and rights in the da
 ddev artisan app:redispatch-events     # hands events that got stuck to their consumers again
 ddev artisan app:send-notification-mails   # queues collected notification mails that have no job; --now sends all open ones at once
 ddev artisan app:search-sync           # sends the settings of the search indexes (config/scout.php) to Meilisearch
-ddev artisan app:search-import         # empties the search indexes and fills them again from the database
+ddev artisan app:search-import         # builds the search indexes again from the database and swaps them in
 ddev artisan app:prune-attachments --dry-run --min-age=30   # lists pictures and files no text names any more
 ```
 
@@ -165,7 +165,7 @@ ddev artisan app:prune-attachments --dry-run --min-age=30   # lists pictures and
 
 `app:send-notification-mails` runs every minute as well: it hands collected mails that are due and lost their job to the queue again, once no try ran for 35 minutes. With `--now` it sends every open collection in its own process, due or not; use it before maintenance, or locally instead of waiting five minutes.
 
-`app:search-sync` is needed after a change of the index settings in `config/scout.php`. `app:search-import` builds the indexes from scratch: on the first start, after `migrate:fresh`, and as the repair when the search missed changes (for example after Meilisearch was down for hours). During the import the search is briefly empty. More under [Search](/en/search#operation).
+`app:search-sync` is needed after a change of the index settings in `config/scout.php`. `app:search-import` builds the indexes from scratch: on the first start, after `migrate:fresh`, and as the repair when the search missed changes (for example after Meilisearch was down for hours). During the import the search keeps answering from the old indexes. More under [Search](/en/search#operation).
 
 Pictures and files pasted into a text stay when the text loses them, so that the history and undo keep working. `app:prune-attachments` removes those that no current text of their project names any more (the description or a rich text value of an item, the text of a comment) and that are older than `--min-age` days (default 30); `--dry-run` only lists them, each with project, id, file name and size, and sums them up. Pictures that only an older version of a text in the history shows go too, so pick the minimum age with that in mind. Files of the file list of an item are never pruned; they are deleted there. The command also removes folders on the media disk whose media row is gone (a preview made while its picture was being deleted), when all their files are older than the minimum age. A project with a text that cannot be read is skipped (`skipped WEB: unreadable text of …`, also in the log) and nothing of it is removed; the other projects still get their turn. Uploads that no text ever took (a picture pasted into a comment that was never sent) go by themselves: a job of the scheduler removes them every hour once they are older than 24 hours. Deleting an item removes the files of the item and of its comments, deleting a comment its files, deleting a project all files of the project. A picture that another text of the project still shows (copied from one text into another) stays: it then belongs to that text.
 
