@@ -82,11 +82,11 @@ Grouping by status works only while all items found share one workflow; otherwis
 | Priority | `priority` | Urgent first |
 | Due date, start date | `due_date`, `start_date` | Earliest first |
 | Created, changed | `created_at`, `updated_at` | Oldest first |
-| Key | `key` | Identifier of the project, then the number (`WEB-9` before `WEB-10`) |
+| Key | `key` | Identifier of the project, then the number (`A2-1` before `A10-1`, `WEB-9` before `WEB-10`) |
 | Category | `state_category` | Backlog first |
-| A property (number, date, text or address) | `property:<key>` | Smallest, earliest or alphabetical first |
+| A property (number, date, text or address) | `property:<key>` | Smallest, earliest or alphabetical first (`Item 9` before `Item 10`) |
 
-Items without a value come last in both directions; equal values keep the manual order. Texts are compared without regard to case and accents.
+Items without a value come last in both directions; equal values keep the manual order. Texts and identifiers are compared without regard to case and accents, and numbers in them as numbers: `Item 9` comes before `Item 10`, `Version 1.2` before `Version 1.10`. Leading zeros do not count (`Item 007` and `Item 7` are equal), and only the digits 0 to 9 are numbers.
 
 <!-- reference:start -->
 ## Filters

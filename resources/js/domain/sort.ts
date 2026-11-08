@@ -2,8 +2,10 @@
  * Sorting (spec 4.11) in the browser. The server orders every list (`ItemOrder`); this only places an item that
  * changed under the cache (an optimistic edit, a card dropped on a column) where the server would put it after the next
  * load, so rows do not jump. It therefore follows the server, not the other way round:
- * - text and project identifiers compare with a collator in the language of the page (case and accents do not count),
- *   without `numeric`: the server's collation reads "Item 10" before "Item 9" (P10, P11)
+ * - text and project identifiers compare naturally with a collator in the language of the page (case and accents do
+ *   not count, numbers in them as numbers: "Item 9" before "Item 10", `A2` before `A10`), as the server's
+ *   `natural_sort_key()` does (A450; `natural-sort-fixtures.json` holds what both agree on, where they differ the server
+ *   decides the pages)
  * - the number of a key compares as a number (`WEB-9` before `WEB-10`), ranks by character code (`<`), never by locale
  * - items without a value come last in both directions; ties follow the manual order (rank, then id), also descending.
  */
@@ -38,7 +40,7 @@ function mixed(a: number | string, b: number | string, text: Intl.Collator): num
   return typeof a === 'number' ? -1 : 1;
 }
 
-/** `WEB-12`: the identifier by collation, then the number as a number. */
+/** `WEB-12`: the identifier naturally, then the number as a number. */
 function compareKeys(a: number | string, b: number | string, text: Intl.Collator): number {
   const [left, right] = [String(a), String(b)].map((key) => {
     const cut = key.lastIndexOf('-');
@@ -94,7 +96,7 @@ export function sortItems<T extends ListedItem>(
 ): T[] {
   const direction = sort.direction === 'desc' ? -1 : 1;
   const { read, compare } = sortField(sort.field, ctx.stateCategory);
-  const text = new Intl.Collator(intlLocale(), { sensitivity: 'base' });
+  const text = new Intl.Collator(intlLocale(), { sensitivity: 'base', numeric: true });
   const manual = (a: ListedItem, b: ListedItem) => compareCodes(a.rank, b.rank) || compareCodes(a.id, b.id);
 
   return [...items].sort((a, b) => {

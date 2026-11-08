@@ -26,7 +26,11 @@ use Illuminate\Validation\ValidationException;
  *   direction turns only the value itself: the mark of an empty value (`… is null`, 0 before 1) keeps empty values
  *   last in both directions, and the guard of `coalesce` makes every value comparable; `rank` and the ULID always
  *   ascend (the manual sort turns its rank).
- * - The key of an item is the identifier of its project (collation) and its number; the category is that of its
+ * - Texts sort naturally (A450, changes A168): a text or address property and the identifier of a key by
+ *   `natural_sort_key()` under the collation of the column, so "Item 9" comes before "Item 10" and `A2` before `A10`,
+ *   as `sort.ts` orders them with `Intl.Collator(…, {numeric: true})`. The cursor carries that key, and the signature
+ *   of a natural order ends on `~natural`: a cursor of the collation order before it is refused, not misread.
+ * - The key of an item is the identifier of its project (naturally) and its number; the category is that of its
  *   state. Both come from joins with their own aliases (`sort_projects`, `sort_states`, K3), so no condition of
  *   `FilterQuery` meets a column of another table. A property sorts by its first value (`position` 0), joined once as
  *   `sort_values`; an item whose type does not have the property (any more) counts as empty, like one without a value.
@@ -41,12 +45,15 @@ final class ItemOrder
 {
     private const CURSOR_SIGNATURE = '_sig';
 
+    /** The end of the signature of an order with a natural key: a cursor of the order by collation (A168) lacks it. */
+    private const NATURAL_SIGNATURE = '~natural';
+
     /** The sorts of a property, with the column of its value and the guard of `coalesce`. */
     private const PROPERTY_VALUES = [
         FieldType::Number->value => ['value_number', '0', 'decimal'],
         FieldType::Date->value => ['value_date', "date '0001-01-01'", 'day'],
-        FieldType::Text->value => ['value_string', "''", 'text'],
-        FieldType::Url->value => ['value_string', "''", 'text'],
+        FieldType::Text->value => ['value_string', "''", 'natural'],
+        FieldType::Url->value => ['value_string', "''", 'natural'],
     ];
 
     /**
@@ -61,7 +68,8 @@ final class ItemOrder
     public static function page(Builder $query, SortSpec $sort, PageArgs $args, ?string $group = null): CursorPaginator
     {
         $keys = self::prepare($query, $sort);
-        $signature = $sort->signature().($group === null ? '' : '|'.$group);
+        $natural = in_array('natural', array_column($keys, 'kind'), true);
+        $signature = $sort->signature().($natural ? self::NATURAL_SIGNATURE : '').($group === null ? '' : '|'.$group);
         $cursor = self::cursor($args->cursor, $keys, $signature);
         $back = $cursor !== null && $cursor->pointsToPreviousItems();
 
@@ -226,7 +234,7 @@ final class ItemOrder
     }
 
     /**
-     * The identifier of the project (by the collation) and the number.
+     * The identifier of the project (naturally: `A2` before `A10`) and the number.
      *
      * @param  Builder<WorkItem>  $query
      * @return list<array{sql: literal-string, bindings: list<mixed>, descending: bool, kind: string}>
@@ -235,7 +243,7 @@ final class ItemOrder
     {
         $query->join('projects as sort_projects', 'sort_projects.id', '=', 'work_items.project_id');
 
-        return [self::key('`sort_projects`.`identifier`', [], $desc, 'text'), self::key('`work_items`.`number`', [], $desc, 'int')];
+        return [self::natural('`sort_projects`.`identifier`', [], $desc), self::key('`work_items`.`number`', [], $desc, 'int')];
     }
 
     /**
@@ -290,10 +298,25 @@ final class ItemOrder
      */
     private static function emptyLast(string $sql, array $bindings, string $guard, string $kind, bool $desc): array
     {
+        $value = "coalesce({$sql}, {$guard})";
+
         return [
             self::key("({$sql} is null)", $bindings, false, 'mark'),
-            self::key("coalesce({$sql}, {$guard})", $bindings, $desc, $kind),
+            $kind === 'natural' ? self::natural($value, $bindings, $desc) : self::key($value, $bindings, $desc, $kind),
         ];
+    }
+
+    /**
+     * The natural sort key of a text (A450): every number in it with the count of its digits before it, so it compares
+     * as a number; under the collation of the text, so case and accents count as little as elsewhere.
+     *
+     * @param  literal-string  $sql
+     * @param  list<mixed>  $bindings
+     * @return array{sql: literal-string, bindings: list<mixed>, descending: bool, kind: string}
+     */
+    private static function natural(string $sql, array $bindings, bool $desc): array
+    {
+        return self::key("natural_sort_key({$sql})", $bindings, $desc, 'natural');
     }
 
     /**

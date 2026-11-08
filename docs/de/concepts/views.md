@@ -82,11 +82,11 @@ Nach Status gruppieren geht nur, solange alle gefundenen Items einen Workflow te
 | Priorität | `priority` | Urgent zuerst |
 | Due-Date, Start-Date | `due_date`, `start_date` | Früheste zuerst |
 | Angelegt, geändert | `created_at`, `updated_at` | Älteste zuerst |
-| Key | `key` | Kennung des Projekts, dann die Nummer (`WEB-9` vor `WEB-10`) |
+| Key | `key` | Kennung des Projekts, dann die Nummer (`A2-1` vor `A10-1`, `WEB-9` vor `WEB-10`) |
 | Kategorie | `state_category` | Backlog zuerst |
-| Eine Property (Zahl, Datum, Text oder Adresse) | `property:<key>` | Kleinste, früheste oder alphabetisch zuerst |
+| Eine Property (Zahl, Datum, Text oder Adresse) | `property:<key>` | Kleinste, früheste oder alphabetisch zuerst (`Item 9` vor `Item 10`) |
 
-Items ohne Wert stehen in beiden Richtungen am Ende; gleiche Werte behalten die manuelle Reihenfolge. Texte werden ohne Rücksicht auf Groß- und Kleinschreibung und Akzente verglichen.
+Items ohne Wert stehen in beiden Richtungen am Ende; gleiche Werte behalten die manuelle Reihenfolge. Texte und Kennungen werden ohne Rücksicht auf Groß- und Kleinschreibung und Akzente verglichen, Zahlen darin als Zahlen: `Item 9` steht vor `Item 10`, `Version 1.2` vor `Version 1.10`. Führende Nullen zählen nicht (`Item 007` und `Item 7` sind gleich), und nur die Ziffern 0 bis 9 sind Zahlen.
 
 <!-- reference:start -->
 ## Filter

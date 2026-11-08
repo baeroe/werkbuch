@@ -111,7 +111,8 @@ $smallPage = function (TestResponse $answer): void {
         ->and($answer->json('meta.total'))->toBeGreaterThan(LOAD_PAGE);
 };
 
-foreach ([...SortSpec::CORE, 'property:effort'] as $field) {
+// a number and a text property: the text sorts by its natural key (A450, Task 21g)
+foreach ([...SortSpec::CORE, 'property:effort', 'property:load_note'] as $field) {
     foreach (['asc', 'desc'] as $direction) {
         $query = fn (int $page) => fn (LoadTestCase $t, array $w) => $t->actingAs($w['admin'])->postJson('/api/v1/work-items/query', [
             'sort' => ['field' => $field, 'direction' => $direction], 'lean' => true, 'per_page' => $page,

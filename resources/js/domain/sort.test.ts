@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { makeWorkItem, standard } from '@/test/fixtures';
 import type { StateCategory } from '@/types';
+import naturalOrder from './natural-sort-fixtures.json';
 import { PRIORITY_ORDER, sortItems } from './sort';
 
 const categoryOf = new Map<string, StateCategory>(standard.states.map((state) => [state.id, state.category]));
@@ -112,11 +113,34 @@ describe('sortItems', () => {
     expect(byId(sortItems([...items].reverse(), { field: 'property:mixed', direction: 'asc' }, ctx))).toEqual(['number', 'text']);
   });
 
-  it('orders text the way the server does: "Item 10" comes before "Item 9"', () => {
-    const task = (id: string, name: string) => makeWorkItem({ id, values: { browser: name }, rank: id });
-    const items = [task('nine', 'Item 9'), task('ten', 'Item 10')];
+  it('orders text properties like the server', () => {
+    // the list natural_sort_key() puts in this order (NaturalSortTest reads the same file); built backwards with one
+    // rank, so only the text decides
+    const items = [...naturalOrder].reverse().map((text, index) => makeWorkItem({ id: `i${String(index).padStart(2, '0')}`, title: text, values: { browser: text }, rank: 'a0' }));
+    const titles = (direction: 'asc' | 'desc') => sortItems(items, { field: 'property:browser', direction }, ctx).map((item) => item.title);
 
-    expect(byId(sortItems(items, { field: 'property:browser', direction: 'asc' }, ctx))).toEqual(['ten', 'nine']);
+    expect(titles('asc')).toEqual(naturalOrder);
+    expect(titles('desc')).toEqual([...naturalOrder].reverse());
+  });
+
+  it('reads numbers in identifiers as numbers, like the server', () => {
+    const items = [
+      makeWorkItem({ id: 'a10', key: 'A10-1' }),
+      makeWorkItem({ id: 'web10', key: 'WEB10-2' }),
+      makeWorkItem({ id: 'a2', key: 'A2-3' }),
+      makeWorkItem({ id: 'web2', key: 'WEB2-1' }),
+    ];
+
+    expect(byId(sortItems(items, { field: 'key', direction: 'asc' }, ctx))).toEqual(['a2', 'a10', 'web2', 'web10']);
+  });
+
+  it('keeps ranks and days as they are', () => {
+    // a rank is no text with numbers: "a10" before "a9" byte by byte; days and stamps compare as written
+    const ranks = [makeWorkItem({ id: 'nine', rank: 'a9' }), makeWorkItem({ id: 'ten', rank: 'a10' })];
+    const days = [makeWorkItem({ id: 'nov', due_date: '2026-11-02' }), makeWorkItem({ id: 'oct', due_date: '2026-10-30' })];
+
+    expect(byId(sortItems(ranks, { field: 'rank', direction: 'asc' }, ctx))).toEqual(['ten', 'nine']);
+    expect(byId(sortItems(days, { field: 'due_date', direction: 'asc' }, ctx))).toEqual(['oct', 'nov']);
   });
 
   it('sorts by the category of the status', () => {
