@@ -2,7 +2,7 @@
 
 # Keyboard
 
-werkbuch works without a mouse. Press <kbd>?</kbd> on any screen to see the shortcuts that apply there right now; this page lists all of them. Where a key has two names, the first is the key on a Mac and the second the one on Windows and Linux. While you type in a field, only <kbd>⌘ / Ctrl</kbd>+<kbd>K</kbd>, <kbd>Esc</kbd> and <kbd>⌘ / Ctrl</kbd>+<kbd>↵</kbd> work. While a dialog is open, the shortcuts of the page behind it wait.
+werkbuch works without a mouse. Press <kbd>?</kbd> on any screen to see the shortcuts that apply there right now; this page lists all of them. Where a key has two names, the first is the key on a Mac and the second the one on Windows and Linux. While you type in a field, only <kbd>⌘ / Ctrl</kbd>+<kbd>K</kbd>, <kbd>Esc</kbd> and <kbd>⌘ / Ctrl</kbd>+<kbd>↵ / Enter</kbd> work. While a dialog is open, the shortcuts of the page behind it wait.
 
 `e2e/keyboard-flows.ts` maps every shortcut on this page and every key of a widget to a Playwright test that presses it with the keyboard only, and every flow of the list `FLOWS` (taken from chapters 4 and 5.2 of the spec) to a test that goes through it without a mouse. `scripts/keyboard-flows.test.mjs` checks that the test exists and uses no mouse, for a shortcut that it presses one of the keys, for a flow that it writes over the API only before its first key, and that the tests cover the desktop and the phone widths. Where a test is still missing, for every width or for one, the manifest names the gap and its reason.
 
@@ -28,13 +28,13 @@ werkbuch works without a mouse. Press <kbd>?</kbd> on any screen to see the shor
 
 | Keys | Action |
 | --- | --- |
-| <kbd>⌘ / Ctrl</kbd>+<kbd>↵</kbd> | Save dialog |
+| <kbd>⌘ / Ctrl</kbd>+<kbd>↵ / Enter</kbd> | Save dialog |
 
 ## Settings
 
 | Keys | Action |
 | --- | --- |
-| <kbd>⌘ / Ctrl</kbd>+<kbd>↵</kbd> | Save settings |
+| <kbd>⌘ / Ctrl</kbd>+<kbd>↵ / Enter</kbd> | Save settings |
 
 ## Items
 
@@ -50,13 +50,12 @@ werkbuch works without a mouse. Press <kbd>?</kbd> on any screen to see the shor
 | <kbd>L</kbd> | Change labels … |
 | <kbd>T</kbd> | Change type … |
 | <kbd>D</kbd> | Set due date … |
-| <kbd>⇧</kbd>+<kbd>D</kbd> | Set start date … |
-| <kbd>⇧</kbd>+<kbd>P</kbd> | Set parent … |
+| <kbd>⇧ / Shift</kbd>+<kbd>D</kbd> | Set start date … |
+| <kbd>⇧ / Shift</kbd>+<kbd>P</kbd> | Set parent … |
 | <kbd>M</kbd> | Write a comment |
 | <kbd>R</kbd> | Add a relation |
 | <kbd>E</kbd> | Edit the title |
-| <kbd>⌘ / Ctrl</kbd>+<kbd>⌫</kbd> | Archive or delete (with undo) |
-| <kbd>Esc</kbd> | Close the preview |
+| <kbd>⌘ / Ctrl</kbd>+<kbd>⌫ / Backspace</kbd> | Archive or delete (with undo) |
 
 ## List
 
@@ -64,18 +63,18 @@ werkbuch works without a mouse. Press <kbd>?</kbd> on any screen to see the shor
 | --- | --- |
 | <kbd>J</kbd> / <kbd>↓</kbd> | Next item |
 | <kbd>K</kbd> / <kbd>↑</kbd> | Previous item |
-| <kbd>⇧</kbd>+<kbd>J</kbd> / <kbd>⇧</kbd>+<kbd>↓</kbd> | Extend the selection down |
-| <kbd>⇧</kbd>+<kbd>K</kbd> / <kbd>⇧</kbd>+<kbd>↑</kbd> | Extend the selection up |
+| <kbd>⇧ / Shift</kbd>+<kbd>J</kbd> / <kbd>⇧ / Shift</kbd>+<kbd>↓</kbd> | Extend the selection down |
+| <kbd>⇧ / Shift</kbd>+<kbd>K</kbd> / <kbd>⇧ / Shift</kbd>+<kbd>↑</kbd> | Extend the selection up |
 | <kbd>X</kbd> | Select item |
-| <kbd>⇧</kbd>+<kbd>X</kbd> | Select the range up to here |
+| <kbd>⇧ / Shift</kbd>+<kbd>X</kbd> | Select the range up to here |
 | <kbd>⌘ / Ctrl</kbd>+<kbd>A</kbd> | Select all |
 | <kbd>Esc</kbd> | Clear the selection |
-| <kbd>↵</kbd> | Open item |
+| <kbd>↵ / Enter</kbd> | Open item |
 | <kbd>Space</kbd> | Show or close the preview |
 | <kbd>F</kbd> | Add a condition |
 | <kbd>/</kbd> | Filter by title |
-| <kbd>⇧</kbd>+<kbd>←</kbd> | Move the item left |
-| <kbd>⇧</kbd>+<kbd>→</kbd> | Move the item right |
+| <kbd>⇧ / Shift</kbd>+<kbd>←</kbd> | Move the item left |
+| <kbd>⇧ / Shift</kbd>+<kbd>→</kbd> | Move the item right |
 | <kbd>⌥ / Alt</kbd>+<kbd>↑</kbd> | Move the item up |
 | <kbd>⌥ / Alt</kbd>+<kbd>↓</kbd> | Move the item down |
 
@@ -108,29 +107,35 @@ werkbuch works without a mouse. Press <kbd>?</kbd> on any screen to see the shor
 | --- | --- |
 | <kbd>E</kbd> | Mark as read |
 | <kbd>U</kbd> | Mark as unread |
-| <kbd>⇧</kbd>+<kbd>E</kbd> | Mark all as read |
+| <kbd>⇧ / Shift</kbd>+<kbd>E</kbd> | Mark all as read |
 | <kbd>#</kbd> | Delete notification |
 
 ## Wiki
 
 | Keys | Action |
 | --- | --- |
-| <kbd>⌘ / Ctrl</kbd>+<kbd>↵</kbd> | Save the page now |
-| <kbd>⌘ / Ctrl</kbd>+<kbd>⌫</kbd> | Delete the page (asks first) |
+| <kbd>⌘ / Ctrl</kbd>+<kbd>↵ / Enter</kbd> | Save the page now |
+| <kbd>⌘ / Ctrl</kbd>+<kbd>⌫ / Backspace</kbd> | Delete the page (asks first) |
 
 ## Template
 
 | Keys | Action |
 | --- | --- |
-| <kbd>⌘ / Ctrl</kbd>+<kbd>↵</kbd> | Save the template |
+| <kbd>⌘ / Ctrl</kbd>+<kbd>↵ / Enter</kbd> | Save the template |
+
+## Preview
+
+| Keys | Action |
+| --- | --- |
+| <kbd>Esc</kbd> | Close the preview |
 
 ## Command palette
 
 | Keys | Action |
 | --- | --- |
 | <kbd>↑</kbd> / <kbd>↓</kbd> | Choose a hit |
-| <kbd>↵</kbd> | Run |
-| <kbd>⌫</kbd> | Back to all commands (in the empty field) |
+| <kbd>↵ / Enter</kbd> | Run |
+| <kbd>⌫ / Backspace</kbd> | Back to all commands (in the empty field) |
 | <kbd>Esc</kbd> | Close |
 
 ## Table
@@ -139,10 +144,10 @@ werkbuch works without a mouse. Press <kbd>?</kbd> on any screen to see the shor
 | --- | --- |
 | <kbd>←</kbd> / <kbd>→</kbd> | Change column |
 | <kbd>↑</kbd> / <kbd>↓</kbd> | Change row |
-| <kbd>⇧</kbd>+<kbd>↑</kbd> / <kbd>⇧</kbd>+<kbd>↓</kbd> | Extend the selection |
+| <kbd>⇧ / Shift</kbd>+<kbd>↑</kbd> / <kbd>⇧ / Shift</kbd>+<kbd>↓</kbd> | Extend the selection |
 | <kbd>Home</kbd> / <kbd>End</kbd> | First or last column |
 | <kbd>⌘ / Ctrl</kbd>+<kbd>Home</kbd> / <kbd>⌘ / Ctrl</kbd>+<kbd>End</kbd> | First or last row |
-| <kbd>↵</kbd> | Edit the cell (first column: open the item) |
+| <kbd>↵ / Enter</kbd> | Edit the cell (first column: open the item) |
 | <kbd>Esc</kbd> | Stop editing |
 
 ## Group headers (list and table)
@@ -152,7 +157,7 @@ werkbuch works without a mouse. Press <kbd>?</kbd> on any screen to see the shor
 | <kbd>←</kbd> | Collapse the group, or go to its header |
 | <kbd>→</kbd> | Expand the group, or go to its first row |
 | <kbd>↑</kbd> / <kbd>↓</kbd> | Previous or next header |
-| <kbd>↵</kbd> / <kbd>Space</kbd> | Fold or unfold the group |
+| <kbd>↵ / Enter</kbd> / <kbd>Space</kbd> | Fold or unfold the group |
 
 ## Page tree of the wiki
 
@@ -162,20 +167,20 @@ werkbuch works without a mouse. Press <kbd>?</kbd> on any screen to see the shor
 | <kbd>→</kbd> | Unfold subpages, or go to the first subpage |
 | <kbd>←</kbd> | Fold subpages away, or go to the parent page |
 | <kbd>Home</kbd> / <kbd>End</kbd> | First or last page |
-| <kbd>↵</kbd> | Open the page |
-| <kbd>⌘ / Ctrl</kbd>+<kbd>⌫</kbd> | Delete the row’s page (asks first) |
+| <kbd>↵ / Enter</kbd> | Open the page |
+| <kbd>⌘ / Ctrl</kbd>+<kbd>⌫ / Backspace</kbd> | Delete the row’s page (asks first) |
 
 ## Editors and fields
 
 | Keys | Action |
 | --- | --- |
-| <kbd>⌘ / Ctrl</kbd>+<kbd>↵</kbd> | Save or send |
+| <kbd>⌘ / Ctrl</kbd>+<kbd>↵ / Enter</kbd> | Save or send |
 | <kbd>Esc</kbd> | Leave the field |
 | <kbd>/</kbd> | Insert a block (at the start of a line or after a space) |
 | <kbd>@</kbd> | Mention a person or bot (with a project) |
 | <kbd>#</kbd> | Refer to an item or a page (with a project) |
 | <kbd>↑</kbd> / <kbd>↓</kbd> | Choose an entry of the list |
-| <kbd>↵</kbd> / <kbd>Tab</kbd> | Take the entry |
+| <kbd>↵ / Enter</kbd> / <kbd>Tab</kbd> | Take the entry |
 | <kbd>Esc</kbd> | Close the list |
-| <kbd>↵</kbd> | Edit the alternative text of the selected image |
+| <kbd>↵ / Enter</kbd> | Edit the alternative text of the selected image |
 | <kbd>⌥ / Alt</kbd>+<kbd>F10</kbd> | Edit the table (cursor in a table) |

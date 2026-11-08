@@ -102,8 +102,9 @@ export const SHORTCUTS = {
   // the template editor (`features/templates/TemplateEditor.tsx`), for whoever may manage templates: saves on purpose
   // only (A336), a held key once. Shares its keys with `settings.save` and `wiki.save` (other screens, A324)
   'template.save': { keys: 'mod+enter', scope: 'detail', label: 'shortcuts.template.save', group: 'shortcuts.group.template' },
-  // registered only while the preview is open (shell/PeekHost): the first Escape in a field leaves the field
-  'peek.close': { keys: 'escape', scope: 'detail', label: 'shortcuts.peek.close', group: 'shortcuts.group.item' },
+  // registered only while the preview is open (shell/PeekHost): the first Escape in a field leaves the field. Its own
+  // group: it closes the preview, it does not act on the item like the keys of `shortcuts.group.item`
+  'peek.close': { keys: 'escape', scope: 'detail', label: 'shortcuts.peek.close', group: 'shortcuts.group.preview' },
 } as const satisfies Record<string, CatalogEntry>;
 
 export type ShortcutId = keyof typeof SHORTCUTS;
