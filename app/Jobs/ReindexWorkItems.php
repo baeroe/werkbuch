@@ -11,25 +11,42 @@ use Illuminate\Foundation\Queue\Queueable;
  * queue `search`, when a change elsewhere (a workflow, a label, an identifier) changes what many documents hold. At most
  * BLOCK items per job (Phase 15, Task 11b): the rest goes to a follow-up job, the items of projects from the last id
  * written on (`$after`), the items named with only the ids still to write. So no job of a big organisation runs for
- * minutes, and no follow-up carries the whole list again.
+ * minutes, and no follow-up carries the whole list again. A worker that dies between queuing the follow-up and finishing
+ * runs the job again and queues a second, equal follow-up: written twice, nothing lost.
  */
 final class ReindexWorkItems implements ShouldQueue
 {
     use Queueable;
 
-    /** The most items one job writes. */
+    /**
+     * The most items one job writes: whole chunks of the indexer (SearchIndexer::CHUNK), as the limit works at the end of
+     * a chunk.
+     */
     public const BLOCK = 2_000;
 
-    /** A block takes seconds; the limit only stops a job that hangs on Meilisearch. */
-    public int $timeout = 600;
+    /**
+     * Below `retry_after` of the queue connection (90 s), so the queue never hands a job that still runs to another
+     * worker; `queue:listen` in DDEV stops a job after 60 s anyway. A block takes well under a second.
+     */
+    public int $timeout = 60;
+
+    /** @var list<string>|null `null`: every item of those projects */
+    public ?array $itemIds = null;
+
+    /** The items of projects after this id (a follow-up job). */
+    public ?string $after = null;
 
     /**
+     * The defaults stand on the properties, not in the constructor: a job queued before a property existed unserializes
+     * with it at its default.
+     *
      * @param  list<string>|null  $projectIds
      * @param  list<string>|null  $itemIds  `null`: every item of those projects
-     * @param  string|null  $after  the items of projects after this id (a follow-up job)
      */
-    public function __construct(public ?array $projectIds, public ?array $itemIds = null, public ?string $after = null)
+    public function __construct(public ?array $projectIds, ?array $itemIds = null, ?string $after = null)
     {
+        $this->itemIds = $itemIds;
+        $this->after = $after;
         $this->onQueue('search');
     }
 

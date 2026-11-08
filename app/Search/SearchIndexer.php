@@ -23,7 +23,8 @@ final class SearchIndexer
     /** The searchable models, by the name of their table (the index without its prefix). */
     private const MODELS = ['work_items' => WorkItem::class, 'pages' => Page::class, 'projects' => Project::class, 'users' => User::class];
 
-    private const CHUNK = 500;
+    /** The rows read and written at a time (ReindexWorkItems::BLOCK is a multiple of it). */
+    public const CHUNK = 500;
 
     /** The most bytes of comment text in an item's document (A245), and of text in a page's document (A317). */
     public const COMMENTS_MAX = 65536;
