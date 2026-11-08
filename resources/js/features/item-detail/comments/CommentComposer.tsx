@@ -69,6 +69,9 @@ function inlineRest(sent: RichText[], now: RichText[]): RichText[] | undefined {
 /** Blocks that hold blocks (a list, its items, a quote): what was typed on in them is read block by block. */
 const CONTAINERS = new Set(['bulletList', 'orderedList', 'taskList', 'listItem', 'taskItem', 'blockquote']);
 
+/** Blocks that begin with a paragraph (`paragraph block*` in the schema of the server, which refuses them otherwise). */
+const ITEMS = new Set(['listItem', 'taskItem']);
+
 /**
  * The attrs of the rest of a numbered list: it goes on counting where the sent part stopped, so its start moves up by
  * the sent items, less one when the last sent item was typed on and stays as the first item of the rest (N3).
@@ -96,7 +99,9 @@ function blockRest(sent: RichText[], now: RichText[]): RichText[] | undefined {
   const inner = CONTAINERS.has(tail.type ?? '') ? blockRest(tail.content ?? [], grown.content ?? []) : inlineRest(tail.content ?? [], grown.content ?? []);
   if (!inner) return undefined;
   if (inner.length === 0) return after;
-  return [{ ...grown, ...numbered(tail, grown, inner), content: inner }, ...after];
+  // an item of which only its inner list went on: an empty paragraph in front of that list, as an item has to begin
+  const lead: RichText[] = ITEMS.has(tail.type ?? '') && inner[0]!.type !== 'paragraph' ? [{ type: 'paragraph' }] : [];
+  return [{ ...grown, ...numbered(tail, grown, inner), content: [...lead, ...inner] }, ...after];
 }
 
 /**
