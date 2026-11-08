@@ -54,6 +54,17 @@ it('sends the CSP with the docs page', function () {
     );
 });
 
+it('sends the CSP with the docs page asked for with a query', function () {
+    $this->get('/api/docs?foo=1')->assertOk()
+        ->assertHeader('Content-Security-Policy', ApiServiceProvider::DOCS_CSP)
+        ->assertHeader('X-Content-Type-Options', 'nosniff');
+});
+
+it('keeps eval out of the script of the docs page', function () {
+    // script-src 'self' without 'unsafe-eval': an eval in the own script would fail in the browser
+    expect(file_get_contents(public_path('api-docs.js')))->toBeString()->toContain('X-XSRF-TOKEN')->not->toContain('eval');
+});
+
 it('keeps the checked in Stoplight Elements as they came from npm', function () {
     $dir = public_path('vendor/stoplight-elements/'.ApiServiceProvider::STOPLIGHT);
 
