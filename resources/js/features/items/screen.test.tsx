@@ -462,10 +462,13 @@ describe('the item list screen', () => {
     inertia.go(`/projects/WEB?layout=${layout}`);
     renderScreen();
     await screen.findByRole('heading', { level: 1, name: 'Website-Relaunch' });
-    // only after a moment, so a quick answer shows without it
-    expect(document.querySelector('[data-skeleton]')).toBeNull();
-    await waitFor(() => expect(document.querySelector(`[data-skeleton="${layout}"]`)).toBeTruthy());
-    expect(screen.getByText('Items werden geladen …')).toBeTruthy();
+    // only after a moment, so a quick answer shows without it: the outline holds the place, unseen and unsaid
+    const outline = document.querySelector(`[data-skeleton="${layout}"]`)!;
+    expect(outline.closest('.invisible')).not.toBeNull();
+    const label = screen.getByText('Items werden geladen …');
+    expect(label.closest('[role="status"]')).toBeNull();
+    await waitFor(() => expect(outline.closest('.invisible')).toBeNull());
+    expect(label.closest('[role="status"]')?.textContent).toBe('Items werden geladen …');
   });
 
   it('says that it grouped by category when the items have several workflows', async () => {

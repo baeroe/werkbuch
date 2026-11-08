@@ -57,12 +57,14 @@ afterEach(() => {
 });
 
 const refusal = (status: number, detail: string) => new ApiError({ status, reason: 'service_unavailable', detail });
+/** The outline of a skeleton by its label: a status only after a moment (SkeletonGroup), there from the start. */
+const outline = (label: string) => screen.getByText(label).parentElement!;
 
 describe('SectionNavSkeleton', () => {
-  it('says the sections are loading and fits the column of the frame: full width from lg on, a row of short bars below', () => {
+  it('says the sections are loading and fits the column of the frame: full width from lg on, a row of short bars below', async () => {
     render(<SectionNavSkeleton />);
 
-    const group = screen.getByRole('status');
+    const group = await screen.findByRole('status');
     expect(group.textContent).toBe('Bereiche werden geladen …');
     expect(group.className).toContain('lg:flex-col');
     const bars = group.querySelectorAll('[aria-hidden="true"]');
@@ -74,7 +76,7 @@ describe('SectionNavSkeleton', () => {
   it('draws as many bars as asked for', () => {
     render(<SectionNavSkeleton items={2} />);
 
-    expect(screen.getByRole('status').querySelectorAll('[aria-hidden="true"]')).toHaveLength(2);
+    expect(outline('Bereiche werden geladen …').querySelectorAll('[aria-hidden="true"]')).toHaveLength(2);
   });
 });
 
@@ -330,27 +332,28 @@ describe('the building blocks', () => {
     expect(readOnlyField).toBe('bg-sunken! shadow-none!');
   });
 
-  it('the skeletons announce that they load, with a label of their own or the default', () => {
+  it('the skeletons announce that they load, with a label of their own or the default', async () => {
     const { rerender } = render(<SettingsSkeleton />);
-    expect(screen.getByRole('status').textContent).toBe('Einstellungen werden geladen …');
-    expect(screen.getByRole('status').querySelectorAll('[aria-hidden="true"]').length).toBeGreaterThan(5);
+    // a status once it shows (after a moment, SkeletonGroup)
+    expect((await screen.findByRole('status')).textContent).toBe('Einstellungen werden geladen …');
+    expect(outline('Einstellungen werden geladen …').querySelectorAll('[aria-hidden="true"]').length).toBeGreaterThan(5);
 
     rerender(<SettingsSkeleton rows={1} label="Sicherheit wird geladen …" />);
-    expect(screen.getByRole('status').textContent).toBe('Sicherheit wird geladen …');
+    expect(outline('Sicherheit wird geladen …').textContent).toBe('Sicherheit wird geladen …');
 
     rerender(<RowsSkeleton />);
-    expect(screen.getByRole('status').textContent).toBe('Wird geladen …');
-    expect(screen.getByRole('status').querySelectorAll('.divide-y > div')).toHaveLength(4);
+    expect(outline('Wird geladen …').textContent).toBe('Wird geladen …');
+    expect(outline('Wird geladen …').querySelectorAll('.divide-y > div')).toHaveLength(4);
 
     rerender(<RowsSkeleton rows={2} label="Personen werden geladen …" />);
-    expect(screen.getByRole('status').textContent).toBe('Personen werden geladen …');
-    expect(screen.getByRole('status').querySelectorAll('.divide-y > div')).toHaveLength(2);
+    expect(outline('Personen werden geladen …').textContent).toBe('Personen werden geladen …');
+    expect(outline('Personen werden geladen …').querySelectorAll('.divide-y > div')).toHaveLength(2);
 
     rerender(<FormSkeleton />);
-    expect(screen.getByRole('status').textContent).toBe('Wird geladen …');
+    expect(outline('Wird geladen …').textContent).toBe('Wird geladen …');
 
     rerender(<FormSkeleton label="Allgemein wird geladen …" />);
-    expect(screen.getByRole('status').textContent).toBe('Allgemein wird geladen …');
+    expect(outline('Allgemein wird geladen …').textContent).toBe('Allgemein wird geladen …');
   });
 });
 

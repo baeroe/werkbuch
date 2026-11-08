@@ -60,7 +60,7 @@ import { ListAnnouncer } from './ListAnnouncer';
 import { ListHeader } from './ListHeader';
 import { FilterBar } from './filter/FilterBar';
 import { isComplete } from './filter/fieldOps';
-import { DelayedSkeleton, ListEmpty, ListError, ListSkeleton, ScreenSkeleton } from './ListStates';
+import { ListEmpty, ListError, ListSkeleton, ScreenSkeleton } from './ListStates';
 import { MY_TABS } from './MyTabs';
 import { SaveAsDialog } from './save/SaveAsDialog';
 import { UnsavedBar } from './save/UnsavedBar';
@@ -275,7 +275,7 @@ function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: P
   if (data.status === 'error') {
     content = <ListError error={data.error} onRetry={data.retry} retrying={false} />;
   } else if (data.status === 'pending') {
-    content = <DelayedSkeleton layout={state.display.layout} />;
+    content = <ListSkeleton layout={state.display.layout} />;
   } else if (data.total === 0 && data.items.length === 0 && state.display.layout !== 'timeline') {
     content = (
       <ListEmpty

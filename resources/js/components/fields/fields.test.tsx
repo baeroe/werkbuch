@@ -671,7 +671,8 @@ describe('askResolution and ItemDialogsHost', () => {
 
     act(() => askResolution({ subject: 'WEB-47', target: done, onConfirm }));
     const dialog = await screen.findByRole('dialog', { name: 'WEB-47 auf Done setzen' });
-    expect(within(dialog).getByRole('status').textContent).toBe('Resolutions werden geladen …');
+    // the outline shows after a moment, while the resolutions are held
+    expect((await within(dialog).findByRole('status')).textContent).toBe('Resolutions werden geladen …');
     // the focus waits in the dialog, never on the page behind it
     await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
 

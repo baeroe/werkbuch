@@ -576,8 +576,8 @@ describe('Activity', () => {
   it('shows a skeleton while loading and says when there is nothing yet', async () => {
     renderActivity(() => historyPage([]));
 
-    // the first render waits for the answer
-    expect(screen.getByRole('status').textContent).toContain('Aktivität wird geladen …');
+    // the first render waits for the answer, in outline (which shows after a moment, SkeletonGroup)
+    expect(screen.getByText('Aktivität wird geladen …')).toBeTruthy();
     await screen.findByText('Noch keine Aktivität.');
   });
 

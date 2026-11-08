@@ -6,7 +6,7 @@
 
 import { keepPreviousData, useQueries } from '@tanstack/react-query';
 import { countWorkItems } from '@/api/workItems';
-import { Skeleton } from '@/components/ui/Skeleton';
+import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
 import { qk } from '@/hooks/keys';
 import { useWorkItemGroups } from '@/hooks/workItems';
 import { t, tn } from '@/lib/i18n';
@@ -73,10 +73,9 @@ export function usePropertyUsage(properties: readonly Property[] | undefined): U
 export function UsageCount({ usage, id }: { usage: Usage; id: string }) {
   if (usage.pending)
     return (
-      <span role="status" className="inline-block w-14 align-middle">
-        <span className="sr-only">{t('common.loading')}</span>
+      <SkeletonGroup as="span" className="inline-block w-14 align-middle">
         <Skeleton className="h-3.5 w-full" />
-      </span>
+      </SkeletonGroup>
     );
   if (usage.counts === undefined) return <span>{t('catalog.usage_failed')}</span>;
   return <span>{tn('catalog.usage', usage.counts[id] ?? 0)}</span>;

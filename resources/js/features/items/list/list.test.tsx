@@ -263,7 +263,7 @@ describe('ListLayout', () => {
     scrollPage(60 * ROW);
     await waitFor(() => expect(second.enable).toHaveBeenCalledTimes(1));
     // until its first page is there it shows a placeholder
-    expect(within(screen.getByRole('list')).getByRole('status').textContent).toBe('Lädt …');
+    expect(within(screen.getByRole('list')).getByText('Lädt …')).toBeTruthy();
   });
 
   it('loads the next page of a group when its last row comes into view', async () => {
@@ -291,7 +291,7 @@ describe('ListLayout', () => {
     rerenderList({ groups: [{ ...only }], groupBy: 'none' });
     expect(only.loadMore).toHaveBeenCalledTimes(2);
     // the end stays a placeholder only while a page is on its way
-    expect(within(screen.getByRole('list')).getByRole('status').textContent).toBe('Lädt …');
+    expect(within(screen.getByRole('list')).getByText('Lädt …')).toBeTruthy();
   });
 
   it('keeps the rows and offers a retry when a later page fails', async () => {
@@ -346,10 +346,10 @@ describe('ListLayout', () => {
     await waitFor(() => expect(document.activeElement).toBe(heading('c')));
     press('ArrowLeft');
     expect(heading('c').getAttribute('aria-expanded')).toBe('false');
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByText('Lädt …')).toBeNull();
     press('ArrowRight');
     expect(heading('c').getAttribute('aria-expanded')).toBe('true');
-    expect(screen.getByRole('status')).not.toBeNull();
+    expect(screen.getByText('Lädt …')).toBeTruthy();
   });
 
   it('keeps the focused row rendered while scrolling away', async () => {
@@ -375,7 +375,7 @@ describe('ListLayout', () => {
     expect(button.textContent).toBe('Gruppe a120, 120 Items');
     expect(rowOf('a1')!.closest('li')!.getAttribute('aria-setsize')).toBe('120');
     // a page on its way shows a placeholder after the loaded rows
-    expect(screen.getByRole('status')).not.toBeNull();
+    expect(screen.getByText('Lädt …')).toBeTruthy();
   });
 
   it('moves the cursor across groups with j and k', async () => {

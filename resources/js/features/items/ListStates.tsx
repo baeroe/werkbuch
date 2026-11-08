@@ -1,13 +1,13 @@
 /*
  * The states of an item list besides its rows: the skeleton while it loads (in the shape of its layout, 13c: rows of
- * the list, columns of the board, rows of the table, bars of the timeline), shown only after a moment so an answer
- * within 300 ms shows without a flash; the empty list (no items at all, or none that match the filter); and the list
- * that could not be loaded, with "Erneut versuchen".
+ * the list, columns of the board, rows of the table, bars of the timeline), shown only after a moment (`SkeletonGroup`)
+ * so an answer within 300 ms shows without a flash; the empty list (no items at all, or none that match the filter);
+ * and the list that could not be loaded, with "Erneut versuchen".
  */
 
 import { Link } from '@inertiajs/react';
 import { FunnelX, List, SquareKanban, SquarePen } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { Button, buttonClass } from '@/components/ui/Button';
 import { cx } from '@/components/ui/cx';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -100,7 +100,7 @@ function TimelineShape() {
 
 const SHAPES: Record<Display['layout'], () => ReactNode> = { list: () => <ListShape />, board: BoardShape, table: TableShape, timeline: TimelineShape };
 
-/** The list in outline, in the shape of its layout. */
+/** The list in outline, in the shape of its layout (only after a moment, as every skeleton). */
 export function ListSkeleton({ layout }: { layout: Display['layout'] }) {
   const Shape = SHAPES[layout];
   return (
@@ -108,16 +108,6 @@ export function ListSkeleton({ layout }: { layout: Display['layout'] }) {
       <Shape />
     </SkeletonGroup>
   );
-}
-
-/** The skeleton, but only after a moment: an answer within 300 ms shows without a flash of it. */
-export function DelayedSkeleton({ layout }: { layout: Display['layout'] }) {
-  const [late, setLate] = useState(false);
-  useEffect(() => {
-    const timer = setTimeout(() => setLate(true), 300);
-    return () => clearTimeout(timer);
-  }, []);
-  return late ? <ListSkeleton layout={layout} /> : <div className="h-40" aria-busy="true" />;
 }
 
 /** The whole screen in outline, while the project or view it belongs to loads. */

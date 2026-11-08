@@ -381,8 +381,8 @@ describe('search', () => {
     await openPalette();
     await user.keyboard('kontakt');
     expect(live()).toBe('Suche läuft …');
-    // nothing to show yet: a skeleton says the same
-    expect(within(screen.getByRole('dialog')).getAllByRole('status').map((status) => status.textContent)).toEqual(['Suche läuft …', 'Suche läuft …']);
+    // nothing to show yet: a skeleton says the same, after a moment
+    await waitFor(() => expect(within(screen.getByRole('dialog')).getAllByRole('status').map((status) => status.textContent)).toEqual(['Suche läuft …', 'Suche läuft …']));
 
     await waitFor(() => expect(search.asked('kontakt')).toBe(true));
     search.release('kontakt');
