@@ -25,15 +25,7 @@ it('has the same heading structure in both languages', function () {
     }
 });
 
-it('lists every page but the landing page in the sidebar', function () {
-    $config = (string) file_get_contents(repo_path('docs/.vitepress/config.ts'));
-
-    foreach (array_diff(docsPages('en'), ['index']) as $page) {
-        expect($config)->toContain("'{$page}'");
-    }
-});
-
-it('keeps the sidebar of both languages in the same order', function () {
+it('lists every page but the landing page in the sidebar, in the same order in both languages', function () {
     $config = RepoFiles::text('docs/.vitepress/config.ts');
     // the keys of `const en` and `const de`: the labels of the groups and pages, in the order they are written
     $keys = function (string $language) use ($config): array {
@@ -66,7 +58,7 @@ it('names no phase in the docs', function () {
     // and the landing page says in its status where the project stands
     foreach (['en', 'de'] as $l) {
         foreach (array_diff(docsPages($l), ['development', 'index']) as $page) {
-            $found = preg_match('/phase \d+/i', RepoFiles::text("docs/{$l}/{$page}.md"), $m);
+            $found = preg_match('/phas(e|en)[\s-]\d+/i', RepoFiles::text("docs/{$l}/{$page}.md"), $m);
 
             expect($found)->toBe(0, "docs/{$l}/{$page}.md names ".($m[0] ?? ''));
         }

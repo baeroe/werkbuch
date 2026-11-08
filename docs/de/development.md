@@ -197,7 +197,7 @@ WERKBUCH_IMAGE=werkbuch:local scripts/compose-smoke.sh
 
 ## Dokumentation
 
-Diese Doku liegt in `docs/` (VitePress) auf Englisch (`docs/en/`) und Deutsch (`docs/de/`). Jede Seite gibt es in beiden Sprachen unter demselben Dateinamen und mit denselben Überschriften, in der Seitenleiste in derselben Reihenfolge; keine Seite außer dieser nennt eine Phase des Baus. `tests/Unit/DocsTest.php` prüft das. Die Specs und Pläne in `docs/superpowers/` gehören nicht zur Seite.
+Diese Doku liegt in `docs/` (VitePress) auf Englisch (`docs/en/`) und Deutsch (`docs/de/`). Jede Seite gibt es in beiden Sprachen unter demselben Dateinamen und mit denselben Überschriften, in der Seitenleiste in derselben Reihenfolge. Nur diese Seite nennt Phasen des Baus, vorerst dazu der Stand auf der Startseite. `tests/Unit/DocsTest.php` prüft das. Die Specs und Pläne in `docs/superpowers/` gehören nicht zur Seite.
 
 ```bash
 ddev exec pnpm --dir docs dev       # https://werkbuch.ddev.site:5174/de/
