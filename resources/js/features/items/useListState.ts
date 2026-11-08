@@ -13,7 +13,7 @@
  */
 
 import { router, usePage } from '@inertiajs/react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   applyViewState,
   decodeViewState,
@@ -39,13 +39,6 @@ export interface ListState {
   unsaved: boolean;
 }
 
-/** The view state of a query in one spelling, so two addresses of the same state compare equal. */
-function canonical(search: string): string {
-  const params = new URLSearchParams(search);
-  const kept = VIEW_STATE_PARAMS.flatMap((key) => (params.has(key) ? [`${key}=${params.get(key)}`] : []));
-  return kept.join('&');
-}
-
 export function useListState({ preset, view }: { preset: ItemsPreset; project?: Project; view?: View }): ListState {
   const { url } = usePage();
   const address = new URL(url, window.location.origin);
@@ -56,11 +49,10 @@ export function useListState({ preset, view }: { preset: ItemsPreset; project?: 
     return presetState(preset);
   }, [view, preset]);
 
-  // the change on its way to the server; it shows until the address has it (or the visit fails)
+  // the change on its way to the server; it shows until the server answers (its address is the state then) or the visit
+  // fails
   const [pending, setPending] = useState<string | null>(null);
-  const served = address.search;
-  useEffect(() => setPending((current) => (current !== null && canonical(current) === canonical(served) ? null : current)), [served]);
-  const search = pending ?? served;
+  const search = pending ?? address.search;
   const state = useMemo(() => applyViewState(base, decodeViewState(search)), [base, search]);
 
   const visit = useCallback(
@@ -68,20 +60,13 @@ export function useListState({ preset, view }: { preset: ItemsPreset; project?: 
       const query = params.toString();
       const next = query === '' ? '' : `?${query}`;
       setPending(next);
-      let answered = false;
       router.get(`${address.pathname}${next}`, {}, {
         preserveState: true,
         preserveScroll: true,
         replace: true,
-        // the address of the answer is the state now, also when its state differs from the one asked for
-        onSuccess: () => {
-          answered = true;
-          setPending((current) => (current === next ? null : current));
-        },
-        // a visit that failed or was cancelled: the address shows again (a newer change keeps its own)
-        onFinish: () => {
-          if (!answered) setPending((current) => (current === next ? null : current));
-        },
+        // answered, failed or cancelled: the address shows, also one whose state differs from the one asked for (a newer
+        // change keeps its own)
+        onFinish: () => setPending((current) => (current === next ? null : current)),
       });
     },
     [address.pathname],
