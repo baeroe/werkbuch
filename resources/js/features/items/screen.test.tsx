@@ -501,8 +501,8 @@ describe('the item list screen', () => {
   });
 
   it('marks only the outline of a layout that is still loading as such (T18-M3)', async () => {
-    // the focus rescue waits for a layout chunk, not for every outline on the screen
-    const { unmount } = render(<ListSkeleton layout="board" chunk />);
+    // the focus rescue waits for a loading layout (its chunk, the timeline before its epics), not for every outline
+    const { unmount } = render(<ListSkeleton layout="board" loadingLayout />);
     expect(document.querySelector('[data-layout-skeleton] [data-skeleton="board"]')).not.toBeNull();
     unmount();
 

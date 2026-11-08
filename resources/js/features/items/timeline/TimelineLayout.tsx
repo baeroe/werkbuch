@@ -415,7 +415,7 @@ export function TimelineLayout({ groups, groupBy, project, createDefaults, filte
 
   // the answer of the layout before (1–4 switched to the timeline) stands until the epics by project are there: the
   // skeleton, so the focus waits for the row of the cursor (the screen's focus rescue) instead of a row that goes again
-  if (groupBy !== 'project') return <ListSkeleton layout="timeline" />;
+  if (groupBy !== 'project') return <ListSkeleton layout="timeline" loadingLayout />;
   if (epics.length === 0) return <TimelineEmpty project={project} createDefaults={createDefaults} filtered={filtered} onResetFilter={onResetFilter} />;
 
   const stop = cursorId !== null && order.includes(cursorId) ? cursorId : order[0];

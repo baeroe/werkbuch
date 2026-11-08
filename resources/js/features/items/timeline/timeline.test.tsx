@@ -563,10 +563,12 @@ describe('the keys and the palette', () => {
     expect(inertia.url).toBe('/my-items?layout=timeline');
     // the timeline comes as a chunk of its own; the rows of the list before do not stand on it meanwhile
     await waitFor(() => expect(document.querySelector('[data-skeleton="timeline"]')).toBeTruthy());
+    // longer than the five frames the rescue waits without an outline: it waits for the timeline's (T18-M3)
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 400));
     });
     expect(document.querySelector('[data-skeleton="timeline"]')).toBeTruthy();
+    expect(document.activeElement).toBe(document.body);
     expect(screen.queryByRole('group', { name: /^WEB-30 / })).toBeNull();
 
     // then the focus is on the epic of the cursor

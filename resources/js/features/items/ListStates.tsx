@@ -102,14 +102,15 @@ function TimelineShape() {
 const SHAPES: Record<Display['layout'], () => ReactNode> = { list: () => <ListShape />, board: BoardShape, table: TableShape, timeline: TimelineShape };
 
 /**
- * The list in outline, in the shape of its layout (only after a moment, as every skeleton). `chunk`: it stands in for a
- * layout that is still loading as a chunk of its own; only that one is what the focus rescue of the screen waits for.
+ * The list in outline, in the shape of its layout (only after a moment, as every skeleton). `loadingLayout`: it stands
+ * for a layout that is still loading (its chunk, or the timeline waiting for its epics by project) and marks itself with
+ * `data-layout-skeleton`; only that outline is what the focus rescue of the screen waits for, not the one of the data.
  */
-export function ListSkeleton({ layout, chunk = false }: { layout: Display['layout']; chunk?: boolean }) {
+export function ListSkeleton({ layout, loadingLayout = false }: { layout: Display['layout']; loadingLayout?: boolean }) {
   const Shape = SHAPES[layout];
   return (
     <SkeletonGroup label={t('items.screen.loading')}>
-      {chunk ? (
+      {loadingLayout ? (
         <div data-layout-skeleton="">
           <Shape />
         </div>

@@ -110,7 +110,7 @@ function useFocusRescue(root: RefObject<HTMLElement | null>, layout: Display['la
     last.current = null;
     if (fromRow && !switched) return;
     // the rows of a layout render a frame later (they measure themselves): wait a few frames for the list's tab stop,
-    // and as long as the outline of the layout stands for it (a layout that comes as a chunk of its own, the board, is loading)
+    // and as long as the outline of a loading layout stands for it (a chunk of its own, the timeline before its epics)
     let attempts = 0;
     const rescue = () => {
       if (document.activeElement !== null && document.activeElement !== document.body) return;
@@ -319,7 +319,7 @@ function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: P
     // a layout of its own chunk that did not load shows the error with "Erneut versuchen"; another layout starts afresh
     content = (
       <LayoutBoundary key={state.display.layout}>
-        <Suspense fallback={<ListSkeleton layout={state.display.layout} chunk />}>
+        <Suspense fallback={<ListSkeleton layout={state.display.layout} loadingLayout />}>
           <Layout {...props} />
         </Suspense>
       </LayoutBoundary>
