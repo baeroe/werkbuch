@@ -5,6 +5,7 @@ namespace App\Actions\Templates;
 use App\Access\Authorize;
 use App\Models\Project;
 use App\Models\Template;
+use App\OpenApi\ListFlags;
 use App\Support\Actor;
 use App\Support\ListFilter;
 use App\Support\ListQuery;
@@ -36,6 +37,7 @@ final class ListTemplates
             filters: [ListFilter::ulid('project_id', 'templates.project_id'), ...self::common()],
             sorts: ['name' => 'templates.name', 'created_at' => 'templates.id'],
             default: ['name'],
+            flags: ['lean' => ListFlags::LEAN],
         );
     }
 
@@ -46,6 +48,7 @@ final class ListTemplates
             filters: self::common(),
             sorts: ['name' => 'templates.name', 'created_at' => 'templates.id'],
             default: ['name'],
+            flags: ['lean' => ListFlags::LEAN],
         );
     }
 

@@ -19,6 +19,7 @@ $generate = function (): array {
     Route::middleware('api')->prefix('api/v1')->group(function () {
         Route::get('_t/list/full', [ListOfController::class, 'full']);
         Route::get('_t/list/fixed', [ListOfController::class, 'fixed']);
+        Route::get('_t/list/flagged', [ListOfController::class, 'flagged']);
         Route::get('_t/list/plain', [ListOfController::class, 'plain']);
         Route::get('_t/list/none', [ListOfController::class, 'none']);
     });
@@ -34,6 +35,15 @@ $generate = function (): array {
  */
 $parameters = fn (array $document, string $path): array => collect($document['paths'][$path]['get']['parameters'] ?? [])
     ->where('in', 'query')->keyBy('name')->all();
+
+it('documents the flags a spec names as 1 or 0 after the page and the filters', function () use ($generate, $parameters) {
+    $flagged = $parameters($generate(), '/_t/list/flagged');
+
+    expect(array_keys($flagged))->toBe(['cursor', 'per_page', 'filter[name]', 'sort', 'with_hidden'])
+        ->and($flagged['with_hidden']['schema'])->toBe(['type' => 'integer', 'enum' => [1, 0]])
+        ->and($flagged['with_hidden']['description'])->toBe('Hidden rows too (`1`).')
+        ->and($flagged['with_hidden']['required'] ?? false)->toBeFalse();
+});
 
 it('documents the filters, sorts and includes of a list from its spec', function () use ($generate, $parameters) {
     $document = $generate();

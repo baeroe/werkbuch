@@ -75,11 +75,12 @@ it('generates without an analysis error', function () {
         ->and($errors)->toBe([]);
 });
 
-it('generates the document in under 30 s and under 512 MB', function () {
+// measured in phase 15 (task 14): about 1.2 s and 55 MB at the peak; production serves the cache of `scramble:cache`
+it('generates the document in under 10 s and under 128 MB', function () {
     $stats = Document::stats();
 
-    expect($stats['seconds'])->toBeLessThan(30.0)
-        ->and($stats['bytes'])->toBeLessThan(512 * 1048576);
+    expect($stats['seconds'])->toBeLessThan(10.0)
+        ->and($stats['bytes'])->toBeLessThan(128 * 1048576);
 });
 
 it('describes the problem shape', function () {

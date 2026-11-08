@@ -1,6 +1,12 @@
 <?php
 
 use App\Providers\ApiServiceProvider;
+use Dedoc\Scramble\CacheableGenerator;
+use Dedoc\Scramble\Contracts\RouteProvider;
+use Dedoc\Scramble\Generator;
+use Dedoc\Scramble\GeneratorConfig;
+use Dedoc\Scramble\GeneratorResult;
+use Dedoc\Scramble\Support\OperationBuilder;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Route;
@@ -21,6 +27,29 @@ it('serves the document without signing in', function () {
         ->and($response->json('servers'))->toBe([['url' => rtrim((string) config('app.url'), '/').'/api/v1']])
         ->and($response->json('paths'))->toHaveKey('/work-items/{item}')
         ->and($response->headers->getCookies())->toBe([]);
+});
+
+it('serves the cached document in production without generating it', function () {
+    $this->app->detectEnvironment(fn () => 'production');
+    config(['scramble.cache.store' => 'array']);
+    $this->artisan('scramble:cache')->assertSuccessful();
+
+    // a generator that must not run: the second request reads the cache `scramble:cache` wrote
+    $this->app->forgetInstance(CacheableGenerator::class);
+    $this->app->bind(Generator::class, fn () => new class(app(OperationBuilder::class), app(RouteProvider::class)) extends Generator
+    {
+        public function generate(GeneratorConfig $config): GeneratorResult
+        {
+            throw new RuntimeException('the document was generated, not read from the cache');
+        }
+    });
+
+    $started = hrtime(true);
+    $response = $this->getJson('/api/openapi.json')->assertOk();
+    $milliseconds = (hrtime(true) - $started) / 1e6;
+
+    expect($response->json('paths'))->toHaveKey('/work-items/{item}')
+        ->and($milliseconds)->toBeLessThan(200.0);
 });
 
 it('serves the docs page without signing in', function () {
