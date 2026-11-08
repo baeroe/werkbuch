@@ -115,8 +115,11 @@ export function useJoinProject() {
   return useApiMutation(joinProject, PROJECT_KEYS);
 }
 
-/** A change of members may change the own role (`my_role`), so the projects load again as well. */
-const MEMBER_KEYS = [qk.members.all, qk.projects.all] as const;
+/**
+ * A change of members may change the own role (`my_role`), so the projects load again as well; and what the search
+ * finds follows who sees a project (a private one gained or lost a member, 21b-M3).
+ */
+const MEMBER_KEYS = [qk.members.all, qk.projects.all, qk.search.all] as const;
 
 export function useAddMember() {
   return useApiMutation(
