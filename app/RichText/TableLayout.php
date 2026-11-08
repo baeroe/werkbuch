@@ -8,10 +8,13 @@ namespace App\RichText;
  * (MarkdownContext::before, every save of a description, a rich text value, a comment, a page or a template) takes
  * both from the table before it, like the kept mentions and references (A229, K9).
  *
- * Tables are matched by their order in the text, counting only tables that are not inside a table (Markdown reads no
- * table in a cell). The n-th table read takes the layout of the n-th table before if both have as many columns (the
- * rows may change: a row added in Markdown keeps the header column); otherwise it stays as Markdown reads it. Only
- * the two switches come back, never a single header cell and never a span.
+ * Tables count only when they are not inside a table (Markdown reads no table in a cell). With as many tables as
+ * before, the n-th table read takes the layout of the n-th table before if both have as many columns (the rows may
+ * change: a row added in Markdown keeps the header column). With another number of tables, a table was added or
+ * removed somewhere: pairs are taken from the front and from the back only while both tables have as many columns
+ * and the same text in their first row; at the first difference matching stops, and the tables in between read as
+ * Markdown writes them (no layout ever moves to another table). Only the two switches come back, never a single
+ * header cell and never a span.
  */
 final class TableLayout
 {
@@ -42,18 +45,17 @@ final class TableLayout
      */
     public static function keep(Document $read, ?Document $before): Document
     {
-        if ($before === null) {
+        $old = $before === null ? [] : self::tables($before->toJson());
+        if ($old === []) {
             return $read;
         }
-        $layouts = [];
-        foreach (self::tables($before->toJson()) as $table) {
-            $layouts[] = ['columns' => self::columns($table), ...self::of($table)];
-        }
+        $json = $read->toJson();
+        $layouts = self::pairs($old, self::tables($json));
         $changed = false;
         $index = 0;
-        $json = self::map($read->toJson(), function (array $table) use ($layouts, &$index, &$changed): array {
+        $json = self::map($json, function (array $table) use ($layouts, &$index, &$changed): array {
             $layout = $layouts[$index++] ?? null;
-            if ($layout === null || $layout['columns'] !== self::columns($table)) {
+            if ($layout === null) {
                 return $table;
             }
             $laid = self::laidOut($table, $layout['header_row'], $layout['header_column']);
@@ -63,6 +65,81 @@ final class TableLayout
         });
 
         return $changed ? Document::fromJson($json) : $read;
+    }
+
+    /**
+     * The layout each table read takes from a table before, by the index of the table read (see the class).
+     *
+     * @param  list<array<string, mixed>>  $before
+     * @param  list<array<string, mixed>>  $read
+     * @return array<int, array{header_row: bool, header_column: bool}>
+     */
+    private static function pairs(array $before, array $read): array
+    {
+        $layouts = [];
+        if (count($before) === count($read)) {
+            foreach ($read as $i => $table) {
+                if (self::columns($before[$i]) === self::columns($table)) {
+                    $layouts[$i] = self::of($before[$i]);
+                }
+            }
+
+            return $layouts;
+        }
+        $shorter = min(count($before), count($read));
+        $front = 0;
+        while ($front < $shorter && self::alike($before[$front], $read[$front])) {
+            $layouts[$front] = self::of($before[$front]);
+            $front++;
+        }
+        for ($back = 1; $front + $back <= $shorter; $back++) {
+            $old = $before[count($before) - $back];
+            if (! self::alike($old, $read[count($read) - $back])) {
+                break;
+            }
+            $layouts[count($read) - $back] = self::of($old);
+        }
+
+        return $layouts;
+    }
+
+    /**
+     * Whether two tables are the same table: as many columns and the same text in the first row.
+     *
+     * @param  array<string, mixed>  $a
+     * @param  array<string, mixed>  $b
+     */
+    private static function alike(array $a, array $b): bool
+    {
+        return self::columns($a) === self::columns($b) && self::heading($a) === self::heading($b);
+    }
+
+    /**
+     * The text of each cell of the first row, whitespace collapsed (Markdown trims a cell).
+     *
+     * @param  array<string, mixed>  $table
+     * @return list<string>
+     */
+    private static function heading(array $table): array
+    {
+        return array_map(
+            fn (array $cell) => trim((string) preg_replace('/\s+/u', ' ', self::text($cell))),
+            self::cells(self::rows($table)[0] ?? []),
+        );
+    }
+
+    /**
+     * The text of a node: text nodes as they are (marks split them), every other node followed by a space.
+     *
+     * @param  array<string, mixed>  $node
+     */
+    private static function text(array $node): string
+    {
+        if (is_string($node['text'] ?? null)) {
+            return $node['text'];
+        }
+
+        return implode('', array_map(self::text(...), self::children($node))).' ';
     }
 
     /**

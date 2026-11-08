@@ -60,8 +60,8 @@ use SplStack;
  * What Markdown cannot carry and loses on the way there and back (JSON keeps all of it):
  * - a header column, a table without a header row, a single header cell and a cell spanning rows or columns (a row
  *   with fewer cells is filled with empty ones, cells beyond the header's are dropped); read with the text before,
- *   each table takes the header row and the header column of the one it was if both have as many columns
- *   (TableLayout, A455), single header cells and spans stay lost;
+ *   each table takes the header row and the header column of the table it was, as TableLayout pairs them (A455);
+ *   single header cells and spans stay lost;
  * - a hard break inside a heading (the heading ends there, the rest becomes a paragraph);
  * - several blocks in a table cell (a list, a code block or a second paragraph flatten into its text);
  * - empty paragraphs (Enter twice in the editor);

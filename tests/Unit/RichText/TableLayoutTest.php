@@ -97,6 +97,52 @@ it('matches tables by their order', function () use ($grid, $read) {
     ));
 });
 
+it('takes no layout from another table when one is inserted before it', function () use ($grid, $read) {
+    $before = F::doc(
+        $grid(true, true, ['Browser', 'Mails'], ['Safari', '2']),
+        $grid(false, false, ['b', '2'], ['c', '3']),
+    );
+    // a new table of as many columns in front: it must not take the header column of the table that was first
+    $markdown = "| Neu | x |\n| --- | --- |\n| n | 1 |\n\n".Document::fromJson($before)->toMarkdown();
+
+    expect($read($markdown, $before))->toBe(F::doc(
+        $grid(true, false, ['Neu', 'x'], ['n', '1']),
+        $grid(true, true, ['Browser', 'Mails'], ['Safari', '2']),
+        $grid(false, false, ['b', '2'], ['c', '3']),
+    ));
+});
+
+it('takes no layout from another table when one in the middle is removed', function () use ($grid, $read) {
+    $first = $grid(true, true, ['Browser', 'Mails'], ['Safari', '2']);
+    $last = $grid(false, false, ['b', '2'], ['c', '3']);
+    $before = F::doc($first, $grid(false, true, ['Mitte', 'm'], ['z', '9']), $last);
+    $markdown = Document::fromJson(F::doc($first, $last))->toMarkdown();
+
+    expect($read($markdown, $before))->toBe(F::doc($first, $last));
+});
+
+it('pairs a table by the text of its first row, whatever its marks and spaces', function () use ($read) {
+    // Markdown reads two spaces as one: the first rows still count as the same text
+    $first = fn (string $space) => F::table(
+        [['type' => 'tableHeader', 'attrs' => F::cell('tableHeader', '')['attrs'], 'content' => [F::p(F::text('Brow', 'bold'), 'ser'.$space, F::text('neu', 'italic'))]], F::cell('tableHeader', 'Mails')],
+        [F::cell('tableHeader', 'Safari'), F::cell('tableCell', '2')],
+    );
+    $added = F::table([F::cell('tableHeader', 'd'), F::cell('tableHeader', '4')], [F::cell('tableCell', 'e'), F::cell('tableCell', '5')]);
+
+    expect($read(Document::fromJson(F::doc($first('  '), $added))->toMarkdown(), F::doc($first('  '))))->toBe(F::doc($first(' '), $added));
+});
+
+it('takes the Markdown form for a table between the matched ones', function () use ($grid, $read) {
+    // one table added and the first row of the other changed: neither pairs up, both read as Markdown writes them
+    $before = F::doc($grid(false, true, ['Safari', '2'], ['Chrome', '1']));
+    $markdown = "| Safari | 3 |\n| --- | --- |\n| Chrome | 1 |\n\n| Neu | x |\n| --- | --- |\n| n | 1 |";
+
+    expect($read($markdown, $before))->toBe(F::doc(
+        $grid(true, false, ['Safari', '3'], ['Chrome', '1']),
+        $grid(true, false, ['Neu', 'x'], ['n', '1']),
+    ));
+});
+
 it('counts no table inside a cell of the text before', function () use ($grid, $read) {
     $inner = $grid(false, false, ['x']);
     $outer = F::table(
@@ -135,4 +181,7 @@ it('leaves a text without tables and one without a text before as read', functio
 
     expect(TableLayout::keep($read, null))->toBe($read)
         ->and(TableLayout::keep($read, Document::fromJson(F::doc(F::table([F::cell('tableCell', 'a')])))))->toBe($read);
+
+    $table = Document::fromJson(F::doc(F::table([F::cell('tableHeader', 'a')])));
+    expect(TableLayout::keep($table, $read))->toBe($table);
 });
