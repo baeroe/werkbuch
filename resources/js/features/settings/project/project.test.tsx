@@ -516,7 +516,7 @@ describe('Members', () => {
     signedIn = lene;
     renderSettings('members', { 'GET /api/v1/projects/p_web/members': () => ({ body: list([]) }) }, { project: { ...web, my_role: 'member' } });
     expect(await screen.findByText('Noch keine Mitglieder')).toBeTruthy();
-    expect(screen.getByText('Mitglieder fügen die Admins des Projekts und Org-Admins hinzu.')).toBeTruthy();
+    expect(screen.getByText('Admins des Projekts und Org-Admins fügen Mitglieder hinzu.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Person oder Bot hinzufügen' })).toBeNull();
   });
 
@@ -1219,10 +1219,11 @@ describe('Types', () => {
 
   it('lets somebody who does not manage the project only read the types', async () => {
     signedIn = lene;
-    renderSettings('types', {}, { project: { ...web, my_role: 'member' } });
+    // one active type: for those who switch types this is the last one, and its rule would show
+    renderSettings('types', {}, { project: { ...web, my_role: 'member', enabled_type_ids: ['t_task'], default_type_id: 't_task' } });
 
     await screen.findByRole('list', { name: 'Typen der Organisation' });
-    expect(screen.getAllByText('Verwendet')).toHaveLength(2);
+    expect(screen.getAllByText('Nicht verwendet')).toHaveLength(3);
     expect(screen.queryByRole('button', { name: /Speichern/ })).toBeNull();
     // the rule for the last type is the business of those who switch types
     expect(screen.queryByText('Mindestens ein Typ bleibt aktiv.')).toBeNull();

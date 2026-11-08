@@ -2142,7 +2142,7 @@
     "settings.project.members.description": "Personen und Bots mit ihrer Rolle in diesem Projekt. Org-Admins haben in jedem Projekt Admin-Rechte, auch ohne Mitglied zu sein.",
     "settings.project.members.empty_add": "Person oder Bot hinzufügen",
     "settings.project.members.empty_description": "Wer Mitglied ist, bekommt eine Rolle in diesem Projekt. Org-Admins brauchen keine.",
-    "settings.project.members.empty_readers": "Mitglieder fügen die Admins des Projekts und Org-Admins hinzu.",
+    "settings.project.members.empty_readers": "Admins des Projekts und Org-Admins fügen Mitglieder hinzu.",
     "settings.project.members.empty_title": "Noch keine Mitglieder",
     "settings.project.members.lead": "Lead",
     "settings.project.members.lead_stays": "Die Lead-Person bleibt Mitglied. Setze zuerst unter Allgemein eine andere Person als Lead ein.",
