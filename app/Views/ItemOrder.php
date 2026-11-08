@@ -11,6 +11,7 @@ use App\Models\WorkItem;
 use App\Support\PageArgs;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Expression;
+use Illuminate\Database\Query\JoinClause;
 use Illuminate\Pagination\Cursor;
 use Illuminate\Pagination\CursorPaginator;
 use Illuminate\Pagination\Paginator;
@@ -27,8 +28,8 @@ use Illuminate\Validation\ValidationException;
  *   ascend (the manual sort turns its rank).
  * - The key of an item is the identifier of its project (collation) and its number; the category is that of its
  *   state. Both come from joins with their own aliases (`sort_projects`, `sort_states`, K3), so no condition of
- *   `FilterQuery` meets a column of another table. A property sorts by its first value (`position` 0) as a scalar
- *   subquery; an item whose type does not have the property (any more) counts as empty, like one without a value.
+ *   `FilterQuery` meets a column of another table. A property sorts by its first value (`position` 0), joined once as
+ *   `sort_values`; an item whose type does not have the property (any more) counts as empty, like one without a value.
  * - The next page is the keyset condition `(k0 > v0) or (k0 = v0 and k1 > v1) or …` (`<` for a descending key),
  *   written out, since Laravel's `cursorPaginate` knows neither marks nor expressions nor mixed directions. The
  *   previous page asks with every direction turned; the paginator turns its rows back (K5).
@@ -117,7 +118,7 @@ final class ItemOrder
             'updated_at' => self::emptyLast('`work_items`.`updated_at`', [], self::STAMP_GUARD, 'stamp', $desc),
             'key' => self::projectKey($query, $desc),
             'state_category' => self::category($query, $desc),
-            default => self::property($sort->field, $desc),
+            default => self::property($query, $sort->field, $desc),
         };
 
         if ($query->getQuery()->columns === null) {
@@ -256,11 +257,14 @@ final class ItemOrder
 
     /**
      * The first value (`position` 0) of a property of the types number, date, text and address, of an item whose type
-     * has the property; any other field (a stored sort whose property went) is the manual order.
+     * has the property; any other field (a stored sort whose property went) is the manual order. The value is joined
+     * once (`sort_values`, at most one row per item by the unique index), not read as a subquery per key: the mark and
+     * the value would read it twice per item (Task 10a).
      *
+     * @param  Builder<WorkItem>  $query
      * @return list<array{sql: literal-string, bindings: list<mixed>, descending: bool, kind: string}>
      */
-    private static function property(string $field, bool $desc): array
+    private static function property(Builder $query, string $field, bool $desc): array
     {
         $property = Field::named($field, app(CatalogProperties::class));
         $values = self::PROPERTY_VALUES[$property?->propertyType->value ?? ''] ?? null;
@@ -269,14 +273,15 @@ final class ItemOrder
         }
 
         [$column, $guard, $kind] = $values;
-        // a value left from a type the item no longer has is no value
-        $first = "(select `sort_values`.`{$column}` from `work_item_values` as `sort_values`"
-            .' where `sort_values`.`work_item_id` = `work_items`.`id` and `sort_values`.`position` = 0'
-            .' and `sort_values`.`property_id` = (select `sort_properties`.`id` from `properties` as `sort_properties` where `sort_properties`.`key` = ?)'
-            .' and exists (select 1 from `type_properties` as `sort_types`'
-            .' where `sort_types`.`type_id` = `work_items`.`type_id` and `sort_types`.`property_id` = `sort_values`.`property_id`))';
+        $query->leftJoin('work_item_values as sort_values', fn (JoinClause $join) => $join
+            ->on('sort_values.work_item_id', '=', 'work_items.id')
+            ->where('sort_values.position', '=', 0)
+            ->whereRaw('`sort_values`.`property_id` = (select `sort_properties`.`id` from `properties` as `sort_properties` where `sort_properties`.`key` = ?)', [(string) $property->propertyKey])
+            // a value left from a type the item no longer has is no value
+            ->whereRaw('exists (select 1 from `type_properties` as `sort_types`'
+                .' where `sort_types`.`type_id` = `work_items`.`type_id` and `sort_types`.`property_id` = `sort_values`.`property_id`)'));
 
-        return self::emptyLast($first, [(string) $property->propertyKey], $guard, $kind, $desc);
+        return self::emptyLast("`sort_values`.`{$column}`", [], $guard, $kind, $desc);
     }
 
     /**
