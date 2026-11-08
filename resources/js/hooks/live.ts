@@ -79,6 +79,8 @@ function keysOf(event: LiveEvent): readonly QueryKey[] {
   if (event.type === 'user.role_changed') return [qk.projects.all];
   // a run ends in a new item that names its template: its log, its count and its next run change
   if (event.type === 'work_item.created' && event.template_id !== null) return [qk.workItems.all, qk.activity.all, qk.templates.all, qk.templateRuns.all];
+  // a renamed or deleted item: the references that show it (a closed parent chip, `#` in a text) read it again (14b2-M1a)
+  if ((event.type === 'work_item.updated' || event.type === 'work_item.deleted') && event.item_id !== null) return [qk.workItems.all, qk.activity.all, qk.references.item(event.item_id)];
   if (group === 'work_item') return [qk.workItems.all, qk.activity.all];
   if (event.type === 'template.deleted') return [qk.templates.all, qk.templateRuns.all, qk.workItems.all];
   if (group === 'template') return [qk.templates.all, qk.templateRuns.all];

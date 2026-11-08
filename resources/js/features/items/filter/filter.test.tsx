@@ -173,11 +173,12 @@ describe('the filter bar', () => {
   it('changes the operator and keeps the values that still fit', async () => {
     const user = userEvent.setup();
     const { last } = renderBar(conditions({ field: 'state', op: 'in', value: ['std_todo', 'std_progress'] }));
-    const state = await findChip(/Status ist eines von Todo, In Progress/);
+    // both workflows in view have a Todo and an In Progress: the chip names the workflow too (20b-M5)
+    const state = await findChip(/Status ist eines von Todo \(Standard\), In Progress \(Standard\)/);
     await user.click(within(state).getByRole('button', { name: 'Operator: ist eines von' }));
     await user.click(await screen.findByRole('menuitemradio', { name: 'ist nicht' }));
     expect(last()).toEqual([{ field: 'state', op: 'not_in', value: ['std_todo', 'std_progress'] }]);
-    expect(await findChip(/Status ist keines von Todo, In Progress/)).toBeTruthy();
+    expect(await findChip(/Status ist keines von Todo \(Standard\), In Progress \(Standard\)/)).toBeTruthy();
     // "ist leer" needs no value, and Status cannot be empty: not offered
     await user.click(within(chip(/Status/)).getByRole('button', { name: /Operator/ }));
     expect(screen.queryByRole('menuitemradio', { name: 'ist leer' })).toBeNull();
@@ -419,6 +420,29 @@ describe('the filter bar', () => {
     expect(epicLists()).toHaveLength(0);
   });
 
+  it('says a parent could not be loaded when its reference failed, not that it is hidden (14b2-M1b)', async () => {
+    renderBar(conditions({ field: 'parent', op: 'is', value: 'wi_web_30' }), {
+      routes: { 'GET /api/v1/references': () => ({ status: 503, body: { reason: 'service_unavailable' } }) },
+    });
+    expect(await findChip(/^Filter: Eltern-Item ist Nicht geladen$/)).toBeTruthy();
+    expect(screen.queryByText('Verborgen')).toBeNull();
+  });
+
+  it('names a state by its workflow too when another workflow in view has one of the same name (20b-M5)', async () => {
+    // both Standard and Agentur-Freigabe have a "Done"; Kundenfreigabe is a name only the Agentur-Freigabe has
+    renderBar(conditions({ field: 'state', op: 'is', value: 'std_done' }, { field: 'state', op: 'is', value: 'app_done' }, { field: 'state', op: 'is', value: 'app_approval' }));
+    expect(await findChip(/^Filter: Status ist Done \(Standard\)$/)).toBeTruthy();
+    expect(await findChip(/^Filter: Status ist Done \(Agentur-Freigabe\)$/)).toBeTruthy();
+    expect(await findChip(/^Filter: Status ist Kundenfreigabe$/)).toBeTruthy();
+  });
+
+  it('names a state of a workflow out of view by its workflow when the project list has one of the same name (20b-M5)', async () => {
+    renderBar(conditions({ field: 'state', op: 'is', value: 'app_done' }, { field: 'state', op: 'is', value: 'std_done' }), { project: web });
+    expect(await findChip(/^Filter: Status ist Done \(Agentur-Freigabe\)$/)).toBeTruthy();
+    // the state of the list's own workflow keeps its plain name
+    expect(await findChip(/^Filter: Status ist Done$/)).toBeTruthy();
+  });
+
   it('offers the states of every workflow in view, named by workflow', async () => {
     const user = userEvent.setup();
     renderBar();
@@ -501,10 +525,62 @@ describe('the filter bar', () => {
     expect(visibleText(failed)).toBe('customerNicht geladenErneut versuchen');
     expect(screen.queryByText('Unbekanntes Feld')).toBeNull();
     failing = false;
-    await user.click(within(failed).getByRole('button', { name: 'Erneut versuchen' }));
-    expect(await findChip(/^Filter: Kunde ist Gärtnerei Moos$/)).toBeTruthy();
+    await user.click(within(failed).getByRole('button', { name: 'Erneut versuchen: customer' }));
+    const loaded = await findChip(/^Filter: Kunde ist Gärtnerei Moos$/);
+    // the pressed button went with the chip: the focus goes on to the new chip, never to the page (20b-M2)
+    await waitFor(() => expect(document.activeElement).toBe(within(loaded).getAllByRole('button')[0]));
     // the condition itself never changed
     expect(last()).toBeUndefined();
+  });
+
+  it('gives the focus to the chip of a field that turns out to be gone after loading again (20b-M2)', async () => {
+    const user = userEvent.setup();
+    let failing = true;
+    renderBar(conditions({ field: 'property:customer', op: 'is', value: 'opt_moos' }), {
+      routes: {
+        'GET /api/v1/properties': () =>
+          failing ? { status: 503, body: { reason: 'service_unavailable' } } : { body: list(catalog.filter((property) => property.key !== 'customer')) },
+      },
+    });
+    const failed = await findChip(/^Filter: Property „customer“, nicht geladen$/);
+    failing = false;
+    await user.click(within(failed).getByRole('button', { name: 'Erneut versuchen: customer' }));
+    const unknown = await findChip(/^Filter: Unbekanntes Feld property:customer$/);
+    await waitFor(() => expect(document.activeElement).toBe(within(unknown).getByRole('button', { name: 'Filter „Unbekanntes Feld“ entfernen' })));
+  });
+
+  it('names the retry button of each chip that could not be loaded by its field (20b-M3)', async () => {
+    renderBar(conditions({ field: 'property:customer', op: 'is', value: 'opt_moos' }, { field: 'property:effort', op: 'gt', value: 2 }), {
+      routes: { 'GET /api/v1/properties': () => ({ status: 503, body: { reason: 'service_unavailable' } }) },
+    });
+    const customer = await findChip(/^Filter: Property „customer“, nicht geladen$/);
+    const effort = await findChip(/^Filter: Property „effort“, nicht geladen$/);
+    expect(within(customer).getByRole('button', { name: 'Erneut versuchen: customer' })).toBeTruthy();
+    expect(within(effort).getByRole('button', { name: 'Erneut versuchen: effort' })).toBeTruthy();
+  });
+
+  it('forgets a retry that failed again: the press that loads them gives the focus to its own chip (20b-M2)', async () => {
+    const user = userEvent.setup();
+    let failing = true;
+    let asked = 0;
+    renderBar(conditions({ field: 'property:customer', op: 'is', value: 'opt_moos' }, { field: 'property:effort', op: 'gt', value: 2 }), {
+      routes: {
+        'GET /api/v1/properties': () => {
+          asked += 1;
+          return failing ? { status: 503, body: { reason: 'service_unavailable' } } : { body: list(catalog) };
+        },
+      },
+    });
+    const customer = await findChip(/^Filter: Property „customer“, nicht geladen$/);
+    const before = asked;
+    const retry = within(customer).getByRole('button', { name: 'Erneut versuchen: customer' });
+    await user.click(retry);
+    await waitFor(() => expect(asked).toBeGreaterThan(before));
+    await waitFor(() => expect(retry.getAttribute('aria-busy')).toBeNull());
+    failing = false;
+    await user.click(within(chip(/^Filter: Property „effort“, nicht geladen$/)).getByRole('button', { name: 'Erneut versuchen: effort' }));
+    const effort = await findChip(/^Filter: Aufwand \(h\) /);
+    await waitFor(() => expect(document.activeElement).toBe(within(effort).getAllByRole('button')[0]));
   });
 
   it('removes a property chip that could not be loaded', async () => {

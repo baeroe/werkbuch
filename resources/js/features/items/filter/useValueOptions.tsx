@@ -12,6 +12,7 @@
 
 import { useQueries } from '@tanstack/react-query';
 import { UserRoundCheck } from 'lucide-react';
+import { isGone } from '@/api/client';
 import { personOption } from '@/components/fields/AssigneePicker';
 import { labelOption } from '@/components/fields/LabelsPicker';
 import type { PickerOption } from '@/components/fields/Picker';
@@ -92,6 +93,11 @@ export function useValueOptions(def: FieldDef, project: Project | undefined, { o
   const error = used.find((query) => query.error)?.error ?? null;
   const retry = () => used.forEach((query) => void query.refetch());
 
+  // the workflow of a project list, else the workflows of the projects the reader sees
+  const workflowIds = project ? [project.workflow_id] : [...new Set((projects.data?.items ?? []).map((entry) => entry.workflow_id))];
+  const allWorkflows = workflows.data?.items ?? [];
+  const shownWorkflows = source === 'state' ? allWorkflows.filter((workflow) => workflowIds.includes(workflow.id)) : [];
+
   let options: PickerOption[] = [];
   switch (source) {
     case 'project':
@@ -100,13 +106,9 @@ export function useValueOptions(def: FieldDef, project: Project | undefined, { o
     case 'type':
       options = (types.data?.items ?? []).map((type) => ({ ...typeOption(type), hint: type.archived_at ? t('items.filter.value.archived') : undefined }));
       break;
-    case 'state': {
-      // the workflow of a project list, else the workflows of the projects the reader sees
-      const ids = project ? [project.workflow_id] : [...new Set((projects.data?.items ?? []).map((entry) => entry.workflow_id))];
-      const shown = (workflows.data?.items ?? []).filter((workflow) => ids.includes(workflow.id));
-      options = shown.flatMap((workflow) => statesInOrder(workflow).map((state) => ({ ...stateOption(state), hint: shown.length > 1 ? workflow.name : undefined })));
+    case 'state':
+      options = shownWorkflows.flatMap((workflow) => statesInOrder(workflow).map((state) => ({ ...stateOption(state), hint: shownWorkflows.length > 1 ? workflow.name : undefined })));
       break;
-    }
     case 'category':
       options = CATEGORY_ORDER.map((category) => {
         const label = t(CATEGORY_LABEL_KEYS[category]);
@@ -147,17 +149,32 @@ export function useValueOptions(def: FieldDef, project: Project | undefined, { o
       break;
   }
 
+  /**
+   * A state by its name, and by its workflow too when another workflow in view (or the list's, for a state out of view)
+   * has a state of the same name: two "Done" of a chip are told apart (20b-M5).
+   */
+  const stateName = (value: unknown): string | null => {
+    const owner = allWorkflows.find((workflow) => workflow.states.some((entry) => entry.id === value));
+    const state = owner?.states.find((entry) => entry.id === value);
+    if (!owner || !state) return null;
+    const clash = shownWorkflows.some((workflow) => workflow.id !== owner.id && workflow.states.some((entry) => entry.name === state.name));
+    return clash ? t('items.filter.value.state_in', { state: state.name, workflow: owner.name }) : state.name;
+  };
+
   const nameOf = (value: unknown): string => {
+    // readable, just not offered: a state of a workflow out of view (T16-M2)
+    const state = source === 'state' ? stateName(value) : null;
+    if (state) return state;
     const known = options.find((option) => option.value === value);
     if (known) return known.label;
-    // readable, just not offered: a deactivated account, a state of a workflow out of view (T16-M2)
+    // readable, just not offered: a deactivated account (T16-M2)
     const user = source === 'person' || source === 'member' ? users.data?.items.find((entry) => entry.id === value) : undefined;
     if (user) return t('items.filter.value.disabled', { name: user.name });
-    const state = source === 'state' ? workflows.data?.items.flatMap((workflow) => workflow.states).find((entry) => entry.id === value) : undefined;
-    if (state) return state.name;
     const ref = refs[refIds.indexOf(value as string)];
     if (ref?.data) return ref.data.title;
-    return loading || ref?.isPending ? t('items.filter.value.loading') : t('items.filter.value.hidden');
+    if (loading || ref?.isPending) return t('items.filter.value.loading');
+    // a reference that failed (5xx, no answer) is not one the reader does not see (14b2-M1b)
+    return ref?.error && !isGone(ref.error) ? t('items.filter.value.not_loaded') : t('items.filter.value.hidden');
   };
   return { options, loading, error, retry, nameOf };
 }

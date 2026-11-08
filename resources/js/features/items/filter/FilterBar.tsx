@@ -42,7 +42,7 @@ export function FilterBar({ filter, onChange, project, actions, searchRef }: Fil
   const properties = useProperties();
   const known = properties.data?.items ?? [];
   // without a list of properties a property chip says it was not loaded, not that its field is unknown (T16-M5)
-  const failed = properties.isError && !properties.data ? { retry: () => void properties.refetch(), retrying: properties.isFetching } : undefined;
+  const failed = properties.isError && !properties.data ? { retry: async () => !(await properties.refetch()).isError, retrying: properties.isFetching } : undefined;
   const ownSearch = useRef<HTMLInputElement>(null);
   const search = searchRef ?? ownSearch;
   const addButton = useRef<HTMLButtonElement>(null);

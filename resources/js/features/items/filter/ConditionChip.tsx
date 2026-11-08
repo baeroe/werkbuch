@@ -35,7 +35,7 @@ type ConditionChipProps = {
   /** The project of a project list: its workflow's states. */
   project?: Project;
   /** The properties failed to load: a chip on a property says so and offers to load them again (T16-M5). */
-  failed?: { retry: () => void; retrying: boolean };
+  failed?: { retry: () => Promise<boolean>; retrying: boolean };
 };
 
 /** Frames to wait for the focus to land after it left an element (a popup gives it back to its trigger a frame later). */
@@ -77,8 +77,17 @@ export function ConditionChip({ condition, def, onChange, onRemove, onLeave, fre
   const askValue = useRef(false);
   const focus = useFocusLeave(onLeave);
   const text = useConditionText(condition, def, project, open);
+  const notLoaded = !def && failed !== undefined && condition.field.startsWith(PROPERTY_PREFIX);
+  /** "Erneut versuchen" was pressed: once the chip is drawn anew, the focus goes on to it (20b-M2). */
+  const retried = useRef(false);
+  useLayoutEffect(() => {
+    if (notLoaded || !retried.current) return;
+    retried.current = false;
+    const active = document.activeElement;
+    if (active === null || active === document.body) root.current?.querySelector<HTMLElement>('button')?.focus();
+  }, [notLoaded]);
 
-  if (!def && failed && condition.field.startsWith(PROPERTY_PREFIX)) {
+  if (notLoaded) {
     // not an unknown field: the list of properties did not come, the condition goes to the server as it is
     const key = condition.field.slice(PROPERTY_PREFIX.length);
     return (
@@ -87,7 +96,15 @@ export function ConditionChip({ condition, def, onChange, onRemove, onLeave, fre
           {key}
         </span>
         <span className="shrink-0 text-muted">{t('items.filter.chip.not_loaded')}</span>
-        <Button variant="ghost" size="sm" icon={RotateCw} pending={failed.retrying} onClick={failed.retry}>
+        <Button variant="ghost" size="sm" icon={RotateCw} aria-label={t('items.filter.chip.retry', { field: key })} pending={failed.retrying}
+          onClick={() => {
+            retried.current = true;
+            // failed again: a later load (another chip's press) is not this press's any more
+            void failed.retry().then((loaded) => {
+              if (!loaded) retried.current = false;
+            });
+          }}
+        >
           {t('common.retry')}
         </Button>
         <IconButton icon={X} size="sm" label={t('items.filter.chip.remove', { field: key })} tooltip={false} onClick={onRemove} />
@@ -97,7 +114,7 @@ export function ConditionChip({ condition, def, onChange, onRemove, onLeave, fre
 
   if (!def) {
     return (
-      <div role="group" aria-label={t('items.filter.chip.unknown_name', { field: condition.field })} className="inline-flex h-11 max-w-full min-w-0 items-center gap-0.5 rounded-ctl border border-dashed border-line bg-surface pr-0.5 pl-2 text-sm text-muted md:h-7">
+      <div ref={root} role="group" aria-label={t('items.filter.chip.unknown_name', { field: condition.field })} className="inline-flex h-11 max-w-full min-w-0 items-center gap-0.5 rounded-ctl border border-dashed border-line bg-surface pr-0.5 pl-2 text-sm text-muted md:h-7">
         <span className="truncate">{t('items.filter.chip.unknown')}</span>
         <IconButton icon={X} size="sm" label={t('items.filter.chip.remove', { field: t('items.filter.chip.unknown') })} tooltip={false} onClick={onRemove} />
       </div>

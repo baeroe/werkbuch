@@ -1045,6 +1045,26 @@ describe('useLiveItem', () => {
   });
 });
 
+describe('the reference of an item', () => {
+  it('loads again after work_item.updated and work_item.deleted of its item, not of another (14b2-M1a)', async () => {
+    const own = await shown(qk.references.item('wi_web_30'));
+    const other = await shown(qk.references.item('wi_web_47'));
+    renderHook(() => useLiveSync(), { wrapper });
+
+    // a renamed epic: the closed parent chip and the references in texts show its new title
+    send({ event_id: 'ev_1', type: 'work_item.updated', item_id: 'wi_web_30' });
+    await pass(LIVE_BURST_MS);
+    expect(own.fetches()).toBe(2);
+    expect(other.fetches()).toBe(1);
+
+    // a deleted one: `GET /references` leaves it out without a 404, the reference reads it as gone
+    send({ event_id: 'ev_2', type: 'work_item.deleted', item_id: 'wi_web_30' });
+    await pass(LIVE_BURST_MS);
+    expect(own.fetches()).toBe(3);
+    expect(other.fetches()).toBe(1);
+  });
+});
+
 describe('the wiki pages of an item', () => {
   const key = qk.pages.item('wi_web_47');
 
