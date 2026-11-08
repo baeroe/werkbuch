@@ -118,6 +118,8 @@ export const board = {
   refuseMoves: false,
   /** The server answers every transition with 503. */
   failMoves: false,
+  /** The server refuses every change of fields (422 on the dates). */
+  refuseDates: false,
   /** The first pages of these groups, and every next page (`more`), answer 503. */
   failing: new Set<string>(),
   api: undefined as MockApi | undefined,
@@ -285,7 +287,12 @@ function route(key: string): MockRoute | undefined {
     };
   }
   const patch = key.match(/^PATCH \/api\/v1\/work-items\/([^/]+)$/);
-  if (patch) return (body) => change(patch[1]!, body as Partial<WorkItem>);
+  if (patch) {
+    return (body) => {
+      if (board.refuseDates) return { status: 422, body: { reason: 'validation_failed', errors: { due_date: ['Das Due-Date liegt vor dem Start.'] } } };
+      return change(patch[1]!, body as Partial<WorkItem>);
+    };
+  }
   return undefined;
 }
 
@@ -300,6 +307,7 @@ export function startBoardServer(): void {
   board.holdMore = null;
   board.refuseMoves = false;
   board.failMoves = false;
+  board.refuseDates = false;
   board.failing = new Set();
   board.api = mockApi(new Proxy({}, { get: (_target, key) => (typeof key === 'string' ? route(key) : undefined) }) as Record<string, MockRoute>);
   const answering = globalThis.fetch;

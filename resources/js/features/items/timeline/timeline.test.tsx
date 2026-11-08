@@ -631,6 +631,23 @@ describe('dragging', () => {
     await waitFor(() => expect(patches('wi_web_30')).toEqual([{ start_date: '2026-10-08', due_date: '2026-11-22' }]));
   });
 
+  it('puts the bar back when the server refuses the dates (T21-M6)', async () => {
+    board.refuseDates = true;
+    renderTimeline();
+    await findRow('WEB-30');
+    await editable('wi_web_30');
+    pointerDown(barOf('wi_web_30'), { clientX: 500 });
+    pointerMove({ clientX: 584 });
+    expect(row('WEB-30').getAttribute('aria-label')).toMatch(/08\.10\.2026 bis 22\.11\.2026/);
+    pointerUp({ clientX: 584 });
+    await waitFor(() => expect(patches('wi_web_30')).toHaveLength(1));
+    // the saved dates show again, nothing was stored, and the toast says the refusal
+    await waitFor(() => expect(row('WEB-30').getAttribute('aria-label')).toMatch(/01\.10\.2026 bis 15\.11\.2026/));
+    expect(stored('wi_web_30')).toMatchObject({ start_date: '2026-10-01', due_date: '2026-11-15' });
+    await waitFor(() => expect(lastToast()).toMatchObject({ tone: 'error' }));
+    expect(lastToast()?.title).toBe('Änderung nicht gespeichert');
+  });
+
   it('keeps the dates of a drag that follows a key before the keys rest', async () => {
     renderTimeline();
     await focusRow('WEB-30');
