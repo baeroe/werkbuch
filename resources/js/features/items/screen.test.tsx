@@ -359,6 +359,33 @@ describe('the item list screen', () => {
     ]);
   });
 
+  it('changes the address once when × removes a chip with typed text', async () => {
+    const user = userEvent.setup();
+    inertia.go(`/projects/WEB?filter=${filterOf([{ field: 'property:effort', op: 'gt', value: 2.5 }])}`);
+    renderScreen();
+    const effort = await screen.findByRole('group', { name: /^Filter: Aufwand \(h\) größer als 2,5$/ });
+    const field = within(effort).getByRole('textbox', { name: 'Aufwand (h) größer als' });
+    await user.clear(field);
+    await user.type(field, '5');
+    inertia.get.mockClear();
+
+    // the × takes the focus from the field: the typed text is not kept first, the chip just goes
+    await user.click(within(effort).getByRole('button', { name: 'Filter „Aufwand (h)“ entfernen' }));
+    expect(inertia.get).toHaveBeenCalledTimes(1);
+    expect(inertia.url).toBe('/projects/WEB');
+
+    // Tab from the field to the × leaves the field: the typed text is kept, as on leaving it anywhere
+    act(() => inertia.go(`/projects/WEB?filter=${filterOf([{ field: 'property:effort', op: 'gt', value: 2.5 }])}`));
+    const again = within(await screen.findByRole('group', { name: /^Filter: Aufwand \(h\) größer als 2,5$/ })).getByRole('textbox', { name: 'Aufwand (h) größer als' });
+    await user.clear(again);
+    await user.type(again, '7');
+    inertia.get.mockClear();
+    await user.tab();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Filter „Aufwand (h)“ entfernen' }));
+    expect(inertia.get).toHaveBeenCalledTimes(1);
+    expect(inertia.url).toBe(`/projects/WEB?filter=${filterOf([{ field: 'property:effort', op: 'gt', value: 7 }])}`);
+  });
+
   it('sends no unfinished condition', async () => {
     const unfinished: Condition[] = [
       { field: 'state', op: 'in', value: [] },

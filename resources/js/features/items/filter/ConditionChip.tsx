@@ -168,7 +168,9 @@ export function ConditionChip({ condition, def, onChange, onRemove, onLeave, fre
         <span className="shrink-0 px-1.5 text-muted">{operator}</span>
       )}
       <ConditionEditor condition={condition} def={def} label={label} onChange={onChange} open={open} onOpenChange={setOpen} project={project} />
-      <IconButton icon={X} size="sm" label={t('items.filter.chip.remove', { field: label })} tooltip={false} onClick={onRemove} />
+      {/* a press keeps the focus where it is: a field of the chip would keep its typed text as it lost the focus, and the
+          list would change twice (T16-M4); the chip just goes. Tab to the × still keeps the text, as leaving a field does */}
+      <IconButton icon={X} size="sm" label={t('items.filter.chip.remove', { field: label })} tooltip={false} onMouseDown={(event) => event.preventDefault()} onClick={onRemove} />
     </div>
   );
 }

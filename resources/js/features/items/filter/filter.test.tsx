@@ -276,7 +276,7 @@ describe('the filter bar', () => {
 
   it('removes a new condition before it has a value, and Backspace in its field stays typing', async () => {
     const user = userEvent.setup();
-    const { changes, last } = renderBar(conditions({ field: 'blocked', op: 'is', value: true }));
+    const { changes } = renderBar(conditions({ field: 'blocked', op: 'is', value: true }));
     await addField(user, 'Notiz');
     const notes = await screen.findByRole('textbox', { name: 'Notiz enthält' });
     await waitFor(() => expect(document.activeElement).toBe(notes));
@@ -289,13 +289,14 @@ describe('the filter bar', () => {
     expect(chip(/Blockiert/).contains(document.activeElement)).toBe(true);
     expect(changes).toHaveLength(0);
 
-    // typed and then removed: what was typed applies as the field is left, then the chip goes
+    // typed and then removed: the × keeps nothing typed first, the chip just goes (T16-M4)
     await addField(user, 'Notiz');
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Notiz enthält' })));
     await user.keyboard('Rückruf');
     await user.click(within(chip(/Notiz/)).getByRole('button', { name: 'Filter „Notiz“ entfernen' }));
     expect(screen.queryByRole('group', { name: /Notiz/ })).toBeNull();
-    expect(last()).toEqual([{ field: 'blocked', op: 'is', value: true }]);
+    expect(changes).toHaveLength(0);
+    expect(chip(/^Filter: Blockiert ist ja$/)).toBeTruthy();
   });
 
   it('focuses the title search with / and filters by title on Enter', async () => {
