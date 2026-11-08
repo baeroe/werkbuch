@@ -41,19 +41,14 @@ it('says down when Meilisearch does not answer', function () {
 });
 
 it('waits once for Meilisearch and Reverb together (K21)', function () {
-    $socket = stream_socket_server('tcp://127.0.0.1:0') ?: throw new RuntimeException('No free port.');
-    $port = (int) substr((string) strrchr((string) stream_socket_get_name($socket, false), ':'), 1);
-    fclose($socket);
-
-    // five requests of half a second each: asked one after the other they take two and a half seconds, in a pool about one
-    $server = new Process([PHP_BINARY, '-S', "127.0.0.1:{$port}", dirname(__DIR__).'/Support/slow-status.php'], null, ['PHP_CLI_SERVER_WORKERS' => '8']);
+    // five requests of half a second each: asked one after the other they take two and a half seconds, in a pool about half a
+    // second; the server answers every request after half a second, none waits for another (tests/Support/slow-status.php)
+    $server = new Process([PHP_BINARY, dirname(__DIR__).'/Support/slow-status.php']);
     $server->start();
     try {
-        $until = microtime(true) + 5;
-        while (@fsockopen('127.0.0.1', $port) === false) {
-            expect(microtime(true) < $until && $server->isRunning())->toBeTrue('The slow server did not start.');
-            usleep(20_000);
-        }
+        $server->waitUntil(fn (string $type, string $output) => str_contains($server->getOutput(), "\n"));
+        expect(preg_match('/^(\d+)$/m', $server->getOutput(), $match))->toBe(1, 'The slow server named no port.');
+        $port = (int) $match[1];
         config([
             'scout.driver' => 'meilisearch', 'scout.meilisearch.host' => "http://127.0.0.1:{$port}", 'scout.meilisearch.key' => null,
             'broadcasting.default' => 'reverb',

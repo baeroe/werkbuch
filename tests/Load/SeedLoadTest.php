@@ -25,7 +25,9 @@ $statementsOf = function (Closure $run): array {
 
 it('refuses a database other than load', function () use ($statementsOf) {
     LoadWorld::forget();
-    // a name no database has: should the guard ever break, the test fails on the connection, never on a database of use
+    // a name no database has, so no data of use is at stake. Should the guard ever break, `migrate` creates `load_refused`
+    // (CREATE DATABASE IF NOT EXISTS) and the seed fills it; the test fails only afterwards, on its statements and on the
+    // message: a QueryException names `load_refused` as well, the text of the guard does not come from one
     config(['database.connections.mariadb.database' => 'load_refused']);
     DB::purge('mariadb');
 
@@ -44,6 +46,7 @@ it('refuses a database other than load', function () use ($statementsOf) {
     }
 
     expect($refused)->toBeInstanceOf(RuntimeException::class)
+        ->and($refused?->getMessage())->toContain('go only into the database')
         ->and($refused?->getMessage())->toContain('load_refused')
         ->and($statements)->toBe([]);
 });
@@ -68,6 +71,7 @@ it('stops every load test before its first statement on another database (T8a-M6
     }
 
     expect($refused)->toBeInstanceOf(RuntimeException::class)
+        ->and($refused?->getMessage())->toContain('go only into the database')
         ->and($refused?->getMessage())->toContain('load_refused')
         ->and($statements)->toBe([]);
 });

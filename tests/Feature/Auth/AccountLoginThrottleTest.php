@@ -99,7 +99,8 @@ it('says the wait in minutes in the language of the request', function (Closure 
     $from('10.0.0.4')->post('/login', ['email' => 'mara@example.com', 'password' => 'secret-pass'])
         ->assertSessionHasErrors(['email' => 'Zu viele Anmeldeversuche. Versuch es in 60 Minuten wieder.']);
     $this->assertGuest();
-    // the probe: the same sentence in English, for a request that does not ask for German
+    // the German sentence is no copy of the English one, read here with trans(); an English request (the default) says the
+    // English sentence in 'says the wait in minutes'
     expect(trans('auth.throttle_minutes', ['minutes' => 60], 'en'))->toBe('Too many sign-in attempts. Try again in 60 minutes.');
 })->with([
     'the cookie locale' => [fn () => test()->withUnencryptedCookie('locale', Locale::De->value)],
