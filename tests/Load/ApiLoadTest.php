@@ -35,13 +35,11 @@ use Tests\Load\Support\Budget;
 /**
  * The rows over the budget of 1.5 s, by the task that takes them out (K10, K13): they run and are measured like every
  * other row, only their median is not asserted. Their query count is. In DDEV every row stays within the budget; the
- * CI job `load` (PR #32, run 42439150185, MariaDB with the image's buffer pool of 128 MiB) measured these three over it.
+ * CI job `load` (PR #32, run 42439150185, MariaDB with the image's buffer pool of 128 MiB) measured these over it.
+ * Task 10a took out the sort by a property (CI 1 764 and 1 784 ms): its first value is joined once and read from an
+ * index.
  */
 const OVER_BUDGET = [
-    // CI 1 764 ms (DDEV 897 ms), 14 queries
-    'query property:effort asc' => 'Task 10a: the sort by a property reads its first value per item',
-    // CI 1 784 ms (DDEV 873 ms), 14 queries
-    'query property:effort desc' => 'Task 10a: the sort by a property reads its first value per item',
     // CI 2 193 ms (DDEV 1 039 ms), 70 queries; seven answers measured together
     'board of a project' => 'Task 10b: the groups and the first page of every group of the board',
 ];
