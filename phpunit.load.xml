@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    The load suite (tests/Load) against its own database `load` with 50 000 items. Not part of phpunit.xml: neither in the
+    required job nor in the coverage. Every value is forced: the environment of DDEV (DB_DATABASE=db, SCOUT_PREFIX) would
+    win otherwise, and LoadWorld::ensure() refuses anything but the database `load` and the prefix `load_`.
+    Run it with: ddev artisan test, option configuration=phpunit.load.xml (docs/en/development.md, „Load“)
+-->
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         colors="true"
+>
+    <testsuites>
+        <testsuite name="Load">
+            <directory>tests/Load</directory>
+        </testsuite>
+    </testsuites>
+    <php>
+        <ini name="memory_limit" value="2G"/>
+        <env name="APP_ENV" value="testing" force="true"/>
+        <env name="APP_MAINTENANCE_DRIVER" value="file" force="true"/>
+        <env name="BCRYPT_ROUNDS" value="4" force="true"/>
+        <env name="BROADCAST_CONNECTION" value="null" force="true"/>
+        <env name="CACHE_STORE" value="array" force="true"/>
+        <env name="DB_CONNECTION" value="mariadb" force="true"/>
+        <env name="DB_DATABASE" value="load" force="true"/>
+        <env name="DB_URL" value="" force="true"/>
+        <env name="ADMIN_EMAIL" value="" force="true"/>
+        <env name="ADMIN_PASSWORD" value="" force="true"/>
+        <env name="MAIL_MAILER" value="array" force="true"/>
+        <env name="QUEUE_CONNECTION" value="sync" force="true"/>
+        <env name="SESSION_DRIVER" value="array" force="true"/>
+        <env name="WEBHOOKS_ALLOW_PRIVATE" value="false" force="true"/>
+        <env name="SCOUT_DRIVER" value="meilisearch" force="true"/>
+        <env name="SCOUT_PREFIX" value="load_" force="true"/>
+        <env name="PULSE_ENABLED" value="false" force="true"/>
+        <env name="TELESCOPE_ENABLED" value="false" force="true"/>
+        <env name="NIGHTWATCH_ENABLED" value="false" force="true"/>
+    </php>
+</phpunit>

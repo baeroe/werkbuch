@@ -25,6 +25,7 @@ use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Laravel\Scout\EngineManager;
 use Symfony\Component\Finder\Finder;
+use Tests\Load\LoadTestCase;
 use Tests\Support\ArraySearchEngine;
 use Tests\Support\FakeResolver;
 use Tests\Support\RecordingBroadcaster;
@@ -38,6 +39,8 @@ pest()->extend(TestCase::class)->use(RefreshDatabase::class)->beforeEach(functio
     resolver([]);
 })->in('Feature');
 pest()->extend(TestCase::class)->use(DatabaseMigrations::class)->in('Integration');
+// the load suite (phpunit.load.xml) against the database `load`, which keeps its data between runs (LoadWorld)
+pest()->extend(LoadTestCase::class)->in('Load');
 
 /**
  * Absolute path inside the repository. Unit tests run without the app, so they resolve files

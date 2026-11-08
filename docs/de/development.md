@@ -101,6 +101,23 @@ node scripts/coverage-merge.mjs --expect-shards=desktop-light,desktop-dark,phone
 
 `--remap-only` bildet jede Datei unter `coverage/e2e` einmal auf die Quellen zurück und schreibt sie als eine Datei, ohne Bericht und ohne Gate. Ein volles Projekt hinterlässt weit über tausend Dateien zu je etwa 2 MB, gemappt sind es rund 4 MB. Die Treffer summieren sich vor und nach dem Mapping gleich, weil alle Projekte denselben Build mit denselben Source-Maps laufen. `--expect-shards` liest genau die genannten Projekte, jedes aus `coverage/e2e/<name>.json`, `coverage/e2e/<name>/` oder `coverage/e2e/<präfix>-<name>/` (der Ordner, den `actions/download-artifact` aus dem Artefakt `e2e-coverage-<name>` macht). Er scheitert und nennt jedes Projekt ohne Abdeckung, mit leerem Ordner oder mit zwei solchen Quellen.
 
+### Lasttests
+
+Die Suite `Load` (`tests/Load`) misst die API gegen 50 000 Items. Sie hat eine eigene Konfiguration `phpunit.load.xml` und eine eigene Datenbank `load`, die DDEV beim Start neben `testing` anlegt; sie gehört weder zu `phpunit.xml` noch zur Abdeckung.
+
+```bash
+ddev exec vendor/bin/pest --configuration=phpunit.load.xml                  # die ganze Suite
+ddev exec vendor/bin/pest --configuration=phpunit.load.xml --filter=SeedLoad # nur die Daten
+```
+
+Ruf Pest direkt auf: `ddev artisan test` stellt `--configuration=phpunit.xml` vor deine Angabe, PHPUnit warnt, dass die Option doppelt kam, und endet mit Exitcode 1, auch wenn jeder Test besteht.
+
+`phpunit.load.xml` erzwingt jeden Wert, darunter die Datenbank `load` und das Such-Präfix `load_`, weil sonst die Umgebung von DDEV gewänne. `Tests\Load\LoadWorld::ensure()` prüft beides vor seiner ersten Anweisung und lehnt alles andere ab. Danach läuft `migrate --force`, so bekommt eine geseedete Datenbank neue Migrationen, und es seedet neu (`migrate:fresh` und `Database\Seeders\LoadSeeder`), wenn der Tabelle `load_meta` die Version des Seeders oder seine Zahlen fehlen. Jede Änderung am Seeder erhöht `LoadSeeder::VERSION`.
+
+Der Seeder schreibt den Demo-Katalog, 30 Personen `load-NN@example.com` (`load-01` ist Org-Admin, Passwort `werkbuch-load`), 5 Bots, 20 Projekte `L01` bis `L20` mit je 2 500 Items, 5 000 Relationen, 100 000 Kommentare (je Projekt ein Item mit 40), 2 000 Wiki-Seiten in `L01` in vier Ebenen, 200 Vorlagen (50 werden in derselben Minute fällig) und 50 ausgeschaltete Webhooks. Er schreibt gesammelt ohne Events und nimmt seine Texte aus einem festen Vorrat Tiptap-JSON, nie aus Markdown. Danach baut er den Suchindex (`load_work_items` und die anderen) neu auf. In DDEV dauert der erste Lauf rund 45 Sekunden (13 s für die Zeilen, 31 s für den Suchindex); die Datenbank wird rund 370 MB groß. Spätere Läufe nutzen sie weiter.
+
+Lass die Lastsuite nie gleichzeitig mit den anderen Tests oder den Browser-Tests laufen: Sie teilen sich MariaDB, Meilisearch und die CPU der VM, die Messungen stimmten dann nicht.
+
 ## Passwort vergessen
 
 Kann sich niemand mehr anmelden, setze auf der Kommandozeile ein neues Passwort. Das Kommando fragt danach und beendet alle Sitzungen des Kontos:

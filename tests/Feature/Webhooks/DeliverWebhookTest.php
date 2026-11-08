@@ -241,7 +241,7 @@ it('never logs or stores the secret', function () use ($deliver, $work, $jobs) {
     app()->bind(RecordWebhookAttempt::class, fn () => throw new RuntimeException('Deadlock found when trying to get lock'));
     $work();
 
-    $everything = collect(Schema::getTableListing(schemaQualified: false))
+    $everything = collect(Schema::getTableListing(DB::getDatabaseName(), schemaQualified: false))
         ->map(fn (string $table) => json_encode(DB::table($table)->get(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES))
         ->implode("\n");
     Http::assertSentCount(3);

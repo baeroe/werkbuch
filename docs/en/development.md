@@ -101,6 +101,23 @@ node scripts/coverage-merge.mjs --expect-shards=desktop-light,desktop-dark,phone
 
 `--remap-only` maps every file below `coverage/e2e` back to the sources once and writes them as one file, with no report and no gate. A full project leaves well over a thousand files of about 2 MB; mapped, they come to about 4 MB. The hits add up the same before and after the mapping, because every project runs the same build with the same source maps. `--expect-shards` reads exactly the projects it names, each from `coverage/e2e/<name>.json`, `coverage/e2e/<name>/` or `coverage/e2e/<prefix>-<name>/` (the folder `actions/download-artifact` makes of the artifact `e2e-coverage-<name>`). It fails naming every project without coverage, with an empty folder or with two such sources.
 
+### Load tests
+
+The suite `Load` (`tests/Load`) measures the API against 50 000 items. It has its own configuration `phpunit.load.xml` and its own database `load`, which DDEV creates on start next to `testing`; it is neither part of `phpunit.xml` nor of the coverage.
+
+```bash
+ddev exec vendor/bin/pest --configuration=phpunit.load.xml                  # the whole suite
+ddev exec vendor/bin/pest --configuration=phpunit.load.xml --filter=SeedLoad # only the data
+```
+
+Call Pest directly: `ddev artisan test` puts `--configuration=phpunit.xml` in front of yours, PHPUnit warns that the option came twice and ends with exit code 1, even when every test passes.
+
+`phpunit.load.xml` forces every value, the database `load` and the search prefix `load_` among them, because the environment of DDEV would win otherwise. `Tests\Load\LoadWorld::ensure()` checks both before its first statement and refuses anything else. It then runs `migrate --force`, so a seeded database gets new migrations, and seeds anew (`migrate:fresh` and `Database\Seeders\LoadSeeder`) when the table `load_meta` lacks the version of the seeder or its numbers. Every change to the seeder raises `LoadSeeder::VERSION`.
+
+The seeder writes the demo catalog, 30 people `load-NN@example.com` (`load-01` is the org admin, password `werkbuch-load`), 5 bots, 20 projects `L01` to `L20` with 2 500 items each, 5 000 relations, 100 000 comments (one item per project with 40), 2 000 wiki pages in `L01` four levels deep, 200 templates (50 come due in the same minute) and 50 switched-off webhooks. It writes in bulk without events and takes its texts from a fixed pool of Tiptap JSON, never from Markdown. Then it builds the search index (`load_work_items` and the others) anew. In DDEV the first run takes about 45 seconds (13 s for the rows, 31 s for the search index); the database comes to about 370 MB. Later runs reuse it.
+
+Never run the load suite at the same time as the other tests or the browser tests: they share MariaDB, Meilisearch and the CPU of the VM, and the measurements would be off.
+
 ## Lost password
 
 If nobody can sign in any more, set a new password from the command line. The command asks for it and ends all sessions of the account:

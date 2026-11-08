@@ -53,3 +53,6 @@ hooks:
     # separate database for Pest (phpunit.xml forces DB_DATABASE=testing)
     - exec: bash -c 'C=$(command -v mariadb || command -v mysql); $C -uroot -proot -e "CREATE DATABASE IF NOT EXISTS testing; GRANT ALL ON testing.* TO '"'"'db'"'"'@'"'"'%'"'"';"'
       service: db
+    # separate database for the load suite (phpunit.load.xml forces DB_DATABASE=load); `load` is a reserved word
+    - exec: bash -c 'C=$(command -v mariadb || command -v mysql); $C -uroot -proot -e "CREATE DATABASE IF NOT EXISTS \`load\`; GRANT ALL ON \`load\`.* TO '"'"'db'"'"'@'"'"'%'"'"';"'
+      service: db
