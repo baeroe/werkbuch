@@ -502,9 +502,22 @@ describe('Members', () => {
     expect(await screen.findByText('Standard-Bot')).toBeTruthy();
   });
 
-  it('says when there are no members', async () => {
-    renderSettings('members', { 'GET /api/v1/projects/p_web/members': () => ({ body: list([]) }) });
+  it('names the next step for an empty member list', async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderSettings('members', { 'GET /api/v1/projects/p_web/members': () => ({ body: list([]) }) });
+
     expect(await screen.findByText('Noch keine Mitglieder')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Person oder Bot hinzufügen' }));
+    expect(document.activeElement).toBe(screen.getByRole('combobox', { name: 'Person oder Bot' }));
+    unmount();
+    api?.restore();
+
+    // somebody who only reads gets the sentence of who adds members, and nothing to press
+    signedIn = lene;
+    renderSettings('members', { 'GET /api/v1/projects/p_web/members': () => ({ body: list([]) }) }, { project: { ...web, my_role: 'member' } });
+    expect(await screen.findByText('Noch keine Mitglieder')).toBeTruthy();
+    expect(screen.getByText('Mitglieder fügen die Admins des Projekts und Org-Admins hinzu.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Person oder Bot hinzufügen' })).toBeNull();
   });
 
   it('adds an active person or bot that is no member yet', async () => {

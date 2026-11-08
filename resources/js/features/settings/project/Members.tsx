@@ -123,7 +123,19 @@ function MemberList({ project, canManage, readOnlyReason, members, users }: Proj
           </form>
         )}
         {rows.length === 0 ? (
-          <EmptyState icon={Users} title={t('settings.project.members.empty_title')} description={t('settings.project.members.empty_description')} />
+          // the next step: those who manage add somebody (the field above takes the focus), everybody else learns who does
+          <EmptyState
+            icon={Users}
+            title={t('settings.project.members.empty_title')}
+            description={canManage ? t('settings.project.members.empty_description') : t('settings.project.members.empty_readers')}
+            actions={
+              canManage && (
+                <Button variant="primary" icon={UserPlus} onClick={() => document.getElementById(personFieldId)?.focus()}>
+                  {t('settings.project.members.empty_add')}
+                </Button>
+              )
+            }
+          />
         ) : (
           <RuledList label={t('settings.project.members.list_of', { identifier: project.identifier })}>
             {rows.map(({ user, role }) => {
