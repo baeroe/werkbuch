@@ -1,8 +1,11 @@
 import path from 'node:path';
 import { defineConfig } from 'vitest/config';
+import { fsModuleCacheFollowsDependencies } from './scripts/dependency-layout.mjs';
 
 export default defineConfig({
   resolve: { alias: { '@': path.resolve(import.meta.dirname, 'resources/js') } },
+  // the cached modules import the pnpm folders they were resolved to: a relinked node_modules needs other cache keys
+  plugins: [fsModuleCacheFollowsDependencies(import.meta.dirname)],
   test: {
     environment: 'jsdom',
     setupFiles: ['./resources/js/test/setup.ts'],
