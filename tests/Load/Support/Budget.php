@@ -29,7 +29,7 @@ final class Budget
     /** The runs after the warm-up; the median is the middle one. */
     public const RUNS = 3;
 
-    /** @var array<string, array{median: float, runs: list<float>, queries: list<int>, baseline: ?int, smaller: ?int, budget: float}> */
+    /** @var array<string, array{median: float, runs: list<float>, queries: list<int>, baseline: ?int, smaller: ?int, budget: ?float, memory: ?float}> */
     private static array $rows = [];
 
     /** @var array<string, int>|null the queries of every row in the small world, once per process */
@@ -65,10 +65,30 @@ final class Budget
         $sorted = $runs;
         sort($sorted);
         $median = $sorted[intdiv(self::RUNS, 2)];
-        self::$rows[$name] = ['median' => $median, 'runs' => $runs, 'queries' => $queries, 'baseline' => $baseline, 'smaller' => $smaller, 'budget' => $seconds];
+        self::$rows[$name] = ['median' => $median, 'runs' => $runs, 'queries' => $queries, 'baseline' => $baseline, 'smaller' => $smaller, 'budget' => $seconds, 'memory' => null];
         self::write();
 
         return $median;
+    }
+
+    /**
+     * Runs `$work` once, without a warm-up, for work a second run would find done (a bulk change, a night, a template
+     * run): records its duration, its queries and the peak of PHP's memory from its start (memory_reset_peak_usage(),
+     * in MB) as a row of the table, with `$seconds` as its budget (null: only measured). Returns what `$work` returned.
+     */
+    public static function once(string $name, Closure $work, ?float $seconds): mixed
+    {
+        self::prepare();
+        memory_reset_peak_usage();
+        $started = hrtime(true);
+        $result = $work();
+        $run = (hrtime(true) - $started) / 1e9;
+        $memory = memory_get_peak_usage() / 1_048_576;
+
+        self::$rows[$name] = ['median' => $run, 'runs' => [$run], 'queries' => [self::$counted], 'baseline' => null, 'smaller' => null, 'budget' => $seconds, 'memory' => $memory];
+        self::write();
+
+        return $result;
     }
 
     /**
@@ -94,7 +114,7 @@ final class Budget
     }
 
     /**
-     * @return array{median: float, runs: list<float>, queries: list<int>, baseline: ?int, smaller: ?int, budget: float}
+     * @return array{median: float, runs: list<float>, queries: list<int>, baseline: ?int, smaller: ?int, budget: ?float, memory: ?float}
      */
     public static function row(string $name): array
     {
@@ -125,25 +145,28 @@ final class Budget
             '',
             sprintf('Median of %d runs after a warm-up, budget %.1f s per answer; queries per run, against 100 items per project and for a smaller answer (a smaller page, fewer children).', self::RUNS, self::SECONDS),
             'Not measured, the same for every row: the session, the account and the counters of the rate limit (array stores in the suite).',
+            'A row with one run and a peak of memory ran once (Budget::once(): a bulk change, the night, a template run); its budget is its own, `–` only measured.',
             '',
-            '| Row | Median ms | Runs ms | Queries | Against 100 items | Smaller answer | Status |',
-            '|---|---:|---|---:|---:|---:|---|',
+            '| Row | Median ms | Runs ms | Queries | Against 100 items | Smaller answer | Peak MB | Status |',
+            '|---|---:|---|---:|---:|---:|---:|---|',
         ];
 
         foreach (self::$rows as $name => $row) {
             $status = match (true) {
+                $row['budget'] === null => '–',
                 $row['median'] <= $row['budget'] => 'ok',
                 isset($over[$name]) => 'over: '.$over[$name],
                 default => 'OVER',
             };
             $lines[] = sprintf(
-                '| %s | %.0f | %s | %s | %s | %s | %s |',
+                '| %s | %.0f | %s | %s | %s | %s | %s | %s |',
                 $name,
                 $row['median'] * 1_000,
                 implode(' / ', array_map(fn (float $run) => sprintf('%.0f', $run * 1_000), $row['runs'])),
                 implode(' / ', array_unique($row['queries'])),
                 $row['baseline'] ?? '–',
                 $row['smaller'] ?? '–',
+                $row['memory'] === null ? '–' : sprintf('%.0f', $row['memory']),
                 $status,
             );
         }
