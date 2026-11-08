@@ -13,17 +13,18 @@ use App\Models\User;
  */
 final class BotIds
 {
-    /** @var array<string, bool> account id → is a bot (false also for an id without an account) */
+    /** @var array<string, bool> account id (lower case) → is a bot (false also for an id without an account) */
     private array $known = [];
 
     /**
-     * Reads with one query which of the ids are bots; ids already known are not asked again.
+     * Reads with one query which of the ids are bots; ids already known are not asked again. An id counts in any case:
+     * the collation finds the account either way, the answer is held under the lower-case id (T13a-M1).
      *
      * @param  list<string>  $ids
      */
     public function preload(array $ids): void
     {
-        $ids = array_values(array_diff(array_unique($ids), array_keys($this->known)));
+        $ids = array_values(array_diff(array_unique(array_map(strtolower(...), $ids)), array_keys($this->known)));
         if ($ids === []) {
             return;
         }
@@ -36,6 +37,7 @@ final class BotIds
 
     public function isBot(string $id): bool
     {
+        $id = strtolower($id);
         if (! array_key_exists($id, $this->known)) {
             $this->preload([$id]);
         }

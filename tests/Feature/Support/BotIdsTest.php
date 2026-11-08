@@ -49,3 +49,14 @@ it('is one instance per request and job', function () {
 
     expect(DB::getQueryLog())->toHaveCount(1);
 });
+
+it('reads an id in any case as the same account (T13a-M1)', function () use ($queries) {
+    $person = User::factory()->create();
+    $bot = User::factory()->bot($person)->create();
+    $ids = app(BotIds::class);
+
+    // the collation finds the account in any case; the answer is held under the canonical id
+    expect($ids->isBot(strtoupper($bot->id)))->toBeTrue()
+        ->and($queries(fn () => expect([$ids->isBot($bot->id), $ids->isBot(strtoupper($person->id))])->toBe([true, false])))->toBe(1)
+        ->and($queries(fn () => $ids->preload([strtoupper($bot->id), $person->id])))->toBe(0);
+});
