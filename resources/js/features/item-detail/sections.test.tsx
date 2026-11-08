@@ -1356,7 +1356,7 @@ describe('Relations', () => {
     await user.keyboard('i');
     // the lock of the earlier text ends when the field stops saying it searches; what stays disabled then is the rights
     await waitFor(() => expect(within(dialog).queryByText('Sucht …')).toBeNull());
-    expect(within(dialog).getByText('Key oder Titel tippen, Enter wählt.')).toBeTruthy();
+    expect(within(dialog).getByText('Key, Titel oder Text tippen, Enter wählt.')).toBeTruthy();
     expect(api!.calls.some((call) => call.url === '/api/v1/search?q=i&types=items&limit=20')).toBe(true);
     const readOnly = screen.getByRole('option', { name: /Mail-Limits/ });
     expect(readOnly.getAttribute('aria-disabled')).toBe('true');
@@ -1468,11 +1468,11 @@ describe('Relations', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Relation hinzufügen' });
     const search = await screen.findByPlaceholderText('Key, Titel oder Text suchen …');
     await waitFor(() => expect(document.activeElement).toBe(search));
-    expect(within(dialog).getByText('Key oder Titel tippen, Enter wählt.')).toBeTruthy();
+    expect(within(dialog).getByText('Key, Titel oder Text tippen, Enter wählt.')).toBeTruthy();
     await user.keyboard('startseite');
     expect(await screen.findByText(`Die Auswahl konnte nicht geladen werden: ${unavailable}`)).toBeTruthy();
     // the hint under the field gives way to the error in the list
-    expect(within(dialog).queryByText('Key oder Titel tippen, Enter wählt.')).toBeNull();
+    expect(within(dialog).queryByText('Key, Titel oder Text tippen, Enter wählt.')).toBeNull();
     failing = false;
     await user.click(screen.getByRole('button', { name: 'Erneut versuchen' }));
     expect(await screen.findByRole('option', { name: /Startseite umbauen/ })).toBeTruthy();

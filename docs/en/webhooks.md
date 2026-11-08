@@ -31,7 +31,7 @@ When you create the webhook, werkbuch shows its **secret** once: `whsec_` and 43
 | `project.member_added` | Someone joined or was added to a project |
 | `project.member_removed` | Someone was removed from a project |
 | `work_item.created` | An item was created |
-| `work_item.updated` | Fields of an item changed: title, description, priority, dates, labels, properties, type, parent, rank, files |
+| `work_item.updated` | Fields of an item changed: title, description, priority, dates, labels, properties, type, parent, resolution, rank, files |
 | `work_item.state_changed` | An item moved to another state |
 | `work_item.assigned` | An item got another assignee or none |
 | `work_item.archived` | An item was archived |

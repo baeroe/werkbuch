@@ -31,7 +31,7 @@ Beim Anlegen zeigt werkbuch das **Geheimnis** einmal: `whsec_` und 43 weitere Ze
 | `project.member_added` | Jemand ist einem Projekt beigetreten oder wurde hinzugefügt |
 | `project.member_removed` | Jemand wurde aus einem Projekt entfernt |
 | `work_item.created` | Ein Item wurde angelegt |
-| `work_item.updated` | Felder eines Items haben sich geändert: Titel, Beschreibung, Priorität, Daten, Labels, Properties, Typ, Eltern-Item, Rang, Dateien |
+| `work_item.updated` | Felder eines Items haben sich geändert: Titel, Beschreibung, Priorität, Daten, Labels, Properties, Typ, Eltern-Item, Resolution, Rang, Dateien |
 | `work_item.state_changed` | Ein Item ist in einen anderen Status gewechselt |
 | `work_item.assigned` | Ein Item hat einen anderen oder keinen Assignee bekommen |
 | `work_item.archived` | Ein Item wurde archiviert |

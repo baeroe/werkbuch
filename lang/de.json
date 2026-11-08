@@ -922,7 +922,7 @@
     "items.detail.relations.dialog.choose": "Item wählen …",
     "items.detail.relations.dialog.description": "Wie hängt :key mit einem anderen Item zusammen? Nur „blockiert“ hat eine Folge: Das blockierte Item zeigt einen Hinweis.",
     "items.detail.relations.dialog.item": "Item",
-    "items.detail.relations.dialog.item_hint": "Key oder Titel tippen, Enter wählt.",
+    "items.detail.relations.dialog.item_hint": "Key, Titel oder Text tippen, Enter wählt.",
     "items.detail.relations.dialog.item_required": "Wähle das Item, mit dem es zusammenhängt.",
     "items.detail.relations.dialog.kind": "Art der Relation",
     "items.detail.relations.dialog.kind_required": "Wähle, wie die Items zusammenhängen.",

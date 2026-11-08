@@ -158,7 +158,7 @@ Items haben ihre eigene Filter-Engine, die der Views. Die vollständige Referenz
 
 ## Rich Text
 
-Beschreibungen, Rich-Text-Werte, Kommentare, Wiki-Seiten und Vorlagen kommen in zwei Formen: `description` in Markdown und `description_json` als Tiptap-Dokument (`body`/`body_json` bei Kommentaren, `content`/`content_json` bei Seiten). Schreib in einer davon; beide zugleich sind ein `422`. Markdown ist für den Leser geschrieben: Erwähnungen zeigen den aktuellen Handle, Verweise den aktuellen Key bzw. Titel, und Verweise auf etwas, das du nicht sehen darfst, bleiben `[hidden](item:<ulid>)`. Was ein Text enthalten darf und wie Erwähnungen, Verweise, Bilder und Dateien geschrieben werden, steht auf der Seite [Rich Text](/de/concepts/rich-text#rest).
+Beschreibungen, Rich-Text-Werte, Kommentare, Wiki-Seiten und Vorlagen kommen in zwei Formen: `description` in Markdown und `description_json` als Tiptap-Dokument (`body`/`body_json` bei Kommentaren, `content`/`content_json` bei Seiten). Schreib in einer davon; beide zugleich sind ein `422`. Markdown ist für den Leser geschrieben: Erwähnungen zeigen den aktuellen Handle, Verweise den aktuellen Key bzw. Titel, und Verweise auf etwas, das du nicht sehen darfst, bleiben `[hidden](item:<ulid>)`. Was ein Text enthalten darf und wie Erwähnungen, Verweise, Bilder und Dateien geschrieben werden, steht auf der Seite [Rich Text](/de/concepts/rich-text#schreiben-uber-rest).
 
 ## Konflikte
 
@@ -256,7 +256,7 @@ curl -X POST https://werkbuch.example.com/api/v1/attachments \
   -F file=@angebot.pdf
 ```
 
-`kind=file` legt die Datei in die Dateiliste des Items. Für ein Bild im Text lädst du mit `kind=inline` hoch und nennst es im Text als `![alt](attachment:<ulid>)` ([Rich Text](/de/concepts/rich-text#rest)).
+`kind=file` legt die Datei in die Dateiliste des Items. Für ein Bild im Text lädst du mit `kind=inline` hoch und nennst es im Text als `![alt](attachment:<ulid>)` ([Rich Text](/de/concepts/rich-text#eine-datei-hochladen)).
 
 ### Eine Grenze prüfen
 

@@ -922,7 +922,7 @@
     "items.detail.relations.dialog.choose": "Choose an item …",
     "items.detail.relations.dialog.description": "How does :key relate to another item? Only “blocks” has a consequence: the blocked item shows a note.",
     "items.detail.relations.dialog.item": "Item",
-    "items.detail.relations.dialog.item_hint": "Type a key or title, Enter chooses.",
+    "items.detail.relations.dialog.item_hint": "Type a key, title or text; Enter chooses.",
     "items.detail.relations.dialog.item_required": "Choose the item it relates to.",
     "items.detail.relations.dialog.kind": "Kind of relation",
     "items.detail.relations.dialog.kind_required": "Choose how the items relate.",

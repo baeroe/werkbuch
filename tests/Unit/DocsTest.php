@@ -11,6 +11,40 @@ $section = function (string $path, string $heading): string {
     return $match[1];
 };
 
+/**
+ * The anchor VitePress gives a heading (`slugify` of @mdit-vue/shared, VitePress 1.6): decomposed (NFKD) without the
+ * combining marks, so `ä` becomes `a` (`ß` stays), control characters gone, every run of spaces and punctuation one `-`,
+ * no `-` at either end, `_` before a leading digit, lower case.
+ */
+$slug = fn (string $text): string => mb_strtolower((string) preg_replace(
+    ['/[\x{0300}-\x{036F}]/u', '/[\x{0000}-\x{001F}]/u', '/[\s~`!@#$%^&*()\-_+=[\]{}|\\\;:"\'“”‘’<>,.?\/]+/u', '/-{2,}/', '/^-+|-+$/', '/^(\d)/'],
+    ['', '', '-', '-', '', '_$1'],
+    (string) Normalizer::normalize($text, Normalizer::FORM_KD),
+));
+
+/**
+ * The anchors of a docs page (`en/concepts/views`): one per heading outside code blocks, made from its text as
+ * markdown-it reads it (code spans and link texts count, their marks do not), a repeated one with `-1`, `-2`, ….
+ *
+ * @return list<string>
+ */
+$anchors = function (string $page) use ($slug): array {
+    $text = (string) preg_replace('/^```.*?^```/ms', '', RepoFiles::text("docs/{$page}.md"));
+    preg_match_all('/^#{1,6} +(.+?) *$/m', $text, $headings);
+    $seen = [];
+    foreach ($headings[1] as $heading) {
+        $plain = (string) preg_replace(['/\[([^\]]*)\]\([^)]*\)/', '/<[^>]+>/', '/[`*]/', '/\\\\(.)/'], ['$1', '', '', '$1'], $heading);
+        $base = $slug($plain);
+        $id = $base;
+        for ($n = 1; in_array($id, $seen, true); $n++) {
+            $id = "{$base}-{$n}";
+        }
+        $seen[] = $id;
+    }
+
+    return $seen;
+};
+
 it('has every docs page in English and German', function () {
     expect(docsPages('en'))->not->toBeEmpty()->toEqualCanonicalizing(docsPages('de'));
 });
@@ -51,6 +85,51 @@ it('lists every page but the landing page in the sidebar, in the same order in b
         expect($labels)->toContain($page);
     }
     expect(count($labels))->toBe(count($pages) + count($lists[1]));
+});
+
+it('makes the anchors of headings the way VitePress does', function () use ($slug) {
+    expect($slug('Erwähnte Items verknüpfen'))->toBe('erwahnte-items-verknupfen')
+        ->and($slug('Größe und Maße'))->toBe('große-und-maße')
+        ->and($slug('data per event'))->toBe('data-per-event')
+        ->and($slug('Wiki: Baum, Seiten & Versionen'))->toBe('wiki-baum-seiten-versionen')
+        ->and($slug('1.2.3 – what changed?'))->toBe('_1-2-3-–-what-changed')
+        ->and($slug('Rich text (Markdown)'))->toBe('rich-text-markdown');
+});
+
+it('links to no anchor a page lacks', function () use ($anchors) {
+    $known = [];
+    $found = 0;
+    foreach (['en', 'de'] as $l) {
+        foreach (docsPages($l) as $page) {
+            $from = "{$l}/{$page}";
+            // links outside code: fenced blocks and code spans are text, not links
+            $text = (string) preg_replace(['/^```.*?^```/ms', '/`[^`\n]*`/'], '', RepoFiles::text("docs/{$from}.md"));
+            preg_match_all('/\]\(([^)\s#]*)#([^)\s]+)\)/', $text, $links, PREG_SET_ORDER);
+            foreach ($links as [, $target, $anchor]) {
+                $path = preg_replace('/\.(md|html)$/', '', $target);
+                $to = match (true) {
+                    $path === '' => $from,
+                    str_starts_with($path, '/') => ltrim($path, '/'),
+                    default => implode('/', array_reduce(explode('/', dirname($from).'/'.$path), function (array $parts, string $part) {
+                        if ($part === '..') {
+                            array_pop($parts);
+                        } elseif ($part !== '.' && $part !== '') {
+                            $parts[] = $part;
+                        }
+
+                        return $parts;
+                    }, [])),
+                };
+                $to = str_ends_with($to, '/') || ! str_contains($to, '/') ? rtrim($to, '/').'/index' : $to;
+                expect(is_file(repo_path("docs/{$to}.md")))->toBeTrue("docs/{$from}.md links to {$target}#{$anchor}, a page that does not exist");
+                $known[$to] ??= $anchors($to);
+                expect(in_array(rawurldecode($anchor), $known[$to], true))->toBeTrue("docs/{$from}.md links to {$target}#{$anchor}, an anchor docs/{$to}.md lacks");
+                $found++;
+            }
+        }
+    }
+    // the docs link to anchors on their own page and on others: a scan that finds none reads the links wrong
+    expect($found)->toBeGreaterThan(150);
 });
 
 it('names no phase in the docs', function () {

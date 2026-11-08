@@ -1,6 +1,6 @@
 # Suche
 
-Eine Suche findet Work Items, Wiki-Seiten, Projekte, Personen und Bots sowie Views. In der Oberfläche steckt sie in der Befehlspalette (<kbd>⌘ / Strg</kbd>+<kbd>K</kbd>), über die API ist es `GET /api/v1/search`. Beide suchen gleich und lassen dieselben Items, Seiten, Projekte und Konten weg; die Palette fragt nach weniger Treffern je Art (8), zeigt Personen und Bots nur Org-Admins (siehe unten) und durchsucht nie das Archiv. Der Browser spricht nie selbst mit der Suchmaschine: Jede Suche läuft über werkbuch, und werkbuch entscheidet, was du sehen darfst.
+Eine Suche findet Work Items, Wiki-Seiten, Projekte, Personen und Bots sowie Views. In der Oberfläche steckt sie in der Befehlspalette (<kbd>⌘ / Strg</kbd>+<kbd>K</kbd>), über die API ist es `GET /api/v1/search`. Beide suchen gleich und lassen dieselben Items, Seiten, Projekte und Konten weg; die Palette fragt nach weniger Treffern je Art (8), zeigt Personen und Bots nur Org-Admins (siehe unten) und lässt das Archiv aus, außer ein Item, dessen Key du tippst (siehe unten). Der Browser spricht nie selbst mit der Suchmaschine: Jede Suche läuft über werkbuch, und werkbuch entscheidet, was du sehen darfst.
 
 ## Was gefunden wird
 
