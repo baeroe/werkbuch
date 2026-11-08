@@ -27,6 +27,7 @@ use App\Models\Workflow;
 use App\Models\WorkItem;
 use App\Models\WorkItemType;
 use App\Search\MeilisearchEngine;
+use App\Support\BotIds;
 use App\Support\ReadCommitted;
 use App\Support\RetryingDatabaseStore;
 use App\Views\CatalogProperties;
@@ -61,6 +62,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->scoped(RoleIndex::class);
         // the properties as filters, sorts and displays look them up, read once per request and job
         $this->app->scoped(CatalogProperties::class, fn () => CatalogProperties::load());
+        // which accounts are bots, read once per request and job (a bulk change preloads its assignees)
+        $this->app->scoped(BotIds::class);
         // the addresses of a webhook's host, asked before every attempt (spec 6.3); RES_OPTIONS only counts before the
         // first lookup of the process, so it is set here (K17)
         DnsResolver::limitWaiting();
