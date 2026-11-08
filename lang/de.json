@@ -652,6 +652,7 @@
     "items.board.command.move_up": "Karte in der Spalte nach oben",
     "items.board.created": ":key in :column angelegt.",
     "items.board.created_elsewhere": "Es passt nicht zum Filter dieser Liste und steht darum nicht hier.",
+    "items.board.created_further": ":key steht weiter unten in „:column“.",
     "items.board.drag.cancelled": "Abgebrochen. :key liegt wieder an seinem Platz.",
     "items.board.drag.card": "Die Karte",
     "items.board.drag.nowhere": ":key ist über keiner Spalte.",

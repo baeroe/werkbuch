@@ -515,8 +515,8 @@ export function BoardLayout({ groups, groupBy, display, project, createDefaults,
 
   /**
    * A quick add made an item: the status line says it. Once the list has loaded again the new card lights up and comes
-   * into view; where the list leaves it out (its filter) a toast says so and opens it. A column with more pages to load
-   * may have it further down: it says nothing then.
+   * into view; where the list leaves it out (its filter) a toast says so and opens it, and so it does where a column
+   * with more pages to load has it further down (T19-M3: the status line alone tells no one who sees).
    */
   function created(item: WorkItem, column: BoardColumnData) {
     setAnnouncement(t('items.board.created', { key: item.key, column: column.label }));
@@ -535,10 +535,11 @@ export function BoardLayout({ groups, groupBy, display, project, createDefaults,
       if (shown?.ids.includes(item.id)) {
         useUiStore.getState().flash(item.id);
         setRevealing({ column: column.key, id: item.id });
-      } else if (!shown?.hasMore) {
+      } else {
+        // a column with more pages to load has it further down; otherwise the filter leaves it out
         toast({
           title: t('items.create.created', { key: item.key }),
-          description: t('items.board.created_elsewhere'),
+          description: shown?.hasMore ? t('items.board.created_further', { key: item.key, column: column.label }) : t('items.board.created_elsewhere'),
           action: { label: t('items.create.open'), onClick: () => useUiStore.getState().openPeek(item.id) },
         });
       }

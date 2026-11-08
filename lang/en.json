@@ -652,6 +652,7 @@
     "items.board.command.move_up": "Move the card up its column",
     "items.board.created": ":key created in :column.",
     "items.board.created_elsewhere": "It does not match the filter of this list, so it is not shown here.",
+    "items.board.created_further": ":key is further down in “:column”.",
     "items.board.drag.cancelled": "Cancelled. :key is back in its place.",
     "items.board.drag.card": "The card",
     "items.board.drag.nowhere": ":key is over no column.",

@@ -13,6 +13,7 @@ import { currentToasts, resetToasts } from '@/components/ui/toast';
 import { useUiStore } from '@/store/ui';
 import {
   announced,
+  app,
   board,
   cardIn,
   column,
@@ -525,6 +526,24 @@ describe('the quick add of a column', () => {
     await act(async () => release());
     await waitFor(() => expect(useUiStore.getState().flashIds).toContain('wi_app_21'));
     expect(currentToasts()).toEqual([]);
+  });
+
+  it('says where a new card stands that a later page of its column will bring, and opens it from the toast', async () => {
+    // more cards in Todo than the first page holds, and than the column shows: the next page is not asked for
+    board.items.push(...Array.from({ length: 12 }, (_, index) => app(30 + index, `Aufgabe ${30 + index}`, 'app_todo')));
+    board.pageSize = 12;
+    renderBoard('/projects/APP?layout=board');
+    await waitFor(() => expect(keysIn('Todo')).toContain('APP-30'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Item in Todo anlegen' }));
+    const input = screen.getByRole('textbox', { name: 'Neues Item in Todo' });
+    fireEvent.change(input, { target: { value: 'Testflug planen' } });
+    fireEvent.submit(input.closest('form')!);
+
+    await waitFor(() => expect(lastToast()).toMatchObject({ title: 'APP-42 angelegt', description: 'APP-42 steht weiter unten in „Todo“.' }));
+    expect(useUiStore.getState().flashIds).toEqual([]);
+    act(() => lastToast()!.action!.onClick());
+    expect(useUiStore.getState().peekItemId).toBe('wi_app_42');
   });
 
   it('keeps an empty quick add open, says what is missing and puts the focus on the title', async () => {
