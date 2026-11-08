@@ -193,6 +193,22 @@ it('orders the relations by type, then by the key of the other end', function ()
     expect($keys)->toBe(['OPS-1', 'WEB-4', 'WEB-10', 'WEB-3', 'WEB-11']);
 });
 
+it('orders the identifiers of the other ends naturally (T21g-M2)', function () use ($world, $type) {
+    [$web, , $mara] = $world();
+    $item = WorkItem::factory()->for($web)->create();
+    // created A10 first, so neither the ULID nor the bytes put A2 first
+    $a10 = WorkItem::factory()->for(Project::factory()->identifier('A10')->public()->create())->create();
+    $a2 = WorkItem::factory()->for(Project::factory()->identifier('A2')->public()->create())->create();
+    foreach ([$a10, $a2] as $other) {
+        WorkItemRelation::factory()->create(['type_id' => $type('relates')->id, 'source_id' => $item->id, 'target_id' => $other->id]);
+    }
+
+    $keys = array_map(fn (array $entry) => $entry['other']?->key, ListRelations::run(actor($mara), $item));
+
+    // like the sort by key and the parent groups: A2 before A10
+    expect($keys)->toBe(['A2-1', 'A10-1']);
+});
+
 it('does not tell whether a hidden target exists', function () use ($world, $type, $errorsOf) {
     [$web, $ops, , $ida] = $world();
     $item = WorkItem::factory()->for($web)->create();
