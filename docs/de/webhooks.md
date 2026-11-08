@@ -159,7 +159,7 @@ Die Pausen zählen ab jedem Fehlschlag, die echten Zeiten verschieben sich also 
 Was ein Empfänger wissen sollte:
 
 - **Entdopple über `X-Werkbuch-Delivery`.** Ein Absturz zwischen Senden und Protokoll kann einen Versuch doppelt schicken, immer mit derselben Zustellungs-ID und demselben Body.
-- **Die Reihenfolge ist nicht garantiert.** Wiederholungen und parallele Worker können ein späteres Ereignis zuerst zustellen; sortiere nach `occurred_at` oder lies den aktuellen Stand über REST.
+- **Die Reihenfolge ist nicht garantiert, auch nicht für ein Item.** Jede Zustellung hat ihren eigenen Job und ihre eigenen Wiederholungen, ein späteres Ereignis desselben Items kann also zuerst ankommen; ordne die Ereignisse nach `occurred_at` und dann nach `id` (beide im Body) oder lies den aktuellen Stand über REST.
 - **Antworte schnell** und arbeite danach. Zehn Sekunden sind die Grenze für die ganze Anfrage.
 
 ## Abgeschaltet und wieder an

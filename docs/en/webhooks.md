@@ -159,7 +159,7 @@ The pauses are counted from each failure, so the real times drift by how long th
 What a receiver should know:
 
 - **Deduplicate over `X-Werkbuch-Delivery`.** A crash between sending and logging can send an attempt twice, always with the same delivery ID and the same body.
-- **The order is not guaranteed.** Retries and parallel workers can deliver a later event first; sort by `occurred_at` or read the current state over REST.
+- **The order is not guaranteed, also not for one item.** Every delivery has its own job and its own retries, so a later event of the same item can arrive first; order the events by `occurred_at` and then by `id` (both in the body), or read the current state over REST.
 - **Answer quickly** and do the work afterwards. Ten seconds is the limit for the whole request.
 
 ## Switched off and on again

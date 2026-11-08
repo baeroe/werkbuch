@@ -27,7 +27,7 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * (`event_id`, `webhook_id`), in the order of the webhooks (K16), so an event that arrives twice (redispatch,
  * queue:retry without the claim) writes nothing twice; only the rows this call inserted (its own ULIDs) get a job,
  * after the commit. Runs in the claim transaction of WebhookConsumer; work of a job without an event of its own, like
- * NotifyRecipients.
+ * NotifyRecipients. Deliveries of one item may arrive out of order (every delivery has its own job and tries).
  */
 final class QueueDeliveries
 {
