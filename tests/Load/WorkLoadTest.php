@@ -30,11 +30,11 @@ use Database\Seeders\Load\LoadContent;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Testing\TestResponse;
 use Spatie\MediaLibrary\Conversions\Jobs\PerformConversionsJob;
-use Tests\Load\LoadWorld;
 use Tests\Load\Support\Budget;
 
 /*
@@ -43,7 +43,7 @@ use Tests\Load\Support\Budget;
  * template run that copies 20 pictures of 2 MB. Each runs once (Budget::once(): a second run would find the work done)
  * in the transaction of the test, which DatabaseTransactions rolls back and declares the base of the app's
  * transactions: an action commits into it, so its afterCommit work (DispatchEvent, the jobs of the consumers) runs
- * (K11). LoadTestCase runs LoadWorld::ensure() before that transaction begins. The search consumer writes into the
+ * (K11). LoadTestCase runs Tests\Load\LoadWorld::ensure() before that transaction begins. The search consumer writes into the
  * in-memory engine of the feature tests (searchEngine() of tests/Pest.php, a global function every suite has), never
  * into Meilisearch, which no rollback would undo;
  * SearchLoadTest measures Meilisearch. The queue is `sync`: DeliverWebhook is faked (no HTTP), the conversions of the
@@ -79,6 +79,12 @@ const PICTURE_BYTES = 2 * 1_048_576;
 
 /** The most memory PHP may hold during the night (memory_get_peak_usage(), from its start): it works item by item. */
 const NIGHT_MEMORY = 256 * 1_048_576;
+
+/**
+ * The most queries the night may ask per candidate (measured 18.5: the lock, the move with its event, the comment with
+ * its event, the dispatch of both): a query more per item for every item shows here, the budget of 10 minutes would not.
+ */
+const NIGHT_QUERIES_PER_ITEM = 25;
 
 /** The most memory PHP may hold while a template run copies its pictures (memory_get_peak_usage(), from its start). */
 const COPY_MEMORY = 256 * 1_048_576;
@@ -196,21 +202,24 @@ it('closes the old items of 20 projects in one night', function () use ($within)
         ->count();
     expect($candidates)->toBeGreaterThan(5_000);
 
+    // the night reports an item that throws and counts it as skipped: here it would measure a shorter, wrong night
+    Exceptions::fake();
     $name = 'night: Auto-Close over L01–L20';
     $counts = Budget::once($name, fn () => RunDailyAutomations::run(
         Actor::system(User::defaultBot(), 'daily_automations'), now()->utc()->startOfHour()->toImmutable(), true,
     ), WORK_ROWS[$name]);
 
-    // every candidate closed or refused by its workflow, none passed over; the memory does not grow with the items
-    expect($counts['closed'] + $counts['skipped'])->toBe($candidates)
-        ->and($counts['closed'])->toBeGreaterThan(0)
-        ->and($counts['archived'])->toBe(0)
-        ->and(Budget::row($name)['memory'] * 1_048_576)->toBeLessThanOrEqual(NIGHT_MEMORY);
+    // every candidate closed: both workflows of the seed allow Backlog and Unstarted to Canceled, so nothing is refused
+    // and nothing threw; the memory does not grow with the items, the queries per item stay few
+    Exceptions::assertNothingReported();
+    expect($counts)->toBe(['archived' => 0, 'closed' => $candidates, 'skipped' => 0])
+        ->and(Budget::row($name)['memory'] * 1_048_576)->toBeLessThanOrEqual(NIGHT_MEMORY)
+        ->and(Budget::row($name)['queries'][0])->toBeLessThanOrEqual(NIGHT_QUERIES_PER_ITEM * $candidates);
     $within($name);
 
     fwrite(STDERR, sprintf(
-        "\n%s: %d candidates, closed %d, skipped %d, peak %.0f MB\n",
-        $name, $candidates, $counts['closed'], $counts['skipped'], Budget::row($name)['memory'],
+        "\n%s: %d candidates, closed %d, skipped %d, %.1f queries per item, peak %.0f MB\n",
+        $name, $candidates, $counts['closed'], $counts['skipped'], Budget::row($name)['queries'][0] / $candidates, Budget::row($name)['memory'],
     ));
 });
 
