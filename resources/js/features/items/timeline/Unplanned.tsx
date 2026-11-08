@@ -92,6 +92,9 @@ export function Unplanned({ items, stop, selection, planningId, navProps, lookOf
                   key={entry.key}
                   ref={virtualizer.measureElement}
                   data-index={entry.index}
+                  // only the cards in view are rendered: the list says how many there are and where each stands (14b2-M2)
+                  aria-setsize={items.length}
+                  aria-posinset={entry.index + 1}
                   data-unplanned-entry=""
                   className="absolute inset-x-0 top-0 flex flex-col gap-2 pb-2.5"
                   style={{ transform: `translateY(${entry.start}px)` }}

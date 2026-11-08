@@ -532,6 +532,13 @@ describe('"Ohne Datum" with many epics', () => {
     expect(cards().some((element) => Number(/^WEB-(\d+) /.exec(element.getAttribute('aria-label')!)![1]) > 400)).toBe(true);
     expect(document.activeElement).toBe(card('WEB-1'));
     expect(cards().length).toBeLessThan(15);
+    // still one tab stop: the card of the cursor (14b2-M3)
+    expect([...document.querySelectorAll('[data-nav-target][tabindex="0"]')]).toEqual([card('WEB-1')]);
+    // the entries say how many there are and where each stands, not only the few rendered (14b2-M2)
+    const entries = [...unplannedList().querySelectorAll('li')];
+    expect(entries.every((entry) => entry.getAttribute('aria-setsize') === '500')).toBe(true);
+    expect(entries.map((entry) => entry.getAttribute('aria-posinset'))).toEqual(entries.map((entry) => String(Number(entry.getAttribute('data-index')) + 1)));
+    expect(entries.map((entry) => entry.getAttribute('aria-posinset'))).toContain('1');
 
     // j goes to the next card, which is out of view: the list scrolls back to it
     press('j');
