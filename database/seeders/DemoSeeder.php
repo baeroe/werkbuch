@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Enums\Locale;
 use App\Models\Organization;
+use App\Models\User;
 use App\Search\SearchIndexer;
 use Database\Seeders\Demo\ActivitySeeder;
 use Database\Seeders\Demo\AttachmentsSeeder;
@@ -93,14 +94,18 @@ class DemoSeeder extends Seeder
     }
 
     /**
-     * Refuses a database whose organization bears the demo name of another language.
+     * Refuses a database that holds the demo of another language: its organization bears that demo name, or (renamed
+     * since) `mara` has the mail domain of that demo (T22a-M4), else the PeopleSeeder died on the unique handle.
      */
     private static function refuseOtherLanguage(Locale $locale): void
     {
         $name = Organization::current()->name;
+        $mara = User::query()->where('handle', 'mara')->value('email');
 
         foreach (Locale::cases() as $other) {
-            if ($other !== $locale && $name === DemoTexts::get('organization.name', $other)) {
+            $named = $name === DemoTexts::get('organization.name', $other);
+            $mailed = is_string($mara) && str_ends_with($mara, '@'.DemoTexts::get('organization.mail_domain', $other));
+            if ($other !== $locale && ($named || $mailed)) {
                 throw new RuntimeException("This database holds the demo data of {$name} ({$other->value}); set it up anew (migrate:fresh) before seeding the demo in {$locale->value}.");
             }
         }

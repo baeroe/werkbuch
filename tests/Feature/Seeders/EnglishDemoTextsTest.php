@@ -155,7 +155,7 @@ it('seeds the organization, people, catalog, projects and views in English', fun
         ->and($people->map(fn (User $user) => $user->locale)->unique()->all())->toBe([Locale::En])
         ->and(User::defaultBot()->description)->toBe(__('bots.default.description', [], 'en'))
         ->and(User::query()->where('handle', 'kira')->sole()->only(['name', 'description', 'locale']))
-        ->toBe(['name' => 'Kira', 'description' => 'Mara’s bot. Works on the items assigned to it over MCP.', 'locale' => Locale::En])
+        ->toBe(['name' => 'Kira', 'description' => 'Mara’s bot. Works over MCP on the items assigned to it.', 'locale' => Locale::En])
         // the workflow of the agency, with the states and moves of the German one
         ->and(Workflow::query()->orderBy('id')->pluck('name')->all())->toBe(['Standard', 'Agency approval'])
         ->and(Workflow::default()->description)->toBe(__('catalog.builtin.workflow.description', [], 'en'))
@@ -242,6 +242,16 @@ it('refuses English demo data on a German demo database', function () {
 
     expect(fn () => $this->seed(DemoSeederEn::class))->toThrow(RuntimeException::class, 'holds the demo data of Feldwerk')
         ->and(Organization::current()->fresh()?->name)->toBe('Feldwerk')
+        ->and(User::query()->where('email', 'like', '%@fieldwork.example.com')->count())->toBe(0)
+        ->and(DemoTexts::current())->toBe(Locale::De);
+});
+
+it('refuses English demo data on a German demo database whose organization was renamed (T22a-M4)', function () {
+    $this->seed(DemoBasicsSeeder::class);
+    Organization::current()->update(['name' => 'Werkstatt']);
+
+    // the mail domain of mara is the second mark: a readable refusal, not a unique handle
+    expect(fn () => $this->seed(DemoSeederEn::class))->toThrow(RuntimeException::class, 'holds the demo data of Werkstatt (de)')
         ->and(User::query()->where('email', 'like', '%@fieldwork.example.com')->count())->toBe(0)
         ->and(DemoTexts::current())->toBe(Locale::De);
 });

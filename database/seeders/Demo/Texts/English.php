@@ -22,7 +22,7 @@ final class English
         'person.sven.name' => 'Sven Albright',
 
         'bot.kira.name' => 'Kira',
-        'bot.kira.description' => 'Mara’s bot. Works on the items assigned to it over MCP.',
+        'bot.kira.description' => 'Mara’s bot. Works over MCP on the items assigned to it.',
 
         'catalog.workflow.standard.name' => 'Standard',
         'catalog.workflow.standard.description' => 'The default workflow: every status can be reached from anywhere.',
@@ -61,7 +61,7 @@ final class English
         'catalog.property.steps.label' => 'Steps to reproduce',
         'catalog.property.steps.help' => 'How to make the bug happen again.',
         'catalog.property.target_quarter.label' => 'Target quarter',
-        'catalog.property.target_quarter.help' => 'When the undertaking should be done.',
+        'catalog.property.target_quarter.help' => 'By when it should be finished.',
         'catalog.property.target_quarter.option.q4_2026' => 'Q4 2026',
         'catalog.property.target_quarter.option.q1_2027' => 'Q1 2027',
         'catalog.property.target_quarter.option.q2_2027' => 'Q2 2027',
