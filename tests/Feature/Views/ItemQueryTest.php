@@ -15,10 +15,10 @@ use Illuminate\Support\Str;
 /*
  * Mutation table: what would turn a case red.
  * - sees: dropping `visibleTo` / the archive condition from `ItemQuery::for`, or `include_archived` read as `true`.
- * - views: reading the sort or sub-items of the request before those of the view.
+ * - views: reading the sort or sub-items of the view before those of the request (the request replaces them).
  * - search: `findByReference` without the visibility check, or the key matched as a title.
  * The items these tests read come from `ItemQuery` and `ItemOrder::page`: their rows carry `sort_*` and `_sig` as
- * attributes for the cursor. Read them, compare them, never `save()` one.
+ * original attributes for the cursor, so a `save()` writes only what changed and never those columns.
  */
 
 /*
