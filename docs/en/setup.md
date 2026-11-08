@@ -177,7 +177,7 @@ To use an existing MariaDB 11.4 instead of the `mariadb` service, edit `docker-c
 1. Remove the service `mariadb` and the entry `mariadb` under `depends_on` of `werkbuch`.
 2. Add `DB_HOST`, `DB_PORT`, `DB_DATABASE` and `DB_USERNAME` to the block `x-werkbuch-environment` (defaults `mariadb`, `3306`, `werkbuch`, `werkbuch`); `DB_PASSWORD` is there already. `DB_WAIT_TIMEOUT` sets how many seconds the start waits for it (default 60).
 3. Give the user all privileges on its database.
-4. Set `max_allowed_packet` to at least `64M` in the configuration of that server. Webhook deliveries are written in one statement, one body of up to 1 MiB per webhook, and the default of 16 MiB is too small for that.
+4. Set `max_allowed_packet` to at least `64M` in the configuration of that server, like the stack. The largest statements of werkbuch write the webhook deliveries of an event, in chunks of up to 8 MiB (one body of up to 1 MiB per webhook); the default of 16 MiB leaves little room above that.
 
 The database has to be reachable from the network `default` of the stack.
 

@@ -415,3 +415,48 @@ it('keeps a body within its limit: first without changes, then without data (T5-
     expect(strlen(WebhookPayload::encode([...$envelope, 'data' => ['d' => $fill], 'changes' => null])))->toBe(WebhookPayload::MAX_BYTES)
         ->and(json_decode(WebhookPayload::encode([...$envelope, 'data' => ['d' => $fill.'a'], 'changes' => null]), true)['data'])->toBeNull();
 });
+
+it('inserts the deliveries of an event in statements of at most 8 MiB, in the order of the webhooks (K16)', function () use ($world, $create, $system) {
+    Queue::fake([DeliverWebhook::class]);
+    $w = $world();
+    consumers();
+    $item = $create($w['mara'], $w['ops']);
+    // a description near the limit of a document (256 KB): the body carries it as Markdown and as JSON
+    $sentence = 'Die Seite lädt das Formular für die Kontaktdaten nach und prüft jedes Feld, bevor sie es an den Server schickt. ';
+    $paragraphs = [];
+    for ($n = 1; $n <= 800; $n++) {
+        $paragraphs[] = ['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => "Absatz {$n}: ".str_repeat($sentence, 2)]]];
+    }
+    DB::table('work_items')->where('id', $item->id)->update(['description' => json_encode(['type' => 'doc', 'content' => $paragraphs])]);
+    UpdateWorkItem::run(actor($w['mara']), $item, ['title' => 'Formular prüfen, groß']);
+    $event = eventsOf(EventType::WorkItemUpdated, $item)->sole();
+    $webhooks = Webhook::factory()->count(40)->create(['events' => ['work_item.*']])->sortBy('id')->values();
+
+    $statements = [];
+    DB::listen(function ($query) use (&$statements): void {
+        if (str_starts_with($query->sql, 'insert ignore into `webhook_deliveries`')) {
+            $statements[] = array_sum(array_map(fn ($binding) => strlen((string) $binding), $query->bindings));
+        }
+    });
+    $queued = QueueDeliveries::run($system(), $event);
+
+    $deliveries = WebhookDelivery::query()->where('event_id', $event->id)->orderBy('id')->get();
+    $body = $deliveries->first()->body;
+    expect(strlen($body))->toBeGreaterThan(400_000)
+        ->and(strlen($body))->toBeLessThanOrEqual(WebhookPayload::MAX_BYTES)
+        // 40 bodies of more than 400 KB: more than 16 MiB, the default max_allowed_packet of MariaDB
+        ->and(array_sum($statements))->toBeGreaterThan(16 * 1_048_576)
+        ->and(count($statements))->toBeGreaterThan(1, 'bytes per statement: '.implode(', ', $statements))
+        ->and(max($statements))->toBeLessThanOrEqual(QueueDeliveries::INSERT_MAX_BYTES)
+        ->and($queued)->toBe(40)
+        ->and($deliveries->pluck('body')->unique()->all())->toBe([$body])
+        // the deliveries got their ULIDs in the order of the webhooks, chunk by chunk
+        ->and($deliveries->pluck('webhook_id')->all())->toBe($webhooks->modelKeys());
+    expect(Queue::pushed(DeliverWebhook::class)->map(fn (DeliverWebhook $job) => $job->uuid)->all())
+        ->toBe($deliveries->modelKeys());
+
+    // an event that arrives twice inserts nothing and queues nothing, in every chunk
+    expect(QueueDeliveries::run($system(), $event))->toBe(0)
+        ->and(WebhookDelivery::query()->where('event_id', $event->id)->count())->toBe(40);
+    Queue::assertPushed(DeliverWebhook::class, 40);
+});

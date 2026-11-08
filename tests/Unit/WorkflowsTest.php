@@ -381,3 +381,19 @@ it('runs the load suite outside the required job', function () use ($stepUsing, 
     // the required job never runs the load suite
     expect(str_contains(implode("\n", $runs($jobs['tests'])), 'phpunit.load.xml'))->toBeFalse('the job tests runs the load suite');
 });
+
+it('gives the MariaDB of every job that runs the app the max_allowed_packet of the stack', function () {
+    $jobs = RepoFiles::yaml('.github/workflows/tests.yml')['jobs'];
+    $compose = RepoFiles::yaml('docker-compose.yml')['services']['mariadb']['command'];
+    expect($compose)->toBe(['--max-allowed-packet=64M']);
+
+    // the step before the first connection of the app: the suite, the load suite, the migration of the e2e database
+    foreach (['tests' => 'Pest with coverage', 'load' => 'Load suite', 'e2e' => 'Migrate'] as $id => $first) {
+        $names = array_map(fn (array $step) => $step['name'] ?? null, $jobs[$id]['steps']);
+        $packet = array_search('MariaDB packet', $names, true);
+        expect($packet)->toBeInt("{$id} sets no max_allowed_packet")
+            ->and($jobs[$id]['steps'][$packet]['run'])->toContain('SET GLOBAL max_allowed_packet = '.(64 * 1_048_576))
+            ->and($jobs[$id]['steps'][$packet]['run'])->toContain('exit($size === '.(64 * 1_048_576).' ? 0 : 1)')
+            ->and($packet)->toBeLessThan(array_search($first, $names, true), "{$id} sets the packet after {$first}");
+    }
+});

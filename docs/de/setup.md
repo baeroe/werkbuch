@@ -177,7 +177,7 @@ Um statt des Dienstes `mariadb` eine vorhandene MariaDB 11.4 zu nutzen, die `doc
 1. Den Dienst `mariadb` und den Eintrag `mariadb` unter `depends_on` von `werkbuch` entfernen.
 2. `DB_HOST`, `DB_PORT`, `DB_DATABASE` und `DB_USERNAME` im Block `x-werkbuch-environment` ergänzen (Standard `mariadb`, `3306`, `werkbuch`, `werkbuch`); `DB_PASSWORD` steht schon dort. `DB_WAIT_TIMEOUT` legt fest, wie viele Sekunden der Start auf sie wartet (Standard 60).
 3. Dem Benutzer alle Rechte an seiner Datenbank geben.
-4. In der Konfiguration dieses Servers `max_allowed_packet` auf mindestens `64M` setzen. Zustellungen der Webhooks werden in einer Anweisung geschrieben, je Webhook ein Body bis 1 MiB, und dafür reicht der Standard von 16 MiB nicht.
+4. In der Konfiguration dieses Servers `max_allowed_packet` wie im Stack auf mindestens `64M` setzen. Die größten Anweisungen von werkbuch schreiben die Zustellungen der Webhooks eines Ereignisses, in Blöcken bis 8 MiB (je Webhook ein Body bis 1 MiB); der Standard von 16 MiB lässt darüber wenig Luft.
 
 Die Datenbank muss aus dem Netz `default` des Stacks erreichbar sein.
 

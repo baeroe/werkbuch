@@ -118,6 +118,15 @@ jobs:
       - name: Meilisearch
         run: curl -fsS --retry 30 --retry-delay 1 --retry-all-errors http://127.0.0.1:7700/health
 
+      # max_allowed_packet of the stack (docker-compose.yml, 64 MiB) instead of the image's 16 MiB: the CI measures what
+      # runs in production. A service cannot take server options; only new connections read the global value, and the
+      # step checks it on one.
+      - name: MariaDB packet
+        run: >-
+          php -r '(new PDO("mysql:host=127.0.0.1;port=3306", "root", "root"))->exec("SET GLOBAL max_allowed_packet = 67108864");
+          $size = (int) (new PDO("mysql:host=127.0.0.1;port=3306", "root", "root"))->query("SELECT @@max_allowed_packet")->fetchColumn();
+          echo "max_allowed_packet {$size}", PHP_EOL; exit($size === 67108864 ? 0 : 1);'
+
       - name: Pest with coverage
         run: php artisan test --coverage --min=100
 
@@ -190,6 +199,15 @@ jobs:
 
       - name: Meilisearch
         run: curl -fsS --retry 30 --retry-delay 1 --retry-all-errors http://127.0.0.1:7700/health
+
+      # max_allowed_packet of the stack (docker-compose.yml, 64 MiB) instead of the image's 16 MiB: the CI measures what
+      # runs in production. A service cannot take server options; only new connections read the global value, and the
+      # step checks it on one.
+      - name: MariaDB packet
+        run: >-
+          php -r '(new PDO("mysql:host=127.0.0.1;port=3306", "root", "root"))->exec("SET GLOBAL max_allowed_packet = 67108864");
+          $size = (int) (new PDO("mysql:host=127.0.0.1;port=3306", "root", "root"))->query("SELECT @@max_allowed_packet")->fetchColumn();
+          echo "max_allowed_packet {$size}", PHP_EOL; exit($size === 67108864 ? 0 : 1);'
 
       # The buffer pool of DDEV's MariaDB (1 GiB) instead of the image's 128 MiB: the database `load` (about 580 MB) has to
       # fit in memory in both, or the CI measures the disk. A service cannot take server options, but the variable can be
@@ -345,6 +363,15 @@ jobs:
 
       - name: Meilisearch
         run: curl -fsS --retry 30 --retry-delay 1 --retry-all-errors http://127.0.0.1:7700/health
+
+      # max_allowed_packet of the stack (docker-compose.yml, 64 MiB) instead of the image's 16 MiB: the CI measures what
+      # runs in production. A service cannot take server options; only new connections read the global value, and the
+      # step checks it on one.
+      - name: MariaDB packet
+        run: >-
+          php -r '(new PDO("mysql:host=127.0.0.1;port=3306", "root", "root"))->exec("SET GLOBAL max_allowed_packet = 67108864");
+          $size = (int) (new PDO("mysql:host=127.0.0.1;port=3306", "root", "root"))->query("SELECT @@max_allowed_packet")->fetchColumn();
+          echo "max_allowed_packet {$size}", PHP_EOL; exit($size === 67108864 ? 0 : 1);'
 
       - name: Migrate
         run: php artisan migrate --force
