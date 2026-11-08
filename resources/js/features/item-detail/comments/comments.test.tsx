@@ -459,6 +459,16 @@ describe('unsentRest', () => {
     expect(unsentRest(bullets('Eins', 'Zwei'), bullets('Ein', 'Zwei', 'Drei'))).toEqual(bullets('Ein', 'Zwei', 'Drei'));
   });
 
+  it('goes on counting a numbered list where the sent part stopped (N3)', () => {
+    const item = (value: string): RichText => ({ type: 'listItem', content: [para(text(value))] });
+    const numbers = (start: number, ...values: string[]): RichText => ({ type: 'doc', content: [{ type: 'orderedList', attrs: { start, type: null }, content: values.map(item) }] });
+
+    expect(unsentRest(numbers(1, 'Eins', 'Zwei'), numbers(1, 'Eins', 'Zwei', 'Drei'))).toEqual(numbers(3, 'Drei'));
+    expect(unsentRest(numbers(4, 'Vier'), numbers(4, 'Vier', 'Fünf', 'Sechs'))).toEqual(numbers(5, 'Fünf', 'Sechs'));
+    // the last sent item was typed on: it stays the first one, with its own number
+    expect(unsentRest(numbers(1, 'Eins', 'Zwei'), numbers(1, 'Eins', 'Zwei und mehr'))).toEqual(numbers(2, 'und mehr'));
+  });
+
   it('keeps everything when the sent text was changed while sending', () => {
     expect(unsentRest(doc('Erstens.'), doc('Erst ens.'))).toEqual(doc('Erst ens.'));
     expect(unsentRest(doc('Erstens.', 'Zweitens.'), doc('Erstens.', 'Zwei.'))).toEqual(doc('Erstens.', 'Zwei.'));
