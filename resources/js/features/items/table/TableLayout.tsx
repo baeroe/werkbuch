@@ -161,13 +161,22 @@ export function TableLayout({ groups, groupBy, display, selection, onSelect, onS
   // last, so the box keeps its height and its scroll position
   const padBottom = virtualizer.getTotalSize() - (virtualRows.at(-1)?.end ?? 0);
 
-  /** Brings a row into view and gives an element of it the focus once it is rendered. */
+  /**
+   * Gives an element of a row the focus: at once when it is rendered, so every press of a held arrow starts where the
+   * one before went (T20-M3); else it brings the row into view and focuses the element once it is there.
+   */
   const pending = useRef<string | null>(null);
   const focusAt = useCallback(
     (index: number, selector: string) => {
-      pending.current = selector;
       const find = () => scroller.current?.querySelector<HTMLElement>(selector);
-      if (!find()) virtualizer.scrollToIndex(index, { align: 'auto' });
+      const rendered = find();
+      if (rendered) {
+        pending.current = null;
+        rendered.focus();
+        return;
+      }
+      pending.current = selector;
+      virtualizer.scrollToIndex(index, { align: 'auto' });
       let attempts = 0;
       const tryFocus = () => {
         if (pending.current !== selector) return;

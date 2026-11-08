@@ -743,6 +743,23 @@ describe('TableLayout', () => {
     expect(document.activeElement).toBe(cell('wi_1', 2));
   });
 
+  it('takes every step of held arrows, also two in one frame (T20-M3)', async () => {
+    renderTable({ groups: [group('all', [web1, web2, web3])] });
+    await focusCell('wi_1', 0);
+    // the cell is rendered: it has the focus at once, not a frame later
+    press('ArrowRight');
+    expect(document.activeElement).toBe(cell('wi_1', 1));
+    // so every press of a held key starts where the one before went
+    press('ArrowRight');
+    press('ArrowDown');
+    press('ArrowDown');
+    expect(document.activeElement).toBe(cell('wi_3', 2));
+    expect(cursor()).toBe('wi_3');
+    press('ArrowLeft');
+    press('ArrowUp');
+    expect(document.activeElement).toBe(cell('wi_2', 1));
+  });
+
   it('measures where its box starts when the window changes its size', () => {
     const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 200, 1024, 0));
     renderTable({ groups: [group('all', [web1])] });
