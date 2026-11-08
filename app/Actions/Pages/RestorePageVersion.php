@@ -66,10 +66,11 @@ final class RestorePageVersion
                 'version' => $locked->version + 1,
                 'updated_by' => $actor->user->id,
             ]);
+            // the items before the attachments, as DeleteWorkItem locks them (the foreign key check holds the item)
+            PageItemReferences::sync($locked, $doc);
             if ($doc !== null) {
                 AttachmentLinks::link($locked, $locked->project, $actor->user, ['content_json' => $doc]);
             }
-            PageItemReferences::sync($locked, $doc);
 
             EventRecorder::record(EventType::PageUpdated, $actor, $locked, $locked->project, $changes, ['restored_version' => $restored->version]);
 

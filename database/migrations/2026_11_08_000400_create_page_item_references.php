@@ -18,6 +18,9 @@ use Illuminate\Support\Str;
 // a reference node are read); a text Document refuses names nothing, an item that is gone gets no row.
 return new class extends Migration
 {
+    /** Items read and rows written per statement: 3 000 rows of three columns stay far below 65 535 placeholders. */
+    private const SLICE = 3_000;
+
     public function up(): void
     {
         Schema::create('page_item_references', function (Blueprint $table) {
@@ -55,8 +58,11 @@ return new class extends Migration
             }
         }
 
-        $ids = array_values(array_unique(array_merge([], ...array_values($named))));
-        $there = $ids === [] ? [] : array_flip(DB::table('work_items')->whereIn('id', $ids)->pluck('id')->all());
+        // in slices: a block of long texts can name more items than one statement takes placeholders (65 535)
+        $there = [];
+        foreach (array_chunk(array_values(array_unique(array_merge([], ...array_values($named)))), self::SLICE) as $ids) {
+            $there += array_flip(DB::table('work_items')->whereIn('id', $ids)->pluck('id')->all());
+        }
 
         $rows = [];
         foreach ($named as $pageId => $items) {
@@ -67,8 +73,8 @@ return new class extends Migration
             }
         }
 
-        if ($rows !== []) {
-            DB::table('page_item_references')->insert($rows);
+        foreach (array_chunk($rows, self::SLICE) as $slice) {
+            DB::table('page_item_references')->insert($slice);
         }
     }
 };

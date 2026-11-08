@@ -17,10 +17,13 @@ use Illuminate\Support\Str;
 final class PageItemReferences
 {
     /**
-     * Puts the rows of the page right for its text: rows of items the text no longer names go, rows of items it names
-     * and there are come in. The items there are come from one read without a lock, the new rows with `insertOrIgnore`
-     * and IDs given before: a row there is already stays, and an item deleted between the read and the write leaves no
-     * row (its foreign key fails and is ignored) while its deletion never waits for the page.
+     * Puts the rows of the page right for its text: rows of items the text no longer names go, rows of items it names,
+     * there are and the page has no row for yet come in (only the missing ones: a row there is stays untouched). The
+     * items there are come from one read without a lock, the new rows with `insertOrIgnore` and IDs given before: an
+     * item deleted between the read and the write leaves no row (its foreign key fails and is ignored). The check of
+     * that foreign key holds a shared lock on the item up to the commit: a deletion of the item waits for a page that
+     * names it anew, never the other way round, and the callers sync before they link the attachments (items before
+     * attachments, as DeleteWorkItem takes them).
      */
     public static function sync(Page $page, ?Document $content): void
     {
@@ -31,10 +34,14 @@ final class PageItemReferences
             ->when($there !== [], fn ($query) => $query->whereNotIn('work_item_id', $there))
             ->delete();
 
-        if ($there !== []) {
+        $missing = $there === [] ? [] : array_values(array_diff(
+            $there,
+            PageItemReference::query()->where('page_id', $page->id)->pluck('work_item_id')->all(),
+        ));
+        if ($missing !== []) {
             PageItemReference::query()->insertOrIgnore(array_map(
                 fn (string $id) => ['id' => strtolower((string) Str::ulid()), 'page_id' => $page->id, 'work_item_id' => $id],
-                $there,
+                $missing,
             ));
         }
     }

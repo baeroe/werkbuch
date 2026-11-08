@@ -96,11 +96,12 @@ final class UpdatePage
                 'version' => $locked->version + 1,
                 'updated_by' => $actor->user->id,
             ]);
+            // the items before the attachments, as DeleteWorkItem locks them (the foreign key check holds the item)
+            if ($textChanged) {
+                PageItemReferences::sync($locked, $text[0]);
+            }
             if ($text !== null && $text[0] !== null) {
                 AttachmentLinks::link($locked, $locked->project, $actor->user, [$text[1] => $text[0]]);
-            }
-            if ($text !== null && $textChanged) {
-                PageItemReferences::sync($locked, $text[0]);
             }
 
             EventRecorder::record(EventType::PageUpdated, $actor, $locked, $locked->project, $changes, $kept === null ? [] : ['kept_version' => $kept]);

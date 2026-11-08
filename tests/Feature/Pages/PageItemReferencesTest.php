@@ -7,12 +7,14 @@ use App\Actions\Pages\RestorePageVersion;
 use App\Actions\Pages\UpdatePage;
 use App\Actions\Projects\PurgeProject;
 use App\Actions\WorkItems\DeleteWorkItem;
+use App\Models\Attachment;
 use App\Models\Page;
 use App\Models\PageVersion;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
 use App\RichText\Document;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Support\RichTextFixtures as F;
@@ -173,4 +175,77 @@ it('drops the rows with the item and keeps the node hidden', function () use ($w
     $this->actingAs($w['lene'])->getJson("/api/v1/pages/{$page->id}")
         ->assertOk()
         ->assertJsonPath('data.content', "Siehe [hidden](item:{$w['a']->id}){$w['b']->key}");
+});
+
+it('locks the items before the attachments when it saves, as DeleteWorkItem does (T21t-I1)', function () use ($world, $create, $save) {
+    $w = $world();
+    // a picture of A on the page and a reference to A: the row of A locks A (its foreign key), the link locks the picture
+    $picture = Attachment::factory()->forItem($w['a'])->create(['uploaded_by' => $w['mara']->id]);
+    $text = fn (WorkItem $item) => F::doc(F::image($picture->id, 'Skizze'), F::p('Siehe ', F::reference($item->id)));
+    $order = function (callable $write): array {
+        $statements = [];
+        DB::listen(function (QueryExecuted $query) use (&$statements) {
+            $statements[] = $query->sql;
+        });
+        $write();
+        $row = array_key_first(array_filter($statements, fn (string $sql) => str_starts_with($sql, 'insert ignore into `page_item_references`')));
+        $link = array_key_first(array_filter($statements, fn (string $sql) => str_contains($sql, 'from `attachments`') && str_ends_with($sql, 'for update')));
+        expect($row)->not->toBeNull()
+            ->and($link)->not->toBeNull();
+
+        return [$row, $link];
+    };
+
+    $page = null;
+    [$row, $link] = $order(function () use ($w, $create, $text, &$page) {
+        $page = $create($w['mara'], $w['web'], ['content_json' => $text($w['a'])]);
+    });
+    expect($row)->toBeLessThan($link);
+
+    [$row, $link] = $order(function () use ($w, $save, $text, &$page) {
+        $page = $save($w['mara'], $page, ['content_json' => $text($w['b'])]);
+    });
+    expect($row)->toBeLessThan($link);
+
+    $version = PageVersion::factory()->create(['page_id' => $page->id, 'version' => 1, 'content' => $text($w['c'])]);
+    [$row, $link] = $order(fn () => RestorePageVersion::run(actor($w['mara']), $page, $version));
+    expect($row)->toBeLessThan($link);
+});
+
+it('writes only the rows a page is missing (T21t-M1)', function () use ($world, $refs, $ids, $naming, $create, $save) {
+    $w = $world();
+    $page = $create($w['mara'], $w['web'], ['content_json' => $naming($w['a'])]);
+    $first = DB::table('page_item_references')->where('page_id', $page->id)->value('id');
+    $inserts = [];
+    DB::listen(function (QueryExecuted $query) use (&$inserts) {
+        if (str_starts_with($query->sql, 'insert ignore into `page_item_references`')) {
+            $inserts[] = $query->bindings;
+        }
+    });
+
+    $page = $save($w['mara'], $page, ['content_json' => $naming($w['a'], $w['b'])]);
+
+    // one row of three values: B; the row of A stays the one it was
+    expect($inserts)->toHaveCount(1)
+        ->and($inserts[0])->toHaveCount(3)
+        ->and($inserts[0][2])->toBe($w['b']->id)
+        ->and($refs($page))->toBe($ids($w['a'], $w['b']))
+        ->and(DB::table('page_item_references')->where('page_id', $page->id)->where('work_item_id', $w['a']->id)->value('id'))->toBe($first);
+});
+
+it('keeps the row of a hidden reference a writer sends back as Markdown (T21t-M3)', function () use ($world, $refs, $naming, $create) {
+    $w = $world();
+    $page = $create($w['mara'], $w['web'], ['content_json' => $naming($w['x'])]);
+
+    // Jonas does not see OPS: he reads the reference hidden and writes it back with a change of his own
+    $read = $this->actingAs($w['jonas'])->getJson("/api/v1/pages/{$page->id}")->assertOk();
+    expect($read->json('data.content'))->toBe("Siehe [hidden](item:{$w['x']->id})");
+    $this->actingAs($w['jonas'])->patchJson("/api/v1/pages/{$page->id}", [
+        'content' => $read->json('data.content').' und mehr', 'base_version' => $read->json('data.version'),
+    ])->assertOk();
+
+    $saved = $page->fresh();
+    expect(Document::fromJson((array) $saved?->content)->itemRefs())->toBe([$w['x']->id])
+        ->and($saved?->content_text)->toBe('Siehe und mehr')
+        ->and($refs($page))->toBe([$w['x']->id]);
 });
