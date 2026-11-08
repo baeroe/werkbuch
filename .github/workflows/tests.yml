@@ -433,7 +433,9 @@ jobs:
 
       # the raw files (well over a thousand of about 2 MB) mapped back to the sources once, as one file of a few MB;
       # also after failed tests, so the merge reports the coverage, but not in a run a newer push cancelled;
-      # `setup` counts with every project, as in a local run
+      # `setup` counts with every project, as in a local run. A project that runs into `timeout-minutes` is cancelled
+      # too and uploads nothing: the merge then fails at `--expect-shards` (no coverage of that project) before its
+      # report, and the run stays red
       - name: Remap the coverage
         if: "!cancelled() && steps.tests.outcome != 'skipped'"
         run: node scripts/coverage-merge.mjs --remap-only --out "coverage/e2e-$E2E_PROJECT.json"

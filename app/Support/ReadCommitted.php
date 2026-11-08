@@ -77,7 +77,9 @@ final class ReadCommitted
     /**
      * Sets the level on a session a connection made while a run of it is open (a reconnect before the BEGIN). A failure
      * here is reported and never thrown out of the listener (5b-M2): it would break whatever connected, a BEGIN or a
-     * query; the transaction then runs at the server's level, as one did before ReadCommitted.
+     * query. The transaction then runs at the server's level (REPEATABLE READ) and this one run loses what READ
+     * COMMITTED gives it (T13-M8): a hand-over of attachments can miss a text that committed after its lock. Setting
+     * a session level needs no privilege, and a dead connection fails its BEGIN as well, so the case is hardly reachable.
      */
     public static function established(ConnectionEstablished $event): void
     {

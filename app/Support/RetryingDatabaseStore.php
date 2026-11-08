@@ -21,8 +21,9 @@ use Throwable;
  *
  * Only outside a transaction: inside one the deadlock rolled back the whole transaction of the caller, which tries it
  * again itself (`DB::transaction(…, 3)`, the same rule as Laravel's transactions and DatabaseLock). Locks (`lock()`)
- * stay Laravel's: `DatabaseLock::release` and `pruneExpiredLocks` swallow only a deadlock or a lock wait outside a
- * transaction and throw anything else, the `update` in `acquire`, `refresh` and `forceRelease` can throw (only jobs and
+ * stay Laravel's: `DatabaseLock::release` and `pruneExpiredLocks` swallow only a concurrency error (Laravel's
+ * ConcurrencyErrorDetector: a deadlock, a lock wait, "record has changed since last read", SQLSTATE 40001, …) outside
+ * a transaction and throw anything else, the `update` in `acquire`, `refresh` and `forceRelease` can throw (only jobs and
  * the scheduler lock).
  */
 final class RetryingDatabaseStore extends DatabaseStore
