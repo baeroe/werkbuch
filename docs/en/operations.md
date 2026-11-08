@@ -104,7 +104,7 @@ Never run `php artisan config:clear` or `php artisan optimize:clear` through `do
 
 ## Empty variables
 
-Never set a variable that starts with `PHP_`, `NGINX_`, `SSL_`, `LOG_` or `TRUSTED_PROXY` to an empty value in an `environment` block (in `docker-compose.override.yml` or in the standalone file): the start script of the base image stops the web service then (`LOG_LEVEL: ""` is enough). Leave a variable out to keep its default. `.env` cannot do this: `docker-compose.yml` passes on only the variables of `.env.docker.example`, the only one of them with such a prefix is `TRUSTED_PROXIES`, and an empty `TRUSTED_PROXIES=` falls back to its default.
+Never set a variable that starts with `PHP_`, `NGINX_`, `SSL_`, `LOG_`, `APACHE_`, `HEALTHCHECK_PATH` or `TRUSTED_PROXY` to an empty value in an `environment` block (in `docker-compose.override.yml` or in the standalone file): the start script of the base image stops the web service then (`LOG_LEVEL: ""` is enough). Leave a variable out to keep its default. `.env` cannot do this: `docker-compose.yml` passes on only the variables of `.env.docker.example`, the only one of them with such a prefix is `TRUSTED_PROXIES`, and an empty `TRUSTED_PROXIES=` falls back to its default.
 
 ## Search
 

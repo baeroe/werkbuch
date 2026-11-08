@@ -104,7 +104,7 @@ Nie `php artisan config:clear` oder `php artisan optimize:clear` per `docker com
 
 ## Leere Variablen
 
-Nie eine Variable, die mit `PHP_`, `NGINX_`, `SSL_`, `LOG_` oder `TRUSTED_PROXY` beginnt, in einem `environment`-Block (in der `docker-compose.override.yml` oder in der Standalone-Datei) auf einen leeren Wert setzen: Das Startskript des Basis-Images stoppt dann den Web-Dienst (`LOG_LEVEL: ""` genügt). Eine Variable weglassen, um ihren Standard zu behalten. Über die `.env` passiert das nicht: `docker-compose.yml` reicht nur die Variablen aus `.env.docker.example` weiter, die einzige davon mit einem solchen Präfix ist `TRUSTED_PROXIES`, und ein leeres `TRUSTED_PROXIES=` fällt auf seinen Standard zurück.
+Nie eine Variable, die mit `PHP_`, `NGINX_`, `SSL_`, `LOG_`, `APACHE_`, `HEALTHCHECK_PATH` oder `TRUSTED_PROXY` beginnt, in einem `environment`-Block (in der `docker-compose.override.yml` oder in der Standalone-Datei) auf einen leeren Wert setzen: Das Startskript des Basis-Images stoppt dann den Web-Dienst (`LOG_LEVEL: ""` genügt). Eine Variable weglassen, um ihren Standard zu behalten. Über die `.env` passiert das nicht: `docker-compose.yml` reicht nur die Variablen aus `.env.docker.example` weiter, die einzige davon mit einem solchen Präfix ist `TRUSTED_PROXIES`, und ein leeres `TRUSTED_PROXIES=` fällt auf seinen Standard zurück.
 
 ## Suche
 

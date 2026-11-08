@@ -90,7 +90,7 @@ Die `.env` vor dem ersten Start ausfüllen. Die Passwörter sind in der Vorlage 
 | `API_SESSION_RATE_LIMIT` | nein | Anfragen je Minute an die REST-API je angemeldeter Browser-Sitzung. Standard `3000`. |
 | `MCP_RATE_LIMIT` | nein | Anfragen je Minute an den [MCP-Server](/de/mcp) je Token oder je IP-Adresse. Standard `300`. |
 
-Nur diese Variablen erreichen die Container: Die Compose-Datei reicht sie weiter. Alles andere gehört ins `environment` eines Dienstes, am besten in einer `docker-compose.override.yml` (siehe [Voraussetzungen](#voraussetzungen)). Dort nie eine Variable, die mit `PHP_`, `NGINX_`, `SSL_`, `LOG_` oder `TRUSTED_PROXY` beginnt, leer setzen: Das Startskript des Basis-Images stoppt dann den Web-Dienst.
+Nur diese Variablen erreichen die Container: Die Compose-Datei reicht sie weiter. Alles andere gehört ins `environment` eines Dienstes, am besten in einer `docker-compose.override.yml` (siehe [Voraussetzungen](#voraussetzungen)). Dort nie eine Variable, die mit `PHP_`, `NGINX_`, `SSL_`, `LOG_`, `APACHE_`, `HEALTHCHECK_PATH` oder `TRUSTED_PROXY` beginnt, leer setzen: Das Startskript des Basis-Images stoppt dann den Web-Dienst.
 
 Die Adresse, die der Browser für die Live-Updates nutzt, kommt aus `APP_URL` (Host, Port und `wss://` bei `https://`). `REVERB_PUBLIC_HOST`, `REVERB_PUBLIC_PORT` und `REVERB_PUBLIC_SCHEME` setzen eine andere; nötig sind sie nur, wenn der Browser Reverb nicht unter `APP_URL` erreicht, was mit dem Stack und einem Proxy davor nie vorkommt. Sie stehen nicht in der `.env`: bei Bedarf ins `environment` von `werkbuch` eintragen.
 
@@ -143,7 +143,7 @@ docker compose exec werkbuch php artisan app:reset-two-factor admin@example.com
 |---|---|---|---|
 | `werkbuch` | nginx und PHP-FPM auf Port `8080`, veröffentlicht als `7740`; migriert beim Start, reicht `/app/` (den WebSocket) an Reverb weiter | `default`, `backend` | `/up` für den Host aus `APP_URL` |
 | `reverb` | der WebSocket-Server der Live-Updates auf Port `6001` | `backend` | `/up` auf Port `6001` |
-| `queue` | Worker für die Queues `mail`, `default`, `live`, `notifications`, `bulk`: Events, Live-Updates, Benachrichtigungs-Mails, Löschen von Projekten | `default`, `backend` | der Worker-Prozess läuft |
+| `queue` | Worker für die Queues `mail`, `default`, `live`, `notifications`, `bulk`: Einladungen und „Passwort vergessen“, Events, Live-Updates, Benachrichtigungs-Mails, Löschen von Projekten | `default`, `backend` | der Worker-Prozess läuft |
 | `queue-index` | Worker für `search` und `media`: der Suchindex und die Vorschauen von Bildern | `default`, `backend` | der Worker-Prozess läuft |
 | `queue-webhooks` | Worker für `webhooks`: die Zustellungen | `default`, `backend` | der Worker-Prozess läuft |
 | `scheduler` | startet die geplante Arbeit: Benachrichtigungs-Mails, Erinnerungen, Vorlagen, die nächtlichen Automatisierungen, Aufräumen | `default`, `backend` | der Scheduler-Prozess läuft |

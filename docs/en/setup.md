@@ -90,7 +90,7 @@ Fill in `.env` before the first start. The passwords are empty in the template o
 | `API_SESSION_RATE_LIMIT` | no | Requests a minute of the REST API per signed-in browser session. Default `3000`. |
 | `MCP_RATE_LIMIT` | no | Requests a minute of the [MCP server](/en/mcp) per token or per IP address. Default `300`. |
 
-Only these variables reach the containers: the compose file passes them on. Anything else goes into the `environment` of a service, best in a `docker-compose.override.yml` (see [Requirements](#requirements)). Never set a variable that starts with `PHP_`, `NGINX_`, `SSL_`, `LOG_` or `TRUSTED_PROXY` to an empty value there: the start script of the base image then stops the web service.
+Only these variables reach the containers: the compose file passes them on. Anything else goes into the `environment` of a service, best in a `docker-compose.override.yml` (see [Requirements](#requirements)). Never set a variable that starts with `PHP_`, `NGINX_`, `SSL_`, `LOG_`, `APACHE_`, `HEALTHCHECK_PATH` or `TRUSTED_PROXY` to an empty value there: the start script of the base image then stops the web service.
 
 The address the browser uses for the live updates comes from `APP_URL` (host, port and `wss://` for `https://`). `REVERB_PUBLIC_HOST`, `REVERB_PUBLIC_PORT` and `REVERB_PUBLIC_SCHEME` set another one; they are only needed when the browser does not reach Reverb under `APP_URL`, which with the stack and a proxy in front never happens. They are not in `.env`: add them to the `environment` of `werkbuch` if you need them.
 
@@ -143,7 +143,7 @@ docker compose exec werkbuch php artisan app:reset-two-factor admin@example.com
 |---|---|---|---|
 | `werkbuch` | nginx and PHP-FPM on port `8080`, published as `7740`; migrates on start, forwards `/app/` (the WebSocket) to Reverb | `default`, `backend` | `/up` for the host of `APP_URL` |
 | `reverb` | the WebSocket server of the live updates on port `6001` | `backend` | `/up` on port `6001` |
-| `queue` | worker for the queues `mail`, `default`, `live`, `notifications`, `bulk`: events, live updates, notification mails, deleting projects | `default`, `backend` | the worker process runs |
+| `queue` | worker for the queues `mail`, `default`, `live`, `notifications`, `bulk`: invitations and password resets, events, live updates, notification mails, deleting projects | `default`, `backend` | the worker process runs |
 | `queue-index` | worker for `search` and `media`: the search index and the previews of pictures | `default`, `backend` | the worker process runs |
 | `queue-webhooks` | worker for `webhooks`: the deliveries | `default`, `backend` | the worker process runs |
 | `scheduler` | starts the scheduled work: notification mails, reminders, templates, the nightly automations, clean-up | `default`, `backend` | the scheduler process runs |

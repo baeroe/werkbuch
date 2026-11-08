@@ -33,6 +33,57 @@ it('lists every page but the landing page in the sidebar', function () {
     }
 });
 
+it('keeps the sidebar of both languages in the same order', function () {
+    $config = RepoFiles::text('docs/.vitepress/config.ts');
+    // the keys of `const en` and `const de`: the labels of the groups and pages, in the order they are written
+    $keys = function (string $language) use ($config): array {
+        expect(preg_match('/^const '.$language.': Record<string, string> = \{\n(.*?)^\};/ms', $config, $block))->toBe(1, "config.ts has no labels for {$language}");
+        preg_match_all("/^    '?([a-z\/-]+)'?: /m", $block[1], $m);
+
+        return $m[1];
+    };
+    // the pages of the sidebar, group by group: one list for both languages
+    preg_match_all("/pages: \[([^\]]*)\]/", $config, $lists);
+    $pages = [];
+    foreach ($lists[1] as $list) {
+        preg_match_all("/'([a-z\/-]+)'/", $list, $m);
+        $pages = [...$pages, ...$m[1]];
+    }
+
+    expect($pages)->toEqualCanonicalizing(array_values(array_diff(docsPages('en'), ['index'])))
+        ->and($keys('de'))->toBe($keys('en'));
+
+    // a page in the sidebar has a label in each language, and no label names a page the sidebar lacks
+    $labels = $keys('en');
+    foreach ($pages as $page) {
+        expect($labels)->toContain($page);
+    }
+    expect(count($labels))->toBe(count($pages) + count($lists[1]));
+});
+
+it('names no phase in the docs', function () {
+    // the plan of the build is history, a reader of the docs needs no phase; the development page tells that history,
+    // and the landing page says in its status where the project stands
+    foreach (['en', 'de'] as $l) {
+        foreach (array_diff(docsPages($l), ['development', 'index']) as $page) {
+            $found = preg_match('/phase \d+/i', RepoFiles::text("docs/{$l}/{$page}.md"), $m);
+
+            expect($found)->toBe(0, "docs/{$l}/{$page}.md names ".($m[0] ?? ''));
+        }
+    }
+});
+
+it('sets a theme color for both themes, the colors of the app', function () {
+    $config = RepoFiles::text('docs/.vitepress/config.ts');
+    $app = RepoFiles::text('resources/views/app.blade.php');
+
+    foreach (['light', 'dark'] as $scheme) {
+        $media = "(prefers-color-scheme: {$scheme})";
+        expect(preg_match('/<meta name="theme-color" content="(#[0-9A-Fa-f]{6})" media="'.preg_quote($media, '/').'"/', $app, $color))->toBe(1, "the app has no theme color for {$scheme}");
+        expect($config)->toContain("['meta', { name: 'theme-color', content: '".strtolower($color[1])."', media: '{$media}' }]");
+    }
+});
+
 it('keeps specs, plans and history out of the site', fn () => expect((string) file_get_contents(repo_path('docs/.vitepress/config.ts')))->toContain("'history/**'", "'superpowers/**'"));
 
 it('documents the DDEV commands of the development page in both languages', function () {

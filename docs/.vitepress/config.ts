@@ -8,7 +8,7 @@ const base = process.env.DOCS_BASE ?? '/';
 const site = process.env.DOCS_URL?.replace(/\/$/, '');
 const description = 'Open, self-hosted project management: work items with your own types, properties and workflows, wikis, views and automations.';
 
-// every page exists in docs/en and docs/de under the same path (tests/Unit/DocsTest.php); later phases add theirs
+// every page exists in docs/en and docs/de under the same path (tests/Unit/DocsTest.php)
 const groups: { title: string; pages: string[] }[] = [
     { title: 'selfhosting', pages: ['setup', 'reverse-proxy', 'operations', 'upgrading', 'backup'] },
     { title: 'guide', pages: ['development', 'keyboard'] },
@@ -86,7 +86,9 @@ export default defineConfig({
     // head entries are not rewritten to the base by VitePress
     head: [
         ['link', { rel: 'icon', href: `${base}favicon.svg`, type: 'image/svg+xml' }],
-        ['meta', { name: 'theme-color', content: '#f4f5f8' }],
+        // the colors of the app (resources/views/app.blade.php), light and dark
+        ['meta', { name: 'theme-color', content: '#f5f7f9', media: '(prefers-color-scheme: light)' }],
+        ['meta', { name: 'theme-color', content: '#181e28', media: '(prefers-color-scheme: dark)' }],
         ['meta', { property: 'og:title', content: 'werkbuch' }],
         ['meta', { property: 'og:description', content: description }],
     ],
