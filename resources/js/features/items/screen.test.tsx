@@ -6,7 +6,7 @@
  */
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { MouseEvent, ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -19,6 +19,7 @@ import { useUiStore } from '@/store/ui';
 import type { Condition, GroupBy, Project, View, WorkItem } from '@/types';
 import { resultMessage, selectionMessage } from './ListAnnouncer';
 import { ItemsScreen, type ItemsScreenProps } from './ItemsScreen';
+import { useListState } from './useListState';
 
 /* --------------------------------------------------------------------- fake Inertia */
 
@@ -552,6 +553,32 @@ describe('the item list screen', () => {
       expect(board().getAttribute('aria-pressed')).toBe('true');
     } finally {
       inertia.answer = answer;
+    }
+  });
+
+  it('shows the address the server answers, also one with another state than asked for', async () => {
+    renderScreen();
+    await screen.findByText('Kontaktformular sendet doppelt');
+    const layout = (name: RegExp) => within(screen.getAllByRole('group', { name: 'Layout' })[0]!).getByRole('button', { name });
+    const answer = inertia.answer;
+    // the server answers the board with the table
+    inertia.answer = (url, options) => answer(url.replace('layout=board', 'layout=table'), options);
+    try {
+      press('2');
+      expect(inertia.url).toBe('/projects/WEB?layout=table');
+      await waitFor(() => expect(layout(/Tabelle/).getAttribute('aria-pressed')).toBe('true'));
+      expect(layout(/Board/).getAttribute('aria-pressed')).toBe('false');
+    } finally {
+      inertia.answer = answer;
+    }
+  });
+
+  it('has no base for a view list without its view', () => {
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(() => renderHook(() => useListState({ preset: 'view' }))).toThrow('A view list needs its view.');
+    } finally {
+      quiet.mockRestore();
     }
   });
 

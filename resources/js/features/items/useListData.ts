@@ -31,7 +31,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ApiError } from '@/api/client';
 import type { ListWorkItemsArgs } from '@/api/workItems';
 import { placeItems } from '@/domain/grouping';
-import type { ItemsPreset, ViewState } from '@/domain/viewState';
+import type { ViewState } from '@/domain/viewState';
 import { useLabels } from '@/hooks/catalog';
 import { useProjects } from '@/hooks/projects';
 import { useProperties } from '@/hooks/properties';
@@ -39,7 +39,7 @@ import { useAllUsers } from '@/hooks/users';
 import { ALL_GROUP, ListGoneError, useGroupedWorkItems, useWorkItemGroups, type InfiniteWorkItems } from '@/hooks/workItems';
 import { useWorkflows } from '@/hooks/workflows';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
-import type { Condition, GroupBy, GroupCount, ListedItem, Project, StateCategory } from '@/types';
+import type { Condition, GroupBy, GroupCount, ListedItem, StateCategory } from '@/types';
 import { groupLabel, type GroupCatalogs } from './display/groupLabels';
 import { listSort, MANUAL_SORT } from './display/options';
 import { fieldDef, isComplete, PROPERTY_PREFIX } from './filter/fieldOps';
@@ -78,7 +78,7 @@ const EPICS: Condition = { field: 'epic', op: 'is', value: true };
 /** The timeline reads in the order of time. */
 const BY_START = { field: 'start_date', direction: 'asc' } as const;
 
-export function useListData(state: ViewState, scope: Condition[], _options: { preset: ItemsPreset; project?: Project }): ListData {
+export function useListData(state: ViewState, scope: Condition[]): ListData {
   const { display } = state;
   const timeline = display.layout === 'timeline';
   const chosen: GroupBy = timeline ? 'project' : display.group_by;

@@ -161,7 +161,7 @@ function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: P
   const { reason, loading: rightsLoading, failed: rightsFailed } = usePermissions();
   const { base, state, setState, clearChanges, unsaved } = useListState({ preset, project, view });
   const scope = useMemo(() => scopeConditions(preset, project?.id), [preset, project?.id]);
-  const data = useListData(state, scope, { preset, project });
+  const data = useListData(state, scope);
 
   const title = view?.name ?? project?.name ?? t(MY_TABS.find((tab) => tab.preset === preset)!.title);
   useDocumentTitle(title);

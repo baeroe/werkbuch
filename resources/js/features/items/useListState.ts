@@ -4,9 +4,9 @@
  * (`encodeViewState`), so a link shows the same list and a reload keeps it. Every other parameter of the address stays.
  *
  * A change goes through Inertia (`router.get` with `preserveState`, `replace`): the page stays mounted and keeps
- * cursor, selection and scroll; the address the server answers is the new state. Until it is there, the state of the
- * change shows already (a layout switch with 2 shows the board at once); a second change meanwhile builds on it. A
- * visit that fails or is cancelled shows the address again.
+ * cursor, selection and scroll; the address the server answers is the new state, also one with another state than the
+ * change asked for. Until it is there, the state of the change shows already (a layout switch with 2 shows the board at
+ * once); a second change meanwhile builds on it. A visit that fails or is cancelled shows the address again.
  *
  * Unsaved: a saved view by any difference; a built-in list only by its filter (layout, grouping and fields are how one
  * looks at it). Those can still be saved as a view (13c).
@@ -49,7 +49,12 @@ function canonical(search: string): string {
 export function useListState({ preset, view }: { preset: ItemsPreset; project?: Project; view?: View }): ListState {
   const { url } = usePage();
   const address = new URL(url, window.location.origin);
-  const base = useMemo<ViewState>(() => (view ? viewStateOf(view) : presetState(preset === 'view' ? 'project' : preset)), [view, preset]);
+  const base = useMemo<ViewState>(() => {
+    if (view) return viewStateOf(view);
+    // the screen shows a view list once its view is there; without it there is no base to invent
+    if (preset === 'view') throw new Error('A view list needs its view.');
+    return presetState(preset);
+  }, [view, preset]);
 
   // the change on its way to the server; it shows until the address has it (or the visit fails)
   const [pending, setPending] = useState<string | null>(null);
@@ -68,8 +73,10 @@ export function useListState({ preset, view }: { preset: ItemsPreset; project?: 
         preserveState: true,
         preserveScroll: true,
         replace: true,
+        // the address of the answer is the state now, also when its state differs from the one asked for
         onSuccess: () => {
           answered = true;
+          setPending((current) => (current === next ? null : current));
         },
         // a visit that failed or was cancelled: the address shows again (a newer change keeps its own)
         onFinish: () => {
