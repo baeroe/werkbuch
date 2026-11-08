@@ -4,9 +4,16 @@ import de from '../../../lang/de.json';
 import { drafts } from '@/lib/drafts';
 import { initI18n } from '@/lib/i18n';
 import { clearLiveGone } from '@/lib/liveGone';
+import { dropQueryNotices, trackQueryNotices } from './queryTeardown';
 
-// Vitest runs without globals, so Testing Library cannot register its own cleanup.
-afterEach(() => cleanup());
+// Vitest runs without globals, so Testing Library cannot register its own cleanup. After the unmount, the notices
+// TanStack Query still has for the unmounted components go too (test/queryTeardown.ts): one left after the last test of
+// a file can reach React once jsdom is gone and fail the run.
+trackQueryNotices();
+afterEach(() => {
+  cleanup();
+  dropQueryNotices();
+});
 
 // The tests speak German, like the clickdummy they come from; a test that needs another language calls initI18n itself.
 // Before each test, so one that switched the language does not leak it into the next.
