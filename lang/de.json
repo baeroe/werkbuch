@@ -3299,6 +3299,8 @@
     "wiki.conflict.open": "Öffnen",
     "wiki.conflict.self": "Du hast die Seite inzwischen in einem anderen Fenster geändert.",
     "wiki.conflict.text": "Deine Fassung steht noch im Editor. Lade die neue Fassung oder übernimm deine. Die andere bleibt dann als Version erhalten.",
+    "wiki.conflict.undo_blocked.newer": "Deine Fassung nicht zurückgeholt: Du darfst die Seite nicht mehr bearbeiten, dein neuerer Text steht zum Kopieren darüber.",
+    "wiki.conflict.undo_blocked.parked": "Deine Fassung steht zum Kopieren über der Seite: Du darfst sie nicht mehr bearbeiten.",
     "wiki.conflict.undo_blocked.title_required": "Deine Fassung nicht zurückgeholt: Gib der Seite erst einen Titel.",
     "wiki.conflict.undo_blocked.uploading": "Deine Fassung kommt zurück, sobald der Upload fertig ist.",
     "wiki.conflict.waits": "Deine Fassung wartet auf der Seite.",
