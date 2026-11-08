@@ -91,7 +91,7 @@ export interface QueriedItems {
   project?: string;
   /** `shorthand.parent`. */
   parent?: string;
-  /** `shorthand.q` or `q`. */
+  /** `q` (only the groups send one; no list sends `shorthand.q` any more, 21b-M4). */
   q?: string;
   /** A condition `epic is true`. */
   epic: boolean;
@@ -101,7 +101,7 @@ export interface QueriedItems {
 
 export function queried(body: unknown): QueriedItems {
   const query = (body ?? {}) as {
-    shorthand?: { project?: string; parent?: string; q?: string };
+    shorthand?: { project?: string; parent?: string };
     filter?: { conditions: { field: string; op: string; value?: unknown }[] };
     q?: string;
     lean?: boolean;
@@ -112,7 +112,7 @@ export function queried(body: unknown): QueriedItems {
   return {
     project: query.shorthand?.project ?? project,
     parent: query.shorthand?.parent,
-    q: query.shorthand?.q ?? query.q,
+    q: query.q,
     epic: conditions.some((condition) => condition.field === 'epic' && condition.value === true),
     lean: query.lean === true,
     cursor: query.cursor,

@@ -44,6 +44,8 @@ describe('reading work items', () => {
   });
 
   it('takes no q in the list args', () => {
+    // the check is the type: `pnpm typecheck` goes RED once the list takes `q` again (the directive is then unused);
+    // the assertion below only keeps the value used (21b-M5)
     // @ts-expect-error the list has no search text; only the groups carry `q`
     const args: ListWorkItemsArgs = { q: 'kontakt' };
     expect(args).toEqual({ q: 'kontakt' });
