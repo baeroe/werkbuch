@@ -147,6 +147,7 @@ use App\Actions\WorkItems\ListRelations;
 use App\Actions\WorkItems\ListSubscribers;
 use App\Actions\WorkItems\ListWorkItems;
 use App\Actions\WorkItems\QueryWorkItems;
+use App\Actions\WorkItems\RedistributeRanks;
 use App\Actions\WorkItems\RemapStates;
 use App\Actions\WorkItems\RemoveRelation;
 use App\Actions\WorkItems\RestoreWorkItem;
@@ -498,6 +499,19 @@ return [
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => BulkUpdateWorkItems::run($a, ['ids' => [$w->item($column)->id], 'patch' => ['priority' => 'high']]),
         // every account may send one: a refused item is a line of the answer, never a 403 or 404 (P10)
         'allowed' => $everyone,
+    ],
+    'RedistributeRanks' => [
+        'action' => RedistributeRanks::class,
+        // an item with a rank the redistribution shortens: else nothing changes and nothing is recorded
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $item = $w->item($column);
+            $item->update(['rank' => $item->rank.'V']);
+
+            return RedistributeRanks::run($a, $w->project($column));
+        },
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::ProjectRanksRedistributed,
     ],
     'DeleteWorkItem' => [
         'action' => DeleteWorkItem::class,

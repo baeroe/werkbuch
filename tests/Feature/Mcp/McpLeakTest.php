@@ -210,6 +210,7 @@ $refusals = fn (): array => [
     'manage-automations' => ['manage-automations', fn ($w, $hide) => ['project' => $hide('OPS'), 'key' => 'close_parent', 'input' => ['enabled' => true]]],
     'manage-projects update' => ['manage-projects', fn ($w, $hide) => ['action' => 'update', 'project' => $hide('OPS'), 'input' => ['name' => 'Umbenannt']]],
     'manage-projects set-workflow' => ['manage-projects', fn ($w, $hide) => ['action' => 'set-workflow', 'project' => $hide('OPS'), 'input' => ['workflow_id' => Workflow::default()->id, 'mapping' => []]]],
+    'manage-projects redistribute-ranks' => ['manage-projects', fn ($w, $hide) => ['action' => 'redistribute-ranks', 'project' => $hide('OPS')]],
     'manage-projects join' => ['manage-projects', fn ($w, $hide) => ['action' => 'join', 'project' => $hide('OPS')], 'positive' => fn ($w) => ['admin', ['action' => 'join', 'project' => 'OPS']]],
     'manage-projects add-member' => ['manage-projects', fn ($w, $hide) => ['action' => 'add-member', 'project' => $hide('OPS'), 'input' => ['user_id' => $w['ida']->id, 'role' => 'viewer']],
         'positive' => fn ($w) => ['mara', ['action' => 'add-member', 'project' => 'OPS', 'input' => ['user_id' => User::factory()->create()->id, 'role' => 'viewer']]]],

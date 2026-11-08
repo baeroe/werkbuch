@@ -201,6 +201,7 @@ Projects, their members and your favorites. The admins of a project change it. (
 | `restore` | Restores an archived project. | `project` | `POST /projects/{project}/restore` |
 | `delete` | Deletes a project at once for everybody; its data goes in the background. | `project` | `DELETE /projects/{project}` |
 | `set-workflow` | Switches the workflow; every state in use needs a state in `mapping`, else 422 with `states`. | `project`, `input` | `PUT /projects/{project}/workflow` |
+| `redistribute-ranks` | Gives the items new short ranks in their order; answers `{redistributed}`. | `project` | `POST /projects/{project}/redistribute-ranks` |
 | `join` | Joins a project as a member. | `project` | `POST /projects/{project}/join` |
 | `add-member` | Adds an account with a role. | `project`, `input` | `POST /projects/{project}/members` |
 | `update-member` | Changes the role of a member. | `project`, `user`, `input` | `PATCH /projects/{project}/members/{user}` |

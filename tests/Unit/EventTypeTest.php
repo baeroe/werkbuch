@@ -21,7 +21,7 @@ it('knows the events of this phase that have no webhook', function () {
     $internal = collect(EventType::cases())->reject(fn (EventType $type) => $type->webhook())->map->value->sort()->values()->all();
 
     expect($internal)->toBe(collect([
-        'project.member_role_changed', 'organization.updated',
+        'project.member_role_changed', 'project.ranks_redistributed', 'organization.updated',
         'user.created', 'user.updated', 'user.role_changed', 'user.deactivated', 'user.reactivated', 'user.invited',
         'user.password_changed', 'user.two_factor_setup_started', 'user.two_factor_setup_cancelled', 'user.two_factor_enabled',
         'user.two_factor_disabled', 'user.recovery_codes_regenerated', 'user.recovery_code_used',

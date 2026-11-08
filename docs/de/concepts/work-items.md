@@ -224,6 +224,21 @@ Im Demo-Workflow „Agentur-Freigabe“ darf Todo nicht direkt nach Done:
 
 Bei einem geschlossenen Status wählt `resolution_id` die Resolution; ohne behält das Item die, die es in dieser Kategorie hatte, oder bekommt den Standard. Ein Status außerhalb des Workflows des Projekts ist ein `422` an `state_id`.
 
+### Items von Hand ordnen
+
+Die Sortierung „Manuell“ folgt dem Rang jedes Items (`rank`): ein kurzer Text, Byte für Byte verglichen, bei gleichen entscheidet die ULID. Wer ein Item von Hand verschiebt, schickt einen Rang zwischen seinen Nachbarn (`PATCH` mit `rank`, höchstens 128 Zeichen). Ist zwischen zwei Nachbarn kein Platz mehr, bekommen die Items des Projekts neue kurze Ränge in ihrer Ordnung:
+
+```bash
+curl -X POST https://werkbuch.example.com/api/v1/projects/WEB/redistribute-ranks \
+  -H "Authorization: Bearer <token>"
+```
+
+```json
+{ "redistributed": 57 }
+```
+
+`redistributed` zählt die Items, deren Rang sich geändert hat. Jedes Item des Projekts behält seinen Platz, archivierte eingeschlossen; keins bekommt ein neues `updated_at`, und die History eines Items zeigt es nicht. Eine Liste mehrerer Projekte nach „Manuell“ kann ihre Items danach anders mischen. Mitglieder und Admins des Projekts dürfen es (`item.edit`, die Fähigkeit `write`), in einem archivierten Projekt niemand (`409 project_archived`). Änderungen an Items des Projekts warten, bis die neuen Ränge gespeichert sind.
+
 ### Mehrere Items ändern
 
 `ids` nimmt 1 bis 100 ULIDs oder Keys, `patch` die Änderung: `state_id`, `resolution_id`, `assignee_id`, `priority`, `label_ids`, `add_label_ids`, `remove_label_ids`, `start_date`, `due_date` und `archived` (`true` archiviert, `false` stellt wieder her). Titel, Beschreibungen und Properties gehören nicht dazu. Jedes Item wird für sich geändert; `updated` nennt die ULIDs aller Items, die nicht abgelehnt wurden, unveränderte eingeschlossen, `rejected` die abgelehnten unter der Referenz, die du geschickt hast.

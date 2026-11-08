@@ -410,6 +410,34 @@ it('answers within budget', function (string $name) use ($rows, $world, $baselin
     }
 })->with(array_keys($rows));
 
+it('redistributes the ranks of a project within budget', function () use ($world) {
+    // a write: once (a second run would find every rank short), in a transaction that is rolled back; before it, every
+    // item of L07 (2 500, archived ones too) gets a longer rank in the same order, so every rank changes
+    LoadWorld::ensure();
+    $big = $world();
+    $name = 'redistribute the ranks of a project';
+
+    DB::beginTransaction();
+    try {
+        $order = fn (): array => DB::table('work_items')->where('project_id', $big['project'])->orderBy('rank')->orderBy('id')->pluck('id')->all();
+        DB::table('work_items')->where('project_id', $big['project'])->update(['rank' => DB::raw("concat(`rank`, 'V')")]);
+        $before = $order();
+        expect($before)->toHaveCount(LoadItems::PER_PROJECT);
+
+        $answer = Budget::once($name, fn () => $this->actingAs($big['admin'])->postJson("/api/v1/projects/{$big['identifier']}/redistribute-ranks"), Budget::SECONDS);
+        expect($answer)->toBeInstanceOf(TestResponse::class);
+        assert($answer instanceof TestResponse);
+        $answer->assertOk()->assertExactJson(['redistributed' => LoadItems::PER_PROJECT]);
+        expect($order())->toBe($before)
+            ->and(DB::table('work_items')->where('project_id', $big['project'])->max(DB::raw('length(`rank`)')))->toBeLessThanOrEqual(3);
+    } finally {
+        DB::rollBack();
+    }
+
+    $run = Budget::row($name)['median'];
+    expect($run)->toBeLessThanOrEqual(Budget::SECONDS, sprintf('%s took %.0f ms', $name, $run * 1_000));
+});
+
 it('names only rows that exist', function () use ($rows) {
     // mutation probes (report of Task 8b, fix round) show that it fails on a name that is no row and on a reason without
     // a task, and passes on the rows OVER_BUDGET names (the loop is empty whenever OVER_BUDGET is)

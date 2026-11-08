@@ -151,6 +151,7 @@ Items haben ihre eigene Filter-Engine, die der Views. Die vollständige Referenz
 - `POST /work-items/query` nimmt einen vollen Filter, eine Sortierung und den Cursor im Body, ein Lesezugriff wie `GET`.
 - `POST /work-items/groups` und `/work-items/counts` liefern die Zahlen einer Gruppierung oder benannter Filter.
 - `lean=1` (`"lean": true`) lässt `description`, `description_json` und `values_markdown` weg.
+- `POST /projects/{project}/redistribute-ranks` gibt den Items eines Projekts neue kurze Ränge in ihrer Ordnung, wenn zwischen zwei Nachbarn kein Rang mehr passt; es antwortet `{"redistributed": n}` ([Work Items](/de/concepts/work-items#items-von-hand-ordnen)).
 
 `GET /work-items/{item}?include=children,relations,type,workflow,attachments` bettet in einer Anfrage ein, was die Item-Seite braucht.
 

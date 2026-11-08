@@ -12,6 +12,7 @@ use App\Actions\Projects\JoinProject;
 use App\Actions\Projects\RemoveMember;
 use App\Actions\Projects\UpdateMemberRole;
 use App\Actions\Projects\UpdateProject;
+use App\Actions\WorkItems\RedistributeRanks;
 use App\Http\Resources\ProjectMemberResource;
 use App\Http\Resources\ProjectResource;
 use App\Mcp\Support\McpAction;
@@ -30,8 +31,9 @@ use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 /**
  * `manage-projects` (spec 6.2), the pair of `projects`: create, change, archive, restore and delete a project, switch
- * its workflow, join it, manage its members and toggle a favorite. `delete` answers `{done: true}` (REST: 202 without a
- * body); `set-workflow` without a state for every state in use is 422 with `states`.
+ * its workflow, give its items new short ranks (A448), join it, manage its members and toggle a favorite. `delete`
+ * answers `{done: true}` (REST: 202 without a body); `set-workflow` without a state for every state in use is 422 with
+ * `states`.
  */
 #[IsDestructive]
 #[IsReadOnly(false)]
@@ -104,6 +106,14 @@ final class ManageProjectsTool extends WriteTool
                 input: CatalogSchemas::projectWorkflow(),
                 required: ['project', 'input'],
                 twin: 'PUT projects/{project}/workflow',
+            ),
+            new McpAction(
+                name: 'redistribute-ranks',
+                summary: 'Gives the items new short ranks in their order; answers `{redistributed}`.',
+                run: fn (Actor $actor, McpArguments $args): McpResult => McpResult::body(['redistributed' => RedistributeRanks::run($actor, self::project($args))]),
+                parameters: $project,
+                required: ['project'],
+                twin: 'POST projects/{project}/redistribute-ranks',
             ),
             new McpAction(
                 name: 'join',

@@ -201,6 +201,7 @@ Projekte, ihre Mitglieder und die eigenen Favoriten. Ein Projekt ändern seine A
 | `restore` | Holt ein archiviertes Projekt zurück. | `project` | `POST /projects/{project}/restore` |
 | `delete` | Löscht ein Projekt sofort für alle; seine Daten gehen im Hintergrund. | `project` | `DELETE /projects/{project}` |
 | `set-workflow` | Wechselt den Workflow; jeder benutzte Status braucht ein Ziel in `mapping`, sonst 422 mit `states`. | `project`, `input` | `PUT /projects/{project}/workflow` |
+| `redistribute-ranks` | Gibt den Items neue kurze Ränge in ihrer Ordnung; antwortet `{redistributed}`. | `project` | `POST /projects/{project}/redistribute-ranks` |
 | `join` | Tritt einem Projekt als Mitglied bei. | `project` | `POST /projects/{project}/join` |
 | `add-member` | Fügt ein Konto mit einer Rolle hinzu. | `project`, `input` | `POST /projects/{project}/members` |
 | `update-member` | Ändert die Rolle eines Mitglieds. | `project`, `user`, `input` | `PATCH /projects/{project}/members/{user}` |

@@ -48,6 +48,7 @@ return [
     'archive a project' => ['POST', '/api/v1/projects/{project}/archive', 'params' => fn (MatrixWorld $w) => ['project' => $w->web->identifier]],
     'restore a project' => ['POST', '/api/v1/projects/{project}/restore', 'params' => fn (MatrixWorld $w) => ['project' => $w->web->identifier]],
     'switch the workflow of a project' => ['PUT', '/api/v1/projects/{project}/workflow', 'params' => fn (MatrixWorld $w) => ['project' => $w->web->identifier]],
+    'redistribute the ranks of a project' => ['POST', '/api/v1/projects/{project}/redistribute-ranks', 'params' => fn (MatrixWorld $w) => ['project' => $w->web->identifier]],
     'join a project' => ['POST', '/api/v1/projects/{project}/join', 'params' => fn (MatrixWorld $w) => ['project' => $w->web->identifier]],
     'list the members of a project' => ['GET', '/api/v1/projects/{project}/members', 'params' => fn (MatrixWorld $w) => ['project' => $w->web->identifier]],
     'add a member to a project' => ['POST', '/api/v1/projects/{project}/members', 'params' => fn (MatrixWorld $w) => ['project' => $w->web->identifier]],

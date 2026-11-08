@@ -256,6 +256,18 @@ final class WorkItemSchemas
     }
 
     /**
+     * The answer of `POST /projects/{project}/redistribute-ranks`.
+     *
+     * @return array<string, mixed>
+     */
+    public static function redistributed(): array
+    {
+        return self::object('How many items of the project got a new rank.', [
+            'redistributed' => ['type' => 'integer', 'minimum' => 0, 'description' => 'The items whose rank changed; 0 when every rank was short already.'],
+        ], ['redistributed'], false);
+    }
+
+    /**
      * The answer of `POST /work-items/bulk`.
      *
      * @return array<string, mixed>

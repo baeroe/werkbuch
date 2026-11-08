@@ -249,6 +249,16 @@ describe('useLiveSync', () => {
     expect(items.fetches()).toBe(2);
   });
 
+  it('reloads the items after the ranks of a project were redistributed (A448)', async () => {
+    const items = await shown(qk.workItems.list({ project: 'p_web' }));
+    renderHook(() => useLiveSync(), { wrapper });
+
+    send({ event_id: 'ev_1', type: 'project.ranks_redistributed', item_id: null });
+    await pass(LIVE_BURST_MS);
+
+    expect(items.fetches()).toBe(2);
+  });
+
   it('loads the account and its rights of the page again on a new org role, nothing else of the page (M2)', async () => {
     inertia.reload.mockClear();
     renderHook(() => useLiveSync(), { wrapper });

@@ -97,6 +97,7 @@ return [
     'manage-projects:restore' => ['arguments' => fn (MatrixWorld $w) => ['project' => $w->web->identifier]],
     'manage-projects:delete' => ['arguments' => fn (MatrixWorld $w) => ['project' => $w->ops->identifier]],
     'manage-projects:set-workflow' => ['arguments' => fn (MatrixWorld $w) => ['project' => $w->web->identifier, 'input' => ['workflow_id' => Workflow::factory()->create()->id, 'mapping' => []]]],
+    'manage-projects:redistribute-ranks' => ['arguments' => fn (MatrixWorld $w) => ['project' => $w->web->identifier]],
     'manage-projects:join' => ['arguments' => fn (MatrixWorld $w) => ['project' => $w->web->identifier]],
     'manage-projects:add-member' => ['arguments' => fn (MatrixWorld $w) => ['project' => $w->web->identifier, 'input' => ['user_id' => $w->account('outsider_public')->id, 'role' => 'viewer']]],
     'manage-projects:update-member' => ['arguments' => fn (MatrixWorld $w) => ['project' => $w->web->identifier, 'user' => $w->target->id, 'input' => ['role' => 'viewer']]],

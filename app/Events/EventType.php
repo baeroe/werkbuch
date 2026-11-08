@@ -16,6 +16,8 @@ enum EventType: string
     case ProjectMemberAdded = 'project.member_added';
     case ProjectMemberRemoved = 'project.member_removed';
     case ProjectMemberRoleChanged = 'project.member_role_changed';
+    // the ranks of the items of a project got shorter in their order (A448): no webhook, no history of an item
+    case ProjectRanksRedistributed = 'project.ranks_redistributed';
 
     case WorkItemCreated = 'work_item.created';
     case WorkItemUpdated = 'work_item.updated';

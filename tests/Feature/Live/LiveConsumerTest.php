@@ -16,6 +16,7 @@ use App\Actions\Templates\SaveTemplate;
 use App\Actions\Tokens\CreateToken;
 use App\Actions\Users\UpdateUserRole;
 use App\Actions\Views\DeleteView;
+use App\Actions\WorkItems\RedistributeRanks;
 use App\Actions\WorkItems\SetSubscription;
 use App\Actions\WorkItems\UpdateWorkItem;
 use App\Events\EventRecorder;
@@ -25,6 +26,7 @@ use App\Live\LiveConsumer;
 use App\Live\LiveMessage;
 use App\Models\Automation;
 use App\Models\EventConsumption;
+use App\Models\Notification;
 use App\Models\Page;
 use App\Models\Project;
 use App\Models\Template;
@@ -295,6 +297,22 @@ it('sends template and automation events to the project channel with ids only, a
         ['channels' => $channel, 'event' => 'live', 'payload' => $message($switched->id, 'automation.updated', $w['web']->id, null, null, $w['tom']->id), 'socket' => null],
         ['channels' => $channel, 'event' => 'live', 'payload' => $message($deleted->id, 'template.deleted', $w['web']->id, null, null, $w['mara']->id, null, $template->id), 'socket' => null],
     ])->and($engine->writes())->toBe(0);
+});
+
+it('sends new ranks of a project to its channel, and the search and the notifications pass over them (A448)', function () use ($world, $message) {
+    $engine = searchEngine();
+    consumers(LiveConsumer::class, SearchConsumer::class, NotificationConsumer::class);
+    $w = $world();
+    DB::table('work_items')->where('id', $w['item']->id)->update(['rank' => 'a0VVV']);
+
+    expect(RedistributeRanks::run(actor($w['mara']), $w['web']))->toBe(1);
+
+    $event = eventsOf(EventType::ProjectRanksRedistributed, $w['web'])->sole();
+    expect($this->live->sent())->toBe([
+        ['channels' => ["private-project.{$w['web']->id}"], 'event' => 'live', 'payload' => $message($event->id, 'project.ranks_redistributed', $w['web']->id, null, null, $w['mara']->id), 'socket' => null],
+    ])->and($engine->writes())->toBe(0)
+        ->and(Notification::query()->count())->toBe(0)
+        ->and(EventConsumption::query()->where('event_id', $event->id)->pluck('consumer')->sort()->values()->all())->toBe(['live', 'notifications', 'search']);
 });
 
 it('sends a failed run of a template to the project channel', function () use ($world, $message) {

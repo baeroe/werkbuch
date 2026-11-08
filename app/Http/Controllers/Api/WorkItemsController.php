@@ -12,6 +12,7 @@ use App\Actions\WorkItems\GetWorkItem;
 use App\Actions\WorkItems\GroupWorkItems;
 use App\Actions\WorkItems\ListWorkItems;
 use App\Actions\WorkItems\QueryWorkItems;
+use App\Actions\WorkItems\RedistributeRanks;
 use App\Actions\WorkItems\RestoreWorkItem;
 use App\Actions\WorkItems\TransitionWorkItem;
 use App\Actions\WorkItems\UpdateWorkItem;
@@ -21,6 +22,7 @@ use App\Http\Api\Body;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ItemGroupsResource;
 use App\Http\Resources\WorkItemResource;
+use App\Models\Project;
 use App\Models\WorkItem;
 use App\OpenApi\ItemQueryDocs;
 use App\OpenApi\WorkItemSchemas;
@@ -130,6 +132,19 @@ final class WorkItemsController extends Controller
     public function bulk(Request $request): JsonResponse
     {
         return response()->json(BulkUpdateWorkItems::run(Actor::fromRequest($request), $request->all()));
+    }
+
+    /**
+     * Redistribute the ranks of a project.
+     *
+     * Every item of the project, archived ones too, gets a new short rank in its manual order (`rank`, then the ULID);
+     * no item changes its place in the project, none its `updated_at`. For when no rank fits between two neighbours
+     * (longer than 128 characters). 200 `{redistributed}` without `data`: the items whose rank changed.
+     */
+    #[Answer(200, WorkItemSchemas::class, 'redistributed', 'How many items of the project got a new rank.')]
+    public function redistributeRanks(Request $request, Project $project): JsonResponse
+    {
+        return response()->json(['redistributed' => RedistributeRanks::run(Actor::fromRequest($request), $project)]);
     }
 
     /**

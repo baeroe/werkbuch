@@ -65,7 +65,7 @@ $operations = [
     'PUT /work-items/{item}/type' => 200, 'POST /work-items/{item}/archive' => 200, 'POST /work-items/{item}/restore' => 200,
     'GET /work-items/{item}/subscribers' => 200, 'PUT /work-items/{item}/subscription' => 200, 'DELETE /work-items/{item}/subscription' => 200,
     'GET /work-items/{item}/relations' => 200, 'POST /work-items/{item}/relations' => 201, 'DELETE /relations/{relation}' => 204,
-    'GET /work-items/{item}/history' => 200,
+    'GET /work-items/{item}/history' => 200, 'POST /projects/{project}/redistribute-ranks' => 200,
 ];
 
 it('documents the success status the server answers for every item operation', function () use ($operations, $tags) {

@@ -54,9 +54,9 @@ function heldKeys(event: LiveEvent): readonly QueryKey[] {
 /**
  * The caches a message makes stale. Items and their history on `work_item.*` (also watching, on the person's own
  * channel), comments and the history on `comment.*`, projects and members on `project.*` (on `project.updated` the
- * items too: their keys carry the identifier), the templates and their runs on `template.*` (a failed run is
- * `template.run_failed`; on `template.deleted` the items too: their `template_id` goes, T14-M3), the automations on
- * `automation.*`, the templates and their runs on a `work_item.created` a run made (it names its template, T14-I1:
+ * items too: their keys carry the identifier; on `project.ranks_redistributed` only the items, A448), the templates
+ * and their runs on `template.*` (a failed run is `template.run_failed`; on `template.deleted` the items too: their
+ * `template_id` goes, T14-M3), the automations on `automation.*`, the templates and their runs on a `work_item.created` a run made (it names its template, T14-I1:
  * the log, the count and the next run change; an item made by hand leaves them alone), the wiki on `page.*` (on `page.updated` and `page.moved` the references
  * too: a reference shows the title of its page, K15; on `page.deleted` as well: a reference to a deleted page loads and
  * finds it missing, T18-M5), the projects on a new org role (K14: the channels follow the list; the
@@ -83,6 +83,8 @@ function keysOf(event: LiveEvent): readonly QueryKey[] {
   if (group === 'comment') return [qk.comments.all, qk.activity.all];
   // a new identifier changes the keys of the items: the lists of the project load again (T14-M6)
   if (event.type === 'project.updated') return [qk.projects.all, qk.members.all, qk.workItems.all];
+  // new short ranks for the items of a project (A448): the lists load them again, the project itself is unchanged
+  if (event.type === 'project.ranks_redistributed') return [qk.workItems.all];
   if (group === 'project') return [qk.projects.all, qk.members.all];
   if (event.type === 'page.updated' || event.type === 'page.moved' || event.type === 'page.deleted') return [...WIKI, qk.references.all];
   if (group === 'page') return WIKI;

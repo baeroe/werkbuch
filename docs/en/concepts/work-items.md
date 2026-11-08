@@ -224,6 +224,21 @@ In the demo workflow "Agentur-Freigabe", Todo may not go straight to Done:
 
 For a closed state, `resolution_id` chooses the resolution; without it, the item keeps the one it had in that category, or gets the default. A state outside the workflow of the project is a `422` at `state_id`.
 
+### Order items by hand
+
+The sort "Manual" follows the rank of each item (`rank`): a short text, compared byte by byte, the ULID decides between equal ones. Moving an item by hand sends a rank between its neighbours (`PATCH` with `rank`, up to 128 characters). When there is no room left between two neighbours, the items of the project get new short ranks in their order:
+
+```bash
+curl -X POST https://werkbuch.example.com/api/v1/projects/WEB/redistribute-ranks \
+  -H "Authorization: Bearer <token>"
+```
+
+```json
+{ "redistributed": 57 }
+```
+
+`redistributed` counts the items whose rank changed. Every item of the project keeps its place, archived ones included; none gets a new `updated_at`, and the history of an item does not show it. A list of several projects sorted by hand may mix their items differently afterwards. Members and admins of the project may do it (`item.edit`, the ability `write`), in an archived project nobody (`409 project_archived`). Changes of items of the project wait until the new ranks are saved.
+
 ### Change several items
 
 `ids` takes 1 to 100 ULIDs or keys, `patch` the change: `state_id`, `resolution_id`, `assignee_id`, `priority`, `label_ids`, `add_label_ids`, `remove_label_ids`, `start_date`, `due_date` and `archived` (`true` archives, `false` restores). Titles, descriptions and properties are not part of it. Each item is changed on its own; `updated` lists the ULIDs of every item that was not refused, unchanged ones included, `rejected` the refused ones under the reference you sent.

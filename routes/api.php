@@ -153,6 +153,8 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
     // before {item}: `bulk`, `query`, `groups` and `counts` are no items; the last three only read (P15), a read-only
     // token may send them
     Route::post('work-items/bulk', [WorkItemsController::class, 'bulk']);
+    // new short ranks for the items of a project in their order (A448)
+    Route::post('projects/{project}/redistribute-ranks', [WorkItemsController::class, 'redistributeRanks']);
     Route::post('work-items/query', [WorkItemsController::class, 'query'])->defaults('token_ability', 'read');
     Route::post('work-items/groups', [WorkItemsController::class, 'groups'])->defaults('token_ability', 'read');
     Route::post('work-items/counts', [WorkItemsController::class, 'counts'])->defaults('token_ability', 'read');
