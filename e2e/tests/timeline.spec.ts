@@ -1,31 +1,12 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { allEntries, api, createE2eProject, createItem, removeE2eProject, runId, tabTo, tr, variant } from '../helpers';
+import { createE2eProject, createItem, removeE2eProject, runId, tabTo, tr, variant } from '../helpers';
+import { plus, range, shown, stateId, today, typeId } from '../timelineHelpers';
 
 // The timeline of a project with the keyboard only, signed in as the e2e person (playwright.config.ts), in English.
 // Each test works in a project of its own (`E2E …`, removed after it) with an epic, and its children, over the API.
 
 const name = (what: string) => `E2E timeline ${what} ${variant()} ${runId()}`;
-
-/** The id of an entry of a catalog by its name: a type, or a state of the default workflow. */
-async function typeId(page: Page, type: string): Promise<string> {
-  return String((await allEntries(page, 'work-item-types')).find((entry) => entry.name === type)!.id);
-}
-async function stateId(page: Page, state: string): Promise<string> {
-  const workflow = (await allEntries(page, 'workflows')).find((entry) => entry.is_default === true) as { states: { id: string; name: string }[] };
-  return workflow.states.find((entry) => entry.name === state)!.id;
-}
-
-/** A day as the app writes it in English (31/10/2026), and a day some days later. */
-const shown = (day: string) => new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${day}T00:00:00Z`));
-const plus = (day: string, days: number) => new Date(Date.parse(`${day}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
-const range = (start: string, due: string) => tr('en', 'items.timeline.range', { start: shown(start), due: shown(due) });
-
-/** Today in the time zone of the organisation. */
-async function today(page: Page): Promise<string> {
-  const { data } = (await (await api(page, 'GET', '/api/v1/organization')).json()) as { data: { timezone: string } };
-  return new Intl.DateTimeFormat('en-CA', { timeZone: data.timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-}
 
 /** An epic's row on the axis, named by its key. */
 const row = (page: Page, key: string) => page.getByRole('group', { name: new RegExp(`^${key} `) });
