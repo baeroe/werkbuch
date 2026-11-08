@@ -917,6 +917,17 @@ describe('Properties usage', () => {
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
   });
 
+  it('does not name a number in the question of a property no item has a value for (T23-M6)', async () => {
+    const user = userEvent.setup();
+    renderWith(<Properties readOnlyReason={null} />, routes(all, { 'POST /api/v1/work-items/counts': () => ({ body: { data: { effort: 0 } } }) }));
+
+    await within(await rowOf('Aufwand (h)')).findByText('0 Items');
+    await user.click(within(await rowOf('Aufwand (h)')).getByRole('button', { name: 'Property „Aufwand (h)“ löschen' }));
+    const question = await screen.findByRole('alertdialog');
+    expect(within(question).getByText(/Die Werte der Items verschwinden/)).toBeTruthy();
+    expect(within(question).queryByText(/gehen? verloren/)).toBeNull();
+  });
+
   it('does not name a number in the question while there is none', async () => {
     const user = userEvent.setup();
     renderWith(<Properties readOnlyReason={null} />, routes(all, { 'POST /api/v1/work-items/counts': unavailable }));

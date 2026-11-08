@@ -46,7 +46,7 @@ const unavailable = () => problem(503, 'service_unavailable', { detail: 'Der Ser
 
 let api: MockApi | undefined;
 
-function renderScreen(overrides: Record<string, MockRoute> = {}, { create = false, offline = false, hold = '' } = {}) {
+function renderScreen(overrides: Record<string, MockRoute> = {}, { create = false, offline = false, hold = '', gate }: { create?: boolean; offline?: boolean; hold?: string; gate?: Promise<void> } = {}) {
   api = mockApi({
     'GET /api/v1/projects': () => ({ body: list([web, app, old]) }),
     'GET /api/v1/users': () => ({ body: list([mara, ida, lene]) }),
@@ -56,9 +56,9 @@ function renderScreen(overrides: Record<string, MockRoute> = {}, { create = fals
     ...overrides,
   });
   if (offline) globalThis.fetch = () => Promise.reject(new TypeError('Failed to fetch'));
-  // calls to a path with `hold` in it never answer
+  // calls to a path with `hold` in it never answer, or only once `gate` is open
   const fetching = globalThis.fetch;
-  if (hold) globalThis.fetch = (input, init) => (String(input).includes(hold) ? new Promise<Response>(() => {}) : fetching(input, init));
+  if (hold) globalThis.fetch = (input, init) => (String(input).includes(hold) ? (gate ?? new Promise<void>(() => {})).then(() => fetching(input, init)) : fetching(input, init));
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return {
     client,
@@ -580,6 +580,18 @@ describe('open items on the cards', () => {
     await screen.findByRole('list', { name: 'Alle Projekte' });
     expect(within(card('Website-Relaunch')).getByRole('status')).toBeTruthy();
     expect(within(card('Website-Relaunch')).queryByText(/offen$/)).toBeNull();
+  });
+
+  it('replaces the skeleton with the number once the count is there (T23-M6)', async () => {
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    renderScreen({ 'POST /api/v1/work-items/groups': () => ({ body: { data: openGroups } }) }, { hold: 'work-items/groups', gate });
+
+    await screen.findByRole('list', { name: 'Alle Projekte' });
+    expect(within(card('Website-Relaunch')).getByRole('status')).toBeTruthy();
+    await act(async () => release());
+    expect(await within(card('Website-Relaunch')).findByText('4 offen')).toBeTruthy();
+    expect(within(card('Website-Relaunch')).queryByRole('status')).toBeNull();
   });
 
   it('says when the count could not be loaded', async () => {
