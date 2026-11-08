@@ -24,6 +24,7 @@ use App\Support\Actor;
 use App\Support\AttachmentLinks;
 use App\Support\CatalogLock;
 use App\Support\ItemInput;
+use App\Support\ItemReferences;
 use App\Support\ItemValues;
 use App\Support\MemberInput;
 use App\Support\Mentions;
@@ -218,6 +219,7 @@ final class CreateWorkItem
             EventRecorder::record(EventType::WorkItemCreated, $actor, $item, $project, ['title' => ['old' => null, 'new' => $item->title]], [...Mentions::meta($mentioned), ...$noted, ...$meta]);
             UpdateWorkItem::announceBots($actor, $item, $mentioned);
             UpdateWorkItem::announceAssignedBot($actor, $item);
+            ItemReferences::queue($actor, $item, ItemReferences::anew($item, [], $texts));
 
             // another state is a move from the initial one, after the creation: the history shows both (P32)
             if ($target->id !== $initial->id) {

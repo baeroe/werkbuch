@@ -13,6 +13,7 @@ use App\Support\Actor;
 use App\Support\AttachmentLinks;
 use App\Support\CommentInput;
 use App\Support\ItemLock;
+use App\Support\ItemReferences;
 use App\Support\Mentions;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -65,6 +66,7 @@ final class EditComment
                 'author_id' => $fresh->author_id,
             ] + Mentions::meta($mentioned));
             UpdateWorkItem::announceBots($actor, $locked, $mentioned, $fresh->id);
+            ItemReferences::queue($actor, $locked, ItemReferences::anew($locked, Document::fromJson($old)->itemRefs(), [$key => $body]));
 
             return $fresh;
         }, 3);

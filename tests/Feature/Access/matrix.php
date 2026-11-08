@@ -142,6 +142,7 @@ use App\Actions\WorkItems\CreateWorkItem;
 use App\Actions\WorkItems\DeleteWorkItem;
 use App\Actions\WorkItems\GetWorkItem;
 use App\Actions\WorkItems\GroupWorkItems;
+use App\Actions\WorkItems\LinkReferences;
 use App\Actions\WorkItems\ListHistory;
 use App\Actions\WorkItems\ListRelations;
 use App\Actions\WorkItems\ListSubscribers;
@@ -1120,6 +1121,19 @@ return [
             RunMoveAutomations::run($a, $child->load('project'), $from, $child->state()->firstOrFail());
         },
         'event' => EventType::WorkItemStateChanged,
+        'system' => true,
+    ],
+    'LinkReferences' => [
+        'action' => LinkReferences::class,
+        // the work of LinkReferencesJob after the commit of a change whose text named another item anew: the two items
+        // related with `relates`, an event at each end
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $item = $w->item($column);
+
+            return LinkReferences::run($a, $item->id, [$w->item($column)->id], $a->user->id);
+        },
+        'event' => EventType::WorkItemRelationAdded,
+        'events' => 2,
         'system' => true,
     ],
     'RunDailyAutomations' => [

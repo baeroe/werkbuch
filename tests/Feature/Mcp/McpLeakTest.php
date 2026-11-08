@@ -75,6 +75,8 @@ $world = function (): array {
     $opsVersion = PageVersion::factory()->create(['page_id' => $opsPage->id]);
     $opsParent = Page::factory()->create(['project_id' => $ops->id, 'title' => 'Geheimer Ordner', 'created_by' => $mara->id, 'updated_by' => $mara->id]);
 
+    // the relation below is Mara's own: the automation link_references would make it from the reference first (A452)
+    withoutReferenceLinks();
     UpdateWorkItem::run(actor($mara), $webItem, ['description' => "Hängt an OPS-1 und [Plan](page:{$opsPage->id})."]);
     AddRelation::run(actor($mara), $webItem, ['type_id' => RelationType::query()->where('built_in', 'relates')->value('id'), 'target_id' => 'OPS-1']);
     $webPage = CreatePage::run(actor($mara), $web, ['title' => 'Öffentliche Seite', 'content' => "Siehe OPS-1 und [Plan](page:{$opsPage->id})."]);

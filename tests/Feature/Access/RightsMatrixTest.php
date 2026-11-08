@@ -70,7 +70,7 @@ it('runs the work of jobs as the system without failing, recording only the even
     $recorded = Event::query()->whereNotIn('id', $before)->pluck('type')->map(fn (EventType $type) => $type->value)->all();
 
     expect($outcome)->toBe('ok')
-        ->and($recorded)->toBe(isset($row['event']) ? [$row['event']->value] : []);
+        ->and($recorded)->toBe(isset($row['event']) ? array_fill(0, $row['events'] ?? 1, $row['event']->value) : []);
 })->with($systemRows);
 
 it('has exactly one row for every action (new actions need one)', function () {

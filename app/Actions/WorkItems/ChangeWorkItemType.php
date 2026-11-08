@@ -14,6 +14,7 @@ use App\Support\Actor;
 use App\Support\AttachmentLinks;
 use App\Support\ItemInput;
 use App\Support\ItemLock;
+use App\Support\ItemReferences;
 use App\Support\ItemValues;
 use App\Support\Mentions;
 use Illuminate\Support\Facades\DB;
@@ -138,6 +139,7 @@ final class ChangeWorkItemType
 
         AttachmentLinks::link($locked, $locked->project, $actor->user, $texts);
         $mentionedBefore = Mentions::ofItem($locked);
+        $referencedBefore = ItemReferences::ofItem($locked);
 
         $locked->type_id = $type->id;
         $locked->setRelation('type', $type);
@@ -148,5 +150,6 @@ final class ChangeWorkItemType
 
         EventRecorder::record(EventType::WorkItemUpdated, $actor, $locked, $locked->project, $changes, Mentions::meta($mentioned));
         UpdateWorkItem::announceBots($actor, $locked, $mentioned);
+        ItemReferences::queue($actor, $locked, ItemReferences::anew($locked, $referencedBefore, $texts));
     }
 }

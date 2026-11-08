@@ -120,6 +120,20 @@ final readonly class Actor
     }
 
     /**
+     * An automation a change of somebody set off (A342, A357): the default bot acting for the person who made the change,
+     * or for the person the acting bot or automation acted for (a template run by hand: who pressed „Jetzt ausführen“);
+     * a bot without `on_behalf_of` (a scheduled run) makes it act for nobody. Quiet when the change was.
+     */
+    public static function automationFor(string $reason, self $cause): self
+    {
+        $automation = self::automation($reason);
+        $automation = $cause->quiet ? $automation->quietly() : $automation;
+        $person = $cause->user->isPerson() ? $cause->user : ($cause->onBehalfOf === null ? null : User::query()->find($cause->onBehalfOf));
+
+        return $person === null ? $automation : $automation->onBehalfOf($person);
+    }
+
+    /**
      * A template creating its item (A30): the default bot through `template`, with the reason `template`. The run itself
      * names the template in the meta of its event (`meta.template`, A352).
      */

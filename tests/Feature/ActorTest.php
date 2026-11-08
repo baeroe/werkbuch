@@ -154,6 +154,19 @@ it('lets automations act as the default bot', function () {
         ->and($actor->token)->toBeNull();
 });
 
+it('lets an automation act for the person a change came from, quiet when the change was', function () {
+    $mara = User::factory()->create();
+    $bot = User::factory()->bot()->create();
+    $person = Actor::automationFor('link_references', actor($mara));
+    $forMara = Actor::automationFor('link_references', actor($bot)->onBehalfOf($mara)->quietly());
+    $forNobody = Actor::automationFor('link_references', actor($bot));
+
+    expect($person->user->is(User::defaultBot()))->toBeTrue()
+        ->and($person->meta())->toBe(['via' => 'automation', 'reason' => 'link_references', 'on_behalf_of' => $mara->id])
+        ->and($forMara->meta())->toBe(['via' => 'automation', 'reason' => 'link_references', 'on_behalf_of' => $mara->id, 'quiet' => true])
+        ->and($forNobody->meta())->toBe(['via' => 'automation', 'reason' => 'link_references']);
+});
+
 it('acts for the system on behalf of an account', function () {
     $user = User::factory()->create();
 

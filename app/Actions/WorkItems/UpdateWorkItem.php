@@ -17,6 +17,7 @@ use App\Support\AttachmentLinks;
 use App\Support\BotIds;
 use App\Support\ItemInput;
 use App\Support\ItemLock;
+use App\Support\ItemReferences;
 use App\Support\ItemValues;
 use App\Support\Mentions;
 use Illuminate\Support\Facades\DB;
@@ -128,6 +129,7 @@ final class UpdateWorkItem
         }
         AttachmentLinks::link($locked, $locked->project, $actor->user, $texts);
         $mentionedBefore = $texts === [] ? [] : Mentions::ofItem($locked);
+        $referencedBefore = $texts === [] ? [] : ItemReferences::ofItem($locked);
 
         $actor = $reason === null ? $actor : $actor->withReason($reason);
         $changes = [];
@@ -205,6 +207,7 @@ final class UpdateWorkItem
             EventRecorder::record(EventType::WorkItemUpdated, $actor, $locked, $locked->project, $changes, Mentions::meta($mentioned));
         }
         self::announceBots($actor, $locked, $mentioned);
+        ItemReferences::queue($actor, $locked, ItemReferences::anew($locked, $referencedBefore, $texts));
         if ($assignee) {
             self::watch($locked, $locked->assignee_id);
             EventRecorder::record(EventType::WorkItemAssigned, $actor, $locked, $locked->project, ['assignee_id' => ['old' => $previous, 'new' => $locked->assignee_id]]);
