@@ -69,6 +69,8 @@ final class ImageInput
 
         $extension = str_replace('jpeg', 'jpg', explode(';', substr($value, strlen('data:image/')), 2)[0]);
         $media = $model->addMediaFromBase64($value)->usingFileName("{$collection}.{$extension}")->toMediaCollection($collection);
+        // the new file is there before the commit: a rollback takes it away with its row
+        DB::afterRollBack(fn () => app(Filesystem::class)->removeAllFiles($media));
 
         return ['old' => $current, 'new' => route('media.show', $media->uuid)];
     }

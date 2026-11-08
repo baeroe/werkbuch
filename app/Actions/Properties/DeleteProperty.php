@@ -13,6 +13,7 @@ use App\Models\WorkItemType;
 use App\Models\WorkItemValue;
 use App\Support\Actor;
 use App\Support\CatalogLock;
+use App\Views\CatalogProperties;
 use Illuminate\Support\Facades\DB;
 use Lorisleiva\Actions\Concerns\AsAction;
 
@@ -35,6 +36,8 @@ final class DeleteProperty
 
         return DB::transaction(function () use ($actor, $property): int {
             CatalogLock::take();
+            // filters, sorts and displays of this process look the properties up: let them read the new ones (T3-M2)
+            DB::afterCommit(fn () => app()->forgetInstance(CatalogProperties::class));
 
             $property = Property::query()->find($property->id) ?? throw Problem::notFound();
 

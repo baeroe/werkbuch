@@ -1,9 +1,12 @@
 <?php
 
 use App\Actions\Organization\UpdateOrganization;
+use App\Actions\Projects\UpdateProject;
+use App\Actions\Users\UpdateUser;
 use App\Events\EventType;
 use App\Models\Event;
 use App\Models\Organization;
+use App\Models\Project;
 use App\Models\User;
 use App\Support\ImageInput;
 use Illuminate\Support\Facades\Storage;
@@ -186,6 +189,25 @@ it('keeps the old logo whole when the change fails after the picture was applied
 
     expect(Media::query()->pluck('uuid')->all())->toBe([$old->uuid])
         ->and(Storage::disk('local')->exists($old->getPathRelativeToRoot()))->toBeTrue()
+        // the new picture was written before the failure: a rollback takes its file away, no folder is left behind
+        ->and(Storage::disk('local')->allFiles())->toBe([$old->getPathRelativeToRoot()])
+        ->and(Storage::disk('local')->allDirectories())->toBe([dirname($old->getPathRelativeToRoot())])
         ->and(ImageInput::url(Organization::query()->sole(), 'logo'))->toBe($url);
     $this->actingAs($admin)->get("/media/{$old->uuid}")->assertOk();
 })->with(['replaced' => 'webp', 'removed' => null]);
+
+it('leaves no file of the new picture behind when the change of an avatar or a project image rolls back', function (string $kind) {
+    $admin = User::factory()->admin()->create();
+    $project = Project::factory()->create();
+    $run = fn (string $url) => $kind === 'avatar'
+        ? UpdateUser::run(actor($admin), $admin, ['avatar_url' => $url])
+        : UpdateProject::run(actor($admin), $project, ['image_url' => $url]);
+    $run(imageDataUrl());
+    $old = Media::query()->sole()->getPathRelativeToRoot();
+
+    Event::creating(fn () => throw new RuntimeException('event store down'));
+    expect(fn () => $run(imageDataUrl('gif')))->toThrow(RuntimeException::class, 'event store down');
+
+    expect(Storage::disk('local')->allFiles())->toBe([$old])
+        ->and(Storage::disk('local')->allDirectories())->toBe([dirname($old)]);
+})->with(['avatar', 'project image' => 'image']);

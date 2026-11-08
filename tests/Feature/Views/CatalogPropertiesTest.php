@@ -1,8 +1,11 @@
 <?php
 
+use App\Actions\Properties\DeleteProperty;
+use App\Actions\Properties\SaveProperty;
 use App\Domain\Properties\FieldType;
 use App\Domain\Properties\PropertyShape;
 use App\Models\Property;
+use App\Models\User;
 use App\Views\CatalogProperties;
 use Illuminate\Support\Facades\DB;
 
@@ -36,4 +39,16 @@ it('reads the catalog with one query, once per request', function () {
     expect($again)->toBe($catalog)
         ->and($queries)->toBe(1)
         ->and($catalog->shape('customer')?->activeOptionIds)->toHaveCount(2);
+});
+
+it('forgets the properties it holds once a property is saved or deleted, so the same process sees the change (T3-M2)', function () {
+    $admin = User::factory()->admin()->create();
+    // the request has read the catalog before the change
+    expect(app(CatalogProperties::class)->shape('release'))->toBeNull();
+
+    $saved = SaveProperty::run(actor($admin), null, ['key' => 'release', 'label' => 'Release', 'field_type' => 'date']);
+    expect(app(CatalogProperties::class)->shape('release')?->type)->toBe(FieldType::Date);
+
+    DeleteProperty::run(actor($admin), $saved);
+    expect(app(CatalogProperties::class)->shape('release'))->toBeNull();
 });
