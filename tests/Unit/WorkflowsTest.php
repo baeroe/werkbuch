@@ -366,6 +366,13 @@ it('runs the load suite outside the required job', function () use ($stepUsing, 
         ->and($load['services']['mariadb']['image'])->toBe($jobs['tests']['services']['mariadb']['image'])
         ->and($load['services']['meilisearch']['image'])->toBe($jobs['tests']['services']['meilisearch']['image']);
 
+    // the buffer pool of DDEV's MariaDB (1 GiB), set before the suite seeds and measures
+    $names = array_map(fn (array $step) => $step['name'] ?? null, $load['steps']);
+    $pool = array_search('MariaDB buffer pool', $names, true);
+    expect($pool)->toBeInt('no step sets the buffer pool')
+        ->and($load['steps'][$pool]['run'])->toContain('SET GLOBAL innodb_buffer_pool_size = 1073741824')
+        ->and($pool)->toBeLessThan(array_search('Load suite', $names, true));
+
     // the table of the measurements, also when a row fails
     $upload = $stepUsing($load, 'actions/upload-artifact', ['name' => 'load-budget']);
     expect($upload['with']['path'])->toBe('storage/logs/load-budget.md')

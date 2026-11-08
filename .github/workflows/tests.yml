@@ -191,6 +191,17 @@ jobs:
       - name: Meilisearch
         run: curl -fsS --retry 30 --retry-delay 1 --retry-all-errors http://127.0.0.1:7700/health
 
+      # The buffer pool of DDEV's MariaDB (1 GiB) instead of the image's 128 MiB: the database `load` (about 580 MB) has to
+      # fit in memory in both, or the CI measures the disk. A service cannot take server options, but the variable can be
+      # set while the server runs; the step waits until the resize is done.
+      - name: MariaDB buffer pool
+        run: >-
+          php -r '$db = new PDO("mysql:host=127.0.0.1;port=3306", "root", "root");
+          $db->exec("SET GLOBAL innodb_buffer_pool_size = 1073741824");
+          for ($i = 0; $i < 60 && (int) $db->query("SELECT @@innodb_buffer_pool_size")->fetchColumn() !== 1073741824; $i++) { sleep(1); }
+          $size = (int) $db->query("SELECT @@innodb_buffer_pool_size")->fetchColumn();
+          echo "innodb_buffer_pool_size {$size}", PHP_EOL; exit($size === 1073741824 ? 0 : 1);'
+
       # Pest directly: `php artisan test` puts --configuration=phpunit.xml in front and ends with exit code 1
       - name: Load suite
         run: vendor/bin/pest --configuration=phpunit.load.xml
