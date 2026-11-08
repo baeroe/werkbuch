@@ -544,6 +544,8 @@ describe('"Ohne Datum" with many epics', () => {
     // still one tab stop: the card of the cursor (14b2-M3)
     expect([...document.querySelectorAll('[data-nav-target][tabindex="0"]')]).toEqual([card('WEB-1')]);
     // the entries say how many there are and where each stands, not only the few rendered (14b2-M2)
+    // a list for assistive tech too: Safari drops the role of a ul without list style, and with it these counts
+    expect(unplannedList().querySelector('ul')!.getAttribute('role')).toBe('list');
     const entries = [...unplannedList().querySelectorAll('li')];
     expect(entries.every((entry) => entry.getAttribute('aria-setsize') === '500')).toBe(true);
     expect(entries.map((entry) => entry.getAttribute('aria-posinset'))).toEqual(entries.map((entry) => String(Number(entry.getAttribute('data-index')) + 1)));

@@ -82,7 +82,8 @@ export function Unplanned({ items, stop, selection, planningId, navProps, lookOf
       <p className="mt-0.5 px-1 text-sm text-pretty text-muted">{t(items.length > 0 ? 'items.timeline.unplanned.hint' : 'items.timeline.unplanned.all_dated')}</p>
       {items.length > 0 && (
         <div ref={box} data-unplanned-list="" className="-mx-1 mt-0.5 max-h-[max(16rem,calc(100dvh-14rem))] overflow-x-hidden overflow-y-auto overscroll-y-contain px-1 pt-0.5">
-          <ul className="relative" style={{ height: virtualizer.getTotalSize() }}>
+          {/* `role`: Safari drops the list of a ul without list style, and with it the counts of its entries */}
+          <ul role="list" className="relative" style={{ height: virtualizer.getTotalSize() }}>
             {virtualizer.getVirtualItems().map((entry) => {
               const item = items[entry.index]!;
               const denied = editReason(item);

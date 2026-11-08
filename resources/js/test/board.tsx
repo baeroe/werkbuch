@@ -361,7 +361,7 @@ export function stopBoardServer(): void {
 
 /**
  * Renders the items screen at a path (`/projects/<identifier>?…`, `/views/<id>?…` with `board.view`, or `/my-items?…`): `go` is the fake Inertia's, so
- * `usePage().url` says the path.
+ * `usePage().url` says the path. Returns what `render` returns and the query client (`client.isMutating()`).
  */
 export function renderBoard(path: string, go: (url: string) => void, { palette = false } = {}) {
   go(path);
@@ -373,7 +373,7 @@ export function renderBoard(path: string, go: (url: string) => void, { palette =
   ) : (
     <ItemsScreen preset="my" />
   );
-  return render(
+  const view = render(
     <QueryClientProvider client={client}>
       <TooltipProvider>
         <main id="main">{screenOf}</main>
@@ -382,6 +382,7 @@ export function renderBoard(path: string, go: (url: string) => void, { palette =
       </TooltipProvider>
     </QueryClientProvider>,
   );
+  return { ...view, client };
 }
 
 /* ------------------------------------------------------------------------- reading */

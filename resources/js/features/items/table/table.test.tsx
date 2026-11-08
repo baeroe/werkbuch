@@ -1109,6 +1109,20 @@ describe('the refusals of the property cells', () => {
     expect(result.current('row', effortOf, item).refusal).toBe('Nur ganze Stunden.');
   });
 
+  it('keeps the words of a refused newest save when an earlier one of the cell went through first (B1 review M1)', async () => {
+    const { result } = renderHook(() => useRefusals());
+    const [first, second] = [held(), held()];
+    act(() => result.current('row', effortOf, item).track(first.call));
+    act(() => result.current('row', effortOf, item).track(second.call));
+    // the earlier save went through: the item the table shows now carries its stamp
+    await act(async () => first.resolve({}));
+    const saved = { ...item, updated_at: '2026-10-28T09:01:00Z' };
+    expect(result.current('row', effortOf, saved).refusal).toBeNull();
+    // then the newest comes back refused: its words belong to the item as it stands now
+    await act(async () => second.reject(refusal('Nur ganze Stunden.')));
+    expect(result.current('row', effortOf, saved).refusal).toBe('Nur ganze Stunden.');
+  });
+
   it('shows the words only while the item is as the refused save found it (20a-M2)', async () => {
     const { result } = renderHook(() => useRefusals());
     const save = held();

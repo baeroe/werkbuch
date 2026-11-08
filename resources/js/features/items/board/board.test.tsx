@@ -665,9 +665,13 @@ describe('the board', () => {
     act(() => cardIn('In Progress', 'WEB-42').focus());
     press('ArrowUp', { altKey: true });
 
+    // the redistribution is on its way
+    expect(view.client.isMutating()).toBeGreaterThan(0);
     view.unmount();
     await act(async () => release());
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    // it answered, and the moves that waited for it had two frames to say something
+    await waitFor(() => expect(view.client.isMutating()).toBe(0));
+    await act(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
     // neither the waiting moves nor the failure say anything once the board is gone, and nothing more goes out
     expect(currentToasts()).toEqual([]);
     expect(sent('POST', '/api/v1/projects/p_web/redistribute-ranks')).toHaveLength(1);
