@@ -137,15 +137,26 @@ final class SearchIndexer
 
     /**
      * Writes the documents of the items of these projects again (`null`: of every project), as a catalog change or a
-     * new identifier changes what they hold.
+     * new identifier changes what they hold; with `$itemIds` only of those items (a deleted label names the items that
+     * carried it), read a block of ids at a time, so no statement binds more ids than a block holds.
      *
      * @param  list<string>|null  $projectIds
+     * @param  list<string>|null  $itemIds
      */
-    public function reindexItems(?array $projectIds): void
+    public function reindexItems(?array $projectIds, ?array $itemIds = null): void
     {
-        $this->query(WorkItem::class)
-            ->when($projectIds !== null, fn (Builder $query) => $query->whereIn('work_items.project_id', $projectIds))
-            ->chunkById(self::CHUNK, fn (Collection $chunk) => (new WorkItem)->syncMakeSearchable($chunk), 'work_items.id', 'id');
+        $query = fn () => $this->query(WorkItem::class)
+            ->when($projectIds !== null, fn (Builder $query) => $query->whereIn('work_items.project_id', $projectIds));
+
+        if ($itemIds === null) {
+            $query()->chunkById(self::CHUNK, fn (Collection $chunk) => (new WorkItem)->syncMakeSearchable($chunk), 'work_items.id', 'id');
+
+            return;
+        }
+
+        foreach (array_chunk($itemIds, self::CHUNK) as $block) {
+            (new WorkItem)->syncMakeSearchable($query()->whereIn('work_items.id', $block)->get());
+        }
     }
 
     /** Sends the settings of config/scout.php to every index, when the engine takes settings (Meilisearch does). */

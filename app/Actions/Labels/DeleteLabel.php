@@ -16,8 +16,10 @@ use Illuminate\Support\Facades\DB;
 use Lorisleiva\Actions\Concerns\AsAction;
 
 /**
- * Deletes a label and takes it off the items (org admins). Returns the number of items that had it (counted
- * under the catalog lock, before the delete takes the labels off). The event names the label in `meta.name`: the subject is gone afterwards.
+ * Deletes a label and takes it off the items (org admins). Returns the number of items that had it (read under the
+ * catalog lock, before the cascade takes the labels off). The event names the label in `meta.name` (the subject is gone
+ * afterwards) and those items in `meta.item_ids` (all of them, in id order): the cascade writes no event of theirs, the
+ * search reindexes them (A206).
  */
 final class DeleteLabel
 {
@@ -35,12 +37,13 @@ final class DeleteLabel
 
             $label = Label::query()->find($label->id) ?? throw Problem::notFound();
 
-            $items = WorkItemLabel::query()->where('label_id', $label->id)->count();
+            /** @var list<string> $items */
+            $items = WorkItemLabel::query()->where('label_id', $label->id)->orderBy('work_item_id')->pluck('work_item_id')->all();
 
-            EventRecorder::record(EventType::LabelDeleted, $actor, $label, null, meta: ['name' => $label->name]);
+            EventRecorder::record(EventType::LabelDeleted, $actor, $label, null, meta: ['name' => $label->name, 'item_ids' => $items]);
             $label->delete();
 
-            return $items;
+            return count($items);
         });
     }
 }

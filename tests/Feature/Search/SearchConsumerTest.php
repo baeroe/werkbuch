@@ -37,6 +37,7 @@ use App\Actions\WorkItems\UpdateWorkItem;
 use App\Events\EventType;
 use App\Events\Outbox;
 use App\Jobs\ConsumeEvent;
+use App\Jobs\ReindexWorkItems;
 use App\Models\Event;
 use App\Models\Label;
 use App\Models\Page;
@@ -267,7 +268,10 @@ it('indexes the default bot from the event of migration 000500', function () {
         ->toMatchArray(['handle' => 'automation', 'type' => 'bot', 'disabled' => false]);
 });
 
-it('reindexes the items of a workflow\'s projects after the workflow changed', function () use ($world) {
+/** Whether the search consumer took the event (claimed it in the claim transaction). */
+$consumed = fn (Event $event): bool => DB::table('event_consumptions')->where('event_id', $event->id)->where('consumer', 'search')->exists();
+
+it('reindexes when a category changes', function () use ($world) {
     $engine = searchEngine();
     [$web, , $ole] = $world();
     $agency = SaveWorkflow::run(actor($ole), null, WorkflowFixtures::agencyInput());
@@ -282,11 +286,68 @@ it('reindexes the items of a workflow\'s projects after the workflow changed', f
     SaveWorkflow::run(actor($ole), Workflow::default(), $input);
 
     // the category of a status changed without an event of the item; the items of other workflows stay as they were
-    expect($engine->documents('testing_work_items')[$pending->id]['state_category'])->toBe('unstarted')
+    expect(eventsOf(EventType::WorkflowUpdated, Workflow::default())->sole()->meta['categories_changed'])->toBeTrue()
+        ->and($engine->documents('testing_work_items')[$pending->id]['state_category'])->toBe('unstarted')
         ->and($engine->documents('testing_work_items'))->not->toHaveKey($elsewhere->id);
 });
 
-it('reindexes every item after a label was deleted', function () use ($world, $create) {
+it('reindexes when a state goes', function () use ($world) {
+    $engine = searchEngine();
+    [$web, , $ole] = $world();
+    // no document yet (the factory writes no event): only a reindex of the project writes it
+    $item = WorkItem::factory()->for($web)->create();
+
+    $input = WorkflowFixtures::inputOf(Workflow::default());
+    $input['states'] = array_values(array_filter($input['states'], fn (array $state) => $state['name'] !== 'Pending'));
+    SaveWorkflow::run(actor($ole), Workflow::default(), $input);
+
+    expect(eventsOf(EventType::WorkflowUpdated, Workflow::default())->sole()->meta['categories_changed'])->toBeTrue()
+        ->and($engine->documents('testing_work_items'))->toHaveKey($item->id);
+});
+
+it('leaves the items alone when a workflow keeps its categories', function () use ($world, $consumed) {
+    $engine = searchEngine();
+    [$web, , $ole] = $world();
+    $item = WorkItem::factory()->for($web)->create();
+
+    $input = WorkflowFixtures::inputOf(Workflow::default());
+    $input['name'] = 'Standard (neu)';
+    $input['states'] = array_map(fn (array $state) => $state['name'] === 'Todo' ? [...$state, 'name' => 'Zu tun'] : $state, $input['states']);
+    SaveWorkflow::run(actor($ole), Workflow::default(), $input);
+
+    // the consumer took the event and wrote nothing: a name is no part of a document
+    $event = eventsOf(EventType::WorkflowUpdated, Workflow::default())->sole();
+    expect($event->meta['categories_changed'])->toBeFalse()
+        ->and($consumed($event))->toBeTrue()
+        ->and($engine->documents('testing_work_items'))->not->toHaveKey($item->id)
+        ->and($engine->writes())->toBe(0);
+});
+
+it('leaves the items alone when the old default loses its mark', function () use ($world, $consumed) {
+    $engine = searchEngine();
+    [$web, , $ole] = $world();
+    $standard = Workflow::default();
+    $agency = SaveWorkflow::run(actor($ole), null, WorkflowFixtures::agencyInput());
+    $ops = Project::factory()->identifier('OPS')->create(['workflow_id' => $agency->id]);
+    $inWeb = WorkItem::factory()->for($web)->create();
+    $inOps = WorkItem::factory()->for($ops)->create();
+
+    SaveWorkflow::run(actor($ole), $agency, [...WorkflowFixtures::inputOf($agency), 'is_default' => true]);
+
+    // the old default says nothing about categories (only its mark went), the new one keeps its categories
+    $lost = eventsOf(EventType::WorkflowUpdated, $standard)->sole();
+    $taken = eventsOf(EventType::WorkflowUpdated, $agency)->sole();
+    expect($lost->changes)->toBe(['is_default' => ['old' => true, 'new' => false]])
+        ->and($lost->meta)->toBe(actor($ole)->meta())
+        ->and($taken->meta['categories_changed'])->toBeFalse()
+        ->and($consumed($lost))->toBeTrue()
+        ->and($consumed($taken))->toBeTrue()
+        ->and($engine->documents('testing_work_items'))->not->toHaveKey($inWeb->id)
+        ->and($engine->documents('testing_work_items'))->not->toHaveKey($inOps->id)
+        ->and($engine->writes())->toBe(0);
+});
+
+it('reindexes only the items that carried a deleted label', function () use ($world, $create) {
     $engine = searchEngine();
     [$web, $mara, $ole] = $world();
     $ops = Project::factory()->identifier('OPS')->member($mara, ProjectRole::Admin)->create();
@@ -295,11 +356,34 @@ it('reindexes every item after a label was deleted', function () use ($world, $c
     $inOps = $create($ops, $mara, 'Backup');
     UpdateWorkItem::run(actor($mara), $inWeb, ['label_ids' => [$ux->id, $bug->id]]);
     UpdateWorkItem::run(actor($mara), $inOps, ['label_ids' => [$ux->id]]);
+    // without the label and without a document (the factory writes no event): a reindex of every item would write it
+    $untouched = WorkItem::factory()->for($web)->create();
+    $untouched->labels()->sync([$bug->id]);
 
     DeleteLabel::run(actor($ole), $ux);
 
     expect($engine->documents('testing_work_items')[$inWeb->id]['label_ids'])->toBe([$bug->id])
-        ->and($engine->documents('testing_work_items')[$inOps->id]['label_ids'])->toBe([]);
+        ->and($engine->documents('testing_work_items')[$inOps->id]['label_ids'])->toBe([])
+        ->and($engine->documents('testing_work_items'))->not->toHaveKey($untouched->id);
+});
+
+it('queues a reindex of the items of a deleted label, none for a label no item carried', function () use ($world, $create, $consumed) {
+    [$web, $mara, $ole] = $world();
+    [$ux, $unused] = Label::factory()->count(2)->create();
+    $item = $create($web, $mara);
+    UpdateWorkItem::run(actor($mara), $item, ['label_ids' => [$ux->id]]);
+    Queue::fake([ReindexWorkItems::class]);
+
+    DeleteLabel::run(actor($ole), $unused);
+
+    expect($consumed(eventsOf(EventType::LabelDeleted, $unused)->sole()))->toBeTrue();
+    Queue::assertNothingPushed();
+
+    DeleteLabel::run(actor($ole), $ux);
+
+    $job = Queue::pushed(ReindexWorkItems::class)->sole();
+    expect($job->projectIds)->toBeNull()
+        ->and($job->itemIds)->toBe([$item->id]);
 });
 
 it('reindexes the item when a comment is added, edited or deleted', function () use ($world, $create) {

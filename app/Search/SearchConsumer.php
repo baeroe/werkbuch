@@ -69,10 +69,11 @@ final class SearchConsumer implements EventConsumer, RetriesConsumption
             EventType::ProjectDeleted => $this->indexer->removeProject($id),
             EventType::UserCreated, EventType::UserUpdated, EventType::UserRoleChanged, EventType::UserDeactivated,
             EventType::UserReactivated, EventType::BotCreated => $this->indexer->upsertUser($id),
-            // the category of a status can change without an event of the items in it
-            EventType::WorkflowUpdated => $this->reindex($this->projectsWith($id)),
-            // the label went from its items by cascade, without events of theirs
-            EventType::LabelDeleted => $this->reindex(null),
+            // the category of a status can change without an event of the items in it; only the saved workflow says so,
+            // the old default that lost its mark (no `categories_changed`) changes no document
+            EventType::WorkflowUpdated => ($event->meta['categories_changed'] ?? false) === true ? $this->reindex($this->projectsWith($id)) : null,
+            // the label went from its items by cascade, without events of theirs: only the items that carried it
+            EventType::LabelDeleted => $this->reindex(null, $this->itemIds($event)),
             default => null,
         };
     }
@@ -85,6 +86,16 @@ final class SearchConsumer implements EventConsumer, RetriesConsumption
     private function pageIds(Event $event): array
     {
         return array_values(array_filter((array) ($event->meta['page_ids'] ?? [$event->subject_id]), is_string(...)));
+    }
+
+    /**
+     * The items a `label.deleted` took the label off (`meta.item_ids`).
+     *
+     * @return list<string>
+     */
+    private function itemIds(Event $event): array
+    {
+        return array_values(array_filter((array) ($event->meta['item_ids'] ?? []), is_string(...)));
     }
 
     /** A new identifier changes the key of every item of the project. */
@@ -109,12 +120,13 @@ final class SearchConsumer implements EventConsumer, RetriesConsumption
     }
 
     /**
-     * @param  list<string>|null  $projectIds  `null`: every item
+     * @param  list<string>|null  $projectIds  `null`: every project
+     * @param  list<string>|null  $itemIds  `null`: every item of those projects
      */
-    private function reindex(?array $projectIds): void
+    private function reindex(?array $projectIds, ?array $itemIds = null): void
     {
-        if ($projectIds !== []) {
-            ReindexWorkItems::dispatch($projectIds)->afterCommit();
+        if ($projectIds !== [] && $itemIds !== []) {
+            ReindexWorkItems::dispatch($projectIds, $itemIds)->afterCommit();
         }
     }
 }
