@@ -841,6 +841,47 @@ describe('DateField', () => {
     await waitFor(() => expect(screen.queryByRole('grid')).toBeNull());
   });
 
+  it('keeps the focus on the trigger when the rights arrive or go, also from an open calendar', async () => {
+    const user = userEvent.setup();
+    function Dated({ reason }: { reason?: string }) {
+      const { today: now } = useToday();
+      return (
+        <DatePopover
+          label="Termin"
+          value={null}
+          onChoose={() => undefined}
+          display={<DayValue value={null} today={now} overdue={false} empty="Kein Termin" />}
+          displayText="nicht gesetzt"
+          disabledReason={reason}
+        />
+      );
+    }
+    const view = renderWith(<Dated reason="Rechte laden noch." />);
+    const readOnly = screen.getByRole('button', { name: 'Termin: nicht gesetzt' });
+    act(() => readOnly.focus());
+
+    // the rights arrive: the calendar's trigger takes the focus over
+    view.rerender(<Dated />);
+    const trigger = screen.getByRole('button', { name: 'Termin: nicht gesetzt' });
+    expect(trigger).not.toBe(readOnly);
+    expect(trigger.getAttribute('aria-disabled')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+
+    // they go while the calendar is open: the focus lands on the read-only trigger
+    await user.click(trigger);
+    const day = await screen.findByRole('grid', { name: /^Termin/ });
+    await waitFor(() => expect(day.contains(document.activeElement)).toBe(true));
+    view.rerender(<Dated reason="Im Projekt darfst du nur lesen." />);
+    const back = screen.getByRole('button', { name: 'Termin: nicht gesetzt' });
+    expect(back.getAttribute('aria-disabled')).toBe('true');
+    expect(document.activeElement).toBe(back);
+
+    // a trigger that never had the focus does not take it
+    act(() => back.blur());
+    view.rerender(<Dated />);
+    expect(document.activeElement).toBe(document.body);
+  });
+
   it('knows overdue items, as the filter does', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-31T10:00:00.000Z'));

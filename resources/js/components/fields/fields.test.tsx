@@ -1003,6 +1003,19 @@ describe('Picker', () => {
     expect(document.activeElement).toBe(document.body);
   });
 
+  it('keeps the focus when an open picker turns read-only', async () => {
+    const user = userEvent.setup();
+    const props = { label: 'Kunde', display: 'Option 2', displayText: 'Option 2', options: many.slice(0, 3), value: 'o1', onValueChange: vi.fn(), placeholder: 'Suchen …' };
+    const view = render(<Picker {...props} />);
+    await user.click(screen.getByRole('combobox', { name: 'Kunde: Option 2' }));
+    const input = await screen.findByRole('combobox', { name: /suchen …$/i });
+    await waitFor(() => expect(document.activeElement).toBe(input));
+
+    // the rights go while the list is open: the list goes, the focus lands on the read-only trigger
+    view.rerender(<Picker {...props} disabledReason="Im Projekt darfst du nur lesen." />);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Kunde: Option 2' }));
+  });
+
   it('changes nothing when the chosen value is chosen again, and opens at once without taking the focus', async () => {
     const user = userEvent.setup();
     const onValueChange = vi.fn();

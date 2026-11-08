@@ -22,7 +22,7 @@ import { useDialogScope } from '@/lib/shortcuts/useShortcut';
 import type { ListedItem } from '@/types';
 import { formatDay, formatShortDay, relativeDay } from './format';
 import { useEditReason, useItemWorkflow, useToday } from './itemData';
-import { PendingMark, ReadOnlyTrigger, triggerClass, withTooltip, type PickerExtras } from './Picker';
+import { PendingMark, ReadOnlyTrigger, triggerClass, useFocusSwap, withTooltip, type PickerExtras } from './Picker';
 
 type DatePopoverProps = PickerExtras & {
   /** The field: "Due-Date"; the trigger is named "<label>: <displayText>". */
@@ -92,9 +92,12 @@ export function DatePopover({
     </>
   );
 
+  // the rights may arrive after the first render (or go): the focus stays on the trigger, also from an open calendar
+  const { swap, popup } = useFocusSwap(Boolean(disabledReason));
+
   if (disabledReason) {
     return (
-      <ReadOnlyTrigger look={look} className={className} name={name} reason={disabledReason} tabIndex={tabIndex} id={id}>
+      <ReadOnlyTrigger look={look} className={className} name={name} reason={disabledReason} tabIndex={tabIndex} id={id} swap={swap}>
         {content}
       </ReadOnlyTrigger>
     );
@@ -114,6 +117,7 @@ export function DatePopover({
               aria-invalid={invalid || undefined}
               aria-keyshortcuts={shortcut ? ariaKeyshortcuts(shortcut) : undefined}
               tabIndex={tabIndex}
+              {...swap}
               className={cx('group', triggerClass(look, { invalid, className }))}
             />
           }
@@ -126,6 +130,7 @@ export function DatePopover({
       {/* the focus starts on the chosen day (or today), so the arrows work at once */}
       <PopoverContent
         keepSide={keepSide}
+        {...popup}
         className="w-auto p-3"
         initialFocus={() => {
           if (startsOpen.current) {
