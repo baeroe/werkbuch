@@ -17,7 +17,7 @@ use Illuminate\Support\Str;
 /**
  * What hangs on the items: 100 000 comments (5 000 per project, item number LoadItems::BUSY with 40 of them, every
  * other item with at most 39), 2 000 wiki pages in L01 (a tree four levels deep: 20, 180, 600, 1 200) with 0–5
- * versions each, 200 templates (10 per project; the 50 of L01–L05 on the same weekly schedule, so they come due in the
+ * versions each and a row in `page_item_references` for the item a text references, 200 templates (10 per project; the 50 of L01–L05 on the same weekly schedule, so they come due in the
  * same minute), 50 webhooks of the organization for `work_item.*`, all switched off (nothing is sent while seeding),
  * and the file list of the first epic of every project (FILES, rows of `attachments` and `media` without the files:
  * the list reads only the rows).
@@ -164,6 +164,7 @@ final class LoadContent
         $now = (int) strtotime(LoadItems::NOW.' UTC');
         $parents = [null];
         $versions = [];
+        $references = [];
 
         foreach (self::LEVELS as $level => $count) {
             // the pages of this level, spread over the parents of the level above as evenly as the counts allow
@@ -189,7 +190,7 @@ final class LoadContent
                         'rank' => $rank,
                         'title' => 'Seite '.LoadTexts::title(),
                         'emoji' => $level === 0 || LoadRandom::int(0, 1) === 0 ? '📄' : null,
-                        'content' => LoadTexts::pointedAt($entry, LoadRandom::pick($items['ids'])),
+                        'content' => LoadTexts::pointedAt($entry, $target = LoadRandom::pick($items['ids'])),
                         'content_text' => $entry['text'],
                         'version' => $kept + 1,
                         'created_by' => LoadRandom::pick($items['people']),
@@ -197,6 +198,11 @@ final class LoadContent
                         'created_at' => LoadItems::stamp($created),
                         'updated_at' => LoadItems::stamp($updated),
                     ];
+
+                    // the item the text references, as PageItemReferences records it (A456); a version counts for nothing
+                    if (str_contains($entry['json'], LoadTexts::TARGET)) {
+                        $references[] = ['id' => strtolower((string) Str::ulid()), 'page_id' => $id, 'work_item_id' => $target];
+                    }
 
                     for ($v = 1; $v <= $kept; $v++) {
                         $older = $this->texts->descriptions[LoadRandom::int(0, LoadTexts::POOL - 1)];
@@ -218,6 +224,7 @@ final class LoadContent
         }
 
         self::insert('page_versions', $versions);
+        self::insert('page_item_references', $references);
     }
 
     /**

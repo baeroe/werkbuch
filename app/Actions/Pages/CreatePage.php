@@ -11,6 +11,7 @@ use App\Models\Project;
 use App\Support\Actor;
 use App\Support\AttachmentLinks;
 use App\Support\PageInput;
+use App\Support\PageItemReferences;
 use App\Support\PageLock;
 use App\Support\PageRanks;
 use Illuminate\Support\Facades\DB;
@@ -23,8 +24,9 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * may take a second); then the tree lock (PageLock::tree: the project `for update`, gone or being deleted 404, archived
  * 409), under it the parent (a page of the same project, else `field.parent_page.unknown`: a parent elsewhere would drop
  * the page out of the tree) and the rank after the last sibling. All field errors come in one 422. The page starts in
- * version 1 by the writer; the writer's uploads its text names become the page's (AttachmentLinks). `page.created` with
- * the title. The project comes as a model or a reference (ULID, identifier or a former identifier).
+ * version 1 by the writer; the writer's uploads its text names become the page's (AttachmentLinks) and the items it
+ * references are recorded (PageItemReferences). `page.created` with the title. The project comes as a model or a
+ * reference (ULID, identifier or a former identifier).
  */
 final class CreatePage
 {
@@ -69,6 +71,7 @@ final class CreatePage
             ]);
             if ($content !== null) {
                 AttachmentLinks::link($page, $locked, $actor->user, [$key => $content]);
+                PageItemReferences::sync($page, $content);
             }
 
             EventRecorder::record(EventType::PageCreated, $actor, $page, $locked, ['title' => ['old' => null, 'new' => $title]]);

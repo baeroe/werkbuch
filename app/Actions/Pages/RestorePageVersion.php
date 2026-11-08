@@ -11,6 +11,7 @@ use App\Models\PageVersion;
 use App\RichText\Document;
 use App\Support\Actor;
 use App\Support\AttachmentLinks;
+use App\Support\PageItemReferences;
 use App\Support\PageLock;
 use App\Support\RichTextRules;
 use Illuminate\Support\Facades\DB;
@@ -25,8 +26,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * leaves it without an error. Under PageLock::page (the project shared, the page `for update`): the version afresh (gone
  * → 404), then the stored state always kept as a version (no base needed, A309; a number kept already stays), then the
  * title and text of the version as version + 1 by the restorer (the emoji stays: versions keep none, A323), its uploads
- * linked to the page, and `page.updated` with the title when it changes and the version, `meta.restored_version` the
- * number restored; never the text (A306).
+ * linked to the page, the items it references recorded (PageItemReferences), and `page.updated` with the title when
+ * it changes and the version, `meta.restored_version` the number restored; never the text (A306).
  */
 final class RestorePageVersion
 {
@@ -68,6 +69,7 @@ final class RestorePageVersion
             if ($doc !== null) {
                 AttachmentLinks::link($locked, $locked->project, $actor->user, ['content_json' => $doc]);
             }
+            PageItemReferences::sync($locked, $doc);
 
             EventRecorder::record(EventType::PageUpdated, $actor, $locked, $locked->project, $changes, ['restored_version' => $restored->version]);
 

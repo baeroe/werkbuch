@@ -35,7 +35,7 @@ class LoadSeeder extends Seeder
 {
     use WithoutModelEvents;
 
-    public const VERSION = 2;
+    public const VERSION = 3;
 
     public const DATABASE = 'load';
 
