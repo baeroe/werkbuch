@@ -7,6 +7,7 @@ use App\Models\PageVersion;
 use App\Models\Project;
 use App\Models\User;
 use App\RichText\Document;
+use App\Support\PageItemReferences;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
@@ -16,9 +17,12 @@ use RuntimeException;
 /**
  * The wiki of WEB, APP and OPS, every page of the clickdummy seed (src/api/seed/pages.ts; `PagesSeederTest` reads that
  * file and compares page by page) with the three kept versions of „Seitenstruktur“. A text is the Tiptap JSON the
- * clickdummy builds (read through Document::fromJson, as an editor would send it): keys like `WEB-47` stay text, as in
- * the seed. Written directly, without events, like the other demo seeders (A86); the search index is built anew at the
- * end of the DemoSeeder. The clickdummy's `simulate_conflict_once` is its own trick and not seeded.
+ * clickdummy builds (read through Document::fromJson, as an editor would send it), with one change: a key like `WEB-47`
+ * in a paragraph, heading or list item becomes a reference to the item the ItemsSeeder made (A456, the frozen
+ * clickdummy keeps it text), so the item detail shows the pages that name it; a key without an item and a key in code
+ * stay text. The references go into `page_item_references` as CreatePage writes them (PageItemReferences::sync).
+ * Written directly, without events, like the other demo seeders (A86); the search index is built anew at the end of the
+ * DemoSeeder. The clickdummy's `simulate_conflict_once` is its own trick and not seeded.
  *
  * Safe to run again, and it never touches a page that exists (like K13): it creates the pages whose (project, title)
  * is missing, with their versions, and nothing else. A page a later run adds goes below the page that has its parent's
@@ -211,6 +215,12 @@ class PagesSeeder extends Seeder
         ],
     ];
 
+    /** A key as a whole word: no word character and no `-` on either side (as MentionsAndReferences reads one). */
+    private const KEY = '/(?<![\\w-])([A-Z][A-Z0-9]{1,9}-\\d{1,10})(?![\\w-])/u';
+
+    /** @var array<string, ?string> the key → the ID of its item, `null` without one */
+    private array $items = [];
+
     public function run(): void
     {
         // one transaction: a page without its versions would stay so for good (a rerun skips every page that exists)
@@ -238,7 +248,7 @@ class PagesSeeder extends Seeder
      */
     private function create(string $project, array $row, array $ids, Collection $people): string
     {
-        $content = self::document($row['content']);
+        $content = $this->document($row['content']);
         $updatedAt = ItemsSeeder::at($row['updated'] ?? $row['created']);
 
         $page = new Page;
@@ -256,6 +266,7 @@ class PagesSeeder extends Seeder
             'created_at' => ItemsSeeder::at($row['created']),
             'updated_at' => $updatedAt,
         ])->save();
+        PageItemReferences::sync($page, $content);
 
         foreach (self::VERSIONS[$row['id']] ?? [] as $kept) {
             // the version of the page's own number is its state now, nothing else (T4-M1)
@@ -268,7 +279,7 @@ class PagesSeeder extends Seeder
                 'page_id' => $page->id,
                 'version' => $kept['version'],
                 'title' => $page->title,
-                'content' => $kept['content'] === null ? $page->content : self::document($kept['content'])->toJson(),
+                'content' => $kept['content'] === null ? $page->content : $this->document($kept['content'])->toJson(),
                 'author_id' => self::person($people, $kept['by']),
                 'created_at' => ItemsSeeder::at($kept['at']),
             ])->save();
@@ -279,24 +290,54 @@ class PagesSeeder extends Seeder
 
     /**
      * The text as the clickdummy's helpers build it (`doc`, `p`, `h`, `ul`, `ol`, `code`), read as the API reads Tiptap
-     * JSON.
+     * JSON; a key with an item becomes a reference outside code.
      *
      * @param  list<list<mixed>>  $blocks
      */
-    private static function document(array $blocks): Document
+    private function document(array $blocks): Document
     {
         $text = fn (string $text): array => ['type' => 'text', 'text' => $text];
-        $paragraph = fn (string $line): array => ['type' => 'paragraph', 'content' => [$text($line)]];
+        $inline = fn (string $line): array => $this->inline($line);
+        $paragraph = fn (string $line): array => ['type' => 'paragraph', 'content' => $inline($line)];
         $items = fn (array $lines): array => array_map(fn (string $line) => ['type' => 'listItem', 'content' => [$paragraph($line)]], $lines);
 
         return Document::fromJson(['type' => 'doc', 'content' => array_map(fn (array $block): array => match ($block[0]) {
             'p' => $paragraph($block[1]),
-            'h' => ['type' => 'heading', 'attrs' => ['level' => $block[1]], 'content' => [$text($block[2])]],
+            'h' => ['type' => 'heading', 'attrs' => ['level' => $block[1]], 'content' => $inline($block[2])],
             'ul' => ['type' => 'bulletList', 'content' => $items($block[1])],
             'ol' => ['type' => 'orderedList', 'attrs' => ['start' => 1], 'content' => $items($block[1])],
             'code' => ['type' => 'codeBlock', 'attrs' => ['language' => null], 'content' => [$text($block[1])]],
             default => throw new RuntimeException("Unknown block {$block[0]}."),
         }, $blocks)]);
+    }
+
+    /**
+     * The inline nodes of a line: text, and a reference for every key whose item there is.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function inline(string $line): array
+    {
+        $nodes = [];
+        foreach (preg_split(self::KEY, $line, -1, PREG_SPLIT_DELIM_CAPTURE) ?: [] as $i => $part) {
+            $id = $i % 2 === 1 ? $this->item($part) : null;
+            $nodes[] = $id === null
+                ? ['type' => 'text', 'text' => $part]
+                : ['type' => 'reference', 'attrs' => ['id' => $id, 'label' => null, 'mentionSuggestionChar' => '#', 'kind' => 'item']];
+        }
+
+        // an empty text between two nodes is no node (Document::fromJson refuses it)
+        return array_values(array_filter($nodes, fn (array $node) => $node['type'] !== 'text' || $node['text'] !== ''));
+    }
+
+    /** The ID of the item of a key, `null` when the demo has none. */
+    private function item(string $key): ?string
+    {
+        if (! array_key_exists($key, $this->items)) {
+            $this->items[$key] = ItemsSeeder::find($key)?->id;
+        }
+
+        return $this->items[$key];
     }
 
     /**
