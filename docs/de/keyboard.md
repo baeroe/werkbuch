@@ -4,7 +4,7 @@
 
 werkbuch geht ohne Maus. Mit <kbd>?</kbd> zeigt jeder Bildschirm die Kürzel, die dort gerade gelten; diese Seite nennt alle. Hat eine Taste zwei Namen, gilt der erste auf dem Mac und der zweite unter Windows und Linux. Beim Tippen in einem Feld wirken nur <kbd>⌘ / Strg</kbd>+<kbd>K</kbd>, <kbd>Esc</kbd> und <kbd>⌘ / Strg</kbd>+<kbd>↵</kbd>. Solange ein Dialog offen ist, ruhen die Kürzel der Seite dahinter.
 
-`e2e/keyboard-flows.ts` ordnet jedes Kürzel dieser Seite und jede Taste eines Widgets einem Playwright-Test zu, der sie nur mit der Tastatur drückt. `scripts/keyboard-flows.test.mjs` prüft, dass es den Test gibt, dass er eine der Tasten drückt und keine Maus benutzt und dass die Tests die Breiten von Desktop und Handy abdecken. Fehlt ein Test noch, für alle Breiten oder für eine, nennt das Manifest die Lücke mit Grund.
+`e2e/keyboard-flows.ts` ordnet jedes Kürzel dieser Seite und jede Taste eines Widgets einem Playwright-Test zu, der sie nur mit der Tastatur drückt, und jeden Ablauf der App, vom Anmelden bis zur System-Seite, einem Test, der ihn ohne Maus durchläuft. `scripts/keyboard-flows.test.mjs` prüft, dass es den Test gibt, dass er eine der Tasten drückt und keine Maus benutzt und dass die Tests die Breiten von Desktop und Handy abdecken. Fehlt ein Test noch, für alle Breiten oder für eine, nennt das Manifest die Lücke mit Grund.
 
 ## Allgemein
 

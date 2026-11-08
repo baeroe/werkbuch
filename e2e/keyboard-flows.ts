@@ -2,6 +2,7 @@
  * The keyboard manifest (A442, K16): success criterion 6 says every flow works without a mouse and Playwright checks it.
  * This file names, for every id of the shortcut catalog (resources/js/lib/shortcuts/catalog.ts) and every key of a widget
  * (widgets.ts, as `<group>:<label>` with the last parts of their translation keys), the Playwright test that presses it
+ * with the keyboard only, and for every flow of the app (chapters 4 and 5.2 of the spec) the test that goes through it
  * with the keyboard only. scripts/keyboard-flows.test.mjs keeps it complete and honest: it reads catalog and widgets as
  * text (this file imports nothing of the app), checks that the spec and the title exist, that the body of the test uses
  * no mouse (`.click(`, `.hover(`, `.dragTo(`, `.tap(`, `page.mouse`, also through a helper of the spec), and that a test
@@ -122,10 +123,106 @@ export const SHORTCUT_TESTS: Record<string, Proof | Proof[]> = {
 };
 
 /**
+ * The flows of chapters 4 and 5.2 of the spec (signing in to the system page), each done with the keyboard only by a
+ * Playwright test: `flow` names it in words. A flow with several proofs (one per width) stands once per proof.
+ */
+export const FLOW_TESTS: ({ flow: string } & Proof)[] = [
+  // signing in, the way back in, invitations
+  { flow: 'sign in and out', file: 'login.spec.ts', test: 'signs in and out with the keyboard only, in English' },
+  { flow: 'sign in with a second factor', file: 'two-factor.spec.ts', test: 'asks for the code after the password and signs in with it' },
+  { flow: 'reset a forgotten password', file: 'password-reset.spec.ts', test: 'answers an unknown address like a known one, then sets a new password from the mail' },
+  { flow: 'accept an invitation', file: 'invitation.spec.ts', test: 'accepts an invitation with the keyboard only' },
+
+  // projects and catalogs
+  { flow: 'create a project', file: 'projects.spec.ts', test: 'creates a project with the keyboard from the sidebar' },
+  { flow: 'add a member', file: 'onboarding.spec.ts', test: 'invites a person who joins, gets a project and finds it' },
+  { flow: 'create a workflow with a matrix', file: 'workflows.spec.ts', test: 'creates a workflow with a transition matrix' },
+  { flow: 'create a type with a required property', file: 'types-properties.spec.ts', test: 'creates a dropdown property and a type that requires it' },
+
+  // the item: create it, change its fields, its relations, texts and files
+  { flow: 'create an item', file: 'create-item.spec.ts', test: 'creates an item of a type with a required property' },
+  { flow: 'change the status', file: 'items.spec.ts', test: 'sets a closing status with the resolution prefilled' },
+  // the palette with a on the desktop, the field editors on the phone (spec 5.1): both with the keyboard
+  { flow: 'change the assignee', file: 'items.spec.ts', test: 'changes assignee and priority with a and p', projects: EVERYWHERE },
+  { flow: 'change the priority', file: 'bulk.spec.ts', test: 'selects three items with x and sets their priority with p' },
+  // on the phone the test returns after the assignee
+  { flow: 'change the priority', file: 'items.spec.ts', test: 'changes assignee and priority with a and p', projects: DESKTOP },
+  { flow: 'add a relation', file: 'item-sections.spec.ts', test: 'relates two items with r and removes the relation again' },
+  { flow: 'remove a relation', file: 'item-sections.spec.ts', test: 'relates two items with r and removes the relation again' },
+  { flow: 'edit the description', file: 'item-description.spec.ts', test: 'writes a heading and a checklist with Markdown shortcuts' },
+  { flow: 'write a comment', file: 'comments.spec.ts', test: 'writes a comment with m and mod+enter' },
+  { flow: 'paste an image', file: 'editor.spec.ts', test: 'pastes an image into the description and shows it after a reload' },
+  // the upload with Enter on "Upload file" and the file chooser; the download after the reload clicks (MOUSE_ALLOWED)
+  { flow: 'upload a file', file: 'attachments.spec.ts', test: 'uploads a file to the list and downloads it' },
+  { flow: 'edit several items at once', file: 'bulk.spec.ts', test: 'selects three items with x and sets their priority with p' },
+  { flow: 'archive with undo', file: 'bulk.spec.ts', test: 'selects a range with shift+x, archives with mod+backspace and undoes with mod+z' },
+  { flow: 'delete with undo', file: 'items.spec.ts', test: 'deletes an item with mod+backspace and undoes it with mod+z' },
+
+  // lists and their layouts
+  { flow: 'filter a list', file: 'filter.spec.ts', test: 'filters by priority with f' },
+  { flow: 'save a list as a view', file: 'views-acceptance.spec.ts', test: 'filters with f, saves as a view, stars it and opens it from the sidebar' },
+  { flow: 'move a card on the board', file: 'board.spec.ts', test: 'moves a card with shift+arrow to the next allowed column' },
+  { flow: 'edit a cell of the table', file: 'table.spec.ts', test: 'edits the priority of an item in the table with the keyboard' },
+  { flow: 'move an epic on the timeline', file: 'timeline.spec.ts', test: 'moves an epic by a week with shift+right at month zoom' },
+  { flow: 'plan an epic on the timeline', file: 'timeline.spec.ts', test: 'plans an epic without dates from the side list' },
+
+  // search, inbox, notifications
+  { flow: 'search from the palette', file: 'search.spec.ts', test: 'Flow 1: finds the item over the palette and closes it with the resolution set' },
+  { flow: 'jump to an item by its key', file: 'search.spec.ts', test: 'jumps to an item over its former key' },
+  { flow: 'work the inbox', file: 'inbox.spec.ts', test: 'works the inbox with the keyboard only' },
+  { flow: 'set the notifications', file: 'notification-settings.spec.ts', test: 'switches mail off for comments with the keyboard and keeps it after a reload' },
+
+  // the wiki (the tests branch on isPhone for the tree beside a page only, the flow itself runs on every width)
+  { flow: 'create a wiki page', file: 'wiki.spec.ts', test: 'creates a page with the keyboard: New page, then the title typed over', projects: EVERYWHERE },
+  { flow: 'edit a wiki page', file: 'wiki.spec.ts', test: 'types into a page, saves by itself and keeps the text after reloading' },
+  { flow: 'move a wiki page', file: 'wiki.spec.ts', test: 'moves a page with Verschieben nach … and deletes a subtree with undo', projects: EVERYWHERE },
+  { flow: 'delete a wiki page', file: 'wiki.spec.ts', test: 'moves a page with Verschieben nach … and deletes a subtree with undo', projects: EVERYWHERE },
+  { flow: 'restore a page version', file: 'wiki.spec.ts', test: 'opens the versions with the keyboard and restores one' },
+
+  // templates, automations, webhooks
+  { flow: 'create a template', file: 'templates.spec.ts', test: 'creates a template with the keyboard and runs it now' },
+  { flow: 'run a template', file: 'templates.spec.ts', test: 'creates a template with the keyboard and runs it now' },
+  { flow: 'set a schedule', file: 'templates.spec.ts', test: 'shows the next five runs of a monthly schedule on the first Monday' },
+  { flow: 'switch an automation', file: 'automations.spec.ts', test: 'switches Assignee beim Start on with the keyboard; a person who starts an item becomes its assignee' },
+  { flow: 'create a webhook', file: 'webhooks.spec.ts', test: 'creates a webhook with the keyboard, copies its secret once and pings the receiver' },
+  { flow: 'ping a webhook', file: 'webhooks.spec.ts', test: 'creates a webhook with the keyboard, copies its secret once and pings the receiver' },
+
+  // settings
+  { flow: 'create a token', file: 'settings-personal.spec.ts', test: 'creates a token, copies it and revokes it' },
+  { flow: 'set up a second factor', file: 'settings-personal.spec.ts', test: 'sets up two-factor sign-in with a real code and turns it off again' },
+  { flow: 'change the organization', file: 'settings-organization.spec.ts', test: 'changes the name of the organization with the keyboard' },
+  { flow: 'open the system page', file: 'system.spec.ts', test: 'opens the system page with the keyboard and sends a test mail that arrives in Mailpit' },
+
+  // the shell: from md on the sidebar folds to the rail, below md it is the drawer
+  { flow: 'change the theme', file: 'shell.spec.ts', test: 'switches the theme from the profile menu and keeps it after reload' },
+  { flow: 'open and close the sidebar', file: 'shell.spec.ts', test: 'collapses the sidebar to the rail and back' },
+  { flow: 'open and close the sidebar', file: 'shell.spec.ts', test: 'opens the navigation drawer on the phone' },
+
+  // beyond the list of Task 17b: more of the structure of chapter 5.2 that a keyboard-only test already goes through
+  { flow: 'invite a person', file: 'settings-organization.spec.ts', test: 'invites a person, copies the link and shows it in the list' },
+  { flow: 'create a bot with a token', file: 'settings-organization.spec.ts', test: 'creates a bot, a token for it, and revokes it' },
+  { flow: 'change the profile', file: 'settings-personal.spec.ts', test: 'changes name and handle in the profile' },
+  { flow: 'create a label', file: 'catalogs.spec.ts', test: 'creates, renames and deletes a label with undo' },
+  { flow: 'create a relation type', file: 'catalogs.spec.ts', test: 'creates a symmetric relation type and cannot delete a built-in one' },
+  { flow: 'create a resolution', file: 'catalogs.spec.ts', test: 'creates a resolution and archives it' },
+  { flow: 'switch the workflow of a project', file: 'state-mapping.spec.ts', test: 'switches the workflow of a project and maps its states' },
+  { flow: 'apply a template in the dialog', file: 'create-item.spec.ts', test: 'applies a template in the dialog and creates the item with a copy of its image' },
+  { flow: 'create several items in a row', file: 'create-item.spec.ts', test: 'creates several items in a row with another one' },
+  { flow: 'change the display of a list', file: 'views-save.spec.ts', test: 'changes the grouping of a view, sees it as unsaved and discards it' },
+];
+
+/**
  * A mouse call inside a test of the manifest that the test does not prove: `call` is the text of the call as it stands
  * in the test. Never for the key or flow the entry names.
  */
-export const MOUSE_ALLOWED: { file: string; test: string; call: string; reason: string }[] = [];
+export const MOUSE_ALLOWED: { file: string; test: string; call: string; reason: string }[] = [
+  {
+    file: 'attachments.spec.ts',
+    test: 'uploads a file to the list and downloads it',
+    call: 'link.click()',
+    reason: 'the download after the reload, which no flow of the manifest names; the upload (Enter on "Upload file") is the flow',
+  },
+];
 
 /** Projects where nothing proves a key, with the reason (a phone has no such widget, …). */
 export const PROJECT_GAPS: { key: string; projects: string[]; reason: string }[] = [
@@ -141,7 +238,10 @@ export const PROJECT_GAPS: { key: string; projects: string[]; reason: string }[]
   },
 ];
 
-/** Keys without a keyboard-only test yet: `test` says what the missing test does. Task 18 closes them. */
+/**
+ * Keys and flows without a keyboard-only test yet: `test` says what the missing test does. Task 18 closes them. A name
+ * with a space is a flow of `FLOW_TESTS`, one without a key of the catalog or the widgets.
+ */
 export const GAPS: Record<string, { file: 'TODO'; test: string }> = {
   'item.assign_me': { file: 'TODO', test: 'i assigns the item of the page (or the cursor) to oneself' },
   'item.labels': { file: 'TODO', test: 'l opens the labels of the item in the palette and sets one' },
@@ -173,4 +273,10 @@ export const GAPS: Record<string, { file: 'TODO'; test: string }> = {
   'editor:image_alt': { file: 'TODO', test: 'Enter on a selected image edits its alternative text' },
   // the test of Task 21s ('edits a table with the keyboard only', editor.spec.ts) waits for Rafael's OK (Task 17b)
   'editor:table_menu': { file: 'TODO', test: 'alt+F10 opens the menu of the table and adds a row with the keyboard' },
+
+  // flows (named in words)
+  'change the labels': { file: 'TODO', test: 'sets and removes a label of an item with l from the palette or its field' },
+  'change the type': { file: 'TODO', test: 'changes the type of an item with t, answering the dialog for lost and required values' },
+  'change the dates': { file: 'TODO', test: 'sets the start and due date of an item with shift+d and d, the calendar with the keyboard' },
+  'change the parent': { file: 'TODO', test: 'moves an item under another epic with shift+p and takes the parent away again' },
 };

@@ -1,9 +1,10 @@
 /*
  * Success criterion 6 (every flow without a mouse, Playwright checks it) as a test (A442, K16): e2e/keyboard-flows.ts maps
  * every id of the shortcut catalog and every key of a widget (`<group>:<label>`, the last parts of their translation keys,
- * `palette:move` for `shortcuts.widget.group.palette` and `shortcuts.widget.palette.move`) to a Playwright test, and this
- * file keeps that map complete and honest: the spec exists, the title stands there literally, the body of that test (from
- * its call to the matching bracket) uses no mouse, and a test that skips a project proves nothing there.
+ * `palette:move` for `shortcuts.widget.group.palette` and `shortcuts.widget.palette.move`) and every flow of `FLOWS` to a
+ * Playwright test, and this file keeps that map complete and honest: the spec exists, the title stands there literally,
+ * the body of that test (from its call to the matching bracket) uses no mouse, and a test that skips a project proves
+ * nothing there.
  *
  * The catalog and the widgets are read as text: keyboard-flows.ts lives under e2e/ and imports nothing of the app (its
  * type check knows no `@/` alias), so only this test knows both sides.
@@ -12,10 +13,71 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { GAPS, MOUSE_ALLOWED, PROJECT_GAPS, SHORTCUT_TESTS } from '../e2e/keyboard-flows.ts';
+import { FLOW_TESTS, GAPS, MOUSE_ALLOWED, PROJECT_GAPS, SHORTCUT_TESTS } from '../e2e/keyboard-flows.ts';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const read = (file) => fs.readFileSync(path.join(ROOT, file), 'utf8');
+
+/**
+ * The flows of chapters 4 and 5.2 of the spec that the manifest names at least (Task 17b): each one has a proof in
+ * `FLOW_TESTS` or a gap in `GAPS`. A flow is named in words, so it never reads as a key (`item.state`, `palette:move`).
+ */
+const FLOWS = [
+  'sign in and out',
+  'sign in with a second factor',
+  'reset a forgotten password',
+  'accept an invitation',
+  'create a project',
+  'add a member',
+  'create a workflow with a matrix',
+  'create a type with a required property',
+  'create an item',
+  'change the status',
+  'change the assignee',
+  'change the priority',
+  'change the labels',
+  'change the type',
+  'change the dates',
+  'change the parent',
+  'add a relation',
+  'remove a relation',
+  'edit the description',
+  'write a comment',
+  'paste an image',
+  'upload a file',
+  'edit several items at once',
+  'archive with undo',
+  'delete with undo',
+  'filter a list',
+  'save a list as a view',
+  'move a card on the board',
+  'edit a cell of the table',
+  'move an epic on the timeline',
+  'plan an epic on the timeline',
+  'search from the palette',
+  'jump to an item by its key',
+  'work the inbox',
+  'set the notifications',
+  'create a wiki page',
+  'edit a wiki page',
+  'move a wiki page',
+  'delete a wiki page',
+  'restore a page version',
+  'create a template',
+  'run a template',
+  'set a schedule',
+  'switch an automation',
+  'create a webhook',
+  'ping a webhook',
+  'create a token',
+  'set up a second factor',
+  'change the organization',
+  'open the system page',
+  'change the theme',
+  'open and close the sidebar',
+];
+/** A name of `GAPS` with a space is a flow, one without a key of the catalog or the widgets. */
+const isFlow = (name) => /\s/.test(name);
 
 /** What a keyboard-only test may not do: pointer calls of Playwright and synthetic pointer events. */
 const MOUSE = /\.(?:click|dblclick|hover|dragTo|tap|setChecked|uncheck|selectOption)\s*\(|(?<!\bfonts)\.check\s*\(|\.mouse\b|\.touchscreen\b|dispatchEvent\(\s*new\s+(?:Mouse|Pointer|Touch|Drag)Event\b|dispatchEvent\(\s*['"](?:click|dblclick|mouse|pointer|touch|drag)/;
@@ -333,9 +395,10 @@ const ALL = projects();
 const proofsOf = (entry) => (Array.isArray(entry) ? entry : [entry]);
 
 /**
- * Where a proof of `key` holds: the projects its test runs in (a `test.skip(isPhone(page), …)` leaves out the phones, one
- * with `!isPhone` the desktops, one without a condition and a skipped describe all of them), narrowed to `projects` if
- * the entry names them; a test that branches on `isPhone()` must name them. Throws what is wrong with the proof.
+ * Where a proof of `key` holds (`key` null: a flow, which presses no key of its own): the projects its test runs in (a
+ * `test.skip(isPhone(page), …)` leaves out the phones, one with `!isPhone` the desktops, one without a condition and a
+ * skipped describe all of them), narrowed to `projects` if the entry names them; a test that branches on `isPhone()` must
+ * name them. Throws what is wrong with the proof.
  */
 function provenIn(proof, key, allowances = MOUSE_ALLOWED) {
   const where = `${proof.file} › ${proof.test}`;
@@ -359,10 +422,12 @@ function provenIn(proof, key, allowances = MOUSE_ALLOWED) {
     if (MOUSE.test(masked.slice(...fns.get(helper)))) throw new Error(`${where}: reaches ${helper}(), which uses the mouse`);
   }
 
-  if (!KEYS.has(key)) throw new Error(`${where}: ${key} is no key of the catalog or the widgets`);
-  const ranges = [[start, end], ...helpers.map((helper) => fns.get(helper))];
-  const forms = KEYS.get(key).flatMap(pressings);
-  if (!forms.some((form) => pressedIn(form, source, masked, ranges, fns))) throw new Error(`${where}: presses none of: ${forms.map((form) => form.text).join(', ')}`);
+  if (key !== null) {
+    if (!KEYS.has(key)) throw new Error(`${where}: ${key} is no key of the catalog or the widgets`);
+    const ranges = [[start, end], ...helpers.map((helper) => fns.get(helper))];
+    const forms = KEYS.get(key).flatMap(pressings);
+    if (!forms.some((form) => pressedIn(form, source, masked, ranges, fns))) throw new Error(`${where}: presses none of: ${forms.map((form) => form.text).join(', ')}`);
+  }
 
   let runs = nowhere ? [] : ALL.map((project) => project.name);
   const skips = skipsOf(body, source, start);
@@ -376,7 +441,7 @@ function provenIn(proof, key, allowances = MOUSE_ALLOWED) {
   for (const { from, to } of skips) unskipped = unskipped.slice(0, from) + ' '.repeat(to - from) + unskipped.slice(to);
   const branches = [unskipped, ...helpers.map((helper) => masked.slice(...fns.get(helper)))].some((text) => /(?<![\w.$])isPhone\s*\(/.test(text));
   if (proof.projects === undefined) {
-    if (branches) throw new Error(`${where}: branches on isPhone(): name the projects where it presses the key`);
+    if (branches) throw new Error(`${where}: branches on isPhone(): name the projects where it presses the key or goes through the flow`);
     return runs;
   }
   for (const name of proof.projects) {
@@ -386,21 +451,28 @@ function provenIn(proof, key, allowances = MOUSE_ALLOWED) {
   return proof.projects;
 }
 
-/** What is wrong with the proofs of one key, across all projects (none: an empty list). */
-function problemsOf(key, entry) {
+/** What is wrong with the proofs of one key or flow (`key` null), across all projects (none: an empty list). */
+function problemsOf(name, entry, key = name) {
   const problems = [];
   const covered = new Set();
   for (const proof of proofsOf(entry)) {
     try {
-      for (const name of provenIn(proof, key)) covered.add(name);
+      for (const project of provenIn(proof, key)) covered.add(project);
     } catch (error) {
-      problems.push(`${key}: ${error.message}`);
+      problems.push(`${name}: ${error.message}`);
     }
   }
-  const excused = PROJECT_GAPS.filter((gap) => gap.key === key).flatMap((gap) => gap.projects);
-  for (const name of excused) if (covered.has(name)) problems.push(`${key}: PROJECT_GAPS excuses ${name}, which a proof covers`);
-  for (const { name } of ALL) if (!covered.has(name) && !excused.includes(name)) problems.push(`${key}: nothing proves it in ${name} (a proof, or PROJECT_GAPS with a reason)`);
+  const excused = PROJECT_GAPS.filter((gap) => gap.key === name).flatMap((gap) => gap.projects);
+  for (const project of excused) if (covered.has(project)) problems.push(`${name}: PROJECT_GAPS excuses ${project}, which a proof covers`);
+  for (const project of ALL) if (!covered.has(project.name) && !excused.includes(project.name)) problems.push(`${name}: nothing proves it in ${project.name} (a proof, or PROJECT_GAPS with a reason)`);
   return problems;
+}
+
+/** The proofs of `FLOW_TESTS` by flow, in the order they stand. */
+function flowProofs(flows = FLOW_TESTS) {
+  const byFlow = new Map();
+  for (const { flow, ...proof } of flows) byFlow.set(flow, [...(byFlow.get(flow) ?? []), proof]);
+  return byFlow;
 }
 
 describe('keyboard manifest', () => {
@@ -429,7 +501,7 @@ describe('keyboard manifest', () => {
   });
 
   it('names every shortcut and every widget key, and nothing else', () => {
-    const named = [...Object.keys(SHORTCUT_TESTS), ...Object.keys(GAPS)];
+    const named = [...Object.keys(SHORTCUT_TESTS), ...Object.keys(GAPS).filter((name) => !isFlow(name))];
     expect({
       withoutEntry: keys.filter((key) => !named.includes(key)),
       unknown: named.filter((key) => !keys.includes(key)),
@@ -437,12 +509,28 @@ describe('keyboard manifest', () => {
     }).toEqual({ withoutEntry: [], unknown: [], provenAndGap: [] });
   });
 
+  it('lists every flow', () => {
+    const proven = [...new Set(FLOW_TESTS.map((proof) => proof.flow))];
+    const gaps = Object.keys(GAPS).filter(isFlow);
+    expect(FLOWS.every(isFlow)).toBe(true);
+    expect(new Set(FLOWS).size).toBe(FLOWS.length);
+    expect({
+      withoutEntry: FLOWS.filter((flow) => !proven.includes(flow) && !gaps.includes(flow)),
+      unnamed: proven.filter((flow) => !isFlow(flow)),
+      provenAndGap: proven.filter((flow) => gaps.includes(flow)),
+    }).toEqual({ withoutEntry: [], unnamed: [], provenAndGap: [] });
+  });
+
   it('proves every shortcut and widget key with a keyboard-only test in every project', () => {
     expect(Object.entries(SHORTCUT_TESTS).flatMap(([key, entry]) => problemsOf(key, entry)).join('\n')).toBe('');
   });
 
+  it('proves every flow with a keyboard-only test in every project', () => {
+    expect([...flowProofs()].flatMap(([flow, proofs]) => problemsOf(flow, proofs, null)).join('\n')).toBe('');
+  });
+
   it('gives every exception a reason and a place', () => {
-    const tests = Object.values(SHORTCUT_TESTS).flatMap(proofsOf);
+    const tests = [...Object.values(SHORTCUT_TESTS).flatMap(proofsOf), ...FLOW_TESTS];
     for (const allowed of MOUSE_ALLOWED) {
       expect(allowed.reason.trim(), `MOUSE_ALLOWED ${allowed.file} › ${allowed.test}`).not.toBe('');
       expect(MOUSE.test(allowed.call), `MOUSE_ALLOWED ${allowed.call}: no mouse call to allow`).toBe(true);
@@ -453,7 +541,7 @@ describe('keyboard manifest', () => {
     }
     for (const gap of PROJECT_GAPS) {
       expect(gap.reason.trim(), `PROJECT_GAPS ${gap.key}`).not.toBe('');
-      expect(Object.hasOwn(SHORTCUT_TESTS, gap.key), `PROJECT_GAPS ${gap.key}: no proof to complete`).toBe(true);
+      expect(Object.hasOwn(SHORTCUT_TESTS, gap.key) || flowProofs().has(gap.key), `PROJECT_GAPS ${gap.key}: no proof to complete`).toBe(true);
       for (const name of gap.projects) expect(ALL.map((project) => project.name), `PROJECT_GAPS ${gap.key}`).toContain(name);
     }
   });
@@ -536,6 +624,29 @@ describe('the scanner of the specs', () => {
     // a letter typed in a text is no shortcut, ⌘↵ is no plain Enter
     expect(() => provenIn({ file: 'editor.spec.ts', test: 'mentions over @ and refers over #' }, 'item.priority')).toThrow(/presses none of: 'p'/);
     expect(() => provenIn({ file: 'shell.spec.ts', test: 'goes to projects with g p' }, 'settings.save')).toThrow(/presses none of: pressMod\(…, 'Enter'\)/);
+  });
+
+  it('reads a flow like a key, without a key to press', () => {
+    const drawer = { file: 'shell.spec.ts', test: 'opens the navigation drawer on the phone' };
+    const rail = { file: 'shell.spec.ts', test: 'collapses the sidebar to the rail and back' };
+    // the drawer presses no key of item.title, yet it proves a flow on the phones
+    expect(() => provenIn(drawer, 'item.title')).toThrow(/presses none of: 'e'/);
+    expect(provenIn(drawer, null)).toEqual(['phone-light', 'phone-dark']);
+    // the mouse and a branch on isPhone count for a flow as for a key
+    expect(() => provenIn({ file: 'comments.spec.ts', test: 'keeps a draft over closing the preview' }, null)).toThrow(/uses the mouse/);
+    expect(() => provenIn({ file: 'items.spec.ts', test: 'changes assignee and priority with a and p' }, null)).toThrow(/branches on isPhone\(\): name the projects/);
+    // the proofs of a flow stand in FLOW_TESTS one by one; together the widths prove it everywhere
+    const proofs = flowProofs([
+      { flow: 'open and close the sidebar', ...rail },
+      { flow: 'create a project', file: 'projects.spec.ts', test: 'creates a project with the keyboard from the sidebar' },
+      { flow: 'open and close the sidebar', ...drawer },
+    ]);
+    expect([...proofs.keys()]).toEqual(['open and close the sidebar', 'create a project']);
+    expect(problemsOf('open and close the sidebar', proofs.get('open and close the sidebar'), null)).toEqual([]);
+    expect(problemsOf('open and close the sidebar', [rail], null)).toEqual([
+      'open and close the sidebar: nothing proves it in phone-light (a proof, or PROJECT_GAPS with a reason)',
+      'open and close the sidebar: nothing proves it in phone-dark (a proof, or PROJECT_GAPS with a reason)',
+    ]);
   });
 
   it('wants the projects named where the test branches on isPhone', () => {
