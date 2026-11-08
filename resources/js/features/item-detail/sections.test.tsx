@@ -1034,6 +1034,41 @@ describe('Children', () => {
     expect(sent('POST', '/api/v1/work-items/query').map((body) => (body as { cursor?: string }).cursor)).toEqual([undefined, 'page-2', 'page-2']);
   });
 
+  it('moves the focus on to the first child that came, however long the last page takes', async () => {
+    // the clock of the browser runs on by hand: a page that comes after more than 2 s must still hand the focus on
+    vi.useFakeTimers({ toFake: ['performance', 'requestAnimationFrame', 'cancelAnimationFrame'] });
+    const user = userEvent.setup();
+    const children = manyChildren();
+    renderWith(<ItemPage itemKey="WEB-30" />, { routes: { 'GET /api/v1/work-items/WEB-30': children.detail, 'POST /api/v1/work-items/query': children.query } });
+    // the second page waits until `release`
+    const original = globalThis.fetch;
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    globalThis.fetch = async (input, init) => {
+      if (init?.method === 'POST' && String(init.body).includes('page-2')) await gate;
+      return original(input, init);
+    };
+    try {
+      const section = await screen.findByRole('region', { name: 'Kinder' });
+      const more = await within(section).findByRole('button', { name: 'Weitere Kind-Items laden' });
+      await waitFor(() => expect(more.getAttribute('aria-busy')).toBeNull());
+      await user.click(more);
+      await waitFor(() => expect(more.getAttribute('aria-busy')).toBe('true'));
+      expect(document.activeElement).toBe(more);
+      act(() => vi.advanceTimersByTime(5_000));
+      await act(async () => release());
+
+      await waitFor(() => expect(within(section).getAllByRole('listitem')).toHaveLength(130));
+      expect(more.isConnected).toBe(false);
+      await waitFor(() => expect(document.activeElement).toBe(within(section).getAllByRole('listitem')[100]!.querySelector('a')));
+      // the state of the list was said in a region that stays: now that everything is there, it says nothing more
+      expect(section.querySelector('[data-children-status]')!.textContent).toBe('');
+    } finally {
+      globalThis.fetch = original;
+      vi.useRealTimers();
+    }
+  });
+
   it('offers the first page of the list again when it fails, and shows the embedded children meanwhile', async () => {
     const user = userEvent.setup();
     const children = manyChildren({ failFirstPage: true });

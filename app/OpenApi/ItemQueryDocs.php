@@ -134,7 +134,7 @@ final class ItemQueryDocs extends OperationExtension
             'schema' => ['type' => 'array', 'items' => ['type' => 'string', 'enum' => GetWorkItem::INCLUDES]],
             'description' => 'What to embed: '.implode(', ', array_map(fn (string $name) => "`{$name}`", GetWorkItem::INCLUDES)).'. '
                 .'`children` holds the first '.GetWorkItem::CHILDREN_MAX.' children in manual order, archived ones included; '
-                .'`children_progress.total` counts them all, the rest come from the item list with `filter[parent]` and `include_archived=1`.',
+                .'`children_progress.total` counts them all; the item list with the item as parent, archived ones included, has the rest in the same order.',
         ];
     }
 

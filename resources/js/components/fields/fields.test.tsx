@@ -913,6 +913,20 @@ describe('TypePicker and the type change', () => {
     await waitFor(() => expect(typeCalls('wi_web_47')).toHaveLength(3));
   });
 
+  it('knows the children from the listed item before its detail is there', async () => {
+    const user = userEvent.setup();
+    // the detail does not load: the listed WEB-30 says through `children_progress` that it has a child
+    renderWith(<TypePicker item={web30} />, {
+      ...routes(web30),
+      'GET /api/v1/work-items/wi_web_30': () => problem(503, 'service_unavailable', 'Der Server ist gerade nicht erreichbar.'),
+    });
+    await user.click(await picker(/^Typ: Epic$/));
+    await user.click(await screen.findByRole('option', { name: 'Task' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Typ von WEB-30 auf Task ändern' });
+    expect(within(dialog).getByText('WEB-30 hat Kind-Items. Nur Epics können Kind-Items haben.')).toBeTruthy();
+    expect(typeCalls('wi_web_30')).toEqual([]);
+  });
+
   it('counts the children of the item, never the list it embeds (A449)', async () => {
     // the embedded list ends after 100; an answer without it still says through `children_progress` that there are some
     const many = { ...web30, children_progress: { done: 0, total: 130 } };

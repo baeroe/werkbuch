@@ -362,7 +362,7 @@ final class WorkItemSchemas
                 'additionalProperties' => ['type' => 'string'],
             ],
             'created_at' => $stamp, 'updated_at' => $stamp, 'started_at' => $stamp, 'closed_at' => $stamp, 'archived_at' => $stamp,
-            'children' => ['type' => 'array', 'items' => ['$ref' => '#/components/schemas/WorkItemResource'], 'description' => 'With `include=children`: the first '.GetWorkItem::CHILDREN_MAX.' children in manual order (archived ones included), without embeds; `children_progress.total` counts them all.'],
+            'children' => ['type' => 'array', 'items' => ['$ref' => '#/components/schemas/WorkItemResource'], 'description' => 'With `include=children`: the first '.GetWorkItem::CHILDREN_MAX.' children in manual order (archived ones included), without embeds; `children_progress.total` counts them all, and `GET /work-items?filter[parent]=<key>&include_archived=1` pages through every one in the same order.'],
             'type' => ['$ref' => '#/components/schemas/WorkItemTypeResource', 'description' => 'With `include=type`.'],
             'workflow' => ['$ref' => '#/components/schemas/WorkflowResource', 'description' => 'With `include=workflow`: the workflow of the project.'],
             'relations' => ['type' => 'array', 'items' => ['$ref' => '#/components/schemas/RelationEntryResource'], 'description' => 'With `include=relations`, as the reader sees them.'],

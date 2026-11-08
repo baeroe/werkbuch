@@ -12,14 +12,14 @@
  */
 
 import { Plus, RotateCw } from 'lucide-react';
-import { useRef } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import { Avatar, UnassignedAvatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
+import { cx } from '@/components/ui/cx';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { useUserMap } from '@/components/fields/itemData';
 import { canHaveChildren } from '@/domain/hierarchy';
 import { useInfiniteWorkItems } from '@/hooks/workItems';
-import { focusWhenLost } from '@/lib/focusOrigin';
 import { intlLocale, t } from '@/lib/i18n';
 import { usePermissions } from '@/lib/permissions';
 import { useUiStore } from '@/store/ui';
@@ -43,21 +43,33 @@ export function Children({ detail }: { detail: WorkItemDetail }) {
     { enabled: paged && canHaveChildren(type) },
   );
   const list = useRef<HTMLUListElement>(null);
-  const canCreate = item.archived_at === null && reason('item.create', item.project_id) === null;
-  if (!canHaveChildren(type) || (total === 0 && !canCreate)) return null;
-
+  /** How many children were shown when "Weitere Kind-Items laden" was pressed last; null without such a press. */
+  const pressedAt = useRef<number | null>(null);
   const rows: ListedItem[] = paged ? (pages.data?.items ?? children) : children;
-  const count = (value: number) => new Intl.NumberFormat(intlLocale()).format(value);
   // the first page failed, or a further one: the same button offers it again (and keeps the focus)
   const failed = pages.isError || pages.moreError !== null;
   const offersMore = paged && (pages.data === undefined || pages.hasMore || pages.isError);
 
+  // the button goes with the last page, however long that takes: the focus it had moves on to the first child that
+  // came; a focus that went elsewhere meanwhile stays where it is
+  useLayoutEffect(() => {
+    if (offersMore || pressedAt.current === null) return;
+    const shown = pressedAt.current;
+    pressedAt.current = null;
+    const active = document.activeElement;
+    if (active && active !== document.body && active.isConnected) return;
+    list.current?.querySelectorAll<HTMLElement>('a[href]')[shown]?.focus();
+  }, [offersMore]);
+
+  const canCreate = item.archived_at === null && reason('item.create', item.project_id) === null;
+  if (!canHaveChildren(type) || (total === 0 && !canCreate)) return null;
+
+  const count = (value: number) => new Intl.NumberFormat(intlLocale()).format(value);
+
   function more() {
-    const shown = rows.length;
+    pressedAt.current = rows.length;
     if (pages.isError) void pages.refetch();
     else pages.loadMore();
-    // the button goes once the last page is there: the focus moves on to the first child that came
-    focusWhenLost(() => list.current?.querySelectorAll<HTMLElement>('a[href]')[shown], 2000);
   }
 
   return (
@@ -91,14 +103,19 @@ export function Children({ detail }: { detail: WorkItemDetail }) {
               );
             })}
           </ul>
-          {offersMore && (
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <Button variant="ghost" size="sm" icon={failed ? RotateCw : undefined} pending={pages.loadingMore || (pages.data === undefined && !pages.isError)} onClick={more}>
-                {failed ? t('common.retry') : t('items.detail.children.more')}
-              </Button>
-              {failed && <span className="text-sm text-danger">{t('items.list.not_loaded')}</span>}
-              <span className="text-sm text-muted tabular-nums" aria-live="polite">
-                {t('items.detail.children.shown', { shown: count(rows.length), total: count(pages.data?.total ?? total) })}
+          {paged && (
+            <div className={cx('flex flex-wrap items-center gap-2', offersMore && 'mt-2')}>
+              {offersMore && (
+                <Button variant="ghost" size="sm" icon={failed ? RotateCw : undefined} pending={pages.loadingMore || (pages.data === undefined && !pages.isError)} onClick={more}>
+                  {failed ? t('common.retry') : t('items.detail.children.more')}
+                </Button>
+              )}
+              {/* one region for the whole time the list pages: a failure and the count are said, also the last change */}
+              <span data-children-status="" aria-live="polite" className="flex flex-wrap items-center gap-2 text-sm">
+                {offersMore && failed && <span className="text-danger">{t('items.list.not_loaded')}</span>}
+                {offersMore && (
+                  <span className="text-muted tabular-nums">{t('items.detail.children.shown', { shown: count(rows.length), total: count(pages.data?.total ?? total) })}</span>
+                )}
               </span>
             </div>
           )}

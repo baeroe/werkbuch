@@ -283,8 +283,9 @@ export function TypePicker({ item, look = 'field', shortcut, ...extras }: TypePi
   const change = useChangeWorkItemType();
   const reason = useEditReason(item);
   // whether the item has children: an epic with children keeps its type (the dialog says why); its progress counts them
-  // all, archived ones too (the embedded list ends after 100, A449)
-  const hasChildren = (useWorkItem(item.id).data?.item.children_progress ?? null) !== null;
+  // all, archived ones too (the embedded list ends after 100, A449), the loaded item's once it is there, the listed
+  // item's before
+  const hasChildren = (useWorkItem(item.id).data?.item ?? item).children_progress !== null;
   const trigger = useRef<HTMLButtonElement>(null);
   // the target stays while the dialog fades out
   const [target, setTarget] = useState<WorkItemType | null>(null);
@@ -353,7 +354,7 @@ export function TypePicker({ item, look = 'field', shortcut, ...extras }: TypePi
           if (open) asks.current = false;
         }}
       />
-      <TypeChangeDialog item={item} target={target} open={dialogOpen} onOpenChange={setDialogOpen} finalFocus={trigger} />
+      <TypeChangeDialog item={item} target={target} open={dialogOpen} onOpenChange={setDialogOpen} finalFocus={trigger} hasChildren={hasChildren} />
     </>
   );
 }

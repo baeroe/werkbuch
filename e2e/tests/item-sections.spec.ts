@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { allEntries, api, createE2eProject, createItem, pressMod, removeE2eProject, runId, searchToken, tabTo, tr, variant, waitForSearch } from '../helpers';
+import { allEntries, api, artisanEval, createE2eProject, createItem, pressMod, removeE2eProject, runId, searchToken, tabTo, tr, variant, waitForSearch } from '../helpers';
 
 // The relations of an item on its page, with the keyboard only, signed in as the e2e person in English. Each test works
 // in a project of its own (`E2E …`, removed in `finally`); its items come over the API. The item to relate is found
@@ -17,20 +17,27 @@ async function relationsOf(page: Page, id: string): Promise<unknown[]> {
   return ((await response.json()) as { data: unknown[] }).data;
 }
 
-// an epic with 101 children, made once per worker over the API: the detail embeds the first 100 (A449), the section
-// loads the 101st from the list with the epic as parent. Named per worker (a worker that starts again runs beforeAll anew).
+// an epic with 101 children, made once per worker: the epic over the API, its children without events through the
+// factory (`artisanEval`): 101 items over the API would each queue three jobs on the worker that also serves the mails
+// and live updates of the specs after this one. The detail embeds the first 100 (A449), the section loads the 101st from
+// the list with the epic as parent. Named per worker (a worker that starts again runs beforeAll anew).
 let big: { identifier: string; epic: { id: string; key: string } } | undefined;
 
 test.beforeAll(async ({ browser }, workerInfo) => {
+  // `artisan tinker` boots the app in DDEV: seconds on its own, more under load
+  test.setTimeout(120_000);
   const page = await browser.newPage();
   await page.goto('/my-items');
   const project = await createE2eProject(page, name(`children ${workerInfo.workerIndex}`), { types: ['Task', 'Epic'] });
   const epicType = (await allEntries(page, 'work-item-types')).find((entry) => entry.is_epic === true && entry.archived_at === null) as { id: string };
   const epic = await createItem(page, { project_id: project.id, type_id: epicType.id, title: 'E2E Großes Epic' });
-  for (let number = 1; number <= 101; number += 1) {
-    await createItem(page, { project_id: project.id, parent_id: epic.id, title: `E2E Teil ${number}` });
-  }
   big = { identifier: project.identifier, epic };
+  const php = [
+    `$epic = App\\Models\\WorkItem::findByReference('${epic.key}') ?? throw new RuntimeException('no ${epic.key}');`,
+    `App\\Models\\WorkItem::factory()->childOf($epic)->count(101)->sequence(fn ($sequence) => ['title' => 'E2E Teil '.($sequence->index + 1)])->create();`,
+    `echo App\\Models\\WorkItem::query()->where('parent_id', $epic->id)->count(), PHP_EOL;`,
+  ].join('\n');
+  expect(artisanEval(php)).toBe('101');
   await page.close();
 });
 
