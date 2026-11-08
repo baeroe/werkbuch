@@ -52,7 +52,7 @@ use Spatie\Permission\Traits\HasRoles;
     'type', 'name', 'handle', 'is_default_bot', 'owner_id', 'description', 'email', 'password', 'locale', 'timezone',
     'disabled_at', 'two_factor_secret', 'two_factor_recovery_codes', 'two_factor_confirmed_at',
 ])]
-#[Hidden(['password', 'remember_token', 'two_factor_secret', 'two_factor_recovery_codes'])]
+#[Hidden(['password', 'remember_token', 'two_factor_secret', 'two_factor_recovery_codes', 'default_bot_guard'])]
 class User extends Authenticatable implements HasLocalePreference, HasMedia
 {
     /** @use HasFactory<UserFactory> */
