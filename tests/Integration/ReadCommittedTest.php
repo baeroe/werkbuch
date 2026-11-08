@@ -34,7 +34,7 @@ it('leaves the level of a connection made outside a run alone', function () use 
     expect($level())->toBe('REPEATABLE-READ');
 });
 
-it('rethrows the error of the transaction when resetting the level fails', function () {
+it('rethrows the error of the transaction when resetting the level fails', function () use ($level) {
     Exceptions::fake();
     $reset = new RuntimeException('the reset failed');
     DB::connection()->beforeExecuting(function (string $query) use ($reset): void {
@@ -53,9 +53,11 @@ it('rethrows the error of the transaction when resetting the level fails', funct
 
     expect($thrown)->toBe($failure);
     Exceptions::assertReported(fn (RuntimeException $e) => $e === $reset);
+    // the session the reset failed on is gone: a long-lived worker gets the server's level again, never READ COMMITTED
+    expect($level())->toBe('REPEATABLE-READ');
 });
 
-it('throws the failed reset when the transaction went through', function () {
+it('throws the failed reset when the transaction went through', function () use ($level) {
     Exceptions::fake();
     $reset = new RuntimeException('the reset failed');
     DB::connection()->beforeExecuting(function (string $query) use ($reset): void {
@@ -73,4 +75,28 @@ it('throws the failed reset when the transaction went through', function () {
 
     expect($thrown)->toBe($reset);
     Exceptions::assertNothingReported();
+    expect($level())->toBe('REPEATABLE-READ');
+});
+
+it('reports a level it cannot set on a new session and lets the run go on', function () use ($level) {
+    Exceptions::fake();
+    $failed = new RuntimeException('the level failed');
+    $sets = 0;
+    DB::connection()->beforeExecuting(function (string $query) use ($failed, &$sets): void {
+        // the second time: the listener on the session made inside the caller's BEGIN
+        if (preg_match('/^set session transaction isolation level read committed$/i', $query) === 1 && ++$sets === 2) {
+            throw $failed;
+        }
+    });
+
+    $inside = ReadCommitted::run(function () use ($level) {
+        DB::disconnect();
+
+        return DB::transaction(fn () => $level());
+    });
+
+    expect($sets)->toBe(2)
+        ->and($inside)->toBe('REPEATABLE-READ')
+        ->and($level())->toBe('REPEATABLE-READ');
+    Exceptions::assertReported(fn (RuntimeException $e) => $e === $failed);
 });

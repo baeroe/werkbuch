@@ -23,7 +23,7 @@ use Throwable;
  * gone and begins at once (K4), so run cannot look in between: while a run is open on a connection, established()
  * (a listener on ConnectionEstablished, AppServiceProvider) sets the level on the new session again. When setting the
  * level back fails after the transaction failed, the error of the transaction comes out and the failed reset is
- * reported.
+ * reported; either way the session it failed on is dropped, so the next query gets a new one at the server's level.
  */
 final class ReadCommitted
 {
@@ -63,6 +63,9 @@ final class ReadCommitted
             try {
                 DB::statement("set session transaction isolation level {$level}");
             } catch (Throwable $reset) {
+                // the session may still live at READ COMMITTED: a long-lived worker would keep it for every job after;
+                // a new one starts at the server's level (5b-M1)
+                DB::disconnect($name);
                 if ($failure === null) {
                     throw $reset;
                 }
@@ -71,11 +74,19 @@ final class ReadCommitted
         }
     }
 
-    /** Sets the level on a session a connection made while a run of it is open (a reconnect before the BEGIN). */
+    /**
+     * Sets the level on a session a connection made while a run of it is open (a reconnect before the BEGIN). A failure
+     * here is reported and never thrown out of the listener (5b-M2): it would break whatever connected, a BEGIN or a
+     * query; the transaction then runs at the server's level, as one did before ReadCommitted.
+     */
     public static function established(ConnectionEstablished $event): void
     {
         if (isset(self::$open[$event->connectionName])) {
-            $event->connection->statement(self::SET);
+            try {
+                $event->connection->statement(self::SET);
+            } catch (Throwable $failure) {
+                report($failure);
+            }
         }
     }
 }
