@@ -3,13 +3,15 @@
  * module with its imports already resolved to the pnpm folder of the package it uses:
  * `__vite_ssr_import__("/node_modules/.pnpm/@inertiajs+react@3.9.1_…/dist/index.js")`. Its key covers the module's own
  * text and the config, and Vitest throws the cache away only when the lockfile changes. When node_modules is relinked
- * without a change of the lockfile (an install outside it, as on 2026-11-08 from the Mac), a cached `lib/links.ts`
- * still imports the old folder while `vi.mock('@inertiajs/react')` of its test resolves the package anew to the new one:
- * the mock misses, the real `usePage` runs, and the tests fail with "usePage must be used within the Inertia component".
+ * without a change of the lockfile (an install outside it, as on 2026-11-08 from the Mac) and the new link does not
+ * resolve (its folder not or no longer there), a cached `lib/links.ts` still imports the old folder while
+ * `vi.mock('@inertiajs/react')` of its test resolves the package anew and fails: the mock misses, the real `usePage`
+ * runs, and the tests fail with "usePage must be used within the Inertia component" instead of the true cause.
  *
  * The plugin puts the layout of node_modules into every cache key: the target of each package link at the top and the
- * folders of `.pnpm`. Another layout means other keys, so no cached module imports a folder the resolver no longer
- * gives. Read once per run, about a thousand directory entries.
+ * folders of `.pnpm`. A run that starts on another layout than the run before uses other keys, so it never takes a
+ * module cached for the old one. The layout is read once, when the run starts (about a thousand directory entries): a
+ * change of node_modules in the middle of a run, as on 2026-11-08, still breaks that run, and the next one is clean.
  */
 
 import { createHash } from 'node:crypto';
