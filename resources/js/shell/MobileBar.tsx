@@ -21,9 +21,11 @@ function DrawerScope() {
 export function MobileBar() {
   const [open, setOpen] = useState(false);
   const { url } = usePage();
+  const path = url.split(/[?#]/)[0];
 
-  // a chosen link closes the drawer
-  useEffect(() => setOpen(false), [url]);
+  // a new page closes the drawer, a new query does not: the lists write their state into it (a canonical address, a
+  // parameter taken out) while the drawer may be open
+  useEffect(() => setOpen(false), [path]);
   // so does the palette (its search button sits in the drawer, mod+k works in it): one modal dialog at a time, and a
   // command that leads nowhere (theme, help) does not leave the drawer behind the closed palette
   const paletteOpen = useUiStore((state) => state.paletteOpen);
@@ -44,7 +46,14 @@ export function MobileBar() {
           >
             <BaseDialog.Title className="sr-only">{t('shell.mobile.navigation')}</BaseDialog.Title>
             <DrawerScope />
-            <nav aria-label={t('shell.sidebar.label')} className="flex min-h-0 flex-1 flex-col gap-4">
+            {/* a chosen link closes it too, also one to the page it is on or to the same page with another query */}
+            <nav
+              aria-label={t('shell.sidebar.label')}
+              className="flex min-h-0 flex-1 flex-col gap-4"
+              onClick={(event) => {
+                if (event.target instanceof Element && event.target.closest('a[href]')) setOpen(false);
+              }}
+            >
               <SidebarContent headerAction={<BaseDialog.Close render={<IconButton icon={X} label={t('shell.mobile.close_navigation')} tooltip={false} />} />} />
             </nav>
           </BaseDialog.Popup>

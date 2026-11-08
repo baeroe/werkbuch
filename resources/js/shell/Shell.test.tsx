@@ -123,16 +123,31 @@ describe('Shell', () => {
     expect(gear().getAttribute('aria-current')).toBe('page');
   });
 
-  it('closes the drawer when only the query of the address changes', async () => {
-    url = '/projects/WEB?view=open';
+  it('keeps the drawer open when only the query of the address changes, and closes it on a new path', async () => {
+    url = '/projects/WEB?layout=board';
     const { rerender } = render(<Shell>Inhalt</Shell>);
     fireEvent.click(screen.getByRole('button', { name: 'Navigation öffnen' }));
-    expect(await screen.findByRole('dialog')).toBeTruthy();
+    expect(await screen.findByRole('dialog', { name: 'Navigation' })).toBeTruthy();
 
-    // a view chosen in the list changes the query, not the path
-    url = '/projects/WEB?view=mine';
+    // the list writes its state into the query (a canonical address, a parameter taken out): the drawer stays
+    url = '/projects/WEB?layout=table';
     rerender(<Shell>Inhalt</Shell>);
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+    expect(screen.getByRole('dialog', { name: 'Navigation' })).toBeTruthy();
+
+    // a link to another page closes it
+    url = '/inbox';
+    rerender(<Shell>Inhalt</Shell>);
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Navigation' })).toBeNull());
+  });
+
+  it('closes the drawer on a link chosen in it, also one to the page it is on', async () => {
+    url = '/my-items';
+    render(<Shell>Inhalt</Shell>);
+    fireEvent.click(screen.getByRole('button', { name: 'Navigation öffnen' }));
+    const drawer = await screen.findByRole('dialog', { name: 'Navigation' });
+    fireEvent.click(within(drawer).getByRole('link', { name: 'Meine Items' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Navigation' })).toBeNull());
   });
 
   it('shows nothing when the visit flashed nothing', () => {
