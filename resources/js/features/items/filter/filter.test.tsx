@@ -123,6 +123,12 @@ function visibleText(element: Element): string {
   return copy.textContent ?? '';
 }
 
+/** Tab until `reached` holds, a few steps at most (a popover is short). */
+async function tabUntil(user: ReturnType<typeof userEvent.setup>, reached: () => boolean) {
+  for (let step = 0; step < 12 && !reached(); step++) await user.tab();
+  expect(reached()).toBe(true);
+}
+
 const chip = (name: RegExp) => screen.getByRole('group', { name });
 const findChip = (name: RegExp) => screen.findByRole('group', { name });
 
@@ -564,6 +570,52 @@ describe('the filter bar', () => {
     await user.click(await screen.findByRole('option', { name: 'Tagen' }));
     await user.type(within(third).getByRole('textbox', { name: 'Anzahl' }), '{Enter}');
     expect(last()).toEqual([{ field: 'due_date', op: 'is', value: { relative: '+2d' } }]);
+  });
+
+  it('goes the date popover with the keyboard only: quick choice, distance and calendar', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-28T10:00:00.000Z'));
+    try {
+      const user = userEvent.setup();
+      const { last } = renderBar();
+      await addField(user, 'Due-Date');
+      const popover = await screen.findByRole('dialog', { name: 'Due-Date' });
+      // the quick choice first: the arrows go through it, Enter takes one
+      const today = within(within(popover).getByRole('group', { name: 'Schnellauswahl' })).getByRole('button', { name: 'Heute' });
+      await waitFor(() => expect(document.activeElement).toBe(today));
+      await user.keyboard('{ArrowRight}');
+      expect(document.activeElement?.textContent).toBe('Diese Woche');
+      await user.keyboard('{Enter}');
+      expect(last()).toEqual([{ field: 'due_date', op: 'is', value: 'this_week' }]);
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Due-Date' })).toBeNull());
+      const trigger = within(chip(/Due-Date ist diese Woche/)).getByRole('button', { name: 'Due-Date: diese Woche' });
+      await waitFor(() => expect(document.activeElement).toBe(trigger));
+
+      // the distance: Tab to the amount, Enter applies it
+      await user.keyboard('{Enter}');
+      const distance = await screen.findByRole('dialog', { name: 'Due-Date' });
+      const amount = within(distance).getByRole('textbox', { name: 'Anzahl' });
+      await waitFor(() => expect(distance.contains(document.activeElement)).toBe(true));
+      await tabUntil(user, () => document.activeElement === amount);
+      await user.keyboard('{Control>}a{/Control}3{Enter}');
+      expect(last()).toEqual([{ field: 'due_date', op: 'is', value: { relative: '+3d' } }]);
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Due-Date' })).toBeNull());
+
+      // the calendar: Tab to its day, the arrows move it, Enter picks
+      const relative = within(chip(/Due-Date/)).getByRole('button', { name: /^Due-Date: heute/ });
+      await waitFor(() => expect(document.activeElement).toBe(relative));
+      await user.keyboard('{Enter}');
+      const calendar = await screen.findByRole('dialog', { name: 'Due-Date' });
+      const grid = within(calendar).getByRole('grid');
+      await waitFor(() => expect(calendar.contains(document.activeElement)).toBe(true));
+      await tabUntil(user, () => grid.contains(document.activeElement));
+      expect(document.activeElement?.getAttribute('aria-label')).toMatch(/^Mittwoch, 28\. Oktober 2026/);
+      await user.keyboard('{ArrowRight}{ArrowDown}{Enter}');
+      expect(last()).toEqual([{ field: 'due_date', op: 'is', value: '2026-11-05' }]);
+      expect(await findChip(/^Filter: Due-Date ist 05\.11\.2026$/)).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('picks a day from the calendar, and two for between', async () => {
