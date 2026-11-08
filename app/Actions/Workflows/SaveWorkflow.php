@@ -35,8 +35,9 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * `state_removed`). Everything runs under the catalog lock, one change of the catalog at a time, each from
  * what the one before left, and every change of an item waits for it. Only what really changes is written and
  * recorded; the same input again writes nothing. The `workflow.updated` of the saved workflow says in
- * `meta.categories_changed` whether a state went or a staying one changed its category (only then does the search
- * reindex); the one of the old default that lost its mark says nothing.
+ * `meta.categories_changed` whether a staying state changed its category (only then does the search reindex; the
+ * items of a state that goes are written through their own events); the one of the old default that lost its mark says
+ * nothing.
  */
 final class SaveWorkflow
 {
@@ -102,10 +103,11 @@ final class SaveWorkflow
 
             $before = $current === null ? null : self::snapshot($current);
 
-            // whether a document of an item can change: a state that goes, or a state that stays in another category
-            // (the search reads `meta.categories_changed` and reindexes the items of the workflow's projects)
+            // whether a document of an item can change without an event of the item: a state that stays in another
+            // category (the search reads `meta.categories_changed` and reindexes the items of the workflow's projects);
+            // the items of a state that goes get their own `work_item.state_changed` from RemapStates (T11a-M2)
             $categories = $current === null ? [] : $current->states->mapWithKeys(fn (WorkflowState $state) => [$state->id => $state->category])->all();
-            $categoriesChanged = $removed !== [] || array_any(
+            $categoriesChanged = array_any(
                 $valid['states'],
                 fn (array $state) => $state['existing'] !== null && $categories[$state['existing']] !== $state['category'],
             );

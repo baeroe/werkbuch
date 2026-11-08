@@ -292,18 +292,42 @@ it('reindexes when a category changes', function () use ($world) {
         ->and($engine->documents('testing_work_items'))->not->toHaveKey($elsewhere->id);
 });
 
-it('reindexes when a state goes', function () use ($world) {
+it('leaves the items alone when an empty state goes', function () use ($world, $consumed) {
     $engine = searchEngine();
     [$web, , $ole] = $world();
-    // no document yet (the factory writes no event): only a reindex of the project writes it
+    // no document yet (the factory writes no event): only a reindex of the project would write it
     $item = WorkItem::factory()->for($web)->create();
 
     $input = WorkflowFixtures::inputOf(Workflow::default());
     $input['states'] = array_values(array_filter($input['states'], fn (array $state) => $state['name'] !== 'Pending'));
     SaveWorkflow::run(actor($ole), Workflow::default(), $input);
 
-    expect(eventsOf(EventType::WorkflowUpdated, Workflow::default())->sole()->meta['categories_changed'])->toBeTrue()
-        ->and($engine->documents('testing_work_items'))->toHaveKey($item->id);
+    // no item stood in the state, no document changes (T11a-M2)
+    $event = eventsOf(EventType::WorkflowUpdated, Workflow::default())->sole();
+    expect($event->meta['categories_changed'])->toBeFalse()
+        ->and($consumed($event))->toBeTrue()
+        ->and($engine->documents('testing_work_items'))->not->toHaveKey($item->id)
+        ->and($engine->writes())->toBe(0);
+});
+
+it('writes the moved items of a state that goes through their own events', function () use ($world) {
+    $engine = searchEngine();
+    [$web, , $ole] = $world();
+    // neither has a document yet (the factory writes no event)
+    $pending = WorkItem::factory()->for($web)->inState('Pending')->create();
+    $backlog = WorkItem::factory()->for($web)->create();
+    $states = Workflow::default()->states->keyBy('name');
+
+    $input = WorkflowFixtures::inputOf(Workflow::default());
+    $input['states'] = array_values(array_filter($input['states'], fn (array $state) => $state['name'] !== 'Pending'));
+    $input['state_mapping'] = [$states['Pending']->id => $states['Done']->id];
+    SaveWorkflow::run(actor($ole), Workflow::default(), $input);
+
+    // RemapStates gave the moved item its `work_item.state_changed`, which writes its document; no reindex of the
+    // project, so the item that stayed gets none (T11a-M2)
+    expect(eventsOf(EventType::WorkflowUpdated, Workflow::default())->sole()->meta['categories_changed'])->toBeFalse()
+        ->and($engine->documents('testing_work_items')[$pending->id]['state_category'])->toBe('completed')
+        ->and($engine->documents('testing_work_items'))->not->toHaveKey($backlog->id);
 });
 
 it('leaves the items alone when a workflow keeps its categories', function () use ($world, $consumed) {
