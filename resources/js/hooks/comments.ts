@@ -26,7 +26,7 @@ export function useComments(itemId: string | null | undefined) {
   });
 }
 
-const COMMENT_KEYS = [qk.comments.all, qk.activity.all, qk.workItems.all] as const;
+const COMMENT_KEYS = [qk.comments.all, qk.activity.all, qk.workItems.all, qk.search.all] as const;
 
 /** Variables: `{ work_item_id, body }`. */
 export function useAddComment() {

@@ -39,20 +39,24 @@ const reloadedFor = new WeakMap<QueryClient, Set<string>>();
  * The projects the rights and the workflows read (`include_archived`), loaded again once when an item names a project
  * the cached list lacks: one created or joined after the list loaded, which counts as fresh for 10 s. Without it the
  * item of a search hit would wait for its project (fields locked, "Status: loading") until something else loads the
- * list. A project that stays missing (no longer visible) is asked for once only.
+ * list. A project that stays missing (no longer visible) is asked for once only; one that was in the list and left it again
+ * is asked for once more.
  */
 export function useProjectsWith(projectId: string) {
   const client = useQueryClient();
   const projects = useProjects({ include_archived: true });
   const missing = projects.data !== undefined && !projects.isFetching && !projects.data.items.some((project) => project.id === projectId);
+  const present = projects.data?.items.some((project) => project.id === projectId) ?? false;
   useEffect(() => {
-    if (!missing) return;
     const asked = reloadedFor.get(client) ?? new Set<string>();
     reloadedFor.set(client, asked);
+    // a project in the list is forgotten: if it leaves the list again, it may be asked for once more
+    if (present) asked.delete(projectId);
+    if (!missing) return;
     if (asked.has(projectId)) return;
     asked.add(projectId);
     void client.invalidateQueries({ queryKey: qk.projects.list({ include_archived: true }), exact: true });
-  }, [missing, projectId, client]);
+  }, [missing, present, projectId, client]);
   return projects;
 }
 
@@ -87,7 +91,7 @@ export function useMembersOf(projects: readonly string[]) {
   });
 }
 
-const PROJECT_KEYS = [qk.projects.all, qk.members.all, qk.favorites.all] as const;
+const PROJECT_KEYS = [qk.projects.all, qk.members.all, qk.favorites.all, qk.search.all] as const;
 
 export function useCreateProject() {
   return useApiMutation(createProject, PROJECT_KEYS);

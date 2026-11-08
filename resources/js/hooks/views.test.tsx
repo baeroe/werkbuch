@@ -54,22 +54,22 @@ describe('views', () => {
       'DELETE /api/v1/views/v_due_week': () => ({ status: 204 }),
       'POST /api/v1/favorites/toggle': () => ({ body: { kind: 'view', id: 'v_due_week', favorite: true } }),
     });
-    const probes = [qk.views.list({ pages: 'all' }), qk.views.detail('v_due_week'), qk.favorites.all, qk.projects.all];
+    const probes = [qk.views.list({ pages: 'all' }), qk.views.detail('v_due_week'), qk.favorites.all, qk.projects.all, qk.search.list({ q: 'x' })];
     const stale = () => probes.map((queryKey) => queryClient.getQueryState(queryKey)?.isInvalidated);
     const fill = () => probes.forEach((queryKey) => queryClient.setQueryData(queryKey, 'cached'));
     const { result } = renderHook(() => ({ save: useSaveView(), remove: useDeleteView(), toggle: useToggleFavorite() }), { wrapper });
 
     fill();
     expect(await act(() => result.current.save.mutateAsync(input))).toEqual(dueWeek);
-    expect(stale()).toEqual([true, true, true, false]);
+    expect(stale()).toEqual([true, true, true, false, true]);
 
     fill();
     await act(() => result.current.remove.mutateAsync('v_due_week'));
-    expect(stale()).toEqual([true, true, true, false]);
+    expect(stale()).toEqual([true, true, true, false, true]);
 
     fill();
     await act(() => result.current.toggle.mutateAsync({ kind: 'view', id: 'v_due_week' }));
-    expect(stale()).toEqual([false, false, true, false]);
+    expect(stale()).toEqual([false, false, true, false, false]);
     expect(api.calls.map((call) => `${call.method} ${call.url}`)).toEqual(['POST /api/v1/views', 'DELETE /api/v1/views/v_due_week', 'POST /api/v1/favorites/toggle']);
   });
 });

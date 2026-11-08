@@ -58,7 +58,7 @@ export function useUpdateUserRole() {
   const own = (user_id: string) => user_id === me?.id;
   return useApiMutation(
     ({ user_id, org_role }: { user_id: string; org_role: OrgRole }) => updateUserRole(user_id, org_role),
-    (_user, { user_id }) => (own(user_id) ? [qk.users.all, qk.projects.all] : [qk.users.all]),
+    (_user, { user_id }) => (own(user_id) ? [qk.users.all, qk.projects.all, qk.search.all] : [qk.users.all, qk.search.all]),
     {
       onSuccess: (_user, { user_id }) => {
         if (own(user_id)) router.reload();
@@ -68,21 +68,21 @@ export function useUpdateUserRole() {
 }
 
 export function useDeactivateUser() {
-  return useApiMutation(deactivateUser, [qk.users.all, qk.tokens.all, qk.workItems.all]);
+  return useApiMutation(deactivateUser, [qk.users.all, qk.tokens.all, qk.workItems.all, qk.search.all]);
 }
 
 export function useReactivateUser() {
-  return useApiMutation(reactivateUser, [qk.users.all]);
+  return useApiMutation(reactivateUser, [qk.users.all, qk.search.all]);
 }
 
 export function useCreateBot() {
-  return useApiMutation(createBot, [qk.users.all]);
+  return useApiMutation(createBot, [qk.users.all, qk.search.all]);
 }
 
 /** A change of the own profile reloads the page: the shared props (name, avatar) and the language follow it. */
 export function useUpdateUser() {
   const me = useCurrentUser();
-  return useApiMutation(({ user_id, patch }: { user_id: string; patch: UpdateUserPatch }) => updateUser(user_id, patch), [qk.users.all], {
+  return useApiMutation(({ user_id, patch }: { user_id: string; patch: UpdateUserPatch }) => updateUser(user_id, patch), [qk.users.all, qk.search.all], {
     onSuccess: (_user, { user_id }) => {
       if (user_id === me?.id) router.reload();
     },
