@@ -1,10 +1,10 @@
 # Automatisierungen
 
-Automatisierungen erledigen kleine, wiederkehrende Schritte eines Projekts für dich. Jedes Projekt hat vier, am Anfang alle aus. Admins des Projekts schalten sie in den Projekteinstellungen unter **Automatisierungen** (`/projects/WEB/settings/automations`); der Schalter wirkt sofort.
+Automatisierungen erledigen kleine, wiederkehrende Schritte eines Projekts für dich. Jedes Projekt hat fünf. Vier sind am Anfang aus, „Erwähnte Items verknüpfen“ ist an. Admins des Projekts schalten sie in den Projekteinstellungen unter **Automatisierungen** (`/projects/WEB/settings/automations`); der Schalter wirkt sofort.
 
 Sie handeln als Standard-Bot „Automation“, halten sich an die Übergänge, die der Workflow erlaubt, und stehen mit ihrem Grund in der History, etwa „Automatisierung: Auto-Archiv“.
 
-## Die vier Automatisierungen
+## Die fünf Automatisierungen
 
 | Automatisierung | Was sie tut | Wann |
 |---|---|---|
@@ -12,6 +12,7 @@ Sie handeln als Standard-Bot „Automation“, halten sich an die Übergänge, d
 | Eltern schließen | Sind alle Kinder eines Items geschlossen, schließt auch das Eltern-Item. | Beim Statuswechsel eines Kinds |
 | Auto-Archiv | Archiviert Items, die seit einer Zahl von Tagen geschlossen sind (Standard 30). | Jede Nacht |
 | Auto-Close | Storniert Items, die seit einer Zahl von Tagen in Backlog oder Todo liegen (Standard 90), und sagt es in einem Kommentar. | Jede Nacht |
+| Erwähnte Items verknüpfen | Verknüpft ein Item mit den Items, die seine Texte neu per `#` nennen. Standardmäßig an. | Nach dem Speichern |
 
 ## Assignee beim Start
 
@@ -40,6 +41,18 @@ Jede Nacht zieht Auto-Close die Items in Backlog oder Unstarted (Todo), an denen
 - **Der Übergang entscheidet.** Erlaubt der Workflow den Wechsel aus dem Status des Items in den gewählten Status nicht, überspringt Auto-Close das Item und schreibt keinen Kommentar. Die Einstellungen sagen, welche Status es überspringt.
 - **Ein Canceled-Status ist nötig.** In einem Workflow ohne Status der Kategorie Canceled lässt sich Auto-Close nicht einschalten; Org-Admins können einen anlegen.
 
+## Erwähnte Items verknüpfen
+
+Nennt eine Beschreibung, ein Rich-Text-Feld oder ein Kommentar eines Items ein anderes Item neu per `#`, verknüpft werkbuch beide mit dem Relationstyp „verwandt mit“. Die Automatisierung ist **standardmäßig an**, in jedem Projekt, auch in schon bestehenden; in den Projekteinstellungen schaltest du sie aus, das gilt dann für das Projekt.
+
+- **Neu genannt** heißt: Der Verweis stand vorher nicht im Text. Denselben Text noch einmal zu speichern oder einen Text, der einen schon vorhandenen Verweis behält, verknüpft nichts. Sind zwei Items schon verknüpft (in beiden Richtungen, mit dem Typ „verwandt mit“), entsteht keine zweite Relation.
+- **Was zählt:** die Beschreibung, die Rich-Text-Felder und die Kommentare (neue und bearbeitete) eines Items. Wiki-Seiten verknüpfen nichts, und ein Item verknüpft sich nie mit sich selbst.
+- **Projektübergreifend**, soweit die Person, die den Text schrieb, das andere Item sieht. Es entscheidet die Automatisierung des Projekts des Items, das den Text trägt.
+- **Wird der Verweis entfernt, bleibt die Relation.** Die Relation selbst entfernst du bei den Relationen des Items.
+- **Ein archiviertes Item** darf das andere Ende sein. Ein archiviertes Item oder ein Item eines archivierten Projekts verknüpft als Träger des Texts nichts.
+- **Nach dem Speichern.** Die Relation entsteht einen Augenblick nach dem Speichern, nicht mit ihm; die Item-Seite lädt sie von selbst nach.
+- **Benachrichtigungen** folgen den üblichen Regeln: Beobachter beider Items hören „Relation hinzugefügt“; die Person, die den Text schrieb, nicht.
+
 ## In der Nacht
 
 Auto-Archiv und Auto-Close laufen jede Nacht um 03:00 in der Zeitzone der Organisation, auch in den Nächten der Zeitumstellung. „Seit 30 Tagen“ heißt 30 × 24 Stunden vor dem Lauf. Fiel eine Nacht aus (Wartung), erledigt die nächste die Arbeit: Die Items erfüllen die Schwelle weiter.
@@ -54,7 +67,7 @@ Auto-Close folgt dem Workflow des Projekts. Wenn ein Admin [den Workflow wechsel
 
 ## In der History
 
-Jeder Schritt einer Automatisierung ist ein Eintrag des Standard-Bots „Automation“ mit seinem Grund: „Automatisierung: Assignee beim Start“, „Automatisierung: Eltern schließen“, „Automatisierung: Auto-Archiv“ oder „Automatisierung: Auto-Close“. Über die API hat der History-Eintrag `via` `automation` und den Grund als Schlüssel in `reason` (`assign_on_start`, `close_parent`, `auto_archive`, `auto_close`). Die Person, deren Statuswechsel einen Schritt auslöste (Assignee beim Start, Eltern schließen), wird darüber nicht benachrichtigt.
+Jeder Schritt einer Automatisierung ist ein Eintrag des Standard-Bots „Automation“ mit seinem Grund: „Automatisierung: Assignee beim Start“, „Automatisierung: Eltern schließen“, „Automatisierung: Auto-Archiv“, „Automatisierung: Auto-Close“ oder „Automatisierung: Erwähnte Items verknüpfen“. Über die API hat der History-Eintrag `via` `automation` und den Grund als Schlüssel in `reason` (`assign_on_start`, `close_parent`, `auto_archive`, `auto_close`, `link_references`). Die Relation von „Erwähnte Items verknüpfen“ steht in der History beider Items als „Relation hinzugefügt“, mit `meta.on_behalf_of` die Person, die den Text schrieb. Die Person, deren Statuswechsel einen Schritt auslöste (Assignee beim Start, Eltern schließen), wird darüber nicht benachrichtigt.
 
 ## Rechte
 
@@ -63,14 +76,14 @@ Jeder Schritt einer Automatisierung ist ein Eintrag des Standard-Bots „Automat
 
 ## REST
 
-Lesen braucht ein Token mit `read`, Ändern eins mit `write`. Die Liste hat immer alle vier Automatisierungen; eine, die nie eingeschaltet war, liest sich als aus mit ihren Standardwerten.
+Lesen braucht ein Token mit `read`, Ändern eins mit `write`. Die Liste hat immer alle fünf Automatisierungen; eine, die nie gespeichert wurde, liest sich, wie ihr Schlüssel startet: aus mit ihren Standardwerten, `link_references` an.
 
 | Anfrage | Antwort |
 |---|---|
-| `GET /api/v1/projects/{project}/automations` | Die vier Automatisierungen des Projekts. |
+| `GET /api/v1/projects/{project}/automations` | Die fünf Automatisierungen des Projekts. |
 | `PUT /api/v1/projects/{project}/automations/{key}` | `200` mit der Automatisierung; `enabled` (Pflicht) und `settings`. |
 
-Die Schlüssel heißen `assign_on_start`, `close_parent`, `auto_archive` und `auto_close`. `settings` hält `days` für Auto-Archiv und Auto-Close (eine ganze Zahl von 1 bis 3650, als JSON-Zahl) und `state_id` für Auto-Close (ein Canceled-Status des Workflows des Projekts, nötig zum Einschalten). Eine Einstellung, die du nicht schickst, behält ihren Wert; andere Schlüssel werden übergangen.
+Die Schlüssel heißen `assign_on_start`, `close_parent`, `auto_archive`, `auto_close` und `link_references` (ohne Einstellungen). `link_references` ohne gespeicherte Zeile einzuschalten ändert nichts, es auszuschalten speichert eine Zeile. `settings` hält `days` für Auto-Archiv und Auto-Close (eine ganze Zahl von 1 bis 3650, als JSON-Zahl) und `state_id` für Auto-Close (ein Canceled-Status des Workflows des Projekts, nötig zum Einschalten). Eine Einstellung, die du nicht schickst, behält ihren Wert; andere Schlüssel werden übergangen.
 
 ```bash
 curl -X PUT https://werkbuch.example.com/api/v1/projects/APP/automations/auto_close \

@@ -1,6 +1,9 @@
 # werkbuch: Fachkonzept und App-Design
 
-Stand: 2026-11-07 · Status: freigegeben (die Änderungen vom 2026-10-31, vom 2026-11-02 (Phasen 5 und 6), vom 2026-11-03 (Phase 7), vom 2026-11-04 (Phasen 8 und 9), vom 2026-11-05 (Phase 10), vom 2026-11-06 (Phasen 11 und 12) und vom 2026-11-07 (Phasen 13 und 14) warten auf Rafaels Bestätigung, außer der bestätigten Status-Zuordnung aus Phase 4)
+Stand: 2026-11-07 · Status: freigegeben (die Änderungen vom 2026-10-31, vom 2026-11-02 (Phasen 5 und 6), vom 2026-11-03 (Phase 7), vom 2026-11-04 (Phasen 8 und 9), vom 2026-11-05 (Phase 10), vom 2026-11-06 (Phasen 11 und 12), vom 2026-11-07 (Phasen 13 und 14) und vom 2026-11-07 (Phase 15) warten auf Rafaels Bestätigung, außer der bestätigten Status-Zuordnung aus Phase 4)
+
+> **Änderungen vom 2026-11-07 (Phase 15):** Beim Umsetzen von Phase 15 (Feinschliff) hat Claude auf Rafaels Wunsch Folgendes entschieden; es ändert die Spec und **wartet auf Rafaels Bestätigung** (Begründung und „Falls falsch“ in `docs/superpowers/plans/2026-10-30-werkbuch-app-rulings.md`, A452 ff.):
+> - **Erwähnte Items verknüpfen (4.13):** Eine fünfte Automatisierung `link_references` ist **standardmäßig an**, auch in bestehenden Projekten (ein Schlüssel ohne Zeile gilt mit diesem Standard; Ausschalten speichert eine Zeile). Nennt die Beschreibung, ein Rich-Text-Feld oder ein Kommentar eines Items ein anderes Item neu per `#`, entsteht eine Relation „verwandt mit“ (eingebauter Typ `relates`); eine schon bestehende, ein Selbstverweis und Wiki-Seiten verknüpfen nichts, ein entfernter Verweis lässt die Relation stehen. Die Relation entsteht nach dem Speichern in einem Job, im Namen der schreibenden Person; die Historie nennt den Grund „Automatisierung: Erwähnte Items verknüpfen“ (A452, A453).
 
 > **Änderungen vom 2026-11-07 (Phase 14):** Beim Umsetzen von Phase 14 (Docker) hat Claude als Controller Folgendes entschieden; es ändert oder präzisiert die Spec und **wartet auf Rafaels Bestätigung** (Begründung und „Falls falsch“ in `docs/superpowers/plans/2026-10-30-werkbuch-app-rulings.md`, A414 ff.):
 > - **Dienste (8.1):** drei Queue-Dienste statt `queue`: `queue` (`default,live,notifications,bulk`), `queue-index` (`search,media`, genau einer) und `queue-webhooks`, wie die Daemons in DDEV; Reverb hängt das Volume nur lesend ein; MariaDB, Meilisearch und Reverb liegen in einem internen Netz ohne Port nach außen; nur `werkbuch` migriert und erzeugt die Schlüssel, alle anderen starten danach (A417, A418).
@@ -613,7 +616,7 @@ Eine **Vorlage** gehört zu einem Projekt (abgestimmt). Sie legt fest:
 
 ### 4.13 Automatisierungen
 
-Automatisierungen sind pro Projekt schaltbar, mit Parametern. Sie handeln als Standard-Bot, halten sich an die erlaubten Übergänge und stehen in der History mit Grund, etwa „Automatisierung: Auto-Archiv“ (Vorgabe + abgestimmt). Neu angelegt sind alle aus (Spec).
+Automatisierungen sind pro Projekt schaltbar, mit Parametern. Sie handeln als Standard-Bot, halten sich an die erlaubten Übergänge und stehen in der History mit Grund, etwa „Automatisierung: Auto-Archiv“ (Vorgabe + abgestimmt). Neu angelegt sind alle aus (Spec), außer „Erwähnte Items verknüpfen“ (Phase 15, A452).
 
 | Automatisierung | Verhalten |
 |---|---|
@@ -621,6 +624,7 @@ Automatisierungen sind pro Projekt schaltbar, mit Parametern. Sie handeln als St
 | Auto-Close | setzt Items in Backlog oder Unstarted (Spec), die seit N Tagen nicht geändert wurden, auf einen gewählten Canceled-Status und schreibt einen Bot-Kommentar dazu; ist der Übergang nicht erlaubt, wird das Item übersprungen; täglicher Job |
 | Eltern schließen | sind alle Kinder geschlossen und mindestens eines davon Completed, geht das Eltern-Item in den ersten Completed-Status, zu dem der Übergang erlaubt ist; wirkt nach oben weiter, mit Begrenzung gegen Schleifen |
 | Assignee beim Start | startet eine Person ein Item ohne Assignee, wird sie Assignee; Bots lösen das nicht aus |
+| Erwähnte Items verknüpfen | nennt ein Text eines Items (Beschreibung, Rich-Text-Feld, Kommentar) ein anderes Item neu per `#`, werden beide mit „verwandt mit“ verknüpft; standardmäßig an; ein entfernter Verweis lässt die Relation stehen; läuft nach dem Speichern |
 
 ### 4.14 Benachrichtigungen
 

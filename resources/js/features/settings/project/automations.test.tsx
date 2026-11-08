@@ -438,6 +438,23 @@ describe('Automations', () => {
     expect(await switchOf('Auto-Archiv')).toBeTruthy();
   });
 
+  it('shows link_references on without a stored row and switches it off', async () => {
+    const user = userEvent.setup();
+    // the server answers a key without a row as on, without an id
+    renderAutomations({ initial: {} });
+    stored.link_references = { ...stored.link_references, enabled: true };
+    const link = await switchOf('Erwähnte Items verknüpfen');
+    expect(link.getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByText(/Standardmäßig an\./)).toBeTruthy();
+    expect(screen.queryByRole('textbox', { name: /Tage/ })).toBeNull();
+
+    await user.click(link);
+    await waitFor(() => expect(puts('link_references')).toHaveLength(1));
+    expect(puts('link_references')[0]!.body).toEqual({ enabled: false, settings: {} });
+    await waitFor(() => expect(toastTitles()).toContain('Erwähnte Items verknüpfen ausgeschaltet'));
+    expect(link.getAttribute('aria-checked')).toBe('false');
+  });
+
   it('lists the automations as one list in the order of the server', async () => {
     renderAutomations();
     const rows = within(await screen.findByRole('list', { name: 'Automatisierungen' })).getAllByRole('heading', { level: 3 });

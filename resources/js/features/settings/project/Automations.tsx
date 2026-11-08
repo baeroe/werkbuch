@@ -1,5 +1,5 @@
 /*
- * Settings → Automations (spec 4.13, port of the clickdummy): four switches with their parameters. A switch applies at
+ * Settings → Automations (spec 4.13, port of the clickdummy): five switches with their parameters. A switch applies at
  * once; the days of Auto-Archive and Auto-Close apply when the field is left or on Enter, the Canceled status of
  * Auto-Close when it is chosen. Automations act as the default bot, keep to the allowed transitions and appear in the
  * history with their reason; the nightly ones notify nobody (A357). Auto-Close needs a Canceled status in the project's

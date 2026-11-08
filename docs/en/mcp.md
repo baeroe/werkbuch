@@ -210,7 +210,7 @@ Projects, their members and your favorites. The admins of a project change it. (
 
 ### `automations`
 
-The four automations of a project with their settings. (Needs `read`.)
+The five automations of a project with their settings; `link_references` is on without a stored row. (Needs `read`.)
 
 | Action | Purpose | Required | REST twin |
 |---|---|---|---|

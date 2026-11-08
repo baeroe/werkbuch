@@ -44,7 +44,7 @@ Die Erwähnung von jemandem, der im Projekt nicht erwähnt werden kann, etwa wei
 
 ## Verweise
 
-`#` sucht die Items und Wiki-Seiten, die du siehst, mit derselben [Suche](/de/search) wie die Befehlspalette: Items über den Key (auch einen früheren), den Titel und den Text, Seiten darunter über Titel und Text. Ein Verweis auf ein Item zeigt dessen Typ und aktuellen Key, den Titel für Screenreader, und führt beim Lesen zum Item; ein Verweis auf eine Seite zeigt ihr Emoji und ihren aktuellen Titel und führt zur Seite.
+`#` sucht die Items und Wiki-Seiten, die du siehst, mit derselben [Suche](/de/search) wie die Befehlspalette: Items über den Key (auch einen früheren), den Titel und den Text, Seiten darunter über Titel und Text. Ein Verweis auf ein Item zeigt dessen Typ und aktuellen Key, den Titel für Screenreader, und führt beim Lesen zum Item; ein Verweis auf eine Seite zeigt ihr Emoji und ihren aktuellen Titel und führt zur Seite. Nennst du in der Beschreibung, einem Rich-Text-Feld oder einem Kommentar eines Items ein anderes Item neu, verknüpft werkbuch beide außerdem mit „verwandt mit“ (die [Automatisierung](/de/concepts/automations#erwähnte-items-verknüpfen) „Erwähnte Items verknüpfen“, standardmäßig an).
 
 werkbuch speichert nur die ULID des Items bzw. der Seite, nie Key oder Titel. Wer den Text liest, sieht den Verweis so, wie er darf: Ein Item oder eine Seite, die er nicht sieht, steht als **verborgen** da, ohne Key und Titel, in der Oberfläche, in der API und in Mails. Beim Speichern kannst du nur auf Items und Seiten verweisen, die du siehst; ein Verweis, der schon im Text stand, bleibt, auch auf eins, das du nicht siehst.
 

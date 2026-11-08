@@ -210,7 +210,7 @@ Projekte, ihre Mitglieder und die eigenen Favoriten. Ein Projekt ändern seine A
 
 ### `automations`
 
-Die vier Automatisierungen eines Projekts mit ihren Einstellungen. (Braucht `read`.)
+Die fünf Automatisierungen eines Projekts mit ihren Einstellungen; `link_references` ist ohne gespeicherte Zeile an. (Braucht `read`.)
 
 | Aktion | Zweck | Pflicht | REST-Zwilling |
 |---|---|---|---|
