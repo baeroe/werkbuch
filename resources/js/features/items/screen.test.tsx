@@ -18,6 +18,7 @@ import { agency, labels, lene, list, makeView, makeWorkItem, mara, organization,
 import { useUiStore } from '@/store/ui';
 import type { Condition, GroupBy, Project, View, WorkItem } from '@/types';
 import { resultMessage, selectionMessage } from './ListAnnouncer';
+import { ListSkeleton } from './ListStates';
 import { ItemsScreen, type ItemsScreenProps } from './ItemsScreen';
 import { useListState } from './useListState';
 
@@ -497,6 +498,20 @@ describe('the item list screen', () => {
     expect(label.closest('[role="status"]')).toBeNull();
     await waitFor(() => expect(outline.closest('.invisible')).toBeNull());
     expect(label.closest('[role="status"]')?.textContent).toBe('Items werden geladen …');
+  });
+
+  it('marks only the outline of a layout that is still loading as such (T18-M3)', async () => {
+    // the focus rescue waits for a layout chunk, not for every outline on the screen
+    const { unmount } = render(<ListSkeleton layout="board" chunk />);
+    expect(document.querySelector('[data-layout-skeleton] [data-skeleton="board"]')).not.toBeNull();
+    unmount();
+
+    hold((_body, path) => path.endsWith('/groups'));
+    inertia.go('/projects/WEB?layout=board');
+    renderScreen();
+    await screen.findByRole('heading', { level: 1, name: 'Website-Relaunch' });
+    expect(document.querySelector('[data-skeleton="board"]')).not.toBeNull();
+    expect(document.querySelector('[data-layout-skeleton]')).toBeNull();
   });
 
   it('says that it grouped by category when the items have several workflows', async () => {

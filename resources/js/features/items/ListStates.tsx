@@ -101,12 +101,21 @@ function TimelineShape() {
 
 const SHAPES: Record<Display['layout'], () => ReactNode> = { list: () => <ListShape />, board: BoardShape, table: TableShape, timeline: TimelineShape };
 
-/** The list in outline, in the shape of its layout (only after a moment, as every skeleton). */
-export function ListSkeleton({ layout }: { layout: Display['layout'] }) {
+/**
+ * The list in outline, in the shape of its layout (only after a moment, as every skeleton). `chunk`: it stands in for a
+ * layout that is still loading as a chunk of its own; only that one is what the focus rescue of the screen waits for.
+ */
+export function ListSkeleton({ layout, chunk = false }: { layout: Display['layout']; chunk?: boolean }) {
   const Shape = SHAPES[layout];
   return (
     <SkeletonGroup label={t('items.screen.loading')}>
-      <Shape />
+      {chunk ? (
+        <div data-layout-skeleton="">
+          <Shape />
+        </div>
+      ) : (
+        <Shape />
+      )}
     </SkeletonGroup>
   );
 }

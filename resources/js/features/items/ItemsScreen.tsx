@@ -110,12 +110,12 @@ function useFocusRescue(root: RefObject<HTMLElement | null>, layout: Display['la
     last.current = null;
     if (fromRow && !switched) return;
     // the rows of a layout render a frame later (they measure themselves): wait a few frames for the list's tab stop,
-    // and as long as a skeleton stands for it (a layout that comes as a chunk of its own, the board, is loading)
+    // and as long as the outline of the layout stands for it (a layout that comes as a chunk of its own, the board, is loading)
     let attempts = 0;
     const rescue = () => {
       if (document.activeElement !== null && document.activeElement !== document.body) return;
       const target = root.current?.querySelector<HTMLElement>(FOCUS_TARGETS);
-      const loading = root.current?.querySelector('[data-skeleton]') != null;
+      const loading = root.current?.querySelector('[data-layout-skeleton]') != null;
       if (target) target.focus({ preventScroll: true });
       else if (attempts++ < 5 || (loading && attempts < RESCUE_FRAMES)) requestAnimationFrame(rescue);
       else root.current?.querySelector<HTMLElement>('[data-items-toolbar] button:not([disabled])')?.focus({ preventScroll: true });
@@ -319,7 +319,7 @@ function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: P
     // a layout of its own chunk that did not load shows the error with "Erneut versuchen"; another layout starts afresh
     content = (
       <LayoutBoundary key={state.display.layout}>
-        <Suspense fallback={<ListSkeleton layout={state.display.layout} />}>
+        <Suspense fallback={<ListSkeleton layout={state.display.layout} chunk />}>
           <Layout {...props} />
         </Suspense>
       </LayoutBoundary>
