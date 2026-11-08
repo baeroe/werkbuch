@@ -368,6 +368,36 @@ describe('ListLayout', () => {
     expect(document.querySelectorAll('[data-nav-target][tabindex="0"]')).toHaveLength(1);
   });
 
+  it('keeps a focused heading rendered while scrolling away', async () => {
+    renderList({ groups: [group('a', items('a', 2000)), group('b', items('b', 1))] });
+    const focused = heading('a');
+    act(() => focused.focus());
+
+    scrollPage(1500 * ROW);
+    await waitFor(() => expect(rowOf('a1500')).not.toBeNull());
+    expect(rowOf('a1')).toBeNull();
+    // the heading stays with the focus, though no cursor names it
+    expect(cursor()).toBe('');
+    expect(heading('a')).toBe(focused);
+    expect(document.activeElement).toBe(focused);
+  });
+
+  it('keeps the focused row of an item with two labels rendered while scrolling away, not only its first one', async () => {
+    const shared = makeWorkItem({ id: 'wi_s1', key: 'S-1', number: 1, title: 'zweimal' });
+    renderList({ groups: [group('a', [shared]), group('b', [shared, ...items('b', 2000)])], groupBy: 'label' });
+    const rows = () => [...document.querySelectorAll<HTMLElement>('[data-row-id="wi_s1"]')];
+    const second = rows()[1]!;
+    act(() => second.focus());
+    expect(cursor()).toBe('wi_s1');
+
+    scrollPage(1500 * ROW);
+    await waitFor(() => expect(rowOf('b1500')).not.toBeNull());
+    expect(rowOf('b1')).toBeNull();
+    // the row in the second group keeps the focus
+    expect(rows()).toContain(second);
+    expect(document.activeElement).toBe(second);
+  });
+
   it('shows the count of the server, not of what is loaded', () => {
     renderList({ groups: [group('a', items('a', 3), { count: 120, hasMore: true, loadingMore: true })] });
 

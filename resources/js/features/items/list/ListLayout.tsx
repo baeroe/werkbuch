@@ -3,8 +3,9 @@
  * fold away, with the count of the server; children right below their parent, indented; the display fields as chips.
  *
  * - Virtualized against the page's scroll (`useWindowVirtualizer`): only the rows in view are mounted, each with its
- *   pickers. Rows measure themselves, so a row whose chips wrap (phones) takes the room it needs. The cursor row stays
- *   rendered while it scrolls away (`rangeExtractor`), so the focus is not lost (13c).
+ *   pickers. Rows measure themselves, so a row whose chips wrap (phones) takes the room it needs. The cursor row and the
+ *   row or heading with the focus stay rendered while they scroll away (`rangeExtractor`), so the focus is not lost
+ *   (13c).
  * - Loading group by group: a group asks for its first page once its heading is rendered and open (`enable`), for the
  *   next once its last loaded row is rendered (`loadMore`). A page that fails leaves the rows loaded so far and adds a
  *   row "Nicht geladen. Erneut versuchen" (13c).
@@ -76,14 +77,17 @@ export function ListLayout({ groups, groupBy, display, selection, onSelect, onSe
   // the list starts below the bars of the screen; their height changes with the filter chips
   const scrollMargin = useDocumentTop(container, [rows.length, wide]);
 
-  // the cursor row stays rendered while it scrolls away, so it keeps the focus (13c)
+  // the cursor row and the row with the focus stay rendered while they scroll away, so the focus is not lost (13c): the
+  // focus may sit on a heading, or on the second row of an item with two labels, which the cursor does not name
+  const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const cursorIndex = useMemo(() => rows.findIndex((row) => row.kind === 'item' && row.item.id === cursorId), [rows, cursorId]);
+  const focusedIndex = useMemo(() => (focusedKey === null ? -1 : rows.findIndex((row) => rowKey(row) === focusedKey)), [rows, focusedKey]);
   const rangeExtractor = useCallback(
     (range: Range) => {
-      const indexes = defaultRangeExtractor(range);
-      return cursorIndex < 0 || indexes.includes(cursorIndex) ? indexes : [...indexes, cursorIndex].sort((a, b) => a - b);
+      const kept = [cursorIndex, focusedIndex].filter((index) => index >= 0);
+      return [...new Set([...defaultRangeExtractor(range), ...kept])].sort((a, b) => a - b);
     },
-    [cursorIndex],
+    [cursorIndex, focusedIndex],
   );
 
   const rowHeight = wide ? ROW_HEIGHT.wide : ROW_HEIGHT.narrow;
@@ -201,11 +205,21 @@ export function ListLayout({ groups, groupBy, display, selection, onSelect, onSe
   }
 
   return (
-    <ul ref={container} aria-label={t('items.list.label')} className="relative" style={{ height: virtualizer.getTotalSize() }}>
+    <ul
+      ref={container}
+      aria-label={t('items.list.label')}
+      className="relative"
+      style={{ height: virtualizer.getTotalSize() }}
+      onFocus={(event) => {
+        // a picker's popup (a portal of a row) leaves the row it belongs to
+        const key = event.target.closest<HTMLElement>('[data-row-key]')?.dataset.rowKey;
+        if (key !== undefined) setFocusedKey(key);
+      }}
+    >
       {virtualRows.map((virtual) => {
         const row = rows[virtual.index]!;
         const style = { transform: `translateY(${virtual.start - virtualizer.options.scrollMargin}px)` };
-        const place = { ref: virtualizer.measureElement, 'data-index': virtual.index, style };
+        const place = { ref: virtualizer.measureElement, 'data-index': virtual.index, 'data-row-key': rowKey(row), style };
         const { group } = row;
 
         if (row.kind === 'group') {
