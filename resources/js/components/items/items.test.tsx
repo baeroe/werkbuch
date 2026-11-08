@@ -248,14 +248,25 @@ describe('rows and cards', () => {
   const tabStops = (root: Element) =>
     [...root.querySelectorAll<HTMLElement>('a[href], button, input, [tabindex]')].filter((element) => element.tabIndex >= 0 && !element.hasAttribute('disabled'));
 
+  it('asks for onOpen exactly when the row has a cursor', () => {
+    // the type is the test (tsc): Enter on a row with a cursor opens the page, a row without one has no Enter of its own
+    // @ts-expect-error a row with a cursor needs onOpen
+    const missing = <ItemRowBase item={web47} depth={0} fields={[]} cursor />;
+    // @ts-expect-error a row without a cursor takes no onOpen
+    const stray = <ItemRowBase item={web47} depth={0} fields={[]} onOpen={vi.fn()} />;
+    expect([missing, stray]).toHaveLength(2);
+  });
+
   it('names every field a row knows', () => {
     expect(Object.keys(ROW_FIELDS)).toEqual(['key', 'state', 'assignee', 'priority', 'labels', 'start_date', 'due_date', 'project', 'created_at', 'updated_at']);
   });
 
   it('shows the fields of the display as chips and keeps them out of the tab order', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-02T10:00:00.000Z'));
     const item = { ...web47, values: { ...web47.values, approved: false, reviewers: ['u_ida', 'u_gone'] } };
     const fields = ['key', 'title', 'state', 'priority', 'labels', 'start_date', 'due_date', 'project', 'assignee', 'property:customer', 'property:effort', 'property:approved', 'property:reviewers', 'property:gone', 'bogus'];
-    const { container } = renderItems(<ItemRowBase item={item} depth={0} fields={fields} onOpen={vi.fn()} />);
+    const { container } = renderItems(<ItemRowBase item={item} depth={0} fields={fields} />);
     const row = container.firstElementChild!;
 
     // the pickers turn from read-only into comboboxes once the rights are there
@@ -275,7 +286,15 @@ describe('rows and cards', () => {
     // one tab stop: the title; every chip is reached with the item shortcuts
     expect(tabStops(row)).toEqual([screen.getByRole('link')]);
     const controls = [...within(row as HTMLElement).getAllByRole('combobox'), ...within(row as HTMLElement).getAllByRole('button')];
-    expect(controls.map((control) => control.getAttribute('aria-label') ?? control.textContent).join(' | ')).toMatch(/Start-Date.*Due-Date/);
+    // the date chips by their whole name: the day, and that the due date has passed
+    expect(controls.map((control) => control.getAttribute('aria-label') ?? control.textContent)).toEqual([
+      'Status: In Progress',
+      'Priorität: Urgent',
+      'Labels: Formulare, Produktion',
+      'Assignee: Ida Brenner',
+      'Start-Date: 27.10.2026',
+      'Due-Date: 31.10.2026, überfällig',
+    ]);
     for (const control of controls) expect(control.tabIndex).toBe(-1);
   });
 
@@ -406,13 +425,13 @@ describe('rows and cards', () => {
   it('shows dates in the zone of the organisation', async () => {
     // 23:30 UTC on the 27th is the 28th in Berlin and still the 27th in New York
     const late = makeWorkItem({ id: 'wi_web_9', key: 'WEB-9', created_at: '2026-10-27T23:30:00.000Z', updated_at: '2026-10-29T04:30:00.000Z' });
-    const { unmount } = renderItems(<ItemRowBase item={late} depth={0} fields={['created_at', 'updated_at']} onOpen={vi.fn()} />);
+    const { unmount } = renderItems(<ItemRowBase item={late} depth={0} fields={['created_at', 'updated_at']} />);
     expect(document.body.textContent).toContain('erstellt28.10.');
     expect(document.body.textContent).toContain('geändert29.10.');
     unmount();
 
     page.organization = { ...organization, timezone: 'America/New_York' };
-    renderItems(<ItemRowBase item={late} depth={0} fields={['created_at', 'updated_at']} onOpen={vi.fn()} />);
+    renderItems(<ItemRowBase item={late} depth={0} fields={['created_at', 'updated_at']} />);
     expect(document.body.textContent).toContain('erstellt27.10.');
     expect(document.body.textContent).toContain('geändert29.10.');
   });
@@ -433,7 +452,7 @@ describe('rows and cards', () => {
       <>
         <ItemCard item={web47} onOpen={vi.fn()} />
         <ItemCard item={done} onOpen={vi.fn()} />
-        <ItemRowBase item={web47} depth={0} fields={['due_date']} onOpen={vi.fn()} />
+        <ItemRowBase item={web47} depth={0} fields={['due_date']} />
       </>,
     );
 
