@@ -6,9 +6,11 @@
  * with the keyboard only. scripts/keyboard-flows.test.mjs keeps it complete and honest: it reads catalog and widgets as
  * text (this file imports nothing of the app), checks that the spec and the title exist, that the body of the test uses
  * no mouse (`.click(`, `.hover(`, `.dragTo(`, `.tap(`, `page.mouse`, also through a helper of the spec), and that a test
- * which skips a project proves nothing there.
+ * which skips a project proves nothing there. A proof of a flow writes over the API only before its first key or in
+ * `finally` (API_AFTER names the exceptions).
  *
- * A new shortcut, widget key or flow needs its entry here in the same commit: a test, or for now a gap.
+ * A new shortcut, widget key or flow needs its entry here in the same commit: a test, or for now a gap; a new flow also
+ * comes into `FLOWS` of scripts/keyboard-flows.test.mjs.
  */
 
 /** A Playwright test that presses a key with the keyboard only. Without `projects` it holds wherever the test runs. */
@@ -145,15 +147,13 @@ export const FLOW_TESTS: ({ flow: string } & Proof)[] = [
   // the palette with a on the desktop, the field editors on the phone (spec 5.1): both with the keyboard
   { flow: 'change the assignee', file: 'items.spec.ts', test: 'changes assignee and priority with a and p', projects: EVERYWHERE },
   { flow: 'change the priority', file: 'bulk.spec.ts', test: 'selects three items with x and sets their priority with p' },
-  // on the phone the test returns after the assignee
+  // in addition: one item from its page (on the phone the test returns after the assignee)
   { flow: 'change the priority', file: 'items.spec.ts', test: 'changes assignee and priority with a and p', projects: DESKTOP },
   { flow: 'add a relation', file: 'item-sections.spec.ts', test: 'relates two items with r and removes the relation again' },
   { flow: 'remove a relation', file: 'item-sections.spec.ts', test: 'relates two items with r and removes the relation again' },
   { flow: 'edit the description', file: 'item-description.spec.ts', test: 'writes a heading and a checklist with Markdown shortcuts' },
   { flow: 'write a comment', file: 'comments.spec.ts', test: 'writes a comment with m and mod+enter' },
   { flow: 'paste an image', file: 'editor.spec.ts', test: 'pastes an image into the description and shows it after a reload' },
-  // the upload with Enter on "Upload file" and the file chooser; the download after the reload clicks (MOUSE_ALLOWED)
-  { flow: 'upload a file', file: 'attachments.spec.ts', test: 'uploads a file to the list and downloads it' },
   { flow: 'edit several items at once', file: 'bulk.spec.ts', test: 'selects three items with x and sets their priority with p' },
   { flow: 'archive with undo', file: 'bulk.spec.ts', test: 'selects a range with shift+x, archives with mod+backspace and undoes with mod+z' },
   { flow: 'delete with undo', file: 'items.spec.ts', test: 'deletes an item with mod+backspace and undoes it with mod+z' },
@@ -182,6 +182,7 @@ export const FLOW_TESTS: ({ flow: string } & Proof)[] = [
   // templates, automations, webhooks
   { flow: 'create a template', file: 'templates.spec.ts', test: 'creates a template with the keyboard and runs it now' },
   { flow: 'run a template', file: 'templates.spec.ts', test: 'creates a template with the keyboard and runs it now' },
+  // changes a schedule that came over the API; switching it on is a gap
   { flow: 'set a schedule', file: 'templates.spec.ts', test: 'shows the next five runs of a monthly schedule on the first Monday' },
   { flow: 'switch an automation', file: 'automations.spec.ts', test: 'switches Assignee beim Start on with the keyboard; a person who starts an item becomes its assignee' },
   { flow: 'create a webhook', file: 'webhooks.spec.ts', test: 'creates a webhook with the keyboard, copies its secret once and pings the receiver' },
@@ -198,7 +199,7 @@ export const FLOW_TESTS: ({ flow: string } & Proof)[] = [
   { flow: 'open and close the sidebar', file: 'shell.spec.ts', test: 'collapses the sidebar to the rail and back' },
   { flow: 'open and close the sidebar', file: 'shell.spec.ts', test: 'opens the navigation drawer on the phone' },
 
-  // beyond the list of Task 17b: more of the structure of chapter 5.2 that a keyboard-only test already goes through
+  // beyond the list of Task 17b: more of chapters 4 and 5.2 that a keyboard-only test already goes through
   { flow: 'invite a person', file: 'settings-organization.spec.ts', test: 'invites a person, copies the link and shows it in the list' },
   { flow: 'create a bot with a token', file: 'settings-organization.spec.ts', test: 'creates a bot, a token for it, and revokes it' },
   { flow: 'change the profile', file: 'settings-personal.spec.ts', test: 'changes name and handle in the profile' },
@@ -209,18 +210,42 @@ export const FLOW_TESTS: ({ flow: string } & Proof)[] = [
   { flow: 'apply a template in the dialog', file: 'create-item.spec.ts', test: 'applies a template in the dialog and creates the item with a copy of its image' },
   { flow: 'create several items in a row', file: 'create-item.spec.ts', test: 'creates several items in a row with another one' },
   { flow: 'change the display of a list', file: 'views-save.spec.ts', test: 'changes the grouping of a view, sees it as unsaved and discards it' },
+  { flow: 'change the password', file: 'settings-personal.spec.ts', test: 'changes the password and signs in with the new one' },
+  { flow: 'change the role of a person', file: 'settings-organization.spec.ts', test: 'changes the role of a person and back' },
+  { flow: 'duplicate a workflow', file: 'workflows.spec.ts', test: 'duplicates a workflow and deletes the copy with undo' },
+  { flow: 'switch on a type for a project', file: 'project-catalog.spec.ts', test: 'switches a type on and makes it the default' },
+  { flow: 'archive and restore a project', file: 'projects.spec.ts', test: 'archives and restores a project' },
+  { flow: 'delete a project', file: 'projects.spec.ts', test: 'deletes a project after typing its identifier' },
+  { flow: 'create a child item', file: 'create-item.spec.ts', test: 'creates a child item of an epic from its children section' },
+  { flow: 'restore an archived item', file: 'items.spec.ts', test: 'archives a done item and restores it' },
+  { flow: 'create an item on the board', file: 'board.spec.ts', test: 'creates an item with the quick add of a column' },
+  { flow: 'star a view', file: 'views.spec.ts', test: 'stars a view and opens it from the sidebar' },
+  { flow: 'paste an image into a wiki page', file: 'wiki.spec.ts', test: 'pastes an image into a page' },
 ];
 
 /**
  * A mouse call inside a test of the manifest that the test does not prove: `call` is the text of the call as it stands
  * in the test. Never for the key or flow the entry names.
  */
-export const MOUSE_ALLOWED: { file: string; test: string; call: string; reason: string }[] = [
+export const MOUSE_ALLOWED: { file: string; test: string; call: string; reason: string }[] = [];
+
+/**
+ * A write over the API (`createItem`, `api(page, 'POST', …)`, `artisan`, …) inside a proof of a flow after its first key,
+ * outside `finally`: `call` is the text as it stands in the test. Never the flow itself done over the API.
+ */
+export const API_AFTER: { file: string; test: string; call: string; reason: string }[] = [
+  // the flow is the switch; the item and its move show what the switched automation does
   {
-    file: 'attachments.spec.ts',
-    test: 'uploads a file to the list and downloads it',
-    call: 'link.click()',
-    reason: 'the download after the reload, which no flow of the manifest names; the upload (Enter on "Upload file") is the flow',
+    file: 'automations.spec.ts',
+    test: 'switches Assignee beim Start on with the keyboard; a person who starts an item becomes its assignee',
+    call: "createItem(page, { project_id: project.id, title: 'E2E Startseite bauen' })",
+    reason: 'the item the switched automation acts on, after the switch (the flow)',
+  },
+  {
+    file: 'automations.spec.ts',
+    test: 'switches Assignee beim Start on with the keyboard; a person who starts an item becomes its assignee',
+    call: "move(page, item.id, 'In Progress')",
+    reason: 'starts the item over the API to show that the switched automation assigns it',
   },
 ];
 
@@ -279,4 +304,18 @@ export const GAPS: Record<string, { file: 'TODO'; test: string }> = {
   'change the type': { file: 'TODO', test: 'changes the type of an item with t, answering the dialog for lost and required values' },
   'change the dates': { file: 'TODO', test: 'sets the start and due date of an item with shift+d and d, the calendar with the keyboard' },
   'change the parent': { file: 'TODO', test: 'moves an item under another epic with shift+p and takes the parent away again' },
+  // attachments.spec.ts › uploads a file to the list and downloads it uploads with the keyboard but clicks the link to
+  // download: with Tab and Enter on the link it proves both
+  'upload a file': { file: 'TODO', test: 'uploads a file to the list with Enter on "Upload file" and the file chooser' },
+  'download a file': { file: 'TODO', test: 'downloads a file of the list with Tab and Enter on its link' },
+  // comments.spec.ts and content-acceptance.spec.ts click through these
+  'edit a comment': { file: 'TODO', test: 'edits an own comment from its menu with the keyboard and saves it with mod+enter' },
+  'delete a comment': { file: 'TODO', test: 'deletes a comment from its menu with the keyboard and brings it back with mod+z' },
+  'react to a comment': { file: 'TODO', test: 'adds a reaction from the emoji picker with the keyboard and takes it back' },
+  'paste an image into a comment': { file: 'TODO', test: 'pastes an image into the comment composer (m) and sends it with mod+enter' },
+  // no e2e test yet
+  'retry failed jobs': { file: 'TODO', test: 'retries the failed jobs on the system page with the keyboard' },
+  'redeliver a webhook delivery': { file: 'TODO', test: 'sends a delivery of the log of a webhook again with the keyboard' },
+  // the template of templates.spec.ts comes with its schedule over the API
+  'switch a schedule on': { file: 'TODO', test: 'switches "Create on a schedule" on in the editor of a template and saves it' },
 };

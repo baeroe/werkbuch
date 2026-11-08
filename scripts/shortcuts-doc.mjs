@@ -59,8 +59,8 @@ const TEXT = {
       `While you type in a field, only ${keyLabel('mod+k', 'en')}, ${keyLabel('escape', 'en')} and ${keyLabel('mod+enter', 'en')} work. While a dialog is open, the shortcuts of the page behind it wait.`,
     ].join(' '),
     tested: [
-      '`e2e/keyboard-flows.ts` maps every shortcut on this page and every key of a widget to a Playwright test that presses it with the keyboard only, and every flow of the app, from signing in to the system page, to a test that goes through it without a mouse.',
-      '`scripts/keyboard-flows.test.mjs` checks that the test exists, presses one of the keys and uses no mouse, and that the tests cover the desktop and the phone widths.',
+      '`e2e/keyboard-flows.ts` maps every shortcut on this page and every key of a widget to a Playwright test that presses it with the keyboard only, and every flow of the list `FLOWS` (taken from chapters 4 and 5.2 of the spec) to a test that goes through it without a mouse.',
+      '`scripts/keyboard-flows.test.mjs` checks that the test exists and uses no mouse, for a shortcut that it presses one of the keys, for a flow that it writes over the API only before its first key, and that the tests cover the desktop and the phone widths.',
       'Where a test is still missing, for every width or for one, the manifest names the gap and its reason.',
     ].join(' '),
   },
@@ -74,8 +74,8 @@ const TEXT = {
       `Beim Tippen in einem Feld wirken nur ${keyLabel('mod+k', 'de')}, ${keyLabel('escape', 'de')} und ${keyLabel('mod+enter', 'de')}. Solange ein Dialog offen ist, ruhen die Kürzel der Seite dahinter.`,
     ].join(' '),
     tested: [
-      '`e2e/keyboard-flows.ts` ordnet jedes Kürzel dieser Seite und jede Taste eines Widgets einem Playwright-Test zu, der sie nur mit der Tastatur drückt, und jeden Ablauf der App, vom Anmelden bis zur System-Seite, einem Test, der ihn ohne Maus durchläuft.',
-      '`scripts/keyboard-flows.test.mjs` prüft, dass es den Test gibt, dass er eine der Tasten drückt und keine Maus benutzt und dass die Tests die Breiten von Desktop und Handy abdecken.',
+      '`e2e/keyboard-flows.ts` ordnet jedes Kürzel dieser Seite und jede Taste eines Widgets einem Playwright-Test zu, der sie nur mit der Tastatur drückt, und jeden Ablauf der Liste `FLOWS` (aus Kapitel 4 und 5.2 der Spec) einem Test, der ihn ohne Maus durchläuft.',
+      '`scripts/keyboard-flows.test.mjs` prüft, dass es den Test gibt und er keine Maus benutzt, bei einem Kürzel, dass er eine der Tasten drückt, bei einem Ablauf, dass er nur vor der ersten Taste über die API schreibt, und dass die Tests die Breiten von Desktop und Handy abdecken.',
       'Fehlt ein Test noch, für alle Breiten oder für eine, nennt das Manifest die Lücke mit Grund.',
     ].join(' '),
   },

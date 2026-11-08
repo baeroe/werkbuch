@@ -13,68 +13,102 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { FLOW_TESTS, GAPS, MOUSE_ALLOWED, PROJECT_GAPS, SHORTCUT_TESTS } from '../e2e/keyboard-flows.ts';
+import { API_AFTER, FLOW_TESTS, GAPS, MOUSE_ALLOWED, PROJECT_GAPS, SHORTCUT_TESTS } from '../e2e/keyboard-flows.ts';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const read = (file) => fs.readFileSync(path.join(ROOT, file), 'utf8');
 
 /**
- * The flows of chapters 4 and 5.2 of the spec that the manifest names at least (Task 17b): each one has a proof in
- * `FLOW_TESTS` or a gap in `GAPS`. A flow is named in words, so it never reads as a key (`item.state`, `palette:move`).
+ * The flows of the app, each with the section of the spec it comes from (chapters 4, 5.2 and 6.3): the list of Task 17b
+ * first, then what the review of 17b and the existing tests added. Each one has a proof in `FLOW_TESTS` or a gap in
+ * `GAPS`, and every flow named there stands here. A flow is named in words, so it never reads as a key (`item.state`,
+ * `palette:move`). A new flow of the app comes into this list, with its test or its gap (CLAUDE.md, rule Tastatur).
  */
 const FLOWS = [
-  'sign in and out',
-  'sign in with a second factor',
-  'reset a forgotten password',
-  'accept an invitation',
-  'create a project',
-  'add a member',
-  'create a workflow with a matrix',
-  'create a type with a required property',
-  'create an item',
-  'change the status',
-  'change the assignee',
-  'change the priority',
-  'change the labels',
-  'change the type',
-  'change the dates',
-  'change the parent',
-  'add a relation',
-  'remove a relation',
-  'edit the description',
-  'write a comment',
-  'paste an image',
-  'upload a file',
-  'edit several items at once',
-  'archive with undo',
-  'delete with undo',
-  'filter a list',
-  'save a list as a view',
-  'move a card on the board',
-  'edit a cell of the table',
-  'move an epic on the timeline',
-  'plan an epic on the timeline',
-  'search from the palette',
-  'jump to an item by its key',
-  'work the inbox',
-  'set the notifications',
-  'create a wiki page',
-  'edit a wiki page',
-  'move a wiki page',
-  'delete a wiki page',
-  'restore a page version',
-  'create a template',
-  'run a template',
-  'set a schedule',
-  'switch an automation',
-  'create a webhook',
-  'ping a webhook',
-  'create a token',
-  'set up a second factor',
-  'change the organization',
-  'open the system page',
-  'change the theme',
-  'open and close the sidebar',
+  // the list of Task 17b
+  'sign in and out', // 4.2, Fortify (3)
+  'sign in with a second factor', // 4.2, Fortify (3)
+  'reset a forgotten password', // 4.2
+  'accept an invitation', // 4.2
+  'create a project', // 4.4
+  'add a member', // 4.4
+  'create a workflow with a matrix', // 4.5
+  'create a type with a required property', // 4.6, 4.7
+  'create an item', // 4.8, 5.2 Anlegen-Dialog
+  'change the status', // 4.8
+  'change the assignee', // 4.8
+  'change the priority', // 4.8
+  'change the labels', // 4.8
+  'change the type', // 4.8
+  'change the dates', // 4.8
+  'change the parent', // 4.8
+  'add a relation', // 4.9
+  'remove a relation', // 4.9
+  'edit the description', // 4.8, 4.16
+  'write a comment', // 4.10
+  'paste an image', // 4.16
+  'upload a file', // 4.16
+  'edit several items at once', // 4.8
+  'archive with undo', // 4.8
+  'delete with undo', // 4.8
+  'filter a list', // 4.11
+  'save a list as a view', // 4.11
+  'move a card on the board', // 4.11
+  'edit a cell of the table', // 4.11
+  'move an epic on the timeline', // 4.11
+  'plan an epic on the timeline', // 4.11
+  'search from the palette', // 4.17
+  'jump to an item by its key', // 4.17
+  'work the inbox', // 4.14
+  'set the notifications', // 4.14, 5.2 Persönlich
+  'create a wiki page', // 4.15
+  'edit a wiki page', // 4.15
+  'move a wiki page', // 4.15
+  'delete a wiki page', // 4.15
+  'restore a page version', // 4.15
+  'create a template', // 4.12
+  'run a template', // 4.12
+  'set a schedule', // 4.12
+  'switch an automation', // 4.13
+  'create a webhook', // 6.3, 5.2 Organisation
+  'ping a webhook', // 6.3
+  'create a token', // 5.2 Persönlich, 6.1
+  'set up a second factor', // 5.2 Persönlich
+  'change the organization', // 4.1, 5.2 Organisation
+  'open the system page', // 5.2 System
+  'change the theme', // 4.17, 5.2
+  'open and close the sidebar', // 5.2 Seitenleiste
+  // the review of 17b: flows of chapters 4 and 5.2 the list above left out
+  'edit a comment', // 4.10
+  'delete a comment', // 4.10
+  'react to a comment', // 4.10
+  'paste an image into a comment', // 4.16
+  'retry failed jobs', // 5.2 System
+  'redeliver a webhook delivery', // 6.3, 5.2 Organisation
+  'download a file', // 4.16
+  'switch a schedule on', // 4.12
+  // more of chapters 4 and 5.2 that a keyboard-only test already goes through
+  'invite a person', // 4.2
+  'create a bot with a token', // 4.2
+  'change the profile', // 5.2 Persönlich
+  'change the password', // 4.2, 5.2 Persönlich
+  'change the role of a person', // 4.3
+  'create a label', // 4.7
+  'create a relation type', // 4.9
+  'create a resolution', // 4.5
+  'duplicate a workflow', // 4.5
+  'switch the workflow of a project', // 4.5
+  'switch on a type for a project', // 4.6
+  'archive and restore a project', // 4.4
+  'delete a project', // 4.4
+  'apply a template in the dialog', // 4.12, 5.2 Anlegen-Dialog
+  'create several items in a row', // 5.2 Anlegen-Dialog
+  'create a child item', // 4.8
+  'restore an archived item', // 4.8
+  'create an item on the board', // 4.11
+  'change the display of a list', // 4.11, 5.2 Item-Listen
+  'star a view', // 4.11, 5.2 Seitenleiste
+  'paste an image into a wiki page', // 4.15, 4.16
 ];
 /** A name of `GAPS` with a space is a flow, one without a key of the catalog or the widgets. */
 const isFlow = (name) => /\s/.test(name);
@@ -282,6 +316,103 @@ function mouseHelpers(source, masked = mask(source)) {
   return new Set([...fns.keys()].filter((name) => uses(name) || reach(masked.slice(...fns.get(name)), fns, masked).some(uses)));
 }
 
+/**
+ * A write over the API or the server instead of the page: a POST, PUT, PATCH or DELETE (`api(page, 'POST', …)`,
+ * `page.request.post(…)`) and the helpers that create or run something (`createItem`, `createE2e…`, `uploadViaApi`,
+ * `artisan`, `makeTemplateDue`). Read on the source, where the method of `api` still stands.
+ */
+const WRITE = /(?<![\w.$])api\(\s*[\w.]+\s*,\s*['"`](?:POST|PUT|PATCH|DELETE)['"`]|\.request\.(?:post|put|patch|delete)\s*\(|(?<![\w.$])(?:createItem|createE2e\w*|uploadViaApi|artisan|artisanEval|makeTemplateDue)\s*\(/g;
+/** Input of the keyboard: a key, a typed text, a field filled, or a helper of e2e/helpers.ts that moves the focus. */
+const INPUT = /\.keyboard\.|(?<![\w.$])(?:pressMod|tabTo|arrowTo)\s*\(|\.(?:press|fill|type|pressSequentially)\s*\(/g;
+
+let helperFile;
+/** e2e/helpers.ts read once like a spec: its functions count when a test or a function of a spec calls them. */
+function helperSpec() {
+  helperFile ??= readSpec('../helpers.ts', read('e2e/helpers.ts'));
+  return helperFile;
+}
+
+/** The function `name` as the spec sees it (its own first, then e2e/helpers.ts): where it stands, or undefined. */
+function lookup(name, parsed) {
+  for (const file of [parsed, helperSpec()]) {
+    if (file.fns.has(name)) return { file, range: file.fns.get(name) };
+  }
+  return undefined;
+}
+
+/** Whether a function of the spec or of e2e/helpers.ts gives keyboard input and writes over the API, also through others. */
+function classify(name, parsed, seen = new Set()) {
+  const found = lookup(name, parsed);
+  if (!found || seen.has(name)) return { input: false, write: false };
+  seen.add(name);
+  const { file, range } = found;
+  const kind = { input: false, write: false };
+  for (const event of eventsIn(file, range)) {
+    if (event.input) kind.input = true;
+    if (event.write) kind.write = true;
+    if (event.call) {
+      const inner = classify(event.call, parsed, seen);
+      kind.input ||= inner.input;
+      kind.write ||= inner.write;
+    }
+  }
+  return kind;
+}
+
+/** The inputs, writes and calls of a range of a file in their order, without what stands in a `finally` block. */
+function eventsIn(file, [from, to], blanked = []) {
+  let masked = file.masked.slice(from, to);
+  for (const [at, length] of blanked) masked = masked.slice(0, at) + ' '.repeat(length) + masked.slice(at + length);
+  for (const match of masked.matchAll(/(?<![\w$])finally\s*\{/g)) {
+    const end = closing(masked, match.index + match[0].length - 1) + 1;
+    masked = masked.slice(0, match.index) + masked.slice(match.index, end).replace(/[^\n]/g, ' ') + masked.slice(end);
+  }
+  const code = (at) => masked[at] !== ' ';
+  const source = file.source.slice(from, to);
+  const events = [
+    ...[...masked.matchAll(INPUT)].map((match) => ({ at: match.index, input: true })),
+    ...[...source.matchAll(WRITE)].filter((match) => code(match.index + match[0].search(/\S/))).map((match) => ({ at: match.index, write: true, text: match[0].trim() })),
+    ...[...masked.matchAll(/(?<![\w.$])([A-Za-z_$][\w$]*)\s*\(/g)].map((match) => ({ at: match.index, call: match[1], text: match[0].replace(/\s+/g, '') })),
+  ];
+  return events.sort((a, b) => a.at - b.at).map((event) => ({ ...event, line: file.source.slice(0, from + event.at).split('\n').length }));
+}
+
+/**
+ * The writes over the API of a test that come after its first keyboard input, outside `finally` (the flow itself done
+ * over the API): directly or through a function of the spec or of e2e/helpers.ts. `allowed` names calls as they stand in
+ * the test (API_AFTER); a name the test does not make throws.
+ */
+function lateWrites(parsed, call, allowed = []) {
+  const blanked = allowed.map((text) => {
+    const at = parsed.source.slice(call.start, call.end).indexOf(text);
+    if (at === -1) throw new Error(`API_AFTER names a call the test does not make: ${text}`);
+    return [at, text.length];
+  });
+  const walk = (file, range, seen) => {
+    const late = [];
+    let keyed = false;
+    const events = eventsIn(file, range, file === parsed && range[0] === call.start ? blanked : []);
+    // `createItem(` and `api(page, 'POST'` are a write already, not a call to look into
+    const writes = new Set(events.filter((event) => event.write).map((event) => event.at));
+    for (const event of events) {
+      if (event.input) keyed = true;
+      else if (event.write) {
+        if (keyed) late.push(event);
+      } else if (event.call && !seen.has(event.call) && !writes.has(event.at)) {
+        const kind = classify(event.call, parsed);
+        if (kind.write && keyed) late.push(event);
+        else if (kind.write && kind.input) {
+          const found = lookup(event.call, parsed);
+          late.push(...walk(found.file, found.range, new Set([...seen, event.call])));
+        }
+        if (kind.input) keyed = true;
+      }
+    }
+    return late;
+  };
+  return walk(parsed, [call.start, call.end], new Set());
+}
+
 const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** The keys of every entry as the register writes them: a catalog id → its keys, a widget key → the keys of its label. */
@@ -398,9 +529,10 @@ const proofsOf = (entry) => (Array.isArray(entry) ? entry : [entry]);
  * Where a proof of `key` holds (`key` null: a flow, which presses no key of its own): the projects its test runs in (a
  * `test.skip(isPhone(page), …)` leaves out the phones, one with `!isPhone` the desktops, one without a condition and a
  * skipped describe all of them), narrowed to `projects` if the entry names them; a test that branches on `isPhone()` must
- * name them. Throws what is wrong with the proof.
+ * name them. A flow writes over the API only before its first key or in `finally` (`lateWrites`). Throws what is wrong
+ * with the proof.
  */
-function provenIn(proof, key, allowances = MOUSE_ALLOWED) {
+function provenIn(proof, key, allowances = MOUSE_ALLOWED, apiAllowances = API_AFTER) {
   const where = `${proof.file} › ${proof.test}`;
   if (!fs.existsSync(path.join(ROOT, 'e2e/tests', proof.file))) throw new Error(`${proof.file}: no such spec under e2e/tests`);
   const { source, masked, tests, fns } = spec(proof.file);
@@ -422,7 +554,13 @@ function provenIn(proof, key, allowances = MOUSE_ALLOWED) {
     if (MOUSE.test(masked.slice(...fns.get(helper)))) throw new Error(`${where}: reaches ${helper}(), which uses the mouse`);
   }
 
-  if (key !== null) {
+  if (key === null) {
+    const allowed = apiAllowances.filter((entry) => entry.file === proof.file && entry.test === proof.test).map((entry) => entry.call);
+    const late = lateWrites(spec(proof.file), found[0], allowed);
+    if (late.length > 0) {
+      throw new Error(`${where}: writes over the API after its first key (${late.map((write) => `${write.text} at line ${write.line}`).join(', ')}): set it up before the keys, clean up in finally, or name it in API_AFTER with a reason`);
+    }
+  } else {
     if (!KEYS.has(key)) throw new Error(`${where}: ${key} is no key of the catalog or the widgets`);
     const ranges = [[start, end], ...helpers.map((helper) => fns.get(helper))];
     const forms = KEYS.get(key).flatMap(pressings);
@@ -512,13 +650,15 @@ describe('keyboard manifest', () => {
   it('lists every flow', () => {
     const proven = [...new Set(FLOW_TESTS.map((proof) => proof.flow))];
     const gaps = Object.keys(GAPS).filter(isFlow);
-    expect(FLOWS.every(isFlow)).toBe(true);
-    expect(new Set(FLOWS).size).toBe(FLOWS.length);
+    expect(FLOWS.filter((flow) => !isFlow(flow)), 'a flow in FLOWS without a space reads as a key').toEqual([]);
+    expect(FLOWS.filter((flow, at) => FLOWS.indexOf(flow) !== at), 'twice in FLOWS').toEqual([]);
     expect({
       withoutEntry: FLOWS.filter((flow) => !proven.includes(flow) && !gaps.includes(flow)),
-      unnamed: proven.filter((flow) => !isFlow(flow)),
+      // a name in FLOW_TESTS or GAPS that FLOWS does not hold: a typo, or a flow missing in the list
+      provenNotListed: proven.filter((flow) => !FLOWS.includes(flow)),
+      gapNotListed: gaps.filter((flow) => !FLOWS.includes(flow)),
       provenAndGap: proven.filter((flow) => gaps.includes(flow)),
-    }).toEqual({ withoutEntry: [], unnamed: [], provenAndGap: [] });
+    }).toEqual({ withoutEntry: [], provenNotListed: [], gapNotListed: [], provenAndGap: [] });
   });
 
   it('proves every shortcut and widget key with a keyboard-only test in every project', () => {
@@ -647,6 +787,36 @@ describe('the scanner of the specs', () => {
       'open and close the sidebar: nothing proves it in phone-light (a proof, or PROJECT_GAPS with a reason)',
       'open and close the sidebar: nothing proves it in phone-dark (a proof, or PROJECT_GAPS with a reason)',
     ]);
+  });
+
+  it('wants every write over the API of a flow before its first key, or in finally', () => {
+    const parsed = readSpec(
+      'x.spec.ts',
+      [
+        'async function setUp(page) { await createItem(page, {}); }',
+        "async function openIt(page) { await page.keyboard.press('c'); }",
+        "async function both(page) { await page.keyboard.press('c'); await api(page, 'PATCH', '/x'); }",
+        "test('early', async ({ page }) => { await setUp(page); await openIt(page); try { await page.keyboard.press('Enter'); } finally { await api(page, 'DELETE', '/x'); } });",
+        "test('late', async ({ page }) => { await openIt(page); await createItem(page, {}); });",
+        "test('late helper', async ({ page }) => { await tabTo(page, x); await setUp(page); });",
+        "test('inside', async ({ page }) => { await both(page); });",
+        "test('request', async ({ page }) => { await pressMod(page, 'Enter'); await page.request.post('/x'); });",
+        "test('reads', async ({ page }) => { await page.keyboard.press('j'); await api(page, 'GET', '/x'); });",
+      ].join('\n'),
+    );
+    const late = (title, allowed = []) => lateWrites(parsed, parsed.tests.find((call) => call.title === title), allowed).map((write) => write.text);
+    expect(late('early')).toEqual([]);
+    expect(late('reads')).toEqual([]);
+    expect(late('late')).toEqual(['createItem(']);
+    expect(late('late helper')).toEqual(['setUp(']);
+    expect(late('inside')).toEqual(["api(page, 'PATCH'"]);
+    expect(late('request')).toEqual(['.request.post(']);
+    // an allowed write goes through, an allowance for a write the test does not make throws
+    expect(late('late', ['createItem(page, {})'])).toEqual([]);
+    expect(() => late('late', ['createE2eProject(page'])).toThrow(/API_AFTER names a call the test does not make/);
+    // the helpers of e2e/helpers.ts count as well: createProjectFromSidebar types, removeE2eProject writes
+    expect(classify('createProjectFromSidebar', parsed)).toMatchObject({ input: true });
+    expect(classify('removeE2eProject', parsed)).toMatchObject({ write: true });
   });
 
   it('wants the projects named where the test branches on isPhone', () => {
