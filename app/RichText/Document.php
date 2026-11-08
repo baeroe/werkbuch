@@ -69,7 +69,8 @@ final class Document
     /**
      * Reads Markdown (CommonMark with GitHub's tables, task lists, strikethrough and autolinks). HTML in it stays
      * text. Markdown longer than Schema::MAX_BYTES is refused before it is parsed (its JSON is never shorter in
-     * practice); even within that, parsing can take a while: callers parse before they take locks.
+     * practice); even within that, parsing can take a while: callers parse before they take locks. With the text
+     * before (`$ctx->before`) each table keeps the header row and the header column of the one it was (TableLayout).
      *
      * @throws InvalidDocument
      */
@@ -85,7 +86,8 @@ final class Document
         // tiptap-php cannot read an empty body
         $json = $html === '' ? ['type' => 'doc'] : self::editor()->setContent($html)->getDocument();
 
-        return self::fromJson(is_array($json) ? $json : []);
+        // Markdown has no header column and no table without a header row: the text before keeps them (A455)
+        return TableLayout::keep(self::fromJson(is_array($json) ? $json : []), $ctx->before);
     }
 
     /** @return array<string, mixed> */

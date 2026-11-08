@@ -76,10 +76,10 @@ final class RichTextFixtures
             ['type' => 'blockquote', 'content' => [self::p('Zwei Mails im Postfach.')]],
             ['type' => 'codeBlock', 'attrs' => ['language' => 'php'], 'content' => [self::text("\$form->submit();\n\$form->submit();")]],
             ['type' => 'horizontalRule'],
-            ['type' => 'table', 'content' => [
-                ['type' => 'tableRow', 'content' => [self::cell('tableHeader', 'Browser'), self::cell('tableHeader', 'Mails')]],
-                ['type' => 'tableRow', 'content' => [self::cell('tableCell', 'Safari'), self::cell('tableCell', '2')]],
-            ]],
+            self::table(
+                [self::cell('tableHeader', 'Browser'), self::cell('tableHeader', 'Mails')],
+                [self::cell('tableCell', 'Safari'), self::cell('tableCell', '2')],
+            ),
         );
     }
 
@@ -142,8 +142,23 @@ final class RichTextFixtures
         return ['type' => 'listItem', 'content' => $blocks];
     }
 
-    private static function cell(string $type, string $text): array
+    /**
+     * A table of rows, each a list of cells (cell()).
+     *
+     * @param  list<array<string, mixed>>  ...$rows
+     */
+    public static function table(array ...$rows): array
     {
-        return ['type' => $type, 'attrs' => ['colspan' => 1, 'rowspan' => 1, 'colwidth' => null, 'align' => null], 'content' => [self::p($text)]];
+        return ['type' => 'table', 'content' => array_map(fn (array $cells) => ['type' => 'tableRow', 'content' => $cells], $rows)];
+    }
+
+    /**
+     * A cell (`tableCell` or `tableHeader`) with one paragraph; `$attrs` replace the defaults (`colspan`, `colwidth`).
+     *
+     * @param  array<string, mixed>  $attrs
+     */
+    public static function cell(string $type, string $text, array $attrs = []): array
+    {
+        return ['type' => $type, 'attrs' => array_replace(['colspan' => 1, 'rowspan' => 1, 'colwidth' => null, 'align' => null], $attrs), 'content' => [self::p($text)]];
     }
 }

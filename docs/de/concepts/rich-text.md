@@ -92,6 +92,10 @@ Für Markdown und JSON gelten dieselben Regeln, geprüft für das Konto, das sch
 
 In Code-Blöcken, Code im Text, Linktexten und Alternativtexten wird nichts als Erwähnung oder Verweis gelesen: `` `@mara` `` und `[WEB-123](https://example.com)` bleiben, wie sie sind. Ein Backslash hält Text davon ab, eins zu werden: `\@mara`, `WEB\-123`. Schreibt werkbuch Markdown, setzt es diesen Backslash vor Text, der auf dem Rückweg sonst zur Erwähnung oder zum Verweis würde.
 
+### Tabellen
+
+Markdown kennt eine Art Tabelle: die erste Zeile ist die Kopfzeile, keine Spalte ist eine Kopfspalte. So schreibt werkbuch jede Tabelle. Schickst du Markdown zurück, behält jede Tabelle Kopfzeile und Kopfspalte, die der Text vorher hatte: die erste Tabelle deines Markdowns übernimmt sie von der ersten Tabelle des gespeicherten Texts, die zweite von der zweiten und so weiter, solange beide gleich viele Spalten haben. Neue oder entfernte Zeilen ändern daran nichts; mit einer anderen Zahl Spalten oder in einem neuen Text gilt die Tabelle so, wie Markdown sie schreibt. Einzelne Kopfzellen und Zellen über mehrere Zeilen oder Spalten trägt Markdown nicht; sie gehen verloren, wenn Markdown zurückkommt. JSON (`*_json`) behält alles.
+
 <!-- reference:end -->
 
 ## REST

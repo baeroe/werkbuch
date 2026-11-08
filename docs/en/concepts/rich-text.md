@@ -92,6 +92,10 @@ The same rules apply to Markdown and JSON, checked for the account that writes:
 
 Nothing inside code blocks, inline code, link texts or alternative texts is read as a mention or reference: `` `@mara` `` and `[WEB-123](https://example.com)` stay as they are. A backslash keeps text from becoming one: `\@mara`, `WEB\-123`. When werkbuch writes Markdown, it puts that backslash in front of text that would otherwise turn into a mention or reference on the way back.
 
+### Tables
+
+Markdown knows one kind of table: the first row is the header row, and no column is a header column. werkbuch writes every table that way. When you send Markdown back, each table keeps the header row and the header column the text had before: the first table of your Markdown takes them from the first table of the stored text, the second from the second, and so on, as long as both have as many columns. Adding or removing rows keeps them; with another number of columns, or in a new text, the table reads as Markdown writes it. Markdown carries no single header cells and no cells that span several rows or columns; they are lost when Markdown comes back. JSON (`*_json`) keeps all of it.
+
 <!-- reference:end -->
 
 ## REST

@@ -136,6 +136,23 @@ it('writes a page only the writer sees as [hidden](page:…) for others and keep
         ->assertJsonPath('data.description_json', F::doc(F::p('Siehe ', F::reference($plan->id, 'page'), '!')));
 });
 
+it('keeps the header column of a page when its Markdown comes back with another cell (A455)', function () use ($world) {
+    $w = $world();
+    $table = fn (string $chrome) => F::doc(F::p('Mails je Browser:'), F::table(
+        [F::cell('tableHeader', 'Browser'), F::cell('tableHeader', 'Mails')],
+        [F::cell('tableHeader', 'Safari'), F::cell('tableCell', '2')],
+        [F::cell('tableHeader', 'Chrome'), F::cell('tableCell', $chrome)],
+    ));
+    $page = Page::factory()->for($w['web'])->create(['title' => 'Mails', 'content' => $table('1')]);
+
+    $markdown = $this->actingAs($w['mara'])->getJson("/api/v1/pages/{$page->id}")->assertOk()->json('data.content');
+    expect($markdown)->toContain('| Chrome | 1 |');
+
+    $this->actingAs($w['mara'])->patchJson("/api/v1/pages/{$page->id}", ['content' => str_replace('| Chrome | 1 |', '| Chrome | 0 |', $markdown)])
+        ->assertOk()->assertJsonPath('data.content_json', $table('0'));
+    expect($page->fresh()?->content)->toBe($table('0'));
+});
+
 it('keeps a kept mention of a former member through Markdown', function () use ($world) {
     $w = $world();
     $this->actingAs($w['mara'])->patchJson("/api/v1/work-items/{$w['item']->key}", ['description' => 'Frag @lene'])->assertOk();
