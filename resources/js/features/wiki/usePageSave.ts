@@ -24,7 +24,9 @@
  *   versuchen"; a 422 at `title` stands at the title. A 404 means the page is gone (deleted meanwhile, K5): it is
  *   marked as gone (`markLiveGone`), the text stays in the draft to copy, nothing is retried, no toast. A 403 means the
  *   right is gone (made a viewer, T14-M5): the rights load again (`projects`), the text stays in the draft, and the
- *   sheet shows it parked with the reason (`ParkedDraft`), no toast.
+ *   sheet shows it parked with the reason (`ParkedDraft`), no toast. Do the rights loaded again still say "may" (a rule
+ *   of the server the browser does not know), an error toast gives the server's sentence and that the next change
+ *   tries again (T21i); it is decided once the screens show those rights, a round of the query's notifications later.
  * - A conflict (409 `page_conflict`) stops the saves until it is settled, and the save state says "Nicht gespeichert".
  *   The stored page it brings goes into the cache (only when newer, Task 12) and the tree goes stale. Its sentence
  *   names who saved meanwhile; was that the person's own account (another window), it says so instead (T4-M5). The
@@ -42,7 +44,7 @@
  */
 
 import { router } from '@inertiajs/react';
-import { useQueryClient } from '@tanstack/react-query';
+import { notifyManager, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { ApiError } from '@/api/client';
 import { toast } from '@/components/ui/toast';
@@ -51,7 +53,7 @@ import type { UploadCounter } from '@/editor/UploadContext';
 import { qk } from '@/hooks/keys';
 import { useSavePage } from '@/hooks/pages';
 import { drafts, pageDraft, useDraftSending, usePageDraft, type PageDraft } from '@/lib/drafts';
-import { notifyError } from '@/lib/errors';
+import { causeOf, notifyError } from '@/lib/errors';
 import { t } from '@/lib/i18n';
 import { isPageGone, markLiveGone } from '@/lib/liveGone';
 import { undoLabel } from '@/lib/undo';
@@ -153,6 +155,8 @@ export function usePageSave(page: WikiPage, { canEdit, uploads, me, href }: Page
   const [state, setState] = useState<SaveState>(kept ? 'failed' : 'idle');
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [titleError, setTitleError] = useState<string | null>(null);
+  /** A save refused with 403 whose rights are loading again: decided once the screen shows them (`canEdit`). */
+  const [refusal, setRefusal] = useState<{ error: unknown; title: string } | null>(null);
 
   /** The page as typed, for saves that run outside a render. */
   const latest = useRef(draft);
@@ -299,7 +303,8 @@ export function usePageSave(page: WikiPage, { canEdit, uploads, me, href }: Page
       } else if (isRefused(error)) {
         // the right is gone, not the page (T14-M5): the rights load again, and the text stands parked with the reason
         setState('failed');
-        void queryClient.invalidateQueries({ queryKey: qk.projects.all });
+        // the screens get the rights in a round of notifications after the fetch: the decision comes after that round
+        void queryClient.invalidateQueries({ queryKey: qk.projects.all }).then(() => notifyManager.schedule(() => setRefusal({ error, title })));
       } else {
         keepCurrent.current = keep;
         setState('failed');
@@ -353,6 +358,14 @@ export function usePageSave(page: WikiPage, { canEdit, uploads, me, href }: Page
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only when the view goes
   }, []);
+
+  // the rights loaded again after a refusal: still "may" means a rule the browser does not know, the toast says it;
+  // otherwise the sheet shows the text parked with the reason
+  useEffect(() => {
+    if (!refusal) return;
+    setRefusal(null);
+    if (canEdit) toast({ title: t('wiki.save.not_saved', { title: refusal.title }), description: `${causeOf(refusal.error)} ${t('wiki.save.refused')}`, tone: 'error' });
+  }, [refusal, canEdit]);
 
   function change(patch: Partial<PageFields>, { now = false } = {}) {
     latest.current = { ...latest.current, ...patch };

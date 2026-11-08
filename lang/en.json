@@ -3384,6 +3384,7 @@
     "wiki.save.kept_title.description": "A page cannot be saved without a title, so it keeps the title it had.",
     "wiki.save.kept_title.title": "“:title” saved",
     "wiki.save.not_saved": "“:title” not saved",
+    "wiki.save.refused": "Your text stays on the page; the next change tries again.",
     "wiki.save.saved": "Saved",
     "wiki.save.saving": "Saving …",
     "wiki.subpages.one": ":count subpage",

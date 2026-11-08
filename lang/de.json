@@ -3384,6 +3384,7 @@
     "wiki.save.kept_title.description": "Ohne Titel lässt sich eine Seite nicht speichern. Sie behält deshalb ihren bisherigen Titel.",
     "wiki.save.kept_title.title": "„:title“ gespeichert",
     "wiki.save.not_saved": "„:title“ nicht gespeichert",
+    "wiki.save.refused": "Dein Text bleibt auf der Seite, die nächste Änderung versucht es erneut.",
     "wiki.save.saved": "Gespeichert",
     "wiki.save.saving": "Speichert …",
     "wiki.subpages.one": ":count Unterseite",

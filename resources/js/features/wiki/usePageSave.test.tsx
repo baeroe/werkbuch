@@ -5,7 +5,7 @@
  * on an older base (K17).
  */
 
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { notifyManager, QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -69,11 +69,35 @@ function holdSaves() {
 function renderSave(options: { canEdit?: boolean; uploads?: UploadCounter; page?: WikiPage } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-  const view = renderHook(({ shown }: { shown: WikiPage }) => usePageSave(shown, { canEdit: options.canEdit ?? true, uploads: options.uploads }), {
-    wrapper,
-    initialProps: { shown: options.page ?? page },
-  });
+  const view = renderHook(
+    ({ shown }: { shown: WikiPage }) => usePageSave(shown, { canEdit: options.canEdit ?? true, uploads: options.uploads }),
+    { wrapper, initialProps: { shown: options.page ?? page } },
+  );
   return { ...view, client };
+}
+
+/**
+ * The autosave with the rights as the wiki reads them: from the projects (one query a screen shows); `role` answers
+ * each fetch of them, a viewer may not edit.
+ */
+function renderWithRights(role: () => 'member' | 'viewer') {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  let fetches = 0;
+  const view = renderHook(
+    () => {
+      const rights = useQuery({
+        queryKey: qk.projects.list({ include_archived: true }),
+        queryFn: () => {
+          fetches += 1;
+          return Promise.resolve(role());
+        },
+      });
+      return { canEdit: rights.data !== 'viewer', save: usePageSave(page, { canEdit: rights.data !== 'viewer' }) };
+    },
+    { wrapper },
+  );
+  return { ...view, fetches: () => fetches };
 }
 
 describe('usePageSave', () => {
@@ -345,16 +369,46 @@ describe('usePageSave', () => {
 
   it('a save refused with 403 keeps the page, reloads the rights and keeps the text (T14-M5)', async () => {
     patch = () => problem(403, 'wiki_members_only', { detail: 'Nur Mitglieder bearbeiten das Wiki.' });
-    const { result, client } = renderSave();
-    client.setQueryData(qk.projects.list({ include_archived: true }), { items: [], next_cursor: null, total: 0 });
-    await act(async () => result.current.change({ content: doc('Rette mich') }, { now: true }));
-    await waitFor(() => expect(result.current.state).toBe('failed'));
+    let role: 'member' | 'viewer' = 'member';
+    const { result, fetches } = renderWithRights(() => role);
+    await waitFor(() => expect(fetches()).toBe(1));
+    // a member made a viewer meanwhile
+    role = 'viewer';
+    await act(async () => result.current.save.change({ content: doc('Rette mich') }, { now: true }));
+    await waitFor(() => expect(result.current.save.state).toBe('failed'));
 
-    // a member made a viewer meanwhile: the page is still there to read, the rights load again and park the text
+    // the page is still there to read, the rights load again and park the text (the sheet shows it, no toast)
+    await waitFor(() => expect(result.current.canEdit).toBe(false));
+    expect(fetches()).toBe(2);
     expect(isPageGone('pg_web_domain')).toBe(false);
-    expect(client.getQueryState(qk.projects.list({ include_archived: true }))?.isInvalidated).toBe(true);
+    // the decision waits for the screens to show the rights loaded again: one round of the query's notifications
+    await act(() => new Promise<void>((resolve) => notifyManager.schedule(resolve)));
     expect(currentToasts()).toHaveLength(0);
     expect(drafts.page(key)?.content).toEqual(doc('Rette mich'));
+  });
+
+  it('says why a refused save failed while the rights still allow it', async () => {
+    patch = () => problem(403, 'wiki_members_only', { detail: 'Nur Mitglieder bearbeiten das Wiki.' });
+    const { result, fetches } = renderWithRights(() => 'member');
+    await waitFor(() => expect(fetches()).toBe(1));
+    await act(async () => result.current.save.change({ content: doc('Rette mich') }, { now: true }));
+
+    // the rights loaded again still say "may" (a rule of the server the browser does not know): the toast says why
+    await waitFor(() => expect(currentToasts()).toHaveLength(1));
+    expect(fetches()).toBe(2);
+    expect(currentToasts()[0]).toMatchObject({
+      title: '„Domain-Umzug“ nicht gespeichert',
+      description: 'Nur Mitglieder bearbeiten das Wiki. Dein Text bleibt auf der Seite, die nächste Änderung versucht es erneut.',
+      tone: 'error',
+    });
+    expect(result.current.save.state).toBe('failed');
+    expect(drafts.page(key)?.content).toEqual(doc('Rette mich'));
+
+    // the next change sends it again
+    patch = (body) => stored(body);
+    await act(async () => result.current.save.change({ content: doc('Rette mich jetzt') }, { now: true }));
+    await waitFor(() => expect(result.current.save.state).toBe('saved'));
+    expect(saves().at(-1)).toMatchObject({ content_json: doc('Rette mich jetzt'), base_version: 3 });
   });
 
   it('saves nothing for a reader, and nothing unchanged', async () => {
