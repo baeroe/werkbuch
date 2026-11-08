@@ -724,6 +724,7 @@
     "items.board.reason.transition": "From “:from” to “:to” is not allowed in the workflow “:workflow”.",
     "items.board.reason.type_disabled": "The type “:type” is not enabled in project :project.",
     "items.board.reason.workflow_loading": "The workflow of the item has not loaded yet.",
+    "items.board.reranking": "Redistributing the order …",
     "items.board.sorted.description": "For an order of your own, choose the sort “Manual” under “Display”.",
     "items.board.sorted.title": "The order follows the sort",
     "items.bulk.archive_open": "Only closed items can be archived. Move them to a state like Done first.",

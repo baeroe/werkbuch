@@ -23,6 +23,7 @@ import {
   listActivity,
   listStateUsage,
   listWorkItems,
+  redistributeRanks,
   restoreWorkItem,
   setSubscribed,
   transitionWorkItem,
@@ -738,6 +739,14 @@ export function useBulkChange() {
     [mutateAsync, queryClient],
   );
   return { run, isPending };
+}
+
+/**
+ * Gives the items of a project short ranks (A448). Variable: the project's ULID. Settles once the shown lists have
+ * loaded again (`invalidateQueries` with `refetchType: 'active'`), so the caller reads the new ranks after it.
+ */
+export function useRedistributeRanks() {
+  return useApiMutation(redistributeRanks, [qk.workItems.all]);
 }
 
 /** Not optimistic: the values of the new type are only known on the server. Variables: `{ id, type_id, values? }`. */

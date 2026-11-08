@@ -172,7 +172,9 @@ export function nearestAllowed(
  * The rank of a card placed between the card above and the card below it, in a column sorted by rank. In a descending
  * column the higher rank stands above. Two neighbours with the same rank (items of different projects number their
  * ranks alike) leave no room between them: the card then goes just past the one above. `null` when the rank would grow
- * past `RANK_MAX` characters, which the server refuses (P23): the card then stays where it is.
+ * past `RANK_MAX` characters, which the server refuses (P23): the board then has the server redistribute the ranks of
+ * the card's project and asks once more with the fresh neighbours (A448); only where they belong to another project is
+ * there still no room, and the card stays where it is.
  */
 export function rankForSlot(above: string | null, below: string | null, direction: 'asc' | 'desc'): string | null {
   const [low, high] = direction === 'asc' ? [above, below] : [below, above];

@@ -1,7 +1,8 @@
 /*
  * The fake REST API of the board tests (`features/items/board/*.test.tsx`): `/groups` and `/query` answer from a
  * small set of items of two projects (WEB with the free standard workflow, APP with the agency workflow) the way the
- * server does; a move (`/transition`, `PATCH`) changes the item there, `POST /work-items` makes one. jsdom lays nothing
+ * server does; a move (`/transition`, `PATCH`) changes the item there, `POST /work-items` makes one, `POST
+ * /projects/<id>/redistribute-ranks` gives the items of a project short ranks in their order (A448). jsdom lays nothing
  * out: `layBoardOut()` gives a column's box 600 px, every card 96 px, and puts the columns side by side (270 px apart),
  * so the virtualizer of a column renders what fits in it and a pointer can be dropped on a card.
  *
@@ -11,6 +12,7 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, within } from '@testing-library/react';
+import { generateNKeysBetween } from 'fractional-indexing';
 import { ItemDialogsHost } from '@/components/fields/ItemDialogs';
 import { currentToasts } from '@/components/ui/toast';
 import { TooltipProvider } from '@/components/ui/Tooltip';
@@ -120,6 +122,10 @@ export const board = {
   failMoves: false,
   /** The server refuses every change of fields (422 on the dates). */
   refuseDates: false,
+  /** Redistributions of ranks that wait until the test lets them go. */
+  holdRanks: null as Promise<void> | null,
+  /** The server answers every redistribution of ranks with 503. */
+  failRanks: false,
   /** The first pages of these groups, and every next page (`more`), answer 503. */
   failing: new Set<string>(),
   api: undefined as MockApi | undefined,
@@ -232,6 +238,20 @@ function change(id: string, patch: Partial<WorkItem>) {
   return { body: { data: board.items[index] } };
 }
 
+/** Gives the items of a project the ranks `Rank::nBetween(null, null, n)` in their order, archived ones included (A448). */
+function redistribute(projectId: string) {
+  if (board.failRanks) return { status: 503, body: { reason: 'unavailable', detail: 'Wartung.' } };
+  const own = board.items.filter((entry) => entry.project_id === projectId).sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : a.id < b.id ? -1 : 1));
+  const ranks = generateNKeysBetween(null, null, own.length);
+  let changed = 0;
+  own.forEach((entry, index) => {
+    if (entry.rank === ranks[index]) return;
+    changed++;
+    change(entry.id, { rank: ranks[index]! });
+  });
+  return { body: { redistributed: changed } };
+}
+
 /** Makes an item as the server would: the next number of its project, the last rank, the start status. */
 function create(input: Partial<WorkItem> & { project_id: string }) {
   const own = projects().find((entry) => entry.id === input.project_id)!;
@@ -286,6 +306,8 @@ function route(key: string): MockRoute | undefined {
       return change(transition[1]!, { state_id: to_state_id, ...(resolution_id !== null && { resolution_id }) });
     };
   }
+  const ranks = key.match(/^POST \/api\/v1\/projects\/([^/]+)\/redistribute-ranks$/);
+  if (ranks) return () => redistribute(ranks[1]!);
   const patch = key.match(/^PATCH \/api\/v1\/work-items\/([^/]+)$/);
   if (patch) {
     return (body) => {
@@ -308,12 +330,15 @@ export function startBoardServer(): void {
   board.refuseMoves = false;
   board.failMoves = false;
   board.refuseDates = false;
+  board.holdRanks = null;
+  board.failRanks = false;
   board.failing = new Set();
   board.api = mockApi(new Proxy({}, { get: (_target, key) => (typeof key === 'string' ? route(key) : undefined) }) as Record<string, MockRoute>);
   const answering = globalThis.fetch;
   globalThis.fetch = async (input, init) => {
     const moving = String(input).includes('/transition') || (init?.method === 'PATCH' && typeof init.body === 'string' && 'rank' in (JSON.parse(init.body) as object));
     if (board.holdMoves && moving) await board.holdMoves;
+    if (board.holdRanks && String(input).endsWith('/redistribute-ranks')) await board.holdRanks;
     if (board.holdMore && typeof init?.body === 'string' && (JSON.parse(init.body) as Body).cursor !== undefined) await board.holdMore;
     return answering(input, init);
   };

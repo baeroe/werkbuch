@@ -724,6 +724,7 @@
     "items.board.reason.transition": "Von „:from“ nach „:to“ ist im Workflow „:workflow“ nicht erlaubt.",
     "items.board.reason.type_disabled": "Der Typ „:type“ ist im Projekt :project nicht aktiviert.",
     "items.board.reason.workflow_loading": "Der Workflow des Items ist noch nicht geladen.",
+    "items.board.reranking": "Ordnung wird neu verteilt …",
     "items.board.sorted.description": "Eine eigene Reihenfolge geht mit der Sortierung „Manuell“ unter „Anzeige“.",
     "items.board.sorted.title": "Die Reihenfolge folgt der Sortierung",
     "items.bulk.archive_open": "Nur geschlossene Items lassen sich archivieren. Setze sie zuerst auf einen Status wie Done.",

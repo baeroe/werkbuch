@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { allEntries, createE2eProject, createItem, isPhone, removeE2eProject, runId, tabTo, tr, variant } from '../helpers';
+import { allEntries, api, createE2eProject, createItem, isPhone, removeE2eProject, runId, tabTo, tr, variant } from '../helpers';
 
 // The board of a project with the agency workflow (Agentur-Freigabe: Backlog → Todo → In Progress → Review →
 // Kundenfreigabe → Done), signed in as the e2e person (playwright.config.ts), in English. Each test works in a project
@@ -101,6 +101,45 @@ test('changes the place of a card in its column with alt+arrow and keeps the foc
     );
     await page.reload();
     await expect(order().first()).toHaveAccessibleName(new RegExp(`^${second} `));
+  } finally {
+    await removeE2eProject(page, identifier);
+  }
+});
+
+test('moves a card where the ranks ran out', async ({ page }) => {
+  await page.goto('/my-items');
+  const { identifier, keys } = await boardProject(page, 'ranks', ['Password reset', 'Profile page']);
+  const [login, password, profile] = keys as [string, string, string];
+  // Login form and Password reset leave no room between them: a rank between the two would be longer than 128 characters
+  for (const [key, rank] of [
+    [login, 'a0'],
+    [password, `a0${'0'.repeat(125)}1`],
+    [profile, 'a1'],
+  ] as const) {
+    const response = await api(page, 'PATCH', `/api/v1/work-items/${key}`, { rank });
+    expect(response.status(), await response.text()).toBe(200);
+  }
+  const order = () => column(page, 'Todo').getByRole('article');
+  try {
+    await openBoard(page, identifier, login);
+    await expect(order()).toHaveCount(3);
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('ArrowDown');
+    await expect(card(page, 'Todo', profile)).toBeFocused();
+
+    // the server makes room first, then the card takes its place between Login form and Password reset
+    await page.keyboard.press('Alt+ArrowUp');
+    await expect(page.getByRole('status', { name: tr('en', 'items.board.announcements') })).toHaveText(
+      tr('en', 'items.board.moved.place', { key: profile, place: 2, count: 3, column: 'Todo' }),
+    );
+    await expect(order().nth(1)).toHaveAccessibleName(new RegExp(`^${profile} `));
+    await expect(card(page, 'Todo', profile)).toBeFocused();
+    await expect(page.getByText(tr('en', 'items.board.not_moved', { key: profile }))).toHaveCount(0);
+
+    await page.reload();
+    await expect(order().nth(0)).toHaveAccessibleName(new RegExp(`^${login} `));
+    await expect(order().nth(1)).toHaveAccessibleName(new RegExp(`^${profile} `));
+    await expect(order().nth(2)).toHaveAccessibleName(new RegExp(`^${password} `));
   } finally {
     await removeE2eProject(page, identifier);
   }

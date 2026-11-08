@@ -18,6 +18,9 @@
  * - Pointer (`useBoardDrag`): a card dragged to another column moves like ⇧←/⇧→ (the same rules and the same
  *   `applyMove`), dropped within its column sorted by rank it gets the rank between its neighbours like ⌥↑/⌥↓. A
  *   refused drop springs back and a toast says why; Escape cancels the drag and keeps the selection.
+ * - Where a new place has no room left between its neighbours (the rank would grow past 128 characters), the server
+ *   gives the items of the card's project short ranks first (A448, `sendPlace`) and the board tries the place once more
+ *   with the fresh neighbours.
  * - Quick add (`QuickAdd`): the "+" of a column makes an item with the column's value (`quickAddFields`) in the project
  *   of the list, else in one of the projects on the board (the most cards first). The new card lights up and comes into
  *   view; one the filter leaves out says so in a toast.
@@ -38,8 +41,9 @@ import { qk } from '@/hooks/keys';
 import { useMembersOf, useProjects } from '@/hooks/projects';
 import { useAllUsers } from '@/hooks/users';
 import { useWorkflows } from '@/hooks/workflows';
-import { useTransitionWorkItem, useUpdateWorkItem } from '@/hooks/workItems';
+import { useRedistributeRanks, useTransitionWorkItem, useUpdateWorkItem } from '@/hooks/workItems';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
+import { notifyError } from '@/lib/errors';
 import { t } from '@/lib/i18n';
 import { usePermissions } from '@/lib/permissions';
 import { useUiStore } from '@/store/ui';
@@ -62,8 +66,8 @@ const TINT = '[background-image:linear-gradient(var(--accent-soft),var(--accent-
 const PRESSED = '[background-image:linear-gradient(var(--pressed),var(--pressed))]';
 /** While the overlay flies to its place the card straightens up again (DESIGN.md: "beim Ablegen federt sie zurück"). */
 const SETTLE = 'in-[.board-dropping]:translate-y-0 in-[.board-dropping]:scale-100 in-[.board-dropping]:rotate-0 in-[.board-dropping]:after:opacity-0';
-/** How long a new card of the quick add may take to show in its list before the board says it is not there. */
-const CREATED_WAIT_MS = 5000;
+/** How long the board waits for its lists to load again (a new card of the quick add, fresh ranks) before it goes on. */
+const LISTS_WAIT_MS = 5000;
 /** How many frames the list must load nothing before the board looks for a new card. */
 const QUIET_FRAMES = 3;
 
@@ -92,6 +96,7 @@ export function BoardLayout({ groups, groupBy, display, project, createDefaults,
   const { reason } = usePermissions();
   const transition = useTransitionWorkItem();
   const update = useUpdateWorkItem();
+  const redistribute = useRedistributeRanks();
   const peekItemId = useUiStore((state) => state.peekItemId);
   const flashIds = useUiStore((state) => state.flashIds);
   const hintId = useId();
@@ -102,6 +107,11 @@ export function BoardLayout({ groups, groupBy, display, project, createDefaults,
   const locked = boardLockReason(groupBy);
 
   const itemById = useMemo(() => new Map(served.flatMap((column) => column.items.map((item) => [item.id, item] as const))), [served]);
+  /** The items as the last render had them: what a move reads after waiting for the lists (fresh ranks, A448). */
+  const latestItems = useRef(itemById);
+  useLayoutEffect(() => {
+    latestItems.current = itemById;
+  });
   const columnLabel = useCallback((key: string) => served.find((column) => column.key === key)?.label ?? key, [served]);
 
   /* --------------------------------------------------------------------------- rules */
@@ -247,6 +257,26 @@ export function BoardLayout({ groups, groupBy, display, project, createDefaults,
       pendingFocus.current = null;
     };
   }, []);
+
+  /**
+   * Settles once the lists of the board have loaded again: a column rebuilds its pages one after another (K15), so the
+   * lists count as loaded once nothing of them has been on its way for a few frames (at most `LISTS_WAIT_MS`), and the
+   * board has rendered what they brought. Settles at once when the board is gone.
+   */
+  const listsLoaded = useCallback(
+    () =>
+      new Promise<void>((resolve) => {
+        const started = performance.now();
+        let quiet = 0;
+        const look = () => {
+          quiet = queryClient.isFetching({ queryKey: qk.workItems.all }) > 0 ? 0 : quiet + 1;
+          if (alive.current && quiet < QUIET_FRAMES && performance.now() - started < LISTS_WAIT_MS) requestAnimationFrame(look);
+          else resolve();
+        };
+        requestAnimationFrame(look);
+      }),
+    [queryClient],
+  );
 
   /** The step of j/k and ↓/↑: within the column, stopping at its ends; from no cursor the first card. */
   const step = (current: string | null, direction: 1 | -1): string | null => {
@@ -394,8 +424,12 @@ export function BoardLayout({ groups, groupBy, display, project, createDefaults,
 
   /**
    * Sends a new place of a card in its column sorted by rank (`ids`: the column with the card at `index`): the rank
-   * between its new neighbours. Returns null, and moves nothing, where the rank would grow past what the server takes
-   * (P23) and at the last loaded place of a column that has more to load.
+   * between its new neighbours. Returns null, and moves nothing, at the last loaded place of a column that has more to
+   * load. Where the rank would grow past what the server takes (P23), the server first gives the items of the card's
+   * project short ranks (A448): the status line says so, the card waits in its place, and once the lists have loaded
+   * again the rank is worked out between the fresh neighbours (never the old ones: a rank from them would land
+   * elsewhere). Where it still has no room (the neighbours belong to another project) the card stays and a toast says
+   * why; a failed redistribution says it with "Try again" and the card goes back.
    */
   function sendPlace(item: ListedItem, column: BoardColumnData, ids: readonly string[], index: number, pointer = false): Promise<boolean> | null {
     // below the last loaded card come cards not loaded yet: a rank after the last loaded one would put the card after
@@ -404,18 +438,15 @@ export function BoardLayout({ groups, groupBy, display, project, createDefaults,
       refuse(item, { code: 'load_more', params: { column: column.label } });
       return null;
     }
-    const rankOf = (id: string | undefined) => (id === undefined ? null : (itemById.get(id)?.rank ?? null));
-    const rank = rankForSlot(rankOf(ids[index - 1]), rankOf(ids[index + 1]), display.sort.direction);
-    if (rank === null) {
-      refuse(item, { code: 'no_room', params: {} });
-      return null;
-    }
+    const slot = (items: ReadonlyMap<string, ListedItem>) => {
+      const rankOf = (id: string | undefined) => (id === undefined ? null : (items.get(id)?.rank ?? null));
+      return rankForSlot(rankOf(ids[index - 1]), rankOf(ids[index + 1]), display.sort.direction);
+    };
     // the new rank moves the card's element within its column, and a focused element that moves loses the focus in
     // the browser. React gives it back within the commit that moved it (seen in Chromium); the card is followed all the
     // same, as a move to another column is, so the focus stays with it whatever renders next (the rollback of a
     // refusal included)
-    follow(item.id, column.key, pointer);
-    return inTurn(item.id, () => {
+    const send = (rank: string) => {
       mark(item.id, true);
       return update
         .mutateAsync({ id: item.id, patch: { rank } })
@@ -426,6 +457,36 @@ export function BoardLayout({ groups, groupBy, display, project, createDefaults,
           },
           // the mutation put the card back and said why
           () => false,
+        )
+        .finally(() => mark(item.id, false));
+    };
+    const rank = slot(itemById);
+    if (rank !== null) {
+      follow(item.id, column.key, pointer);
+      return inTurn(item.id, () => send(rank));
+    }
+    return inTurn(item.id, () => {
+      mark(item.id, true);
+      setAnnouncement(t('items.board.reranking'));
+      return redistribute
+        .mutateAsync(item.project_id)
+        .then(
+          async () => {
+            await listsLoaded();
+            const fresh = slot(latestItems.current);
+            if (fresh !== null) {
+              follow(item.id, column.key, pointer);
+              return send(fresh);
+            }
+            setAnnouncement('');
+            refuse(item, { code: 'no_room', params: {} });
+            return false;
+          },
+          (error: unknown) => {
+            setAnnouncement('');
+            notifyError(t('items.board.not_moved', { key: item.key }), error, () => void sendPlace(item, column, ids, index, pointer));
+            return false;
+          },
         )
         .finally(() => mark(item.id, false));
     });
@@ -520,17 +581,8 @@ export function BoardLayout({ groups, groupBy, display, project, createDefaults,
    */
   function created(item: WorkItem, column: BoardColumnData) {
     setAnnouncement(t('items.board.created', { key: item.key, column: column.label }));
-    const started = performance.now();
-    let quiet = 0;
-    const look = () => {
+    void listsLoaded().then(() => {
       if (!alive.current) return;
-      // a column rebuilds its pages one after another (K15): the list has loaded again once nothing of it has been on
-      // its way for a few frames
-      quiet = queryClient.isFetching({ queryKey: qk.workItems.all }) > 0 ? 0 : quiet + 1;
-      if (quiet < QUIET_FRAMES && performance.now() - started < CREATED_WAIT_MS) {
-        requestAnimationFrame(look);
-        return;
-      }
       const shown = latestColumns.current.find((entry) => entry.key === column.key);
       if (shown?.ids.includes(item.id)) {
         useUiStore.getState().flash(item.id);
@@ -543,8 +595,7 @@ export function BoardLayout({ groups, groupBy, display, project, createDefaults,
           action: { label: t('items.create.open'), onClick: () => useUiStore.getState().openPeek(item.id) },
         });
       }
-    };
-    requestAnimationFrame(look);
+    });
   }
 
   /* --------------------------------------------------------------------------- layout */

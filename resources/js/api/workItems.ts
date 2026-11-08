@@ -241,6 +241,14 @@ export function deleteWorkItem(id: string): Promise<void> {
   return del<void>(itemPath(id));
 }
 
+/**
+ * Gives the items of a project short ranks in their order (archived ones included, A448): the board calls it where the
+ * rank between two neighbours would grow past what the server takes. Answers how many ranks changed.
+ */
+export function redistributeRanks(projectId: string): Promise<{ redistributed: number }> {
+  return post<{ redistributed: number }>(`/projects/${encodeURIComponent(projectId)}/redistribute-ranks`);
+}
+
 /** Watch an item or stop watching it; the answer is the item with `subscribed` for the signed-in account. */
 export function setSubscribed(id: string, on: boolean): Promise<WorkItem> {
   const path = `${itemPath(id)}/subscription`;

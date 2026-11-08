@@ -48,7 +48,7 @@ Every group is a column, empty ones included. Dragging a card, or `shift+left` a
 - **Priority** and **assignee:** the new value; a person who is not a member of the project cannot take the item.
 - **Type, project, parent item:** cards stay in their column. **Label:** a board grouped by label cannot be dragged, because an item stands in the column of each of its labels.
 
-The order within a column follows the sort of the display. With the sort **Manual**, `alt+up` and `alt+down` or dragging within the column move a card between its neighbours; with any other sort, werkbuch says that the order follows the sort. When there is no room left between two neighbours, the card stays where it was and a toast says so. A move the server refuses puts the card back, and the numbers of the columns are right again. **+** in the head of a column creates an item that fits the column.
+The order within a column follows the sort of the display. With the sort **Manual**, `alt+up` and `alt+down` or dragging within the column move a card between its neighbours; with any other sort, werkbuch says that the order follows the sort. When there is no room left between two neighbours, werkbuch first redistributes the order of the card's project (the order stays, the ranks get short again, see [Order items by hand](./work-items.md#order-items-by-hand)) and then moves the card. Only when the two neighbours belong to another project does the card stay where it was, and a toast says so. A move the server refuses puts the card back, and the numbers of the columns are right again. **+** in the head of a column creates an item that fits the column.
 
 ### Table
 
