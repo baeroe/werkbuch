@@ -102,7 +102,17 @@ final class ListRelations
     private static function compare(array $a, array $b): int
     {
         return [$a['relation']->type_id, $a['hidden']] <=> [$b['relation']->type_id, $b['hidden']]
-            ?: strnatcasecmp($a['other']->project->identifier ?? '', $b['other']->project->identifier ?? '')
+            ?: strnatcasecmp(self::natural($a['other']->project->identifier ?? ''), self::natural($b['other']->project->identifier ?? ''))
             ?: [$a['other']->number ?? 0, $a['relation']->id] <=> [$b['other']->number ?? 0, $b['relation']->id];
+    }
+
+    /**
+     * An identifier without the leading zeros of its numbers. `natural_sort_key()` of MariaDB ignores them (`A02` sorts
+     * like `A2`, after `A1`), while `strnatcasecmp` reads a number with a leading zero like a fraction (`A02` before
+     * `A1`); without them both order alike (A2-M1).
+     */
+    private static function natural(string $identifier): string
+    {
+        return (string) preg_replace('/(?<!\d)0+(?=\d)/', '', $identifier);
     }
 }

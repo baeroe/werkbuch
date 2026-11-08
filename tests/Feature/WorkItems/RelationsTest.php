@@ -209,6 +209,23 @@ it('orders the identifiers of the other ends naturally (T21g-M2)', function () u
     expect($keys)->toBe(['A2-1', 'A10-1']);
 });
 
+it('drops the leading zeros of a number in an identifier like the sort by key (A2-M1)', function () use ($world, $type) {
+    [$web, , $mara] = $world();
+    $item = WorkItem::factory()->for($web)->create();
+    // created A02 first, and the bytes put A02 first too: only a natural order without leading zeros puts A1 first
+    $a02 = WorkItem::factory()->for(Project::factory()->identifier('A02')->public()->create())->create();
+    $a1 = WorkItem::factory()->for(Project::factory()->identifier('A1')->public()->create())->create();
+    foreach ([$a02, $a1] as $other) {
+        WorkItemRelation::factory()->create(['type_id' => $type('relates')->id, 'source_id' => $item->id, 'target_id' => $other->id]);
+    }
+
+    $keys = array_map(fn (array $entry) => $entry['other']?->key, ListRelations::run(actor($mara), $item));
+    $byKey = DB::table('projects')->whereIn('identifier', ['A02', 'A1'])->orderByRaw('natural_sort_key(identifier)')->pluck('identifier')->all();
+
+    expect($byKey)->toBe(['A1', 'A02'])
+        ->and($keys)->toBe(['A1-1', 'A02-1']);
+});
+
 it('does not tell whether a hidden target exists', function () use ($world, $type, $errorsOf) {
     [$web, $ops, , $ida] = $world();
     $item = WorkItem::factory()->for($web)->create();
