@@ -1,8 +1,12 @@
 <?php
 
+use App\Access\OrgRole;
+use App\Access\RoleAssignments;
+use App\Access\Visibility;
 use App\Actions\Automations\RunDailyAutomations;
 use App\Domain\Automations\AutomationKey;
 use App\Events\EventType;
+use App\Exceptions\Problem;
 use App\Jobs\RunDailyAutomationsJob;
 use App\Models\Automation;
 use App\Models\Event;
@@ -112,6 +116,7 @@ it('runs every hour from its job on the queue bulk, for the hour it was planned 
 });
 
 it('passes over the items of a project that is archived or being deleted after they were read', function (string $column) use ($run, $world, $nothing) {
+    Exceptions::fake();
     $this->travelTo(CarbonImmutable::parse('2026-11-10 02:00', 'UTC'));
     [$project, $closed, $stale] = $world();
     $done = false;
@@ -127,7 +132,46 @@ it('passes over the items of a project that is archived or being deleted after t
         ->and($done)->toBeTrue()
         ->and($closed->fresh()->archived_at)->toBeNull()
         ->and($stale->fresh()->state_id)->toBe($stale->state_id);
+    Exceptions::assertNothingReported();
 })->with(['archived_at', 'deleting_at']);
+
+it('passes over an item deleted after it was read, without a report', function () use ($run, $world) {
+    Exceptions::fake();
+    $this->travelTo(CarbonImmutable::parse('2026-11-10 02:00', 'UTC'));
+    [, $closed, $stale] = $world();
+    $done = false;
+    // right after the stale items are read, before the first of them is locked
+    DB::listen(function (QueryExecuted $query) use ($stale, &$done): void {
+        if (! $done && str_starts_with($query->sql, 'select `work_items`.* from `work_items`') && str_contains($query->sql, 'limit 200')
+            && str_contains($query->sql, 'max(comments.created_at)')) {
+            $done = true;
+            DB::table('work_items')->where('id', $stale->id)->delete();
+        }
+    });
+
+    expect($run('2026-11-10 02:00', true))->toBe(['archived' => 1, 'closed' => 0, 'skipped' => 0])
+        ->and($done)->toBeTrue()
+        ->and($closed->fresh()->archived_at)->not->toBeNull();
+    Exceptions::assertNothingReported();
+});
+
+it('reports a 404 of the work after the lock, counts the item as skipped and leaves nothing behind', function () use ($run) {
+    Exceptions::fake();
+    $this->travelTo(CarbonImmutable::parse('2026-11-10 02:00', 'UTC'));
+    $project = Project::factory()->private()->create();
+    $canceled = (string) $project->workflow()->firstOrFail()->states()->where('name', 'Cancelled')->value('id');
+    Automation::factory()->for($project)->key(AutomationKey::AutoClose)->enabled(['state_id' => $canceled])->create();
+    $stale = WorkItem::factory()->for($project)->inState('Backlog')->create(['updated_at' => now()->subDays(100)]);
+    // a broken invariant: the default bot no longer sees the private project, so the comment after the move is a 404
+    app(RoleAssignments::class)->setOrgRole(User::defaultBot(), OrgRole::Member);
+    Visibility::forget();
+
+    expect($run('2026-11-10 02:00', true))->toBe(['archived' => 0, 'closed' => 0, 'skipped' => 1])
+        ->and($stale->fresh()->state_id)->toBe($stale->state_id)
+        ->and(eventsOf(EventType::WorkItemStateChanged, $stale))->toHaveCount(0);
+    Exceptions::assertReported(fn (RuntimeException $e) => str_contains($e->getMessage(), $stale->id)
+        && $e->getPrevious() instanceof Problem && $e->getPrevious()->status === 404);
+});
 
 it('checks each item again under its lock: reopened or commented after it was read, it stays', function () use ($run, $world, $nothing) {
     $this->travelTo(CarbonImmutable::parse('2026-11-10 02:00', 'UTC'));
