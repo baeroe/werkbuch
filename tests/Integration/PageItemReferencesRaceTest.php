@@ -3,10 +3,13 @@
 use App\Access\ProjectRole;
 use App\Actions\Pages\UpdatePage;
 use App\Actions\WorkItems\DeleteWorkItem;
+use App\Models\Attachment;
 use App\Models\Page;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
+use App\RichText\Document;
+use App\Support\PageItemReferences;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\RaceConnections;
 use Tests\Support\RichTextFixtures as F;
@@ -61,4 +64,25 @@ it('takes the row of a saved page with the item it names', function () use ($wor
     expect($deleted)->toBeNull()
         ->and(WorkItem::query()->find($a->id))->toBeNull()
         ->and($rows())->toBe([$b->id]);
+});
+
+it('saves a page that drops its reference and keeps the picture of the item a deletion takes', function () use ($world, $rows) {
+    [$page, $mara, $a] = $world();
+    $picture = Attachment::factory()->forItem($a)->create(['uploaded_by' => $mara->id]);
+    $page->update(['content' => F::doc(F::p(F::reference($a->id)), F::image($picture->id, 'Entwurf'))]);
+    PageItemReferences::sync($page, Document::fromJson($page->content));
+
+    // the deletion holds A, the picture and (by cascade) the row of the page on A, like a request in progress
+    RaceConnections::hold(fn () => DeleteWorkItem::run(actor($mara), $a));
+    // the save asks for the picture before it touches its rows: the deletion commits there and hands the picture to
+    // the page; a save that took the row first waited for it while the deletion waited for the picture (a deadlock)
+    RaceConnections::releaseBeforeLock('attachments');
+
+    $saved = RaceConnections::second(fn () => UpdatePage::run(actor($mara), $page, ['content_json' => F::doc(F::image($picture->id, 'Entwurf'))]));
+
+    expect($saved)->toBeInstanceOf(Page::class)
+        ->and(WorkItem::query()->find($a->id))->toBeNull()
+        ->and($rows())->toBe([])
+        ->and($picture->fresh()?->attachable_type)->toBe($page->getMorphClass())
+        ->and($picture->fresh()?->attachable_id)->toBe($page->id);
 });

@@ -70,8 +70,9 @@ final class CreatePage
                 'updated_by' => $actor->user->id,
             ]);
             if ($content !== null) {
-                // the items before the attachments, as DeleteWorkItem locks them (the foreign key check holds the item)
-                PageItemReferences::sync($page, $content);
+                // the items before the attachments, as DeleteWorkItem locks them (the foreign key check holds the item);
+                // a new page has no row to drop
+                PageItemReferences::add($page, $content);
                 AttachmentLinks::link($page, $locked, $actor->user, [$key => $content]);
             }
 
