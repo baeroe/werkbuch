@@ -51,7 +51,7 @@ final class TemplatesTool extends ReadTool
                 run: fn (Actor $actor, McpArguments $args): McpResult => McpResult::list(ListTemplates::run($actor, null, $args->query([...array_keys($list), 'lean'])), TemplateResource::class),
                 parameters: [
                     ...$list,
-                    'lean' => [...ListFlags::QUERY_FLAG, 'description' => ListFlags::LEAN],
+                    'lean' => [...ListFlags::QUERY_FLAG, 'description' => ListTemplates::LEAN],
                 ],
                 twin: 'GET templates',
                 defaults: ['lean' => 1],

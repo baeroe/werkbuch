@@ -18,10 +18,6 @@ final class ListFlags extends OperationExtension
 {
     public const QUERY_FLAG = ['type' => 'integer', 'enum' => [1, 0]];
 
-    /** The flag `lean` of the template lists. */
-    public const LEAN = 'Leave the texts out (`1`): no `description`, `description_json` and `values_markdown` in `payload`, '
-        .'the rest as usual (the list of a command palette).';
-
     public function handle(Operation $operation, RouteInfo $routeInfo): void
     {
         $listOf = ($routeInfo->reflectionMethod()?->getAttributes(ListOf::class)[0] ?? null)?->newInstance();

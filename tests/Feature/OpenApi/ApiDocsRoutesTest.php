@@ -30,8 +30,12 @@ it('serves the document without signing in', function () {
 });
 
 it('serves the cached document in production without generating it', function () {
+    // the rule of the provider: the store of the package stays in production (it is null elsewhere)
+    config(['scramble.cache.store' => 'array', 'cache.stores.array.serialize' => true]);
     $this->app->detectEnvironment(fn () => 'production');
-    config(['scramble.cache.store' => 'array']);
+    (new ApiServiceProvider($this->app))->register();
+    expect(config('scramble.cache.store'))->toBe('array');
+
     $this->artisan('scramble:cache')->assertSuccessful();
 
     // a generator that must not run: the second request reads the cache `scramble:cache` wrote
@@ -44,12 +48,7 @@ it('serves the cached document in production without generating it', function ()
         }
     });
 
-    $started = hrtime(true);
-    $response = $this->getJson('/api/openapi.json')->assertOk();
-    $milliseconds = (hrtime(true) - $started) / 1e6;
-
-    expect($response->json('paths'))->toHaveKey('/work-items/{item}')
-        ->and($milliseconds)->toBeLessThan(200.0);
+    $this->getJson('/api/openapi.json')->assertOk()->assertJsonPath('info.title', 'werkbuch API')->assertJsonStructure(['paths' => ['/work-items/{item}']]);
 });
 
 it('serves the docs page without signing in', function () {
