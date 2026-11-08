@@ -68,7 +68,7 @@ Lesen braucht ein Token mit `read`, Ändern eines mit `write`. Lesen darf jedes 
 | Anfrage | Antwort |
 |---|---|
 | `GET /api/v1/workflows` | Die Liste, mit Status und Übergängen. |
-| `GET /api/v1/workflows/{id}` | Ein Workflow, auch ein archivierter. |
+| `GET /api/v1/workflows/{id}` | Ein Workflow mit Status und Übergängen. |
 | `POST /api/v1/workflows` | `201` mit dem neuen Workflow. |
 | `PUT /api/v1/workflows/{id}` | `200` mit dem Workflow. |
 | `DELETE /api/v1/workflows/{id}` | `204`. |

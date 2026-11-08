@@ -197,7 +197,7 @@ WERKBUCH_IMAGE=werkbuch:local scripts/compose-smoke.sh
 
 ## Documentation
 
-These docs live in `docs/` (VitePress) in English (`docs/en/`) and German (`docs/de/`). Every page exists in both languages under the same file name and with the same headings, in the same order in the sidebar. Only this page names phases of the build, and for now the status on the landing page. `tests/Unit/DocsTest.php` checks that. The specs and plans in `docs/superpowers/` are not part of the site.
+These docs live in `docs/` (VitePress) in English (`docs/en/`) and German (`docs/de/`). Every page exists in both languages under the same file name and with the same headings, in the same order in the sidebar. No page names a phase of the build, for now except the status on the landing page. `tests/Unit/DocsTest.php` checks that. The specs and plans in `docs/superpowers/` are not part of the site.
 
 ```bash
 ddev exec pnpm --dir docs dev       # https://werkbuch.ddev.site:5174/en/

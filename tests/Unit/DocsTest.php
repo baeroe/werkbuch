@@ -54,11 +54,11 @@ it('lists every page but the landing page in the sidebar, in the same order in b
 });
 
 it('names no phase in the docs', function () {
-    // the plan of the build is history, a reader of the docs needs no phase; the development page tells that history,
-    // and the landing page says in its status where the project stands
+    // the plan of the build is history, a reader of the docs needs no phase; for now the landing page says in its status
+    // where the project stands
     foreach (['en', 'de'] as $l) {
-        foreach (array_diff(docsPages($l), ['development', 'index']) as $page) {
-            $found = preg_match('/phas(e|en)[\s-]\d+/i', RepoFiles::text("docs/{$l}/{$page}.md"), $m);
+        foreach (array_diff(docsPages($l), ['index']) as $page) {
+            $found = preg_match('/phase[ns]?[\s-]*\d+/i', RepoFiles::text("docs/{$l}/{$page}.md"), $m);
 
             expect($found)->toBe(0, "docs/{$l}/{$page}.md names ".($m[0] ?? ''));
         }
