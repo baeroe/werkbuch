@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
 /*
@@ -26,4 +27,30 @@ it('makes the guard a virtual column with a unique index and takes both away aga
     $this->artisan('migrate')->assertSuccessful();
 
     expect($createUsers())->toContain($column)->toContain($index);
+});
+
+it('stops before the index while two accounts are the default bot and names both', function () use ($createUsers) {
+    $this->artisan('migrate:rollback', ['--path' => DEFAULT_BOT_GUARD_MIGRATION])->assertSuccessful();
+    $default = User::defaultBot();
+    $second = User::factory()->bot()->create(['handle' => 'zweiter-bot']);
+    DB::table('users')->where('id', $second->id)->update(['is_default_bot' => true]);
+    $migration = require base_path(DEFAULT_BOT_GUARD_MIGRATION);
+
+    $refusal = null;
+    try {
+        $migration->up();
+    } catch (RuntimeException $e) {
+        $refusal = $e->getMessage();
+    }
+
+    expect($refusal)->toBeString()
+        ->toContain("{$default->id} (@{$default->handle})")
+        ->toContain("{$second->id} (@zweiter-bot)")
+        ->and(str_contains($createUsers(), 'default_bot_guard'))->toBeFalse();
+
+    // with one default bot again the migration goes through
+    DB::table('users')->where('id', $second->id)->update(['is_default_bot' => false]);
+    $this->artisan('migrate')->assertSuccessful();
+
+    expect($createUsers())->toContain('UNIQUE KEY `users_default_bot_guard_unique` (`default_bot_guard`)');
 });
