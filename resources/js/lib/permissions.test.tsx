@@ -84,13 +84,13 @@ describe('deniedReason (spec 4.3)', () => {
 
     // without his APP membership, Theo sees APP as a public project, read-only like WEB
     const viewerOnly = as('u_theo', (projects) => projects.map((entry) => ({ ...entry, my_role: 'viewer' as const })));
-    expect(deniedReason(viewerOnly, 'item.create')).toBe('Items anlegen darfst du in keinem Projekt. Bitte eine Projekt-Admin, dich als Mitglied aufzunehmen.');
+    expect(deniedReason(viewerOnly, 'item.create')).toBe('Items anlegen darfst du in keinem Projekt. Tritt einem Projekt bei oder bitte eine Projekt-Admin um die Rolle Member.');
     expect(deniedReason(viewerOnly, 'item.comment')).toBeNull();
   });
 
   it.each<[Permission, string]>([
     ['project.manage', 'Projekteinstellungen ändern darfst du in keinem Projekt.'],
-    ['item.create', 'Items anlegen darfst du in keinem Projekt. Bitte eine Projekt-Admin, dich als Mitglied aufzunehmen.'],
+    ['item.create', 'Items anlegen darfst du in keinem Projekt. Tritt einem Projekt bei oder bitte eine Projekt-Admin um die Rolle Member.'],
     ['item.edit', 'Items ändern darfst du in keinem Projekt.'],
     ['item.delete', 'Items löschen darfst du in keinem Projekt.'],
     ['item.comment', 'Kommentieren darfst du in keinem Projekt.'],
