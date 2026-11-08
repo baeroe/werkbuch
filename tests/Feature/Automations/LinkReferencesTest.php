@@ -29,6 +29,7 @@ use App\Models\WorkItemType;
 use App\Notifications\NotificationConsumer;
 use App\Support\Actor;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Tests\Support\Mcp\McpClient;
@@ -352,3 +353,99 @@ it('relates for a change over REST and over MCP', function (string $via) use ($w
         ->and($relations())->toBe([[$relates(), $w['a']->id, $w['b']->id]])
         ->and(eventsOf(EventType::WorkItemRelationAdded, $w['b'])->sole()->meta)->toMatchArray(['on_behalf_of' => $w['mara']->id]);
 })->with(['rest', 'mcp']);
+
+it('relates only for an account that may change the source, like a relation by hand', function (string $who) use ($world, $naming, $relations, $relates) {
+    $w = $world();
+    $writer = match ($who) {
+        'viewer' => memberOf($w['web'], ProjectRole::Viewer, ['name' => 'Theo']),
+        'bot as viewer' => (function () use ($w) {
+            $bot = User::factory()->bot($w['mara'])->create(['name' => 'Kira']);
+            app(RoleAssignments::class)->setProjectRole($bot, $w['web'], ProjectRole::Viewer);
+
+            return $bot;
+        })(),
+        'member' => $w['lene'],
+    };
+
+    // everybody here may comment and sees B; only a member may relate A to B by hand
+    AddComment::run(actor($writer), $w['a'], ['body_json' => $naming($w['b'])]);
+
+    expect($relations())->toBe($who === 'member' ? [[$relates(), $w['a']->id, $w['b']->id]] : []);
+})->with(['viewer', 'bot as viewer', 'member']);
+
+it('checks a template run by hand against the person who ran it', function () use ($world, $naming, $relations, $relates) {
+    $w = $world();
+    $template = Template::factory()->create(['project_id' => $w['web']->id, 'created_by' => $w['mara']->id]);
+    // C of OPS, kept in the template by Mara; Lene does not see OPS
+    $template->update(['payload' => [...$template->payload, 'description' => $naming($w['c'], $w['b'])]]);
+
+    $item = RunTemplate::run(actor($w['lene']), $template)['item'];
+    assert($item instanceof WorkItem);
+
+    expect($relations())->toBe([[$relates(), $item->id, $w['b']->id]]);
+});
+
+it('names an item once however often a save names it', function () use ($world, $naming, $notes) {
+    $w = $world();
+    $notes();
+    Queue::fake([LinkReferencesJob::class]);
+
+    UpdateWorkItem::run(actor($w['mara']), $w['a'], ['description_json' => $naming($w['b'], $w['b']), 'values' => ['notes' => $naming($w['b'])]]);
+
+    Queue::assertPushed(LinkReferencesJob::class, fn (LinkReferencesJob $job) => $job->targetIds === [$w['b']->id]);
+});
+
+it('queues nothing for a hidden reference written back over REST', function () use ($world, $describe) {
+    $w = $world();
+    Queue::fake([LinkReferencesJob::class]);
+    $describe($w['mara'], $w['a'], $w['c']);
+    Queue::assertPushed(LinkReferencesJob::class, 1);
+
+    // Lene does not see OPS: she reads the reference as hidden and sends it back with her text
+    $read = $this->withToken(apiToken($w['lene'], ['read', 'write']))->getJson('/api/v1/work-items/WEB-1')->assertOk()->json('data.description');
+    expect($read)->toBe("Siehe [hidden](item:{$w['c']->id})");
+    $this->patchJson('/api/v1/work-items/WEB-1', ['description' => "{$read} und mehr"])->assertOk();
+
+    expect($w['a']->fresh()?->description_text)->toBe('Siehe und mehr');
+    Queue::assertPushed(LinkReferencesJob::class, 1);
+});
+
+it('relates nothing for a writer deactivated before the job runs', function () use ($world, $describe) {
+    $w = $world();
+    Queue::fake([LinkReferencesJob::class]);
+    $describe($w['mara'], $w['a'], $w['b']);
+    $job = Queue::pushed(LinkReferencesJob::class)->sole();
+
+    $w['mara']->update(['disabled_at' => now()]);
+    $job->handle();
+    expect(WorkItemRelation::query()->count())->toBe(0);
+
+    $w['mara']->update(['disabled_at' => null]);
+    $job->handle();
+    expect(WorkItemRelation::query()->count())->toBe(1);
+});
+
+it('makes no second relation when relates has an inward label', function () use ($world, $describe, $relations, $relates) {
+    $w = $world();
+    RelationType::query()->whereKey($relates())->update(['inward_label' => 'bezogen von']);
+    WorkItemRelation::factory()->create(['type_id' => $relates(), 'source_id' => $w['b']->id, 'target_id' => $w['a']->id]);
+    $other = WorkItem::factory()->for($w['web'])->create();
+
+    $describe($w['mara'], $w['a'], $w['b'], $other);
+
+    $expected = [[$relates(), $w['a']->id, $other->id], [$relates(), $w['b']->id, $w['a']->id]];
+    usort($expected, fn ($x, $y) => [$x[1], $x[2]] <=> [$y[1], $y[2]]);
+    expect($relations())->toBe($expected);
+});
+
+it('relates nothing and reports once when relates is gone', function () use ($world, $describe) {
+    $w = $world();
+    Exceptions::fake();
+    RelationType::query()->where('built_in', 'relates')->delete();
+
+    $describe($w['mara'], $w['a'], $w['b'], $w['c']);
+
+    expect(WorkItemRelation::query()->count())->toBe(0);
+    Exceptions::assertReportedCount(1);
+    Exceptions::assertReported(fn (RuntimeException $e) => str_contains($e->getMessage(), 'relates'));
+});

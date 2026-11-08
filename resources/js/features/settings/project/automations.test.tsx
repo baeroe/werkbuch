@@ -1,6 +1,7 @@
 /*
- * Settings → Automations against a fake server that keeps the four automations of WEB and answers like
- * `SaveAutomation` (a Canceled state to switch Auto-Close on, days 1–3650). The main flows run in
+ * Settings → Automations against a fake server that keeps the five automations of WEB and answers like
+ * `SaveAutomation` (a Canceled state to switch Auto-Close on, days 1–3650); a key without a stored row reads as it starts:
+ * off, but `link_references` on (A452). The main flows run in
  * e2e/tests/automations.spec.ts.
  */
 
@@ -59,7 +60,7 @@ const releaseOne = () => act(() => held.shift()!());
 
 function fakeServer(workflow: Workflow, initial: Partial<Record<AutomationKey, Partial<Automation>>>): Record<string, MockRoute> {
   stored = Object.fromEntries(
-    KEYS.map((key) => [key, { id: initial[key] ? `au_${key}` : null, project_id: 'p_web', key, enabled: false, settings: DEFAULTS[key], ...initial[key] }]),
+    KEYS.map((key) => [key, { id: initial[key] ? `au_${key}` : null, project_id: 'p_web', key, enabled: key === 'link_references', settings: DEFAULTS[key], ...initial[key] }]),
   ) as Record<AutomationKey, Automation>;
   const routes: Record<string, MockRoute> = {
     'GET /api/v1/projects/p_web/automations': () => ({ body: { data: KEYS.map((key) => stored[key]) } }),
@@ -124,7 +125,7 @@ afterEach(() => {
 /* ------------------------------------------------------------------------- tests */
 
 describe('Automations', () => {
-  it('shows the four automations with what they do, and the days of the ones that are on', async () => {
+  it('shows the five automations with what they do, and the days of the ones that are on', async () => {
     renderAutomations({ initial: { auto_archive: { enabled: true, settings: { days: 30 } }, assign_on_start: { enabled: true } } });
 
     expect(screen.getByText('Projekteinstellungen werden geladen …')).toBeTruthy();
@@ -133,6 +134,7 @@ describe('Automations', () => {
     expect((await switchOf('Auto-Close')).getAttribute('aria-checked')).toBe('false');
     expect((await switchOf('Eltern schließen')).getAttribute('aria-checked')).toBe('false');
     expect((await switchOf('Assignee beim Start')).getAttribute('aria-checked')).toBe('true');
+    expect((await switchOf('Erwähnte Items verknüpfen')).getAttribute('aria-checked')).toBe('true');
     // the switch is described by what the automation does; the nightly ones notify nobody (A357)
     const description = document.getElementById(archive.getAttribute('aria-describedby')!.split(' ')[0]!)!;
     expect(description.textContent).toBe('Archiviert Items, die seit der eingestellten Zeit geschlossen sind. Läuft jede Nacht und benachrichtigt niemanden.');
@@ -440,13 +442,17 @@ describe('Automations', () => {
 
   it('shows link_references on without a stored row and switches it off', async () => {
     const user = userEvent.setup();
-    // the server answers a key without a row as on, without an id
-    renderAutomations({ initial: {} });
-    stored.link_references = { ...stored.link_references, enabled: true };
+    // the server answers a key without a row as on, without an id; Auto-Archiv on shows the one field of days
+    renderAutomations({ initial: { auto_archive: { enabled: true, settings: { days: 30 } } } });
     const link = await switchOf('Erwähnte Items verknüpfen');
     expect(link.getAttribute('aria-checked')).toBe('true');
     expect(screen.getByText(/Standardmäßig an\./)).toBeTruthy();
-    expect(screen.queryByRole('textbox', { name: /Tage/ })).toBeNull();
+    // link_references has no settings: the only field of days is Auto-Archiv's, outside its row
+    const row = link.closest('li')!;
+    const days = screen.getAllByRole('textbox', { name: /Tage/ });
+    expect(days).toHaveLength(1);
+    expect(row.contains(days[0]!)).toBe(false);
+    expect(within(row).getAllByRole('switch')).toEqual([link]);
 
     await user.click(link);
     await waitFor(() => expect(puts('link_references')).toHaveLength(1));

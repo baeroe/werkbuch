@@ -43,15 +43,16 @@ Jede Nacht zieht Auto-Close die Items in Backlog oder Unstarted (Todo), an denen
 
 ## Erwähnte Items verknüpfen
 
-Nennt eine Beschreibung, ein Rich-Text-Feld oder ein Kommentar eines Items ein anderes Item neu per `#`, verknüpft werkbuch beide mit dem Relationstyp „verwandt mit“. Die Automatisierung ist **standardmäßig an**, in jedem Projekt, auch in schon bestehenden; in den Projekteinstellungen schaltest du sie aus, das gilt dann für das Projekt.
+Nennt eine Beschreibung, ein Rich-Text-Feld oder ein Kommentar eines Items ein anderes Item neu per `#`, verknüpft werkbuch beide mit dem eingebauten Relationstyp „verwandt“ (er liest sich „verwandt mit“). Die Automatisierung ist **standardmäßig an**, in jedem Projekt, auch in schon bestehenden; in den Projekteinstellungen schaltest du sie aus, das gilt dann für das Projekt.
 
-- **Neu genannt** heißt: Der Verweis stand vorher nicht im Text. Denselben Text noch einmal zu speichern oder einen Text, der einen schon vorhandenen Verweis behält, verknüpft nichts. Sind zwei Items schon verknüpft (in beiden Richtungen, mit dem Typ „verwandt mit“), entsteht keine zweite Relation.
+- **Neu genannt** heißt: Bei der Beschreibung und den Rich-Text-Feldern stand der Verweis vorher in keinem von ihnen (sie zählen zusammen: Ein Verweis, den die Beschreibung schon hat, verknüpft nichts, wenn er in ein Rich-Text-Feld kommt); bei einem Kommentar stand er vorher nicht in diesem Kommentar. Denselben Text noch einmal zu speichern oder einen Text, der einen schon vorhandenen Verweis behält, verknüpft nichts. Sind zwei Items mit dem eingebauten Typ schon verknüpft, in einer der beiden Richtungen, entsteht keine zweite Relation. Eine Relation, die du von Hand entfernt hast, kommt durch erneutes Speichern des Texts nicht zurück.
 - **Was zählt:** die Beschreibung, die Rich-Text-Felder und die Kommentare (neue und bearbeitete) eines Items. Wiki-Seiten verknüpfen nichts, und ein Item verknüpft sich nie mit sich selbst.
-- **Projektübergreifend**, soweit die Person, die den Text schrieb, das andere Item sieht. Es entscheidet die Automatisierung des Projekts des Items, das den Text trägt.
+- **Wer verknüpft:** nur eine Person, die das Item mit dem Text ändern darf (das Recht, Items zu bearbeiten, dasselbe wie für eine Relation von Hand). Ein Viewer oder jemand außerhalb eines öffentlichen Projekts, der in einem Kommentar ein Item nennt, verknüpft nichts. Das andere Item darf in einem anderen Projekt liegen, soweit die Person, die den Text schrieb, es sieht. Es entscheidet die Automatisierung des Projekts des Items, das den Text trägt.
+- **Vorlagen:** Jeder Lauf einer Vorlage, deren Texte ein Item nennen, verknüpft das neue Item mit ihm. Ein Lauf von Hand prüft die Rechte der Person, die ihn startete, ein geplanter Lauf die des Standard-Bots „Automation“.
 - **Wird der Verweis entfernt, bleibt die Relation.** Die Relation selbst entfernst du bei den Relationen des Items.
-- **Ein archiviertes Item** darf das andere Ende sein. Ein archiviertes Item oder ein Item eines archivierten Projekts verknüpft als Träger des Texts nichts.
+- **Ein archiviertes Item** darf das andere Ende sein. Ein archiviertes Item oder ein Item in einem archivierten Projekt verknüpft über seine eigenen Texte nichts.
 - **Nach dem Speichern.** Die Relation entsteht einen Augenblick nach dem Speichern, nicht mit ihm; die Item-Seite lädt sie von selbst nach.
-- **Benachrichtigungen** folgen den üblichen Regeln: Beobachter beider Items hören „Relation hinzugefügt“; die Person, die den Text schrieb, nicht.
+- **Benachrichtigungen** folgen den üblichen Regeln: Beobachter beider Items hören, dass sich die Relationen geändert haben; die Person, die den Text schrieb, nicht. Beobachter des Items mit dem Text hören es zweimal: von der Änderung des Texts und von der neuen Relation.
 
 ## In der Nacht
 
@@ -67,7 +68,7 @@ Auto-Close folgt dem Workflow des Projekts. Wenn ein Admin [den Workflow wechsel
 
 ## In der History
 
-Jeder Schritt einer Automatisierung ist ein Eintrag des Standard-Bots „Automation“ mit seinem Grund: „Automatisierung: Assignee beim Start“, „Automatisierung: Eltern schließen“, „Automatisierung: Auto-Archiv“, „Automatisierung: Auto-Close“ oder „Automatisierung: Erwähnte Items verknüpfen“. Über die API hat der History-Eintrag `via` `automation` und den Grund als Schlüssel in `reason` (`assign_on_start`, `close_parent`, `auto_archive`, `auto_close`, `link_references`). Die Relation von „Erwähnte Items verknüpfen“ steht in der History beider Items als „Relation hinzugefügt“, mit `meta.on_behalf_of` die Person, die den Text schrieb. Die Person, deren Statuswechsel einen Schritt auslöste (Assignee beim Start, Eltern schließen), wird darüber nicht benachrichtigt.
+Jeder Schritt einer Automatisierung ist ein Eintrag des Standard-Bots „Automation“ mit seinem Grund: „Automatisierung: Assignee beim Start“, „Automatisierung: Eltern schließen“, „Automatisierung: Auto-Archiv“, „Automatisierung: Auto-Close“ oder „Automatisierung: Erwähnte Items verknüpfen“. Über die API hat der History-Eintrag `via` `automation` und den Grund als Schlüssel in `reason` (`assign_on_start`, `close_parent`, `auto_archive`, `auto_close`, `link_references`). Die Relation von „Erwähnte Items verknüpfen“ steht in der History beider Items als Relation, die der Standard-Bot hinzufügte; der Eintrag nennt die Person, die den Text schrieb, nicht. Die Person, deren Statuswechsel einen Schritt auslöste (Assignee beim Start, Eltern schließen), wird darüber nicht benachrichtigt.
 
 ## Rechte
 

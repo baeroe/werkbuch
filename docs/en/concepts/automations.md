@@ -43,15 +43,16 @@ Every night, auto-close moves the items in Backlog or Unstarted (Todo) that noth
 
 ## Link referenced items
 
-When a description, a rich text property or a comment of an item newly references another item with `#`, werkbuch relates both with the relation type "relates to". The automation is **on by default**, in every project, also in those that existed before; switch it off in the project settings and the setting is saved for the project.
+When a description, a rich text property or a comment of an item newly references another item with `#`, werkbuch relates both with the built-in relation type "related" (it reads "relates to"). The automation is **on by default**, in every project, also in those that existed before; switch it off in the project settings and the setting is saved for the project.
 
-- **Newly references** means: the reference was not in the text before. Saving the same text again, or a text that keeps a reference it already had, relates nothing. An item that is already related to the other one, in either direction and of the type "relates to", gets no second relation.
+- **Newly references** means: for the description and the rich text properties, the reference was in none of them before (they count together: a reference the description has already relates nothing when it comes into a rich text property); for a comment, it was not in that comment before. Saving the same text again, or a text that keeps a reference it already had, relates nothing. An item that is already related to the other one with the built-in type, in either direction, gets no second relation. A relation you removed by hand does not come back from saving the text again.
 - **What counts:** the description, the rich text properties and the comments (new and edited) of an item. Wiki pages relate nothing, and an item never relates to itself.
-- **Across projects**, as far as the person who wrote the text sees the other item. The automation of the project of the item that carries the text decides.
+- **Who relates:** only a person who may change the item that carries the text (the right to edit items, the same a relation by hand needs). A viewer, or somebody outside a public project, who references an item in a comment relates nothing. The other item may lie in another project, as far as the person who wrote the text sees it. The automation of the project of the item that carries the text decides.
+- **Templates:** every run of a template whose texts reference an item relates the new item to it. A run by hand checks the rights of the person who started it, a scheduled run those of the default bot "Automation".
 - **Removing the reference keeps the relation.** Remove the relation itself in the item's relations.
-- **An archived item** may be the other end. An archived item, or an item of an archived project, as the one that carries the text relates nothing.
+- **An archived item** may be the other end. An archived item, or an item in an archived project, relates nothing through its own texts.
 - **After saving.** The relation comes a moment after the save, not with it; the item page loads it by itself.
-- **Notifications** follow the usual rules: watchers of both items hear "relation added"; the person who wrote the text does not.
+- **Notifications** follow the usual rules: watchers of both items are told that the relations changed; the person who wrote the text is not. Watchers of the item that carries the text are told twice: of the change of the text, and of the new relation.
 
 ## At night
 
@@ -67,7 +68,7 @@ Auto-close follows the workflow of the project. When an admin [changes the workf
 
 ## In the history
 
-Every step of an automation is an entry of the default bot "Automation" with its reason: "Automation: assignee on start", "Automation: close parent", "Automation: auto-archive", "Automation: auto-close" or "Automation: link referenced items". Over the API, the history entry has `via` `automation` and the reason as a key in `reason` (`assign_on_start`, `close_parent`, `auto_archive`, `auto_close`, `link_references`). The relation made by "link referenced items" shows in the history of both items as "relation added", with `meta.on_behalf_of` the person who wrote the text. The person whose move set off a step (assignee on start, close parent) is not notified about it.
+Every step of an automation is an entry of the default bot "Automation" with its reason: "Automation: assignee on start", "Automation: close parent", "Automation: auto-archive", "Automation: auto-close" or "Automation: link referenced items". Over the API, the history entry has `via` `automation` and the reason as a key in `reason` (`assign_on_start`, `close_parent`, `auto_archive`, `auto_close`, `link_references`). The relation made by "link referenced items" shows in the history of both items as a relation the default bot added; the entry does not name the person who wrote the text. The person whose move set off a step (assignee on start, close parent) is not notified about it.
 
 ## Permissions
 

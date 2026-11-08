@@ -50,7 +50,8 @@ final class ItemReferences
 
     /**
      * Queues the job that relates the item to the items, after the commit, when there are any and the automation of the
-     * project is on (one query). The job carries IDs only: who wrote, for whom the automation acts, whether quietly.
+     * project is on (one query). The job carries IDs only: who wrote (the person a bot wrote for, when it wrote for one),
+     * for whom the automation acts, whether quietly.
      *
      * @param  list<string>  $ids
      */
@@ -62,6 +63,7 @@ final class ItemReferences
 
         $automation = Actor::automationFor(LinkReferences::REASON, $actor);
 
-        LinkReferencesJob::dispatch($item->id, $ids, $actor->user->id, $automation->onBehalfOf, $automation->quiet)->afterCommit();
+        // the writer the job checks: the person who wrote, or the person a bot wrote for, else the bot itself
+        LinkReferencesJob::dispatch($item->id, $ids, $automation->onBehalfOf ?? $actor->user->id, $automation->onBehalfOf, $automation->quiet)->afterCommit();
     }
 }

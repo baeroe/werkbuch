@@ -17,7 +17,7 @@
     "automations.days.auto_close": "Tage ohne Aktivität",
     "automations.days.auto_close_hint": "So lange darf ein Item in Backlog oder Todo ruhen.",
     "automations.description": "Vier davon sind am Anfang aus, „Erwähnte Items verknüpfen“ ist an. Sie handeln als der Standard-Bot, halten sich an die erlaubten Übergänge und stehen in der History mit ihrem Grund, etwa „Automatisierung: Auto-Archiv“. Auto-Archiv und Auto-Close laufen jede Nacht um 3 Uhr in der Zeitzone der Organisation.",
-    "automations.link_references.description": "Nennt eine Beschreibung, ein Rich-Text-Feld oder ein Kommentar ein anderes Item neu per #, werden beide mit „verwandt mit“ verknüpft. Wird der Verweis entfernt, bleibt die Relation. Standardmäßig an.",
+    "automations.link_references.description": "Nennt eine Beschreibung, ein Rich-Text-Feld oder ein Kommentar ein anderes Item neu per #, werden beide mit dem eingebauten Typ „verwandt“ verknüpft, wenn die Person, die schrieb, das Item bearbeiten darf. Wird der Verweis entfernt, bleibt die Relation. Standardmäßig an.",
     "automations.link_references.title": "Erwähnte Items verknüpfen",
     "automations.load_failed": "Die Automatisierungen konnten nicht geladen werden",
     "automations.loading": "Automatisierungen werden geladen …",
