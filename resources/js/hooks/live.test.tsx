@@ -12,6 +12,7 @@ import { mockApi, type MockApi } from '@/test/api';
 import { project, webTree } from '@/test/fixtures';
 import { qk } from './keys';
 import { LIVE_BURST_MS, LIVE_MAX_WAIT_MS, useLiveConnected, useLiveItem, useLiveSync } from './live';
+import { usePageVersion, usePageVersions } from './pages';
 import { useMembers, useProject, useProjects } from './projects';
 
 /* The live connection stands in as a bus the test sends messages over. */
@@ -523,6 +524,31 @@ describe('useLiveSync', () => {
 
     // their answers name the project: they would answer 404
     expect([page.fetches(), item.fetches(), inbox.fetches()]).toEqual([1, 1, 2]);
+  });
+
+  it('asks for no version of a page whose project was deleted, also when the connection comes back', async () => {
+    const version = { id: 'pv_domain_1', page_id: 'pg_web_domain', version: 1, title: 'Domain-Umzug', author_id: 'u_mara', created_at: '2026-10-20T08:00:00Z' };
+    api = mockApi({
+      'GET /api/v1/pages/pg_web_domain/versions': () => ({ body: { data: [version], links: {}, meta: { next_cursor: null, total: 1 } } }),
+      'GET /api/v1/pages/pg_web_domain/versions/pv_domain_1': () => ({ body: { data: { ...version, content: null, content_json: null } } }),
+    });
+    const asked = () => api!.calls.filter((call) => call.url.startsWith('/api/v1/pages/pg_web_domain/versions')).map((call) => call.url);
+    const { result } = renderHook(
+      () => ({ list: usePageVersions('pg_web_domain', 'p_web'), text: usePageVersion('pg_web_domain', 'pv_domain_1', 'p_web') }),
+      { wrapper },
+    );
+    renderHook(() => useLiveSync(), { wrapper });
+    await vi.waitFor(() => expect(result.current.list.isSuccess && result.current.text.isSuccess).toBe(true));
+    expect(asked()).toHaveLength(2);
+
+    send({ event_id: 'ev_1', type: 'project.deleted', project_id: 'p_web', item_id: null });
+    await pass(LIVE_BURST_MS);
+    send({ event_id: null, type: 'live.reconnected', project_id: null, item_id: null });
+    await pass(LIVE_BURST_MS);
+    await pass(0);
+
+    // their keys and answers name the page, not its project: only the project tells they would answer 404 now
+    expect(asked()).toHaveLength(2);
   });
 
   it('does not load again a fetch it waited for when its project went meanwhile', async () => {

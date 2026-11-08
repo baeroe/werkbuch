@@ -52,9 +52,9 @@ describe('pages', () => {
       () => ({
         tree: usePages('p_web'),
         page: usePage('pg_web_structure'),
-        versions: usePageVersions('pg_web_structure'),
-        version: usePageVersion('pg_web_structure', 'pv_structure_2'),
-        idle: [usePages(null), usePage(undefined), usePageVersions(null), usePageVersion('pg_web_structure', null)],
+        versions: usePageVersions('pg_web_structure', 'p_web'),
+        version: usePageVersion('pg_web_structure', 'pv_structure_2', 'p_web'),
+        idle: [usePages(null), usePage(undefined), usePageVersions(null, null), usePageVersion('pg_web_structure', null, 'p_web')],
       }),
       { wrapper },
     );
@@ -74,7 +74,7 @@ describe('pages', () => {
     api = mockApi({});
     markLiveGone('pg_web_structure', 'page');
     const { result } = renderHook(
-      () => [usePage('pg_web_structure'), usePageVersions('pg_web_structure'), usePageVersion('pg_web_structure', 'pv_structure_2')],
+      () => [usePage('pg_web_structure'), usePageVersions('pg_web_structure', 'p_web'), usePageVersion('pg_web_structure', 'pv_structure_2', 'p_web')],
       { wrapper },
     );
 
@@ -142,8 +142,8 @@ describe('pages', () => {
       () => ({
         tree: usePages('p_web'),
         hosting: usePage('pg_web_hosting'),
-        versions: usePageVersions('pg_web_tech'),
-        domain: usePageVersion('pg_web_domain', 'pv_domain_1'),
+        versions: usePageVersions('pg_web_tech', 'p_web'),
+        domain: usePageVersion('pg_web_domain', 'pv_domain_1', 'p_web'),
         other: usePage('pg_web_structure'),
         gone: usePageGone('pg_web_performance'),
         remove: useDeletePage(),
@@ -185,7 +185,7 @@ describe('pages', () => {
       'DELETE /api/v1/pages/pg_web_tech': () => ({ body: { deleted: 5 } }),
     });
     const { result } = renderHook(
-      () => ({ hosting: usePage('pg_web_hosting'), versions: usePageVersions('pg_web_hosting'), gone: usePageGone('pg_web_hosting'), remove: useDeletePage() }),
+      () => ({ hosting: usePage('pg_web_hosting'), versions: usePageVersions('pg_web_hosting', 'p_web'), gone: usePageGone('pg_web_hosting'), remove: useDeletePage() }),
       { wrapper },
     );
     await waitFor(() => expect([result.current.hosting.data, result.current.versions.data]).not.toContain(undefined));
