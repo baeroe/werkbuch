@@ -541,10 +541,14 @@ describe('the display menu', () => {
     const save = await screen.findByRole('button', { name: 'Speichern' });
     const saveAs = screen.getByRole('button', { name: 'Als neue View speichern …' });
     const sentence = 'Die Properties werden noch geladen. Speichern geht, sobald klar ist, ob die Sortierung noch gilt.';
-    await waitFor(() => expect(reasonOf(save)).toBe(sentence));
-    expect(reasonOf(saveAs)).toBe(sentence);
+    // a click goes nowhere: the mutation would send its PUT after a few ticks, so wait for them before looking
     fireEvent.click(save);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
     expect(api.calls.some((call) => call.method === 'PUT')).toBe(false);
+    expect(reasonOf(save)).toBe(sentence);
+    expect(reasonOf(saveAs)).toBe(sentence);
 
     release();
     await waitFor(() => expect(save.getAttribute('aria-disabled')).toBeNull());
