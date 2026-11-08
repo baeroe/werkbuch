@@ -70,6 +70,8 @@ const SETTLE = 'in-[.board-dropping]:translate-y-0 in-[.board-dropping]:scale-10
 const LISTS_WAIT_MS = 5000;
 /** How many frames the list must load nothing before the board looks for a new card. */
 const QUIET_FRAMES = 3;
+/** How waiting for the lists of the board ended: they loaded, they took too long, or the board went meanwhile. */
+type ListsOutcome = 'loaded' | 'stale' | 'gone';
 
 /** A hint once: a toast with the same text replaces the one shown, so key after key does not take one more place. */
 function toastOnce(options: ToastOptions): void {
@@ -266,17 +268,19 @@ export function BoardLayout({ groups, groupBy, display, project, createDefaults,
   /**
    * Settles once the lists of the board have loaded again: a column rebuilds its pages one after another (K15), so the
    * lists count as loaded once nothing of them has been on its way for a few frames, and the board has rendered what
-   * they brought. Resolves `false` when that takes longer than `LISTS_WAIT_MS` or the board is gone.
+   * they brought (`loaded`). Resolves `stale` when that takes longer than `LISTS_WAIT_MS`, and `gone` once the board is
+   * gone: what waited for it ends without a word (the next screen hears nothing of the board, M-b).
    */
   const listsLoaded = useCallback(
     () =>
-      new Promise<boolean>((resolve) => {
+      new Promise<ListsOutcome>((resolve) => {
         const started = performance.now();
         let quiet = 0;
         const look = () => {
           quiet = queryClient.isFetching({ queryKey: qk.workItems.all }) > 0 ? 0 : quiet + 1;
-          if (!alive.current || quiet >= QUIET_FRAMES) resolve(alive.current);
-          else if (performance.now() - started >= LISTS_WAIT_MS) resolve(false);
+          if (!alive.current) resolve('gone');
+          else if (quiet >= QUIET_FRAMES) resolve('loaded');
+          else if (performance.now() - started >= LISTS_WAIT_MS) resolve('stale');
           else requestAnimationFrame(look);
         };
         requestAnimationFrame(look);
@@ -429,17 +433,16 @@ export function BoardLayout({ groups, groupBy, display, project, createDefaults,
   }
 
   /**
-   * The redistributions of ranks on their way, by project: they settle once the lists have loaded again (`loaded`) or
-   * the board gave up waiting for them (`stale`), and fail with the server's refusal.
+   * The redistributions of ranks on their way, by project: they settle once the lists have loaded again (`loaded`), the
+   * board gave up waiting for them (`stale`) or is gone (`gone`), and fail with the server's refusal.
    */
-  const reranking = useRef(new Map<string, Promise<'loaded' | 'stale'>>());
+  const reranking = useRef(new Map<string, Promise<ListsOutcome>>());
   /**
    * Has the server give the items of a project short ranks (A448). Moves of the project wait for a call on its way
-   * (`placeNow`); two moves that start in the same tick may both call, and the second only finds the order the first
-   * left (nothing changes).
+   * (`placeNow`), also a move that started in the same tick as the one that asked for it (M-d).
    */
-  function makeRoom(projectId: string): Promise<'loaded' | 'stale'> {
-    const call = redistribute.mutateAsync(projectId).then(async () => ((await listsLoaded()) ? 'loaded' : 'stale'));
+  function makeRoom(projectId: string): Promise<ListsOutcome> {
+    const call = redistribute.mutateAsync(projectId).then(() => listsLoaded());
     reranking.current.set(projectId, call);
     const done = () => {
       if (reranking.current.get(projectId) === call) reranking.current.delete(projectId);
@@ -458,11 +461,13 @@ export function BoardLayout({ groups, groupBy, display, project, createDefaults,
    * Where the rank would grow past what the server takes (P23), the server first gives the items of the card's project
    * short ranks (A448, one call per project at a time; moves of other cards of the project wait for it): the status
    * line says so and the card waits in its new place. Once the lists have loaded again, the rank is worked out between
-   * the fresh neighbours. After a redistribution the card only goes where the two neighbours still stand next to each
-   * other in the fresh column: in a list of several projects the cards of the own project may now stand between them,
-   * and a place that is gone is no room (`no_room`), as are neighbours of another project that still leave none. Lists
-   * that take longer than `LISTS_WAIT_MS` say so (`not_reloaded`); a failed redistribution says it, with "Try again"
-   * where repeating helps, and the card goes back.
+   * the fresh neighbours. The card only goes where the two neighbours still stand next to each other in the column as
+   * the board has it when the turn comes: after a redistribution, in a list of several projects, the cards of the own
+   * project may now stand between them, and a "Try again" comes from a board that may have changed meanwhile (M-c). A
+   * place that is gone says so (`order_changed`); neighbours of another project that still leave none are no room
+   * (`no_room`). Lists that take longer than `LISTS_WAIT_MS` say so (`not_reloaded`); a failed redistribution says it,
+   * with "Try again" where repeating helps, and the card goes back. Once the board is gone, a move ends without a word
+   * (M-b).
    */
   function sendPlace(item: ListedItem, column: BoardColumnData, ids: readonly string[], index: number, pointer = false): Promise<boolean> | null {
     // below the last loaded card come cards not loaded yet: a rank after the last loaded one would put the card after
@@ -488,36 +493,45 @@ export function BoardLayout({ groups, groupBy, display, project, createDefaults,
     const stop = (why: BoardReason) => {
       setAnnouncement('');
       refuse(item, why);
+      // the card goes back to its place: the focus goes with it, however long the move waited (M-e)
+      follow(item.id, column.key, pointer);
       return false;
     };
     mark(item.id, true);
     try {
-      // a redistribution of the project on its way: its new ranks first (one that failed changed nothing)
-      let outcome = await reranking.current.get(item.project_id)?.catch(() => undefined);
+      // a redistribution of the project on its way: its new ranks first (one that failed changed nothing). The first
+      // wait lets a move of the same tick ask for one, which this move then waits for as well (M-d)
+      let outcome: ListsOutcome | undefined;
+      let pending = reranking.current.get(item.project_id);
+      for (;;) {
+        const settled = await pending?.catch(() => undefined);
+        if (pending) outcome = settled;
+        const next = reranking.current.get(item.project_id);
+        if (next === undefined || next === pending) break;
+        pending = next;
+      }
+      if (!alive.current) return false;
       let rank = slot();
       if (rank === null && outcome === undefined) {
         setAnnouncement(t('items.board.reranking'));
         try {
           outcome = await makeRoom(item.project_id);
         } catch (error) {
+          if (!alive.current) return false;
           setAnnouncement('');
           notifyError(t('items.board.not_moved', { key: item.key }), error, () => latestRetry.current(item.id, column.key, ids, index, pointer));
           return false;
         }
         rank = slot();
       }
+      if (outcome === 'gone') return false;
       if (outcome === 'stale') return stop({ code: 'not_reloaded', params: {} });
-      let place = index + 1;
-      let count = ids.length;
-      if (outcome === 'loaded') {
-        // the place is where the two neighbours still stand next to each other
-        const others = (latestServed.current.find((entry) => entry.key === column.key)?.ids ?? []).filter((id) => id !== item.id);
-        const at = above === undefined ? 0 : others.indexOf(above) + 1;
-        if ((above !== undefined && at === 0) || others[at] !== below) rank = null;
-        place = at + 1;
-        count = others.length + 1;
-      }
+      // the place is where the two neighbours still stand next to each other
+      const others = (latestServed.current.find((entry) => entry.key === column.key)?.ids ?? []).filter((id) => id !== item.id);
+      const at = above === undefined ? 0 : others.indexOf(above) + 1;
+      if ((above !== undefined && at === 0) || others[at] !== below) return stop({ code: 'order_changed', params: {} });
       if (rank === null) return stop({ code: 'no_room', params: {} });
+      const [place, count] = [at + 1, others.length + 1];
       follow(item.id, column.key, pointer);
       return await update.mutateAsync({ id: item.id, patch: { rank } }).then(
         () => {
@@ -539,8 +553,8 @@ export function BoardLayout({ groups, groupBy, display, project, createDefaults,
   }
 
   /**
-   * "Try again" after a failed redistribution, from the board as it is then: the card must still be on the board and
-   * still allowed to move (M1); it waits in its new place again.
+   * "Try again" after a failed redistribution, from the board as it is then: the card must still be on the board,
+   * still allowed to move (M1) and the board still sorted by rank (M-c); it waits in its new place again.
    */
   const latestRetry = useRef((_id: string, _column: string, _ids: readonly string[], _index: number, _pointer: boolean) => {});
   useLayoutEffect(() => {
@@ -550,6 +564,8 @@ export function BoardLayout({ groups, groupBy, display, project, createDefaults,
       if (!item || !column) return;
       const check = checkMove(item, key, key, rules);
       if (!check.ok) return refuse(item, check.reason);
+      // the board may be sorted by something else by now (M-c)
+      if (!manual) return sortedHint();
       placeCard(item, column, ids, index, pointer);
     };
   });
@@ -639,7 +655,8 @@ export function BoardLayout({ groups, groupBy, display, project, createDefaults,
   /**
    * A quick add made an item: the status line says it. Once the list has loaded again the new card lights up and comes
    * into view; where the list leaves it out (its filter) a toast says so and opens it, and so it does where a column
-   * with more pages to load has it further down (T19-M3: the status line alone tells no one who sees).
+   * with more pages to load has it further down (T19-M3: the status line alone tells no one who sees). `column` is the
+   * column as it was when the item went out: a count that grew says the column has it.
    */
   function created(item: WorkItem, column: BoardColumnData) {
     setAnnouncement(t('items.board.created', { key: item.key, column: column.label }));
@@ -650,10 +667,12 @@ export function BoardLayout({ groups, groupBy, display, project, createDefaults,
         useUiStore.getState().flash(item.id);
         setRevealing({ column: column.key, id: item.id });
       } else {
-        // a column with more pages to load has it further down; otherwise the filter leaves it out
+        // a column with more pages to load has it further down, if it counts one more than before; otherwise the filter
+        // leaves it out (20b-M1)
+        const further = shown !== undefined && shown.hasMore && shown.count > column.count;
         toast({
           title: t('items.create.created', { key: item.key }),
-          description: shown?.hasMore ? t('items.board.created_further', { key: item.key, column: column.label }) : t('items.board.created_elsewhere'),
+          description: further ? t('items.board.created_further', { key: item.key, column: column.label }) : t('items.board.created_elsewhere'),
           action: { label: t('items.create.open'), onClick: () => useUiStore.getState().openPeek(item.id) },
         });
       }

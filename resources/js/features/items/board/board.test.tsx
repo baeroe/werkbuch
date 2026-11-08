@@ -568,7 +568,7 @@ describe('the board', () => {
     expect(sent('PATCH', '/api/v1/work-items/wi_web_48')).toEqual([]);
   });
 
-  it('keeps the card and says no room when the redistribution put other cards between its neighbours', async () => {
+  it('keeps the card and says the order changed when the redistribution put other cards between its neighbours', async () => {
     // WEB-44 and APP-16 leave no room between them; WEB-43 stands last, but its new rank comes before APP-16
     board.items = board.items.map((entry) =>
       entry.id === 'wi_web_44'
@@ -583,9 +583,11 @@ describe('the board', () => {
     await waitFor(() => expect(keysIn('Unstarted')).toEqual(['WEB-48', 'WEB-44', 'APP-16', 'APP-17', 'APP-18', 'WEB-43']));
     act(() => cardIn('Unstarted', 'WEB-48').focus());
 
-    // meant: right above APP-16; after the redistribution WEB-43 stands there
+    // meant: right above APP-16; after the redistribution WEB-43 stands there: there is room again, but not that place
     press('ArrowDown', { altKey: true });
-    await waitFor(() => expect(lastToast()).toMatchObject({ tone: 'error', title: 'WEB-48 nicht verschoben', description: 'Hier ist kein Platz mehr. Verschiebe die Karte an eine andere Stelle.' }));
+    await waitFor(() =>
+      expect(lastToast()).toMatchObject({ tone: 'error', title: 'WEB-48 nicht verschoben', description: 'Die Ordnung hat sich inzwischen geändert. Verschiebe die Karte noch einmal.' }),
+    );
     expect(sent('POST', '/api/v1/projects/p_web/redistribute-ranks')).toHaveLength(1);
     expect(sent('PATCH', '/api/v1/work-items/wi_web_48')).toEqual([]);
     await waitFor(() => expect(keysIn('Unstarted').slice(0, 3)).toEqual(['WEB-48', 'WEB-44', 'WEB-43']));
@@ -604,15 +606,123 @@ describe('the board', () => {
       await waitFor(() => expect(sent('POST', '/api/v1/projects/p_web/redistribute-ranks')).toHaveLength(1));
       // the lists do not answer; five seconds pass
       vi.spyOn(performance, 'now').mockImplementation(() => now() + 10_000);
+      // the card that waited so long lost the focus meanwhile (in a browser, a card that moves can lose it)
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      act(() => (document.activeElement as HTMLElement).blur());
       await waitFor(() =>
         expect(lastToast()).toMatchObject({ tone: 'error', title: 'WEB-48 nicht verschoben', description: 'Die neue Ordnung ist noch nicht geladen. Verschiebe die Karte gleich noch einmal.' }),
       );
       expect(sent('PATCH', '/api/v1/work-items/wi_web_48')).toEqual([]);
       expect(keysIn('Todo')).toEqual(['WEB-43', 'WEB-44', 'WEB-48']);
+      // long after the move began, the focus still goes back with the card (M-e)
+      await waitFor(() => expect(document.activeElement).toBe(cardIn('Todo', 'WEB-48')));
     } finally {
       vi.restoreAllMocks();
       await act(async () => release());
     }
+  });
+
+  it('lets a move that starts in the same tick wait for the redistribution the first one asks for (M-d)', async () => {
+    board.items = board.items.map((entry) => (entry.id === 'wi_web_44' ? { ...entry, rank: `a1${'0'.repeat(125)}1` } : entry));
+    let release = () => {};
+    board.holdRanks = new Promise((resolve) => (release = resolve));
+    renderBoard('/projects/WEB?layout=board');
+    await waitFor(() => expect(keysIn('In Progress')).toEqual(['WEB-30', 'WEB-41', 'WEB-42']));
+    await waitFor(() => expect(keysIn('Todo')).toEqual(['WEB-43', 'WEB-44', 'WEB-48']));
+
+    // both keys before either move has looked for a redistribution of WEB
+    act(() => cardIn('Todo', 'WEB-48').focus());
+    press('ArrowUp', { altKey: true });
+    act(() => cardIn('In Progress', 'WEB-42').focus());
+    press('ArrowUp', { altKey: true });
+    await waitFor(() => expect(announced()).toBe('Ordnung wird neu verteilt …'));
+    await waitFor(() => expect(cardIn('In Progress', 'WEB-42').getAttribute('aria-busy')).toBe('true'));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    // WEB-42 has room on the old scale, but waits for the new one
+    expect(sent('PATCH', '/api/v1/work-items/wi_web_42')).toEqual([]);
+    await act(async () => release());
+
+    await waitFor(() => expect(sent('PATCH', '/api/v1/work-items/wi_web_42')).toHaveLength(1));
+    const { rank } = sent('PATCH', '/api/v1/work-items/wi_web_42')[0] as { rank: string };
+    expect('a3' < rank && rank < 'a4').toBe(true);
+    expect(sent('POST', '/api/v1/projects/p_web/redistribute-ranks')).toHaveLength(1);
+  });
+
+  it.each([
+    ['the lists load again', false],
+    ['the redistribution fails', 503],
+  ] as const)('says nothing on the next screen when the board goes while %s (M-b)', async (_, fail) => {
+    board.items = board.items.map((entry) => (entry.id === 'wi_web_44' ? { ...entry, rank: `a1${'0'.repeat(125)}1` } : entry));
+    board.failRanks = fail;
+    let release = () => {};
+    board.holdRanks = new Promise((resolve) => (release = resolve));
+    const view = renderBoard('/projects/WEB?layout=board');
+    await waitFor(() => expect(keysIn('In Progress')).toEqual(['WEB-30', 'WEB-41', 'WEB-42']));
+    act(() => cardIn('Todo', 'WEB-48').focus());
+    press('ArrowUp', { altKey: true });
+    await waitFor(() => expect(announced()).toBe('Ordnung wird neu verteilt …'));
+    // a move of another card of WEB waits for the redistribution
+    act(() => cardIn('In Progress', 'WEB-42').focus());
+    press('ArrowUp', { altKey: true });
+
+    view.unmount();
+    await act(async () => release());
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    // neither the waiting moves nor the failure say anything once the board is gone, and nothing more goes out
+    expect(currentToasts()).toEqual([]);
+    expect(sent('POST', '/api/v1/projects/p_web/redistribute-ranks')).toHaveLength(1);
+    expect(sent('PATCH', '/api/v1/work-items/wi_web_42')).toEqual([]);
+    expect(sent('PATCH', '/api/v1/work-items/wi_web_48')).toEqual([]);
+  });
+
+  it('gives the hint of the sort for "Try again" once the board is sorted by something else (M-c)', async () => {
+    board.items = board.items.map((entry) => (entry.id === 'wi_web_44' ? { ...entry, rank: `a1${'0'.repeat(125)}1` } : entry));
+    board.failRanks = 503;
+    renderBoard('/projects/WEB?layout=board');
+    const card = await waitFor(() => cardIn('Todo', 'WEB-48'));
+    act(() => card.focus());
+    press('ArrowUp', { altKey: true });
+    await waitFor(() => expect(lastToast()).toMatchObject({ title: 'WEB-48 nicht verschoben', description: 'Wartung.' }));
+    const retry = lastToast()!.action!.onClick;
+
+    board.failRanks = false;
+    act(() => inertia.go('/projects/WEB?layout=board&sort=priority'));
+    await waitFor(() => expect(sent('POST', '/api/v1/work-items/groups').at(-1)).toMatchObject({ sort: { field: 'priority' } }));
+    resetToasts();
+    act(() => retry());
+    expect(currentToasts().map((entry) => entry.title)).toEqual(['Die Reihenfolge folgt der Sortierung']);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(sent('POST', '/api/v1/projects/p_web/redistribute-ranks')).toHaveLength(1);
+    expect(sent('PATCH', '/api/v1/work-items/wi_web_48')).toEqual([]);
+  });
+
+  it('keeps the card for "Try again" when its neighbours no longer stand next to each other (M-c)', async () => {
+    board.items = board.items.map((entry) => (entry.id === 'wi_web_44' ? { ...entry, rank: `a1${'0'.repeat(125)}1` } : entry));
+    board.failRanks = 503;
+    renderBoard('/projects/WEB?layout=board');
+    const card = await waitFor(() => cardIn('Todo', 'WEB-48'));
+    act(() => card.focus());
+    press('ArrowUp', { altKey: true });
+    await waitFor(() => expect(lastToast()).toMatchObject({ title: 'WEB-48 nicht verschoben', description: 'Wartung.' }));
+    const retry = lastToast()!.action!.onClick;
+
+    // another tab gave WEB short ranks, and WEB-43, the neighbour above, went to In Progress
+    board.failRanks = false;
+    board.items = board.items.map((entry) =>
+      entry.id === 'wi_web_43' ? { ...entry, rank: 'a0' } : entry.id === 'wi_web_44' ? { ...entry, rank: 'a1' } : entry.id === 'wi_web_48' ? { ...entry, rank: 'a2' } : entry,
+    );
+    act(() => cardIn('Todo', 'WEB-43').focus());
+    press('ArrowRight', { shiftKey: true });
+    await waitFor(() => expect(cardIn('In Progress', 'WEB-43')).toBeTruthy());
+    await waitFor(() => expect(keysIn('Todo')).toEqual(['WEB-44', 'WEB-48']));
+
+    resetToasts();
+    act(() => retry());
+    await waitFor(() =>
+      expect(lastToast()).toMatchObject({ tone: 'error', title: 'WEB-48 nicht verschoben', description: 'Die Ordnung hat sich inzwischen geändert. Verschiebe die Karte noch einmal.' }),
+    );
+    expect(sent('PATCH', '/api/v1/work-items/wi_web_48')).toEqual([]);
+    await waitFor(() => expect(keysIn('Todo')).toEqual(['WEB-44', 'WEB-48']));
   });
 
   it('keeps the card and says no room when the neighbours belong to another project', async () => {
