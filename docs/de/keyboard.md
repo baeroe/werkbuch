@@ -4,6 +4,8 @@
 
 werkbuch geht ohne Maus. Mit <kbd>?</kbd> zeigt jeder Bildschirm die Kürzel, die dort gerade gelten; diese Seite nennt alle. Hat eine Taste zwei Namen, gilt der erste auf dem Mac und der zweite unter Windows und Linux. Beim Tippen in einem Feld wirken nur <kbd>⌘ / Strg</kbd>+<kbd>K</kbd>, <kbd>Esc</kbd> und <kbd>⌘ / Strg</kbd>+<kbd>↵</kbd>. Solange ein Dialog offen ist, ruhen die Kürzel der Seite dahinter.
 
+`e2e/keyboard-flows.ts` ordnet jedes Kürzel dieser Seite und jede Taste eines Widgets einem Playwright-Test zu, der sie nur mit der Tastatur drückt. `scripts/keyboard-flows.test.mjs` prüft, dass es den Test gibt, dass er keine Maus benutzt und in den Breiten von Desktop und Handy läuft; Tasten ohne solchen Test stehen dort als Lücke.
+
 ## Allgemein
 
 | Taste | Aktion |

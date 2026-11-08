@@ -58,6 +58,10 @@ const TEXT = {
       'Where a key has two names, the first is the key on a Mac and the second the one on Windows and Linux.',
       `While you type in a field, only ${keyLabel('mod+k', 'en')}, ${keyLabel('escape', 'en')} and ${keyLabel('mod+enter', 'en')} work. While a dialog is open, the shortcuts of the page behind it wait.`,
     ].join(' '),
+    tested: [
+      '`e2e/keyboard-flows.ts` maps every shortcut on this page and every key of a widget to a Playwright test that presses it with the keyboard only.',
+      '`scripts/keyboard-flows.test.mjs` checks that the test exists, uses no mouse and runs at desktop and phone widths; keys without such a test yet stand there as gaps.',
+    ].join(' '),
   },
   de: {
     title: 'Tastatur',
@@ -67,6 +71,10 @@ const TEXT = {
       'werkbuch geht ohne Maus. Mit <kbd>?</kbd> zeigt jeder Bildschirm die Kürzel, die dort gerade gelten; diese Seite nennt alle.',
       'Hat eine Taste zwei Namen, gilt der erste auf dem Mac und der zweite unter Windows und Linux.',
       `Beim Tippen in einem Feld wirken nur ${keyLabel('mod+k', 'de')}, ${keyLabel('escape', 'de')} und ${keyLabel('mod+enter', 'de')}. Solange ein Dialog offen ist, ruhen die Kürzel der Seite dahinter.`,
+    ].join(' '),
+    tested: [
+      '`e2e/keyboard-flows.ts` ordnet jedes Kürzel dieser Seite und jede Taste eines Widgets einem Playwright-Test zu, der sie nur mit der Tastatur drückt.',
+      '`scripts/keyboard-flows.test.mjs` prüft, dass es den Test gibt, dass er keine Maus benutzt und in den Breiten von Desktop und Handy läuft; Tasten ohne solchen Test stehen dort als Lücke.',
     ].join(' '),
   },
 };
@@ -138,6 +146,8 @@ export async function renderKeyboardDoc(language) {
     `# ${TEXT[language].title}`,
     '',
     TEXT[language].intro,
+    '',
+    TEXT[language].tested,
     '',
     ...[...groups].flatMap(([group, entries]) => section(texts[group], entries, language, texts, NOTES[language][group])),
     ...WIDGET_KEYS.flatMap((widget) => section(texts[widget.group], widget.entries, language, texts)),

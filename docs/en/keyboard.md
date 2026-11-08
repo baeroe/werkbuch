@@ -4,6 +4,8 @@
 
 werkbuch works without a mouse. Press <kbd>?</kbd> on any screen to see the shortcuts that apply there right now; this page lists all of them. Where a key has two names, the first is the key on a Mac and the second the one on Windows and Linux. While you type in a field, only <kbd>⌘ / Ctrl</kbd>+<kbd>K</kbd>, <kbd>Esc</kbd> and <kbd>⌘ / Ctrl</kbd>+<kbd>↵</kbd> work. While a dialog is open, the shortcuts of the page behind it wait.
 
+`e2e/keyboard-flows.ts` maps every shortcut on this page and every key of a widget to a Playwright test that presses it with the keyboard only. `scripts/keyboard-flows.test.mjs` checks that the test exists, uses no mouse and runs at desktop and phone widths; keys without such a test yet stand there as gaps.
+
 ## General
 
 | Keys | Action |
