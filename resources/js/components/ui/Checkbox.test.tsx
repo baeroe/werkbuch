@@ -58,9 +58,18 @@ describe('Checkbox', () => {
   });
 
   it('dims a locked box without a label itself', () => {
-    render(<Checkbox aria-label="Mail" disabled />);
+    render(
+      <>
+        <Checkbox aria-label="Mail" aria-describedby="why" disabled />
+        <p id="why">Kein Mailserver.</p>
+      </>,
+    );
+    const box = screen.getByRole('checkbox', { name: 'Mail' });
 
-    expect(screen.getByRole('checkbox', { name: 'Mail' }).className).toContain('data-disabled:opacity-50');
+    expect(box.className).toContain('data-disabled:opacity-50');
+    // what Base UI says of a disabled box and what the caller describes it with both stay
+    expect(box.getAttribute('aria-disabled')).toBe('true');
+    expect(box.getAttribute('aria-describedby')).toBe('why');
   });
 
   it('keeps its tab stop and says why when it is blocked by a reason, and changes neither by click nor by Space', async () => {

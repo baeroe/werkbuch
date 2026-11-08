@@ -23,14 +23,19 @@ export function Checkbox(props: CheckboxProps) {
   const reasonId = useId();
   const blocked = Boolean(disabledReason) && !disabled;
   const locked = disabled || blocked;
+  const description = [blocked ? reasonId : undefined, describedBy].filter(Boolean).join(' ');
+  // only what this box adds: an `undefined` would overwrite what Base UI sets itself (`aria-disabled` of a disabled box)
+  const blockedProps = {
+    ...(blocked ? { 'aria-disabled': true } : {}),
+    ...(description ? { 'aria-describedby': description } : {}),
+  };
   const box = (
     <BaseCheckbox.Root
       indeterminate={indeterminate}
       disabled={disabled}
       // readOnly, not disabled: it keeps the tab stop, and neither a click nor Space changes it
       readOnly={readOnly || blocked}
-      aria-disabled={blocked || undefined}
-      aria-describedby={[blocked ? reasonId : undefined, describedBy].filter(Boolean).join(' ') || undefined}
+      {...blockedProps}
       onCheckedChange={onCheckedChange ? (checked) => onCheckedChange(checked) : undefined}
       className={cx(
         'inline-flex size-4 shrink-0 items-center justify-center rounded-chip border border-line-input bg-surface text-on-accent transition-colors duration-120',
