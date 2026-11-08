@@ -1082,6 +1082,47 @@ describe('Relations', () => {
     expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual(['Startseite umbauenWEB-48', 'Impressum aktualisierenWEB-50']);
   });
 
+  it('offers no hit of an earlier query while the search answers', async () => {
+    const user = userEvent.setup();
+    renderWith(<ItemPage itemKey="WEB-47" />);
+    // the search for the new text waits until the test lets it answer
+    const original = globalThis.fetch;
+    let release = () => {};
+    let held = false;
+    globalThis.fetch = async (input, init) => {
+      if (new URL(String(input), 'https://werkbuch.test').searchParams.get('q') === 'impressum') {
+        held = true;
+        await new Promise<void>((resolve) => (release = resolve));
+      }
+      return original(input, init);
+    };
+    await screen.findByRole('region', { name: 'Relationen' });
+    press('r');
+    const dialog = await screen.findByRole('dialog', { name: 'Relation hinzufügen' });
+    const search = await screen.findByPlaceholderText('Key, Titel oder Text suchen …');
+    await waitFor(() => expect(document.activeElement).toBe(search));
+    await user.keyboard('startseite');
+    expect((await screen.findByRole('option', { name: /Startseite umbauen/ })).getAttribute('aria-disabled')).not.toBe('true');
+
+    await user.keyboard('{Backspace>10/}impressum');
+    // the hits of "startseite" stay while the new text is asked, but none of them can be chosen
+    const earlier = screen.getByRole('option', { name: /Startseite umbauen/ });
+    expect(earlier.getAttribute('aria-disabled')).toBe('true');
+    await waitFor(() => expect(held).toBe(true));
+    expect(screen.getByRole('option', { name: /Startseite umbauen/ }).getAttribute('aria-disabled')).toBe('true');
+    expect(within(dialog).getByText('Sucht …')).toBeTruthy();
+    await user.keyboard('{Enter}');
+    expect(within(dialog).getByRole('combobox', { name: 'Item: keins gewählt' })).toBeTruthy();
+
+    await act(async () => release());
+    const fresh = await screen.findByRole('option', { name: /Impressum aktualisieren/ });
+    expect(fresh.getAttribute('aria-disabled')).not.toBe('true');
+    expect(screen.queryByRole('option', { name: /Startseite umbauen/ })).toBeNull();
+    expect(within(dialog).queryByText('Sucht …')).toBeNull();
+    await user.keyboard('{Enter}');
+    expect(within(dialog).getByRole('combobox', { name: 'Item: WEB-50 Impressum aktualisieren' })).toBeTruthy();
+  });
+
   it('asks nothing until something is typed and says what to type', async () => {
     const user = userEvent.setup();
     renderWith(<ItemPage itemKey="WEB-47" />);

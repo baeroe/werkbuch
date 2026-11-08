@@ -891,6 +891,7 @@
     "items.detail.relations.dialog.no_match": "No item matches.",
     "items.detail.relations.dialog.none": "none chosen",
     "items.detail.relations.dialog.search": "Search key, title or text …",
+    "items.detail.relations.dialog.searching": "Searching …",
     "items.detail.relations.dialog.submit": "Add",
     "items.detail.relations.dialog.title": "Add relation",
     "items.detail.relations.dialog.type_to_search": "Type a key or a title",

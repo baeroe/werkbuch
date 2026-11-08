@@ -7,7 +7,8 @@
  * `r`, "Relation" or "Relation hinzufügen …" in the item's menu open the dialog: the kind of relation in both
  * directions, then the item, found through the search (`GET /api/v1/search?types=items`, P16) by key, title or
  * description in every project the reader sees; a typed key, also with a former identifier and of an archived item,
- * leads the hits (`key_match`). Nothing is asked before something is typed. A refusal of the server stands at its field
+ * leads the hits (`key_match`). Nothing is asked before something is typed; the hits of an earlier text stay greyed out
+ * and cannot be chosen until the new text is answered. A refusal of the server stands at its field
  * (`target_id`: duplicate, self, unknown; `type_id`), any other one on top of the form.
  */
 
@@ -89,6 +90,9 @@ function RelationDialog({ item, open, onOpenChange, finalFocus }: RelationDialog
   // on its way (the list does not blink)
   const found = useSearch(search, { types: ['items'], limit: SEARCH_LIMIT }, { enabled: open });
   const typed = query.trim() !== '';
+  // the hits belong to an earlier text while the pause runs or the answer to the new one is on its way: they stay, so the
+  // list does not blink, but none of them can be chosen (Enter takes nothing, like `stale` in the editor's menus)
+  const stale = typed && (search !== query.trim() || found.isPlaceholderData);
   const [errors, setErrorState] = useState<Errors>({});
   const [refused, setRefused] = useState(0);
   /** Errors of a submit: shown at their fields, and the focus goes to the first of them. */
@@ -120,10 +124,10 @@ function RelationDialog({ item, open, onOpenChange, finalFocus }: RelationDialog
   const options: PickerOption[] = candidates.map((entry) => {
     const type = types?.find((candidate) => candidate.id === entry.type_id);
     const why = denied(entry);
-    return { value: entry.id, label: entry.title, hint: why ? `${entry.key} · ${why}` : entry.key, icon: type ? <TypeGlyph type={type} /> : undefined, disabled: why !== null };
+    return { value: entry.id, label: entry.title, hint: why ? `${entry.key} · ${why}` : entry.key, icon: type ? <TypeGlyph type={type} /> : undefined, disabled: stale || why !== null };
   });
   const label = kinds.find((entry) => entry.value === chosenKind)?.label ?? '';
-  const hint = typed && found.isError ? undefined : t('items.detail.relations.dialog.item_hint');
+  const hint = typed && found.isError ? undefined : t(stale ? 'items.detail.relations.dialog.searching' : 'items.detail.relations.dialog.item_hint');
 
   function submit() {
     if (!chosenKind) return setErrors({ kind: t('items.detail.relations.dialog.kind_required') });
@@ -193,7 +197,7 @@ function RelationDialog({ item, open, onOpenChange, finalFocus }: RelationDialog
               setErrors({});
             }}
             placeholder={t('items.detail.relations.dialog.search')}
-            emptyText={t(typed ? 'items.detail.relations.dialog.no_match' : 'items.detail.relations.dialog.type_to_search')}
+            emptyText={t(stale ? 'items.detail.relations.dialog.searching' : typed ? 'items.detail.relations.dialog.no_match' : 'items.detail.relations.dialog.type_to_search')}
             load={{ isLoading: typed && found.data === undefined && !found.isError, error: typed ? found.error : null, retry: () => void found.refetch(), retrying: found.isFetching }}
             describedBy={describedBy(itemFieldId, { hint, error: errors.target })}
             invalid={Boolean(errors.target)}
