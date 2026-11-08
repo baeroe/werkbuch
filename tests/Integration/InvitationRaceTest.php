@@ -1,7 +1,11 @@
 <?php
 
+use App\Access\ProjectRole;
 use App\Actions\Auth\AcceptInvitation;
+use App\Events\EventType;
+use App\Models\Event;
 use App\Models\Invitation;
+use App\Models\Project;
 use App\Models\User;
 use Illuminate\Validation\ValidationException;
 use Tests\Support\RaceConnections;
@@ -18,7 +22,12 @@ beforeEach(fn () => RaceConnections::setUp());
 afterEach(fn () => RaceConnections::tearDown());
 
 it('makes one account of two accepts at once', function () {
-    $invitation = Invitation::factory()->create(['email' => 'lea@example.com']);
+    $web = Project::factory()->create();
+    $invitation = Invitation::factory()->create([
+        'email' => 'lea@example.com',
+        'projects' => [['project_id' => $web->id, 'role' => ProjectRole::Member->value]],
+    ]);
+    $before = Event::query()->pluck('id')->all();
     $second = Invitation::query()->findOrFail($invitation->id);
 
     // connection 1: Lea accepts and the request has not committed yet
@@ -33,4 +42,13 @@ it('makes one account of two accepts at once', function () {
         ->and($refusal instanceof ValidationException ? $refusal->errors() : null)->toBe(['invitation' => [__('invitation.closed')]])
         ->and(User::query()->where('email', 'lea@example.com')->sole()->is($lea))->toBeTrue()
         ->and(Invitation::query()->findOrFail($invitation->id)->accepted_at)->not->toBeNull();
+
+    // the first accept wrote the account and its membership once; the refused second wrote no event at all
+    $created = eventsOf(EventType::UserCreated, $lea);
+    $added = eventsOf(EventType::ProjectMemberAdded, $web);
+    expect($created)->toHaveCount(1)
+        ->and($added)->toHaveCount(1)
+        ->and($added->sole()->changes['member']['new'] ?? null)->toBe(['user_id' => $lea->id, 'role' => 'member'])
+        ->and(Event::query()->whereNotIn('id', $before)->orderBy('id')->pluck('id')->all())
+        ->toBe(collect([$created->sole()->id, $added->sole()->id])->sort()->values()->all());
 });
