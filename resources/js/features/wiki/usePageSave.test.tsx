@@ -8,7 +8,7 @@
 import { notifyManager, QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { currentToasts, resetToasts, runToastAction } from '@/components/ui/toast';
 import { UploadCounter } from '@/editor/UploadContext';
 import { drafts, pageDraft } from '@/lib/drafts';
@@ -66,11 +66,11 @@ function holdSaves() {
   };
 }
 
-function renderSave(options: { canEdit?: boolean; uploads?: UploadCounter; page?: WikiPage } = {}) {
+function renderSave(options: { canEdit?: boolean; uploads?: UploadCounter; page?: WikiPage; onTitleRequired?: () => void } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
   const view = renderHook(
-    ({ shown }: { shown: WikiPage }) => usePageSave(shown, { canEdit: options.canEdit ?? true, uploads: options.uploads }),
+    ({ shown }: { shown: WikiPage }) => usePageSave(shown, { canEdit: options.canEdit ?? true, uploads: options.uploads, onTitleRequired: options.onTitleRequired }),
     { wrapper, initialProps: { shown: options.page ?? page } },
   );
   return { ...view, client };
@@ -265,6 +265,61 @@ describe('usePageSave', () => {
     await waitFor(() => expect(result.current.conflict?.current.version).toBe(6));
     expect(saves().at(-1)).toEqual({ title: 'Domain-Umzug (Ida)', emoji: null, content_json: doc('Idas und meins'), base_version: 5 });
     expect(result.current.draft.content).toEqual(doc('Meins'));
+  });
+
+  it('says why undo after reload could not run with an empty title', async () => {
+    const current = makePage({ ...page, title: 'Domain-Umzug (Ida)', content_json: doc('Idas'), version: 5 });
+    patch = () => problem(409, 'page_conflict', { detail: 'Ida Brenner hat die Seite inzwischen geändert.', current });
+    const onTitleRequired = vi.fn();
+    const { result } = renderSave({ onTitleRequired });
+    await act(async () => result.current.change({ content: doc('Meins') }, { now: true }));
+    await waitFor(() => expect(result.current.conflict).not.toBeNull());
+    act(() => result.current.reload());
+    // the title emptied after "Neu laden": the text typed since cannot save first
+    act(() => result.current.change({ title: '' }));
+    const dropped = currentToasts().find((toast) => toast.title === 'Deine Fassung verworfen')!;
+
+    await act(async () => runToastAction(dropped.id));
+
+    expect(currentToasts().at(-1)).toMatchObject({ title: 'Deine Fassung nicht zurückgeholt: Gib der Seite erst einen Titel.', tone: 'error' });
+    expect(onTitleRequired).toHaveBeenCalledTimes(1);
+    expect(result.current.titleError).toBe('Gib der Seite einen Titel. Ohne Titel wird nichts gespeichert.');
+    expect(result.current.conflict).toBeNull();
+    expect(result.current.draft.content).toEqual(doc('Idas'));
+    expect(saves()).toHaveLength(1);
+  });
+
+  it('undoes after reload once the upload finished', async () => {
+    const uploads = new UploadCounter();
+    const current = makePage({ ...page, title: 'Domain-Umzug (Ida)', content_json: doc('Idas'), version: 5 });
+    patch = () => problem(409, 'page_conflict', { detail: 'Ida Brenner hat die Seite inzwischen geändert.', current });
+    const { result } = renderSave({ uploads });
+    await act(async () => result.current.change({ content: doc('Meins') }, { now: true }));
+    await waitFor(() => expect(result.current.conflict).not.toBeNull());
+    act(() => result.current.reload());
+    patch = (body) => stored(body);
+    // a picture uploads into the text typed after "Neu laden"
+    act(() => uploads.add(1));
+    act(() => result.current.change({ content: doc('Idas mit Bild') }));
+    const dropped = currentToasts().find((toast) => toast.title === 'Deine Fassung verworfen')!;
+
+    await act(async () => runToastAction(dropped.id));
+    // the toast says it waits, nothing is sent or brought back yet
+    expect(currentToasts().at(-1)).toMatchObject({ title: 'Deine Fassung kommt zurück, sobald der Upload fertig ist.', tone: 'neutral' });
+    expect(saves()).toHaveLength(1);
+    expect(result.current.conflict).toBeNull();
+    act(() => uploads.add(-1));
+    // the text typed since is saved first, then the own text comes back with the conflict, once
+    await waitFor(() => expect(result.current.conflict?.current.version).toBe(6));
+    expect(saves()).toHaveLength(2);
+    expect(saves()[1]).toEqual({ title: 'Domain-Umzug (Ida)', emoji: null, content_json: doc('Idas mit Bild'), base_version: 5 });
+    expect(result.current.draft.content).toEqual(doc('Meins'));
+    // at most once: the next upload brings nothing back again
+    act(() => result.current.reload());
+    act(() => uploads.add(1));
+    act(() => uploads.add(-1));
+    expect(result.current.conflict).toBeNull();
+    expect(saves()).toHaveLength(2);
   });
 
   it('takes a newer page from outside only while nothing is typed', async () => {

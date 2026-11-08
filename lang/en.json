@@ -3299,6 +3299,8 @@
     "wiki.conflict.open": "Open",
     "wiki.conflict.self": "You have changed the page in another window in the meantime.",
     "wiki.conflict.text": "Your version is still in the editor. Load the new version or keep yours. The other one is then kept as a version.",
+    "wiki.conflict.undo_blocked.title_required": "Your version not brought back: give the page a title first.",
+    "wiki.conflict.undo_blocked.uploading": "Your version comes back once the upload is done.",
     "wiki.conflict.waits": "Your version is waiting on the page.",
     "wiki.create_failed": "Page not created",
     "wiki.created.description": "The title is waiting to be typed over.",

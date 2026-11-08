@@ -14,7 +14,8 @@
  *   "Verschieben nach …" (`wiki.page.move`, `onMove`) and "Löschen …" (`wiki.page.delete`, `onDelete`), only for whoever
  *   may edit and only as far as the wiki passes them.
  * - A conflict (409) stands as a banner above the text (`ConflictBanner`): "Neu laden" or "Meine Fassung übernehmen",
- *   both give the focus on into the text (`usePageSave`).
+ *   both give the focus on into the text (`usePageSave`). An undo of "Neu laden" that waits for a title puts the focus
+ *   in the title.
  * - "Versionen …" in the head row and the palette's `wiki.page.versions` open the kept versions (`VersionsDialog`);
  *   a restore saves what is typed first and waits while a conflict stands ("Erst den Konflikt klären").
  * - A viewer reads: the title as heading, the text in the viewer (or "Diese Seite ist noch leer."), why they cannot
@@ -62,15 +63,17 @@ export function PageSheet({ page, projectId, identifier, ancestors, rights, focu
   const canEdit = rights.denied === null;
   const uploads = useUploadCounter();
   const me = useCurrentUser()?.id;
+  const titleRef = useRef<HTMLTextAreaElement>(null);
   const { draft, change, save, state, savedAt, spoken, titleError, conflict, reload, keepMine, flush } = usePageSave(page, {
     canEdit,
     uploads,
     me,
     href: paths.wiki(identifier, page.id),
+    // an undo after "Neu laden" waits for a title: the title takes the focus
+    onTitleRequired: () => titleRef.current?.focus(),
   });
   const users = useUserMap();
   const day = useInstantDay();
-  const titleRef = useRef<HTMLTextAreaElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const ids = useId();
   const [emojiOpen, setEmojiOpen] = useState(false);

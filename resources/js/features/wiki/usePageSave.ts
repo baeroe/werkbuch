@@ -35,6 +35,8 @@
  *   - `reload()` takes the stored page into the editor and drops the own text, with a toast whose "Rückgängig" (⌘Z
  *     with the focus outside a text field) brings the own text and the conflict back; a version this view saved since
  *     then is what the conflict is about now (13c); text typed since then and not saved yet is saved first (T15-M1).
+ *     Can it not save yet, a toast says why (T21i): a blank title (and the title takes the focus, `onTitleRequired`),
+ *     or an upload on its way, then the undo waits for the uploads and runs once they are stored, at most once.
  *     The editor's own undo stops at the reloaded page (it never enters
  *     the editor's history), so it never saves the own text over the other one without the conflict.
  *   - A conflict that stands when the view goes says so in the same toast with "Öffnen"; nothing is sent then.
@@ -132,9 +134,11 @@ export interface PageSaveOptions {
   me?: string;
   /** The address of the page, for "Öffnen" of a conflict met after the view went away. */
   href?: string;
+  /** The title is blank where a save had to go first (an undo after "Neu laden"): the title takes the focus. */
+  onTitleRequired?: () => void;
 }
 
-export function usePageSave(page: WikiPage, { canEdit, uploads, me, href }: PageSaveOptions): PageSave {
+export function usePageSave(page: WikiPage, { canEdit, uploads, me, href, onTitleRequired }: PageSaveOptions): PageSave {
   const key = pageDraft(page.id);
   const savePage = useSavePage();
   const queryClient = useQueryClient();
@@ -163,7 +167,7 @@ export function usePageSave(page: WikiPage, { canEdit, uploads, me, href }: Page
   /** The page as the latest render had it, for an undo that runs later. */
   const latestPage = useRef(page);
   /** The options as the latest render had them. */
-  const options = useRef({ me, href });
+  const options = useRef({ me, href, onTitleRequired });
   /** The version the typed text is based on. */
   const base = useRef(kept ? kept.base_version : page.version);
   /** What the server holds of this view's text. */
@@ -177,13 +181,15 @@ export function usePageSave(page: WikiPage, { canEdit, uploads, me, href }: Page
   const keepCurrent = useRef(false);
   /** A save waits for the uploads to be stored. */
   const waiting = useRef(false);
+  /** An undo after "Neu laden" that waits for the uploads: it runs instead of that save, once. */
+  const undoAfterUploads = useRef<(() => void) | null>(null);
   const mounted = useRef(false);
   const editable = useRef(canEdit);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => {
     editable.current = canEdit;
     latestPage.current = page;
-    options.current = { me, href };
+    options.current = { me, href, onTitleRequired };
   });
 
   /** Typed text the server does not have yet: kept as the page's draft with the version it is typed on. */
@@ -237,7 +243,11 @@ export function usePageSave(page: WikiPage, { canEdit, uploads, me, href }: Page
     return uploads.subscribe(() => {
       if (uploads.current() > 0 || !waiting.current) return;
       waiting.current = false;
-      void save.current();
+      // an undo that waited saves first itself
+      const undo = undoAfterUploads.current;
+      undoAfterUploads.current = null;
+      if (undo) undo();
+      else void save.current();
     });
   }, [uploads]);
 
@@ -410,7 +420,18 @@ export function usePageSave(page: WikiPage, { canEdit, uploads, me, href }: Page
   async function restoreMine(mine: PageFields, before: PageConflict) {
     // typed after "Neu laden" and not saved yet: saved first, so taking the own text back loses none of it (T15-M1);
     // should that save fail or meet a conflict, the newer text stays and the old one is not brought back over it
-    if (mounted.current && !(await flush())) return;
+    if (mounted.current && !(await flush())) {
+      // a conflict met (the banner says it), a failure (its toast says it), or the view gone: nothing more to say
+      if (open.current || !mounted.current) return;
+      if (waiting.current) {
+        undoAfterUploads.current = () => void restoreMine(mine, before);
+        toast({ title: t('wiki.conflict.undo_blocked.uploading') });
+      } else if (latest.current.title.trim() === '') {
+        toast({ title: t('wiki.conflict.undo_blocked.title_required'), tone: 'error' });
+        options.current.onTitleRequired?.();
+      }
+      return;
+    }
     // a copy: the editor ignores documents it reported itself
     const copy: PageFields = { ...mine, content: mine.content ? structuredClone(mine.content) : null };
     // what this view saved after "Neu laden" is newer than the page the conflict met: that is the stored state now
