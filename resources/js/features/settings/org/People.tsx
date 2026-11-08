@@ -217,7 +217,10 @@ export default function People(_props: SectionProps) {
   const settle = useSettle();
   const users = useAllUsers({ type: 'person' });
   const invitations = useInvitations();
-  const projects = useProjects();
+  // the list the rights and the sidebar read (a second one would be a second request): invitations name archived projects
+  // too, the dialog offers only the others
+  const projects = useProjects({ include_archived: true });
+  const open = (projects.data?.items ?? []).filter((project) => project.archived_at === null);
   const me = useCurrentUser();
   const zone = useOrgZone();
   const updateRole = useUpdateUserRole();
@@ -309,7 +312,7 @@ export default function People(_props: SectionProps) {
         </Banner>
       )}
 
-      <Loaded queries={[users, projects]} failure={t('settings.people.load_failed')} skeleton={<RowsSkeleton rows={5} label={t('settings.people.loading')} />}>
+      <Loaded queries={[users]} failure={t('settings.people.load_failed')} skeleton={<RowsSkeleton rows={5} label={t('settings.people.loading')} />}>
         {() =>
           people.length === 0 ? (
             <EmptyState icon={UserPlus} title={t('settings.people.empty.title')} description={t('settings.people.empty.description')} />
@@ -400,7 +403,7 @@ export default function People(_props: SectionProps) {
         )}
       </Panel>
 
-      <InviteDialog key={inviteDialog.round} open={inviteDialog.open} onOpenChange={inviteDialog.setOpen} projects={projects.data?.items ?? []} />
+      <InviteDialog key={inviteDialog.round} open={inviteDialog.open} onOpenChange={inviteDialog.setOpen} projects={open} />
 
       <AlertDialog
         open={asking !== null}

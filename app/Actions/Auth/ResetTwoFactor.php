@@ -16,8 +16,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
 /**
  * The way back for a person who lost the authenticator app and the recovery codes (`app:reset-two-factor`): the second
  * factor goes off, the stored sessions and the remember cookie end, the event `user.two_factor_disabled` names the
- * reset, and the day of codes starts again (A435). The person signs in with the password and sets the second factor up
- * again, also the same day.
+ * reset (`user.two_factor_setup_cancelled` instead, when the setup was never confirmed), and the day of codes starts
+ * again (A435). The person signs in with the password and sets the second factor up again, also the same day.
  */
 final class ResetTwoFactor
 {
@@ -35,10 +35,11 @@ final class ResetTwoFactor
         }
 
         DB::transaction(function () use ($user): void {
+            $type = $user->two_factor_confirmed_at === null ? EventType::UserTwoFactorSetupCancelled : EventType::UserTwoFactorDisabled;
             ($this->disable)($user);
             $user->forceFill(['remember_token' => Str::random(60)])->save();
             EndSessions::run($user);
-            EventRecorder::record(EventType::UserTwoFactorDisabled, Actor::system($user, 'two_factor_reset'), $user, null);
+            EventRecorder::record($type, Actor::system($user, 'two_factor_reset'), $user, null);
             DB::afterCommit(fn () => RateLimiter::clear(TwoFactorDay::cacheKey((string) $user->id)));
         });
 

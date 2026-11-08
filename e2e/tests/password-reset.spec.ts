@@ -1,12 +1,12 @@
 import { expect, test } from '../fixtures';
-import { artisan, login, mailpit, PEOPLE, tabTo, tr, trFramework } from '../helpers';
+import { flushCache, login, mailpit, PEOPLE, tabTo, tr, trFramework } from '../helpers';
 
 // without a session; one reset account per project (the broker allows one link per address a minute)
 test.use({ storageState: { cookies: [], origins: [] } });
 
 // The four projects run within a minute: their links (6 a minute per IP) and sign-ins (20) would hit the limits of the
 // IP. Emptying the cache resets them, once per project; the limits themselves are tested in Pest.
-test.beforeAll(() => artisan('cache:clear'));
+test.beforeAll(() => flushCache());
 
 const NEW_PASSWORD = 'new-e2e-password';
 

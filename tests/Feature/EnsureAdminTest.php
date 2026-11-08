@@ -27,9 +27,10 @@ it('notes exactly one event, user.created by the system', function () {
     $this->artisan('app:ensure-admin')->assertSuccessful();
 
     $user = User::query()->where('is_default_bot', false)->sole();
-    $events = Event::query()->where('subject_id', $user->id)->get();
+    $events = Event::query()->where('subject_type', $user->getMorphClass())->where('subject_id', $user->id)->get();
 
     expect($events)->toHaveCount(1)
+        ->and(eventsOf(EventType::UserCreated, $user))->toHaveCount(1)
         ->and($events[0]->type)->toBe(EventType::UserCreated)
         ->and($events[0]->actor_id)->toBe($user->id)
         ->and($events[0]->meta)->toBe(['via' => 'system', 'reason' => 'ensure_admin']);

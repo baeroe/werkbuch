@@ -423,6 +423,20 @@ describe('People', () => {
     expect(await screen.findByText(/Keine offenen Einladungen/)).toBeTruthy();
   });
 
+  it('reads the projects once, as the rights do, and offers the invitation only the projects that are not archived', async () => {
+    const user = userEvent.setup();
+    const old = project('OLD', 'admin', { name: 'Altprojekt', archived_at: '2026-10-01T10:00:00.000Z' });
+    renderSettings('people', { 'GET /api/v1/projects': () => ({ body: list([web, app, old]) }) });
+    await user.click(await screen.findByRole('button', { name: 'Person einladen' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Person einladen' });
+
+    expect(within(dialog).getByRole('checkbox', { name: /WEB/ })).toBeTruthy();
+    expect(within(dialog).queryByRole('checkbox', { name: /OLD/ })).toBeNull();
+    // one list for the rights and for this section (the test client refetches on mounting; a list of its own would ask without the flag)
+    const asked = api!.calls.filter((call) => call.method === 'GET' && call.url.startsWith('/api/v1/projects')).map((call) => call.url);
+    expect(new Set(asked)).toEqual(new Set(['/api/v1/projects?include_archived=1']));
+  });
+
   it('invites with role and projects, and ends in the link to copy', async () => {
     const user = userEvent.setup();
     renderSettings('people', {

@@ -7,6 +7,7 @@ import { createHash, createHmac } from 'node:crypto';
 import { crc32, deflateSync } from 'node:zlib';
 import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
+import { isMac } from '../resources/js/lib/platform';
 import { expect, request, test, type APIResponse, type Browser, type BrowserContext, type Locator, type Page } from '@playwright/test';
 
 export const ROOT = path.resolve(import.meta.dirname, '..');
@@ -32,6 +33,17 @@ export function artisan(...args: string[]): void {
 }
 
 /**
+ * Empties the cache of the app under test: the limits of sign-in, password reset and invitation (they count per address
+ * and account and would strike with four projects within a minute; Pest tests the limits) and the codes of the second
+ * factor used so far. Only a spec that signs in or resets a lot calls it (`beforeAll`), `global-setup.ts` once per run and
+ * `signedInContext()` before a first sign-in; the other specs never need it, and it must not run while another spec
+ * works (a project running parallel loses its throttle state, nothing else).
+ */
+export function flushCache(): void {
+  artisan('cache:clear');
+}
+
+/**
  * Runs PHP in the app under test (`artisan tinker`, the code on stdin, so no shell reads it) and returns the last line it
  * printed: for a spec that must read what no API shows, e.g. the outcome of a mail collection. The code `echo`es one
  * line of JSON.
@@ -42,6 +54,9 @@ export function artisanEval(php: string): string {
   return output.trim().split('\n').at(-1)!.trim();
 }
 
+/** How long `syncMutagen()` waits for `ddev mutagen sync` before it goes on (the sync keeps running in the background). */
+export const MUTAGEN_SYNC_TIMEOUT_MS = 60_000;
+
 /**
  * Against DDEV (`E2E_EXEC ?? 'ddev exec'` starts with `ddev`): waits until Mutagen has synced the Mac and the container
  * both ways. Mutagen syncs in the background, seconds late: right after `ddev exec pnpm build:coverage` the Mac may still
@@ -51,9 +66,9 @@ export function artisanEval(php: string): string {
 export function syncMutagen(): void {
   if ((process.env.E2E_EXEC ?? 'ddev exec').split(/\s+/).find(Boolean) !== 'ddev') return;
   try {
-    execFileSync('ddev', ['mutagen', 'sync'], { cwd: ROOT, stdio: 'ignore' });
+    execFileSync('ddev', ['mutagen', 'sync'], { cwd: ROOT, stdio: 'ignore', timeout: MUTAGEN_SYNC_TIMEOUT_MS });
   } catch {
-    // no Mutagen: the files are there already
+    // no Mutagen: the files are there already; a sync that outlasts the timeout is left to finish by itself
   }
 }
 
@@ -144,9 +159,9 @@ export function variant(): string {
 }
 
 /**
- * Whether `target` has the focus once the focus has settled. Base UI moves the focus one animation frame late (floating-ui's
- * `enqueueFocus`): into a menu that just opened, and to the first item when the arrows wrap around. Read at once,
- * `document.activeElement` is still the element before, and the next key would skip past the target.
+ * Waits two animation frames, then says whether `target` is the focused element. Base UI moves the focus one frame late
+ * (floating-ui's `enqueueFocus`): into a menu that just opened, and to the first item when the arrows wrap around. Read
+ * at once, `document.activeElement` is still the element before, and the next key would skip past the target.
  */
 async function focusSettledOn(page: Page, target: Locator): Promise<boolean> {
   // two frames: the first one runs the focus Base UI queued, the second one comes after it
@@ -233,7 +248,7 @@ export async function signedInContext(
     return { context, page };
   }
 
-  artisan('cache:clear');
+  flushCache();
   // without a state of its own, Playwright hands a new context the one of the project (the e2e person's session)
   const context = await browser.newContext({ ...options, storageState: { cookies: [], origins: [] } });
   const page = await context.newPage();
@@ -259,7 +274,8 @@ export const accountPageErrors: string[] = [];
 /**
  * The answers the shared DDEV router gave itself with a 502 "Bad Gateway" during the running test, counted by address
  * (Traefik: its connection to the web container broke, the web container never saw the request; its own answers carry
- * `server: nginx`, the router's do not). Not the app's error: the fixture `pageErrors` leaves the browser's note on
+ * `server: nginx`, the router's do not). It happens whenever any DDEV project starts, stops or restarts while a run is
+ * going (CLAUDE.md, "Geteilter DDEV-Router"): start nothing else during a run. Not the app's error: the fixture `pageErrors` leaves the browser's note on
  * exactly these out, one note per such answer, and empties the count when a test starts: a 502 of nginx on the same
  * address, then or later, still fails the test.
  */
@@ -293,9 +309,8 @@ export function watchPageErrors(page: Page, into: string[], label?: string): voi
  * `ControlOrMeta` can miss.
  */
 export async function pressMod(page: Page, key: string): Promise<void> {
-  const mac = await page.evaluate(() =>
-    /mac|iphone|ipad|ipod/i.test((navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform || navigator.platform || ''),
-  );
+  // the page's own `isMac` (lib/platform.ts): the same rule the app reads `mod` with, not a copy of it
+  const mac = await page.evaluate(isMac);
   await page.keyboard.press(`${mac ? 'Meta' : 'Control'}+${key}`);
 }
 

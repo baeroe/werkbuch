@@ -73,3 +73,15 @@ it('fails for an unknown address', function () {
         ->expectsOutputToContain('There is no account with this email.')
         ->assertFailed();
 });
+
+it('notes a cancelled setup, not a turned-off second factor, when the setup was never confirmed', function () {
+    $user = User::factory()->create();
+    app(EnableTwoFactorAuthentication::class)($user, true);
+
+    $this->artisan('app:reset-two-factor', ['email' => $user->email])->assertSuccessful();
+
+    $event = eventsOf(EventType::UserTwoFactorSetupCancelled, $user)->sole();
+    expect($user->refresh()->two_factor_secret)->toBeNull()
+        ->and([$event->actor_id, $event->meta['via'], $event->meta['reason']])->toBe([$user->id, 'system', 'two_factor_reset'])
+        ->and(eventsOf(EventType::UserTwoFactorDisabled, $user))->toHaveCount(0);
+});

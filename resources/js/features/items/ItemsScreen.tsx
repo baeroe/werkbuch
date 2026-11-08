@@ -38,6 +38,7 @@ import { cx } from '@/components/ui/cx';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { toast } from '@/components/ui/toast';
 import { sameFilter, scopeConditions, type ItemsPreset } from '@/domain/viewState';
+import { copyName } from '@/features/views/viewForm';
 import { useSettle } from '@/hooks/mutation';
 import { useProject } from '@/hooks/projects';
 import { useProperties } from '@/hooks/properties';
@@ -65,7 +66,6 @@ import { MY_TABS } from './MyTabs';
 import { SaveAsDialog } from './save/SaveAsDialog';
 import { UnsavedBar } from './save/UnsavedBar';
 import { useListSave } from './save/useListSave';
-import { VIEW_NAME_MAX } from './save/ViewFields';
 import { BulkBar } from './selection/BulkBar';
 import { useListData } from './useListData';
 import { useListState } from './useListState';
@@ -146,12 +146,6 @@ function StickyToolbar({ children }: { children: ReactNode }) {
       </div>
     </>
   );
-}
-
-/** The name of a copy, „:name (Kopie)“, within the 60 characters of a name (K26). */
-function copyName(name: string): string {
-  const room = VIEW_NAME_MAX - [...t('items.save.copy_name', { name: '' })].length;
-  return t('items.save.copy_name', { name: [...name].slice(0, room).join('').trimEnd() });
 }
 
 /* ------------------------------------------------------------------------- the list */

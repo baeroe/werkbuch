@@ -1011,6 +1011,24 @@ describe('Picker', () => {
     expect(onValueChange).toHaveBeenCalledWith('o4');
   });
 
+  it('reports what is typed and leaves the narrowing to its owner, and reports an empty query when the list closes', async () => {
+    const user = userEvent.setup();
+    const onQueryChange = vi.fn();
+    const props = { label: 'Kunde', display: 'Option 2', displayText: 'Option 2', value: 'o1', onValueChange: vi.fn(), placeholder: 'Suchen …', onQueryChange };
+    // the owner's options do not match what is typed (the server finds by a former key or a word of the text): all stay
+    render(<Picker {...props} options={many.slice(1, 4)} />);
+
+    await user.click(screen.getByRole('combobox', { name: 'Kunde: Option 2' }));
+    await search(user, 'zzz');
+
+    expect(onQueryChange.mock.calls.map(([text]) => text)).toContain('zzz');
+    expect(await screen.findAllByRole('option')).toHaveLength(3);
+    expect(screen.queryByText(/Keine/)).toBeNull();
+
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(onQueryChange).toHaveBeenLastCalledWith(''));
+  });
+
   it('keeps the focus on the trigger when the rights arrive and the read-only trigger gives way to the picker', () => {
     const props = { label: 'Kunde', display: 'Option 2', displayText: 'Option 2', options: many.slice(0, 3), value: 'o1', onValueChange: vi.fn(), placeholder: 'Suchen …' };
     const view = render(<Picker {...props} disabledReason="Rechte laden noch." />);

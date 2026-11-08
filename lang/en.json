@@ -1253,7 +1253,6 @@
     "items.row.selected": "selected",
     "items.row.updated": "changed",
     "items.save.copy_instead": "Save your changes as a new view.",
-    "items.save.copy_name": ":name (copy)",
     "items.save.create_failed": "View not created",
     "items.save.created": "View “:name” created",
     "items.save.creator": "the creator",

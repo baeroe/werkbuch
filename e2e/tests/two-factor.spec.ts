@@ -1,5 +1,5 @@
 import { expect, test } from '../fixtures';
-import { artisan, login, PEOPLE, tabTo, totp, tr, variant } from '../helpers';
+import { flushCache, login, PEOPLE, tabTo, totp, tr, variant } from '../helpers';
 
 // without the shared session: every test signs in itself, as the two-factor account of its project (the seeder sets its
 // recovery codes back every run)
@@ -8,7 +8,7 @@ test.use({ storageState: { cookies: [], origins: [] } });
 // three sign-ins per project, four projects within a minute: the limit per IP would strike; the limits are tested in Pest.
 // Emptying the cache also forgets the codes used before: a code counts once per secret within its window, and the
 // two-factor accounts of all projects share one secret (E2eSeeder::TOTP_SECRET).
-test.beforeAll(() => artisan('cache:clear'));
+test.beforeAll(() => flushCache());
 
 /** Signs in with the password and lands on the challenge, with the field for the code of the app focused. */
 async function reachChallenge(page: import('@playwright/test').Page): Promise<void> {

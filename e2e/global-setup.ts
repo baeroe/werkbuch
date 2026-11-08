@@ -1,7 +1,7 @@
 import { existsSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { COVERAGE } from './fixtures';
-import { artisan, forgetAccountSessions, ROOT, runId, syncMutagen } from './helpers';
+import { artisan, flushCache, forgetAccountSessions, ROOT, runId, syncMutagen } from './helpers';
 
 /**
  * Before the run: against DDEV (no WERKBUCH_URL) the app has to serve the Istanbul build from this working copy, checked
@@ -23,7 +23,7 @@ export default function globalSetup(): void {
   runId();
   rmSync(path.join(ROOT, 'coverage/e2e'), { recursive: true, force: true });
 
-  artisan('cache:clear');
+  flushCache();
   artisan('db:seed', '--class=E2eSeeder', '--no-interaction');
   forgetAccountSessions();
 }
