@@ -10,7 +10,7 @@ import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TooltipProvider } from '@/components/ui/Tooltip';
-import { mockApi, type MockApi, type MockRoute } from '@/test/api';
+import { mockApi, queried, type MockApi, type MockRoute } from '@/test/api';
 import { agency, labels, lene, list, makeWorkItem, mara, organization, person, project, properties, queryItems, standard, theo, types, web30, web47 } from '@/test/fixtures';
 import type { Condition, Filter, Project, Property, User } from '@/types';
 import { FilterBar } from './FilterBar';
@@ -382,6 +382,34 @@ describe('the filter bar', () => {
     await user.keyboard('Status{Enter}');
     await searchFocused('Status suchen …');
     expect((await screen.findAllByRole('option')).map(visibleText)).toEqual(standard.states.map((state) => state.name));
+  });
+
+  /** `GET /references` for the epics of the fixtures: an id it does not know the reader does not see. */
+  const references: MockRoute = (_body, url) => ({
+    body: { data: { items: [web30, web47, appEpic].filter((item) => (url.searchParams.get('items') ?? '').split(',').includes(item.id)), pages: [] } },
+  });
+  const epicLists = () => api!.calls.filter((call) => call.url === '/api/v1/work-items/query' && queried(call.body).epic);
+
+  it('names a parent chip without loading the epics (T16-M1)', async () => {
+    const user = userEvent.setup();
+    renderBar(conditions({ field: 'parent', op: 'in', value: ['wi_web_30', 'wi_app_9'] }), { routes: { 'GET /api/v1/references': references } });
+    expect(await findChip(/^Filter: Eltern-Item ist eines von Relaunch Phase 1, App 2\.0$/)).toBeTruthy();
+    // the names came from the references of the two values, in one request; no list of every epic was read for them
+    expect(api!.calls.filter((call) => call.url.startsWith('/api/v1/references')).map((call) => call.url)).toEqual(['/api/v1/references?items=wi_web_30%2Cwi_app_9']);
+    expect(epicLists()).toHaveLength(0);
+
+    // the list opens: now the epics load, and the chosen ones stay checked
+    await user.click(within(chip(/Eltern-Item/)).getByRole('combobox', { name: /^Eltern-Item:/ }));
+    await searchFocused('Eltern-Item suchen …');
+    expect(await screen.findByRole('option', { name: /Relaunch Phase 1/, selected: true })).toBeTruthy();
+    expect(epicLists()).toHaveLength(1);
+  });
+
+  it('names a parent the reader does not see hidden, without the epics', async () => {
+    renderBar(conditions({ field: 'parent', op: 'is', value: 'wi_secret' }), { routes: { 'GET /api/v1/references': references } });
+    expect(await findChip(/^Filter: Eltern-Item ist Verborgen$/)).toBeTruthy();
+    expect(api!.calls.some((call) => call.url.startsWith('/api/v1/references'))).toBe(true);
+    expect(epicLists()).toHaveLength(0);
   });
 
   it('offers the states of every workflow in view, named by workflow', async () => {

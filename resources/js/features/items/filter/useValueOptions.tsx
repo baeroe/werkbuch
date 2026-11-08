@@ -4,8 +4,12 @@
  * with "Ich" first, the priorities, labels, the epics as parents (lean), the options of a dropdown property. A value
  * the reader does not know (an id in a view of somebody else, of a project the reader does not see) reads "Verborgen"
  * (P21); names come only from the lists of the reader.
+ *
+ * The epics load only while the list of a parent chip is open (A153, T16-M1): a closed chip names its values through
+ * `GET /references` (`itemRefQuery`, one request for the ids of a tick), not through every epic of the organisation.
  */
 
+import { useQueries } from '@tanstack/react-query';
 import { UserRoundCheck } from 'lucide-react';
 import { personOption } from '@/components/fields/AssigneePicker';
 import { labelOption } from '@/components/fields/LabelsPicker';
@@ -21,6 +25,7 @@ import { useLabels } from '@/hooks/catalog';
 import { useProjects } from '@/hooks/projects';
 import { useAllUsers, useCurrentUser } from '@/hooks/users';
 import { useWorkflows } from '@/hooks/workflows';
+import { itemRefQuery } from '@/hooks/richText';
 import { useEpics } from '@/hooks/workItems';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
 import { intlLocale, t } from '@/lib/i18n';
@@ -49,7 +54,14 @@ function people(users: readonly User[]): User[] {
     .sort((a, b) => (a.type === b.type ? collator.compare(a.name, b.name) : a.type === 'person' ? -1 : 1));
 }
 
-export function useValueOptions(def: FieldDef, project?: Project): ValueOptions {
+export interface ValueOptionsUse {
+  /** The list of the chip is open: only then are the epics read. */
+  open: boolean;
+  /** The values of the condition: a parent names them by their references while the list is closed. */
+  values: readonly unknown[];
+}
+
+export function useValueOptions(def: FieldDef, project: Project | undefined, { open, values }: ValueOptionsUse): ValueOptions {
   const source = def.source;
   const projects = useProjects({ include_archived: true });
   const workflows = useWorkflows();
@@ -57,7 +69,9 @@ export function useValueOptions(def: FieldDef, project?: Project): ValueOptions 
   const users = useAllUsers();
   const labels = useLabels();
   const me = useCurrentUser();
-  const epics = useEpics(project?.id, source === 'parent');
+  const epics = useEpics(project?.id, source === 'parent' && open);
+  const refIds = source === 'parent' ? values.filter((value): value is string => typeof value === 'string') : [];
+  const refs = useQueries({ queries: refIds.map((id) => itemRefQuery(id)) });
 
   const used =
     source === 'project'
@@ -70,7 +84,7 @@ export function useValueOptions(def: FieldDef, project?: Project): ValueOptions 
             ? [users]
             : source === 'label'
               ? [labels]
-              : source === 'parent'
+              : source === 'parent' && open
                 ? [epics, types]
                 : [];
   const loading = used.some((query) => query.isPending);
@@ -135,7 +149,9 @@ export function useValueOptions(def: FieldDef, project?: Project): ValueOptions 
   const nameOf = (value: unknown): string => {
     const known = options.find((option) => option.value === value);
     if (known) return known.label;
-    return loading ? t('items.filter.value.loading') : t('items.filter.value.hidden');
+    const ref = refs[refIds.indexOf(value as string)];
+    if (ref?.data) return ref.data.title;
+    return loading || ref?.isPending ? t('items.filter.value.loading') : t('items.filter.value.hidden');
   };
   return { options, loading, error, retry, nameOf };
 }

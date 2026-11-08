@@ -37,9 +37,12 @@ export function ConditionEditor(props: ValueEditorProps) {
 /** A field without options, for the conditions whose field is gone: their text needs no list. */
 const NO_FIELD: FieldDef = { field: '', kind: 'text', nullable: false, acceptsMe: false };
 
-/** The value of a condition in words, for the chip's name: "Todo, In Progress", "diese Woche", "3,5", "„Login“". */
-export function useConditionText(condition: Condition, def: FieldDef | null, project?: Project): string {
-  const { nameOf } = useValueOptions(def ?? NO_FIELD, project);
+/**
+ * The value of a condition in words, for the chip's name: "Todo, In Progress", "diese Woche", "3,5", "„Login“".
+ * `open`: the value list of the chip is open (the epics of a parent are read only then).
+ */
+export function useConditionText(condition: Condition, def: FieldDef | null, project: Project | undefined, open: boolean): string {
+  const { nameOf } = useValueOptions(def ?? NO_FIELD, project, { open, values: valuesOf(condition) });
   if (!def || VALUELESS.has(condition.op)) return '';
   const pair = (read: (value: unknown) => string) =>
     Array.isArray(condition.value) ? t('items.filter.value.pair', { from: read(condition.value[0]), to: read(condition.value[1]) }) : read(condition.value);

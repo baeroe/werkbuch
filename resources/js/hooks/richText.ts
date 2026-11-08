@@ -78,13 +78,12 @@ function load<T extends ListedItem | PageSummary>(kind: Kind, id: string): Promi
   });
 }
 
+/** The query of the item behind a stored reference, for `useQueries` over many (the names of a filter chip). */
+export const itemRefQuery = (id: string) => ({ queryKey: qk.references.item(id), queryFn: () => load<ListedItem>('item', id) });
+
 /** The item behind a stored reference (lean), or an error 404 when the reader does not see it. */
 export function useItemRef(id: string | null | undefined) {
-  return useQuery({
-    queryKey: qk.references.item(id ?? ''),
-    queryFn: () => load<ListedItem>('item', id!),
-    enabled: !!id,
-  });
+  return useQuery({ ...itemRefQuery(id ?? ''), enabled: !!id });
 }
 
 /** Puts an item the person just chose (the `#` list) into the cache, so its new reference shows without asking. */

@@ -30,7 +30,7 @@ function chosenDisplay(options: PickerOption[], values: string[], nameOf: (value
 }
 
 export function EnumValue({ condition, def, label, onChange, open, onOpenChange, project }: ValueEditorProps) {
-  const { options, loading, error, retry, nameOf } = useValueOptions(def, project);
+  const { options, loading, error, retry, nameOf } = useValueOptions(def, project, { open, values: valuesOf(condition) });
   const values = valuesOf(condition).map(String);
   // a value the reader does not know stays a choice of its own, so it can be taken away (or stays when others change)
   const shown = loading ? options : [...options, ...values.filter((value) => !options.some((option) => option.value === value)).map((value) => ({ value, label: nameOf(value) }))];

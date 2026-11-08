@@ -72,7 +72,7 @@ export function ConditionChip({ condition, def, onChange, onRemove, onLeave, fre
   /** The operator menu changed to one that needs a value: the value editor opens once the menu is closed. */
   const askValue = useRef(false);
   const focus = useFocusLeave(onLeave);
-  const text = useConditionText(condition, def, project);
+  const text = useConditionText(condition, def, project, open);
 
   if (!def) {
     return (
