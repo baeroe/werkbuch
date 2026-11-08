@@ -17,7 +17,8 @@
  *   come from `useSelection`. A refusal says why in a toast and changes nothing.
  * - Dates are saved with `useUpdateWorkItem` (optimistic, start and due in one patch); a refusal of the server puts the
  *   bar back and the toast of the mutation says why. A polite status line says what moved and what was saved.
- * - The rows are virtualized (`TimelineRows`, R34); the row of the cursor stays rendered.
+ * - The rows are virtualized (`TimelineRows`, R34), and so is "Ohne Datum" in a box of its own (T21-M8); the row or card
+ *   of the cursor stays rendered.
  */
 
 import { usePage, router } from '@inertiajs/react';
@@ -157,6 +158,8 @@ export function TimelineLayout({ groups, groupBy, project, createDefaults, selec
   const scroller = useRef<HTMLDivElement>(null);
   const grid = useRef<HTMLDivElement>(null);
   const rows = useRef(new Map<string, HTMLElement>());
+  /** Scrolls "Ohne Datum" to an epic's card (its list is virtualized as well). */
+  const revealUnplanned = useRef<((id: string) => void) | null>(null);
   const labelWidth = () => scroller.current?.querySelector<HTMLElement>('[data-timeline-label]')?.offsetWidth ?? 0;
   const { entries, virtualizer, indexOf } = useTimelineRows(dated, scroller, cursorId);
 
@@ -236,6 +239,8 @@ export function TimelineLayout({ groups, groupBy, project, createDefaults, selec
     (id: string) => {
       const index = indexOf(id);
       if (index >= 0 && !rows.current.get(id)?.isConnected) virtualizer.scrollToIndex(index, { align: 'auto' });
+      // a card of "Ohne Datum" scrolls into its box (its own scroll, not the axis's)
+      if (index < 0) revealUnplanned.current?.(id);
       let attempts = 0;
       const attempt = () => {
         const element = rows.current.get(id);
@@ -562,6 +567,7 @@ export function TimelineLayout({ groups, groupBy, project, createDefaults, selec
         onPlanPointerDown={drag.onPlanPointerDown}
         onOpen={onOpen}
         onPeek={onPeek}
+        revealRef={revealUnplanned}
       />
 
       {drag.planning && planningItem && (

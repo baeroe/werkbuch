@@ -73,10 +73,13 @@ vi.mock('@inertiajs/react', async () => {
 /** The scroll box: 1000 × 440 px, 100 px below the top of the window; the title column is 136 px wide. */
 const BOX = { left: 0, top: 100, width: 1000, height: 440 };
 const LABEL = 136;
+/** The list of "Ohne Datum" scrolls in a box of its own, 400 px tall; an epic there (card and button) is 120 px. */
+const UNPLANNED = { height: 400, entry: 120 };
 const descriptors = {
   clientHeight: Object.getOwnPropertyDescriptor(Element.prototype, 'clientHeight')!,
   clientWidth: Object.getOwnPropertyDescriptor(Element.prototype, 'clientWidth')!,
   offsetWidth: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth')!,
+  offsetHeight: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight')!,
 };
 const boundingRect = Element.prototype.getBoundingClientRect;
 /** Where the rows stand in the window (all at the same place): above the box at first, so a focused row scrolls up. */
@@ -88,7 +91,14 @@ beforeAll(() => {
   Object.defineProperty(Element.prototype, 'clientHeight', {
     configurable: true,
     get(this: Element) {
+      if (this.hasAttribute('data-unplanned-list')) return UNPLANNED.height;
       return this.hasAttribute('data-timeline-scroller') ? BOX.height : 0;
+    },
+  });
+  Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+    configurable: true,
+    get(this: HTMLElement) {
+      return this.hasAttribute('data-unplanned-entry') ? UNPLANNED.entry : 0;
     },
   });
   Object.defineProperty(Element.prototype, 'clientWidth', {
@@ -123,6 +133,7 @@ afterAll(() => {
   Object.defineProperty(Element.prototype, 'clientHeight', descriptors.clientHeight);
   Object.defineProperty(Element.prototype, 'clientWidth', descriptors.clientWidth);
   Object.defineProperty(HTMLElement.prototype, 'offsetWidth', descriptors.offsetWidth);
+  Object.defineProperty(HTMLElement.prototype, 'offsetHeight', descriptors.offsetHeight);
   Element.prototype.getBoundingClientRect = boundingRect;
   Element.prototype.scrollTo = scrollTo;
   Object.assign(window, windowScroll);
@@ -480,6 +491,39 @@ describe('the timeline', () => {
     await waitFor(() => expect(document.activeElement).toBe(row('WEB-2')));
     expect(scroller().scrollTop).toBeLessThan(before);
     expect(scroller().scrollTop).toBeGreaterThan(0);
+  });
+});
+
+describe('"Ohne Datum" with many epics', () => {
+  const unplannedList = () => document.querySelector<HTMLElement>('[data-unplanned-list]')!;
+  const cards = () => within(aside()).queryAllByRole('article');
+
+  it('renders only the visible undated epics (T21-M8)', async () => {
+    board.items = Array.from({ length: 500 }, (_, index) => web(index + 1, `Ohne Datum ${index + 1}`, 'std_backlog', epic({ rank: rankOf(index + 1) })));
+    renderTimeline();
+    await waitFor(() => expect(within(aside()).getByText('500')).toBeTruthy(), { timeout: 5000 });
+    // 400 px of 120 px each, and a few around them: never the 500
+    await waitFor(() => expect(cards().length).toBeGreaterThan(2));
+    expect(cards().length).toBeLessThan(15);
+    expect(card('WEB-1')).toBeTruthy();
+
+    // the card of the cursor stays while the list scrolls away from it
+    act(() => card('WEB-1').focus());
+    act(() => {
+      unplannedList().scrollTop = 500 * UNPLANNED.entry - UNPLANNED.height;
+      unplannedList().dispatchEvent(new Event('scroll'));
+    });
+    // (the cards not measured yet count 140 px: the window stands somewhere past the 400th)
+    await waitFor(() => expect(within(aside()).queryByRole('article', { name: /^WEB-2 / })).toBeNull());
+    expect(cards().some((element) => Number(/^WEB-(\d+) /.exec(element.getAttribute('aria-label')!)![1]) > 400)).toBe(true);
+    expect(document.activeElement).toBe(card('WEB-1'));
+    expect(cards().length).toBeLessThan(15);
+
+    // j goes to the next card, which is out of view: the list scrolls back to it
+    press('j');
+    await waitFor(() => expect(document.activeElement).toBe(card('WEB-2')));
+    expect(unplannedList().scrollTop).toBeLessThanOrEqual(2 * UNPLANNED.entry);
+    expect(cards().length).toBeLessThan(15);
   });
 });
 
