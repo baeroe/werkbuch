@@ -160,9 +160,9 @@ class CatalogSeeder extends Seeder
             // the properties it asks for, in this order (the shipped Bug asked for the effort alone)
             $position = 0;
 
-            foreach ($asks as $key => $required) {
+            foreach ($asks as $propertyKey => $required) {
                 TypeProperty::query()->updateOrCreate(
-                    ['type_id' => $type->id, 'property_id' => $properties[$key]->id],
+                    ['type_id' => $type->id, 'property_id' => $properties[$propertyKey]->id],
                     ['required' => $required, 'position' => $position++],
                 );
             }

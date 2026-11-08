@@ -25,6 +25,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Tests\Support\DemoBasicsSeeder;
 use Tests\Support\EnglishDemoBasicsSeeder;
+use Tests\Support\SharedDemoTexts;
 
 // the language is static: a test that fails midway must not leave English to the next one
 afterEach(fn () => DemoTexts::use(Locale::De));
@@ -109,8 +110,18 @@ it('knows every key in both languages', function () {
 
 it('writes no German into the English texts', function () use ($germanIn) {
     $found = array_filter(array_map($germanIn, English::TEXTS));
+    $shared = array_keys(SharedDemoTexts::KEYS);
 
     expect($found)->toBe([])
+        // key by key: an English text equal to the German one needs its reason in SharedDemoTexts
+        ->and(SharedDemoTexts::untranslated())->toBe([])
+        // and every reason names a key both languages really share
+        ->and(array_values(array_filter($shared, fn (string $key) => German::TEXTS[$key] !== English::TEXTS[$key])))->toBe([])
+        // the probe: an untranslated copy without an umlaut or a listed word fails, one with a reason does not
+        ->and(SharedDemoTexts::untranslated([...English::TEXTS, 'catalog.state.approval' => 'Kundenfreigabe', 'catalog.label.forms' => 'Formulare']))
+        ->toBe(['catalog.state.approval', 'catalog.label.forms'])
+        ->and(SharedDemoTexts::untranslated([...English::TEXTS, 'catalog.type.task.name' => 'Task']))->toBe([])
+        ->and(SharedDemoTexts::germanOnly())->toContain('Kundenfreigabe', 'Formulare', 'Infrastruktur')->not->toContain('Backlog')
         // the probe: the rule finds the German texts, a letter and a word alike
         ->and(count(array_filter(array_map($germanIn, German::TEXTS))))->toBeGreaterThan(20)
         ->and([$germanIn('Gärtnerei Moos'), $germanIn('Für Kira'), $germanIn('Browser und Version')])->toBe(['ä', 'Für', 'und']);
@@ -191,7 +202,7 @@ it('seeds the organization, people, catalog, projects and views in English', fun
         ->and(PersonalAccessToken::query()->orderBy('name')->pluck('name')->all())->toBe(['CI script', 'Claude Code', 'MCP']);
 
     // no text of the German demo reached a row, unless both languages share it (Backlog, Task, UX, Kira, …)
-    $german = array_diff(German::TEXTS, English::TEXTS);
+    $german = SharedDemoTexts::germanOnly();
     $written = collect($texts())->flatten()->filter(fn (mixed $value) => is_string($value))->unique()->values();
 
     expect($written->intersect($german)->values()->all())->toBe([])

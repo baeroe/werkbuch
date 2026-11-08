@@ -32,6 +32,7 @@ final class German
         'catalog.state.progress' => 'In Progress',
         'catalog.state.review' => 'Review',
         'catalog.state.approval' => 'Kundenfreigabe',
+        'catalog.state.pending' => 'Pending',
         'catalog.state.done' => 'Done',
         'catalog.state.cancelled' => 'Cancelled',
 
