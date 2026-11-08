@@ -14,6 +14,7 @@ import { ApiError } from '@/api/client';
 import { editReasonOf } from '@/components/fields/itemData';
 import { currentToasts, resetToasts } from '@/components/ui/toast';
 import { cachedZone } from '@/domain/tz';
+import { qk } from '@/hooks/keys';
 import { mockApi, type MockApi } from '@/test/api';
 import { ida, labels, lene, list, makeWorkItem, mara, organization, person, project, properties as catalog, standard, types as typeCatalog } from '@/test/fixtures';
 import { useUiStore } from '@/store/ui';
@@ -1089,9 +1090,17 @@ describe('the refusals of the property cells', () => {
     return { call, ...answer };
   };
   const item = makeWorkItem({ id: 'wi_1', updated_at: '2026-10-28T09:00:00Z' });
+  /** The hook over a cache that holds a page of the table with the item as given. */
+  const refusalsOver = (shown: ListedItem) => {
+    const client = new QueryClient();
+    const cache = (now: ListedItem) => client.setQueryData(qk.workItems.list({ lean: true }), { items: [now], next_cursor: null, total: 1 });
+    cache(shown);
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+    return { ...renderHook(() => useRefusals(), { wrapper }), cache };
+  };
 
   it('keeps the words of the newest save only, when two saves of a cell are on their way at once (20a-M1)', async () => {
-    const { result } = renderHook(() => useRefusals());
+    const { result } = refusalsOver(item);
     const [first, second] = [held(), held()];
     act(() => result.current('row', effortOf, item).track(first.call));
     act(() => result.current('row', effortOf, item).track(second.call));
@@ -1110,21 +1119,42 @@ describe('the refusals of the property cells', () => {
   });
 
   it('keeps the words of a refused newest save when an earlier one of the cell went through first (B1 review M1)', async () => {
-    const { result } = renderHook(() => useRefusals());
+    const { result, cache } = refusalsOver(item);
     const [first, second] = [held(), held()];
     act(() => result.current('row', effortOf, item).track(first.call));
     act(() => result.current('row', effortOf, item).track(second.call));
-    // the earlier save went through: the item the table shows now carries its stamp
+    // the earlier save went through: the item in the cache, which the table shows now, carries its stamp
     await act(async () => first.resolve({}));
     const saved = { ...item, updated_at: '2026-10-28T09:01:00Z' };
+    act(() => cache(saved));
     expect(result.current('row', effortOf, saved).refusal).toBeNull();
     // then the newest comes back refused: its words belong to the item as it stands now
     await act(async () => second.reject(refusal('Nur ganze Stunden.')));
     expect(result.current('row', effortOf, saved).refusal).toBe('Nur ganze Stunden.');
   });
 
+  it('keeps the words of a row that scrolled away while live changed its item (B23-M2)', async () => {
+    const { result, cache } = refusalsOver(item);
+    const save = held();
+    act(() => result.current('row', effortOf, item).track(save.call));
+    // the row scrolled away (the table asks no more for it), then live changed the item in the cache
+    const changed = { ...item, updated_at: '2026-10-28T09:02:00Z' };
+    act(() => cache(changed));
+    await act(async () => save.reject(refusal('Höchstens 100 Stunden.')));
+    // back in view with the changed item: the words came after the change and belong to it
+    expect(result.current('row', effortOf, changed).refusal).toBe('Höchstens 100 Stunden.');
+  });
+
+  it('takes the item of the save for the words when the cache does not hold it any more', async () => {
+    const { result } = refusalsOver(makeWorkItem({ id: 'wi_other' }));
+    const save = held();
+    act(() => result.current('row', effortOf, item).track(save.call));
+    await act(async () => save.reject(refusal('Höchstens 100 Stunden.')));
+    expect(result.current('row', effortOf, item).refusal).toBe('Höchstens 100 Stunden.');
+  });
+
   it('shows the words only while the item is as the refused save found it (20a-M2)', async () => {
-    const { result } = renderHook(() => useRefusals());
+    const { result } = refusalsOver(item);
     const save = held();
     act(() => result.current('row', effortOf, item).track(save.call));
     await act(async () => save.reject(refusal('Höchstens 100 Stunden.')));

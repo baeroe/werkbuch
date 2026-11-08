@@ -1272,10 +1272,20 @@ describe('Relations', () => {
     const live = dialog.querySelector('[data-relation-status]');
     expect(live?.getAttribute('aria-live')).toBe('polite');
     expect(live?.textContent).toBe('');
+    // what describes the field (its trigger): said with it, so "Sucht …" is not in it while the region says it (B23-M4)
+    const field = within(dialog).getByRole('combobox', { name: /^Item:/, hidden: true });
+    const description = () =>
+      (field.getAttribute('aria-describedby') ?? '')
+        .split(' ')
+        .map((id) => (id ? document.getElementById(id)?.textContent : ''))
+        .join(' ');
     await user.keyboard('impressum');
     expect(live?.textContent).toBe('Sucht …');
+    expect(screen.getByText('Sucht …', { selector: ':not([data-relation-status])' })).toBeTruthy();
+    expect(description()).not.toContain('Sucht …');
     await screen.findByRole('option', { name: /Impressum aktualisieren/ });
     await waitFor(() => expect(live?.textContent).toBe(''));
+    expect(description()).toContain('Key, Titel oder Text tippen, Enter wählt.');
   });
 
   it('asks nothing until something is typed and says what to type', async () => {

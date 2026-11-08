@@ -403,6 +403,23 @@ describe('ListLayout', () => {
     }
   });
 
+  it('keeps a focused heading rendered while the window is left (another tab or app)', async () => {
+    renderList({ groups: [group('a', items('a', 2000)), group('b', items('b', 1))] });
+    const focused = heading('a');
+    act(() => focused.focus());
+    // leaving the window fires focusout, but the heading stays the active element of the document
+    fireEvent.focusOut(focused);
+    expect(document.activeElement).toBe(focused);
+    await act(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+
+    scrollPage(1500 * ROW);
+    await waitFor(() => expect(rowOf('a1500')).not.toBeNull());
+    expect(rowOf('a1')).toBeNull();
+    // back in the window, the focus is still on the heading, not on the body
+    expect(heading('a')).toBe(focused);
+    expect(document.activeElement).toBe(focused);
+  });
+
   it('keeps the focused row of an item with two labels rendered while scrolling away, not only its first one', async () => {
     const shared = makeWorkItem({ id: 'wi_s1', key: 'S-1', number: 1, title: 'zweimal' });
     renderList({ groups: [group('a', [shared]), group('b', [shared, ...items('b', 2000)])], groupBy: 'label' });

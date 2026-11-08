@@ -10,11 +10,13 @@
  * keeps those words per row (`useRefusals`), so a row that scrolls away and back still has them (T20-M5).
  */
 
+import { useQueryClient } from '@tanstack/react-query';
 import { Check, CircleAlert } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ApiError } from '@/api/client';
 import { personOption } from '@/components/fields/AssigneePicker';
 import { DatePopover, DayValue } from '@/components/fields/DateField';
+import { cachedItems } from '@/components/fields/commands/context';
 import { formatDay, formatPropertyValue } from '@/components/fields/format';
 import { useEditReason, useProjectPeople, useToday, useUserMap } from '@/components/fields/itemData';
 import { Picker, ReadOnlyTrigger, triggerClass, type PickerOption } from '@/components/fields/Picker';
@@ -67,11 +69,7 @@ export function useRefusals(): (row: string, property: Property, item: ListedIte
   const [words, setWords] = useState<ReadonlyMap<string, Held>>(() => new Map());
   /** The newest save of each cell. */
   const latest = useRef(new Map<string, object>());
-  /**
-   * The `updated_at` of the item each cell showed last: a refusal belongs to the item as it stands when the refusal
-   * comes, not as the save found it (an earlier save of the cell may have gone through meanwhile, B1 review M1).
-   */
-  const shown = useRef(new Map<string, string>());
+  const queryClient = useQueryClient();
   const settle = useSettle();
   const put = useCallback((key: string, held: Held | null) => {
     setWords((current) => {
@@ -84,7 +82,6 @@ export function useRefusals(): (row: string, property: Property, item: ListedIte
   }, []);
   return (row, property, item) => {
     const key = `${row}:${property.key}`;
-    shown.current.set(key, item.updated_at);
     const held = words.get(key);
     return {
       refusal: held && held.stamp === item.updated_at ? held.message : null,
@@ -96,7 +93,12 @@ export function useRefusals(): (row: string, property: Property, item: ListedIte
           onError: (failure) => {
             if (latest.current.get(key) !== token) return;
             const message = failure instanceof ApiError ? failure.errors?.[`values.${property.key}`]?.[0] : undefined;
-            if (message) put(key, { message, stamp: shown.current.get(key) ?? item.updated_at });
+            if (!message) return;
+            // the words belong to the item as it stands in the cache when they come, not as the save found it (an
+            // earlier save of the cell may have gone through meanwhile, B1 review M1); read there, not in the render,
+            // which may be one React drops or one of a row that scrolled away before live changed the item (B23-M2)
+            const stamp = cachedItems(queryClient)(item.id)?.updated_at ?? item.updated_at;
+            put(key, { message, stamp });
           },
         });
       },

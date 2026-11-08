@@ -228,7 +228,9 @@ export function ListLayout({ groups, groupBy, display, selection, onSelect, onSe
         focusInside.current = false;
         cancelAnimationFrame(leaving.current);
         const check = (left: number) => {
-          if (focusInside.current) return;
+          // leaving the window (another tab or app) fires a blur, yet the list keeps the active element: the row
+          // stays rendered, the focus is back on it when the window is
+          if (focusInside.current || container.current?.contains(document.activeElement)) return;
           // the focus is on its way (a closing popup gives it back to its trigger a frame later): wait for it
           const lost = document.activeElement === null || document.activeElement === document.body;
           if (lost && left > 0) leaving.current = requestAnimationFrame(() => check(left - 1));

@@ -198,16 +198,17 @@ function RelationDialog({ item, open, onOpenChange, finalFocus }: RelationDialog
             placeholder={t('items.detail.relations.dialog.search')}
             emptyText={t(stale ? 'items.detail.relations.dialog.searching' : typed ? 'items.detail.relations.dialog.no_match' : 'items.detail.relations.dialog.type_to_search')}
             load={{ isLoading: typed && found.data === undefined && !found.isError, error: typed ? found.error : null, retry: () => void found.refetch(), retrying: found.isFetching }}
-            describedBy={describedBy(itemFieldId, { hint, error: errors.target })}
+            describedBy={describedBy(itemFieldId, { hint: stale ? undefined : hint, error: errors.target })}
             invalid={Boolean(errors.target)}
             open={pickerOpen}
             onOpenChange={setPickerOpen}
             onQueryChange={setQuery}
           />
         </Field>
-        {/* the hint names "Sucht …" only as a description: a screen reader hears it here once the hits turn stale (20b-M4) */}
+        {/* a screen reader hears "Sucht …" here once, when the hits turn stale (20b-M4): the visible hint says it too, but the
+            field is not described by it meanwhile, so it is not said twice (B23-M4) */}
         <span data-relation-status="" role="status" aria-live="polite" className="sr-only">
-          {stale && !(typed && found.isError) ? t('items.detail.relations.dialog.searching') : ''}
+          {stale && !found.isError ? t('items.detail.relations.dialog.searching') : ''}
         </span>
         {target && label && (
           <p className="text-ui text-pretty text-muted">

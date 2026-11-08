@@ -519,7 +519,8 @@ describe('usePageSave', () => {
     await waitFor(() => expect(currentToasts()).toHaveLength(1));
     await act(async () => result.current.save.change({ title: 'Domain neu' }, { now: true }));
     await waitFor(() => expect(saves()).toHaveLength(2));
-    await act(async () => {});
+    // the second refusal is handled, then its decision waits one round
+    await waitFor(() => expect(result.current.save.state).toBe('failed'));
     await act(() => new Promise<void>((resolve) => notifyManager.schedule(resolve)));
     // the rights loaded once for this series of refusals (21i-M3b)
     expect(fetches()).toBe(2);
