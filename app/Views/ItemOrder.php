@@ -41,9 +41,6 @@ final class ItemOrder
 {
     private const CURSOR_SIGNATURE = '_sig';
 
-    /** The guard of `coalesce` for a stamp, in the form the cursor carries (`Y-m-d H:i:s`). */
-    private const STAMP_GUARD = "timestamp '0001-01-01 00:00:00'";
-
     /** The sorts of a property, with the column of its value and the guard of `coalesce`. */
     private const PROPERTY_VALUES = [
         FieldType::Number->value => ['value_number', '0', 'decimal'],
@@ -110,9 +107,9 @@ final class ItemOrder
             'priority' => [self::position('`work_items`.`priority`', array_map(fn (Priority $p) => $p->value, Priority::ORDER), $desc)],
             'due_date' => self::emptyLast('`work_items`.`due_date`', [], "date '0001-01-01'", 'day', $desc),
             'start_date' => self::emptyLast('`work_items`.`start_date`', [], "date '0001-01-01'", 'day', $desc),
-            // the stamps may be null as well (a row written without Eloquent), so they get the mark too (T5-M1)
-            'created_at' => self::emptyLast('`work_items`.`created_at`', [], self::STAMP_GUARD, 'stamp', $desc),
-            'updated_at' => self::emptyLast('`work_items`.`updated_at`', [], self::STAMP_GUARD, 'stamp', $desc),
+            // the stamps are required (A440): the column itself, so the keyset condition is a range on its index
+            'created_at' => [self::key('`work_items`.`created_at`', [], $desc, 'stamp')],
+            'updated_at' => [self::key('`work_items`.`updated_at`', [], $desc, 'stamp')],
             'key' => self::projectKey($query, $desc),
             'state_category' => self::category($query, $desc),
             default => self::property($query, $sort->field, $desc),

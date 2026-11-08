@@ -183,25 +183,44 @@ it('sorts by creation and change time', function () use ($sort) {
         ->and(($this->titles)($sort('updated_at')))->toBe(['new', 'old']);
 });
 
-it('pages items without a creation stamp exactly once', function () use ($sort, $forward, $backward) {
-    // the columns may be null (a row written without Eloquent); such items stand last in both directions (T5-M1)
-    foreach ([null, '2026-10-01 08:00:00', null, '2026-10-15 12:30:00', '2026-10-01 08:00:00'] as $i => $stamp) {
-        $item = WorkItem::factory()->create(['project_id' => $this->web->id, 'title' => "item {$i}"]);
-        DB::table('work_items')->where('id', $item->id)->update(['created_at' => $stamp, 'updated_at' => $stamp]);
+it('sorts by created_at without a guard', function () use ($sort) {
+    // the stamps are required (A440): the order and the keyset compare the column itself, so its index serves the range
+    $items = WorkItem::factory()->count(3)->create(['project_id' => $this->web->id]);
+    foreach ($items as $i => $item) {
+        DB::table('work_items')->where('id', $item->id)->update(['created_at' => sprintf('2026-10-%02d 08:00:00', $i + 1), 'updated_at' => sprintf('2026-10-%02d 09:00:00', $i + 1)]);
     }
 
     foreach (['created_at', 'updated_at'] as $field) {
-        expect(($this->titles)($sort($field)))->toBe(['item 1', 'item 4', 'item 3', 'item 0', 'item 2'], $field)
-            ->and(($this->titles)($sort($field, 'desc')))->toBe(['item 3', 'item 1', 'item 4', 'item 0', 'item 2'], $field);
+        foreach (['asc', 'desc'] as $direction) {
+            $first = ItemOrder::page(WorkItem::query(), $sort($field, $direction), new PageArgs(null, 1));
+            DB::flushQueryLog();
+            DB::enableQueryLog();
+            $second = ItemOrder::page(WorkItem::query(), $sort($field, $direction), new PageArgs($first->nextCursor()?->encode(), 1));
+            DB::disableQueryLog();
+            $sql = DB::getQueryLog()[0]['query'];
+            $operator = $direction === 'desc' ? '<' : '>';
 
+            expect($sql)->not->toContain('coalesce')
+                ->and($sql)->not->toContain('is null')
+                ->and($sql)->toContain("`work_items`.`{$field}` {$operator} ?")
+                ->and($first->nextCursor()?->parameters(['sort_0']))->toBe([$first->first()?->getRawOriginal($field)])
+                ->and($second->pluck('id')->all())->toBe([$items[1]->id], "{$field} {$direction}");
+        }
+    }
+});
+
+it('refuses a cursor of the old shape', function () use ($sort, $refused) {
+    // before A440 a stamp had the mark of an empty value and the value with a guard (`sort_0`, `sort_1`)
+    $items = WorkItem::factory()->count(3)->create(['project_id' => $this->web->id]);
+    $old = fn (string $signature) => str_replace(['+', '/', '='], ['-', '_', ''], base64_encode((string) json_encode([
+        'sort_0' => 0, 'sort_1' => '2026-10-01 08:00:00', 'rank' => $items[0]->rank, 'id' => $items[0]->id,
+        '_sig' => $signature, '_pointsToNextItems' => true,
+    ])));
+
+    foreach (['created_at', 'updated_at'] as $field) {
         foreach (['asc', 'desc'] as $direction) {
             $order = $sort($field, $direction);
-            $all = ItemOrder::apply(WorkItem::query(), $order)->get()->pluck('id')->all();
-            foreach ([1, 2] as $perPage) {
-                $pages = $forward($order, $perPage);
-                expect(array_merge(...array_column($pages, 'ids')))->toBe($all, "{$field} {$direction}, {$perPage} per page")
-                    ->and($backward($order, end($pages)['page'], $perPage))->toBe(array_reverse(array_column(array_slice($pages, 0, -1), 'ids')), "{$field} {$direction} back");
-            }
+            $refused(fn () => ItemOrder::page(WorkItem::query(), $order, new PageArgs($old($order->signature()), 1)));
         }
     }
 });
@@ -512,7 +531,7 @@ it('refuses a cursor it cannot read', function () use ($sort, $refused, $tampere
         ['due_date', fn (array $p) => [...$p, 'sort_0' => 2]],
         ['due_date', fn (array $p) => [...$p, 'sort_1' => '2026-11-01 or 1']],
         ['created_at', fn (array $p) => [...$p, 'sort_0' => '2026-11-01']],
-        ['updated_at', fn (array $p) => [...$p, 'sort_1' => '2026-11-01']],
+        ['updated_at', fn (array $p) => [...$p, 'sort_0' => '2026-11-01 10:00']],
         ['property:effort', fn (array $p) => [...$p, 'sort_1' => '1e3']],
     ];
     foreach ($cases as [$field, $change]) {
@@ -520,7 +539,7 @@ it('refuses a cursor it cannot read', function () use ($sort, $refused, $tampere
     }
 
     // the cursor as it came is read; an empty one is the first page
-    foreach (['rank', 'priority', 'due_date', 'created_at', 'property:effort'] as $field) {
+    foreach (['rank', 'priority', 'due_date', 'created_at', 'updated_at', 'property:effort'] as $field) {
         expect($page($field, $tampered($sort($field), fn (array $p) => $p)))->toHaveCount(1);
     }
     expect($page('rank', ''))->toHaveCount(2);

@@ -38,6 +38,9 @@ class WorkItemFactory extends Factory
             'state_id' => fn (array $attributes) => self::initialState(self::project($attributes)),
             'priority' => Priority::None,
             'created_by' => fn (array $attributes) => self::member(self::project($attributes)),
+            // required (A440): a made item that goes into the table without Eloquent has them too
+            'created_at' => fn () => now(),
+            'updated_at' => fn (array $attributes) => $attributes['created_at'],
         ];
     }
 
