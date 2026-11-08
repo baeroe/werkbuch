@@ -1,11 +1,13 @@
 <?php
 
+use App\Actions\WorkItems\UpdateWorkItem;
 use App\Models\Label;
 use App\Models\Page;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
 use App\Search\MeilisearchEngine;
+use App\Search\SearchConsumer;
 use App\Search\SearchIndexer;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\Artisan;
@@ -13,6 +15,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Scout\EngineManager;
 use Meilisearch\Client;
+use Meilisearch\Contracts\TasksQuery;
 use Meilisearch\Exceptions\ApiException;
 use Tests\Support\Meili;
 
@@ -202,4 +205,52 @@ it('refuses a prefix other than testing_', function () {
     config(['scout.prefix' => '']);
 
     expect(fn () => Meili::use())->toThrow(RuntimeException::class, 'Meili::use() needs the prefix testing_, not "".');
+});
+
+it('drops what an earlier rebuild left beside the live index, and asks only for leftovers', function () {
+    $client = app(Client::class);
+    $client->index('testing_work_items_next')->addDocuments([['id' => 'left', 'title' => 'Liegengeblieben']]);
+    Meili::settle();
+    $before = $client->getTasks((new TasksQuery)->setLimit(1))->getResults()[0]['uid'];
+    $item = WorkItem::factory()->create(['title' => 'Kontaktformular']);
+
+    expect(app(SearchIndexer::class)->buildNext(WorkItem::class))->toBe(1);
+    Meili::settle();
+
+    expect(Meili::ids('testing_work_items_next', ''))->toBe([$item->id]);
+
+    app(SearchIndexer::class)->swapIn(WorkItem::class);
+    app(SearchIndexer::class)->buildNext(Page::class);
+    Meili::settle();
+    $failed = $client->getTasks((new TasksQuery)->setStatuses(['failed'])->setTypes(['indexDeletion'])
+        ->setIndexUids(['testing_work_items_next', 'testing_pages_next']))->getResults();
+
+    expect(array_filter($failed, fn (array $task) => $task['uid'] > $before))->toBe([]);
+});
+
+it('says why it could not ask for a leftover index', function () {
+    $engine = app(EngineManager::class)->engine();
+    assert($engine instanceof MeilisearchEngine);
+
+    expect(fn () => $engine->dropIndex('testing_not a name', ifExists: true))->toThrow(ApiException::class);
+});
+
+it('keeps a change the consumer wrote into the old index while it rebuilt', function () use ($indexed) {
+    [, , $inWeb] = $indexed();
+    consumers(SearchConsumer::class);
+    $mara = User::factory()->admin()->create();
+    $changed = false;
+    DB::listen(function (QueryExecuted $query) use (&$changed, $mara, $inWeb): void {
+        if (! $changed && str_contains($query->sql, 'from `work_items`')) {
+            $changed = true;
+            UpdateWorkItem::run(actor($mara), $inWeb, ['title' => 'Impressum ergänzen']);
+        }
+    });
+
+    app(SearchIndexer::class)->rebuild();
+    Meili::settle();
+
+    expect($changed)->toBeTrue()
+        ->and(Meili::ids('testing_work_items', 'impressum'))->toBe([$inWeb->id])
+        ->and(Meili::ids('testing_work_items', 'prüfen'))->toBe([]);
 });

@@ -50,6 +50,7 @@ use App\Search\SearchConsumer;
 use App\Search\SearchIndexer;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
 use Tests\Support\WorkflowFixtures;
 
 beforeEach(fn () => consumers(SearchConsumer::class));
@@ -470,4 +471,59 @@ it('retries with its own tries and backoff', function () {
     expect([$consumer->key(), $consumer->queue()])->toBe(['search', 'search'])
         ->and($job->tries())->toBe(8)
         ->and($job->backoff())->toBe([10, 60, 300, 900, 3600]);
+});
+
+it('replays the events since a moment, and none before it', function () use ($world, $create, $ids) {
+    consumers();
+    $engine = searchEngine();
+    [$web, $mara] = $world();
+    $this->travel(-2)->hours();
+    $create($web, $mara, 'Alt');
+    $this->travelBack();
+    $fresh = $create($web, $mara, 'Neu');
+    $gone = $create($web, $mara, 'Weg');
+    $page = CreatePage::run(actor($mara), $web, ['title' => 'Handbuch']);
+    app(SearchIndexer::class)->upsertItem($gone->id);
+    DeleteWorkItem::run(actor($mara), $gone);
+
+    expect($ids($engine, 'testing_work_items'))->toBe([$gone->id]);
+
+    $read = app(SearchConsumer::class)->replaySince(now()->subMinute());
+
+    expect($ids($engine, 'testing_work_items'))->toBe([$fresh->id])
+        ->and($ids($engine, 'testing_pages'))->toBe([$page->id])
+        ->and($ids($engine, 'testing_projects'))->toBe([])
+        ->and($read)->toBe(Event::query()->where('occurred_at', '>=', now()->subMinute())->count());
+});
+
+it('replays in blocks, with the same queries for a few events and for many', function () use ($world) {
+    consumers();
+    $engine = searchEngine();
+    [, $mara] = $world();
+    $at = now()->addHour();
+    /** user.updated of Mara `$count` times an hour ahead, with ids of that moment as the recorder gives them */
+    $record = fn (int $count) => DB::table('events')->insert(array_map(fn () => [
+        'id' => strtolower((string) Str::ulid($at)), 'type' => EventType::UserUpdated->value, 'actor_id' => $mara->id,
+        'subject_type' => 'user', 'subject_id' => $mara->id, 'meta' => '{}', 'occurred_at' => $at->format('Y-m-d H:i:s.u'),
+    ], range(1, $count)));
+    $replay = function () use ($at): array {
+        $queries = 0;
+        DB::listen(function () use (&$queries): void {
+            $queries++;
+        });
+        $read = app(SearchConsumer::class)->replaySince($at->copy()->subMinute());
+
+        return [$read, $queries];
+    };
+
+    $record(5);
+    $writes = $engine->writes();
+    expect($replay())->toBe([5, 2])
+        ->and($engine->writes())->toBe($writes + 1)
+        ->and(array_keys($engine->documents('testing_users')))->toBe([$mara->id]);
+
+    $record(SearchConsumer::BLOCK + 100 - 5);
+    $writes = $engine->writes();
+    expect($replay())->toBe([SearchConsumer::BLOCK + 100, 4])
+        ->and($engine->writes())->toBe($writes + 2);
 });

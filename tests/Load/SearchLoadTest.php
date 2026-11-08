@@ -2,14 +2,17 @@
 
 use App\Access\ProjectRole;
 use App\Access\RoleAssignments;
+use App\Events\EventType;
 use App\Models\Comment;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
 use App\Search\MeilisearchEngine;
+use App\Search\SearchConsumer;
 use App\Search\SearchIndexer;
 use Database\Seeders\Load\LoadItems;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use Laravel\Scout\EngineManager;
 use Meilisearch\Client;
@@ -21,7 +24,8 @@ use Tests\Load\Support\Budget;
  * The search against 50 000 items (plan, Task 11b; K9). The palette asks 150 ms after the last key, so an answer has its
  * own budget of 0.5 s (median of three runs after a warm-up, Budget::measure, in the table of the suite): one, two and
  * three words, all kinds and only items, for the org admin, who sees the 20 projects, and for a person who sees one.
- * Then the document of the item with 40 comments, and a rebuild of every index at the end (beside the live indexes,
+ * Then the document of the item with 40 comments, the replay of 20 000 events that a rebuild runs after its swap (in
+ * blocks, one query per kind and block), and a rebuild of every index at the end (beside the live indexes,
  * swapped in at the end of each; it runs last): within five minutes until Meilisearch has every document, with at most
  * 512 MB of PHP.
  * Meilisearch takes up to two thirds of the RAM while it indexes (A428) and shares the VM in DDEV: the suite runs alone.
@@ -32,6 +36,11 @@ const SEARCH_SECONDS = 0.5;
 
 /** The budget of a rebuild in seconds, until Meilisearch has written every document (K9). */
 const REBUILD_SECONDS = 300;
+
+/** The events of the replay test, and the budget of their replay in seconds (PHP; Meilisearch writes afterwards). */
+const REPLAY_EVENTS = 20_000;
+
+const REPLAY_SECONDS = 60;
 
 /** The most memory PHP may hold during a rebuild (memory_get_peak_usage(), from the moment it starts). */
 const REBUILD_MEMORY = 512 * 1_048_576;
@@ -119,6 +128,53 @@ it('keeps the document of the item with 40 comments within COMMENTS_MAX', functi
     expect($texts)->toHaveCount(40)
         ->and($document['comments'])->toBe(SearchIndexer::commentsText(array_values($texts)))
         ->and(strlen($document['comments']))->toBeLessThanOrEqual(SearchIndexer::COMMENTS_MAX);
+});
+
+it('replays 20 000 events after a rebuild in blocks, without a query per event', function () {
+    LoadWorld::ensure();
+    $at = now();
+    $since = $at->copy()->subMinute();
+    $actor = (string) DB::table('users')->where('handle', 'load-01')->value('id');
+    /** an event for each of these items, recorded as the recorder does (an id of the moment) */
+    $record = fn ($items) => DB::table('events')->insert($items->map(fn (string $item) => [
+        'id' => strtolower((string) Str::ulid($at)), 'type' => EventType::WorkItemUpdated->value, 'actor_id' => $actor,
+        'subject_type' => 'work_item', 'subject_id' => $item, 'meta' => '{}', 'occurred_at' => $at->format('Y-m-d H:i:s.u'),
+    ])->all());
+    /** @return array{int, int, float} the events read, the queries asked and the seconds of a replay since `$since` */
+    $replay = function () use ($since): array {
+        $queries = 0;
+        DB::listen(function () use (&$queries): void {
+            $queries++;
+        });
+        $started = hrtime(true);
+        $read = app(SearchConsumer::class)->replaySince($since);
+
+        return [$read, $queries, (hrtime(true) - $started) / 1e9];
+    };
+    $items = DB::table('work_items')->orderBy('id')->limit(REPLAY_EVENTS)->pluck('id');
+
+    DB::beginTransaction();
+    try {
+        // one block first: the queries it asks are the most any block may ask
+        $record($items->take(SearchConsumer::BLOCK));
+        [, $perBlock] = $replay();
+        // a busy day: an event for each of 20 000 items since the rebuild started
+        foreach ($items->skip(SearchConsumer::BLOCK)->chunk(1_000) as $chunk) {
+            $record($chunk);
+        }
+        $events = DB::table('events')->where('occurred_at', '>=', $since)->count();
+
+        [$read, $queries, $seconds] = $replay();
+        fwrite(STDERR, sprintf("\nThe replay read %d events in %.1f s with %d queries (%d for one block).\n", $read, $seconds, $queries, $perBlock));
+
+        expect($read)->toBe($events)
+            ->and($events)->toBeGreaterThanOrEqual(REPLAY_EVENTS)
+            ->and($queries)->toBeLessThanOrEqual((int) ceil($events / SearchConsumer::BLOCK) * $perBlock + 1)
+            ->and($seconds)->toBeLessThanOrEqual(REPLAY_SECONDS, sprintf('the replay took %.1f s', $seconds));
+    } finally {
+        DB::rollBack();
+        LoadWorld::settle();
+    }
 });
 
 it('rebuilds the index of 50 000 items within five minutes', function () {

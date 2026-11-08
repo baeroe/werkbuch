@@ -26,6 +26,9 @@ final class SearchIndexer
     /** The searchable models, by the name of their table (the index without its prefix). */
     private const MODELS = ['work_items' => WorkItem::class, 'pages' => Page::class, 'projects' => Project::class, 'users' => User::class];
 
+    /** How far before its start a rebuild replays the events (a transaction can record its event early, commit late). */
+    public const REPLAY_MARGIN_MINUTES = 10;
+
     /** The rows read and written at a time (ReindexWorkItems::BLOCK is a multiple of it). */
     public const CHUNK = 500;
 
@@ -64,15 +67,19 @@ final class SearchIndexer
     /** Writes the document of an item, or removes it when the item is gone or its project is being deleted (K11). */
     public function upsertItem(string $id): void
     {
-        $item = $this->query(WorkItem::class)->whereKey($id)->first();
+        $this->upsertItems([$id]);
+    }
 
-        if ($item === null) {
-            $this->removeItem($id);
-
-            return;
-        }
-
-        $item->searchableSync();
+    /**
+     * Writes the documents of these items, read in one query, and removes those of the items that are gone or whose
+     * project is being deleted (K11): at most one write for those written and one for those removed, none for an empty
+     * list.
+     *
+     * @param  list<string>  $ids
+     */
+    public function upsertItems(array $ids): void
+    {
+        $this->writeFresh(WorkItem::class, $ids);
     }
 
     public function removeItem(string $id): void
@@ -83,29 +90,33 @@ final class SearchIndexer
     /** Writes the document of a project; a project that is gone or being deleted loses only its own document. */
     public function upsertProject(string $id): void
     {
-        $project = $this->query(Project::class)->whereKey($id)->first();
+        $this->upsertProjects([$id]);
+    }
 
-        if ($project === null || ! $project->shouldBeSearchable()) {
-            (new Project)->setRawAttributes(['id' => $id])->unsearchableSync();
-
-            return;
-        }
-
-        $project->searchableSync();
+    /**
+     * As upsertProject() for many projects, read in one query.
+     *
+     * @param  list<string>  $ids
+     */
+    public function upsertProjects(array $ids): void
+    {
+        $this->writeFresh(Project::class, $ids);
     }
 
     /** Writes the document of a page, or removes it when the page is gone or its project is being deleted. */
     public function upsertPage(string $id): void
     {
-        $page = $this->query(Page::class)->whereKey($id)->first();
+        $this->upsertPages([$id]);
+    }
 
-        if ($page === null || ! $page->shouldBeSearchable()) {
-            $this->removePages([$id]);
-
-            return;
-        }
-
-        $page->searchableSync();
+    /**
+     * As upsertPage() for many pages, read in one query.
+     *
+     * @param  list<string>  $ids
+     */
+    public function upsertPages(array $ids): void
+    {
+        $this->writeFresh(Page::class, $ids);
     }
 
     /**
@@ -136,7 +147,42 @@ final class SearchIndexer
 
     public function upsertUser(string $id): void
     {
-        (new User)->syncMakeSearchable($this->query(User::class)->whereKey($id)->get());
+        $this->upsertUsers([$id]);
+    }
+
+    /**
+     * Writes the documents of these accounts, read in one query.
+     *
+     * @param  list<string>  $ids
+     */
+    public function upsertUsers(array $ids): void
+    {
+        $this->writeFresh(User::class, $ids);
+    }
+
+    /**
+     * Writes the documents of the rows of these ids that are searchable (read fresh, in one query) and removes the
+     * documents of the others (gone, of a project being deleted): at most one write for each.
+     *
+     * @param  class-string<WorkItem|Page|Project|User>  $class
+     * @param  list<string>  $ids
+     */
+    private function writeFresh(string $class, array $ids): void
+    {
+        if ($ids === []) {
+            return;
+        }
+
+        $ids = array_values(array_unique($ids));
+        $model = new $class;
+        $searchable = $this->query($class)->whereKey($ids)->get()
+            ->filter(fn (WorkItem|Page|Project|User $found) => $found->shouldBeSearchable());
+        $model->syncMakeSearchable($searchable);
+
+        $gone = array_values(array_diff($ids, $searchable->modelKeys()));
+        if ($gone !== []) {
+            $model->syncRemoveFromSearch($model->newCollection(array_map(fn (string $id) => (new $class)->setRawAttributes(['id' => $id]), $gone)));
+        }
     }
 
     /**
@@ -249,8 +295,11 @@ final class SearchIndexer
 
     /**
      * Builds every index from scratch (P18). On an engine that swaps (Meilisearch), each index is built beside the live
-     * one and swapped in (buildNext(), swapIn()), so the search keeps answering from the old documents meanwhile; on
-     * any other engine it sends the settings, empties each index and fills it in place.
+     * one and swapped in (buildNext(), swapIn()), so the search keeps answering from the old documents meanwhile. The
+     * consumer writes into the live index, so what it wrote while the next one was built would go with the swap: at the
+     * end, the events since the start (less REPLAY_MARGIN_MINUTES, for a transaction that recorded its event before the
+     * start and committed after the rows were read) go through its rules again (SearchConsumer::replaySince()). On any
+     * other engine it sends the settings, empties each index and fills it in place.
      *
      * @return array{work_items: int, pages: int, projects: int, users: int} the documents written to each index
      */
@@ -259,10 +308,13 @@ final class SearchIndexer
         $counts = [];
 
         if ($this->engines->engine() instanceof SwapsIndexes) {
+            $since = now()->subMinutes(self::REPLAY_MARGIN_MINUTES);
             foreach (self::MODELS as $table => $class) {
                 $counts[$table] = $this->buildNext($class);
                 $this->swapIn($class);
             }
+            // what the consumer wrote into an old index while its successor was built went with the swap
+            app(SearchConsumer::class)->replaySince($since);
 
             return $counts;
         }
@@ -290,7 +342,7 @@ final class SearchIndexer
         $next = self::nextOf($class);
 
         try {
-            $engine->dropIndex($next);
+            $engine->dropIndex($next, ifExists: true);
             if ($engine instanceof UpdatesIndexSettings) {
                 /** @var array<string, mixed> $settings */
                 $settings = config('scout.meilisearch.index-settings')[$class] ?? [];

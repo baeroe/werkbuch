@@ -78,7 +78,7 @@ final class Meili
         $swaps = (new TasksQuery)->setStatuses(['enqueued', 'processing'])->setTypes(['indexSwap']);
         $until = microtime(true) + 10;
 
-        while (($open = [...app(Client::class)->getTasks($query)->getResults(), ...app(Client::class)->getTasks($swaps)->getResults()]) !== []) {
+        while (($open = [...app(Client::class)->getTasks($query)->getResults(), ...self::ofTests(app(Client::class)->getTasks($swaps)->getResults())]) !== []) {
             if (microtime(true) > $until) {
                 throw new RuntimeException('Meilisearch did not settle within 10 s: '.json_encode($open));
             }
@@ -101,13 +101,24 @@ final class Meili
         /** @var list<array{uid: int, indexUid: string, type: string, error: array{code: string, message: string}, details?: array{swaps?: list<array{indexes: list<string>}>}}> $tasks */
         $tasks = [
             ...app(Client::class)->getTasks($query)->getResults(),
-            ...array_filter(app(Client::class)->getTasks($swaps)->getResults(), fn (array $task) => array_intersect(
-                array_merge(...array_column($task['details']['swaps'] ?? [], 'indexes')), self::INDEXES,
-            ) !== []),
+            ...self::ofTests(app(Client::class)->getTasks($swaps)->getResults()),
         ];
         usort($tasks, fn (array $a, array $b) => $b['uid'] <=> $a['uid']);
 
         return array_values(array_map(fn (array $task) => [...$task, 'indexUid' => $task['indexUid'] ?? 'swap'], $tasks));
+    }
+
+    /**
+     * The swap tasks among these that name an index of the tests: a swap names its indexes only in its details.
+     *
+     * @param  array<int, array<string, mixed>>  $tasks
+     * @return list<array<string, mixed>>
+     */
+    private static function ofTests(array $tasks): array
+    {
+        return array_values(array_filter($tasks, fn (array $task) => array_intersect(
+            array_merge(...array_column($task['details']['swaps'] ?? [], 'indexes')), self::INDEXES,
+        ) !== []));
     }
 
     /**

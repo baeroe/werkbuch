@@ -2,12 +2,16 @@
 
 use App\Access\ProjectRole;
 use App\Actions\Projects\DeleteProject;
+use App\Actions\WorkItems\ArchiveWorkItem;
+use App\Actions\WorkItems\DeleteWorkItem;
+use App\Actions\WorkItems\UpdateWorkItem;
 use App\Jobs\ReindexWorkItems;
 use App\Models\Label;
 use App\Models\Page;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
+use App\Search\SearchConsumer;
 use App\Search\SearchIndexer;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Arr;
@@ -411,4 +415,32 @@ it('needs an engine that swaps to build the next index', function () {
         ->toThrow(LogicException::class, 'The search engine cannot swap indexes.')
         ->and(fn () => app(SearchIndexer::class)->swapIn(WorkItem::class))
         ->toThrow(LogicException::class, 'The search engine cannot swap indexes.');
+});
+
+it('keeps a change made while an index is rebuilt', function () {
+    consumers(SearchConsumer::class);
+    $engine = searchEngine();
+    $mara = User::factory()->create(['name' => 'Mara']);
+    $web = Project::factory()->identifier('WEB')->member($mara, ProjectRole::Admin)->create(['lead_id' => $mara->id]);
+    $renamed = WorkItem::factory()->for($web)->create(['title' => 'Kontaktformular']);
+    $gone = WorkItem::factory()->for($web)->create(['title' => 'Impressum']);
+    $done = WorkItem::factory()->for($web)->closed()->create(['title' => 'Datenschutz']);
+    $changed = false;
+    // right after the rebuild read the items, as the consumer would meanwhile: it writes into the live index
+    DB::listen(function (QueryExecuted $query) use (&$changed, $mara, $renamed, $gone, $done): void {
+        if ($changed || ! str_contains($query->sql, 'from `work_items`')) {
+            return;
+        }
+        $changed = true;
+        UpdateWorkItem::run(actor($mara), $renamed, ['title' => 'Kontaktformular prüfen']);
+        DeleteWorkItem::run(actor($mara), $gone);
+        ArchiveWorkItem::run(actor($mara), $done);
+    });
+
+    app(SearchIndexer::class)->rebuild();
+
+    expect($changed)->toBeTrue()
+        ->and(array_keys($engine->documents('testing_work_items')))->toEqualCanonicalizing([$renamed->id, $done->id])
+        ->and($engine->documents('testing_work_items')[$renamed->id]['title'])->toBe('Kontaktformular prüfen')
+        ->and($engine->documents('testing_work_items')[$done->id]['archived'])->toBeTrue();
 });

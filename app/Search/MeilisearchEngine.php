@@ -71,9 +71,21 @@ final class MeilisearchEngine extends ScoutMeilisearchEngine implements CountsDo
         $this->meilisearch->swapIndexes([[$a, $b]]);
     }
 
-    public function dropIndex(string $index): void
+    public function dropIndex(string $index, bool $ifExists = false): void
     {
         $this->ownIndex($index);
+
+        if ($ifExists) {
+            try {
+                $this->meilisearch->getIndex($index);
+            } catch (ApiException $e) {
+                if ($e->errorCode === 'index_not_found') {
+                    return;
+                }
+
+                throw $e;
+            }
+        }
 
         $this->meilisearch->deleteIndex($index);
     }

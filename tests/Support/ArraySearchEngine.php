@@ -211,7 +211,7 @@ final class ArraySearchEngine extends Engine implements CountsDocuments, Removes
         [$this->settings[$a], $this->settings[$b]] = [$this->settings[$b] ?? [], $this->settings[$a] ?? []];
     }
 
-    public function dropIndex(string $index): void
+    public function dropIndex(string $index, bool $ifExists = false): void
     {
         $this->write();
 
