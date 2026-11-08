@@ -1282,6 +1282,7 @@
     "items.timeline.drag_cancelled": ":key: drag cancelled, the dates stay.",
     "items.timeline.empty.create": "New :type",
     "items.timeline.empty.description": "The timeline shows only items of types with the “Epic” tick, grouped by project. Create an epic, or switch to the list with 1.",
+    "items.timeline.empty.filtered_title": "No epic matches the filter",
     "items.timeline.empty.title": "No epics in this list",
     "items.timeline.from_day": "from :day",
     "items.timeline.moving": ":key: :range",

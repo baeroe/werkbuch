@@ -418,11 +418,25 @@ describe('the timeline', () => {
   });
 
   it('explains an empty timeline: only epics stand on it', async () => {
-    const filter = encodeURIComponent(JSON.stringify([{ field: 'type', op: 'is', value: 't_task' }]));
-    renderTimeline(`/projects/WEB?layout=timeline&filter=${filter}`);
+    board.items = [task];
+    renderTimeline('/projects/WEB?layout=timeline');
     expect(await screen.findByText('Keine Epics in dieser Liste')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Filter zurücksetzen' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Neues Epic' }));
     expect(useUiStore.getState()).toMatchObject({ createOpen: true, createDefaults: { project_id: 'p_web', type_id: 't_epic' } });
+  });
+
+  it('offers to reset the filter on an empty timeline', async () => {
+    const filter = encodeURIComponent(JSON.stringify([{ field: 'type', op: 'is', value: 't_task' }]));
+    renderTimeline(`/projects/WEB?layout=timeline&filter=${filter}`);
+    expect(await screen.findByText('Kein Epic passt zum Filter')).toBeTruthy();
+    expect(screen.getByText('Ändere die Bedingungen oder setze den Filter zurück.')).toBeTruthy();
+    expect(screen.queryByText('Keine Epics in dieser Liste')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Filter zurücksetzen' }));
+    // back to the filter of the project: its epics stand on the timeline again
+    await waitFor(() => expect(inertia.url).toBe('/projects/WEB?layout=timeline'));
+    expect(await findRow('WEB-30')).toBeTruthy();
   });
 
   it('says where an epic of the list has no dates yet', async () => {

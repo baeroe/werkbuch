@@ -270,6 +270,9 @@ function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: P
   const filterChanged = !sameFilter(base.filter, { version: 1, conditions: sent });
   const filtered = sent.length > 0;
   const Layout = layouts[state.display.layout];
+  // an empty list because of its filter offers the way back to all of it (ListEmpty, the timeline's own empty state)
+  const hidesItems = filtered && (filterChanged || preset === 'view');
+  const resetFilter = () => setState({ ...state, filter: filterChanged ? base.filter : { version: 1, conditions: [] } });
 
   let content: ReactNode;
   if (data.status === 'error') {
@@ -284,7 +287,7 @@ function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: P
         view={view}
         filtered={filtered}
         filterChanged={filterChanged}
-        onResetFilter={() => setState({ ...state, filter: filterChanged ? base.filter : { version: 1, conditions: [] } })}
+        onResetFilter={resetFilter}
         createReason={createReason}
         onCreate={create}
       />
@@ -297,6 +300,8 @@ function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: P
       total: data.total,
       ...(project && { project }),
       ...(createDefaults && { createDefaults }),
+      filtered: hidesItems,
+      onResetFilter: resetFilter,
       selection,
       onSelect: setSelection,
       onSelectAll: () => void selectAll(),

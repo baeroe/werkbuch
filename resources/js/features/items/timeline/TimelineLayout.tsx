@@ -22,7 +22,7 @@
  */
 
 import { usePage, router } from '@inertiajs/react';
-import { ChartGantt, Plus } from 'lucide-react';
+import { ChartGantt, FunnelX, Plus } from 'lucide-react';
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { formatDay } from '@/components/fields/format';
 import { archivedReason, useToday } from '@/components/fields/itemData';
@@ -87,7 +87,7 @@ function addressWith(url: string, zoom: Zoom): string {
   return `${address.pathname}${address.search}`;
 }
 
-export function TimelineLayout({ groups, groupBy, project, createDefaults, selection, onSelect, onSelectAll, onOpen, onPeek, cursorId, onCursor }: LayoutProps) {
+export function TimelineLayout({ groups, groupBy, project, createDefaults, filtered = false, onResetFilter, selection, onSelect, onSelectAll, onOpen, onPeek, cursorId, onCursor }: LayoutProps) {
   const types = useWorkItemTypes().data?.items;
   const projects = useProjects({ include_archived: true }).data?.items;
   const { reason } = usePermissions();
@@ -416,7 +416,7 @@ export function TimelineLayout({ groups, groupBy, project, createDefaults, selec
   // the answer of the layout before (1–4 switched to the timeline) stands until the epics by project are there: the
   // skeleton, so the focus waits for the row of the cursor (the screen's focus rescue) instead of a row that goes again
   if (groupBy !== 'project') return <ListSkeleton layout="timeline" />;
-  if (epics.length === 0) return <TimelineEmpty project={project} createDefaults={createDefaults} />;
+  if (epics.length === 0) return <TimelineEmpty project={project} createDefaults={createDefaults} filtered={filtered} onResetFilter={onResetFilter} />;
 
   const stop = cursorId !== null && order.includes(cursorId) ? cursorId : order[0];
   const planningItem = drag.planning ? epicById.get(drag.planning.id) : undefined;
@@ -588,10 +588,24 @@ export function TimelineLayout({ groups, groupBy, project, createDefaults, selec
   );
 }
 
-/** No epic in the list: only epics stand on the timeline. */
-function TimelineEmpty({ project, createDefaults }: Pick<LayoutProps, 'project' | 'createDefaults'>) {
+/** No epic in the list: only epics stand on the timeline; with a filter that hides items, the way back to all of them. */
+function TimelineEmpty({ project, createDefaults, filtered, onResetFilter }: Pick<LayoutProps, 'project' | 'createDefaults' | 'filtered' | 'onResetFilter'>) {
   const types = useWorkItemTypes().data?.items ?? [];
   const { reason } = usePermissions();
+  if (filtered && onResetFilter) {
+    return (
+      <EmptyState
+        icon={FunnelX}
+        title={t('items.timeline.empty.filtered_title')}
+        description={t('items.empty.filtered.changed')}
+        actions={
+          <Button variant="secondary" icon={FunnelX} onClick={onResetFilter}>
+            {t('items.empty.filtered.reset')}
+          </Button>
+        }
+      />
+    );
+  }
   const epicType = types.find((type) => type.is_epic && type.archived_at === null && (!project || project.enabled_type_ids.includes(type.id)));
   return (
     <EmptyState

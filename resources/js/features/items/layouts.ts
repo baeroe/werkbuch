@@ -14,6 +14,8 @@
  *   workflows, P14). `display`: the display as applied (fields, sort, sub-items). `total`: every match of the list.
  *   `project`: the project of a project list. `createDefaults`: what a new item of the list gets (`openCreate`; Meine
  *   Items: assigned to me), for the quick add of a board.
+ * - `filtered` / `onResetFilter()`: the list is empty because of its filter, and the way back to all of it (as
+ *   `ListEmpty`); only the timeline uses them, the screen shows `ListEmpty` for the other layouts.
  * - `selection` / `onSelect(ids)`: the selected ids. `onSelectAll()` (⌘A) selects every item of the list, also those of
  *   pages not loaded yet; pass it on to `useSelection`.
  * - `cursorId` / `onCursor(id)`: the item under the keyboard cursor; the item commands of the list act on it. Report
@@ -69,6 +71,10 @@ export interface LayoutProps {
   total: number;
   project?: Project;
   createDefaults?: CreateDefaults;
+  /** The filter of the list hides items (it differs from its base, or a view has conditions of its own). */
+  filtered?: boolean;
+  /** Back to the filter of the base (or none). */
+  onResetFilter?(): void;
   selection: string[];
   onSelect(ids: string[]): void;
   /** ⌘A: every item of the list, also those not loaded yet (the screen loads them first). */

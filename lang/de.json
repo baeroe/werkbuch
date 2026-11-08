@@ -1282,6 +1282,7 @@
     "items.timeline.drag_cancelled": ":key: Ziehen abgebrochen, die Daten bleiben.",
     "items.timeline.empty.create": "Neues :type",
     "items.timeline.empty.description": "Die Timeline zeigt nur Items von Typen mit dem Häkchen „Epic“, nach Projekt gruppiert. Lege ein Epic an, oder wechsle mit 1 zur Liste.",
+    "items.timeline.empty.filtered_title": "Kein Epic passt zum Filter",
     "items.timeline.empty.title": "Keine Epics in dieser Liste",
     "items.timeline.from_day": "ab :day",
     "items.timeline.moving": ":key: :range",
