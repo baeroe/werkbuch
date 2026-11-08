@@ -123,6 +123,35 @@ it('writes no German into the English texts', function () use ($germanIn) {
         ->and([$germanIn('Gärtnerei Moos'), $germanIn('Für Kira'), $germanIn('Browser und Version')])->toBe(['ä', 'Für', 'und']);
 });
 
+it('takes the texts of the shipped entries from lang in both languages (T22a-M3)', function () {
+    // the demo key of a shipped entry and the key of lang/*.json that ships it
+    $shipped = [
+        'catalog.workflow.standard.name' => 'catalog.builtin.workflow.name',
+        'catalog.workflow.standard.description' => 'catalog.builtin.workflow.description',
+        'catalog.property.effort.label' => 'catalog.builtin.property.effort.label',
+        'catalog.property.effort.help' => 'catalog.builtin.property.effort.help',
+        'catalog.type.task.description' => 'catalog.builtin.type.task.description',
+        'catalog.type.epic.description' => 'catalog.builtin.type.epic.description',
+        'catalog.relation.blocks.name' => 'catalog.builtin.relation.blocks.name',
+        'catalog.relation.blocks.outward' => 'catalog.builtin.relation.blocks.outward',
+        'catalog.relation.blocks.inward' => 'catalog.builtin.relation.blocks.inward',
+        'catalog.relation.duplicates.name' => 'catalog.builtin.relation.duplicates.name',
+        'catalog.relation.duplicates.outward' => 'catalog.builtin.relation.duplicates.outward',
+        'catalog.relation.duplicates.inward' => 'catalog.builtin.relation.duplicates.inward',
+        'catalog.relation.relates.name' => 'catalog.builtin.relation.relates.name',
+        'catalog.relation.relates.outward' => 'catalog.builtin.relation.relates.outward',
+    ];
+
+    foreach (['de' => German::TEXTS, 'en' => English::TEXTS] as $locale => $texts) {
+        foreach ($shipped as $demo => $lang) {
+            expect(__($lang, [], $locale))->not->toBe($lang, "lang/{$locale}.json lacks {$lang}")
+                ->and($texts[$demo])->toBe(__($lang, [], $locale), "{$demo} ({$locale})");
+        }
+        // the demo's bug asks for the environment: the shipped sentence, then its own
+        expect($texts['catalog.type.bug.description'])->toStartWith(__('catalog.builtin.type.bug.description', [], $locale).' ');
+    }
+});
+
 it('throws for a key the language lacks, in either language', function () {
     foreach (Locale::cases() as $locale) {
         DemoTexts::use($locale);

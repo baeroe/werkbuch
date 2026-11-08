@@ -5,7 +5,9 @@ use App\Models\Automation;
 use App\Models\Comment;
 use App\Models\Favorite;
 use App\Models\Notification;
+use App\Models\Organization;
 use App\Models\Page;
+use App\Models\PersonalAccessToken;
 use App\Models\Project;
 use App\Models\Template;
 use App\Models\TemplateRun;
@@ -16,6 +18,7 @@ use App\Models\WebhookAttempt;
 use App\Models\WorkflowState;
 use App\Models\WorkItem;
 use App\Models\WorkItemRelation;
+use App\Models\WorkItemType;
 use Database\Seeders\Demo\Texts\DemoTexts;
 use Database\Seeders\Demo\Texts\English;
 use Database\Seeders\Demo\Texts\German;
@@ -102,9 +105,30 @@ it('seeds the English demo in the shape of the German one', function () use ($in
         $webhook = fn (?Webhook $webhook): ?string => $keyOf($texts, '/^webhook\.(\w+)\.name$/', $webhook?->name);
         $view = fn (?string $name): ?string => $keyOf($texts, '/^view\.(\w+)\.name$/', $name);
         $engine = $this->engine;
+        $type = fn (?string $id): ?string => $id === null ? null : $keyOf($texts, '/^catalog\.type\.(\w+)\.name$/', (string) WorkItemType::query()->whereKey($id)->value('name'));
+        // every role of every account, in the team it holds it in: the organization or a project by its identifier
+        $organization = Organization::current()->id;
+        $roles = DB::table('model_has_roles')->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
+            ->get(['model_has_roles.model_id', 'model_has_roles.team_id', 'roles.name'])
+            ->groupBy(fn (object $row) => $handles[$row->model_id])->sortKeys()
+            ->map(fn (Collection $rows) => $rows->map(fn (object $row) => ($row->team_id === $organization ? 'organization' : $identifiers[$row->team_id]).":{$row->name}")->sort()->values()->all())
+            ->all();
 
         return [
             'rows' => collect($tables())->mapWithKeys(fn (string $table) => [$table => DB::table($table)->count()])->all(),
+            'projects' => Project::query()->with(['types', 'workflow'])->get()->sortBy('identifier')->mapWithKeys(fn (Project $project) => [$project->identifier => [
+                $project->visibility->value,
+                $handles[$project->lead_id] ?? null,
+                $keyOf($texts, '/^catalog\.workflow\.(\w+)\.name$/', $project->workflow->name),
+                $type($project->default_type_id),
+                $project->types->map(fn (WorkItemType $enabled) => $type($enabled->id))->sort()->values()->all(),
+                DB::table('project_members')->where('project_id', $project->id)->pluck('user_id')->map(fn (string $id) => $handles[$id])->sort()->values()->all(),
+            ]])->all(),
+            'roles' => $roles,
+            'tokens' => PersonalAccessToken::query()->get()->map(fn (PersonalAccessToken $token) => [
+                $handles[$token->tokenable_id], $keyOf($texts, '/^token\.(\w+)\.name$/', $token->name), $token->abilities,
+                $token->expires_at?->format(DATE_ATOM),
+            ])->sortBy(fn (array $row) => "{$row[0]} {$row[1]}")->values()->all(),
             'items' => WorkItem::query()->with(['type', 'state', 'labels', 'parent.project', 'project'])->get()
                 ->sortBy(fn (WorkItem $item) => $item->key, SORT_NATURAL)
                 ->mapWithKeys(fn (WorkItem $item) => [$item->key => [
@@ -181,6 +205,10 @@ it('seeds the English demo in the shape of the German one', function () use ($in
         ->and($german['webhooks'])->toHaveCount(3)
         ->and($german['attempts'])->toHaveCount(18)
         ->and($german['automations'])->not->toBeEmpty()
+        ->and(array_slice($german['projects']['APP'], 0, 5))->toBe(['public', 'theo', 'agency', 'task', ['bug', 'epic', 'task', 'wish']])
+        ->and($german['projects']['APP'][5])->toContain('theo')
+        ->and($german['roles']['mara'])->toContain('organization:org-admin')
+        ->and($german['tokens'])->toHaveCount(3)
         ->and($german['search']['work_items'] ?? null)->toBe(71)
         ->and($json)->not->toContain('unknown:');
 });

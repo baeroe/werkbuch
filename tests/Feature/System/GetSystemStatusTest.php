@@ -143,7 +143,6 @@ it('says whether mail is configured', function () {
 });
 
 it('says live is off for the log broadcaster', function () {
-    Http::preventStrayRequests();
     config(['broadcasting.default' => 'log']);
 
     expect(GetSystemStatus::run(actor($this->admin))['live'])->toBe('off');
@@ -151,16 +150,17 @@ it('says live is off for the log broadcaster', function () {
 });
 
 it('asks Reverb whether it is up', function () {
-    Http::preventStrayRequests();
     liveChannels();
-    Http::fakeSequence('http://127.0.0.1:6001/up')
+    $answers = Http::fakeSequence('http://127.0.0.1:6001/up')
         ->push('{"health":"OK"}')
         ->push('', 500)
         ->pushFailedConnection('Connection refused');
 
     expect(GetSystemStatus::run(actor($this->admin))['live'])->toBe('ok')
         ->and(GetSystemStatus::run(actor($this->admin))['live'])->toBe('down')
-        ->and(GetSystemStatus::run(actor($this->admin))['live'])->toBe('down');
+        ->and(GetSystemStatus::run(actor($this->admin))['live'])->toBe('down')
+        // the third ask took the refused connection: every answer of the sequence was asked for
+        ->and($answers->isEmpty())->toBeTrue();
 
     // a refused connection in a pool leaves no response to record: two answers, three asks
     Http::assertSentCount(2);
@@ -174,8 +174,7 @@ $meilisearch = function (): void {
     app(EngineManager::class)->forgetDrivers();
 };
 
-it('asks search and live at the same time (K21)', function () use ($meilisearch) {
-    Http::preventStrayRequests();
+it('asks search and live in one pool, each once (K21)', function () use ($meilisearch) {
     $meilisearch();
     Http::fake([
         'meili.test/health' => Http::response(['status' => 'available']),
@@ -197,7 +196,6 @@ it('asks search and live at the same time (K21)', function () use ($meilisearch)
 });
 
 it('says search is down and live is up when only Meilisearch fails', function () use ($meilisearch) {
-    Http::preventStrayRequests();
     $meilisearch();
     Http::fake([
         'meili.test/health' => Http::response(['status' => 'available']),
@@ -208,13 +206,14 @@ it('says search is down and live is up when only Meilisearch fails', function ()
 });
 
 it('says live is down and search is up when only Reverb fails', function () use ($meilisearch) {
-    Http::preventStrayRequests();
     $meilisearch();
     Http::fake([
         'meili.test/*' => Http::response(['total' => 0]),
-        '127.0.0.1:6001/up' => Http::failedConnection('Connection refused'),
+        '127.0.0.1:6001/up' => $reverb = Http::sequence()->pushFailedConnection('Connection refused'),
     ]);
-    expect(GetSystemStatus::run(actor($this->admin)))->toMatchArray(['search' => 'ok', 'search_tasks' => ['enqueued' => 0, 'processing' => 0, 'failed_last_day' => 0], 'live' => 'down']);
+    expect(GetSystemStatus::run(actor($this->admin)))->toMatchArray(['search' => 'ok', 'search_tasks' => ['enqueued' => 0, 'processing' => 0, 'failed_last_day' => 0], 'live' => 'down'])
+        // down because Reverb refused the connection, not because nothing asked it
+        ->and($reverb->isEmpty())->toBeTrue();
 });
 
 it('refuses members and bots with 403', function () {

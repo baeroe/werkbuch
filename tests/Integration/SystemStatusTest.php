@@ -60,14 +60,16 @@ it('waits once for Meilisearch and Reverb together (K21)', function () {
             'broadcasting.connections.reverb.options' => ['scheme' => 'http', 'host' => '127.0.0.1', 'port' => $port],
         ]);
         app(EngineManager::class)->forgetDrivers();
+        // the account apart: only the action is measured, its reads of the database and the pool
+        $admin = actor(User::factory()->admin()->create());
 
         $started = microtime(true);
-        $status = GetSystemStatus::run(actor(User::factory()->admin()->create()));
+        $status = GetSystemStatus::run($admin);
         $took = microtime(true) - $started;
     } finally {
         $server->stop(0);
     }
 
     expect($status)->toMatchArray(['search' => 'ok', 'search_tasks' => ['enqueued' => 0, 'processing' => 0, 'failed_last_day' => 0], 'live' => 'ok'])
-        ->and($took)->toBeGreaterThan(0.45)->toBeLessThan(1.8);
+        ->and($took > 0.45 && $took < 1.8)->toBeTrue(sprintf('The five requests took %.2f s, not between 0.45 s and 1.8 s.', $took));
 });

@@ -259,6 +259,34 @@ it('reads the default bot once per event (T6-M1)', function () use ($world, $cre
         ->and($twenty)->toBe([20, $one[1], 1]);
 });
 
+it('reads no default bot when only webhooks with a bot take the event (T13a-M3)', function () use ($world, $create, $system) {
+    Queue::fake([DeliverWebhook::class]);
+    $w = $world();
+    consumers();
+    $item = $create($w['mara'], $w['web'], ['assignee_id' => $w['kira']->id]);
+    $event = eventsOf(EventType::WorkItemCreated, $item)->sole();
+    $actor = $system();
+    $kira = Webhook::factory()->forBot($w['kira'])->create(['events' => ['work_item.*']]);
+    $run = function () use ($actor, $event): array {
+        WebhookDelivery::query()->delete();
+        app()->forgetScopedInstances();
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $queued = QueueDeliveries::run($actor, $event);
+        DB::disableQueryLog();
+
+        return [$queued, count(array_filter(array_column(DB::getQueryLog(), 'query'), fn (string $query) => str_contains($query, '`is_default_bot`')))];
+    };
+
+    // the body reads as Kira: the default bot is never asked for
+    expect($run())->toBe([1, 0])
+        ->and(WebhookDelivery::query()->sole()->webhook_id)->toBe($kira->id);
+
+    // the probe: a webhook without a bot takes the event as well, and the default bot is read once
+    Webhook::factory()->create(['events' => ['work_item.*']]);
+    expect($run())->toBe([2, 1]);
+});
+
 it('filters by bot: its own bot events, the events of its items, nothing of an item of another account (A364, K9)', function () use ($world, $create, $delivered, $botAssigned) {
     Queue::fake([DeliverWebhook::class]);
     $w = $world();

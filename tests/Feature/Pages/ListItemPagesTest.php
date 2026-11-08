@@ -3,8 +3,10 @@
 use App\Access\ProjectRole;
 use App\Actions\Pages\CreatePage;
 use App\Actions\Pages\ListItemPages;
+use App\Actions\Pages\UpdatePage;
 use App\Exceptions\Problem;
 use App\Models\Page;
+use App\Models\PageVersion;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
@@ -64,8 +66,12 @@ it('lists the pages that reference an item, by title', function () use ($world, 
     $apfel = $naming($w['web'], 'Äpfel', $w['item']);
     $twin = $naming($w['web'], 'alpha', $w['item']);
     $naming($w['web'], 'Nur das andere', $other);
-    // a key as text and a version name nothing
+    // a key as text names nothing
     Page::factory()->withText("Siehe {$w['item']->key}")->create(['project_id' => $w['web']->id, 'title' => 'Text']);
+    // nor does a version: the page named the item, its current text no longer does, the kept version still does
+    $earlier = CreatePage::run(actor($w['mara']), $w['web'], ['title' => 'Früher', 'content' => "Hing an {$w['item']->key}."]);
+    UpdatePage::run(actor($w['mara']), $earlier, ['content' => 'Hängt an nichts mehr.', 'keep_current' => true]);
+    expect(Document::fromJson(PageVersion::query()->where('page_id', $earlier->id)->sole()->content)->itemRefs())->toBe([$w['item']->id]);
 
     $result = ListItemPages::run(actor($w['lene']), $w['item'], []);
     $first = $result->page->items()[0];

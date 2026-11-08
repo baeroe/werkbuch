@@ -4,6 +4,8 @@ use App\Actions\Auth\FindChallengedUser;
 use App\Auth\AccountLoginRateLimiter;
 use App\Auth\KnownDevice;
 use App\Auth\TwoFactorDay;
+use App\Enums\Locale;
+use App\Models\Organization;
 use App\Models\User;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Http\Request;
@@ -90,10 +92,19 @@ it('says the wait in minutes', function () use ($from, $lockMara) {
     $this->assertGuest();
 });
 
-it('words the wait in minutes in German', function () {
-    expect(trans('auth.throttle_minutes', ['minutes' => 59], 'de'))->toBe('Zu viele Anmeldeversuche. Versuch es in 59 Minuten wieder.')
-        ->and(trans('auth.throttle_minutes', ['minutes' => 59], 'en'))->toBe('Too many sign-in attempts. Try again in 59 minutes.');
-});
+it('says the wait in minutes in the language of the request', function (Closure $german) use ($from, $lockMara) {
+    $lockMara();
+    $german();
+
+    $from('10.0.0.4')->post('/login', ['email' => 'mara@example.com', 'password' => 'secret-pass'])
+        ->assertSessionHasErrors(['email' => 'Zu viele Anmeldeversuche. Versuch es in 60 Minuten wieder.']);
+    $this->assertGuest();
+    // the probe: the same sentence in English, for a request that does not ask for German
+    expect(trans('auth.throttle_minutes', ['minutes' => 60], 'en'))->toBe('Too many sign-in attempts. Try again in 60 minutes.');
+})->with([
+    'the cookie locale' => [fn () => test()->withUnencryptedCookie('locale', Locale::De->value)],
+    'the language of the organization' => [fn () => Organization::current()->update(['locale' => Locale::De])],
+]);
 
 it('counts the address in any case, with spaces and accents', function () use ($from, $locked) {
     foreach (['10.0.0.1' => 'Mara@Example.com ', '10.0.0.2' => 'mara@example.com', '10.0.0.3' => ' MARA@example.com'] as $ip => $email) {
@@ -171,14 +182,16 @@ it('ignores a device cookie that was not issued by this instance', function (Clo
     'the address without the password' => [fn ($test) => $test->withCookie(KnownDevice::NAME, hash_hmac('sha256', 'mara@example.com', (string) config('app.key')))],
 ]);
 
-it('sets the device cookie for a year, only readable by the server', function () {
+it('sets the device cookie for a year, only readable by the server, secure as the session', function (bool $secure) {
+    config(['session.secure' => $secure]);
     $cookie = $this->post('/login', ['email' => 'mara@example.com', 'password' => 'secret-pass'])->getCookie(KnownDevice::NAME, decrypt: false);
 
     expect($cookie?->isHttpOnly())->toBeTrue()
         ->and($cookie?->getSameSite())->toBe('lax')
+        ->and($cookie?->isSecure())->toBe($secure)
         ->and($cookie?->getExpiresTime())->toBe(now()->addMinutes(KnownDevice::MINUTES)->getTimestamp())
         ->and(KnownDevice::MINUTES)->toBe(60 * 24 * 365);
-});
+})->with(['an https address' => true, 'an http address' => false]);
 
 it('sets no device cookie for an account without an address', function () {
     event(new Login('web', User::factory()->bot()->create(), false));

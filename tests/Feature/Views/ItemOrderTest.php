@@ -308,7 +308,9 @@ it('pages a natural sort exactly once', function () use ($sort, $properties, $fo
         $pages = $forward($order, $perPage);
         $last = end($pages)['page'];
 
+        // every page but the last is full, and together they are every item once, in the natural order
         expect(array_merge(...array_column($pages, 'ids')))->toBe(array_column($expected, 'id'), "forward, {$perPage} per page")
+            ->and(array_map('count', array_column(array_slice($pages, 0, -1), 'ids')))->each->toBe($perPage)
             ->and($backward($order, $last, $perPage))->toBe(array_reverse(array_column(array_slice($pages, 0, -1), 'ids')), "backward, {$perPage} per page");
     }
 });

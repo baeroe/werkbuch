@@ -79,6 +79,36 @@ it('tries a statement of the cache again that MariaDB rolled back as the deadloc
     'touch' => ['update `cache`', fn (Repository $cache) => expect($cache->touch('counter', 120))->toBeTrue(), 1],
 ]);
 
+it('reads either sign of the server as a deadlock, and only those', function (string $state, int $code, bool $retried) use ($store, $driverError) {
+    $thrown = 0;
+    DB::connection()->beforeExecuting(function (string $query, array $bindings) use (&$thrown, $driverError, $state, $code): void {
+        if ($thrown === 0 && str_starts_with($query, 'insert ignore into `cache`')) {
+            $thrown++;
+            throw new QueryException('mariadb', $query, $bindings, $driverError($state, $code, 'the server refused the statement'));
+        }
+    });
+    $add = fn () => $store()->add('counter', 0, 60);
+
+    if ($retried) {
+        expect($add())->toBeTrue()
+            ->and($store()->get('counter'))->toBe(0);
+        Sleep::assertSleptTimes(1);
+    } else {
+        expect($add)->toThrow(QueryException::class, 'the server refused the statement');
+        Sleep::assertNeverSlept();
+    }
+    expect($thrown)->toBe(1);
+})->with([
+    // SQLSTATE 40001 and error 1213 together, as MariaDB reports a deadlock victim
+    'state and code' => ['40001', 1213, true],
+    // either one alone counts (a driver may report only one of them)
+    'the code 1213 under another state' => ['HY000', 1213, true],
+    'the state 40001 without a code of the server' => ['40001', 0, true],
+    // a lock wait timeout and any other error go to the caller at once
+    'a lock wait timeout' => ['HY000', 1205, false],
+    'neither' => ['42S02', 1146, false],
+]);
+
 it('reads an expired key again whose delete was the deadlock victim', function () use ($deadlockOnce, $store) {
     $store()->put('counter', 1, 60);
     $this->travel(2)->minutes();

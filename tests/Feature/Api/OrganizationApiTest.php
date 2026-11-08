@@ -202,12 +202,18 @@ it('leaves no file of the new picture behind when the change of an avatar or a p
     $run = fn (string $url) => $kind === 'avatar'
         ? UpdateUser::run(actor($admin), $admin, ['avatar_url' => $url])
         : UpdateProject::run(actor($admin), $project, ['image_url' => $url]);
+    $owner = fn () => $kind === 'avatar' ? $admin->fresh() : $project->fresh();
     $run(imageDataUrl());
-    $old = Media::query()->sole()->getPathRelativeToRoot();
+    $media = Media::query()->sole();
+    $old = $media->getPathRelativeToRoot();
+    $url = ImageInput::url($owner(), $kind);
 
     Event::creating(fn () => throw new RuntimeException('event store down'));
     expect(fn () => $run(imageDataUrl('gif')))->toThrow(RuntimeException::class, 'event store down');
 
-    expect(Storage::disk('local')->allFiles())->toBe([$old])
+    // the old picture stays whole: its row, its address and its file
+    expect(Media::query()->pluck('uuid')->all())->toBe([$media->uuid])
+        ->and(ImageInput::url($owner(), $kind))->toBe($url)->not->toBeNull()
+        ->and(Storage::disk('local')->allFiles())->toBe([$old])
         ->and(Storage::disk('local')->allDirectories())->toBe([dirname($old)]);
 })->with(['avatar', 'project image' => 'image']);
