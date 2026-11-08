@@ -611,6 +611,38 @@ describe('useLiveSync', () => {
     expect(items.fetches()).toBe(2);
   });
 
+  it('keeps a reload it waited for out of the undo window when the screen cancels it and hides an item (T7-I1)', async () => {
+    const items = await shown(qk.workItems.list({}));
+    renderHook(() => useLiveSync(), { wrapper });
+    const release = items.hold();
+    void queryClient.refetchQueries({ queryKey: qk.workItems.all });
+    await pass(0);
+    send({ event_id: 'ev_1' });
+    await pass(LIVE_BURST_MS);
+    expect(items.fetches()).toBe(2);
+
+    // as `hideAtOnce` does: cancel the reload on its way, take the item out of the list, then offer undo
+    let finish = () => {};
+    const removal = vi.fn(() => queryClient.getMutationCache().build(queryClient, { mutationFn: () => new Promise<void>((resolve) => (finish = resolve)) }).execute(undefined));
+    act(() => {
+      void queryClient.cancelQueries({ queryKey: qk.workItems.all });
+      queryClient.setQueryData(qk.workItems.list({}), 0);
+      runWithUndo({ label: 'WEB-47 archiviert', run: removal });
+    });
+    release();
+    await pass(0);
+    // a reload now would answer the item as the server still has it and put it back
+    expect(items.fetches()).toBe(2);
+
+    await pass(5_000);
+    expect(removal).toHaveBeenCalledTimes(1);
+    expect(items.fetches()).toBe(2);
+
+    finish();
+    await pass(0);
+    expect(items.fetches()).toBe(3);
+  });
+
   it('loads what came during the undo window once the change is taken back', async () => {
     const items = await shown(qk.workItems.list({}));
     renderHook(() => useLiveSync(), { wrapper });

@@ -192,7 +192,10 @@ class LiveRefresh {
     for (const query of new Set([...stale, ...waiting])) this.load(query);
   }
 
-  /** A query of the cache finished a fetch: load it again when a message came during that fetch. */
+  /**
+   * A query of the cache got the answer of a fetch (never a `setQueryData`): load it again when a message came during
+   * that fetch. A fetch that was cancelled waits in `afterFetch` until `settle`.
+   */
   fetched(query: Query): void {
     if (!this.afterFetch.has(query.queryHash) || query.state.fetchStatus === 'fetching' || this.pending()) return;
     this.load(query);
@@ -315,8 +318,12 @@ export function useLiveSync(): void {
 
     const stopMutations = queryClient.getMutationCache().subscribe(settle);
     const stopUndo = subscribeUndoPending(settle);
+    // only an answer of a fetch ends it: `setQueryData` (`success` with `manual`) after a cancelled reload is the screen
+    // changing what it shows (an item hidden for an undo window, T7-I1); what waited for that fetch loads on `settle`
     const stopQueries = queryClient.getQueryCache().subscribe((event) => {
-      if (event.type === 'updated' && (event.action.type === 'success' || event.action.type === 'error')) refresh.fetched(event.query);
+      if (event.type !== 'updated') return;
+      const { action } = event;
+      if (action.type === 'error' || (action.type === 'success' && action.manual !== true)) refresh.fetched(event.query);
     });
     const stopLive = subscribeLive((event) => {
       if (event.event_id !== null) {
