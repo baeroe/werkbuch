@@ -286,6 +286,7 @@ describe('unsaved changes', () => {
     act(() => inertia.go(`/projects/WEB?filter=${filterOf([{ field: 'nonsense', op: 'is', value: 'x' }])}`));
     const submit = within(form).getByRole('button', { name: /View anlegen/ });
     await waitFor(() => expect(submit.getAttribute('aria-disabled')).toBe('true'));
+    expect(reasonOf(submit)).toBe('Eine Bedingung nennt ein Feld, das es nicht mehr gibt. Entferne sie mit × am Chip „Unbekanntes Feld“, dann lässt sich die View speichern.');
     const name = within(form).getByRole('textbox', { name: 'Name' });
     await user.click(name);
     fireEvent.keyDown(name, { key: 'Enter', ctrlKey: true });
@@ -532,6 +533,23 @@ describe('the display menu', () => {
     release();
     await waitFor(() => expect(sort.textContent).toContain('Aufwand (h)'));
     expect(within(menu).queryByText('Das Feld gibt es nicht mehr. Bis du ein anderes wählst, ist die Liste manuell sortiert.')).toBeNull();
+  });
+
+  it('waits for the properties before a view with a property sort is saved (T17-M8)', async () => {
+    const release = holdGet('/api/v1/properties');
+    await openView(ownView(), '?sort=property:effort:desc');
+    const save = await screen.findByRole('button', { name: 'Speichern' });
+    const saveAs = screen.getByRole('button', { name: 'Als neue View speichern …' });
+    const sentence = 'Die Properties werden noch geladen. Speichern geht, sobald klar ist, ob die Sortierung noch gilt.';
+    await waitFor(() => expect(reasonOf(save)).toBe(sentence));
+    expect(reasonOf(saveAs)).toBe(sentence);
+    fireEvent.click(save);
+    expect(api.calls.some((call) => call.method === 'PUT')).toBe(false);
+
+    release();
+    await waitFor(() => expect(save.getAttribute('aria-disabled')).toBeNull());
+    fireEvent.click(save);
+    await waitFor(() => expect(api.calls.find((call) => call.method === 'PUT')?.body).toMatchObject({ display: { sort: { field: 'property:effort', direction: 'desc' } } }));
   });
 
   it('hides sub-items', () => {

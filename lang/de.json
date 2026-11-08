@@ -1226,6 +1226,7 @@
     "items.save.discard": "Verwerfen",
     "items.save.discarded": "Änderungen verworfen",
     "items.save.field_gone": "Eine Bedingung nennt ein Feld, das es nicht mehr gibt. Entferne sie mit × am Chip „Unbekanntes Feld“, dann lässt sich die View speichern.",
+    "items.save.properties_loading": "Die Properties werden noch geladen. Speichern geht, sobald klar ist, ob die Sortierung noch gilt.",
     "items.save.save": "Speichern",
     "items.save.save_as": "Als neue View speichern …",
     "items.save.save_failed": "View nicht gespeichert",

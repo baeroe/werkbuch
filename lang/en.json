@@ -1226,6 +1226,7 @@
     "items.save.discard": "Discard",
     "items.save.discarded": "Changes discarded",
     "items.save.field_gone": "A condition names a field that is gone. Remove it with × on the chip “Unknown field”, then the view can be saved.",
+    "items.save.properties_loading": "The properties are still loading. Saving works once it is clear whether the sort still applies.",
     "items.save.save": "Save",
     "items.save.save_as": "Save as new view …",
     "items.save.save_failed": "View not saved",

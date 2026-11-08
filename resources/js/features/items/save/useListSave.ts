@@ -25,18 +25,22 @@ export interface ListSave {
   /** A new view of what the list shows, its scope included; answers it. */
   saveAs(name: string, icon: string): Promise<View>;
   creating: boolean;
-  /** Why neither may be sent (a condition on a field that is gone), or null. */
+  /** Why neither may be sent (a condition on a field that is gone, properties still loading), or null. */
   blocked: string | null;
 }
 
 export function useListSave({ view, state, scope }: { view?: View; state: ViewState; scope: Condition[] }): ListSave {
-  const properties = useProperties().data?.items;
+  const loaded = useProperties();
+  const properties = loaded.data?.items;
   const update = useSaveView();
   const create = useSaveView();
 
   const conditions = state.filter.conditions.filter(isComplete);
   const display = savableDisplay(state.display, properties);
   const gone = conditions.some((condition) => (properties !== undefined || !condition.field.startsWith(PROPERTY_PREFIX)) && fieldDef(condition.field, properties ?? []) === null);
+
+  // a sort or field on a property is kept or dropped by what the properties say: until they are there, nothing is sent (T17-M8)
+  const waiting = loaded.isPending && (state.display.sort.field.startsWith(PROPERTY_PREFIX) || state.display.fields.some((field) => field.startsWith(PROPERTY_PREFIX)));
 
   return {
     // only a view list offers "Speichern"
@@ -47,6 +51,6 @@ export function useListSave({ view, state, scope }: { view?: View; state: ViewSt
       return create.mutateAsync({ name, icon, filter, display });
     },
     creating: create.isPending,
-    blocked: gone ? t('items.save.field_gone') : null,
+    blocked: gone ? t('items.save.field_gone') : waiting ? t('items.save.properties_loading') : null,
   };
 }
