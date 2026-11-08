@@ -16,7 +16,7 @@ They act as the default bot "Automation", keep to the transitions the workflow a
 
 ## Assignee on start
 
-When a person moves an item that has no assignee from a state that is not started (Backlog, Unstarted) into a Started state, they become its assignee and watch it. This also happens when someone creates an item directly in a Started state.
+When a person moves an item that has no assignee from a state that is not started (Backlog, Unstarted, or a closed state when the item opens again) into a Started state, they become its assignee and watch it. This also happens when someone creates an item directly in a Started state.
 
 - **Only people.** Bots never trigger it, and neither does a run of a [template](/en/concepts/templates).
 - **Only who may take the work:** a member of the project, or a person who is an org admin.
@@ -25,7 +25,7 @@ When a person moves an item that has no assignee from a state that is not starte
 
 ## Close parent
 
-When a child moves into a Completed or Canceled state, werkbuch looks at all children of its parent, archived ones included. When all of them are closed and at least one of them is Completed, the parent moves to the first Completed state of its workflow (in the order of the workflow) that the transition allows. When none is allowed, the parent stays open. When all children were canceled, the parent stays open too: nothing was done.
+When a child moves into a Completed or Canceled state, werkbuch looks at all children of its parent, archived ones included. When all of them are closed and at least one of them is Completed, the parent moves to the first Completed state of its workflow (in the order of the workflow) that the transition allows. When none is allowed, the parent stays open. When all children were canceled, the parent stays open too: nothing was done. A child created directly in a closed state counts the same way.
 
 The parent moves in the same moment as the child; the history shows both. An archived parent stays as it is. The rule works its way up, at most five levels; with [two levels](/en/concepts/work-items#parent-and-children) of items, that is one step today.
 
@@ -96,7 +96,7 @@ curl -X PUT https://werkbuch.example.com/api/v1/projects/APP/automations/auto_cl
 ```json
 {
   "data": {
-    "id": "01m6d5k2h3j4k5l6m7n8p9q0rs",
+    "id": "01m6d5k2h3j4k5n6m7n8p9q0rs",
     "project_id": "01m6akx72yptw2aw6n30m5fg0a",
     "key": "auto_close",
     "enabled": true,

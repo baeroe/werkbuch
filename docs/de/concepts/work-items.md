@@ -107,7 +107,7 @@ Lesen braucht ein Token mit `read`, Ändern eines mit `write`. Items sprichst du
 |---|---|
 | `GET /api/v1/work-items` | Items, die du siehst: `view`, eine Kurzform wie `filter[project]`, `filter[assignee]=me`, `filter[q]` (ein Key oder ein Teil des Titels), `sort`, `show_sub_items`, `include_archived`, `lean`, `cursor`, `per_page`. Filter, Gruppen und Zahlen stehen unter [Views](/de/concepts/views#rest). |
 | `POST /api/v1/work-items` | `201` mit dem neuen Item. |
-| `GET /api/v1/work-items/{item}` | Das Item; `?include=children,relations,type,workflow,attachments` bettet diese mit ein. |
+| `GET /api/v1/work-items/{item}` | Das Item; `?include=children,relations,type,workflow,attachments` bettet diese mit ein (`children`: die ersten 100 nach Rang, archivierte eingeschlossen; `children_progress.total` zählt alle, die Liste `?filter[parent]=WEB-30&include_archived=1` hat den Rest). |
 | `PATCH /api/v1/work-items/{item}` | `200` mit dem Item. |
 | `POST /api/v1/work-items/{item}/transition` | `200`; `to_state_id`, `resolution_id`. |
 | `PUT /api/v1/work-items/{item}/type` | `200`; `type_id`, `values`. |
@@ -119,6 +119,8 @@ Lesen braucht ein Token mit `read`, Ändern eines mit `write`. Items sprichst du
 | `GET /api/v1/work-items/{item}/subscribers` | Wer das Item beobachtet. |
 | `PUT`, `DELETE /api/v1/work-items/{item}/subscription` | Beobachten an oder aus; `200` mit dem Item. |
 | `GET /api/v1/work-items/{item}/history` | Die History, älteste zuerst. |
+| `GET /api/v1/work-items/{item}/pages` | Die [Wiki-Seiten](#wiki-seiten), die auf das Item verweisen und die du siehst, nach Titel. |
+| `POST /api/v1/projects/{project}/redistribute-ranks` | `200` mit `{"redistributed": n}`; siehe [Items von Hand ordnen](#items-von-hand-ordnen). |
 | `GET`, `POST /api/v1/work-items/{item}/comments` | Die Kommentare, älteste zuerst; `201` mit dem neuen. Kommentare, Reaktionen und Dateien stehen unter [Rich Text](/de/concepts/rich-text#rest). |
 
 Ein Item, das das Konto des Tokens nicht sieht, ist ein `404`, wie eines, das es nicht gibt. Ein unbekannter Filter oder ein unbekanntes `include` ist ein `422`, nie still übergangen. Meldungen (`detail`, Feldfehler) kommen in der Sprache des Kontos, sonst in der Standardsprache der Organisation.

@@ -107,7 +107,7 @@ Reading needs a token with `read`, changing one with `write`. Items are addresse
 |---|---|
 | `GET /api/v1/work-items` | Items you see: `view`, a short form such as `filter[project]`, `filter[assignee]=me`, `filter[q]` (a key or part of the title), `sort`, `show_sub_items`, `include_archived`, `lean`, `cursor`, `per_page`. Filters, groups and counts are described under [views](/en/concepts/views#rest). |
 | `POST /api/v1/work-items` | `201` with the new item. |
-| `GET /api/v1/work-items/{item}` | The item; `?include=children,relations,type,workflow,attachments` embeds those. |
+| `GET /api/v1/work-items/{item}` | The item; `?include=children,relations,type,workflow,attachments` embeds those (`children`: the first 100 by rank, archived ones included; `children_progress.total` counts all, the list `?filter[parent]=WEB-30&include_archived=1` has the rest). |
 | `PATCH /api/v1/work-items/{item}` | `200` with the item. |
 | `POST /api/v1/work-items/{item}/transition` | `200`; `to_state_id`, `resolution_id`. |
 | `PUT /api/v1/work-items/{item}/type` | `200`; `type_id`, `values`. |
@@ -119,6 +119,8 @@ Reading needs a token with `read`, changing one with `write`. Items are addresse
 | `GET /api/v1/work-items/{item}/subscribers` | Who watches the item. |
 | `PUT`, `DELETE /api/v1/work-items/{item}/subscription` | Start or stop watching; `200` with the item. |
 | `GET /api/v1/work-items/{item}/history` | The history, oldest first. |
+| `GET /api/v1/work-items/{item}/pages` | The [wiki pages](#wiki-pages) that refer to the item and that you see, by title. |
+| `POST /api/v1/projects/{project}/redistribute-ranks` | `200` with `{"redistributed": n}`; see [Order items by hand](#order-items-by-hand). |
 | `GET`, `POST /api/v1/work-items/{item}/comments` | The comments, oldest first; `201` with the new one. Comments, reactions and files are described under [rich text](/en/concepts/rich-text#rest). |
 
 An item the account of the token does not see is a `404`, like one that does not exist. An unknown filter or `include` is a `422`, never silently ignored. Messages (`detail`, field errors) come in the language of the account, else in the organization's default language.

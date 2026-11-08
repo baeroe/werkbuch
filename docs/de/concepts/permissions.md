@@ -74,7 +74,8 @@ Ein Token ohne die Fähigkeit, die eine Anfrage braucht, bekommt `403`. Lege ein
 Manches geht nur mit der Sitzung der angemeldeten Oberfläche, nicht mit einem Token, egal mit welchen Fähigkeiten:
 
 - das eigene Passwort ändern sowie den zweiten Faktor einrichten und ausschalten (`/api/v1/me/…`),
-- Tokens anlegen (`POST /api/v1/tokens`).
+- Tokens anlegen (`POST /api/v1/tokens`),
+- die E-Mail-Adresse eines Kontos ändern (`PATCH /api/v1/users/{user}` mit `email`).
 
 Ein Token, das es trotzdem versucht, bekommt `403` mit dem Grund `session_required`. Ein gestohlenes Token kann so weder das Konto übernehmen noch sich einen länger gültigen Nachfolger anlegen. Tokens auflisten und widerrufen geht mit einem Token.
 

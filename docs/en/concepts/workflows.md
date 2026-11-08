@@ -68,6 +68,7 @@ Reading needs a token with `read`, changing one with `write`. Every account may 
 | Request | Answer |
 |---|---|
 | `GET /api/v1/workflows` | The list, with states and transitions. |
+| `GET /api/v1/workflows/{id}` | One workflow, also an archived one. |
 | `POST /api/v1/workflows` | `201` with the new workflow. |
 | `PUT /api/v1/workflows/{id}` | `200` with the workflow. |
 | `DELETE /api/v1/workflows/{id}` | `204`. |

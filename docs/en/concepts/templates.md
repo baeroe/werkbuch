@@ -50,7 +50,7 @@ Deleting a template hands an image over to another text of the project that stil
 - **In the create dialog** (<kbd>C</kbd>), the field **Template** fills type, title (with the placeholders filled now), description, fields and dates. You can change all of it before creating. A notice under the fields says so; its **Undo** button (the next stop after the field with <kbd>Tab</kbd>) brings back what was there before, until you change the draft. When you keep writing while the template loads, it is not applied and a toast says so. **No template** lets go of it and keeps the fields.
 - **In the command palette**, **Apply template …** lists the templates of the projects in which you may create items and opens the create dialog with the one you pick.
 
-An item made from a template remembers it (`template_id`) and its history says "From template "…"", with the name the template had then. Applied by hand, the item is created by you.
+An item made from a template remembers it (`template_id`) and its history says "From template "…"", with the name the template had then. Applied by hand, the item is created by you. Items its texts reference with `#` are related to the new item, as long as the project has [Link referenced items](/en/concepts/automations#link-referenced-items) on.
 
 ## Schedule
 
@@ -164,7 +164,7 @@ The answer (`201`, shortened):
 ```json
 {
   "data": {
-    "id": "01m6d3t8q4w2e6r0y5u9i3o7pa",
+    "id": "01m6d3t8q4w2e6r0y5v9h3n7pa",
     "project_id": "01m6akx72yptw2aw6n30m5fg0a",
     "name": "Monthly report",
     "payload": {
@@ -219,15 +219,15 @@ curl -X POST https://werkbuch.example.com/api/v1/templates/preview \
 
 ```bash
 curl -X POST -H "Authorization: Bearer <token>" \
-  https://werkbuch.example.com/api/v1/templates/01m6d3t8q4w2e6r0y5u9i3o7pa/run
+  https://werkbuch.example.com/api/v1/templates/01m6d3t8q4w2e6r0y5v9h3n7pa/run
 ```
 
 ```json
 {
   "data": {
     "run": {
-      "id": "01m6d4a1s2d3f4g5h6j7k8l9zx",
-      "template_id": "01m6d3t8q4w2e6r0y5u9i3o7pa",
+      "id": "01m6d4a1s2d3f4g5h6j7k8m9zx",
+      "template_id": "01m6d3t8q4w2e6r0y5v9h3n7pa",
       "scheduled_for": null,
       "ran_at": "2026-11-05T10:12:31.204517Z",
       "status": "created",

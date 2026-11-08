@@ -50,7 +50,7 @@ Wird eine Vorlage gelöscht, geht ein Bild an einen anderen Text des Projekts, d
 - **Im Anlegen-Dialog** (<kbd>C</kbd>) füllt das Feld **Vorlage** Typ, Titel (mit den Platzhaltern von jetzt), Beschreibung, Felder und Daten. Vor dem Anlegen kannst du alles ändern. Ein Hinweis unter den Feldern sagt es; sein Knopf **Rückgängig** (mit <kbd>Tab</kbd> der nächste Halt nach dem Feld) bringt zurück, was vorher dastand, bis du den Entwurf änderst. Schreibst du weiter, während die Vorlage lädt, wird sie nicht angewendet, und ein Toast sagt es. **Keine Vorlage** lässt sie los und behält die Felder.
 - **In der Befehlspalette** listet **Vorlage anwenden …** die Vorlagen der Projekte, in denen du Items anlegen darfst, und öffnet den Anlegen-Dialog mit der gewählten.
 
-Ein Item aus einer Vorlage merkt sich diese (`template_id`), und seine History sagt „Aus Vorlage „…““, mit dem Namen, den die Vorlage damals hatte. Von Hand angewendet legst du das Item selbst an.
+Ein Item aus einer Vorlage merkt sich diese (`template_id`), und seine History sagt „Aus Vorlage „…““, mit dem Namen, den die Vorlage damals hatte. Von Hand angewendet legst du das Item selbst an. Items, auf die ihre Texte per `#` verweisen, werden mit dem neuen Item verknüpft, solange im Projekt [Erwähnte Items verknüpfen](/de/concepts/automations#erwahnte-items-verknupfen) an ist.
 
 ## Zeitplan
 
@@ -164,7 +164,7 @@ Die Antwort (`201`, gekürzt):
 ```json
 {
   "data": {
-    "id": "01m6d3t8q4w2e6r0y5u9i3o7pa",
+    "id": "01m6d3t8q4w2e6r0y5v9h3n7pa",
     "project_id": "01m6akx72yptw2aw6n30m5fg0a",
     "name": "Monatsbericht",
     "payload": {
@@ -219,15 +219,15 @@ curl -X POST https://werkbuch.example.com/api/v1/templates/preview \
 
 ```bash
 curl -X POST -H "Authorization: Bearer <token>" \
-  https://werkbuch.example.com/api/v1/templates/01m6d3t8q4w2e6r0y5u9i3o7pa/run
+  https://werkbuch.example.com/api/v1/templates/01m6d3t8q4w2e6r0y5v9h3n7pa/run
 ```
 
 ```json
 {
   "data": {
     "run": {
-      "id": "01m6d4a1s2d3f4g5h6j7k8l9zx",
-      "template_id": "01m6d3t8q4w2e6r0y5u9i3o7pa",
+      "id": "01m6d4a1s2d3f4g5h6j7k8m9zx",
+      "template_id": "01m6d3t8q4w2e6r0y5v9h3n7pa",
       "scheduled_for": null,
       "ran_at": "2026-11-05T10:12:31.204517Z",
       "status": "created",

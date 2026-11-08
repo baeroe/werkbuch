@@ -16,7 +16,7 @@ Sie handeln als Standard-Bot „Automation“, halten sich an die Übergänge, d
 
 ## Assignee beim Start
 
-Zieht eine Person ein Item ohne Assignee aus einem nicht begonnenen Status (Backlog, Unstarted) in einen Status der Kategorie Started, wird sie sein Assignee und beobachtet es. Das gilt auch, wenn jemand ein Item gleich in einem Started-Status anlegt.
+Zieht eine Person ein Item ohne Assignee aus einem nicht begonnenen Status (Backlog, Unstarted oder ein geschlossener, wenn das Item wieder aufgeht) in einen Status der Kategorie Started, wird sie sein Assignee und beobachtet es. Das gilt auch, wenn jemand ein Item gleich in einem Started-Status anlegt.
 
 - **Nur Personen.** Bots lösen es nie aus, auch kein Lauf einer [Vorlage](/de/concepts/templates).
 - **Nur wer die Arbeit übernehmen darf:** ein Mitglied des Projekts oder eine Person, die Org-Admin ist.
@@ -25,7 +25,7 @@ Zieht eine Person ein Item ohne Assignee aus einem nicht begonnenen Status (Back
 
 ## Eltern schließen
 
-Kommt ein Kind in einen Status der Kategorie Completed oder Canceled, sieht werkbuch alle Kinder seines Eltern-Items an, auch archivierte. Sind alle geschlossen und mindestens eins davon Completed, geht das Eltern-Item in den ersten Completed-Status seines Workflows (in dessen Reihenfolge), den der Übergang erlaubt. Ist keiner erlaubt, bleibt das Eltern-Item offen. Wurden alle Kinder storniert, bleibt es ebenfalls offen: Erledigt wurde nichts.
+Kommt ein Kind in einen Status der Kategorie Completed oder Canceled, sieht werkbuch alle Kinder seines Eltern-Items an, auch archivierte. Sind alle geschlossen und mindestens eins davon Completed, geht das Eltern-Item in den ersten Completed-Status seines Workflows (in dessen Reihenfolge), den der Übergang erlaubt. Ist keiner erlaubt, bleibt das Eltern-Item offen. Wurden alle Kinder storniert, bleibt es ebenfalls offen: Erledigt wurde nichts. Ein Kind, das gleich in einem geschlossenen Status angelegt wird, zählt genauso.
 
 Das Eltern-Item wechselt im selben Moment wie das Kind; die History zeigt beides. Ein archiviertes Eltern-Item bleibt, wie es ist. Die Regel arbeitet sich nach oben, höchstens fünf Ebenen; mit [zwei Ebenen](/de/concepts/work-items#eltern-und-kinder) von Items ist das heute ein Schritt.
 
@@ -96,7 +96,7 @@ curl -X PUT https://werkbuch.example.com/api/v1/projects/APP/automations/auto_cl
 ```json
 {
   "data": {
-    "id": "01m6d5k2h3j4k5l6m7n8p9q0rs",
+    "id": "01m6d5k2h3j4k5n6m7n8p9q0rs",
     "project_id": "01m6akx72yptw2aw6n30m5fg0a",
     "key": "auto_close",
     "enabled": true,

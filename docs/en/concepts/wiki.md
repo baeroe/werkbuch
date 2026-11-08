@@ -80,6 +80,7 @@ Reading needs a token with `read`, changing one with `write`. Projects are addre
 | `GET /api/v1/pages/{page}/versions` | The versions without text, newest first, with `cursor` and `per_page`. |
 | `GET /api/v1/pages/{page}/versions/{version}` | One version with `content` and `content_json`. |
 | `POST /api/v1/pages/{page}/versions/{version}/restore` | `200` with the page in its new state. |
+| `GET /api/v1/work-items/{item}/pages` | The pages whose current text refers to the item, without text, by title; only pages you see count, also in `meta.total`. |
 
 ### Read the tree
 

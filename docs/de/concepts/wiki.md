@@ -80,6 +80,7 @@ Lesen braucht ein Token mit `read`, Ändern eins mit `write`. Projekte gehen üb
 | `GET /api/v1/pages/{page}/versions` | Die Versionen ohne Text, die neueste zuerst, mit `cursor` und `per_page`. |
 | `GET /api/v1/pages/{page}/versions/{version}` | Eine Version mit `content` und `content_json`. |
 | `POST /api/v1/pages/{page}/versions/{version}/restore` | `200` mit der Seite in ihrem neuen Stand. |
+| `GET /api/v1/work-items/{item}/pages` | Die Seiten, deren aktueller Text auf das Item verweist, ohne Text, nach Titel; es zählen nur Seiten, die du siehst, auch in `meta.total`. |
 
 ### Den Baum lesen
 

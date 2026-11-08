@@ -9,8 +9,8 @@ There is one editor in three levels. Each level shows what fits its place:
 | Level | Where | Blocks |
 |---|---|---|
 | Comment | Comments | Text, lists, quotes, code, links, mentions, references, images and files |
-| Description | Descriptions of items, rich text properties | Also headings (three levels), checklists and tables |
-| Page | [Wiki pages](/en/concepts/wiki) | Also horizontal rules; tables in the `/` menu |
+| Description | Descriptions of items and [templates](/en/concepts/templates), rich text properties | Also headings (three levels), checklists and tables (a table you paste stays; the `/` menu offers new tables on pages only) |
+| Page | [Wiki pages](/en/concepts/wiki) | Also horizontal rules, and tables in the `/` menu |
 
 A text that holds blocks its level does not know (a table pasted into a comment) shows their text as paragraphs. `mod+enter` saves or sends; the description, rich text properties and wiki pages also save on their own after a short pause and when you leave the field.
 
@@ -223,6 +223,6 @@ Deleting an image or file that belongs to a text is a `409` with `reason: attach
 Two things keep uploads from piling up:
 
 - **Uploads that no text took** (a picture pasted into a comment that was never sent): a job of the scheduler removes them every hour once they are older than 24 hours. The browser never deletes uploads itself, because a text may already have been saved with them.
-- **Images and files that no text names any more:** `php artisan app:prune-attachments --dry-run --min-age=30` lists the images and files that no current text of their project names (descriptions, rich text values, comments, wiki pages and their versions) and that are older than the minimum age in days; without `--dry-run` it removes them. An image that only a version of a wiki page shows stays, because versions can be restored; images that only an older version in the history of an item shows go, so pick the minimum age with that in mind. Files of the file list are never pruned.
+- **Images and files that no text names any more:** `php artisan app:prune-attachments --dry-run --min-age=30` lists the images and files that no current text of their project names (descriptions, rich text values, comments, wiki pages and their versions, templates) and that are older than the minimum age in days; without `--dry-run` it removes them. An image that only a version of a wiki page shows stays, because versions can be restored; images that only an older version in the history of an item shows go, so pick the minimum age with that in mind. Files of the file list are never pruned.
 
-Deleting an item removes its files and those of its comments, deleting a comment its files, deleting a wiki page those of its subtree, deleting a project all of them; an image that another text of the project still shows stays and then belongs to that text. Files are removed only after the change is saved: if it fails, nothing is lost. More under [development](/en/development#maintenance-commands).
+Deleting an item removes its files and those of its comments, deleting a comment its files, deleting a wiki page those of its subtree, deleting a template its own, deleting a project all of them; an image that another text of the project still shows stays and then belongs to that text. Files are removed only after the change is saved: if it fails, nothing is lost. More under [development](/en/development#maintenance-commands).

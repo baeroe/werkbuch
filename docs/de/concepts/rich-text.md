@@ -9,8 +9,8 @@ Es gibt einen Editor in drei Stufen. Jede Stufe zeigt, was an ihren Ort passt:
 | Stufe | Wo | Blöcke |
 |---|---|---|
 | Kommentar | Kommentare | Text, Listen, Zitate, Code, Links, Erwähnungen, Verweise, Bilder und Dateien |
-| Beschreibung | Beschreibungen von Items, Rich-Text-Properties | Dazu Überschriften (drei Ebenen), Checklisten und Tabellen |
-| Seite | [Wiki-Seiten](/de/concepts/wiki) | Dazu Trennlinien; Tabellen im `/`-Menü |
+| Beschreibung | Beschreibungen von Items und [Vorlagen](/de/concepts/templates), Rich-Text-Properties | Dazu Überschriften (drei Ebenen), Checklisten und Tabellen (eine eingefügte Tabelle bleibt; neue Tabellen bietet das `/`-Menü nur auf Seiten) |
+| Seite | [Wiki-Seiten](/de/concepts/wiki) | Dazu Trennlinien und Tabellen im `/`-Menü |
 
 Ein Text mit Blöcken, die seine Stufe nicht kennt (eine Tabelle in einem Kommentar), zeigt deren Text als Absätze. `mod+enter` speichert bzw. sendet; Beschreibung, Rich-Text-Properties und Wiki-Seiten speichern außerdem nach einer kurzen Pause und beim Verlassen des Felds von selbst.
 
@@ -44,7 +44,7 @@ Die Erwähnung von jemandem, der im Projekt nicht erwähnt werden kann, etwa wei
 
 ## Verweise
 
-`#` sucht die Items und Wiki-Seiten, die du siehst, mit derselben [Suche](/de/search) wie die Befehlspalette: Items über den Key (auch einen früheren), den Titel und den Text, Seiten darunter über Titel und Text. Ein Verweis auf ein Item zeigt dessen Typ und aktuellen Key, den Titel für Screenreader, und führt beim Lesen zum Item; ein Verweis auf eine Seite zeigt ihr Emoji und ihren aktuellen Titel und führt zur Seite. Nennst du in der Beschreibung, einem Rich-Text-Feld oder einem Kommentar eines Items ein anderes Item neu, verknüpft werkbuch beide außerdem mit dem eingebauten Relationstyp „verwandt“, wenn du das Item bearbeiten darfst (die [Automatisierung](/de/concepts/automations#erwähnte-items-verknüpfen) „Erwähnte Items verknüpfen“, standardmäßig an).
+`#` sucht die Items und Wiki-Seiten, die du siehst, mit derselben [Suche](/de/search) wie die Befehlspalette: Items über den Key (auch einen früheren), den Titel und den Text, Seiten darunter über Titel und Text. Ein Verweis auf ein Item zeigt dessen Typ und aktuellen Key, den Titel für Screenreader, und führt beim Lesen zum Item; ein Verweis auf eine Seite zeigt ihr Emoji und ihren aktuellen Titel und führt zur Seite. Nennst du in der Beschreibung, einem Rich-Text-Feld oder einem Kommentar eines Items ein anderes Item neu, verknüpft werkbuch beide außerdem mit dem eingebauten Relationstyp „verwandt“, wenn du das Item bearbeiten darfst (die [Automatisierung](/de/concepts/automations#erwahnte-items-verknupfen) „Erwähnte Items verknüpfen“, standardmäßig an).
 
 werkbuch speichert nur die ULID des Items bzw. der Seite, nie Key oder Titel. Wer den Text liest, sieht den Verweis so, wie er darf: Ein Item oder eine Seite, die er nicht sieht, steht als **verborgen** da, ohne Key und Titel, in der Oberfläche, in der API und in Mails. Beim Speichern kannst du nur auf Items und Seiten verweisen, die du siehst; ein Verweis, der schon im Text stand, bleibt, auch auf eins, das du nicht siehst.
 
@@ -223,6 +223,6 @@ Ein Bild oder eine Datei zu löschen, die zu einem Text gehört, ist ein `409` m
 Zwei Dinge halten Uploads klein:
 
 - **Uploads, die kein Text übernommen hat** (ein Bild in einem Kommentar, der nie abgeschickt wurde): Ein Job des Schedulers entfernt sie stündlich, sobald sie älter als 24 Stunden sind. Der Browser löscht Uploads nie selbst, denn ein Text kann schon mit ihnen gespeichert sein.
-- **Bilder und Dateien, die kein Text mehr nennt:** `php artisan app:prune-attachments --dry-run --min-age=30` listet die Bilder und Dateien, die kein aktueller Text ihres Projekts nennt (Beschreibungen, Rich-Text-Werte, Kommentare, Wiki-Seiten und ihre Versionen) und die älter als das Mindestalter in Tagen sind; ohne `--dry-run` entfernt es sie. Ein Bild, das nur noch eine Version einer Wiki-Seite zeigt, bleibt, denn Versionen lassen sich wiederherstellen; Bilder, die nur eine ältere Fassung in der History eines Items zeigt, gehen dabei, wähle das Mindestalter danach. Dateien der Dateiliste räumt es nie ab.
+- **Bilder und Dateien, die kein Text mehr nennt:** `php artisan app:prune-attachments --dry-run --min-age=30` listet die Bilder und Dateien, die kein aktueller Text ihres Projekts nennt (Beschreibungen, Rich-Text-Werte, Kommentare, Wiki-Seiten und ihre Versionen, Vorlagen) und die älter als das Mindestalter in Tagen sind; ohne `--dry-run` entfernt es sie. Ein Bild, das nur noch eine Version einer Wiki-Seite zeigt, bleibt, denn Versionen lassen sich wiederherstellen; Bilder, die nur eine ältere Fassung in der History eines Items zeigt, gehen dabei, wähle das Mindestalter danach. Dateien der Dateiliste räumt es nie ab.
 
-Wer ein Item löscht, löscht seine Dateien und die seiner Kommentare, wer einen Kommentar löscht, dessen Dateien, wer eine Wiki-Seite löscht, die ihres Teilbaums, wer ein Projekt löscht, alle; ein Bild, das ein anderer Text des Projekts noch zeigt, bleibt und gehört dann diesem Text. Dateien gehen erst, wenn die Änderung gespeichert ist: Scheitert sie, geht nichts verloren. Mehr unter [Entwicklung](/de/development#wartungsbefehle).
+Wer ein Item löscht, löscht seine Dateien und die seiner Kommentare, wer einen Kommentar löscht, dessen Dateien, wer eine Wiki-Seite löscht, die ihres Teilbaums, wer eine Vorlage löscht, ihre eigenen, wer ein Projekt löscht, alle; ein Bild, das ein anderer Text des Projekts noch zeigt, bleibt und gehört dann diesem Text. Dateien gehen erst, wenn die Änderung gespeichert ist: Scheitert sie, geht nichts verloren. Mehr unter [Entwicklung](/de/development#wartungsbefehle).
