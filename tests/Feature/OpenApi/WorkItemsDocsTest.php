@@ -247,7 +247,9 @@ it('documents the keys the server reads and closes only the bodies that refuse o
         ->and($patch['minProperties'])->toBe(1)
         ->and(array_keys($shorthand['properties']))->toBe(Shorthand::KEYS)
         ->and($body('POST', '/work-items/query')['properties']['filter']['anyOf'][0]['$ref'])->toBe('#/components/schemas/Filter')
-        ->and($body('POST', '/work-items/counts')['properties']['filters']['additionalProperties']['$ref'])->toBe('#/components/schemas/Filter');
+        ->and($body('POST', '/work-items/counts')['properties']['filters']['additionalProperties']['$ref'])->toBe('#/components/schemas/Filter')
+        ->and($body('POST', '/work-items/counts')['properties']['filters']['description'])
+        ->toContain('at most '.CountWorkItems::MAX_CONDITIONS_TOTAL.' conditions over all of them');
 });
 
 it('says on create which fields mean "not given" with null', function () use ($body) {

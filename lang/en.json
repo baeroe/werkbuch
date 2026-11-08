@@ -227,6 +227,7 @@
     "field.filters.invalid": "An object of 1 to :max filters by name.",
     "field.filters.name": "“:name” is no name for a filter: at most 64 letters, digits, _ . : or -.",
     "field.filters.names": "These are no names for a filter (at most 64 letters, digits, _ . : or -): :names.",
+    "field.filters.too_many": "At most :max conditions over all filters together.",
     "field.group.invalid": "This grouping has no such group.",
     "field.group_by.invalid": "This grouping does not exist.",
     "field.group_by.required": "Choose a grouping.",

@@ -177,7 +177,8 @@ final class ItemQueryDocs extends OperationExtension
             'properties' => [
                 'filters' => [
                     'type' => 'object',
-                    'description' => '1–'.CountWorkItems::MAX_FILTERS.' filters by name (letters, digits, `_`, `.`, `:`, `-`; at most 64 characters).',
+                    'description' => '1–'.CountWorkItems::MAX_FILTERS.' filters by name (letters, digits, `_`, `.`, `:`, `-`; at most 64 characters), '
+                        .'with at most '.CountWorkItems::MAX_CONDITIONS_TOTAL.' conditions over all of them together (else 422 `field.filters.too_many` at `filters`).',
                     'minProperties' => 1,
                     'maxProperties' => CountWorkItems::MAX_FILTERS,
                     'propertyNames' => ['pattern' => '^[A-Za-z0-9_.:-]{1,64}$'],
