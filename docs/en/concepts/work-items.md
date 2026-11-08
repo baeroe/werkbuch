@@ -43,7 +43,7 @@ Moving an item into a Completed or Canceled state closes it and sets its resolut
 
 ## Parent and children
 
-Items of an epic type can have child items; epics have no parent item themselves, so there are two levels. The parent is an epic of the same project. An epic shows the progress of its children: the closed ones (Completed or Canceled) out of all. **Child item** in the children section of an epic creates one with the epic as its parent.
+Items of an epic type can have child items; epics have no parent item themselves, so there are two levels. The parent is an epic of the same project. An epic shows the progress of its children: the closed ones (Completed or Canceled) out of all. **Child item** in the children section of an epic creates one with the epic as its parent. An epic with more than 100 children shows the first 100 and **Load more child items** brings the next ones.
 
 ## Relations
 

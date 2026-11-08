@@ -621,6 +621,23 @@ describe('the sub-lists of the item commands', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
+  it('counts the children of the detail, never the list it embeds (A449)', async () => {
+    // an answer whose list holds none of the children still says through `children_progress` that there are 130
+    const epic = { ...web30, id: 'wi_web_61', key: 'WEB-61', children_progress: { done: 0, total: 130 } };
+    renderWith(<ItemPage id="wi_web_61" />, {
+      routes: {
+        'GET /api/v1/work-items/wi_web_61': () => ({ body: { data: { ...epic, children: [], relations: [], type: types.find((type) => type.id === epic.type_id), workflow: standard, attachments: [] } } }),
+      },
+    });
+    await ready('WEB-61', 'item.type');
+
+    choose('item.type', 'Task');
+    expect(await screen.findByText('WEB-61 hat Kind-Items. Nur Epics können Kind-Items haben.')).toBeTruthy();
+    expect(sent('PUT', '/api/v1/work-items/wi_web_61/type')).toEqual([]);
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Typ behalten' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
   it('offers the days from today, sets and removes a date, and refuses a start after the due date', async () => {
     // a fixed day: a run across midnight in the zone of the organisation would count from two days otherwise
     vi.useFakeTimers({ toFake: ['Date'] });

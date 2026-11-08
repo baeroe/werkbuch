@@ -134,9 +134,9 @@ export function useItemCommands(options: ItemCommandsOptions): void {
       properties: properties ?? [],
       people: own ? people : undefined,
       peopleFailed: own && peopleQuery.error !== null && people === undefined,
-      // the children: those of the detail of this very target (another detail may still be in `detail`), or for an item
-      // of a list its count, which counts archived children too
-      hasChildren: one && detail?.item.id === one.id ? detail.children.length > 0 : one && listed ? one.children_progress !== null : undefined,
+      // the children: the count of the detail of this very target (another detail may still be in `detail`), or for an
+      // item of a list its own; both count archived children too, and never the embedded list, which ends after 100 (A449)
+      hasChildren: one && detail?.item.id === one.id ? detail.item.children_progress !== null : one && listed ? one.children_progress !== null : undefined,
       projectItems: one ? projectItems : undefined,
       projectItemsFailed: one !== undefined && projectItemsQuery.isError && projectItems === undefined,
       reason: (permission, project) => reason(permission, project),

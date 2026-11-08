@@ -913,6 +913,17 @@ describe('TypePicker and the type change', () => {
     await waitFor(() => expect(typeCalls('wi_web_47')).toHaveLength(3));
   });
 
+  it('counts the children of the item, never the list it embeds (A449)', async () => {
+    // the embedded list ends after 100; an answer without it still says through `children_progress` that there are some
+    const many = { ...web30, children_progress: { done: 0, total: 130 } };
+    renderWith(<TypeChangeDialog item={many} target={task} open onOpenChange={() => {}} />, {
+      ...routes(many),
+      'GET /api/v1/work-items/wi_web_30': () => ({ body: { data: { ...many, children: [], relations: [], type: epic, workflow: standard, attachments: [] } } }),
+    });
+    expect(await screen.findByText('WEB-30 hat Kind-Items. Nur Epics können Kind-Items haben.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Zu Task wechseln/ })).toBeNull();
+  });
+
   it('says why from what the caller knows before the item has loaded', () => {
     renderWith(<TypeChangeDialog item={web30} target={task} open onOpenChange={() => {}} hasChildren />, routes(web30));
     // the first draw already says no

@@ -43,7 +43,7 @@ Wechselt ein Item in einen Status der Kategorie Completed oder Canceled, ist es 
 
 ## Eltern und Kinder
 
-Items eines Epic-Typs können Kind-Items haben; Epics haben selbst kein Eltern-Item, es gibt also zwei Ebenen. Das Eltern-Item ist ein Epic desselben Projekts. Ein Epic zeigt den Fortschritt seiner Kinder: die geschlossenen (Completed oder Canceled) von allen. **Kind-Item** im Abschnitt Kinder eines Epics legt eins mit dem Epic als Eltern-Item an.
+Items eines Epic-Typs können Kind-Items haben; Epics haben selbst kein Eltern-Item, es gibt also zwei Ebenen. Das Eltern-Item ist ein Epic desselben Projekts. Ein Epic zeigt den Fortschritt seiner Kinder: die geschlossenen (Completed oder Canceled) von allen. **Kind-Item** im Abschnitt Kinder eines Epics legt eins mit dem Epic als Eltern-Item an. Hat ein Epic mehr als 100 Kinder, zeigt der Abschnitt die ersten 100, **Weitere Kind-Items laden** holt die nächsten.
 
 ## Relationen
 

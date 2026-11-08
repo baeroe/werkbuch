@@ -5,7 +5,8 @@ import { allEntries, api, createE2eProject, createItem, pressMod, removeE2eProje
 // The relations of an item on its page, with the keyboard only, signed in as the e2e person in English. Each test works
 // in a project of its own (`E2E …`, removed in `finally`); its items come over the API. The item to relate is found
 // through the search: by its key at once, by a word of its title once the index has it (`waitForSearch`). Creating a child item from the
-// children section needs the create dialog and is in create-item.spec.ts (K11).
+// children section needs the create dialog and is in create-item.spec.ts (K11). An epic with 101 children (one per
+// worker, made in beforeAll) shows how the children section pages.
 
 const name = (what: string) => `E2E ${what} ${variant()} ${runId()}`;
 
@@ -15,6 +16,53 @@ async function relationsOf(page: Page, id: string): Promise<unknown[]> {
   expect(response.status(), await response.text()).toBe(200);
   return ((await response.json()) as { data: unknown[] }).data;
 }
+
+// an epic with 101 children, made once per worker over the API: the detail embeds the first 100 (A449), the section
+// loads the 101st from the list with the epic as parent. Named per worker (a worker that starts again runs beforeAll anew).
+let big: { identifier: string; epic: { id: string; key: string } } | undefined;
+
+test.beforeAll(async ({ browser }, workerInfo) => {
+  const page = await browser.newPage();
+  await page.goto('/my-items');
+  const project = await createE2eProject(page, name(`children ${workerInfo.workerIndex}`), { types: ['Task', 'Epic'] });
+  const epicType = (await allEntries(page, 'work-item-types')).find((entry) => entry.is_epic === true && entry.archived_at === null) as { id: string };
+  const epic = await createItem(page, { project_id: project.id, type_id: epicType.id, title: 'E2E Großes Epic' });
+  for (let number = 1; number <= 101; number += 1) {
+    await createItem(page, { project_id: project.id, parent_id: epic.id, title: `E2E Teil ${number}` });
+  }
+  big = { identifier: project.identifier, epic };
+  await page.close();
+});
+
+test.afterAll(async ({ browser }) => {
+  // nothing to remove when beforeAll failed before the project existed
+  if (!big) return;
+  const page = await browser.newPage();
+  await page.goto('/my-items');
+  await removeE2eProject(page, big.identifier);
+  await page.close();
+});
+
+test('shows the first 100 children of an epic and loads the rest', async ({ page }) => {
+  const { epic } = big!;
+  await page.goto(`/items/${epic.key}`);
+  await expect(page.getByRole('heading', { level: 1, name: 'E2E Großes Epic' })).toBeVisible();
+  const section = page.getByRole('region', { name: tr('en', 'items.detail.children.title') });
+  const rows = section.getByRole('listitem');
+  await expect(rows).toHaveCount(100);
+  await expect(section.getByText(tr('en', 'items.detail.children.shown', { shown: '100', total: '101' }))).toBeVisible();
+  await expect(section.getByRole('link', { name: /E2E Teil 101\b/ })).toHaveCount(0);
+
+  // the button loads the next page; with nothing left it goes, and the focus moves on to the child that came
+  const more = section.getByRole('button', { name: tr('en', 'items.detail.children.more') });
+  // busy until the first page of the list is there
+  await expect(more).not.toHaveAttribute('aria-busy');
+  await more.focus();
+  await page.keyboard.press('Enter');
+  await expect(rows).toHaveCount(101);
+  await expect(more).toHaveCount(0);
+  await expect(section.getByRole('link', { name: /E2E Teil 101\b/ })).toBeFocused();
+});
 
 test('relates two items with r and removes the relation again', async ({ page }) => {
   const { id, identifier } = await createE2eProject(page, name('relations'), { types: ['Task'] });

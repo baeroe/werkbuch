@@ -951,7 +951,8 @@ describe('Children', () => {
   });
 
   it('invites an epic without children to split the work, and leaves the section out where it has nothing to show', async () => {
-    items = items.filter((entry) => entry.id !== web48.id);
+    // without children the server answers no progress either (`children_progress` null)
+    items = items.filter((entry) => entry.id !== web48.id).map((entry) => (entry.id === web30.id ? { ...web30, children_progress: null } : entry));
     const view = renderWith(<ItemPage itemKey="WEB-30" />);
     const children = await screen.findByRole('region', { name: 'Kinder' });
     expect(within(children).getByText('Noch keine Kind-Items. Teile die Arbeit auf, dann zeigt sich hier der Fortschritt.')).toBeTruthy();
@@ -964,6 +965,89 @@ describe('Children', () => {
     await screen.findByRole('region', { name: 'Beschreibung' });
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Kinder' })).toBeNull());
     expect(screen.queryByRole('region', { name: 'Kinder' })).toBeNull();
+  });
+
+  /**
+   * WEB-30 with 130 children: the detail embeds the first 100 (as the server does, A449), the list with the parent
+   * answers them in pages of 100. `failFirstMore` lets the second page fail once, `failFirstPage` the first one.
+   */
+  function manyChildren({ failFirstMore = false, failFirstPage = false } = {}) {
+    const many = Array.from({ length: 130 }, (_, index) =>
+      makeWorkItem({ id: `wi_child_${index}`, number: 100 + index, key: `WEB-${100 + index}`, title: `Teil ${index + 1}`, parent_id: 'wi_web_30', rank: `b${String(index).padStart(3, '0')}` }),
+    );
+    items = items.filter((entry) => entry.id !== web48.id).map((entry) => (entry.id === web30.id ? { ...web30, children_progress: { done: 0, total: 130 } } : entry));
+    let failed = !failFirstMore;
+    let firstFailed = !failFirstPage;
+    return {
+      detail: () => ({ body: { data: { ...items.find((entry) => entry.id === web30.id)!, children: many.slice(0, 100), relations: [], type: types.find((type) => type.id === 't_epic'), workflow: standard, attachments: [] } } }),
+      query: (body: unknown) => {
+        const query = body as { shorthand?: { parent?: string }; include_archived?: boolean; show_sub_items?: boolean; lean?: boolean; sort?: unknown; cursor?: string };
+        expect(query).toMatchObject({ shorthand: { parent: 'wi_web_30' }, include_archived: true, show_sub_items: true, lean: true, sort: { field: 'rank', direction: 'asc' } });
+        if (query.cursor === undefined && !firstFailed) {
+          firstFailed = true;
+          return problem(500, 'server_error');
+        }
+        if (query.cursor === undefined) return { body: { data: many.slice(0, 100), links: {}, meta: { next_cursor: 'page-2', total: 130 } } };
+        if (!failed) {
+          failed = true;
+          return problem(500, 'server_error');
+        }
+        return { body: list(many.slice(100), 130) };
+      },
+    };
+  }
+
+  it('says how many children it shows', async () => {
+    const children = manyChildren();
+    renderWith(<ItemPage itemKey="WEB-30" />, { routes: { 'GET /api/v1/work-items/WEB-30': children.detail, 'POST /api/v1/work-items/query': children.query } });
+
+    const section = await screen.findByRole('region', { name: 'Kinder' });
+    // the count of all children, from children_progress, not the 100 the detail embeds
+    expect(within(section).getByText('130')).toBeTruthy();
+    expect(within(section).getByRole('progressbar', { name: 'Fortschritt der Kind-Items' }).getAttribute('aria-valuemax')).toBe('130');
+    expect(await within(section).findByText('100 von 130')).toBeTruthy();
+    expect(within(section).getAllByRole('listitem')).toHaveLength(100);
+    expect(within(section).getByRole('button', { name: 'Weitere Kind-Items laden' })).toBeTruthy();
+  });
+
+  it('loads the further children page by page', async () => {
+    const user = userEvent.setup();
+    const children = manyChildren({ failFirstMore: true });
+    renderWith(<ItemPage itemKey="WEB-30" />, { routes: { 'GET /api/v1/work-items/WEB-30': children.detail, 'POST /api/v1/work-items/query': children.query } });
+
+    const section = await screen.findByRole('region', { name: 'Kinder' });
+    await user.click(await within(section).findByRole('button', { name: 'Weitere Kind-Items laden' }));
+    // the second page fails: the 100 stay, and the section offers the page again
+    const retry = await within(section).findByRole('button', { name: 'Erneut versuchen' });
+    expect(within(section).getByText('Nicht geladen.')).toBeTruthy();
+    expect(within(section).getAllByRole('listitem')).toHaveLength(100);
+    await user.click(retry);
+
+    await waitFor(() => expect(within(section).getAllByRole('listitem')).toHaveLength(130));
+    const rows = within(section).getAllByRole('listitem');
+    expect(rows.at(-1)!.querySelector('a')!.textContent).toBe('WEB-229Teil 130');
+    // the button went with the last page: the focus is on the first child that came with it
+    await waitFor(() => expect(document.activeElement).toBe(rows[100]!.querySelector('a')));
+    // everything is there: no button, no count of the shown ones
+    expect(within(section).queryByRole('button', { name: 'Weitere Kind-Items laden' })).toBeNull();
+    expect(within(section).queryByText('130 von 130')).toBeNull();
+    expect(sent('POST', '/api/v1/work-items/query').map((body) => (body as { cursor?: string }).cursor)).toEqual([undefined, 'page-2', 'page-2']);
+  });
+
+  it('offers the first page of the list again when it fails, and shows the embedded children meanwhile', async () => {
+    const user = userEvent.setup();
+    const children = manyChildren({ failFirstPage: true });
+    renderWith(<ItemPage itemKey="WEB-30" />, { routes: { 'GET /api/v1/work-items/WEB-30': children.detail, 'POST /api/v1/work-items/query': children.query } });
+
+    const section = await screen.findByRole('region', { name: 'Kinder' });
+    const retry = await within(section).findByRole('button', { name: 'Erneut versuchen' });
+    expect(within(section).getByText('Nicht geladen.')).toBeTruthy();
+    expect(within(section).getAllByRole('listitem')).toHaveLength(100);
+    await user.click(retry);
+    // the same button, now for the next page
+    await waitFor(() => expect(retry.textContent).toBe('Weitere Kind-Items laden'));
+    expect(within(section).queryByText('Nicht geladen.')).toBeNull();
+    expect(sent('POST', '/api/v1/work-items/query').map((body) => (body as { cursor?: string }).cursor)).toEqual([undefined, undefined]);
   });
 
   it('shows no children section on a task', async () => {
