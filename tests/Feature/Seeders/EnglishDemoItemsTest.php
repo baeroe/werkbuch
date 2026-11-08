@@ -39,14 +39,7 @@ beforeEach(function () {
     searchEngine();
 });
 
-/** German as a whole word, or a letter English does not have (the rule of EnglishDemoTextsTest). */
-$germanIn = function (string $text): ?string {
-    if (preg_match('/[äöüßÄÖÜ]|\b(?:und|der|die|das|nicht|mit|für|ist)\b/iu', $text, $match) === 1) {
-        return $match[0];
-    }
-
-    return null;
-};
+$germanIn = SharedDemoTexts::germanIn(...);
 
 /** The keys of the texts of the items, comments and files. */
 $itemKeys = fn (): array => array_values(array_filter(array_keys(German::TEXTS), fn (string $key) => preg_match('/^(item|comment|file)\./', $key) === 1));

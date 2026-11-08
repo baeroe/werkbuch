@@ -36,14 +36,7 @@ beforeEach(function () {
     searchEngine();
 });
 
-/** German as a whole word, or a letter English does not have. */
-$germanIn = function (string $text): ?string {
-    if (preg_match('/[äöüßÄÖÜ]|\b(?:und|der|die|das|nicht|mit|für|ist)\b/iu', $text, $match) === 1) {
-        return $match[0];
-    }
-
-    return null;
-};
+$germanIn = SharedDemoTexts::germanIn(...);
 
 /**
  * Every text the demo seeders up to the tokens write, by table, so a second run and a stray German text show.
@@ -122,6 +115,9 @@ it('writes no German into the English texts', function () use ($germanIn) {
         ->toBe(['catalog.state.approval', 'catalog.label.forms'])
         ->and(SharedDemoTexts::untranslated([...English::TEXTS, 'catalog.type.task.name' => 'Task']))->toBe([])
         ->and(SharedDemoTexts::germanOnly())->toContain('Kundenfreigabe', 'Formulare', 'Infrastruktur')->not->toContain('Backlog')
+        // a path is no text: it names a key of both languages and stays out of what an English text may not hold
+        ->and(array_diff_key(SharedDemoTexts::NOT_TEXTS, array_intersect_key(German::TEXTS, English::TEXTS)))->toBe([])
+        ->and(SharedDemoTexts::germanOnly())->not->toContain(German::TEXTS['file.folder'])
         // the probe: the rule finds the German texts, a letter and a word alike
         ->and(count(array_filter(array_map($germanIn, German::TEXTS))))->toBeGreaterThan(20)
         ->and([$germanIn('Gärtnerei Moos'), $germanIn('Für Kira'), $germanIn('Browser und Version')])->toBe(['ä', 'Für', 'und']);

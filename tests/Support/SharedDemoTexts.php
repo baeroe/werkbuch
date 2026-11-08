@@ -44,6 +44,24 @@ final class SharedDemoTexts
         'file.OPS-12.1.name' => 'the name of a configuration file of Postfix',
     ];
 
+    /** @var array<string, string> key → why it is no text a reader sees */
+    public const NOT_TEXTS = [
+        'file.folder' => 'the folder of the demo files, a path',
+    ];
+
+    /**
+     * German in a text: a letter English does not have, or a German word as a whole word. The first one found, else
+     * null.
+     */
+    public static function germanIn(string $text): ?string
+    {
+        if (preg_match('/[äöüßÄÖÜ]|\b(?:und|der|die|das|nicht|mit|für|ist)\b/iu', $text, $match) === 1) {
+            return $match[0];
+        }
+
+        return null;
+    }
+
     /**
      * The keys whose English text is the German one without a reason.
      *
@@ -61,12 +79,12 @@ final class SharedDemoTexts
     }
 
     /**
-     * The German texts no English text may hold: all but the shared ones.
+     * The German texts no English text may hold: all but the shared ones and those that are no text (a path).
      *
      * @return list<string>
      */
     public static function germanOnly(): array
     {
-        return array_values(array_unique(array_diff_key(German::TEXTS, self::KEYS)));
+        return array_values(array_unique(array_diff_key(German::TEXTS, self::KEYS, self::NOT_TEXTS)));
     }
 }
