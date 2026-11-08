@@ -18,7 +18,7 @@ const ROOT = path.resolve(import.meta.dirname, '..');
 const read = (file) => fs.readFileSync(path.join(ROOT, file), 'utf8');
 
 /** What a keyboard-only test may not do: pointer calls of Playwright and synthetic pointer events. */
-const MOUSE = /\.(?:click|dblclick|hover|dragTo|tap|setChecked|uncheck)\s*\(|\.mouse\b|\.touchscreen\b|dispatchEvent\(\s*new\s+(?:Mouse|Pointer|Touch|Drag)Event\b|dispatchEvent\(\s*['"](?:click|dblclick|mouse|pointer|touch|drag)/;
+const MOUSE = /\.(?:click|dblclick|hover|dragTo|tap|setChecked|uncheck|selectOption)\s*\(|(?<!\bfonts)\.check\s*\(|\.mouse\b|\.touchscreen\b|dispatchEvent\(\s*new\s+(?:Mouse|Pointer|Touch|Drag)Event\b|dispatchEvent\(\s*['"](?:click|dblclick|mouse|pointer|touch|drag)/;
 
 /** The ids of `SHORTCUTS` in catalog.ts. */
 function catalogIds(source = read('resources/js/lib/shortcuts/catalog.ts')) {
@@ -181,66 +181,170 @@ function testCalls(source, masked = mask(source)) {
   return calls;
 }
 
-/**
- * The names of functions of a spec that use a mouse, also through another such function of the same file. A test that
- * calls one uses the mouse as much as one that clicks itself.
- */
-function mouseHelpers(source, masked = mask(source)) {
-  const bodies = new Map();
+/** The functions of a spec (declarations and arrow functions bound to a name): name → [start, end] in its source. */
+function functions(masked) {
+  const found = new Map();
   for (const match of masked.matchAll(/\bfunction\s+([A-Za-z_$][\w$]*)\s*\(|\b(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s+)?(?:\([^()]*(?:\([^()]*\)[^()]*)*\)|[A-Za-z_$][\w$]*)\s*(?::[^=]+)?=>/g)) {
     const name = match[1] ?? match[2];
     let at = match.index + match[0].length;
     if (match[1]) at = closing(masked, at - 1) + 1;
     while (at < masked.length && masked[at] !== '{' && masked[at] !== '\n' && masked[at] !== ';') at++;
-    const end = masked[at] === '{' ? closing(masked, at) + 1 : at;
-    bodies.set(name, masked.slice(match.index, end));
+    found.set(name, [match.index, masked[at] === '{' ? closing(masked, at) + 1 : at]);
   }
-  const users = new Set([...bodies].filter(([, body]) => MOUSE.test(body)).map(([name]) => name));
-  for (let grew = true; grew; ) {
-    grew = false;
-    for (const [name, body] of bodies) {
-      if (!users.has(name) && [...users].some((user) => new RegExp(`(?<![\\w.$])${escape(user)}\\s*\\(`).test(body))) {
-        users.add(name);
-        grew = true;
+  return found;
+}
+
+/** The functions of the spec that `text` calls, also through each other, in the order they are reached. */
+function reach(text, fns, masked) {
+  const reached = [];
+  const queue = [text];
+  while (queue.length > 0) {
+    const next = queue.shift();
+    for (const [name, [start, end]] of fns) {
+      if (!reached.includes(name) && new RegExp(`(?<![\\w.$])${escape(name)}\\s*\\(`).test(next)) {
+        reached.push(name);
+        queue.push(masked.slice(start, end));
       }
     }
   }
-  return users;
+  return reached;
+}
+
+/**
+ * The names of functions of a spec that use a mouse, also through another such function of the same file. A test that
+ * calls one uses the mouse as much as one that clicks itself.
+ */
+function mouseHelpers(source, masked = mask(source)) {
+  const fns = functions(masked);
+  const uses = (name) => MOUSE.test(masked.slice(...fns.get(name)));
+  return new Set([...fns.keys()].filter((name) => uses(name) || reach(masked.slice(...fns.get(name)), fns, masked).some(uses)));
 }
 
 const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-const specs = new Map();
-/** A spec of e2e/tests read once: source, masked source, its tests and its mouse helpers. */
-function spec(file) {
-  if (!specs.has(file)) {
-    const source = read(path.join('e2e/tests', file));
-    const masked = mask(source);
-    const tests = testCalls(source, masked);
-    // a skip outside a test (in a describe, a hook) would hold for tests this check reads as running everywhere
-    for (const skip of masked.matchAll(/(?<![\w$])test\.skip\s*\(/g)) {
-      if (!tests.some((call) => call.start < skip.index && skip.index < call.end)) throw new Error(`${file}: test.skip outside a test, which this check does not read`);
-    }
-    specs.set(file, { source, masked, tests, helpers: mouseHelpers(source, masked) });
+/** The keys of every entry as the register writes them: a catalog id → its keys, a widget key → the keys of its label. */
+function entryKeys() {
+  const keys = new Map();
+  const catalog = read('resources/js/lib/shortcuts/catalog.ts');
+  for (const [, id, combo] of catalog.slice(catalog.indexOf('export const SHORTCUTS = {')).matchAll(/^ {2}'([a-z0-9_.]+)': \{ keys: '([^']+)'/gm)) {
+    keys.set(id, [combo]);
   }
+  for (const part of read('resources/js/lib/shortcuts/widgets.ts').split(/\bgroup: '/).slice(1)) {
+    const name = part.slice(0, part.indexOf("'")).replace(/^shortcuts\.widget\.group\./, '');
+    for (const [, combo, label] of part.matchAll(/\{ keys: '([^']+)', label: '([^']+)' \}/g)) {
+      const key = `${name}:${label.slice(`shortcuts.widget.${name}.`.length)}`;
+      keys.set(key, [...(keys.get(key) ?? []), combo]);
+    }
+  }
+  return keys;
+}
+const KEYS = entryKeys();
+
+/** Register names whose Playwright name differs. */
+const PLAYWRIGHT = { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight', escape: 'Escape', enter: 'Enter', backspace: 'Backspace', home: 'Home', end: 'End', tab: 'Tab', space: ' ' };
+
+/**
+ * How a test presses a key of the register (`mod+enter`, `shift+x`, `g i`): a sequence by its last step, `mod` only as
+ * `pressMod(page, '<key>')` or `ControlOrMeta+<key>`, otherwise the literal Playwright presses (`'Shift+X'`,
+ * `'Alt+ArrowDown'`, `' '`), and a sign like `@`, `#` or `/` also typed inside a text. A letter typed in a text is no
+ * shortcut, so it does not count.
+ */
+function pressings(combo) {
+  const parts = combo.trim().split(/\s+/).at(-1).split('+');
+  const base = parts.pop();
+  const name = PLAYWRIGHT[base.toLowerCase()] ?? base;
+  if (parts.includes('mod')) return [{ text: `pressMod(…, '${name}')`, mod: name }, { text: `'ControlOrMeta+${name}'`, literal: `ControlOrMeta+${name}` }];
+  const prefix = `${parts.includes('alt') ? 'Alt+' : ''}${parts.includes('shift') ? 'Shift+' : ''}`;
+  const names = parts.includes('shift') && /^[a-z]$/i.test(name) ? [name.toUpperCase(), name.toLowerCase()] : name === ' ' ? [' ', 'Space'] : [name];
+  const forms = names.map((each) => ({ text: `'${prefix}${each}'`, literal: `${prefix}${each}` }));
+  if (prefix === '' && /^[^\w\s]$/.test(name)) forms.push({ text: `${name} in a typed text`, typed: name });
+  return forms;
+}
+
+/** The bracket that holds `at` in masked source, and the name called before it if it is a `(`. */
+function enclosing(masked, at) {
+  let depth = 0;
+  for (let i = at - 1; i >= 0; i--) {
+    if (')]}'.includes(masked[i])) depth++;
+    else if ('([{'.includes(masked[i])) {
+      if (depth === 0) return { bracket: masked[i], callee: masked.slice(0, i).match(/([A-Za-z_$][\w$]*)\s*$/)?.[1] };
+      depth--;
+    }
+  }
+  return { bracket: null };
+}
+
+/** Calls of Playwright that press what they get. */
+const PRESSING = new Set(['press', 'pressMod', 'down']);
+
+/**
+ * Whether `form` stands as code in one of the ranges of a spec: a string literal (not a comment) handed to a call that
+ * presses it (`press`, `pressMod`, `keyboard.down`), to a function of the spec (`subList(page, 's', …)`, which presses
+ * it), or in an array (the keys a loop presses). `page.locator('p')` names an element, no key.
+ */
+function pressedIn(form, source, masked, ranges, fns) {
+  const inside = (at) => masked[at] !== ' ' && ranges.some(([start, end]) => start <= at && at < end);
+  if (form.mod !== undefined) {
+    return [...source.matchAll(new RegExp(`pressMod\\(\\s*[\\w.]+\\s*,\\s*(['"\`])${escape(form.mod)}\\1`, 'g'))].some((match) => inside(match.index));
+  }
+  if (form.typed !== undefined) {
+    return [...source.matchAll(/\.(?:type|insertText)\(\s*(['"`])((?:\\.|(?!\1)[^\\])*)\1/g)].some((match) => inside(match.index) && match[2].includes(form.typed));
+  }
+  return [...source.matchAll(new RegExp(`(['"\`])${escape(form.literal)}\\1`, 'g'))].some((match) => {
+    if (!inside(match.index)) return false;
+    const { bracket, callee } = enclosing(masked, match.index);
+    // the key of a pressMod(page, 'Enter') is ⌘↵, not a plain Enter
+    if (callee === 'pressMod') return false;
+    return bracket === '[' || (bracket === '(' && (PRESSING.has(callee) || fns.has(callee)));
+  });
+}
+
+/** The ranges of the skips of a body (`test.skip(…)`, `test.fixme(…)`) relative to it, with the condition they read. */
+function skipsOf(body, source, start) {
+  return [...body.matchAll(/(?<![\w$])test\.(?:skip|fixme)\s*\(/g)].map((skip) => {
+    const open = skip.index + skip[0].length - 1;
+    const end = closing(body, open) + 1;
+    return { from: skip.index, to: end, condition: source.slice(start + open + 1, start + end - 1).split(',')[0].replace(/\s+/g, '') };
+  });
+}
+
+const specs = new Map();
+/** A spec of e2e/tests read once: source, masked source, its tests (with those in a skipped describe) and its functions. */
+function spec(file) {
+  if (!specs.has(file)) specs.set(file, readSpec(file, read(path.join('e2e/tests', file))));
   return specs.get(file);
+}
+
+/** What the checks read of a spec. */
+function readSpec(file, source) {
+  const masked = mask(source);
+  const tests = testCalls(source, masked);
+  // a skip outside a test (in a describe, a hook) would hold for tests this check reads as running everywhere
+  for (const skip of masked.matchAll(/(?<![\w$])test\.(?:skip|fixme)\s*\(/g)) {
+    if (!tests.some((call) => call.start < skip.index && skip.index < call.end)) throw new Error(`${file}: test.skip or test.fixme outside a test, which this check does not read`);
+  }
+  // test.describe.skip and .fixme run none of their tests
+  const skipped = [...masked.matchAll(/(?<![\w$])test\.describe\.(?:skip|fixme)\s*\(/g)].map((match) => [match.index, closing(masked, match.index + match[0].length - 1)]);
+  for (const call of tests) call.nowhere = skipped.some(([from, to]) => from < call.start && call.end <= to);
+  return { source, masked, tests, fns: functions(masked) };
 }
 
 const ALL = projects();
 const proofsOf = (entry) => (Array.isArray(entry) ? entry : [entry]);
 
 /**
- * Where a proof holds: the projects its test runs in (a `test.skip(isPhone(page), …)` leaves out the phones, one with
- * `!isPhone` the desktops), narrowed to `projects` if the entry names them. Throws what is wrong with the proof.
+ * Where a proof of `key` holds: the projects its test runs in (a `test.skip(isPhone(page), …)` leaves out the phones, one
+ * with `!isPhone` the desktops, one without a condition and a skipped describe all of them), narrowed to `projects` if
+ * the entry names them; a test that branches on `isPhone()` must name them. Throws what is wrong with the proof.
  */
-function provenIn(proof, allowances = MOUSE_ALLOWED) {
+function provenIn(proof, key, allowances = MOUSE_ALLOWED) {
   const where = `${proof.file} › ${proof.test}`;
   if (!fs.existsSync(path.join(ROOT, 'e2e/tests', proof.file))) throw new Error(`${proof.file}: no such spec under e2e/tests`);
-  const { source, masked, tests, helpers } = spec(proof.file);
+  const { source, masked, tests, fns } = spec(proof.file);
   const found = tests.filter((call) => call.title === proof.test);
   if (found.length === 0) throw new Error(`${where}: no test('…') with this title`);
   if (found.length > 1) throw new Error(`${where}: the title stands ${found.length} times`);
-  const { start, end } = found[0];
+  const { start, end, nowhere } = found[0];
 
   let body = masked.slice(start, end);
   for (const allowed of allowances.filter((entry) => entry.file === proof.file && entry.test === proof.test)) {
@@ -250,19 +354,31 @@ function provenIn(proof, allowances = MOUSE_ALLOWED) {
   }
   const mouse = body.match(MOUSE);
   if (mouse) throw new Error(`${where}: uses the mouse (${mouse[0].trim()}) at line ${source.slice(0, start + body.indexOf(mouse[0])).split('\n').length}`);
+  const helpers = reach(body, fns, masked);
   for (const helper of helpers) {
-    if (new RegExp(`(?<![\\w.$])${escape(helper)}\\s*\\(`).test(body)) throw new Error(`${where}: calls ${helper}(), which uses the mouse`);
+    if (MOUSE.test(masked.slice(...fns.get(helper)))) throw new Error(`${where}: reaches ${helper}(), which uses the mouse`);
   }
 
-  let runs = ALL.map((project) => project.name);
-  for (const skip of body.matchAll(/(?<![\w$])test\.skip\s*\(/g)) {
-    const open = skip.index + skip[0].length - 1;
-    const condition = source.slice(start + open + 1, start + closing(body, open)).split(',')[0].replace(/\s+/g, '');
-    if (condition === 'isPhone(page)') runs = runs.filter((name) => !ALL.find((project) => project.name === name).phone);
+  if (!KEYS.has(key)) throw new Error(`${where}: ${key} is no key of the catalog or the widgets`);
+  const ranges = [[start, end], ...helpers.map((helper) => fns.get(helper))];
+  const forms = KEYS.get(key).flatMap(pressings);
+  if (!forms.some((form) => pressedIn(form, source, masked, ranges, fns))) throw new Error(`${where}: presses none of: ${forms.map((form) => form.text).join(', ')}`);
+
+  let runs = nowhere ? [] : ALL.map((project) => project.name);
+  const skips = skipsOf(body, source, start);
+  for (const { condition } of skips) {
+    if (condition === '') runs = [];
+    else if (condition === 'isPhone(page)') runs = runs.filter((name) => !ALL.find((project) => project.name === name).phone);
     else if (condition === '!isPhone(page)') runs = runs.filter((name) => ALL.find((project) => project.name === name).phone);
     else throw new Error(`${where}: test.skip(${condition}, …) is a condition this test does not read; name the projects`);
   }
-  if (proof.projects === undefined) return runs;
+  let unskipped = body;
+  for (const { from, to } of skips) unskipped = unskipped.slice(0, from) + ' '.repeat(to - from) + unskipped.slice(to);
+  const branches = [unskipped, ...helpers.map((helper) => masked.slice(...fns.get(helper)))].some((text) => /(?<![\w.$])isPhone\s*\(/.test(text));
+  if (proof.projects === undefined) {
+    if (branches) throw new Error(`${where}: branches on isPhone(): name the projects where it presses the key`);
+    return runs;
+  }
   for (const name of proof.projects) {
     if (!ALL.some((project) => project.name === name)) throw new Error(`${where}: no Playwright project ${name}`);
     if (!runs.includes(name)) throw new Error(`${where}: claims ${name}, where the test skips`);
@@ -276,7 +392,7 @@ function problemsOf(key, entry) {
   const covered = new Set();
   for (const proof of proofsOf(entry)) {
     try {
-      for (const name of provenIn(proof)) covered.add(name);
+      for (const name of provenIn(proof, key)) covered.add(name);
     } catch (error) {
       problems.push(`${key}: ${error.message}`);
     }
@@ -299,6 +415,11 @@ describe('keyboard manifest', () => {
     expect(widgetKeys()).toContain('palette:move');
     expect(widgetKeys()).toContain('editor:table_menu');
     expect(widgetKeys().filter((key) => key.startsWith('table:'))).toHaveLength(7);
+    // and the keys of every entry, for the check that a test presses one of them
+    expect([...catalogIds(), ...widgetKeys()].filter((key) => !KEYS.has(key))).toEqual([]);
+    expect(KEYS.get('shell.go.inbox')).toEqual(['g i']);
+    expect(KEYS.get('palette:move')).toEqual(['up', 'down']);
+    expect(KEYS.get('editor:table_menu')).toEqual(['alt+F10']);
     expect(ALL).toEqual([
       { name: 'desktop-light', phone: false },
       { name: 'desktop-dark', phone: false },
@@ -338,7 +459,10 @@ describe('keyboard manifest', () => {
   });
 
   it('keeps the mouse out of the e2e helpers, so a test body hides none', () => {
-    for (const file of fs.readdirSync(path.join(ROOT, 'e2e')).filter((name) => name.endsWith('.ts'))) {
+    const files = fs.readdirSync(path.join(ROOT, 'e2e')).filter((name) => name.endsWith('.ts'));
+    expect(files).toContain('helpers.ts');
+    expect(files).toContain('fixtures.ts');
+    for (const file of files) {
       expect(mask(read(path.join('e2e', file))), `e2e/${file}`).not.toMatch(MOUSE);
     }
   });
@@ -385,19 +509,69 @@ describe('the scanner of the specs', () => {
     const write = "preview.getByRole('button', { name: tr('en', 'items.comments.write') }).click()";
     const resume = "preview.getByRole('button', { name: tr('en', 'items.comments.continue') }).click()";
     const allow = (call) => ({ ...proof, call, reason: 'scanner test' });
-    expect(() => provenIn(proof, [])).toThrow(/uses the mouse \(\.click\(\) at line \d+/);
-    expect(() => provenIn(proof, [allow(write)])).toThrow(/uses the mouse/);
-    expect(provenIn(proof, [allow(write), allow(resume)])).toEqual(ALL.map((project) => project.name));
-    expect(() => provenIn(proof, [allow(write), allow(resume), allow('page.mouse.up()')])).toThrow(/names a call the test does not make/);
+    // the test opens the preview with the space bar (list.peek), then clicks twice
+    expect(() => provenIn(proof, 'list.peek', [])).toThrow(/uses the mouse \(\.click\(\) at line \d+/);
+    expect(() => provenIn(proof, 'list.peek', [allow(write)])).toThrow(/uses the mouse/);
+    expect(provenIn(proof, 'list.peek', [allow(write), allow(resume)])).toEqual(ALL.map((project) => project.name));
+    expect(() => provenIn(proof, 'list.peek', [allow(write), allow(resume), allow('page.mouse.up()')])).toThrow(/names a call the test does not make/);
   });
 
   it('reads where a skipping test runs', () => {
-    expect(provenIn({ file: 'shell.spec.ts', test: 'collapses the sidebar to the rail and back' })).toEqual(['desktop-light', 'desktop-dark']);
-    expect(provenIn({ file: 'shell.spec.ts', test: 'opens the navigation drawer on the phone' })).toEqual(['phone-light', 'phone-dark']);
-    expect(provenIn({ file: 'shell.spec.ts', test: 'goes to projects with g p' })).toEqual(ALL.map((project) => project.name));
+    expect(provenIn({ file: 'shell.spec.ts', test: 'collapses the sidebar to the rail and back' }, 'palette:close')).toEqual(['desktop-light', 'desktop-dark']);
+    expect(provenIn({ file: 'shell.spec.ts', test: 'opens the navigation drawer on the phone' }, 'palette:close')).toEqual(['phone-light', 'phone-dark']);
+    expect(provenIn({ file: 'shell.spec.ts', test: 'goes to projects with g p' }, 'shell.go.projects')).toEqual(ALL.map((project) => project.name));
+  });
+
+  it('wants one of the keys of the entry in the test or in a helper of the spec it calls', () => {
+    const title = { file: 'items.spec.ts', test: 'edits the title with e' };
+    expect(() => provenIn(title, 'item.labels')).toThrow(/presses none of: 'l'/);
+    expect(provenIn(title, 'item.title')).toEqual(ALL.map((project) => project.name));
+    // c through openDialog, mod+enter as pressMod(page, 'Enter'), ⇧X, ⌥↓, a sequence by its last key, @ typed in a text
+    expect(provenIn({ file: 'create-item.spec.ts', test: 'creates an item of a type with a required property' }, 'item.create')).toHaveLength(4);
+    expect(provenIn({ file: 'create-item.spec.ts', test: 'creates an item of a type with a required property' }, 'dialog.submit')).toHaveLength(4);
+    expect(provenIn({ file: 'bulk.spec.ts', test: 'selects a range with shift+x, archives with mod+backspace and undoes with mod+z' }, 'list.select_range')).toHaveLength(4);
+    expect(provenIn({ file: 'board.spec.ts', test: 'changes the place of a card in its column with alt+arrow and keeps the focus on it' }, 'list.move_down')).toHaveLength(4);
+    expect(provenIn({ file: 'shell.spec.ts', test: 'reaches the other main places with their g sequences' }, 'shell.go.views')).toHaveLength(4);
+    expect(provenIn({ file: 'editor.spec.ts', test: 'mentions over @ and refers over #' }, 'editor:mention')).toHaveLength(4);
+    // a letter typed in a text is no shortcut, ⌘↵ is no plain Enter
+    expect(() => provenIn({ file: 'editor.spec.ts', test: 'mentions over @ and refers over #' }, 'item.priority')).toThrow(/presses none of: 'p'/);
+    expect(() => provenIn({ file: 'shell.spec.ts', test: 'goes to projects with g p' }, 'settings.save')).toThrow(/presses none of: pressMod\(…, 'Enter'\)/);
+  });
+
+  it('wants the projects named where the test branches on isPhone', () => {
+    const search = { file: 'shell.spec.ts', test: 'opens the palette with / and from the search button, also on the phone' };
+    expect(() => provenIn(search, 'shell.search')).toThrow(/branches on isPhone\(\): name the projects/);
+    expect(provenIn({ ...search, projects: ['desktop-light', 'phone-dark'] }, 'shell.search')).toEqual(['desktop-light', 'phone-dark']);
+    // a skip on isPhone is read, not a branch
+    expect(provenIn({ file: 'shell.spec.ts', test: 'collapses the sidebar to the rail and back' }, 'palette:close')).toHaveLength(2);
+  });
+
+  it('reads test.fixme, test.describe.skip and a skip outside a test', () => {
+    const parsed = readSpec(
+      'x.spec.ts',
+      [
+        "test.describe.skip('off', () => {",
+        "  test('a', async ({ page }) => { await page.keyboard.press('j'); });",
+        '});',
+        "test('b', async ({ page }) => { test.fixme(); await page.keyboard.press('k'); });",
+        "test('c', async ({ page }) => { test.fixme(!isPhone(page), 'phone only'); });",
+      ].join('\n'),
+    );
+    expect(parsed.tests.map((call) => [call.title, call.nowhere])).toEqual([
+      ['a', true],
+      ['b', false],
+      ['c', false],
+    ]);
+    const conditions = (call) => skipsOf(parsed.masked.slice(call.start, call.end), parsed.source, call.start).map((skip) => skip.condition);
+    expect(conditions(parsed.tests[1])).toEqual(['']);
+    expect(conditions(parsed.tests[2])).toEqual(['!isPhone(page)']);
+    expect(() => readSpec('y.spec.ts', "test.beforeEach(async ({ page }) => { test.fixme(isPhone(page)); });")).toThrow(/outside a test/);
   });
 
   it('reads no mouse call from a string or a comment', () => {
+    expect(mask("await page.getByRole('checkbox').check();")).toMatch(MOUSE);
+    expect(mask("await page.locator('select').selectOption('a');")).toMatch(MOUSE);
+    expect(mask("const fonts = await page.evaluate(() => document.fonts.check('16px Figtree'));")).not.toMatch(MOUSE);
     expect(mask("const a = '.click('; // page.mouse\nconst b = `x ${y.hover} .tap(`;")).not.toMatch(MOUSE);
     expect(mask('const b = `x ${page.mouse.down()} y`;')).toMatch(MOUSE);
   });

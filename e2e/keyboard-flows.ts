@@ -21,13 +21,15 @@ export interface Proof {
 const DESKTOP = ['desktop-light', 'desktop-dark'];
 /** The two phone projects. */
 const PHONE = ['phone-light', 'phone-dark'];
+/** All four: for a test that branches on `isPhone()` but presses the key before or outside the branch. */
+const EVERYWHERE = [...DESKTOP, ...PHONE];
 
 /** Per id of the catalog and per widget key (`<group>:<label>`), one test or several (e.g. one per width). */
 export const SHORTCUT_TESTS: Record<string, Proof | Proof[]> = {
   // general and navigation
   'shell.help': { file: 'shell.spec.ts', test: 'starts with "Skip to content" and lists the shortcuts with ?' },
   'shell.palette': { file: 'palette.spec.ts', test: 'closes with Escape and mod+k, and gives the focus back' },
-  'shell.search': { file: 'shell.spec.ts', test: 'opens the palette with / and from the search button, also on the phone' },
+  'shell.search': { file: 'shell.spec.ts', test: 'opens the palette with / and from the search button, also on the phone', projects: EVERYWHERE },
   'shell.undo': { file: 'items.spec.ts', test: 'deletes an item with mod+backspace and undoes it with mod+z' },
   'shell.go.inbox': { file: 'shell.spec.ts', test: 'reaches the other main places with their g sequences' },
   'shell.go.my_items': { file: 'shell.spec.ts', test: 'reaches the other main places with their g sequences' },
@@ -51,12 +53,12 @@ export const SHORTCUT_TESTS: Record<string, Proof | Proof[]> = {
   'item.remove': { file: 'items.spec.ts', test: 'deletes an item with mod+backspace and undoes it with mod+z' },
 
   // the list: cursor, selection, preview, filter bar, layouts
-  'list.next': { file: 'items-list.spec.ts', test: 'moves through the list with j and k, opens the preview with space and the page with Enter' },
-  'list.prev': { file: 'items-list.spec.ts', test: 'moves through the list with j and k, opens the preview with space and the page with Enter' },
+  'list.next': { file: 'items-list.spec.ts', test: 'moves through the list with j and k, opens the preview with space and the page with Enter', projects: EVERYWHERE },
+  'list.prev': { file: 'items-list.spec.ts', test: 'moves through the list with j and k, opens the preview with space and the page with Enter', projects: EVERYWHERE },
   'list.select': { file: 'bulk.spec.ts', test: 'selects three items with x and sets their priority with p' },
   'list.select_range': { file: 'bulk.spec.ts', test: 'selects a range with shift+x, archives with mod+backspace and undoes with mod+z' },
-  'list.open': { file: 'items-list.spec.ts', test: 'moves through the list with j and k, opens the preview with space and the page with Enter' },
-  'list.peek': { file: 'items-list.spec.ts', test: 'moves through the list with j and k, opens the preview with space and the page with Enter' },
+  'list.open': { file: 'items-list.spec.ts', test: 'moves through the list with j and k, opens the preview with space and the page with Enter', projects: EVERYWHERE },
+  'list.peek': { file: 'items-list.spec.ts', test: 'moves through the list with j and k, opens the preview with space and the page with Enter', projects: EVERYWHERE },
   'list.filter': { file: 'filter.spec.ts', test: 'filters by priority with f' },
   'list.search': { file: 'filter.spec.ts', test: 'filters by title with /' },
   'list.layout.list': { file: 'items-list.spec.ts', test: 'switches to the board with 2 and back with 1, also in the address' },
@@ -80,10 +82,10 @@ export const SHORTCUT_TESTS: Record<string, Proof | Proof[]> = {
   'inbox.delete': { file: 'inbox.spec.ts', test: 'works the inbox with the keyboard only' },
 
   // wiki, templates, preview
-  'wiki.delete': { file: 'wiki.spec.ts', test: 'moves a page with Verschieben nach … and deletes a subtree with undo' },
+  'wiki.delete': { file: 'wiki.spec.ts', test: 'moves a page with Verschieben nach … and deletes a subtree with undo', projects: EVERYWHERE },
   'template.save': { file: 'templates.spec.ts', test: 'creates a template with the keyboard and runs it now' },
   // the preview opened with space closes with Escape (on the phone the first Escape leaves the panel's focus)
-  'peek.close': { file: 'items-list.spec.ts', test: 'moves through the list with j and k, opens the preview with space and the page with Enter' },
+  'peek.close': { file: 'items-list.spec.ts', test: 'moves through the list with j and k, opens the preview with space and the page with Enter', projects: EVERYWHERE },
 
   // widgets: the palette
   'palette:move': { file: 'search.spec.ts', test: 'finds a project and a view by name' },
@@ -102,11 +104,11 @@ export const SHORTCUT_TESTS: Record<string, Proof | Proof[]> = {
   'groups:toggle': { file: 'items-list.spec.ts', test: 'collapses a group from the keyboard' },
 
   // widgets: the page tree of the wiki (on the overview it shows on every width)
-  'tree:move': { file: 'wiki.spec.ts', test: 'opens the wiki from the sidebar and walks the tree with the keyboard' },
-  'tree:expand': { file: 'wiki.spec.ts', test: 'opens the wiki from the sidebar and walks the tree with the keyboard' },
-  'tree:collapse': { file: 'wiki.spec.ts', test: 'opens the wiki from the sidebar and walks the tree with the keyboard' },
-  'tree:edge': { file: 'wiki.spec.ts', test: 'opens the wiki from the sidebar and walks the tree with the keyboard' },
-  'tree:open': { file: 'wiki.spec.ts', test: 'opens the wiki from the sidebar and walks the tree with the keyboard' },
+  'tree:move': { file: 'wiki.spec.ts', test: 'opens the wiki from the sidebar and walks the tree with the keyboard', projects: EVERYWHERE },
+  'tree:expand': { file: 'wiki.spec.ts', test: 'opens the wiki from the sidebar and walks the tree with the keyboard', projects: EVERYWHERE },
+  'tree:collapse': { file: 'wiki.spec.ts', test: 'opens the wiki from the sidebar and walks the tree with the keyboard', projects: EVERYWHERE },
+  'tree:edge': { file: 'wiki.spec.ts', test: 'opens the wiki from the sidebar and walks the tree with the keyboard', projects: EVERYWHERE },
+  'tree:open': { file: 'wiki.spec.ts', test: 'opens the wiki from the sidebar and walks the tree with the keyboard', projects: EVERYWHERE },
   // beside a page the tree shows from lg on; the test deletes from a row there only
   'tree:delete': { file: 'wiki.spec.ts', test: 'moves a page with Verschieben nach … and deletes a subtree with undo', projects: DESKTOP },
 
