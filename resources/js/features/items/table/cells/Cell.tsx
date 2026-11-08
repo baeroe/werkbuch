@@ -12,12 +12,13 @@ import { StatePicker } from '@/components/fields/StatePicker';
 import type { ListedItem } from '@/types';
 import type { Column } from '../columns';
 import { CoreDateCell, LabelsCell, ProjectCell, type EditProps } from './CoreCells';
-import { PropertyCell } from './PropertyCells';
+import { PropertyCell, type CellRefusal } from './PropertyCells';
 import { StampCell } from './StampCell';
 
-type CellProps = EditProps & { item: ListedItem; column: Column };
+/** `refusal`: the words the table keeps for the cell of a property (`useRefusals`). */
+type CellProps = EditProps & { item: ListedItem; column: Column; refusal?: CellRefusal };
 
-export function Cell({ item, column, editing, onEditingChange }: CellProps) {
+export function Cell({ item, column, editing, onEditingChange, refusal }: CellProps) {
   const picker = { item, look: 'bare', tabIndex: -1, open: editing, onOpenChange: onEditingChange } as const;
   switch (column.field) {
     case 'state':
@@ -37,6 +38,6 @@ export function Cell({ item, column, editing, onEditingChange }: CellProps) {
     case 'updated_at':
       return <StampCell value={item[column.field]} />;
     default:
-      return <PropertyCell item={item} property={column.property!} editing={editing} onEditingChange={onEditingChange} />;
+      return <PropertyCell item={item} property={column.property!} refusal={refusal!} editing={editing} onEditingChange={onEditingChange} />;
   }
 }

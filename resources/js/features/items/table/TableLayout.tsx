@@ -41,6 +41,7 @@ import { GroupHeader } from '../list/GroupHeader';
 import { listRows, rowKey, type ListRow } from '../list/rows';
 import { useSelection } from '../selection/useSelection';
 import { Cell } from './cells/Cell';
+import { useRefusals } from './cells/PropertyCells';
 import { tableColumns, typeHasProperty, type Column } from './columns';
 import { useGridKeys } from './useGridKeys';
 
@@ -94,6 +95,8 @@ export function TableLayout({ groups, groupBy, display, selection, onSelect, onS
   const [column, setColumn] = useState(0);
   /** The open editor: the row (`rowKey`, an item has a row in each of its label groups) and the field. */
   const [editing, setEditing] = useState<{ row: string; field: string } | null>(null);
+  /** The server's refusals at the property cells, by row: a row scrolled away and back keeps them (T20-M5). */
+  const refusals = useRefusals();
   const peekItemId = useUiStore((state) => state.peekItemId);
   const flashIds = useUiStore((state) => state.flashIds);
   const scroller = useRef<HTMLDivElement>(null);
@@ -471,6 +474,7 @@ export function TableLayout({ groups, groupBy, display, selection, onSelect, onS
                   item={item}
                   column={entry}
                   editing={cellEditing}
+                  {...(entry.property && { refusal: refusals(key, entry.property) })}
                   onEditingChange={(open) => {
                     if (open) startEditing(item, entry, key);
                     else if (cellEditing) setEditing(null);

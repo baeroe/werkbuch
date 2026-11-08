@@ -792,6 +792,31 @@ describe('TableLayout', () => {
     expect(screen.getByPlaceholderText('Priorität suchen …')).toBeTruthy();
   });
 
+  it('keeps the refusal of a property cell when its row scrolls away and back (T20-M5)', async () => {
+    const user = userEvent.setup();
+    patchAnswer = () => ({ status: 422, body: { status: 422, reason: 'validation_failed', errors: { 'values.effort': ['Höchstens 100 Stunden.'] } } });
+    renderTable({ groups: [group('all', [web1, ...items('a', 1999)])] });
+    await focusCell('wi_1', 3, 'Aufwand (h)');
+    press('Enter');
+    const field = await screen.findByRole('textbox', { name: 'Aufwand (h)' });
+    await waitFor(() => expect(document.activeElement).toBe(field));
+    await user.clear(field);
+    await user.keyboard('120{Enter}');
+    await waitFor(() => expect(within(cell('wi_1', 3)!).getByText('Höchstens 100 Stunden.')).toBeTruthy());
+
+    // the cursor goes far away, the row is no longer rendered
+    scrollBox(1000 * ROW);
+    await waitFor(() => expect(cell('wi_a1000', 0)).toBeTruthy());
+    act(() => cell('wi_a1000', 0)!.focus());
+    await waitFor(() => expect(cell('wi_1', 3)).toBeNull());
+    // back in view, the cell still says it
+    scrollBox(0);
+    await waitFor(() => expect(cell('wi_1', 3)).toBeTruthy());
+    expect(within(cell('wi_1', 3)!).getByText('Höchstens 100 Stunden.')).toBeTruthy();
+    expect(cell('wi_1', 3)!.querySelector('[aria-invalid="true"]')).toBeTruthy();
+    expect(patches()).toEqual([{ values: { effort: 120 } }]);
+  });
+
   it('measures where its box starts when the window changes its size', () => {
     const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 200, 1024, 0));
     renderTable({ groups: [group('all', [web1])] });

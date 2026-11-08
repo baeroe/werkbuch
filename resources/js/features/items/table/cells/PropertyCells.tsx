@@ -6,11 +6,12 @@
  *   people write them, http(s) only, a required value stays). Rich text only as plain paragraphs (spec "Änderungen vom
  *   2026-10-29", R17): a richer one shows read-only there, to be edited on the item.
  * A property the item's type does not have shows a dash. Every save is optimistic (`useUpdateWorkItem`); a refusal of
- * the server marks the cell with its words (the toast names it too), and the editor shows them at its field.
+ * the server marks the cell with its words (the toast names it too), and the editor shows them at its field. The table
+ * keeps those words per row (`useRefusals`), so a row that scrolls away and back still has them (T20-M5).
  */
 
 import { Check, CircleAlert } from 'lucide-react';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ApiError } from '@/api/client';
 import { personOption } from '@/components/fields/AssigneePicker';
 import { DatePopover, DayValue } from '@/components/fields/DateField';
@@ -43,27 +44,59 @@ interface Saving {
   refusal: string | null;
 }
 
-function useSave(item: ListedItem, property: Property): Saving {
+/** The words of the server's refusal at a cell, kept by the table, and the way to follow a save of the cell. */
+export interface CellRefusal {
+  refusal: string | null;
+  /** A save goes out: earlier words go, the words of this one stay once the server refuses it. */
+  track: (call: Promise<unknown>) => void;
+}
+
+/**
+ * The refusals of the property cells of a table, by `<rowKey>:<property key>`: they live with the table, not with a
+ * cell, so a row that scrolls away (the virtualizer unmounts it) still shows them when it comes back (T20-M5).
+ */
+export function useRefusals(): (row: string, property: Property) => CellRefusal {
+  const [words, setWords] = useState<ReadonlyMap<string, string>>(() => new Map());
   const settle = useSettle();
+  const put = useCallback((key: string, message: string | null) => {
+    setWords((current) => {
+      if ((current.get(key) ?? null) === message) return current;
+      const next = new Map(current);
+      if (message === null) next.delete(key);
+      else next.set(key, message);
+      return next;
+    });
+  }, []);
+  return (row, property) => {
+    const key = `${row}:${property.key}`;
+    return {
+      refusal: words.get(key) ?? null,
+      track: (call) => {
+        put(key, null);
+        settle(call, {
+          onError: (failure) => {
+            const message = failure instanceof ApiError ? failure.errors?.[`values.${property.key}`]?.[0] : undefined;
+            if (message) put(key, message);
+          },
+        });
+      },
+    };
+  };
+}
+
+function useSave(item: ListedItem, property: Property, { refusal, track }: CellRefusal): Saving {
   const update = useUpdateWorkItem();
-  const [refusal, setRefusal] = useState<string | null>(null);
   return {
     pending: update.isPending,
     refusal,
     save: (next) => {
       if (sameValue(next, item.values[property.key])) return;
-      setRefusal(null);
-      settle(update.mutateAsync({ id: item.id, patch: { values: { [property.key]: next } } }), {
-        onError: (failure) => {
-          const message = failure instanceof ApiError ? failure.errors?.[`values.${property.key}`]?.[0] : undefined;
-          if (message) setRefusal(message);
-        },
-      });
+      track(update.mutateAsync({ id: item.id, patch: { values: { [property.key]: next } } }));
     },
   };
 }
 
-type PropertyCellProps = EditProps & { item: ListedItem; property: Property };
+type PropertyCellProps = EditProps & { item: ListedItem; property: Property; refusal: CellRefusal };
 type CellOf = PropertyCellProps & { saving: Saving; reason: string | null };
 
 /** Names in a cell: the first one, then "+N". */
@@ -285,7 +318,7 @@ function TypedCell({ item, property, editing, onEditingChange, saving, reason, r
 export function PropertyCell(props: PropertyCellProps) {
   const { item, property } = props;
   const types = useWorkItemTypes().data?.items;
-  const saving = useSave(item, property);
+  const saving = useSave(item, property, props.refusal);
   const reason = useEditReason(item);
   const assignment = typePropertyOf(types, item, property);
   if (!assignment) return <NotApplicable />;
