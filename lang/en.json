@@ -910,6 +910,8 @@
     "items.detail.link.failed_description": "The browser does not allow copying right now. The link: :url",
     "items.detail.more": "More actions",
     "items.detail.open_page": "Open as page",
+    "items.detail.pages.failed": "Wiki pages not loaded.",
+    "items.detail.pages.title": "Wiki pages",
     "items.detail.path": "Path",
     "items.detail.relations.add": "Relation",
     "items.detail.relations.add_failed": "Relation not added",

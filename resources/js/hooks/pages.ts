@@ -20,6 +20,7 @@ import {
   deletePage,
   getPage,
   getPageVersion,
+  listItemPages,
   listPages,
   listPageVersions,
   movePage,
@@ -28,7 +29,7 @@ import {
   type SavePageInput,
 } from '@/api/pages';
 import { drafts, pageDraft } from '@/lib/drafts';
-import { markLiveGone, usePageGone } from '@/lib/liveGone';
+import { markLiveGone, useLiveGone, usePageGone } from '@/lib/liveGone';
 import type { PageNode, Page as WikiPage } from '@/types';
 import { qk } from './keys';
 import { useApiMutation } from './mutation';
@@ -38,6 +39,12 @@ export { allPages } from '@/api/client';
 /** The page tree of a project (ULID or identifier; no text). */
 export function usePages(projectId: string | null | undefined) {
   return useQuery({ queryKey: qk.pages.list({ project: projectId }), queryFn: () => listPages(projectId!), enabled: !!projectId });
+}
+
+/** The wiki pages that reference an item; nothing is asked for an item known to be deleted (its list would be a 404). */
+export function useItemPages(itemId: string, projectId: string) {
+  const gone = useLiveGone(itemId, projectId);
+  return useQuery({ queryKey: qk.pages.item(itemId), queryFn: () => listItemPages(itemId), enabled: !gone });
 }
 
 /** A page with its text; nothing is asked for a page known to be deleted. */

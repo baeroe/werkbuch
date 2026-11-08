@@ -1018,3 +1018,35 @@ describe('useLiveItem', () => {
     expect(bus.released).toEqual(['wi_web_47', 'wi_web_30']);
   });
 });
+
+describe('the wiki pages of an item', () => {
+  const key = qk.pages.item('wi_web_47');
+
+  it('loads again after page.updated, page.moved and page.deleted, also when the answer names the deleted page', async () => {
+    const pages = await shown(key);
+    queryClient.setQueryData(key, { items: [{ id: 'pg_web_tech', project_id: 'p_web' }], next_cursor: null, total: 1 });
+    renderHook(() => useLiveSync(), { wrapper });
+
+    send({ event_id: 'ev_1', type: 'page.updated', page_id: 'pg_web_tech', item_id: null });
+    await pass(LIVE_BURST_MS);
+    expect(pages.fetches()).toBe(2);
+
+    send({ event_id: 'ev_2', type: 'page.deleted', page_id: 'pg_web_tech', page_ids: ['pg_web_tech'], item_id: null });
+    await pass(LIVE_BURST_MS);
+
+    // the server leaves a deleted page out without a 404: the list reads it again instead of keeping the page
+    expect(pages.fetches()).toBe(3);
+  });
+
+  it('asks nothing for an item that was deleted', async () => {
+    const pages = await shown(key);
+    renderHook(() => useLiveSync(), { wrapper });
+
+    send({ event_id: 'ev_1', type: 'work_item.deleted', item_id: 'wi_web_47' });
+    await pass(LIVE_BURST_MS);
+    send({ event_id: 'ev_2', type: 'page.updated', page_id: 'pg_web_tech', item_id: null });
+    await pass(LIVE_BURST_MS);
+
+    expect(pages.fetches()).toBe(1);
+  });
+});

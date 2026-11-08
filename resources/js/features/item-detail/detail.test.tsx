@@ -360,12 +360,16 @@ describe('ItemPage', () => {
   it('says the item was deleted when live said so, without asking for it again (F36)', async () => {
     renderWith(<ItemPage itemKey="WEB-50" />);
     expect(await screen.findByRole('heading', { level: 1 })).toBeTruthy();
-    const calls = api!.calls.length;
+    // the wiki pages of the item are read once too: that is the last of the first reads
+    await waitFor(() => expect(api!.calls.some((call) => call.url.startsWith('/api/v1/work-items/wi_web_50/pages'))).toBe(true));
 
     act(() => markLiveGone(web50.id));
     expect(await screen.findByText('Dieses Item wurde gelöscht. Du siehst, wie es zuletzt war.')).toBeTruthy();
     // and for its project too
     act(() => clearLiveGone());
+    // the pages of the item read again once it counts as there (stale), then nothing more is asked
+    await act(async () => {});
+    const calls = api!.calls.length;
     expect(screen.queryByText(/Dieses Item wurde gelöscht/)).toBeNull();
     act(() => markLiveGone(web50.project_id));
     expect(await screen.findByText(/Dieses Item wurde gelöscht/)).toBeTruthy();

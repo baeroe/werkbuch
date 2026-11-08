@@ -18,6 +18,8 @@ Ein Wort eines Kommentars findet das Item, zu dem der Kommentar gehört; die Suc
 
 Eine Wiki-Seite wird über ihren Titel und ihren Text gefunden, bis zu 64 KB Text je Seite; ein Treffer im Titel zählt mehr als einer im Text, und bei gleichen Treffern steht die zuletzt geänderte Seite vorn. Speichern, Verschieben und Löschen einer Seite ändern die Suche einen Moment später.
 
+Ein Verweis auf ein Item in einer Seite zählt für die Suche nicht: Die Seite wird über den Key des Items, auf das sie verweist, nicht gefunden, denn ein Key als Verweis steht ohne seine Buchstaben im Text. Welche Seiten ein Item nennen, zeigt das Item selbst: Sein Abschnitt **Wiki-Seiten** listet sie (siehe [Wiki](/de/concepts/wiki#verweise-und-suche)).
+
 Personen und Bots werden nur gefunden, solange ihr Konto aktiv ist. Views sucht werkbuch über jedes Wort ihres Namens, ohne Rücksicht auf Groß- und Kleinschreibung und Akzente, direkt in der Datenbank: Eine neue View wird sofort gefunden.
 
 ## Wer was findet

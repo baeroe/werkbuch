@@ -53,6 +53,10 @@ An item at the other end that you may not see appears as **hidden item**, withou
 
 Only "blocks" has a consequence: as long as an open item blocks another open one, the blocked item shows a hint. werkbuch does not stop anyone from starting it. The hint also counts a blocker you may not see, without naming it. All other relation types are labels only.
 
+## Wiki pages
+
+If wiki pages refer to an item with a `#` reference, the item shows them in the section **Wiki pages**, between the relations and the files: each page as a link into its wiki. The section appears only when there is at least one such page you may see. It reads the current text of the pages, so it follows edits, moves and deletions in the wiki. See [wiki](/en/concepts/wiki#references-and-search).
+
 ## Comments
 
 Anyone who can read an item can comment on it, viewers included; bots too, over the API. A comment is [rich text](/en/concepts/rich-text) at the comment level: text, lists, quotes, code, links, mentions, references, images and files. In the interface, `m` opens the comment field at the end of the activity, and `mod+enter` sends. A comment that fails to send stays in the field, and text you have not sent stays for this visit even if you close the item.

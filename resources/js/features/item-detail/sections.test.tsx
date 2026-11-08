@@ -17,7 +17,7 @@ import { resetForUser } from '@/hooks/queryClient';
 import { descriptionDraft, drafts } from '@/lib/drafts';
 import { useUiStore } from '@/store/ui';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
-import { ida, labels, lene, list, makeWorkItem, mara, organization, project, properties, relationTypes, resolutions, searchResults, standard, types, web30, web47, web48 } from '@/test/fixtures';
+import { ida, labels, lene, list, makeWorkItem, makePage, mara, organization, pageSummary, project, properties, relationTypes, resolutions, searchResults, standard, types, web30, web47, web48 } from '@/test/fixtures';
 import type { Project, ProjectMember, RelationEntry, RichText, User, WorkItem } from '@/types';
 import { DESCRIPTION_PAUSE_MS } from './Description';
 import { ItemPage } from './ItemPage';
@@ -1420,5 +1420,81 @@ describe('Relations', () => {
       expect(lastToast()).toMatchObject({ title: 'Nicht möglich', description: 'Im Projekt WEB darfst du nur lesen. Items ändern dürfen Member und Admins.', tone: 'error' });
     });
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+});
+
+/* --------------------------------------------------------------------- wiki pages */
+
+describe('WikiPages', () => {
+  const zeitplan = pageSummary(makePage({ id: 'pg_zeitplan', title: 'Zeitplan', emoji: '🗓' }));
+  const handbuch = pageSummary(makePage({ id: 'pg_handbuch', title: 'Handbuch', emoji: null }));
+  const pagesOf = (data: ReturnType<typeof pageSummary>[]): Record<string, MockRoute> => ({
+    'GET /api/v1/work-items/wi_web_47/pages': () => ({ body: list(data) }),
+  });
+
+  it('lists the wiki pages that reference the item between relations and files', async () => {
+    renderWith(<ItemPage itemKey="WEB-47" />, { routes: pagesOf([zeitplan, handbuch]) });
+    const section = await screen.findByRole('region', { name: 'Wiki-Seiten' });
+
+    expect(within(section).getAllByRole('listitem').map((row) => row.textContent)).toEqual(['🗓ZeitplanWiki WEB', 'HandbuchWiki WEB']);
+    expect(within(section).getByText('2')).toBeTruthy();
+    const names = screen.getAllByRole('region').map((region) => region.getAttribute('aria-label') ?? region.querySelector('h2, h3')?.textContent);
+    const at = (name: string) => names.findIndex((entry) => entry === name);
+    expect(at('Wiki-Seiten')).toBeGreaterThan(-1);
+    // the sections come in the order of the body: children and relations before, the activity after
+    const order = [...document.querySelectorAll('[data-item-detail] section')].map((node) => node.querySelector('h2')?.textContent);
+    expect(order.indexOf('Wiki-Seiten')).toBeGreaterThan(order.indexOf('Relationen'));
+  });
+
+  it('shows no section without pages', async () => {
+    renderWith(<ItemPage itemKey="WEB-47" />, { routes: pagesOf([]) });
+    await screen.findByRole('region', { name: 'Relationen' });
+    await waitFor(() => expect(api!.calls.some((call) => call.url.startsWith('/api/v1/work-items/wi_web_47/pages'))).toBe(true));
+
+    expect(screen.queryByRole('region', { name: 'Wiki-Seiten' })).toBeNull();
+  });
+
+  it('links each page to its wiki with the identifier', async () => {
+    renderWith(<ItemPage itemKey="WEB-47" />, { routes: pagesOf([zeitplan]) });
+    const link = await screen.findByRole('link', { name: 'Zeitplan, Wiki WEB' });
+
+    expect(link.getAttribute('href')).toBe('/projects/WEB/wiki/pg_zeitplan');
+  });
+
+  it('says it when the pages cannot be read, and tries again', async () => {
+    let fail = true;
+    renderWith(<ItemPage itemKey="WEB-47" />, {
+      routes: { 'GET /api/v1/work-items/wi_web_47/pages': () => (fail ? problem(500, 'server_error') : { body: list([zeitplan]) }) },
+    });
+    const section = await screen.findByRole('region', { name: 'Wiki-Seiten' });
+    expect(within(section).getByText('Wiki-Seiten nicht geladen.')).toBeTruthy();
+
+    fail = false;
+    await userEvent.click(within(section).getByRole('button', { name: 'Erneut versuchen' }));
+
+    expect(await within(section).findByRole('link', { name: 'Zeitplan, Wiki WEB' })).toBeTruthy();
+    expect(within(section).queryByText('Wiki-Seiten nicht geladen.')).toBeNull();
+  });
+
+  it('keeps the list when a reload fails', async () => {
+    let fail = false;
+    const client = newClient();
+    renderWith(<ItemPage itemKey="WEB-47" />, {
+      client,
+      routes: { 'GET /api/v1/work-items/wi_web_47/pages': () => (fail ? problem(500, 'server_error') : { body: list([zeitplan]) }) },
+    });
+    await screen.findByRole('link', { name: 'Zeitplan, Wiki WEB' });
+
+    fail = true;
+    await act(() => client.invalidateQueries({ queryKey: qk.pages.all }));
+
+    expect(screen.getByRole('link', { name: 'Zeitplan, Wiki WEB' })).toBeTruthy();
+    expect(screen.queryByText('Wiki-Seiten nicht geladen.')).toBeNull();
+  });
+
+  it('is part of the preview too', async () => {
+    renderWith(<ItemPeek itemId="WEB-47" panel={{ current: null }} />, { routes: pagesOf([zeitplan]) });
+
+    expect(await screen.findByRole('link', { name: 'Zeitplan, Wiki WEB' })).toBeTruthy();
   });
 });

@@ -53,6 +53,7 @@ Eine Version behält Titel, Text, wer sie geschrieben hat und wann; das Emoji ge
 - `#` in jedem Text eines Projekts bietet Wiki-Seiten unter den Items an. Ein Verweis speichert nur die ULID der Seite; wer ihn liest, sieht das aktuelle Emoji und den aktuellen Titel und kommt über ihn zur Seite. Eine Seite, die der Leser nicht sehen darf, steht als **verborgen** da, ohne Titel. In Markdown ist ein Verweis `[Titel](page:<ulid>)`, in Mails ein Link auf die Seite.
 - **Erwähnungen** in einer Seite funktionieren wie in anderen Texten, benachrichtigen aber niemanden: Seiten haben keine Beobachter, und Inbox und Mails gehören zu Work Items.
 - **Suche:** Die Befehlspalette findet Seiten über Titel und Text unter **Seiten**, unter den Items (siehe [Suche](/de/search)).
+- **Im Item:** Das Item zeigt die Seiten, die auf es verweisen, in einem eigenen Abschnitt **Wiki-Seiten** zwischen Relationen und Dateien, jede als Link auf die Seite mit dem zugehörigen Wiki. Den Abschnitt gibt es nur, wenn mindestens eine Seite auf das Item verweist und du sie sehen darfst; er folgt Änderungen im Wiki. Es zählt nur der aktuelle Text einer Seite, nicht ihre Versionen, und ein Key als einfacher Text ist kein Verweis.
 - **Links:** `/projects/WEB/wiki/<ulid>` öffnet eine Seite. Eine Seite eines anderen Projekts führt ins Wiki dieses Projekts, eine frühere Kennung zur aktuellen; eine Seite, die es nicht gibt (oder die du nicht sehen darfst), zeigt „Diese Seite gibt es nicht“, mit dem Baum.
 
 ## Rechte

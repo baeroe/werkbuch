@@ -53,6 +53,10 @@ Ein Item am anderen Ende, das du nicht sehen darfst, erscheint als **verborgenes
 
 Nur „blockiert“ hat eine Folge: Solange ein offenes Item ein anderes offenes blockiert, zeigt das blockierte einen Hinweis. werkbuch hindert niemanden daran, es zu beginnen. Der Hinweis zählt auch einen Blocker, den du nicht sehen darfst, ohne ihn zu nennen. Alle anderen Relationstypen sind reine Beschriftung.
 
+## Wiki-Seiten
+
+Verweisen Wiki-Seiten per `#` auf ein Item, zeigt das Item sie im Abschnitt **Wiki-Seiten** zwischen Relationen und Dateien: jede Seite als Link in ihr Wiki. Den Abschnitt gibt es nur, wenn mindestens eine solche Seite existiert, die du sehen darfst. Er liest den aktuellen Text der Seiten und folgt darum Änderungen, Verschiebungen und Löschungen im Wiki. Siehe [Wiki](/de/concepts/wiki#verweise-und-suche).
+
 ## Kommentare
 
 Wer ein Item lesen kann, kann es kommentieren, auch als Viewer; Bots ebenso, über die API. Ein Kommentar ist [Rich Text](/de/concepts/rich-text) der Stufe Kommentar: Text, Listen, Zitate, Code, Links, Erwähnungen, Verweise, Bilder und Dateien. In der Oberfläche öffnet `m` das Kommentarfeld am Ende der Aktivität, und `mod+enter` sendet. Ein Kommentar, der beim Senden scheitert, bleibt im Feld, und nicht gesendeter Text bleibt für diesen Besuch erhalten, auch wenn du das Item schließt.

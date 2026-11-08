@@ -53,6 +53,7 @@ A version keeps the title, the text, who wrote it and when; the emoji is not par
 - `#` in any text of a project offers wiki pages below the items. A reference stores only the ULID of the page; whoever reads it sees the current emoji and title and follows it to the page. A page the reader cannot see shows as **hidden**, without a title. In Markdown a reference is `[Title](page:<ulid>)`, in mails a link to the page.
 - **Mentions** in a page work as in other texts, but notify nobody: pages have no watchers, and the inbox and its mails belong to work items.
 - **Search:** the command palette finds pages by title and text under **Pages**, below the items (see [search](/en/search)).
+- **In the item:** the item shows the pages that refer to it in its own section **Wiki pages**, between the relations and the files, each as a link to the page with the wiki it belongs to. The section is there only if at least one page refers to the item and you can see it; it follows changes in the wiki. Only the current text of a page counts, not its versions, and a key written as plain text is no reference.
 - **Links:** `/projects/WEB/wiki/<ulid>` opens a page. A page of another project leads to the wiki of that project, a former identifier to the current one; a page that does not exist (or that you cannot see) shows "This page does not exist", with the tree.
 
 ## Permissions
