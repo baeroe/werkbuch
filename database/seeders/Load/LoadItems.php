@@ -8,11 +8,15 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
- * 2 500 items per project, 50 000 in all, with their values, labels and 5 000 relations. Written by bulk inserts in
- * blocks of 1 000, without events (like the demo ItemsSeeder, A86). Per project: every 20th item is an epic (5 %), the
- * first with 40 children, the others with up to 24; every 10th is closed and archived (10 %); the others spread over
- * every category of the workflow; 70 % have an assignee, 0–3 labels, values for `effort` (80 %) and the date, text and
- * dropdown of LoadCatalog (60 % each); 60 % a description from the pool, pointing at the item before it.
+ * 2 500 items per project, 50 000 in all, with their values, labels, 5 000 relations and their history (LoadHistory).
+ * Written by bulk inserts in blocks of 1 000, without events of the app (like the demo ItemsSeeder, A86). Per project:
+ * every 20th item is an epic (5 %), the first with the 40 items after it as children (numbers 2–43 without the epics 21
+ * and 41), every other item with a chance of one half the child of the epic of its block of 20 (parents), so the first
+ * 100 items name only parents among them; every 10th is closed and archived (10 %); the others spread over every
+ * category of the workflow; 70 % have an assignee, 0–3 labels, values for `effort` (80 %) and the date, text and
+ * dropdown of LoadCatalog (60 % each); 60 % a description from the pool, pointing at the item before it (the first
+ * epic and the item BUSY always). The first epic of every project has the same 12 relations (EPIC_RELATIONS): nine to
+ * items 2–10 of its project, three to items of other projects (some of them private), in both directions.
  *
  * @phpstan-import-type Frame from LoadCatalog
  *
@@ -29,6 +33,19 @@ final class LoadItems
 
     public const BLOCK = 1_000;
 
+    /** The children of the first epic of every project (numbers 2–43 without the epics 21 and 41). */
+    public const EPIC_CHILDREN = 40;
+
+    /**
+     * The relations of the first epic of every project: [relation type, project offset (0 = its own), number of the
+     * other end, whether the epic is the source].
+     */
+    public const EPIC_RELATIONS = [
+        ['relates', 0, self::BUSY, true], ['blocks', 0, 3, true], ['relates', 0, 4, true], ['blocks', 0, 5, false], ['duplicates', 0, 6, true],
+        ['tests', 0, 7, false], ['relates', 0, 8, true], ['blocks', 0, 9, true], ['relates', 0, 10, true],
+        ['relates', 1, 3, true], ['blocks', 3, 4, true], ['tests', 4, 5, false],
+    ];
+
     /** The moment the load data are about: everything happened before it. */
     public const NOW = '2026-11-01 08:00:00';
 
@@ -38,10 +55,18 @@ final class LoadItems
     /** @var array<string, list<array<string, mixed>>> rows waiting for their insert, by table */
     private array $pending = [];
 
+    private readonly LoadHistory $history;
+
+    /** @var array<string, true> the relations so far (`type|source|target`) */
+    private array $seen = [];
+
     /**
      * @param  Frame  $frame
      */
-    public function __construct(private readonly array $frame, private readonly LoadTexts $texts) {}
+    public function __construct(private readonly array $frame, private readonly LoadTexts $texts)
+    {
+        $this->history = new LoadHistory;
+    }
 
     /**
      * @return list<Items> per project, in the order of the frame
@@ -55,12 +80,13 @@ final class LoadItems
 
         $this->relations($all);
         $this->flushAll();
+        $this->history->flush();
 
         return $all;
     }
 
     /**
-     * @param  array{id: string, identifier: string, people: list<string>, bot: string, wishes: bool, states: list<array{id: string, category: string}>}  $project
+     * @param  array{id: string, identifier: string, people: list<string>, bot: string, wishes: bool, states: list<array{id: string, name: string, category: string}>}  $project
      * @return Items
      */
     private function project(array $project): array
@@ -95,7 +121,8 @@ final class LoadItems
             $closed = in_array($category, ['completed', 'canceled'], true) ? $updatedAt : null;
             $created[] = $createdAt;
 
-            $description = LoadRandom::chance(6) ? $this->texts->descriptions[LoadRandom::int(0, LoadTexts::POOL - 1)] : null;
+            // the first epic and the item with 40 comments always (their rows compare a big and a small world, ApiLoadTest)
+            $description = in_array($n, [1, self::BUSY], true) || LoadRandom::chance(6) ? $this->texts->descriptions[LoadRandom::int(0, LoadTexts::POOL - 1)] : null;
             $start = LoadRandom::int(1, 10) <= ($epic ? 9 : 3) ? $now + LoadRandom::int(-120, 60) * 86_400 : null;
             $due = LoadRandom::int(1, 10) <= ($epic ? 9 : 5) ? ($start ?? $now) + LoadRandom::int(0, 90) * 86_400 : null;
 
@@ -136,14 +163,17 @@ final class LoadItems
         foreach ([...$epics, ...$others] as $row) {
             $this->add('work_items', $row);
             $this->extras((string) $row['id'], (string) $row['created_at']);
+            $this->history->item($row, $project, in_array($row['number'], [1, self::BUSY], true));
         }
 
         return ['ids' => $ids, 'created' => $created, 'people' => $project['people']];
     }
 
     /**
-     * The parent of every item: the first epic takes 40 children, every other epic up to 24, drawn from the items that
-     * are no epic.
+     * The parent of every item: the first epic takes the 40 items after it that are no epic (numbers 2–43); every other
+     * item belongs with a chance of one half to the epic of its block of 20 (the epic 41 takes 44–60, the epic 61 takes
+     * 62–80). An epic is never the child of a later one: the first 100 items of a project name only parents among them
+     * (the small world of ApiLoadTest keeps them).
      *
      * @param  list<string>  $ids
      * @return list<string|null>
@@ -151,24 +181,17 @@ final class LoadItems
     private function parents(array $ids): array
     {
         $parents = array_fill(0, count($ids), null);
-        $candidates = [];
+        $children = 0;
         foreach ($ids as $index => $id) {
-            if (($index + 1) % 20 !== 1) {
-                $candidates[] = $index;
-            }
-        }
-        $candidates = LoadRandom::shuffle($candidates);
-
-        $first = true;
-        foreach ($ids as $index => $id) {
-            if (($index + 1) % 20 !== 1) {
+            if (($index + 1) % 20 === 1) {
                 continue;
             }
 
-            $quota = $first ? 40 : LoadRandom::int(0, 24);
-            $first = false;
-            for ($i = 0; $i < $quota && $candidates !== []; $i++) {
-                $parents[(int) array_pop($candidates)] = $id;
+            if ($children < self::EPIC_CHILDREN) {
+                $parents[$index] = $ids[0];
+                $children++;
+            } elseif (LoadRandom::chance(5)) {
+                $parents[$index] = $ids[intdiv($index, 20) * 20];
             }
         }
 
@@ -217,21 +240,30 @@ final class LoadItems
     }
 
     /**
-     * 5 000 relations: nine in ten inside a project, one in ten across two; relates, blocks, duplicates and „testet“.
+     * 5 000 relations: first the EPIC_RELATIONS of the first epic of every project, then nine in ten inside a project,
+     * one in ten across two; relates, blocks, duplicates and „testet“. Each with its two history events, a minute after
+     * the later of its ends.
      *
      * @param  list<Items>  $all
      */
     private function relations(array $all): void
     {
         $types = $this->frame['relationTypes'];
-        $seen = [];
-        $now = self::stamp((int) strtotime(self::NOW.' UTC'));
+        $count = count($all);
 
-        while (count($seen) < self::RELATIONS) {
-            $from = LoadRandom::int(0, count($all) - 1);
-            $to = LoadRandom::int(1, 10) === 1 ? LoadRandom::int(0, count($all) - 1) : $from;
-            $source = LoadRandom::pick($all[$from]['ids']);
-            $target = LoadRandom::pick($all[$to]['ids']);
+        foreach (array_keys($all) as $p) {
+            foreach (self::EPIC_RELATIONS as [$type, $offset, $number, $epicIsSource]) {
+                $epic = [$p, 0];
+                $other = [($p + $offset) % $count, $number - 1];
+                $this->relate($all, $types[$type], ...($epicIsSource ? [$epic, $other] : [$other, $epic]));
+            }
+        }
+
+        while (count($this->seen) < self::RELATIONS) {
+            $from = LoadRandom::int(0, $count - 1);
+            $to = LoadRandom::int(1, 10) === 1 ? LoadRandom::int(0, $count - 1) : $from;
+            $source = LoadRandom::int(0, self::PER_PROJECT - 1);
+            $target = LoadRandom::int(0, self::PER_PROJECT - 1);
             $roll = LoadRandom::int(1, 10);
             $type = match (true) {
                 $roll <= 5 => $types['relates'],
@@ -240,16 +272,38 @@ final class LoadItems
                 default => $types['tests'],
             };
 
-            // never on itself, never twice; a symmetric type also not the other way round
-            $key = "{$type}|{$source}|{$target}";
-            $back = "{$type}|{$target}|{$source}";
-            if ($source === $target || isset($seen[$key]) || ($type === $types['relates'] && isset($seen[$back]))) {
-                continue;
-            }
-
-            $seen[$key] = true;
-            $this->add('work_item_relations', ['id' => strtolower((string) Str::ulid()), 'type_id' => $type, 'source_id' => $source, 'target_id' => $target, 'created_at' => $now, 'updated_at' => $now]);
+            $this->relate($all, $type, [$from, $source], [$to, $target]);
         }
+    }
+
+    /**
+     * A relation from the item `$source` to the item `$target` (each [project, index]), with its history; never on
+     * itself, never twice, a symmetric type also not the other way round.
+     *
+     * @param  list<Items>  $all
+     * @param  array{0: int, 1: int}  $source
+     * @param  array{0: int, 1: int}  $target
+     */
+    private function relate(array $all, string $type, array $source, array $target): void
+    {
+        $from = $all[$source[0]]['ids'][$source[1]];
+        $to = $all[$target[0]]['ids'][$target[1]];
+        $key = "{$type}|{$from}|{$to}";
+        $back = "{$type}|{$to}|{$from}";
+        if ($from === $to || isset($this->seen[$key]) || ($type === $this->frame['relationTypes']['relates'] && isset($this->seen[$back]))) {
+            return;
+        }
+
+        $this->seen[$key] = true;
+        $at = max($all[$source[0]]['created'][$source[1]], $all[$target[0]]['created'][$target[1]]) + 60;
+        $this->add('work_item_relations', ['id' => strtolower((string) Str::ulid()), 'type_id' => $type, 'source_id' => $from, 'target_id' => $to, 'created_at' => self::stamp($at), 'updated_at' => self::stamp($at)]);
+        $this->history->relation(
+            $type,
+            ['id' => $from, 'project' => $this->frame['projects'][$source[0]]['id']],
+            ['id' => $to, 'project' => $this->frame['projects'][$target[0]]['id']],
+            LoadRandom::pick($all[$source[0]]['people']),
+            $at,
+        );
     }
 
     private static function category(): string

@@ -1,5 +1,7 @@
 <?php
 
+use Database\Seeders\Load\LoadHistory;
+use Database\Seeders\Load\LoadItems;
 use Database\Seeders\LoadSeeder;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\Artisan;
@@ -103,6 +105,22 @@ it('seeds 50 000 items in 20 projects', function () {
     };
     $deepest = DB::table('pages as p')->join('pages as q', 'q.id', '=', 'p.parent_id')->join('pages as r', 'r.id', '=', 'q.parent_id')
         ->whereNotNull('r.parent_id')->value('p.id');
+
+    // the first epic of every project: its children the 40 items after it (so they stay among the first 100), its 11
+    // relations and its three files; the history of every item, the busiest one over two pages of 100
+    $first = DB::table('work_items')->where('project_id', $projects['L07'])->where('number', 1)->value('id');
+    $busy = DB::table('work_items')->where('project_id', $projects['L07'])->where('number', LoadItems::BUSY)->value('id');
+    $relations = DB::table('work_item_relations')->where('source_id', $first)->orWhere('target_id', $first)->count();
+    expect(DB::table('work_items')->where('parent_id', $first)->orderBy('number')->pluck('number')->all())->toBe([...range(2, 20), ...range(22, 40), 42, 43])
+        ->and($relations)->toBeGreaterThanOrEqual(count(LoadItems::EPIC_RELATIONS))
+        ->and(DB::table('attachments')->where('attachable_id', $first)->where('kind', 'file')->pluck('filename')->sort()->values()->all())->toBe(['entwurf.png', 'konzept.pdf', 'notizen.txt'])
+        ->and(DB::table('media')->whereIn('model_id', DB::table('attachments')->where('attachable_id', $first)->select('id'))->count())->toBe(3)
+        ->and(DB::table('events')->where('type', 'work_item.created')->count())->toBe(50_000)
+        ->and(DB::table('events')->where('type', 'work_item.relation_added')->count())->toBe(10_000)
+        ->and(DB::table('events')->where('subject_id', $busy)->count())->toBeGreaterThan(LoadHistory::HEAVY)
+        ->and(DB::table('events')->where('subject_id', $first)->where('type', 'work_item.relation_added')->count())->toBe($relations)
+        ->and(DB::table('events')->count())->toBeGreaterThan(200_000)
+        ->and(DB::table('events')->whereNull('dispatched_at')->count())->toBe(0);
 
     expect($epic?->n)->toBe(40)
         ->and($depth((string) $deepest))->toBe(4)

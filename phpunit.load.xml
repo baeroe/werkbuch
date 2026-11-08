@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
     The load suite (tests/Load) against its own database `load` with 50 000 items. Not part of phpunit.xml: neither in the
-    required job nor in the coverage. Every value is forced: the environment of DDEV (DB_DATABASE=db, SCOUT_PREFIX) would
-    win otherwise, and LoadWorld::ensure() refuses anything but the database `load` and the prefix `load_`.
-    Run it with: ddev artisan test, option configuration=phpunit.load.xml (docs/en/development.md, „Load“)
+    required job nor in the coverage. Every value is forced: a value of the environment (DDEV sets the rate limits and
+    WEBHOOKS_ALLOW_PRIVATE, the CI job sets DB_DATABASE) would win otherwise, and LoadWorld::ensure() refuses anything but
+    the database `load` and the prefix `load_`. The rate limits are those of the CI (6000/60000 in DDEV).
+    Run it with: ddev exec vendor/bin/pest, option configuration=phpunit.load.xml (never `ddev artisan test`, which puts
+    phpunit.xml in front and ends with exit code 1; docs/en/development.md, „Load tests“)
 -->
 <phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
@@ -31,6 +33,9 @@
         <env name="QUEUE_CONNECTION" value="sync" force="true"/>
         <env name="SESSION_DRIVER" value="array" force="true"/>
         <env name="WEBHOOKS_ALLOW_PRIVATE" value="false" force="true"/>
+        <env name="API_RATE_LIMIT" value="600" force="true"/>
+        <env name="API_SESSION_RATE_LIMIT" value="3000" force="true"/>
+        <env name="MCP_RATE_LIMIT" value="300" force="true"/>
         <env name="SCOUT_DRIVER" value="meilisearch" force="true"/>
         <env name="SCOUT_PREFIX" value="load_" force="true"/>
         <env name="PULSE_ENABLED" value="false" force="true"/>

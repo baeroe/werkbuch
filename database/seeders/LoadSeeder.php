@@ -21,10 +21,11 @@ use RuntimeException;
 
 /**
  * The data of the load suite (tests/Load, phpunit.load.xml): the demo organization and catalog, 30 people, 5 bots, 20
- * projects with 2 500 items each (50 000), 5 000 relations, 100 000 comments, 2 000 wiki pages in L01, 200 templates
- * and 50 switched-off webhooks; only fictional names. Deterministic (LoadRandom with seed 15, Faker seed 15) apart from the ULIDs
- * and the moment of the schedules. Written by bulk inserts without events (A86); the texts come from a fixed pool of
- * Tiptap JSON, never from Markdown (K9). At the end the search index is built anew and the table `load_meta` names the
+ * projects with 2 500 items each (50 000) and their history (`events`), 5 000 relations, 100 000 comments, 2 000 wiki
+ * pages in L01, 200 templates, 50 switched-off webhooks and the file list of the first epic of every project; only
+ * fictional names. Deterministic (LoadRandom with seed 15, Faker seed 15) apart from the ULIDs, the UUIDs of the media
+ * and the moment of the schedules. Written by bulk inserts without the app's events (A86), the history as rows of its
+ * own (LoadHistory); the texts come from a fixed pool of Tiptap JSON, never from Markdown (K9). At the end the search index is built anew and the table `load_meta` names the
  * version and the numbers: LoadWorld::ensure() seeds again when they are missing or the version differs.
  *
  * Only for the database `load` with the search prefix `load_` (K8): anything else is refused before the first write.
@@ -34,14 +35,14 @@ class LoadSeeder extends Seeder
 {
     use WithoutModelEvents;
 
-    public const VERSION = 1;
+    public const VERSION = 2;
 
     public const DATABASE = 'load';
 
     public const PREFIX = 'load_';
 
     /** The tables `load_meta` counts; a seeded database has every one of them. */
-    public const COUNTED = ['users', 'projects', 'work_items', 'work_item_values', 'work_item_labels', 'work_item_relations', 'comments', 'pages', 'page_versions', 'templates', 'webhooks'];
+    public const COUNTED = ['users', 'projects', 'work_items', 'work_item_values', 'work_item_labels', 'work_item_relations', 'comments', 'pages', 'page_versions', 'templates', 'webhooks', 'events', 'attachments'];
 
     public function run(RoleAssignments $roles): void
     {

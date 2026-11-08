@@ -4,9 +4,11 @@ namespace Database\Seeders\Load;
 
 use App\Domain\Ranking\Rank;
 use App\Domain\Schedule\Schedule;
+use App\Models\Attachment;
 use App\Models\Organization;
 use App\Models\Template;
 use App\Models\Webhook;
+use App\Models\WorkItem;
 use App\Support\TemplateSchedule;
 use DateTimeZone;
 use Illuminate\Support\Facades\DB;
@@ -16,7 +18,9 @@ use Illuminate\Support\Str;
  * What hangs on the items: 100 000 comments (5 000 per project, item number LoadItems::BUSY with 40 of them, every
  * other item with at most 39), 2 000 wiki pages in L01 (a tree four levels deep: 20, 180, 600, 1 200) with 0–5
  * versions each, 200 templates (10 per project; the 50 of L01–L05 on the same weekly schedule, so they come due in the
- * same minute) and 50 webhooks of the organization for `work_item.*`, all switched off: nothing is sent while seeding.
+ * same minute), 50 webhooks of the organization for `work_item.*`, all switched off (nothing is sent while seeding),
+ * and the file list of the first epic of every project (FILES, rows of `attachments` and `media` without the files:
+ * the list reads only the rows).
  * Bulk inserts in blocks of 1 000 without events, except the 250 templates and webhooks (their casts: schedule,
  * encrypted secret).
  *
@@ -38,6 +42,9 @@ final class LoadContent
 
     public const WEBHOOKS = 50;
 
+    /** The files of the first epic of every project: name, type, size, whether it has a preview. */
+    public const FILES = [['entwurf.png', 'image/png', 48_213, true], ['konzept.pdf', 'application/pdf', 182_904, false], ['notizen.txt', 'text/plain', 2_310, false]];
+
     /**
      * @param  Frame  $frame
      * @param  list<Items>  $items  per project, in the order of the frame
@@ -53,6 +60,58 @@ final class LoadContent
         $this->pages($this->frame['projects'][0]['id'], $this->items[0]);
         $this->templates();
         $this->webhooks();
+        $this->files();
+    }
+
+    /** The file list of the first epic of every project, as UploadAttachment leaves it (kind `file`, one media row each). */
+    private function files(): void
+    {
+        $attachments = [];
+        $media = [];
+        $type = (new Attachment)->getMorphClass();
+        $owner = (new WorkItem)->getMorphClass();
+
+        foreach ($this->items as $index => $items) {
+            foreach (self::FILES as $order => [$name, $mime, $size, $preview]) {
+                $id = strtolower((string) Str::ulid());
+                $at = LoadItems::stamp($items['created'][0] + ($order + 1) * 3_600);
+                $attachments[] = [
+                    'id' => $id,
+                    'project_id' => $this->frame['projects'][$index]['id'],
+                    'attachable_type' => $owner,
+                    'attachable_id' => $items['ids'][0],
+                    'kind' => 'file',
+                    'uploaded_by' => LoadRandom::pick($items['people']),
+                    'filename' => $name,
+                    'mime' => $mime,
+                    'size' => $size,
+                    'created_at' => $at,
+                    'updated_at' => $at,
+                ];
+                $media[] = [
+                    'model_type' => $type,
+                    'model_id' => $id,
+                    'uuid' => (string) Str::uuid(),
+                    'collection_name' => 'file',
+                    'name' => $id,
+                    'file_name' => $id.'.'.pathinfo($name, PATHINFO_EXTENSION),
+                    'mime_type' => $mime,
+                    'disk' => 'local',
+                    'conversions_disk' => 'local',
+                    'size' => $size,
+                    'manipulations' => '[]',
+                    'custom_properties' => '[]',
+                    'generated_conversions' => $preview ? '{"preview":true}' : '[]',
+                    'responsive_images' => '[]',
+                    'order_column' => 1,
+                    'created_at' => $at,
+                    'updated_at' => $at,
+                ];
+            }
+        }
+
+        self::insert('attachments', $attachments);
+        self::insert('media', $media);
     }
 
     /**

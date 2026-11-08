@@ -40,7 +40,7 @@ use Faker\Generator;
  *     resolutions: array{completed: string, canceled: string},
  *     properties: array{effort: string, deadline: string, note: string, area: string},
  *     areaOptions: list<string>,
- *     projects: list<array{id: string, identifier: string, people: list<string>, bot: string, wishes: bool, states: list<array{id: string, category: string}>}>
+ *     projects: list<array{id: string, identifier: string, people: list<string>, bot: string, wishes: bool, states: list<array{id: string, name: string, category: string}>}>
  * }
  */
 final class LoadCatalog
@@ -163,7 +163,7 @@ final class LoadCatalog
      * @param  list<array{id: string, handle: string}>  $people
      * @param  list<string>  $bots
      * @param  array<string, string>  $types  by name
-     * @return list<array{id: string, identifier: string, people: list<string>, bot: string, wishes: bool, states: list<array{id: string, category: string}>}>
+     * @return list<array{id: string, identifier: string, people: list<string>, bot: string, wishes: bool, states: list<array{id: string, name: string, category: string}>}>
      */
     private function projects(array $people, array $bots, array $types): array
     {
@@ -212,7 +212,7 @@ final class LoadCatalog
                 'bot' => $bot,
                 'wishes' => $wishes,
                 'states' => array_values(WorkflowState::query()->where('workflow_id', $workflow->id)->orderBy('position')->get()
-                    ->map(fn (WorkflowState $state) => ['id' => (string) $state->id, 'category' => $state->category->value])->all()),
+                    ->map(fn (WorkflowState $state) => ['id' => (string) $state->id, 'name' => $state->name, 'category' => $state->category->value])->all()),
             ];
         }
 

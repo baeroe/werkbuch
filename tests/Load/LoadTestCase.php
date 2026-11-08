@@ -14,9 +14,11 @@ abstract class LoadTestCase extends BaseTestCase
 {
     /**
      * The values phpunit.load.xml forces. PHPUnit writes them to $_ENV and putenv, Laravel reads $_SERVER first, where
-     * the environment of the container stays (DDEV sets DB_DATABASE=db): copied over, so the forced value wins.
+     * the environment of the process stays: copied over, so the forced value wins. Only a variable the process gets from
+     * outside stands in $_SERVER (DDEV sets the rate limits and WEBHOOKS_ALLOW_PRIVATE, the CI job DB_DATABASE); the
+     * others are copied as a safeguard.
      */
-    private const FORCED = ['APP_ENV', 'DB_CONNECTION', 'DB_DATABASE', 'DB_URL', 'SCOUT_DRIVER', 'SCOUT_PREFIX', 'CACHE_STORE', 'QUEUE_CONNECTION', 'WEBHOOKS_ALLOW_PRIVATE'];
+    private const FORCED = ['APP_ENV', 'DB_CONNECTION', 'DB_DATABASE', 'DB_URL', 'SCOUT_DRIVER', 'SCOUT_PREFIX', 'CACHE_STORE', 'QUEUE_CONNECTION', 'WEBHOOKS_ALLOW_PRIVATE', 'API_RATE_LIMIT', 'API_SESSION_RATE_LIMIT', 'MCP_RATE_LIMIT'];
 
     public function createApplication(): Application
     {
