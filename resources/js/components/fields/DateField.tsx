@@ -92,8 +92,11 @@ export function DatePopover({
     </>
   );
 
-  // the rights may arrive after the first render (or go): the focus stays on the trigger, also from an open calendar
-  const { swap, popup } = useFocusSwap(Boolean(disabledReason));
+  // the rights may arrive after the first render (or go): the focus stays on the trigger, also from an open calendar;
+  // a calendar open when they go is closed, so it stays closed when they come back
+  const { swap, popup } = useFocusSwap(Boolean(disabledReason), () => {
+    if (shown) show(false);
+  });
 
   if (disabledReason) {
     return (

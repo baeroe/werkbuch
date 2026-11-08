@@ -63,6 +63,8 @@ const hafen = customer.options[1]!;
 // Gärtnerei Moos archived meanwhile, but still the customer of the item
 const customerArchived: Property = { ...customer, options: customer.options.map((option) => (option.id === 'opt_moos' ? { ...option, archived_at: '2026-10-01T08:00:00.000Z' } : option)) };
 
+/** Two frames: Base UI opens a popup and sets its focus a frame after the render that asks for it. */
+const nextFrames = () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
 const paragraph = (text: string): RichText => ({ type: 'paragraph', content: [{ type: 'text', text }] });
 const doc = (...content: RichText[]): RichText => ({ type: 'doc', content });
 const listDoc = doc(paragraph('So lässt sich der Fehler nachstellen:'), {
@@ -876,10 +878,49 @@ describe('DateField', () => {
     expect(back.getAttribute('aria-disabled')).toBe('true');
     expect(document.activeElement).toBe(back);
 
-    // a trigger that never had the focus does not take it
+    // the rights come back: the calendar they closed stays closed, and a trigger that never had the focus does not take it
     act(() => back.blur());
     view.rerender(<Dated />);
+    const again = screen.getByRole('button', { name: 'Termin: nicht gesetzt' });
+    await act(nextFrames);
+    expect(again.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('grid')).toBeNull();
     expect(document.activeElement).toBe(document.body);
+  });
+
+  it('tells its owner that the rights closed an open calendar, which stays closed when they come back', async () => {
+    const user = userEvent.setup();
+    const changes: boolean[] = [];
+    function Owned({ reason }: { reason?: string }) {
+      const { today: now } = useToday();
+      const [open, setOpen] = useState(false);
+      return (
+        <DatePopover
+          label="Termin"
+          value={null}
+          onChoose={() => undefined}
+          display={<DayValue value={null} today={now} overdue={false} empty="Kein Termin" />}
+          displayText="nicht gesetzt"
+          disabledReason={reason}
+          open={open}
+          onOpenChange={(next) => {
+            changes.push(next);
+            setOpen(next);
+          }}
+        />
+      );
+    }
+    const view = renderWith(<Owned />);
+    await user.click(screen.getByRole('button', { name: 'Termin: nicht gesetzt' }));
+    await screen.findByRole('grid', { name: /^Termin/ });
+    view.rerender(<Owned reason="Im Projekt darfst du nur lesen." />);
+    expect(changes).toEqual([true, false]);
+
+    view.rerender(<Owned />);
+    const trigger = screen.getByRole('button', { name: 'Termin: nicht gesetzt' });
+    await act(nextFrames);
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('grid')).toBeNull();
   });
 
   it('knows overdue items, as the filter does', () => {

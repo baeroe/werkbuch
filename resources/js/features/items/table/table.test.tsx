@@ -259,6 +259,9 @@ const rightsLoaded = () =>
     expect(document.querySelector('[data-cell] [aria-disabled="true"]')).toBeNull();
   });
 
+/** Two frames: Base UI opens a popup and sets its focus a frame after the render that asks for it. */
+const nextFrames = () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+
 /** Waits for the search field of an open picker to have the focus (Base UI sets it a frame later). */
 async function searchField(placeholder: string) {
   const field = await screen.findByPlaceholderText(placeholder);
@@ -471,6 +474,36 @@ describe('TableLayout', () => {
     const [viewer, archive] = toastTexts();
     expect(viewer).toEqual(['Nicht änderbar', 'Im Projekt WEB darfst du nur lesen. Items ändern dürfen Member und Admins.']);
     expect(archive).toEqual(['Nicht änderbar', 'WEB-9 ist archiviert und schreibgeschützt. Stelle es zuerst wieder her.']);
+  });
+
+  it('closes an open editor for good when the rights go: when they come back, it stays closed', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const show = (entry: ListedItem) => (
+      <QueryClientProvider client={client}>
+        <Harness groups={[group('all', [entry])]} display={{ fields: ['state', 'labels', 'start_date', 'property:note'] }} />
+      </QueryClientProvider>
+    );
+    const archived = { ...web1, archived_at: '2026-10-20T08:00:00Z' };
+    const view = render(show(web1));
+    await rightsLoaded();
+    // each editor: a picker, the labels (a dash without the right and without labels), the calendar, a typed property
+    const editors: [number, string, () => HTMLElement | null][] = [
+      [1, 'Status', () => screen.queryByPlaceholderText('Status suchen …')],
+      [2, 'Labels', () => screen.queryByPlaceholderText('Label suchen …')],
+      [3, 'Start', () => screen.queryByRole('grid', { name: /^Start/ })],
+      [4, 'Notiz', () => screen.queryByRole('textbox', { name: 'Notiz' })],
+    ];
+    for (const [column, label, editor] of editors) {
+      await focusCell('wi_1', column, label);
+      press('Enter');
+      await waitFor(() => expect(editor()).toBeTruthy());
+      view.rerender(show(archived));
+      await waitFor(() => expect(editor()).toBeNull());
+      view.rerender(show(web1));
+      await rightsLoaded();
+      await act(nextFrames);
+      expect([label, editor()]).toEqual([label, null]);
+    }
   });
 
   it('keeps the group toggles out of the tab order', async () => {

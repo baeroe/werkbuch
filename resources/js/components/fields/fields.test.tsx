@@ -8,7 +8,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import en from '../../../../lang/en.json';
 import { currentToasts, resetToasts } from '@/components/ui/toast';
@@ -109,6 +109,9 @@ function visibleText(element: Element): string {
 const optionTexts = async () => (await screen.findAllByRole('option')).map(visibleText);
 
 /** Types into the search field of the open list once it has the focus (Base UI sets it a frame later). */
+/** Two frames: Base UI opens a popup and sets its focus a frame after the render that asks for it. */
+const nextFrames = () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+
 async function search(user: ReturnType<typeof userEvent.setup>, text: string) {
   const input = await screen.findByRole('combobox', { name: /suchen …$/i });
   await user.click(input);
@@ -1014,6 +1017,51 @@ describe('Picker', () => {
     // the rights go while the list is open: the list goes, the focus lands on the read-only trigger
     view.rerender(<Picker {...props} disabledReason="Im Projekt darfst du nur lesen." />);
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Kunde: Option 2' }));
+  });
+
+  it('tells its owner that the rights closed an open list, which stays closed when they come back', async () => {
+    const user = userEvent.setup();
+    const changes: boolean[] = [];
+    const props = { label: 'Kunde', display: 'Option 2', displayText: 'Option 2', options: many.slice(0, 3), value: 'o1', onValueChange: vi.fn(), placeholder: 'Suchen …' };
+    function Owned({ reason }: { reason?: string }) {
+      const [open, setOpen] = useState(false);
+      return (
+        <Picker
+          {...props}
+          disabledReason={reason}
+          open={open}
+          onOpenChange={(next) => {
+            changes.push(next);
+            setOpen(next);
+          }}
+        />
+      );
+    }
+    const view = render(<Owned />);
+    await user.click(screen.getByRole('combobox', { name: 'Kunde: Option 2' }));
+    await screen.findByRole('combobox', { name: /suchen …$/i });
+    view.rerender(<Owned reason="Im Projekt darfst du nur lesen." />);
+    expect(changes).toEqual([true, false]);
+
+    view.rerender(<Owned />);
+    const trigger = screen.getByRole('combobox', { name: 'Kunde: Option 2' });
+    await act(nextFrames);
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('combobox', { name: /suchen …$/i })).toBeNull();
+  });
+
+  it('opens a list that starts open only that first time, not again after the rights went and came back', async () => {
+    const props = { label: 'Kunde', display: 'Option 2', displayText: 'Option 2', options: many.slice(0, 3), value: 'o1', onValueChange: vi.fn(), placeholder: 'Suchen …', defaultOpen: true };
+    const view = render(<Picker {...props} />);
+    expect(await screen.findAllByRole('option')).toHaveLength(3);
+    view.rerender(<Picker {...props} disabledReason="Im Projekt darfst du nur lesen." />);
+    expect(screen.getByRole('button', { name: 'Kunde: Option 2' }).getAttribute('aria-disabled')).toBe('true');
+
+    view.rerender(<Picker {...props} />);
+    const trigger = screen.getByRole('combobox', { name: 'Kunde: Option 2' });
+    await act(nextFrames);
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryAllByRole('option')).toEqual([]);
   });
 
   it('changes nothing when the chosen value is chosen again, and opens at once without taking the focus', async () => {
