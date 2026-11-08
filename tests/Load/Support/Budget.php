@@ -6,13 +6,20 @@ use App\Access\Visibility;
 use Closure;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Testing\TestResponse;
 
 /**
  * The budget of the load suite (A187, K10): 1.5 s per answer as the median of three runs after a warm-up run. Before
  * every run the app forgets its scoped instances and the visibility (Laravel keeps them between two requests of a test;
  * Organization::current(), RoleIndex and CatalogProperties would come from memory and save queries a real request
- * makes). The query count is the hard check, the wall clock only the median against the budget. Every measured row
- * goes into a table, written to storage/logs/load-budget.md after each row and printed at the end of the suite.
+ * makes). The query count is the hard check, the wall clock only the median against the budget. Every run that answers
+ * with a TestResponse has to answer 200 (a fast 429 or 500 is no measurement). Every measured row goes into a table,
+ * written to storage/logs/load-budget.md after each row and printed at the end of the suite.
+ *
+ * What a run does not pay, the same for every row and so hiding nothing that grows with the data (K10): the test acts
+ * with one User instance for all runs (relations it loaded stay loaded), and SESSION_DRIVER and CACHE_STORE are `array`
+ * (phpunit.load.xml). A request in production reads its session row, the account and the counters of the rate limit
+ * (store `retrying-database`): a few queries and a few milliseconds more per answer.
  */
 final class Budget
 {
@@ -22,7 +29,7 @@ final class Budget
     /** The runs after the warm-up; the median is the middle one. */
     public const RUNS = 3;
 
-    /** @var array<string, array{median: float, runs: list<float>, queries: list<int>, baseline: ?int, budget: float}> */
+    /** @var array<string, array{median: float, runs: list<float>, queries: list<int>, baseline: ?int, smaller: ?int, budget: float}> */
     private static array $rows = [];
 
     /** @var array<string, int>|null the queries of every row in the small world, once per process */
@@ -37,50 +44,57 @@ final class Budget
 
     /**
      * Runs `$request` once to warm up, then RUNS times, and records the median of the runs and the queries of each.
+     * `$baseline` and `$smaller` (the queries against 100 items and of a smaller answer) only go into the table.
      */
-    public static function measure(string $name, Closure $request, float $seconds = self::SECONDS, ?int $baseline = null): float
+    public static function measure(string $name, Closure $request, float $seconds = self::SECONDS, ?int $baseline = null, ?int $smaller = null): float
     {
         self::prepare();
-        self::$answer = $request();
+        self::$answer = self::answered($request());
 
         $runs = [];
         $queries = [];
         for ($i = 0; $i < self::RUNS; $i++) {
             self::prepare();
             $started = hrtime(true);
-            $request();
+            $answer = $request();
             $runs[] = (hrtime(true) - $started) / 1e9;
             $queries[] = self::$counted;
+            self::answered($answer);
         }
 
         $sorted = $runs;
         sort($sorted);
         $median = $sorted[intdiv(self::RUNS, 2)];
-        self::$rows[$name] = ['median' => $median, 'runs' => $runs, 'queries' => $queries, 'baseline' => $baseline, 'budget' => $seconds];
+        self::$rows[$name] = ['median' => $median, 'runs' => $runs, 'queries' => $queries, 'baseline' => $baseline, 'smaller' => $smaller, 'budget' => $seconds];
         self::write();
 
         return $median;
     }
 
-    /** The queries `$request` makes after a warm-up run, with the same preparations as measure(). */
+    /**
+     * The queries `$request` makes after a warm-up run, with the same preparations as measure(); answer() is then what
+     * the counted run returned.
+     */
     public static function queries(Closure $request): int
     {
         self::prepare();
-        $request();
+        self::answered($request());
         self::prepare();
-        $request();
+        self::$answer = $request();
+        $counted = self::$counted;
+        self::answered(self::$answer);
 
-        return self::$counted;
+        return $counted;
     }
 
-    /** What the warm-up run of the last measure() returned. */
+    /** What the warm-up run of the last measure() returned, or the counted run of the last queries(). */
     public static function answer(): mixed
     {
         return self::$answer;
     }
 
     /**
-     * @return array{median: float, runs: list<float>, queries: list<int>, baseline: ?int, budget: float}
+     * @return array{median: float, runs: list<float>, queries: list<int>, baseline: ?int, smaller: ?int, budget: float}
      */
     public static function row(string $name): array
     {
@@ -109,10 +123,11 @@ final class Budget
         $lines = [
             '# Load budget',
             '',
-            sprintf('Median of %d runs after a warm-up, budget %.1f s per answer; queries per run and against 100 items.', self::RUNS, self::SECONDS),
+            sprintf('Median of %d runs after a warm-up, budget %.1f s per answer; queries per run, against 100 items per project and for a smaller answer (a smaller page, fewer children).', self::RUNS, self::SECONDS),
+            'Not measured, the same for every row: the session, the account and the counters of the rate limit (array stores in the suite).',
             '',
-            '| Row | Median ms | Runs ms | Queries | Against 100 items | Status |',
-            '|---|---:|---|---:|---:|---|',
+            '| Row | Median ms | Runs ms | Queries | Against 100 items | Smaller answer | Status |',
+            '|---|---:|---|---:|---:|---:|---|',
         ];
 
         foreach (self::$rows as $name => $row) {
@@ -122,12 +137,13 @@ final class Budget
                 default => 'OVER',
             };
             $lines[] = sprintf(
-                '| %s | %.0f | %s | %s | %s | %s |',
+                '| %s | %.0f | %s | %s | %s | %s | %s |',
                 $name,
                 $row['median'] * 1_000,
                 implode(' / ', array_map(fn (float $run) => sprintf('%.0f', $run * 1_000), $row['runs'])),
                 implode(' / ', array_unique($row['queries'])),
                 $row['baseline'] ?? '–',
+                $row['smaller'] ?? '–',
                 $status,
             );
         }
@@ -149,6 +165,16 @@ final class Budget
     public static function write(array $over = []): void
     {
         file_put_contents(self::path(), self::table($over));
+    }
+
+    /** A run that answers with a TestResponse has to answer 200; anything else goes through as it came. */
+    private static function answered(mixed $answer): mixed
+    {
+        if ($answer instanceof TestResponse) {
+            $answer->assertOk();
+        }
+
+        return $answer;
     }
 
     /** Forgets what the app keeps between two requests of a test and starts counting anew. */

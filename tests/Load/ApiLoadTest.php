@@ -20,18 +20,41 @@ use Tests\Load\Support\Budget;
  * hangs on what an answer holds (an item with a parent loads the parents, a text with a reference reads the referenced
  * items), so a small world of other subjects would compare unlike answers.
  *
+ * The small world holds answers as big as the big one where the answer is a page (100 items, 40 comments, 100 events,
+ * 20 projects) or the subject itself (the children and relations of L07-1): a query per item, comment or event would
+ * count the same in both. Those rows have a second check, a smaller answer in the big world (`smaller`: a page of 25, the
+ * epic with 10 of its children in a transaction rolled back), which has to ask as often as the row; a query per entry of
+ * the answer shows there. The groups and the counts have none: their groups and filters are the same in both worlds
+ * (only `groups parent` grows, 2 500 epics against 100), and the counts ask once per filter by design. The search is
+ * compared with a search of more hits (`baseline`), the pages of L01 with 20 top pages against 2 000.
+ *
  * The table of every row (median, runs, queries) goes to STDERR at the end and to storage/logs/load-budget.md (the
  * artifact `load-budget` of the CI job `load`).
  */
 
 /**
  * The rows over the budget of 1.5 s, by the task that takes them out (K10, K13): they run and are measured like every
- * other row, only their median is not asserted. Their query count is.
+ * other row, only their median is not asserted. Their query count is. In DDEV every row stays within the budget; the
+ * CI job `load` (PR #32, run 42439150185, MariaDB with the image's buffer pool of 128 MiB) measured these three over it.
  */
-const OVER_BUDGET = [];
+const OVER_BUDGET = [
+    // CI 1 764 ms (DDEV 897 ms), 14 queries
+    'query property:effort asc' => 'Task 10a: the sort by a property reads its first value per item',
+    // CI 1 784 ms (DDEV 873 ms), 14 queries
+    'query property:effort desc' => 'Task 10a: the sort by a property reads its first value per item',
+    // CI 2 193 ms (DDEV 1 039 ms), 70 queries; seven answers measured together
+    'board of a project' => 'Task 10b: the groups and the first page of every group of the board',
+];
 
 /** The first page of every list, as the browser asks it. */
 const LOAD_PAGE = 100;
+
+/**
+ * The page of the smaller answer: a query per entry of a page counts 75 more against LOAD_PAGE. Not 10: in the sort by
+ * rank or creation the first 20 items are the first epics of the 20 projects, a page of 10 holds no item with a parent
+ * and loads no parents (12 queries instead of 14, an answer of another form).
+ */
+const SMALLER_PAGE = 25;
 
 /**
  * What the rows ask: the reader (load-01, the org admin), a member (load-05: some projects, private ones among them,
@@ -61,9 +84,11 @@ $filter = fn (array ...$conditions): array => ['version' => 1, 'conditions' => $
 
 /**
  * The rows: name => the request (the test case and the world), what its answer has to hold in the big world (so no
- * row measures an empty answer), and, for the one row the small world cannot answer, the baseline asked otherwise.
+ * row measures an empty answer), for the one row the small world cannot answer the baseline asked otherwise (with what
+ * its answer has to hold), and for the rows whose answer is as big in both worlds a smaller answer in the big world
+ * (`shrink` changes the data in a transaction that is rolled back).
  *
- * @var array<string, array{request: Closure(LoadTestCase, array<string, mixed>): TestResponse, check: Closure(TestResponse): void, baseline?: array{reason: string, request: Closure(LoadTestCase, array<string, mixed>): TestResponse}}>
+ * @var array<string, array{request: Closure(LoadTestCase, array<string, mixed>): TestResponse, check: Closure(TestResponse): void, baseline?: array{reason: string, request: Closure(LoadTestCase, array<string, mixed>): TestResponse, check: Closure(TestResponse): void}, smaller?: array{request: Closure(LoadTestCase, array<string, mixed>): TestResponse, check: Closure(TestResponse): void, shrink?: Closure(array<string, mixed>): void}}>
  */
 $rows = [];
 
@@ -72,21 +97,30 @@ $fullPage = function (TestResponse $answer): void {
     expect($answer->json('data'))->toHaveCount(LOAD_PAGE)
         ->and($answer->json('meta.total'))->toBeGreaterThan(LOAD_PAGE);
 };
+$smallPage = function (TestResponse $answer): void {
+    $answer->assertOk();
+    expect($answer->json('data'))->toHaveCount(SMALLER_PAGE)
+        ->and($answer->json('meta.total'))->toBeGreaterThan(LOAD_PAGE);
+};
 
 foreach ([...SortSpec::CORE, 'property:effort'] as $field) {
     foreach (['asc', 'desc'] as $direction) {
+        $query = fn (int $page) => fn (LoadTestCase $t, array $w) => $t->actingAs($w['admin'])->postJson('/api/v1/work-items/query', [
+            'sort' => ['field' => $field, 'direction' => $direction], 'lean' => true, 'per_page' => $page,
+        ]);
         $rows["query {$field} {$direction}"] = [
-            'request' => fn (LoadTestCase $t, array $w) => $t->actingAs($w['admin'])->postJson('/api/v1/work-items/query', [
-                'sort' => ['field' => $field, 'direction' => $direction], 'lean' => true, 'per_page' => LOAD_PAGE,
-            ]),
+            'request' => $query(LOAD_PAGE),
             'check' => $fullPage,
+            'smaller' => ['request' => $query(SMALLER_PAGE), 'check' => $smallPage],
         ];
     }
 }
 
+$list = fn (int $page) => fn (LoadTestCase $t, array $w) => $t->actingAs($w['admin'])->getJson("/api/v1/work-items?filter[project]={$w['identifier']}&per_page={$page}");
 $rows['list of a project'] = [
-    'request' => fn (LoadTestCase $t, array $w) => $t->actingAs($w['admin'])->getJson("/api/v1/work-items?filter[project]={$w['identifier']}"),
+    'request' => $list(LOAD_PAGE),
     'check' => $fullPage,
+    'smaller' => ['request' => $list(SMALLER_PAGE), 'check' => $smallPage],
 ];
 
 $groups = function (TestResponse $answer): void {
@@ -128,23 +162,28 @@ $rows['counts of 10 filters'] = [
 ];
 
 // the board of a project grouped by state: its groups, then the first page of every group (the browser enables each)
-$rows['board of a project'] = [
-    'request' => function (LoadTestCase $t, array $w) use ($filter, $condition): TestResponse {
-        $scope = $filter($condition('project', 'is', $w['project']));
-        $groups = $t->actingAs($w['admin'])->postJson('/api/v1/work-items/groups', ['group_by' => 'state', 'filter' => $scope])->assertOk();
-        $pages = [];
-        foreach ($groups->json('data.groups') as $group) {
-            $pages[] = $t->postJson('/api/v1/work-items/query', [
-                'filter' => $scope, 'group_by' => $groups->json('data.group_by'), 'group' => $group['key'], 'lean' => true, 'per_page' => LOAD_PAGE,
-            ])->assertOk()->json('data');
-        }
+$board = fn (int $page) => function (LoadTestCase $t, array $w) use ($filter, $condition, $page): TestResponse {
+    $scope = $filter($condition('project', 'is', $w['project']));
+    $groups = $t->actingAs($w['admin'])->postJson('/api/v1/work-items/groups', ['group_by' => 'state', 'filter' => $scope])->assertOk();
+    $pages = [];
+    foreach ($groups->json('data.groups') as $group) {
+        $pages[] = $t->postJson('/api/v1/work-items/query', [
+            'filter' => $scope, 'group_by' => $groups->json('data.group_by'), 'group' => $group['key'], 'lean' => true, 'per_page' => $page,
+        ])->assertOk()->json('data');
+    }
 
-        return TestResponse::fromBaseResponse(response()->json(['groups' => $groups->json('data.groups'), 'pages' => $pages]));
-    },
-    'check' => function (TestResponse $answer): void {
-        expect($answer->json('groups'))->toHaveCount(6)
-            ->and(array_map(fn (array $page) => count($page), $answer->json('pages')))->toContain(LOAD_PAGE);
-    },
+    return TestResponse::fromBaseResponse(response()->json(['groups' => $groups->json('data.groups'), 'pages' => $pages]));
+};
+$boardOf = fn (int $page) => function (TestResponse $answer) use ($page): void {
+    $sizes = array_map(fn (array $items) => count($items), $answer->json('pages'));
+    expect($answer->json('groups'))->toHaveCount(6)
+        ->and($sizes)->toContain($page)
+        ->and(max($sizes))->toBe($page);
+};
+$rows['board of a project'] = [
+    'request' => $board(LOAD_PAGE),
+    'check' => $boardOf(LOAD_PAGE),
+    'smaller' => ['request' => $board(SMALLER_PAGE), 'check' => $boardOf(SMALLER_PAGE)],
 ];
 
 $rows['item with children, relations, type, workflow, attachments'] = [
@@ -155,6 +194,27 @@ $rows['item with children, relations, type, workflow, attachments'] = [
             ->and(count($answer->json('data.relations')))->toBeGreaterThanOrEqual(count(LoadItems::EPIC_RELATIONS))
             ->and($answer->json('data.attachments'))->toHaveCount(3);
     },
+    // the same epic with 10 of its children (2–11), without its relations to 8, 9 and 10 (every relation type, the
+    // hidden ends and the other projects stay) and without one of its files (the PNG with its preview stays)
+    'smaller' => [
+        'request' => fn (LoadTestCase $t, array $w) => $t->actingAs($w['admin'])->getJson("/api/v1/work-items/{$w['epic']}?include=children,relations,type,workflow,attachments"),
+        'check' => function (TestResponse $answer): void {
+            $answer->assertOk();
+            expect($answer->json('data.children'))->toHaveCount(10)
+                ->and(count($answer->json('data.relations')))->toBeGreaterThanOrEqual(count(LoadItems::EPIC_RELATIONS) - 3)
+                ->and($answer->json('data.attachments'))->toHaveCount(2);
+        },
+        'shrink' => function (array $w): void {
+            $epic = (string) DB::table('work_items')->where('project_id', $w['project'])->where('number', 1)->value('id');
+            DB::table('work_items')->where('parent_id', $epic)->where('number', '>', 11)->update(['parent_id' => null]);
+            $ends = DB::table('work_items')->where('project_id', $w['project'])->whereIn('number', [8, 9, 10])->pluck('id')->all();
+            expect(DB::table('work_item_relations')
+                ->where(fn ($query) => $query->where('source_id', $epic)->whereIn('target_id', $ends))
+                ->orWhere(fn ($query) => $query->where('target_id', $epic)->whereIn('source_id', $ends))
+                ->delete())->toBe(3);
+            expect(DB::table('attachments')->where('attachable_id', $epic)->where('filename', 'notizen.txt')->delete())->toBe(1);
+        },
+    ],
 ];
 
 $rows['comments of an item'] = [
@@ -163,11 +223,21 @@ $rows['comments of an item'] = [
         $answer->assertOk();
         expect($answer->json('data'))->toHaveCount(40);
     },
+    'smaller' => [
+        'request' => fn (LoadTestCase $t, array $w) => $t->actingAs($w['admin'])->getJson("/api/v1/work-items/{$w['busy']}/comments?per_page=".SMALLER_PAGE),
+        'check' => function (TestResponse $answer): void {
+            $answer->assertOk();
+            expect($answer->json('data'))->toHaveCount(SMALLER_PAGE)
+                ->and($answer->json('meta.total'))->toBe(40);
+        },
+    ],
 ];
 
+$history = fn (int $page) => fn (LoadTestCase $t, array $w) => $t->actingAs($w['admin'])->getJson("/api/v1/work-items/{$w['busy']}/history?per_page={$page}");
 $rows['history of an item'] = [
-    'request' => fn (LoadTestCase $t, array $w) => $t->actingAs($w['admin'])->getJson("/api/v1/work-items/{$w['busy']}/history"),
+    'request' => $history(LOAD_PAGE),
     'check' => $fullPage,
+    'smaller' => ['request' => $history(SMALLER_PAGE), 'check' => $smallPage],
 ];
 
 $rows['search'] = [
@@ -183,15 +253,29 @@ $rows['search'] = [
     'baseline' => [
         'reason' => 'the index is not part of the transaction',
         'request' => fn (LoadTestCase $t, array $w) => $t->actingAs($w['admin'])->getJson('/api/v1/search?q=Formular&limit=50'),
+        'check' => function (TestResponse $answer): void {
+            $answer->assertOk();
+            // more hits than the row, or a query per hit would count the same in both
+            expect(count($answer->json('data.items')))->toBeGreaterThan(20);
+        },
     ],
 ];
 
+$projects = fn (string $who, ?int $page = null) => fn (LoadTestCase $t, array $w) => $t->actingAs($w[$who])->getJson('/api/v1/projects'.($page === null ? '' : "?per_page={$page}"));
 $rows['projects'] = [
-    'request' => fn (LoadTestCase $t, array $w) => $t->actingAs($w['admin'])->getJson('/api/v1/projects'),
+    'request' => $projects('admin'),
     'check' => function (TestResponse $answer): void {
         $answer->assertOk();
-        expect($answer->json('meta.total'))->toBe(20);
+        expect($answer->json('data'))->toHaveCount(20)
+            ->and($answer->json('meta.total'))->toBe(20);
     },
+    'smaller' => [
+        'request' => $projects('admin', 5),
+        'check' => function (TestResponse $answer): void {
+            $answer->assertOk();
+            expect($answer->json('data'))->toHaveCount(5);
+        },
+    ],
 ];
 
 $rows['pages of a project'] = [
@@ -203,9 +287,11 @@ $rows['pages of a project'] = [
 ];
 
 // a member sees the projects they belong to and the public ones (Visibility::projectIds), never every project
+$memberQuery = fn (int $page) => fn (LoadTestCase $t, array $w) => $t->actingAs($w['member'])->postJson('/api/v1/work-items/query', ['lean' => true, 'per_page' => $page]);
 $rows['query rank asc as a member'] = [
-    'request' => fn (LoadTestCase $t, array $w) => $t->actingAs($w['member'])->postJson('/api/v1/work-items/query', ['lean' => true, 'per_page' => LOAD_PAGE]),
+    'request' => $memberQuery(LOAD_PAGE),
     'check' => $fullPage,
+    'smaller' => ['request' => $memberQuery(SMALLER_PAGE), 'check' => $smallPage],
 ];
 $rows['groups project as a member'] = [
     'request' => fn (LoadTestCase $t, array $w) => $t->actingAs($w['member'])->postJson('/api/v1/work-items/groups', ['group_by' => 'project']),
@@ -216,11 +302,19 @@ $rows['groups project as a member'] = [
     },
 ];
 $rows['projects as a member'] = [
-    'request' => fn (LoadTestCase $t, array $w) => $t->actingAs($w['member'])->getJson('/api/v1/projects'),
+    'request' => $projects('member'),
     'check' => function (TestResponse $answer): void {
         $answer->assertOk();
-        expect($answer->json('meta.total'))->toBeGreaterThan(1)->toBeLessThan(20);
+        expect($answer->json('meta.total'))->toBeGreaterThan(2)->toBeLessThan(20)
+            ->and($answer->json('data'))->toHaveCount($answer->json('meta.total'));
     },
+    'smaller' => [
+        'request' => $projects('member', 2),
+        'check' => function (TestResponse $answer): void {
+            $answer->assertOk();
+            expect($answer->json('data'))->toHaveCount(2);
+        },
+    ],
 ];
 
 /**
@@ -240,6 +334,7 @@ $baselines = function (LoadTestCase $test) use ($rows, $world): array {
     foreach ($rows as $name => $row) {
         if (isset($row['baseline'])) {
             $counts[$name] = Budget::queries(fn () => $row['baseline']['request']($test, $big));
+            ($row['baseline']['check'])(Budget::answer());
         }
     }
 
@@ -275,29 +370,76 @@ $baselines = function (LoadTestCase $test) use ($rows, $world): array {
     return $counts;
 };
 
-it('answers within budget', function (string $name) use ($rows, $world, $baselines) {
+/**
+ * The queries of the smaller answer of a row, in the big world (`shrink` in a transaction that is rolled back), after
+ * checking that answer; null for a row without one.
+ */
+$smaller = function (LoadTestCase $test, array $row, array $big): ?int {
+    if (! isset($row['smaller'])) {
+        return null;
+    }
+
+    DB::beginTransaction();
+    try {
+        if (isset($row['smaller']['shrink'])) {
+            ($row['smaller']['shrink'])($big);
+        }
+        $queries = Budget::queries(fn () => $row['smaller']['request']($test, $big));
+        ($row['smaller']['check'])(Budget::answer());
+    } finally {
+        DB::rollBack();
+    }
+
+    return $queries;
+};
+
+it('answers within budget', function (string $name) use ($rows, $world, $baselines, $smaller) {
     LoadWorld::ensure();
     $baseline = $baselines($this)[$name];
     $big = $world();
     $row = $rows[$name];
+    $small = $smaller($this, $row, $big);
 
-    $median = Budget::measure($name, fn () => $row['request']($this, $big), baseline: $baseline);
+    $median = Budget::measure($name, fn () => $row['request']($this, $big), baseline: $baseline, smaller: $small);
     ($row['check'])(Budget::answer());
 
     // the hard check: the same queries as against 100 items (K10), in every run
     expect(Budget::row($name)['queries'])->toBe([$baseline, $baseline, $baseline], "{$name} asks the database otherwise than against 100 items");
+    // and as for a smaller answer: no query per item, comment, event, child or relation of the answer
+    if ($small !== null) {
+        expect($small)->toBe($baseline, "{$name} asks the database otherwise for a smaller answer");
+    }
     if (! array_key_exists($name, OVER_BUDGET)) {
         expect($median)->toBeLessThanOrEqual(Budget::SECONDS, sprintf('%s took %.0f ms (median)', $name, $median * 1_000));
     }
 })->with(array_keys($rows));
 
 it('names only rows that exist', function () use ($rows) {
+    // mutation probes (report of Task 8b, fix round) show that it fails on a name that is no row and on a reason without
+    // a task, and passes on the rows OVER_BUDGET names (the loop is empty whenever OVER_BUDGET is)
     foreach (OVER_BUDGET as $name => $reason) {
-        expect($rows)->toHaveKey($name, "OVER_BUDGET names {$name}, which is no row");
+        // the second argument of toHaveKey is the value the key must hold, the message is named
+        expect($rows)->toHaveKey($name, message: "OVER_BUDGET names {$name}, which is no row");
         expect($reason)->toMatch('/^Task \d+[a-z]?: \S/', "the reason of {$name} names no task");
     }
 
     expect(count($rows))->toBeGreaterThan(40);
+});
+
+it('checks a smaller answer wherever the small world answers as much', function () use ($rows) {
+    // every other row has a smaller answer (a page of 25, fewer children); these answer differently in the two worlds
+    // (the pages, `groups parent`), ask once per filter by design (the counts) or hold the same groups in both
+    $without = array_keys(array_filter($rows, fn (array $row) => ! isset($row['smaller'])));
+    $groups = array_map(fn (GroupBy $by) => "groups {$by->value}", GroupBy::cases());
+
+    expect($without)->toEqualCanonicalizing([
+        ...$groups,
+        ...array_map(fn (string $name) => "{$name} of a project", $groups),
+        'groups project as a member',
+        'counts of 10 filters',
+        'search',
+        'pages of a project',
+    ]);
 });
 
 it('measures with the rate limits of the CI', function () {
