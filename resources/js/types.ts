@@ -545,7 +545,7 @@ export interface SchedulePreview {
 
 /* ------------------------------------------------------------ further resources */
 
-export type AutomationKey = 'auto_archive' | 'auto_close' | 'close_parent' | 'assign_on_start';
+export type AutomationKey = 'auto_archive' | 'auto_close' | 'close_parent' | 'assign_on_start' | 'link_references';
 
 /** Parameters of an automation; which ones apply depends on its key. */
 export interface AutomationSettings {

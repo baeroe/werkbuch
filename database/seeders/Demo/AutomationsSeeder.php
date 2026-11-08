@@ -13,8 +13,8 @@ use Illuminate\Database\Seeder;
 /**
  * The automations of the three projects in the clickdummy (src/api/seed/config.ts; `AutomationsSeederTest` reads that
  * file): WEB Auto-Archive after 30 days and the assignee on start, APP Auto-Close after 90 days into its Cancelled (the
- * first Canceled state of the workflow the project has) and closing the parent, OPS all off. Every project gets a row
- * for each of the four keys, with the settings the key starts with. Auto-Close stays off in a workflow without a
+ * first Canceled state of the workflow the project has) and closing the parent, OPS all off. `link_references` is not in the
+ * file (A446) and is on in all three (A452). Every project gets a row for each of the five keys, with the settings the key starts with. Auto-Close stays off in a workflow without a
  * Canceled state. Written directly, without events (A86).
  *
  * Safe to run again (like K13): it creates the rows whose (project, key) is missing and never changes one that exists,
@@ -26,9 +26,9 @@ class AutomationsSeeder extends Seeder
 
     /** The keys each project switches on. */
     private const ENABLED = [
-        'WEB' => [AutomationKey::AutoArchive, AutomationKey::AssignOnStart],
-        'APP' => [AutomationKey::AutoClose, AutomationKey::CloseParent],
-        'OPS' => [],
+        'WEB' => [AutomationKey::AutoArchive, AutomationKey::AssignOnStart, AutomationKey::LinkReferences],
+        'APP' => [AutomationKey::AutoClose, AutomationKey::CloseParent, AutomationKey::LinkReferences],
+        'OPS' => [AutomationKey::LinkReferences],
     ];
 
     public function run(): void

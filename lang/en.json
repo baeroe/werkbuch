@@ -17,6 +17,8 @@
     "automations.days.auto_close": "Days without activity",
     "automations.days.auto_close_hint": "How long an item may rest in Backlog or Todo.",
     "automations.description": "They act as the default bot, keep to the allowed transitions and appear in the history with their reason, such as “Automation: auto-archive”. Auto-archive and auto-close run every night at 3 am in the time zone of the organisation.",
+    "automations.link_references.description": "When an item is mentioned in the fields or a comment of another, the two get the relation “relates to”. Runs after saving.",
+    "automations.link_references.title": "Link mentioned items",
     "automations.load_failed": "The automations could not be loaded",
     "automations.loading": "Loading automations …",
     "automations.not_saved": ":name not saved",

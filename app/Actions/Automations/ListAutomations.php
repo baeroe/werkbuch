@@ -11,7 +11,7 @@ use App\Support\ProjectAutomations;
 use Lorisleiva\Actions\Concerns\AsAction;
 
 /**
- * The four automations of a project (`GET /api/v1/projects/{project}/automations`, A346) for whoever sees it, archived
+ * The five automations of a project (`GET /api/v1/projects/{project}/automations`, A346) for whoever sees it, archived
  * projects too: always four, in the order of AutomationKey::cases(), a key without a row off with its defaults (no id).
  * One query, however many are stored. The project comes as a model or as a reference (ULID, identifier or a former one).
  */

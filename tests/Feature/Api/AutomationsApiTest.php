@@ -8,7 +8,7 @@ use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
 /*
- * The automations of a project over REST (spec 4.13, A346): `GET /api/v1/projects/{project}/automations` (always four,
+ * The automations of a project over REST (spec 4.13, A346): `GET /api/v1/projects/{project}/automations` (always five,
  * in the order of the keys) and `PUT …/automations/{key}` (`{enabled, settings}`). WEB (public) with Mara as its admin
  * and Tom as a member.
  */
@@ -21,7 +21,7 @@ $world = function (): array {
     return [$web, $mara, $tom];
 };
 
-it('answers four automations in the order of the keys, the missing ones without an id', function () use ($world) {
+it('answers five automations in the order of the keys, the missing ones without an id', function () use ($world) {
     [$web, , $tom] = $world();
     $stored = Automation::factory()->for($web)->key(AutomationKey::CloseParent)->enabled()->create();
 
@@ -32,6 +32,7 @@ it('answers four automations in the order of the keys, the missing ones without 
         ['id' => null, 'project_id' => $web->id, 'key' => 'auto_close', 'enabled' => false, 'settings' => ['days' => 90, 'state_id' => null]],
         ['id' => $stored->id, 'project_id' => $web->id, 'key' => 'close_parent', 'enabled' => true, 'settings' => []],
         ['id' => null, 'project_id' => $web->id, 'key' => 'assign_on_start', 'enabled' => false, 'settings' => []],
+        ['id' => null, 'project_id' => $web->id, 'key' => 'link_references', 'enabled' => true, 'settings' => []],
     ]])
         // settings are an object, also when empty
         ->and($response->getContent())->toContain('"settings":{}');

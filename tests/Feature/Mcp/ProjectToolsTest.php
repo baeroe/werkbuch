@@ -148,13 +148,13 @@ it('refuses a member who changes a project or an automation', function () {
         ->and(Automation::query()->count())->toBe(0);
 });
 
-it('lists the four automations and switches one by its key', function () {
+it('lists the five automations and switches one by its key', function () {
     $admin = User::factory()->create();
     Project::factory()->identifier('WEB')->member($admin, ProjectRole::Admin)->create();
     $mcp = McpClient::for($this, apiToken($admin, ['read', 'write', 'mcp']));
 
     $list = $mcp->call('automations', ['action' => 'list', 'project' => 'WEB']);
-    expect(array_column($list['structuredContent']['data'], 'key'))->toBe(['auto_archive', 'auto_close', 'close_parent', 'assign_on_start']);
+    expect(array_column($list['structuredContent']['data'], 'key'))->toBe(['auto_archive', 'auto_close', 'close_parent', 'assign_on_start', 'link_references']);
 
     $on = $mcp->call('manage-automations', ['action' => 'update', 'project' => 'WEB', 'key' => 'auto_archive', 'input' => ['enabled' => true, 'settings' => ['days' => 14]]]);
     expect($on['isError'])->toBeFalse((string) json_encode($on))

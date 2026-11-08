@@ -267,7 +267,7 @@ final class CatalogSchemas
         return self::object(
             'The settings of the automation. Only its own keys count (others are ignored), a key left out keeps what is stored: '
             .'`days` for the nightly automations (`'.AutomationKey::AutoArchive->value.'`, `'.AutomationKey::AutoClose->value.'`), `state_id` for `'.AutomationKey::AutoClose->value.'`. '
-            .'`'.AutomationKey::CloseParent->value.'` and `'.AutomationKey::AssignOnStart->value.'` have none.',
+            .'`'.AutomationKey::CloseParent->value.'`, `'.AutomationKey::AssignOnStart->value.'` and `'.AutomationKey::LinkReferences->value.'` have none.',
             [
                 'days' => ['type' => 'integer', 'minimum' => AutomationKey::MIN_DAYS, 'maximum' => AutomationKey::MAX_DAYS, 'description' => 'How many days a nightly automation waits.'],
                 'state_id' => self::ulid('Auto-Close: the Canceled state of the project\'s workflow the items move to; required to switch it on, `null` takes it away.', true),
@@ -290,7 +290,7 @@ final class CatalogSchemas
                 'id' => self::echoed(['string', 'null']),
                 'project_id' => self::echoed('string'),
                 'key' => self::echoed('string'),
-                'enabled' => ['type' => 'boolean', 'description' => 'Whether the automation runs.'],
+                'enabled' => ['type' => 'boolean', 'description' => 'Whether the automation runs. Without a stored row, the default of the key: on for `'.AutomationKey::LinkReferences->value.'`, off for the others.'],
                 'settings' => self::automationSettings(),
             ],
             ['enabled'],

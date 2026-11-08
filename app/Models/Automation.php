@@ -12,8 +12,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 
 /**
- * One of the four automations of a project (spec 4.13, AutomationKey), on or off, with its settings (`days`, the
- * `state_id` of Auto-Close). A project without a row for a key has that automation off with its defaults.
+ * One of the five automations of a project (spec 4.13, AutomationKey), on or off, with its settings (`days`, the
+ * `state_id` of Auto-Close). A project without a row for a key has that automation as its key starts
+ * (AutomationKey::enabledByDefault(): off, but link_references) with its defaults.
  *
  * @property string $id
  * @property string $project_id

@@ -12,7 +12,7 @@ use App\Models\Workflow;
 use App\Support\ProjectAutomations;
 use Illuminate\Support\Facades\DB;
 
-// Switching the automations of a project (spec 4.13): four per project, all off, changed only by its admins, one event
+// Switching the automations of a project (spec 4.13): five per project, the four old ones off and link_references on, changed only by its admins, one event
 // per real change.
 
 /** WEB (public, the default workflow) with Mara as its admin and Tom as a member. */
@@ -30,7 +30,7 @@ $state = fn (Project $project, string $name): string => (string) $project->workf
 /** What an automation reads as: key, enabled and settings. */
 $shape = fn (Automation $a): array => ['key' => $a->key->value, 'enabled' => $a->enabled, 'settings' => $a->settings, 'stored' => $a->exists];
 
-it('lists four automations, all off, for a new project', function () use ($world, $shape) {
+it('lists five automations, link_references on without a row, for a new project', function () use ($world, $shape) {
     [$web, $mara] = $world();
 
     expect(array_map($shape, ListAutomations::run(actor($mara), $web)))->toBe([
@@ -38,8 +38,9 @@ it('lists four automations, all off, for a new project', function () use ($world
         ['key' => 'auto_close', 'enabled' => false, 'settings' => ['days' => 90, 'state_id' => null], 'stored' => false],
         ['key' => 'close_parent', 'enabled' => false, 'settings' => [], 'stored' => false],
         ['key' => 'assign_on_start', 'enabled' => false, 'settings' => [], 'stored' => false],
+        ['key' => 'link_references', 'enabled' => true, 'settings' => [], 'stored' => false],
     ])
-        ->and(array_map(fn (Automation $a) => $a->project_id, ListAutomations::run(actor($mara), 'web')))->toBe(array_fill(0, 4, $web->id))
+        ->and(array_map(fn (Automation $a) => $a->project_id, ListAutomations::run(actor($mara), 'web')))->toBe(array_fill(0, 5, $web->id))
         ->and(Automation::query()->count())->toBe(0);
 });
 
@@ -55,16 +56,31 @@ it('lists the stored ones with the missing ones in the order of the keys, in one
     DB::disableQueryLog();
 
     expect($queries)->toBe(1)
-        ->and(array_keys($all))->toBe(['auto_archive', 'auto_close', 'close_parent', 'assign_on_start'])
+        ->and(array_keys($all))->toBe(['auto_archive', 'auto_close', 'close_parent', 'assign_on_start', 'link_references'])
         ->and(array_map($shape, array_values($all)))->toBe([
             ['key' => 'auto_archive', 'enabled' => true, 'settings' => ['days' => 7], 'stored' => true],
             ['key' => 'auto_close', 'enabled' => false, 'settings' => ['days' => 90, 'state_id' => null], 'stored' => false],
             ['key' => 'close_parent', 'enabled' => false, 'settings' => [], 'stored' => false],
             ['key' => 'assign_on_start', 'enabled' => true, 'settings' => [], 'stored' => true],
+            ['key' => 'link_references', 'enabled' => true, 'settings' => [], 'stored' => false],
         ])
         ->and(ProjectAutomations::enabled($web->id, AutomationKey::AutoArchive)?->settings)->toBe(['days' => 7])
         ->and(ProjectAutomations::enabled($web->id, AutomationKey::AutoClose))->toBeNull()
         ->and(ProjectAutomations::enabled($web->id, AutomationKey::CloseParent))->toBeNull();
+});
+
+it('reads link_references as enabled without a row and as off with a row that says so', function () use ($world) {
+    [$web] = $world();
+
+    $unstored = ProjectAutomations::enabled($web->id, AutomationKey::LinkReferences);
+    expect($unstored?->enabled)->toBeTrue()
+        ->and($unstored?->exists)->toBeFalse();
+
+    Automation::factory()->for($web)->key(AutomationKey::LinkReferences)->create(['enabled' => false]);
+    expect(ProjectAutomations::enabled($web->id, AutomationKey::LinkReferences))->toBeNull();
+
+    Automation::query()->where('project_id', $web->id)->update(['enabled' => true]);
+    expect(ProjectAutomations::enabled($web->id, AutomationKey::LinkReferences)?->exists)->toBeTrue();
 });
 
 it('hides the automations of a project the reader does not see', function () use ($world) {
@@ -168,8 +184,8 @@ it('lets a member read, not change (403 automations_admins_only)', function () u
 
     $refusal = problemOf(fn () => SaveAutomation::run(actor($tom), $web, 'auto_archive', ['enabled' => true]));
 
-    expect(ListAutomations::run(actor($tom), $web))->toHaveCount(4)
-        ->and(ListAutomations::run(actor($outsider), $web))->toHaveCount(4)
+    expect(ListAutomations::run(actor($tom), $web))->toHaveCount(5)
+        ->and(ListAutomations::run(actor($outsider), $web))->toHaveCount(5)
         ->and($refusal->status)->toBe(403)
         ->and($refusal->detail)->toBe(__('problem.detail.automations_admins_only'))
         ->and(problemOf(fn () => SaveAutomation::run(actor($viewer), $web, 'auto_archive', ['enabled' => true]))->status)->toBe(403)
@@ -208,4 +224,28 @@ it('writes no event when nothing changes', function () use ($world, $shape) {
     expect(eventsOf(EventType::AutomationUpdated))->toHaveCount(1)
         ->and($again->id)->toBe($saved->id)
         ->and($again->updated_at?->toJSON())->toBe($saved->updated_at?->toJSON());
+});
+
+it('writes nothing when link_references is switched on without a row', function () use ($world) {
+    [$web, $mara] = $world();
+
+    $saved = SaveAutomation::run(actor($mara), $web, 'link_references', ['enabled' => true]);
+
+    expect($saved->enabled)->toBeTrue()
+        ->and($saved->exists)->toBeFalse()
+        ->and(Automation::query()->count())->toBe(0)
+        ->and(eventsOf(EventType::AutomationUpdated))->toHaveCount(0);
+});
+
+it('stores a row and an event when link_references is switched off', function () use ($world) {
+    [$web, $mara] = $world();
+
+    $saved = SaveAutomation::run(actor($mara), $web, 'link_references', ['enabled' => false]);
+    $event = eventsOf(EventType::AutomationUpdated)->sole();
+
+    expect($saved->enabled)->toBeFalse()
+        ->and($saved->exists)->toBeTrue()
+        ->and(Automation::query()->sole()->enabled)->toBeFalse()
+        ->and($event->changes)->toBe(['enabled' => ['old' => true, 'new' => false]])
+        ->and($event->project_id)->toBe($web->id);
 });

@@ -31,8 +31,8 @@ vi.mock('@inertiajs/react', () => ({
 /* -------------------------------------------------------------------------- data */
 
 const web = project('WEB', 'admin', { id: 'p_web', name: 'Website-Relaunch', lead_id: 'u_ida' });
-const KEYS: AutomationKey[] = ['auto_archive', 'auto_close', 'close_parent', 'assign_on_start'];
-const DEFAULTS: Record<AutomationKey, Automation['settings']> = { auto_archive: { days: 30 }, auto_close: { days: 90, state_id: null }, close_parent: {}, assign_on_start: {} };
+const KEYS: AutomationKey[] = ['auto_archive', 'auto_close', 'close_parent', 'assign_on_start', 'link_references'];
+const DEFAULTS: Record<AutomationKey, Automation['settings']> = { auto_archive: { days: 30 }, auto_close: { days: 90, state_id: null }, close_parent: {}, assign_on_start: {}, link_references: {} };
 
 /** A workflow without a Canceled state. */
 const lean: Workflow = {
@@ -441,6 +441,6 @@ describe('Automations', () => {
   it('lists the automations as one list in the order of the server', async () => {
     renderAutomations();
     const rows = within(await screen.findByRole('list', { name: 'Automatisierungen' })).getAllByRole('heading', { level: 3 });
-    expect(rows.map((row) => row.textContent)).toEqual(['Auto-Archiv', 'Auto-Close', 'Eltern schließen', 'Assignee beim Start']);
+    expect(rows.map((row) => row.textContent)).toEqual(['Auto-Archiv', 'Auto-Close', 'Eltern schließen', 'Assignee beim Start', 'Erwähnte Items verknüpfen']);
   });
 });

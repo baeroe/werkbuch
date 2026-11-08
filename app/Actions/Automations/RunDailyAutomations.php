@@ -30,7 +30,7 @@ use RuntimeException;
 use Throwable;
 
 /**
- * The nightly automations (spec 4.13, A343, A344): the hourly RunDailyAutomationsJob acts in the hour 03:00–03:59 in the
+ * The nightly automations (spec 4.13, A343, A344; reads rows only, no nightly key starts on without one, A452): the hourly RunDailyAutomationsJob acts in the hour 03:00–03:59 in the
  * zone of the organisation (NightlyRun) and in no other, unless forced (`app:run-automations --now`). In every project
  * that is neither archived nor being deleted, with the automation switched on (`$projectId` names one project, e2e, K9):
  *
