@@ -37,7 +37,7 @@ class NotificationsSeeder extends Seeder
     /**
      * id, kind, item key (or `project` => identifier|null without an item), actor handle, `data`, created and read
      * (`MM-DD HH:mm`, Berlin time; read null = unread). `comment` names the comment, `states` the moved states (keys of
-     * ItemsSeeder::STATES).
+     * ItemsSeeder::state()).
      *
      * @var list<array{id: string, kind: NotificationKind, item?: string, project?: string|null, template?: string, webhook?: string, actor?: string, data?: array<string, mixed>, comment?: array{0: string, 1: int}, states?: array{0: string, 1: string}, created: string, read?: string, seconds?: int}>
      */
@@ -145,12 +145,12 @@ class NotificationsSeeder extends Seeder
         return is_string($id) ? $id : null;
     }
 
-    /** The state of that name (a key of ItemsSeeder::STATES) in the workflow the item's project has now, if it has one. */
+    /** The state of that name (a key of ItemsSeeder::state()) in the workflow the item's project has now, if it has one. */
     private function state(WorkItem $item, string $key): ?WorkflowState
     {
         $workflow = Project::query()->whereKey($item->project_id)->value('workflow_id');
 
-        return WorkflowState::query()->where('workflow_id', $workflow)->where('name', ItemsSeeder::STATES[$key])->first();
+        return WorkflowState::query()->where('workflow_id', $workflow)->where('name', ItemsSeeder::state($key))->first();
     }
 
     private function project(?string $identifier): ?string

@@ -9,6 +9,7 @@ use App\Models\WorkItem;
 use App\Models\WorkItemSubscriber;
 use App\RichText\Document;
 use App\Support\RichTextRules;
+use Database\Seeders\Demo\Texts\DemoTexts;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
@@ -30,30 +31,31 @@ class CommentsSeeder extends Seeder
     use WithoutModelEvents;
 
     /**
-     * The comments by item, author and time (`MM-DD HH:mm`, Berlin time), the text as Markdown and the reactions
-     * (emoji → handles, in the order they reacted).
+     * The comments by item, author and time (`MM-DD HH:mm`, Berlin time) and the reactions (emoji → handles, in the order
+     * they reacted). The text is DemoTexts' `comment.<KEY>.<n>`, Markdown, n counting the comments of the item in this
+     * order (the `c_<item>_<n>` of the clickdummy).
      *
-     * @var list<array{0: string, 1: string, 2: string, 3: string, 4?: array<string, list<string>>}>
+     * @var list<array{0: string, 1: string, 2: string, 3?: array<string, list<string>>}>
      */
     private const COMMENTS = [
-        ['WEB-47', 'mara', '10-27 14:42', 'Kann ich reproduzieren, nur unter iOS 18.', ['👍' => ['ida', 'jonas']]],
+        ['WEB-47', 'mara', '10-27 14:42', ['👍' => ['ida', 'jonas']]],
         // with a code block, so the item shows the highlighting of code (spec 4.16)
-        ['WEB-47', 'jonas', '10-28 08:50', "Ich schaue mir den Submit-Handler an. Vermutlich feuert das Formular-Plugin zweimal:\n\n```\nform.addEventListener('submit', sendMail);\n// das Plugin hängt sich noch einmal an\nplugin.on('submit', (event) => sendMail(event, { retries: 2 }));\n```"],
-        ['WEB-42', 'ida', '10-28 08:40', 'Hero-Entwurf ist drin, die Teaser kommen heute Nachmittag. @mara kannst du die Texte kurz gegenlesen?'],
-        ['WEB-42', 'lene', '10-28 09:05', 'Die Bildzuschnitte für Mobil schicke ich dir bis mittags.', ['🙌' => ['ida']]],
-        ['WEB-30', 'mara', '10-05 11:10', 'Phase 1 endet am 15.11. Danach starten wir mit den Leistungsseiten und dem Journal.'],
-        ['WEB-45', 'ida', '10-22 09:32', 'Studio Nordlicht liefert die Texte bis Freitag nach. Ohne sie kann ich die Leistungsseiten nicht befüllen.'],
-        ['WEB-45', 'mara', '10-27 15:00', 'Ich erinnere den Kunden morgen noch einmal.'],
-        ['WEB-48', 'lene', '10-27 16:30', 'Burger-Menü oder Tab-Leiste? Ich skizziere beides bis Donnerstag.'],
-        ['WEB-41', 'ida', '10-27 11:00', 'Hängt an den neuen Angaben zur Geschäftsführung. Ich habe heute noch einmal nachgefragt.'],
-        ['WEB-39', 'jonas', '10-27 16:25', 'Umzug ist durch. Die TTL war vorher gesenkt, die alte Instanz bleibt noch eine Woche als Fallback.', ['🎉' => ['mara', 'ida', 'lene']]],
-        ['WEB-40', 'lene', '10-23 14:12', 'Es fehlte das apple-touch-icon. Ist ergänzt und in Safari geprüft.'],
-        ['OPS-12', 'kira', '10-26 15:30', 'Postfix erlaubt aktuell 100 Mails pro Stunde. Die Formularmails und der Wochenreport reichen damit nicht.'],
-        ['OPS-12', 'jonas', '10-26 16:30', 'Setze ich um, sobald das Wartungsfenster steht.'],
-        ['OPS-3', 'jonas', '10-26 17:00', 'Fehlt nur noch das Mail-Limit (OPS-12). @mara das Wartungsfenster für die alten Server brauche ich noch von dir.'],
-        ['APP-5', 'theo', '10-20 09:10', 'Die Beta startet heute. Ziel ist eine TestFlight-Version für den Kunden bis Mitte Dezember.'],
-        ['APP-12', 'lene', '10-27 17:10', 'Telefonnummer und Adresse sind fertig, bei der E-Mail-Adresse fehlt noch die Bestätigungsmail.'],
-        ['APP-15', 'theo', '10-27 15:10', 'Hafenkontor möchte das bis Ende November. Wir brauchen noch das PDF-Layout vom Kunden.'],
+        ['WEB-47', 'jonas', '10-28 08:50'],
+        ['WEB-42', 'ida', '10-28 08:40'],
+        ['WEB-42', 'lene', '10-28 09:05', ['🙌' => ['ida']]],
+        ['WEB-30', 'mara', '10-05 11:10'],
+        ['WEB-45', 'ida', '10-22 09:32'],
+        ['WEB-45', 'mara', '10-27 15:00'],
+        ['WEB-48', 'lene', '10-27 16:30'],
+        ['WEB-41', 'ida', '10-27 11:00'],
+        ['WEB-39', 'jonas', '10-27 16:25', ['🎉' => ['mara', 'ida', 'lene']]],
+        ['WEB-40', 'lene', '10-23 14:12'],
+        ['OPS-12', 'kira', '10-26 15:30'],
+        ['OPS-12', 'jonas', '10-26 16:30'],
+        ['OPS-3', 'jonas', '10-26 17:00'],
+        ['APP-5', 'theo', '10-20 09:10'],
+        ['APP-12', 'lene', '10-27 17:10'],
+        ['APP-15', 'theo', '10-27 15:10'],
     ];
 
     public function run(): void
@@ -73,23 +75,25 @@ class CommentsSeeder extends Seeder
         $commented = Comment::query()->whereIn('work_item_id', $items->map->id->all())->distinct()->pluck('work_item_id')->flip();
         $fresh = $items->reject(fn (WorkItem $item) => $commented->has($item->id));
 
+        $counts = [];
         foreach (self::COMMENTS as $row) {
+            $n = $counts[$row[0]] = ($counts[$row[0]] ?? 0) + 1;
             $item = $fresh->get($row[0]);
             if ($item !== null) {
-                $this->write($item, $row, $people);
+                $this->write($item, $row, DemoTexts::get("comment.{$row[0]}.{$n}"), $people);
             }
         }
     }
 
     /**
-     * @param  array{0: string, 1: string, 2: string, 3: string, 4?: array<string, list<string>>}  $row
+     * @param  array{0: string, 1: string, 2: string, 3?: array<string, list<string>>}  $row
      * @param  Collection<string, User>  $people
      */
-    private function write(WorkItem $item, array $row, Collection $people): void
+    private function write(WorkItem $item, array $row, string $text, Collection $people): void
     {
         $author = $this->person($people, $row[1]);
         $at = ItemsSeeder::at($row[2]);
-        $body = Document::fromMarkdown($row[3], RichTextRules::context($item->project, $author, null));
+        $body = Document::fromMarkdown($text, RichTextRules::context($item->project, $author, null));
 
         $comment = new Comment;
         $comment->forceFill([
@@ -103,7 +107,7 @@ class CommentsSeeder extends Seeder
 
         // a minute apart, so the reactions keep the order of the seed (the API lists them by time)
         $minutes = 0;
-        foreach ($row[4] ?? [] as $emoji => $handles) {
+        foreach ($row[3] ?? [] as $emoji => $handles) {
             foreach ($handles as $handle) {
                 $when = $at->addMinutes(++$minutes);
                 (new CommentReaction)->forceFill([

@@ -41,6 +41,7 @@ final class SharedDemoTexts
         'view.roadmap.name' => 'the same word in both languages',
         'token.claude_code.name' => 'a product name',
         'token.mcp.name' => 'an abbreviation',
+        'file.OPS-12.1.name' => 'the name of a configuration file of Postfix',
     ];
 
     /**

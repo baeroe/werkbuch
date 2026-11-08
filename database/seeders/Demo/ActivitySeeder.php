@@ -38,7 +38,7 @@ class ActivitySeeder extends Seeder
      * The events by item, who and when (`MM-DD HH:mm`, Berlin time); the rest depends on the kind:
      *
      * - `created`: nothing more (the change is the title of the item),
-     * - `state`: the state before and after (shorts of ItemsSeeder::STATES), `true` when the move closes the item as done,
+     * - `state`: the state before and after (keys of ItemsSeeder::state()), `true` when the move closes the item as done,
      * - `assigned`: the handle of the new assignee, an optional reason (the automation, via `automation`) and seconds,
      * - `updated`: the changed fields as `field => [old, new]`.
      *
@@ -128,8 +128,8 @@ class ActivitySeeder extends Seeder
                 break;
             case 'state':
                 $states = WorkflowState::query()->where('workflow_id', $item->project->workflow_id)->get()->keyBy('name');
-                $from = $states->get(ItemsSeeder::STATES[$row[4]]);
-                $to = $states->get(ItemsSeeder::STATES[$row[5]]);
+                $from = $states->get(ItemsSeeder::state($row[4]));
+                $to = $states->get(ItemsSeeder::state($row[5]));
                 if ($from === null || $to === null) {
                     // the project works with another workflow now: these states are no history it can show
                     return;

@@ -118,7 +118,7 @@ it("seeds Mara's inbox like the clickdummy", function () use ($clickdummy, $comm
         }
         if ($row['states'] !== null) {
             expect([$notification->data['from']['name'], $notification->data['to']['name']])
-                ->toBe([ItemsSeeder::STATES[$row['states'][0]], ItemsSeeder::STATES[$row['states'][1]]]);
+                ->toBe([ItemsSeeder::state($row['states'][0]), ItemsSeeder::state($row['states'][1])]);
         }
         if ($row['fields'] !== null) {
             expect($notification->data['fields'])->toBe($row['fields']);

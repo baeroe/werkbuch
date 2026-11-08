@@ -31,7 +31,7 @@ Starte den Vite-Dev-Server und lass ihn laufen:
 ddev exec pnpm dev
 ```
 
-Öffne <https://werkbuch.ddev.site/login> und melde dich mit `ADMIN_EMAIL` und `ADMIN_PASSWORD` aus `.env` an (`admin@example.com` und `password` in `.env.example`). Die Demo-Personen nutzen `<handle>@feldwerk.example.com` mit dem Passwort `werkbuch-demo`. `DemoSeederEn` legt dieselbe Demo auf Englisch an: das Team Fieldwork mit gleichen Handles, Projekten, Keys und Zeiten, die Personen unter `<handle>@fieldwork.example.com`. Eine Datenbank hält eine Sprache: jeder der beiden Seeder lehnt eine Datenbank mit der Demo der anderen ab, zum Wechseln vorher `ddev artisan migrate:fresh`.
+Öffne <https://werkbuch.ddev.site/login> und melde dich mit `ADMIN_EMAIL` und `ADMIN_PASSWORD` aus `.env` an (`admin@example.com` und `password` in `.env.example`). Die Demo-Personen nutzen `<handle>@feldwerk.example.com` mit dem Passwort `werkbuch-demo`. `DemoSeederEn` legt dieselbe Demo auf Englisch an: das Team Fieldwork mit gleichen Handles, Projekten, Keys und Zeiten, die Personen unter `<handle>@fieldwork.example.com`. Eine Datenbank hält eine Sprache: jeder der beiden Seeder lehnt eine Datenbank mit der Demo der anderen ab, zum Wechseln vorher `ddev artisan migrate:fresh`. Bis die englische Demo vollständig ist, schreibt `DemoSeederEn` Wiki, Vorlagen, Inbox und Webhooks noch auf Deutsch.
 
 ## Dienste
 
