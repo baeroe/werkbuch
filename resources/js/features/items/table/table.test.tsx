@@ -6,10 +6,11 @@
  */
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState, type MouseEvent, type ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApiError } from '@/api/client';
 import { editReasonOf } from '@/components/fields/itemData';
 import { currentToasts, resetToasts } from '@/components/ui/toast';
 import { cachedZone } from '@/domain/tz';
@@ -19,6 +20,7 @@ import { useUiStore } from '@/store/ui';
 import type { Display, ListedItem, Organization, Property, ProjectRole, WorkItemType } from '@/types';
 import type { GroupData, LayoutProps } from '../layouts';
 import { tableColumns, typeHasProperty, typePropertyOf } from './columns';
+import { useRefusals } from './cells/PropertyCells';
 import { TableLayout } from './TableLayout';
 import { cellOf } from './useGridKeys';
 
@@ -259,6 +261,24 @@ const rightsLoaded = () =>
     expect(document.querySelector('[data-cell] [aria-disabled="true"]')).toBeNull();
   });
 
+/**
+ * A pointer presses in a cell and the focus lands on `target` meanwhile. The table forgets the press in the task after
+ * it (`setTimeout` 0): the fake timer runs that task at once, so the next focus is one without a pointer (20a-M3).
+ */
+function pointAt(inCell: HTMLElement, target: HTMLElement) {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  try {
+    fireEvent.pointerDown(inCell);
+    act(() => target.focus());
+    const kept = document.activeElement;
+    act(() => vi.runOnlyPendingTimers());
+    // the timers ran no focus of their own
+    expect(document.activeElement).toBe(kept);
+  } finally {
+    vi.useRealTimers();
+  }
+}
+
 /** Two frames: Base UI opens a popup and sets its focus a frame after the render that asks for it. */
 const nextFrames = () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
 
@@ -403,6 +423,8 @@ describe('TableLayout', () => {
     // the keys come as keys, Escape says what each press does
     const hint = document.getElementById(field.getAttribute('aria-describedby')!)!;
     expect(within(hint).getByRole('img', { name: 'Eingabe' })).toBeTruthy();
+    // the key Enter is a picture without text (Kbd), so the sentence starts with its space: untrimmed on purpose, the
+    // space belongs between the key and the words (20a-M6)
     expect(hint.textContent).toBe(' speichert. Esc nimmt das Getippte zurück, ein zweites schließt.');
     await user.clear(field);
     await user.keyboard('120,5{Enter}');
@@ -766,11 +788,9 @@ describe('TableLayout', () => {
     renderTable({ groups: [group('all', [web1])] });
     await rightsLoaded();
     const trigger = within(cell('wi_1', 2)!).getByRole('combobox', { name: /^Priorität/ });
-    fireEvent.pointerDown(cell('wi_1', 2)!);
-    act(() => trigger.focus());
+    pointAt(cell('wi_1', 2)!, trigger);
     expect(document.activeElement).toBe(trigger);
     // without a pointer the cell takes it
-    await new Promise((resolve) => setTimeout(resolve, 5));
     act(() => cell('wi_1', 1)!.focus());
     act(() => trigger.focus());
     expect(document.activeElement).toBe(cell('wi_1', 2));
@@ -797,21 +817,18 @@ describe('TableLayout', () => {
     renderTable({ groups: [group('all', [web1, web2])] });
     await rightsLoaded();
     const trigger = (id: string) => within(cell(id, 2)!).getByRole('combobox', { name: /^Priorität/ });
-    const pointAt = (id: string) => {
-      fireEvent.pointerDown(cell(id, 2)!);
-      act(() => trigger(id).focus());
+    const pointAtTrigger = (id: string) => {
+      pointAt(cell(id, 2)!, trigger(id));
       expect(document.activeElement).toBe(trigger(id));
     };
-    pointAt('wi_1');
+    pointAtTrigger('wi_1');
     press('ArrowRight');
     await waitFor(() => expect(document.activeElement).toBe(cell('wi_1', 3)));
-    await new Promise((resolve) => setTimeout(resolve, 5));
-    pointAt('wi_1');
+    pointAtTrigger('wi_1');
     press('ArrowDown');
     await waitFor(() => expect(document.activeElement).toBe(cell('wi_2', 2)));
     expect(cursor()).toBe('wi_2');
-    await new Promise((resolve) => setTimeout(resolve, 5));
-    pointAt('wi_2');
+    pointAtTrigger('wi_2');
     press('End');
     await waitFor(() => expect(document.activeElement).toBe(cell('wi_2', 3)));
 
@@ -1059,5 +1076,48 @@ describe('cells of the table', () => {
     expect(hint.textContent).toBe('Strg speichert, Enter beginnt eine neue Zeile. Esc nimmt das Getippte zurück, ein zweites schließt.');
     await user.keyboard('Zeile eins{Control>}{Enter}{/Control}');
     await waitFor(() => expect(patches().at(-1)).toEqual({ values: { brief: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Zeile eins' }] }] } } }));
+  });
+});
+
+describe('the refusals of the property cells', () => {
+  const effortOf = catalog.find((entry) => entry.key === 'effort')!;
+  const refusal = (words: string) => new ApiError({ status: 422, reason: 'validation_failed', errors: { 'values.effort': [words] } });
+  /** A save that waits until the test answers it. */
+  const held = () => {
+    let answer: { resolve: (value: unknown) => void; reject: (error: Error) => void } = { resolve: () => {}, reject: () => {} };
+    const call = new Promise((resolve, reject) => (answer = { resolve, reject }));
+    return { call, ...answer };
+  };
+  const item = makeWorkItem({ id: 'wi_1', updated_at: '2026-10-28T09:00:00Z' });
+
+  it('keeps the words of the newest save only, when two saves of a cell are on their way at once (20a-M1)', async () => {
+    const { result } = renderHook(() => useRefusals());
+    const [first, second] = [held(), held()];
+    act(() => result.current('row', effortOf, item).track(first.call));
+    act(() => result.current('row', effortOf, item).track(second.call));
+    // the second goes through, then the first comes back refused
+    await act(async () => second.resolve({}));
+    await act(async () => first.reject(refusal('Höchstens 100 Stunden.')));
+    expect(result.current('row', effortOf, item).refusal).toBeNull();
+
+    // the newest save refused: its words stay, whatever an earlier one answers
+    const [third, fourth] = [held(), held()];
+    act(() => result.current('row', effortOf, item).track(third.call));
+    act(() => result.current('row', effortOf, item).track(fourth.call));
+    await act(async () => fourth.reject(refusal('Nur ganze Stunden.')));
+    await act(async () => third.reject(refusal('Höchstens 100 Stunden.')));
+    expect(result.current('row', effortOf, item).refusal).toBe('Nur ganze Stunden.');
+  });
+
+  it('shows the words only while the item is as the refused save found it (20a-M2)', async () => {
+    const { result } = renderHook(() => useRefusals());
+    const save = held();
+    act(() => result.current('row', effortOf, item).track(save.call));
+    await act(async () => save.reject(refusal('Höchstens 100 Stunden.')));
+    expect(result.current('row', effortOf, item).refusal).toBe('Höchstens 100 Stunden.');
+    // the item changed another way (live, the preview, another row of it): the words are no longer its
+    expect(result.current('row', effortOf, { ...item, updated_at: '2026-10-28T09:05:00Z' }).refusal).toBeNull();
+    // other cells and rows have none
+    expect(result.current('other', effortOf, item).refusal).toBeNull();
   });
 });

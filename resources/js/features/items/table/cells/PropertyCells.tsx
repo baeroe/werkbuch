@@ -51,32 +51,48 @@ export interface CellRefusal {
   track: (call: Promise<unknown>) => void;
 }
 
+/** The words of a refusal and the `updated_at` of the item the refused save started from. */
+interface Held {
+  message: string;
+  stamp: string;
+}
+
 /**
  * The refusals of the property cells of a table, by `<rowKey>:<property key>`: they live with the table, not with a
- * cell, so a row that scrolls away (the virtualizer unmounts it) still shows them when it comes back (T20-M5).
+ * cell, so a row that scrolls away (the virtualizer unmounts it) still shows them when it comes back (T20-M5). Only the
+ * newest save of a cell has its say (20a-M1: of two at once, a refused earlier one never marks a later one that went
+ * through), and its words stay only while the item is as that save found it (20a-M2: a change from elsewhere, live, the
+ * preview or another row of the item, makes them old).
  */
-export function useRefusals(): (row: string, property: Property) => CellRefusal {
-  const [words, setWords] = useState<ReadonlyMap<string, string>>(() => new Map());
+export function useRefusals(): (row: string, property: Property, item: ListedItem) => CellRefusal {
+  const [words, setWords] = useState<ReadonlyMap<string, Held>>(() => new Map());
+  /** The newest save of each cell. */
+  const latest = useRef(new Map<string, object>());
   const settle = useSettle();
-  const put = useCallback((key: string, message: string | null) => {
+  const put = useCallback((key: string, held: Held | null) => {
     setWords((current) => {
-      if ((current.get(key) ?? null) === message) return current;
+      if (held === null && !current.has(key)) return current;
       const next = new Map(current);
-      if (message === null) next.delete(key);
-      else next.set(key, message);
+      if (held === null) next.delete(key);
+      else next.set(key, held);
       return next;
     });
   }, []);
-  return (row, property) => {
+  return (row, property, item) => {
     const key = `${row}:${property.key}`;
+    const held = words.get(key);
     return {
-      refusal: words.get(key) ?? null,
+      refusal: held && held.stamp === item.updated_at ? held.message : null,
       track: (call) => {
+        const token = {};
+        latest.current.set(key, token);
+        const stamp = item.updated_at;
         put(key, null);
         settle(call, {
           onError: (failure) => {
+            if (latest.current.get(key) !== token) return;
             const message = failure instanceof ApiError ? failure.errors?.[`values.${property.key}`]?.[0] : undefined;
-            if (message) put(key, message);
+            if (message) put(key, { message, stamp });
           },
         });
       },

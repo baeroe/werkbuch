@@ -474,7 +474,7 @@ export function TableLayout({ groups, groupBy, display, selection, onSelect, onS
                   item={item}
                   column={entry}
                   editing={cellEditing}
-                  {...(entry.property && { refusal: refusals(key, entry.property) })}
+                  {...(entry.property && { refusal: refusals(key, entry.property, item) })}
                   onEditingChange={(open) => {
                     if (open) startEditing(item, entry, key);
                     else if (cellEditing) setEditing(null);
