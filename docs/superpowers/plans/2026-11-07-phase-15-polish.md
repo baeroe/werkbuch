@@ -53,7 +53,7 @@ Regel A249, wie Phase 14:
 
 - **G1 (PHP), je Task mit PHP:** `ddev artisan test --coverage --min=100` → `Total: 100.0 %`; `ddev exec vendor/bin/phpstan analyse --memory-limit=1G` → `[OK] No errors`; `ddev exec vendor/bin/pint --test` → `PASS`. Mit Code unter `tests/Integration` dazu `ddev artisan test --testsuite=Integration --filter=<Name>`.
 - **G2 (Frontend), je Task mit `resources/js`, `scripts/` oder `e2e/`-Typen:** `ddev exec pnpm typecheck && ddev exec pnpm test:coverage` → grün, Schwellen gehalten; `pnpm --dir e2e typecheck` bei `e2e/`.
-- **GL (Last), Tasks 8a–13b:** `ddev artisan test --configuration=phpunit.load.xml` → grün; die Tabelle der Messwerte aus der Ausgabe in den Bericht. **GL läuft nie parallel zu G1 oder G3** (dieselbe MariaDB, derselbe Meilisearch, CPU der VM).
+- **GL (Last), Tasks 8a–13b:** `ddev exec vendor/bin/pest --configuration=phpunit.load.xml` (nie `artisan test`: es hängt `--configuration=phpunit.xml` davor, PHPUnit endet dann immer mit 1) → grün; die Tabelle der Messwerte aus der Ausgabe in den Bericht. **GL läuft nie parallel zu G1 oder G3** (dieselbe MariaDB, derselbe Meilisearch, CPU der VM).
 - **G3 gezielt, je Task mit Playwright:** `E2E_COVERAGE=0 pnpm --dir e2e exec playwright test <specs>` → grün.
 - **G3 voll, genau einmal je Phase:** nach Task 27, im Hintergrund parallel zum Final-Review: `ddev exec pnpm build:coverage && pnpm --dir e2e test && ddev exec pnpm build`.
 - **GD (Doku), Tasks 22e–24c:** `ddev exec pnpm --dir docs build` (Base `/` wie auf `werkbuch.dev`) → ohne tote Links; mit `DOCS_BASE=/werkbuch/` ebenso (Probe des CI-Jobs `docs`).
@@ -465,7 +465,7 @@ Nach superpowers:systematic-debugging: erst Ursache belegen, dann ändern. Bekan
 - In der CI legt der Service `MARIADB_DATABASE: load` sie an (Task 8b).
 
 - [ ] **Step 1: Failing Tests** — `SeedLoadTest` „refuses a database other than load“ (Konfiguration auf `testing` umgestellt → Exception, keine Tabelle geändert), „refuses a search prefix other than load_“, „seeds 50 000 items in 20 projects“ (Zahlen je Tabelle, `L01` hat 2 000 Seiten, 50 Webhooks aus, `load_meta.version` = `VERSION`), „migrates a seeded database again“ (eine offene Test-Migration per `--path` läuft beim nächsten `ensure()`).
-- [ ] **Step 2: RED** — `ddev artisan test --configuration=phpunit.load.xml --filter=SeedLoad`.
+- [ ] **Step 2: RED** — `ddev exec vendor/bin/pest --configuration=phpunit.load.xml --filter=SeedLoad`.
 - [ ] **Step 3: Umsetzen;** DDEV-Hook, `ddev restart`.
 - [ ] **Step 4: GL** (`--filter=SeedLoad`); Dauer des Seeders, Dauer von `rebuild()`, Größe der Datenbank (`information_schema.tables`) und Spitzenspeicher von PHP in den Bericht; G1 (nichts unter `app/` geändert, muss grün bleiben).
 - [ ] **Step 5: Commit** — `test: seed 50 000 items into a guarded load database`.
@@ -484,7 +484,7 @@ Nach superpowers:systematic-debugging: erst Ursache belegen, dann ändern. Bekan
   - Zeilen: `POST /api/v1/work-items/query` (erste Seite 100, jede Sortierung aus `SortSpec::CORE` und `property:effort`, beide Richtungen, `lean`), `GET /api/v1/work-items?filter[project]=L07`, `POST …/groups` (jede Gruppierung über alle Projekte und in `L07`), `POST …/counts` (10 Filter), Board = `/groups` + erste Seite jeder Gruppe nach Status in `L07`, `GET /api/v1/work-items/{key}?include=children,relations,type,workflow,attachments` (Epic mit 40 Kindern), `GET …/comments` und `…/history` des Items mit 40 Kommentaren, `GET /api/v1/search?q=<Wort>` (echte Meilisearch), `GET /api/v1/projects`, `GET /api/v1/projects/L01/pages` (2 000 Seiten).
   - Jede Zeile: **harte Zusicherung** Abfragezahl gleich der in `L20` mit nur den ersten 100 Items (feste Zahl, unabhängig von der Datenmenge; Ausnahmen nur mit Grund im Test), dazu Median ≤ 1,5 s.
   - **`OVER_BUDGET`** statt `->todo()` (Pests `todo` ruft `skip('__TODO__')`, der Test liefe nicht und die Zeile fehlte in der Tabelle): `const OVER_BUDGET = ['<zeile>' => 'Task 10: <Grund>']`. Jede Zeile läuft und misst, die Tabelle zeigt alle; nur die Zusicherung des Medians entfällt für genannte Zeilen (P2: nicht gelockert). Test „names only rows that exist“ hält die Liste ehrlich; Tasks 9–13b leeren sie.
-- CI-Job `load` (nicht Pflicht, `timeout-minutes: 40`): Services wie `tests` (MariaDB mit `MARIADB_DATABASE: load`, Meilisearch), `php artisan test --configuration=phpunit.load.xml`; lädt `storage/logs/load-budget.md` als Artefakt `load-budget` hoch (`if: always()`). Läuft bei jedem PR parallel zu `tests`.
+- CI-Job `load` (nicht Pflicht, `timeout-minutes: 40`): Services wie `tests` (MariaDB mit `MARIADB_DATABASE: load`, Meilisearch), `vendor/bin/pest --configuration=phpunit.load.xml` (nicht `artisan test`, siehe GL); lädt `storage/logs/load-budget.md` als Artefakt `load-budget` hoch (`if: always()`). Läuft bei jedem PR parallel zu `tests`.
 
 - [ ] **Step 1: Failing Tests** — `ApiLoadTest` (zuerst ohne `OVER_BUDGET`: RED zeigt, welche Zeilen über Budget liegen), „names only rows that exist“; `WorkflowsTest` „runs the load suite outside the required job“ (Job `load` mit `phpunit.load.xml`, nicht `tests`, Service-Datenbank `load`).
 - [ ] **Step 2: RED;** **erste Messung** ohne Änderung am App-Code: die Tabelle (Median, Abfragen) in den Bericht.
