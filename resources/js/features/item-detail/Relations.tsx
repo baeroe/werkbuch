@@ -15,6 +15,7 @@
 import { EyeOff, Plus, X } from 'lucide-react';
 import { useEffect, useId, useMemo, useRef, useState, type RefObject } from 'react';
 import { ApiError } from '@/api/client';
+import type { SearchOptions } from '@/api/search';
 import { useEditReason } from '@/components/fields/itemData';
 import { Picker, type PickerOption } from '@/components/fields/Picker';
 import { TypeGlyph } from '@/components/fields/TypeGlyph';
@@ -24,8 +25,10 @@ import { describedBy, Field } from '@/components/ui/Field';
 import { FormDialog } from '@/components/ui/FormDialog';
 import { IconButton } from '@/components/ui/IconButton';
 import { Select } from '@/components/ui/Select';
+import { useAsked } from '@/editor/suggestions';
 import { toast } from '@/components/ui/toast';
 import { useRelationTypes } from '@/hooks/catalog';
+import { qk } from '@/hooks/keys';
 import { useSettle } from '@/hooks/mutation';
 import { useAddRelation, useRemoveRelation } from '@/hooks/relations';
 import { useSearch } from '@/hooks/search';
@@ -43,7 +46,7 @@ import { LinkedItem, Section, useDetail } from './shared';
 export const SEARCH_PAUSE_MS = 200;
 
 /** Hits the search shows at once; typing narrows them. */
-const SEARCH_LIMIT = 20;
+const SEARCH_OPTIONS: SearchOptions = { types: ['items'], limit: 20 };
 
 /** What a relation says from the side of the item that shows it. */
 export function relationLabel(type: RelationType | undefined, direction: RelationEntry['direction']): string {
@@ -84,11 +87,12 @@ function RelationDialog({ item, open, onOpenChange, finalFocus }: RelationDialog
   const [target, setTarget] = useState<ListedItem | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [search, setSearch] = useState('');
   const { reason } = usePermissions();
+  // asked once typing paused, or at once when the answer to the text is in the cache already (like `@` and `#`)
+  const search = useAsked(query.trim(), (q) => qk.search.list({ q, ...SEARCH_OPTIONS }), SEARCH_PAUSE_MS);
   // asked only while the dialog is open and something is typed; the hits of the last search stay while the next one is
   // on its way (the list does not blink)
-  const found = useSearch(search, { types: ['items'], limit: SEARCH_LIMIT }, { enabled: open });
+  const found = useSearch(search, SEARCH_OPTIONS, { enabled: open });
   const typed = query.trim() !== '';
   // the hits belong to an earlier text while the pause runs or the answer to the new one is on its way: they stay, so the
   // list does not blink, but none of them can be chosen (Enter takes nothing, like `stale` in the editor's menus)
@@ -106,11 +110,6 @@ function RelationDialog({ item, open, onOpenChange, finalFocus }: RelationDialog
     const timer = setTimeout(() => setPickerOpen(true), 0);
     return () => clearTimeout(timer);
   }, []);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setSearch(query.trim()), SEARCH_PAUSE_MS);
-    return () => clearTimeout(timer);
-  }, [query]);
 
   useEffect(() => {
     if (refused > 0) requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-relation-form] [aria-invalid="true"]`)?.focus());
@@ -206,6 +205,10 @@ function RelationDialog({ item, open, onOpenChange, finalFocus }: RelationDialog
             onQueryChange={setQuery}
           />
         </Field>
+        {/* the hint names "Sucht …" only as a description: a screen reader hears it here once the hits turn stale (20b-M4) */}
+        <span data-relation-status="" role="status" aria-live="polite" className="sr-only">
+          {stale && !(typed && found.isError) ? t('items.detail.relations.dialog.searching') : ''}
+        </span>
         {target && label && (
           <p className="text-ui text-pretty text-muted">
             <ItemKey value={item.key} className="text-ink" /> {label} <ItemKey value={target.key} className="text-ink" />

@@ -188,8 +188,8 @@ export function useSettled(value: string, delay = 150): string {
  * What a list asks the server for: what is typed, once typing paused for a moment, or at once when an answer to it is
  * in the cache already (that one is good to take right away).
  */
-export function useAsked(typed: string, keyOf: (q: string) => QueryKey): string {
-  const settled = useSettled(typed);
+export function useAsked(typed: string, keyOf: (q: string) => QueryKey, delay?: number): string {
+  const settled = useSettled(typed, delay);
   return useQueryClient().getQueryData(keyOf(typed)) !== undefined ? typed : settled;
 }
 

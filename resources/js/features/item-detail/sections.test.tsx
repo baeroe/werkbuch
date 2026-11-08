@@ -1229,7 +1229,8 @@ describe('Relations', () => {
     expect(earlier.getAttribute('aria-disabled')).toBe('true');
     await waitFor(() => expect(held).toBe(true));
     expect(screen.getByRole('option', { name: /Startseite umbauen/ }).getAttribute('aria-disabled')).toBe('true');
-    expect(within(dialog).getByText('Sucht …')).toBeTruthy();
+    // in the hint under the field and in the live region
+    expect(within(dialog).getAllByText('Sucht …')).toHaveLength(2);
     await user.keyboard('{Enter}');
     expect(within(dialog).getByRole('combobox', { name: 'Item: keins gewählt' })).toBeTruthy();
 
@@ -1242,6 +1243,41 @@ describe('Relations', () => {
     expect(within(dialog).getByRole('combobox', { name: 'Item: WEB-50 Impressum aktualisieren' })).toBeTruthy();
   });
 
+  it('takes the hits of a text it searched before at once, without the pause (CI-sections)', async () => {
+    const user = userEvent.setup();
+    renderWith(<ItemPage itemKey="WEB-47" />);
+    await screen.findByRole('region', { name: 'Relationen' });
+    press('r');
+    const search = await screen.findByPlaceholderText('Key, Titel oder Text suchen …');
+    await waitFor(() => expect(document.activeElement).toBe(search));
+    await user.keyboard('startseite');
+    expect((await screen.findByRole('option', { name: /Startseite umbauen/ })).getAttribute('aria-disabled')).not.toBe('true');
+    await user.keyboard('{Backspace}');
+    // "startseit" is asked after the pause and answered
+    await waitFor(() => expect(api!.calls.some((call) => call.url.includes('q=startseit&'))).toBe(true));
+    await waitFor(() => expect(screen.getByRole('option', { name: /Startseite umbauen/ }).getAttribute('aria-disabled')).not.toBe('true'));
+    // the answer to "startseite" is in the cache: no pause of SEARCH_PAUSE_MS before its hits can be chosen
+    await user.keyboard('e');
+    expect(screen.getByRole('option', { name: /Startseite umbauen/ }).getAttribute('aria-disabled')).not.toBe('true');
+  });
+
+  it('says "Sucht …" in a polite live region while the hits are stale (20b-M4)', async () => {
+    const user = userEvent.setup();
+    renderWith(<ItemPage itemKey="WEB-47" />);
+    await screen.findByRole('region', { name: 'Relationen' });
+    press('r');
+    const dialog = await screen.findByRole('dialog', { name: 'Relation hinzufügen' });
+    const search = await screen.findByPlaceholderText('Key, Titel oder Text suchen …');
+    await waitFor(() => expect(document.activeElement).toBe(search));
+    const live = dialog.querySelector('[data-relation-status]');
+    expect(live?.getAttribute('aria-live')).toBe('polite');
+    expect(live?.textContent).toBe('');
+    await user.keyboard('impressum');
+    expect(live?.textContent).toBe('Sucht …');
+    await screen.findByRole('option', { name: /Impressum aktualisieren/ });
+    await waitFor(() => expect(live?.textContent).toBe(''));
+  });
+
   it('asks nothing until something is typed and says what to type', async () => {
     const user = userEvent.setup();
     renderWith(<ItemPage itemKey="WEB-47" />);
@@ -1249,7 +1285,7 @@ describe('Relations', () => {
     press('r');
     const search = await screen.findByPlaceholderText('Key, Titel oder Text suchen …');
     await waitFor(() => expect(document.activeElement).toBe(search));
-    expect(await screen.findByText('Key oder Titel eingeben')).toBeTruthy();
+    expect(await screen.findByText('Key, Titel oder Text eingeben')).toBeTruthy();
     expect(screen.queryByRole('option')).toBeNull();
     await act(() => new Promise((resolve) => setTimeout(resolve, SEARCH_PAUSE_MS + 50)));
     const searches = () => api!.calls.filter((call) => call.url.startsWith('/api/v1/search'));
@@ -1259,7 +1295,7 @@ describe('Relations', () => {
     await user.keyboard('impressum');
     await screen.findByRole('option', { name: /Impressum aktualisieren/ });
     await user.keyboard('{Backspace>9/}');
-    expect(await screen.findByText('Key oder Titel eingeben')).toBeTruthy();
+    expect(await screen.findByText('Key, Titel oder Text eingeben')).toBeTruthy();
     expect(screen.queryByRole('option')).toBeNull();
     await act(() => new Promise((resolve) => setTimeout(resolve, SEARCH_PAUSE_MS + 50)));
     expect(screen.queryByRole('option')).toBeNull();
