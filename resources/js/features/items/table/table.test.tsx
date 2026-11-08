@@ -760,6 +760,38 @@ describe('TableLayout', () => {
     expect(document.activeElement).toBe(cell('wi_2', 1));
   });
 
+  it('moves with the arrows from a control a pointer left the focus on, while no editor is open (T20-M9)', async () => {
+    renderTable({ groups: [group('all', [web1, web2])] });
+    await rightsLoaded();
+    const trigger = (id: string) => within(cell(id, 2)!).getByRole('combobox', { name: /^Priorität/ });
+    const pointAt = (id: string) => {
+      fireEvent.pointerDown(cell(id, 2)!);
+      act(() => trigger(id).focus());
+      expect(document.activeElement).toBe(trigger(id));
+    };
+    pointAt('wi_1');
+    press('ArrowRight');
+    await waitFor(() => expect(document.activeElement).toBe(cell('wi_1', 3)));
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    pointAt('wi_1');
+    press('ArrowDown');
+    await waitFor(() => expect(document.activeElement).toBe(cell('wi_2', 2)));
+    expect(cursor()).toBe('wi_2');
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    pointAt('wi_2');
+    press('End');
+    await waitFor(() => expect(document.activeElement).toBe(cell('wi_2', 3)));
+
+    // with its editor open, the keys on the control are the editor's
+    act(() => cell('wi_2', 2)!.focus());
+    press('Enter');
+    await searchField('Priorität suchen …');
+    act(() => trigger('wi_2').focus());
+    press('ArrowRight');
+    expect(document.activeElement).toBe(trigger('wi_2'));
+    expect(screen.getByPlaceholderText('Priorität suchen …')).toBeTruthy();
+  });
+
   it('measures where its box starts when the window changes its size', () => {
     const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 200, 1024, 0));
     renderTable({ groups: [group('all', [web1])] });

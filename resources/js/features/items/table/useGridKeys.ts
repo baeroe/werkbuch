@@ -1,7 +1,8 @@
 /*
  * The keys of the table's grid (WAI-ARIA grid pattern, P26): they belong to the widget, not to the shortcut catalog,
- * and act only while a cell itself has the focus (not a control inside it, not an open editor, whose keys bubble
- * through the portal of its popup). The arrows move from cell to cell: ↑/↓ through the item rows in their order, the
+ * and act while a cell itself has the focus, not in an open editor (whose keys bubble through the portal of its popup).
+ * On a control inside a cell (where a pointer left the focus) the arrows, Home and End move from its cell as long as no
+ * editor is open (T20-M9); its Enter and space stay its own. The arrows move from cell to cell: ↑/↓ through the item rows in their order, the
  * same as j/k, and with ⇧ they extend the selection as ⇧J/⇧K do (K19). Home and End go to the first and last column,
  * with ⌘/Strg to the first and last row; Enter opens the editor of the cell (the item's page on the first column).
  * Escape closes an editor, which gives the focus back to its cell (TableLayout). Tab leaves the grid: only one cell is
@@ -36,19 +37,28 @@ export interface GridKeysOptions {
   enter: (row: string, column: number) => void;
   /** ← on the first column; answers whether it went somewhere (the heading of the group). */
   leftEdge?: (row: string) => boolean;
+  /** An editor of a cell is open: a control of the cell keeps its keys. */
+  editing: boolean;
 }
 
-/** The keydown handler of the grid, for its table element. */
-export function useGridKeys({ rows, lastColumn, go, move, enter, leftEdge }: GridKeysOptions) {
-  return (event: KeyboardEvent<HTMLElement>) => {
-    const cell = cellOf(event.target);
-    if (!cell || event.nativeEvent.isComposing || event.altKey) return;
+/** The keys that move from cell to cell, also from a control inside one. */
+const MOVES = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End']);
+
+/**
+ * The keydown handlers of the grid, for its table element: `onKeyDown` for a cell that has the focus, and
+ * `onKeyDownCapture` for a control inside a cell, which sees the keys first, so a picker's trigger does not open its list
+ * on ↓ while the arrows move from cell to cell.
+ */
+export function useGridKeys({ rows, lastColumn, go, move, enter, leftEdge, editing }: GridKeysOptions) {
+  /** Acts on a key at a cell; answers whether the key was the grid's. */
+  function act(event: KeyboardEvent<HTMLElement>, cell: { row: string; column: number }): boolean {
+    if (event.nativeEvent.isComposing || event.altKey) return false;
     const mod = event.metaKey || event.ctrlKey;
     const { row, column } = cell;
     // ⌘/Strg only with Home and End (the first and last row), ⇧ only with ↑/↓ (it extends the selection)
     const jump = event.key === 'Home' || event.key === 'End';
     const vertical = event.key === 'ArrowUp' || event.key === 'ArrowDown';
-    if ((mod && !jump) || (event.shiftKey && !vertical)) return;
+    if ((mod && !jump) || (event.shiftKey && !vertical)) return false;
     switch (event.key) {
       case 'ArrowUp':
       case 'ArrowDown':
@@ -56,7 +66,7 @@ export function useGridKeys({ rows, lastColumn, go, move, enter, leftEdge }: Gri
         break;
       case 'ArrowLeft':
         if (column > 0) go(row, column - 1);
-        else if (!leftEdge?.(row)) return;
+        else if (!leftEdge?.(row)) return false;
         break;
       case 'ArrowRight':
         go(row, Math.min(lastColumn, column + 1));
@@ -71,9 +81,23 @@ export function useGridKeys({ rows, lastColumn, go, move, enter, leftEdge }: Gri
         enter(row, column);
         break;
       default:
-        return;
+        return false;
     }
     // the shortcuts of the list stay out of it (the registry leaves a prevented key alone)
     event.preventDefault();
+    return true;
+  }
+
+  return {
+    onKeyDown: (event: KeyboardEvent<HTMLElement>) => {
+      const cell = cellOf(event.target);
+      if (cell) act(event, cell);
+    },
+    onKeyDownCapture: (event: KeyboardEvent<HTMLElement>) => {
+      // only a control inside a cell, while no editor is open; its Enter and space stay its own
+      if (editing || !MOVES.has(event.key) || !(event.target instanceof Element) || cellOf(event.target)) return;
+      const cell = cellOf(event.target.closest('[data-cell]'));
+      if (cell && act(event, cell)) event.stopPropagation();
+    },
   };
 }

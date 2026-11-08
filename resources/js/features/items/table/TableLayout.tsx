@@ -277,6 +277,7 @@ export function TableLayout({ groups, groupBy, display, selection, onSelect, onS
       focusHeading(rowsByKey.get(key)!.group.key);
       return true;
     },
+    editing: editing !== null,
   });
 
   // a group loads once a row of it is rendered and it is open; its next page once its last loaded row is rendered
@@ -497,7 +498,7 @@ export function TableLayout({ groups, groupBy, display, selection, onSelect, onS
         aria-rowcount={rowCount}
         aria-colcount={span}
         aria-multiselectable="true"
-        onKeyDown={gridKeys}
+        {...gridKeys}
         // a fixed table needs its width: the first column (14 rem, 22 rem from md on) and the fields
         style={{ width: `calc(var(--title-w) + ${columns.reduce((sum, entry) => sum + entry.width, 0)}rem)` }}
         className="min-w-full table-fixed border-separate border-spacing-0 text-ui [--title-w:14rem] md:[--title-w:22rem]"
