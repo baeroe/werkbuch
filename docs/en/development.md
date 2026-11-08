@@ -31,7 +31,7 @@ Start the Vite dev server and keep it running:
 ddev exec pnpm dev
 ```
 
-Open <https://werkbuch.ddev.site/login> and sign in with `ADMIN_EMAIL` and `ADMIN_PASSWORD` from `.env` (`admin@example.com` and `password` in `.env.example`). The demo people use `<handle>@feldwerk.example.com` with the password `werkbuch-demo`. `DemoSeederEn` seeds the same demo in English: the team Fieldwork with the same handles, projects, keys and times, people at `<handle>@fieldwork.example.com`. One database holds one language: each seeder refuses a database that holds the demo of the other one, so switch with `ddev artisan migrate:fresh` first. `tests/Feature/Seeders/DemoLanguagesTest.php` seeds both and holds the English demo to the shape of the German one, row by row; the e2e seeder stays on the German demo.
+Open <https://werkbuch.ddev.site/login> and sign in with `ADMIN_EMAIL` and `ADMIN_PASSWORD` from `.env` (`admin@example.com` and `password` in `.env.example`). The demo people use `<handle>@feldwerk.example.com` with the password `werkbuch-demo`. `DemoSeederEn` seeds the same demo in English: the team Fieldwork with the same handles, projects, keys and times, people at `<handle>@fieldwork.example.com`. One database holds one language: each seeder refuses a database that holds the demo of the other one, so switch with `ddev artisan migrate:fresh` first. `tests/Feature/Seeders/DemoLanguagesTest.php` seeds both and holds the English demo to the shape of the German one; the e2e seeder stays on the German demo.
 
 ## Services
 

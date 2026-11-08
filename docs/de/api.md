@@ -131,7 +131,7 @@ Ohne `sort` behält jede Liste ihre eigene Ordnung (der Standard in der Tabelle)
 | `GET /favorites` | – | – | deine Reihenfolge | – |
 | `GET /work-items/{item}/comments` | – | – | älteste zuerst | – |
 | `GET /work-items/{item}/history` | – | – | älteste zuerst | – |
-| `GET /work-items/{item}/pages` | – | – | Titel (nur Seiten von Projekten, die du siehst) | – |
+| `GET /work-items/{item}/pages` | – | – | Titel | – |
 | `GET /pages/{page}/versions` | – | – | neueste zuerst | – |
 | `GET /templates/{template}/runs` | – | – | neueste zuerst | – |
 <!-- lists:end -->
@@ -158,7 +158,7 @@ Items haben ihre eigene Filter-Engine, die der Views. Die vollständige Referenz
 
 ## Rich Text
 
-Beschreibungen, Rich-Text-Werte, Kommentare, Wiki-Seiten und Vorlagen kommen in zwei Formen: `description` in Markdown und `description_json` als Tiptap-Dokument (`body`/`body_json` bei Kommentaren, `content`/`content_json` bei Seiten). Schreib in einer davon; beide zugleich sind ein `422`. Markdown ist für den Leser geschrieben: Erwähnungen zeigen den aktuellen Handle, Verweise den aktuellen Key bzw. Titel, und Verweise auf etwas, das du nicht sehen darfst, bleiben `[hidden](item:<ulid>)`. Was ein Text enthalten darf und wie Erwähnungen, Verweise, Bilder und Dateien geschrieben werden, steht auf der Seite [Rich Text](/de/concepts/rich-text#schreiben-uber-rest).
+Beschreibungen, Rich-Text-Werte, Kommentare, Wiki-Seiten und Vorlagen kommen in zwei Formen: `description` in Markdown und `description_json` als Tiptap-Dokument (`body`/`body_json` bei Kommentaren, `content`/`content_json` bei Seiten). Schreib in einer davon; beide zugleich sind ein `422`. Markdown ist für den Leser geschrieben: Erwähnungen zeigen den aktuellen Handle, Verweise den aktuellen Key bzw. Titel, und Verweise auf etwas, das du nicht sehen darfst, bleiben `[hidden](item:<ulid>)` bzw. `[hidden](page:<ulid>)`. Was ein Text enthalten darf und wie Erwähnungen, Verweise, Bilder und Dateien geschrieben werden, steht auf der Seite [Rich Text](/de/concepts/rich-text#schreiben-uber-rest).
 
 ## Konflikte
 

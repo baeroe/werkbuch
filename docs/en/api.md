@@ -131,7 +131,7 @@ Without `sort`, every list keeps its own order (the default in the table). Fixed
 | `GET /favorites` | – | – | your order | – |
 | `GET /work-items/{item}/comments` | – | – | oldest first | – |
 | `GET /work-items/{item}/history` | – | – | oldest first | – |
-| `GET /work-items/{item}/pages` | – | – | title (only pages of projects you see) | – |
+| `GET /work-items/{item}/pages` | – | – | title | – |
 | `GET /pages/{page}/versions` | – | – | newest first | – |
 | `GET /templates/{template}/runs` | – | – | newest first | – |
 <!-- lists:end -->
@@ -158,7 +158,7 @@ Items have their own filter engine, the one of the views. The full reference of 
 
 ## Rich text
 
-Descriptions, rich-text values, comments, wiki pages and templates come in two forms: `description` in Markdown and `description_json` as the Tiptap document (`body`/`body_json` for comments, `content`/`content_json` for pages). Write in one of them; both at once is a `422`. Markdown is written for the reader: mentions show the current handle, references the current key or title, and references to what you may not see stay `[hidden](item:<ulid>)`. What a text may contain and how mentions, references, images and files are written is on the page [Rich text](/en/concepts/rich-text#writing-over-rest).
+Descriptions, rich-text values, comments, wiki pages and templates come in two forms: `description` in Markdown and `description_json` as the Tiptap document (`body`/`body_json` for comments, `content`/`content_json` for pages). Write in one of them; both at once is a `422`. Markdown is written for the reader: mentions show the current handle, references the current key or title, and references to what you may not see stay `[hidden](item:<ulid>)` or `[hidden](page:<ulid>)`. What a text may contain and how mentions, references, images and files are written is on the page [Rich text](/en/concepts/rich-text#writing-over-rest).
 
 ## Conflicts
 
