@@ -56,11 +56,13 @@ test('creates a webhook with the keyboard, copies its secret once and pings the 
     // the secret is shown this one time; the button copies it
     const secretDialog = page.getByRole('dialog', { name: label('settings.webhooks.secret.created_title') });
     await expect(secretDialog).toBeVisible();
-    await expect(secretDialog.getByRole('textbox', { name: label('settings.webhooks.secret.label') })).toHaveValue(/\S+/);
+    const field = secretDialog.getByRole('textbox', { name: label('settings.webhooks.secret.label') });
+    await expect(field).toHaveValue(/^whsec_\S+$/);
     await tabTo(page, secretDialog.getByRole('button', { name: label('settings.webhooks.secret.copy') }));
     await page.keyboard.press('Enter');
-    const secret = await clipboard(page);
-    expect(secret.length).toBeGreaterThan(16);
+    // the clipboard belongs to the browser, not to the context: an earlier spec's token is still there until the copy
+    const secret = await field.inputValue();
+    await expect.poll(() => clipboard(page)).toBe(secret);
     await tabTo(page, secretDialog.getByRole('button', { name: label('settings.webhooks.secret.done') }));
     await page.keyboard.press('Enter');
     await expect(secretDialog).toHaveCount(0);

@@ -54,7 +54,8 @@ type FormDialogProps = {
   notice?: ReactNode;
   /** Why the form cannot be sent yet: the main button stays focusable and says so (`onSubmit` still checks). */
   submitDisabledReason?: string | null;
-  finalFocus?: RefObject<HTMLElement | null>;
+  /** Where the focus goes on close (see `DialogFrame`); `false` leaves it where it is. */
+  finalFocus?: RefObject<HTMLElement | null> | false;
   children: ReactNode;
 };
 

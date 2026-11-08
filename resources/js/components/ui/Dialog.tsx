@@ -22,8 +22,11 @@ type FrameProps = {
   size?: keyof typeof WIDTHS;
   /** Element to focus on open; by default the first field or button. */
   initialFocus?: RefObject<HTMLElement | null>;
-  /** Element to focus on close; by default the one that had the focus before (gone after a closing menu). */
-  finalFocus?: RefObject<HTMLElement | null>;
+  /**
+   * Element to focus on close; by default the one that had the focus before (gone after a closing menu). `false` leaves
+   * the focus where it is: another dialog took it over meanwhile (an explicit element is focused wherever the focus is).
+   */
+  finalFocus?: RefObject<HTMLElement | null> | false;
   /** Close button at the top right (Dialog yes, AlertDialog no: it must be answered). */
   closable?: boolean;
   /** Rendered inside the popup after everything else, e.g. a question that belongs to this dialog. */

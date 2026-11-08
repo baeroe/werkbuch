@@ -447,6 +447,48 @@ describe('Webhooks: focus and retry (T13 findings)', () => {
     await waitFor(() => expect(document.activeElement).toBe(screen.getAllByRole('button', { name: 'Webhook anlegen' })[0]));
   });
 
+  it('leaves the focus in the secret when the form behind it has faded out (T7: Enter opened a second form)', async () => {
+    const user = userEvent.setup();
+    renderWebhooks();
+    await cardOf('Deploy-Bot');
+    const opener = screen.getByRole('button', { name: 'Webhook anlegen' });
+    await user.click(opener);
+    const form = await screen.findByRole('dialog', { name: 'Webhook anlegen' });
+    await user.type(within(form).getByRole('textbox', { name: 'Name' }), 'Chat');
+    await user.type(within(form).getByRole('textbox', { name: 'URL' }), 'https://chat.example.com/hook');
+    await user.click(within(form).getByRole('checkbox', { name: /^Bots/ }));
+
+    // the form fades out until `finish` (jsdom has no animations, Base UI would unmount it at once): in the browser the
+    // secret is open and has the focus before the form is gone
+    let finish!: () => void;
+    const fading = { pending: false, playState: 'running', effect: { getTiming: () => ({ duration: 160, iterations: 1 }) }, finished: new Promise<void>((resolve) => (finish = resolve)) };
+    Element.prototype.getAnimations = function (this: Element) {
+      return form.contains(this) ? [fading as unknown as Animation] : [];
+    };
+    let result: HTMLElement;
+    try {
+      await user.click(within(form).getByRole('button', { name: 'Anlegen' }));
+      result = await screen.findByRole('dialog', { name: 'Webhook ist angelegt' });
+      await waitFor(() => expect(result.contains(document.activeElement)).toBe(true));
+      expect(form.isConnected).toBe(true);
+    } finally {
+      fading.playState = 'finished';
+      await act(async () => finish());
+    }
+    // the form unmounts once it has faded out; what it hands back then must not pull the focus out of the secret
+    await waitFor(() => expect(form.isConnected).toBe(false));
+    delete (Element.prototype as Partial<Element>).getAnimations;
+    await act(async () => {});
+    expect(result.contains(document.activeElement)).toBe(true);
+    expect(document.activeElement).not.toBe(opener);
+
+    // Enter stays in the secret: no second form behind it
+    within(result).getByRole('button', { name: 'Geheimnis kopieren' }).focus();
+    await user.keyboard('{Enter}');
+    expect(screen.queryByRole('dialog', { name: 'Webhook anlegen' })).toBeNull();
+    expect(calls('POST', '/api/v1/webhooks')).toHaveLength(1);
+  });
+
   it('gives the focus back to "Neues Geheimnis erzeugen" after the new secret, and to the opener after the form', async () => {
     const user = userEvent.setup();
     renderWebhooks();
