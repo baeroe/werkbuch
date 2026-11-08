@@ -255,9 +255,24 @@ function PausePageShortcuts() {
   return null;
 }
 
-/** Text, number, link and plain rich text: a small editor in a popover, saved on Enter (or when the focus leaves). */
+/**
+ * Text, number, link and plain rich text: a small editor in a popover, saved on Enter (or when the focus leaves). A text
+ * it cannot read keeps the popover open on a click beside it, with its error, as Enter does (T20-M10); Escape takes the
+ * typing back first, then closes.
+ */
 function TypedCell({ item, property, editing, onEditingChange, saving, reason, required }: CellOf & { required: boolean }) {
   const users = useUserMap();
+  /** The error of the typed text while it cannot be read. */
+  const unreadable = useRef<string | null>(null);
+  /** That error, shown since a click beside the editor was refused. */
+  const [held, setHeld] = useState<string | null>(null);
+  const field = useRef<HTMLDivElement>(null);
+  // a closed editor forgets its text: the next one starts readable
+  useEffect(() => {
+    if (editing) return;
+    unreadable.current = null;
+    setHeld(null);
+  }, [editing]);
   const value = item.values[property.key];
   const text = formatPropertyValue(property, value, (id) => users.get(id)?.name ?? t('items.fields.property.unknown_person'));
   const numeric = property.field_type === 'number';
@@ -272,7 +287,19 @@ function TypedCell({ item, property, editing, onEditingChange, saving, reason, r
     );
   }
   return (
-    <Popover open={editing} onOpenChange={onEditingChange}>
+    <Popover
+      open={editing}
+      onOpenChange={(open, details) => {
+        if (!open && unreadable.current !== null) {
+          details.cancel();
+          setHeld(unreadable.current);
+          // the focus stays in the field, as after Enter
+          requestAnimationFrame(() => field.current?.querySelector<HTMLElement>('input, textarea')?.focus());
+          return;
+        }
+        onEditingChange(open);
+      }}
+    >
       <PopoverTrigger
         render={
           <button
@@ -289,7 +316,7 @@ function TypedCell({ item, property, editing, onEditingChange, saving, reason, r
       </PopoverTrigger>
       <PopoverContent title={property.label} className="w-[min(20rem,calc(100vw-2rem))] p-3">
         <PausePageShortcuts />
-        <div className="mt-2">
+        <div ref={field} className="mt-2">
           <PropertyValueInput
             property={property}
             value={value}
@@ -298,9 +325,13 @@ function TypedCell({ item, property, editing, onEditingChange, saving, reason, r
               saving.save(next);
               onEditingChange(false);
             }}
+            onUnreadable={(message) => {
+              unreadable.current = message;
+              setHeld((shown) => (shown === null || message === null ? null : message));
+            }}
             projectId={item.project_id}
             required={required}
-            error={saving.refusal}
+            error={held ?? saving.refusal}
             hideLabel
             hint={
               property.field_type === 'rich_text'

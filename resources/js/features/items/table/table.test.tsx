@@ -817,6 +817,43 @@ describe('TableLayout', () => {
     expect(patches()).toEqual([{ values: { effort: 120 } }]);
   });
 
+  it('keeps the editor open with a text it cannot read on a click beside it, and says why (T20-M10)', async () => {
+    const user = userEvent.setup();
+    renderTable({ groups: [group('all', [web1])] });
+    await focusCell('wi_1', 3, 'Aufwand (h)');
+    press('Enter');
+    const field = await screen.findByRole<HTMLInputElement>('textbox', { name: 'Aufwand (h)' });
+    await waitFor(() => expect(document.activeElement).toBe(field));
+    await user.clear(field);
+    // a text that may still become valid: its error waits for Enter or a click beside it
+    await user.keyboard('1.500');
+    expect(field.getAttribute('aria-invalid')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'danach' }));
+    expect(await screen.findByText(/^Mehrdeutig/)).toBeTruthy();
+    expect(screen.getByRole('textbox', { name: 'Aufwand (h)' })).toBe(field);
+    expect(field.value).toBe('1.500');
+    expect(field.getAttribute('aria-invalid')).toBe('true');
+    await waitFor(() => expect(document.activeElement).toBe(field));
+    expect(patches()).toEqual([]);
+
+    // the first Escape takes the typing back, the second closes
+    await user.keyboard('{Escape}');
+    expect(field.value).toBe('3');
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Aufwand (h)' })).toBeNull());
+
+    // a text it can read goes out on a click beside it, and the editor closes
+    act(() => cell('wi_1', 3)!.focus());
+    press('Enter');
+    const again = await screen.findByRole('textbox', { name: 'Aufwand (h)' });
+    await waitFor(() => expect(document.activeElement).toBe(again));
+    await user.clear(again);
+    await user.keyboard('4');
+    await user.click(screen.getByRole('button', { name: 'danach' }));
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Aufwand (h)' })).toBeNull());
+    expect(patches()).toEqual([{ values: { effort: 4 } }]);
+  });
+
   it('measures where its box starts when the window changes its size', () => {
     const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 200, 1024, 0));
     renderTable({ groups: [group('all', [web1])] });
