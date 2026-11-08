@@ -3,11 +3,13 @@
 use App\Access\ProjectRole;
 use App\Actions\Projects\DeleteProject;
 use App\Jobs\ReindexWorkItems;
+use App\Models\Label;
 use App\Models\Page;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
 use App\Search\SearchIndexer;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Laravel\Scout\EngineManager;
@@ -222,6 +224,34 @@ it('rebuilds every index from scratch', function () use ($world) {
         ->and($engine->updatedSettings('testing_work_items')['filterableAttributes'])->toContain('project_id')
         ->and($engine->updatedSettings('testing_projects'))->toBe(config('scout.meilisearch.index-settings')[Project::class])
         ->and($engine->updatedSettings('testing_users'))->toBe(config('scout.meilisearch.index-settings')[User::class]);
+});
+
+it('reads the labels of the documents from work_item_labels alone', function () use ($world) {
+    $engine = searchEngine();
+    [$web, , [$item, $bare]] = $world();
+    [$first, $second] = [Label::factory()->create(), Label::factory()->create()];
+    // linked in the other order: the document names them in catalog order, as the links of a page (Task 10b)
+    $item->labels()->attach([$second->id, $first->id]);
+    $indexer = app(SearchIndexer::class);
+
+    $read = [];
+    DB::listen(function (QueryExecuted $query) use (&$read): void {
+        if (str_contains($query->sql, 'work_item_labels')) {
+            $read[] = $query->sql;
+        }
+    });
+    $indexer->rebuild();
+    $indexer->reindexItems([$web->id]);
+    $indexer->upsertItem($item->id);
+
+    // a rebuild, a reindex and an upsert each read the links once, never with a join of `labels` (its plan could begin
+    // with the labels and walk every link of the organisation, Task 10b)
+    expect($read)->toHaveCount(3);
+    foreach ($read as $sql) {
+        expect($sql)->toStartWith('select `work_item_id`, `label_id` from `work_item_labels`');
+    }
+    expect($engine->documents('testing_work_items')[$item->id]['label_ids'])->toBe([$first->id, $second->id])
+        ->and($engine->documents('testing_work_items')[$bare->id]['label_ids'])->toBe([]);
 });
 
 it('skips settings for an engine without them', function () {

@@ -314,7 +314,9 @@ final class WorkItem extends Model
 
     /**
      * What toSearchableArray() reads, loaded with the query of a rebuild (makeAllSearchableQuery()). Items of a project
-     * being deleted stay out: a reindex after removeProject() would bring their documents back for good (K11).
+     * being deleted stay out: a reindex after removeProject() would bring their documents back for good (K11). The
+     * labels come from `work_item_labels` alone after the query, as loadForResource() reads them (Phase 15, Task 11b):
+     * a join of `labels` leaves the plan to the statistics (Task 10b).
      *
      * @param  Builder<self>  $query
      * @return Builder<self>
@@ -322,12 +324,17 @@ final class WorkItem extends Model
     protected function makeAllSearchableUsing(Builder $query): Builder
     {
         return $query->with([
-            'project:id,identifier', 'labels:labels.id', 'state:id,category',
+            'project:id,identifier', 'state:id,category',
             // no comment gives the document more than it can take: the database cuts it (T12-M1)
             'comments' => fn (HasMany $comments) => $comments->select(['id', 'work_item_id'])
                 ->selectRaw('left(body_text, ?) as body_text', [SearchIndexer::COMMENTS_MAX]),
         ])
-            ->whereIn('work_items.project_id', Project::query()->whereNull('deleting_at')->select('id'));
+            ->whereIn('work_items.project_id', Project::query()->whereNull('deleting_at')->select('id'))
+            ->afterQuery(function (mixed $items): void {
+                if ($items instanceof EloquentCollection) {
+                    self::loadLabels($items);
+                }
+            });
     }
 
     /**
