@@ -301,6 +301,8 @@ function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: P
       ...(project && { project }),
       ...(createDefaults && { createDefaults }),
       filtered: hidesItems,
+      filterChanged,
+      ...(view && { view }),
       onResetFilter: resetFilter,
       selection,
       onSelect: setSelection,

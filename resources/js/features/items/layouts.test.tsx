@@ -61,8 +61,10 @@ describe('a layout of its own chunk', () => {
     renderLayout(lateLayout(load));
 
     const alert = await screen.findByRole('alert');
-    expect(alert.textContent).toContain('Die Items konnten nicht geladen werden');
-    expect(alert.textContent).toContain('Das Layout ließ sich nicht laden. Die Liste erscheint, sobald der Server wieder antwortet.');
+    // the items are there, only the code of the layout is missing (19b-M1)
+    expect(alert.textContent).toContain('Das Layout konnte nicht geladen werden');
+    expect(alert.textContent).toContain('Die Items sind schon da. „Erneut versuchen“ lädt das Layout noch einmal.');
+    expect(alert.textContent).not.toContain('Die Items konnten nicht geladen werden');
     expect(errors.mock.calls.some(([error]) => error instanceof LayoutChunkError)).toBe(true);
     expect(load).toHaveBeenCalledTimes(1);
 

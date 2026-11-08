@@ -87,7 +87,7 @@ function addressWith(url: string, zoom: Zoom): string {
   return `${address.pathname}${address.search}`;
 }
 
-export function TimelineLayout({ groups, groupBy, project, createDefaults, filtered = false, onResetFilter, selection, onSelect, onSelectAll, onOpen, onPeek, cursorId, onCursor }: LayoutProps) {
+export function TimelineLayout({ groups, groupBy, project, createDefaults, filtered = false, filterChanged = false, view, onResetFilter, selection, onSelect, onSelectAll, onOpen, onPeek, cursorId, onCursor }: LayoutProps) {
   const types = useWorkItemTypes().data?.items;
   const projects = useProjects({ include_archived: true }).data?.items;
   const { reason } = usePermissions();
@@ -416,7 +416,7 @@ export function TimelineLayout({ groups, groupBy, project, createDefaults, filte
   // the answer of the layout before (1–4 switched to the timeline) stands until the epics by project are there: the
   // skeleton, so the focus waits for the row of the cursor (the screen's focus rescue) instead of a row that goes again
   if (groupBy !== 'project') return <ListSkeleton layout="timeline" loadingLayout />;
-  if (epics.length === 0) return <TimelineEmpty project={project} createDefaults={createDefaults} filtered={filtered} onResetFilter={onResetFilter} />;
+  if (epics.length === 0) return <TimelineEmpty project={project} createDefaults={createDefaults} filtered={filtered} filterChanged={filterChanged} view={view} onResetFilter={onResetFilter} />;
 
   const stop = cursorId !== null && order.includes(cursorId) ? cursorId : order[0];
   const planningItem = drag.planning ? epicById.get(drag.planning.id) : undefined;
@@ -589,15 +589,16 @@ export function TimelineLayout({ groups, groupBy, project, createDefaults, filte
 }
 
 /** No epic in the list: only epics stand on the timeline; with a filter that hides items, the way back to all of them. */
-function TimelineEmpty({ project, createDefaults, filtered, onResetFilter }: Pick<LayoutProps, 'project' | 'createDefaults' | 'filtered' | 'onResetFilter'>) {
+function TimelineEmpty({ project, createDefaults, filtered, filterChanged, view, onResetFilter }: Pick<LayoutProps, 'project' | 'createDefaults' | 'filtered' | 'filterChanged' | 'view' | 'onResetFilter'>) {
   const types = useWorkItemTypes().data?.items ?? [];
   const { reason } = usePermissions();
   if (filtered && onResetFilter) {
+    // a view names itself, and with its own conditions unchanged says that they match no epic (as `ListEmpty`, 19b-M2)
     return (
       <EmptyState
         icon={FunnelX}
-        title={t('items.timeline.empty.filtered_title')}
-        description={t('items.empty.filtered.changed')}
+        title={view ? t('items.empty.filtered.view_title', { name: view.name }) : t('items.timeline.empty.filtered_title')}
+        description={view && !filterChanged ? t('items.timeline.empty.filtered_view') : t('items.empty.filtered.changed')}
         actions={
           <Button variant="secondary" icon={FunnelX} onClick={onResetFilter}>
             {t('items.empty.filtered.reset')}

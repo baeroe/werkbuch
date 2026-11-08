@@ -209,8 +209,19 @@ export function ListError({ error, onRetry, retrying }: { error: Error | null; o
   );
 }
 
+/** A layout's chunk did not load: the items are there, its code is not (19b-M1); "Erneut versuchen" asks again. */
+function LayoutError({ onRetry }: { onRetry(): void }) {
+  return (
+    <ErrorState
+      title={t('items.screen.layout_failed_title')}
+      description={t('items.screen.layout_failed_description')}
+      onRetry={onRetry}
+    />
+  );
+}
+
 /**
- * Stands in for a layout whose chunk did not load (board, table, timeline): the list's error with "Erneut versuchen",
+ * Stands in for a layout whose chunk did not load (board, table, timeline): an error of its own with "Erneut versuchen",
  * which renders the layout anew and so asks for the chunk again (`lateLayout`). Any other error of a layout is none of
  * its business: it goes on to the error boundary of the page.
  */
@@ -234,6 +245,6 @@ export class LayoutBoundary extends Component<{ children: ReactNode }, { error: 
       error.retry();
       this.setState({ error: null });
     };
-    return <ListError error={error} onRetry={retry} retrying={false} />;
+    return <LayoutError onRetry={retry} />;
   }
 }

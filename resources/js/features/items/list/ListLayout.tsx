@@ -38,6 +38,8 @@ import { listRows, rowKey, type ListRow } from './rows';
 /** How tall a row is before it has measured itself: 36 px, 44 px on phones (touch targets). */
 const ROW_HEIGHT = { wide: 36, narrow: 44 };
 const HEADING_HEIGHT = 48;
+/** Frames to wait for a focus on its way back to the list before its row is let go. */
+const SETTLE_FRAMES = 5;
 
 /** Plain arrow keys only: with ⇧ they extend the selection (`useSelection`). */
 const plain = (event: KeyboardEvent) => !event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey;
@@ -80,6 +82,9 @@ export function ListLayout({ groups, groupBy, display, selection, onSelect, onSe
   // the cursor row and the row with the focus stay rendered while they scroll away, so the focus is not lost (13c): the
   // focus may sit on a heading, or on the second row of an item with two labels, which the cursor does not name
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
+  const focusInside = useRef(false);
+  const leaving = useRef(0);
+  useEffect(() => () => cancelAnimationFrame(leaving.current), []);
   const cursorIndex = useMemo(() => rows.findIndex((row) => row.kind === 'item' && row.item.id === cursorId), [rows, cursorId]);
   const focusedIndex = useMemo(() => (focusedKey === null ? -1 : rows.findIndex((row) => rowKey(row) === focusedKey)), [rows, focusedKey]);
   const rangeExtractor = useCallback(
@@ -211,9 +216,25 @@ export function ListLayout({ groups, groupBy, display, selection, onSelect, onSe
       className="relative"
       style={{ height: virtualizer.getTotalSize() }}
       onFocus={(event) => {
+        focusInside.current = true;
+        cancelAnimationFrame(leaving.current);
         // a picker's popup (a portal of a row) leaves the row it belongs to
         const key = event.target.closest<HTMLElement>('[data-row-key]')?.dataset.rowKey;
         if (key !== undefined) setFocusedKey(key);
+      }}
+      onBlur={() => {
+        // the focus left the list (its rows and their popups: React events cross portals) for good: the row it had
+        // need not stay rendered any more, nor ask for pages out of view (20b-M9)
+        focusInside.current = false;
+        cancelAnimationFrame(leaving.current);
+        const check = (left: number) => {
+          if (focusInside.current) return;
+          // the focus is on its way (a closing popup gives it back to its trigger a frame later): wait for it
+          const lost = document.activeElement === null || document.activeElement === document.body;
+          if (lost && left > 0) leaving.current = requestAnimationFrame(() => check(left - 1));
+          else setFocusedKey(null);
+        };
+        leaving.current = requestAnimationFrame(() => check(SETTLE_FRAMES));
       }}
     >
       {virtualRows.map((virtual) => {

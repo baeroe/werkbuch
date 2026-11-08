@@ -150,6 +150,22 @@ describe('Shell', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Navigation' })).toBeNull());
   });
 
+  it('keeps the drawer open on a link opened in a new tab or window (20b-M6)', async () => {
+    url = '/my-items';
+    render(<Shell>Inhalt</Shell>);
+    fireEvent.click(screen.getByRole('button', { name: 'Navigation öffnen' }));
+    const drawer = await screen.findByRole('dialog', { name: 'Navigation' });
+    const link = within(drawer).getByRole('link', { name: 'Meine Items' });
+    fireEvent.click(link, { ctrlKey: true });
+    fireEvent.click(link, { metaKey: true });
+    fireEvent.click(link, { button: 1 });
+    await act(async () => {});
+    expect(screen.getByRole('dialog', { name: 'Navigation' }).hasAttribute('data-ending-style')).toBe(false);
+    // a plain click still closes it
+    fireEvent.click(link);
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Navigation' })).toBeNull());
+  });
+
   it('shows nothing when the visit flashed nothing', () => {
     render(<Shell>Inhalt</Shell>);
 

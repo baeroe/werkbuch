@@ -382,6 +382,27 @@ describe('ListLayout', () => {
     expect(document.activeElement).toBe(focused);
   });
 
+  it('lets a heading go once the focus left the list for good (20b-M9)', async () => {
+    renderList({ groups: [group('a', items('a', 2000)), group('b', items('b', 1))] });
+    const outside = document.createElement('button');
+    document.body.append(outside);
+    try {
+      act(() => heading('a').focus());
+      act(() => outside.focus());
+      // the list waits a few frames for a focus on its way back (a popup of a row gives it back to its trigger)
+      await act(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+
+      scrollPage(1500 * ROW);
+      await waitFor(() => expect(rowOf('a1500')).not.toBeNull());
+      expect(rowOf('a1')).toBeNull();
+      // nothing keeps the heading any more: it went with the rows around it
+      expect(document.querySelector('[data-row-key="group:a"]')).toBeNull();
+      expect(document.activeElement).toBe(outside);
+    } finally {
+      outside.remove();
+    }
+  });
+
   it('keeps the focused row of an item with two labels rendered while scrolling away, not only its first one', async () => {
     const shared = makeWorkItem({ id: 'wi_s1', key: 'S-1', number: 1, title: 'zweimal' });
     renderList({ groups: [group('a', [shared]), group('b', [shared, ...items('b', 2000)])], groupBy: 'label' });

@@ -18,7 +18,7 @@ import { currentToasts } from '@/components/ui/toast';
 import { TooltipProvider } from '@/components/ui/Tooltip';
 import { ItemsScreen } from '@/features/items/ItemsScreen';
 import { CommandPalette } from '@/features/palette/CommandPalette';
-import type { Condition, GroupBy, Project, ProjectRole, StateCategory, WorkItem } from '@/types';
+import type { Condition, GroupBy, Project, ProjectRole, StateCategory, View, WorkItem } from '@/types';
 import { mockApi, type MockApi, type MockRoute } from './api';
 import { agency, ida, labels, lene, list, makeWorkItem, mara, organization, project, properties, resolutions, standard, types } from './fixtures';
 
@@ -130,6 +130,8 @@ export const board = {
   holdLists: null as Promise<void> | null,
   /** The first pages of these groups, and every next page (`more`), answer 503. */
   failing: new Set<string>(),
+  /** The view `GET /views/<id>` answers (`renderBoard('/views/<id>')`). */
+  view: null as View | null,
   api: undefined as MockApi | undefined,
 };
 
@@ -300,6 +302,7 @@ function route(key: string): MockRoute | undefined {
     'POST /api/v1/work-items/query': (body) => query(body as Body),
   };
   if (fixed[key]) return fixed[key];
+  if (board.view && key === `GET /api/v1/views/${board.view.id}`) return () => ({ body: { data: board.view } });
   const transition = key.match(/^POST \/api\/v1\/work-items\/([^/]+)\/transition$/);
   if (transition) {
     return (body) => {
@@ -337,6 +340,7 @@ export function startBoardServer(): void {
   board.failRanks = false;
   board.holdLists = null;
   board.failing = new Set();
+  board.view = null;
   board.api = mockApi(new Proxy({}, { get: (_target, key) => (typeof key === 'string' ? route(key) : undefined) }) as Record<string, MockRoute>);
   const answering = globalThis.fetch;
   globalThis.fetch = async (input, init) => {
@@ -356,7 +360,7 @@ export function stopBoardServer(): void {
 }
 
 /**
- * Renders the items screen at a path (`/projects/<identifier>?…` or `/my-items?…`): `go` is the fake Inertia's, so
+ * Renders the items screen at a path (`/projects/<identifier>?…`, `/views/<id>?…` with `board.view`, or `/my-items?…`): `go` is the fake Inertia's, so
  * `usePage().url` says the path.
  */
 export function renderBoard(path: string, go: (url: string) => void, { palette = false } = {}) {
@@ -364,6 +368,8 @@ export function renderBoard(path: string, go: (url: string) => void, { palette =
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const screenOf = path.startsWith('/projects/') ? (
     <ItemsScreen preset="project" projectIdentifier={path.slice('/projects/'.length).split('?')[0]} />
+  ) : path.startsWith('/views/') ? (
+    <ItemsScreen preset="view" viewId={path.slice('/views/'.length).split('?')[0]} />
   ) : (
     <ItemsScreen preset="my" />
   );

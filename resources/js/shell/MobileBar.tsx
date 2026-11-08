@@ -2,6 +2,7 @@ import { Dialog as BaseDialog } from '@base-ui/react/dialog';
 import { Link, usePage } from '@inertiajs/react';
 import { Inbox, Menu, Search, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { isPlainClick } from '@/components/items/ItemLink';
 import { IconButton } from '@/components/ui/IconButton';
 import { t } from '@/lib/i18n';
 import { paths } from '@/lib/links';
@@ -46,12 +47,13 @@ export function MobileBar() {
           >
             <BaseDialog.Title className="sr-only">{t('shell.mobile.navigation')}</BaseDialog.Title>
             <DrawerScope />
-            {/* a chosen link closes it too, also one to the page it is on or to the same page with another query */}
+            {/* a chosen link closes it too, also one to the page it is on or to the same page with another query; one
+                opened in a new tab or window (⌘, Strg, ⇧, middle button) leaves this page where it is (20b-M6) */}
             <nav
               aria-label={t('shell.sidebar.label')}
               className="flex min-h-0 flex-1 flex-col gap-4"
               onClick={(event) => {
-                if (event.target instanceof Element && event.target.closest('a[href]')) setOpen(false);
+                if (isPlainClick(event) && event.target instanceof Element && event.target.closest('a[href]')) setOpen(false);
               }}
             >
               <SidebarContent headerAction={<BaseDialog.Close render={<IconButton icon={X} label={t('shell.mobile.close_navigation')} tooltip={false} />} />} />

@@ -14,7 +14,7 @@ import { listCommands } from '@/lib/commands';
 import { listShortcuts } from '@/lib/shortcuts/registry';
 import { useUiStore } from '@/store/ui';
 import { app, board, press, rankOf, renderBoard as renderWithServer, sent, startBoardServer, stopBoardServer, web } from '@/test/board';
-import { lene, organization } from '@/test/fixtures';
+import { lene, makeView, organization } from '@/test/fixtures';
 import type { WorkItem } from '@/types';
 import { PLANNED_DAYS, SAVE_DELAY } from './TimelineLayout';
 
@@ -437,6 +437,15 @@ describe('the timeline', () => {
     // back to the filter of the project: its epics stand on the timeline again
     await waitFor(() => expect(inertia.url).toBe('/projects/WEB?layout=timeline'));
     expect(await findRow('WEB-30')).toBeTruthy();
+  });
+
+  it('says of an empty timeline of a view with its own conditions what the list says (19b-M2)', async () => {
+    board.view = makeView({ id: 'v_tasks', name: 'Nur Tasks', filter: { version: 1, conditions: [{ field: 'type', op: 'is', value: 't_task' }] }, display: { ...makeView().display, layout: 'timeline' } });
+    renderTimeline('/views/v_tasks');
+    expect(await screen.findByText('Keine Treffer in „Nur Tasks“')).toBeTruthy();
+    expect(screen.getByText('Gerade passt kein Epic zu den Bedingungen dieser View. Ohne Bedingungen zeigt sie alle Epics.')).toBeTruthy();
+    expect(screen.queryByText('Kein Epic passt zum Filter')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Filter zurücksetzen' })).toBeTruthy();
   });
 
   it('says where an epic of the list has no dates yet', async () => {
