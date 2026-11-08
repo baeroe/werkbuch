@@ -163,6 +163,8 @@ export function usePageSave(page: WikiPage, { canEdit, uploads, me, href, onTitl
   const [titleError, setTitleError] = useState<string | null>(null);
   /** A save refused with 403 whose rights are loading again: decided once the screen shows them (`canEdit`). */
   const [refusal, setRefusal] = useState<{ error: unknown } | null>(null);
+  /** A refused save of this series loaded the rights again already; a save that goes through ends the series. */
+  const rightsReloaded = useRef(false);
 
   /** The page as typed, for saves that run outside a render. */
   const latest = useRef(draft);
@@ -293,6 +295,7 @@ export function usePageSave(page: WikiPage, { canEdit, uploads, me, href, onTitl
       });
       flight.current = request;
       const saved = await request;
+      rightsReloaded.current = false;
       // the next save is based on the version the server has now, also when nothing changed there (K17)
       base.current = saved.version;
       held.current = { ...mine, title };
@@ -315,8 +318,14 @@ export function usePageSave(page: WikiPage, { canEdit, uploads, me, href, onTitl
       } else if (isRefused(error)) {
         // the right is gone, not the page (T14-M5): the rights load again, and the text stands parked with the reason
         setState('failed');
-        // the screens get the rights in a round of notifications after the fetch: the decision comes after that round
-        void queryClient.invalidateQueries({ queryKey: qk.projects.all }).then(() => notifyManager.schedule(() => setRefusal({ error })));
+        // the screens get the rights in a round of notifications after the fetch: the decision comes after that round;
+        // once per series of refusals (21i-M3b): rights that said "may" a moment ago say the same for the next one
+        const decide = () => notifyManager.schedule(() => setRefusal({ error }));
+        if (rightsReloaded.current) decide();
+        else {
+          rightsReloaded.current = true;
+          void queryClient.invalidateQueries({ queryKey: qk.projects.all }).then(decide);
+        }
       } else {
         keepCurrent.current = keep;
         setState('failed');

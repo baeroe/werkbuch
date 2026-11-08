@@ -519,8 +519,10 @@ describe('usePageSave', () => {
     await waitFor(() => expect(currentToasts()).toHaveLength(1));
     await act(async () => result.current.save.change({ title: 'Domain neu' }, { now: true }));
     await waitFor(() => expect(saves()).toHaveLength(2));
-    await waitFor(() => expect(fetches()).toBe(3));
+    await act(async () => {});
     await act(() => new Promise<void>((resolve) => notifyManager.schedule(resolve)));
+    // the rights loaded once for this series of refusals (21i-M3b)
+    expect(fetches()).toBe(2);
 
     // named after the stored title, one toast for the page
     expect(currentToasts().map((toast) => toast.title)).toEqual(['„Domain-Umzug“ nicht gespeichert']);
@@ -551,6 +553,32 @@ describe('usePageSave', () => {
     await act(async () => result.current.save.change({ content: doc('Rette mich jetzt') }, { now: true }));
     await waitFor(() => expect(result.current.save.state).toBe('saved'));
     expect(saves().at(-1)).toMatchObject({ content_json: doc('Rette mich jetzt'), base_version: 3 });
+  });
+
+  it('loads the rights again once per series of refused saves, not for each (21i-M3b)', async () => {
+    patch = () => problem(403, 'wiki_members_only', { detail: 'Nur Mitglieder bearbeiten das Wiki.' });
+    const { result, fetches } = renderWithRights(() => 'member');
+    await waitFor(() => expect(fetches()).toBe(1));
+    await act(async () => result.current.save.change({ content: doc('Eins') }, { now: true }));
+    await waitFor(() => expect(currentToasts()).toHaveLength(1));
+    expect(fetches()).toBe(2);
+
+    // refused again: the rights just loaded say "may" still; the toast says it again, the rights stay as they are
+    const before = saves().length;
+    await act(async () => result.current.save.change({ content: doc('Zwei') }, { now: true }));
+    await waitFor(() => expect(saves()).toHaveLength(before + 1));
+    await waitFor(() => expect(result.current.save.state).toBe('failed'));
+    await waitFor(() => expect(currentToasts()[0]?.description).toContain('Nur Mitglieder bearbeiten das Wiki.'));
+    expect(currentToasts()).toHaveLength(1);
+    expect(fetches()).toBe(2);
+
+    // a save that goes through ends the series: the next refusal loads them again
+    patch = (body) => stored(body);
+    await act(async () => result.current.save.change({ content: doc('Drei') }, { now: true }));
+    await waitFor(() => expect(result.current.save.state).toBe('saved'));
+    patch = () => problem(403, 'wiki_members_only', { detail: 'Nur Mitglieder bearbeiten das Wiki.' });
+    await act(async () => result.current.save.change({ content: doc('Vier') }, { now: true }));
+    await waitFor(() => expect(fetches()).toBe(3));
   });
 
   it('saves nothing for a reader, and nothing unchanged', async () => {
