@@ -11,8 +11,8 @@
  *
  * Options:
  * - `--remap-only --out <file>`: maps every file below coverage/e2e back to the sources once and writes them as one
- *   file of a few MB (a CI job of one project uploads only that); no report, no gate. Hits add up the same before and
- *   after the mapping, as long as all runs come from the same build.
+ *   file of a few MB (a CI job of one project uploads only that); no report, no gate, and exit code 1 without a file to
+ *   map. Hits add up the same before and after the mapping, as long as all runs come from the same build.
  * - `--expect-shards=<name,name,…>`: reads exactly the coverage of these projects, each from
  *   `coverage/e2e/<name>.json`, `coverage/e2e/<name>/` or a folder `coverage/e2e/<prefix>-<name>/` (as
  *   download-artifact names it), and fails naming every project that has none. Without it every file below
@@ -67,8 +67,13 @@ export async function remapCoverage(runs) {
   return JSON.parse(JSON.stringify(data));
 }
 
+/** The data of a coverage file; a file cut off or broken (a job stopped by its timeout) fails naming it. */
 function readJson(file) {
-  return JSON.parse(fs.readFileSync(file, 'utf8'));
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (error) {
+    throw new Error(`Cannot read ${file}: ${error.message}`, { cause: error });
+  }
 }
 
 /** The `*.json` files below `dir` at any depth, sorted; none for a folder that does not exist. */
@@ -85,7 +90,7 @@ function jsonFiles(dir) {
  * Reads coverage files one at a time and returns their data for `mergeCoverage`. Entries of the built code (they carry
  * their source map) are added up and mapped once (see remapCoverage); entries already mapped (a file of
  * `--remap-only`) stay as they are: mapped once more they would add up with entries of the built code under the same
- * path, statement by statement of two different maps. `count(file, entries)` hears how many entries each file had.
+ * path, statement by statement of two different maps. `count(file, data)` hears the data of each file.
  */
 async function readRuns(files, count = () => {}) {
   const mapped = [];
@@ -93,7 +98,7 @@ async function readRuns(files, count = () => {}) {
     (function* () {
       for (const file of files) {
         const data = readJson(file);
-        count(file, Object.keys(data).length);
+        count(file, data);
         const built = {};
         const done = {};
         for (const [key, coverage] of Object.entries(data)) (coverage.inputSourceMap ? built : done)[key] = coverage;
@@ -152,9 +157,12 @@ export async function loadCoverage(root, { shards = null } = {}) {
   const found = shardFiles(e2eDir, shards);
   const shardOf = new Map(found.flatMap(({ name, files }) => files.map((file) => [file, name])));
   const entries = new Map(shards.map((name) => [name, 0]));
+  // only entries the merge keeps count: a file of node_modules or of tests alone leaves the project without coverage
+  const kept = (data) =>
+    Object.entries(data).filter(([key, coverage]) => normalizePath(coverage.path ?? key, root) !== null).length;
   const e2e = await readRuns(
     found.flatMap(({ files }) => files),
-    (file, count) => entries.set(shardOf.get(file), entries.get(shardOf.get(file)) + count),
+    (file, data) => entries.set(shardOf.get(file), entries.get(shardOf.get(file)) + kept(data)),
   );
   const empty = shards.filter((name) => entries.get(name) === 0);
   if (empty.length > 0) throw new Error(missingMessage(empty.map((name) => `${name} (no coverage)`)));
@@ -163,11 +171,13 @@ export async function loadCoverage(root, { shards = null } = {}) {
 
 /**
  * `--remap-only`: every file below coverage/e2e (but `out` itself) mapped back to the sources once and written to `out`
- * as one coverage file. Returns the number of files read.
+ * as one coverage file. Returns the number of files read; with none it fails and writes nothing (the merge would refuse
+ * the empty file later, with a cause further away).
  */
 export async function remapOnly(root, out) {
   const target = path.resolve(root, out);
   const files = jsonFiles(path.join(root, 'coverage/e2e')).filter((file) => path.resolve(file) !== target);
+  if (files.length === 0) throw new Error('No e2e coverage below coverage/e2e to remap: did the tests run?');
   const map = libCoverage.createCoverageMap({});
   for (const data of await readRuns(files)) map.merge(data);
   fs.mkdirSync(path.dirname(target), { recursive: true });

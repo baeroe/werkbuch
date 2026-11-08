@@ -153,13 +153,46 @@ describe('coverage-merge', () => {
         'e2e-coverage-phone-dark/e2e-phone-dark.json': built(1),
       });
 
-      await expect(loadCoverage(root, { shards: ['phone-dark'] })).rejects.toThrow(/phone-dark/);
+      await expect(loadCoverage(root, { shards: ['phone-dark'] })).rejects.toThrow(/phone-dark \(2 sources/);
     });
 
     it('counts a file without coverage as missing', async () => {
       const root = repo({ 'desktop-light.json': {} });
 
       await expect(loadCoverage(root, { shards: ['desktop-light'] })).rejects.toThrow(/desktop-light/);
+    });
+
+    it('counts a file with entries outside resources/js only as missing', async () => {
+      const outside = (where) => ({ [where]: { ...built(1)['/var/www/html/resources/js/x.ts'], path: where } });
+      const root = repo({
+        'desktop-light/a-0.json': outside('/var/www/html/node_modules/x/index.js'),
+        'desktop-dark/a-0.json': outside('/var/www/html/resources/js/x.test.ts'),
+        'phone-dark/a-0.json': built(1),
+      });
+
+      const error = await loadCoverage(root, { shards: ['desktop-light', 'desktop-dark', 'phone-dark'] }).then(
+        () => null,
+        (reason) => reason,
+      );
+      expect(error.message).toContain('desktop-light (no coverage)');
+      expect(error.message).toContain('desktop-dark (no coverage)');
+      expect(error.message).not.toContain('phone-dark');
+    });
+
+    it('names the file it cannot read', async () => {
+      const root = repo({ 'desktop-light/a-0.json': built(1) });
+      fs.writeFileSync(path.join(root, 'coverage/e2e/desktop-light/a-1.json'), '{"cut off');
+
+      await expect(loadCoverage(root, { shards: ['desktop-light'] })).rejects.toThrow(/desktop-light\/a-1\.json/);
+      await expect(remapOnly(root, path.join(root, 'coverage/e2e-desktop-light.json'))).rejects.toThrow(/a-1\.json/);
+    });
+
+    it('writes nothing when there is no coverage to remap', async () => {
+      const root = repo({ setup: null });
+      const out = path.join(root, 'coverage/e2e-desktop-light.json');
+
+      await expect(remapOnly(root, out)).rejects.toThrow(/No e2e coverage/);
+      expect(fs.existsSync(out)).toBe(false);
     });
 
     it('gives the same lines whether runs are remapped one by one or together', async () => {
@@ -247,6 +280,9 @@ describe('coverage-merge', () => {
         shards: ['desktop-light', 'phone-dark'],
       });
       expect(() => parseArgs(['--remap-only'])).toThrow(/--out/);
+      expect(() => parseArgs(['--out', 'x.json'])).toThrow(/--out goes with --remap-only/);
+      expect(() => parseArgs(['--remap-only', '--out='])).toThrow(/--out needs a file/);
+      expect(() => parseArgs(['--remap-only', '--out'])).toThrow(/--out needs a file/);
       expect(() => parseArgs(['--expect-shards='])).toThrow(/--expect-shards/);
       expect(() => parseArgs(['--expect-shards=a', '--remap-only', '--out', 'x.json'])).toThrow(/--expect-shards/);
       expect(() => parseArgs(['--shards=4'])).toThrow(/--shards=4/);
