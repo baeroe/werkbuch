@@ -3,7 +3,8 @@
  * states of the one workflow of a project list or of all workflows of the projects in view, the categories, people
  * with "Ich" first, the priorities, labels, the epics as parents (lean), the options of a dropdown property. A value
  * the reader does not know (an id in a view of somebody else, of a project the reader does not see) reads "Verborgen"
- * (P21); names come only from the lists of the reader.
+ * (P21); names come only from the lists of the reader. One the reader knows but the list does not offer keeps its name:
+ * a deactivated account ("Sven Roth (deaktiviert)"), a state of a workflow out of view (T16-M2).
  *
  * The epics load only while the list of a parent chip is open (A153, T16-M1): a closed chip names its values through
  * `GET /references` (`itemRefQuery`, one request for the ids of a tick), not through every epic of the organisation.
@@ -149,6 +150,11 @@ export function useValueOptions(def: FieldDef, project: Project | undefined, { o
   const nameOf = (value: unknown): string => {
     const known = options.find((option) => option.value === value);
     if (known) return known.label;
+    // readable, just not offered: a deactivated account, a state of a workflow out of view (T16-M2)
+    const user = source === 'person' || source === 'member' ? users.data?.items.find((entry) => entry.id === value) : undefined;
+    if (user) return t('items.filter.value.disabled', { name: user.name });
+    const state = source === 'state' ? workflows.data?.items.flatMap((workflow) => workflow.states).find((entry) => entry.id === value) : undefined;
+    if (state) return state.name;
     const ref = refs[refIds.indexOf(value as string)];
     if (ref?.data) return ref.data.title;
     return loading || ref?.isPending ? t('items.filter.value.loading') : t('items.filter.value.hidden');

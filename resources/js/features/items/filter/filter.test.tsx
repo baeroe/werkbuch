@@ -477,6 +477,39 @@ describe('the filter bar', () => {
     expect(last()).toEqual([{ field: 'project', op: 'is', value: 'p_web' }]);
   });
 
+  it('names a deactivated person and a state of another workflow by their names, not as hidden (T16-M2)', async () => {
+    // a project list of WEB offers only the states of its workflow; Kundenfreigabe is one of the Agentur-Freigabe
+    renderBar(conditions({ field: 'assignee', op: 'is', value: 'u_sven' }, { field: 'state', op: 'is', value: 'app_approval' }), { project: web });
+    expect(await findChip(/^Filter: Assignee ist Sven Roth \(deaktiviert\)$/)).toBeTruthy();
+    expect(await findChip(/^Filter: Status ist Kundenfreigabe$/)).toBeTruthy();
+  });
+
+  it('says a property chip could not be loaded and loads the properties again (T16-M5)', async () => {
+    const user = userEvent.setup();
+    let failing = true;
+    const { last } = renderBar(conditions({ field: 'property:customer', op: 'is', value: 'opt_moos' }, { field: 'blocked', op: 'is', value: true }), {
+      routes: { 'GET /api/v1/properties': () => (failing ? { status: 503, body: { reason: 'service_unavailable' } } : { body: list(catalog) }) },
+    });
+    const failed = await findChip(/^Filter: Property „customer“, nicht geladen$/);
+    expect(visibleText(failed)).toBe('customerNicht geladenErneut versuchen');
+    expect(screen.queryByText('Unbekanntes Feld')).toBeNull();
+    failing = false;
+    await user.click(within(failed).getByRole('button', { name: 'Erneut versuchen' }));
+    expect(await findChip(/^Filter: Kunde ist Gärtnerei Moos$/)).toBeTruthy();
+    // the condition itself never changed
+    expect(last()).toBeUndefined();
+  });
+
+  it('removes a property chip that could not be loaded', async () => {
+    const user = userEvent.setup();
+    const { last } = renderBar(conditions({ field: 'property:customer', op: 'is', value: 'opt_moos' }, { field: 'blocked', op: 'is', value: true }), {
+      routes: { 'GET /api/v1/properties': () => ({ status: 503, body: { reason: 'service_unavailable' } }) },
+    });
+    const failed = await findChip(/^Filter: Property „customer“, nicht geladen$/);
+    await user.click(within(failed).getByRole('button', { name: 'Filter „customer“ entfernen' }));
+    expect(last()).toEqual([{ field: 'blocked', op: 'is', value: true }]);
+  });
+
   it('says the value of a choice is loading while its list loads, and offers to try again when it failed', async () => {
     const user = userEvent.setup();
     let failing = true;
