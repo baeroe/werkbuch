@@ -50,7 +50,9 @@ final class ItemQuery
                 $query->whereNull($query->qualifyColumn('archived_at'));
             }
             // `not in` an uncorrelated subquery, never `in`: MariaDB flattens `in` into a semi-join, and under 50 000
-            // items its two join orders cost the same, starting from the projects read every item's row (Task 10c)
+            // items its two join orders cost the same, starting from the projects read every item's row (Task 10c);
+            // `not in` equals the old `in` only because work_items.project_id and projects.id are NOT NULL: a null in
+            // the subquery would make every `not in` unknown and empty every list
             $query->whereNotIn($query->qualifyColumn('project_id'), Project::query()->select('projects.id')
                 ->whereNotNull('projects.archived_at')->whereNotIn('projects.id', $filter->namedProjects()));
         }

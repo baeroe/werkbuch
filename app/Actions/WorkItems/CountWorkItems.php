@@ -17,8 +17,9 @@ use stdClass;
 /**
  * The number of items of named filters in one call (`POST /work-items/counts`, a read, P15, P18): `filters` is an
  * object of 1–MAX_FILTERS filters by name (NAME_PATTERN, `0` too), each read by FilterSchema::parse (errors below
- * `filters.<name>.`), with at most MAX_CONDITIONS_TOTAL conditions together, and `include_archived` holds for all. Every number comes from ItemQuery, so it only counts items
- * the account sees: a filter on a hidden project counts 0, never 404.
+ * `filters.<name>.`), with at most MAX_CONDITIONS_TOTAL conditions together, and `include_archived` holds for all.
+ * Every number comes from ItemQuery, so it only counts items the account sees: a filter on a hidden project counts 0,
+ * never 404.
  */
 final class CountWorkItems
 {

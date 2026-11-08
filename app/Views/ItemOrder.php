@@ -228,7 +228,9 @@ final class ItemOrder
     }
 
     /**
-     * How a value of the cursor is bound: numbers as exact decimals (a text would compare as a float), days as days.
+     * How a value of the cursor is bound: numbers as decimals, days as days. The casts are defensive (T5-M4): fits()
+     * already holds every value to the form the database gave the key; without them MariaDB would compare the text
+     * with a decimal key as a float, which differs from the exact comparison only past about 15 digits.
      *
      * @return literal-string
      */
