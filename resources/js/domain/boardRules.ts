@@ -44,6 +44,7 @@ export type BoardReasonCode =
     | 'last_column'
     | 'workflow_loading'
     | 'no_room'
+    | 'not_reloaded'
     | 'load_more'
     | 'state_unknown'
     | 'start_transition'
@@ -173,8 +174,8 @@ export function nearestAllowed(
  * column the higher rank stands above. Two neighbours with the same rank (items of different projects number their
  * ranks alike) leave no room between them: the card then goes just past the one above. `null` when the rank would grow
  * past `RANK_MAX` characters, which the server refuses (P23): the board then has the server redistribute the ranks of
- * the card's project and asks once more with the fresh neighbours (A448); only where they belong to another project is
- * there still no room, and the card stays where it is.
+ * the card's project and asks once more with the fresh neighbours (A448); where they still leave no room (neighbours of
+ * another project) the card stays where it is.
  */
 export function rankForSlot(above: string | null, below: string | null, direction: 'asc' | 'desc'): string | null {
   const [low, high] = direction === 'asc' ? [above, below] : [below, above];

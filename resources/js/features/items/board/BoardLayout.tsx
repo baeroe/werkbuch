@@ -107,10 +107,15 @@ export function BoardLayout({ groups, groupBy, display, project, createDefaults,
   const locked = boardLockReason(groupBy);
 
   const itemById = useMemo(() => new Map(served.flatMap((column) => column.items.map((item) => [item.id, item] as const))), [served]);
-  /** The items as the last render had them: what a move reads after waiting for the lists (fresh ranks, A448). */
+  /**
+   * The items and columns as the last render had them (the columns as the server serves them, without the cards held
+   * in a new place): what a move reads when its turn comes (fresh ranks, A448).
+   */
   const latestItems = useRef(itemById);
+  const latestServed = useRef(served);
   useLayoutEffect(() => {
     latestItems.current = itemById;
+    latestServed.current = served;
   });
   const columnLabel = useCallback((key: string) => served.find((column) => column.key === key)?.label ?? key, [served]);
 
@@ -260,18 +265,19 @@ export function BoardLayout({ groups, groupBy, display, project, createDefaults,
 
   /**
    * Settles once the lists of the board have loaded again: a column rebuilds its pages one after another (K15), so the
-   * lists count as loaded once nothing of them has been on its way for a few frames (at most `LISTS_WAIT_MS`), and the
-   * board has rendered what they brought. Settles at once when the board is gone.
+   * lists count as loaded once nothing of them has been on its way for a few frames, and the board has rendered what
+   * they brought. Resolves `false` when that takes longer than `LISTS_WAIT_MS` or the board is gone.
    */
   const listsLoaded = useCallback(
     () =>
-      new Promise<void>((resolve) => {
+      new Promise<boolean>((resolve) => {
         const started = performance.now();
         let quiet = 0;
         const look = () => {
           quiet = queryClient.isFetching({ queryKey: qk.workItems.all }) > 0 ? 0 : quiet + 1;
-          if (alive.current && quiet < QUIET_FRAMES && performance.now() - started < LISTS_WAIT_MS) requestAnimationFrame(look);
-          else resolve();
+          if (!alive.current || quiet >= QUIET_FRAMES) resolve(alive.current);
+          else if (performance.now() - started >= LISTS_WAIT_MS) resolve(false);
+          else requestAnimationFrame(look);
         };
         requestAnimationFrame(look);
       }),
@@ -423,13 +429,40 @@ export function BoardLayout({ groups, groupBy, display, project, createDefaults,
   }
 
   /**
-   * Sends a new place of a card in its column sorted by rank (`ids`: the column with the card at `index`): the rank
-   * between its new neighbours. Returns null, and moves nothing, at the last loaded place of a column that has more to
-   * load. Where the rank would grow past what the server takes (P23), the server first gives the items of the card's
-   * project short ranks (A448): the status line says so, the card waits in its place, and once the lists have loaded
-   * again the rank is worked out between the fresh neighbours (never the old ones: a rank from them would land
-   * elsewhere). Where it still has no room (the neighbours belong to another project) the card stays and a toast says
-   * why; a failed redistribution says it with "Try again" and the card goes back.
+   * The redistributions of ranks on their way, by project: they settle once the lists have loaded again (`loaded`) or
+   * the board gave up waiting for them (`stale`), and fail with the server's refusal.
+   */
+  const reranking = useRef(new Map<string, Promise<'loaded' | 'stale'>>());
+  /**
+   * Has the server give the items of a project short ranks (A448). Moves of the project wait for a call on its way
+   * (`placeNow`); two moves that start in the same tick may both call, and the second only finds the order the first
+   * left (nothing changes).
+   */
+  function makeRoom(projectId: string): Promise<'loaded' | 'stale'> {
+    const call = redistribute.mutateAsync(projectId).then(async () => ((await listsLoaded()) ? 'loaded' : 'stale'));
+    reranking.current.set(projectId, call);
+    const done = () => {
+      if (reranking.current.get(projectId) === call) reranking.current.delete(projectId);
+    };
+    void call.then(done, done);
+    return call;
+  }
+
+  /**
+   * Sends a new place of a card in its column sorted by rank (`ids`: the column with the card at `index`). Returns null,
+   * and moves nothing, at the last loaded place of a column that has more to load. Otherwise the card goes in turn
+   * (`inTurn`), and its rank between the neighbours `ids` names is worked out when the turn comes, from the ranks the
+   * board has then (I1): a move queued behind another of the card, or behind a redistribution of its project, never
+   * sends a rank of the old scale.
+   *
+   * Where the rank would grow past what the server takes (P23), the server first gives the items of the card's project
+   * short ranks (A448, one call per project at a time; moves of other cards of the project wait for it): the status
+   * line says so and the card waits in its new place. Once the lists have loaded again, the rank is worked out between
+   * the fresh neighbours. After a redistribution the card only goes where the two neighbours still stand next to each
+   * other in the fresh column: in a list of several projects the cards of the own project may now stand between them,
+   * and a place that is gone is no room (`no_room`), as are neighbours of another project that still leave none. Lists
+   * that take longer than `LISTS_WAIT_MS` say so (`not_reloaded`); a failed redistribution says it, with "Try again"
+   * where repeating helps, and the card goes back.
    */
   function sendPlace(item: ListedItem, column: BoardColumnData, ids: readonly string[], index: number, pointer = false): Promise<boolean> | null {
     // below the last loaded card come cards not loaded yet: a rank after the last loaded one would put the card after
@@ -438,59 +471,88 @@ export function BoardLayout({ groups, groupBy, display, project, createDefaults,
       refuse(item, { code: 'load_more', params: { column: column.label } });
       return null;
     }
-    const slot = (items: ReadonlyMap<string, ListedItem>) => {
-      const rankOf = (id: string | undefined) => (id === undefined ? null : (items.get(id)?.rank ?? null));
-      return rankForSlot(rankOf(ids[index - 1]), rankOf(ids[index + 1]), display.sort.direction);
-    };
-    // the new rank moves the card's element within its column, and a focused element that moves loses the focus in
+    // the new place moves the card's element within its column, and a focused element that moves loses the focus in
     // the browser. React gives it back within the commit that moved it (seen in Chromium); the card is followed all the
     // same, as a move to another column is, so the focus stays with it whatever renders next (the rollback of a
     // refusal included)
-    const send = (rank: string) => {
-      mark(item.id, true);
-      return update
-        .mutateAsync({ id: item.id, patch: { rank } })
-        .then(
-          () => {
-            setAnnouncement(t('items.board.moved.place', { key: item.key, place: index + 1, count: ids.length, column: column.label }));
-            return true;
-          },
-          // the mutation put the card back and said why
-          () => false,
-        )
-        .finally(() => mark(item.id, false));
-    };
-    const rank = slot(itemById);
-    if (rank !== null) {
-      follow(item.id, column.key, pointer);
-      return inTurn(item.id, () => send(rank));
-    }
-    return inTurn(item.id, () => {
-      mark(item.id, true);
-      setAnnouncement(t('items.board.reranking'));
-      return redistribute
-        .mutateAsync(item.project_id)
-        .then(
-          async () => {
-            await listsLoaded();
-            const fresh = slot(latestItems.current);
-            if (fresh !== null) {
-              follow(item.id, column.key, pointer);
-              return send(fresh);
-            }
-            setAnnouncement('');
-            refuse(item, { code: 'no_room', params: {} });
-            return false;
-          },
-          (error: unknown) => {
-            setAnnouncement('');
-            notifyError(t('items.board.not_moved', { key: item.key }), error, () => void sendPlace(item, column, ids, index, pointer));
-            return false;
-          },
-        )
-        .finally(() => mark(item.id, false));
-    });
+    follow(item.id, column.key, pointer);
+    return inTurn(item.id, () => placeNow(item, column, ids, index, pointer));
   }
+
+  async function placeNow(item: ListedItem, column: BoardColumnData, ids: readonly string[], index: number, pointer: boolean): Promise<boolean> {
+    const [above, below] = [ids[index - 1], ids[index + 1]];
+    const slot = () => {
+      const rankOf = (id: string | undefined) => (id === undefined ? null : (latestItems.current.get(id)?.rank ?? null));
+      return rankForSlot(rankOf(above), rankOf(below), display.sort.direction);
+    };
+    const stop = (why: BoardReason) => {
+      setAnnouncement('');
+      refuse(item, why);
+      return false;
+    };
+    mark(item.id, true);
+    try {
+      // a redistribution of the project on its way: its new ranks first (one that failed changed nothing)
+      let outcome = await reranking.current.get(item.project_id)?.catch(() => undefined);
+      let rank = slot();
+      if (rank === null && outcome === undefined) {
+        setAnnouncement(t('items.board.reranking'));
+        try {
+          outcome = await makeRoom(item.project_id);
+        } catch (error) {
+          setAnnouncement('');
+          notifyError(t('items.board.not_moved', { key: item.key }), error, () => latestRetry.current(item.id, column.key, ids, index, pointer));
+          return false;
+        }
+        rank = slot();
+      }
+      if (outcome === 'stale') return stop({ code: 'not_reloaded', params: {} });
+      let place = index + 1;
+      let count = ids.length;
+      if (outcome === 'loaded') {
+        // the place is where the two neighbours still stand next to each other
+        const others = (latestServed.current.find((entry) => entry.key === column.key)?.ids ?? []).filter((id) => id !== item.id);
+        const at = above === undefined ? 0 : others.indexOf(above) + 1;
+        if ((above !== undefined && at === 0) || others[at] !== below) rank = null;
+        place = at + 1;
+        count = others.length + 1;
+      }
+      if (rank === null) return stop({ code: 'no_room', params: {} });
+      follow(item.id, column.key, pointer);
+      return await update.mutateAsync({ id: item.id, patch: { rank } }).then(
+        () => {
+          setAnnouncement(t('items.board.moved.place', { key: item.key, place, count, column: column.label }));
+          return true;
+        },
+        // the mutation put the card back and said why
+        () => false,
+      );
+    } finally {
+      mark(item.id, false);
+    }
+  }
+
+  /** Sends a new place and keeps the card there until it has landed (a key, "Try again"; a drop holds it itself). */
+  function placeCard(item: ListedItem, column: BoardColumnData, ids: readonly string[], index: number, pointer = false) {
+    const call = sendPlace(item, column, ids, index, pointer);
+    if (call) dragging.hold(item.id, column.key, index, call);
+  }
+
+  /**
+   * "Try again" after a failed redistribution, from the board as it is then: the card must still be on the board and
+   * still allowed to move (M1); it waits in its new place again.
+   */
+  const latestRetry = useRef((_id: string, _column: string, _ids: readonly string[], _index: number, _pointer: boolean) => {});
+  useLayoutEffect(() => {
+    latestRetry.current = (id, key, ids, index, pointer) => {
+      const item = latestItems.current.get(id);
+      const column = latestServed.current.find((entry) => entry.key === key);
+      if (!item || !column) return;
+      const check = checkMove(item, key, key, rules);
+      if (!check.ok) return refuse(item, check.reason);
+      placeCard(item, column, ids, index, pointer);
+    };
+  });
 
   function moveByKey(direction: 1 | -1) {
     const card = cursorCard();
@@ -513,7 +575,7 @@ export function BoardLayout({ groups, groupBy, display, project, createDefaults,
       setAnnouncement(t(direction < 0 ? 'items.board.at_top' : 'items.board.at_bottom', { key: item.key, column: column.label }));
       return;
     }
-    void sendPlace(item, column, moved(column.ids, at.index, index), index);
+    placeCard(item, column, moved(column.ids, at.index, index), index);
   }
 
   const inBoard = () => focusIsNeutral() || Boolean(board.current?.contains(document.activeElement));

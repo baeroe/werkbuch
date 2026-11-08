@@ -352,5 +352,7 @@ export function useBoardDrag(served: BoardColumnData[], rules: BoardRules, optio
     lifted,
     context,
     dropAnimation,
+    /** Keeps a card at a place of a column until a call settles (a place sent by key or by "Try again"). */
+    hold,
   };
 }

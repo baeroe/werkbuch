@@ -382,6 +382,8 @@ describe('dragging a card', () => {
     await waitFor(() => expect(announced()).toBe('Ordnung wird neu verteilt …'));
     expect(keysIn('Todo')).toEqual(['WEB-43', 'WEB-48', 'WEB-44']);
     expect(sent('PATCH', '/api/v1/work-items/wi_web_48')).toEqual([]);
+    // the card keeps the focus while it waits (M3)
+    await waitFor(() => expect(document.activeElement).toBe(cardIn('Todo', 'WEB-48')));
     await act(async () => release());
     await waitFor(() => expect(sent('POST', '/api/v1/projects/p_web/redistribute-ranks')).toHaveLength(1));
 
@@ -392,9 +394,44 @@ describe('dragging a card', () => {
     expect(keysIn('Todo')).toEqual(['WEB-43', 'WEB-48', 'WEB-44']);
   });
 
+  it('works out the rank of a card dropped again during the redistribution when its turn comes', async () => {
+    board.items = board.items.map((entry) => (entry.id === 'wi_web_44' ? { ...entry, rank: `a1${'0'.repeat(125)}1` } : entry));
+    let release = () => {};
+    board.holdRanks = new Promise((resolve) => (release = resolve));
+    renderBoard('/projects/WEB?layout=board');
+    await waitFor(() => expect(keysIn('Todo')).toEqual(['WEB-43', 'WEB-44', 'WEB-48']));
+
+    await drag('Todo', 'WEB-48', onCard('Todo', 'WEB-44'));
+    await waitFor(() => expect(announced()).toBe('Ordnung wird neu verteilt …'));
+    // dropped again, on top of WEB-43
+    await drag('Todo', 'WEB-48', onCard('Todo', 'WEB-43'));
+    expect(keysIn('Todo')).toEqual(['WEB-48', 'WEB-43', 'WEB-44']);
+    await act(async () => release());
+
+    await waitFor(() => expect(sent('PATCH', '/api/v1/work-items/wi_web_48')).toHaveLength(2));
+    // WEB-43 is a0 now: a rank from its old a1 would be a0 as well and put the card after it
+    const [, second] = sent('PATCH', '/api/v1/work-items/wi_web_48') as { rank: string }[];
+    expect(second!.rank < 'a0').toBe(true);
+    await waitFor(() => expect(announced()).toBe('WEB-48 steht jetzt an Stelle 1 von 3 in Todo.'));
+    expect(keysIn('Todo')).toEqual(['WEB-48', 'WEB-43', 'WEB-44']);
+  });
+
+  it('puts the card back without "Try again" when the server refuses the redistribution', async () => {
+    board.items = board.items.map((entry) => (entry.id === 'wi_web_44' ? { ...entry, rank: `a1${'0'.repeat(125)}1` } : entry));
+    board.failRanks = 409;
+    renderBoard('/projects/WEB?layout=board');
+    await waitFor(() => expect(keysIn('Todo')).toEqual(['WEB-43', 'WEB-44', 'WEB-48']));
+
+    await drag('Todo', 'WEB-48', onCard('Todo', 'WEB-44'));
+    await waitFor(() => expect(lastToast()).toMatchObject({ tone: 'error', title: 'WEB-48 nicht verschoben', description: 'Das Projekt ist archiviert.' }));
+    expect(lastToast()!.action).toBeUndefined();
+    await waitFor(() => expect(keysIn('Todo')).toEqual(['WEB-43', 'WEB-44', 'WEB-48']));
+    expect(sent('PATCH', '/api/v1/work-items/wi_web_48')).toEqual([]);
+  });
+
   it('puts the card back when the redistribution fails', async () => {
     board.items = board.items.map((entry) => (entry.id === 'wi_web_44' ? { ...entry, rank: `a1${'0'.repeat(125)}1` } : entry));
-    board.failRanks = true;
+    board.failRanks = 503;
     renderBoard('/projects/WEB?layout=board');
     await waitFor(() => expect(keysIn('Todo')).toEqual(['WEB-43', 'WEB-44', 'WEB-48']));
 
@@ -404,9 +441,14 @@ describe('dragging a card', () => {
     expect(sent('PATCH', '/api/v1/work-items/wi_web_48')).toEqual([]);
     await waitFor(() => expect(cardIn('Todo', 'WEB-48').getAttribute('aria-busy')).toBeNull());
 
-    // "Try again" makes room and moves the card where it was dropped
+    // "Try again" makes room and moves the card where it was dropped; it waits there meanwhile (M1)
     board.failRanks = false;
+    let release = () => {};
+    board.holdRanks = new Promise((resolve) => (release = resolve));
     act(() => lastToast()!.action!.onClick());
+    await waitFor(() => expect(keysIn('Todo')).toEqual(['WEB-43', 'WEB-48', 'WEB-44']));
+    expect(sent('PATCH', '/api/v1/work-items/wi_web_48')).toEqual([]);
+    await act(async () => release());
     await waitFor(() => expect(sent('PATCH', '/api/v1/work-items/wi_web_48')).toHaveLength(1));
     expect(sent('POST', '/api/v1/projects/p_web/redistribute-ranks')).toHaveLength(2);
     await waitFor(() => expect(keysIn('Todo')).toEqual(['WEB-43', 'WEB-48', 'WEB-44']));

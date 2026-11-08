@@ -8,7 +8,7 @@
  * server: only it knows the key, the children that lose their parent, and the values of the new type.
  */
 
-import { hashKey, useQueries, useQuery, useQueryClient, type QueryClient, type UseQueryResult } from '@tanstack/react-query';
+import { hashKey, useMutation, useQueries, useQuery, useQueryClient, type QueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type { Page } from '@/api/client';
 import {
@@ -742,11 +742,16 @@ export function useBulkChange() {
 }
 
 /**
- * Gives the items of a project short ranks (A448). Variable: the project's ULID. Settles once the shown lists have
- * loaded again (`invalidateQueries` with `refetchType: 'active'`), so the caller reads the new ranks after it.
+ * Gives the items of a project short ranks (A448). Variable: the project's ULID. Settles with the server's answer and
+ * starts reloading the shown lists (`qk.workItems.all`) without waiting for them: a list that does not answer must not
+ * hold the caller for good, it waits for the lists itself, with a limit (the board's `listsLoaded`).
  */
 export function useRedistributeRanks() {
-  return useApiMutation(redistributeRanks, [qk.workItems.all]);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: redistributeRanks,
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: qk.workItems.all }),
+  });
 }
 
 /** Not optimistic: the values of the new type are only known on the server. Variables: `{ id, type_id, values? }`. */

@@ -714,6 +714,7 @@
     "items.board.reason.no_child_type": "Im Projekt ist kein Typ aktiviert, der Kind-Item sein kann.",
     "items.board.reason.no_room": "Hier ist kein Platz mehr. Verschiebe die Karte an eine andere Stelle.",
     "items.board.reason.not_member": ":name ist nicht Mitglied im Projekt :project und kann das Item nicht übernehmen.",
+    "items.board.reason.not_reloaded": "Die neue Ordnung ist noch nicht geladen. Verschiebe die Karte gleich noch einmal.",
     "items.board.reason.single_column": "Ohne Gruppierung gibt es nur eine Spalte.",
     "items.board.reason.start_category": "Neue Items starten in „:initial“. Von dort führt im Workflow „:workflow“ kein Übergang nach :column.",
     "items.board.reason.start_transition": "Neue Items starten in „:initial“. Von dort nach „:to“ ist im Workflow „:workflow“ nicht erlaubt.",

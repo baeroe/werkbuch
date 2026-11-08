@@ -124,8 +124,10 @@ export const board = {
   refuseDates: false,
   /** Redistributions of ranks that wait until the test lets them go. */
   holdRanks: null as Promise<void> | null,
-  /** The server answers every redistribution of ranks with 503. */
-  failRanks: false,
+  /** The status the server answers every redistribution of ranks with (503, 409 …), or false. */
+  failRanks: false as false | number,
+  /** Lists (`/query`, `/groups`) that wait until the test lets them go. */
+  holdLists: null as Promise<void> | null,
   /** The first pages of these groups, and every next page (`more`), answer 503. */
   failing: new Set<string>(),
   api: undefined as MockApi | undefined,
@@ -240,7 +242,8 @@ function change(id: string, patch: Partial<WorkItem>) {
 
 /** Gives the items of a project the ranks `Rank::nBetween(null, null, n)` in their order, archived ones included (A448). */
 function redistribute(projectId: string) {
-  if (board.failRanks) return { status: 503, body: { reason: 'unavailable', detail: 'Wartung.' } };
+  if (board.failRanks === 409) return { status: 409, body: { reason: 'project_archived', detail: 'Das Projekt ist archiviert.' } };
+  if (board.failRanks) return { status: board.failRanks, body: { reason: 'unavailable', detail: 'Wartung.' } };
   const own = board.items.filter((entry) => entry.project_id === projectId).sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : a.id < b.id ? -1 : 1));
   const ranks = generateNKeysBetween(null, null, own.length);
   let changed = 0;
@@ -332,6 +335,7 @@ export function startBoardServer(): void {
   board.refuseDates = false;
   board.holdRanks = null;
   board.failRanks = false;
+  board.holdLists = null;
   board.failing = new Set();
   board.api = mockApi(new Proxy({}, { get: (_target, key) => (typeof key === 'string' ? route(key) : undefined) }) as Record<string, MockRoute>);
   const answering = globalThis.fetch;
@@ -339,6 +343,7 @@ export function startBoardServer(): void {
     const moving = String(input).includes('/transition') || (init?.method === 'PATCH' && typeof init.body === 'string' && 'rank' in (JSON.parse(init.body) as object));
     if (board.holdMoves && moving) await board.holdMoves;
     if (board.holdRanks && String(input).endsWith('/redistribute-ranks')) await board.holdRanks;
+    if (board.holdLists && /\/work-items\/(query|groups)$/.test(String(input))) await board.holdLists;
     if (board.holdMore && typeof init?.body === 'string' && (JSON.parse(init.body) as Body).cursor !== undefined) await board.holdMore;
     return answering(input, init);
   };
