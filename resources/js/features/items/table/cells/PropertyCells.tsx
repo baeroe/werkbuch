@@ -29,6 +29,7 @@ import { useWorkItemTypes } from '@/hooks/workItemTypes';
 import { t } from '@/lib/i18n';
 import { useDialogScope } from '@/lib/shortcuts/useShortcut';
 import type { ListedItem, Property, PropertyValue } from '@/types';
+import { typePropertyOf } from '../columns';
 import type { EditProps } from './CoreCells';
 import { NotApplicable } from './NotApplicable';
 
@@ -279,7 +280,7 @@ export function PropertyCell(props: PropertyCellProps) {
   const types = useWorkItemTypes().data?.items;
   const saving = useSave(item, property);
   const reason = useEditReason(item);
-  const assignment = types?.find((type) => type.id === item.type_id)?.properties.find((entry) => entry.property_id === property.id);
+  const assignment = typePropertyOf(types, item, property);
   if (!assignment) return <NotApplicable />;
   const cell = { ...props, saving, reason };
   let editor: ReactNode;

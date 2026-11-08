@@ -10,6 +10,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { useState, type MouseEvent, type ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { editReasonOf } from '@/components/fields/itemData';
 import { currentToasts, resetToasts } from '@/components/ui/toast';
 import { cachedZone } from '@/domain/tz';
 import { mockApi, type MockApi } from '@/test/api';
@@ -17,7 +18,7 @@ import { ida, labels, lene, list, makeWorkItem, mara, organization, person, proj
 import { useUiStore } from '@/store/ui';
 import type { Display, ListedItem, Organization, Property, ProjectRole, WorkItemType } from '@/types';
 import type { GroupData, LayoutProps } from '../layouts';
-import { tableColumns, typeHasProperty } from './columns';
+import { tableColumns, typeHasProperty, typePropertyOf } from './columns';
 import { TableLayout } from './TableLayout';
 import { cellOf } from './useGridKeys';
 
@@ -281,6 +282,19 @@ describe('columns of the table', () => {
     expect(cellOf(null)).toBeNull();
     expect(cellOf(document.createElement('td'))).toBeNull();
   });
+
+  it('shares the helpers of the cells: the assignment of a property and why an item does not change (T20-M2)', () => {
+    expect(typePropertyOf(types, web1, note)).toEqual({ property_id: 'pr_note', required: true, position: 7 });
+    expect(typePropertyOf(types, web2, note)).toBeUndefined();
+    expect(typePropertyOf(undefined, web1, note)).toBeUndefined();
+
+    const reason = vi.fn(() => 'Keine Rechte.');
+    expect(editReasonOf(web1, reason)).toBe('Keine Rechte.');
+    expect(reason).toHaveBeenCalledWith('item.edit', web1.project_id);
+    const archived = makeWorkItem({ key: 'WEB-9', archived_at: '2026-10-20T08:00:00Z' });
+    expect(editReasonOf(archived, reason)).toBe('WEB-9 ist archiviert und schreibgeschützt. Stelle es zuerst wieder her.');
+    expect(reason).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('TableLayout', () => {
@@ -452,7 +466,7 @@ describe('TableLayout', () => {
     act(() => cell('wi_9', 1)!.focus());
     press('Enter');
     const [viewer, archive] = toastTexts();
-    expect(viewer![1]).toMatch(/nur lesen|lesen/);
+    expect(viewer).toEqual(['Nicht änderbar', 'Im Projekt WEB darfst du nur lesen. Items ändern dürfen Member und Admins.']);
     expect(archive).toEqual(['Nicht änderbar', 'WEB-9 ist archiviert und schreibgeschützt. Stelle es zuerst wieder her.']);
   });
 

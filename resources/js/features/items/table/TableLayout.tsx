@@ -20,7 +20,7 @@
 import { defaultRangeExtractor, useVirtualizer, type Range } from '@tanstack/react-virtual';
 import { ArrowDownWideNarrow, ArrowUpNarrowWide } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FocusEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
-import { archivedReason } from '@/components/fields/itemData';
+import { editReasonOf } from '@/components/fields/itemData';
 import { TypeGlyph } from '@/components/fields/TypeGlyph';
 import { ItemKey } from '@/components/items/ItemKey';
 import { ItemLink } from '@/components/items/ItemLink';
@@ -248,7 +248,7 @@ export function TableLayout({ groups, groupBy, display, selection, onSelect, onS
       const type = types?.find((entry) => entry.id === item.type_id)?.name ?? '';
       return refuse(t('items.table.not_applicable_detail', { property: target.property.label, type }));
     }
-    const denied = item.archived_at !== null ? archivedReason(item.key) : reason('item.edit', item.project_id);
+    const denied = editReasonOf(item, reason);
     if (denied) return refuse(denied);
     setEditing({ row: key, field: target.field });
   }

@@ -20,13 +20,18 @@ export const archivedReason = (key: string) => t('items.fields.archived', { key 
 
 /**
  * Why the signed-in person cannot change this item right now, or null when they can: an archived item, a role without
- * `item.edit` (a viewer), an archived project, or rights that are still loading.
+ * `item.edit` (a viewer), an archived project, or rights that are still loading. `reason` is the one of
+ * `usePermissions`; without a hook, for a screen that asks for many items at once (the table).
  */
+export function editReasonOf(item: Pick<ListedItem, 'key' | 'project_id' | 'archived_at'>, reason: ReturnType<typeof usePermissions>['reason']): string | null {
+  return item.archived_at !== null ? archivedReason(item.key) : reason('item.edit', item.project_id);
+}
+
+/** `editReasonOf` for one item, with the rights of the signed-in person. */
 export function useEditReason(item: Pick<ListedItem, 'key' | 'project_id' | 'archived_at'>): string | null {
   // a project the cached list lacks (just created or joined) loads the list again
   useProjectsWith(item.project_id);
-  const { reason } = usePermissions();
-  return item.archived_at !== null ? archivedReason(item.key) : reason('item.edit', item.project_id);
+  return editReasonOf(item, usePermissions().reason);
 }
 
 /** The project of an item and its workflow, plus the loading state of both. */
