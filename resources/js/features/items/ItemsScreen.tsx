@@ -158,7 +158,7 @@ function copyName(name: string): string {
 
 function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: Project; view?: View }) {
   const me = useCurrentUser();
-  const { reason } = usePermissions();
+  const { reason, loading: rightsLoading, failed: rightsFailed } = usePermissions();
   const { base, state, setState, clearChanges, unsaved } = useListState({ preset, project, view });
   const scope = useMemo(() => scopeConditions(preset, project?.id), [preset, project?.id]);
   const data = useListData(state, scope, { preset, project });
@@ -225,16 +225,22 @@ function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: P
   /* ------------------------------------------------------------------------- saving */
 
   const settle = useSettle();
-  const properties = useProperties().data?.items ?? [];
+  const propertyList = useProperties();
+  // unknown while they load: a sort on a property is then neither unknown nor named (T17-M3); after a failure as before
+  const properties = propertyList.data?.items ?? (propertyList.isError ? [] : undefined);
   const users = useAllUsers();
   const saving = useListSave({ view, state, scope });
   const [savingAs, setSavingAs] = useState(false);
   const creatorName = users.data?.items.find((user) => user.id === view?.created_by)?.name ?? t('items.save.creator');
+  // while the rights load (or failed to), their reason says so: who may save it is known only with them (T17-M7)
+  const manageReason = view && view.created_by !== me?.id ? reason('view.manage_any') : null;
   // a condition on a field that is gone blocks both: the server would refuse the filter
   const saveReason =
     saving.blocked ??
-    (view && view.created_by !== me?.id && reason('view.manage_any') !== null
-      ? `${t('problem.detail.view_creator_only', { name: creatorName, view: view.name })} ${t('items.save.copy_instead')}`
+    (manageReason !== null && view
+      ? rightsLoading || rightsFailed
+        ? manageReason
+        : `${t('problem.detail.view_creator_only', { name: creatorName, view: view.name })} ${t('items.save.copy_instead')}`
       : null);
   const saveAsReason = saving.blocked ?? reason('view.create');
   /** Back to what is saved: a view drops every change, a built-in list its filter (its display was no unsaved change). */

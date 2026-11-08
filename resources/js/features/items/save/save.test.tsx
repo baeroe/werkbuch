@@ -154,6 +154,17 @@ async function openSaveAs() {
   return dialog();
 }
 const reasonOf = (button: HTMLElement) => document.getElementById(button.getAttribute('aria-describedby')!)?.textContent;
+/** Holds the answers of `GET <path>` (with any query) until released. */
+function holdGet(path: string): () => void {
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const inner = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    if ((init?.method ?? 'GET') === 'GET' && new URL(String(input), window.location.origin).pathname === path) await gate;
+    return inner(input, init);
+  };
+  return () => act(() => release());
+}
 
 /* -------------------------------------------------------------------------- tests */
 
@@ -281,6 +292,18 @@ describe('unsaved changes', () => {
     fireEvent.submit(name.closest('form')!);
     await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
     expect(posted()).toHaveLength(0);
+  });
+
+  it('shows no creator sentence while rights load', async () => {
+    const release = holdGet('/api/v1/projects');
+    await openView(makeView({ created_by: 'u_mara', display: display() }), '?group=priority');
+    const save = await screen.findByRole('button', { name: 'Speichern' });
+    // an org admin may save it: until the rights are there, say that they load, not who may save
+    expect(reasonOf(save)).toBe('Die Rechte werden noch geladen.');
+    expect(save.getAttribute('aria-disabled')).toBe('true');
+
+    release();
+    await waitFor(() => expect(reasonOf(save)).toBe('Nur Mara Lindqvist und Org-Admins dürfen „Fällig diese Woche“ ändern. Speichere deine Änderungen als neue View.'));
   });
 
   it('lets an org admin save the view of somebody else', async () => {
@@ -493,6 +516,22 @@ describe('the display menu', () => {
     const { menu } = renderMenu({ display: display({ sort: { field: 'property:gone', direction: 'asc' } }) });
     expect(within(menu).getByRole('combobox', { name: /^Sortierung/ }).textContent).toContain('Unbekanntes Feld');
     expect(within(menu).getByText('Das Feld gibt es nicht mehr. Bis du ein anderes wählst, ist die Liste manuell sortiert.')).toBeTruthy();
+  });
+
+  it('calls a loading property sort neither unknown nor sortable', async () => {
+    const release = holdGet('/api/v1/properties');
+    await openView(ownView(), '?sort=property:effort:desc');
+    fireEvent.click(screen.getByRole('button', { name: 'Anzeige' }));
+    const menu = screen.getByRole('dialog', { name: 'Anzeige' });
+    const sort = within(menu).getByRole('combobox', { name: /^Sortierung/ });
+    // the properties are on their way: the sort says so, it is neither "Unbekanntes Feld" nor already named
+    expect(sort.textContent).toContain('Lädt …');
+    expect(sort.textContent).not.toContain('Unbekanntes Feld');
+    expect(within(menu).queryByText('Das Feld gibt es nicht mehr. Bis du ein anderes wählst, ist die Liste manuell sortiert.')).toBeNull();
+
+    release();
+    await waitFor(() => expect(sort.textContent).toContain('Aufwand (h)'));
+    expect(within(menu).queryByText('Das Feld gibt es nicht mehr. Bis du ein anderes wählst, ist die Liste manuell sortiert.')).toBeNull();
   });
 
   it('hides sub-items', () => {

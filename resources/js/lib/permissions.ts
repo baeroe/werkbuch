@@ -118,6 +118,11 @@ export interface Permissions {
    * for a moment waits for this (a skeleton) instead.
    */
   loading: boolean;
+  /**
+   * The rights could not be loaded: `reason` says so. Like `loading`, a reason then says nothing about this person's
+   * rights, so a sentence that would explain a refusal (who may do it) has to wait for them (T17-M7).
+   */
+  failed: boolean;
 }
 
 /** The rights of the signed-in person; nothing is allowed until the projects have loaded. */
@@ -135,6 +140,6 @@ export function usePermissions(): Permissions {
       if (data) return deniedReason(data, permission, projectId);
       return failed ? t('permissions.reason.failed') : t('permissions.reason.loading');
     };
-    return { can: (permission, projectId) => reason(permission, projectId) === null, reason, loading: data === null && !failed };
+    return { can: (permission, projectId) => reason(permission, projectId) === null, reason, loading: data === null && !failed, failed: data === null && failed };
   }, [user, projectList, failed]);
 }
