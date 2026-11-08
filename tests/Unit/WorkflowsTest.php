@@ -230,3 +230,122 @@ it('syncs the description only while the repository exists', function () use ($s
     expect($workflow['jobs']['sync']['if'])->toContain("github.event.workflow_run.event == 'push'")
         ->and($workflow['jobs']['sync']['if'])->toContain("(github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')");
 });
+
+/** @return list<string> the Playwright projects of e2e/playwright.config.ts, `setup` left out, in their order */
+$playwrightProjects = function (): array {
+    preg_match_all("/\\['([\\w-]+)',\\s*\\w+,\\s*'(?:light|dark)'\\]/", RepoFiles::text('e2e/playwright.config.ts'), $matches);
+    expect($matches[1])->toHaveCount(4, 'e2e/playwright.config.ts names other than four projects');
+
+    return $matches[1];
+};
+
+/** @return array<string, mixed> the first step of a job whose `uses` starts with `$action` and whose `with` holds all of `$with` */
+$stepUsing = function (array $job, string $action, array $with = []): array {
+    foreach ($job['steps'] as $step) {
+        if (str_starts_with((string) ($step['uses'] ?? ''), $action.'@') && array_intersect_assoc($with, $step['with'] ?? []) === $with) {
+            return $step;
+        }
+    }
+
+    throw new RuntimeException("no step uses {$action} with ".json_encode($with));
+};
+
+/** @return list<string> the scripts of the `run:` steps of a job */
+$runs = fn (array $job): array => array_values(array_map(fn (array $step): string => (string) $step['run'], array_filter($job['steps'], fn (array $step): bool => isset($step['run']))));
+
+it('runs the e2e suite once per Playwright project', function () use ($playwrightProjects, $stepUsing, $runs) {
+    $jobs = RepoFiles::yaml('.github/workflows/tests.yml')['jobs'];
+    $e2e = $jobs['e2e'];
+
+    expect($e2e['strategy']['matrix']['project'])->toBe($playwrightProjects())
+        ->and($e2e['strategy']['fail-fast'])->toBeFalse()
+        ->and($e2e['timeout-minutes'])->toBeLessThanOrEqual(60)
+        ->and($e2e['needs'])->toBe('e2e-build')
+        ->and($e2e['env']['E2E_PROJECT'])->toBe('${{ matrix.project }}');
+
+    // the build of the job e2e-build, never one of its own
+    expect($stepUsing($e2e, 'actions/download-artifact', ['name' => 'e2e-build'])['with']['path'])->toBe('public/build');
+
+    $tests = collect($e2e['steps'])->first(fn (array $step): bool => str_contains((string) ($step['run'] ?? ''), 'pnpm --dir e2e test'));
+    expect($tests['run'])->toBe('pnpm --dir e2e test --project=setup --project="$E2E_PROJECT"')
+        ->and($tests['env']['E2E_MERGE'])->toBe('0')
+        ->and($tests['id'])->toBe('tests');
+
+    // a database, a search, a mailbox, a Reverb and workers of its own per project
+    expect(array_keys($e2e['services']))->toEqualCanonicalizing(['mariadb', 'mailpit', 'meilisearch']);
+    expect(implode("\n", $runs($e2e)))->toContain('php artisan reverb:start')
+        ->and(implode("\n", $runs($e2e)))->toContain('php artisan queue:work --queue=webhooks');
+});
+
+it('uploads one remapped coverage file per project', function () use ($stepUsing) {
+    $e2e = RepoFiles::yaml('.github/workflows/tests.yml')['jobs']['e2e'];
+
+    $remap = collect($e2e['steps'])->first(fn (array $step): bool => str_contains((string) ($step['run'] ?? ''), '--remap-only'));
+    expect($remap['run'])->toBe('node scripts/coverage-merge.mjs --remap-only --out "coverage/e2e-$E2E_PROJECT.json"')
+        ->and($remap['if'])->toContain('always()');
+
+    $upload = $stepUsing($e2e, 'actions/upload-artifact', ['name' => 'e2e-coverage-${{ matrix.project }}']);
+    // the one mapped file, never the raw files of coverage/e2e (hundreds of MB per project)
+    expect($upload['with']['path'])->toBe('coverage/e2e-${{ matrix.project }}.json')
+        ->and($upload['with']['if-no-files-found'])->toBe('error')
+        ->and($upload['if'])->toBe($remap['if']);
+
+    expect($stepUsing($e2e, 'actions/upload-artifact', ['name' => 'e2e-results-${{ matrix.project }}'])['if'])->toBe('failure()');
+});
+
+it('merges the coverage of every project by name with the gate', function () use ($playwrightProjects, $stepUsing, $runs) {
+    $merge = RepoFiles::yaml('.github/workflows/tests.yml')['jobs']['e2e-coverage'];
+
+    // needs.e2e-build is only readable for a job that needs it
+    expect($merge['needs'])->toEqualCanonicalizing(['e2e-build', 'e2e'])
+        ->and($merge['if'])->toBe("always() && needs.e2e-build.result == 'success'");
+
+    expect($stepUsing($merge, 'actions/download-artifact', ['name' => 'unit-coverage'])['with']['path'])->toBe('coverage/unit');
+    expect($stepUsing($merge, 'actions/download-artifact', ['pattern' => 'e2e-coverage-*'])['with'])
+        ->toMatchArray(['path' => 'coverage/e2e', 'merge-multiple' => false]);
+
+    expect($runs($merge))->toContain('pnpm coverage:merge --expect-shards='.implode(',', $playwrightProjects()));
+
+    expect($stepUsing($merge, 'actions/upload-artifact', ['name' => 'frontend-coverage'])['with']['path'])->toBe('coverage/merged');
+
+    // the coverage can reach 100 % while tests failed: the last step fails with the projects
+    $last = end($merge['steps']);
+    expect($last['if'])->toBe("always() && needs.e2e.result != 'success'")
+        ->and($last['run'])->toContain('exit 1');
+});
+
+it('builds the coverage build once', function () use ($stepUsing, $runs) {
+    $jobs = RepoFiles::yaml('.github/workflows/tests.yml')['jobs'];
+    $build = $jobs['e2e-build'];
+
+    expect($runs($build))->toContain('pnpm build:coverage')
+        ->and($runs($build))->toContain('pnpm test:coverage');
+
+    expect($stepUsing($build, 'actions/upload-artifact', ['name' => 'e2e-build'])['with'])
+        ->toMatchArray(['path' => 'public/build', 'retention-days' => 3, 'if-no-files-found' => 'error']);
+    expect($stepUsing($build, 'actions/upload-artifact', ['name' => 'unit-coverage'])['with'])
+        ->toMatchArray(['path' => 'coverage/unit/coverage-final.json', 'retention-days' => 3, 'if-no-files-found' => 'error']);
+
+    foreach ($jobs as $name => $job) {
+        if ($name !== 'e2e-build') {
+            expect(implode("\n", $runs($job)))->not->toContain('build:coverage', "{$name} builds the coverage build again");
+        }
+    }
+
+    // the gate of the required job keeps its Vitest run (K7)
+    expect($runs($jobs['tests']))->toContain('pnpm test:coverage');
+});
+
+it('names the e2e jobs for what they do and none of them like the required check', function () {
+    $jobs = RepoFiles::yaml('.github/workflows/tests.yml')['jobs'];
+
+    expect($jobs['e2e-build']['name'])->toBe('e2e build (coverage build, Vitest)')
+        ->and($jobs['e2e']['name'])->toBe('e2e (${{ matrix.project }})')
+        ->and($jobs['e2e-coverage']['name'])->toBe('e2e coverage (merge, 100 % lines)');
+
+    foreach ($jobs as $id => $job) {
+        if ($id !== 'tests') {
+            expect($job['name'] ?? $id)->not->toBe('tests', "{$id} shows up as the required check tests");
+        }
+    }
+});
