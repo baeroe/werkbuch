@@ -24,10 +24,18 @@ final class LiveMessage implements ShouldBroadcastNow
     public const PAGE_IDS_MAX = 200;
 
     /**
+     * The most channels one message names (A451): the Pusher client refuses more than 100 in one call, and a request
+     * with 100 own channels (`presence-user.` and an ULID, about 45 bytes each in the body) and the IDs of a project
+     * event stays near 5 500 bytes, within the 10 000 Reverb takes. The consumer splits longer lists itself.
+     */
+    public const CHANNELS_MAX = 100;
+
+    /**
+     * @param  list<Channel>  $channels  one to CHANNELS_MAX
      * @param  array<string, mixed>  $payload
      */
     public function __construct(
-        private readonly Channel $channel,
+        private readonly array $channels,
         private readonly array $payload,
         public readonly ?string $socket = null,
     ) {}
@@ -40,9 +48,10 @@ final class LiveMessage implements ShouldBroadcastNow
      * template's log and next run again and leaves a deleted one alone (T14-I1/I2); `automation.updated` names only its
      * project (A347). `page.deleted` adds `page_ids`, the whole subtree from `meta.page_ids`
      * (the root first); a subtree of more than PAGE_IDS_MAX pages is too large to name and comes as `null`, as does an
-     * event that names none: the browser loads the tree again and takes what is no longer in it as gone.
+     * event that names none: the browser loads the tree again and takes what is no longer in it as gone. The same
+     * message may go to several channels at once (the own channels of the people who see a project, A451).
      */
-    public static function of(Event $event, Channel $channel): self
+    public static function of(Event $event, Channel ...$channels): self
     {
         $group = $event->type->group();
         $item = in_array($group, ['work_item', 'comment'], true) ? $event->subject_id : null;
@@ -71,7 +80,7 @@ final class LiveMessage implements ShouldBroadcastNow
             $payload['page_ids'] = $ids === [] || count($ids) > self::PAGE_IDS_MAX ? null : $ids;
         }
 
-        return new self($channel, $payload, is_string($socket) ? $socket : null);
+        return new self(array_values($channels), $payload, is_string($socket) ? $socket : null);
     }
 
     /**
@@ -79,7 +88,7 @@ final class LiveMessage implements ShouldBroadcastNow
      */
     public static function notificationsChanged(string $userId, ?string $socket): self
     {
-        return new self(new PresenceChannel("user.{$userId}"), [
+        return new self([new PresenceChannel("user.{$userId}")], [
             'event_id' => null,
             'type' => 'notifications.changed',
             'project_id' => null,
@@ -92,9 +101,12 @@ final class LiveMessage implements ShouldBroadcastNow
         ], $socket);
     }
 
-    public function broadcastOn(): Channel
+    /**
+     * @return list<Channel>
+     */
+    public function broadcastOn(): array
     {
-        return $this->channel;
+        return $this->channels;
     }
 
     public function broadcastAs(): string
