@@ -70,6 +70,9 @@ type Restore = (back?: readonly string[], reload?: boolean) => void;
 function hideAtOnce(queryClient: QueryClient, items: readonly ListedItem[]): Restore {
   const ids = new Set(items.map((item) => item.id));
   const listKey = [...qk.workItems.all, 'list'];
+  // a reload already on its way (a live update) would answer the items as they were and put them back (T7); the
+  // cancel takes effect at once (the list keeps what it had), so the items still leave the screen in this tick
+  void queryClient.cancelQueries({ queryKey: listKey });
   const before = queryClient
     .getQueriesData<unknown>({ queryKey: listKey })
     .filter((entry): entry is [readonly unknown[], Page<ListedItem>] => isPage(entry[1]) && entry[1].items.some((item) => ids.has(item.id)));

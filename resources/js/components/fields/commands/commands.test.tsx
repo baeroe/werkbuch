@@ -4,7 +4,7 @@
  * archiving and deleting with undo, and that the page and the preview register the keys once.
  */
 
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useRef, useState, type ReactNode } from 'react';
@@ -15,6 +15,7 @@ import { CommandPalette } from '@/features/palette/CommandPalette';
 import { listCommands } from '@/lib/commands';
 import { helpGroups } from '@/lib/shortcuts/HelpOverlay';
 import { listShortcuts } from '@/lib/shortcuts/registry';
+import { qk } from '@/hooks/keys';
 import { useWorkItems } from '@/hooks/workItems';
 import { useUiStore } from '@/store/ui';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
@@ -1021,6 +1022,53 @@ describe('the item commands of a list', () => {
     await waitFor(() =>
       expect(lastToast()).toMatchObject({ title: '1 von 2 Items archiviert', description: 'WEB-51: Nur geschlossene Items lassen sich archivieren.' }),
     );
+  });
+
+  it('keeps archived items off the screen when a reload of the list was on its way (T7)', async () => {
+    const web51 = makeWorkItem({ id: 'wi_web_51', number: 51, key: 'WEB-51', state_id: 'std_cancelled', rank: 'a7' });
+    let client!: QueryClient;
+    function Client() {
+      client = useQueryClient();
+      return null;
+    }
+    renderWith(
+      <>
+        <Client />
+        <ListScreen />
+        <WebList />
+      </>,
+      { role: 'admin', routes: { 'POST /api/v1/work-items/query': (body) => ({ body: list(queryItems([...items, web51], body)) }) } },
+    );
+    const webList = screen.getByLabelText('WEB');
+    await waitFor(() => expect(webList.textContent).toBe('WEB-30 WEB-47 WEB-48 WEB-50 WEB-51'));
+
+    // a reload (a live update) is on its way and answers the items as they were, after they left the screen
+    let answer!: () => void;
+    const held = new Promise<void>((resolve) => (answer = resolve));
+    let asked = 0;
+    const answering = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      if (String(input).includes('/work-items/query')) {
+        asked += 1;
+        await held;
+      }
+      return answering(input, init);
+    };
+    onTestFinished(() => {
+      globalThis.fetch = answering;
+    });
+    act(() => void client.invalidateQueries({ queryKey: qk.workItems.all }));
+    await waitFor(() => expect(asked).toBe(1));
+
+    select('wi_web_50', 'wi_web_51');
+    await ready('2 Items', 'item.archive');
+    press('Backspace', { ctrlKey: true });
+    expect(lastToast()).toMatchObject({ title: '2 Items archiviert' });
+    await waitFor(() => expect(webList.textContent).toBe('WEB-30 WEB-47 WEB-48'));
+
+    await act(async () => answer());
+    await waitFor(() => expect(client.isFetching({ queryKey: qk.workItems.all })).toBe(0));
+    expect(webList.textContent).toBe('WEB-30 WEB-47 WEB-48');
   });
 
   it('brings the archived items back when the bulk edit fails', async () => {
