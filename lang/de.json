@@ -911,6 +911,7 @@
     "items.detail.more": "Weitere Aktionen",
     "items.detail.open_page": "Als Seite öffnen",
     "items.detail.pages.failed": "Wiki-Seiten nicht geladen.",
+    "items.detail.pages.list": "Wiki-Seiten, die dieses Item nennen",
     "items.detail.pages.title": "Wiki-Seiten",
     "items.detail.path": "Pfad",
     "items.detail.relations.add": "Relation",

@@ -17,7 +17,7 @@ import { resetForUser } from '@/hooks/queryClient';
 import { descriptionDraft, drafts } from '@/lib/drafts';
 import { useUiStore } from '@/store/ui';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
-import { ida, labels, lene, list, makeWorkItem, makePage, mara, organization, pageSummary, project, properties, relationTypes, resolutions, searchResults, standard, types, web30, web47, web48 } from '@/test/fixtures';
+import { ida, labels, lene, list, makeAttachment, makeWorkItem, makePage, mara, organization, pageSummary, project, properties, relationTypes, resolutions, searchResults, standard, types, web30, web47, web48 } from '@/test/fixtures';
 import type { Project, ProjectMember, RelationEntry, RichText, User, WorkItem } from '@/types';
 import { DESCRIPTION_PAUSE_MS } from './Description';
 import { ItemPage } from './ItemPage';
@@ -1433,24 +1433,62 @@ describe('WikiPages', () => {
   });
 
   it('lists the wiki pages that reference the item between relations and files', async () => {
-    renderWith(<ItemPage itemKey="WEB-47" />, { routes: pagesOf([zeitplan, handbuch]) });
+    renderWith(<ItemPage itemKey="WEB-47" />, {
+      routes: {
+        ...pagesOf([zeitplan, handbuch]),
+        'GET /api/v1/work-items/wi_web_47': () => ({ body: { ...detail(web47).body, data: { ...detail(web47).body.data, attachments: [makeAttachment({ id: 'att_f', kind: 'file', inline: false })] } } }),
+      },
+    });
     const section = await screen.findByRole('region', { name: 'Wiki-Seiten' });
+    await screen.findByRole('region', { name: 'Dateien' });
 
+    expect(within(section).getByRole('list', { name: 'Wiki-Seiten, die dieses Item nennen' })).toBeTruthy();
     expect(within(section).getAllByRole('listitem').map((row) => row.textContent)).toEqual(['🗓ZeitplanWiki WEB', 'HandbuchWiki WEB']);
     expect(within(section).getByText('2')).toBeTruthy();
-    const names = screen.getAllByRole('region').map((region) => region.getAttribute('aria-label') ?? region.querySelector('h2, h3')?.textContent);
-    const at = (name: string) => names.findIndex((entry) => entry === name);
-    expect(at('Wiki-Seiten')).toBeGreaterThan(-1);
-    // the sections come in the order of the body: children and relations before, the activity after
+    // the sections come in the order of the body: after the relations, before the files
     const order = [...document.querySelectorAll('[data-item-detail] section')].map((node) => node.querySelector('h2')?.textContent);
     expect(order.indexOf('Wiki-Seiten')).toBeGreaterThan(order.indexOf('Relationen'));
+    expect(order.indexOf('Wiki-Seiten')).toBeLessThan(order.indexOf('Dateien'));
   });
 
-  it('shows no section without pages', async () => {
-    renderWith(<ItemPage itemKey="WEB-47" />, { routes: pagesOf([]) });
-    await screen.findByRole('region', { name: 'Relationen' });
-    await waitFor(() => expect(api!.calls.some((call) => call.url.startsWith('/api/v1/work-items/wi_web_47/pages'))).toBe(true));
+  /** Holds the answer to the wiki pages of WEB-47 back until `release()`; installed after `renderWith`, over its fake API. */
+  function holdPages() {
+    const original = globalThis.fetch;
+    let release = () => {};
+    let asked = false;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    globalThis.fetch = async (input, init) => {
+      if (String(input).includes('/work-items/wi_web_47/pages')) {
+        asked = true;
+        await gate;
+      }
+      return original(input, init);
+    };
+    return { asked: () => asked, release: () => act(async () => release()), restore: () => (globalThis.fetch = original) };
+  }
 
+  it('shows no section while the pages load, and the section once they are there', async () => {
+    renderWith(<ItemPage itemKey="WEB-47" />, { routes: pagesOf([zeitplan]) });
+    const held = holdPages();
+    try {
+      await screen.findByRole('region', { name: 'Relationen' });
+      await waitFor(() => expect(held.asked()).toBe(true));
+      expect(screen.queryByRole('region', { name: 'Wiki-Seiten' })).toBeNull();
+
+      await held.release();
+      expect(await screen.findByRole('region', { name: 'Wiki-Seiten' })).toBeTruthy();
+    } finally {
+      held.restore();
+    }
+  });
+
+  it('shows no section without pages, once the answer is there', async () => {
+    const client = newClient();
+    renderWith(<ItemPage itemKey="WEB-47" />, { client, routes: pagesOf([]) });
+    await screen.findByRole('region', { name: 'Relationen' });
+    await waitFor(() => expect(client.getQueryState(qk.pages.item('wi_web_47'))?.status).toBe('success'));
+
+    expect(client.getQueryData<{ items: unknown[] }>(qk.pages.item('wi_web_47'))?.items).toEqual([]);
     expect(screen.queryByRole('region', { name: 'Wiki-Seiten' })).toBeNull();
   });
 
@@ -1496,5 +1534,38 @@ describe('WikiPages', () => {
     renderWith(<ItemPeek itemId="WEB-47" panel={{ current: null }} />, { routes: pagesOf([zeitplan]) });
 
     expect(await screen.findByRole('link', { name: 'Zeitplan, Wiki WEB' })).toBeTruthy();
+  });
+
+  describe('when a live update takes a page away', () => {
+    let shown = [zeitplan, handbuch];
+    const routes = (): Record<string, MockRoute> => ({ 'GET /api/v1/work-items/wi_web_47/pages': () => ({ body: list(shown) }) });
+
+    it('moves the focus to the neighbouring row', async () => {
+      const client = newClient();
+      shown = [zeitplan, handbuch];
+      renderWith(<ItemPage itemKey="WEB-47" />, { client, routes: routes() });
+      const link = await screen.findByRole('link', { name: 'Zeitplan, Wiki WEB' });
+      act(() => link.focus());
+
+      shown = [handbuch];
+      await act(() => client.invalidateQueries({ queryKey: qk.pages.all }));
+
+      const next = await screen.findByRole('link', { name: 'Handbuch, Wiki WEB' });
+      await waitFor(() => expect(document.activeElement).toBe(next));
+    });
+
+    it('moves the focus to the title when the last row goes and the section with it', async () => {
+      const client = newClient();
+      shown = [zeitplan];
+      renderWith(<ItemPage itemKey="WEB-47" />, { client, routes: routes() });
+      const link = await screen.findByRole('link', { name: 'Zeitplan, Wiki WEB' });
+      act(() => link.focus());
+
+      shown = [];
+      await act(() => client.invalidateQueries({ queryKey: qk.pages.all }));
+
+      await waitFor(() => expect(screen.queryByRole('region', { name: 'Wiki-Seiten' })).toBeNull());
+      await waitFor(() => expect(document.activeElement).toBe(document.querySelector('[data-item-detail] [data-item-title]')));
+    });
   });
 });

@@ -1049,4 +1049,24 @@ describe('the wiki pages of an item', () => {
 
     expect(pages.fetches()).toBe(1);
   });
+
+  it('loads again after page.deleted that cannot name its pages, once the tree has been read', async () => {
+    api = mockApi({ 'GET /api/v1/projects/p_web/pages': () => ({ body: { data: webTree, meta: { total: 12 } } }) });
+    const pages = await shown(key);
+    renderHook(() => useLiveSync(), { wrapper });
+
+    send({ event_id: 'ev_1', type: 'page.deleted', page_id: 'pg_web_tech', page_ids: null, item_id: null });
+    await pass(LIVE_BURST_MS);
+    await vi.waitFor(() => expect(pages.fetches()).toBe(2));
+  });
+
+  it('loads again when a project is deleted: a page of it may have named the item', async () => {
+    const pages = await shown(key);
+    renderHook(() => useLiveSync(), { wrapper });
+
+    send({ event_id: 'ev_1', type: 'project.deleted', project_id: 'p_ops', item_id: null });
+    await pass(LIVE_BURST_MS);
+
+    expect(pages.fetches()).toBe(2);
+  });
 });

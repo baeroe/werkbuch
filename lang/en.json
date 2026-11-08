@@ -911,6 +911,7 @@
     "items.detail.more": "More actions",
     "items.detail.open_page": "Open as page",
     "items.detail.pages.failed": "Wiki pages not loaded.",
+    "items.detail.pages.list": "Wiki pages that name this item",
     "items.detail.pages.title": "Wiki pages",
     "items.detail.path": "Path",
     "items.detail.relations.add": "Relation",

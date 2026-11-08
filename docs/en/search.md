@@ -18,7 +18,7 @@ A word of a comment finds the item the comment belongs to; the search reads the 
 
 A wiki page is found by its title and its text, up to 64 KB of text per page; a hit in the title counts more than one in the text, and among equal hits the page changed last comes first. Saving, moving and deleting a page change the search a moment later.
 
-A reference to an item inside a page does not count for the search: the page is not found by the key of the item it refers to, and a key written as a reference stands in the text without its letters. To see which pages name an item, open the item: its section **Wiki pages** lists them (see [wiki](/en/concepts/wiki#references-and-search)).
+A reference to an item inside a page does not count for the search: the page is not found by the key of the item it refers to, because a key written as a reference stands in the text without its letters. To see which pages name an item, open the item: its section **Wiki pages** lists them (see [wiki](/en/concepts/wiki#references-and-search)).
 
 People and bots are found only while their account is active. Views are searched by every word of their name, case and accents aside, straight in the database: a new view is found at once.
 

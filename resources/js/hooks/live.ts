@@ -26,6 +26,9 @@ const GONE_MAX = 200;
 /** The wiki of a project: the trees, the pages, their versions. */
 const WIKI: readonly QueryKey[] = [qk.pages.all, qk.pageVersions.all];
 
+/** The wiki pages that name an item (`qk.pages.item(id)`), all of them. */
+const ITEM_PAGES: QueryKey = [...qk.pages.all, 'item'];
+
 /** The templates with their runs and the automations of a project (the preview of a schedule is no live data). */
 const AUTOMATION: readonly QueryKey[] = [qk.templates.all, qk.templateRuns.all, qk.automations.all];
 
@@ -85,6 +88,8 @@ function keysOf(event: LiveEvent): readonly QueryKey[] {
   if (event.type === 'project.updated') return [qk.projects.all, qk.members.all, qk.workItems.all];
   // new short ranks for the items of a project (A448): the lists load them again, the project itself is unchanged
   if (event.type === 'project.ranks_redistributed') return [qk.workItems.all];
+  // a page of the deleted project may name an item of another one: the wiki pages of an item load again (no 404: the server leaves them out)
+  if (event.type === 'project.deleted') return [qk.projects.all, qk.members.all, ITEM_PAGES];
   if (group === 'project') return [qk.projects.all, qk.members.all];
   if (event.type === 'page.updated' || event.type === 'page.moved' || event.type === 'page.deleted') return [...WIKI, qk.references.all];
   if (group === 'page') return WIKI;
