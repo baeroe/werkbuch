@@ -14,8 +14,8 @@ use App\Models\Workflow;
 use App\Models\WorkflowState;
 use App\Support\Actor;
 use App\Support\CatalogLock;
-use App\Support\MemberInput;
 use App\Support\ProjectInput;
+use App\Support\ProjectLock;
 use App\Support\WorkflowInput;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -55,7 +55,7 @@ final class AssignWorkflow
         // no Visibility::forget(): the workflow changes neither who sees the project nor the roles in it (P27)
         return DB::transaction(function () use ($actor, $project, $input): Project {
             CatalogLock::take();
-            MemberInput::lock($project);
+            ProjectLock::lock($project);
             $project->refresh();
 
             /** @var array{workflow_id: string, mapping?: ?array<array-key, mixed>} $valid */

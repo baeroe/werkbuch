@@ -9,7 +9,7 @@ use Tests\Support\RaceConnections;
 
 /*
  * Two items created in one project at the same time never get the same number (Review Focus 1): CreateWorkItem takes
- * the row of the project `lockForUpdate` (MemberInput::lock) after the shared lock of the organization and reads
+ * the row of the project `lockForUpdate` (ProjectLock::lock) after the shared lock of the organization and reads
  * `next_number` and the last rank under it. Two connections as in ProjectMemberRaceTest: `mariadb` holds its
  * transaction open like a request in progress, `mariadb_second` is the other request and gives up waiting for a lock
  * after one second.

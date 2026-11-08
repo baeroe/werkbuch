@@ -12,7 +12,7 @@ use App\Models\WorkItem;
 use App\Support\Actor;
 use App\Support\CatalogLock;
 use App\Support\ItemLock;
-use App\Support\MemberInput;
+use App\Support\ProjectLock;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Lorisleiva\Actions\Concerns\AsAction;
@@ -57,7 +57,7 @@ final class RedistributeRanks
 
         return DB::transaction(function () use ($actor, $project): int {
             CatalogLock::share();
-            $locked = MemberInput::lock($project);
+            $locked = ProjectLock::lock($project);
             ItemLock::refuseArchivedProject($locked);
 
             $rows = [];

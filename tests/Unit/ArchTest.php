@@ -300,3 +300,25 @@ it('binds route parameters in a provider, never in a route file', function () {
 
     expect($hits)->toBe([]);
 });
+
+it('has no MemberInput any more', function () {
+    expect(class_exists('App\Support\MemberInput'))->toBeFalse()
+        ->and(file_exists(repo_path('app/Support/ProjectLock.php')))->toBeTrue()
+        ->and(file_exists(repo_path('app/Support/ProjectMembership.php')))->toBeTrue();
+});
+
+it('locks the row of a project for update only in ProjectLock and PageLock', function () {
+    $found = [];
+    foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator(repo_path('app'))) as $file) {
+        if ($file->getExtension() !== 'php') {
+            continue;
+        }
+
+        if (preg_match('/Project::query\(\)\s*->\s*(?:\w+\([^)]*\)\s*->\s*)*lockForUpdate\(/', (string) file_get_contents($file->getPathname())) === 1) {
+            $found[] = $file->getFilename();
+        }
+    }
+
+    sort($found);
+    expect($found)->toBe(['PageLock.php', 'ProjectLock.php']);
+});

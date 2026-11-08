@@ -26,8 +26,8 @@ use App\Support\CatalogLock;
 use App\Support\ItemInput;
 use App\Support\ItemReferences;
 use App\Support\ItemValues;
-use App\Support\MemberInput;
 use App\Support\Mentions;
+use App\Support\ProjectLock;
 use App\Support\TemplateAttachments;
 use DateTimeImmutable;
 use Illuminate\Support\Facades\DB;
@@ -146,7 +146,7 @@ final class CreateWorkItem
 
         return DB::transaction(function () use ($actor, $project, $input, $refused, $texts, $prepared, $meta): WorkItem {
             CatalogLock::share();
-            $project = MemberInput::lock($project);
+            $project = ProjectLock::lock($project);
 
             if ($project->archived_at !== null) {
                 throw Problem::conflict('project_archived', [], __('problem.detail.project_archived'));

@@ -12,8 +12,8 @@ use App\Models\ProjectMember;
 use App\Support\Actor;
 use App\Support\CatalogLock;
 use App\Support\ImageInput;
-use App\Support\MemberInput;
 use App\Support\ProjectInput;
+use App\Support\ProjectLock;
 use Closure;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -62,7 +62,7 @@ final class UpdateProject
 
             // one change of the project at a time, each from what the one before left (the old values of the event, the
             // former identifier); the lead must stay a member: a removal of the new lead waits for this change
-            MemberInput::lock($project);
+            ProjectLock::lock($project);
             $project->refresh();
 
             $image = ImageInput::url($project, 'image');

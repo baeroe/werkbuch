@@ -12,7 +12,7 @@ use App\Support\Actor;
 use App\Support\AttachmentTexts;
 use App\Support\CatalogLock;
 use App\Support\ItemLock;
-use App\Support\MemberInput;
+use App\Support\ProjectLock;
 use App\Support\ReadCommitted;
 use Illuminate\Support\Facades\DB;
 use Lorisleiva\Actions\Concerns\AsAction;
@@ -40,7 +40,7 @@ final class DeleteTemplate
 
         ReadCommitted::run(fn () => DB::transaction(function () use ($actor, $template): void {
             CatalogLock::share();
-            $project = MemberInput::lock($template->project);
+            $project = ProjectLock::lock($template->project);
             ItemLock::refuseArchivedProject($project);
             $locked = Template::query()->lockForUpdate()->find($template->id) ?? throw Problem::notFound();
 

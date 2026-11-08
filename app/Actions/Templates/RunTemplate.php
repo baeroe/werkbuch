@@ -15,7 +15,7 @@ use App\Models\User;
 use App\Models\WorkItem;
 use App\Support\Actor;
 use App\Support\CatalogLock;
-use App\Support\MemberInput;
+use App\Support\ProjectLock;
 use App\Support\TemplateRunError;
 use App\Support\TemplateSchedule;
 use Carbon\CarbonImmutable;
@@ -138,7 +138,7 @@ final class RunTemplate
         return DB::transaction(function () use ($id, $scheduledFor, $trigger, $actor, $organization, $locale, $prepared, $stamp): array|Organization|null {
             $locked = CatalogLock::share();
             try {
-                $project = MemberInput::lock($prepared['project']);
+                $project = ProjectLock::lock($prepared['project']);
             } catch (Problem) {
                 return null;
             }

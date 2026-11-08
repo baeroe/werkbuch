@@ -13,7 +13,8 @@ use App\Models\Project;
 use App\Models\ProjectMember;
 use App\Models\User;
 use App\Support\Actor;
-use App\Support\MemberInput;
+use App\Support\ProjectLock;
+use App\Support\ProjectMembership;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Lorisleiva\Actions\Concerns\AsAction;
@@ -40,13 +41,13 @@ final class UpdateMemberRole
         Authorize::check($actor, 'manageMembers', $project);
 
         $member = DB::transaction(function () use ($actor, $project, $user, $role): ProjectMember {
-            $project = MemberInput::lock($project);
+            $project = ProjectLock::lock($project);
 
-            if (! MemberInput::isMember($project, $user)) {
+            if (! ProjectMembership::isMember($project, $user)) {
                 throw Problem::notFound();
             }
 
-            $role = MemberInput::role($role);
+            $role = ProjectMembership::role($role);
 
             // the role as the database has it now, not as the request read it before the lock
             Visibility::forget();
@@ -62,7 +63,7 @@ final class UpdateMemberRole
                 ]);
             }
 
-            return MemberInput::membership($project, $user);
+            return ProjectMembership::membership($project, $user);
         });
 
         Visibility::forget();

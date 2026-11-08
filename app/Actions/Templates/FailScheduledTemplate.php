@@ -10,7 +10,7 @@ use App\Models\Template;
 use App\Models\TemplateRun;
 use App\Support\Actor;
 use App\Support\CatalogLock;
-use App\Support\MemberInput;
+use App\Support\ProjectLock;
 use App\Support\TemplateSchedule;
 use Carbon\CarbonImmutable;
 use DateTimeZone;
@@ -41,7 +41,7 @@ final class FailScheduledTemplate
         return DB::transaction(function () use ($template): ?TemplateRun {
             $organization = CatalogLock::share();
             try {
-                $project = MemberInput::lock($template->project);
+                $project = ProjectLock::lock($template->project);
             } catch (Problem) {
                 return null;
             }
