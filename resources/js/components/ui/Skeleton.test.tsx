@@ -33,15 +33,16 @@ describe('Skeleton', () => {
 
 describe('SkeletonGroup', () => {
   it('shows no skeleton before 300 ms', () => {
-    const { container } = render(
+    const { container, rerender } = render(
       <SkeletonGroup label="Items laden" className="space-y-2">
         <Skeleton className="h-4" />
       </SkeletonGroup>,
     );
 
-    // the place is held, nothing shows and nothing is said
+    // the place is held, nothing shows and nothing is said; the group holds it, not each skeleton (19b-M3)
     const group = container.firstElementChild!;
     expect(group.className).toContain('invisible');
+    expect(group.querySelector('.h-4')!.className).not.toContain('invisible');
     expect(group.getAttribute('aria-hidden')).toBe('true');
     expect(screen.queryByRole('status')).toBeNull();
     expect(screen.queryByText('Items laden')).toBe(group.firstElementChild);
@@ -51,8 +52,14 @@ describe('SkeletonGroup', () => {
     act(() => vi.advanceTimersByTime(1));
     expect(screen.getByRole('status')).toBe(group);
     expect(group.className).not.toContain('invisible');
-    // the skeletons inside show with the group, not after a moment of their own
-    expect(group.querySelector('.invisible')).toBeNull();
+    // the skeletons inside show with the group, not after a moment of their own: also one that comes later (19b-M3)
+    rerender(
+      <SkeletonGroup label="Items laden" className="space-y-2">
+        <Skeleton className="h-4" />
+        <Skeleton className="h-6" />
+      </SkeletonGroup>,
+    );
+    expect(group.querySelector('.h-6')!.className).not.toContain('invisible');
   });
 
   it('is a status with its label as text, around its skeletons, and not permanently busy', () => {

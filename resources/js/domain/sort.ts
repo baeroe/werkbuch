@@ -1,11 +1,13 @@
 /*
- * Sorting (spec 4.11) in the browser. The server orders every list (`ItemOrder`); this only places an item that
- * changed under the cache (an optimistic edit, a card dropped on a column) where the server would put it after the next
- * load, so rows do not jump. It therefore follows the server, not the other way round:
+ * Sorting (spec 4.11) in the browser. The server orders every list (`ItemOrder`) and decides which items each page
+ * holds; the browser orders the rows it has loaded with this on every render (`placeItems`), so an item that changed
+ * under the cache (an optimistic edit, a card dropped on a column) stands where the server would put it after the next
+ * load and rows do not jump. It therefore follows the server, not the other way round:
  * - text and project identifiers compare naturally with a collator in the language of the page (case and accents do
  *   not count, numbers in them as numbers: "Item 9" before "Item 10", `A2` before `A10`), as the server's
- *   `natural_sort_key()` does (A450; `natural-sort-fixtures.json` holds what both agree on, where they differ the server
- *   decides the pages)
+ *   `natural_sort_key()` does (A450; `natural-sort-fixtures.json` holds what both agree on). Where they differ (digits
+ *   of other scripts, fractions) the browser keeps its own order of the loaded rows, and a later page may slip rows in
+ *   between them (21g-M1)
  * - the number of a key compares as a number (`WEB-9` before `WEB-10`), ranks by character code (`<`), never by locale
  * - items without a value come last in both directions; ties follow the manual order (rank, then id), also descending.
  */
