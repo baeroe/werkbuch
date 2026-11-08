@@ -20,6 +20,9 @@ class PeopleSeeder extends Seeder
 {
     use WithoutModelEvents;
 
+    /** The handles of the demo people; each gets the address `{handle}@{mail domain of the demo}`. */
+    public const HANDLES = ['mara', 'jonas', 'ida', 'theo', 'lene', 'sven'];
+
     private const TIMEZONE = 'Europe/Berlin';
 
     public function run(RoleAssignments $roles): void
@@ -27,7 +30,7 @@ class PeopleSeeder extends Seeder
         // Eloquent stores the wall-clock time of the Carbon as it is, so the moment goes in as UTC like the app time zone.
         $domain = DemoTexts::get('organization.mail_domain');
 
-        foreach (['mara', 'jonas', 'ida', 'theo', 'lene', 'sven'] as $handle) {
+        foreach (self::HANDLES as $handle) {
             $user = User::updateOrCreate(['email' => "{$handle}@{$domain}"], [
                 'type' => AccountType::Person,
                 'name' => DemoTexts::get("person.{$handle}.name"),

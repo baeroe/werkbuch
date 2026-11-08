@@ -95,18 +95,27 @@ class DemoSeeder extends Seeder
 
     /**
      * Refuses a database that holds the demo of another language: its organization bears that demo name, or (renamed
-     * since) `mara` has the mail domain of that demo (T22a-M4), else the PeopleSeeder died on the unique handle.
+     * since) a demo person has the mail domain of that demo (T22a-M4). Refuses as well while a demo handle has any other
+     * address than `{handle}@{domain}` of this demo (A2-M2): the PeopleSeeder finds the people by that address and would
+     * die on the unique handle.
      */
     private static function refuseOtherLanguage(Locale $locale): void
     {
         $name = Organization::current()->name;
-        $mara = User::query()->where('handle', 'mara')->value('email');
+        $people = User::query()->whereIn('handle', PeopleSeeder::HANDLES)->orderBy('handle')->pluck('email', 'handle');
 
         foreach (Locale::cases() as $other) {
-            $named = $name === DemoTexts::get('organization.name', $other);
-            $mailed = is_string($mara) && str_ends_with($mara, '@'.DemoTexts::get('organization.mail_domain', $other));
-            if ($other !== $locale && ($named || $mailed)) {
+            $domain = '@'.DemoTexts::get('organization.mail_domain', $other);
+            $mailed = $people->contains(fn (mixed $email) => is_string($email) && str_ends_with($email, $domain));
+            if ($other !== $locale && ($name === DemoTexts::get('organization.name', $other) || $mailed)) {
                 throw new RuntimeException("This database holds the demo data of {$name} ({$other->value}); set it up anew (migrate:fresh) before seeding the demo in {$locale->value}.");
+            }
+        }
+
+        $domain = DemoTexts::get('organization.mail_domain', $locale);
+        foreach ($people as $handle => $email) {
+            if ($email !== "{$handle}@{$domain}") {
+                throw new RuntimeException("The account @{$handle} has the address {$email}, not {$handle}@{$domain}; set the database up anew (migrate:fresh) or give it back that address before seeding the demo in {$locale->value}.");
             }
         }
     }

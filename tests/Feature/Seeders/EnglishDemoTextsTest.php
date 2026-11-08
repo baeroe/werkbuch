@@ -285,6 +285,30 @@ it('refuses English demo data on a German demo database whose organization was r
         ->and(DemoTexts::current())->toBe(Locale::De);
 });
 
+it('refuses the demo while a demo handle has an address the demo would not give it (A2-M2)', function (array $handles, string $seeder, string $refusal) {
+    $this->seed(DemoBasicsSeeder::class);
+    Organization::current()->update(['name' => 'Werkstatt']);
+    foreach ($handles as $handle) {
+        User::query()->where('handle', $handle)->update(['email' => "{$handle}@werkstatt.example.com"]);
+    }
+    $accounts = User::query()->count();
+
+    // the name of the organization tells nothing any more: without the check the handle hit the unique key
+    expect(fn () => $this->seed($seeder))->toThrow(RuntimeException::class, $refusal)
+        ->and(User::query()->count())->toBe($accounts)
+        ->and(DemoTexts::current())->toBe(Locale::De);
+})->with([
+    // another account than mara still has the domain of the German demo
+    'mara changed, English demo' => [['mara'], DemoSeederEn::class, 'holds the demo data of Werkstatt (de)'],
+    'every address changed, English demo' => [
+        ['mara', 'jonas', 'ida', 'theo', 'lene', 'sven'], DemoSeederEn::class,
+        'The account @ida has the address ida@werkstatt.example.com, not ida@fieldwork.example.com',
+    ],
+    'jonas changed, German demo again' => [
+        ['jonas'], DemoSeeder::class, 'The account @jonas has the address jonas@werkstatt.example.com, not jonas@feldwerk.example.com',
+    ],
+]);
+
 it('refuses German demo data on an English demo database', function () {
     $this->seed(EnglishDemoBasicsSeeder::class);
 
