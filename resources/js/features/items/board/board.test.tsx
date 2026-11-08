@@ -584,4 +584,8 @@ describe('the sentence of a refusal', () => {
     );
     expect(reasonText({ code: 'transition', params: { from: 'Todo', to: 'Done', workflow: 'Standard' } })).toBe('Von „Todo“ nach „Done“ ist im Workflow „Standard“ nicht erlaubt.');
   });
+
+  it('says a finished sentence of the permissions as it is', () => {
+    expect(reasonText({ sentence: 'Im Projekt APP darfst du nur lesen.' })).toBe('Im Projekt APP darfst du nur lesen.');
+  });
 });

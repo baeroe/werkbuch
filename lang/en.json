@@ -679,7 +679,6 @@
     "items.board.quick_add.unavailable": "No item can be created here.",
     "items.board.reason.category": "In the workflow “:workflow” no transition leads from “:from” to :to.",
     "items.board.reason.deactivated": ":name is deactivated.",
-    "items.board.reason.edit": ":reason",
     "items.board.reason.first_column": "“:column” is the first column.",
     "items.board.reason.label_locked": "Boards grouped by label cannot be dragged: an item stands in the column of each of its labels. Change labels with L.",
     "items.board.reason.last_column": "“:column” is the last column.",

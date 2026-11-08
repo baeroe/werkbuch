@@ -5,7 +5,8 @@
  * (`useItemMutation`): the card stands in its new column at once and the counts follow (`placeItems`); a refusal of the
  * server puts it back and says why in the hook's toast.
  *
- * The sentence of a refusal of the rules is `items.board.reason.<code>` (`reasonText`).
+ * The sentence of a refusal of the rules is `items.board.reason.<code>` (`reasonText`), or the finished sentence of the
+ * permissions.
  */
 
 import { askResolution } from '@/components/fields/ItemDialogs';
@@ -19,6 +20,7 @@ const STATE_PARAMS = ['from', 'initial'];
 
 /** The sentence of a refusal, for the toast, the status line and the drag's announcement. */
 export function reasonText(reason: BoardReason): string {
+  if ('sentence' in reason) return reason.sentence;
   const params = { ...reason.params };
   for (const key of STATE_PARAMS) if (params[key] === '') params[key] = t('items.group.unknown.state');
   return t(`items.board.reason.${reason.code}`, params);

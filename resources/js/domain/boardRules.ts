@@ -6,9 +6,9 @@
  * - a board grouped by label does not move cards at all (an item stands in the column of each of its labels); by
  *   type, project or parent a card only changes its place within its column
  * - the reason of a refusal is a code with parameters (`BoardReason`); the sentence is the key
- *   `items.board.reason.<code>`, filled with the parameters, for the toast and the column under the dragged card
- *   (`edit` carries the finished sentence of the permissions as `:reason`; who cannot take an item is `assignBlocker`'s
- *   own reason, passed through as it is)
+ *   `items.board.reason.<code>`, filled with the parameters, for the toast and the column under the dragged card. Why
+ *   the person may not change the item is a finished sentence of the permissions (`{ sentence }`); who cannot take an
+ *   item is `assignBlocker`'s own reason, passed through as it is
  * - the order within a column is the rank (`rankForSlot`), quick add starts in the column's status only where the
  *   workflow allows the move from the start status, like the API (`createWorkItem`).
  */
@@ -28,9 +28,11 @@ export const RANK_MAX = 128;
 /**
  * Why a card cannot go where it was dropped; the sentence is `items.board.reason.<code>` with the parameters. A status
  * name the rules do not know (`from`, `initial`) is empty: the sentence names it as an unknown status (`reasonText`).
+ * A refusal of the permissions comes as their finished sentence.
  */
-export interface BoardReason {
-  code:
+export type BoardReason = { code: BoardReasonCode; params: Record<string, string> } | { sentence: string };
+
+export type BoardReasonCode =
     | 'transition'
     | 'category'
     | 'stays_type'
@@ -38,7 +40,6 @@ export interface BoardReason {
     | 'stays_parent'
     | 'single_column'
     | 'label_locked'
-    | 'edit'
     | 'first_column'
     | 'last_column'
     | 'workflow_loading'
@@ -51,10 +52,8 @@ export interface BoardReason {
     | 'no_child_type'
     | 'not_member'
     | 'deactivated';
-  params: Record<string, string>;
-}
 
-const reason = (code: BoardReason['code'], params: Record<string, string> = {}): BoardReason => ({ code, params });
+const reason = (code: BoardReasonCode, params: Record<string, string> = {}): BoardReason => ({ code, params });
 
 /** What the rules need to know about the board besides the item. */
 export interface BoardRules {
@@ -105,7 +104,7 @@ export function checkMove(item: ListedItem, from: string, to: string, rules: Boa
   const locked = boardLockReason(rules.groupBy);
   if (locked) return { ok: false, reason: locked };
   const denied = rules.editReason?.(item);
-  if (denied) return { ok: false, reason: reason('edit', { reason: denied }) };
+  if (denied) return { ok: false, reason: { sentence: denied } };
   if (from === to) return { ok: true, patch: {}, closing: null };
 
   switch (rules.groupBy) {

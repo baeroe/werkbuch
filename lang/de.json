@@ -679,7 +679,6 @@
     "items.board.quick_add.unavailable": "Hier lässt sich kein Item anlegen.",
     "items.board.reason.category": "Im Workflow „:workflow“ führt von „:from“ kein Übergang nach :to.",
     "items.board.reason.deactivated": ":name ist deaktiviert.",
-    "items.board.reason.edit": ":reason",
     "items.board.reason.first_column": "„:column“ ist die erste Spalte.",
     "items.board.reason.label_locked": "Nach Label gruppierte Boards sind nicht ziehbar: Ein Item steht in der Spalte jedes seiner Labels. Labels änderst du mit L.",
     "items.board.reason.last_column": "„:column“ ist die letzte Spalte.",
