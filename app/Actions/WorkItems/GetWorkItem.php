@@ -16,7 +16,9 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * that does not exist, one the account does not see and one of a project being deleted are the same 404. Asked for by
  * a former key, the item says so (`resolved_by_former_identifier`); the caller redirects and decides nothing itself.
  *
- * `include` names what the resource embeds besides the item (`children` in manual order, `type`, `workflow`, and
+ * `include` names what the resource embeds besides the item (`children`: the first CHILDREN_MAX in manual order,
+ * archived ones included, A449; `children_progress.total` counts them all, the rest come from the item list with
+ * `parent`), `type`, `workflow`, and
  * `relations` as the account reads them: ListRelations::of() with the account as reader, hidden ends blanked, and
  * `attachments`, the files of the file list oldest first, never the pictures and files of the texts); all of it is
  * loaded here, the resource asks nothing.
@@ -27,6 +29,9 @@ final class GetWorkItem
 
     /** What an item can embed, in the order the resource answers it. */
     public const INCLUDES = ['children', 'type', 'workflow', 'relations', 'attachments'];
+
+    /** How many children `include=children` embeds at most (A449): an epic with thousands of them stays one cheap read. */
+    public const CHILDREN_MAX = 100;
 
     /**
      * @param  array<array-key, mixed>  $include  names out of INCLUDES (blanks around them and empty ones are ignored)
@@ -46,8 +51,10 @@ final class GetWorkItem
         $item->includes = $include;
 
         if (in_array('children', $include, true)) {
-            $item->load('children');
-            WorkItem::loadForResource($item->children, $actor->user);
+            // a query of its own with a limit: `load('children')` would read every child
+            $children = $item->children()->limit(self::CHILDREN_MAX)->get();
+            $item->setRelation('children', $children);
+            WorkItem::loadForResource($children, $actor->user);
         }
         if (in_array('type', $include, true)) {
             $item->load('type.typeProperties');

@@ -154,7 +154,7 @@ Items haben ihre eigene Filter-Engine, die der Views. Die vollständige Referenz
 - `lean=1` (`"lean": true`) lässt `description`, `description_json` und `values_markdown` weg.
 - `POST /projects/{project}/redistribute-ranks` gibt den Items eines Projekts neue kurze Ränge in ihrer Ordnung, wenn zwischen zwei Nachbarn kein Rang mehr passt; es antwortet `{"redistributed": n}` ([Work Items](/de/concepts/work-items#items-von-hand-ordnen)).
 
-`GET /work-items/{item}?include=children,relations,type,workflow,attachments` bettet in einer Anfrage ein, was die Item-Seite braucht.
+`GET /work-items/{item}?include=children,relations,type,workflow,attachments` bettet in einer Anfrage ein, was die Item-Seite braucht. `children` enthält die ersten 100 Kinder in manueller Ordnung, archivierte eingeschlossen; wie viele es gibt, sagt `children_progress.total`, und `GET /work-items?filter[parent]=<key>&include_archived=1` blättert in derselben Ordnung durch alle.
 
 ## Rich Text
 

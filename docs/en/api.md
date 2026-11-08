@@ -154,7 +154,7 @@ Items have their own filter engine, the one of the views. The full reference of 
 - `lean=1` (`"lean": true`) leaves out `description`, `description_json` and `values_markdown`.
 - `POST /projects/{project}/redistribute-ranks` gives the items of a project new short ranks in their order when no rank fits between two neighbours any more; it answers `{"redistributed": n}` ([Work items](/en/concepts/work-items#order-items-by-hand)).
 
-`GET /work-items/{item}?include=children,relations,type,workflow,attachments` embeds what the item page needs in one request.
+`GET /work-items/{item}?include=children,relations,type,workflow,attachments` embeds what the item page needs in one request. `children` holds the first 100 children in manual order, archived ones included; `children_progress.total` says how many there are, and `GET /work-items?filter[parent]=<key>&include_archived=1` pages through all of them in the same order.
 
 ## Rich text
 

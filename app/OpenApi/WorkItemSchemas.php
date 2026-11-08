@@ -3,6 +3,7 @@
 namespace App\OpenApi;
 
 use App\Actions\WorkItems\BulkUpdateWorkItems;
+use App\Actions\WorkItems\GetWorkItem;
 use App\Domain\Views\GroupBy;
 use App\Domain\Workflow\StateCategory;
 use App\Domain\WorkItems\Priority;
@@ -361,7 +362,7 @@ final class WorkItemSchemas
                 'additionalProperties' => ['type' => 'string'],
             ],
             'created_at' => $stamp, 'updated_at' => $stamp, 'started_at' => $stamp, 'closed_at' => $stamp, 'archived_at' => $stamp,
-            'children' => ['type' => 'array', 'items' => ['$ref' => '#/components/schemas/WorkItemResource'], 'description' => 'With `include=children`: the children in manual order, without embeds.'],
+            'children' => ['type' => 'array', 'items' => ['$ref' => '#/components/schemas/WorkItemResource'], 'description' => 'With `include=children`: the first '.GetWorkItem::CHILDREN_MAX.' children in manual order (archived ones included), without embeds; `children_progress.total` counts them all.'],
             'type' => ['$ref' => '#/components/schemas/WorkItemTypeResource', 'description' => 'With `include=type`.'],
             'workflow' => ['$ref' => '#/components/schemas/WorkflowResource', 'description' => 'With `include=workflow`: the workflow of the project.'],
             'relations' => ['type' => 'array', 'items' => ['$ref' => '#/components/schemas/RelationEntryResource'], 'description' => 'With `include=relations`, as the reader sees them.'],

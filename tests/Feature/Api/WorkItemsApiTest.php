@@ -291,6 +291,26 @@ it('shows an item and embeds children, type and workflow on request', function (
     $this->actingAs($mara)->getJson('/api/v1/work-items/WEB-9')->assertNotFound();
 });
 
+it('embeds the first 100 children and pages the rest through the list with the parent', function () use ($web) {
+    [$project, $mara] = $web();
+    $epic = WorkItem::factory()->for($project)->epic()->create();
+    WorkItem::factory()->for($project)->childOf($epic)->count(101)->create();
+    WorkItem::factory()->for($project)->childOf($epic)->archived()->create();
+
+    $embedded = $this->actingAs($mara)->getJson('/api/v1/work-items/WEB-1?include=children')->assertOk();
+    expect($embedded->json('data.children'))->toHaveCount(100)
+        ->and($embedded->json('data.children.0.key'))->toBe('WEB-2')
+        ->and($embedded->json('data.children.99.key'))->toBe('WEB-101')
+        ->and($embedded->json('data.children_progress.total'))->toBe(102);
+
+    // the rest, archived ones included, in the same order: the second page of the list holds WEB-102 and WEB-103
+    $first = $this->actingAs($mara)->getJson('/api/v1/work-items?filter[parent]=WEB-1&include_archived=1&lean=1')->assertOk();
+    expect(array_column($first->json('data'), 'key'))->toBe(array_column($embedded->json('data.children'), 'key'))
+        ->and($first->json('meta.total'))->toBe(102);
+    $next = $this->actingAs($mara)->getJson('/api/v1/work-items?filter[parent]=WEB-1&include_archived=1&lean=1&cursor='.$first->json('meta.next_cursor'))->assertOk();
+    expect(array_column($next->json('data'), 'key'))->toBe(['WEB-102', 'WEB-103']);
+});
+
 it('embeds the files of the item with include=attachments', function () use ($web) {
     [$project, $mara] = $web();
     Storage::fake('local');

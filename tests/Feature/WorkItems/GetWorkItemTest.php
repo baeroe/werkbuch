@@ -2,12 +2,14 @@
 
 use App\Access\ProjectRole;
 use App\Actions\WorkItems\GetWorkItem;
+use App\Domain\Ranking\Rank;
 use App\Exceptions\Problem;
 use App\Http\Resources\WorkItemResource;
 use App\Models\Attachment;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
+use Illuminate\Database\Eloquent\Factories\Sequence;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
@@ -100,4 +102,39 @@ it('loads what the resource needs', function () use ($world) {
         ->and($data['workflow']['states'])->not->toBeEmpty()
         ->and(array_column($data['attachments'], 'id'))->toBe([$file->id])
         ->and($data['attachments'][0]['url'])->toBe("/attachments/{$file->id}");
+});
+
+it('embeds at most 100 children in manual order', function () use ($world) {
+    [$web, , $mara] = $world();
+    $epic = WorkItem::factory()->for($web)->epic()->create();
+    // the ranks of the 130 children in an order other than the one they were made in; one archived child among them
+    $ranks = Rank::nBetween(null, null, 130);
+    $children = WorkItem::factory()->for($web)->childOf($epic)->count(130)
+        ->sequence(fn (Sequence $sequence) => ['rank' => $ranks[($sequence->index * 37) % 130]])->create();
+    $archived = $children->sortBy('rank', SORT_STRING)->values()->get(3);
+    $archived->update(['archived_at' => now()]);
+    $expected = $children->sortBy(fn (WorkItem $child) => $child->rank, SORT_STRING)->take(100)->pluck('key')->all();
+
+    // the same number of queries for 130 children as for 3 (a fresh model each: nothing loaded before counts)
+    $queries = function (WorkItem $item) use ($mara): int {
+        $item = $item->fresh();
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        GetWorkItem::run(actor($mara), $item, ['children']);
+        DB::disableQueryLog();
+
+        return count(DB::getQueryLog());
+    };
+    $small = WorkItem::factory()->for($web)->epic()->create();
+    WorkItem::factory()->for($web)->childOf($small)->count(3)->create();
+
+    $item = GetWorkItem::run(actor($mara), $epic, ['children']);
+    $data = json_decode((string) json_encode(new WorkItemResource($item)), true);
+
+    expect($data['children'])->toHaveCount(100)
+        ->and(array_column($data['children'], 'key'))->toBe($expected)
+        ->and(array_column($data['children'], 'key'))->toContain($archived->key)
+        ->and($data['children_progress'])->toBe(['done' => 0, 'total' => 130])
+        ->and($queries($epic))->toBe($queries($small))
+        ->and(GetWorkItem::CHILDREN_MAX)->toBe(100);
 });
