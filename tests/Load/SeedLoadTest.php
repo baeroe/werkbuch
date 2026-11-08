@@ -1,5 +1,7 @@
 <?php
 
+use App\Access\Visibility;
+use App\Models\User;
 use Database\Seeders\Load\LoadHistory;
 use Database\Seeders\Load\LoadItems;
 use Database\Seeders\LoadSeeder;
@@ -94,6 +96,17 @@ it('seeds 50 000 items in 20 projects', function () {
         ->and(DB::table('users')->where('type', 'bot')->where('is_default_bot', false)->count())->toBe(5)
         ->and(DB::table('load_meta')->where('name', 'version')->value('value'))->toBe((string) LoadSeeder::VERSION)
         ->and(DB::table('load_meta')->where('name', 'work_items')->value('value'))->toBe('50000');
+
+    // every org role in the team of the one organization, the default bot its admin: it sees all 20 projects, the
+    // private ones too (the night and every template run act as it)
+    $organization = (string) DB::table('organization')->value('id');
+    $bot = User::defaultBot();
+    expect(DB::table('model_has_roles')->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
+        ->where('roles.name', 'like', 'org-%')->distinct()->pluck('model_has_roles.team_id')->all())->toBe([$organization])
+        ->and(DB::table('model_has_roles')->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
+            ->where('model_has_roles.model_id', $bot->id)->where('model_has_roles.team_id', $organization)->pluck('roles.name')->all())->toBe(['org-admin'])
+        ->and(DB::table('projects')->where('visibility', 'private')->count())->toBe(5)
+        ->and(Visibility::projectIds($bot))->toHaveCount(20);
 
     // one epic per project with 40 children, the deepest page on level 4, archived items only closed ones
     $epic = DB::table('work_items')->where('project_id', $l01)->whereNotNull('parent_id')

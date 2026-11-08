@@ -115,10 +115,12 @@ final class LoadWorld
     {
         $since = app(Client::class)->getTasks((new TasksQuery)->setLimit(1))->getResults()[0]['uid'] ?? -1;
         $started = microtime(true);
+        // the organization, roles and permissions of the database before go, before migrate:fresh as after it: on an
+        // empty database ensure() migrated first, and the default bot of the fresh migrations took its role in the team
+        // of that organization (Organization::current() is scoped), so it saw no private project
+        self::forgetOrganization();
         Artisan::call('migrate:fresh', ['--force' => true]);
-        // the organization, roles and permissions of the database before are gone
-        app()->forgetScopedInstances();
-        app(PermissionRegistrar::class)->forgetCachedPermissions();
+        self::forgetOrganization();
         $migrated = microtime(true);
 
         try {
@@ -138,5 +140,12 @@ final class LoadWorld
 
             throw $e;
         }
+    }
+
+    /** The scoped organization, role index and catalog of the container and the permissions spatie holds. */
+    private static function forgetOrganization(): void
+    {
+        app()->forgetScopedInstances();
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
     }
 }
