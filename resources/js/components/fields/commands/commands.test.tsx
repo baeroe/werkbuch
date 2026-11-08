@@ -9,6 +9,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event';
 import { useRef, useState, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import type { Page } from '@/api/client';
 import { currentToasts, dismissToast, resetToasts, runToastAction } from '@/components/ui/toast';
 import { cachedZone } from '@/domain/tz';
 import { CommandPalette } from '@/features/palette/CommandPalette';
@@ -1459,5 +1460,52 @@ describe('the item commands of a list', () => {
     expect(previewKeysAct(panel)).toBe(false);
     inside.focus();
     expect(previewKeysAct(panel)).toBe(true);
+  });
+
+  it('reads the cache once for a selection of 1 000 items, not once per item (T15-M2)', async () => {
+    let client: QueryClient | undefined;
+    function Client() {
+      client = useQueryClient();
+      return null;
+    }
+    renderWith(
+      <>
+        <ListScreen />
+        <Client />
+      </>,
+    );
+    await waitFor(() => expect(command('item.priority')).toBeDefined());
+
+    // ten pages of 100 items of WEB in the cache, as a long list loaded them; each page counts how often its items are read
+    const ids = Array.from({ length: 1000 }, (_, n) => `wi_many_${n}`);
+    const reads = Array.from({ length: 10 }, () => 0);
+    act(() => {
+      for (let p = 0; p < 10; p++) {
+        const items = ids.slice(p * 100, p * 100 + 100).map((id, n) => makeWorkItem({ id, number: 1000 + p * 100 + n, key: `WEB-${1000 + p * 100 + n}` }));
+        const page = { next_cursor: null, total: 1000 } as Page<WorkItem>;
+        Object.defineProperty(page, 'items', { enumerable: true, get: () => ((reads[p]! += 1), items) });
+        client!.setQueryData(qk.workItems.list({ project_id: 'p_web', q: 'viele', cursor: `c${p}` }), page);
+      }
+    });
+    const lookups = vi.spyOn(client!, 'getQueriesData');
+    /** What one look at the targets reads: calls into the cache, and the reads of each page. */
+    const cost = () => {
+      lookups.mockClear();
+      reads.fill(0);
+      expect(command('item.priority')!.when!()).toBe(true);
+      return { lookups: lookups.mock.calls.length, reads: [...reads] };
+    };
+
+    select(ids[0]!);
+    await waitFor(() => expect(command('item.priority')?.group).toBe('Aktionen für WEB-1000'));
+    const one = cost();
+    select(...ids);
+    await waitFor(() => expect(command('item.priority')?.group).toBe('Aktionen für 1.000 Items'));
+    const many = cost();
+
+    // the selection's size does not change how often the cache and its pages are read
+    expect(many).toEqual(one);
+    expect(one.lookups).toBeGreaterThan(0);
+    expect(one.reads.every((count) => count > 0)).toBe(true);
   });
 });
