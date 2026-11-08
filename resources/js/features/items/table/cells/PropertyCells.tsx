@@ -22,11 +22,14 @@ import { PropertyValueInput } from '@/components/fields/property/PropertyValueIn
 import { Avatar, UnassignedAvatar } from '@/components/ui/Avatar';
 import { ToneDot } from '@/components/ui/Chip';
 import { cx } from '@/components/ui/cx';
+import { Kbd } from '@/components/ui/Kbd';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/Popover';
+import { tx } from '@/features/item-detail/activity/phrases';
 import { useSettle } from '@/hooks/mutation';
 import { useUpdateWorkItem } from '@/hooks/workItems';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
 import { t } from '@/lib/i18n';
+import { SHORTCUTS } from '@/lib/shortcuts/catalog';
 import { useDialogScope } from '@/lib/shortcuts/useShortcut';
 import type { ListedItem, Property, PropertyValue } from '@/types';
 import { typePropertyOf } from '../columns';
@@ -266,7 +269,11 @@ function TypedCell({ item, property, editing, onEditingChange, saving, reason, r
             required={required}
             error={saving.refusal}
             hideLabel
-            hint={t(property.field_type === 'rich_text' ? 'items.table.edit_hint_rich' : 'items.table.edit_hint')}
+            hint={
+              property.field_type === 'rich_text'
+                ? tx('items.table.edit_hint_rich', { keys: <Kbd keys={SHORTCUTS['dialog.submit'].keys} /> })
+                : tx('items.table.edit_hint', { keys: <Kbd keys="enter" /> })
+            }
           />
         </div>
       </PopoverContent>

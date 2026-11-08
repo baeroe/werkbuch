@@ -397,7 +397,10 @@ describe('TableLayout', () => {
     press('Enter');
     const field = await screen.findByRole('textbox', { name: 'Aufwand (h)' });
     await waitFor(() => expect(document.activeElement).toBe(field));
-    expect(screen.getByText('Enter speichert, Esc bricht ab.')).toBeTruthy();
+    // the keys come as keys, Escape says what each press does
+    const hint = document.getElementById(field.getAttribute('aria-describedby')!)!;
+    expect(within(hint).getByRole('img', { name: 'Eingabe' })).toBeTruthy();
+    expect(hint.textContent).toBe(' speichert. Esc nimmt das Getippte zurück, ein zweites schließt.');
     await user.clear(field);
     await user.keyboard('120,5{Enter}');
     await waitFor(() => expect(patches()).toEqual([{ values: { effort: 120.5 } }]));
@@ -445,7 +448,7 @@ describe('TableLayout', () => {
     await waitFor(() => expect(document.activeElement).toBe(cell('wi_1', 3)));
     press('Enter');
     expect(toastTexts()).toEqual([
-      ['Nicht änderbar', 'Das Projekt eines Items lässt sich in der Tabelle nicht ändern.'],
+      ['Nicht änderbar', 'Das Projekt eines Items lässt sich nicht ändern.'],
       ['Nicht änderbar', 'Wann ein Item angelegt wurde, lässt sich nicht ändern.'],
       ['Nicht änderbar', '„Geändert“ setzt werkbuch bei jeder Änderung selbst.'],
     ]);
@@ -907,7 +910,9 @@ describe('cells of the table', () => {
     press('Enter');
     const area = await screen.findByRole('textbox', { name: 'Briefing' });
     await waitFor(() => expect(document.activeElement).toBe(area));
-    expect(screen.getByText('Mit ⌘↵ bzw. Strg+↵ speichern, Esc bricht ab.')).toBeTruthy();
+    const hint = document.getElementById(area.getAttribute('aria-describedby')!)!;
+    expect(within(hint).getByRole('img', { name: 'Steuerung Eingabe' })).toBeTruthy();
+    expect(hint.textContent).toBe('Strg speichert, Enter beginnt eine neue Zeile. Esc nimmt das Getippte zurück, ein zweites schließt.');
     await user.keyboard('Zeile eins{Control>}{Enter}{/Control}');
     await waitFor(() => expect(patches().at(-1)).toEqual({ values: { brief: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Zeile eins' }] }] } } }));
   });

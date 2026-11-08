@@ -5,7 +5,7 @@
  * (`onUnreadable` tells a form not to send meanwhile). A required value cannot be emptied once it is set.
  */
 
-import { useId, useState } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { cx } from '@/components/ui/cx';
 import { describedBy, Field } from '@/components/ui/Field';
 import { t } from '@/lib/i18n';
@@ -48,8 +48,8 @@ export type PropertyValueInputProps = {
   required?: boolean;
   /** An error from outside, e.g. the server's refusal; it wins over the field's own. */
   error?: string | null;
-  /** Shown under the field instead of the property's help. */
-  hint?: string | null;
+  /** Shown under the field instead of the property's help (it may name keys with `Kbd`). */
+  hint?: ReactNode;
   /** In a grid that shows the label itself (detail panel): the label only names the control. */
   hideLabel?: boolean;
   /** Not allowed: the value is read-only and says why. */
