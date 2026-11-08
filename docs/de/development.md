@@ -89,6 +89,18 @@ Der CI-Job `e2e` läuft dieselbe Suite gegen `php artisan serve` mit MariaDB, Me
 
 Das Frontend muss von Vitest und Playwright zusammen zu 100 % an Zeilen abgedeckt sein. Nach dem Playwright-Lauf schlägt `coverage:merge` darunter fehl. Führe danach `ddev exec pnpm build` aus, damit ein Build ohne Instrumentierung zurückbleibt.
 
+Playwright hält seine Abdeckung je Projekt: Die Fixture schreibt `coverage/e2e/<projekt>/<test>-<n>.json`, und `coverage:merge` liest jede Datei unter `coverage/e2e`, gleich wie tief. Die 100 % gelten nur für die Summe aus Vitest und allen vier Projekten. Kein Projekt schafft sie allein (die Schublade am Handy, das dunkle Theme, die Touch-Menüs), darum hat ein einzelnes Projekt kein eigenes Gate. Zu Beginn jedes Laufs leert `globalSetup` den Ordner `coverage/e2e`, auch die Ordner der Projekte, die der Lauf auslässt (`--project=desktop-light`). Das ist Absicht: Ein Teil-Lauf ist nie die Summe, und die Reste eines früheren Laufs ließen ihn so aussehen.
+
+Für einen CI-Job je Projekt hat der Merge zwei Optionen:
+
+```bash
+E2E_MERGE=0 pnpm --dir e2e test                # lässt coverage/e2e/<projekt>/ ungemergt liegen
+node scripts/coverage-merge.mjs --remap-only --out coverage/e2e-<projekt>.json
+node scripts/coverage-merge.mjs --expect-shards=desktop-light,desktop-dark,phone-light,phone-dark
+```
+
+`--remap-only` bildet jede Datei unter `coverage/e2e` einmal auf die Quellen zurück und schreibt sie als eine Datei, ohne Bericht und ohne Gate. Ein volles Projekt hinterlässt weit über tausend Dateien zu je etwa 2 MB, gemappt sind es rund 4 MB. Die Treffer summieren sich vor und nach dem Mapping gleich, weil alle Projekte denselben Build mit denselben Source-Maps laufen. `--expect-shards` liest genau die genannten Projekte, jedes aus `coverage/e2e/<name>.json`, `coverage/e2e/<name>/` oder `coverage/e2e/<präfix>-<name>/` (der Ordner, den `actions/download-artifact` aus dem Artefakt `e2e-coverage-<name>` macht). Er scheitert und nennt jedes Projekt ohne Abdeckung, mit leerem Ordner oder mit zwei solchen Quellen.
+
 ## Passwort vergessen
 
 Kann sich niemand mehr anmelden, setze auf der Kommandozeile ein neues Passwort. Das Kommando fragt danach und beendet alle Sitzungen des Kontos:

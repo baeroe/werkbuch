@@ -89,6 +89,18 @@ The CI job `e2e` runs the same suite against `php artisan serve` with MariaDB, M
 
 The frontend must be covered to 100 % lines by Vitest and Playwright together. After the Playwright run, `coverage:merge` fails below that. Run `ddev exec pnpm build` afterwards to leave an uninstrumented build behind.
 
+Playwright keeps its coverage per project: the fixture writes `coverage/e2e/<project>/<test>-<n>.json`, and `coverage:merge` reads every file below `coverage/e2e`, at any depth. The 100 % hold for the sum of Vitest and all four projects only. No project gets there alone (the drawer of the phone, the dark theme, the touch menus), so a single project has no gate of its own. At the start of every run, `globalSetup` empties `coverage/e2e`, the folders of the projects the run leaves out (`--project=desktop-light`) included. That is on purpose: a partial run is never the sum, and the leftovers of an earlier run would make it look like one.
+
+For a CI job per project, the merge has two options:
+
+```bash
+E2E_MERGE=0 pnpm --dir e2e test                # leaves coverage/e2e/<project>/ unmerged
+node scripts/coverage-merge.mjs --remap-only --out coverage/e2e-<project>.json
+node scripts/coverage-merge.mjs --expect-shards=desktop-light,desktop-dark,phone-light,phone-dark
+```
+
+`--remap-only` maps every file below `coverage/e2e` back to the sources once and writes them as one file, with no report and no gate. A full project leaves well over a thousand files of about 2 MB; mapped, they come to about 4 MB. The hits add up the same before and after the mapping, because every project runs the same build with the same source maps. `--expect-shards` reads exactly the projects it names, each from `coverage/e2e/<name>.json`, `coverage/e2e/<name>/` or `coverage/e2e/<prefix>-<name>/` (the folder `actions/download-artifact` makes of the artifact `e2e-coverage-<name>`). It fails naming every project without coverage, with an empty folder or with two such sources.
+
 ## Lost password
 
 If nobody can sign in any more, set a new password from the command line. The command asks for it and ends all sessions of the account:
