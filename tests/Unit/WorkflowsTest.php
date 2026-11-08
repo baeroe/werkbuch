@@ -35,6 +35,11 @@ it('keeps the required job named tests', function () {
     expect($workflow['jobs']['tests'])->not->toHaveKey('name');
 });
 
+it('gives the required job an hour', function () {
+    // it took 32–38 min in phase 15 (Pest about 24, Vitest about 4); at 45 a slow runner would end it like a red test (A464)
+    expect(RepoFiles::yaml('.github/workflows/tests.yml')['jobs']['tests']['timeout-minutes'])->toBe(60);
+});
+
 it('builds both platforms on every pull request without pushing', function () {
     $text = RepoFiles::text('.github/workflows/tests.yml');
     $workflow = RepoFiles::yaml('.github/workflows/tests.yml');

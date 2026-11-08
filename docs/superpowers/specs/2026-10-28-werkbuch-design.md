@@ -1,6 +1,18 @@
 # werkbuch: Fachkonzept und App-Design
 
-Stand: 2026-11-07 · Status: freigegeben (die Änderungen vom 2026-10-31, vom 2026-11-02 (Phasen 5 und 6), vom 2026-11-03 (Phase 7), vom 2026-11-04 (Phasen 8 und 9), vom 2026-11-05 (Phase 10), vom 2026-11-06 (Phasen 11 und 12), vom 2026-11-07 (Phasen 13 und 14) und vom 2026-11-07 (Phase 15) warten auf Rafaels Bestätigung, außer der bestätigten Status-Zuordnung aus Phase 4)
+Stand: 2026-11-08 · Status: freigegeben (die Änderungen vom 2026-10-31, vom 2026-11-02 (Phasen 5 und 6), vom 2026-11-03 (Phase 7), vom 2026-11-04 (Phasen 8 und 9), vom 2026-11-05 (Phase 10), vom 2026-11-06 (Phasen 11 und 12), vom 2026-11-07 (Phasen 13 und 14) und vom 2026-11-07 und 2026-11-08 (Phase 15) warten auf Rafaels Bestätigung, außer der bestätigten Status-Zuordnung aus Phase 4)
+
+> **Änderungen vom 2026-11-08 (Phase 15):** Beim Umsetzen von Phase 15 (Feinschliff) hat Claude als Controller Folgendes entschieden, teils auf Rafaels Antworten vom 2026-11-07 hin; es ändert oder präzisiert die Spec und **wartet auf Rafaels Bestätigung**, außer wo „bestätigt“ steht (Begründung und „Falls falsch“ in `docs/superpowers/plans/2026-10-30-werkbuch-app-rulings.md`, A434 ff.). Phase 15 läuft noch; axe, Screenshots, Landingpage und Pages (A441, A443, A444) sind beschlossen, aber noch nicht umgesetzt.
+> - **Anmeldung (7.5, bestätigt am 2026-11-07):** Neben der Drossel je Adresse und IP gilt ein Deckel je Konto über alle IPs: höchstens 50 Fehlversuche je Stunde. Er gilt nicht auf einem **bekannten Gerät** (ein Cookie, das jede erfolgreiche Anmeldung für ein Jahr setzt und das ein neues Passwort ungültig macht); auf einem neuen Gerät bleibt eine Anmeldung unter Angriff bis zu einer Stunde gesperrt. Ein Erfolg leert den Deckel, ein neues Passwort hebt ihn auf, „Passwort vergessen“ bleibt offen; die Meldung nennt die Wartezeit ab zwei Minuten in Minuten (A434).
+> - **Zweiter Faktor (7.5):** höchstens 30 Versuche je Konto und Tag (Codes und Recovery-Codes zusammen) neben 5 je Minute; ein neues Passwort und `app:reset-two-factor` setzen den Tag zurück, der Satz verweist danach auf den Betreiber (A435).
+> - **Mails der Anmeldung (8.1):** Link und Mail von „Passwort vergessen“ und die Einladung laufen auf einer eigenen Queue `mail`, die jeder Worker vor allen anderen nimmt; Sammelmails bleiben, wo sie waren (A437).
+> - **Zeitstempel der Items (7.4):** `created_at` und `updated_at` eines Items sind immer gesetzt (NOT NULL, ohne Standardwert); Sortieren danach braucht keine Regel für leere Werte mehr (A440).
+> - **Board (4.11):** Ist zwischen zwei Karten kein Rang mehr frei, verteilt der Server die Ränge des Projekts neu (Ordnung bleibt, kein Event je Item, keine Änderung von „Geändert“) und das Board setzt die Karte danach; „Hier ist kein Platz mehr“ bleibt nur, wenn die Nachbarn zu einem anderen Projekt gehören. Neu ist `POST /api/v1/projects/{project}/redistribute-ranks` (6.1, A448).
+> - **Kinder eines Epics (4.8, 6.1):** `include=children` liefert höchstens 100 Kinder in manueller Ordnung; wie viele es gibt, sagt der Fortschritt; die Item-Seite lädt weitere seitenweise nach (A449).
+> - **Sortierung (4.11):** Text- und Adress-Properties und Kennungen sortieren natürlich („Item 9“ vor „Item 10“, `A2` vor `A10`), auf dem Server und im Browser gleich (A450).
+> - **Live-Updates (7.3):** Ein neues Projekt und ein Projekt, das öffentlich wird, erreichen auch Personen, die seinen Kanal noch nicht halten, nach der einen Sichtbarkeitsregel; ein privates neues Projekt sehen so nur Mitglieder und Org-Admins (A451).
+> - **Tabellen im Editor (4.16):** Ein Menü an der Tabelle fügt Zeilen und Spalten ein und löscht sie und schaltet Kopfzeile und Kopfspalte; Zellen verbinden und teilen gibt es nicht. Wird ein Text als Markdown geschrieben, behält jede Tabelle Kopfzeile und Kopfspalte des vorigen Texts, solange sie erkennbar dieselbe ist (A454, A455).
+> - **Doku (1, 10, 14, bestätigt am 2026-11-07):** `werkbuch.dev` ist registriert. Die Doku wird per GitHub Pages unter `https://werkbuch.dev` (Base `/`) veröffentlicht; die Pages-Einstellung setzt Rafael (A444). Screenshots zeigen in der deutschen Doku die deutsche Oberfläche mit den deutschen Demo-Daten, in der englischen die englische Oberfläche mit englischen Demo-Daten derselben Struktur (A443).
 
 > **Änderungen vom 2026-11-07 (Phase 15):** Beim Umsetzen von Phase 15 (Feinschliff) hat Claude auf Rafaels Wunsch Folgendes entschieden; es ändert die Spec und **wartet auf Rafaels Bestätigung** (Begründung und „Falls falsch“ in `docs/superpowers/plans/2026-10-30-werkbuch-app-rulings.md`, A452 ff.):
 > - **Erwähnte Items verknüpfen (4.13):** Eine fünfte Automatisierung `link_references` ist **standardmäßig an**, auch in bestehenden Projekten (ein Schlüssel ohne Zeile gilt mit diesem Standard; Ausschalten speichert eine Zeile). Nennt die Beschreibung, ein Rich-Text-Feld oder ein Kommentar eines Items ein anderes Item neu per `#`, entsteht eine Relation des eingebauten Typs „verwandt“ (`relates`); „neu“ heißt bei Beschreibung und Rich-Text-Feldern: in keinem von ihnen vorher (sie zählen zusammen), bei einem Kommentar: nicht im Kommentar vorher. Eine schon bestehende Relation (in einer der beiden Richtungen), ein Selbstverweis und Wiki-Seiten verknüpfen nichts, ein entfernter Verweis lässt die Relation stehen. Verknüpft wird nur, wenn die schreibende Person das Item mit dem Text bearbeiten darf (`item.edit`, wie eine Relation von Hand; ein Viewer, der kommentiert, verknüpft nichts) und das andere Item sieht; bei Vorlagen prüft ein Lauf von Hand die Person, die ihn startete, ein geplanter Lauf den Standard-Bot. Die Relation entsteht nach dem Speichern in einem Job, im Namen der schreibenden Person; die History nennt den Grund „Automatisierung: Erwähnte Items verknüpfen“ (A452, A453).
@@ -202,7 +214,7 @@ werkbuch ist ein offenes, selbst gehostetes Projektmanagement-Tool für Teams. E
 
 **Betrieb wie openbill und prevju (Vorgabe):**
 - ein Image `baeroe/werkbuch` auf Docker Hub, gestartet mit `docker compose up -d`
-- Doku als VitePress-Seite auf GitHub Pages; Wunschdomain `werkbuch.dev`, zum Zeitpunkt der Spec frei, aber noch nicht registriert
+- Doku als VitePress-Seite auf GitHub Pages unter `https://werkbuch.dev` (die Domain ist seit 2026-11-07 registriert)
 - Lizenz MIT
 
 **Zielgruppe (Spec):**
@@ -1049,7 +1061,7 @@ Die anderen Container starten ohne Migration.
 
 ## 10. Doku
 
-Die Doku ist eine VitePress-Seite in `docs/`, auf Englisch (`docs/en/`) und Deutsch (`docs/de/`) mit gleichen Dateinamen und `llms.txt`, wie openbill. Veröffentlicht wird sie über GitHub Pages. Bis `werkbuch.dev` registriert ist, liegt sie unter einem Unterpfad (`DOCS_BASE`).
+Die Doku ist eine VitePress-Seite in `docs/`, auf Englisch (`docs/en/`) und Deutsch (`docs/de/`) mit gleichen Dateinamen und `llms.txt`, wie openbill. Veröffentlicht wird sie über GitHub Pages unter `https://werkbuch.dev` (`DOCS_BASE=/`, Custom Domain `werkbuch.dev`; Änderungen vom 2026-11-08, A444). `DOCS_BASE` bleibt für einen Unterpfad einstellbar.
 
 **Seiten:**
 - Landingpage
@@ -1159,4 +1171,4 @@ Screenshots entstehen per Playwright aus Demo-Daten in beiden Sprachen. Demo- un
 - **spatie-Teams mit ULIDs** brauchen angepasste Migrationen. Die Organisations-Rollen als eigenes „Team“ sind zu prüfen.
 - **tiptap-php mit eigenen Knoten** (Erwähnung, Verweis, Anhang) und dem Schema von Tiptap v3: Die Rundreise Markdown ↔ JSON braucht Tests.
 - **Speicherbedarf:** Meilisearch braucht auf kleinen Servern spürbar RAM. Mindestanforderungen dokumentieren.
-- **Domain:** `werkbuch.dev` muss Rafael registrieren. Bis dahin liegt die Doku unter einem Unterpfad.
+- **Domain:** `werkbuch.dev` ist seit 2026-11-07 registriert. Offen sind die DNS-Einträge beim Registrar und die Pages-Einstellung im Repository (Custom Domain, HTTPS erzwingen); beides setzt Rafael nach der Phase.

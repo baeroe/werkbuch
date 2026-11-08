@@ -45,7 +45,6 @@ export type BoardReasonCode =
     | 'workflow_loading'
     | 'no_room'
     | 'not_reloaded'
-    | 'order_changed'
     | 'load_more'
     | 'state_unknown'
     | 'start_transition'

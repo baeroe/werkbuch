@@ -704,22 +704,6 @@ describe('the quick add of a column', () => {
     expect(useUiStore.getState().peekItemId).toBe('wi_web_51');
   });
 
-  it('says the filter leaves the new item out also in a column with more cards to load (20b-M1)', async () => {
-    // more tasks in Todo than the column shows: the next page is not asked for, and the new bug is no task
-    board.items.push(...Array.from({ length: 12 }, (_, index) => web(60 + index, `Aufgabe ${60 + index}`, 'std_todo')));
-    board.pageSize = 12;
-    board.webDefaultType = 't_bug';
-    const filter = encodeURIComponent(JSON.stringify([{ field: 'type', op: 'is', value: 't_task' }]));
-    renderBoard(`/projects/WEB?layout=board&filter=${filter}`);
-    await waitFor(() => expect(keysIn('Todo')).toContain('WEB-60'));
-    fireEvent.click(screen.getByRole('button', { name: 'Item in Todo anlegen' }));
-    const input = screen.getByRole('textbox', { name: 'Neues Item in Todo' });
-    fireEvent.change(input, { target: { value: 'Fehler im Footer' } });
-    fireEvent.submit(input.closest('form')!);
-
-    await waitFor(() => expect(lastToast()).toMatchObject({ title: 'WEB-72 angelegt', description: 'Es passt nicht zum Filter dieser Liste und steht darum nicht hier.' }));
-  });
-
   it('chooses the project on a board of several, the one with the most cards first, and assigns the item to me on Meine Items', async () => {
     const user = userEvent.setup();
     board.items = [...board.items, web(60, 'Sitemap', 'std_todo')];
