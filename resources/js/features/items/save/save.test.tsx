@@ -84,6 +84,8 @@ let api: MockApi;
 let saveFails: boolean;
 /** How the next `POST /views` answers; by default it makes the view. */
 let createAnswer: ((body: ViewInput) => { status: number; body: unknown }) | null;
+/** `GET /projects` (and with it the rights) answers 503. */
+let projectsFail = false;
 
 beforeEach(() => {
   inertia.user = lene;
@@ -92,11 +94,12 @@ beforeEach(() => {
   views = [];
   saveFails = false;
   createAnswer = null;
+  projectsFail = false;
   useUiStore.setState({ selection: [], peekItemId: null });
   resetToasts();
   api = mockApi({
     'GET /api/v1/organization': () => ({ body: { data: organization } }),
-    'GET /api/v1/projects': () => ({ body: list([project('WEB', 'member', { name: 'Website-Relaunch' })]) }),
+    'GET /api/v1/projects': () => (projectsFail ? { status: 503, body: { reason: 'unavailable' } } : { body: list([project('WEB', 'member', { name: 'Website-Relaunch' })]) }),
     'GET /api/v1/projects/WEB': () => ({ body: { data: project('WEB', 'member', { name: 'Website-Relaunch' }) } }),
     'GET /api/v1/workflows': () => ({ body: list([standard, agency]) }),
     'GET /api/v1/users': () => ({ body: list([mara, lene]) }),
@@ -305,6 +308,14 @@ describe('unsaved changes', () => {
 
     release();
     await waitFor(() => expect(reasonOf(save)).toBe('Nur Mara Lindqvist und Org-Admins dürfen „Fällig diese Woche“ ändern. Speichere deine Änderungen als neue View.'));
+  });
+
+  it('says the rights failed instead of who may save a view of somebody else when they did not load (19b-M5)', async () => {
+    projectsFail = true;
+    await openView(makeView({ created_by: 'u_mara', display: display() }), '?group=priority');
+    const save = await screen.findByRole('button', { name: 'Speichern' });
+    await waitFor(() => expect(reasonOf(save)).toBe('Die Rechte konnten nicht geladen werden.'));
+    expect(save.getAttribute('aria-disabled')).toBe('true');
   });
 
   it('lets an org admin save the view of somebody else', async () => {

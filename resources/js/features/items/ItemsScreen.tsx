@@ -227,15 +227,14 @@ function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: P
   const [savingAs, setSavingAs] = useState(false);
   const creatorName = users.data?.items.find((user) => user.id === view?.created_by)?.name ?? t('items.save.creator');
   // while the rights load (or failed to), their reason says so: who may save it is known only with them (T17-M7)
-  const manageReason = view && view.created_by !== me?.id ? reason('view.manage_any') : null;
+  const foreign = view && view.created_by !== me?.id ? view : null;
+  const foreignReason = (other: View): string | null => {
+    const manageReason = reason('view.manage_any');
+    if (manageReason === null) return null;
+    return rightsLoading || rightsFailed ? manageReason : `${t('problem.detail.view_creator_only', { name: creatorName, view: other.name })} ${t('items.save.copy_instead')}`;
+  };
   // a condition on a field that is gone blocks both: the server would refuse the filter
-  const saveReason =
-    saving.blocked ??
-    (manageReason !== null && view
-      ? rightsLoading || rightsFailed
-        ? manageReason
-        : `${t('problem.detail.view_creator_only', { name: creatorName, view: view.name })} ${t('items.save.copy_instead')}`
-      : null);
+  const saveReason = saving.blocked ?? (foreign ? foreignReason(foreign) : null);
   const saveAsReason = saving.blocked ?? reason('view.create');
   /** Back to what is saved: a view drops every change, a built-in list its filter (its display was no unsaved change). */
   const discard = () => {
