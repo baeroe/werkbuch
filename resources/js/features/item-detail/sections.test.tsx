@@ -1232,11 +1232,19 @@ describe('Relations', () => {
     // inward: the chosen item becomes the source, so it has to be one the person may change
     await user.click(within(dialog).getByRole('combobox', { name: 'Item: keins gewählt' }));
     await waitFor(() => expect(document.activeElement).toBe(screen.getByPlaceholderText('Key, Titel oder Text suchen …')));
-    await user.keyboard('e');
-    const readOnly = await screen.findByRole('option', { name: /Mail-Limits/ });
+    // another text than before: the hits of "e" stay greyed out until the search for "i" answers, on a fast machine as on
+    // a slow one (with "e" again the lock depended on whether the pause for the emptied field had run out)
+    await user.keyboard('i');
+    // the lock of the earlier text ends when the field stops saying it searches; what stays disabled then is the rights
+    await waitFor(() => expect(within(dialog).queryByText('Sucht …')).toBeNull());
+    expect(within(dialog).getByText('Key oder Titel tippen, Enter wählt.')).toBeTruthy();
+    expect(api!.calls.some((call) => call.url === '/api/v1/search?q=i&types=items&limit=20')).toBe(true);
+    const readOnly = screen.getByRole('option', { name: /Mail-Limits/ });
     expect(readOnly.getAttribute('aria-disabled')).toBe('true');
     expect(readOnly.textContent).toContain('Im Projekt OPS darfst du nur lesen');
-    expect(screen.getByRole('option', { name: /Startseite umbauen/ }).getAttribute('aria-disabled')).not.toBe('true');
+    const writable = screen.getByRole('option', { name: /Startseite umbauen/ });
+    expect(writable.getAttribute('aria-disabled')).not.toBe('true');
+    expect(writable.textContent).not.toContain('darfst du');
   });
 
   it('refuses a target after the kind turned to :in', async () => {
