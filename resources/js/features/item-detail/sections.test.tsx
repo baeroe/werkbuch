@@ -1239,6 +1239,33 @@ describe('Relations', () => {
     expect(screen.getByRole('option', { name: /Startseite umbauen/ }).getAttribute('aria-disabled')).not.toBe('true');
   });
 
+  it('refuses a target after the kind turned to :in', async () => {
+    const user = userEvent.setup();
+    // OPS is a project the member only reads
+    projects = [project('WEB', 'member'), project('OPS', 'viewer')];
+    renderWith(<ItemPage itemKey="WEB-47" />, {
+      routes: { 'GET /api/v1/search': () => ({ body: { data: searchResults({ items: [web48, ops12] }) } }) },
+    });
+    await screen.findByRole('region', { name: 'Relationen' });
+    press('r');
+    const dialog = await screen.findByRole('dialog', { name: 'Relation hinzufügen' });
+    const search = await screen.findByPlaceholderText('Key, Titel oder Text suchen …');
+    await waitFor(() => expect(document.activeElement).toBe(search));
+    await user.keyboard('e');
+    // outward: OPS-12 becomes the target, which it may be
+    await user.click(await screen.findByRole('option', { name: /Mail-Limits/ }));
+    const chosen = within(dialog).getByRole('combobox', { name: 'Item: OPS-12 Mail-Limits am Server erhöhen' });
+
+    // inward: OPS-12 would become the source, a change of an item the person only reads
+    await user.click(within(dialog).getByRole('combobox', { name: /^Art der Relation/ }));
+    await user.click(await screen.findByRole('option', { name: 'wird blockiert von' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Hinzufügen' }));
+    expect(await within(dialog).findByText(/^Im Projekt OPS darfst du nur lesen/)).toBeTruthy();
+    expect(chosen.getAttribute('aria-invalid')).toBe('true');
+    await waitFor(() => expect(document.activeElement).toBe(chosen));
+    expect(api!.calls.filter((call) => call.method === 'POST')).toEqual([]);
+  });
+
   it('shows a duplicate at the field', async () => {
     const user = userEvent.setup();
     let answer: { status: number; body: unknown } = {
