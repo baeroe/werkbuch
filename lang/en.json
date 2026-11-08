@@ -1239,6 +1239,7 @@
     "items.screen.fell_back": "Several workflows: grouped by category.",
     "items.screen.items": "Items",
     "items.screen.layout": "Layout",
+    "items.screen.layout_failed": "The layout did not load.",
     "items.screen.load_failed.description": "The list shows as soon as the server answers again.",
     "items.screen.load_failed.title": "The items could not be loaded",
     "items.screen.loading": "Loading items …",

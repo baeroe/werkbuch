@@ -7,7 +7,7 @@
 
 import { Link } from '@inertiajs/react';
 import { FunnelX, List, SquareKanban, SquarePen } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { Component, type ReactNode } from 'react';
 import { Button, buttonClass } from '@/components/ui/Button';
 import { cx } from '@/components/ui/cx';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -18,6 +18,7 @@ import { t } from '@/lib/i18n';
 import { paths } from '@/lib/links';
 import { SHORTCUTS } from '@/lib/shortcuts/catalog';
 import type { Display, Project, View } from '@/types';
+import { LayoutChunkError } from './layouts';
 import { MyItemsEmpty } from './MyItemsEmpty';
 
 const WIDTHS = ['w-2/5', 'w-1/3', 'w-1/2', 'w-1/4', 'w-2/5', 'w-1/3', 'w-1/2', 'w-1/4'];
@@ -196,4 +197,33 @@ export function ListError({ error, onRetry, retrying }: { error: Error | null; o
       retrying={retrying}
     />
   );
+}
+
+/**
+ * Stands in for a layout whose chunk did not load (board, table, timeline): the list's error with "Erneut versuchen",
+ * which renders the layout anew and so asks for the chunk again (`lateLayout`). Any other error of a layout is none of
+ * its business: it goes on to the error boundary of the page.
+ */
+export class LayoutBoundary extends Component<{ children: ReactNode }, { error: unknown }> {
+  state: { error: unknown } = { error: null };
+
+  static getDerivedStateFromError(error: unknown) {
+    return { error };
+  }
+
+  componentDidCatch(error: unknown) {
+    if (error instanceof LayoutChunkError) console.error(error);
+  }
+
+  render() {
+    const { error } = this.state;
+    if (error === null) return this.props.children;
+    // thrown again from here, it reaches the next boundary up
+    if (!(error instanceof LayoutChunkError)) throw error;
+    const retry = () => {
+      error.retry();
+      this.setState({ error: null });
+    };
+    return <ListError error={error} onRetry={retry} retrying={false} />;
+  }
 }

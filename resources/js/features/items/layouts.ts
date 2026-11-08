@@ -30,9 +30,9 @@
  * - Registers no item commands of its own; keeps chips and pickers out of the tab order.
  */
 
-import { lazy, type ComponentType } from 'react';
+import { createElement, lazy, type ComponentType } from 'react';
 import type { ApiError } from '@/api/client';
-import type { TranslationKey } from '@/lib/i18n';
+import { t, type TranslationKey } from '@/lib/i18n';
 import type { ShortcutId } from '@/lib/shortcuts/catalog';
 import type { CreateDefaults } from '@/store/ui';
 import type { Display, GroupBy, GroupCount, ListedItem, Project } from '@/types';
@@ -85,10 +85,44 @@ export interface LayoutProps {
   onCursor(id: string | null): void;
 }
 
-/** The board, the table and the timeline come as chunks of their own, with their first use (in a `Suspense`). */
-const BoardLayout = lazy(() => import('./board/BoardLayout').then((module) => ({ default: module.BoardLayout })));
-const TableLayout = lazy(() => import('./table/TableLayout').then((module) => ({ default: module.TableLayout })));
-const TimelineLayout = lazy(() => import('./timeline/TimelineLayout').then((module) => ({ default: module.TimelineLayout })));
+/** A chunk of a layout that did not load: the one error `LayoutBoundary` takes on (T18-M5). */
+export class LayoutChunkError extends Error {
+  /** Lets the next render of the layout ask for its chunk again. */
+  readonly retry: () => void;
+
+  constructor(cause: unknown, retry: () => void) {
+    super(t('items.screen.layout_failed'), { cause });
+    this.name = 'LayoutChunkError';
+    this.retry = retry;
+  }
+}
+
+/**
+ * A layout that comes as a chunk of its own, with its first use (in a `Suspense`). A lazy component keeps a failed
+ * import for good: "Erneut versuchen" of `LayoutBoundary` gives the layout a new one (`retry` of the error), so its next
+ * render asks for the chunk again. Not before: React renders once more after an error by itself, and that render must
+ * fail again rather than ask the network a second time unasked.
+ */
+export function lateLayout(load: () => Promise<ComponentType<LayoutProps>>): ComponentType<LayoutProps> {
+  const make = () =>
+    lazy(() =>
+      load().then(
+        (component) => ({ default: component }),
+        (reason: unknown) => {
+          throw new LayoutChunkError(reason, () => (current = make()));
+        },
+      ),
+    );
+  let current = make();
+  return function LateLayout(props: LayoutProps) {
+    return createElement(current, props);
+  };
+}
+
+/** The board, the table and the timeline come as chunks of their own. */
+const BoardLayout = lateLayout(() => import('./board/BoardLayout').then((module) => module.BoardLayout));
+const TableLayout = lateLayout(() => import('./table/TableLayout').then((module) => module.TableLayout));
+const TimelineLayout = lateLayout(() => import('./timeline/TimelineLayout').then((module) => module.TimelineLayout));
 
 /** The layout of each `Display['layout']`. */
 export const layouts: Record<Display['layout'], ComponentType<LayoutProps>> = {
