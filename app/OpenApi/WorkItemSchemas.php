@@ -341,6 +341,8 @@ final class WorkItemSchemas
     public static function itemPatches(): array
     {
         $stamp = ['type' => ['string', 'null'], 'format' => 'date-time'];
+        // NOT NULL since A440: a client never gets null here
+        $set = ['type' => 'string', 'format' => 'date-time'];
 
         return [
             'description_json' => ['anyOf' => [self::ref('RichTextDocument'), ['type' => 'null']], 'description' => 'The description as Tiptap JSON. Not in a lean item.'],
@@ -361,7 +363,7 @@ final class WorkItemSchemas
                 'description' => 'Property key → the rich text values as Markdown for the reader. Not in a lean item.',
                 'additionalProperties' => ['type' => 'string'],
             ],
-            'created_at' => $stamp, 'updated_at' => $stamp, 'started_at' => $stamp, 'closed_at' => $stamp, 'archived_at' => $stamp,
+            'created_at' => $set, 'updated_at' => $set, 'started_at' => $stamp, 'closed_at' => $stamp, 'archived_at' => $stamp,
             'children' => ['type' => 'array', 'items' => ['$ref' => '#/components/schemas/WorkItemResource'], 'description' => 'With `include=children`: the first '.GetWorkItem::CHILDREN_MAX.' children in manual order (archived ones included), without embeds; `children_progress.total` counts them all, and `GET /work-items?filter[parent]=<key>&include_archived=1` pages through every one in the same order.'],
             'type' => ['$ref' => '#/components/schemas/WorkItemTypeResource', 'description' => 'With `include=type`.'],
             'workflow' => ['$ref' => '#/components/schemas/WorkflowResource', 'description' => 'With `include=workflow`: the workflow of the project.'],

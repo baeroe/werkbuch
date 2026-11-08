@@ -53,8 +53,8 @@ use Laravel\Scout\Searchable;
  * @property Carbon|null $started_at
  * @property Carbon|null $closed_at
  * @property Carbon|null $archived_at
- * @property Carbon|null $created_at
- * @property Carbon|null $updated_at
+ * @property Carbon $created_at NOT NULL (A440)
+ * @property Carbon $updated_at NOT NULL (A440)
  * @property-read string $key
  * @property-read int $children_total only with `withComputed()`
  * @property-read int $children_done only with `withComputed()`
@@ -308,7 +308,7 @@ final class WorkItem extends Model
             'assignee_id' => $this->assignee_id,
             'label_ids' => array_values($this->labels->map(fn (Label $label) => $label->id)->all()),
             'archived' => $this->archived_at !== null,
-            'updated_at' => (int) $this->updated_at?->getTimestamp(),
+            'updated_at' => $this->updated_at->getTimestamp(),
         ];
     }
 

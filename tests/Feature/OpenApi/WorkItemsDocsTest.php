@@ -125,6 +125,14 @@ it('describes a work item, its free values and what a lean one leaves out', func
         ->and($properties['due_date']['format'])->toBe('date')
         ->and($properties['updated_at']['format'])->toBe('date-time');
 
+    // both stamps are NOT NULL (A440): the document promises a client no null that never comes; the others may be empty
+    expect($item['required'])->toContain('created_at', 'updated_at', 'started_at', 'closed_at', 'archived_at')
+        ->and($properties['created_at'])->toBe(['type' => 'string', 'format' => 'date-time'])
+        ->and($properties['updated_at'])->toBe(['type' => 'string', 'format' => 'date-time'])
+        ->and($properties['started_at']['type'])->toBe(['string', 'null'])
+        ->and($properties['closed_at']['type'])->toBe(['string', 'null'])
+        ->and($properties['archived_at']['type'])->toBe(['string', 'null']);
+
     // what `include` embeds is the resource of each, never a loose array
     expect($properties['children']['items']['$ref'])->toBe('#/components/schemas/WorkItemResource')
         ->and($properties['type']['$ref'])->toBe('#/components/schemas/WorkItemTypeResource')
