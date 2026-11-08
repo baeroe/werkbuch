@@ -67,6 +67,15 @@ describe('keyboard docs', () => {
     expect(page).toContain('| <kbd>⌘ / Ctrl</kbd>+<kbd>↵</kbd> | Save the page now |');
   });
 
+  it('says what the item keys act on, below their heading', async () => {
+    expect(await renderKeyboardDoc('en')).toContain(
+      '## Items\n\n<kbd>C</kbd> works on every screen. The other keys act on the item of the page or the preview; in a list on the selected items, without a selection on the item under the cursor.\n\n| Keys | Action |',
+    );
+    expect(await renderKeyboardDoc('de')).toContain(
+      '## Items\n\n<kbd>C</kbd> wirkt auf jedem Bildschirm. Die übrigen Tasten wirken auf das Item der Seite oder der Vorschau, in einer Liste auf die ausgewählten Items, ohne Auswahl auf das Item am Cursor.\n\n| Taste | Aktion |',
+    );
+  });
+
   it('lists the grid keys of the table', async () => {
     expect(await renderKeyboardDoc('en')).toContain('| <kbd>⇧</kbd>+<kbd>↑</kbd> / <kbd>⇧</kbd>+<kbd>↓</kbd> | Extend the selection |');
     expect(await renderKeyboardDoc('en')).toContain('| <kbd>⌘ / Ctrl</kbd>+<kbd>Home</kbd> / <kbd>⌘ / Ctrl</kbd>+<kbd>End</kbd> | First or last row |');

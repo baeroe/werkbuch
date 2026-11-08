@@ -34,7 +34,10 @@ export const SHORTCUTS = {
   'dialog.submit': { keys: 'mod+enter', scope: 'dialog', label: 'shortcuts.dialog.submit', group: 'shortcuts.group.dialog' },
   'settings.save': { keys: 'mod+enter', scope: 'detail', label: 'shortcuts.settings.save', group: 'shortcuts.group.settings' },
   'item.create': { keys: 'c', scope: 'global', label: 'shortcuts.item.create', group: 'shortcuts.group.item' },
-  // the field editors name these keys in their tooltips; the item commands (`components/fields/commands`) bind them
+  // the field editors name these keys in their tooltips; the item commands (`components/fields/commands`) bind them.
+  // The scope `detail` names the item page and the preview; in a list the mount of the item commands binds them in its
+  // own scope `list` (`useItemCommands({ scope: 'list' })`), so there they rank with the list's keys (T15-M6). The
+  // keyboard page says so under the group (`scripts/shortcuts-doc.mjs`).
   'item.state': { keys: 's', scope: 'detail', label: 'shortcuts.item.state', group: 'shortcuts.group.item' },
   'item.assignee': { keys: 'a', scope: 'detail', label: 'shortcuts.item.assignee', group: 'shortcuts.group.item' },
   'item.assign_me': { keys: 'i', scope: 'detail', label: 'shortcuts.item.assign_me', group: 'shortcuts.group.item' },

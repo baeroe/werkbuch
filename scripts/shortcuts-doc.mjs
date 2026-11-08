@@ -71,6 +71,19 @@ const TEXT = {
   },
 };
 
+/**
+ * A sentence under the heading of a group. The item keys are bound by the mount of the item commands: on the item page
+ * and in the preview (scope `detail`) and in a list (scope `list`), whatever scope the catalog names (T15-M6).
+ */
+const NOTES = {
+  en: {
+    'shortcuts.group.item': `${keyLabel('c', 'en')} works on every screen. The other keys act on the item of the page or the preview; in a list on the selected items, without a selection on the item under the cursor.`,
+  },
+  de: {
+    'shortcuts.group.item': `${keyLabel('c', 'de')} wirkt auf jedem Bildschirm. Die übrigen Tasten wirken auf das Item der Seite oder der Vorschau, in einer Liste auf die ausgewählten Items, ohne Auswahl auf das Item am Cursor.`,
+  },
+};
+
 /** One key as written on the page. */
 function keyName(token, language) {
   const name = token.toLowerCase();
@@ -108,9 +121,9 @@ function rows(entries, language, texts) {
   return [...byLabel].map(([label, keys]) => `| ${keys.map((key) => keyLabel(key, language)).join(' / ')} | ${cell(texts[label])} |`);
 }
 
-function section(title, entries, language, texts) {
+function section(title, entries, language, texts, note) {
   const { keys, action } = TEXT[language];
-  return [`## ${cell(title)}`, '', `| ${keys} | ${action} |`, '| --- | --- |', ...rows(entries, language, texts), ''];
+  return [`## ${cell(title)}`, '', ...(note ? [note, ''] : []), `| ${keys} | ${action} |`, '| --- | --- |', ...rows(entries, language, texts), ''];
 }
 
 /** The keyboard page of a language: the groups of the catalog in catalog order, then the widgets. */
@@ -126,7 +139,7 @@ export async function renderKeyboardDoc(language) {
     '',
     TEXT[language].intro,
     '',
-    ...[...groups].flatMap(([group, entries]) => section(texts[group], entries, language, texts)),
+    ...[...groups].flatMap(([group, entries]) => section(texts[group], entries, language, texts, NOTES[language][group])),
     ...WIDGET_KEYS.flatMap((widget) => section(texts[widget.group], widget.entries, language, texts)),
   ].join('\n');
 }

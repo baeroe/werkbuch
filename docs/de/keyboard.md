@@ -36,6 +36,8 @@ werkbuch geht ohne Maus. Mit <kbd>?</kbd> zeigt jeder Bildschirm die Kürzel, di
 
 ## Items
 
+<kbd>C</kbd> wirkt auf jedem Bildschirm. Die übrigen Tasten wirken auf das Item der Seite oder der Vorschau, in einer Liste auf die ausgewählten Items, ohne Auswahl auf das Item am Cursor.
+
 | Taste | Aktion |
 | --- | --- |
 | <kbd>C</kbd> | Neues Item |

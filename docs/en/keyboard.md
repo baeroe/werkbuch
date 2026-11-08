@@ -36,6 +36,8 @@ werkbuch works without a mouse. Press <kbd>?</kbd> on any screen to see the shor
 
 ## Items
 
+<kbd>C</kbd> works on every screen. The other keys act on the item of the page or the preview; in a list on the selected items, without a selection on the item under the cursor.
+
 | Keys | Action |
 | --- | --- |
 | <kbd>C</kbd> | New item |
