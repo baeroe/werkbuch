@@ -59,6 +59,11 @@ final class ItemOrder
     /**
      * One page of the query in the order of the sort; the query (filtered) changes with it, an order it brings goes.
      *
+     * The rows carry the keys of the order (`sort_0`, `sort_1`, …) and the signature (`_sig`) as attributes, because the
+     * cursor reads them from there: they are the business of the paginator, never of the caller. A row of a page is for
+     * reading; it is never given to `save()` or `toArray()` for a write (they are original attributes, so only what the
+     * caller changed is dirty, and `ItemOrderTest` holds that).
+     *
      * @param  Builder<WorkItem>  $query
      * @param  string|null  $group  the group the page lists (`group_by:key`), so that a cursor of another group is refused
      * @return CursorPaginator<int, WorkItem>
@@ -222,8 +227,11 @@ final class ItemOrder
         };
     }
 
-    /** How a value of the cursor is bound: numbers as exact decimals (a text would compare as a float), days as days. */
-    /** @return literal-string */
+    /**
+     * How a value of the cursor is bound: numbers as exact decimals (a text would compare as a float), days as days.
+     *
+     * @return literal-string
+     */
     private static function placeholder(string $kind): string
     {
         return match ($kind) {

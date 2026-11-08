@@ -13,6 +13,15 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
 /*
+ * Mutation table: what would turn a case red.
+ * - sees: dropping `visibleTo` / the archive condition from `ItemQuery::for`, or `include_archived` read as `true`.
+ * - views: reading the sort or sub-items of the request before those of the view.
+ * - search: `findByReference` without the visibility check, or the key matched as a title.
+ * The items these tests read come from `ItemQuery` and `ItemOrder::page`: their rows carry `sort_*` and `_sig` as
+ * attributes for the cursor. Read them, compare them, never `save()` one.
+ */
+
+/*
  * The one query over items (ItemQuery): only what the reader sees, the archive rules (P5), sub-items, a view narrowed
  * by the request, and the search of Phase 4.
  */

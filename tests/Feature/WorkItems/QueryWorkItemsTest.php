@@ -22,6 +22,14 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
+/*
+ * Mutation table: what would turn a case red.
+ * - project key / parent: the shorthand reading an unseen project or parent as a filter (200) instead of 404.
+ * - sort and paging: `ItemOrder::page` without the key of the view, or a cursor of another sort accepted.
+ * - project being deleted: `visibleTo` letting `deleting_at` through.
+ * The rows of a page carry `sort_*` and `_sig` as attributes for the cursor: read them, compare them, never `save()` one.
+ */
+
 /** WEB (public) with Mara as its member, and the private OPS she is no member of. */
 $world = function (): array {
     $mara = User::factory()->create(['name' => 'Mara']);

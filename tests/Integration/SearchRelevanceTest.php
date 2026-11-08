@@ -41,7 +41,11 @@ it('finds Kontaktformular by kontakt', function () use ($item, $index, $search, 
     $item($web, 'Newsletter versenden');
     $index();
 
-    expect($ids($search('kontakt', ['types' => 'items'])->items))->toBe([$form->id]);
+    expect($ids($search('kontakt', ['types' => 'items'])->items))->toBe([$form->id])
+        // only the last word of the query is a prefix: the prefix of an earlier word finds nothing, the whole word does
+        ->and($ids($search('kontaktformular pflicht', ['types' => 'items'])->items))->toBe([$form->id])
+        ->and($ids($search('kontakt pflichtfelder', ['types' => 'items'])->items))->toBe([])
+        ->and($ids($search('kontaktformular pflichtfelder', ['types' => 'items'])->items))->toBe([$form->id]);
 });
 
 it('ranks a hit in the title before a hit in the description', function () use ($item, $index, $search, $ids) {
@@ -122,7 +126,9 @@ it('needs every word of the query', function () use ($item, $index, $search, $id
     $index();
 
     // without matchingStrategy all, Meilisearch drops words from the end and finds all three
-    expect($ids($search('kontaktformular pflichtfelder', ['types' => 'items'])->items))->toBe([$both->id]);
+    expect($ids($search('kontaktformular pflichtfelder', ['types' => 'items'])->items))->toBe([$both->id])
+        // a word that no title has together with the first one must not hit, whatever else matches
+        ->and($ids($search('kontaktformular checkout', ['types' => 'items'])->items))->toBe([]);
 });
 
 it('filters by project and archive in Meilisearch, not only in the database', function () use ($item, $index) {

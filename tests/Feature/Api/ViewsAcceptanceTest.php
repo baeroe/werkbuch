@@ -40,8 +40,8 @@ beforeEach(function () {
     }
     app()->instance(CatalogProperties::class, CatalogProperties::load());
 
-    $item = function (Project $project, string $title, string $type, array $attributes = [], ?string $option = null) use ($customer) {
-        $item = WorkItem::factory()->for($project)->create(['type_id' => WorkItemType::query()->where('name', $type)->sole()->id, 'title' => $title, ...$attributes]);
+    $item = function (Project $project, string $title, string $typeName, array $attributes = [], ?string $option = null) use ($customer, $type) {
+        $item = WorkItem::factory()->for($project)->create(['type_id' => $type($typeName)->id, 'title' => $title, ...$attributes]);
         if ($option !== null) {
             $item->values()->create(['property_id' => $customer->id, 'position' => 0, 'value_option_id' => $option]);
         }
@@ -109,4 +109,21 @@ it('gives the timeline the epics the reader sees, with their progress', function
 
     expect(array_column($epics, 'id'))->toBe(($this->ids)('Relaunch', 'Archive'))
         ->and(array_column($epics, 'children_progress', 'title'))->toBe(['Relaunch' => ['done' => 1, 'total' => 2], 'Archive' => null]);
+});
+
+it('narrows the epics of the timeline by the filter of a view and the epic condition together', function () {
+    // the customer of $this->view is no property of an epic, so the view here asks for WEB; OPS has an epic of its own
+    $view = View::factory()->create(['name' => 'Web', 'filter' => ['version' => 1, 'conditions' => [['field' => 'project', 'op' => 'is', 'value' => $this->web->id]]], 'display' => [
+        'layout' => 'timeline', 'group_by' => 'project', 'sort' => ['field' => 'start_date', 'direction' => 'asc'], 'fields' => ['key', 'title'], 'show_sub_items' => false,
+    ]]);
+    $epic = ['version' => 1, 'conditions' => [['field' => 'epic', 'op' => 'is', 'value' => true]]];
+    $admin = apiToken(User::factory()->admin()->create(), ['read']);
+
+    $both = $this->withToken($admin)->postJson('/api/v1/work-items/query', ['view_id' => $view->id, 'filter' => $epic])->assertOk()->json('data');
+    $epicsOnly = $this->withToken($admin)->postJson('/api/v1/work-items/query', ['filter' => $epic])->assertOk()->json('data');
+
+    // the epics of WEB only (the view), not Migration of OPS (the epic condition alone finds it for an admin)
+    expect(array_column($both, 'id'))->toBe(($this->ids)('Relaunch', 'Archive'))
+        ->and(array_column($epicsOnly, 'id'))->toEqualCanonicalizing(($this->ids)('Relaunch', 'Archive', 'Migration'))
+        ->and(array_column($both, 'children_progress', 'title'))->toBe(['Relaunch' => ['done' => 1, 'total' => 2], 'Archive' => null]);
 });

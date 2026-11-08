@@ -667,3 +667,16 @@ it('asks the database twice for a page', function () use ($sort, $properties) {
         }
     }
 });
+
+it('hands out rows whose sort keys are original attributes, so a save of a page row writes only what changed', function () use ($sort) {
+    WorkItem::factory()->create(['project_id' => $this->web->id, 'title' => 'a', 'due_date' => '2026-10-01']);
+
+    $row = ItemOrder::page(WorkItem::query(), $sort('due_date'), new PageArgs(null, 5))->items()[0];
+    expect(array_key_exists('sort_0', $row->getAttributes()))->toBeTrue()
+        ->and(array_key_exists('_sig', $row->getAttributes()))->toBeTrue()
+        ->and($row->isDirty())->toBeFalse();
+
+    $row->title = 'b';
+
+    expect($row->getDirty())->toBe(['title' => 'b']);
+});
