@@ -127,7 +127,8 @@ final class WorkItem extends Model
     public static function loadForResource(EloquentCollection|self $items, User $reader, bool $lean = false): void
     {
         $items = $items instanceof self ? $items->newCollection([$items]) : $items;
-        $items->load(['project', 'parent.project', 'labels:labels.id', 'values.property']);
+        $items->load(['project', 'parent.project', 'values.property']);
+        self::loadLabels($items);
         $ids = $items->modelKeys();
 
         $computed = self::query()->select('id')->withComputed()->whereKey($ids)->get()->keyBy('id');
@@ -147,6 +148,30 @@ final class WorkItem extends Model
         if (! $lean) {
             $names = self::richNames($items, $reader);
             $items->each(fn (self $item) => $item->rich_names = $names);
+        }
+    }
+
+    /**
+     * `labels` of the items, in catalog order, from `work_item_labels` alone through its index (work_item_id, label_id)
+     * (Phase 15, Task 10b): with a join of `labels` MariaDB could begin, depending on its statistics, with the few
+     * labels and walk the index of `label_id` through every link of the organisation (126 ms per page under 50 000
+     * items). A link always names a label (foreign key with cascade), and the resource reads only their ids.
+     *
+     * @param  EloquentCollection<int, self>  $items
+     */
+    private static function loadLabels(EloquentCollection $items): void
+    {
+        if ($items->isEmpty()) {
+            return;
+        }
+
+        $label = new Label;
+        $byItem = [];
+        foreach (WorkItemLabel::query()->whereIn('work_item_id', $items->modelKeys())->orderBy('label_id')->toBase()->get(['work_item_id', 'label_id']) as $link) {
+            $byItem[$link->work_item_id][] = $label->newFromBuilder(['id' => $link->label_id]);
+        }
+        foreach ($items as $item) {
+            $item->setRelation('labels', $label->newCollection($byItem[$item->id] ?? []));
         }
     }
 

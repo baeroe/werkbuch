@@ -37,12 +37,10 @@ use Tests\Load\Support\Budget;
  * other row, only their median is not asserted. Their query count is. In DDEV every row stays within the budget; the
  * CI job `load` (PR #32, run 42439150185, MariaDB with the image's buffer pool of 128 MiB) measured these over it.
  * Task 10a took out the sort by a property (CI 1 764 and 1 784 ms): its first value is joined once and read from an
- * index.
+ * index. Task 10b took out the board of a project (CI 2 193 ms, seven answers measured together): each page read its
+ * labels with a join MariaDB could begin with the labels, now it reads them from `work_item_labels` alone.
  */
-const OVER_BUDGET = [
-    // CI 2 193 ms (DDEV 1 039 ms), 70 queries; seven answers measured together
-    'board of a project' => 'Task 10b: the groups and the first page of every group of the board',
-];
+const OVER_BUDGET = [];
 
 /** The first page of every list, as the browser asks it. */
 const LOAD_PAGE = 100;
