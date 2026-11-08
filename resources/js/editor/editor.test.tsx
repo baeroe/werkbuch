@@ -394,6 +394,35 @@ describe('RichTextEditor', () => {
     expect(nodesOf(lastDoc(onChange), 'taskItem')[0].attrs?.checked).toBe(false);
   });
 
+  it('reports a header column as tableHeader cells', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const editorRef = createRef<Editor | null>() as { current: Editor | null };
+    render(<RichTextEditor value={tableDoc} onChange={onChange} preset="description" editorRef={editorRef} />);
+    const editor = editorRef.current!;
+    let inCell = -1;
+    editor.state.doc.descendants((node, pos) => {
+      if (node.text === 'offen') inCell = pos;
+    });
+    act(() => {
+      editor.commands.setTextSelection(inCell);
+      editor.view.focus();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Tabelle bearbeiten' }));
+    const menu = await screen.findByRole('menu');
+    await waitFor(() => expect(menu.contains(document.activeElement)).toBe(true));
+    await user.click(within(menu).getByRole('menuitemcheckbox', { name: 'Kopfspalte' }));
+
+    // the first cell of every row is a header cell; the header row stays, the other cells too
+    const rows = nodesOf(lastDoc(onChange), 'tableRow').map((tableRow) => tableRow.content!.map((tableCell) => tableCell.type));
+    expect(rows).toEqual([
+      ['tableHeader', 'tableHeader'],
+      ['tableHeader', 'tableCell'],
+    ]);
+    expect(nodesOf(lastDoc(onChange), 'tableHeader')[2].content).toEqual([{ type: 'paragraph', content: [{ type: 'text', text: 'Pixel 9' }] }]);
+  });
+
   it('holds a read-only document that it does not let anyone change', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();

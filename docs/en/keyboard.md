@@ -176,3 +176,4 @@ werkbuch works without a mouse. Press <kbd>?</kbd> on any screen to see the shor
 | <kbd>↵</kbd> / <kbd>Tab</kbd> | Take the entry |
 | <kbd>Esc</kbd> | Close the list |
 | <kbd>↵</kbd> | Edit the alternative text of the selected image |
+| <kbd>⌥ / Alt</kbd>+<kbd>F10</kbd> | Edit the table (cursor in a table) |

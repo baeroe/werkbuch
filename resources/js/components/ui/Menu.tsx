@@ -25,13 +25,15 @@ type MenuContentProps = {
   /** Keep the preferred side even without room. */
   keepSide?: boolean;
   className?: string;
+  /** Where the focus goes when the menu closes (Base UI's `finalFocus`); by default back to the trigger. */
+  finalFocus?: ComponentProps<typeof BaseMenu.Popup>['finalFocus'];
 };
 
-export function MenuContent({ children, side = 'bottom', align = 'start', sideOffset = 6, keepSide, className }: MenuContentProps) {
+export function MenuContent({ children, side = 'bottom', align = 'start', sideOffset = 6, keepSide, className, finalFocus }: MenuContentProps) {
   return (
     <BaseMenu.Portal>
       <BaseMenu.Positioner side={side} align={align} sideOffset={sideOffset} collisionAvoidance={keepSide ? keptSide : undefined} className="z-50 outline-none">
-        <BaseMenu.Popup {...popupFocus} className={cx(popupSurface, 'min-w-52 overflow-y-auto overscroll-contain p-1', !keepSide && 'max-h-[var(--available-height)]', className)}>
+        <BaseMenu.Popup {...popupFocus} finalFocus={finalFocus} className={cx(popupSurface, 'min-w-52 overflow-y-auto overscroll-contain p-1', !keepSide && 'max-h-[var(--available-height)]', className)}>
           {children}
         </BaseMenu.Popup>
       </BaseMenu.Positioner>

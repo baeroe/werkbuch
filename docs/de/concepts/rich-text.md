@@ -30,6 +30,10 @@ Ein `/` am Zeilenanfang oder nach einem Leerzeichen öffnet das Blockmenü (dire
 
 **Bild oder Datei** im Menü öffnet die Dateiauswahl des Browsers. Code wird für Bash, CSS, Diff, JavaScript, JSON, Markdown, PHP, Python, Shell, SQL, TypeScript, XML und YAML hervorgehoben; ohne Sprache rät werkbuch eine für die Anzeige, der Text bleibt, wie du ihn getippt hast. Fett, kursiv, durchgestrichen, Code im Text und Links gehen mit den üblichen Markdown-Zeichen (`**`, `*`, `~~`, `` ` ``) und Tasten. Links behalten nur `http`, `https` und `mailto`.
 
+## Tabellen bearbeiten
+
+Steht der Cursor in einer Tabelle, sitzt an ihrer oberen Kante rechts der Knopf **Tabelle**; `alt+F10` öffnet sein Menü auch direkt aus dem Text. Darin fügst du Zeilen darüber oder darunter und Spalten links oder rechts ein, löschst die Zeile oder Spalte des Cursors oder die ganze Tabelle und schaltest **Kopfzeile** und **Kopfspalte** an und aus. Die letzte Zeile und die letzte Spalte bleiben; lösche dann die Tabelle. Nach jedem Befehl und mit `esc` geht der Fokus an dieselbe Stelle im Text zurück. Dieselben Befehle stehen im `/`-Menü, solange der Cursor in einer Tabelle steht (Gruppe „Tabelle“). Zellen verbinden und einzelne Kopfzellen bietet der Editor nicht an: Markdown trägt beides nicht (siehe [Tabellen](#tabellen) unter Markdown).
+
 ## Erwähnungen
 
 `@` öffnet eine Liste der Personen und Bots, die im Projekt erwähnt werden können: seine aktiven Mitglieder und Personen, die Org-Admins sind. Ein Bot nur, wenn er Mitglied des Projekts ist, auch der Standard-Bot. Tippen grenzt die Liste über Name oder Handle ein. Eine Erwähnung zeigt den aktuellen Handle des Kontos, auch nach einer Umbenennung; ein deaktiviertes Konto ist als solches markiert.

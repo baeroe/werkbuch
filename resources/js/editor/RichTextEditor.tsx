@@ -55,6 +55,7 @@ import { AttachmentFile, AttachmentImage, ImageAltKey } from './nodes';
 import { PRESET_LABEL, PRESET_PLACEHOLDER, PRESET_PLACEHOLDER_PLAIN, PRESETS, type EditorPreset } from './presets';
 import { referenceExtension } from './references';
 import { slashMenu } from './slashMenu';
+import { TableMenu } from './tables';
 import { UploadContext } from './UploadContext';
 import { pickFiles, uploadExtensions, uploadFiles, UploadSession } from './uploads';
 
@@ -358,6 +359,7 @@ function EditorBody({ value, onChange, preset, projectId, label, placeholder, au
   });
 
   const framed = preset !== 'page';
+  const frameRef = useRef<HTMLDivElement>(null);
   const placeholderOf = useCallback(() => latest.current.hint, []);
   const { extensions, schema } = useLevel(preset, env, placeholderOf);
   /**
@@ -468,8 +470,10 @@ function EditorBody({ value, onChange, preset, projectId, label, placeholder, au
   }, [editor, value, content, reports]);
 
   return (
-    <div className={cx('rt rt-editor', framed && 'rt-frame')} data-preset={preset} data-invalid={invalid || undefined}>
+    <div ref={frameRef} className={cx('rt rt-editor relative', framed && 'rt-frame')} data-preset={preset} data-invalid={invalid || undefined}>
       <EditorContent editor={editor} />
+      {/* rows, columns and headers of the table the cursor is in (tables.tsx); only where tables exist */}
+      {PRESETS[preset].table && <TableMenu editor={editor} frame={frameRef} />}
       {/* the editor's live region, empty when it mounts: uploads and the lists write into it (announcer.ts) */}
       <div aria-live="polite" aria-atomic="true" className="sr-only" data-editor-announcer="" />
     </div>

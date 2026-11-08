@@ -176,3 +176,4 @@ werkbuch geht ohne Maus. Mit <kbd>?</kbd> zeigt jeder Bildschirm die Kürzel, di
 | <kbd>↵</kbd> / <kbd>Tab</kbd> | Eintrag übernehmen |
 | <kbd>Esc</kbd> | Liste schließen |
 | <kbd>↵</kbd> | Alternativtext des ausgewählten Bilds bearbeiten |
+| <kbd>⌥ / Alt</kbd>+<kbd>F10</kbd> | Tabelle bearbeiten (Cursor in einer Tabelle) |

@@ -30,6 +30,10 @@ Type `/` at the start of a line or after a space to open the block menu (right a
 
 **Image or file** in the menu opens the file choice of the browser. Code is highlighted for Bash, CSS, Diff, JavaScript, JSON, Markdown, PHP, Python, Shell, SQL, TypeScript, XML and YAML; without a language werkbuch guesses one for the display, the text stays as you typed it. Bold, italic, strike-through, inline code and links work with the usual Markdown marks (`**`, `*`, `~~`, `` ` ``) and keys. Links keep only `http`, `https` and `mailto`.
 
+## Editing tables
+
+While the cursor is in a table, the **Table** button sits on its top edge at the right; `alt+F10` opens its menu straight from the text. There you insert rows above or below and columns to the left or right, delete the row or column of the cursor or the whole table, and turn the **Header row** and the **Header column** on and off. The last row and the last column stay; delete the table instead. After every command and on `esc` the focus goes back to the same place in the text. The same commands are in the `/` menu while the cursor is in a table (group "Table"). The editor offers neither merged cells nor single header cells: Markdown carries neither (see [Tables](#tables) under Markdown).
+
 ## Mentions
 
 `@` opens a list of the people and bots that can be mentioned in the project: its active members, and people who are org admins. A bot only when it is a member of the project, the default bot as well. Typing narrows the list by name or handle. A mention shows the current handle of the account, even after it was renamed; a deactivated account is marked as such.
