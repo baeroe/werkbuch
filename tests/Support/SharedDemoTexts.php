@@ -42,6 +42,8 @@ final class SharedDemoTexts
         'token.claude_code.name' => 'a product name',
         'token.mcp.name' => 'an abbreviation',
         'file.OPS-12.1.name' => 'the name of a configuration file of Postfix',
+        'page.web_meetings.title' => 'the same word in both languages',
+        'webhook.kira.name' => 'a name',
     ];
 
     /** @var array<string, string> key → why it is no text a reader sees */

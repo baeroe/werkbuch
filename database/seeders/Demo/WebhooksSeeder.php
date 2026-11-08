@@ -8,6 +8,7 @@ use App\Models\Webhook;
 use App\Models\WebhookAttempt;
 use App\Models\WebhookDelivery;
 use Carbon\CarbonImmutable;
+use Database\Seeders\Demo\Texts\DemoTexts;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -24,42 +25,48 @@ use RuntimeException;
  * changed stays, and a second run adds nothing. Berlin wall clock as everywhere in the demo data; the CRM's attempts are
  * UTC stamps, as in the file.
  *
+ * The names (`webhook.<key>.name`) and the error of a timeout (`webhook.timeout`) come from DemoTexts; the hosts of
+ * Deploy-Bot and Kira are subdomains of the organization's mail domain (`feldwerk.example.com`, `fieldwork.example.com`),
+ * the CRM is the client's and keeps its host.
+ *
  * The demo webhooks fire for real in development; the E2eSeeder switches them off (K8).
  */
 class WebhooksSeeder extends Seeder
 {
     use WithoutModelEvents;
 
-    private const TIMEOUT = 'Zeitüberschreitung nach 10 s';
+    /** An attempt without an answer: its error is `webhook.timeout`. */
+    private const TIMEOUT = 'timeout';
 
     /**
-     * name, url, `project` (identifier), events, `bot` (handle), created, `disabled` (UTC).
+     * key of the texts, url (`{domain}` the organization's mail domain), `project` (identifier), events, `bot` (handle),
+     * created, `disabled` (UTC).
      *
-     * @var list<array{name: string, url: string, project: string|null, events: list<string>, bot: string|null, created: string, disabled: string|null}>
+     * @var list<array{key: string, url: string, project: string|null, events: list<string>, bot: string|null, created: string, disabled: string|null}>
      */
     private const WEBHOOKS = [
-        ['name' => 'Deploy-Bot', 'url' => 'https://deploy.feldwerk.example.com/hooks/werkbuch', 'project' => null, 'events' => ['work_item.state_changed'], 'bot' => null, 'created' => '10-02 10:30', 'disabled' => null],
-        ['name' => 'Kira', 'url' => 'https://kira.feldwerk.example.com/werkbuch/webhook', 'project' => null, 'events' => ['bot.*'], 'bot' => 'kira', 'created' => '10-05 14:35', 'disabled' => null],
-        ['name' => 'Altes CRM', 'url' => 'https://crm.example.com/api/inbound/werkbuch', 'project' => 'APP', 'events' => ['work_item.created', 'work_item.updated'], 'bot' => null, 'created' => '08-12 09:00', 'disabled' => '2026-10-22T08:00:30Z'],
+        ['key' => 'deploy', 'url' => 'https://deploy.{domain}/hooks/werkbuch', 'project' => null, 'events' => ['work_item.state_changed'], 'bot' => null, 'created' => '10-02 10:30', 'disabled' => null],
+        ['key' => 'kira', 'url' => 'https://kira.{domain}/werkbuch/webhook', 'project' => null, 'events' => ['bot.*'], 'bot' => 'kira', 'created' => '10-05 14:35', 'disabled' => null],
+        ['key' => 'crm', 'url' => 'https://crm.example.com/api/inbound/werkbuch', 'project' => 'APP', 'events' => ['work_item.created', 'work_item.updated'], 'bot' => null, 'created' => '08-12 09:00', 'disabled' => '2026-10-22T08:00:30Z'],
     ];
 
     /**
-     * One delivery per entry: webhook, event and its attempts `[when, status, duration ms, excerpt, error]` in order
+     * One delivery per entry: webhook (key), event and its attempts `[when, status, duration ms, excerpt, error]` in order
      * (`when` Berlin `MM-DD HH:mm`, or a UTC stamp with a `T`).
      *
      * @var list<array{0: string, 1: string, 2: non-empty-list<array{0: string, 1: int|null, 2: int, 3: string|null, 4: string|null}>}>
      */
     private const DELIVERIES = [
-        ['Deploy-Bot', 'work_item.state_changed', [['10-22 11:05', 200, 142, '{"ok":true}', null]]],
-        ['Deploy-Bot', 'work_item.state_changed', [['10-23 14:10', 200, 188, '{"ok":true}', null]]],
-        ['Deploy-Bot', 'work_item.state_changed', [['10-26 10:00', 200, 121, '{"ok":true}', null]]],
-        ['Deploy-Bot', 'work_item.state_changed', [['10-27 09:15', 200, 305, '{"ok":true}', null]]],
-        ['Deploy-Bot', 'work_item.state_changed', [['10-27 14:00', 200, 167, '{"ok":true}', null]]],
-        ['Deploy-Bot', 'work_item.state_changed', [['10-27 16:20', 200, 154, '{"ok":true}', null]]],
-        ['Kira', 'bot.assigned', [['10-26 11:20', 200, 233, '{"ok":true}', null]]],
-        ['Kira', 'bot.mentioned', [['10-26 15:30', 200, 198, '{"ok":true}', null]]],
-        ['Kira', 'bot.assigned', [['10-27 09:40', 502, 1204, 'Bad Gateway', null], ['10-27 09:41', 200, 219, '{"ok":true}', null]]],
-        ['Altes CRM', 'work_item.updated', [
+        ['deploy', 'work_item.state_changed', [['10-22 11:05', 200, 142, '{"ok":true}', null]]],
+        ['deploy', 'work_item.state_changed', [['10-23 14:10', 200, 188, '{"ok":true}', null]]],
+        ['deploy', 'work_item.state_changed', [['10-26 10:00', 200, 121, '{"ok":true}', null]]],
+        ['deploy', 'work_item.state_changed', [['10-27 09:15', 200, 305, '{"ok":true}', null]]],
+        ['deploy', 'work_item.state_changed', [['10-27 14:00', 200, 167, '{"ok":true}', null]]],
+        ['deploy', 'work_item.state_changed', [['10-27 16:20', 200, 154, '{"ok":true}', null]]],
+        ['kira', 'bot.assigned', [['10-26 11:20', 200, 233, '{"ok":true}', null]]],
+        ['kira', 'bot.mentioned', [['10-26 15:30', 200, 198, '{"ok":true}', null]]],
+        ['kira', 'bot.assigned', [['10-27 09:40', 502, 1204, 'Bad Gateway', null], ['10-27 09:41', 200, 219, '{"ok":true}', null]]],
+        ['crm', 'work_item.updated', [
             ['2026-10-21T08:00:00Z', 500, 412, '{"error":"Internal Server Error"}', null],
             ['2026-10-21T08:01:00Z', 500, 388, '{"error":"Internal Server Error"}', null],
             ['2026-10-21T08:06:00Z', null, 10000, null, self::TIMEOUT],
@@ -78,7 +85,7 @@ class WebhooksSeeder extends Seeder
             $present = Webhook::query()->pluck('name')->flip();
 
             foreach (self::WEBHOOKS as $row) {
-                if (! $present->has($row['name'])) {
+                if (! $present->has(DemoTexts::get("webhook.{$row['key']}.name"))) {
                     $this->write($row, $mara);
                 }
             }
@@ -86,7 +93,7 @@ class WebhooksSeeder extends Seeder
     }
 
     /**
-     * @param  array{name: string, url: string, project: string|null, events: list<string>, bot: string|null, created: string, disabled: string|null}  $row
+     * @param  array{key: string, url: string, project: string|null, events: list<string>, bot: string|null, created: string, disabled: string|null}  $row
      */
     private function write(array $row, User $creator): void
     {
@@ -94,8 +101,8 @@ class WebhooksSeeder extends Seeder
         $created = $this->at($row['created']);
 
         $webhook = (new Webhook)->forceFill([
-            'name' => $row['name'],
-            'url' => $row['url'],
+            'name' => DemoTexts::get("webhook.{$row['key']}.name"),
+            'url' => str_replace('{domain}', DemoTexts::get('organization.mail_domain'), $row['url']),
             'secret' => Webhook::newSecret(),
             'project_id' => $row['project'] === null ? null
                 : (Project::query()->where('identifier', $row['project'])->value('id') ?? throw new RuntimeException("No project {$row['project']}.")),
@@ -112,7 +119,7 @@ class WebhooksSeeder extends Seeder
         $failing = null;
         $success = null;
         foreach (self::DELIVERIES as [$name, $event, $attempts]) {
-            if ($name !== $row['name']) {
+            if ($name !== $row['key']) {
                 continue;
             }
             foreach ($attempts as $attempt) {
@@ -160,7 +167,7 @@ class WebhooksSeeder extends Seeder
                 'status_code' => $status,
                 'duration_ms' => $duration,
                 'response_excerpt' => $excerpt,
-                'error' => $error,
+                'error' => $error === self::TIMEOUT ? DemoTexts::get('webhook.timeout') : $error,
                 'attempted_at' => $this->at($when),
             ])->save();
         }
