@@ -63,6 +63,43 @@ it('keeps the order and shortens every rank', function () use ($world, $order) {
         ->and(Event::query()->where('type', 'like', 'work_item.%')->count())->toBe(0);
 });
 
+it('reads and writes more items than a block in blocks and keeps their order across the border', function () use ($world, $order) {
+    $w = $world();
+    $count = RedistributeRanks::BLOCK + 1;
+    $items = WorkItem::factory()->for($w['web'])->count($count)->create();
+    // long ranks in the reverse order of the numbers: the order crosses the border between the blocks of `number`
+    $ranks = Rank::nBetween(null, null, $count);
+    foreach ($items->values() as $n => $item) {
+        DB::table('work_items')->where('id', $item->id)->update(['rank' => $ranks[$count - 1 - $n].str_repeat('V', 100)]);
+    }
+    $before = $order($w['web']);
+    expect($before[0])->toBe($items->last()->id)->and($before[$count - 1])->toBe($items->first()->id);
+
+    $reads = [];
+    $writes = [];
+    DB::listen(function ($query) use (&$reads, &$writes): void {
+        if (str_starts_with($query->sql, 'select `id`, `rank`, `number` from `work_items`')) {
+            $reads[] = $query->sql;
+        }
+        if (str_starts_with($query->sql, 'update `work_items` set `rank`')) {
+            $writes[] = count($query->bindings);
+        }
+    });
+
+    expect(RedistributeRanks::run(actor($w['mara']), $w['web']))->toBe($count);
+
+    $after = WorkItem::query()->where('project_id', $w['web']->id)->orderBy('rank')->orderBy('id')->get(['id', 'rank']);
+    expect($after->pluck('id')->all())->toBe($before)
+        ->and($after->pluck('rank')->all())->toBe($ranks)
+        // two blocks over the index (`project_id`, `number`), the second after the last number of the first
+        ->and($reads)->toHaveCount(2)
+        ->and($reads[0])->toContain('order by `number` asc')
+        ->and($reads[1])->toContain('`number` > ?')
+        // one statement per block: 500 rows, then the one left over (three bindings per row)
+        ->and($writes)->toBe([RedistributeRanks::BLOCK * 3, 3])
+        ->and(eventsOf(EventType::ProjectRanksRedistributed)->sole()->meta['count'])->toBe($count);
+});
+
 it('counts only items whose rank changed and records nothing when none did', function () use ($world, $order) {
     $w = $world();
     [$first, $second, $third] = WorkItem::factory()->for($w['web'])->count(3)->create()->all();

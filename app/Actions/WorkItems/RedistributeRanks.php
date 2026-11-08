@@ -28,7 +28,14 @@ use Lorisleiva\Actions\Concerns\AsAction;
  *
  * Under the locks of a change of items in their order (P1): the organization shared, then the row of the project
  * `for update`. Every change of an item of the project shares that row (ItemLock::take): a `PATCH rank` waits until the
- * new ranks are committed and is then placed among them, never in the middle of the rewrite.
+ * new ranks are committed, never lands in the middle of the rewrite. Where it lands depends on the neighbours its rank
+ * was computed from: a rank computed after the redistribution falls between the new ones; a rank a client computed from
+ * the old, long neighbours lands in the wrong place among the new, short ranks, and the server cannot tell. A client
+ * loads the items again after this and only then computes a rank (the board does, Task 21e).
+ *
+ * The items are read in blocks over the index (`project_id`, `number`), never over `PRIMARY`: under REPEATABLE READ a
+ * locking read keeps every row it scanned locked, and a scan of `PRIMARY` by ULID would hold the items of every other
+ * project as well (and read the whole project again for every block).
  */
 final class RedistributeRanks
 {
@@ -54,12 +61,12 @@ final class RedistributeRanks
             ItemLock::refuseArchivedProject($locked);
 
             $rows = [];
-            WorkItem::query()->where('project_id', $locked->id)->lockForUpdate()->select(['id', 'rank'])
+            WorkItem::query()->where('project_id', $locked->id)->lockForUpdate()->select(['id', 'rank', 'number'])
                 ->chunkById(self::BLOCK, function (Collection $items) use (&$rows): void {
                     foreach ($items as $item) {
                         $rows[] = ['id' => (string) $item->id, 'rank' => (string) $item->rank];
                     }
-                });
+                }, 'number');
 
             // the manual order: the rank byte by byte (as `ascii_bin` compares), then the ULID (lower case)
             usort($rows, fn (array $a, array $b) => strcmp($a['rank'], $b['rank']) ?: strcmp($a['id'], $b['id']));
