@@ -41,9 +41,6 @@ final class ItemOrder
 {
     private const CURSOR_SIGNATURE = '_sig';
 
-    /** The names of the selected keys of a sort (at most two: the mark of an empty value and the value). */
-    private const ALIASES = ['sort_0', 'sort_1'];
-
     /** The guard of `coalesce` for a stamp, in the form the cursor carries (`Y-m-d H:i:s`). */
     private const STAMP_GUARD = "timestamp '0001-01-01 00:00:00'";
 
@@ -126,7 +123,9 @@ final class ItemOrder
         }
         $keys = [];
         foreach ($values as $index => $value) {
-            $name = self::ALIASES[$index];
+            // `sort_0`, `sort_1`: an alias of ours, never input
+            /** @var literal-string $name */
+            $name = "sort_{$index}";
             $query->addSelect(new Expression($value['sql'].' as '.$name))->addBinding($value['bindings'], 'select');
             $keys[] = [...$value, 'name' => $name, 'order' => $name];
         }

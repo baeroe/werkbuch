@@ -90,7 +90,19 @@ it('drops unknown fields of a stored display', function () use ($board) {
 
 it('reads what it cannot use of a stored display as the plain list', function () {
     expect(DisplaySchema::read(['layout' => 'gantt', 'group_by' => 'milestone', 'sort' => ['field' => 'property:gone', 'direction' => 'asc'], 'fields' => 'key', 'show_sub_items' => 'yes'], new FixedPropertyCatalog))
-        ->toEqual(new Display(Layout::List, GroupBy::None, SortSpec::manual(), [], true))
+        ->toEqual(new Display(Layout::List, GroupBy::None, SortSpec::manual(), DisplaySchema::DEFAULT_FIELDS, true))
         ->and(DisplaySchema::read([], new FixedPropertyCatalog))
-        ->toEqual(new Display(Layout::List, GroupBy::None, SortSpec::manual(), [], true));
+        ->toEqual(new Display(Layout::List, GroupBy::None, SortSpec::manual(), DisplaySchema::DEFAULT_FIELDS, true))
+        ->and(DisplaySchema::read(['fields' => ['a' => 'key']], new FixedPropertyCatalog)->fields)
+        ->toBe(DisplaySchema::DEFAULT_FIELDS);
+});
+
+it('keeps an empty list of fields as the empty list: only a stored non-list takes the default', function () {
+    expect(DisplaySchema::read(['fields' => []], new FixedPropertyCatalog)->fields)->toBe([]);
+});
+
+it('takes the default fields of the browser (T2-M1)', function () {
+    preg_match('/export const DEFAULT_FIELDS = \[(.*?)\];/', (string) file_get_contents(repo_path('resources/js/domain/viewState.ts')), $match);
+
+    expect(array_map(fn (string $field): string => trim($field, " '"), explode(',', $match[1])))->toBe(DisplaySchema::DEFAULT_FIELDS);
 });
