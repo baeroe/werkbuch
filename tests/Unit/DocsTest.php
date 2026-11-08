@@ -45,6 +45,36 @@ $anchors = function (string $page) use ($slug): array {
     return $seen;
 };
 
+/**
+ * The docs page (`en/concepts/views`) a link of the page `$from` goes to: relative to it, from the root of the site, or
+ * the page itself for `#anchor`; `null` for a link that leaves the docs (`https://…`, `mailto:`, an app path like
+ * `/api/docs`).
+ */
+$docsPage = function (string $from, string $target): ?string {
+    if (preg_match('/^[a-z][a-z0-9+.-]*:/i', $target) || (str_starts_with($target, '/') && ! preg_match('#^/(en|de)(/|$)#', $target))) {
+        return null;
+    }
+    $path = (string) preg_replace('/\.(md|html)$/', '', $target);
+    $to = match (true) {
+        $path === '' => $from,
+        str_starts_with($path, '/') => ltrim($path, '/'),
+        default => implode('/', array_reduce(explode('/', dirname($from).'/'.$path), function (array $parts, string $part) {
+            if ($part === '..') {
+                array_pop($parts);
+            } elseif ($part !== '.' && $part !== '') {
+                $parts[] = $part;
+            }
+
+            return $parts;
+        }, [])),
+    };
+
+    return str_ends_with($to, '/') || ! str_contains($to, '/') ? rtrim($to, '/').'/index' : $to;
+};
+
+/** What a docs page says of a phase of the build (`Phase 15`, `phase-3`, `Phasen 1`), `null` for nothing. */
+$namesPhase = fn (string $text): ?string => preg_match('/phase[ns]?[ \t-]*\d+/i', $text, $m) ? $m[0] : null;
+
 it('has every docs page in English and German', function () {
     expect(docsPages('en'))->not->toBeEmpty()->toEqualCanonicalizing(docsPages('de'));
 });
@@ -96,7 +126,19 @@ it('makes the anchors of headings the way VitePress does', function () use ($slu
         ->and($slug('Rich text (Markdown)'))->toBe('rich-text-markdown');
 });
 
-it('links to no anchor a page lacks', function () use ($anchors) {
+it('reads the target of a link as a page of the docs, and only that', function () use ($docsPage) {
+    expect($docsPage('en/api', ''))->toBe('en/api')
+        ->and($docsPage('en/api', 'concepts/views'))->toBe('en/concepts/views')
+        ->and($docsPage('en/concepts/views', '../api.md'))->toBe('en/api')
+        ->and($docsPage('en/api', '/de/concepts/rich-text'))->toBe('de/concepts/rich-text')
+        ->and($docsPage('en/api', '/en/'))->toBe('en/index')
+        ->and($docsPage('en/api', 'https://www.rfc-editor.org/rfc/rfc9457'))->toBeNull()
+        ->and($docsPage('en/api', 'mailto:ops@example.com'))->toBeNull()
+        ->and($docsPage('en/api', '/api/docs'))->toBeNull()
+        ->and($docsPage('en/api', '/mcp'))->toBeNull();
+});
+
+it('links to no anchor a page lacks', function () use ($anchors, $docsPage) {
     $known = [];
     $found = 0;
     foreach (['en', 'de'] as $l) {
@@ -106,21 +148,10 @@ it('links to no anchor a page lacks', function () use ($anchors) {
             $text = (string) preg_replace(['/^```.*?^```/ms', '/`[^`\n]*`/'], '', RepoFiles::text("docs/{$from}.md"));
             preg_match_all('/\]\(([^)\s#]*)#([^)\s]+)\)/', $text, $links, PREG_SET_ORDER);
             foreach ($links as [, $target, $anchor]) {
-                $path = preg_replace('/\.(md|html)$/', '', $target);
-                $to = match (true) {
-                    $path === '' => $from,
-                    str_starts_with($path, '/') => ltrim($path, '/'),
-                    default => implode('/', array_reduce(explode('/', dirname($from).'/'.$path), function (array $parts, string $part) {
-                        if ($part === '..') {
-                            array_pop($parts);
-                        } elseif ($part !== '.' && $part !== '') {
-                            $parts[] = $part;
-                        }
-
-                        return $parts;
-                    }, [])),
-                };
-                $to = str_ends_with($to, '/') || ! str_contains($to, '/') ? rtrim($to, '/').'/index' : $to;
+                $to = $docsPage($from, $target);
+                if ($to === null) {
+                    continue;
+                }
                 expect(is_file(repo_path("docs/{$to}.md")))->toBeTrue("docs/{$from}.md links to {$target}#{$anchor}, a page that does not exist");
                 $known[$to] ??= $anchors($to);
                 expect(in_array(rawurldecode($anchor), $known[$to], true))->toBeTrue("docs/{$from}.md links to {$target}#{$anchor}, an anchor docs/{$to}.md lacks");
@@ -132,14 +163,23 @@ it('links to no anchor a page lacks', function () use ($anchors) {
     expect($found)->toBeGreaterThan(150);
 });
 
-it('names no phase in the docs', function () {
+it('reads a phase of the build, but no number on a line of its own', function () use ($namesPhase) {
+    expect($namesPhase('since Phase 15'))->toBe('Phase 15')
+        ->and($namesPhase('the phase-3 plan'))->toBe('phase-3')
+        ->and($namesPhase('in Phasen 1 und 2'))->toBe('Phasen 1')
+        ->and($namesPhase('Phase 2 – 3'))->toBe('Phase 2')
+        ->and($namesPhase("the next phase\n\n1. Pull the images"))->toBeNull()
+        ->and($namesPhase("the last phase\n2. step"))->toBeNull();
+});
+
+it('names no phase in the docs', function () use ($namesPhase) {
     // the plan of the build is history, a reader of the docs needs no phase; for now the landing page says in its status
     // where the project stands
     foreach (['en', 'de'] as $l) {
         foreach (array_diff(docsPages($l), ['index']) as $page) {
-            $found = preg_match('/phase[ns]?[\s-]*\d+/i', RepoFiles::text("docs/{$l}/{$page}.md"), $m);
+            $named = $namesPhase(RepoFiles::text("docs/{$l}/{$page}.md"));
 
-            expect($found)->toBe(0, "docs/{$l}/{$page}.md names ".($m[0] ?? ''));
+            expect($named)->toBeNull("docs/{$l}/{$page}.md names {$named}");
         }
     }
 });
