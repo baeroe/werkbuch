@@ -56,6 +56,8 @@ export interface ListData {
   status: 'pending' | 'error' | 'success';
   error: ApiError | null;
   retry(): void;
+  /** A retry of the list that failed is on its way: the error stays until its answer is there (T14-M4). */
+  retrying: boolean;
   /**
    * Every item of the list (⌘A); rejects with `ListGoneError` while a new state is loading (what shows is the old one)
    * and when the list changed or unmounted meanwhile.
@@ -67,7 +69,7 @@ export interface ListData {
   current: boolean;
 }
 
-type Shown = Omit<ListData, 'retry' | 'loadAll' | 'current'>;
+type Shown = Omit<ListData, 'retry' | 'retrying' | 'loadAll' | 'current'>;
 
 const EMPTY: Shown = { groups: [], groupBy: 'none', fellBack: false, total: 0, status: 'pending', error: null, items: [] };
 
@@ -229,11 +231,22 @@ export function useListData(state: ViewState, scope: Condition[], _options: { pr
   const failure = (grouped && !answer.data ? answer.error : null) ?? (!grouped && !all?.data ? all?.error : null) ?? catalogs.find((query) => query.isError && !query.data)?.error ?? null;
 
   const last = useRef<{ shown: Shown; key: string } | null>(null);
+  // a query without data that fetches again forgets its error (TanStack): while a failed list fetches again, its error
+  // stays, saying that the retry runs, instead of a moment of nothing and then the skeleton (T14-M4)
+  const failed = useRef<{ error: ApiError; key: string } | null>(null);
+  const fetching = Boolean(answer.isFetching || all?.isFetching || catalogs.some((query) => query.isFetching));
   let shown: Shown;
-  if (failure) shown = { ...EMPTY, status: 'error', error: failure as ApiError };
-  else if (settled) {
+  let retrying = false;
+  if (failure) {
+    shown = { ...EMPTY, status: 'error', error: failure as ApiError };
+    failed.current = { error: failure as ApiError, key: argsKey };
+  } else if (settled) {
     shown = fresh;
     last.current = { shown, key: argsKey };
+    failed.current = null;
+  } else if (failed.current?.key === argsKey && fetching) {
+    shown = { ...EMPTY, status: 'error', error: failed.current.error };
+    retrying = true;
   } else shown = last.current?.shown ?? EMPTY;
   const current = !failure && settled;
 
@@ -274,5 +287,5 @@ export function useListData(state: ViewState, scope: Condition[], _options: { pr
     return loaded.flat().filter((item) => !seen.has(item.id) && seen.add(item.id));
   }, [argsKey, served, pages, current]);
 
-  return { ...shown, current, retry, loadAll };
+  return { ...shown, current, retry, retrying, loadAll };
 }

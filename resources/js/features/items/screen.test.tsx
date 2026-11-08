@@ -762,6 +762,38 @@ describe('the item list screen', () => {
     expect(await screen.findByText('Kontaktformular sendet doppelt')).toBeTruthy();
   });
 
+  it('says while it retries', async () => {
+    failing.add('groups');
+    renderScreen();
+    await screen.findByText('Die Items konnten nicht geladen werden');
+    const retry = screen.getByRole('button', { name: 'Erneut versuchen' });
+    expect(retry.getAttribute('aria-busy')).toBeNull();
+
+    failing.delete('groups');
+    const gate = hold((_body, path) => path.endsWith('/groups'));
+    fireEvent.click(retry);
+    await waitFor(() => expect(gate.held()).toBe(true));
+    // the error stays until the answer is there, and its button says that it runs
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Erneut versuchen' }).getAttribute('aria-busy')).toBe('true'));
+    expect(screen.getByText('Die Items konnten nicht geladen werden')).toBeTruthy();
+
+    await act(async () => gate.release());
+    expect(await screen.findByText('Kontaktformular sendet doppelt')).toBeTruthy();
+  });
+
+  it('says the retry is over when it fails again', async () => {
+    failing.add('groups');
+    renderScreen();
+    await screen.findByText('Die Items konnten nicht geladen werden');
+    const gate = hold((_body, path) => path.endsWith('/groups'));
+    fireEvent.click(screen.getByRole('button', { name: 'Erneut versuchen' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Erneut versuchen' }).getAttribute('aria-busy')).toBe('true'));
+
+    await act(async () => gate.release());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Erneut versuchen' }).getAttribute('aria-busy')).toBeNull());
+    expect(screen.getByText('Die Items konnten nicht geladen werden')).toBeTruthy();
+  });
+
   it('offers to load a group again whose first page failed', async () => {
     failing.add('progress');
     renderScreen();

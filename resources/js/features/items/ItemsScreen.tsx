@@ -276,7 +276,7 @@ function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: P
 
   let content: ReactNode;
   if (data.status === 'error') {
-    content = <ListError error={data.error} onRetry={data.retry} retrying={false} />;
+    content = <ListError error={data.error} onRetry={data.retry} retrying={data.retrying} />;
   } else if (data.status === 'pending') {
     content = <ListSkeleton layout={state.display.layout} />;
   } else if (data.total === 0 && data.items.length === 0 && state.display.layout !== 'timeline') {
