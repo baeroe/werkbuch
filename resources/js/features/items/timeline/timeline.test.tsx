@@ -790,12 +790,18 @@ describe('where the timeline starts', () => {
   it('reads where its box starts not on every render (T21-M9)', async () => {
     renderTimeline();
     await focusRow('WEB-30');
+    // the count sees the box: the timeline read it when it laid out
+    expect(measured).toBeGreaterThan(0);
 
     // the selection changes: a render with the same rows reads no box
     measured = 0;
     press('x');
     await waitFor(() => expect(useUiStore.getState().selection).toEqual([web30.id]));
     expect(measured).toBe(0);
+
+    // and a page that changes size is read again
+    act(() => observers.filter((entry) => entry.targets.includes(document.body)).forEach((entry) => entry.callback([], {} as ResizeObserver)));
+    expect(measured).toBeGreaterThan(0);
   });
 
   it('fills the window below a bar above it that grows', async () => {

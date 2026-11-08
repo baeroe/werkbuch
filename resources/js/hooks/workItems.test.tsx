@@ -559,7 +559,7 @@ describe('pages of a list', () => {
   });
 
   it('hashes no list again when a query of the cache is invalidated (T9-M3)', async () => {
-    const items = ranked('abcdef');
+    let items = ranked('abcdef');
     api = mockApi({ 'POST /api/v1/work-items/query': keysetServer(() => items) });
     const { result } = renderHook(() => ({ one: useInfiniteWorkItems({ q: 'eins' }, { all: true }), two: useInfiniteWorkItems({ q: 'zwei' }, { all: true }) }), {
       wrapper,
@@ -569,15 +569,19 @@ describe('pages of a list', () => {
     // 50 other queries of the cache, as a live update invalidates them
     for (let n = 0; n < 50; n++) queryClient.setQueryData(['andere', n], n);
 
+    // the spy sees the hashes the hooks compute: a render of the lists computes one per list
+    expect(vi.mocked(hashKey)).toHaveBeenCalled();
     vi.mocked(hashKey).mockClear();
     for (let n = 0; n < 50; n++) await act(() => queryClient.invalidateQueries({ queryKey: ['andere', n] }));
 
     // both lists of three pages heard every invalidation: they compare the hash they have, they compute none
     expect(vi.mocked(hashKey)).not.toHaveBeenCalled();
-    // and a list whose first page is invalidated still notices: it rebuilds
+    // and a list whose first page is invalidated still notices: it rebuilds along the new cursors, never the old (a2, a4)
+    items = items.map((item) => (item.id === 'wi_e' ? { ...item, rank: 'a0' } : item));
     const before = bodies().length;
     await act(() => queryClient.invalidateQueries({ queryKey: qk.workItems.list({ q: 'eins' }) }));
-    await waitFor(() => expect(bodies().length).toBeGreaterThan(before));
+    await waitFor(() => expect(titles(result.current.one.data)).toEqual(['e', 'a', 'b', 'c', 'd', 'f']));
+    expect(bodies().slice(before)).toEqual([{ shorthand: { q: 'eins' } }, { shorthand: { q: 'eins' }, cursor: 'a1' }, { shorthand: { q: 'eins' }, cursor: 'a3' }]);
   });
 
   it('rebuilds a list that comes back after a change while it was away, along the new cursors', async () => {
