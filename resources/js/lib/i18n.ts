@@ -1,3 +1,4 @@
+import { createElement, Fragment, type ReactNode } from 'react';
 import type { Locale } from '@/types';
 
 /** Every key of `lang/en.json`; `lang/de.json` has the same keys (a test keeps them equal). */
@@ -39,6 +40,16 @@ function fill(text: string, params: TranslationParams): string {
 /** The text of a key in the language of the page; a key without text shows as itself. */
 export function t(key: TranslationKey, params: TranslationParams = {}): string {
   return fill(translations[key] ?? key, params);
+}
+
+/** A translated text with nodes in its placeholders: `tx('items.activity.line', { actor: <b>Ida</b> })`. */
+export function tx(key: TranslationKey, parts: Record<string, ReactNode>): ReactNode {
+  return t(key)
+    .split(/(:[a-z_]+)/)
+    .map((piece, index) => {
+      const name = piece.slice(1);
+      return createElement(Fragment, { key: index }, piece.startsWith(':') && Object.hasOwn(parts, name) ? parts[name] : piece);
+    });
 }
 
 /** The text for a count: `<key>.one` for exactly one, else `<key>.other`; `:count` is the count in the number format of the language. */
