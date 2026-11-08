@@ -2,6 +2,7 @@
 
 namespace Tests\Load;
 
+use Database\Seeders\LoadSeeder;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
@@ -12,7 +13,8 @@ use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
  * items between runs, LoadWorld::ensure() seeds it when needed), the event consumers off as in Tests\TestCase.
  * A test file that uses DatabaseTransactions (WorkLoadTest: its actions commit into the transaction of the test, so
  * their afterCommit work runs, K11) gets LoadWorld::ensure() before that transaction begins: a migration or a seed inside
- * it would commit it (DDL) and leave the test's changes in the database `load`.
+ * it would commit it (DDL) and leave the test's changes in the database `load`. Every test checks the database and the
+ * search prefix first (LoadSeeder::guard()), before any trait or `beforeEach` sends a statement (T8a-M6).
  */
 abstract class LoadTestCase extends BaseTestCase
 {
@@ -41,6 +43,8 @@ abstract class LoadTestCase extends BaseTestCase
     /** @return array<class-string, class-string> */
     protected function setUpTraits()
     {
+        LoadSeeder::guard();
+
         if (isset(($this->traitsUsedByTest ?? class_uses_recursive(static::class))[DatabaseTransactions::class])) {
             LoadWorld::ensure();
         }

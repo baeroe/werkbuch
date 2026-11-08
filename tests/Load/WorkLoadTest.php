@@ -188,6 +188,10 @@ it('changes 100 items with 50 active webhooks and consumes their events', functi
 });
 
 it('closes the old items of 20 projects in one night', function () use ($within) {
+    // the night reckons the cutoff of each project when it gets there: on a running clock a project late in a night of
+    // two minutes (CI) closes an item whose last activity passed the cutoff after the count (8 440 of 8 439). The clock
+    // stands still, so the count and every project share one cutoff; Budget measures with hrtime, untouched by it.
+    $this->freezeTime();
     $days = AutomationKey::AutoClose->defaults()['days'];
     foreach (Project::query()->orderBy('identifier')->get() as $project) {
         $canceled = WorkflowState::query()->where('workflow_id', $project->workflow_id)
