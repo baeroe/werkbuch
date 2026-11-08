@@ -22,11 +22,12 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * and never for a project being deleted, an organization webhook for a project being deleted only `project.deleted`;
  * a webhook with a bot only while the bot sees the project (active, member or public), and only for what concerns it
  * (`bot.*` of it, `work_item.*`/`comment.*` of an item it is assigned to when consumed, it was assigned to before or
- * after the change, or a deleted item it had, K9). The body is built once per reader (the bot, else the default bot, A363) and
- * stored with the delivery; the rows go in with `insertOrIgnore` over (`event_id`, `webhook_id`), in the order of the
- * webhooks (K16), so an event that arrives twice (redispatch, queue:retry without the claim) writes nothing twice; only
- * the rows this call inserted (its own ULIDs) get a job, after the commit. Runs in the claim transaction of
- * WebhookConsumer; work of a job without an event of its own, like NotifyRecipients.
+ * after the change, or a deleted item it had, K9). The body is built once per reader (the bot, else the default bot,
+ * A363, read once per event, T6-M1) and stored with the delivery; the rows go in with `insertOrIgnore` over
+ * (`event_id`, `webhook_id`), in the order of the webhooks (K16), so an event that arrives twice (redispatch,
+ * queue:retry without the claim) writes nothing twice; only the rows this call inserted (its own ULIDs) get a job,
+ * after the commit. Runs in the claim transaction of WebhookConsumer; work of a job without an event of its own, like
+ * NotifyRecipients.
  */
 final class QueueDeliveries
 {
@@ -57,6 +58,7 @@ final class QueueDeliveries
 
         $assignee = $this->assignee($event, $webhooks->contains(fn (Webhook $webhook) => $webhook->bot_id !== null));
         $bodies = $rows = [];
+        $defaultBot = null;
         $now = now();
         foreach ($webhooks as $webhook) {
             if ($deleting && ($webhook->project_id !== null || $type !== EventType::ProjectDeleted)) {
@@ -67,7 +69,7 @@ final class QueueDeliveries
                 continue;
             }
 
-            $reader = $bot ?? User::defaultBot();
+            $reader = $bot ?? ($defaultBot ??= User::defaultBot());
             $rows[] = [
                 'id' => (new WebhookDelivery)->newUniqueId(),
                 'webhook_id' => $webhook->id,

@@ -230,6 +230,35 @@ it('skips events without a webhook, without a query', function () use ($world, $
     expect(WebhookDelivery::query()->count())->toBe(0);
 });
 
+it('reads the default bot once per event (T6-M1)', function () use ($world, $create, $system) {
+    Queue::fake([DeliverWebhook::class]);
+    $w = $world();
+    consumers();
+    $item = $create($w['mara'], $w['ops']);
+    $event = eventsOf(EventType::WorkItemCreated, $item)->sole();
+    $actor = $system();
+    Webhook::factory()->create(['events' => ['work_item.*']]);
+    $run = function () use ($actor, $event): array {
+        WebhookDelivery::query()->delete();
+        app()->forgetScopedInstances();
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $queued = QueueDeliveries::run($actor, $event);
+        DB::disableQueryLog();
+        $sql = array_column(DB::getQueryLog(), 'query');
+
+        return [$queued, count($sql), count(array_filter($sql, fn (string $query) => str_contains($query, '`is_default_bot`')))];
+    };
+
+    $run();
+    $one = $run();
+    Webhook::factory()->count(19)->create(['events' => ['work_item.*']]);
+    $twenty = $run();
+
+    expect($one)->toBe([1, $one[1], 1])
+        ->and($twenty)->toBe([20, $one[1], 1]);
+});
+
 it('filters by bot: its own bot events, the events of its items, nothing of an item of another account (A364, K9)', function () use ($world, $create, $delivered, $botAssigned) {
     Queue::fake([DeliverWebhook::class]);
     $w = $world();
