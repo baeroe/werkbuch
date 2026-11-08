@@ -21,7 +21,8 @@ use Illuminate\Support\Str;
  * their rows for `archived_at` (cost 53.77, 105 ms against 12 ms in DDEV). The tie fell either way with the sampled
  * statistics. `project_id not in (select id from archived projects)` is a subquery MariaDB materializes once: the
  * projects never join the items, and no join order hangs on the statistics. The plan is read with EXPLAIN on the real
- * queries, after ANALYZE TABLE, on a few hundred items.
+ * queries, after ANALYZE TABLE, on a few hundred items, also for a list that names an archived project (P5: its open
+ * items, the subquery then leaves the named project out).
  */
 
 it('never joins the projects into the items it counts, groups or lists', function () {
@@ -52,7 +53,9 @@ it('never joins the projects into the items it counts, groups or lists', functio
 
     $read = [];
     DB::listen(function (QueryExecuted $query) use (&$read) {
-        // the queries whose first table is the items (not the catalog of the workflows, which reads the projects)
+        // the queries whose first table is the items (not the catalog of the workflows, which reads the projects); the
+        // first `from` of the computed columns of a page is that of their first subselect (`work_items as children`),
+        // so that statement counts as well
         if (preg_match('/^select .*? from `(\w+)`/', $query->sql, $from) === 1 && $from[1] === 'work_items') {
             $read[] = $query;
         }
@@ -64,16 +67,28 @@ it('never joins the projects into the items it counts, groups or lists', functio
         'backlog' => ['version' => 1, 'conditions' => [['field' => 'state_category', 'op' => 'is', 'value' => 'backlog']]],
     ]]);
     $page = QueryWorkItems::run($actor, ['lean' => true, 'per_page' => 100]);
+    // the list and the board of an archived project next to an open one (P5)
+    $named = ['version' => 1, 'conditions' => [['field' => 'project', 'op' => 'in', 'value' => [$archived->id, $projects[0]->id]]]];
+    $namedGroups = GroupWorkItems::run($actor, ['group_by' => 'none', 'filter' => $named]);
+    $namedPage = QueryWorkItems::run($actor, ['lean' => true, 'per_page' => 100, 'filter' => $named]);
 
-    // the answer: the open items of the four open projects, never those of the archived one
+    // the answer: the open items of the four open projects, never those of the archived one, unless the list names it
     $open = 4 * 72;
     expect($none->total)->toBe($open)
         ->and($state->total)->toBe($open)
         ->and($page->total)->toBe($open)
         ->and($counts['backlog'])->toBe($backlog)->toBeGreaterThan(0)
-        // the total and the tally of each grouping, the count, the page and its count, the computed columns of the page
-        ->and($read)->toHaveCount(8);
+        ->and($namedGroups->total)->toBe(2 * 72)
+        ->and($namedPage->total)->toBe(2 * 72)
+        ->and(collect($namedPage->page->items())->pluck('project_id')->unique()->sort()->values()->all())
+        ->toBe(collect([$archived->id, $projects[0]->id])->sort()->values()->all())
+        // the total and the tally of each grouping, the count, the page and its count, the computed columns of a page;
+        // for the archived project named the total and tally, the page, its count and its computed columns
+        ->and($read)->toHaveCount(13)
+        // there the subquery leaves the named projects out of the archived ones
+        ->and(count(array_filter($read, fn (QueryExecuted $query) => str_contains($query->sql, '`projects`.`id` not in (?, ?)'))))->toBe(4);
 
+    $materialized = 0;
     foreach ($read as $query) {
         $plan = json_decode((string) DB::selectOne('explain format=json '.$query->sql, $query->bindings)->EXPLAIN, true);
         // the tables the query joins (also under a sort or a temporary table), without the subqueries run apart
@@ -93,7 +108,32 @@ it('never joins the projects into the items it counts, groups or lists', functio
         };
         $walk($plan['query_block']);
 
+        // every subquery that reads the projects runs once, materialized, never again per item (a dependent one would
+        // also keep them out of the join)
+        $subqueries = [];
+        $collect = function (mixed $node) use (&$collect, &$subqueries): void {
+            if (! is_array($node)) {
+                return;
+            }
+            foreach ($node as $key => $child) {
+                if ($key === 'subqueries' && is_array($child)) {
+                    array_push($subqueries, ...$child);
+                }
+                $collect($child);
+            }
+        };
+        $collect($plan);
+        foreach ($subqueries as $subquery) {
+            if (str_contains((string) json_encode($subquery), '"table_name":"projects"')) {
+                expect(array_key_first($subquery))->toBe('materialization', "{$query->sql} reads the projects again per item");
+                $materialized++;
+            }
+        }
+
         expect($joined)->toContain('work_items')
             ->and(in_array('projects', $joined, true))->toBeFalse("{$query->sql} joins the projects");
     }
+
+    // the probe: every statement but the computed columns of the two pages leaves out the archived projects that way
+    expect($materialized)->toBe(11);
 });

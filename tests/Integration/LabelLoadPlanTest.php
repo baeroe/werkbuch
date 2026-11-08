@@ -56,8 +56,10 @@ it('reads the labels of a page from work_item_labels alone, through its index', 
     $page = $answer->page->items();
 
     // the answer: every item with its labels in catalog order, as the links say
+    // the order is the query's own: a scan of the index would hand the links over in the same order without it
     expect($page)->toHaveCount(100)
-        ->and($read)->toHaveCount(1);
+        ->and($read)->toHaveCount(1)
+        ->and($read[0]->sql)->toEndWith('order by `label_id` asc');
     foreach ($page as $item) {
         $linked = DB::table('work_item_labels')->where('work_item_id', $item->id)->orderBy('label_id')->pluck('label_id')->all();
         expect($item->labels->modelKeys())->toBe($linked);

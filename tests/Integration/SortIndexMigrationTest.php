@@ -17,8 +17,9 @@ it('adds the index of the sort by a property and takes it away again', function 
 
     foreach ([1, 2] as $round) {
         $this->artisan('migrate:rollback', ['--path' => SORT_INDEX_MIGRATION])->assertSuccessful();
+        // the foreign key of `property_id` lives on: the rollback took only its own index (no 1553)
         expect($index())->toBeFalse("rolled back, round {$round}")
-            ->and(Schema::hasIndex('work_item_values', ['property_id', 'value_option_id']))->toBeTrue();
+            ->and(collect(Schema::getForeignKeys('work_item_values'))->pluck('name')->all())->toContain('work_item_values_property_id_foreign');
 
         $this->artisan('migrate')->assertSuccessful();
         expect($index())->toBeTrue("migrated, round {$round}");

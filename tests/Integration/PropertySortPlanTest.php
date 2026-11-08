@@ -16,7 +16,9 @@ use Illuminate\Support\Str;
  * The plan of the sort by a property (Phase 15, Task 10a): under 50 000 items its first value cost two reads per item,
  * one for the mark of an empty value and one for the value, each from the row of `work_item_values` (CI 1.8 s). The
  * first value is joined once (`sort_values`) and read from the index `work_item_values_sort_index` alone. The plan is
- * read with EXPLAIN on the real query of a page, after ANALYZE TABLE, on a few hundred items.
+ * read with EXPLAIN on the real query of a page, after ANALYZE TABLE, on a few hundred items. The optimizer picks the
+ * index by its statistics: should a later MariaDB pick another one for these few rows, adjust the data size, not the
+ * assertion.
  */
 
 /**

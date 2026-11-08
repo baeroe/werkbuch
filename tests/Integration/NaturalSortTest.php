@@ -61,7 +61,11 @@ it('sorts with the whole of a long value on every connection, in UTC', function 
     // under utf8mb4_unicode_ci), a comparison in WHERE the whole value: the keyset of a page then skips or repeats
     foreach ($sessions as $session) {
         expect((int) $session->scalar('select @@session.max_sort_length'))->toBe(65536)
-            ->and($session->scalar('select @@session.time_zone'))->toBe('+00:00');
+            ->and($session->scalar('select @@session.time_zone'))->toBe('+00:00')
+            // and the init command takes nothing of what Laravel sets after it: strict mode and the characters (review of A1, M1)
+            ->and(explode(',', (string) $session->scalar('select @@session.sql_mode')))->toContain('STRICT_TRANS_TABLES')
+            ->and($session->scalar('select @@session.character_set_connection'))->toBe('utf8mb4')
+            ->and($session->scalar('select @@session.collation_connection'))->toBe('utf8mb4_unicode_ci');
     }
     DB::purge('mariadb_copy');
 });
